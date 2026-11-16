@@ -336,8 +336,12 @@ private:
     /** When true, universes are dumped. Otherwise not. */
     bool m_universeChanged;
 
-    /** Mutex guarding m_universeArray */
+    /** Mutex guarding m_universeArray. Never held over a call that
+     *  reaches a device: patch changes are made with an IODeferral open
+     *  (iodeferral.h), and their device calls run after it is let go. */
     QMutex m_universeMutex;
+    /** claimUniverses() opened the outermost IODeferral (iodeferral.h) */
+    bool m_claimDeferral = false;
 
     /*********************************************************************
      * Grand Master
@@ -428,6 +432,13 @@ public:
                         const QString& outputUID, quint32 output = 0,
                         bool isFeedback = false, int index = 0,
                         const QMap<QString, QVariant> &params = QMap<QString, QVariant>());
+private:
+    /** setOutputPatch()'s bookkeeping, under the universe claim; its device
+     *  calls are queued (IODeferral) and run once the claim is let go */
+    bool patchOutput(quint32 universe, const QString& pluginName,
+                     const QString& outputUID, quint32 output,
+                     bool isFeedback, int index, const QMap<QString, QVariant> &params);
+public:
 
     int outputPatchesCount(quint32 universe) const;
 

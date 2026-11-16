@@ -42,6 +42,7 @@
 #include "genericfader.h"
 #include "qlcioplugin.h"
 #include "outputpatch.h"
+#include "iodeferral.h"
 #include "grandmaster.h"
 #include "mastertimer.h"
 #include "inputpatch.h"
@@ -136,6 +137,8 @@ Universe::~Universe()
         wait();
     }
 
+    // Each line closed after the frame lock (iodeferral.h).
+    IODeferral io;
     delete m_inputPatch;
     /* R9-1: each line closed with its closing frame (~OutputPatch), while
        this universe is still whole -- the thread is stopped, nothing else
@@ -1719,6 +1722,9 @@ bool Universe::setInputPatch(QLCIOPlugin *plugin,
 {
     qDebug() << "[Universe] setInputPatch - ID:" << m_id << ", plugin:" << ((plugin == NULL)?"None":plugin->name())
              << ", input:" << input << ", profile:" << ((profile == NULL)?"None":profile->name());
+    /* Opened and closed when the outermost IODeferral ends -- the
+       caller's, after it lets the universes go (InputOutputMap). */
+    IODeferral io;
     if (m_inputPatch == NULL)
     {
         if (plugin == NULL || input == QLCIOPlugin::invalidLine())
@@ -1742,6 +1748,7 @@ bool Universe::setInputPatch(QLCIOPlugin *plugin,
     if (m_inputPatch != NULL)
     {
         bool result = m_inputPatch->set(plugin, input, profile);
+        result = io.finish() && result;
         emit inputPatchChanged();
         return result;
     }
@@ -1761,7 +1768,10 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index,
     /* Under the frame lock: the universe thread's frame (dumpOutputFrame())
        and sendCurrent()/sendHeld() never walk the list, nor dump to a patch,
        while it changes; a line closed sends its closing frame first (R9-1:
-       OutputPatch::closeLine()). The signals after, with the lock let go. */
+       OutputPatch::closeLine()). The signals after, with the lock let go.
+       The device calls after it too (IODeferral): a device that does not
+       answer must never hold this universe's thread, nor the tick. */
+    IODeferral io;
     bool result = false;
     enum { NoChange, Changed, CountChanged } change = NoChange;
     {
@@ -1796,6 +1806,7 @@ bool Universe::setOutputPatch(QLCIOPlugin *plugin, quint32 output, int index,
             change = CountChanged;
         }
     }
+    result = io.finish() && result;
 
     if (change == CountChanged)
         emit outputPatchesCountChanged();
@@ -1815,7 +1826,8 @@ bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pending
              << ", plugin:" << plugin->name() << ", pending UID:" << pendingUID;
 
     // Under the frame lock, as setOutputPatch(): a held line sends its
-    // closing frame first (R9-1).
+    // closing frame first (R9-1). Closed after it (IODeferral).
+    IODeferral io;
     bool added = false;
     {
         QMutexLocker frameLocker(&m_frameMutex);
@@ -1834,6 +1846,7 @@ bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pending
             added = true;
         }
     }
+    io.finish();
     if (added)
         emit outputPatchesCountChanged();
     else
@@ -1843,16 +1856,23 @@ bool Universe::setOutputPatchPending(QLCIOPlugin *plugin, const QString &pending
 
 bool Universe::resolveOutputPatch(int index, quint32 line)
 {
-    // Under the frame lock, as every patch change: the line opens between
-    // two frames, and its first is the current S0 build (sent as changed).
-    QMutexLocker frameLocker(&m_frameMutex);
-    OutputPatch *patch = outputPatch(index);
-    return patch != NULL && patch->resolvePending(line);
+    // Under the frame lock, as every patch change: the line opens after
+    // it (IODeferral), and its first frame is the current S0 build (sent
+    // as changed).
+    IODeferral io;
+    bool opened = false;
+    {
+        QMutexLocker frameLocker(&m_frameMutex);
+        OutputPatch *patch = outputPatch(index);
+        opened = patch != NULL && patch->resolvePending(line);
+    }
+    return io.finish() && opened;
 }
 
 bool Universe::setFeedbackPatch(QLCIOPlugin *plugin, quint32 output)
 {
     qDebug() << Q_FUNC_INFO << "plugin:" << plugin << "output:" << output;
+    IODeferral io;      // opened and closed after the caller's locks
     if (m_fbPatch == NULL)
     {
         if (plugin == NULL || output == QLCIOPlugin::invalidLine())
@@ -1883,6 +1903,7 @@ bool Universe::setFeedbackPatch(QLCIOPlugin *plugin, quint32 output)
     if (m_fbPatch != NULL)
     {
         bool result = m_fbPatch->set(plugin, output);
+        result = io.finish() && result;
         emit hasFeedbackChanged();
         return result;
     }

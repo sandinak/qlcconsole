@@ -27,10 +27,12 @@
 #include <QRecursiveMutex>
 #include <memory>
 #include <QMutexLocker>
+#include <QPointer>
 #include <QDebug>
 
 #include "qlcioplugin.h"
 #include "outputpatch.h"
+#include "iodeferral.h"
 
 #define GRACE_MS 1
 
@@ -62,6 +64,9 @@ OutputPatch::OutputPatch(quint32 universe, QObject* parent)
 
 OutputPatch::~OutputPatch()
 {
+    /* Its device calls may run after it is gone (IODeferral): each holds
+       what it needs, nothing of this patch. */
+    m_dying = true;
     /* Review 20: another open patch of this universe on this line goes on
        sending it there -- (line, universe) is not closed under it. */
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
@@ -73,13 +78,38 @@ OutputPatch::~OutputPatch()
     }
     else if (m_plugin != NULL)
     {
-        m_plugin->closeOutput(m_pluginLine, m_universe);
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
         /* Held by N2/N3 and now unpatched (review 12 F6): the plugin
            forgets this universe on the line it had, whoever else is open
            there. */
-        if (m_holdKind != NotHeld && m_pendingLine != UINT_MAX && siblingOnLine(m_pendingLine) == nullptr)
-            m_plugin->forgetOutput(m_pendingLine, m_universe);
+        const quint32 forget = (m_holdKind != NotHeld && m_pendingLine != UINT_MAX
+                                && siblingOnLine(m_pendingLine) == nullptr) ? m_pendingLine : UINT_MAX;
+        deviceCall([plugin, line, universe, forget]() {
+            plugin->closeOutput(line, universe);
+            if (forget != UINT_MAX)
+                plugin->forgetOutput(forget, universe);
+            return true;
+        });
     }
+}
+
+bool OutputPatch::deviceCall(const std::function<bool()> &call)
+{
+    if (IODeferral::active() == false)
+        return call();
+    if (m_dying)
+        return IODeferral::run(call);
+    /* Not ready until it has run: no frame to a line half-way (the closing
+       frame sent, the line not yet closed; opened but not yet aimed). */
+    m_deviceCalls.fetch_add(1, std::memory_order_acq_rel);
+    QPointer<OutputPatch> self(this);
+    return IODeferral::run([self, call]() {
+        const bool ok = call();
+        if (self)
+            self->m_deviceCalls.fetch_sub(1, std::memory_order_acq_rel);
+        return ok;
+    });
 }
 
 void OutputPatch::setClosingFrame(const std::function<bool(QByteArray &, bool)> &source)
@@ -100,8 +130,14 @@ void OutputPatch::sendClosingFrame()
     QByteArray frame;
     if (m_closingFrame(frame, m_blackout))
     {
-        m_plugin->writeUniverse(m_universe, m_pluginLine, frame, true);
-        m_plugin->flushOutput(m_pluginLine, m_universe);
+        // Built now, under the frame lock; sent with the device calls.
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        deviceCall([plugin, line, universe, frame]() {
+            plugin->writeUniverse(universe, line, frame, true);
+            plugin->flushOutput(line, universe);
+            return true;
+        });
     }
 }
 
@@ -109,11 +145,14 @@ void OutputPatch::closeLine()
 {
     if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
         return;
+    IODeferral io;      // the close after the frame lock
     std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
     sendClosingFrame();
-    m_plugin->closeOutput(m_pluginLine, m_universe);
+    QLCIOPlugin *plugin = m_plugin;
+    const quint32 line = m_pluginLine, universe = m_universe;
+    deviceCall([plugin, line, universe]() { plugin->closeOutput(line, universe); return true; });
 }
 
 /****************************************************************************
@@ -126,7 +165,11 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
     {
         // The same line again (a re-set of what is open): no closing frame.
         if (m_plugin == plugin && m_pluginLine == output)
-            m_plugin->closeOutput(m_pluginLine, m_universe);
+        {
+            QLCIOPlugin *old = m_plugin;
+            const quint32 line = m_pluginLine, universe = m_universe;
+            deviceCall([old, line, universe]() { old->closeOutput(line, universe); return true; });
+        }
         /* Review 20: moved away from a line another open patch of this
            universe still uses -- left open for it. */
         else if (siblingOnLine(m_pluginLine) == nullptr)
@@ -158,8 +201,18 @@ bool OutputPatch::set(QLCIOPlugin* plugin, quint32 output)
 
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
     {
-        const bool opened = m_plugin->openOutput(m_pluginLine, m_universe);
-        m_freshLine.store(opened, std::memory_order_relaxed);
+        /* Opened after the locks (IODeferral): its first frame, once it
+           has, goes out as a changed one. Queued, true for now --
+           InputOutputMap::setOutputPatch() says how it went. */
+        QPointer<OutputPatch> self(this);
+        QLCIOPlugin *open = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        const bool opened = deviceCall([self, open, line, universe]() {
+            const bool ok = open->openOutput(line, universe);
+            if (self)
+                self->m_freshLine.store(ok, std::memory_order_relaxed);
+            return ok;
+        });
         // The device it was patched to: a hold keeps it pending on that name.
         m_lineName = m_plugin->outputs().value(int(m_pluginLine));
         m_reconnectHeld.clear();
@@ -184,41 +237,58 @@ bool OutputPatch::set(QLCIOPlugin *plugin, quint32 output, const QMap<QString, Q
     const bool opened = set(plugin, output);
     for (auto it = params.constBegin(); it != params.constEnd(); ++it)
         m_parametersCache[it.key()] = it.value();
-    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-        for (auto it = params.constBegin(); it != params.constEnd(); ++it)
-            m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine() && params.isEmpty() == false)
+    {
+        QLCIOPlugin *aim = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        deviceCall([aim, line, universe, params]() {
+            for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+                aim->setParameter(universe, line, QLCIOPlugin::Output, it.key(), it.value());
+            return true;
+        });
+    }
     return opened;
 }
 
 bool OutputPatch::reconnect()
 {
-    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+    IODeferral io;      // closed and opened after the frame lock
+    bool ret = false;
     {
-        // Closed and opened between two frames (L1): no frame to a line half-way.
+        /* No frame to a line half-way (L1): from here until it is open
+           again this patch sends nothing (deviceCall()). */
         std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
         if (m_frameLock != nullptr)
             locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
+        if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
+            return false;
 
         /* By number, as it always was (review 11: following a name broke an
            ordinary unplug and replug). A universe with Show-only channels
            is never on a hardware line (N1, outputpatch.h). */
-        m_plugin->closeOutput(m_pluginLine, m_universe);
+        QPointer<OutputPatch> self(this);
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        const QMap<QString, QVariant> params = m_parametersCache;
+        ret = deviceCall([self, plugin, line, universe, params]() {
+            plugin->closeOutput(line, universe);
 #if defined(WIN32) || defined(Q_OS_WIN)
-        Sleep(GRACE_MS);
+            Sleep(GRACE_MS);
 #else
-        usleep(GRACE_MS * 1000);
+            usleep(GRACE_MS * 1000);
 #endif
-        bool ret = m_plugin->openOutput(m_pluginLine, m_universe);
-        if (ret == true)
-        {
-            m_freshLine.store(true, std::memory_order_relaxed);
-            QMap<QString, QVariant>::iterator it = m_parametersCache.begin();
-            for (; it != m_parametersCache.end(); it++)
-                m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
-        }
-        return ret;
+            const bool ok = plugin->openOutput(line, universe);
+            if (ok)
+            {
+                if (self)
+                    self->m_freshLine.store(true, std::memory_order_relaxed);
+                for (auto it = params.constBegin(); it != params.constEnd(); ++it)
+                    plugin->setParameter(universe, line, QLCIOPlugin::Output, it.key(), it.value());
+            }
+            return ok;
+        });
     }
-    return false;
+    return io.finish() && ret;
 }
 
 void OutputPatch::hold(HoldKind kind, const QString &why, bool closeTheLine, bool sendClosing,
@@ -226,6 +296,7 @@ void OutputPatch::hold(HoldKind kind, const QString &why, bool closeTheLine, boo
 {
     if (m_plugin == NULL || m_pluginLine == QLCIOPlugin::invalidLine())
         return;
+    IODeferral io;      // the closing frame and the close after the frame lock
     std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
@@ -243,14 +314,17 @@ void OutputPatch::hold(HoldKind kind, const QString &why, bool closeTheLine, boo
        goes on sending it there -- neither closed nor forgotten. */
     if (siblingOnLine(m_pluginLine) == nullptr)
     {
-        if (closeTheLine)
-        {
-            if (sendClosing)
-                sendClosingFrame();
-            m_plugin->closeOutput(m_pluginLine, m_universe);
-        }
-        else
-            m_plugin->forgetOutput(m_pluginLine, m_universe);
+        if (closeTheLine && sendClosing)
+            sendClosingFrame();
+        QLCIOPlugin *plugin = m_plugin;
+        const quint32 line = m_pluginLine, universe = m_universe;
+        deviceCall([plugin, line, universe, closeTheLine]() {
+            if (closeTheLine)
+                plugin->closeOutput(line, universe);
+            else
+                plugin->forgetOutput(line, universe);
+            return true;
+        });
     }
     else
         leaveLineToSibling(m_pluginLine);
@@ -405,6 +479,7 @@ bool OutputPatch::isTargetParameter(const QString &prop)
 
 void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, const QStringList &unset)
 {
+    IODeferral io;      // the plugin told after the frame lock
     std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
@@ -428,12 +503,9 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
     // One closing frame, to the old target only: then every change at once.
     if (retarget)
         sendClosingFrame();
+    QStringList clear;
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
-    {
         m_parametersCache[it.key()] = it.value();
-        if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-            m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
-    }
     bool cleared = false;
     foreach (const QString &prop, unset)
     {
@@ -441,10 +513,12 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
             continue;
         if (open)
         {
-            m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop);
+            clear << prop;
             cleared = true;
         }
     }
+    if (open)
+        applyParameters(values, clear);
     /* A feedback patch on an output's line cleared a target of that one
        entry: the output gets its own back. */
     if (cleared && m_isFeedback)
@@ -453,6 +527,7 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
 
 void OutputPatch::replacePluginParameters(const QMap<QString, QVariant> &values)
 {
+    IODeferral io;      // the plugin told after the frame lock
     std::unique_ptr<QMutexLocker<QRecursiveMutex> > locker;
     if (m_frameLock != nullptr)
         locker.reset(new QMutexLocker<QRecursiveMutex>(m_frameLock));
@@ -479,20 +554,29 @@ void OutputPatch::replacePluginParameters(const QMap<QString, QVariant> &values)
     if (retarget && open)
         sendClosingFrame();
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
-    {
         m_parametersCache[it.key()] = it.value();
-        if (open)
-            m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, it.key(), it.value());
-    }
     foreach (const QString &prop, unset)
-    {
         m_parametersCache.remove(prop);
-        if (open)
-            m_plugin->unSetParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop);
-    }
+    if (open)
+        applyParameters(values, unset);
     // As setPluginParameters(): a feedback patch gives an output its own back.
     if (open && m_isFeedback && unset.isEmpty() == false)
         leaveLineToSibling(m_pluginLine);
+}
+
+void OutputPatch::applyParameters(const QMap<QString, QVariant> &values, const QStringList &unset)
+{
+    if (values.isEmpty() && unset.isEmpty())
+        return;
+    QLCIOPlugin *plugin = m_plugin;
+    const quint32 line = m_pluginLine, universe = m_universe;
+    deviceCall([plugin, line, universe, values, unset]() {
+        for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+            plugin->setParameter(universe, line, QLCIOPlugin::Output, it.key(), it.value());
+        foreach (const QString &prop, unset)
+            plugin->unSetParameter(universe, line, QLCIOPlugin::Output, prop);
+        return true;
+    });
 }
 
 void OutputPatch::reapplyPluginParameters()
@@ -530,7 +614,7 @@ void OutputPatch::setPluginParameter(QString prop, QVariant value)
     // Nothing to tell the plugin while pending: there is no line yet.
     // resolvePending() replays the cache once there is.
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-        m_plugin->setParameter(m_universe, m_pluginLine, QLCIOPlugin::Output, prop, value);
+        applyParameters({ { prop, value } }, QStringList());
 }
 
 void OutputPatch::unSetPluginParameter(QString prop)
@@ -596,8 +680,10 @@ void OutputPatch::setBlackout(bool blackout)
 
 void OutputPatch::dump(quint32 universe, const QByteArray& data, bool dataChanged)
 {
-    /* Don't do anything if there is no plugin and/or output line. */
-    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+    /* Don't do anything if there is no plugin and/or output line -- nor
+       while its line is changing (IODeferral: the calls not yet made). */
+    if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine()
+        && m_deviceCalls.load(std::memory_order_acquire) == 0)
     {
         // A line just opened (released from a hold, re-patched): its first
         // frame is sent as changed, so it carries the current build.

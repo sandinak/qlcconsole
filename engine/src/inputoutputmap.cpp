@@ -31,6 +31,7 @@
 #include <qmath.h>
 
 #include "inputoutputmap.h"
+#include "iodeferral.h"
 #include <QTimer>
 #include "patchundo.h"
 #include "qlcinputchannel.h"
@@ -193,6 +194,7 @@ bool InputOutputMap::setBlackout(bool blackout)
     // m_universeMutex, so take it here to serialise with the MasterTimer tick.
     bool changed;
     {
+        IODeferral io;
         QMutexLocker locker(&m_universeMutex);
         changed = applyBlackout(blackout);
     }
@@ -239,6 +241,7 @@ bool InputOutputMap::setOutputInhibited(bool inhibit)
     // lock via claimUniverses), so we never touch a universe's output or the
     // array concurrently with the tick / a structural change.
     {
+        IODeferral io;
         QMutexLocker locker(&m_universeMutex);
         foreach (Universe *universe, m_universeArray)
         {
@@ -287,6 +290,7 @@ quint32 InputOutputMap::maxUniverses()
 bool InputOutputMap::addUniverse(quint32 id)
 {
     {
+        IODeferral io;
         QMutexLocker locker(&m_universeMutex);
         Universe *uni = NULL;
 
@@ -344,6 +348,7 @@ bool InputOutputMap::addUniverse(quint32 id)
 bool InputOutputMap::removeUniverse(int index)
 {
     {
+        IODeferral io;      // its patches closed after the claim
         QMutexLocker locker(&m_universeMutex);
 
         if (index < 0 || index >= m_universeArray.count())
@@ -365,6 +370,7 @@ bool InputOutputMap::removeUniverse(int index)
 
 bool InputOutputMap::removeAllUniverses()
 {
+    IODeferral io;      // their patches closed after the claim
     QMutexLocker locker(&m_universeMutex);
     qDeleteAll(m_universeArray);
     m_universeArray.clear();
@@ -489,19 +495,27 @@ Universe *InputOutputMap::universe(quint32 id)
 
 QList<Universe*> InputOutputMap::claimUniverses()
 {
+    /* A patch change made under the claim (a Show-only hold, said
+       directly) reaches its device once the claim is let go. */
+    const bool outer = IODeferral::begin();
     m_universeMutex.lock();
+    m_claimDeferral = outer;
     return m_universeArray;
 }
 
 void InputOutputMap::releaseUniverses(bool changed)
 {
     m_universeChanged = changed;
+    const bool outer = m_claimDeferral;
+    m_claimDeferral = false;
     m_universeMutex.unlock();
+    IODeferral::end(outer);
 }
 
 void InputOutputMap::resetUniverses()
 {
     {
+        IODeferral io;
         QMutexLocker locker(&m_universeMutex);
         for (int i = 0; i < m_universeArray.size(); i++)
             m_universeArray.at(i)->reset();
@@ -587,6 +601,7 @@ uchar InputOutputMap::grandMasterValue()
 
 void InputOutputMap::flushInputs()
 {
+    IODeferral io;
     QMutexLocker locker(&m_universeMutex);
     foreach (Universe *universe, m_universeArray)
         universe->flushInput();
@@ -602,6 +617,12 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         qWarning() << Q_FUNC_INFO << "Universe" << universe << "out of bounds.";
         return false;
     }
+
+    /* The device closed and opened after the universes are let go: a
+       controller whose reader stopped answering waits there (up to
+       HIDDevice::kReaderStopMs), and a device the system never answers
+       for -- never with every universe's DMX output held. */
+    IODeferral io;
 
     /* Patched by hand to one device (or unpatched): a controller slot gives
        way, unless that device is one of its own. */
@@ -675,11 +696,12 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
        and anything there that takes m_universeMutex (Blackout, a re-patch)
        would lock up the GUI. */
     locker.unlock();
+    const bool opened = io.finish();
     if (ip != NULL && currProfile != ip->profile())
         emit profileChanged(universe, ip->profileName());
     emit inputPatchChanged(universe);
 
-    return true;
+    return opened;
 }
 
 bool InputOutputMap::setInputProfile(quint32 universe, const QString &profileName)
@@ -704,6 +726,21 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
                                     const QString &outputUID, quint32 output,
                                     bool isFeedback, int index,
                                     const QMap<QString, QVariant> &params)
+{
+    /* The bookkeeping under the universe claim, the device calls (the old
+       line's closing frame and close, the new one's open and target) after
+       it: a DMX interface that does not answer (a USB hub wedged by a
+       device re-enumerating) must never stop every universe's output. The
+       patch sends nothing until its calls have run. */
+    IODeferral io;
+    const bool done = patchOutput(universe, pluginName, outputUID, output, isFeedback, index, params);
+    return io.finish() && done;
+}
+
+bool InputOutputMap::patchOutput(quint32 universe, const QString &pluginName,
+                                 const QString &outputUID, quint32 output,
+                                 bool isFeedback, int index,
+                                 const QMap<QString, QVariant> &params)
 {
     m_lastPatchRefusal.clear();
     /* Check that the universe that we're doing mapping for is valid */
@@ -1017,6 +1054,8 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
     if (patch.plugin.isEmpty() || patch.plugin == KOutputNone || patch.plugin == KInputNone)
         return;
 
+    IODeferral io;      // opened after the claims below (iodeferral.h)
+
     const bool hasIdentity = patch.uid.isEmpty() == false && patch.uid != KOutputNone;
     if (hasIdentity == false && patch.line == QLCIOPlugin::invalidLine())
         return;   // nothing that could ever be opened
@@ -1217,6 +1256,7 @@ bool InputOutputMap::hasOfflinePatches() const
 
 int InputOutputMap::retryOfflinePatches()
 {
+    IODeferral io;      // each reopened after the claim (iodeferral.h)
     int reconnected = 0;
 
     /* Review 17: the patches held off a reserved interface first (F4) --
@@ -1361,6 +1401,7 @@ int InputOutputMap::retryOfflinePatches()
         }
     }
 
+    io.finish();
     if (reconnected > 0)
         emit offlinePatchesChanged();
 
@@ -1642,6 +1683,8 @@ int InputOutputMap::applyTransmitGate()
        E1.31, WLED) would drop that frame, and the node keep the laser on. */
     const bool active = transmitGateActive();
     int held = 0;
+    IODeferral io;      // closing frames and closes after the claim
+
     for (quint32 u = 0; u < universesCount(); u++)
     {
         Universe *uni = m_universeArray.at(u);
@@ -1673,6 +1716,8 @@ int InputOutputMap::applyTransmitGate()
             held++;
         }
     }
+    // Each held line's closing frame on the wire before the plugins hold it.
+    io.finish();
 
     pushTransmitNetworks();
 
@@ -1985,6 +2030,9 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
 {
     const QStringList lines = plugin->inputs();
     bool kept = false;
+    /* Moved or gone, each closed and opened after the claim: a reader that
+       stopped answering waits up to HIDDevice::kReaderStopMs there. */
+    IODeferral io;
 
     for (quint32 i = 0; i < universesCount(); i++)
     {
@@ -2028,6 +2076,7 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         kept = true;
         emit inputDeviceDisconnected(i, rec.plugin, device);
     }
+    io.finish();
 
     if (kept)
         emit offlinePatchesChanged();
@@ -2215,6 +2264,7 @@ void InputOutputMap::holdShowOnlyOutputs(Universe *universe, bool fromLoad)
 void InputOutputMap::setLoadHold(bool hold)
 {
     m_loadHold = hold;
+    IODeferral io;
     QMutexLocker locker(&m_universeMutex);
     foreach (Universe *uni, m_universeArray)
         uni->setLoadHold(hold);
@@ -2295,7 +2345,11 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
 
     /* Every patch reconnects by line number, as stock does: a universe
        with Show-only fixtures has none on a hardware line (N1), and nothing
-       else opens onto the interface one was held off (F4). */
+       else opens onto the interface one was held off (F4). The bookkeeping
+       under the claim, every close and open after it (IODeferral): a
+       device that does not answer -- a reader stuck in a call, a DMX
+       interface on a wedged USB hub -- never stops the DMX output. */
+    IODeferral io;
     QMutexLocker locker(&m_universeMutex);
     bool success = true;
     bool keptOff = false;
@@ -2338,6 +2392,7 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
        this thread changes patches, so each is still there. */
     for (InputPatch *ip : std::as_const(inputs))
         /*success = */ ip->reconnect();
+    io.finish();
 
     /* The device a kept patch waits for may be what just appeared: reopen
        it now rather than at the next retry tick. */

@@ -47,4 +47,9 @@ engine/test/speedmasters
 # hangs. hidstuckpad holds a patch reconnect's DMX gap to 250 ms (the old
 # code's was ~600 ms); next to two other legs' tests a tick can be late.
 engine/test/hidstuckpad
+
+# A stuck USB device (0.4.12): iolock holds the MasterTimer's and another
+# universe's frame gap to 250 ms while a fake device's every open and close
+# takes 400 ms; next to two other legs' tests a tick can be late.
+engine/test/iolock
 plugins/hid/test
