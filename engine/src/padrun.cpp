@@ -1272,6 +1272,14 @@ void PadRun::focusCueChanged()
 
 void PadRun::focusOwnerChanged()
 {
+    /* Only a venue focus's owner changes FOCUS: a claim made as a start
+       goes (startFocus(), before the calls) must not show the moment
+       between ARMED and FOCUS. */
+    if (!isFocusing())
+    {
+        m_shownOwner = m_pc != nullptr ? m_pc->controllerOwner() : UINT_MAX;
+        return;
+    }
     /* A pad that can work it took it while the runner could too (the
        runner itself), or it has no pad now and the runner can work it:
        the runner's arm is put by, as for a focus begun on the laptop
