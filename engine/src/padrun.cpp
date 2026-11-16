@@ -2218,4 +2218,3 @@ void PadRun::walkTick(double dt)
         m_levelMoved = false;
     }
 }
-
