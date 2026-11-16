@@ -284,7 +284,9 @@ show from any pad.
   GO family is refused (*… is walking the show: nothing plays until the
   walk ends.*) until the walk ends, then works with no re-arm. In
   Operate the walk waits until the runner disarms, and says who runs
-  cues.
+  cues. The walk beside the runner also ends by itself, saying why, if
+  the show goes into Operate, the role is switched, or the walking pad
+  loses its Focus job or is unplugged (a change not kept goes back).
 - Buzzes, trigger feel and the names of buttons in a message go to the
   pad they are about: the runner's armed triggers and GO buzz are on the
   runner, the emergency stop buzzes every pad.

@@ -438,8 +438,8 @@ public:
     /** The venue focus cue changed state (ProgrammerController): FOCUS
      *  begins or ends; ended, the arm it came from is back. */
     void focusCueChanged();
-    /** The pad the venue focus is on (board Q135's owner, else the pad
-     *  whose arm it put by; UINT_MAX: none yet). FOCUS names it and only
+    /** The pad the venue focus is on: board Q135's owner (UINT_MAX: none
+     *  yet -- not the pad whose arm it put by). FOCUS names it and only
      *  its light shows FOCUS (CONTROLLER_JOBS.md 11). */
     quint32 focusOwnerUniverse() const;
     /** The owner of the tools changed (claimed, a job taken away, its pad
@@ -755,6 +755,11 @@ private:
     quint32 m_walker = UINT_MAX;
     /** Q252: start the walk on @p universe beside the armed runner. */
     bool startWalkBeside(quint32 universe);
+    /** End a walk beside the runner that can't go on (Operate, the role
+     *  switched, the walker's Focus job taken or the walker gone; second
+     *  review 1, 2, 6): the runner's GO works again, and @p reason (with
+     *  any change not kept, which goes back) is said on the screen. */
+    void endBesideWalk(const QString &reason);
     /** The words a press beside the focus was refused with (cleared when
      *  the focus ends, review 8). */
     QString m_besideNotice;

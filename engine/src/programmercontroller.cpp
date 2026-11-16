@@ -2001,7 +2001,7 @@ void ProgrammerController::sendPadFeedback(const QVariantMap &params, quint32 un
             return;
         universe = pad.universe;
     }
-    if (universe >= iom->universesCount())
+    if (universe >= iom->universesCount() || !isPadUniverse(universe))
         return;
     InputPatch *ip = iom->inputPatch(universe);
     if (ip == nullptr || ip->plugin() == nullptr)
@@ -2011,7 +2011,8 @@ void ProgrammerController::sendPadFeedback(const QVariantMap &params, quint32 un
 
 quint32 ProgrammerController::feedbackPad() const
 {
-    if (m_actingUniverse != UINT_MAX)
+    // A MIDI or OSC input is no pad: its events are no pad's action.
+    if (m_actingUniverse != UINT_MAX && isPadUniverse(m_actingUniverse))
         return m_actingUniverse;
     return statePad();
 }
@@ -3357,7 +3358,13 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     m_heldRoles.pad = universe;
     /* The touchpad's swipes (Q199): kept here, read on the tick. A swipe
        walks the show, so only a pad with the Focus job's (CONTROLLER_JOBS.md 8). */
-    const bool swipes = m_controllerJobs->has(universe, ControllerJobs::Focus);
+    const bool beside = m_padRun->isBesideTool(universe);
+    const bool swipes = m_controllerJobs->has(universe, ControllerJobs::Focus) && !beside;
+    /* Beside another pad's focus or walk a swipe is a press like the
+       others: refused, said (second review 5). */
+    if (beside && role == GamepadRole::TouchDown && value > 0)
+        m_padRun->tellRefused(m_padRun->isBesideFocus(universe) ? m_padRun->focusBesideText()
+                                                                : m_padRun->walkBesideText());
     if (GamepadRole::isTouch(role) && swipes)
         m_padRun->touchValue(role, norm);
     else if (role == GamepadRole::TouchClick && swipes)

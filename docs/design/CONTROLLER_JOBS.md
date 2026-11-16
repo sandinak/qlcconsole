@@ -261,6 +261,20 @@ still starts no walk while a pad is armed (unchanged). Hits fire in
 Operate only, so a walk beside the runner never meets a new hit; one
 already on plays on (the walk stops nothing).
 
+A walk beside the runner ends by itself, the runner's GO live again at
+once and the reason on the screen (and any change not kept put back,
+said), when the show goes into **Operate** ("Walk ended: the show is in
+Operate and <runner> runs cues."), the **role** is switched, the walker
+**loses its Focus job** ("Walk ended: <walker> no longer does focus.") or
+the walker **goes away** (unplugged, or its input moved: "Walk ended: the
+controller walking it went away.") -- as a focus left with no pad is said
+(second review of 46cfdd708). A runner's swipe beside a walk or a focus
+steps nothing and is refused as its other presses are.
+
+A runner's arm put by is not ownership: any pad with Focus may take an
+ownerless venue focus (a pad unplugged and back takes its focus again),
+and FOCUS names no pad until one does.
+
 Already true before the build: the stop from either pad (`watchStop()`
 first); a playing hit not cut (a walk starts or stops no function).
 

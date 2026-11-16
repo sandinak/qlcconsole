@@ -73,6 +73,17 @@ PadRun::PadRun(Doc *doc, ProgrammerController *pc, QObject *parent)
            or off (a VC button, the phone page) changes what a pull does.
            Queued: a function starts and stops on the DMX thread. */
         connect(m_doc, &Doc::modeChanged, this, &PadRun::syncHit);
+        /* Into Operate, a walk beside the runner ends (Q252 is Design's;
+           second review 1): the runner's GO is live again at once. */
+        connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
+            if (mode == Doc::Operate && m_walkBeside && isWalking())
+            {
+                const QString name = runnerName();
+                endBesideWalk(name.isEmpty()
+                              ? tr("Walk ended: the show is in Operate and another controller runs cues.")
+                              : tr("Walk ended: the show is in Operate and %1 runs cues.").arg(name));
+            }
+        });
         if (MasterTimer *mt = m_doc->masterTimer())
         {
             connect(mt, &MasterTimer::functionStarted, this, &PadRun::syncHit, Qt::QueuedConnection);
@@ -251,6 +262,9 @@ void PadRun::setEnabled(bool on, bool say)
     if (on == m_enabled)
         return;
     hookShowControl();
+    // A walk beside the runner is the Run role's (second review 6).
+    if (m_walkBeside && isWalking())
+        endBesideWalk(tr("Walk ended: the controller role changed."));
     clear(false);       // the four were not read in Tools
     m_stopped = false;
     m_enabled = on;
@@ -1019,6 +1033,9 @@ bool PadRun::twinStopFired(quint32 universe) const
 
 void PadRun::forgetPad(quint32 universe)
 {
+    // The walker beside the runner went (second review 2).
+    if (m_walkBeside && isWalking() && sameController(universe, m_walker))
+        endBesideWalk(tr("Walk ended: the controller walking it went away."));
     m_held.remove(universe);
     if (m_chordUniverse == universe)
     {
@@ -1394,8 +1411,10 @@ void PadRun::tellRefused(const QString &text)
 
 quint32 PadRun::focusOwnerUniverse() const
 {
-    const quint32 owner = m_pc != nullptr ? m_pc->controllerOwner() : UINT_MAX;
-    return owner != UINT_MAX ? owner : m_focusArm;
+    /* The pad that owns it (Q135), and no other: a runner's arm put by is
+       not ownership, so any pad with Focus may take an ownerless focus
+       (second review 3), and FOCUS names no pad until one does. */
+    return m_pc != nullptr ? m_pc->controllerOwner() : UINT_MAX;
 }
 
 QString PadRun::focusOwnerName() const
@@ -1492,6 +1511,14 @@ QString PadRun::chipNotice() const
 
 void PadRun::jobsChanged()
 {
+    // The walker beside the runner lost its Focus job (second review 2).
+    if (m_walkBeside && isWalking() && !hasJob(m_walker, ControllerJobs::Focus))
+    {
+        const ControllerJobs *jobs = m_pc != nullptr ? m_pc->controllerJobs() : nullptr;
+        const QString name = jobs != nullptr ? jobs->nameOfUniverse(m_walker) : QString();
+        endBesideWalk(name.isEmpty() ? tr("Walk ended: the controller walking it no longer does focus.")
+                                     : tr("Walk ended: %1 no longer does focus.").arg(name));
+    }
     /* A job taken away while it is in use (CONTROLLER_JOBS.md 10): the
        runner's Run cues -- disarmed, with no button (rule 3's "no button
        at all"); the arm a venue focus put by is not given back. */
@@ -2093,6 +2120,22 @@ void PadRun::walkEnded()
     }
     sync();
     m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
+}
+
+void PadRun::endBesideWalk(const QString &reason)
+{
+    if (!m_walkBeside || !isWalking() || m_pc == nullptr)
+        return;
+    // Ended here, not by the walker: what was not kept goes back, and is said.
+    const RefineSession *r = m_pc->refineSession();
+    const int pending = r->hasPending() ? r->pendingCount() : 0;
+    m_pc->refineSession()->stop();      // its stopped(): walkEnded(), the runner's GO back
+    QString said = reason;
+    if (pending == 1)
+        said += QLatin1Char(' ') + tr("1 change not kept went back.");
+    else if (pending > 1)
+        said += QLatin1Char(' ') + tr("%1 changes not kept went back.").arg(pending);
+    tellRefused(said);
 }
 
 bool PadRun::startWalkBeside(quint32 universe)
