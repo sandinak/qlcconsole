@@ -1284,8 +1284,11 @@ void PadRunRules_Test::jobsEveryControlOnASecondPad()
         for (int i = 0; i < g.steps.size(); ++i)
         {
             axis(g.steps.at(i).first, g.steps.at(i).second, 1);
+            /* The arm's hold, waited out: until its timer has fired, not
+               a fixed time (CI's slow macOS runner fired a 15 ms timer
+               after 60 ms). A chord that is never timed is not pending. */
             if (g.chord && i == 1)
-                QTest::qWait(60);      // the arm's hold, waited out
+                QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);
         }
         const QString why = QString("%1 on B").arg(g.name);
         // A GO never comes from a pad that does not hold Run.
