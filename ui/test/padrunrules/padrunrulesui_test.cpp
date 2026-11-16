@@ -378,6 +378,7 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
     value(kLB, 255);
     value(kRB, 255);
     QTest::qWait(300);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);   // and its timer fired (slow CI)
     const QString diag = QString("after the pad came back: armed %1, state %2, LB role %3, holder '%4', testing %5")
                              .arg(run->isArmed()).arg(int(run->state())).arg(pc->controllerRole(0, kLB))
                              .arg(run->holder()).arg(run->isTesting());
@@ -412,6 +413,7 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
     value(kLB, 255);
     value(kRB, 255);
     QTest::qWait(300);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);   // and its timer fired (slow CI)
     const QString diag2 = QString("again after the pad came back: armed %1, state %2, LB role %3, holder '%4', "
                                   "testing %5, walking %6, chord pending %7, roleText %8")
                               .arg(run->isArmed()).arg(int(run->state())).arg(pc->controllerRole(0, kLB))
@@ -588,6 +590,7 @@ void PadRunRulesUi_Test::twoPadsOnEverySurface()
     value(1, kLB, 255);
     value(1, kRB, 255);
     QTest::qWait(60);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);   // and its timer fired (slow CI)
     value(1, kRB, 0);
     value(1, kLB, 0);
     settle();
@@ -598,6 +601,7 @@ void PadRunRulesUi_Test::twoPadsOnEverySurface()
     value(1, kLB, 255);
     value(1, kRB, 255);
     QTest::qWait(60);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);   // and its timer fired (slow CI)
     value(1, kRB, 0);
     value(1, kLB, 0);
     settle();

@@ -1368,6 +1368,7 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     hold(kLB, true, 1);
     hold(kRB, true, 1);
     QTest::qWait(80);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);   // and its timer fired (slow CI)
     hold(kRB, false, 1);
     hold(kLB, false, 1);
     QCOMPARE(run->notice(), QString::fromUtf8("Pad A (\u202600:01) is running cues."));
@@ -1396,6 +1397,7 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     hold(kLB, true, 0);
     hold(kRB, true, 0);
     QTest::qWait(80);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);   // and its timer fired (slow CI)
     hold(kRB, false, 0);
     hold(kLB, false, 0);
     QCOMPARE(run->armedUniverse(), quint32(1));
