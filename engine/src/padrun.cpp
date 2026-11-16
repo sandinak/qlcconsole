@@ -2093,3 +2093,12 @@ void PadRun::walkTick(double dt)
         m_levelMoved = false;
     }
 }
+
+/* RED-STUBS (replaced by the build): the old behaviour, so the new tests
+   compile and show what fails. */
+quint32 PadRun::focusOwnerUniverse() const { return m_focusArm; }
+QString PadRun::focusOwnerName() const { return runnerName(); }
+bool PadRun::isBesideFocus(quint32) const { return false; }
+QString PadRun::focusBesideText() const { return QString(); }
+PadRun::FocusStart PadRun::focusStart() const { return ArmFirst; }
+void PadRun::tellRefused(const QString &text) { if (m_pc != nullptr) m_pc->tellOperator(text, ControllerScheme::ConfirmPriority); }

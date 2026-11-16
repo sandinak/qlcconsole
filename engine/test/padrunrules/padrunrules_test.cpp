@@ -60,6 +60,15 @@
 #include "qlcchannel.h"
 #include "qlcpalette.h"
 #include "fixture.h"
+#include "monitorproperties.h"
+#include "stagetarget.h"
+#include "focuscallcue.h"
+#include "focuscalls.h"
+#include "focussession.h"
+#include "fixturegroup.h"
+#include "qlcpoint.h"
+#include "function.h"
+#include "functionparent.h"
 
 namespace
 {
@@ -194,6 +203,7 @@ void PadRunRules_Test::makeShow()
     QList<quint32> spots;
     for (int i = 0; i < 2; ++i)
         spots << makeSpot(m_doc, QString("Spot %1").arg(i + 1))->id();
+    m_spots = spots;
     QLCPalette *full = new QLCPalette(QLCPalette::Dimmer);
     full->setName("Full");
     full->setValue(255);
@@ -215,6 +225,59 @@ void PadRunRules_Test::makeShow()
     }
     m_doc->programmer()->refineSession()->setFlashEnabled(false);
     st->pickCue(m_cue1);
+}
+
+void PadRunRules_Test::makeFocusCue()
+{
+    ProgrammerController *pc = m_doc->programmer();
+    MonitorProperties *props = m_doc->monitorProperties();
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Spots");
+    g->setSize(QSize(int(m_spots.size()), 1));
+    for (int i = 0; i < m_spots.size(); ++i)
+    {
+        props->setFixturePosition(m_spots.at(i), 0, 0, QVector3D(2000.0f * (i + 1), 2000.0f, 5.0f));
+        g->assignFixture(m_spots.at(i), QLCPoint(i, 0));
+    }
+    m_doc->addFixtureGroup(g);
+    StageTarget *dsc = props->addStageTarget();
+    dsc->setName("DSC");
+    dsc->setPosition(QVector3D(5.0f, 6.0f, 0.0f));
+    FocusCall c;
+    c.groups << g->id();
+    c.target.kind = FocusSession::Reference::Target;
+    c.target.id = dsc->id();
+    pc->focusCalls()->setCalls({ c });
+    QVERIFY(m_doc->showTree()->setCuesFocusCall({ m_cue1 }, true));
+    m_running = m_cue1;
+    pc->focusCallCue()->setRunningCueProbe([this](quint32) { return m_running; });
+    // The panel's part: Leave asks about unsaved work, then finishes.
+    connect(pc->focusSession(), &FocusSession::exitRequested, pc->focusSession(), &FocusSession::finish);
+    m_doc->setMode(Doc::Operate);
+    pc->focusCallCue()->cueCurrent(m_list, m_cue1);
+    QCOMPARE(pc->focusCallCue()->state(), FocusCallCue::Armed);
+}
+
+void PadRunRules_Test::focusCueAgain()
+{
+    FocusCallCue *fcc = m_doc->programmer()->focusCallCue();
+    m_running = m_cue2;
+    fcc->cueCurrent(m_list, m_cue2);
+    m_running = m_cue1;
+    fcc->cueCurrent(m_list, m_cue1);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+}
+
+void PadRunRules_Test::ltMenu(quint32 universe)
+{
+    withLt(kMenu, universe);
+}
+
+void PadRunRules_Test::withLt(quint32 channel, quint32 universe)
+{
+    axis(kLT, 255, universe);
+    press(channel, universe);
+    axis(kLT, 0, universe);
 }
 
 void PadRunRules_Test::press(quint32 channel, quint32 universe)
@@ -1552,6 +1615,336 @@ void PadRunRules_Test::jobsFocusOnlyFromFocusPads()
     press(kMenu, 1);
     QVERIFY(!run->isWalking());
     QCOMPARE(run->notice(), QString("This controller doesn't do focus."));
+}
+
+namespace
+{
+QString jobNames(int jobs)
+{
+    QStringList names;
+    for (ControllerJobs::Job job : ControllerJobs::jobs())
+        if (jobs & job)
+            names << ControllerJobs::jobKey(job);
+    return names.isEmpty() ? QStringLiteral("none") : names.join('+');
+}
+}
+
+void PadRunRules_Test::jobsVenueFocusFromAFocusPad_data()
+{
+    QTest::addColumn<int>("jobs");
+    QTest::addColumn<int>("runnerLine");
+    // The other pad: each of the eight job mixes; the runner on either line.
+    for (int line : { 0, 1 })
+        for (int j = 0; j <= int(CJ::AllJobs); ++j)
+            QTest::newRow(qPrintable(QString("other[%1] runner on line %2").arg(jobNames(j)).arg(line)))
+                << j << line;
+}
+
+void PadRunRules_Test::jobsVenueFocusFromAFocusPad()
+{
+    QFETCH(int, jobs);
+    QFETCH(int, runnerLine);
+    const quint32 r = quint32(runnerLine), o = 1 - r;
+    makeShow();
+    if (r == 0)
+        twoPads(int(CJ::RunCues), jobs);
+    else
+        twoPads(jobs, int(CJ::RunCues));
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    run->setEnabled(true);
+    arm(true, r);
+    QCOMPARE(run->armedUniverse(), r);
+    const QString oName = pc->controllerJobs()->nameOfUniverse(o);
+    const bool focus = jobs & CJ::Focus;
+    // How it starts, said everywhere from one source: no arm on a Focus pad.
+    QCOMPARE(fcc->readyPhrase(), focus ? QString("Venue focus ready. Hold {LT} and press {Menu} to begin.")
+                                       : QString("Venue focus ready. No controller does focus: start it on the laptop."));
+
+    // Menu alone on the other pad: never a start on one button.
+    press(kMenu, o);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->notice(), focus ? QString("To start the venue focus, hold LT and press Menu.")
+                                  : QString("This controller doesn't do focus."));
+    QVERIFY(run->isArmed());
+
+    // LT + Menu on it.
+    ltMenu(o);
+    QVERIFY2(run->isArmed() && run->armedUniverse() == r, "the runner's arm moved");
+    if (!focus)
+    {
+        QCOMPARE(fcc->state(), FocusCallCue::Armed);
+        QCOMPARE(run->state(), PadRun::Armed);
+        QCOMPARE(run->notice(), QString("This controller doesn't do focus."));
+        withLt(kA, r);
+        QCOMPARE(goes(), 1);
+        return;
+    }
+    QVERIFY2(fcc->state() == FocusCallCue::Running, qPrintable(run->notice()));
+    QVERIFY(pc->focusSession()->isActive());
+    QCOMPARE(pc->controllerOwner(), o);
+    // FOCUS names the focus's pad; only its light is blue (one source).
+    QCOMPARE(run->state(), PadRun::Focus);
+    QCOMPARE(run->focusOwnerUniverse(), o);
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: FOCUS · %1").arg(oName));
+    QCOMPARE(run->lightUniverse(), o);
+    QCOMPARE(lightOn(o), PadRun::focusColour().name());
+    QCOMPARE(lightOn(r), QString());
+
+    // The runner: armed all through; its GO family refused, saying why.
+    const QString why = QString("Venue focus is running on %1: nothing plays until it ends.").arg(oName);
+    for (quint32 ch : { kA, kB, kX, kY })
+    {
+        run->showNotice(QString());
+        withLt(ch, r);
+        QVERIFY2(run->notice() == why, qPrintable(QString("LT + %1: '%2'").arg(ch).arg(run->notice())));
+        QVERIFY(run->isArmed());
+        QCOMPARE(run->armedUniverse(), r);
+    }
+    // RT (no hit on): no new hit.
+    run->showNotice(QString());
+    press(kRT, r);
+    QCOMPARE(run->notice(), why);
+    // Its arm chord: no change in FOCUS, and said.
+    run->showNotice(QString());
+    hold(kLB, true, r);
+    hold(kRB, true, r);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);
+    hold(kRB, false, r);
+    hold(kLB, false, r);
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->notice(), why);
+    // Its LT + Menu ends nothing (it has no Focus).
+    ltMenu(r);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(run->notice(), QString("This controller doesn't do focus."));
+    QCOMPARE(goes(), 0);
+    QCOMPARE(stops(), 0);
+
+    // The focus's pad ends it: the runner is ARMED, its GO works, no re-arm.
+    ltMenu(o);
+    QVERIFY(!pc->focusSession()->isActive());
+    QCOMPARE(run->state(), PadRun::Armed);
+    QCOMPARE(run->armedUniverse(), r);
+    QCOMPARE(lightOn(r), PadRun::armedColour().name());
+    withLt(kA, r);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::jobsTheStopDuringAnotherPadsFocus_data()
+{
+    QTest::addColumn<int>("stopper");
+    QTest::newRow("the runner (Run cues only)") << 0;
+    QTest::newRow("the focus pad (Focus only)") << 1;
+}
+
+void PadRunRules_Test::jobsTheStopDuringAnotherPadsFocus()
+{
+    QFETCH(int, stopper);
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    ltMenu(1);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QVERIFY(run->isArmed());
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, quint32(stopper));
+    // First, from either pad, whatever its jobs: everything stops, red on both.
+    QCOMPARE(stops(), 1);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(!run->isArmed());
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    QCOMPARE(lightOn(1), PadRun::stoppedColour().name());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0, quint32(stopper));
+    // The focus ended after the stop: the runner is not armed again.
+    ltMenu(1);
+    QVERIFY(!pc->focusSession()->isActive());
+    QVERIFY(!run->isArmed());
+    withLt(kA, 0);
+    QCOMPARE(goes(), 0);
+}
+
+void PadRunRules_Test::jobsRunAndFocusOnOnePadAsBefore()
+{
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::FollowSpot));
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    run->setEnabled(true);
+    // The pad that runs cues starts from its arm: not armed, refused.
+    QCOMPARE(fcc->readyPhrase(), QString("Venue focus ready. Armed, hold {LT} and press {Menu} to begin."));
+    ltMenu(0);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->notice(), QString("Not armed. To start the venue focus, hold LB and RB to arm, then LT + Menu."));
+    arm(true, 0);
+    press(kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QVERIFY(run->notice().contains("LT + Menu starts the venue focus"));
+    // Armed, LT + Menu: FOCUS, the arm put by.
+    ltMenu(0);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(run->state(), PadRun::Focus);
+    QVERIFY(!run->isArmed());
+    QCOMPARE(run->m_focusArm, quint32(0));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: FOCUS · Pad A (…00:01)"));
+    // The end: ARMED again on it.
+    ltMenu(0);
+    QVERIFY(!pc->focusSession()->isActive());
+    QCOMPARE(run->state(), PadRun::Armed);
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::jobsAHitPlayingAcrossAnotherPadsFocus()
+{
+    /* "A cue that fires while a hit is firing lets the hit complete": the
+       focus start is no exception. The runner's toggle hit stays on across
+       it until the runner's own pull lets it go; a new pull waits. */
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    makeFocusCue();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 hit = st->addHit(ShowTree::HitScope::Production, st->productions().first().id, "Strobe");
+    QVERIFY(hit != ShowTree::invalidId());
+    ShowTree::Target t;
+    t.fixtures = m_spots;
+    ShowTree::Look l;
+    l.key = ShowTree::KeyDimmer;
+    l.palettes = { m_doc->palettes().first()->id() };
+    QVERIFY(st->setLayerLook(hit, st->addLayer(hit, t, "Spots"), l));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    QCOMPARE(run->armedHits(), QList<quint32>({ hit }));
+    QSignalSpy fired(run, &PadRun::hitFired);
+    press(kRT, 0);
+    QCOMPARE(fired.count(), 1);
+    Function *f = m_doc->function(st->lookFunction(hit));
+    QVERIFY(f != nullptr);
+    m_doc->masterTimer()->timerTick();
+    QVERIFY(f->isRunning());
+
+    // B starts the venue focus: the hit plays on.
+    ltMenu(1);
+    QCOMPARE(run->state(), PadRun::Focus);
+    m_doc->masterTimer()->timerTick();
+    QVERIFY2(f->isRunning(), "the focus start cut the hit");
+    QVERIFY(run->isArmed());
+    // A's pull lets it go: that is no new hit.
+    press(kRT, 0);
+    QCOMPARE(fired.count(), 2);
+    QVERIFY(!fired.last().at(1).toBool());
+    m_doc->masterTimer()->timerTick();
+    QVERIFY(!f->isRunning());
+    // A new pull: refused while the focus runs, and why.
+    run->showNotice(QString());
+    press(kRT, 0);
+    QCOMPARE(fired.count(), 2);
+    QCOMPARE(run->notice(), QString::fromUtf8("Venue focus is running on Pad B (…00:02): nothing plays until it ends."));
+    m_doc->masterTimer()->timerTick();
+    QVERIFY(!f->isRunning());
+    // The end: A's pull fires it again, no re-arm.
+    ltMenu(1);
+    QVERIFY(!pc->focusSession()->isActive());
+    press(kRT, 0);
+    QCOMPARE(fired.count(), 3);
+    QVERIFY(fired.last().at(1).toBool());
+    QCOMPARE(goes(), 0);
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+void PadRunRules_Test::jobsTheWalkBesideTheRunner()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    press(kMenu, 1);
+    QVERIFY(!run->isWalking());
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (…00:01) is running cues: walk once it disarms."));
+    // A disarms: B walks with its Focus job alone.
+    arm(false, 0);
+    press(kMenu, 1);
+    QVERIFY(run->isWalking());
+    run->stopWalk();
+}
+
+void PadRunRules_Test::jobsASwipeIsTheFocusJobs()
+{
+    const quint32 kTouchX = 30, kTouchY = 31, kTouchDown = 32;
+    m_stub->m_channelRoles.insert(kTouchX, "touch_x");
+    m_stub->m_channelRoles.insert(kTouchY, "touch_y");
+    m_stub->m_channelRoles.insert(kTouchDown, "touch_down");
+    makeShow();
+    twoPads(int(CJ::RunCues | CJ::FollowSpot), int(CJ::Focus));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    auto swipe = [&](quint32 u) {
+        auto at = [&](float x) {
+            axis(kTouchX, uchar(x * 255.0f), u);
+            axis(kTouchY, uchar(0.5f * 255.0f), u);
+        };
+        at(0.2f);
+        axis(kTouchDown, 255, u);
+        run->swipeTick(0.02);
+        for (int i = 1; i <= 10; ++i)
+        {
+            at(0.2f + 0.6f * i / 10.0f);
+            run->swipeTick(0.02);
+        }
+        axis(kTouchDown, 0, u);
+        run->swipeTick(0.02);
+        run->swipeTick(1.0);
+    };
+    // A, no Focus: its swipe walks nothing.
+    swipe(0);
+    QVERIFY2(!run->isWalking(), "a pad without the Focus job started a walk");
+    // B, Focus: it walks.
+    swipe(1);
+    QVERIFY(run->isWalking());
+    run->stopWalk();
+}
+
+void PadRunRules_Test::jobsFocusModeInRunIsSaidOnScreen()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    QSignalSpy focusMode(pc, &ProgrammerController::focusModeRequested);
+    hold(kView, true, 1);
+    hold(kMenu, true, 1);
+    hold(kMenu, false, 1);
+    hold(kView, false, 1);
+    QCOMPARE(focusMode.count(), 0);
+    QVERIFY(run->isEnabled());
+    QCOMPARE(run->notice(), QString("Focus mode is in the Tools role: switch roles on the laptop (the Run tab's Pad: button)."));
+}
+
+void PadRunRules_Test::jobsTheFocusControllerHasTheFocusJob()
+{
+    twoPads(int(CJ::RunCues | CJ::FollowSpot), int(CJ::Focus));
+    ProgrammerController *pc = m_doc->programmer();
+    pc->refreshStickBinding();
+    QCOMPARE(pc->focusController().universe, quint32(1));
+    // With no pad with the job: the first, as before.
+    ControllerJobs *jobs = pc->controllerJobs();
+    jobs->setJob(jobs->identityOfUniverse(1), CJ::Focus, false);
+    QVERIFY(pc->focusController().present);
 }
 
 void PadRunRules_Test::jobsTakenAwayWhileInUse()

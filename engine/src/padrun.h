@@ -67,7 +67,9 @@ class Doc;
  *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
  *   Menu         walk the show (below); not while armed
- *   armed, LT held + Menu   start the venue focus cue that waits (FOCUS)
+ *   armed, LT held + Menu   start the venue focus cue that waits (FOCUS);
+ *                a pad with Focus and no arm of its own to give (no
+ *                Run cues, or another pad runs cues): LT held + Menu
  *   hold View + Menu 1 s   switch the role (Tools / Run), either way
  *
  * The rules (the operator's, 2026-11-14; every later change keeps them):
@@ -100,6 +102,12 @@ class Doc;
  *      until the operator moves it (LT + A, or GO on the laptop): ending
  *      a venue focus, from anywhere, never moves the list. The pad going
  *      away in FOCUS: back not armed, never FOCUS with no pad.
+ *      Each job on its own (board Q250, CONTROLLER_JOBS.md 11): a pad
+ *      with Focus and no arm of its own to give starts the focus with LT
+ *      held + Menu, no arm; the runner on another pad stays ARMED, its
+ *      GO family and new hits refused on the screen until the focus ends
+ *      (a hit already playing completes, or is let go by its pull), and
+ *      FOCUS names the focus's pad.
  *
  * Hits (Q154, show-tree.md "Hits"): every hit of the show whose place is
  * live now is armed; the narrowest place wins (cue, then list, production,
@@ -375,6 +383,10 @@ public:
     QString chipNotice() const;
     static QString noRunCuesText();
     static QString noFocusText();
+    /** Refused on the pad, a press PadRun did not read itself (the role
+     *  chord's): said, and shown as notice() so the footer's chip says it
+     *  too (lights-only feedback says nothing aloud). */
+    void tellRefused(const QString &text);
     /** Game controllers patched now (roleText() names the runner when
      *  more than one is). */
     int padCount() const;
@@ -416,6 +428,26 @@ public:
     /** The venue focus cue changed state (ProgrammerController): FOCUS
      *  begins or ends; ended, the arm it came from is back. */
     void focusCueChanged();
+    /** The pad the venue focus is on (board Q135's owner, else the pad
+     *  whose arm it put by; UINT_MAX: none yet). FOCUS names it and only
+     *  its light shows FOCUS (CONTROLLER_JOBS.md 11). */
+    quint32 focusOwnerUniverse() const;
+    /** Its short name; empty when none. */
+    QString focusOwnerName() const;
+    /** @p universe is not the focus's pad while another pad has it: its
+     *  presses play nothing (its arm, if it runs cues, stays). */
+    bool isBesideFocus(quint32 universe) const;
+    /** "Venue focus is running on <pad>: nothing plays until it ends." --
+     *  the runner's GO, Back, Sub GO, Sub Back and new hits while another
+     *  pad has the venue focus (board Q250). */
+    QString focusBesideText() const;
+    /** How a waiting venue focus cue starts from a pad (one source for the
+     *  voice, the Run tab and the footer): ArmFirst -- armed, LT + Menu
+     *  (every pad with Focus also runs cues and none is armed by another);
+     *  NoArm -- LT + Menu on a pad with Focus; NoFocusPad -- pads are
+     *  patched and none has the Focus job (start it on the laptop). */
+    enum FocusStart { ArmFirst, NoArm, NoFocusPad };
+    FocusStart focusStart() const;
 
     /*********************************************************************
      * Triggers and swipes (Q199)
@@ -627,7 +659,9 @@ private:
     void letGoFinishedOneShots();
     /** The controller on @p universe has @p job (a ControllerJobs::Job). */
     bool hasJob(quint32 universe, int job) const;
-    /** Armed, LT held + Menu with a venue focus cue waiting: start it. */
+    /** LT held + Menu with a venue focus cue waiting: start it. From the
+     *  runner's own pad its arm is put by (m_focusArm); from another pad
+     *  (Focus alone, board Q250) the runner keeps its arm. */
     bool startFocus(quint32 universe);
     /** Into FOCUS from ARMED, however the calls began: the arm is kept
      *  aside (m_focusArm) for the focus's end. */
@@ -677,6 +711,9 @@ private:
     quint32 m_focusArm = UINT_MAX;
     /** The controller is gone (ProgrammerController's presence check). */
     bool m_padGone = false;
+    /** isFocusing() when focusCueChanged() last looked: its end is told
+     *  to a runner that kept its arm beside it. */
+    bool m_wasFocusing = false;
     bool m_testing = false;     ///< the Controller Test has the pad
     /** holder() when last seen: a change forgets what was held. */
     QString m_lastHolder;

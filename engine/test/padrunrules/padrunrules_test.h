@@ -84,6 +84,33 @@ private slots:
     void jobsEachPadsLight();
     void jobsTheFollowSpotSkipsAPad();
     void jobsFocusOnlyFromFocusPads();
+    /** Board Q250 (a), each job on its own: the runner has Run cues only
+     *  and is armed; the other pad has each of the eight job mixes, on
+     *  either line. With Focus it starts the venue focus with LT + Menu
+     *  and no arm (Menu alone never does), the runner stays armed with
+     *  its GO family refused on the screen, FOCUS names the focus's pad,
+     *  and after the end the runner's GO works with no re-arm. */
+    void jobsVenueFocusFromAFocusPad_data();
+    void jobsVenueFocusFromAFocusPad();
+    /** The four from either pad while the other pad's venue focus runs. */
+    void jobsTheStopDuringAnotherPadsFocus_data();
+    void jobsTheStopDuringAnotherPadsFocus();
+    /** One pad with Run cues and Focus: as before (armed, LT + Menu, the
+     *  arm put by and back; not armed, refused saying to arm). */
+    void jobsRunAndFocusOnOnePadAsBefore();
+    /** A toggle hit on while another pad starts the venue focus: not cut;
+     *  the runner's pull lets it go, a new pull is refused until the end. */
+    void jobsAHitPlayingAcrossAnotherPadsFocus();
+    /** A Focus pad's Menu while another pad is armed: no walk, and the
+     *  words name the runner (never "disarm first" to a pad that can't). */
+    void jobsTheWalkBesideTheRunner();
+    /** A swipe on a pad without Focus starts no walk (the walk is Focus's). */
+    void jobsASwipeIsTheFocusJobs();
+    /** View + Menu on a Focus pad in the Run role: Focus mode is the Tools
+     *  role's, said on the screen. */
+    void jobsFocusModeInRunIsSaidOnScreen();
+    /** The pad the focus tools read is one with the Focus job. */
+    void jobsTheFocusControllerHasTheFocusJob();
     void jobsTakenAwayWhileInUse();
     /** Review 0.4.10: one pad listed twice (one address, two universes,
      *  CONTROLLER_JOBS.md 9: one controller) is told one light. */
@@ -97,6 +124,15 @@ private:
     IOPluginStub *loadStub();
     /** Four spots, a list: Opening, Blackout (no layer), Ballad. */
     void makeShow();
+    /** A focus call on the spots and Opening a venue focus cue, waiting
+     *  (Operate; the probe says the list is on Opening). */
+    void makeFocusCue();
+    /** The focus cue waiting again (the list off it and back). */
+    void focusCueAgain();
+    /** LT held + Menu on @p universe. */
+    void ltMenu(quint32 universe);
+    /** LT held + @p channel on @p universe. */
+    void withLt(quint32 channel, quint32 universe);
     void press(quint32 channel, quint32 universe = 0);
     void axis(quint32 channel, uchar value, quint32 universe = 0);
     void hold(quint32 channel, bool down, quint32 universe = 0);
@@ -120,6 +156,8 @@ private:
     QList<QPair<ShowControl::Request, ShowControl::Route>> m_runs;
     QStringList m_said;
     quint32 m_list = 0, m_cue1 = 0, m_cue2 = 0;
+    QList<quint32> m_spots;
+    quint32 m_running = 0;      // the cue the focus probe says the list is on
 };
 
 #endif
