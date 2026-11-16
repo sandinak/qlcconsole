@@ -639,7 +639,8 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     r->stop();
     QCOMPARE(run->state(), PadRun::Stopped);
 
-    // The Controller Test open (rule 7): nothing runs the show, not even this.
+    /* The Controller Test open: it runs nothing else, but the four are
+       still the stop (review 0.4.10, M2: nothing swallows it). */
     QVERIFY(r->start(m_cue1, 0xFFFFFFFF, nullptr));
     run->setTesting(true);
     hold(kLB, true);
@@ -650,7 +651,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 1);
+    QCOMPARE(stops(), 2);
     run->setTesting(false);
     r->stop();
 }

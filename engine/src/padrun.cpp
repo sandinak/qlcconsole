@@ -288,24 +288,22 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
                               || role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger;
     Held &h = m_held[universe];
     bool rtPressed = false;
-    switch (role)
+    /* The four were read first, by watchStop() (the stop is checked before
+       anything else): this event's reading is taken from there, never made
+       twice (a trigger's press is an edge). */
+    const bool noted = m_noted.valid && m_noted.universe == universe
+                       && m_noted.role == int(role) && m_noted.value == value;
+    m_noted.valid = false;
+    if (chordControl)
     {
-        case GamepadRole::LB:           h.lb = down; break;
-        case GamepadRole::RB:           h.rb = down; break;
-        case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
-        case GamepadRole::RightTrigger: rtPressed = h.rt.update(value / 255.0f); break;
-        default:                        break;
+        if (noted)
+            rtPressed = m_noted.rtPressed;
+        else
+            rtPressed = noteHeld(universe, role, value);
     }
 
     if (chordControl)
     {
-        /* A trigger with both bumpers is the stop (or on its way): no arm
-           chord again until both bumpers are up -- letting go of the
-           triggers first must not arm. */
-        if (h.lb && h.rb && h.anyTrigger())
-            h.spent = true;
-        else if (!h.lb && !h.rb)
-            h.spent = false;
         /* All four: the emergency stop, armed or not, once a chord. */
         if (h.all())
         {
@@ -857,26 +855,45 @@ void PadRun::controllerLost()
         showNotice(tr("Disarmed: the controller went away."));
 }
 
-bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
+bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
 {
-    // The Controller Test open: nothing pressed runs the show (rule 7).
-    if (!m_enabled || m_testing)
-        return false;
-    if (role != GamepadRole::LB && role != GamepadRole::RB
-        && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)
-        return false;
     Held &h = m_held[universe];
+    bool rtPressed = false;
     switch (role)
     {
         case GamepadRole::LB:           h.lb = value > 0; break;
         case GamepadRole::RB:           h.rb = value > 0; break;
         case GamepadRole::LeftTrigger:  h.lt.update(value / 255.0f); break;
-        default:                        h.rt.update(value / 255.0f); break;
+        case GamepadRole::RightTrigger: rtPressed = h.rt.update(value / 255.0f); break;
+        default:                        break;
     }
+    /* A trigger with both bumpers is the stop (or on its way): no arm
+       chord again until both bumpers are up -- letting go of the triggers
+       first must not arm. */
     if (h.lb && h.rb && h.anyTrigger())
         h.spent = true;
     else if (!h.lb && !h.rb)
         h.spent = false;
+    return rtPressed;
+}
+
+bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
+{
+    m_noted.valid = false;
+    /* The Run role's stop (the Tools role has none, CONTROLLER_JOBS.md 4).
+       The Controller Test open too: it shows the presses, and the stop
+       still stops (review 0.4.10, M2). */
+    if (!m_enabled)
+        return false;
+    if (role != GamepadRole::LB && role != GamepadRole::RB
+        && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)
+        return false;
+    Held &h = m_held[universe];
+    m_noted.rtPressed = noteHeld(universe, role, value);
+    m_noted.universe = universe;
+    m_noted.role = int(role);
+    m_noted.value = value;
+    m_noted.valid = true;
     if (!h.all())
     {
         h.stopFired = false;
@@ -995,6 +1012,8 @@ bool PadRun::startFocus(quint32 universe)
         m_focusArm = UINT_MAX;
         m_armed = true;
         m_armUniverse = universe;
+        // The cue waits again: the controller the start claimed is let go.
+        m_pc->releaseControllerSoon();
         if (!why.isEmpty())
             showNotice(m_pc->padText(why));
         sync();
@@ -1127,14 +1146,21 @@ int PadRun::padCount() const
     InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
     if (iom == nullptr || m_pc == nullptr)
         return 0;
-    int n = 0;
+    /* One pad seen on two universes (one identity: macOS lists some pads
+       twice) is one controller (CONTROLLER_JOBS.md 9): counted once. */
+    QList<quint32> counted;
     for (quint32 u = 0; u < iom->universesCount(); ++u)
     {
         InputPatch *ip = iom->inputPatch(u);
-        if (ip != nullptr && ip->isPatched() && m_pc->isPadUniverse(u))
-            ++n;
+        if (ip == nullptr || !ip->isPatched() || !m_pc->isPadUniverse(u))
+            continue;
+        bool twin = false;
+        for (quint32 v : std::as_const(counted))
+            twin = twin || sameController(u, v);
+        if (!twin)
+            counted << u;
     }
-    return n;
+    return int(counted.size());
 }
 
 quint32 PadRun::lightUniverse() const

@@ -31,6 +31,7 @@
 
 #include <QMutexLocker>
 #include <QVariant>
+#include <QTimer>
 
 #include "programmercontroller.h"
 #include "controllerjobs.h"
@@ -155,6 +156,15 @@ ProgrammerController::ProgrammerController(Doc *doc)
             m_ownerUniverse = 0xFFFFFFFF;
             emit focusControllerChanged();
         }
+        /* A pad that lost the Follow spot job leaves nothing pushed: its
+           events are dropped from now on, so its last push (a stick held
+           as the job went) would drive the spot on by itself (review
+           0.4.10, H2). A stick bound by hand stays bound, and still. */
+        if ((m_panBound && !m_controllerJobs->has(m_panUniverse, ControllerJobs::FollowSpot))
+            || (m_tiltBound && !m_controllerJobs->has(m_tiltUniverse, ControllerJobs::FollowSpot)))
+            letGoOfFollowSpotInputs(m_panBound ? m_panUniverse : m_tiltUniverse, true);
+        if (m_fineUniverse != UINT_MAX && !m_controllerJobs->has(m_fineUniverse, ControllerJobs::FollowSpot))
+            letGoOfFollowSpotInputs(m_fineUniverse, false);
         refreshStickBinding();
         emit axisBindingChanged();      // the follow spot's set-up says it
         refreshPadLight();
@@ -227,7 +237,12 @@ ProgrammerController::ProgrammerController(Doc *doc)
         // Armed: the controller is read for Start, even with nothing else on.
         if (m_focusCallCue->isArmed())
             connectControllerInput();
-        releaseOwnerIfIdle();
+        /* Waiting again (the start given up): the owner the start claimed
+           goes once the press that gave it up is done. */
+        if (m_focusCallCue->isArmed())
+            releaseControllerSoon();
+        else
+            releaseOwnerIfIdle();
     });
     connect(m_focusSession, &FocusSession::announce, this, &ProgrammerController::tellOperator);
     connect(m_refineSession, &RefineSession::announce, this, &ProgrammerController::tellOperator);
@@ -1775,16 +1790,9 @@ void ProgrammerController::setPadLight(const QColor &colour)
        the stop, the others their own colour. One pad: that pad, as ever. */
     const quint32 kAllPads = UINT_MAX - 1;
     quint32 target = UINT_MAX;
-    QList<quint32> pads;
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (m_padRun != nullptr && iom != nullptr && m_padRun->padCount() > 1)
     {
-        for (quint32 u = 0; u < iom->universesCount(); ++u)
-        {
-            InputPatch *ip = iom->inputPatch(u);
-            if (ip != nullptr && ip->isPatched() && isPadUniverse(u))
-                pads << u;
-        }
         if (m_padRun->state() == PadRun::Stopped)
             target = kAllPads;
         else
@@ -1792,6 +1800,19 @@ void ProgrammerController::setPadLight(const QColor &colour)
     }
     if (colour == m_padLight && target == m_padLightTarget)
         return;
+    QList<quint32> pads;
+    for (quint32 u = 0; iom != nullptr && u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip != nullptr && ip->isPatched() && isPadUniverse(u))
+            pads << u;
+    }
+    /* One pad seen on two universes (macOS lists some twice) is one
+       controller: every line of it is told the same light, or it shows
+       whichever came last (review 0.4.10, M1). */
+    auto samePad = [this](quint32 a, quint32 b) {
+        return a == b || (m_padRun != nullptr && m_padRun->sameController(a, b));
+    };
     const quint32 was = m_padLightTarget;
     m_padLight = colour;
     m_padLightTarget = target;
@@ -1808,14 +1829,22 @@ void ProgrammerController::setPadLight(const QColor &colour)
             for (quint32 u : std::as_const(pads))
                 sendPadFeedback(own, u);
         }
-        sendPadFeedback(p);
+        // The one controller: the line the tools read, and its twins.
+        const FocusController pad = focusController();
+        if (pad.present)
+        {
+            sendPadFeedback(p, pad.universe);
+            for (quint32 u : std::as_const(pads))
+                if (u != pad.universe && samePad(u, pad.universe))
+                    sendPadFeedback(p, u);
+        }
     }
     else
     {
         QVariantMap own = p;
         own.insert(QStringLiteral("rgb"), QString());
         for (quint32 u : std::as_const(pads))
-            sendPadFeedback(target == kAllPads || u == target ? p : own, u);
+            sendPadFeedback(target == kAllPads || samePad(u, target) ? p : own, u);
     }
     emit padLightChanged(colour);
 }
@@ -2041,9 +2070,17 @@ void ProgrammerController::claimController(quint32 universe)
 
 void ProgrammerController::releaseOwnerIfIdle()
 {
+    /* A focus cue that only waits (Armed: its start given up or refused)
+       holds no owner, as one that is gone (review 0.4.10, H1). */
+    const FocusCallCue::State cue = m_focusCallCue->state();
     if (!m_focusSession->isActive() && !m_refineSession->isActive()
-        && m_focusCallCue->state() == FocusCallCue::Idle)
+        && (cue == FocusCallCue::Idle || cue == FocusCallCue::Armed))
         m_ownerUniverse = 0xFFFFFFFF;
+}
+
+void ProgrammerController::releaseControllerSoon()
+{
+    QTimer::singleShot(0, this, [this]() { releaseOwnerIfIdle(); });
 }
 
 void ProgrammerController::checkControllerPresence()
@@ -2510,7 +2547,34 @@ void ProgrammerController::clearAxisBindings()
     m_boundFromProfile = false;
     m_capturingPan  = false;
     m_capturingTilt = false;
+    // No stick bound: nothing it pushed stays pushed (H2).
+    letGoOfFollowSpotInputs(UINT_MAX, true);
     emit axisBindingChanged();
+}
+
+void ProgrammerController::letGoOfFollowSpotInputs(quint32 universe, bool stick)
+{
+    bool changed = false;
+    if (stick && (m_panNorm != 0.5f || m_tiltNorm != 0.5f))
+    {
+        m_panNorm = m_tiltNorm = 0.5f;
+        changed = true;
+    }
+    if (universe == UINT_MAX || universe == m_fineUniverse)
+    {
+        changed = changed || m_fineNormX != 0.5f || m_fineNormY != 0.5f || m_recalHeld;
+        m_fineNormX = m_fineNormY = 0.5f;
+        m_fineUniverse = UINT_MAX;
+        // An unfinished facing push sets no facing: it is dropped.
+        m_recalHeld = false;
+        m_recalX = m_recalY = 0.0;
+    }
+    if (!changed)
+        return;
+    // The mover and the free-fly script hear it now, not at the next push.
+    if (m_followMover != nullptr)
+        applyFollowSpotSticks();
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
 }
 
 QString ProgrammerController::axisLabel(quint32 universe, quint32 channel) const
@@ -2642,13 +2706,18 @@ void ProgrammerController::refreshStickBinding()
         return;
     }
 
+    /* A stick that went leaves nothing deflected; a new one starts
+       centred -- and the old pad's fine stick and facing push go with it
+       (review 0.4.10, H2). */
+    const quint32 was = m_panBound ? m_panUniverse : m_tiltBound ? m_tiltUniverse : UINT_MAX;
+    if (was != UINT_MAX)
+        letGoOfFollowSpotInputs(was, true);
     m_panBound = s.pan;
     m_tiltBound = s.tilt;
     m_panUniverse = m_tiltUniverse = s.universe;
     m_panChannel = s.panChannel;
     m_tiltChannel = s.tiltChannel;
     m_boundFromProfile = s.pan || s.tilt;
-    // A stick that went leaves nothing deflected; a new one starts centred.
     m_panNorm = m_tiltNorm = 0.5f;
     qDebug() << "[Stick]" << (m_boundFromProfile ? "bound:" : "none")
              << "u=" << s.universe << "pan ch=" << (s.pan ? int(s.panChannel) : -1)
@@ -2768,6 +2837,10 @@ void ProgrammerController::connectControllerInput()
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
         if (m_padRun != nullptr)
             m_padRun->forgetPad(universe);
+        // Its pushes went with it (no release comes): the follow spot lets go.
+        const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
+        if (stick || m_fineUniverse == universe)
+            letGoOfFollowSpotInputs(universe, stick);
         if (m_padLight.isValid() || m_padLightTarget != UINT_MAX)
         {
             const QColor light = m_padLight;
@@ -2809,8 +2882,17 @@ void ProgrammerController::updateFollowspotJsBindings()
 void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 channel,
                                                        uchar value, const QString &)
 {
+    /* The emergency stop first (CONTROLLER_JOBS.md 4, review 0.4.10): the
+       four together, from any pad, in every state -- before any capture,
+       owner, tool, job, role or Controller Test check, so nothing can
+       swallow it. Swallowed itself while all four are down. */
+    if (m_padRun != nullptr && m_padRun->isEnabled()
+        && m_padRun->watchStop(universe, GamepadRole::Role(controllerRole(universe, channel)), value))
+        return;
     if (m_capturingPan)
     {
+        // Bound by hand: what the old binding left pushed goes (H2).
+        letGoOfFollowSpotInputs(UINT_MAX, true);
         m_panUniverse = universe;
         m_panChannel  = channel;
         m_panBound    = true;
@@ -2821,6 +2903,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     }
     if (m_capturingTilt)
     {
+        letGoOfFollowSpotInputs(UINT_MAX, true);
         m_tiltUniverse = universe;
         m_tiltChannel  = channel;
         m_tiltBound    = true;
@@ -3147,11 +3230,6 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
     if (role == GamepadRole::None && !active)
         return false;
-    /* The Run role's emergency stop is the four together whatever the pad
-       is doing (rule 5): a tool or the walk has the pad here, so the four
-       are watched before they reach it, and swallowed while all are down. */
-    if (active && m_padRun->isEnabled() && m_padRun->watchStop(universe, role, value))
-        return true;
     /* Its jobs (CONTROLLER_JOBS.md 8): a pad without Focus works no tool
        -- Quick focus, Venue focus, Focus this cue -- its presses are told
        so and go nowhere (the stop, above, is every pad's). */
@@ -3245,8 +3323,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         {
             if (!m_controllerJobs->has(universe, ControllerJobs::Focus))
                 tellOperator(PadRun::noFocusText(), ControllerScheme::ConfirmPriority);
-            else
-                m_focusCallCue->start();
+            else if (!m_focusCallCue->start())
+                releaseControllerSoon();    // refused: the cue waits, owned by none
             return true;
         }
         /* "Still at <venue>?" asked (Menu began the calls): A held answers
@@ -5359,6 +5437,7 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
     if (role == GamepadRole::RightX || role == GamepadRole::RightY)
     {
         (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = value / 255.0f;
+        m_fineUniverse = universe;      // whose push it is, to let go of (H2)
         if (m_recalHeld)
             applyFollowSpotSticks();
         return true;
@@ -5372,6 +5451,7 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         if (value > 0 && !m_recalHeld)
         {
             m_recalHeld = true;
+            m_fineUniverse = universe;
             m_recalX = m_recalY = 0.0;
             m_facingSaidClock.invalidate();
             applyFollowSpotSticks();

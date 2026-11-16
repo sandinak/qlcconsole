@@ -22,6 +22,7 @@
 
 #include <QDateTime>
 #include <QObject>
+#include <QHash>
 #include <QString>
 #include <QSet>
 #include <QList>
@@ -211,6 +212,11 @@ public:
      *  keeps its own turns): the views say so. */
     struct TurnChange { quint32 fixtureId; int from; int to; };
     QList<TurnChange> lastTurnChanges() const { return m_turnChanges; }
+    /** Heads whose venue turn waits for Design (review 0.4.10, M4):
+     *  applying a venue never swings a head in Operate, so a turn it keeps
+     *  that differs from the head's now is put on when the show goes to
+     *  Design, and said both times. fixture id -> the turn it waits for. */
+    QHash<quint32, int> deferredTurns() const { return m_deferredTurns; }
 
     /** When @p name's corrections last changed (else when it was made). */
     QDateTime lastChanged(const QString &name) const;
@@ -436,6 +442,11 @@ private:
     VenueRig *m_rig = nullptr;
     class QTimer *m_rigTimer = nullptr;
     QList<TurnChange> m_turnChanges;
+    QHash<quint32, int> m_deferredTurns;
+    /** The show is in Design: the turns that waited go on now, said. */
+    void applyDeferredTurns();
+    /** @p c with the turn a head waits for in place of the one it has. */
+    RigCalibration withDeferredTurn(quint32 fid, RigCalibration c) const;
 };
 
 /** @} */

@@ -135,6 +135,17 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
         connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged,
                 this, &VenueCorrections::syncStructure);
     }
+    /* A venue's turn that would have swung a head in Operate waited: on
+       now, in Design (review 0.4.10, M4). */
+    if (m_doc != nullptr)
+    {
+        connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
+            if (mode == Doc::Design)
+                applyDeferredTurns();
+        });
+        // Another show: nothing of this one's waits.
+        connect(m_doc, &Doc::clearing, this, [this]() { m_deferredTurns.clear(); });
+    }
     // A fixture added while a venue is applied: its calibration is held too.
     if (m_doc != nullptr)
         connect(m_doc, &Doc::fixtureAdded, this, [this](quint32 fid) {
@@ -151,7 +162,8 @@ void VenueCorrections::onRigPropsChanged(quint32 fid)
     if (houseByRig(fid))
         return;
     MonitorProperties *props = m_doc->monitorProperties();
-    const RigCalibration now = RigCalibration::of(props->fixtureRigProps(fid));
+    // A turn waiting for Design is the venue's, not the one on the rig.
+    const RigCalibration now = withDeferredTurn(fid, RigCalibration::of(props->fixtureRigProps(fid)));
     // A skipped correction (Q133) is not on the rig: compare with the base.
     const RigCalibration was = (hasCorrection(fid) && !needsFocus(fid)) ? correction(fid) : baseOf(fid);
     if (now == was)
@@ -921,6 +933,11 @@ bool VenueCorrections::setActiveVenue(const QString &name)
     // Chosen just now: the room it is.
     m_confirmed = !name.isEmpty();
     apply();
+    /* In Operate a turn waits for Design (writeRig()): said, so the
+       person knows why the head has not gone round. */
+    if (!m_deferredTurns.isEmpty())
+        emit note(tr("%n head(s) keep their pan turn until the show is in Design: changing it "
+                     "now would swing the beam a whole turn round live.", "", int(m_deferredTurns.size())));
     m_turnChanges.clear();
     if (props != nullptr)
         for (auto it = turnsBefore.constBegin(); it != turnsBefore.constEnd(); ++it)
@@ -962,6 +979,16 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
     RigCalibration with = c;
     if (with.panTurn == RigCalibration::kTurnUnset)
         with.panTurn = baseOf(fid).panTurn;
+    /* Never a swing in Operate (review 0.4.10, M4): every head is live
+       there, and another turn takes its beam the whole way round. The turn
+       waits for Design (applyDeferredTurns()); the rest goes on now. */
+    if (m_doc->mode() == Doc::Operate && with.panTurn != rp.panTurn)
+    {
+        m_deferredTurns.insert(fid, with.panTurn);
+        with.panTurn = rp.panTurn;
+    }
+    else
+        m_deferredTurns.remove(fid);
     if (RigCalibration::of(rp) == with && rp.panTurn == with.panTurn)
         return;
     with.applyTo(rp);
@@ -970,6 +997,40 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
     m_writing = true;
     props->setFixtureRigProps(fid, rp);
     m_writing = was;
+}
+
+RigCalibration VenueCorrections::withDeferredTurn(quint32 fid, RigCalibration c) const
+{
+    if (m_deferredTurns.contains(fid))
+        c.panTurn = m_deferredTurns.value(fid);
+    return c;
+}
+
+void VenueCorrections::applyDeferredTurns()
+{
+    if (m_deferredTurns.isEmpty() || m_doc == nullptr || m_doc->monitorProperties() == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QHash<quint32, int> waiting = m_deferredTurns;
+    m_deferredTurns.clear();
+    m_turnChanges.clear();
+    const bool was = m_writing;
+    m_writing = true;
+    for (auto it = waiting.constBegin(); it != waiting.constEnd(); ++it)
+    {
+        if (m_doc->fixture(it.key()) == nullptr)
+            continue;
+        FixtureRigProps rp = props->fixtureRigProps(it.key());
+        if (rp.panTurn == it.value())
+            continue;
+        m_turnChanges << TurnChange{ it.key(), rp.panTurn, it.value() };
+        rp.panTurn = it.value();
+        props->setFixtureRigProps(it.key(), rp);
+    }
+    m_writing = was;
+    if (!m_turnChanges.isEmpty())
+        emit note(tr("In Design now: %n head(s) took the pan turn %1 keeps.", "", int(m_turnChanges.size()))
+                      .arg(m_active.isEmpty() ? tr("the show") : m_active));
 }
 
 void VenueCorrections::ensureBase(quint32 fid)
@@ -1207,7 +1268,13 @@ bool VenueCorrections::record(quint32 fid, QString *why)
         return recordRig(why);
     MonitorProperties *props = m_doc->monitorProperties();
     ensureBase(fid);
-    const RigCalibration now = RigCalibration::of(props->fixtureRigProps(fid));
+    // A turn waiting for Design is the venue's, not the one on the rig.
+    RigCalibration now = withDeferredTurn(fid, RigCalibration::of(props->fixtureRigProps(fid)));
+    /* A venue pins only a turn it chose (review 0.4.10, M4): one changed
+       while it was applied differs from the show's own. The show's own
+       turn is not kept (kTurnUnset), so it stands when the show's changes. */
+    if (now.panTurn == props->calibrationBase(fid).panTurn)
+        now.panTurn = RigCalibration::kTurnUnset;
     for (Venue &v : m_venues)
     {
         if (v.name != m_active)
@@ -1404,6 +1471,7 @@ void VenueCorrections::reset()
     m_unknown.clear();
     m_active.clear();
     m_needsFocus.clear();
+    m_deferredTurns.clear();
     m_showFile.clear();
     if (had)
         emit activeVenueChanged(QString());

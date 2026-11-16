@@ -1025,18 +1025,18 @@ void PadRun_Test::theControllerTestTakesThePad()
     QVERIFY(!run->stateColour().isValid());
     QCOMPARE(run->notice(), QString("Disarmed: Controller Test has the controller."));
     QVERIFY(!pc->padLight().isValid());
-    // Everything a tester presses: no arm, no GO, no hit, no stop, no role change.
+    // Everything a tester presses: no arm, no GO, no hit, no role change.
     hold(kLB, true);
     hold(kRB, true);
     QTest::qWait(60);
     QVERIFY(!run->isArmed());
     axis(kLT, 255);
-    axis(kRT, 255);                 // all four: no emergency stop
     press(kA);
-    axis(kRT, 0);
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
+    axis(kRT, 255);                 // RT alone: no hit
+    axis(kRT, 0);
     hold(kView, true);
     hold(kMenu, true);
     QTest::qWait(90);
@@ -1059,6 +1059,25 @@ void PadRun_Test::theControllerTestTakesThePad()
     with(kLT, kA);
     QCOMPARE(m_runs.size(), 1);
     arm(false);
+
+    /* The emergency stop, though (review 0.4.10, M2): the four together
+       stop the show with the test open too -- the test shows the presses,
+       and the stop acts. */
+    run->setTesting(true);
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(m_runs.size(), 2);
+    QCOMPARE(m_runs.last().first.command, ShowControl::AllOff);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+    QCOMPARE(m_runs.size(), 2);     // once a chord
+    run->setTesting(false);
+    QCOMPARE(run->state(), PadRun::Stopped);
     stub->m_buttonActions.clear();
 }
 
@@ -1707,6 +1726,116 @@ void PadRun_Test::reviewTheStopFromAnotherPadAfterAFocusGivenUp()
     QVERIFY(!run->isArmed());
     for (quint32 ch : { kRT, kLT, kRB, kLB })
         axis(ch, 0, 1);
+}
+
+void PadRun_Test::aFocusStartGivenUpLetsTheControllerGo()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1));
+    QTemporaryDir dir;
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    pc->venueCorrections()->setShowFile(dir.filePath("Spring.qlcc"), false);
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    run->setEnabled(true);
+
+    // Given up from the pad: no owner once the press is done.
+    arm(true, 0);
+    with(kLT, kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    with(kLT, kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCoreApplication::processEvents();
+    QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
+    QCOMPARE(run->state(), PadRun::Armed);
+
+    // Started again: claimed again. Given up on the laptop: let go again.
+    with(kLT, kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    QVERIFY(fcc->cancelStart());
+    QCoreApplication::processEvents();
+    QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
+
+    // Refused (the calls have no lights): the cue waits, owned by none.
+    FocusCall empty;
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("Nobody");
+    m_doc->addFixtureGroup(g);
+    empty.groups << g->id();
+    pc->focusCalls()->setCalls({ empty });
+    QCOMPARE(run->state(), PadRun::Armed);
+    with(kLT, kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QCoreApplication::processEvents();
+    QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
+    arm(false, 0);
+}
+
+void PadRun_Test::theStopFromAnyPadInEveryFocusState()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1));
+    QTemporaryDir dir;
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    pc->venueCorrections()->setShowFile(dir.filePath("Spring.qlcc"), false);
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    run->setEnabled(true);
+    auto stops = [this]() {
+        int n = 0;
+        for (const auto &r : m_runs)
+            n += r.first.command == ShowControl::AllOff ? 1 : 0;
+        return n;
+    };
+    auto fourOnB = [this]() {
+        for (quint32 ch : { kLB, kRB, kLT, kRT })
+            axis(ch, 255, 1);
+        for (quint32 ch : { kRT, kLT, kRB, kLB })
+            axis(ch, 0, 1);
+    };
+
+    // The focus cue waiting, A armed: B's four.
+    arm(true, 0);
+    fourOnB();
+    QCOMPARE(stops(), 1);
+    QCOMPARE(run->state(), PadRun::Stopped);
+
+    // Naming the venue, A the owner: B's four.
+    arm(true, 0);
+    with(kLT, kMenu, 0);
+    QCOMPARE(fcc->state(), FocusCallCue::NamingVenue);
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    fourOnB();
+    QCOMPARE(stops(), 2);
+    QCOMPARE(run->state(), PadRun::Stopped);
+
+    // The calls running, A the owner: B's four.
+    if (fcc->state() == FocusCallCue::Armed)
+    {
+        arm(true, 0);
+        with(kLT, kMenu, 0);
+    }
+    if (fcc->state() == FocusCallCue::NamingVenue)
+        QVERIFY(fcc->useVenue(QString("Hall")));
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    fourOnB();
+    QCOMPARE(stops(), 3);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    pc->focusSession()->finish();
 }
 
 void PadRun_Test::aLostPadInFocus()

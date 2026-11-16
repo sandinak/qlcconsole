@@ -136,9 +136,24 @@ signals:
 
 private:
     void load();
+    /** Forget every identity worked out (a pad plugged, unplugged or
+     *  patched elsewhere). */
+    void forgetIdentities();
 
 private:
     Doc *m_doc;
+    /** identityOfUniverse(), worked out once per device (review 0.4.10):
+     *  has() asks on every event, and on Linux a pad's location is read
+     *  from /sys. Kept with what it was worked out for -- the plugin, its
+     *  line, the device's name -- and forgotten on any hot-plug or patch. */
+    struct KnownIdentity
+    {
+        QString plugin;
+        quint32 input = 0;
+        QString name;
+        QString identity;
+    };
+    mutable QHash<quint32, KnownIdentity> m_identities;
     /** What the settings hold, read once: identity -> jobs (only those not
      *  AllJobs are kept). */
     QHash<QString, Jobs> m_jobs;

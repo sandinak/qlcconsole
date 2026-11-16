@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QSignalSpy>
 
 #include "focusreport_test.h"
 #include "programmercontroller.h"
@@ -243,6 +244,95 @@ void FocusReport_Test::aVenueKeepsItsPanTurn()
     QCOMPARE(props->fixtureRigProps(a->id()).panTurn, -1);
     QVERIFY(v->setActiveVenue(QString()));
     QCOMPARE(props->fixtureRigProps(a->id()).panTurn, -1);
+}
+
+void FocusReport_Test::aVenuePinsOnlyTheTurnItChose()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *a = makeSpot(m_doc, "FOH", 5.0f, 12.0f);
+    QVERIFY(a != nullptr);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+
+    // A pan offset trimmed here, the turn not touched: no turn kept.
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 3.0f;
+    props->setFixtureRigProps(a->id(), rp);
+    QVERIFY(v->hasCorrection(a->id()));
+    QCOMPARE(v->venue("Lincoln HS").fixtures.value(a->id()).panTurn, RigCalibration::kTurnUnset);
+    QVERIFY(!readFile(v->filePath()).contains("PanTurn"));
+
+    // The show's turn changed since: it stands in the venue, with its trim.
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), 1));
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    QVERIFY(qFuzzyCompare(props->fixtureRigProps(a->id()).panOffsetDeg, 3.0f));
+    QVERIFY(v->lastTurnChanges().isEmpty());
+
+    // Turned here: the venue's own, kept.
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), -1));
+    QCOMPARE(v->venue("Lincoln HS").fixtures.value(a->id()).panTurn, -1);
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, -1);
+    // Turned back to the show's: no turn kept again.
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), 1));
+    QCOMPARE(v->venue("Lincoln HS").fixtures.value(a->id()).panTurn, RigCalibration::kTurnUnset);
+}
+
+void FocusReport_Test::aVenueTurnWaitsForDesign()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *a = makeSpot(m_doc, "FOH", 5.0f, 12.0f);
+    QVERIFY(a != nullptr);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), 1));
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 0);
+    QSignalSpy notes(v, &VenueCorrections::note);
+    auto said = [&notes](const QString &part) {
+        for (const QList<QVariant> &n : std::as_const(notes))
+            if (n.first().toString().contains(part))
+                return true;
+        return false;
+    };
+
+    // Operate: the venue applied, the head kept on the turn it has, said.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 0);
+    QCOMPARE(v->deferredTurns().value(a->id(), 99), 1);
+    QVERIFY(v->lastTurnChanges().isEmpty());
+    QVERIFY(said("keep their pan turn until the show is in Design"));
+    QVERIFY(!said("In Design now"));
+    // A trim made meanwhile keeps the venue's turn, not the one on the rig.
+    FixtureRigProps rp = props->fixtureRigProps(a->id());
+    rp.panOffsetDeg = 2.0f;
+    props->setFixtureRigProps(a->id(), rp);
+    QCOMPARE(v->venue("Lincoln HS").fixtures.value(a->id()).panTurn, 1);
+
+    // Design: the turn goes on, said.
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    QVERIFY(v->deferredTurns().isEmpty());
+    QVERIFY(said("In Design now"));
+    QVERIFY(qFuzzyCompare(props->fixtureRigProps(a->id()).panOffsetDeg, 2.0f));
+
+    // Leaving the venue in Operate: the show's turn waits too.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 0);
 }
 
 void FocusReport_Test::theReportListsEveryLight()

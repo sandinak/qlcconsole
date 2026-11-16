@@ -1303,6 +1303,37 @@ void FollowSpotFeel_Test::reviewAFineStickHeldAsTheJobIsHandedOver()
                                            "20 frames: A's last fine push stays in m_fineNormX").arg(d)));
 }
 
+void FollowSpotFeel_Test::aStickHeldAsItsPadGoesStops()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" }, { 2, "rx" }, { 3, "ry" } };
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    auto restore = qScopeGuard([&]() {
+        stub->m_channelRoles.clear();
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        h.pc->refreshStickBinding();
+    });
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    QVERIFY(h.pc->m_panBound);
+    h.use(h.rig.targetScene);
+
+    // Both sticks pushed; the pad unpatched mid-push (its releases never come).
+    const QVector3D from = h.rig.subject->position();
+    h.pc->slotControllerInputChanged(0, 0, 255, QString());
+    h.pc->slotControllerInputChanged(0, 2, 255, QString());
+    for (int i = 0; i < 10; ++i)
+        h.tick();
+    QVERIFY2((h.rig.subject->position() - from).length() > 0.01f, "the push moved nothing (no control)");
+    QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    const double d = driftAfter(h);
+    QVERIFY2(d < 0.005, qPrintable(QString("the pad is gone, yet the subject moved %1 m in 20 frames").arg(d)));
+}
+
 void FollowSpotFeel_Test::report()
 {
     if (qEnvironmentVariableIsEmpty("QLC_FSPOT_REPORT"))

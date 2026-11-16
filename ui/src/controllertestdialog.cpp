@@ -122,6 +122,20 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
                                   "the log."), this);
     intro->setWordWrap(true);
     vl->addWidget(intro);
+    /* Opening it takes the pad, as a tool does: the runner's arm drops.
+       The emergency stop does not (CONTROLLER_JOBS.md 4): said, so the
+       person knows both before they close it (review 0.4.10, M2). */
+    {
+        const QString text = tr("The pad that runs cues is disarmed while this is open; arm it again with "
+                                "{LB} + {RB} when you close. The emergency stop, {LB} + {RB} + {LT} + {RT}, "
+                                "still stops the show from any pad.");
+        QLabel *armNote = new QLabel(m_doc != nullptr && m_doc->programmer() != nullptr
+                                     ? m_doc->programmer()->padText(text) : PadNames::expand(text, PadNames::Xbox),
+                                     this);
+        armNote->setObjectName(QStringLiteral("controllerTestArmNote"));
+        armNote->setWordWrap(true);
+        vl->addWidget(armNote);
+    }
 
     m_devicesLabel = new QLabel(this);
     m_devicesLabel->setObjectName(QStringLiteral("controllerTestDevices"));

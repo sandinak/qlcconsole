@@ -478,7 +478,10 @@ and had to rotate."
 Fixture Properties shows it under **Aim & Mount ▸ Pan works around**: the
 bearing with the most room either way, the turn, where the seam is, and how
 clear of it the stage is. Three buttons change it, live like every row
-(OK keeps it as one undo step, Cancel puts it back):
+(OK keeps it as one undo step, Cancel puts it back). When the head is live
+(in Operate, or a running look sets it) each asks first: its beam moves
+now, a whole turn round to the same place.
+
 
 - **Centre on Stage** — the turn that keeps the seam off the stage with
   the most room. A head over the stage, or one the stage already clears by
@@ -500,8 +503,12 @@ inventory — and changes it then only when the stage now crosses the seam,
 saying so on the plot's notice line (Undo puts it back). Never in Operate
 (a slip of the mouse on a live head moves nothing round), never on a
 re-patch of a placed head (the turn you chose stands), and never when an
-Undo, a Cancel or the Patch Planner puts the rig back. A venue keeps its
-own turns: switching to one that turns a head says so on the notice line.
+Undo, a Cancel or the Patch Planner puts the rig back. A venue keeps a
+head's turn only when you changed the turn while that venue was applied;
+otherwise the show's own turn stands there too. Switching to a venue that
+turns a head says so on the notice line, and in Operate it never swings a
+head round: the venue's turn waits until the show is in Design, and the
+notice line says so then and when it goes on.
 For several heads at once, the plot's right-click **Facing (pan zero) ▸
 Centre Their Pans on Stage**, or Fixture Properties for the selection, does
 them all in one step. The **Earlier Turn** and **Later Turn** buttons say,

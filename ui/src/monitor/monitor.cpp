@@ -226,6 +226,37 @@ Monitor* Monitor::s_instance = NULL;
  *****************************************************************************/
 
 namespace {
+/* A turn changed on a live head moves its beam now, the whole way round to
+   the same place: said first, as Show Review's MOV-14 fix says it, and
+   only on a yes (review 0.4.10, M3). True when nothing is live or the
+   person says go. */
+bool confirmLiveTurn(Doc *doc, QWidget *parent, const QList<quint32> &fids, const QString &goText)
+{
+    QStringList live;
+    for (quint32 fid : fids)
+        if (PanTurn::isLive(doc, fid))
+            if (const Fixture *fx = doc->fixture(fid))
+                live << fx->name();
+    if (live.isEmpty())
+        return true;
+    QMessageBox box(parent);
+    box.setObjectName(QStringLiteral("panTurnLiveConfirm"));
+    box.setIcon(QMessageBox::Warning);
+    box.setWindowTitle(goText);
+    box.setText(live.size() > 1
+                ? QCoreApplication::translate("Monitor", "%1 are live: their beams move now, each a whole "
+                                                         "turn round to the same place.")
+                      .arg(live.join(QStringLiteral(", ")))
+                : QCoreApplication::translate("Monitor", "%1 is live: its beam moves now, a whole turn "
+                                                         "round to the same place.").arg(live.first()));
+    box.setInformativeText(QCoreApplication::translate("Monitor", "Cancel puts nothing in motion."));
+    QPushButton *go = box.addButton(goText, QMessageBox::AcceptRole);
+    box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(go);
+    box.exec();
+    return box.clickedButton() == go;
+}
+
 /* The structure views, in the order they read: the plan, the front plane from
    the audience and from behind, the side, the angled look. Each item carries
    its StructureStudioView::Plane, so the list order is free to read well --
@@ -12493,7 +12524,13 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                     centre->setEnabled(toChange > 0);
                 };
                 sayIt();
-                connect(centre, &QPushButton::clicked, &dlg, [this, turners, sayIt]() {
+                connect(centre, &QPushButton::clicked, &dlg, [this, turners, sayIt, centre, &dlg]() {
+                    QList<quint32> moving;
+                    for (quint32 fid : turners)
+                        if (PanTurn::proposal(m_doc, fid) != m_props->fixtureRigProps(fid).panTurn)
+                            moving << fid;
+                    if (!confirmLiveTurn(m_doc, &dlg, moving, centre->text()))
+                        return;
                     for (quint32 fid : turners)
                         PanTurn::centre(m_doc, fid);
                     sayIt();
@@ -13287,14 +13324,18 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
             refreshTest();
         }
     };
+    // A live head (Operate, or a running look) moves now: said first (M3).
     connect(turnCentreBtn, &QPushButton::clicked, [&]() {
-        turnTo(PanTurn::proposal(m_doc, fxId_dlg));
+        if (confirmLiveTurn(m_doc, &dlg, { fxId_dlg }, turnCentreBtn->text()))
+            turnTo(PanTurn::proposal(m_doc, fxId_dlg));
     });
     connect(turnEarlierBtn, &QPushButton::clicked, [&]() {
-        turnTo(m_props->fixtureRigProps(fxId_dlg).panTurn - 1);
+        if (confirmLiveTurn(m_doc, &dlg, { fxId_dlg }, turnEarlierBtn->text()))
+            turnTo(m_props->fixtureRigProps(fxId_dlg).panTurn - 1);
     });
     connect(turnLaterBtn, &QPushButton::clicked, [&]() {
-        turnTo(m_props->fixtureRigProps(fxId_dlg).panTurn + 1);
+        if (confirmLiveTurn(m_doc, &dlg, { fxId_dlg }, turnLaterBtn->text()))
+            turnTo(m_props->fixtureRigProps(fxId_dlg).panTurn + 1);
     });
 
     // Position & Orientation  (placed above Rig Assignment, per user request).

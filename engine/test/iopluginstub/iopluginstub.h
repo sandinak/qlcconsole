@@ -130,7 +130,7 @@ public:
 
     /** @reimp m_lineLocations for @p input (the port: controller jobs) */
     QString inputDeviceLocation(quint32 input) const override
-    { return m_lineLocations.value(input); }
+    { ++m_locationAsks; return m_lineLocations.value(input); }
 
     /** @reimp Counted, like a real plugin's. */
     bool setInputDiagnostics(bool enable) override
@@ -165,6 +165,8 @@ public:
     QString m_deviceKind;
     /** What inputDeviceLocation() reports, by input line ("USB 14200000") */
     QMap<quint32, QString> m_lineLocations;
+    /** inputDeviceLocation() calls (a real plugin may read /sys for each) */
+    mutable int m_locationAsks = 0;
     /** setInputDiagnostics() calls: +1 on, -1 off */
     int m_diagnostics = 0;
     QList<Device> m_devices;

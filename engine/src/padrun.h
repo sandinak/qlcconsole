@@ -338,10 +338,14 @@ public:
      *  it ends), then the button map as a table in the connected pad's
      *  names (Cross / L1 or A / LB), and the walking map. Rich text. */
     QString helpHtml() const;
-    /** A pad control while a tool or the walk has the pad (they hear the
-     *  rest): the emergency stop's four, which are the stop in the Run role
-     *  whatever the pad is doing. True when the four are all down, so the
-     *  tool must not act on it (the stop fires once a chord). */
+    /** Every pad control, first of all (CONTROLLER_JOBS.md 4): the
+     *  emergency stop's four, which are the stop in the Run role from any
+     *  pad whatever it is doing -- a tool, the walk, a venue focus waiting
+     *  or held by another pad, the Controller Test open. It is read before
+     *  any owner, tool, job or role check, so nothing can swallow it. True
+     *  when the four are all down, so nothing else acts on it (the stop
+     *  fires once a chord). handle() takes what this read of the same
+     *  event, so a press is not read twice. */
     bool watchStop(quint32 universe, GamepadRole::Role role, uchar value);
     /** Let go of everything held and disarm (the pad went away, a tool
      *  took it, the role changed): never a button's doing. */
@@ -630,6 +634,9 @@ private:
     void putArmBy();
     /** Menu with a venue focus cue waiting, pressed on @p universe. */
     void focusStartPress(quint32 universe, bool safetyHeld);
+    /** One of the four (LB, RB, LT, RT) read into m_held: the bumpers, the
+     *  triggers' hysteresis, the spent chord. True on RT's press. */
+    bool noteHeld(quint32 universe, GamepadRole::Role role, uchar value);
 
 private:
     Doc *m_doc;
@@ -649,6 +656,16 @@ private:
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };
     QHash<quint32, Held> m_held;
+    /** The event watchStop() last read (and RT's press in it), for handle()
+     *  to take instead of reading it again. */
+    struct Noted
+    {
+        bool valid = false;
+        quint32 universe = UINT_MAX;
+        int role = 0;
+        uchar value = 0;
+        bool rtPressed = false;
+    } m_noted;
     bool m_armed = false;
     quint32 m_armUniverse = UINT_MAX;
     bool m_stopped = false;
