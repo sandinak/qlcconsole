@@ -1255,6 +1255,7 @@ void App::closeEvent(QCloseEvent* e)
                                             "before closing the application?")) == true)
         {
             e->accept();
+            noteStuckControllersAtQuit();
             // A staged update goes in now that qlcconsole is quitting -- and
             // only if nothing is running (UpdateManager::aboutToQuit()). The
             // helper waits for this process to end: make sure it does, even
@@ -1285,7 +1286,33 @@ void App::closeEvent(QCloseEvent* e)
         }
 
         e->accept();
+        noteStuckControllersAtQuit();
     }
+}
+
+bool App::noteStuckControllersAtQuit()
+{
+    /* A controller whose open is stuck in the system (dink, 0.4.10: a pad
+       that switched USB mode): its call may never return, and then the
+       process cannot finish exiting until the computer restarts. Nothing
+       here waits for it -- it is only said. */
+    QLCIOPlugin *hid = m_doc != NULL && m_doc->ioPluginCache() != NULL
+                     ? m_doc->ioPluginCache()->plugin(QStringLiteral("HID")) : NULL;
+    int stuck = 0;
+    if (hid == NULL || QMetaObject::invokeMethod(hid, "openingCount", Qt::DirectConnection,
+                                                 Q_RETURN_ARG(int, stuck)) == false
+        || stuck <= 0)
+        return false;
+    qWarning() << Q_FUNC_INFO << stuck << "game controller(s) still stuck being opened:"
+               << "the app may not finish quitting until the computer restarts";
+#if defined(Q_OS_MACOS)
+    statusBar()->showMessage(tr("A game controller is still stuck in macOS: qlcconsole may not "
+                                "finish quitting until you restart this Mac."));
+#else
+    statusBar()->showMessage(tr("A game controller is still stuck in the system: qlcconsole may "
+                                "not finish quitting until you restart this computer."));
+#endif
+    return true;
 }
 
 /*****************************************************************************

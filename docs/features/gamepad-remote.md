@@ -194,10 +194,14 @@ Joystick** in the same layout.
 - **A controller that stops answering is skipped.** Controllers are
   opened in the background, two seconds each at most. One that doesn't
   answer (a USB pad switching mode, held busy by the computer) is left
-  out and named in the footer, "... not answering", and tried again by
-  itself; the other pads, the lights and every pad's emergency stop
-  carry on, and the show keeps running. If it stays named, unplug it,
-  wait a few seconds and plug it back in.
+  out and named in the footer, "... not answering"; the other pads, the
+  lights and every pad's emergency stop carry on, and the show keeps
+  running. The computer may go on holding that controller, and with it
+  the USB port or hub it is on: unplugging it may not free it, and other
+  devices on that hub may stop working. After the show, restart the
+  computer (on a Mac, restart this Mac to free its USB). Until then
+  qlcconsole may not finish quitting: the window closes, but the app can
+  stay listed as running.
 - **Teaching mode holds the remote as it holds the console.** A remote GO
   goes through the same path as the console's GO, so the instructor's
   settings ([Teaching mode](teaching.md#instructor-settings)) apply to it
@@ -370,5 +374,15 @@ for and note each result.
     had armed Pad Run, the Run tab says "Disarmed: the controller went
     away." If the pad doesn't come back within a few seconds, the footer
     names it ("Xbox 360 Controller for Windows (USB …) — not
-    answering"); another pad's emergency stop (both bumpers and both
-    triggers) still stops the show. Quit the app: it quits at once.
+    answering"), and its details say the show keeps running and to
+    restart this Mac to free its USB. Quit the app: the window closes at
+    once. If the pad stayed named, the status line says "may not finish
+    quitting" as the window closes, and the app may stay listed as
+    running until the Mac restarts.
+16. **After a pad gets stuck.** With the pad from step 15 named in the
+    footer (reopen the app if you quit), and a second pad patched:
+    *Expected:* the console's DMX output still runs (a cue fades on the
+    rig, the output monitor moves), and the second pad's emergency stop
+    (both bumpers and both triggers) stops the show. Restart the Mac
+    afterwards and check the clone pad, and anything else on that USB
+    hub, works again.

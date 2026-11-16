@@ -2211,7 +2211,20 @@ void FollowSpotCue_Test::aControllerThatHangsIsNamedInTheFooter()
     QVERIFY2(entry().items.first().startsWith("Xbox 360 Controller for Windows (USB 2124000)"),
              qPrintable(entry().items.first()));
     QVERIFY2(entry().summary.contains("not answering"), qPrintable(entry().summary));
+    // What to do: the show runs on; a restart frees the USB (not a replug).
+    QVERIFY2(entry().detail.contains("the show keeps running"), qPrintable(entry().detail));
+    QVERIFY2(entry().detail.contains("to free its USB"), qPrintable(entry().detail));
+    QVERIFY2(entry().detail.contains("plug it back") == false, qPrintable(entry().detail));
     QCOMPARE(hid->inputs(), before);    // the other pads, as they were
+
+    /* Quitting now: said in one line, never waited on. */
+    QElapsedTimer quitting;
+    quitting.start();
+    QVERIFY(m_app->noteStuckControllersAtQuit());
+    QVERIFY2(quitting.elapsed() < 1000, qPrintable(QString::number(quitting.elapsed())));
+    QVERIFY2(m_app->statusBar()->currentMessage().contains("may not finish quitting"),
+             qPrintable(m_app->statusBar()->currentMessage()));
+    m_app->statusBar()->clearMessage();
 
     /* The system lets go with nothing there: the line goes. */
     fake.release(false);
@@ -2219,6 +2232,7 @@ void FollowSpotCue_Test::aControllerThatHangsIsNamedInTheFooter()
     QMetaObject::invokeMethod(hid, "setTestBackend", Qt::DirectConnection, Q_ARG(quintptr, quintptr(0)));
     QTRY_VERIFY_WITH_TIMEOUT(entry().key.isEmpty(), 5000);
     QCOMPARE(hid->inputs(), before);
+    QVERIFY(m_app->noteStuckControllersAtQuit() == false);     // nothing stuck: nothing said
 }
 
 QTEST_MAIN(FollowSpotCue_Test)

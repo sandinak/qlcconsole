@@ -176,10 +176,12 @@ void HIDRescan_Test::aPadThatGoesMidOpenIsNotAdded()
 
 void HIDRescan_Test::aPadReplugedAtTheSamePathOpens()
 {
-    /* What the footer tells the operator: unplug it, plug it back in --
-       into the same port, so the same path (macOS: transport_vid_pid_
-       location). The open stuck before is given up once the pad leaves the
-       list; the pad back is opened afresh, while that one stays stuck. */
+    /* A pad whose open stuck leaves the list, then the system offers one
+       at the same port again -- the same path (macOS: transport_vid_pid_
+       location). The stuck open is given up once the pad leaves the list;
+       the one back is opened afresh, while that one stays stuck. (On the
+       bench the system never offered it again until a restart: this is
+       for when it does, not the fix the footer promises.) */
     m_fake->list(kClonePath, 0x045e, 0x028e, kCloneName, FakeHIDBackend::Forever);
     m_plugin->setTestBackend(quintptr(m_fake));
     QTRY_COMPARE_WITH_TIMEOUT(m_plugin->targetProblems().count(), 1, 3000);
