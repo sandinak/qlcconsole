@@ -1330,10 +1330,19 @@ public:
     bool hasCalibrationBase(quint32 fid) const { return m_calibrationBase.contains(fid); }
     RigCalibration calibrationBase(quint32 fid) const { return m_calibrationBase.value(fid); }
     QList<quint32> calibrationBaseFixtures() const { return m_calibrationBase.keys(); }
+    /** The show's own pan turn of a head whose live turn is another, with
+     *  no venue applied: a venue left in Operate keeps its turn on the
+     *  live head until Design (no swing), and saveXML() writes this one
+     *  (review 0.4.10 verify, M-A). */
+    void setShowTurn(quint32 fid, int turn) { m_showTurn[fid] = turn; }
+    void clearShowTurn(quint32 fid) { m_showTurn.remove(fid); }
+    bool hasShowTurn(quint32 fid) const { return m_showTurn.contains(fid); }
+    int showTurn(quint32 fid) const { return m_showTurn.value(fid); }
 
 private:
     QMap<quint32, FixtureRigProps> m_rigProps;
     QHash<quint32, RigCalibration> m_calibrationBase;
+    QHash<quint32, int> m_showTurn;
 
     /********************************************************************
      * Gobo swaps

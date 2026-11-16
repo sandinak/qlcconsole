@@ -250,7 +250,9 @@ show from any pad.
   takes the next pad that has the job. Taken off mid-push, whatever the
   pad was pushing lets go: the follow spot stops, it does not drift on.
   The same happens when the follow spot moves to another pad, is bound by
-  hand, or the pad is unplugged. The follow spot's settings in the
+  hand, or the pad is unplugged. Only that pad's push lets go: with two
+  pads on the follow spot, their fine sticks add up (to a full push), and
+  the other pad's trim stays. The follow spot's settings in the
   Look Editor say where the jobs are set, and say when no pad has the
   job.
 - **Focus off.** The pad can't start or work Venue focus (armed, LT +

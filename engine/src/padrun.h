@@ -637,6 +637,9 @@ private:
     /** One of the four (LB, RB, LT, RT) read into m_held: the bumpers, the
      *  triggers' hysteresis, the spent chord. True on RT's press. */
     bool noteHeld(quint32 universe, GamepadRole::Role role, uchar value);
+    /** The same pad on another universe (one identity) has fired the stop
+     *  for the chord now held: one stop per physical pad. */
+    bool twinStopFired(quint32 universe) const;
 
 private:
     Doc *m_doc;

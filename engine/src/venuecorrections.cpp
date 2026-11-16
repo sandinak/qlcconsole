@@ -144,7 +144,10 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
                 applyDeferredTurns();
         });
         // Another show: nothing of this one's waits.
-        connect(m_doc, &Doc::clearing, this, [this]() { m_deferredTurns.clear(); });
+        connect(m_doc, &Doc::clearing, this, [this]() {
+            m_deferredTurns.clear();
+            m_deferredLive.clear();
+        });
     }
     // A fixture added while a venue is applied: its calibration is held too.
     if (m_doc != nullptr)
@@ -156,6 +159,8 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
 
 void VenueCorrections::onRigPropsChanged(quint32 fid)
 {
+    if (!m_writing)
+        noteHandTurn(fid);
     if (!isActive() || m_writing || m_held.contains(fid) || m_doc->fixture(fid) == nullptr)
         return;
     // A house fixture's calibration is part of its house-rig entry.
@@ -985,10 +990,14 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
     if (m_doc->mode() == Doc::Operate && with.panTurn != rp.panTurn)
     {
         m_deferredTurns.insert(fid, with.panTurn);
+        m_deferredLive.insert(fid, rp.panTurn);
         with.panTurn = rp.panTurn;
     }
     else
+    {
         m_deferredTurns.remove(fid);
+        m_deferredLive.remove(fid);
+    }
     if (RigCalibration::of(rp) == with && rp.panTurn == with.panTurn)
         return;
     with.applyTo(rp);
@@ -997,6 +1006,22 @@ void VenueCorrections::writeRig(quint32 fid, const RigCalibration &c)
     m_writing = true;
     props->setFixtureRigProps(fid, rp);
     m_writing = was;
+}
+
+void VenueCorrections::noteHandTurn(quint32 fid)
+{
+    if (!m_deferredTurns.contains(fid) || m_doc == nullptr || m_doc->monitorProperties() == nullptr)
+        return;
+    MonitorProperties *props = m_doc->monitorProperties();
+    if (props->fixtureRigProps(fid).panTurn == m_deferredLive.value(fid))
+        return;     // something else changed: the turn still waits
+    /* Turned on purpose (Fixture Properties after its question, the plot):
+       the latest choice. With a venue applied it is recorded as any
+       change is (onRigPropsChanged); with none it is the show's own. */
+    m_deferredTurns.remove(fid);
+    m_deferredLive.remove(fid);
+    if (!isActive())
+        props->clearShowTurn(fid);
 }
 
 RigCalibration VenueCorrections::withDeferredTurn(quint32 fid, RigCalibration c) const
@@ -1013,11 +1038,15 @@ void VenueCorrections::applyDeferredTurns()
     MonitorProperties *props = m_doc->monitorProperties();
     const QHash<quint32, int> waiting = m_deferredTurns;
     m_deferredTurns.clear();
+    m_deferredLive.clear();
     m_turnChanges.clear();
     const bool was = m_writing;
     m_writing = true;
     for (auto it = waiting.constBegin(); it != waiting.constEnd(); ++it)
     {
+        // No venue: the head is the show's again, live and saved alike.
+        if (!isActive())
+            props->clearShowTurn(it.key());
         if (m_doc->fixture(it.key()) == nullptr)
             continue;
         FixtureRigProps rp = props->fixtureRigProps(it.key());
@@ -1038,7 +1067,15 @@ void VenueCorrections::ensureBase(quint32 fid)
     MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
     if (props == nullptr || !isActive() || props->hasCalibrationBase(fid) || houseByRig(fid))
         return;
-    props->setCalibrationBase(fid, RigCalibration::of(props->fixtureRigProps(fid)));
+    /* The show's own turn, never a venue's still on the live head (a venue
+       left in Operate): the base holds it from here (M-A). */
+    RigCalibration base = RigCalibration::of(props->fixtureRigProps(fid));
+    if (props->hasShowTurn(fid))
+    {
+        base.panTurn = props->showTurn(fid);
+        props->clearShowTurn(fid);
+    }
+    props->setCalibrationBase(fid, base);
 }
 
 RigCalibration VenueCorrections::baseOf(quint32 fid) const
@@ -1046,7 +1083,11 @@ RigCalibration VenueCorrections::baseOf(quint32 fid) const
     MonitorProperties *props = m_doc->monitorProperties();
     if (props->hasCalibrationBase(fid))
         return props->calibrationBase(fid);
-    return RigCalibration::of(props->fixtureRigProps(fid));
+    RigCalibration c = RigCalibration::of(props->fixtureRigProps(fid));
+    // A venue's turn still on the live head is not the show's (M-A).
+    if (props->hasShowTurn(fid))
+        c.panTurn = props->showTurn(fid);
+    return c;
 }
 
 void VenueCorrections::apply()
@@ -1245,8 +1286,14 @@ void VenueCorrections::unapply()
     }
     for (quint32 fid : props->calibrationBaseFixtures())
     {
+        const RigCalibration base = props->calibrationBase(fid);
         if (m_doc->fixture(fid) != nullptr)
-            writeRig(fid, props->calibrationBase(fid));
+            writeRig(fid, base);
+        /* Left in Operate, the venue's turn stays on the live head until
+           Design (writeRig()): the show's own is kept apart, so a save --
+           or a show closed before Design -- writes the show's turn (M-A). */
+        if (m_deferredTurns.contains(fid))
+            props->setShowTurn(fid, base.panTurn);
         props->clearCalibrationBase(fid);
     }
     const bool was = m_writing;
@@ -1472,6 +1519,7 @@ void VenueCorrections::reset()
     m_active.clear();
     m_needsFocus.clear();
     m_deferredTurns.clear();
+    m_deferredLive.clear();
     m_showFile.clear();
     if (had)
         emit activeVenueChanged(QString());

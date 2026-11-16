@@ -1096,6 +1096,7 @@ void MonitorProperties::reset()
     m_stageTargets.clear();
     m_rigProps.clear();
     m_calibrationBase.clear();
+    m_showTurn.clear();
     m_goboSwaps.clear();
     {
         QMutexLocker lock(&m_goboNameMutex);
@@ -1266,6 +1267,7 @@ void MonitorProperties::removeFixture(quint32 fid)
          that id -- which silently arrives pre-mounted on a structure, at some
          dead fixture's offset and drop height. */
     m_rigProps.remove(fid);
+    m_showTurn.remove(fid);
 }
 
 void MonitorProperties::removeFixture(quint32 fid, quint16 head, quint16 linked)
@@ -5106,6 +5108,10 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
         const auto base = m_calibrationBase.constFind(it.key());
         if (base != m_calibrationBase.constEnd())
             base->applyTo(rp);
+        // A venue's turn still on a live head (left in Operate): the show's own.
+        const auto own = m_showTurn.constFind(it.key());
+        if (own != m_showTurn.constEnd())
+            rp.panTurn = own.value();
         doc->writeStartElement(QStringLiteral("FixtureRig"));
         doc->writeAttribute(QStringLiteral("FID"),     QString::number(it.key()));
         doc->writeAttribute(QStringLiteral("Truss"),   QString::number(rp.trussId));

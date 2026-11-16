@@ -33,6 +33,7 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QVector3D>
+#include <QPointF>
 
 #include "controllerscheme.h"
 #include "padnames.h"
@@ -969,9 +970,20 @@ private:
     /** Controller buttons held, by gamepad role, for the View+Menu combo. */
     QSet<int> m_heldRoles;
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
-    /** The pad the follow spot's fine stick (or its facing push, LS held)
-     *  was last read from; UINT_MAX: none. */
-    quint32 m_fineUniverse = UINT_MAX;
+    /** The follow spot's fine stick, per pad and per axis (review 0.4.10
+     *  verify, H-A): universe -> its last X and Y readings (0..1). The
+     *  fine stick the follow spot uses (m_fineNormX/Y) is the SUM of the
+     *  deflections of the pads that have the Follow spot job, clamped to a
+     *  full push: two pads trimming at once add, and one pad's resting
+     *  noise never hides another's held push. A pad that loses the job,
+     *  goes or is rebound takes only its own share away. */
+    QHash<quint32, QPointF> m_finePads;
+    /** The pad whose LS began the facing push (UINT_MAX: none). */
+    quint32 m_recalUniverse = UINT_MAX;
+    /** m_fineNormX/Y from m_finePads. */
+    void combineFineSticks();
+    /** Every pad's fine stick centred (a tool, a mode change, a hold). */
+    void centreFineSticks();
     /** The follow spot lets go of what @p universe's pad left it (UINT_MAX:
      *  every pad's): the stick, the fine stick, a facing push -- centred, so
      *  nothing drifts on with no hand on it (review 0.4.10, H2). Called
@@ -993,8 +1005,8 @@ private:
     /** The gamepad role of an input channel, from its device profile. */
     int controllerRole(quint32 universe, quint32 channel) const;
     /** Focus mode's share of slotControllerInputChanged(). True if it took
-     *  the event. */
-    bool routeFocusInput(quint32 universe, quint32 channel, uchar value);
+     *  the event. @p knownRole: controllerRole() if already worked out. */
+    bool routeFocusInput(quint32 universe, quint32 channel, uchar value, int knownRole = -1);
     /** Centre Sticks on the controller patched to @p universe (View + LS):
      *  its plugin learns where its sticks rest once they are let go. */
     void centreSticks(quint32 universe);
