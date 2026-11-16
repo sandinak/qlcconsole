@@ -1192,16 +1192,44 @@ void CueRunner::setRunnerSize(Size size)
     for (QShortcut *s : findChildren<QShortcut *>(QString(), Qt::FindDirectChildrenOnly))
         delete s;
     delete layout();
-    m_padFrame = nullptr;
+    // Every widget member lives under the children deleted above: none may
+    // outlive them (the refresh slots read these on the next state change).
     m_header = nullptr;
     m_followBox = nullptr;
+    m_timecode = nullptr;
+    m_mode = nullptr;
     m_tree = nullptr;
+    m_now = nullptr;
+    m_next = nullptr;
+    m_subNext = nullptr;
+    m_tcNext = nullptr;
+    m_go = nullptr;
+    m_subGo = nullptr;
+    m_subBack = nullptr;
+    m_back = nullptr;
+    m_pause = nullptr;
+    m_stop = nullptr;
+    m_empty = nullptr;
+    m_upgrade = nullptr;
     m_info = nullptr;
     m_buttons = nullptr;
     m_secondary = nullptr;
     m_fade = nullptr;
     m_infoHandle = nullptr;
     m_goHandle = nullptr;
+    m_focusCallsBtn = nullptr;
+    m_padRunBtn = nullptr;
+    m_padFrame = nullptr;
+    m_focusArmed = nullptr;
+    m_focusArmedLabel = nullptr;
+    m_hitsNow = nullptr;
+    m_padHit = nullptr;
+    m_goHeld = nullptr;
+    m_focusStart = nullptr;
+    m_resumeBar = nullptr;
+    m_resumeText = nullptr;
+    m_resumeLoad = nullptr;
+    m_resumeDismiss = nullptr;
     m_upcoming.clear();
     setMinimumSize(0, 0);
     buildLayout();

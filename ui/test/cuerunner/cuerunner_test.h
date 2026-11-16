@@ -51,6 +51,10 @@ private slots:
     /** UX shots: the Run tab armed, stopped and disarmed at 1024x640,
      *  1440x900 and 1920x1080 (QLC_SHOT_DIR; skipped without it). */
     void padFrameShots();
+    /** Full -> Compact -> Full: no widget the old layout owned is read
+     *  after it is deleted when PadRun / focus-call state changes (a
+     *  use-after-free that only -O2 shows; the Release leg runs it). */
+    void resizingRunnerSurvivesStateChanges();
     void theRunTabHasTheGroupMasters();
     void clickLoadsDoubleClickJumps();
     void aClickInDesignShowsTheCue();

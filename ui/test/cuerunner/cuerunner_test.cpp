@@ -64,6 +64,7 @@
 #include "scene.h"
 #include "padrun.h"
 #include "programmercontroller.h"
+#include "focuscalls.h"
 #include "controlmap.h"
 #include "teachingsettings.h"
 #include "teachingglossary.h"
@@ -472,6 +473,48 @@ void CueRunner_Test::noMainListGreysGoAndOffersUpgrade()
     const QColor green = shot.pixelColor(4, shot.height() / 2);
     QVERIFY2(green.green() > green.red() + 40, qPrintable(green.name()));
     CueRunner::setUpgradeAction(nullptr);
+}
+
+void CueRunner_Test::resizingRunnerSurvivesStateChanges()
+{
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(900, 600);
+    runner.show();
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    auto churn = [&]() {
+        QVERIFY(run->setArmed(true));
+        emit run->hitChanged();
+        run->emergencyStop();
+        QVERIFY(run->setArmed(true));
+        QVERIFY(run->setArmed(false));
+        emit m_doc->programmer()->focusCalls()->changed();
+        emit m_doc->programmer()->focusControllerChanged();
+        emit run->enabledChanged(true);
+        emit m_doc->showControl()->commandHeld(QString(), 0, ShowControl::Route());
+        QApplication::processEvents();
+    };
+    churn();
+    if (QTest::currentTestFailed())
+        return;
+    for (int round = 0; round < 3; ++round)
+    {
+        runner.setRunnerSize(CueRunner::Compact);
+        QApplication::processEvents();
+        QVERIFY(runner.findChild<QToolButton *>("crPadRun") == nullptr);
+        churn();
+        if (QTest::currentTestFailed())
+            return;
+        runner.setRunnerSize(CueRunner::Full);
+        QApplication::processEvents();
+        QToolButton *pad = runner.findChild<QToolButton *>("crPadRun");
+        QVERIFY(pad != nullptr);
+        churn();
+        if (QTest::currentTestFailed())
+            return;
+        QCOMPARE(pad->text(), QString("Pad: Run"));
+    }
+    run->setEnabled(false, false);
 }
 
 void CueRunner_Test::padFrameShots()
