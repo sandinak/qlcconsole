@@ -54,12 +54,6 @@ private slots:
      *  stick walks the subject across and back and every head's pan moves
      *  smoothly, clear of both channel ends, never round. */
     void aWalkAcrossTheSeamNeverSwingsRound();
-    /** Review 0.4.10: a stick bound by hand, held, its pad's Follow spot
-     *  job taken away, then let go: the subject must stop. */
-    void reviewAHandBoundStickHeldAsItsJobGoes();
-    /** Review 0.4.10: two pads, A steering with its fine stick pushed; the
-     *  Follow spot job handed to B; A lets go: the subject must stop. */
-    void reviewAFineStickHeldAsTheJobIsHandedOver();
 
     /* Where the operator stands (FollowSpotOperator). */
     void stickUpGoesAwayFromTheOperator();
@@ -75,6 +69,13 @@ private slots:
     void realTimers();
     void realTimersFreeFly();
 
+    /* Review 0.4.10, last: what they leave behind is the finding. */
+    /** Review 0.4.10: a stick bound by hand, held, its pad's Follow spot
+     *  job taken away, then let go: the subject must stop. */
+    void reviewAHandBoundStickHeldAsItsJobGoes();
+    /** Review 0.4.10: two pads, A steering with its fine stick pushed; the
+     *  Follow spot job handed to B; A lets go: the subject must stop. */
+    void reviewAFineStickHeldAsTheJobIsHandedOver();
 private:
     Doc *m_doc = nullptr;
 };
