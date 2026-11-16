@@ -443,6 +443,12 @@ private:
     class QTimer *m_rigTimer = nullptr;
     QList<TurnChange> m_turnChanges;
     QHash<quint32, int> m_deferredTurns;
+    /** The live turn each waiting head had when its turn was put off: a
+     *  head found on another is one turned by hand since (M-B). */
+    QHash<quint32, int> m_deferredLive;
+    /** A head turned by hand while a turn waits for it: the hand's turn
+     *  stands and nothing waits any more (review 0.4.10 verify, M-B). */
+    void noteHandTurn(quint32 fid);
     /** The show is in Design: the turns that waited go on now, said. */
     void applyDeferredTurns();
     /** @p c with the turn a head waits for in place of the one it has. */

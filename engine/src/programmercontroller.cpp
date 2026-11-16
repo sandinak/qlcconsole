@@ -163,8 +163,19 @@ ProgrammerController::ProgrammerController(Doc *doc)
         if ((m_panBound && !m_controllerJobs->has(m_panUniverse, ControllerJobs::FollowSpot))
             || (m_tiltBound && !m_controllerJobs->has(m_tiltUniverse, ControllerJobs::FollowSpot)))
             letGoOfFollowSpotInputs(m_panBound ? m_panUniverse : m_tiltUniverse, true);
-        if (m_fineUniverse != UINT_MAX && !m_controllerJobs->has(m_fineUniverse, ControllerJobs::FollowSpot))
-            letGoOfFollowSpotInputs(m_fineUniverse, false);
+        /* Each pad's own fine stick and facing push: only the pads that
+           lost the job let go (review 0.4.10 verify, H-A). */
+        {
+            QList<quint32> lost;
+            for (auto it = m_finePads.constBegin(); it != m_finePads.constEnd(); ++it)
+                if (!m_controllerJobs->has(it.key(), ControllerJobs::FollowSpot))
+                    lost << it.key();
+            if (m_recalUniverse != UINT_MAX && !lost.contains(m_recalUniverse)
+                && !m_controllerJobs->has(m_recalUniverse, ControllerJobs::FollowSpot))
+                lost << m_recalUniverse;
+            for (quint32 u : std::as_const(lost))
+                letGoOfFollowSpotInputs(u, false);
+        }
         refreshStickBinding();
         emit axisBindingChanged();      // the follow spot's set-up says it
         refreshPadLight();
@@ -302,7 +313,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
         if (m_focusSession->isActive())
             m_focusSession->stop();
         connectControllerInput();
-        m_fineNormX = m_fineNormY = 0.5f;
+        centreFineSticks();
         m_touch.reset();
         refreshPadFamily();
         m_refineSession->setStick(RefineSession::Coarse, 0.5f, 0.5f);
@@ -324,7 +335,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
         if (m_refineSession != nullptr && m_refineSession->isActive())
             m_refineSession->stop();
         connectControllerInput();    // even with no follow-spot axes bound
-        m_fineNormX = m_fineNormY = 0.5f;
+        centreFineSticks();
         m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
         emit joystickUpdated(0.5f, 0.5f);
         m_joyTickClock.invalidate();
@@ -1911,7 +1922,7 @@ void ProgrammerController::setHolding(bool on)
     m_holding = on;
     // Let go of the sticks and holds: nothing creeps on while held or after.
     m_panNorm = m_tiltNorm = 0.5f;
-    m_fineNormX = m_fineNormY = 0.5f;
+    centreFineSticks();
     m_holdA.reset();
     m_holdB.reset();
     m_touch.reset();
@@ -2001,7 +2012,7 @@ void ProgrammerController::heldTick(double dt)
 void ProgrammerController::freezeController()
 {
     m_panNorm = m_tiltNorm = 0.5f;
-    m_fineNormX = m_fineNormY = 0.5f;
+    centreFineSticks();
     m_holdA.reset();
     m_holdB.reset();
     m_holdVenueA.reset();
@@ -2434,6 +2445,7 @@ void ProgrammerController::resetFollowSpotOperators()
 void ProgrammerController::finishFacingRecalibration()
 {
     m_recalHeld = false;
+    m_recalUniverse = UINT_MAX;
     const MonitorProperties *mp = m_doc->monitorProperties();
     const QPointF centre = mp != nullptr ? QPointF(mp->stageCentre().x(), mp->stageCentre().y()) : QPointF();
     FollowSpotOperator op = followSpotOperator();
@@ -2552,6 +2564,26 @@ void ProgrammerController::clearAxisBindings()
     emit axisBindingChanged();
 }
 
+void ProgrammerController::combineFineSticks()
+{
+    double x = 0.0, y = 0.0;
+    for (auto it = m_finePads.constBegin(); it != m_finePads.constEnd(); ++it)
+    {
+        if (!m_controllerJobs->has(it.key(), ControllerJobs::FollowSpot))
+            continue;
+        x += 2.0 * it.value().x() - 1.0;
+        y += 2.0 * it.value().y() - 1.0;
+    }
+    m_fineNormX = float((qBound(-1.0, x, 1.0) + 1.0) / 2.0);
+    m_fineNormY = float((qBound(-1.0, y, 1.0) + 1.0) / 2.0);
+}
+
+void ProgrammerController::centreFineSticks()
+{
+    m_finePads.clear();
+    m_fineNormX = m_fineNormY = 0.5f;
+}
+
 void ProgrammerController::letGoOfFollowSpotInputs(quint32 universe, bool stick)
 {
     bool changed = false;
@@ -2560,14 +2592,29 @@ void ProgrammerController::letGoOfFollowSpotInputs(quint32 universe, bool stick)
         m_panNorm = m_tiltNorm = 0.5f;
         changed = true;
     }
-    if (universe == UINT_MAX || universe == m_fineUniverse)
+    // That pad's own fine stick only; the others' pushes stand (H-A).
+    if (universe == UINT_MAX ? !m_finePads.isEmpty() : m_finePads.contains(universe))
     {
-        changed = changed || m_fineNormX != 0.5f || m_fineNormY != 0.5f || m_recalHeld;
+        const float wasX = m_fineNormX, wasY = m_fineNormY;
+        if (universe == UINT_MAX)
+            m_finePads.clear();
+        else
+            m_finePads.remove(universe);
+        combineFineSticks();
+        changed = changed || wasX != m_fineNormX || wasY != m_fineNormY;
+    }
+    else if (universe == UINT_MAX && (m_fineNormX != 0.5f || m_fineNormY != 0.5f))
+    {
         m_fineNormX = m_fineNormY = 0.5f;
-        m_fineUniverse = UINT_MAX;
-        // An unfinished facing push sets no facing: it is dropped.
+        changed = true;
+    }
+    // An unfinished facing push from that pad sets no facing: it is dropped.
+    if (m_recalHeld && (universe == UINT_MAX || universe == m_recalUniverse))
+    {
         m_recalHeld = false;
+        m_recalUniverse = UINT_MAX;
         m_recalX = m_recalY = 0.0;
+        changed = true;
     }
     if (!changed)
         return;
@@ -2839,7 +2886,7 @@ void ProgrammerController::connectControllerInput()
             m_padRun->forgetPad(universe);
         // Its pushes went with it (no release comes): the follow spot lets go.
         const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
-        if (stick || m_fineUniverse == universe)
+        if (stick || m_finePads.contains(universe) || (m_recalHeld && m_recalUniverse == universe))
             letGoOfFollowSpotInputs(universe, stick);
         if (m_padLight.isValid() || m_padLightTarget != UINT_MAX)
         {
@@ -2886,9 +2933,13 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
        four together, from any pad, in every state -- before any capture,
        owner, tool, job, role or Controller Test check, so nothing can
        swallow it. Swallowed itself while all four are down. */
-    if (m_padRun != nullptr && m_padRun->isEnabled()
-        && m_padRun->watchStop(universe, GamepadRole::Role(controllerRole(universe, channel)), value))
-        return;
+    int role = -1;      // worked out once an event (L2), when it is needed
+    if (m_padRun != nullptr && m_padRun->isEnabled())
+    {
+        role = controllerRole(universe, channel);
+        if (m_padRun->watchStop(universe, GamepadRole::Role(role), value))
+            return;
+    }
     if (m_capturingPan)
     {
         // Bound by hand: what the old binding left pushed goes (H2).
@@ -2916,7 +2967,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     // Something came in: a controller being found again after a sleep is.
     m_keepAlive->noteInput();
 
-    if (routeFocusInput(universe, channel, value))
+    if (routeFocusInput(universe, channel, value, role))
         return;
 
     const float norm = value / 255.0f;
@@ -3194,7 +3245,7 @@ bool ProgrammerController::isPadUniverse(quint32 universe) const
     return false;
 }
 
-bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value)
+bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uchar value, int knownRole)
 {
     const float norm = value / 255.0f;
     const bool refine = m_refineSession->isActive();
@@ -3206,7 +3257,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     if (!active && (isPan || isTilt))
         return false;
 
-    const GamepadRole::Role role = GamepadRole::Role(controllerRole(universe, channel));
+    const GamepadRole::Role role = GamepadRole::Role(knownRole >= 0 ? knownRole : controllerRole(universe, channel));
     // The touchpad's swipes (Q199): kept here, read on the tick.
     if (GamepadRole::isTouch(role))
         m_padRun->touchValue(role, norm);
@@ -4109,7 +4160,7 @@ void ProgrammerController::slotDocModeChanged(Doc::Mode mode)
     // real stick event re-reads the live position.
     m_panNorm  = 0.5f;
     m_tiltNorm = 0.5f;
-    m_fineNormX = m_fineNormY = 0.5f;
+    centreFineSticks();
     // Push the centred value into the effect-script "joystick" data channel too
     // (followspot.js reads its velocity from there), else it keeps the stale
     // deflection and drifts.
@@ -4989,8 +5040,9 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
            is not carried into the next one). */
         if (onOff && st.state == FollowSpotStatus::Off)
         {
-            m_fineNormX = m_fineNormY = 0.5f;
+            centreFineSticks();
             m_recalHeld = false;    // nor an unfinished facing push
+            m_recalUniverse = UINT_MAX;
         }
         m_followStatus = st;
         if (onOff)
@@ -5436,8 +5488,10 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         return false;
     if (role == GamepadRole::RightX || role == GamepadRole::RightY)
     {
-        (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = value / 255.0f;
-        m_fineUniverse = universe;      // whose push it is, to let go of (H2)
+        // This pad's own share, by axis (H-A); a pad first heard is at rest.
+        QPointF &mine = m_finePads.insert(universe, m_finePads.value(universe, QPointF(0.5, 0.5))).value();
+        (role == GamepadRole::RightX ? mine.rx() : mine.ry()) = value / 255.0;
+        combineFineSticks();
         if (m_recalHeld)
             applyFollowSpotSticks();
         return true;
@@ -5451,7 +5505,7 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         if (value > 0 && !m_recalHeld)
         {
             m_recalHeld = true;
-            m_fineUniverse = universe;
+            m_recalUniverse = universe;
             m_recalX = m_recalY = 0.0;
             m_facingSaidClock.invalidate();
             applyFollowSpotSticks();

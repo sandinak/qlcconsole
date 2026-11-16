@@ -508,7 +508,11 @@ head's turn only when you changed the turn while that venue was applied;
 otherwise the show's own turn stands there too. Switching to a venue that
 turns a head says so on the notice line, and in Operate it never swings a
 head round: the venue's turn waits until the show is in Design, and the
-notice line says so then and when it goes on.
+notice line says so then and when it goes on. Leaving a venue in Operate
+works the same way: the live head keeps the venue's turn until Design,
+but saving writes the show's own turn. A head you turn by hand in Operate
+(Fixture Properties, after its question) keeps your turn: nothing waiting
+replaces it in Design.
 For several heads at once, the plot's right-click **Facing (pan zero) ▸
 Centre Their Pans on Stage**, or Fixture Properties for the selection, does
 them all in one step. The **Earlier Turn** and **Later Turn** buttons say,

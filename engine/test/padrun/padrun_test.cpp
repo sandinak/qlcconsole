@@ -1838,6 +1838,37 @@ void PadRun_Test::theStopFromAnyPadInEveryFocusState()
     pc->focusSession()->finish();
 }
 
+void PadRun_Test::reviewOnePadListedTwiceStopsOnce()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // One pad, listed twice (macOS): the same USB port on both lines.
+    stub->m_lineLocations = { { 0, "USB 14200000" }, { 1, "USB 14200000" } };
+    auto restore = qScopeGuard([&]() { stub->m_lineLocations.clear(); });
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1));
+    makeShow();
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    auto stops = [this]() {
+        int n = 0;
+        for (const auto &r : m_runs)
+            n += r.first.command == ShowControl::AllOff ? 1 : 0;
+        return n;
+    };
+    // Each report arrives on both lines.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        for (quint32 u : { 0u, 1u })
+            axis(ch, 255, u);
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        for (quint32 u : { 0u, 1u })
+            axis(ch, 0, u);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY2(stops() == 1, qPrintable(QString("one chord on one pad sent %1 emergency stops").arg(stops())));
+}
+
 void PadRun_Test::aLostPadInFocus()
 {
     IOPluginStub *stub = loadStub();

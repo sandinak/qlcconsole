@@ -79,7 +79,8 @@ connects. (can change: a pad's serial over USB, when one says it.)
    first, before any owner, tool, job, role or test check
    (`PadRun::watchStop()` at the top of
    `ProgrammerController::slotControllerInputChanged()`), so nothing can
-   swallow it (review 0.4.10, H1 and M2). A controller with no jobs
+   swallow it (review 0.4.10, H1 and M2). One pad on two universes
+   stops once a chord (one ALL OFF, one rumble, one message). A controller with no jobs
    does nothing else: no command, no arm, no light change, no follow
    spot move, no tool step.
 5. **Run cues off.** Every Run-map control on that pad does nothing but
@@ -125,6 +126,10 @@ connects. (can change: a pad's serial over USB, when one says it.)
    let go when it loses the job or the binding changes for any reason
    (job, rebind, Bind by hand, unplug): its later events are dropped, so
    a push it left would drive the spot on by itself (review 0.4.10, H2).
+   The fine stick is kept per pad and per axis; what the follow spot uses
+   is the sum of the pushes of the pads with the job, clamped to a full
+   push, so a pad letting go takes only its own share away and one pad's
+   resting noise never hides another's held push (verify, H-A).
    A venue focus start given up or refused lets its owner go too.
 
 ## Where it is set

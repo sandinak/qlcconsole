@@ -19,6 +19,8 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QBuffer>
+#include <QXmlStreamWriter>
 
 #include "focusreport_test.h"
 #include "programmercontroller.h"
@@ -333,6 +335,71 @@ void FocusReport_Test::aVenueTurnWaitsForDesign()
     QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
     m_doc->setMode(Doc::Design);
     QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 0);
+}
+
+void FocusReport_Test::reviewAVenueLeftInOperateSavesTheShowsTurn()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *a = makeSpot(m_doc, "FOH", 5.0f, 12.0f);
+    QVERIFY(a != nullptr);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    // Design: the venue turns the head (the show's own turn is 0).
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), 1));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+
+    // Operate: the venue left; the head keeps the venue's turn for now.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 1);
+    QCOMPARE(v->deferredTurns().value(a->id(), 99), 0);
+
+    // Saved now (and closed before Design): the show's own turn is 0.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buffer);
+    w.writeStartDocument();
+    QVERIFY(props->saveXML(&w, m_doc, true));
+    w.writeEndDocument();
+    const QString xml = QString::fromUtf8(buffer.data());
+    QVERIFY2(!xml.contains(QStringLiteral("PanTurn=\"1\"")),
+             "the show file is given the venue's pan turn as the show's own: the turn the show was "
+             "waiting to go back to (deferredTurns) is lost once the show is closed");
+    m_doc->setMode(Doc::Design);
+}
+
+void FocusReport_Test::reviewATurnSetByHandInOperateStandsInDesign()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Meters);
+    props->setGridSize(QVector3D(10.0f, 6.0f, 8.0f));
+    Fixture *a = makeSpot(m_doc, "FOH", 5.0f, 12.0f);
+    QVERIFY(a != nullptr);
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Tour.qlcc"), false);
+    QVERIFY(v->setActiveVenue(v->addVenue("Lincoln HS")));
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), 1));
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, 0);
+
+    // Operate: the venue applied, its turn (1) waits.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(v->setActiveVenue("Lincoln HS"));
+    QCOMPARE(v->deferredTurns().value(a->id(), 99), 1);
+    // The operator turns the head by hand (Fixture Properties' Earlier Turn,
+    // after its "is live" question): -1, live, on purpose.
+    QVERIFY(PanTurn::setTurn(m_doc, a->id(), -1));
+    QCOMPARE(props->fixtureRigProps(a->id()).panTurn, -1);
+
+    // Design: the turn chosen by hand stands (it is the latest choice).
+    m_doc->setMode(Doc::Design);
+    QVERIFY2(props->fixtureRigProps(a->id()).panTurn == -1,
+             qPrintable(QString("the turn set by hand in Operate (-1) was replaced in Design by the venue's "
+                                "waiting turn (%1): the hand turn was masked by withDeferredTurn() and never "
+                                "recorded").arg(props->fixtureRigProps(a->id()).panTurn)));
 }
 
 void FocusReport_Test::theReportListsEveryLight()
