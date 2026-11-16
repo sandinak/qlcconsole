@@ -197,7 +197,7 @@ public:
      *  A scan already under way is followed by one more, never a second
      *  beside it. New devices are opened on threads of their own and
      *  added as each is ready (drainResults()). */
-    void rescanDevices();
+    Q_INVOKABLE void rescanDevices();
 
     /** The test seam: find and open devices through @p backend (an
      *  HIDBackend *, kept alive by the test until openingCount() is 0)
