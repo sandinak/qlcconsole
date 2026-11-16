@@ -10648,32 +10648,52 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
 bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
 {
     /* MOV-14's fix: each head to the turn that keeps its seam off the
-       stage. What changes is said first, plainly; one undo step. */
-    QList<quint32> fids;
-    QStringList lines;
+       stage. What changes is said first, plainly; one undo step for them
+       all (several findings selected are one fix). */
+    QList<quint32> fids, stuck;
+    QStringList lines, live;
     for (const QVariant &v : data)
     {
         const quint32 fid = v.toUInt();
         const PanTurn::Info in = PanTurn::info(m_doc, fid);
-        if (!in.valid || in.proposal == in.turn)
+        if (!in.valid)
             continue;
+        if (!in.improves())
+        {
+            if (in.crossesSeam())
+                stuck << fid;
+            continue;
+        }
         fids << fid;
         lines << PanTurn::changeText(m_doc, fid, in.turn, in.proposal);
+        if (PanTurn::isLive(m_doc, fid))
+            if (const Fixture *fx = m_doc->fixture(fid))
+                live << fx->name();
     }
     if (fids.isEmpty())
     {
+        /* No turn does better: its Facing has to turn toward the stage.
+           Fixture Properties is where that is set. */
+        if (!stuck.isEmpty() && Monitor::instance() != nullptr)
+            Monitor::instance()->editFixtureProperties(stuck.first());
         m_doc->showReview()->run();
-        return true;            // already done: the finding goes on the re-check
+        return true;
     }
     QMessageBox box(parent != nullptr ? parent : this);
     box.setObjectName(QStringLiteral("centrePanConfirm"));
-    box.setIcon(QMessageBox::Question);
-    box.setWindowTitle(tr("Centre the Pan on the Stage"));
+    box.setIcon(live.isEmpty() ? QMessageBox::Question : QMessageBox::Warning);
+    box.setWindowTitle(fids.size() > 1 ? tr("Centre Their Pans on Stage") : tr("Centre the Pan on Stage"));
     box.setText(lines.join(QLatin1Char('\n')));
-    box.setInformativeText(tr("Its looks are worked out again on the new turn: the same places on the stage, "
-                              "reached from the other end of the pan channel, so a move across the stage no "
-                              "longer swings the head round. Undo puts it back."));
-    QPushButton *go = box.addButton(tr("Centre the Pan"), QMessageBox::AcceptRole);
+    QString more = tr("Its looks are worked out again on the new turn: the same places on the stage, "
+                      "reached from the other end of the pan channel, so a move across the stage no "
+                      "longer swings the head round. Undo puts it back.");
+    if (!live.isEmpty())
+        more = tr("%1 is live: its beam moves now, a whole turn round to the same place.")
+                   .arg(live.join(QStringLiteral(", ")))
+               + QStringLiteral("\n\n") + more;
+    box.setInformativeText(more);
+    QPushButton *go = box.addButton(fids.size() > 1 ? tr("Centre Their Pans") : tr("Centre the Pan"),
+                                    QMessageBox::AcceptRole);
     box.addButton(QMessageBox::Cancel);
     box.setDefaultButton(go);
     box.exec();

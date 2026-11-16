@@ -151,7 +151,10 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
   clears it — typically a follow spot out front whose pan zero faces away
   from the stage. A walk across that line swings the head a whole turn. Its
   fix, **Centre the Pan on Stage…**, says which turn and where the seam goes
-  before it changes anything (one undo step).
+  before it changes anything (one undo step), and warns when the head is
+  live. With several selected it centres them all as one step. When no
+  turn clears the stage it says so, and the real fix: point the head's
+  Facing toward the stage, then Centre the Pan on Stage.
 
 How long a move takes comes from the head's type: a moving head turns 180°
 in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).

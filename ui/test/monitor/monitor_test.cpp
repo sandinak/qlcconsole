@@ -33342,7 +33342,7 @@ void Monitor_Test::centringASelectionIsOneUndoStep()
         if (act->objectName() == QLatin1String("plotCentrePan"))
             centre = act;
     QVERIFY(centre != nullptr);
-    QCOMPARE(centre->text(), QString("Centre Their Pans on the Stage"));
+    QCOMPARE(centre->text(), QString("Centre Their Pans on Stage"));
     centre->trigger();
     QVERIFY(rig.turn(a) != 0 && rig.turn(b) != 0);
 }
@@ -33384,4 +33384,109 @@ void Monitor_Test::aMovedHeadsTurnChangesOnlyWhenItMustAndSaysSo()
     rig.mon->slotFixtureMoved(fid, QPointF(20010.0, 12000.0));
     QApplication::processEvents();
     QCOMPARE(rig.turn(fid), 1);
+}
+
+/* Review of c8824b22ce. Operate is "running allowed, editing disabled",
+   but the plot's fixtures stay movable there unless Edit Plot is locked
+   (off by default). A 3 px slip while picking a head is a drop: it must
+   not swing a live head a whole turn. */
+void Monitor_Test::review_aDragInOperateNeverTurnsALiveHead()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    QVERIFY(PanTurn::info(m_doc, fid).fixable());
+    struct Mode { Doc *d; ~Mode() { d->setMode(Doc::Design); } } mode{ m_doc };
+    m_doc->setMode(Doc::Operate);
+    QApplication::processEvents();
+    MonitorFixtureItem *item = rig.gv->m_fixtures.value(fid);
+    QVERIFY(item != nullptr);
+    QVERIFY2(item->flags() & QGraphicsItem::ItemIsMovable, "precondition: a head drags in Operate");
+
+    // A mark on the stage's far side of turn 0's seam.
+    const QVector3D mark(23.0f, 4.0f, 1.7f);
+    AimSolver::Frame f;
+    QVERIFY(AimSolver::frameFor(m_doc, fid, f));
+    const float before = AimSolver::solve(f, mark).panDeg;
+
+    rig.mon->m_noticeLabel->clear();
+    item->setPos(item->pos() + QPointF(3.0, 0.0));
+    rig.gv->slotFixtureMoved(item);
+    QApplication::processEvents();
+    QVERIFY(AimSolver::frameFor(m_doc, fid, f));
+    const float after = AimSolver::solve(f, mark).panDeg;
+    QVERIFY2(rig.turn(fid) == 0 && qAbs(after - before) < 5.0f,
+             qPrintable(QString("Operate: a 3 px slip set the live head's turn to %1; its pan on the same "
+                                "mark went %2 -> %3 degrees (notice: \"%4\")")
+                            .arg(rig.turn(fid)).arg(before).arg(after).arg(rig.mon->m_noticeLabel->text())));
+}
+
+/* Review of c8824b22ce. The Patch dialog (PatchInventoryDialog::accept)
+   re-addresses a head as one rig step; the app then proposes a turn as its
+   own step. Undo, Undo must leave the rig as it was before the patch, with
+   no new step: an undo is not the person placing or patching the head. */
+void Monitor_Test::review_undoingARepatchLeavesTheTurnAlone()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    QVERIFY(PanTurn::info(m_doc, fid).fixable());
+    Fixture *fx = m_doc->fixture(fid);
+    QVERIFY(fx != nullptr && fx->isPatched());
+    const quint32 addr = fx->address();
+    const int steps = rig.gv->m_moveUndo.size();
+
+    const QByteArray before = rig.mon->rigSnapshot();
+    QVERIFY(m_doc->patchFixtures({ Doc::FixturePatch{ fid, 0, 300 } }));
+    rig.mon->pushRigUndo(before);
+    QApplication::processEvents();
+    QCOMPARE(fx->address(), quint32(300));
+    /* Changed after the review (the coordinator's decision): a re-patch of
+       a placed head never proposes; the turn the person has stands. */
+    QCOMPARE(rig.turn(fid), 0);
+
+    rig.gv->undoLastMove();                     // the patch
+    QApplication::processEvents();
+    QCOMPARE(fx->address(), addr);
+    QVERIFY2(rig.turn(fid) == 0 && rig.gv->m_moveUndo.size() == steps,
+             qPrintable(QString("after undoing the patch: turn %1 (was 0), %2 undo steps (was %3); notice \"%4\"")
+                            .arg(rig.turn(fid)).arg(rig.gv->m_moveUndo.size()).arg(steps)
+                            .arg(rig.mon->m_noticeLabel->text())));
+}
+
+/* After the review: a FIRST patch (out of the inventory) is a clear
+   moment and proposes; putting the rig back over it (Cancel, undo) never
+   does. */
+void Monitor_Test::aFirstPatchProposesAndPuttingItBackNever()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    Fixture *fx = m_doc->fixture(fid);
+    m_doc->unpatchFixture(fid);
+    QVERIFY(!fx->isPatched());
+    QVERIFY(m_doc->patchFixtures({ Doc::FixturePatch{ fid, 0, 300 } }));
+    QApplication::processEvents();
+    QCOMPARE(rig.turn(fid), 1);
+    rig.gv->undoLastMove();                     // the proposal, its own step
+    QCOMPARE(rig.turn(fid), 0);
+
+    // A rig put back that patches it again (an undone unpatch) is not a patch.
+    const QByteArray patched = rig.mon->rigSnapshot();
+    m_doc->unpatchFixture(fid);
+    rig.mon->restoreRig(patched);
+    QApplication::processEvents();
+    QVERIFY(m_doc->fixture(fid)->isPatched());
+    QCOMPARE(rig.turn(fid), 0);
+
+    // In Operate, a first patch proposes nothing either.
+    struct Mode { Doc *d; ~Mode() { d->setMode(Doc::Design); } } mode{ m_doc };
+    m_doc->unpatchFixture(fid);
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_doc->patchFixtures({ Doc::FixturePatch{ fid, 0, 320 } }));
+    QApplication::processEvents();
+    QCOMPARE(rig.turn(fid), 0);
 }

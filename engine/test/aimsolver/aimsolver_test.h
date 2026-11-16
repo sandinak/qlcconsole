@@ -112,6 +112,19 @@ private slots:
     void reviewTheUnitsSettingDoesNotTurnAHeadRound();
     void reviewOverheadLooksThatFadedShortStillDo();
     void reviewAWalkUpTheSideNeverSwingsRound();
+    /** Review of c8824b22ce: every stored turn, every mount, invert, pan
+     *  offset, 540/630/360, tilt-limited heads on the flipped branch --
+     *  every reachable answer points at its target, a 360 ignores the turn,
+     *  and a main-branch answer stays in its turn's window. */
+    void review_everyTurnPointsAtItsTarget();
+    /** Review (pre-existing, not the turn): the flipped branch (pan half a
+     *  turn round, tilt mirrored) with a tilt offset still points at the
+     *  target. */
+    void review_theFlippedBranchKeepsTheTiltOffset();
+    /** After the review: live is Operate, or a running scene setting it. */
+    void aHeadIsLiveInOperate();
+    /** After the review: exact span ends, kept until the head moves. */
+    void theStageSpanIsExactAndKept();
 };
 
 #endif

@@ -1065,6 +1065,14 @@ private slots:
     void centringASelectionIsOneUndoStep();
     /** A move changes the turn only when the stage crosses the seam, said. */
     void aMovedHeadsTurnChangesOnlyWhenItMustAndSaysSo();
+    /** Review of c8824b22ce: in Operate a head on the plot still drags; a
+     *  slip of a few pixels must not change a live head's pan turn. */
+    void review_aDragInOperateNeverTurnsALiveHead();
+    /** Review of c8824b22ce: undoing a re-patch puts the rig back as it
+     *  was -- it is not a clear moment to propose a turn again. */
+    void review_undoingARepatchLeavesTheTurnAlone();
+    /** A first patch proposes; a rig put back over it, or Operate, never. */
+    void aFirstPatchProposesAndPuttingItBackNever();
 
 private:
     Doc* m_doc;

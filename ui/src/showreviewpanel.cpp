@@ -466,7 +466,12 @@ void ShowReviewPanel::updateButtons()
     bool footerRow = false;
     for (QTreeWidgetItem *item : m_tree->selectedItems())
         footerRow = footerRow || !item->data(0, FooterKeyRole).toString().isEmpty();
-    m_fix->setEnabled((sel.count() == 1 && !sel.first().jump.isEmpty()) || (footerRow && sel.isEmpty()));
+    // Several MOV-14 rows are one fix (one undo step for all their heads).
+    bool allPanSeam = !sel.isEmpty();
+    for (const ReviewFinding &f : sel)
+        allPanSeam = allPanSeam && f.check == QLatin1String("MOV-14");
+    m_fix->setEnabled((sel.count() == 1 && !sel.first().jump.isEmpty()) || (footerRow && sel.isEmpty())
+                      || allPanSeam);
     m_accept->setEnabled(anyOpen);
     /* PWR-12 (light on the cyc): Accept is "I meant it", kept on the layer
        that lights it rather than as a note; Reopen takes that back; Fix
@@ -479,7 +484,9 @@ void ShowReviewPanel::updateButtons()
     bool panSeam = !sel.isEmpty();
     for (const ReviewFinding &f : sel)
         panSeam = panSeam && f.check == QLatin1String("MOV-14");
-    m_fix->setText(backwash ? tr("Show Me ▸") : panSeam ? tr("Centre the Pan on Stage…") : tr("Fix ▸"));
+    m_fix->setText(backwash ? tr("Show Me ▸")
+                   : panSeam ? (sel.count() > 1 ? tr("Centre Their Pans on Stage…") : tr("Centre the Pan on Stage…"))
+                             : tr("Fix ▸"));
     m_fix->setToolTip(panSeam ? tr("Each head takes the turn of its pan that keeps the seam off the stage. "
                                    "It says what changes first; one undo step.")
                               : tr("Go to the place to fix it (or double-click the row)"));
@@ -575,6 +582,18 @@ bool ShowReviewPanel::reopenSelected()
 bool ShowReviewPanel::fixSelected()
 {
     const QList<QTreeWidgetItem *> items = m_tree->selectedItems();
+    /* Several MOV-14 rows: their heads centred together, one step. */
+    if (items.count() > 1)
+    {
+        QVariantList heads;
+        for (const ReviewFinding &f : selectedFindings())
+        {
+            if (f.check != QLatin1String("MOV-14"))
+                return false;
+            heads += f.jumpData;
+        }
+        return !heads.isEmpty() && runJump(this, QStringLiteral("panturn"), heads);
+    }
     if (items.count() != 1)
         return false;
     QTreeWidgetItem *item = items.first();
@@ -633,7 +652,13 @@ void ShowReviewPanel::fixOrSay()
 {
     // Never a click that does nothing: the finding's place may be gone.
     m_gone.clear();
-    if (m_tree->selectedItems().count() == 1 && !fixSelected())
+    const int n = int(m_tree->selectedItems().count());
+    if (n > 1)
+    {
+        fixSelected();              // several MOV-14 rows: one fix, or nothing
+        return;
+    }
+    if (n == 1 && !fixSelected())
         m_summary->setText(m_gone.isEmpty()
                            ? tr("⚠ Couldn't go there: it changed or is gone. Re-check.")
                            : QStringLiteral("⚠ ") + m_gone + QLatin1Char(' ') + tr("Re-check to clear it."));

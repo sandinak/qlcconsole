@@ -416,7 +416,7 @@ void mov13(ReviewContext &ctx, QList<ReviewFinding> &out)
 /* MOV-14: a head with more than a turn of pan whose stage span crosses
    the seam of the turn it has stored (PanTurn), when another turn clears
    it. A follow spot or a move across that place swings it a whole turn.
-   Fix: Centre the pan on the stage (the turn PanTurn proposes). */
+   Fix: Centre the Pan on Stage (the turn PanTurn proposes), or its Facing. */
 void mov14(ReviewContext &ctx, QList<ReviewFinding> &out)
 {
     Doc *doc = ctx.doc();
@@ -428,17 +428,27 @@ void mov14(ReviewContext &ctx, QList<ReviewFinding> &out)
         if (fx == nullptr || !mp->containsFixture(fx->id()))
             continue;
         const PanTurn::Info in = PanTurn::info(doc, fx->id());
-        if (!in.fixable())
+        /* On the seam, or near it. Said even when no turn clears it (its
+           Facing does); not when the stage fills so much of the round that
+           nothing could. */
+        if (!in.crossesSeam() || in.span.width >= 360.0f - 2.0f * PanTurn::kClearDeg)
             continue;
         AimSolver::Frame f;
         AimSolver::frameFor(doc, fx->id(), f);
         const float to = PanTurn::seamBearing(f, in.proposal);
-        const QString fix = in.proposalMargin >= PanTurn::kClearDeg
-            ? tr("Centre the pan on the stage (turn %1) moves the seam to %2\302\260 %3, %4\302\260 clear of "
-                 "the stage.").arg(in.proposal).arg(qRound(to) % 360).arg(PanTurn::bearingName(to))
-                  .arg(qRound(in.proposalMargin))
-            : tr("Centre the pan on the stage (turn %1) moves the seam to %2\302\260 %3, as far off the "
-                 "stage as it goes.").arg(in.proposal).arg(qRound(to) % 360).arg(PanTurn::bearingName(to));
+        const QString facing = tr("point the head's Facing toward the stage (Fixture Properties \342\226\270 "
+                                  "Facing), then Centre the Pan on Stage.");
+        QString fix;
+        if (in.improves() && in.proposalMargin >= PanTurn::kClearDeg)
+            fix = tr("Centre the Pan on Stage (turn %1) moves the seam to %2\302\260 %3, %4\302\260 clear of "
+                     "the stage.").arg(in.proposal).arg(qRound(to) % 360).arg(PanTurn::bearingName(to))
+                      .arg(qRound(in.proposalMargin));
+        else if (in.improves())
+            fix = tr("Centre the Pan on Stage (turn %1) helps, moving the seam to %2\302\260 %3, but no turn "
+                     "clears the stage: %4").arg(in.proposal).arg(qRound(to) % 360)
+                      .arg(PanTurn::bearingName(to), facing);
+        else
+            fix = tr("No turn clears the stage: %1").arg(facing);
         out << ReviewContext::make(QStringLiteral("MOV-14"), ReviewFinding::Warning,
             (in.margin < 0.0f
                  ? tr("%1's pan seam is on the stage, at %2\302\260 %3 (pan turn %4): a follow spot or a move "
@@ -451,7 +461,8 @@ void mov14(ReviewContext &ctx, QList<ReviewFinding> &out)
                        .arg(PanTurn::bearingName(in.seam)).arg(in.turn).arg(fix)),
             { QStringLiteral("fx:%1").arg(fx->id()) },
             QByteArray::number(in.turn) + ',' + QByteArray::number(in.proposal) + ','
-                + QByteArray::number(qRound(in.span.from)) + ',' + QByteArray::number(qRound(in.span.width)),
+                + QByteArray::number(qRound(in.span.from)) + ',' + QByteArray::number(qRound(in.span.width))
+                + ',' + QByteArray::number(qRound(in.seam)),
             QStringLiteral("panturn"), QVariantList() << fx->id());
     }
 }
@@ -488,7 +499,8 @@ QList<ShowReview::Check> ShowReviewChecks::moveChecks()
              "the turn it works in has a seam: the one bearing where its answer jumps a whole turn. A "
              "head out front whose pan zero faces away from the stage has that seam on the stage, so a "
              "follow spot walked across it, or a fade between two looks either side, swings the head "
-             "round the long way. The turn is stored with the head; Centre the pan on the stage moves "
-             "the seam off the stage (one undo step). Nothing else changes it."), mov14 },
+             "round the long way. The turn is stored with the head; Centre the Pan on Stage moves "
+             "the seam off the stage (one undo step). When no turn can, turn the head's Facing toward "
+             "the stage first. Nothing else changes the turn."), mov14 },
     };
 }

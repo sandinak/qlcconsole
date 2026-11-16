@@ -254,6 +254,8 @@ private:
     /** proposePanTurns() once a drag or a drop is over (coalesced). */
     void schedulePanTurns(const QList<quint32> &fids);
     QList<quint32> m_pendingTurns;
+    /** restoreRig() is putting the rig back: what it patches is not placed. */
+    bool m_restoringRig = false;
     /** Says @p changes on the notice line and the window's status bar. */
     void sayTurnChanges(const QStringList &changes, bool proposed);
 public:

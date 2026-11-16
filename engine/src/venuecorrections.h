@@ -207,6 +207,10 @@ public:
      *  the rig is the show's calibration with this venue's on top -- and
      *  remember it in the sidecar. */
     bool setActiveVenue(const QString &name);
+    /** A head whose pan turn the last setActiveVenue() changed (a venue
+     *  keeps its own turns): the views say so. */
+    struct TurnChange { quint32 fixtureId; int from; int to; };
+    QList<TurnChange> lastTurnChanges() const { return m_turnChanges; }
 
     /** When @p name's corrections last changed (else when it was made). */
     QDateTime lastChanged(const QString &name) const;
@@ -431,6 +435,7 @@ private:
 
     VenueRig *m_rig = nullptr;
     class QTimer *m_rigTimer = nullptr;
+    QList<TurnChange> m_turnChanges;
 };
 
 /** @} */

@@ -910,11 +910,25 @@ bool VenueCorrections::setActiveVenue(const QString &name)
         return false;
     if (name == m_active)
         return true;
+    // Each head's pan turn as it was: a venue that turns one says so.
+    MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    QHash<quint32, int> turnsBefore;
+    if (props != nullptr)
+        for (auto it = props->fixtureRigPropsMap().constBegin(); it != props->fixtureRigPropsMap().constEnd(); ++it)
+            turnsBefore.insert(it.key(), it.value().panTurn);
     unapply();
     m_active = name;
     // Chosen just now: the room it is.
     m_confirmed = !name.isEmpty();
     apply();
+    m_turnChanges.clear();
+    if (props != nullptr)
+        for (auto it = turnsBefore.constBegin(); it != turnsBefore.constEnd(); ++it)
+        {
+            const int now = props->fixtureRigProps(it.key()).panTurn;
+            if (now != it.value())
+                m_turnChanges << TurnChange{ it.key(), it.value(), now };
+        }
     save();
     emit activeVenueChanged(m_active);
     emit correctionsChanged();

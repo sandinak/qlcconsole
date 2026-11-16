@@ -294,6 +294,14 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
     auto marginOf = [&](float pan, float tilt) {
         return qMin(qMin(pan, frame.panMax - pan), qMin(tilt, frame.tiltMax - tilt));
     };
+    /* The tilt mirrored through home is the GEOMETRY mirrored: the
+       calibration offset is added after it, the same way, whichever way the
+       head points. Mirroring the whole value (tiltMax - tilt) mirrored the
+       offset too, and the beam landed twice the offset off its mark.
+       Before invert: tiltMax/2 + d + ofs -> tiltMax/2 - d + ofs, which is
+       tiltMax - tilt + 2 ofs; invert turns the sign of the 2 ofs. */
+    const float flippedTilt = frame.tiltMax - tiltRaw
+                              + (frame.tiltInvert ? -2.0f : 2.0f) * frame.tiltOffsetDeg;
     float bestPan = panRaw, bestTilt = tiltRaw;
     float best = marginOf(panRaw, tiltRaw);
     if (best < 0.0f)
@@ -303,7 +311,7 @@ AimSolver::Solution AimSolver::solve(const Frame &frame, const QVector3D &target
             if (k == 0)
                 continue;
             const float pan = panRaw + 180.0f * float(k);
-            const float tilt = (k % 2 != 0) ? frame.tiltMax - tiltRaw : tiltRaw;
+            const float tilt = (k % 2 != 0) ? flippedTilt : tiltRaw;
             /* A real improvement only. Mirroring leaves the tilt shortfall
                exactly as it was, so when tilt is what is out of range the two
                tie -- and a tie decided by rounding swung an unreachable head

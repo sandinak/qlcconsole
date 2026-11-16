@@ -29,6 +29,7 @@
 #include <QTabWidget>
 #include <QMainWindow>
 #include <QStatusBar>
+#include <QScopedValueRollback>
 #include <QColorDialog>
 #include <QSet>
 #include <QStyleOptionComboBox>
@@ -313,10 +314,35 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     connect(m_doc, SIGNAL(fixtureRemoved(quint32)),
             this, SLOT(slotFixtureRemoved(quint32)));
     // Patched: a clear moment to look at each head's pan turn (PanTurn).
+    /* A first patch (Doc::fixturesPatched names only those): a clear moment
+       to look at each head's pan turn (PanTurn). Never an undo, a Cancel or
+       a rig being put back: those are not the person patching it. */
     connect(m_doc, &Doc::fixturesPatched, this, [this](const QList<quint32> &ids) {
-        if (m_doc->loadStatus() != Doc::Loading)
+        if (m_doc->loadStatus() != Doc::Loading && !m_restoringRig
+            && (m_graphicsView == nullptr || !m_graphicsView->quietMoves()))
             schedulePanTurns(ids);
     });
+    /* A venue keeps its own pan turns: switching to one that turns a head
+       says so, as any change of turn does. */
+    if (m_doc->programmer() != nullptr && m_doc->programmer()->venueCorrections() != nullptr)
+    {
+        VenueCorrections *vc = m_doc->programmer()->venueCorrections();
+        connect(vc, &VenueCorrections::activeVenueChanged, this, [this, vc](const QString &name) {
+            QStringList changes;
+            for (const VenueCorrections::TurnChange &c : vc->lastTurnChanges())
+                changes << PanTurn::changeText(m_doc, c.fixtureId, c.from, c.to);
+            if (changes.isEmpty())
+                return;
+            const QString what = changes.size() == 1 ? changes.first()
+                                                     : tr("%n heads' pan turns changed", "", int(changes.size()));
+            const QString text = name.isEmpty() ? tr("The show as built: %1.").arg(what)
+                                                : tr("Venue %1: %2.").arg(name, what);
+            showNotice(text);
+            if (QMainWindow *mw = qobject_cast<QMainWindow *>(window()))
+                if (mw->statusBar() != nullptr)
+                    mw->statusBar()->showMessage(text, 8000);
+        });
+    }
     connect(m_doc->masterTimer(), SIGNAL(functionStarted(quint32)),
             this, SLOT(slotFunctionStarted(quint32)));
     // Repaint fixture ghost outlines when the mark set changes (add/remove or an
@@ -1811,6 +1837,8 @@ QByteArray Monitor::rigSnapshot() const
 
 void Monitor::restoreRig(const QByteArray &snap)
 {
+    // What it re-patches and moves is put back, not placed (pan turns).
+    QScopedValueRollback<bool> restoring(m_restoringRig, true);
     QByteArray props;
     QHash<quint32, QString> names;
     QHash<quint32, QByteArray> power;
@@ -2000,6 +2028,8 @@ QStringList Monitor::centrePanOnStage(const QList<quint32> &fids)
 QStringList Monitor::proposePanTurns(const QList<quint32> &fids, bool ownStep)
 {
     QStringList changes;
+    if (m_doc->mode() == Doc::Operate)
+        return changes;             // never a live head's turn on its own
     const QByteArray before = ownStep ? rigSnapshot() : QByteArray();
     for (quint32 fid : fids)
     {
@@ -2019,6 +2049,10 @@ QStringList Monitor::proposePanTurns(const QList<quint32> &fids, bool ownStep)
 
 void Monitor::schedulePanTurns(const QList<quint32> &fids)
 {
+    /* Operate is running the show: a slip of the mouse on the plot must
+       not swing a live head a whole turn. */
+    if (m_doc->mode() == Doc::Operate)
+        return;
     const bool first = m_pendingTurns.isEmpty();
     for (quint32 fid : fids)
         if (!m_pendingTurns.contains(fid))
@@ -12830,10 +12864,8 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
                                  "pan zero's turn."));
     QPushButton *turnEarlierBtn = new QPushButton(tr("Earlier Turn"), turnRow);
     turnEarlierBtn->setObjectName(QStringLiteral("fixturePanTurnEarlier"));
-    turnEarlierBtn->setToolTip(tr("Work a turn lower on the pan channel: the seam moves round"));
     QPushButton *turnLaterBtn = new QPushButton(tr("Later Turn"), turnRow);
     turnLaterBtn->setObjectName(QStringLiteral("fixturePanTurnLater"));
-    turnLaterBtn->setToolTip(tr("Work a turn higher on the pan channel: the seam moves round"));
     turnBtns->addWidget(turnCentreBtn);
     turnBtns->addWidget(turnEarlierBtn);
     turnBtns->addWidget(turnLaterBtn);
@@ -12849,6 +12881,21 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         turnCentreBtn->setEnabled(in.hasTurns && in.proposal != in.turn);
         turnEarlierBtn->setEnabled(in.hasTurns && in.turn > in.lowest);
         turnLaterBtn->setEnabled(in.hasTurns && in.turn < in.highest);
+        /* Said by where the seam goes, which is true for a head standing,
+           hung or inverted alike ("lower on the channel" was not). */
+        AimSolver::Frame tf;
+        if (in.hasTurns && AimSolver::frameFor(m_doc, fxId, tf))
+        {
+            auto where = [&](int k) {
+                const float b = PanTurn::seamBearing(tf, k);
+                return tr("Turn %1: the seam goes to %2\302\260 %3").arg(k)
+                    .arg(qRound(b) % 360).arg(PanTurn::bearingName(b));
+            };
+            turnEarlierBtn->setToolTip(in.turn > in.lowest ? where(in.turn - 1)
+                                                           : tr("It is on its earliest turn"));
+            turnLaterBtn->setToolTip(in.turn < in.highest ? where(in.turn + 1)
+                                                          : tr("It is on its latest turn"));
+        }
     };
     refreshTurn();
     // Pan zero, offsets, its place: the seam and the stage's room follow.
