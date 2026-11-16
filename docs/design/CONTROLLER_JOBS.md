@@ -180,7 +180,7 @@ runner, the focus owner (`controllerOwner()`) or a job (`hasJob`,
 | `PadRun::armChordUpdate()` / `armChordFired()` / `setArmed()` | no arm change in FOCUS, one runner | Run cues | no (now says why to the runner) |
 | `PadRun::roleText()`, `lightUniverse()`, `chipNotice()` | FOCUS names a pad | (status) | **was**: named the runner. Now the focus's pad |
 | `PadRun::triggerState()` | the triggers' feel | (status) | **was**: armed feel on every pad while another pad focused. Now Armed only |
-| `PadRun::handle()` → `startWalk()` | Menu walks, not while armed | Focus | not a job, the one runner: a Focus pad's walk waits while another pad is armed, now told so by name ("…is running cues: walk once it disarms.", not "disarm first") |
+| `PadRun::handle()` → `startWalk()` | Menu walks, not while armed | Focus | not a job, the one runner. Q252: a Focus pad walks beside an armed runner in Design (the runner keeps its arm); in Operate it is refused naming the runner, never "disarm first" |
 | `PadRun::swipe()` (`routeFocusInput()` feeds the touchpad) | a swipe starts or steps the walk | Focus | **was missing**: any pad's swipe walked. Now only a pad with Focus is read |
 | `PadRun::focusMenu()` | ends the focus | Focus + the owner (Q135) | no |
 | `PadRun::jobsChanged()` | a job taken away | each its own | no |
@@ -192,14 +192,89 @@ runner, the focus owner (`controllerOwner()`) or a job (`hasJob`,
 | `routeFocusInput()`, "Still at…?" A held | answers yes | Focus + owner | no |
 | `routeFocusInput()`, View + Menu | the hold / the tap | none (the hold switches nothing, Q251), Focus (the tap: Focus mode, Tools) | no: the role is the computer's for every pad now; a Focus pad without Run cues tapping in Run is told on the screen where Focus mode is |
 | `focusController()` | the pad the focus tools read and name | Focus | **was**: could pick a pad without Focus. Now one with the job first |
-| `followSpotTakes()`, the bound sticks, a profile's follow spot button, `refreshStickBinding()`, `combineFineSticks()` | the follow spot | Follow spot | no: never the arm, the runner or a tool owner. While any tool runs the follow spot holds (the tick feeds the tool), as before jobs |
-| `ui/src/controllertestdialog.cpp` | the test takes the pad, disarms the runner | none | no (documented: arm again on close) |
+| `followSpotTakes()`, the bound sticks, a profile's follow spot button, `refreshStickBinding()`, `combineFineSticks()` | the follow spot | Follow spot | no: never the arm, the runner or a tool owner. While any tool runs the follow spot holds (the tick feeds the tool), as before jobs. Q253 (steer beside a tool unless it works on the spot's lights) is open, below |
+| `sendPadFeedback()`, `padRumble()`, `setPadTriggers()`, `padFamily()` | which pad is told | (feedback) | **was**: the tools' pad (`focusController()`, a Focus pad first) for every buzz, trigger feel and control name -- the runner's armed triggers and GO buzzes went to the focus pad. Now the acting pad, else the state's pad (review 1) |
+| `ui/src/controllertestdialog.cpp` | the test takes the pad, disarms the runner | none | no (documented: arm again on close); **was**: not beside a venue focus -- now in every case (review 9) |
 | `ui/src/app.cpp` ⌘↩ with a focus cue armed | the laptop starts it | none | no |
 | `ui/src/monitor/focusmodepanel.cpp`, `refinepanel.cpp` | name the owner | (status) | no |
 
-Open, for the owner: walking (Refine) on one pad while another pad is
-armed (Quiet Refine in Operate beside a runner), and the follow spot
-steering while another pad's tool runs.
+### Rules added by the review of a430351ef (2026-11-16)
+
+Written before the fixes, every caller swept against them:
+
+- **Feedback goes to the pad whose action it is.** A buzz or a control's
+  name while a pad's input is handled is that pad's
+  (`ProgrammerController::feedbackPad()`: the acting pad); otherwise the
+  pad the state is on (`statePad()`: the runner armed, the focus's pad in
+  FOCUS, a tool's owner -- the light and the triggers always follow it);
+  otherwise the tools' pad, as with one pad. The arm's firm triggers are
+  the runner's, every other pad's off. The emergency stop buzzes every
+  pad (`kAllPads`, once per physical pad). The re-arm at a focus end
+  buzzes the runner, once. `focusController()` keeps its Focus-job
+  preference: it is who the focus tools read, not who gets feedback.
+- **A tool taking the pad drops the runner's arm, whoever started the
+  focus.** Only the venue focus itself (or a walk beside the runner,
+  Q252) leaves the runner its arm; the laptop's Focus this cue / look,
+  Quick focus and the Controller Test disarm it, during a focus or a walk
+  or as it ends (`PadRun::toolOverFocus()`, `focusCueChanged()`,
+  `walkEnded()`), and it is never told GO works again.
+- **The four's bits are never forgotten while the stop reads them.** A
+  tool, the test or the walk taking or giving back the pad forgets what
+  is held but LB, RB, LT and RT (`PadRun::forgetHeld()`: the arm chord
+  spent until both bumpers are up); only a role switch, where the four
+  were not read, clears them.
+- **Who has the venue focus.** A focus begun on the laptop puts the
+  runner's arm by only when the runner can work it (Focus); otherwise
+  the runner stays armed beside it and FOCUS is unnamed until a pad with
+  Focus takes it with a press (Q135), then names that pad (its light,
+  `focusOwnerChanged()`). If the focus's pad loses the Focus job or is
+  unplugged mid-focus, the focus runs on with no pad and says so ("Venue
+  focus has no controller now: a controller with the Focus job takes it
+  with a press, or finish it on the laptop."); only a pad with Focus
+  takes it, and the runner's arm is put by then only if the runner can
+  work it (a runner with Focus: at once, as for a laptop start). A pad
+  that held View as the focus began and let it go meanwhile has let go
+  (the held buttons are kept before any early return).
+- **After the emergency stop** a pad's LT + Menu starts no venue focus:
+  "Emergency stop: arm a pad (or GO on the computer) before the venue
+  focus." (decided as the safe default, can change). The laptop still
+  can.
+- The words of a press refused beside the focus (or a walk) go when it
+  ends; the Run tab's focus-start line follows a job edit or a pad
+  plugged in or out as the footer does.
+
+### A walk beside the runner (board Q252, option a)
+
+A pad with Focus presses Menu while another pad is armed: in **Design**
+it walks (Quiet Refine's Design side) and the runner **stays armed**, as
+beside a venue focus -- its GO family and new hits refused with
+"<walker> is walking the show: nothing plays until the walk ends." (the
+chip, naming the walker: "Pad: Walk · <walker> · nothing plays until the
+walk ends"), its arm chord changes nothing, a hit left on is its own to
+let go, and when the walk ends its GO works with no re-arm (two short
+buzzes on its pad). In **Operate** the walk is refused: "<runner> is
+running cues: in Operate the walk waits until it disarms." The walker
+owns the walk's tool from its start (Q135); the walk's triggers and
+light are its own. The emergency stop is live from both. The Controller
+Test or the laptop's Focus this cue mid-walk disarms the runner. A swipe
+still starts no walk while a pad is armed (unchanged). Hits fire in
+Operate only, so a walk beside the runner never meets a new hit; one
+already on plays on (the walk stops nothing).
+
+Already true before the build: the stop from either pad (`watchStop()`
+first); a playing hit not cut (a walk starts or stops no function).
+
+### Open, for the owner (board Q253, not built here)
+
+The follow spot pad keeps steering while another pad's tool runs, unless
+that tool is working on the follow spot's own lights (then it holds, its
+sticks zeroed, the chip saying why). Not built on this branch: while any
+tool runs, `applyDesignJoystick()` hands the controller tick to the tool
+and returns before the follow spot's integration, and `routeFocusInput()`
+gives a tool's time to its owner; steering beside a tool needs the tick
+split per pad, and "its lights" needs each tool's live fixture set (the
+focus call's, the walk's layer, Focus this cue's cue). Today the follow
+spot holds while any tool runs, as before jobs.
 
 ## Where it is set
 

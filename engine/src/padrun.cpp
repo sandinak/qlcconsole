@@ -391,6 +391,24 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
                                         "{LT} + {Menu} finishes it.")));
         return true;
     }
+    /* Another pad walks beside the runner (Q252): as beside a venue focus,
+       nothing new plays from here until the walk ends; a hit left on is
+       the runner's to let go. */
+    if (isBesideWalk(universe))
+    {
+        bool letsGo = false;
+        if (action == WhereAmI)
+            trigger(action);
+        else if (action == FireHit && m_armed && sameController(universe, m_armUniverse)
+                 && nextHit(&letsGo) != ShowTree::invalidId() && letsGo)
+            trigger(action);
+        else
+        {
+            m_besideNotice = m_pc != nullptr ? m_pc->padText(walkBesideText()) : walkBesideText();
+            refuse(action, walkBesideText());
+        }
+        return true;
+    }
     // A venue focus cue waits: Menu is its start, armed and with LT held.
     if (action == Walk && isFocusCueWaiting())
     {
@@ -398,14 +416,21 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         return true;
     }
 
-    /* Menu walks -- not while another pad runs cues: the walk takes the pad
-       state from the runner's arm. Told who, never "disarm first" to a pad
-       that has no arm to drop. */
+    /* Menu walks. Another pad armed (board Q252): in Design the walk
+       goes beside it, the runner keeping its arm; in Operate it waits,
+       told who runs cues -- never "disarm first" to a pad that has no arm
+       to drop. */
     if (action == Walk && m_armed && !sameController(universe, m_armUniverse))
     {
-        const QString name = runnerName();
-        refuse(action, name.isEmpty() ? tr("Another controller is running cues: walk once it disarms.")
-                                      : tr("%1 is running cues: walk once it disarms.").arg(name));
+        if (m_doc != nullptr && m_doc->mode() == Doc::Operate)
+        {
+            const QString name = runnerName();
+            refuse(action, name.isEmpty()
+                   ? tr("Another controller is running cues: in Operate the walk waits until it disarms.")
+                   : tr("%1 is running cues: in Operate the walk waits until it disarms.").arg(name));
+            return true;
+        }
+        startWalkBeside(universe);
         return true;
     }
 
@@ -456,7 +481,7 @@ void PadRun::armChordUpdate(quint32 universe)
 {
     const Held h = m_held.value(universe);
     // In FOCUS the bumpers are the focus tool's: no arm change (rule 6).
-    const bool chord = h.lb && h.rb && !h.anyTrigger() && !h.spent && !isFocusing();
+    const bool chord = h.lb && h.rb && !h.anyTrigger() && !h.spent && !isFocusing() && !isWalking();
     if (chord)
     {
         // Timed from the second bumper down; a held chord is not restarted.
@@ -473,9 +498,9 @@ void PadRun::armChordUpdate(quint32 universe)
     }
     /* The runner's chord while another pad has the venue focus: its arm
        stays as it is until the focus ends, and the screen says why. */
-    if (h.lb && h.rb && !h.anyTrigger() && !h.spent && isBesideFocus(universe) && m_pc != nullptr)
+    if (h.lb && h.rb && !h.anyTrigger() && !h.spent && isBesideTool(universe) && m_pc != nullptr)
     {
-        m_besideNotice = focusBesideText();
+        m_besideNotice = isBesideFocus(universe) ? focusBesideText() : walkBesideText();
         showNotice(m_besideNotice);
     }
     /* Both bumpers with one trigger down: no chord, and the screen says
@@ -490,7 +515,7 @@ void PadRun::armChordFired()
     const quint32 u = m_chordUniverse;
     m_chordUniverse = UINT_MAX;
     const Held h = m_held.value(u);
-    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent || isFocusing())
+    if (!m_enabled || !h.lb || !h.rb || h.anyTrigger() || h.spent || isFocusing() || isWalking())
         return;
     /* One runner (CONTROLLER_JOBS.md 6): another pad's arm -- or the arm a
        venue focus put by -- is not this one's to drop or share. */
@@ -655,7 +680,7 @@ void PadRun::toolChanged()
        (no button did that), so it is not found armed when the tool ends.
        Not the venue focus a runner keeps its arm beside (Q250) -- but any
        other tool, whoever started the focus (review 2, 9). */
-    const QString tool = isFocusing() ? toolOverFocus() : holder();
+    const QString tool = (isFocusing() || m_walkBeside) ? toolOverFocus() : holder();
     if (m_armed && !tool.isEmpty())
     {
         reset();
@@ -786,7 +811,12 @@ QString PadRun::roleText() const
                 return tr("Pad: ARMED \u00B7 %1").arg(runnerName());
             return tr("Pad: ARMED");
         case Stopped:       return tr("Pad: STOPPED");
-        case Walking:       return tr("Pad: Walk");
+        case Walking:
+            // Beside the runner (Q252), with more than one pad: who walks.
+            if (m_walkBeside && padCount() > 1 && m_pc != nullptr && m_pc->controllerJobs() != nullptr
+                && !m_pc->controllerJobs()->nameOfUniverse(m_walker).isEmpty())
+                return tr("Pad: Walk \u00B7 %1").arg(m_pc->controllerJobs()->nameOfUniverse(m_walker));
+            return tr("Pad: Walk");
         case ToolHasPad:    return tr("Pad: %1").arg(holder());
         case Focus:
             // The pad the focus is on, not the runner (CONTROLLER_JOBS.md 11).
@@ -913,7 +943,7 @@ QString PadRun::toolOverFocus() const
     if (m_pc == nullptr)
         return QString();
     const RefineSession *r = m_pc->refineSession();
-    if (r->isActive() && !isWalking())
+    if (r->isActive() && !isWalking() && !m_walkBeside)
         return r->isSceneMode() ? tr("Focus This Look") : tr("Focus This Cue");
     if (m_testing)
         return tr("Controller Test");
@@ -1387,6 +1417,24 @@ QString PadRun::focusBesideText() const
                           : tr("Venue focus is running on %1: nothing plays until it ends.").arg(name);
 }
 
+bool PadRun::isBesideWalk(quint32 universe) const
+{
+    return m_walkBeside && isWalking() && universe != UINT_MAX && !sameController(universe, m_walker);
+}
+
+bool PadRun::isBesideTool(quint32 universe) const
+{
+    return isBesideFocus(universe) || isBesideWalk(universe);
+}
+
+QString PadRun::walkBesideText() const
+{
+    const ControllerJobs *jobs = m_pc != nullptr ? m_pc->controllerJobs() : nullptr;
+    const QString name = jobs != nullptr ? jobs->nameOfUniverse(m_walker) : QString();
+    return name.isEmpty() ? tr("Another controller is walking the show: nothing plays until the walk ends.")
+                          : tr("%1 is walking the show: nothing plays until the walk ends.").arg(name);
+}
+
 PadRun::FocusStart PadRun::focusStart() const
 {
     InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
@@ -1423,6 +1471,10 @@ QString PadRun::chipNotice() const
     if (!m_notice.isEmpty() && !owner.isEmpty() && m_notice == focusBesideText()
         && roleText().contains(owner))
         return tr("nothing plays until the venue focus ends");
+    if (m_walkBeside && !m_notice.isEmpty() && m_notice == walkBesideText() && m_pc != nullptr
+        && m_pc->controllerJobs() != nullptr
+        && roleText().contains(m_pc->controllerJobs()->nameOfUniverse(m_walker)))
+        return tr("nothing plays until the walk ends");
     const QString name = runnerName();
     if (!m_notice.isEmpty() && !name.isEmpty() && m_notice == runningCuesText()
         && roleText().contains(name))
@@ -1456,7 +1508,7 @@ void PadRun::jobsChanged()
 PadTriggers::State PadRun::triggerState() const
 {
     // Armed beside another pad's venue focus: the triggers fire nothing.
-    return PadTriggers::forState(m_enabled, m_armed && !isFocusing(), isWalking());
+    return PadTriggers::forState(m_enabled, m_armed && !isFocusing() && !isWalking(), isWalking());
 }
 
 void PadRun::updateTriggers(bool force)
@@ -1966,10 +2018,14 @@ bool PadRun::tryStart(quint32 cueId, QString *why)
 
 void PadRun::walkStarted()
 {
-    // The walking map has no GO, and no arm (a walk never starts armed).
-    const bool wasArmed = m_armed;
-    m_armed = false;
-    m_armUniverse = UINT_MAX;
+    /* The walking map has no GO, and no arm (a walk never starts armed) --
+       but a walk beside the runner (Q252) leaves the runner's arm. */
+    const bool wasArmed = m_armed && !m_walkBeside;
+    if (wasArmed)
+    {
+        m_armed = false;
+        m_armUniverse = UINT_MAX;
+    }
     m_armChord->stop();
     m_chordUniverse = UINT_MAX;
     forgetHeld();
@@ -2002,8 +2058,51 @@ void PadRun::walkEnded()
     setSolo(false);
     forgetHeld();       // what was held while walking was the walk's (but the four)
     emit walkingChanged(false);
+    if (m_walkBeside)
+    {
+        m_walkBeside = false;
+        m_walker = UINT_MAX;
+        if (!m_besideNotice.isEmpty() && m_notice == m_besideNotice)
+            showNotice(QString());
+        m_besideNotice.clear();
+        /* The runner kept its arm (Q252): GO works again, its pad told
+           once -- unless a tool took the pad as the walk ended (the
+           laptop's Focus this cue), which disarms it (toolChanged()). Its
+           start comes a moment after this stop: looked at then. */
+        if (m_armed)
+            QTimer::singleShot(0, this, [this]() {
+                if (!m_armed || m_pc == nullptr)
+                    return;
+                const QString tool = holder();
+                if (!tool.isEmpty())
+                {
+                    reset();
+                    showNotice(tr("Disarmed: %1 has the controller.").arg(tool));
+                    return;
+                }
+                m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), m_armUniverse);
+            });
+    }
     sync();
     m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
+}
+
+bool PadRun::startWalkBeside(quint32 universe)
+{
+    if (m_pc == nullptr)
+        return false;
+    // The walker owns the walk's tool (Q135); the runner keeps its arm.
+    m_walkBeside = true;
+    m_walker = universe;
+    m_pc->claimController(universe);
+    if (!startWalk())
+    {
+        m_walkBeside = false;
+        m_walker = UINT_MAX;
+        m_pc->releaseControllerSoon();
+        return false;
+    }
+    return true;
 }
 
 bool PadRun::refuseWalk(const QString &reason, QString *why)
@@ -2022,7 +2121,7 @@ bool PadRun::startWalk(quint32 cueId, QString *why)
     if (m_pc == nullptr)
         return false;
     // Armed, the pad is the cue map: the walk has its own (rule 3).
-    if (m_armed)
+    if (m_armed && !m_walkBeside)
         return refuseWalk(m_pc->padText(tr("Armed. To walk, disarm first: hold {LB} and {RB}.")), why);
     if (cueId == 0xFFFFFFFF)
         cueId = cueInHand();

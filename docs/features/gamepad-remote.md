@@ -270,7 +270,25 @@ show from any pad.
   to its end; a toggle until the runner pulls RT to let it go). The focus
   pad ends it with LT + Menu, and the runner's GO works again at once, no
   re-arm (two short buzzes). One pad with Run cues and Focus works as
-  before: armed, LT + Menu. Focus mode is in the Tools role, and Run /
+  before: armed, LT + Menu. A focus started on the laptop leaves a
+  runner without Focus armed too, and **Pad: FOCUS** names the first pad
+  with Focus to press a button. If the focus pad loses its Focus job or
+  is unplugged, the focus runs on and the chip says so: another pad with
+  Focus takes it with a press, or finish it on the laptop. After the
+  emergency stop a pad can't start the venue focus until a pad is armed
+  again (or GO on the computer). The laptop's Focus this cue, Quick focus
+  or the Controller Test still disarm the runner.
+- **A walk beside the runner.** In Design, a pad with Focus can walk the
+  show (Menu) while another pad is armed: the runner stays armed, the
+  chip reads **Pad: Walk ·** and the walking pad's name, and the runner's
+  GO family is refused (*… is walking the show: nothing plays until the
+  walk ends.*) until the walk ends, then works with no re-arm. In
+  Operate the walk waits until the runner disarms, and says who runs
+  cues.
+- Buzzes, trigger feel and the names of buttons in a message go to the
+  pad they are about: the runner's armed triggers and GO buzz are on the
+  runner, the emergency stop buzzes every pad.
+  Focus mode is in the Tools role, and Run /
   Tools is switched on the computer (the Run tab's **Pad:** button) for
   every pad: a View + Menu tap in Run on a Focus-only pad says so.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
@@ -311,7 +329,20 @@ list. Set pad A to **Run cues** only and pad B to **Focus** only.
 9. Start the focus on B again, then press all four on A (LB + RB + LT +
    RT). *Expected:* **Pad: STOPPED**, both lights red, everything off. End
    the focus on B (LT + Menu): A is not armed. Repeat with the four on B.
-10. Set A to every job, B to Follow spot only. Disarmed, on A, LT +
+10. With A armed, in Design: on B press Menu. *Expected:* B walks;
+    **Pad: Walk · B**; A's LT + A plays nothing (*… is walking the show:
+    nothing plays until the walk ends.*). Menu on B again: the walk ends,
+    two short buzzes on A, A's LT + A plays. In Operate, Menu on B:
+    refused, naming A.
+11. Arm A, put the Pre-show list on its focus cue, and press **Start
+    Venue Focus** on the Run tab (the laptop). *Expected:* A stays armed;
+    the chip says **Pad: FOCUS** with no name. Once the calls run, press Y
+    on B: **Pad: FOCUS · B**, B's light blue. LT + Menu on B ends it.
+12. On A, hold DualSense L2 + Cross to GO (A a DualSense, B an Xbox pad),
+    then press Cross alone. *Expected:* the GO buzz is on A only, A's
+    triggers are firm while armed, and the chip says *GO is L2 held and
+    Cross.* (A's own names).
+13. Set A to every job, B to Follow spot only. Disarmed, on A, LT +
     Menu. *Expected:* refused: *Not armed. To start the venue focus, hold
     LB and RB to arm, then LT + Menu.* Arm A, LT + Menu: **Pad: FOCUS**,
     not armed; LT + Menu again: ARMED (as before jobs).

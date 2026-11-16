@@ -3393,7 +3393,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
        the focus ends and says so (the runner keeps its arm) -- never the
        focus tool's, never "doesn't do focus" for a GO. Its sticks stay as
        a tool leaves them. */
-    if (active && m_padRun->isBesideFocus(universe) && role != GamepadRole::None
+    if (active && m_padRun->isBesideTool(universe) && role != GamepadRole::None
         && !GamepadRole::isTouch(role) && !isPan && !isTilt
         && role != GamepadRole::LeftX && role != GamepadRole::LeftY
         && role != GamepadRole::RightX && role != GamepadRole::RightY)
@@ -3551,8 +3551,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
        takes the pad until it ends. */
     if (!active && !isPan && !isTilt && m_padRun->handle(universe, role, value))
         return true;
-    // Not another pad's venue focus: the runner keeps its arm (Q250).
-    if (active && m_padRun->isArmed() && !m_padRun->isFocusing())
+    // Not another pad's venue focus or walk: the runner keeps its arm (Q250, Q252).
+    if (active && m_padRun->isArmed() && !m_padRun->isFocusing() && !m_padRun->isWalking())
         m_padRun->reset();
     if (!active)
         return false;

@@ -456,6 +456,13 @@ public:
      *  the runner's GO, Back, Sub GO, Sub Back and new hits while another
      *  pad has the venue focus (board Q250). */
     QString focusBesideText() const;
+    /** A walk on another pad beside the runner (board Q252): @p universe
+     *  is not the walker's. */
+    bool isBesideWalk(quint32 universe) const;
+    /** isBesideFocus() or isBesideWalk(): its presses play nothing. */
+    bool isBesideTool(quint32 universe) const;
+    /** "<walker> is walking the show: nothing plays until the walk ends." */
+    QString walkBesideText() const;
     /** How a waiting venue focus cue starts from a pad (one source for the
      *  voice, the Run tab and the footer): ArmFirst -- armed, LT + Menu
      *  (every pad with Focus also runs cues and none is armed by another);
@@ -742,6 +749,12 @@ private:
     /** isFocusing() when focusCueChanged() last looked: its end is told
      *  to a runner that kept its arm beside it. */
     bool m_wasFocusing = false;
+    /** A Focus pad walks while another pad is armed (Q252, Design only):
+     *  the runner keeps its arm; m_walker is the walking pad. */
+    bool m_walkBeside = false;
+    quint32 m_walker = UINT_MAX;
+    /** Q252: start the walk on @p universe beside the armed runner. */
+    bool startWalkBeside(quint32 universe);
     /** The words a press beside the focus was refused with (cleared when
      *  the focus ends, review 8). */
     QString m_besideNotice;
