@@ -147,7 +147,6 @@ ControllerTestDialog::ControllerTestDialog(Doc *doc, QWidget *parent)
     m_statusLabel = new QLabel(this);
     m_statusLabel->setObjectName(QStringLiteral("controllerTestStatus"));
     m_statusLabel->setWordWrap(true);
-    m_statusLabel->setStyleSheet(QStringLiteral("color: palette(mid);"));
     status->addWidget(m_statusLabel, 1);
     m_askButton = new QPushButton(tr("Ask macOS for Input Monitoring"), this);
     m_askButton->setObjectName(QStringLiteral("controllerTestAsk"));

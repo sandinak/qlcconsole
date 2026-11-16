@@ -18,6 +18,7 @@
 */
 
 #include <QRegularExpression>
+#include <algorithm>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QtMath>
@@ -640,39 +641,72 @@ void FocusControlMap::paintController(QPainter &p)
     }
 
     // Room for the label columns, then the pad as large as fits between.
-    qreal leftW = 0, rightW = 0;
-    for (const Callout &c : callouts)
-    {
-        const qreal w = qMax(afm.horizontalAdvance(c.action), nfm.horizontalAdvance(c.name));
-        (c.left ? leftW : rightW) = qMax(c.left ? leftW : rightW, w);
-    }
     const bool names = m_labels == NameLabels;
-    if (names)
+    const qreal gap = 8, margin = 6, lineGap = 6;
+    qreal leftW = 0, rightW = 0, s = 0, total = 0, x0 = 0, y0 = 0;
+    bool oneLine = false;   // a control's name and what it reads on one line
+    /* Two lines a label while the rows (28 pad units apart) stay clear of
+       each other; when the pad is drawn too small for that (a short
+       window) a label is one line, so nothing collides. */
+    for (int pass = 0; pass < 2; ++pass)
     {
-        /* What a control reads changes as it is pressed: both columns as
-           wide as the widest it can say, so the pad holds still. */
-        const QString tick = QString::fromUtf8("\342\234\223 ");
-        const QStringList widest = {
-            tr("not on this controller"), tr("not pressed yet"),
-            tick + tr("x %1  y %2").arg(QStringLiteral("-0.00"), QStringLiteral("-0.00")),
-            tr("pressed %1").arg(QString::fromUtf8("\342\226\262 \342\226\274 \342\227\200 \342\226\266")),
-            tick + tr("%1 of 4 seen").arg(4), tick + tr("%1 %").arg(100) };
-        for (const QString &w : widest)
-            leftW = qMax(leftW, nfm.horizontalAdvance(w));
-        leftW = rightW = qMax(leftW, rightW);
+        leftW = rightW = 0;
+        for (const Callout &c : callouts)
+        {
+            const qreal w = oneLine ? afm.horizontalAdvance(c.action) + lineGap + nfm.horizontalAdvance(c.name)
+                                    : qMax(afm.horizontalAdvance(c.action), nfm.horizontalAdvance(c.name));
+            (c.left ? leftW : rightW) = qMax(c.left ? leftW : rightW, w);
+        }
+        if (names)
+        {
+            /* What a control reads changes as it is pressed: both columns as
+               wide as the widest it can say, so the pad holds still. */
+            const QString tick = QString::fromUtf8("\342\234\223 ");
+            const QStringList widest = {
+                tr("not on this controller"), tr("not pressed yet"),
+                tick + tr("x %1  y %2").arg(QStringLiteral("-0.00"), QStringLiteral("-0.00")),
+                tr("pressed %1").arg(QString::fromUtf8("\342\226\262 \342\226\274 \342\227\200 \342\226\266")),
+                tick + tr("%1 of 4 seen").arg(4), tick + tr("%1 %").arg(100) };
+            qreal wide = 0;
+            for (const QString &w : widest)
+                wide = qMax(wide, nfm.horizontalAdvance(w));
+            if (oneLine)
+                wide += lineGap + afm.horizontalAdvance(QStringLiteral("Right stick"));
+            leftW = rightW = qMax(qMax(leftW, rightW), wide);
+        }
+        const qreal availW = width() - leftW - rightW - 2 * (gap + margin);
+        const qreal availH = height() - 2 * margin;
+        s = qBound(0.3, qMin(availW / kPad.width(), availH / kPad.height()), 1.8);
+        total = leftW + gap + kPad.width() * s + gap + rightW;
+        x0 = (width() - total) / 2.0;
+        y0 = (height() - kPad.height() * s) / 2.0;
+        if (pass == 0 && names && 28.0 * s < afm.height() + nfm.height() + 2.0)
+            oneLine = true;
+        else
+            break;
     }
-    const qreal gap = 8, margin = 6;
-    const qreal availW = width() - leftW - rightW - 2 * (gap + margin);
-    const qreal availH = height() - 2 * margin;
-    const qreal s = qBound(0.3, qMin(availW / kPad.width(), availH / kPad.height()), 1.8);
-    const qreal total = leftW + gap + kPad.width() * s + gap + rightW;
-    const qreal x0 = (width() - total) / 2.0;
-    const qreal y0 = (height() - kPad.height() * s) / 2.0;
 
     QTransform t;
     t.translate(x0 + leftW + gap, y0);
     t.scale(s, s);
     t.translate(-kPad.left(), -kPad.top());
+
+    /* Where each label sits (centre of its text): its row on the pad, pushed
+       down where two on a side would touch, so no two ever collide. */
+    const qreal labelH = oneLine ? qMax(afm.height(), nfm.height()) + 1.0 : afm.height() + nfm.height();
+    QList<qreal> labelY;
+    for (const Callout &c : callouts)
+        labelY << t.map(QPointF(0, c.row)).y();
+    for (int side = 0; side < 2; ++side)
+    {
+        QList<int> order;
+        for (int i = 0; i < callouts.size(); ++i)
+            if (callouts.at(i).left == (side == 0))
+                order << i;
+        std::sort(order.begin(), order.end(), [&labelY](int a, int b) { return labelY.at(a) < labelY.at(b); });
+        for (int k = 1; k < order.size(); ++k)
+            labelY[order.at(k)] = qMax(labelY.at(order.at(k)), labelY.at(order.at(k - 1)) + labelH);
+    }
 
     auto addHit = [this, &t, names](const QPainterPath &shape, int role, const QString &tip) {
         if (!names)     // the Controller Test's picture only shows
@@ -699,8 +733,9 @@ void FocusControlMap::paintController(QPainter &p)
 
     // The lines, over the body and under the controls.
     p.save();
-    for (const Callout &c : callouts)
+    for (int ci = 0; ci < callouts.size(); ++ci)
     {
+        const Callout &c = callouts.at(ci);
         if (c.action.isEmpty())
             continue;
         QPen pen(withAlpha(c.mapped ? text : dim, c.mapped ? 120 : 90), 1.0);
@@ -709,7 +744,7 @@ void FocusControlMap::paintController(QPainter &p)
         p.setPen(pen);
         const QPointF a = t.map(c.anchor);
         const QPointF end(c.left ? x0 + leftW + gap * 0.5 : x0 + total - rightW - gap * 0.5,
-                          t.map(QPointF(0, c.row)).y());
+                          labelY.at(ci));
         QPolygonF line;
         line << a;
         if (!c.elbow.isNull())
@@ -1006,15 +1041,35 @@ void FocusControlMap::paintController(QPainter &p)
     drawStick(rs, R::RightX, R::RightY, R::RS, true);
 
     // The labels.
-    for (const Callout &c : callouts)
+    for (int ci = 0; ci < callouts.size(); ++ci)
     {
+        const Callout &c = callouts.at(ci);
         if (c.action.isEmpty())
             continue;
-        const qreal y = t.map(QPointF(0, c.row)).y();
+        const qreal y = labelY.at(ci);
         const qreal ah = afm.height(), nh = nfm.height();
         const qreal top = y - ah / 2.0;
         QRectF ar, nr;
-        if (c.left)
+        if (oneLine)
+        {
+            /* "Menu  not on this controller": the control's name, then what
+               it reads, on the one line. */
+            const qreal aw = afm.horizontalAdvance(c.action), nw = nfm.horizontalAdvance(c.name);
+            const qreal h = qMax(ah, nh);
+            if (c.left)
+            {
+                const qreal right = x0 + leftW;
+                nr = QRectF(right - nw, y - h / 2.0, nw, h);
+                ar = QRectF(right - nw - lineGap - aw, y - h / 2.0, aw, h);
+            }
+            else
+            {
+                const qreal x = x0 + total - rightW;
+                ar = QRectF(x, y - h / 2.0, aw, h);
+                nr = QRectF(x + aw + lineGap, y - h / 2.0, nw, h);
+            }
+        }
+        else if (c.left)
         {
             ar = QRectF(x0, top, leftW, ah);
             nr = QRectF(x0, top + ah, leftW, nh);
@@ -1025,7 +1080,7 @@ void FocusControlMap::paintController(QPainter &p)
             ar = QRectF(x, top, rightW, ah);
             nr = QRectF(x, top + ah, rightW, nh);
         }
-        const Qt::Alignment al = (c.left ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
+        const Qt::Alignment al = ((c.left && !oneLine) ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter;
         bool lit = false;
         for (int r : c.roles)
             lit = lit || isLit(r);
