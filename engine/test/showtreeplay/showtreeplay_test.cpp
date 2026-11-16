@@ -2337,13 +2337,16 @@ void ShowTreePlay_Test::anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage()
     QCOMPARE(st->runningCue(listId), cues[2]);  // cue 3 on stage
     QCOMPARE(int(settle(5)[0]), 120);
 
-    // A cue added at the top, with a look of its own on fixture 1, which
-    // no other cue sets: cue 3 stays on stage, and it never played.
+    // A cue added at the top, with a look of its own on fixture 1 that it
+    // releases (so no later cue tracks it on): cue 3 stays on stage, and
+    // the new cue never played.
     FixtureGroup *b = group("B", { m_fixtures[1] });
     stepSaid.clear();
     const quint32 top = st->addCue(listId, -1, "Top");
     QVERIFY(top != ShowTree::invalidId());
-    st->setLayerLook(top, st->addLayer(top, groupTarget(b->id())), st->lookForPalette(dimmer(77, "L77")));
+    const quint32 topLayer = st->addLayer(top, groupTarget(b->id()));
+    st->setLayerLook(top, topLayer, st->lookForPalette(dimmer(77, "L77")));
+    QVERIFY(st->setLayerRelease(top, topLayer, true));
     QHash<quint32, uchar> out = settle(5);
     QCOMPARE(int(out[0]), 120);
     QCOMPARE(int(out[1]), 0);
