@@ -450,7 +450,9 @@ for and note each result.
     controller list.
     *Expected:* the Deck's controller is listed, with Xbox button names,
     and its VID:PID starts with 28DE (Valve). Report the whole VID:PID.
-15. **A pad that switches mode.** Not the Deck: plug the Xbox 360 clone
+15. **A pad that switches mode.** This tests recovery from the clone's own
+    mode switch, not a qlcconsole control (no pad chord switches Run / Tools).
+    Not the Deck: plug the Xbox 360 clone
     pad (a DualSense clone, 045E:028E once switched) into the console by
     USB, patch it, and start a cue list running with the console's
     output on the rig. Hold View + Menu (Create + Options) on the pad for

@@ -2,6 +2,75 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
+## 0.4.12 (November 2026)
+
+This section covers 0.4.5 through 0.4.12.
+
+### Running the show from a game controller
+
+- **Pad Run follows five rules.** The pad never picks the list (the Run
+  tab does). The bumpers are the mode and only that: hold **LB + RB** to
+  arm, hold them again to disarm. **LT** is the safety for every cue
+  command: armed, hold LT and press **A** (GO), **B** (Back), **X** (Sub
+  GO) or **Y** (Sub Back). **RT** fires the armed hit. **LB + RB + LT +
+  RT** is the emergency stop, on every pad. See [GO from the game
+  controller](show-control.md#go-from-the-game-controller-pad-run).
+- **One state everywhere.** The Run tab's **Pad:** button, the frame round
+  the tab, the footer's Pad chip and the pad's light read one state:
+  **Pad: Run**, **ARMED** (orange), **STOPPED** (red), **Walk**, **FOCUS**
+  (blue). The Run tab names the hit RT will fire before you pull it.
+- **Run / Tools is switched on the computer**, with the Run tab's **Pad:**
+  button, never by a chord on the pad. Holding View + Menu (Create +
+  Options) only says so.
+- **Venue focus from the pad.** In the Run role a waiting venue focus cue
+  starts with **LT + Menu** and ends the same way; the list stays on the
+  focus cue until a GO. See [Venue focus](focus-calls.md#a-venue-focus-cue-pre-show).
+- **Controller jobs.** Each pad has three jobs, **Run cues**, **Follow
+  spot** and **Focus**, set in **Connections**, right-click the
+  controller, **Test Controller and Jobs...**. A pad that runs cues stays
+  armed while a Focus pad works a venue focus, and a Focus pad can walk the
+  show beside it. See [Controller jobs](gamepad-remote.md#controller-jobs-more-than-one-controller).
+- **See and check a controller.** The Controller Test shows every button
+  and stick as it answers, **Check Mapping** walks the pad through its
+  controls, and a pad that stops answering is skipped and named in the
+  footer instead of freezing the app.
+- **The phone and Deck Run page** plays the list the Run tab plays and
+  follows the same pad rules.
+
+### Safety
+
+- **Show only output.** A laser, fogger, flame relay or DMX curtain given
+  the **Show only** output rule fires only from what is started in
+  Operate. In Design, Blind, the Workbench, previews and Test buttons it
+  stays off, and the emergency stop cuts it at once. See [Output
+  rules](fixture-manager.md#output-rules).
+- **The Workbench opens Blind in Operate.** What you load there stays off
+  the stage until **Play Live**.
+- **Two GOs a moment apart play one cue.** See [Two GOs at
+  once](show-control.md#two-gos-at-once).
+- **After a crash**, the Run tab offers the cue the show was on, as a
+  standby.
+- **Before the house opens.** One page of Show Review checks the universes
+  reaching their nodes, Local Network, the controllers, power and the
+  screen. See [Before the house opens](dress-rehearsal.md).
+
+### The show and the rig
+
+- **Cues from the calling script.** **Make Cues...** turns the script's
+  SCENE, LIGHTING and LIGHTS lines into numbered cues, as one undo step.
+- **Follow spot.** The operator's position turns the sticks to where they
+  stand, and a head with more than a turn of pan keeps a **pan turn** so a
+  walk across the stage never swings it round. See [Moving a follow
+  spot](stage-targets.md#moving-a-follow-spot).
+- **WLED.** Patching a universe to a WLED sets the device up for the show
+  and says what it did.
+- **Props in a hand, and IR candles.** A staff or candle target can be held
+  by a performer cue by cue, and the **Generic > IR Candle Remote** fixture
+  lights hand-held candles from the show. See
+  [Candles](stage-targets.md#candles).
+- **Connections by universe** edits in place and reads where each universe
+  goes in one cell.
+
 ## 0.4.4 (November 2026)
 
 ### Lighting Studio
@@ -1595,7 +1664,7 @@ their house lights, relays and subs.
   ([Mounting](lighting-studio.md#mounting-a-fixture))
 - **Height counts when attaching.** A fixture mounted on something (the
   foot of a tower, a deck) is only offered a truss or pipe within 20 in
-  (0.5 m) of its own height — no more lights at a tower's base hung on the
+  of its own height — no more lights at a tower's base hung on the
   bar on top.
 - **Mount on → Deck.** Stands every selected fixture on the deck under it
   (or a named one): on its top, upright, nothing floating, nudged inside a

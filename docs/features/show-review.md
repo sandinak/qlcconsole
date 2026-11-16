@@ -1,5 +1,7 @@
 # Show Review
 
+Lengths in this guide are written in feet and inches, the default. The app shows and reads every length in your **Settings ▸ Units**.
+
 Show Review reads the show and lists what is likely wrong with its
 **design**, each with the place to fix it: two fixtures on the same
 channels, a missing fixture definition, a special from one song still up
@@ -211,7 +213,7 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   instead. Not flagged: a light clamped to a truss, pipe, tower or hanger,
   or in a studio group (the structure places it); a light standing on or
   bolted to that deck; a deck with a Clear or Open top (lights go inside
-  those on purpose); and a body that only touches or sinks less than 1 in (3 cm).
+  those on purpose); and a body that only touches or sinks less than 1 in.
   It re-reads a moment after any edit.
 - **FIX-18** A definition with no beam angle or no pan/tilt range: *"Test
   Spot: no beam angle and no pan/tilt range in its definition (3
@@ -228,9 +230,9 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   (2')."* The row-mates are the other lights of the **same fixture type**
   in a fixture group it belongs to (smallest group first), else with the
   same name series ("UST-" for UST-2), else in the same line (Y within
-  1 ft (0.3 m)). It fires when more than half of them, and at least two, stand on a
+  1 ft). It fires when more than half of them, and at least two, stand on a
   deck (a deck mount, or a free light at a solid top's height) and this
-  light is within a body length (1 ft 8 in (0.5 m) at least) of the edge of one of those
+  light is within a body length (1 ft 8 in at least) of the edge of one of those
   decks. A **warning** in the footer (`fixtures.offrow`, **Sit on Top** /
   **Show**) and an amber ring with a triangle on the plot, since a floor
   light beside a riser can be deliberate: **Accept with a note** as for any
@@ -352,8 +354,8 @@ both give the same answer.
 - **PWR-06** A stage light that ignores Blackout or the Grand Master.
 - **PWR-09** A laser, or a star projector, whose beam or star field can
   reach the audience or eye height. The plot has no audience area, so the
-  rule is a fixed unit whose beam, followed 100 ft (30 m), enters the space downstage
-  of the stage's front edge below 10 ft (3 m). Aim it up or away, or accept it with a
+  rule is a fixed unit whose beam, followed 100 ft, enters the space downstage
+  of the stage's front edge below 10 ft. Aim it up or away, or accept it with a
   note saying who approved it (the venue's laser safety officer, the
   variance). A laser's beam is its **scan window**, H × V degrees (the
   definition's widest lens angle across, its narrowest up and down when that
@@ -373,7 +375,7 @@ both give the same answer.
   conductor, a camera, the audience's eyes) that a lit beam's cone crosses in
   a cue. The finding names the cue, the lights and the zone, in the first cue
   the beam starts to cross it (not again in the cues that track it on). Each
-  lit light's cone is followed 100 ft (30 m) from where it is in the rig: a mover from
+  lit light's cone is followed 100 ft from where it is in the rig: a mover from
   its position in the cue, a fixed light from where it throws, a laser as its
   window. A beam stops at the stage floor, so a pit's zone reaches up to it.
   A laser's window is read after any **Masking** on it, and a ray stopped by

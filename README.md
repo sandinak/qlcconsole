@@ -26,11 +26,19 @@ written as cue lists with tracking, the focus done from the stage with a
 game controller, and a show that moves from room to room with its
 corrections, house rig and outputs kept per venue.
 
+A show runs from the laptop, a phone or Steam Deck, QLab, a Stream Deck or
+an Xbox or PlayStation controller held on stage, with a safety on every
+route.
+
 It is built for:
 
-- **Show choir and school theatre crews**: a show with a few dozen to a
-  few hundred fixtures, programmed by students and run by a board op
-  calling GO.
+- **Students and school crews**: show choir and school theatre, a show
+  with a few dozen to a few hundred fixtures, programmed by students and
+  run by a board op calling GO. The interface says what it is doing and
+  why, and a Teaching show holds real output until the instructor allows it.
+- **Working lighting techs and pros**: cue lists that track, palettes,
+  stage targets, per-venue focus, show control in and out, and a
+  controller that runs GO without a console in front of you.
 - **Teachers**: a [course](docs/course/README.md) that takes a crew from
   "what does lighting do?" to running a real show, on a virtual copy of a
   show choir stage that is never connected to real lights.
@@ -51,6 +59,19 @@ desktop UI, and for crews who want a theatre cue list, venues and
 stage-side focus. What it promises QLC+ 4 users is in
 [SUPPORT.md](SUPPORT.md); where it's going, in
 [the strategy](docs/project/STRATEGY.md).
+
+**The main workflows**
+
+| You want to | Start here |
+|---|---|
+| Build the rig before anything is patched | [Lighting Studio](docs/features/lighting-studio.md) |
+| Write the show as cues | [Show Tree](docs/features/show-tree.md) |
+| Make looks, effects and scenes | [Build](docs/features/build.md), [Effects](docs/features/effects.md) |
+| Focus the rig in a room | [Venue focus](docs/features/focus-calls.md) |
+| Move one show between rooms | [Venues](docs/features/venues.md) |
+| Run the show | [Run tab](docs/features/show-tree.md#the-cue-runner), [game controller](docs/features/show-control.md#go-from-the-game-controller-pad-run), [phone and Steam Deck](docs/features/gamepad-remote.md), [QLab](docs/features/show-control.md) |
+| Check the show before the house opens | [Before the house opens](docs/features/dress-rehearsal.md) |
+| Teach it | [The course](docs/course/README.md) |
 
 **Contents:** [Major features](#major-features) ·
 [Download](#download-and-install) · [Getting started](#getting-started) ·
@@ -202,26 +223,78 @@ tabs; the show is the same. An old QLC+ show opens in Classic QLC+, and
 **File ▸ Upgrade This Show…** gives it a Show Tree.
 → [Getting started: views](docs/features/getting-started.md#views)
 
-### Controllers and the follow spot
+### Run the show from a game controller
 
 <img src="docs/images/focus-mode-controller-map.png" alt="The controller map: what each button and stick of an Xbox controller does in the focus tools" width="700" />
 
-Xbox, DualShock 4 and DualSense pads (Bluetooth or USB) drive the focus
-tools and a joystick **Followspot** effect that can fade a head out near
-its limits or when scenery blocks it. A pad that falls asleep or wakes
-up is picked up again by name, never silently lost; with two pads, the
-first to press Start owns the tools. MIDI devices are followed the same
-way.
-→ [Controllers coming and going](docs/features/other-improvements.md#controllers-and-midi-devices-coming-and-going) ·
+An Xbox One or Series, DualShock 4 or DualSense pad (Bluetooth or USB)
+can run the cue list from anywhere in the room. The pad's **Run** role
+follows a few fixed rules, so a pad knocked off a stool moves nothing:
+
+- **Arm** by holding **LB + RB**; hold them again to disarm. No other
+  button arms or disarms.
+- **LT is the safety.** Armed, hold LT and press **A** for GO, **B** for
+  Back, **X** for Sub GO, **Y** for Sub Back. **RT** fires the armed hit.
+- **LB + RB + LT + RT is the emergency stop**, on every connected pad,
+  whatever it is doing.
+- The pad never picks the list: the Run tab does. The Run / Tools switch
+  is on the computer, the Run tab's **Pad:** button, never a pad chord.
+
+The footer, the frame round the Run tab and the pad's light bar say one
+state: **Pad: ARMED** (orange), **STOPPED** (red), **FOCUS** (blue).
+With more than one pad, each has **jobs** (Run cues, Follow spot, Focus):
+one pad can run cues while another focuses the venue. The same pad starts
+a waiting venue focus cue with **LT + Menu**, works its calls, and ends it
+the same way; the Controller Test and **Check Mapping** show what a pad
+really sends. A Steam Deck, phone or tablet is a Wi-Fi remote with the
+same rules.
+→ [Pad Run](docs/features/show-control.md#go-from-the-game-controller-pad-run) ·
+[Controller jobs and the remote](docs/features/gamepad-remote.md) ·
+[Controllers coming and going](docs/features/other-improvements.md#controllers-and-midi-devices-coming-and-going)
+
+### The follow spot
+
+A joystick **Followspot** effect aims a moving head at a subject you walk
+across the stage with the pad's sticks. It knows where its operator
+stands (front of house, a side tower, a balcony), can fade the head out
+near its limits or when scenery blocks it, and keeps a head with more than
+a turn of pan from swinging round on a long walk.
+→ [Moving a follow spot](docs/features/stage-targets.md#moving-a-follow-spot) ·
 [Effects: Followspot](docs/features/effects.md)
+
+### Safe to run
+
+- **Show only** output rule: a laser, fogger, flame relay or DMX curtain
+  fires only from what is started in Operate, never from Design, a
+  preview, Blind or a Test button; the emergency stop cuts it at once.
+- **Design and Operate** keep a running show from being edited by
+  accident; the Workbench opens Blind in Operate.
+- Two GOs a moment apart play one cue. After a crash the Run tab offers
+  the cue the show was on, as a standby.
+- **Before the House Opens** (Show Review) checks, on one page, that
+  every universe reaches its node, the controllers are present, power and
+  the screen are set, and nothing blocks the show.
+- A **Teaching** show holds real output and show control out.
+→ [Fixture Manager: output rules](docs/features/fixture-manager.md#output-rules) ·
+[Before the house opens](docs/features/dress-rehearsal.md) ·
+[Teaching mode](docs/features/teaching.md)
+
+### WLED and hand-held candles
+
+Patching a universe to a **WLED** device sets the device up for the show
+(its name, no WLED sync, dark at power-on) and says what it did; WLED
+effects play from the Workbench. Hand-held flameless candles are lit by
+the show through the network IR blaster (**Generic ▸ IR Candle Remote**),
+and a performer can hold a staff or candle cue by cue.
+→ [Build](docs/features/build.md) · [Candles](docs/features/stage-targets.md#candles)
 
 ### And more
 
 The readiness footer and its fixes, Blind / Park / Highlight, cloud
 storage safety and the show cache, fixture definition updates, Eos show
 import (with its special circuits and subs), power distribution, the
-show timeline following timecode, and software updates that never
-install during a show.
+show timeline following timecode, a script that turns a calling script
+into cues, and software updates that never install during a show.
 → [What's new](docs/features/whats-new.md) ·
 [Other improvements](docs/features/other-improvements.md) ·
 [CHANGELOG](CHANGELOG.md)
@@ -237,6 +310,13 @@ release's **Assets**:
 | Mac (Apple silicon or Intel, macOS 12+) | `qlcconsole-<version>-universal-<date>-<rev>.dmg` | Signed and notarized: open the DMG and drag the app to Applications |
 | Windows (64-bit) | `qlcconsole-<version>-win64-setup.exe` | Not code-signed, so Windows warns before it installs |
 | Linux (x86_64) | `qlcconsole-<version>-x86_64.AppImage` | Make it executable and run it |
+
+**Platform status.** macOS is the primary platform and the one the show
+is run on. The Windows installer and the Linux AppImage are built by CI
+on every release, and are tested less: Windows is checked on a Windows 10
+machine only. A Raspberry Pi 5 (64-bit Debian) runs it from a `.deb` built
+on the Pi, not yet published as a download; see
+[RASPI.md](docs/dev/RASPI.md).
 
 Each release has a `SHA256SUMS` file to check the download against. The
 app checks GitHub for updates and installs them at quit, never during a

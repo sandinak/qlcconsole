@@ -232,7 +232,8 @@ them:
   takes the controller until it ends, and the arm drops with it. The Run tab's button and the footer
   name it meanwhile (**Pad: Venue Focus**, **Pad: Focus This Cue**). In the Run role, View + Menu doesn't
   start Focus mode, and Menu alone walks the show (below). A focus-call
-  cue's Start (Menu) still begins its calls.
+  cue's calls begin with **LT + Menu**, armed (in the Tools role, Start
+  (Menu)).
 - The sticks stay the follow spot's in either role. While a follow spot
   plays, the right stick is its fine stick and **D-pad Up / Down** step its
   speed ([How fast, and how fine](stage-targets.md#how-fast-and-how-fine)).
@@ -471,14 +472,22 @@ button to **Pad: Run**. Connect one pad at a time, and check that
    does nothing. Arm again (LB + RB): orange, and LT + A plays.
 10. On the laptop, pick the Pre-show list in the Run tab's list box.
     Press RS: the voice names Pre-show. Hold LT + A.
-    *Expected:* the focus-call cue arms ("Venue focus ready. Press Start
-    to begin."); nothing steps. Disarm (LB + RB).
-11. Press **Menu** (Options). *Expected:* the focus calls begin and the
-    laptop asks "Still at *venue*?" and the voice says to hold A. Tap A
-    once. *Expected:* nothing is answered (the voice says to hold A).
-    Then hold **A** (Cross) for a second. *Expected:* a short buzz, "Still
-    at *venue*.", and the first call begins. (With no venue applied, answer
-    on the laptop.) Press Menu again to leave the calls.
+    *Expected:* the focus-call cue arms ("Venue focus ready. Hold LT and
+    press Menu to begin."); nothing steps. The Run tab says *waiting for
+    the controller*.
+11. Still armed, press **Menu** alone. *Expected:* nothing starts; the
+    Pad chip says *LT + Menu starts the venue focus*. Disarm (LB + RB)
+    and hold **LT** and press **Menu**. *Expected:* refused: *Not armed.
+    To start the venue focus, hold LB and RB to arm, then LT + Menu.* Arm
+    again and hold **LT** and press **Menu**. *Expected:* the calls
+    begin, **Pad: FOCUS** in blue on the button, the frame, the chip and
+    the light bar, and the laptop asks "Still at *venue*?" with the voice
+    saying to hold A. Tap A once. *Expected:* nothing is answered. Hold
+    **A** (Cross) for a second. *Expected:* a short buzz, "Still at
+    *venue*.", and the first call begins. (With no venue applied, answer
+    on the laptop.) In FOCUS, press LT + A: nothing plays. Hold LT and
+    press Menu to finish: **Pad: ARMED** again, and the list is still on
+    the focus cue (*Venue focus done: LT + A for the next cue*).
 12. Arm, then hold **View + Menu** (Create + Options) for two seconds.
     *Expected:* still **Pad: ARMED**; the chip and the voice say *Run /
     Tools is switched on the computer: the Run tab's Pad: button*. On a

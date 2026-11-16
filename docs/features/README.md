@@ -28,14 +28,14 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Fixture Manager](fixture-manager.md) | Fixture-group folders, the head-layout grid editor, the inventory of unpatched fixtures and the Patch dialog, output rules (relays, house and work lights), plot symbols and icons |
 | [Definition updates](definition-updates.md) | Bringing old fixture definitions up to date, in your fixture folder and inside saved shows, with a way back |
 | [Venue focus](focus-calls.md) | Focusing the rig for a venue on the controller, call by call; the focus calls, venues and their corrections, the focus report, scramble practice, the venue focus cue, the laptop's voice |
-| [Steam Deck and gamepad remote](gamepad-remote.md) | A Steam Deck, phone or tablet as a Wi-Fi remote: the focus remote (sticks pan and tilt, the console's controller scheme), the Run page as a second screen, setup in Desktop and Game Mode, the back grips, the controller test |
+| [Steam Deck and gamepad remote](gamepad-remote.md) | A Steam Deck, phone or tablet as a Wi-Fi remote: the focus remote (sticks pan and tilt, the console's controller scheme), the Run page as a second screen, setup in Desktop and Game Mode, the back grips, the controller test, controller jobs for more than one pad |
 | [Teaching mode](teaching.md) | A classroom flag saved with the show: scramble practice, real output held, the Operate warning, the one PIN, Make Student Handout |
 | [House rig and tour package](venues.md) | Owners (Tour, House, Rental), each venue's house rig, universes and outputs per venue, channels not ours, the clash check |
 | [Focus this cue](refine.md) | Focus this cue / Focus this look: changing a cue or a Build scene from the stage with the controller: position, zoom, focus, colour and gobo |
 | [Stage Targets &amp; Aim Solving](stage-targets.md) | Marking points/areas/people in the room and having fixtures aim there automatically |
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Plot layers panel, Studio groups, Blind/Park/Highlight, and more |
 | [Shows (the timeline)](shows.md) | Tracks, items, sequences and cues, the show end, track flags, following timecode |
-| [Show control (QLab)](show-control.md) | Cue numbers and cue lists; QLab (or anything else) firing cues over MIDI Show Control or OSC |
+| [Show control (QLab)](show-control.md) | Cue numbers and cue lists; running the show from a game controller (Pad Run: arm, safety, hit, emergency stop, venue focus from the pad); QLab (or anything else) firing cues over MIDI Show Control or OSC |
 | [Effects](effects.md) | Every built-in effect, by what it does, and writing your own |
 | [Keyboard and mouse](shortcuts.md) | Every shortcut, by view |
 | [Before the house opens](dress-rehearsal.md) | One page before a show (Show Review's blockers, every universe reaching its node, Local Network, the controllers, power, the screen, autosave), the channel check from the pad, and the dress-rehearsal checklist for the room |
