@@ -147,6 +147,10 @@ public:
     int groupIndex() const { return m_groupIndex; }
     /** The fixtures of the current layer, Fixture scope's steps. */
     QList<quint32> layerFixtures() const;
+    /** Every fixture of every layer it steps through (the cue's, or the
+     *  Build scenes'), each once: the lights it can work on (board Q253:
+     *  a follow spot on any of them holds while it runs). */
+    QList<quint32> cueFixtures() const;
     int fixtureIndex() const { return m_fixtureIndex; }
     quint32 currentFixture() const;
     /** Next / previous group or fixture (by scope); at Layer scope it picks

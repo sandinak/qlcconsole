@@ -10138,6 +10138,11 @@ void App::updateFollowChip()
         extras << full;
         extrasShort << (shortText.isEmpty() ? full : shortText);
     };
+    /* A controller tool on the follow spot's own lights (board Q253): it
+       holds until the tool ends or moves off them, and says why -- the
+       one status the Look Editor and the rig view also read. */
+    if (!st.heldBy.isEmpty())
+        extra(ProgrammerController::followSpotHeldText(st.heldBy), tr("holds: %1").arg(st.heldBy));
     /* Left stick click held: the facing being set from the push, and a
        moment after, what it set -- on the screen, not only in the voice. */
     if (st.settingFacing && st.state != Status::NoStick)

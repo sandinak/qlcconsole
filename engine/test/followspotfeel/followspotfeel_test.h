@@ -72,6 +72,21 @@ private slots:
     /** Review 0.4.10 verify: as above, B unpatched (unplugged) while its
      *  fine stick is held: the subject must stop. */
     void reviewBFineStickHeldAsItsPadGoesAfterATouch();
+    /* Board Q253: the follow spot beside a tool on another pad. */
+    /** Every tool (Quick Focus, Venue Focus, Focus This Cue, Focus This
+     *  Look, the walk) x its lights inside the follow spot's or not x the
+     *  spot on the tool owner's pad or another: the spot steers on beside
+     *  a tool on other lights from another pad; on its own lights it holds
+     *  (sticks zeroed, its status says why); the tool's own pad's sticks
+     *  are the tool's. A stick held through the tool's start or end, or
+     *  through the hold, never jumps the spot: it moves again only once
+     *  centred and pushed. */
+    void q253TheSpotBesideEveryTool_data();
+    void q253TheSpotBesideEveryTool();
+    /** One pad seen twice (one identity on two universes) steers once:
+     *  its fine stick is one share, and with the follow spot and the tool
+     *  on that pad its twin line's stick is the tool's, not the spot's. */
+    void q253ATwinPadDoesNotDoubleSteer();
 
     /* Where the operator stands (FollowSpotOperator). */
     void stickUpGoesAwayFromTheOperator();

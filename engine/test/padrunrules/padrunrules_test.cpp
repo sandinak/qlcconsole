@@ -568,6 +568,48 @@ void PadRunRules_Test::aTriggerInTheArmChordSpendsIt()
     QVERIFY(run->isArmed());
 }
 
+void PadRunRules_Test::aSpentChordPressedAgainSaysLetGo()
+{
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    const QString letGo("Let go of both bumpers, then hold LB and RB again.");
+    // A trigger inside the chord spends it; one bumper up and down again.
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kLT, 0);
+    hold(kRB, false);
+    run->showNotice(QString());
+    hold(kRB, true);
+    QCOMPARE(run->notice(), letGo);
+    QCOMPARE(run->chipNotice(), letGo);
+    QTest::qWait(80);
+    QVERIFY(!run->isArmed());
+    hold(kRB, false);
+    hold(kLB, false);
+    // Both up: a fresh chord arms, and says nothing of letting go.
+    run->showNotice(QString());
+    hold(kLB, true);
+    hold(kRB, true);
+    QTRY_VERIFY(run->isArmed());
+    QVERIFY(run->notice() != letGo);
+    // Still held after it fired: one bumper again does not disarm, and says so.
+    hold(kLB, false);
+    run->showNotice(QString());
+    hold(kLB, true);
+    QCOMPARE(run->notice(), letGo);
+    QTest::qWait(80);
+    QVERIFY(run->isArmed());
+    hold(kRB, false);
+    hold(kLB, false);
+    // The first bumper of a fresh chord says nothing.
+    run->showNotice(QString());
+    hold(kLB, true);
+    QCOMPARE(run->notice(), QString());
+    hold(kLB, false);
+}
+
 void PadRunRules_Test::aHeldChordFiresOnce_data()
 {
     QTest::addColumn<int>("start");     // 0: to arm, 1: to disarm, 2: refused (another pad runs cues)

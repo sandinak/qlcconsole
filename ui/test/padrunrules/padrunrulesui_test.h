@@ -59,6 +59,12 @@ private slots:
      *  and 1920x1080 with a venue focus started from the armed pad (LT +
      *  Menu), then finished the same way (the UX review's shots). */
     void venueFocusShots();
+    /** Board Q253 on the footer: a tool working on the follow spot's own
+     *  lights holds it, and the follow spot's chip (and its tooltip, from
+     *  the same status) says why -- "Follow spot holds: Focus This Look
+     *  is working on its lights"; on other lights, or once the tool ends,
+     *  it says nothing of a hold. */
+    void q253TheFollowChipSaysWhyItHolds();
 
 private:
     /** Two spots on the plot, a group, a target, one focus call; a

@@ -60,6 +60,7 @@
 #include "qlcpoint.h"
 #include "cuerunner.h"
 #include "controlmap.h"
+#include "scene.h"
 
 #include "padrunrulesui_test.h"
 #include "../common/padframe.h"
@@ -982,6 +983,97 @@ void PadRunRulesUi_Test::venueFocusShots()
     run->setEnabled(false, false);
     doc->setMode(Doc::Design);
     settle(50);
+}
+
+void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
+{
+    Doc *doc = m_app->doc();
+    ProgrammerController *pc = doc->programmer();
+    // Three lights: two the follow spot plays, one it does not.
+    QList<quint32> fids;
+    for (int i = 0; i < 3; ++i)
+    {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test");
+        def->setModel(QString("Q253 Spot %1").arg(i));
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        QLCFixtureHead head;
+        const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("Ch %1").arg(k));
+            ch->setGroup(groups[k]);
+            ch->setControlByte(QLCChannel::MSB);
+            def->addChannel(ch);
+            mode->insertChannel(ch, k);
+            head.addChannel(k);
+        }
+        mode->insertHead(-1, head);
+        def->addMode(mode);
+        Fixture *fxi = new Fixture(doc);
+        fxi->setName(QString("Q253 Spot %1").arg(i + 1));
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setUniverse(0);
+        fxi->setAddress(quint32(200 + i * 3));
+        doc->addFixture(fxi);
+        fids << fxi->id();
+    }
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
+    follow->setName("Followspot");
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    doc->addPalette(follow);
+    Scene *spot = new Scene(doc);
+    spot->setName("Follow");
+    doc->addFunction(spot);
+    spot->addFixture(fids.at(0));
+    spot->addFixture(fids.at(1));
+    spot->addPalette(follow->id());
+    Scene *mine = new Scene(doc);
+    mine->setName("On the spot's lights");
+    doc->addFunction(mine);
+    mine->addFixture(fids.at(1));
+    Scene *others = new Scene(doc);
+    others->setName("On another light");
+    doc->addFunction(others);
+    others->addFixture(fids.at(2));
+    const quint32 wasFocused = pc->m_focusedSceneId;
+    pc->m_focusedSceneId = spot->id();      // the Workbench's follow spot
+    RefineSession *r = pc->refineSession();
+    r->setFlashEnabled(false);
+    auto restore = qScopeGuard([&]() {
+        r->stop();
+        pc->m_focusedSceneId = wasFocused;
+        doc->deleteFunction(spot->id());
+        doc->deleteFunction(mine->id());
+        doc->deleteFunction(others->id());
+        doc->deletePalette(follow->id());
+        for (quint32 fid : fids)
+            doc->deleteFixture(fid);
+        settle(50);
+    });
+    QLabel *chip = m_app->followChip();
+    const QString held("Follow spot holds: Focus This Look is working on its lights");
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible(), 2000);
+    QVERIFY2(!chip->property("fullText").toString().contains(held), qPrintable(chip->property("fullText").toString()));
+
+    // Focus This Look on one of its lights: it holds, and the chip says why.
+    QString why;
+    QVERIFY2(r->startScene({ mine->id() }, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->property("fullText").toString().contains(held),
+                              qPrintable(chip->property("fullText").toString()), 2000);
+    QVERIFY2(chip->toolTip().contains(held), qPrintable(chip->toolTip()));
+    QCOMPARE(pc->followSpotStatus().heldBy, QString("Focus This Look"));
+
+    // On another light: no hold, nothing said of one.
+    r->stop();
+    QVERIFY2(r->startScene({ others->id() }, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_VERIFY2_WITH_TIMEOUT(!chip->property("fullText").toString().contains("Follow spot holds"),
+                              qPrintable(chip->property("fullText").toString()), 2000);
+    QCOMPARE(pc->followSpotStatus().heldBy, QString());
+    r->stop();
 }
 
 int main(int argc, char **argv)

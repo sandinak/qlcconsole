@@ -329,6 +329,12 @@ ProgrammerController::ProgrammerController(Doc *doc)
         refreshControllerKeepAlive();
         releaseOwnerIfIdle();
     });
+    // Its sticks start centred; the follow spot's stay its own (Q253).
+    connect(m_refineSession, &RefineSession::started, this, [this]() {
+        centreToolSticks();
+        ++m_toolGeneration;
+        syncSpotToolPad();
+    });
     /* Focus mode takes the stick from the follow spot's data channel while it
        runs (a free-flying follow spot must not fly while its stick is
        aligning the rig), and gives it back as it stands when it stops. */
@@ -337,8 +343,13 @@ ProgrammerController::ProgrammerController(Doc *doc)
         if (m_refineSession != nullptr && m_refineSession->isActive())
             m_refineSession->stop();
         connectControllerInput();    // even with no follow-spot axes bound
-        centreFineSticks();
-        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        /* The tool's sticks start centred; the follow spot's are its own
+           (board Q253: another pad may steer it beside the tool -- the
+           tool's pad lets go of it, syncSpotToolPad()). */
+        centreToolSticks();
+        ++m_toolGeneration;
+        m_focusSession->setStick(FocusSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
+        syncSpotToolPad();
         emit joystickUpdated(0.5f, 0.5f);
         m_joyTickClock.invalidate();
         refreshControllerKeepAlive();
@@ -1950,9 +1961,10 @@ void ProgrammerController::setHolding(bool on)
     if (on == m_holding)
         return;
     m_holding = on;
-    // Let go of the sticks and holds: nothing creeps on while held or after.
-    m_panNorm = m_tiltNorm = 0.5f;
-    centreFineSticks();
+    /* Let go of the sticks and holds: nothing creeps on while held or
+       after. The tool's sticks: a follow spot steered beside it from
+       another pad is that pad's (Q253). */
+    centreToolSticks();
     m_holdA.reset();
     m_holdB.reset();
     m_touch.reset();
@@ -2082,6 +2094,7 @@ void ProgrammerController::freezeController()
 {
     m_panNorm = m_tiltNorm = 0.5f;
     centreFineSticks();
+    centreToolSticks();
     m_holdA.reset();
     m_holdB.reset();
     m_holdVenueA.reset();
@@ -2693,6 +2706,219 @@ void ProgrammerController::letGoOfFollowSpotInputs(quint32 universe, bool stick)
     emit joystickUpdated(m_panNorm, m_tiltNorm);
 }
 
+/*********************************************************************
+ * The follow spot beside a tool (board Q253)
+ *********************************************************************/
+
+QString ProgrammerController::followSpotHeldText(const QString &tool)
+{
+    return tr("Follow spot holds: %1 is working on its lights").arg(tool);
+}
+
+QString ProgrammerController::toolName() const
+{
+    const bool refine = m_refineSession != nullptr && m_refineSession->isActive();
+    if (!refine && (m_focusSession == nullptr || !m_focusSession->isActive()))
+        return QString();
+    if (refine && m_padRun != nullptr && m_padRun->isWalking())
+        return tr("the walk");
+    // The Run tab's and the footer's names for it (PadRun::holder()).
+    return m_padRun != nullptr ? m_padRun->holder() : QString();
+}
+
+bool ProgrammerController::isToolsPad(quint32 universe) const
+{
+    if (m_ownerUniverse != 0xFFFFFFFF)
+        return m_padRun->sameController(universe, m_ownerUniverse);
+    /* No pad has taken the tool yet (it began on the laptop): one
+       controller is the tool's, as it always was; with more, the first
+       press of a pad with Focus takes it (Q135) and the follow spot's pad
+       keeps steering until then. */
+    return m_controllerJobs->has(universe, ControllerJobs::Focus) && m_padRun->padCount() <= 1;
+}
+
+quint32 ProgrammerController::fineSlot(quint32 universe) const
+{
+    if (m_finePads.contains(universe))
+        return universe;
+    for (auto it = m_finePads.constBegin(); it != m_finePads.constEnd(); ++it)
+        if (m_padRun->sameController(it.key(), universe))
+            return it.key();
+    return universe;
+}
+
+void ProgrammerController::centreToolSticks()
+{
+    m_toolPanNorm = m_toolTiltNorm = 0.5f;
+    m_toolFineX = m_toolFineY = 0.5f;
+}
+
+bool ProgrammerController::spotStickCentred(float norm) const
+{
+    const double dz = m_followMover != nullptr ? m_followMover->settings().deadzone : 0.10;
+    return FollowSpotDrive::shape(2.0 * double(norm) - 1.0, dz, 0.0) == 0.0;
+}
+
+void ProgrammerController::noteSpotAxis(quint32 universe, int role, bool pan, bool tilt, float norm)
+{
+    const bool deflected = !spotStickCentred(norm);
+    if (pan || tilt)
+    {
+        (pan ? m_panLatched : m_tiltLatched) = deflected;
+        return;
+    }
+    if ((role != GamepadRole::RightX && role != GamepadRole::RightY)
+        || !m_controllerJobs->has(universe, ControllerJobs::FollowSpot))
+        return;
+    const quint64 key = (quint64(fineSlot(universe)) << 1) | (role == GamepadRole::RightX ? 0u : 1u);
+    if (deflected)
+        m_fineLatched.insert(key);
+    else
+        m_fineLatched.remove(key);
+}
+
+void ProgrammerController::takeSpotStick(bool pan, float norm)
+{
+    bool &latched = pan ? m_panLatched : m_tiltLatched;
+    if (latched)
+    {
+        // Held through a hold or a tool: nothing until it has been centred.
+        if (!spotStickCentred(norm))
+            return;
+        latched = false;
+    }
+    (pan ? m_panNorm : m_tiltNorm) = norm;
+    if (m_recalHeld)
+        applyFollowSpotSticks();    // the push that sets the facing
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
+}
+
+void ProgrammerController::zeroAndLatchSpot(quint32 universe, bool stick)
+{
+    if (stick)
+    {
+        m_panLatched = m_panLatched || !spotStickCentred(m_panNorm);
+        m_tiltLatched = m_tiltLatched || !spotStickCentred(m_tiltNorm);
+    }
+    QList<quint32> shares;
+    for (auto it = m_finePads.constBegin(); it != m_finePads.constEnd(); ++it)
+    {
+        if (universe != UINT_MAX && !m_padRun->sameController(it.key(), universe))
+            continue;
+        shares << it.key();
+        if (!spotStickCentred(float(it.value().x())))
+            m_fineLatched.insert(quint64(it.key()) << 1);
+        if (!spotStickCentred(float(it.value().y())))
+            m_fineLatched.insert((quint64(it.key()) << 1) | 1u);
+    }
+    letGoOfFollowSpotInputs(universe, stick);
+    for (quint32 share : std::as_const(shares))
+        if (universe != UINT_MAX && share != universe)
+            letGoOfFollowSpotInputs(share, false);
+}
+
+QString ProgrammerController::toolOnSpotLights(quint32 sceneId, bool tick)
+{
+    const bool focus = m_focusSession != nullptr && m_focusSession->isActive();
+    const bool refine = !focus && m_refineSession != nullptr && m_refineSession->isActive();
+    if ((!focus && !refine) || sceneId == UINT_MAX)
+        return QString();
+
+    /* The tool's lights, again only when what it works on changed: the
+       venue focus's call, the walk's layer, another cue or session. */
+    ToolLightsKey key;
+    key.kind = focus ? 1 : 2;
+    key.generation = m_toolGeneration;
+    const bool walking = refine && m_padRun != nullptr && m_padRun->isWalking();
+    if (focus)
+    {
+        key.index = m_focusSession->callIndex();
+        key.count = m_focusSession->count();
+    }
+    else
+    {
+        key.id = m_refineSession->cueId();
+        key.count = int(m_refineSession->layers().size());
+        key.layer = walking ? m_refineSession->currentLayer() : UINT_MAX;
+    }
+    if (!(key == m_toolLightsKey))
+    {
+        m_toolLightsKey = key;
+        m_toolLights.clear();
+        /* Venue focus: the call being focused; Quick Focus: its list; the
+           walk: the layer walked; Focus This Cue / Look: every light of
+           the cue (or the scenes) it can step to. */
+        const QList<quint32> fids = focus ? m_focusSession->order()
+                                    : walking ? m_refineSession->layerFixtures()
+                                              : m_refineSession->cueFixtures();
+        for (quint32 fid : fids)
+            m_toolLights.insert(fid);
+    }
+
+    // The follow spot's own lights: its scene's fixtures and groups.
+    if (sceneId != m_spotLightsScene || (tick && --m_spotLightsTicks <= 0))
+    {
+        m_spotLightsScene = sceneId;
+        m_spotLightsTicks = 50;     // once a second, for a scene edited meanwhile
+        m_spotLights.clear();
+        if (const Scene *scene = qobject_cast<const Scene *>(m_doc->function(sceneId)))
+        {
+            for (quint32 fid : scene->fixtures())
+                m_spotLights.insert(fid);
+            for (quint32 gid : scene->fixtureGroups())
+                if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                    for (quint32 fid : g->fixtureList())
+                        m_spotLights.insert(fid);
+        }
+    }
+    const QSet<quint32> &few = m_spotLights.size() <= m_toolLights.size() ? m_spotLights : m_toolLights;
+    const QSet<quint32> &many = &few == &m_spotLights ? m_toolLights : m_spotLights;
+    for (quint32 fid : few)
+        if (many.contains(fid))
+            return toolName();
+    return QString();
+}
+
+void ProgrammerController::syncSpotHold(const QString &tool)
+{
+    if (tool == m_spotHeldBy)
+        return;
+    const bool begins = m_spotHeldBy.isEmpty();
+    m_spotHeldBy = tool;
+    if (!begins || tool.isEmpty())
+        return;
+    /* The hold begins: nothing pushed on the spot stays pushed (no drift,
+       no velocity kept for when it ends), a stick held through it moves
+       nothing until centred, and the subject stops now. */
+    zeroAndLatchSpot(UINT_MAX, true);
+    if (m_followMover != nullptr)
+        m_followMover->follow(UINT_MAX, UINT_MAX);
+}
+
+void ProgrammerController::syncSpotToolPad()
+{
+    const bool active = (m_focusSession != nullptr && m_focusSession->isActive())
+                        || (m_refineSession != nullptr && m_refineSession->isActive());
+    if (active == m_spotSeenActive && m_ownerUniverse == m_spotSeenOwner
+        && m_toolGeneration == m_spotSeenGeneration)
+        return;
+    m_spotSeenActive = active;
+    m_spotSeenOwner = m_ownerUniverse;
+    m_spotSeenGeneration = m_toolGeneration;
+    if (!active)
+        return;
+    /* A tool began, or a pad took it: what the tool's pad had pushed on
+       the follow spot is let go (its sticks are the tool's now), and a
+       stick it holds moves the spot again only once centred. */
+    const quint32 bound = m_panBound ? m_panUniverse : m_tiltBound ? m_tiltUniverse : UINT_MAX;
+    if (bound != UINT_MAX && isToolsPad(bound))
+        zeroAndLatchSpot(bound, true);
+    QList<quint32> pads = m_finePads.keys();
+    for (quint32 u : std::as_const(pads))
+        if (m_finePads.contains(u) && isToolsPad(u))
+            zeroAndLatchSpot(u, false);
+}
+
 QString ProgrammerController::axisLabel(quint32 universe, quint32 channel) const
 {
     if (!m_doc->inputOutputMap())
@@ -2835,6 +3061,7 @@ void ProgrammerController::refreshStickBinding()
     m_tiltChannel = s.tiltChannel;
     m_boundFromProfile = s.pan || s.tilt;
     m_panNorm = m_tiltNorm = 0.5f;
+    m_panLatched = m_tiltLatched = false;   // another stick: none of the old one's latch
     qDebug() << "[Stick]" << (m_boundFromProfile ? "bound:" : "none")
              << "u=" << s.universe << "pan ch=" << (s.pan ? int(s.panChannel) : -1)
              << "tilt ch=" << (s.tilt ? int(s.tiltChannel) : -1) << followSpotStickName();
@@ -3084,18 +3311,12 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     // held stick keeps moving at a rate set by its deflection.
     if (m_panBound && universe == m_panUniverse && channel == m_panChannel)
     {
-        m_panNorm = norm;
-        if (m_recalHeld)
-            applyFollowSpotSticks();    // the push that sets the facing
-        emit joystickUpdated(m_panNorm, m_tiltNorm);
+        takeSpotStick(true, norm);
         return;
     }
     if (m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel)
     {
-        m_tiltNorm = norm;
-        if (m_recalHeld)
-            applyFollowSpotSticks();
-        emit joystickUpdated(m_panNorm, m_tiltNorm);
+        takeSpotStick(false, norm);
         return;
     }
 
@@ -3366,7 +3587,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         m_padRun->tellRefused(m_padRun->isBesideFocus(universe) ? m_padRun->focusBesideText()
                                                                 : m_padRun->walkBesideText());
     if (GamepadRole::isTouch(role) && swipes)
-        m_padRun->touchValue(role, norm);
+        m_padRun->touchValue(role, norm, universe);
     else if (role == GamepadRole::TouchClick && swipes)
         m_padRun->touchClick(value > 0);
     /* The Controller Test is open and no tool has the pad: its buttons and
@@ -3397,6 +3618,40 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
     if (role == GamepadRole::None && !active)
         return false;
+    /* Board Q253: the follow spot beside a tool. A pad with the Follow
+       spot job that is not the tool's keeps steering the spot -- its
+       bound stick, fine stick, D-pad speed and size, the facing push --
+       unless the tool works on the spot's own lights: then it holds, what
+       the pad sends moves nothing, and its status says why. The tool's
+       own pad (the same pad with both jobs) is the tool's, as before. */
+    if (active)
+    {
+        syncSpotToolPad();
+        const bool spotControl = isPan || isTilt || role == GamepadRole::RightX || role == GamepadRole::RightY
+                                 || role == GamepadRole::DpadUp || role == GamepadRole::DpadDown
+                                 || role == GamepadRole::DpadLeft || role == GamepadRole::DpadRight
+                                 || role == GamepadRole::LS;
+        if (spotControl && m_followStatus.state != FollowSpotStatus::Off && !isToolsPad(universe)
+            && m_controllerJobs->has(universe, ControllerJobs::FollowSpot))
+        {
+            syncSpotHold(toolOnSpotLights(m_followStatus.sceneId, false));
+            if (!m_spotHeldBy.isEmpty())
+            {
+                noteSpotAxis(universe, int(role), isPan, isTilt, norm);
+                return true;
+            }
+            if (isPan || isTilt)
+            {
+                takeSpotStick(isPan, norm);
+                return true;
+            }
+            if (followSpotTakes(universe, channel, int(role), value))
+                return true;
+        }
+        // A follow spot stick the spot did not take: latched while deflected.
+        if (isPan || isTilt || role == GamepadRole::RightX || role == GamepadRole::RightY)
+            noteSpotAxis(universe, int(role), isPan, isTilt, norm);
+    }
     /* Another pad's venue focus in the Run role (board Q250): this pad's
        buttons and triggers are the Run map's, which plays nothing until
        the focus ends and says so (the runner keeps its arm) -- never the
@@ -3732,13 +3987,13 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         if (m_padRun->handleWalk(role, value))
             return true;
         if (isPan || role == GamepadRole::LeftX)
-            m_panNorm = norm;
+            m_toolPanNorm = norm;
         else if (isTilt || role == GamepadRole::LeftY)
-            m_tiltNorm = norm;
+            m_toolTiltNorm = norm;
         else if (role == GamepadRole::RightX)
-            m_fineNormX = norm;
+            m_toolFineX = norm;
         else if (role == GamepadRole::RightY)
-            m_fineNormY = norm;
+            m_toolFineY = norm;
         else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
             m_refineSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
         /* View + A (board Q118): keep at the source cue (View itself is
@@ -3753,8 +4008,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             // Down applies (a held D-pad arm repeats); up stops it.
             m_refineSession->press(ControllerScheme::verbFor(role), value > 0);
         }
-        m_refineSession->setStick(RefineSession::Coarse, m_panNorm, m_tiltNorm);
-        m_refineSession->setStick(RefineSession::Fine, m_fineNormX, m_fineNormY);
+        m_refineSession->setStick(RefineSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
+        m_refineSession->setStick(RefineSession::Fine, m_toolFineX, m_toolFineY);
         return true;
     }
 
@@ -3782,18 +4037,18 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
     else if (isPan || role == GamepadRole::LeftX)
     {
-        m_panNorm = norm;
-        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        m_toolPanNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
     }
     else if (isTilt || role == GamepadRole::LeftY)
     {
-        m_tiltNorm = norm;
-        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        m_toolTiltNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
     }
     else if (role == GamepadRole::RightX || role == GamepadRole::RightY)
     {
-        (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = norm;
-        m_focusSession->setStick(FocusSession::Fine, m_fineNormX, m_fineNormY);
+        (role == GamepadRole::RightX ? m_toolFineX : m_toolFineY) = norm;
+        m_focusSession->setStick(FocusSession::Fine, m_toolFineX, m_toolFineY);
     }
     else if (FocusSession::controlFor(role) != FocusSession::NoControl)
     {
@@ -3818,6 +4073,7 @@ void ProgrammerController::applyDesignJoystick()
     }
     if (m_padRun != nullptr && (m_focusSession == nullptr || !m_focusSession->isActive()))
         m_padRun->swipeTick(m_designJoyTimer != nullptr ? m_designJoyTimer->interval() / 1000.0 : 0.02);
+    bool tool = false;      // a controller tool ticked: the follow spot only beside it
     if (m_focusSession != nullptr && m_focusSession->isActive())
     {
         m_focusSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
@@ -3837,10 +4093,9 @@ void ProgrammerController::applyDesignJoystick()
         heldTick(dt);
         applyTouch();
         m_focusSession->tick(dt);
-        m_followMover->follow(UINT_MAX, UINT_MAX);
-        return;
+        tool = true;
     }
-    if (m_refineSession != nullptr && m_refineSession->isActive())
+    else if (m_refineSession != nullptr && m_refineSession->isActive())
     {
         m_refineSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
         const double nominal = m_designJoyTimer != nullptr
@@ -3856,9 +4111,15 @@ void ProgrammerController::applyDesignJoystick()
         m_padRun->walkTick(dt);     // walking: Y held tags the cue
         applyTouch();
         m_refineSession->tick(dt);
-        m_followMover->follow(UINT_MAX, UINT_MAX);
-        return;
+        tool = true;
     }
+    /* Board Q253: a tool on the pad no longer stops the follow spot. A pad
+       that is not the tool's steers it on beside the tool (its inputs
+       are its own: routeFocusInput()), unless the tool works on the
+       spot's own lights -- then it holds, stopped at once, and its status
+       says why (updateFollowSpotStatus()). The tool's pad lets go of it. */
+    if (tool)
+        syncSpotToolPad();
 
     // Run-mode joystick: for an Aim look, drag the stage target in floor space
     // (the scene re-resolves per-fixture pan/tilt from the moved target).  A
@@ -3872,6 +4133,14 @@ void ProgrammerController::applyDesignJoystick()
     Scene *scene = joystickScene();
     updateFollowSpotStatus(scene);
     if (!scene)
+    {
+        m_followMover->follow(UINT_MAX, UINT_MAX);
+        return;
+    }
+    /* Beside a tool, a follow spot only (no other Aim look is dragged
+       while a tool has the pad), and not while the tool works on its
+       lights. */
+    if (tool && (m_followStatus.state == FollowSpotStatus::Off || !m_followStatus.heldBy.isEmpty()))
     {
         m_followMover->follow(UINT_MAX, UINT_MAX);
         return;
@@ -5145,6 +5414,9 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
                 st.facingSaid = m_facingSaid;
                 st.facingShort = m_facingShort;
             }
+            /* A tool working on its lights holds it (Q253): said, and
+               everything pushed on it let go. */
+            st.heldBy = toolOnSpotLights(st.sceneId, true);
             if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
@@ -5155,6 +5427,7 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
         else
             st.targetId = UINT_MAX;
     }
+    syncSpotHold(st.heldBy);
     if (st != m_followStatus)
     {
         const bool onOff = (st.state == FollowSpotStatus::Off) != (m_followStatus.state == FollowSpotStatus::Off);
@@ -5610,8 +5883,18 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         return false;
     if (role == GamepadRole::RightX || role == GamepadRole::RightY)
     {
-        // This pad's own share, by axis (H-A); a pad first heard is at rest.
-        QPointF &mine = m_finePads.insert(universe, m_finePads.value(universe, QPointF(0.5, 0.5))).value();
+        /* This pad's own share, by axis (H-A); a pad first heard is at
+           rest. The same pad seen twice is one share (Q253). */
+        const quint32 slot = fineSlot(universe);
+        const quint64 key = (quint64(slot) << 1) | (role == GamepadRole::RightX ? 0u : 1u);
+        if (m_fineLatched.contains(key))
+        {
+            // Held through a hold or a tool: nothing until it has been centred.
+            if (!spotStickCentred(value / 255.0f))
+                return true;
+            m_fineLatched.remove(key);
+        }
+        QPointF &mine = m_finePads.insert(slot, m_finePads.value(slot, QPointF(0.5, 0.5))).value();
         (role == GamepadRole::RightX ? mine.rx() : mine.ry()) = value / 255.0;
         combineFineSticks();
         if (m_recalHeld)
@@ -5717,6 +6000,10 @@ QString ProgrammerController::followSpotStatusText() const
         on += QStringLiteral(" · ") + st.saved;
     else if (st.sizeShown && !followSpotSizeText(st).isEmpty())
         on += QStringLiteral(" · ") + followSpotSizeText(st);
+    // A tool on its lights (Q253): it holds, and the line says why.
+    if (!st.heldBy.isEmpty())
+        return (who.isEmpty() ? tr("Follow spot") : tr("Following %1").arg(who)) + on
+               + QStringLiteral(" · ") + followSpotHeldText(st.heldBy);
     // Setting the facing: the subject holds still, and the line says why.
     if (st.settingFacing)
         return (who.isEmpty() ? tr("Follow spot") : tr("Following %1").arg(who)) + on;

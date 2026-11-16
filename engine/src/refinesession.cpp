@@ -36,6 +36,8 @@
 #include "righeads.h"
 #include "universe.h"
 #include "fixture.h"
+#include "fixturegroup.h"
+#include "scene.h"
 #include "doc.h"
 
 namespace
@@ -384,6 +386,38 @@ QList<quint32> RefineSession::layerFixtures() const
         return sceneFixtures();
     const ShowTree::Layer *l = layer(currentLayer());
     return l != nullptr ? m_doc->showTree()->targetFixtures(l->target) : QList<quint32>();
+}
+
+QList<quint32> RefineSession::cueFixtures() const
+{
+    QList<quint32> out;
+    if (!m_active)
+        return out;
+    auto add = [&](quint32 fid) {
+        if (!out.contains(fid) && m_doc->fixture(fid) != nullptr)
+            out << fid;
+    };
+    for (quint32 lid : m_layers)
+    {
+        if (m_sceneMode)
+        {
+            const Scene *s = sceneAt(lid);
+            if (s == nullptr)
+                continue;
+            for (quint32 gid : s->fixtureGroups())
+                if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                    for (quint32 fid : g->fixtureList())
+                        add(fid);
+            for (quint32 fid : s->fixtures())
+                add(fid);
+        }
+        else if (const ShowTree::Layer *l = layer(lid))
+        {
+            for (quint32 fid : m_doc->showTree()->targetFixtures(l->target))
+                add(fid);
+        }
+    }
+    return out;
 }
 
 quint32 RefineSession::currentFixture() const
