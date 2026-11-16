@@ -1180,7 +1180,11 @@ void PadRunRules_Test::theRulesHoldOverRandomPresses()
             if (!run->isPlaying() && (s == PadRun::Run || s == PadRun::Armed || s == PadRun::Stopped)
                 && pc->padLight() != run->stateColour())
                 failure = "the pad's light is not the state's colour after " + eventText;
-            if (s == PadRun::Armed && run->roleText() != QLatin1String("Pad: ARMED"))
+            /* Armed: those words; with two pads, and the pad that runs cues
+               (controller jobs: "Pad: ARMED · 2: Stub 2"). */
+            const QString armedWords = run->padCount() > 1
+                ? QStringLiteral("Pad: ARMED \u00B7 ") + run->runnerName() : QStringLiteral("Pad: ARMED");
+            if (s == PadRun::Armed && run->roleText() != armedWords)
                 failure = "armed, but the words are " + run->roleText();
         }
         QTest::qWait(waits[rng.bounded(int(sizeof(waits) / sizeof(waits[0])))]);

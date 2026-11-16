@@ -655,11 +655,14 @@ void PadRun::sync()
     }
     updateTriggers();
     showLight();
+    /* The words too: the runner's name comes and goes with a second pad
+       (not on the first sync, which had none to compare with). */
     const QString text = roleText();
-    if (int(now) != m_shownState || text != m_shownText)
+    const bool renamed = !m_shownText.isEmpty() && text != m_shownText;
+    m_shownText = text;
+    if (int(now) != m_shownState || renamed)
     {
         m_shownState = int(now);
-        m_shownText = text;
         emit stateChanged();
     }
     syncHit();
