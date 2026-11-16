@@ -447,7 +447,12 @@ button to **Pad: Run**. Connect one pad at a time, and check that
    Pull again: it lets go ("… off."). Still armed.
 8. Hold **LB + RB** for half a second. *Expected:* one long buzz; **Pad:
    Run**; the frame and the orange are gone everywhere; the light bar goes
-   back to its own colour.
+   back to its own colour. Look at all four edges of the Run tab: **the
+   frame round the Run tab disappears at the same moment** as the button
+   and the chip change, with no orange line left at any edge (and none
+   left after you move the mouse over it or switch tabs and back). Do the
+   same after the emergency stop's red (step 9, then disarm) and after a
+   venue focus's blue ends.
 9. Arm again. Press and hold all four: **LB + RB + LT + RT** (the bumpers
    first). *Expected:* everything stops; three long buzzes; the button,
    the frame, the chip and the light bar are red, **Pad: STOPPED**. LT + A

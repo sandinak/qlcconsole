@@ -62,6 +62,17 @@
 #include "controlmap.h"
 
 #include "padrunrulesui_test.h"
+#include "../common/padframe.h"
+
+/* The frame as drawn: the armed/stopped/focus colour on its edges, or none of them. */
+static bool frameIs(QWidget *tab, const QColor &want)
+{
+    const QColor got = padFrameDrawn(tab);
+    if (want.isValid())
+        return got == want && padFrameShown(tab);
+    return got != PadRun::armedColour() && got != PadRun::stoppedColour()
+        && got != PadRun::focusColour() && !padFrameShown(tab);
+}
 
 namespace
 {
@@ -240,8 +251,8 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
                      qPrintable(QString("%1: chip '%2', state '%3'").arg(when, chip->text(), words)));
         QVERIFY2(colour.isValid() ? btn->styleSheet().contains(name) : btn->styleSheet().isEmpty(),
                  qPrintable(QString("%1: button style '%2'").arg(when, btn->styleSheet())));
-        QVERIFY2(colour.isValid() ? runTab->styleSheet().contains(name) : runTab->styleSheet().isEmpty(),
-                 qPrintable(QString("%1: frame '%2'").arg(when, runTab->styleSheet())));
+        QVERIFY2(frameIs(runTab, colour), qPrintable(QString("%1: frame, drawn %2, state %3")
+                 .arg(when, padFrameDrawn(runTab).name(), name)));
         if (run->state() != PadRun::Tools)
             QVERIFY2(colour.isValid() ? chip->styleSheet().contains(name)
                                       : !chip->styleSheet().contains(QStringLiteral("background")),
@@ -475,7 +486,8 @@ void PadRunRulesUi_Test::focusOnEverySurface()
         QVERIFY2(chip->isVisible() && chip->text().startsWith(words),
                  qPrintable(QString("%1: chip '%2'").arg(when, chip->text())));
         QVERIFY2(btn->styleSheet().contains(name), qPrintable(QString("%1: button '%2'").arg(when, btn->styleSheet())));
-        QVERIFY2(runTab->styleSheet().contains(name), qPrintable(QString("%1: frame '%2'").arg(when, runTab->styleSheet())));
+        QVERIFY2(frameIs(runTab, colour), qPrintable(QString("%1: frame, drawn %2, state %3")
+                 .arg(when, padFrameDrawn(runTab).name(), name)));
         QVERIFY2(chip->styleSheet().contains(name), qPrintable(QString("%1: chip '%2'").arg(when, chip->styleSheet())));
         QVERIFY2(pc->padLight() == colour, qPrintable(QString("%1: light %2, state %3")
                  .arg(when, pc->padLight().name(), name)));

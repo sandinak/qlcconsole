@@ -76,6 +76,17 @@
 #include "doc.h"
 
 #include "padbenchshow_test.h"
+#include "../common/padframe.h"
+
+/* The frame as drawn: the armed/stopped/focus colour on its edges, or none of them. */
+static bool frameIs(QWidget *tab, const QColor &want)
+{
+    const QColor got = padFrameDrawn(tab);
+    if (want.isValid())
+        return got == want && padFrameShown(tab);
+    return got != PadRun::armedColour() && got != PadRun::stoppedColour()
+        && got != PadRun::focusColour() && !padFrameShown(tab);
+}
 
 using namespace ShowTree;
 
@@ -1213,7 +1224,7 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
         QVERIFY2(run->roleText() == words, when);
         const QString name = colour.isValid() ? colour.name() : QString();
         QVERIFY2(colour.isValid() ? padBtn->styleSheet().contains(name) : padBtn->styleSheet().isEmpty(), when);
-        QVERIFY2(colour.isValid() ? runTab->styleSheet().contains(name) : runTab->styleSheet().isEmpty(), when);
+        QVERIFY2(frameIs(runTab, colour), when);
         QVERIFY2(colour.isValid() ? chip->styleSheet().contains(name)
                                   : !chip->styleSheet().contains(QStringLiteral("background")), when);
         QVERIFY2(run->stateColour() == colour, when);
