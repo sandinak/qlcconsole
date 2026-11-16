@@ -41,6 +41,7 @@
 #include "showcontrol.h"
 #include "mastertimer.h"
 #include "padrun.h"
+#include "controllerjobs.h"
 #include "qlcfile.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -530,6 +531,118 @@ void PadRunRulesUi_Test::focusOnEverySurface()
     doc->masterTimer()->stopAllFunctions();
     doc->setMode(Doc::Design);
     settle(50);
+}
+
+void PadRunRulesUi_Test::twoPadsOnEverySurface()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    ProgrammerController *pc = doc->programmer();
+    PadRun *run = pc->padRun();
+    ControllerJobs *jobs = pc->controllerJobs();
+    m_stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)" << "Pad B (AA:BB:CC:00:00:02)";
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    auto restore = qScopeGuard([&]() {
+        run->setEnabled(false, false);
+        jobs->resetAll();
+        iom->setInputPatch(1, QString(), QString(), QLCIOPlugin::invalidLine());
+        m_stub->m_lineNames.clear();
+        settle(20);
+    });
+    const QString padB = jobs->identityOfUniverse(1);
+    jobs->setJobs(padB, ControllerJobs::FollowSpot | ControllerJobs::Focus);
+    run->setEnabled(true, false);
+    run->setArmChordMs(15);
+    QToolButton *btn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(btn != nullptr && chip != nullptr);
+    auto value = [&](quint32 u, quint32 ch, uchar v) { emit iom->inputValueChanged(u, ch, v, QString()); };
+    auto light = [&](quint32 line) {
+        const int offset = m_stub->m_feedbackLines.size() - m_stub->m_feedbackParams.size();
+        for (int i = m_stub->m_feedbackParams.size() - 1; i >= 0; --i)
+        {
+            const QVariantMap p = m_stub->m_feedbackParams.at(i).toMap();
+            if (p.value("gamepad").toString() == QLatin1String("light")
+                && m_stub->m_feedbackLines.value(offset + i) == line)
+                return p.value("rgb").toString();
+        }
+        return QStringLiteral("none");
+    };
+
+    // A arms: the one state names it on the button and the chip.
+    value(0, kLB, 255);
+    value(0, kRB, 255);
+    QTRY_VERIFY(run->isArmed());
+    value(0, kRB, 0);
+    value(0, kLB, 0);
+    settle();
+    const QString armed = QString::fromUtf8("Pad: ARMED \u00B7 Pad A (\u202600:01)");
+    QCOMPARE(run->roleText(), armed);
+    QCOMPARE(btn->text(), armed);
+    QVERIFY2(chip->isVisible() && chip->text().startsWith(armed), qPrintable(chip->text()));
+    QCOMPARE(light(0), PadRun::armedColour().name());
+    QCOMPARE(light(1), QString());
+
+    // B, no Run cues: its chord says so on the chip; A as it was.
+    value(1, kLB, 255);
+    value(1, kRB, 255);
+    QTest::qWait(60);
+    value(1, kRB, 0);
+    value(1, kLB, 0);
+    settle();
+    QVERIFY2(chip->text().contains("This controller doesn't run cues."), qPrintable(chip->text()));
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    // B given Run cues: told who runs them.
+    jobs->setJob(padB, ControllerJobs::RunCues, true);
+    value(1, kLB, 255);
+    value(1, kRB, 255);
+    QTest::qWait(60);
+    value(1, kRB, 0);
+    value(1, kLB, 0);
+    settle();
+    // The chip names the runner once; the full words are the notice (and said).
+    QVERIFY2(chip->text().startsWith(armed + QString::fromUtf8(" \u00B7 another controller is running cues")),
+             qPrintable(chip->text()));
+    QCOMPARE(chip->text().count(QString::fromUtf8("Pad A (\u202600:01)")), 1);
+    QCOMPARE(run->notice(), QString::fromUtf8("Pad A (\u202600:01) is running cues."));
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    /* QLC_SHOT_DIR: the footer as it is now (A runs cues, B told so) at
+       three sizes, for the UX review; and once the notice is gone. */
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        const QSize was = m_app->size();
+        for (const QString &when : { QStringLiteral("refused"), QStringLiteral("armed") })
+        {
+            if (when == QLatin1String("armed"))
+                QTRY_VERIFY_WITH_TIMEOUT(run->notice().isEmpty(), PadRun::noticeMs() + 2000);
+            for (const QSize &z : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+            {
+                m_app->resize(z);
+                settle(150);
+                const QPixmap full = m_app->grab();
+                const int h = 44 * int(full.devicePixelRatio());
+                full.copy(0, full.height() - h, full.width(), h)
+                    .save(QDir(shotDir).filePath(QStringLiteral("after-footer-two-pads-%1-%2x%3.png")
+                                                 .arg(when).arg(z.width()).arg(z.height())));
+            }
+        }
+        m_app->resize(was);
+        settle(50);
+    }
+
+    // The stop from B: red everywhere, on both pads.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        value(1, ch, 255);
+    settle();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(chip->text().startsWith(run->roleText()));
+    QCOMPARE(light(0), PadRun::stoppedColour().name());
+    QCOMPARE(light(1), PadRun::stoppedColour().name());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        value(1, ch, 0);
 }
 
 quint32 PadRunRulesUi_Test::makeFocusShow(quint32 *focus, quint32 *house)

@@ -50,6 +50,7 @@ class FocusCalls;
 class FocusCallCue;
 class RefineSession;
 class PadRun;
+class ControllerJobs;
 class VenueCorrections;
 class ControllerKeepAlive;
 class ParkEffect;
@@ -213,7 +214,9 @@ public:
      *  {"gamepad": "light", "rgb": "#rrggbb"} or {"gamepad": "rumble",
      *  "pulses": n}); a plugin or pad that cannot do it ignores it. */
     void setPadLight(const QColor &colour);
-    void padRumble(int pulses, int lengthMs = ControllerScheme::rumbleShortMs());
+    /** @p universe: the pad that buzzes (UINT_MAX: the tools' pad). */
+    void padRumble(int pulses, int lengthMs = ControllerScheme::rumbleShortMs(),
+                   quint32 universe = UINT_MAX);
     /** Something important for the operator on stage (board Q131): said
      *  in every feedback setting, the selection's slow long blink, one
      *  long buzz. Warnings, refusals, the controller lost or back, the
@@ -242,6 +245,16 @@ public:
      *  the controller, through ShowControl::run() with RoutePad, while no
      *  tool has the pad. Never null. */
     PadRun *padRun() const { return m_padRun; }
+    /** What each game controller is for, on this computer (Run cues,
+     *  Follow spot, Focus; docs/design/CONTROLLER_JOBS.md). Never null. */
+    ControllerJobs *controllerJobs() const { return m_controllerJobs; }
+    /** @p universe's input is a game controller's (a HID profile, a pad
+     *  kind, or any control with a gamepad role). */
+    bool isPadUniverse(quint32 universe) const;
+    /** Pads are connected and none has the Follow spot job: said where the
+     *  follow spot is set up ("No controller has the Follow spot job.");
+     *  empty otherwise. */
+    QString followSpotJobNote() const;
 
     bool saveFocusCallsXML(QXmlStreamWriter *doc) const;
     bool loadFocusCallsXML(QXmlStreamReader &root);
@@ -909,7 +922,13 @@ private:
     PadTriggers::State m_padTriggers;
     bool m_padTriggersSent = false;
     int m_padRumbles = 0;
-    void sendPadFeedback(const QVariantMap &params);
+    /** To @p universe's pad (UINT_MAX: the tools' pad, focusController()). */
+    void sendPadFeedback(const QVariantMap &params, quint32 universe = UINT_MAX);
+    /** Where the light was last sent: one pad (PadRun::lightUniverse()),
+     *  every pad (kAllPads, the stop) or the tools' pad (UINT_MAX). */
+    quint32 m_padLightTarget = UINT_MAX;
+    /** View + Menu pressed on a pad without Run cues: no role chord. */
+    bool m_viewMenuNoRun = false;
     void refreshPadLight();
     /** A hold came round on the controller tick. */
     void heldTick(double dt);
@@ -934,6 +953,7 @@ private:
     VenueCorrections *m_venues = nullptr;
     RefineSession *m_refineSession = nullptr;
     PadRun *m_padRun = nullptr;
+    ControllerJobs *m_controllerJobs = nullptr;
     /** See controllerKeepAlive(). */
     ControllerKeepAlive *m_keepAlive = nullptr;
     /** Asks the controller how it is while it is wanted: a plugin does not
@@ -957,9 +977,6 @@ private:
     void refreshPadFamily();
     /** The gamepad role of an input channel, from its device profile. */
     int controllerRole(quint32 universe, quint32 channel) const;
-    /** @p universe's input is a game controller's (a HID profile, a pad
-     *  kind, or any control with a gamepad role). */
-    bool isPadUniverse(quint32 universe) const;
     /** Focus mode's share of slotControllerInputChanged(). True if it took
      *  the event. */
     bool routeFocusInput(quint32 universe, quint32 channel, uchar value);

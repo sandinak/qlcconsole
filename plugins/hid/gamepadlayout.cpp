@@ -15,6 +15,8 @@
   limitations under the License.
 */
 
+#include <QStringList>
+
 #include "gamepadlayout.h"
 
 namespace GamepadLayout
@@ -145,6 +147,27 @@ Transport transportFromPath(const QString &path)
     if (cut <= 0)
         return UnknownTransport;
     return transportFromString(path.left(cut));
+}
+
+QString locationFromPath(const QString &path)
+{
+    // "<transport>_<vid>_<pid>_<location>", all three numbers hex.
+    if (path.contains(QLatin1Char('/')) || path.contains(QLatin1Char('\\')))
+        return QString();
+    const QStringList f = path.split(QLatin1Char('_'));
+    if (f.size() < 4)
+        return QString();
+    for (int i = f.size() - 3; i < f.size(); ++i)
+    {
+        bool ok = false;
+        f.at(i).toUInt(&ok, 16);
+        if (!ok)
+            return QString();
+    }
+    const QString transport = QStringList(f.mid(0, f.size() - 3)).join(QLatin1Char('_')).trimmed();
+    if (transport.isEmpty())
+        return QString();
+    return transport + QLatin1Char(' ') + f.last();
 }
 
 QString transportName(Transport transport)

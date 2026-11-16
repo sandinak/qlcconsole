@@ -145,6 +145,12 @@ public:
      *  is (or might be). */
     virtual QString inputProblem() const { return QString(); }
 
+    /** Where it is plugged in, to tell two of one model apart
+     *  (QLCIOPlugin::inputDeviceLocation()): "USB 14200000" on macOS (the
+     *  transport and IOKit location ID of its hidapi path), the sysfs phys
+     *  of a Linux joystick ("usb-0000:00:14.0-2/input0"), else the path. */
+    virtual QString location() const;
+
 protected:
     quint32 m_line;
     int m_capabilities;

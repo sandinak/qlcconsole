@@ -122,6 +122,11 @@ private slots:
     /** The pad unpatched and gone in FOCUS: not FOCUS, not armed, said;
      *  back mid-focus it is FOCUS; the end leaves it not armed. */
     void aLostPadInFocus();
+    /** Controller jobs: a pad without the Focus job, ARMED, LT + Menu
+     *  starts no venue focus (said why); with it, FOCUS. In FOCUS another
+     *  pad's LT + Menu ends nothing: without Focus it is not heard, with
+     *  Focus it is not the focus's pad (Q135). */
+    void theVenueFocusNeedsTheFocusJob();
 
     /* Walking the show (Q192). */
     /** The walking map by role, the same for both pads. */

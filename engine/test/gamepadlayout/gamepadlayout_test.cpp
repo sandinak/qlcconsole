@@ -70,6 +70,14 @@ void GamepadLayout_Test::transports()
     QCOMPARE(transportFromPath("USB_045e_0b12_14100000"), Usb);
     QCOMPARE(transportFromPath("Bluetooth_045e_02fd_5a0b1c2d"), Bluetooth);
     QCOMPARE(transportFromPath("Bluetooth Low Energy_045e_0b13_1"), BluetoothLE);
+    // Where it is plugged in (controller jobs): the transport and location ID.
+    QCOMPARE(locationFromPath("USB_045e_0b12_14100000"), QString("USB 14100000"));
+    QCOMPARE(locationFromPath("USB_054c_09cc_14200000"), QString("USB 14200000"));
+    QCOMPARE(locationFromPath("Bluetooth Low Energy_045e_0b13_1"), QString("Bluetooth Low Energy 1"));
+    QCOMPARE(locationFromPath("/dev/input/js0"), QString());
+    QCOMPARE(locationFromPath("virtual: DUALSHOCK 4 Wireless Controller (AA:BB)"), QString());
+    QCOMPARE(locationFromPath("USB_zz_09cc_1"), QString());
+    QCOMPARE(locationFromPath("_045e_0b12_1"), QString());
     QCOMPARE(transportFromPath("SPU_0000_0000_0"), UnknownTransport);
     QCOMPARE(transportFromPath("0b13_1"), UnknownTransport);
     QCOMPARE(transportFromPath(QString()), UnknownTransport);

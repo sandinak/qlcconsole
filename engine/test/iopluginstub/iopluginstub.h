@@ -97,7 +97,7 @@ public:
      *  buzzes, board Q126), kept in m_feedbackParams */
     void sendFeedBack(quint32 universe, quint32 inputLine, quint32 channel, uchar value,
                       const QVariant &params) override
-    { Q_UNUSED(universe) Q_UNUSED(inputLine) m_feedbackParams << params; m_feedback << qMakePair(channel, value); }
+    { Q_UNUSED(universe) m_feedbackParams << params; m_feedbackLines << inputLine; m_feedback << qMakePair(channel, value); }
 
     /** @reimp m_channelRoles for @p channel, whatever the line */
     QString inputChannelRole(quint32 input, quint32 channel) const override
@@ -128,6 +128,10 @@ public:
     QString inputDeviceKind(quint32 input) const override
     { return m_lineDeviceKind.contains(input) ? m_lineDeviceKind.value(input) : m_deviceKind; }
 
+    /** @reimp m_lineLocations for @p input (the port: controller jobs) */
+    QString inputDeviceLocation(quint32 input) const override
+    { return m_lineLocations.value(input); }
+
     /** @reimp Counted, like a real plugin's. */
     bool setInputDiagnostics(bool enable) override
     { m_diagnostics += enable ? 1 : -1; return true; }
@@ -145,8 +149,9 @@ public:
     /** Per line, overriding m_channelRoles / m_deviceKind for that line */
     QMap<quint32, QMap<quint32, QString>> m_lineChannelRoles;
     QMap<quint32, QString> m_lineDeviceKind;
-    /** What sendFeedBack() was given, in order */
+    /** What sendFeedBack() was given, in order, and to which input line */
     QList<QVariant> m_feedbackParams;
+    QList<quint32> m_feedbackLines;
     /** The channel and value of each sendFeedBack(), in order */
     QList<QPair<quint32, uchar>> m_feedback;
     /** What inputChannelName() reports, by channel ("Cross", "L1"...) */
@@ -158,6 +163,8 @@ public:
     QMap<quint32, QString> m_inputProblems;
     /** What inputDeviceKind() reports ("dualshock4"...) */
     QString m_deviceKind;
+    /** What inputDeviceLocation() reports, by input line ("USB 14200000") */
+    QMap<quint32, QString> m_lineLocations;
     /** setInputDiagnostics() calls: +1 on, -1 off */
     int m_diagnostics = 0;
     QList<Device> m_devices;

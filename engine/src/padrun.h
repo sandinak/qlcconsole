@@ -353,6 +353,37 @@ public:
      *  no pad the state is not FOCUS (rule 6), and the arm the focus would
      *  go back to is dropped, as controllerLost(). */
     void setPadPresent(bool present);
+    /*********************************************************************
+     * Controller jobs (docs/design/CONTROLLER_JOBS.md)
+     *********************************************************************/
+    /** The controller holding Run: the one armed, or the one whose arm a
+     *  venue focus put by (UINT_MAX: none). One at a time: another pad's
+     *  arm is refused with runningCuesText(). */
+    quint32 runnerUniverse() const;
+    /** Its short name ("DualSense Wireless Controller (…77:93)"); empty
+     *  when none holds Run. */
+    QString runnerName() const;
+    /** "<name> is running cues." -- said aloud and kept as notice(). */
+    QString runningCuesText() const;
+    /** notice() as the footer's Pad chip shows it beside roleText(): when
+     *  the chip already names the runner, a refusal of another pad does
+     *  not name it again ("another controller is running cues"). */
+    QString chipNotice() const;
+    static QString noRunCuesText();
+    static QString noFocusText();
+    /** Game controllers patched now (roleText() names the runner when
+     *  more than one is). */
+    int padCount() const;
+    /** The one pad whose light shows the state (the runner; in FOCUS the
+     *  focus's pad); UINT_MAX: no one pad's (the tools' pad, as before).
+     *  Every pad is red after the stop. */
+    quint32 lightUniverse() const;
+    /** Two universes are one controller: the same, or the same pad seen
+     *  twice (one identity, not a name). */
+    bool sameController(quint32 a, quint32 b) const;
+    /** A controller's jobs changed: a job taken away while in use lets go. */
+    void jobsChanged();
+
     /** The input on @p universe was repatched (its pad unplugged, another
      *  pad in its slot, back again): what it held is forgotten, and an arm
      *  made on it drops as controllerLost() -- its releases may never have
@@ -587,6 +618,8 @@ private:
     void syncHit();
     /** Stops a one-shot hit whose run is over (Q239). */
     void letGoFinishedOneShots();
+    /** The controller on @p universe has @p job (a ControllerJobs::Job). */
+    bool hasJob(quint32 universe, int job) const;
     /** Armed, LT held + Menu with a venue focus cue waiting: start it. */
     bool startFocus(quint32 universe);
     /** Into FOCUS from ARMED, however the calls began: the arm is kept
@@ -635,6 +668,7 @@ private:
     quint32 m_chordUniverse = UINT_MAX;
     /** What the screens were last told, so stateChanged() goes once. */
     int m_shownState = int(Tools);
+    QString m_shownText;
     /** The blink: a cue fading (or the GO's flash), and its phase. */
     QTimer *m_blink = nullptr;
     bool m_playing = false;

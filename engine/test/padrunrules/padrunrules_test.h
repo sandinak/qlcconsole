@@ -75,6 +75,17 @@ private slots:
     void theControllerTestSwallowsUnroledButtons();
     void aButtonLetGoDuringTheTestIsLetGo();
 
+    /* Controller jobs (docs/design/CONTROLLER_JOBS.md), swept */
+    void jobsEveryControlOnASecondPad_data();
+    void jobsEveryControlOnASecondPad();
+    void jobsOneRunnerAtATime();
+    void jobsTheStopFromAPadWithNoJobs();
+    void jobsOnePadNothingSavedIsAsBefore();
+    void jobsEachPadsLight();
+    void jobsTheFollowSpotSkipsAPad();
+    void jobsFocusOnlyFromFocusPads();
+    void jobsTakenAwayWhileInUse();
+
     /* Rules 1, 3, 4 and 5 over random presses */
     void theRulesHoldOverRandomPresses_data();
     void theRulesHoldOverRandomPresses();
@@ -90,6 +101,11 @@ private:
     /** The pad unplugged / plugged back, as InputOutputMap does it. */
     void drop(quint32 universe = 0);
     void back(quint32 universe = 0);
+    /** Pads A (universe 0) and B (universe 1), told apart by address,
+     *  with these jobs (ControllerJobs::Jobs as int). */
+    void twoPads(int jobsA, int jobsB);
+    /** The last light sent to input line @p line ("": its own; "none"). */
+    QString lightOn(quint32 line) const;
     int goes() const;
     int stops() const;
     /** Announcements said since @p from that contain @p part. */

@@ -65,6 +65,9 @@ private slots:
     void anAbsentInputDeviceIsShownNotConnected();
     void aControllerSlotListsItsDevices();
     void testControllerOpensThePictureOnIt();
+    /** Controller jobs: two of one model told apart by their ports in
+     *  the Controller Test, each with its own jobs, saved on this computer. */
+    void testControllerJobsAreSetFromIt();
     void targetAliasIsShownOnTheRow();
 
     /* Default expansion and its memory */
@@ -188,6 +191,9 @@ private slots:
     void byUniverseShowsTheSelectedUniversesSettings();
     void byUniverseCellsEditThePatch();
     void byUniverseShots();
+    /** With QLC_SHOT_DIR: the controller's right-click menu and the
+     *  Controller Test on it (two of one model), at three sizes. */
+    void controllerJobsShots();
 
 private:
     Doc *m_doc;

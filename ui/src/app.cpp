@@ -10189,7 +10189,8 @@ void App::updatePadRoleChip()
     /* The Run tab's button's words, so the two never disagree -- and for a
        moment what the last press could not do ("Hold LB to arm."), which
        lights-only feedback never says aloud. */
-    const QString notice = run->notice();
+    // A refusal the chip's own words already name the runner of: not twice.
+    const QString notice = run->chipNotice();
     /* Walking says how to get back; a notice (a refused press, the list
        just stepped to) follows the role text, never replaces it. */
     QString text = run->roleText();
