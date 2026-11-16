@@ -151,6 +151,9 @@ them:
 | Start a waiting **venue focus cue** (below), and finish it | armed, hold LT + Menu (a pad with Focus and no Run cues: LT + Menu) | armed, hold L2 + Options (a Focus-only pad: L2 + Options) |
 | Switch the role: Tools / Run | on the computer: the Run tab's **Pad:** button (held View + Menu only says so) | the same (held Create + Options only says so) |
 
+- **One hold, one change.** Once LB + RB have armed, disarmed or been
+  refused, holding them on changes nothing more: let go of both to use
+  the chord again.
 - **Armed stays armed.** The arm drops only on the LB + RB hold, or with
   no button of the Run map at all: the role is switched (the Run tab's
   **Pad:** button, on the computer), a tool started on the laptop takes the pad, the
