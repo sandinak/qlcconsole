@@ -330,8 +330,10 @@ void PadTraces_Test::aShiftedLineIsNoSafety()
                                 "u2 on line %3; heard %4)")
                         .arg(run->armedUniverse()).arg(run->notice())
                         .arg(m_doc->inputOutputMap()->inputPatch(2)->input()).arg(heard.join(' '))));
-    // B's own LT, then A: a GO.
+    // B's own LT (heard), then A: a GO.
+    heard.clear();
     QVERIFY(in(b, kLt, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u1:ch2=255")), 2000);
     QVERIFY(in(b, kA, 255));
     QVERIFY(in(b, kA, 0));
     QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::Go)), 1, 2000);
