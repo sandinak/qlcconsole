@@ -577,7 +577,7 @@ void PadRunRulesUi_Test::twoPadsOnEverySurface()
     value(0, kRB, 0);
     value(0, kLB, 0);
     settle();
-    const QString armed = QString::fromUtf8("Pad: ARMED · Pad A (…00:01)");
+    const QString armed = QString::fromUtf8("Pad: ARMED \u00B7 Pad A (\u202600:01)");
     QCOMPARE(run->roleText(), armed);
     QCOMPARE(btn->text(), armed);
     QVERIFY2(chip->isVisible() && chip->text().startsWith(armed), qPrintable(chip->text()));
@@ -601,9 +601,34 @@ void PadRunRulesUi_Test::twoPadsOnEverySurface()
     value(1, kRB, 0);
     value(1, kLB, 0);
     settle();
-    QVERIFY2(chip->text().contains(QString::fromUtf8("Pad A (…00:01) is running cues.")),
+    QVERIFY2(chip->text().contains(QString::fromUtf8("Pad A (\u202600:01) is running cues.")),
              qPrintable(chip->text()));
     QCOMPARE(run->armedUniverse(), quint32(0));
+    /* QLC_SHOT_DIR: the footer as it is now (A runs cues, B told so) at
+       three sizes, for the UX review; and once the notice is gone. */
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        const QSize was = m_app->size();
+        for (const QString &when : { QStringLiteral("refused"), QStringLiteral("armed") })
+        {
+            if (when == QLatin1String("armed"))
+                QTRY_VERIFY_WITH_TIMEOUT(run->notice().isEmpty(), PadRun::noticeMs() + 2000);
+            for (const QSize &z : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+            {
+                m_app->resize(z);
+                settle(150);
+                const QPixmap full = m_app->grab();
+                const int h = 44 * int(full.devicePixelRatio());
+                full.copy(0, full.height() - h, full.width(), h)
+                    .save(QDir(shotDir).filePath(QStringLiteral("after-footer-two-pads-%1-%2x%3.png")
+                                                 .arg(when).arg(z.width()).arg(z.height())));
+            }
+        }
+        m_app->resize(was);
+        settle(50);
+    }
 
     // The stop from B: red everywhere, on both pads.
     for (quint32 ch : { kLB, kRB, kLT, kRT })

@@ -1847,7 +1847,10 @@ void FollowSpotCue_Test::theOperatorViewpointTurnsTheStick()
         rigDock = qobject_cast<QDockWidget *>(w);
     QVERIFY(rigDock != nullptr);
 
-    const QString shots = qEnvironmentVariable("QLC_FSPOT_SHOTS");
+    // QLC_FSPOT_SHOTS, else the gate pool's QLC_SHOT_DIR (its fspot folder).
+    QString shots = qEnvironmentVariable("QLC_FSPOT_SHOTS");
+    if (shots.isEmpty() && !qEnvironmentVariable("QLC_SHOT_DIR").isEmpty())
+        shots = qEnvironmentVariable("QLC_SHOT_DIR") + QStringLiteral("/fspot");
     auto shoot = [&](const QString &phase) {
         if (shots.isEmpty())
             return;

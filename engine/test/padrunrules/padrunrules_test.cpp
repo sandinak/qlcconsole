@@ -1379,7 +1379,9 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     arm(true, 1);
     QCOMPARE(run->armedUniverse(), quint32(1));
     QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED \u00B7 Pad B (\u202600:02)"));
-    with(kLT, kA, 1);
+    axis(kLT, 255, 1);
+    press(kA, 1);
+    axis(kLT, 0, 1);
     QCOMPARE(goes(), 2);
     hold(kLB, true, 0);
     hold(kRB, true, 0);
