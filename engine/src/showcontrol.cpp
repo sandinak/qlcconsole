@@ -22,7 +22,6 @@
 #include <QtEndian>
 #include <QThread>
 #include <cstring>
-#include <atomic>
 
 #include "functionparent.h"
 #include "chaseraction.h"
@@ -122,21 +121,6 @@ QString ShowControl::listName(const Chaser *chaser) const
 /*****************************************************************************
  * Commands
  *****************************************************************************/
-
-namespace
-{
-std::atomic<bool> s_webStopNeedsRemote{ ShowControl::kWebStopNeedsRemote };
-}
-
-bool ShowControl::webStopNeedsRemote()
-{
-    return s_webStopNeedsRemote.load(std::memory_order_relaxed);
-}
-
-void ShowControl::setWebStopNeedsRemote(bool on)
-{
-    s_webStopNeedsRemote.store(on, std::memory_order_relaxed);
-}
 
 void ShowControl::go(Chaser *chaser, int step)
 {

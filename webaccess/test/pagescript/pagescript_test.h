@@ -63,8 +63,8 @@ private slots:
      *  stop and when the console names none. */
     void theArmedHitIsNamedUnderTheBanner();
     /** The page never shows EMERGENCY STOP for a stop it did not send
-     *  (remote GO off, the PIN not given): it says STOP NOT SENT and why
-     *  (eval/0412; board Q256 keeps the permission rule). */
+     *  (the PIN not given): it says STOP NOT SENT and why; with remote GO
+     *  off and no PIN the stop goes (eval/0412; board Q256). */
     void noStopIsShownThatWasNotSent();
     void theTestOpenedMidChordArmsNothing();
     void aPadGoneMidHoldDisarmsThePage();

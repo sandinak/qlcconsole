@@ -113,23 +113,22 @@ public:
     {
         return route == RouteKey || route == RouteRunTab || route == RoutePad;
     }
-    /** Board Q256 (open): does the emergency stop (ALL OFF) from the phone
-     *  or Deck page need what every page command needs -- GO from the
-     *  phone on in Show Settings, the page's PIN given? Until it is
-     *  answered, yes. Letting the stop through without them is this one
-     *  line: false. WebAccessRun (the server's check and the page's
-     *  stopFree) and App::runCommand() both read webNeedsRemote(), so the
-     *  two can never disagree ("shown but not done"). */
-    static constexpr bool kWebStopNeedsRemote = true;
-    /** kWebStopNeedsRemote, unless a test set it (setWebStopNeedsRemote()) */
-    static bool webStopNeedsRemote();
-    static void setWebStopNeedsRemote(bool on);
-    /** A command from the phone or Deck page (RouteWeb) needs GO from the
-     *  phone on, and the page's PIN: every one, the stop as
-     *  webStopNeedsRemote() says. */
-    static bool webNeedsRemote(Command command)
+    /** Board Q256 (answered): what a command from the phone or Deck page
+     *  (RouteWeb) needs. Every command needs GO from the phone on in Show
+     *  Settings, except the emergency stop (ALL OFF): a page must always be
+     *  able to stop the show. Every command, the stop too, needs the page's
+     *  PIN when the show has one; with no PIN set the stop needs nothing.
+     *  WebAccessRun (the server's check and the page's stopNeedsRemote /
+     *  stopNeedsPin) and App::runCommand() all read these two, so they can
+     *  never disagree ("shown but not done"). */
+    static bool webNeedsRemoteGo(Command command)
     {
-        return command != AllOff || webStopNeedsRemote();
+        return command != AllOff;
+    }
+    static bool webNeedsPin(Command command)
+    {
+        Q_UNUSED(command)
+        return true;
     }
 
     /** GO, Back, Sub GO and Sub Back put a cue on stage (RC8 holds the

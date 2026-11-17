@@ -130,6 +130,9 @@ private slots:
     void theGamepadTablesAreTheConsoles();
     void theRunPageMapIsPadRun();
     void theRemoteEmergencyStopNeedsNoCueList();
+    /** Board Q256: the page's stop needs only the PIN (when one is set),
+     *  never remote GO; every other command needs both. */
+    void theRemoteStopNeedsOnlyThePin();
     void theFocusRemoteWorksTheRunningSession();
     void focusFollowsTheRemoteGoAndPinRules();
     void aBurstOfNudgesIsOneMove();

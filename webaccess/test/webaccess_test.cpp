@@ -2778,36 +2778,58 @@ void WebAccess_Test::theRemoteEmergencyStopNeedsNoCueList()
     QCOMPARE(run.command(QStringLiteral("alloff"), true, QString(), QString()), WebAccessRun::Done);
     // GO in the same show still has nothing to play.
     QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::NothingToDo);
-
-    /* Board Q256 (open): until it is answered the stop asks what every
-       command asks, and the page is told so (stopFree false), so it says
-       STOP NOT SENT rather than a stop it did not send. */
-    QVERIFY(ShowControl::kWebStopNeedsRemote);
-    QVERIFY(ShowControl::webStopNeedsRemote());
-    QCOMPARE(QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("stopFree")).toBool(true), false);
-    m_doc->operateSettings()->setRemoteGo(true);
-    QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::NothingToDo);
-    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
-    m_doc->outputRuleKeeper()->noteGo();       // the stop's mark gone, to see the next one
+    m_doc->outputRuleKeeper()->noteGo();
     m_doc->operateSettings()->setRemoteGo(false);
-    QCOMPARE(run.command(QStringLiteral("alloff"), true, QString(), QString()), WebAccessRun::Refused);
-    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
-    m_doc->operateSettings()->setRemoteGo(true);
+}
+
+/* Board Q256 (answered): the page's emergency stop needs only the PIN,
+   when the show has one -- never GO from the phone. Every other command
+   still needs both. The page is told the same rule the server checks. */
+void WebAccess_Test::theRemoteStopNeedsOnlyThePin()
+{
+    WebAccessRun run(m_doc);
+    auto tidy = qScopeGuard([&]() {
+        m_doc->operateSettings()->setPin(QString());
+        m_doc->operateSettings()->setRemoteGo(false);
+        m_doc->outputRuleKeeper()->noteGo();
+    });
+    const QJsonObject state = QJsonDocument::fromJson(run.stateJson()).object();
+    QCOMPARE(state.value(QStringLiteral("stopNeedsRemote")).toBool(true), false);
+    QCOMPARE(state.value(QStringLiteral("stopNeedsPin")).toBool(false), true);
+
+    auto stop = [&](bool pinGiven) {
+        m_doc->outputRuleKeeper()->noteGo();      // the last stop's mark gone, to see the next one
+        return run.command(QStringLiteral("alloff"), pinGiven, QString(), QString());
+    };
+    // A PIN set: remote GO on/off x the PIN given/missing.
     m_doc->operateSettings()->setPin(QStringLiteral("2468"));
-    QCOMPARE(run.command(QStringLiteral("alloff"), false, QString(), QString()), WebAccessRun::NeedPin);
-    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
-
-    /* Q256 answered "send it anyway" (the rule flipped): the page is told,
-       and the stop really runs with GO from the phone off and no PIN. */
-    ShowControl::setWebStopNeedsRemote(false);
-    auto restore = qScopeGuard([]() { ShowControl::setWebStopNeedsRemote(ShowControl::kWebStopNeedsRemote); });
-    m_doc->operateSettings()->setRemoteGo(false);
-    QCOMPARE(QJsonDocument::fromJson(run.stateJson()).object().value(QStringLiteral("stopFree")).toBool(false), true);
-    QCOMPARE(run.command(QStringLiteral("alloff"), false, QString(), QString()), WebAccessRun::Done);
-    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
-    // Every other command still asks.
-    QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::Refused);
+    struct Case { bool remote; bool pinGiven; WebAccessRun::Result want; };
+    const Case cases[] = {
+        { true,  true,  WebAccessRun::Done },
+        { true,  false, WebAccessRun::NeedPin },
+        { false, true,  WebAccessRun::Done },
+        { false, false, WebAccessRun::NeedPin },
+    };
+    for (const Case &c : cases)
+    {
+        m_doc->operateSettings()->setRemoteGo(c.remote);
+        const WebAccessRun::Result got = stop(c.pinGiven);
+        QVERIFY2(got == c.want, qPrintable(QString("alloff, remote GO %1, PIN %2: answer %3, wanted %4")
+                                               .arg(c.remote ? "on" : "off", c.pinGiven ? "given" : "missing")
+                                               .arg(int(got)).arg(int(c.want))));
+        QCOMPARE(m_doc->outputRuleKeeper()->emergencyStopped(), c.want == WebAccessRun::Done);
+    }
+    // No PIN set, remote GO off: the stop goes through.
     m_doc->operateSettings()->setPin(QString());
+    m_doc->operateSettings()->setRemoteGo(false);
+    QCOMPARE(stop(false), WebAccessRun::Done);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    // GO is still refused with remote GO off, PIN or not.
+    QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::Refused);
+    m_doc->operateSettings()->setPin(QStringLiteral("2468"));
+    QCOMPARE(run.command(QStringLiteral("go"), true, QString(), QString()), WebAccessRun::Refused);
+    m_doc->operateSettings()->setRemoteGo(true);
+    QCOMPARE(run.command(QStringLiteral("go"), false, QString(), QString()), WebAccessRun::NeedPin);
 }
 
 void WebAccess_Test::soloFromTheRemotePlaysOneLayerOfThePreview()
