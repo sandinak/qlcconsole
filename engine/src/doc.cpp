@@ -80,6 +80,7 @@
 #include "showreview.h"
 #include "teachinglog.h"
 #include "outputrulekeeper.h"
+#include "testchannels.h"
 #include "bus.h"
 #include "qlcpalette.h"
 #include "qlcphysical.h"
@@ -187,6 +188,10 @@ Doc::Doc(QObject* parent, int universes)
        thread when it struck on another (an OSC or MSC plugin's). */
     connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopStruck,
             m_programmer, &ProgrammerController::endToolsForStop);
+    // Test mode on the DMX map: the stop (and All Off, which strikes it) ends it.
+    m_testChannels = new TestChannels(this);
+    connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopStruck,
+            m_testChannels, [this](quint32) { m_testChannels->setOn(false); });
     // The pad's red ends when the stop does: one source with the footer.
     connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopEnded,
             m_programmer->padRun(), &PadRun::stopEnded);
@@ -334,6 +339,10 @@ void Doc::clearContents()
 
     if (m_lastLook != NULL)
         m_lastLook->clear();
+
+    // Closing the show ends Test mode: nothing of it is saved or carried over.
+    if (m_testChannels != NULL)
+        m_testChannels->setOn(false);
 
     m_clipboard->resetContents();
 
@@ -1077,6 +1086,10 @@ void Doc::setMode(Doc::Mode mode)
     // again, not running a show.
     if (mode == Design && m_lastLook != NULL)
         m_lastLook->clear();
+
+    // Test values never go live: Operate ends Test mode.
+    if (mode == Operate && m_testChannels != NULL)
+        m_testChannels->setOn(false);
 
     // Show-mode Lock is part of Operate (board Q80): programmer parameter
     // writes and timeline edits are locked while the show runs.

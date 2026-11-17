@@ -126,6 +126,19 @@ run it sits in ("121 · free 121-140, 20 channels"); a pointer that rests
 gets the same with the value it sends. On a narrower window the grid
 puts fewer channels on a row; the settings keep their width.
 
+**Test.** The **Test** button on the Connections bar turns on Test mode:
+click a channel's block on the map to set it (the top of the block is 255,
+the bottom 0), drag to move it, double-click to type 0-255, right-click to let
+that channel go. The values sit **on top of whatever is playing**; held
+channels are outlined, a banner and the footer say **Testing channels: N
+held**, and turning Test off (the button, the footer chip, leaving the tab)
+lets all of them go at once, each channel back to what the show gives it.
+The **emergency stop** and **All Off** turn Test off too, and it stays off
+until you turn it on again. Test is refused in **Operate** (the banner says
+why) and Operate ends it; it works in Design and in a Teaching show. A
+Show-only fixture keeps its rule: a channel set on it stays safe. Test values
+are never saved: closing the show clears them.
+
 **What each block is.** A block is coloured by the kind of channel it
 carries, read from the fixture definition's channel group and colour, as the
 Simple Desk reads them: red, green, blue, amber, white and UV channels are a

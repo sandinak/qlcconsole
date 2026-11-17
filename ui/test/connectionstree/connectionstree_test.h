@@ -161,6 +161,7 @@ private slots:
     void doubleClickingAUniverseOpensNoWindow();
     void aUniverseOpensItsOwnPatchList();
     void theMapColoursChannelsByKindAndValue();
+    void testModeSetsChannelsFromTheMap();
     void theMapHoverNamesFixtureModeAndChannel();
     void aUniversesMenuHasNoEditConnection();
     void byUniverseOutputSaysWhereEachProtocolGoes();

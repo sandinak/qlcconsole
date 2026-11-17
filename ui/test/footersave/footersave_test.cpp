@@ -36,6 +36,7 @@
 #define protected public
 #include "app.h"
 #include "programmercontroller.h"
+#include "testchannels.h"
 #undef protected
 #undef private
 #include "powerdistribution.h"
@@ -128,6 +129,24 @@ void FooterSave_Test::cleanupTestCase()
     m_app->doc()->resetModified();
     delete m_app;
     m_app = nullptr;
+}
+
+/* "Testing channels: N held": the footer says Connections' Test mode is
+   holding channels, from every tab; gone when Test is. */
+void FooterSave_Test::theTestChannelsChipSaysHowManyAreHeld()
+{
+    QToolButton *chip = m_app->testChannelsChip();
+    QVERIFY(chip != nullptr);
+    TestChannels *t = m_app->doc()->testChannels();
+    QVERIFY(!chip->isVisible());
+    m_app->doc()->setMode(Doc::Design);
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, 5, 99));
+    QVERIFY(t->setValue(0, 6, 40));
+    QVERIFY(chip->isVisible());
+    QCOMPARE(chip->text(), QString("Testing channels: 2 held"));
+    t->setOn(false);
+    QVERIFY(!chip->isVisible());
 }
 
 void FooterSave_Test::savingLeavesTheFooterWhereItWas()

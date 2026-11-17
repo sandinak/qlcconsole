@@ -644,6 +644,9 @@ public:
      *  while one is on (a cue playing it or the Workbench's), hidden
      *  otherwise (docs/features/stage-targets.md). */
     QLabel *followChip() const { return m_statusFollowLabel; }
+    /** The footer chip "Testing channels: N held" (Connections' Test mode);
+     *  hidden while Test is off. */
+    QToolButton *testChannelsChip() const { return m_statusTestChip; }
     /** The game controller's role, beside it: "Pad: Run", "Pad: ARMED",
      *  "Pad: Walk" while the Run role is on (as the Run tab's Pad: button
      *  says), hidden in Tools (docs/features/show-control.md). */
@@ -1309,6 +1312,10 @@ private:
      *  show right now -- Park, Highlight, Hold at end, Focus mode, Blind --
      *  and a click clears them all. Hidden when nothing is. */
     class QToolButton* m_statusOverridesChip = nullptr;
+    /** "Testing channels: N held": Test mode on Connections' DMX map is on
+     *  (hidden otherwise); a click turns it off. */
+    class QToolButton* m_statusTestChip = nullptr;
+    void updateTestChip();
     class QTimer* m_overridesPoll = nullptr;
     /** Compact footer Grand Master fader — GM previously lived only inside
      *  the Virtual Console tab, unlike its safety-tier siblings (Blackout,

@@ -83,6 +83,14 @@ public:
     /** The address the label at the left of grid row @p row reads (the
      *  row's first channel, from the live column count). */
     int rowStart(int row) const { return row * m_cols + 1; }
+    /** Test mode on the map (Doc::testChannels()): a click or a drag on a
+     *  block sets that channel's value (top of the block 255, bottom 0), a
+     *  double-click asks for a number 0-255, a right-click lets that channel
+     *  go. Off: the map only looks. */
+    void setTestMode(bool on);
+    bool testMode() const { return m_testMode; }
+    /** The value a press at @p y gives in @p cell. */
+    static int valueAtY(const QRect &cell, int y);
     /** The channel (0-based) the header line is describing, or -1. */
     int hovered() const { return m_hovered; }
 
@@ -90,6 +98,9 @@ protected:
     void paintEvent(QPaintEvent *) override;
     bool event(QEvent *e) override;
     void mouseMoveEvent(QMouseEvent *e) override;
+    void mousePressEvent(QMouseEvent *e) override;
+    void mouseReleaseEvent(QMouseEvent *e) override;
+    void mouseDoubleClickEvent(QMouseEvent *e) override;
     void leaveEvent(QEvent *e) override;
 
 private:
@@ -110,6 +121,9 @@ private:
      *  text (-1). */
     void hoverChannel(int channel);
     int m_hovered = -1;
+    bool m_testMode = false;
+    int m_dragChannel = -1;
+    void applyTest(int channel, int y);
 
     Doc *m_doc;
     quint32 m_universe;

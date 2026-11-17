@@ -57,6 +57,7 @@
 #include "connectionstree.h"
 #include "universeoutputview.h"
 #include "fixture.h"
+#include "testchannels.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
@@ -2880,6 +2881,70 @@ void ConnectionsTree_Test::theMapColoursChannelsByKindAndValue()
                 break;
             }
     QVERIFY(legend);
+}
+
+/* Test on the map: a click or drag sets a channel, the banner and button say
+   so, Operate refuses it with a reason, leaving the tab lets go. */
+void ConnectionsTree_Test::testModeSetsChannelsFromTheMap()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, stub->name(), "", 0, false, 0));
+    ConnectionsTree tree(m_doc);
+    tree.resize(1400, 800);
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    UniverseOutputView *map = tree.m_output;
+    map->setUniverse(0);
+    map->fitWidth(UniverseOutputView::widthFor(16));
+    map->resize(map->sizeHint());
+    TestChannels *t = m_doc->testChannels();
+    QVERIFY(tree.testButton() != nullptr);
+    QCOMPARE(tree.testButton()->text(), QString("Test"));
+    QVERIFY(!tree.testBanner()->isVisible());
+
+    // Off: a click does nothing.
+    QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(20).center());
+    QCOMPARE(t->heldCount(), 0);
+
+    tree.testButton()->click();
+    QVERIFY(t->isOn());
+    QVERIFY(tree.testBanner()->isVisible());
+    QCOMPARE(tree.testBanner()->text(), QString("Testing channels: 0 held"));
+    // A click at the top of a block: 255; dragged to its bottom: 0.
+    const QRect cell = map->cellRect(20);
+    QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.top()));
+    QCOMPARE(int(t->value(0, 20)), 255);
+    QCOMPARE(tree.testBanner()->text(), QString("Testing channels: 1 held"));
+    QTest::mousePress(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.top()));
+    QMouseEvent move(QEvent::MouseMove, QPointF(cell.center().x(), cell.bottom()),
+                     map->mapToGlobal(QPointF(cell.center().x(), cell.bottom())),
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(map, &move);
+    QTest::mouseRelease(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.bottom()));
+    QCOMPARE(int(t->value(0, 20)), 0);
+    QVERIFY(t->holds(0, 20));
+    // Right-click lets that channel go.
+    QTest::mouseClick(map, Qt::RightButton, Qt::NoModifier, cell.center());
+    QCOMPARE(t->heldCount(), 0);
+
+    // Leaving the tab lets go of everything.
+    QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(30).center());
+    QCOMPARE(t->heldCount(), 1);
+    tree.hide();
+    QVERIFY(!t->isOn());
+    QVERIFY(!tree.testButton()->isChecked());
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    QVERIFY(!tree.testBanner()->isVisible());
+
+    // Operate refuses it, and says why.
+    m_doc->setMode(Doc::Operate);
+    tree.testButton()->click();
+    QVERIFY(!t->isOn());
+    QVERIFY(tree.testBanner()->isVisible());
+    QVERIFY2(tree.testBanner()->text().contains("Operate"), qPrintable(tree.testBanner()->text()));
+    QVERIFY(!tree.testButton()->isChecked());
+    m_doc->setMode(Doc::Design);
 }
 
 /* Hover: the fixture, its mode and the channel, as the Simple Desk says it. */

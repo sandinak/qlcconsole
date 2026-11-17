@@ -29,6 +29,8 @@
 #include "qlcchannel.h"
 #include "qlcfixturemode.h"
 #include <QMouseEvent>
+#include <QInputDialog>
+#include "testchannels.h"
 #include "universe.h"
 #include "fixture.h"
 #include "doc.h"
@@ -66,6 +68,12 @@ UniverseOutputView::UniverseOutputView(Doc *doc, QWidget *parent)
     });
     m_repaint->start();
 
+    // Held channels are outlined; the map follows Test going on and off.
+    connect(m_doc->testChannels(), &TestChannels::changed, this, [this]() {
+        if (!m_doc->testChannels()->isOn())
+            m_dragChannel = -1;
+        update();
+    });
     connect(m_doc->inputOutputMap(), &InputOutputMap::universeWritten,
             this, &UniverseOutputView::slotUniverseWritten);
     updateHeader();
@@ -487,8 +495,75 @@ void UniverseOutputView::hoverChannel(int ch)
     m_header->setToolTip(QString());
 }
 
+void UniverseOutputView::setTestMode(bool on)
+{
+    m_testMode = on;
+    m_dragChannel = -1;
+    setCursor(on ? Qt::PointingHandCursor : Qt::ArrowCursor);
+    update();
+}
+
+int UniverseOutputView::valueAtY(const QRect &cell, int y)
+{
+    const double t = double(y - cell.top()) / qMax(1, cell.height() - 1);
+    return qBound(0, qRound(255.0 * (1.0 - t)), 255);
+}
+
+/* Set @p channel from where the pointer is, through Test mode (the engine
+   refuses when it is off or in Operate; the banner says why). */
+void UniverseOutputView::applyTest(int channel, int y)
+{
+    if (!m_testMode || channel < 0 || m_universe == Universe::invalid())
+        return;
+    m_doc->testChannels()->setValue(m_universe, quint32(channel), uchar(valueAtY(cellRect(channel), y)));
+}
+
+void UniverseOutputView::mousePressEvent(QMouseEvent *e)
+{
+    const int ch = m_universe == Universe::invalid() ? -1 : channelAt(e->pos());
+    if (m_testMode && ch >= 0 && e->button() == Qt::LeftButton)
+    {
+        m_dragChannel = ch;
+        applyTest(ch, e->pos().y());
+        return;
+    }
+    if (m_testMode && ch >= 0 && e->button() == Qt::RightButton)
+    {
+        m_doc->testChannels()->release(m_universe, quint32(ch));
+        return;
+    }
+    QWidget::mousePressEvent(e);
+}
+
+void UniverseOutputView::mouseReleaseEvent(QMouseEvent *e)
+{
+    m_dragChannel = -1;
+    QWidget::mouseReleaseEvent(e);
+}
+
+void UniverseOutputView::mouseDoubleClickEvent(QMouseEvent *e)
+{
+    const int ch = m_universe == Universe::invalid() ? -1 : channelAt(e->pos());
+    if (!m_testMode || ch < 0 || e->button() != Qt::LeftButton)
+    {
+        QWidget::mouseDoubleClickEvent(e);
+        return;
+    }
+    bool ok = false;
+    const int now = uchar(ch < m_values.size() ? m_values.at(ch) : char(0));
+    const int v = QInputDialog::getInt(this, tr("Test channel"),
+                                       tr("Value for channel %1 (0-255):").arg(ch + 1), now, 0, 255, 1, &ok);
+    if (ok)
+        m_doc->testChannels()->setValue(m_universe, quint32(ch), uchar(v));
+}
+
 void UniverseOutputView::mouseMoveEvent(QMouseEvent *e)
 {
+    if (m_testMode && m_dragChannel >= 0 && (e->buttons() & Qt::LeftButton))
+    {
+        applyTest(m_dragChannel, e->pos().y());
+        return;
+    }
     /* At once, on the header line: no wait for a tooltip ("show the
        address of the moused over block"). */
     hoverChannel(m_universe == Universe::invalid() ? -1 : channelAt(e->pos()));
@@ -582,6 +657,13 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
         }
         if (o >= 0 && (kind == Pan || kind == Tilt || kind >= ColourWheel))
             paintMark(p, kind, cell, v);
+        if (m_doc->testChannels()->holds(m_universe, quint32(ch)))
+        {
+            // Held by Test mode: outlined in amber.
+            p.setPen(QPen(QColor(255, 190, 60), 2));
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(cell.adjusted(1, 1, -1, -1));
+        }
         // A fixture's first channel: a mark, and its name over the cells it spans.
         if (!startName.at(ch).isEmpty())
         {

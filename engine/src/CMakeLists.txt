@@ -173,6 +173,7 @@ add_library(${module_name} SHARED
     rgbtext.cpp rgbtext.h
     programmerflasher.cpp programmerflasher.h
     highlighteffect.cpp highlighteffect.h
+    testchannels.cpp testchannels.h
     focussession.cpp focussession.h
     followspotdrive.cpp followspotdrive.h
     followspotframing.cpp followspotframing.h

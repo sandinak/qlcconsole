@@ -27,6 +27,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Test mode on Connections' DMX map.** A **Test** button: while it is on, click or drag a channel's block to set its value (double-click to type 0-255, right-click to let one go). Held values sit on top of what plays; turning Test off lets them all go at once, each channel back to the show's. The emergency stop and All Off turn it off and it stays off until turned on again; it is refused in Operate (with the reason) and Operate ends it; a Show-only fixture keeps its output rule. A banner and a footer chip say **Testing channels: N held**; leaving the tab or closing the show clears it; nothing is saved.
+
 - **Connections' DMX map shows what each block is.** Blocks are coloured by the channel's kind and value, read from the fixture definition as the Simple Desk does: red, green, blue, amber, white and UV a dull shade at 0 rising to bright at 255, a dimmer a grey ramp, pan and tilt an arrow placed by the value (left-right, up-down), the other kinds a small consistent mark; unpatched channels stay plain, and a small legend explains them. Hover a channel for its fixture, mode and channel name; the names are no longer written inside the blocks.
 
 - **Patch list: one universe, and Print.** Right-click a universe in Connections and choose **Patch List for U13…** to see only the fixtures patched there (the exports and labels follow; **All universes** clears it). The Patch List itself gets a **Print…** button that opens the system print dialog directly, as Print Labels does, beside Save PDF.

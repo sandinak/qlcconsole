@@ -58,6 +58,7 @@
 #include "connectioneditor.h"
 #include "networkroute.h"
 #include "universeoutputview.h"
+#include "testchannels.h"
 #include "patchlistdialog.h"
 #include "deviceprofile.h"
 #include "qlcioplugin.h"
@@ -383,9 +384,29 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     bar->addSpacing(12);
     bar->addWidget(hint);
     bar->addStretch(1);
+    /* Test: set single channels from the DMX map to see what a fixture does.
+       Held values sit over the show until Test is turned off (or the e-stop,
+       or leaving the tab); not in Operate. */
+    m_testButton = new QPushButton(tr("Test"), this);
+    m_testButton->setObjectName(QStringLiteral("connectionsTest"));
+    m_testButton->setCheckable(true);
+    m_testButton->setToolTip(tr("Test channels: click or drag a channel's block on the DMX map to set "
+                                "its value (double-click to type 0-255, right-click to let it go). "
+                                "Values sit on top of what plays; turning Test off lets them all go. "
+                                "Not in Operate."));
+    connect(m_testButton, &QPushButton::clicked, this, [this](bool on) { setTestMode(on); });
+    bar->addWidget(m_testButton);
     bar->addWidget(m_undo);
     bar->addWidget(m_rescan);
     lay->addWidget(new ShrinkableBar(barRow, this));
+    m_testBanner = new QLabel(this);
+    m_testBanner->setObjectName(QStringLiteral("connectionsTestBanner"));
+    m_testBanner->setWordWrap(true);
+    m_testBanner->setStyleSheet(QStringLiteral(
+        "QLabel { background: #f5a623; color: #000; font-weight: bold; padding: 3px 8px; }"));
+    m_testBanner->hide();
+    lay->addWidget(m_testBanner);
+    connect(m_doc->testChannels(), &TestChannels::changed, this, [this]() { updateTestBanner(); });
 
     if (m_doc->inputOutputMap() != NULL
             && m_doc->inputOutputMap()->patchUndo() != NULL)
@@ -764,8 +785,52 @@ void ConnectionsTree::showEvent(QShowEvent *ev)
     m_refreshTimer->start();
 }
 
+bool ConnectionsTree::setTestMode(bool on)
+{
+    QString why;
+    TestChannels *t = m_doc->testChannels();
+    const bool done = t->setOn(on, &why);
+    if (!done)
+    {
+        // Said in the banner, not a window: why Test is not allowed now.
+        m_testBanner->setText(why);
+        m_testBanner->show();
+        QTimer::singleShot(8000, this, [this]() {
+            if (!m_doc->testChannels()->isOn())
+                m_testBanner->hide();
+        });
+    }
+    else
+    {
+        updateTestBanner();
+    }
+    m_testButton->setChecked(t->isOn());
+    m_output->setTestMode(t->isOn());
+    return done;
+}
+
+void ConnectionsTree::updateTestBanner()
+{
+    TestChannels *t = m_doc->testChannels();
+    // The engine ended it (the e-stop, Operate, a new show): the button follows.
+    m_testButton->setChecked(t->isOn());
+    m_output->setTestMode(t->isOn());
+    if (t->isOn())
+    {
+        m_testBanner->setText(t->statusText());
+        m_testBanner->show();
+    }
+    else
+    {
+        m_testBanner->hide();
+    }
+}
+
 void ConnectionsTree::hideEvent(QHideEvent *ev)
 {
+    // Leaving the tab ends Test mode: nothing is held behind the operator's back.
+    if (m_doc != nullptr && m_doc->testChannels() != nullptr && m_doc->testChannels()->isOn())
+        m_doc->testChannels()->setOn(false);
     m_refreshTimer->stop();
     /* "New" means new since you last looked. Leaving the tab is the natural
        end of looking; anything still unpatched next time is just unpatched. */

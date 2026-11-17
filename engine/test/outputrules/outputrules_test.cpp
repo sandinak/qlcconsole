@@ -61,6 +61,7 @@
 #include "cuestack.h"
 #include "cue.h"
 #include "highlighteffect.h"
+#include "testchannels.h"
 #include "programmerflasher.h"
 #include "lastlookeffect.h"
 #include "focussession.h"
@@ -132,6 +133,7 @@ void OutputRules_Test::cleanup()
         m_uni->setChannelModifier(ushort(a), nullptr);
     m_doc->programmer()->focusSession()->stop();
     m_doc->lastLook()->clear();
+    m_doc->testChannels()->setOn(false);
     m_uni->dismissFader(m_fader);
     m_fader.clear();
     m_doc->inputOutputMap()->setBlackout(false);
@@ -2042,6 +2044,73 @@ void OutputRules_Test::theHeldTextSaysEmergencyStop()
     QCOMPARE(m_doc->outputRuleKeeper()->showOnlyHeldText(), QString("Flame L held: Design"));
     m_doc->setMode(Doc::Operate);
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped() == false);
+}
+
+/* Test mode on Connections' DMX map: values held over what plays, on the wire. */
+void OutputRules_Test::testChannelsSitOnTopAndReleaseTogether()
+{
+    TestChannels *t = m_doc->testChannels();
+    put(Stage, 100);                        // what the show gives it
+    frame(Stage);
+    QCOMPARE(sent(Stage), 100);
+    QVERIFY(t->setValue(0, Stage, 200) == false);   // not on yet
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, Stage, 200));
+    QVERIFY(t->setValue(0, 300, 50));       // no fixture there: an address
+    frame(Stage);
+    QCOMPARE(sent(Stage), 200);             // on the wire, over the cue
+    QCOMPARE(sent(300), 50);
+    QCOMPARE(t->statusText(), QString("Testing channels: 2 held"));
+    // The cue moves on; the held value stays on top.
+    put(Stage, 120);
+    frame(Stage);
+    QCOMPARE(sent(Stage), 200);
+    // Off: all of them let go at once, each back to the show's.
+    QVERIFY(t->setOn(false));
+    frame(Stage);
+    QCOMPARE(sent(Stage), 120);
+    QCOMPARE(sent(300), 0);
+    QCOMPARE(t->heldCount(), 0);
+}
+
+void OutputRules_Test::theStopAndOperateEndTestMode()
+{
+    TestChannels *t = m_doc->testChannels();
+    put(Stage, 100);
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, Stage, 255));
+    frame(Stage);
+    QCOMPARE(sent(Stage), 255);
+    m_doc->outputRuleKeeper()->emergencyStop();      // the e-stop and All Off
+    QVERIFY(!t->isOn());
+    QCOMPARE(t->heldCount(), 0);
+    QVERIFY(t->setValue(0, Stage, 255) == false);    // stays off until turned on again
+    frame(Stage);
+    QVERIFY2(sent(Stage) != 255, qPrintable(QString::number(sent(Stage))));
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, Stage, 77));
+
+    // Operate refuses it, with the reason, and entering Operate ends it.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!t->isOn());
+    QString why;
+    QVERIFY(!t->setOn(true, &why));
+    QVERIFY2(why.contains("Operate"), qPrintable(why));
+    QVERIFY(!t->isOn());
+}
+
+void OutputRules_Test::aShowOnlyChannelStaysSafeInTestMode()
+{
+    addDimmer("Flame L", Flame, Fixture::ShowOnly);
+    m_doc->outputRuleKeeper()->rebuild();
+    TestChannels *t = m_doc->testChannels();
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, Flame, 255));
+    QVERIFY(t->setValue(0, Stage, 255));
+    frame(Flame);
+    QCOMPARE(sent(Stage), 255);
+    QCOMPARE(sent(Flame), 0);               // Show only keeps its rule
+    t->setOn(false);
 }
 
 /****************************************************************************

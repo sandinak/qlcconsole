@@ -187,6 +187,9 @@ private slots:
      *  at once */
     void aShowOnlyFixtureMovedMidShowIsHeldAtOnce();
     void theHeldTextSaysEmergencyStop();
+    void testChannelsSitOnTopAndReleaseTogether();
+    void theStopAndOperateEndTestMode();
+    void aShowOnlyChannelStaysSafeInTestMode();
 
     /* Fourth safety review (review/048-show-only-4) */
     /** R4-1: All Off on a Show tab show in Operate, then a GO on another
