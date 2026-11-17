@@ -168,10 +168,16 @@ int InputOutputMap::slotDeviceLine(quint32 universe, const Universe::InputSlotDe
        not by the line index it was patched to -- a slot universe later in
        the order may still sit on its old index after a pad before it went
        (applyInputSlots() walks them in order), and two slots must not
-       swap pads over it. */
+       swap pads over it. Its device re-enumerated in place counts as its
+       own (QLCIOPlugin::inputDeviceReplacement(), as followInputDevices()
+       and retryOfflinePatches() follow it): this runs before that patch's
+       reconnect() learns the new id, and the line is not free meanwhile. */
     auto holds = [plugin](const InputPatch *other, quint32 l) {
-        return other->deviceId() != 0 ? other->deviceId() == plugin->inputDeviceId(l)
-                                      : other->input() == l;
+        const quint64 id = other->deviceId();
+        if (id == 0)
+            return other->input() == l;
+        const quint64 here = plugin->inputDeviceId(l);
+        return here != 0 && (here == id || plugin->inputDeviceReplacement(id) == here);
     };
     // Another universe is patched to line @p l now.
     auto takenByOther = [&](quint32 l) {

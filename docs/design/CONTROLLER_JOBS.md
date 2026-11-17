@@ -408,8 +408,14 @@ it holds, and the chip says why."
   another universe's by the device that universe's patch follows, not by
   the line index it was patched to (`slotDeviceLine()`): two "any" slots
   keep their own pads when a pad before both goes, though the later one is
-  looked at after the earlier has moved. A plugin with no ids keeps the
-  line-and-name rule, as before. Every value is read with the roles its device had
+  looked at after the earlier has moved. A device re-enumerated in place
+  counts as the one it replaced (`inputDeviceReplacement()`, as above):
+  the slots are looked at before that patch's `reconnect()` learns the new
+  id, and a waiting "any" slot must not take the line meanwhile. A plugin
+  with no ids keeps the line-and-name rule, as before. The replug advice
+  is worked out each time a notice is said: one given earlier can go stale
+  when a lower-numbered universe starts waiting for that name later, and
+  the latest notice is the one to follow. Every value is read with the roles its device had
   (`ProgrammerController::controllerRole()` learns a universe's roles while
   its device is known, and again at once after a patch, device, profile,
   slot or configuration change, once what was read has been delivered,
