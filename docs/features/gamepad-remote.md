@@ -350,7 +350,7 @@ show from any pad.
   controller twice; with the same address (or USB port) it is one
   controller here: the Pad chip names no second runner, both get the same
   light, and one press is one action -- one LT + A is one GO, one RT one
-  hit, the four one stop -- and its fine stick steers
+  hit, the four one stop, one Menu one walk -- and its fine stick steers
   the follow spot once, not twice as fast. Two pads of one model told
   apart by address or USB port stay two pads.
 - **Each pad times its own arm chord.** Another pad squeezing LB + RB

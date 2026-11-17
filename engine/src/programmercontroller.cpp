@@ -3295,6 +3295,16 @@ void ProgrammerController::checkPadDevices()
     forgetRoles(UINT_MAX);
 }
 
+bool ProgrammerController::downOnTwinLine(quint32 universe, int role) const
+{
+    if (m_padRun == nullptr)
+        return false;
+    for (auto it = m_seenDown.constBegin(); it != m_seenDown.constEnd(); ++it)
+        if (it.key() != universe && it.value().contains(role) && m_padRun->sameController(it.key(), universe))
+            return true;
+    return false;
+}
+
 void ProgrammerController::padLost(quint32 universe)
 {
     /* As an unplug: nothing it held is held -- the chords made of it, the
@@ -3902,6 +3912,21 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         }
     }
 
+    /* One pad listed twice (one identity on two universes) sends each
+       press on both lines. The tools and the walk keep one state for the
+       whole pad (PadRun::handleWalk() has no line), so the pad's press is
+       the first line's and its copy is nothing -- one Menu started the walk
+       on one line and stopped it on the other. While a tool has the pad
+       its release is the last line's to let go (one View, one undo). In
+       the Run map PadRun reads LB and RB a line apart (padHeld(), the arm
+       chord, the stop) and acts on no release: only the other presses'
+       copies go here -- a press that stopped the walk on one line starts
+       no walk on the other. */
+    if (role != GamepadRole::None && !GamepadRole::isAxis(role) && !GamepadRole::isTouch(role)
+        && (active || (role != GamepadRole::LB && role != GamepadRole::RB))
+        && (value > 0 || active) && downOnTwinLine(universe, int(role)))
+        return true;
+
     if (!GamepadRole::isAxis(role) && !GamepadRole::isTouch(role) && role != GamepadRole::None)
     {
         if (value > 0)
@@ -3961,7 +3986,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
            yes, same room (board Q230, reversing Q129's laptop-only); a tap
            does nothing, and no is the laptop's. Whatever the role. */
         if (!active && role == GamepadRole::A && m_focusCallCue->asksStill()
-            && (m_ownerUniverse == 0xFFFFFFFF || universe == m_ownerUniverse)
+            && (m_ownerUniverse == 0xFFFFFFFF || m_padRun->sameController(universe, m_ownerUniverse))
             && m_controllerJobs->has(universe, ControllerJobs::Focus))
         {
             if (value > 0)

@@ -1030,6 +1030,9 @@ private:
     /** Per pad universe, the buttons seen down since its device was new:
      *  a release with none seen is ignored. */
     QHash<quint32, QSet<int>> m_seenDown;
+    /** @p role is seen down on another line of @p universe's pad (one
+     *  identity, PadRun::sameController()): this event is its copy. */
+    bool downOnTwinLine(quint32 universe, int role) const;
     /** Universes whose plugin gave no device id when last asked: not asked
      *  on every value (cleared by a patch or configuration change). */
     QSet<quint32> m_noDeviceId;
