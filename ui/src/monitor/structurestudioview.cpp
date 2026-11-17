@@ -255,6 +255,14 @@ void StructureStudioView::setHighlight(const QList<quint32> &ids)
     update();
 }
 
+/* The room level at which every mark has its full colour: Dim. Below it
+ * colour drains out of whatever is not light (roomInk()), to none in a
+ * Blackout; Dim, House and Work light look as they always have. */
+static const double kRoomColourFull = 0.30;
+/* The selection's one grey in a Blackout, at 45° and in the flat views
+ * alike: clear of an unselected edge (faint, roomEdge()), never a colour. */
+static QColor selectionGrey() { return QColor(128, 130, 136); }
+
 void StructureStudioView::setUnsavedMarks(const QList<quint32> &ids)
 {
     const QSet<quint32> marks(ids.begin(), ids.end());
@@ -271,7 +279,9 @@ void StructureStudioView::drawUnsavedMarks(QPainter &p) const
     /* Over the rig, like the stage marks: a light being focused that has
        changes not saved yet. The one being focused keeps its own ring and
        gets only the badge. */
-    const QColor pending = roomInk(QColor(240, 200, 40));
+    /* A status mark, not decoration: it keeps its colour in a Blackout (the
+       invariant's exception, as a clash's red is). */
+    const QColor pending(240, 200, 40);
     p.save();
     p.setRenderHint(QPainter::Antialiasing, true);
     for (quint32 fid : m_unsaved)
@@ -3006,13 +3016,35 @@ void StructureStudioView::flushOps(QPainter &p) const
     }
     }   // !drawn: the CPU
 
-    // Text last, in screen space: depth-testing a label is not meaningful.
-    // Nearest first (a larger depth is nearer: viewDepth()).
-    std::stable_sort(labels.begin(), labels.end(),
-                     [](const DrawOp *a, const DrawOp *b) { return a->depth > b->depth; });
-    for (const DrawOp *op : std::as_const(labels))
+    /* Text last, in screen space: depth-testing a label is not meaningful.
+       A name where another is already written is left out: with a whole row
+       of strips or bars selected, every name went on top of the next and
+       none of them could be read. Which ones are written is decided nearest
+       first (a larger depth is nearer: viewDepth()), so what is left out is
+       behind; everything is then painted in the order it came, the aim
+       traces among it as before. */
     {
-        const DrawOp &o = *op;
+        const QFontMetricsF fm(p.font());
+        m_labelOrder.clear();
+        m_labelRects.resize(int(labels.size()));
+        m_labelKeep.fill(false, int(labels.size()));
+        for (int i = 0; i < int(labels.size()); ++i)
+        {
+            const DrawOp &o = *labels.at(i);
+            if (o.kind != DrawOp::Label || o.poly.isEmpty())
+                continue;
+            m_labelRects[i] = QRectF(o.poly.at(0).x(), o.poly.at(0).y() - fm.ascent(),
+                                     fm.horizontalAdvance(o.text), fm.height());
+            m_labelOrder << i;
+        }
+        std::stable_sort(m_labelOrder.begin(), m_labelOrder.end(),
+                         [&labels](int a, int b) { return labels.at(a)->depth > labels.at(b)->depth; });
+        for (int i : std::as_const(m_labelOrder))
+            m_labelKeep[i] = claimNameSpace(m_labelRects.at(i));
+    }
+    for (int i = 0; i < int(labels.size()); ++i)
+    {
+        const DrawOp &o = *labels.at(i);
         if (o.kind == DrawOp::Trace)
         {
             if (o.poly.size() >= 2)
@@ -3022,21 +3054,9 @@ void StructureStudioView::flushOps(QPainter &p) const
             }
             continue;
         }
-        if (o.poly.isEmpty())
+        if (!m_labelKeep.at(i))
             continue;
-        /* A name where another is already written is left out: with a whole
-           row of strips or bars selected, every name went on top of the next
-           and none of them could be read. Nearest first, so what is left out
-           is behind. */
-        const QFontMetricsF fm(p.font());
-        const QRectF r(o.poly.at(0).x(), o.poly.at(0).y() - fm.ascent(),
-                       fm.horizontalAdvance(o.text), fm.height());
-        bool taken = false;
-        for (const QRectF &n : std::as_const(m_nameLabels))
-            taken = taken || n.intersects(r);
-        if (taken)
-            continue;
-        m_nameLabels << r;
+        m_nameLabels << m_labelRects.at(i);       // what is written, where
         p.setPen(o.pen);
         p.drawText(o.poly.at(0), o.text);
     }
@@ -3294,11 +3314,6 @@ static QColor fixtureEdgeColor(const QColor &base)
                   base.alpha());
 }
 
-/* The room level at which every mark has its full colour: Dim. Below it
- * colour drains out of whatever is not light (roomInk()), to none in a
- * Blackout; Dim, House and Work light look as they always have. */
-static const double kRoomColourFull = 0.30;
-
 QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &base,
                                                   bool emitting, bool roomLit) const
 {
@@ -3313,7 +3328,7 @@ QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &bas
     if (fid == m_dragFid || m_highlight.contains(fid))
     {
         const double k = qBound(0.0, m_ambient / kRoomColourFull, 1.0);
-        const QColor soft(128, 130, 136);
+        const QColor soft = selectionGrey();
         auto mix = [k](int s, int t) { return qBound(0, qRound(s + (t - s) * k), 255); };
         return QColor(mix(soft.red(), tint.red()), mix(soft.green(), tint.green()),
                       mix(soft.blue(), tint.blue()), tint.alpha());
@@ -3358,15 +3373,16 @@ QColor StructureStudioView::roomInk(const QColor &c) const
 
 QColor StructureStudioView::selectionInk(int alpha) const
 {
-    QColor c = roomInk(QColor(120, 220, 140));
-    c.setAlpha(alpha);
-    return c;
+    const double k = qBound(0.0, m_ambient / kRoomColourFull, 1.0);
+    const QColor mint(120, 220, 140), grey = selectionGrey();
+    auto mix = [k](int g, int m) { return qBound(0, qRound(g + (m - g) * k), 255); };
+    return QColor(mix(grey.red(), mint.red()), mix(grey.green(), mint.green()),
+                  mix(grey.blue(), mint.blue()), alpha);
 }
 
-QColor StructureStudioView::selectionFill(const QColor &own) const
+QColor StructureStudioView::selectionFill(const QColor &own, const QColor &mint) const
 {
     const double k = qBound(0.0, m_ambient / kRoomColourFull, 1.0);
-    const QColor mint(120, 220, 140);
     auto mix = [k](int o, int m) { return qBound(0, qRound(o + (m - o) * k), 255); };
     return QColor(mix(own.red(), mint.red()), mix(own.green(), mint.green()),
                   mix(own.blue(), mint.blue()));
@@ -4291,7 +4307,8 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         if (sc->isSeeThrough())
             cloth.setAlpha(70);
         // A warning is the outline, the cloth keeps its colour.
-        const QColor seam = paint.outline ? roomInk(paint.edge) : sc->isSeeThrough() ? QColor() : cloth.darker(118);
+        // A Show Review warning is a status mark: its amber stays in a Blackout.
+        const QColor seam = paint.outline ? paint.edge : sc->isSeeThrough() ? QColor() : cloth.darker(118);
         const double seamWidth = paint.outline ? 1.8 : 0.6;
         const bool folds = sc->isCloth() && sc->kind() != Scenery::Cyclorama && !sc->isSeeThrough();
         const double half = double(sc->thickness()) / 2.0;
@@ -6902,7 +6919,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
             const QVector3D tip = headMid + beam * float(qMax(0.25, h * 1.4));
             emitLine(w2s(headMid), w2s(tip),
                      viewDepth(headMid), viewDepth(tip),
-                     fixtureEdgeColor(col), 1.4, p);   // where it points: not the body's clash
+                     overlapAwareEdgeColor(fid, col, false, false), 1.4, p);
 
             if (m_beams && look.beamLevel > 0.01)
             {
@@ -8332,6 +8349,10 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     const QPointF c = w2s(fixtureCentre(fid));
     const bool hi = m_highlight.contains(fid);
     const bool drag = (fid == m_dragFid);
+    /* Below Dim a dragged body is not lit in the drag's amber
+       (selectionFill()); in the flat views its outline says it is the one
+       being dragged, as a selection's does. */
+    const bool dragBelowDim = drag && m_ambient < kRoomColourFull;
 
     QColor col = props->fixtureGelColor(fid, 0, 0);
     if (!col.isValid() || col == QColor(Qt::black))
@@ -8392,8 +8413,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     }
     /* Selected or dragged: the selection's colour in the room's light. In a
        Blackout a selected body stays as dark as it is and the selection is
-       its edge (overlapAwareEdgeColor()), a light grey, never a lit green. */
-    if (drag)     col = roomInk(QColor(255, 196, 64));
+       its edge (overlapAwareEdgeColor()), the selection grey, never a lit
+       green -- a dragged one too, never a lit amber. */
+    if (drag)     col = selectionFill(col, QColor(255, 196, 64));
     else if (hi)  col = selectionFill(col);
 
 
@@ -9039,7 +9061,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             bodyPath.addPolygon(bodyPoly);
             bodyPath.closeSubpath();
         }
-        if (hi)
+        if (hi || dragBelowDim)
         {
             QPen halo(selectionInk(160)); halo.setWidth(3);
             p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9089,7 +9111,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const QPainterPath body = traits.look != Fixture::AutoLook
                                           ? stageLookBodyPath(traits.look, unitRect)
                                           : moverPlanPath(unitRect);
-                if (hi)
+                if (hi || dragBelowDim)
                 {
                     QPen halo(selectionInk(160)); halo.setWidth(3);
                     p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9115,7 +9137,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const bool hung = (rp.mountingType == Truss::TopHung);
             const QPainterPath body = moverElevationPath(
                 QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), hung, units);
-            if (hi)
+            if (hi || dragBelowDim)
             {
                 QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9147,7 +9169,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             p.setBrush(QColor(72, 72, 78));
             p.drawPath(stageLookBodyPath(Fixture::LanternLook, outer, side));
         }
-        if (hi)
+        if (hi || dragBelowDim)
         {
             QPen halo(selectionInk(160)); halo.setWidth(3);
             p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9218,7 +9240,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             if (!leds.tag.isEmpty())
             {
                 p.setPen(roomInk(QColor(230, 200, 120)));
-                p.drawText(QPointF(r.right() + 4, r.bottom()), leds.tag);
+                drawFixtureName(p, QPointF(r.right() + 4, r.bottom()), leds.tag);
                 p.setPen(Qt::NoPen);
             }
         }
@@ -9234,7 +9256,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             /* The LD's stage look: a followspot's barrel, a staff's rod...
                the same shape as on the plot, in its colour. */
             const QPainterPath body = stageLookBodyPath(traits.look, r, m_plane != Top);
-            if (hi)
+            if (hi || dragBelowDim)
             {
                 QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9263,7 +9285,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         }
         else
         {
-            if (hi)
+            if (hi || dragBelowDim)
             {
                 QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9308,7 +9330,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         if (silhouette.size() < 3)
             silhouette = QPolygonF(boxPx);
 
-        if (hi)
+        if (hi || dragBelowDim)
         {
             // Outline the silhouette itself, offset outward from its centre.
             const QPointF mid = silhouette.boundingRect().center();
@@ -9392,7 +9414,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         // Generic fallback -- unchanged original bar+dots rendering, for
         // any fixture Type this session didn't give a dedicated shape
         // (Laser/Hazer/Smoke/Fan/Flower/Effect/Other).
-        if (hi)
+        if (hi || dragBelowDim)
         {
             QPen halo(selectionInk(160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
             p.setPen(halo);
@@ -9434,16 +9456,23 @@ void StructureStudioView::flushFixtureNames(QPainter &p) const
     {
         const QRectF r(n.at.x(), n.at.y() - fm.ascent(), fm.horizontalAdvance(n.text), fm.height());
         // One over another can't be read: the later one is left out.
-        bool taken = false;
-        for (const QRectF &o : std::as_const(m_nameLabels))
-            taken = taken || o.intersects(r);
-        if (taken)
+        if (!claimNameSpace(r))
             continue;
-        m_nameLabels << r;
+        m_nameLabels << r;                         // what is written, where
         p.setPen(n.pen);
         p.drawText(n.at, n.text);
     }
     m_pendingNames.clear();
+}
+
+bool StructureStudioView::claimNameSpace(const QRectF &r) const
+{
+    m_nameCandidates << r;
+    for (const QRectF &o : std::as_const(m_nameTaken))
+        if (o.intersects(r))
+            return false;
+    m_nameTaken << r;
+    return true;
 }
 
 QSize StructureStudioView::headGrid(Fixture *fx, const FixtureVisualTraits &traits) const
@@ -10951,6 +10980,8 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     m_callouts.clear();
     m_edgeLabels.clear();
     m_nameLabels.clear();
+    m_nameTaken.clear();
+    m_nameCandidates.clear();
     /* The frame budget. While values change fast (a value-driven frame close
        on the last one) the rig is drawn without supersampling -- a third of
        the work -- and one full-quality frame follows when they stop. Still

@@ -404,6 +404,37 @@ void RigRoomLight_Test::aSelectedFixtureKeepsItsEdge()
     }
     QVERIFY2(brightest >= 110.0,
              qPrintable(QString("a selected fixture's edge lost in a blackout: luma %1").arg(brightest)));
+
+    /* Dragged, in a Blackout: an edge in the same selection grey, not a
+       filled light body (it was the drag's amber, then a lit grey box). */
+    v.setHighlight({});
+    v.m_dragFid = strip->id();
+    v.grab();
+    {
+        QImage canvas(64, 64, QImage::Format_ARGB32);
+        QPainter p(&canvas);
+        v.m_ops.clear();
+        v.m_collecting = true;
+        v.drawOneFixture(p, strip->id(), false);
+        v.m_collecting = false;
+        double edge = 0.0, face = 0.0;
+        for (const auto &o : v.m_ops)
+            if (o.kind == StructureStudioView::DrawOp::Poly && !o.light)
+            {
+                if (o.fill.isValid() && o.fill.alpha() > 0)
+                    face = qMax(face, luma(o.fill));
+                if (o.pen.isValid() && o.penWidth > 0.0)
+                {
+                    edge = qMax(edge, luma(o.pen));
+                    QVERIFY2(qAbs(o.pen.red() - o.pen.green()) <= 12 && qAbs(o.pen.green() - o.pen.blue()) <= 12,
+                             qPrintable("a coloured drag edge in a blackout: " + colourText(o.pen)));
+                }
+            }
+        v.m_ops.clear();
+        QVERIFY2(face <= 80.0, qPrintable(QString("a dragged body lit in a blackout: luma %1").arg(face)));
+        QVERIFY2(edge >= 110.0, qPrintable(QString("a dragged fixture's edge lost in a blackout: luma %1").arg(edge)));
+    }
+    v.m_dragFid = Fixture::invalidId();
 }
 
 /* ---- The Blackout invariant, on the pixels ------------------------------
@@ -489,6 +520,30 @@ ColourFinding findColour(StructureStudioView &v, const QImage &img, QImage *mask
             clashText << QStringLiteral("%1 [%2,%3 %4x%5]").arg(v.m_doc->fixture(fid)->name())
                              .arg(int(r.x())).arg(int(r.y())).arg(int(r.width())).arg(int(r.height()));
         }
+    QList<QRectF> marks;
+    for (quint32 fid : std::as_const(v.m_unsaved))
+        if (v.m_doc->fixture(fid) != nullptr)
+        {
+            const QPointF c = v.w2s(v.fixtureCentre(fid));
+            marks << QRectF(c.x() - 22, c.y() - 22, 44, 44);
+        }
+    foreach (Scenery *sc, v.m_doc->monitorProperties()->sceneries())
+        if (sc != nullptr && v.sceneryWarned(sc->id()))
+        {
+            QImage canvas(8, 8, QImage::Format_ARGB32);
+            QPainter cp(&canvas);
+            v.m_ops.clear();
+            v.m_collecting = true;
+            v.drawOneStructure(cp, StructureStudioView::SceneryKind, sc->id());
+            v.m_collecting = false;
+            QRectF r;
+            for (const auto &o : v.m_ops)
+                for (const QPointF &q : o.poly)
+                    r = r.isNull() ? QRectF(q, QSizeF(0.01, 0.01)) : r.united(QRectF(q, QSizeF(0.01, 0.01)));
+            v.m_ops.clear();
+            if (!r.isNull())
+                marks << r.adjusted(-3, -3, 3, 3);
+        }
     const int cell = 40;
     QMap<QPair<int, int>, QPair<int, QRgb> > cells;
     ColourFinding f;
@@ -503,6 +558,17 @@ ColourFinding findColour(StructureStudioView &v, const QImage &img, QImage *mask
             /* The warning's red, and its antialiased edge over the dark
                (a darker red): red's hue, inside a clashing fixture. */
             const int hue = QColor(px).hsvHue();
+            /* A status mark's amber (an unsaved focus change's badge, a Show
+               Review warning on scenery) is information, kept in a Blackout
+               as the clash red is: allowed where that mark is. */
+            if (hue >= 25 && hue <= 60)
+            {
+                bool inMark = false;
+                for (const QRectF &r : std::as_const(marks))
+                    inMark = inMark || r.contains(QPointF(x, y));
+                if (inMark)
+                    continue;
+            }
             if (hue >= 0 && (hue <= 30 || hue >= 340))
             {
                 bool inClash = false;
@@ -537,7 +603,8 @@ ColourFinding findColour(StructureStudioView &v, const QImage &img, QImage *mask
                        .arg(names.isEmpty() ? QString() : QStringLiteral(" near ") + names.join(QStringLiteral(", ")));
     }
     if (f.count > 0)
-        f.where << QStringLiteral("clashes allowed: ") + clashText.join(QStringLiteral(", "));
+        f.where << QStringLiteral("clashes allowed: ") + clashText.join(QStringLiteral(", "))
+                 + QStringLiteral("; status marks allowed: %1").arg(marks.size());
     if (mask != nullptr)
     {
         QPainter mp(mask);
@@ -774,8 +841,158 @@ void RigRoomLight_Test::selectedNamesNeverOverlap()
                 }
         QVERIFY2(clashes == 0, qPrintable(QStringLiteral("view %1: %2 of %3 names overlap, first %4")
                                           .arg(view).arg(clashes).arg(names.size()).arg(first)));
+
+        /* Against what the view wanted to write: everything written was
+           wanted, and a name left out was left out only because one that is
+           written is where it would go -- not lost for nothing. */
+        const QList<QRectF> wanted = v.wantedNameLabels();
+        QVERIFY2(wanted.size() >= names.size(),
+                 qPrintable(QStringLiteral("view %1: %2 written, %3 wanted").arg(view).arg(names.size()).arg(wanted.size())));
+        for (const QRectF &n : names)
+            QVERIFY2(wanted.contains(n), qPrintable(QStringLiteral("view %1: a name written that was not wanted").arg(view)));
+        int lost = 0;
+        for (const QRectF &w : wanted)
+        {
+            if (names.contains(w))
+                continue;
+            bool covered = false;
+            for (const QRectF &n : names)
+                if (n.intersects(w))
+                {
+                    covered = true;
+                    break;
+                }
+            lost += covered ? 0 : 1;
+        }
+        QVERIFY2(lost == 0, qPrintable(QStringLiteral("view %1: %2 names left out with nothing in their place")
+                                       .arg(view).arg(lost)));
     }
 }
+
+void RigRoomLight_Test::aboveDimTheClashAndTheSelectionAreAsBefore()
+{
+    loadStageShow();
+    Doc *doc = m_app->doc();
+    for (Fixture *fx : doc->fixtures())
+        fx->setOwnChannelValues(QByteArray(int(fx->channels()), 0));
+    const bool moveSpeed = StructureStudioView::moveSpeed();
+    StructureStudioView::setMoveSpeed(false);
+    auto restoreMoveSpeed = qScopeGuard([moveSpeed]() { StructureStudioView::setMoveSpeed(moveSpeed); });
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.setLocked(true);
+    v.setLiveValues(true);
+    setStageView(v, ViewOverview);
+    v.resize(1280, 800);
+    v.reload();
+    v.grab();
+
+    // The show's clashing movers (the towers' heads).
+    QList<quint32> movers;
+    for (quint32 fid : std::as_const(v.m_overlappingFixtures))
+        if (classifyFixture(doc->fixture(fid)).kind == FixtureSilhouette::Mover)
+            movers << fid;
+    QVERIFY2(!movers.isEmpty(), "no clashing mover in the stage show");
+    const QColor warning(255, 70, 40);
+    const QColor mint(120, 220, 140);
+
+    QImage canvas(8, 8, QImage::Format_ARGB32);
+    QPainter p(&canvas);
+    auto opsOf = [&](quint32 fid) {
+        v.m_ops.clear();
+        v.m_collecting = true;
+        v.drawOneFixture(p, fid, false);
+        v.m_collecting = false;
+        QVector<StructureStudioView::DrawOp> ops = v.m_ops;
+        v.m_ops.clear();
+        return ops;
+    };
+
+    const struct { double level; const char *name; } rooms[] = {
+        { 1.0, "Work light" }, { 0.62, "House" }, { 0.30, "Dim" }, { 0.0, "Blackout" } };
+    for (const auto &room : rooms)
+    {
+        v.setAmbient(room.level);
+        v.setHighlight({});
+        v.grab();
+        /* A clash's red at every level -- body edges and the aim stub, the
+           line that points out of it (the stub took the room's grey once). */
+        for (quint32 fid : std::as_const(movers))
+        {
+            int edges = 0, stubs = 0;
+            for (const auto &o : opsOf(fid))
+            {
+                if (o.kind == StructureStudioView::DrawOp::Poly && o.pen == warning && o.penWidth > 0.0)
+                    ++edges;
+                if (o.kind == StructureStudioView::DrawOp::Line && o.pen == warning)
+                    ++stubs;
+            }
+            QVERIFY2(edges > 0 && stubs > 0,
+                     qPrintable(QStringLiteral("%1, %2: %3 red edges, %4 red stubs")
+                                    .arg(room.name, doc->fixture(fid)->name()).arg(edges).arg(stubs)));
+        }
+
+        // The selection: the mint at Dim and above, as it always was; none in a Blackout.
+        quint32 strip = Fixture::invalidId();
+        for (Fixture *fx : doc->fixtures())
+            if (fx->name() == QLatin1String("DS1 #1"))
+                strip = fx->id();
+        QVERIFY(strip != Fixture::invalidId());
+        v.setHighlight({ strip });
+        v.grab();
+        bool sawMint = false;
+        for (const auto &o : opsOf(strip))
+            if (o.kind == StructureStudioView::DrawOp::Poly && !o.light)
+            {
+                const QColor f = o.fill;
+                /* drawSolidBox() shades each face (lighter/darker) from the
+                   one base: mint's own hue and saturation on some face. */
+                sawMint = sawMint || (f.isValid() && qAbs(f.hsvHue() - mint.hsvHue()) <= 2
+                                      && qAbs(f.hsvSaturation() - mint.hsvSaturation()) <= 6);
+            }
+        if (room.level >= 0.30)
+            QVERIFY2(sawMint, qPrintable(QStringLiteral("%1: a selected strip is not in the mint").arg(room.name)));
+        else
+            QVERIFY2(!sawMint, "Blackout: a selected strip is still filled in the mint");
+    }
+}
+
+void RigRoomLight_Test::statusMarksKeepTheirColourInABlackout()
+{
+    loadStageShow();
+    Doc *doc = m_app->doc();
+    quint32 fid = Fixture::invalidId();
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == QLatin1String("DS1 #1"))
+            fid = fx->id();
+    QVERIFY(fid != Fixture::invalidId());
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.setLocked(true);
+    v.setLiveValues(true);
+    v.setAmbient(0.0);
+    setStageView(v, ViewOverview);
+    v.resize(1280, 800);
+    v.reload();
+    // A focus change not saved yet: its badge is the amber it always was.
+    v.setUnsavedMarks({ fid });
+    const QImage img = v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    const QPointF c = v.w2s(v.fixtureCentre(fid));
+    int amber = 0;
+    for (int y = int(c.y()) - 24; y <= int(c.y()) + 24; ++y)
+        for (int x = int(c.x()) - 24; x <= int(c.x()) + 24; ++x)
+            if (img.rect().contains(x, y))
+            {
+                const QColor q = img.pixelColor(x, y);
+                if (qAbs(q.red() - 240) < 30 && qAbs(q.green() - 200) < 30 && q.blue() < 90)
+                    ++amber;
+            }
+    QVERIFY2(amber >= 20, qPrintable(QStringLiteral("the unsaved badge in a blackout: %1 amber px").arg(amber)));
+    // And the invariant still holds: the badge is a status mark, allowed as a clash's red is.
+    const ColourFinding f = findColour(v, img);
+    QVERIFY2(f.count == 0, qPrintable(QStringLiteral("%1 saturated px apart from the marks:\n  %2")
+                                      .arg(f.count).arg(f.where.join(QStringLiteral("\n  ")))));
+}
+
 
 void RigRoomLight_Test::userShowShots()
 {

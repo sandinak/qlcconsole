@@ -474,7 +474,12 @@ private:
     mutable QList<QVector3D> m_floorPoints;
     mutable QList<QRectF> m_callouts;      ///< this frame's measurement texts (drawnCallouts())
     mutable QList<QRectF> m_edgeLabels;    ///< ...and the edge labels, put clear of them
-    mutable QList<QRectF> m_nameLabels;    ///< this frame's fixture names (drawnNameLabels())
+    mutable QList<QRectF> m_nameLabels;    ///< this frame's fixture names as written (drawnNameLabels())
+    mutable QList<QRectF> m_nameTaken;     ///< where a name has claimed the space (claimNameSpace())
+    mutable QList<QRectF> m_nameCandidates;///< every name this frame wanted to write
+    mutable QVector<int> m_labelOrder;     ///< flushOps(): the labels, nearest first (kept, not reallocated)
+    mutable QVector<QRectF> m_labelRects;
+    mutable QVector<bool> m_labelKeep;
     mutable QImage m_floorImage;    ///< the angled floor grid, drawn once (drawGrid())
     mutable QString m_floorKey;     ///< the view it was drawn for
     mutable QElapsedTimer m_floorPointsAge;
@@ -752,18 +757,23 @@ private:
      *  Blackout: still readable, never a colour. A real
      *  clash's warning red is the only mark that keeps its colour. */
     QColor roomInk(const QColor &c) const;
-    /** The selection's colour, in the room's light (roomInk()): the plot's
-     *  mint at Dim and above, a light neutral grey in a Blackout. */
+    /** The selection's colour, in the room's light: the plot's mint at Dim
+     *  and above, the one selection grey (selectionGrey()) in a Blackout --
+     *  the same grey as a selected body's edge at 45°. */
     QColor selectionInk(int alpha = 255) const;
-    /** What a selected body is filled with: the selection's mint at Dim
-     *  and above, going to @p own (as it would be unselected) as the room
+    /** What a selected (or, with the drag's amber as @p mint, a dragged)
+     *  body is filled with: that colour at Dim and above, going to @p own (as it would be unselected) as the room
      *  goes dark -- in a Blackout a selection is its edge, not a lit body. */
-    QColor selectionFill(const QColor &own) const;
+    QColor selectionFill(const QColor &own,
+                         const QColor &mint = QColor(120, 220, 140)) const;
     /** A fixture's name in a flat view, at @p at (its baseline), in the
      *  pen's colour: kept until flushFixtureNames() writes them all over
      *  the bodies, leaving out one where another is already written. */
     void drawFixtureName(QPainter &p, const QPointF &at, const QString &name) const;
     void flushFixtureNames(QPainter &p) const;
+    /** Whether a name may be written at @p r: false when another already
+     *  is there (the first hit ends the search); true claims the space. */
+    bool claimNameSpace(const QRectF &r) const;
     struct PendingName { QPointF at; QString text; QColor pen; };
     mutable QVector<PendingName> m_pendingNames;
 
@@ -872,8 +882,10 @@ public:
      *  coordinates: what a test reads to see none is drawn over another. */
     QList<QRectF> drawnCallouts() const { return m_callouts; }
     QList<QRectF> drawnEdgeLabels() const { return m_edgeLabels; }
-    /** The last frame's fixture names, where each was written. */
+    /** The last frame's fixture names, where each was written (recorded as
+     *  it is painted), and every name it wanted to write. */
     QList<QRectF> drawnNameLabels() const { return m_nameLabels; }
+    QList<QRectF> wantedNameLabels() const { return m_nameCandidates; }
 private:
 
     /** The three stage axes as a small labelled tripod, for the angled view
