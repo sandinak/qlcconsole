@@ -3438,7 +3438,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (selFixtures.size() == 1 && m_doc->mode() != Doc::Operate)
         {
             const quint32 fid = selFixtures.first();
-            cm.add(ContextMenu::Place, tr("Definition && Mode…"), [this, fid]() {
+            QAction *defMode = setupMenu->addAction(tr("Definition && Mode…"));
+            connect(defMode, &QAction::triggered, this, [this, fid]() {
                 editDefinitionAndMode(this, m_doc, fid);
             });
         }

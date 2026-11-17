@@ -894,9 +894,18 @@ static QStringList contextMenuTexts(FixtureManager &mgr, QTreeWidgetItem *item)
             QTimer::singleShot(10, *poll);
             return;
         }
-        foreach (QAction *a, m->actions())
-            if (!a->isSeparator())
-                texts << a->text();
+        /* Submenus as "Sub ▸ Item" (Fixture Setup holds this tab's own). */
+        std::function<void(QMenu *, const QString &)> flat = [&](QMenu *menu, const QString &prefix) {
+            foreach (QAction *a, menu->actions())
+            {
+                if (a->isSeparator())
+                    continue;
+                texts << prefix + a->text();
+                if (a->menu() != nullptr && a->menu()->objectName() == QLatin1String("fixtureSetupMenu"))
+                    flat(a->menu(), a->text() + QStringLiteral(" ▸ "));
+            }
+        };
+        flat(m, QString());
         m->close();
     };
     QTimer::singleShot(0, *poll);
@@ -999,9 +1008,9 @@ void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
     QTreeWidgetItem *stagedRow = fixtureRow(mgr, staged->id());
     QVERIFY(realRow != nullptr && stagedRow != nullptr);
 
-    QVERIFY(contextMenuTexts(mgr, realRow).contains("Return to Inventory…"));
+    QVERIFY(contextMenuTexts(mgr, realRow).contains("Fixture Setup ▸ Return to Inventory…"));
     const QStringList st = contextMenuTexts(mgr, stagedRow);
-    QVERIFY2(!st.contains("Return to Inventory…"), qPrintable(st.join(" | ")));
+    QVERIFY2(!st.contains("Fixture Setup ▸ Return to Inventory…"), qPrintable(st.join(" | ")));
     QVERIFY2(st.contains("Patch…"), qPrintable(st.join(" | ")));
 
     /* "we should clean up that menu to organize it", and since 2026-11-03
@@ -1009,7 +1018,7 @@ void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
        submenus) on top, then the fixture's own menu as everywhere --
        Fixture Properties…, Patch… -- and deleting it last. */
     const QStringList rt = contextMenuTexts(mgr, realRow);
-    const QStringList order = { "Return to Inventory…", "Test Fixture…", "Group", "Power",
+    const QStringList order = { "Test Fixture…", "Group", "Fixture Setup", "Fixture Setup ▸ Return to Inventory…",
                                 "Fixture Properties…", "Patch…", "Delete…" };
     int last = -1;
     foreach (const QString &t, order)
@@ -1118,6 +1127,17 @@ bool chooseFromContextMenu(FixtureManager &mgr, QTreeWidgetItem *item, const QSt
                 QTest::keyClick(m, Qt::Key_Return);   // exec() only reports a real pick
                 return;
             }
+        /* In Fixture Setup: open the submenu, and look again in it. */
+        foreach (QAction *a, m->actions())
+            if (a->menu() != nullptr && a->menu()->objectName() == QLatin1String("fixtureSetupMenu"))
+                foreach (QAction *b, a->menu()->actions())
+                    if (b->text() == text)
+                    {
+                        m->setActiveAction(a);
+                        QTest::keyClick(m, Qt::Key_Right);
+                        QTimer::singleShot(10, *poll);
+                        return;
+                    }
         m->close();
     };
     QTimer::singleShot(0, *poll);
@@ -1947,8 +1967,8 @@ void FixtureManager_Test::editDefinitionForFixturesSharingOne()
     QCOMPARE(defs, 2);
 
     FixtureManager mgr(nullptr, m_doc);
-    const QString edit = QStringLiteral("Edit Fixture Definition…");
-    const QString several = QStringLiteral("Edit Fixture Definition… (several definitions)");
+    const QString edit = QStringLiteral("Fixture Setup ▸ Edit Fixture Definition…");
+    const QString several = QStringLiteral("Fixture Setup ▸ Edit Fixture Definition… (several definitions)");
 
     // One fixture, as before.
     selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, spots[0]) });
@@ -1984,8 +2004,8 @@ void FixtureManager_Test::stageLookIsOfferedInOperate()
     selectOnly(mgr.m_fixtures_tree, { fixtureRow(mgr, two[0]), fixtureRow(mgr, two[1]) });
     const QStringList texts = contextMenuTree(mgr);
     m_doc->setMode(Doc::Design);
-    QVERIFY2(texts.contains("Plot Symbol"), qPrintable(texts.join(" | ")));
-    QVERIFY2(!texts.filter(QStringLiteral("Plot Symbol ▸ ")).isEmpty(), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Fixture Setup ▸ Plot Symbol"), qPrintable(texts.join(" | ")));
+    QVERIFY2(!texts.filter(QStringLiteral("Fixture Setup ▸ Plot Symbol ▸ ")).isEmpty(), qPrintable(texts.join(" | ")));
 }
 
 void FixtureManager_Test::stageLookMenuHasAScenerySectionWithCurtain()

@@ -139,9 +139,12 @@ static int ceilingFor(const char *where)
 static bool isPicker(const QMenu *m)
 {
     static const QStringList names = { "ctxMoveToFolder", "ctxUsedBy", "selectionMenu" };
-    static const QStringList texts_ = { "Set to", "Set in This Cue", "Add to Circuit", "Move to Layer",
+    static const QStringList texts_ = { "Add Child Layer", "Deck", "Truss", "Boom", "Tower", "Set to", "Set in This Cue", "Add to Circuit", "Move to Layer",
                                         "Add to Group", "Used By", "Move to Folder", "Remove from Layer" };
-    return names.contains(m->objectName()) || texts_.contains(m->title());
+    for (const QString &t : texts_)
+        if (m->title().startsWith(t))
+            return true;
+    return names.contains(m->objectName());
 }
 
 static QStringList lawProblems(const QMenu *menu, int ceiling, const QString &path = QString())
@@ -1496,7 +1499,7 @@ void ContextMenus_Test::testFixtureNeverDoesNothing()
             poll.stop();
             all = texts(m);
             for (QAction *a : m->actions())
-                if (a->text() == QLatin1String("Test Fixture…"))
+                if (a->text() == QStringLiteral("Test Fixture…"))
                 {
                     found = true;
                     enabled = a->isEnabled();
