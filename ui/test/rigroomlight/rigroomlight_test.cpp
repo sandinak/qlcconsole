@@ -531,6 +531,15 @@ void RigRoomLight_Test::loadStageShow()
     m_app->doc()->resetModified();
     QVERIFY2(m_app->doc()->fixtures().size() > 150,
              qPrintable(QString("the stage show has %1 fixtures").arg(m_app->doc()->fixtures().size())));
+    /* The main drape open, as the stage is looked at: its curtain fixture
+       at zero (nothing playing) would close it under Live, and the rig is
+       behind it. */
+    foreach (Scenery *sc, m_app->doc()->monitorProperties()->sceneries())
+        if (sc != nullptr && sc->hasState())
+        {
+            sc->setDriverFixture(Scenery::invalidId());
+            sc->setState(Scenery::Open);
+        }
     settle(100);
     m_stageShowLoaded = true;
 }
