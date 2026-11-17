@@ -96,6 +96,12 @@ private slots:
      *  as a draft that the next start offers with its count; picked up,
      *  the values come back unsaved; discarded, or the show closed, gone. */
     void theEmergencyStopKeepsADraft();
+    /** Q258: nothing laid on the Focus layer on the way out of an
+     *  emergency stop lights a light (discardAll()'s rebuild). */
+    void theStopNeverRelightsOnTheWayOut();
+    /** Q258: a pick up in a focus that covers only some of the draft's
+     *  lights keeps the others for a focus that has them. */
+    void aPickUpKeepsTheLightsItDidNotCover();
     /** What the views draw for the focused head is where it is MEANT to
      *  point -- at its reference -- through a nudge, Save, Revert, Zero, Undo
      *  and a discard; nothing for any other head, or once it stops. */

@@ -84,6 +84,11 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
     connect(this, &FocusSession::offsetChanged, this, &FocusSession::checkUnsaved);
     connect(this, &FocusSession::started, this, &FocusSession::checkUnsaved);
     connect(this, &FocusSession::stopped, this, &FocusSession::checkUnsaved);
+    // A draft light nudged or saved since the start drops out of the offer: recount (Q258).
+    connect(this, &FocusSession::offsetChanged, this, [this]() {
+        if (m_active && !m_draft.isEmpty())
+            emit draftChanged();
+    });
     m_blinkTimer.setInterval(kBlinkPhaseMs);
     connect(&m_blinkTimer, &QTimer::timeout, this, &FocusSession::advanceBlink);
     // The unsaved light's slow breath (gap 10).
@@ -916,8 +921,11 @@ int FocusSession::pickUpDraft()
         }
         emit offsetChanged(fid);
     }
-    m_draft.clear();
-    m_draftVenue.clear();
+    // Only what was put back leaves the draft: a light outside this focus stays for one that has it.
+    for (quint32 fid : fids)
+        m_draft.remove(fid);
+    if (m_draft.isEmpty())
+        m_draftVenue.clear();
     if (!fids.isEmpty())
         rebuildWrites();
     emit draftChanged();
@@ -2354,6 +2362,8 @@ void FocusSession::rebuildWrites()
         m_writes = writes;
     }
     m_layer.set(levels);
+    if (m_layerProbe)
+        m_layerProbe(writes);
 }
 
 QHash<QPair<int, int>, uchar> FocusSession::pendingWrites() const

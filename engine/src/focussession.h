@@ -267,6 +267,10 @@ public:
     int pickUpDraft();
     /** Drop the draft. */
     void discardDraft();
+    /** For a test: called with what each write lays on the Focus layer
+     *  (as pendingWrites() reads), so a light set on the way out shows. */
+    void setLayerProbe(const std::function<void(const QHash<QPair<int, int>, uchar> &)> &probe)
+        { m_layerProbe = probe; }
 
     /*********************************************************************
      * Where it is
@@ -785,6 +789,7 @@ private:
         float lensSaved = 0.0f, lensLive = 0.0f;
     };
     QHash<quint32, DraftHead> m_draft;
+    std::function<void(const QHash<QPair<int, int>, uchar> &)> m_layerProbe;
     bool m_goingDark = false;       ///< stopForEmergency(): no write lights it again
     QString m_draftVenue;           ///< where its saves would go: the venue, or empty (the show)
     /** The lights the draft applies to now (draftCount()). */

@@ -621,6 +621,50 @@ void FocusCalls_Test::theOperatorIsToldWhereTheyAre()
     s->stop();
 }
 
+void FocusCalls_Test::theStopsDraftStaysWithItsVenue()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *dsc = makeTarget(m_doc, "DSC", QVector3D(5.0f, 6.0f, 0.0f));
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    v->setShowFile(m_dir->filePath("Draft Show.qlcc"), false);
+    const QString venueA = v->addVenue("Venue A");
+    const QString venueB = v->addVenue("Venue B");
+    FocusSession *s = m_doc->programmer()->focusSession();
+    auto tidy = qScopeGuard([&]() { s->stop(); s->discardDraft(); v->setActiveVenue(QString()); });
+    FocusSession::Options o;
+    o.fixtures = { a->id(), b->id() };
+    o.order = FocusSession::AsGiven;
+    o.first = targetRef(dsc->id());
+
+    QVERIFY(v->setActiveVenue(venueA));
+    QVERIFY(s->start(o));
+    s->nudge(1.0f, 0.0f);
+    s->next();
+    s->nudge(0.5f, 0.5f);
+    s->stopForEmergency();
+    QVERIFY(s->hasDraft());
+
+    QSignalSpy offered(s, &FocusSession::draftOffered);
+    // Another venue: nothing offered.
+    QVERIFY(v->setActiveVenue(venueB));
+    QVERIFY(s->start(o));
+    QCOMPARE(s->draftCount(), 0);
+    QCOMPARE(offered.count(), 0);
+    s->stop();
+    // The show's own calibration: nothing offered.
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(s->start(o));
+    QCOMPARE(s->draftCount(), 0);
+    QCOMPARE(offered.count(), 0);
+    s->stop();
+    // Its own venue again: both offered.
+    QVERIFY(v->setActiveVenue(venueA));
+    QVERIFY(s->start(o));
+    QCOMPARE(s->draftCount(), 2);
+    QCOMPARE(offered.count(), 1);
+}
+
 void FocusCalls_Test::correctionsGoToTheVenueNotTheShow()
 {
     Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);

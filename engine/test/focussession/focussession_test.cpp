@@ -977,6 +977,56 @@ void FocusSession_Test::theEmergencyStopKeepsADraft()
     QVERIFY(!s->hasDraft());
 }
 
+void FocusSession_Test::theStopNeverRelightsOnTheWayOut()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(4.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->start(optionsFor({ a->id(), b->id() }, mark->id())));
+    s->nudge(1.0f, 0.0f);
+    s->next();
+    s->nudge(0.0f, 1.0f);
+    QList<int> lit;
+    s->setLayerProbe([&](const QHash<QPair<int, int>, uchar> &writes) {
+        for (Fixture *f : { a, b })
+            lit << int(writes.value(qMakePair(0, int(f->address()) + 2), 0));
+    });
+    auto unprobe = qScopeGuard([s]() { s->setLayerProbe(nullptr); });
+    s->stopForEmergency();
+    for (int v : lit)
+        QVERIFY2(v == 0, qPrintable(QString("a light was laid at %1 on the way out of the stop").arg(v)));
+    QVERIFY(!s->isActive());
+}
+
+void FocusSession_Test::aPickUpKeepsTheLightsItDidNotCover()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(4.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    QVERIFY(s->start(optionsFor({ a->id(), b->id() }, mark->id())));
+    s->nudge(1.0f, 0.0f);
+    s->next();
+    s->nudge(0.0f, 1.0f);
+    s->stopForEmergency();
+    // A focus of A alone picks up A; B stays in the draft.
+    QVERIFY(s->start(optionsFor({ a->id() }, mark->id())));
+    QCOMPARE(s->draftCount(), 1);
+    QCOMPARE(s->pickUpDraft(), 1);
+    QVERIFY(s->hasDraft());
+    s->saveAll();
+    s->stop();
+    // A focus with B offers B.
+    QSignalSpy offered(s, &FocusSession::draftOffered);
+    QVERIFY(s->start(optionsFor({ a->id(), b->id() }, mark->id())));
+    QCOMPARE(offered.count(), 1);
+    QCOMPARE(s->draftCount(), 1);
+    QCOMPARE(s->pickUpDraft(), 1);
+    QCOMPARE(s->liveOffset(b->id()).tilt, 1.0f);
+    QVERIFY(!s->hasDraft());
+}
+
 namespace
 {
 class CountingBackend final : public ControllerKeepAlive::Backend

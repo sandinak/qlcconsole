@@ -741,6 +741,11 @@ void FocusMode_Test::theStopKeepsUnsavedFocusAsADraft()
                                       int(FocusSession::KeyboardInput));
     QVERIFY2(panel != nullptr, qPrintable(why));
     QVERIFY(offerShown(panel));
+    // A draft light nudged since the start leaves the offer: the count follows.
+    QCOMPARE(pickUpButton(panel)->text(), QString("Pick up where you stopped (2 unsaved changes)"));
+    s->nudge(0.2f, 0.0f);
+    QCOMPARE(pickUpButton(panel)->text(), QString("Pick up where you stopped (1 unsaved change)"));
+    s->revert();
     QPushButton *discard = panel->findChild<QPushButton *>("focusDraftDiscard");
     QVERIFY(discard != nullptr);
     discard->click();
