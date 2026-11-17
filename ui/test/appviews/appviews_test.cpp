@@ -869,9 +869,9 @@ void AppViews_Test::theRunTabIsTheCueRunner()
     QCOMPARE(runner->runnerSize(), CueRunner::Full);
     QCOMPARE(runner->follow(), ShowTree::invalidId());    // the current production
     QCOMPARE(page->property("helpTopic").toString(), QString("show-tree.md#the-cue-runner"));
-    // The others are numbered by the view too (⇧⌘6 is Simple Desk).
+    // The others are numbered by the view too (⇧⌘6 is the Virtual Console).
     foreach (QAction *a, m_app->m_windowJumps)
-        if (a->data().toString() == QLatin1String("Simple Desk"))
+        if (a->data().toString() == QLatin1String("Virtual Console"))
             QCOMPARE(a->shortcut(), QKeySequence("CTRL+SHIFT+6"));
 }
 
@@ -2839,7 +2839,7 @@ void AppViews_Test::eachWorkspaceViewShowsItsTabs()
     const QStringList classic = { "Fixtures", "Functions", "Shows", "Virtual Console",
                                   "Simple Desk", "Connections" };
     const QStringList console = { "Connections", "Fixtures", "Lighting Studio",
-                                  "Show Tree", "Virtual Console", "Simple Desk", "Run" };
+                                  "Show Tree", "Shows", "Virtual Console", "Run" };
     const QStringList everything = { "Connections", "Fixtures", "Lighting Studio", "Functions",
                                      "Build", "Show Tree", "Shows", "Virtual Console",
                                      "Simple Desk", "Run" };
@@ -3002,8 +3002,8 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree 4",
-                           "Virtual Console 5", "Simple Desk 6", "Run 7",
-                           "|", "Functions", "Build", "Shows" }));
+                           "Shows 5", "Virtual Console 6", "Run 7",
+                           "|", "Functions", "Build", "Simple Desk" }));
 
     m_app->setWorkspaceView(App::ClassicView);
     QCOMPARE(windowJumpsAsShown(m_app),
@@ -3031,10 +3031,10 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QTabWidget *tabs = m_app->m_tab;
     m_app->slotDetachContext(tabs->indexOf(VirtualConsole::instance()));
     QStringList shown = windowJumpsAsShown(m_app);
-    QCOMPARE(shown.value(4), QString("Virtual Console — In Its Own Window 5"));
-    QCOMPARE(shown.value(5), QString("Simple Desk 6"));
+    QCOMPARE(shown.value(5), QString("Virtual Console — In Its Own Window 6"));
+    QCOMPARE(shown.value(6), QString("Run 7"));
     reattach(m_app, "Virtual Console");
-    QCOMPARE(windowJumpsAsShown(m_app).value(4), QString("Virtual Console 5"));
+    QCOMPARE(windowJumpsAsShown(m_app).value(5), QString("Virtual Console 6"));
     m_app->doc()->resetModified();
 }
 
@@ -3090,7 +3090,150 @@ void AppViews_Test::aBrokenOutViewSurvivesAViewSwitch()
     QCOMPARE(tabs->indexOf(build), 3);
     vcWin->close();
     QCOMPARE(tabLabels(tabs), QStringList({ "Connections", "Fixtures", "Lighting Studio",
-                                            "Show Tree", "Virtual Console", "Simple Desk", "Run" }));
+                                            "Show Tree", "Shows", "Virtual Console", "Run" }));
+    m_app->doc()->resetModified();
+}
+
+/* What the operator reads on the bar (Q262), not the model's list. */
+static QStringList barTexts(App *app)
+{
+    app->setTabLabelMode(App::TabTextOnly);
+    QStringList out;
+    QTabWidget *tabs = app->m_tab;
+    for (int i = 0; i < tabs->count(); ++i)
+        out << tabs->tabText(i);
+    return out;
+}
+
+void AppViews_Test::theTabBarDefaultsPerView()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    QCOMPARE(barTexts(m_app), QStringList({ "Connections", "Fixtures", "Lighting Studio",
+                                            "Show Tree", "Timeline", "Virtual Console", "Run" }));
+    m_app->setWorkspaceView(App::EverythingView);
+    QVERIFY(barTexts(m_app).contains("Timeline"));
+    QVERIFY(!barTexts(m_app).contains("Shows"));
+    m_app->setWorkspaceView(App::ClassicView);
+    QVERIFY(barTexts(m_app).contains("Shows"));
+    QVERIFY(!barTexts(m_app).contains("Timeline"));
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->setTabLabelMode(App::TabIconAndText);
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::aCustomTabSetRoundTripsThroughTheShow()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("tabs.qxw");
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->setCustomTabs({ "Run", "Fixtures", "Virtual Console", "Connections" });
+    // Connections leads and Run ends whatever the order asked for.
+    const QStringList chosen = { "Connections", "Fixtures", "Virtual Console", "Run" };
+    QCOMPARE(barTexts(m_app), chosen);
+    QVERIFY(m_app->doc()->isModified());
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+
+    m_app->clearDocument();             // a new show: the view's default
+    QCOMPARE(barTexts(m_app).size(), 7);
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(barTexts(m_app), chosen);
+
+    // A show saved without the setting gets its view's default.
+    m_app->setCustomTabs(QStringList());
+    QCOMPARE(barTexts(m_app).size(), 7);
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    m_app->setCustomTabs({ "Fixtures", "Run" });
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(barTexts(m_app).size(), 7);
+
+    // Classic stays stock whatever the show asks.
+    m_app->setCustomTabs({ "Fixtures", "Run" });
+    m_app->setWorkspaceView(App::ClassicView);
+    QCOMPARE(barTexts(m_app), QStringList({ "Fixtures", "Functions", "Shows", "Virtual Console",
+                                            "Simple Desk", "Inputs/Outputs" }));
+    m_app->setCustomTabs(QStringList());
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->setTabLabelMode(App::TabIconAndText);
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::runAndConnectionsCantBeUnchecked()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    QAction *act = m_app->menuBar()->findChild<QAction *>("viewTabsAction");
+    QVERIFY(act != nullptr);
+    QVERIFY(act->isEnabled());
+    QListWidget *list = nullptr;
+    bool tried = false;
+    QTimer::singleShot(300, m_app, [&]() {
+        QDialog *dlg = m_app->findChild<QDialog *>("chooseTabsDialog");
+        QVERIFY(dlg != nullptr);
+        list = dlg->findChild<QListWidget *>("chooseTabsList");
+        QVERIFY(list != nullptr);
+        dlg->show();
+        for (int i = 0; i < list->count(); ++i)
+        {
+            const QString t = list->item(i)->text();
+            if (t != "Run" && t != "Connections")
+                continue;
+            // A click on the box where it is drawn, as a person would.
+            const QRect r = list->visualItemRect(list->item(i));
+            QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier,
+                              QPoint(r.left() + 10, r.center().y()));
+            QCOMPARE(list->item(i)->checkState(), Qt::Checked);
+            tried = true;
+        }
+        // Fixtures can be: untick it and accept.
+        for (int i = 0; i < list->count(); ++i)
+            if (list->item(i)->text() == "Fixtures")
+                list->item(i)->setCheckState(Qt::Unchecked);
+        dlg->accept();
+    });
+    act->trigger();
+    QVERIFY(tried);
+    QVERIFY(!barTexts(m_app).contains("Fixtures"));
+    QVERIFY(barTexts(m_app).contains("Run"));
+    QVERIFY(barTexts(m_app).contains("Connections"));
+    // And not by the call either.
+    m_app->setCustomTabs({ "Fixtures" });
+    QVERIFY(barTexts(m_app).contains("Run") && barTexts(m_app).contains("Connections"));
+
+    // Classic: the dialog isn't offered.
+    m_app->setCustomTabs(QStringList());
+    m_app->setWorkspaceView(App::ClassicView);
+    QVERIFY(!act->isEnabled());
+    m_app->setWorkspaceView(App::ConsoleView);
+    m_app->setTabLabelMode(App::TabIconAndText);
+    m_app->doc()->resetModified();
+}
+
+void AppViews_Test::simpleDeskOpensAndClosesOnDemand()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    QTabWidget *tabs = m_app->m_tab;
+    QVERIFY(!barTexts(m_app).contains("Simple Desk"));
+    QAction *desk = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == "Simple Desk")
+            desk = a;
+    QVERIFY(desk != nullptr);
+    desk->trigger();
+    QVERIFY(barTexts(m_app).contains("Simple Desk"));
+    QCOMPARE(m_app->workspaceView(), App::ConsoleView);
+    QCOMPARE(tabs->currentWidget(), static_cast<QWidget *>(SimpleDesk::instance()));
+    const int at = tabs->indexOf(SimpleDesk::instance());
+    // Only it has a close button, and it closes it.
+    QVERIFY(tabs->tabBar()->tabButton(at, QTabBar::RightSide) != nullptr);
+    QVERIFY(tabs->tabBar()->tabButton(0, QTabBar::RightSide) == nullptr);
+    tabs->tabBar()->tabButton(at, QTabBar::RightSide)->click();
+    QVERIFY(!barTexts(m_app).contains("Simple Desk"));
+    QCOMPARE(barTexts(m_app).size(), 7);
+    m_app->setTabLabelMode(App::TabIconAndText);
     m_app->doc()->resetModified();
 }
 
