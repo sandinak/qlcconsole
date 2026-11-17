@@ -682,6 +682,53 @@ void PadRunRules_Test::windowsRefusesMscCuesButNotItsStop()
     QCOMPARE(goes(), 1);
 }
 
+void PadRunRules_Test::windowsAFocusPadStartsNoVenueFocus()
+{
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    ControllerJobs *jobs = pc->controllerJobs();
+    // A pad with the Focus job and no Run cues: LT + Menu is its start.
+    jobs->setJob(jobs->identityOfUniverse(0), ControllerJobs::RunCues, false);
+    run->setEnabled(true);
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    ltMenu();
+    QVERIFY2(fcc->state() == FocusCallCue::Armed && !run->isFocusing(),
+             "LT + Menu started the venue focus from a pad on Windows");
+    QCOMPARE(run->notice(), PadRun::notSupportedText());
+}
+
+void PadRunRules_Test::windowsMenuWalksNothingAndTheStopStillStops()
+{
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        // Operate: the walk is Quiet Refine on the running cue.
+        m_doc->setMode(mode);
+        press(kMenu);
+        QVERIFY2(!run->isWalking() && !pc->refineSession()->isActive(),
+                 mode == Doc::Design ? "Menu walked the show from a pad on Windows"
+                                     : "Menu started Quiet Refine from a pad on Windows");
+        QCOMPARE(run->notice(), PadRun::notSupportedText());
+    }
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(stops(), 1);
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+    QCOMPARE(run->state(), PadRun::Stopped);
+}
+
 void PadRunRules_Test::theRealPlatformArmsOrRefusesAndAlwaysStops()
 {
     const PlatformGuard guard(PadRun::PlatformReal);   // ignores the test guard's "any"

@@ -61,6 +61,12 @@ private slots:
     void windowsStillStopsFromThePad();
     /** ... and MIDI Show Control: cues refused, ALL OFF and STOP not. */
     void windowsRefusesMscCuesButNotItsStop();
+    /** Board Q257's follow-up: on Windows a Focus pad's LT + Menu starts
+     *  no venue focus, and the notice says why. */
+    void windowsAFocusPadStartsNoVenueFocus();
+    /** ... Menu starts no walk (nor Quiet Refine), said; the four together
+     *  still reach ALL OFF. */
+    void windowsMenuWalksNothingAndTheStopStillStops();
     /** The real platform, no override: Windows refuses to arm and its stop
      *  reaches ALL OFF; macOS and Linux arm. (Windows CI runs this.) */
     void theRealPlatformArmsOrRefusesAndAlwaysStops();
