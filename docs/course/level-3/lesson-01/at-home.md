@@ -24,5 +24,5 @@ Do **one** of these.
 
 1. Patch a small rig on a printed 512 grid: six LED pars at 7 channels,
    two movers at 16 channels and a dimmer pack of four channels. Write each
-   light's start and end, and the label you'd put on the first par's cable end (D1.1).
+   light's start and end, and the label you'd put on the first par's cable end (U1.001).
 2. Write the label you'd put on the second mover's cable end.

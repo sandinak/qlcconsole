@@ -20,6 +20,7 @@
 #ifndef PATCHLIST_H
 #define PATCHLIST_H
 
+#include <QPagedPaintDevice>
 #include <QStringList>
 #include <QVector3D>
 #include <QColor>
@@ -100,6 +101,14 @@ public:
      *  universe, by fixture type, or not at all. */
     enum GroupBy { ByLocation = 0, ByUniverse, ByType, ByNone };
 
+    /** A DMX address the way the crew reads it (grandMA's universe.address):
+     *  universe 3 (zero-based 2), address 1 is "U3.001". @p address is
+     *  one-based. The one formatter labels, the patch list, its CSV and PDF
+     *  and the other places that print both use. */
+    static QString dmxAddress(quint32 universe, quint32 address);
+    /** A span on one universe: "U3.001–012" (a single channel: "U3.001"). */
+    static QString dmxRange(quint32 universe, quint32 first, quint32 last);
+
     /** Which fixtures: all, the discrete ones, or the pixel / matrix ones. */
     enum Kind { AllKinds = 0, Discrete, Pixel };
 
@@ -109,9 +118,12 @@ public:
         Kind kind = AllKinds;
         /** Only these owners; empty: anybody's. */
         QList<RigOwner::Owner> owners;
+        /** Only the fixtures patched (or clashing) on this universe
+         *  (zero-based); -1: every universe. */
+        int universe = -1;
 
         bool accepts(const Row &row) const;
-        bool isEmpty() const { return kind == AllKinds && owners.isEmpty(); }
+        bool isEmpty() const { return kind == AllKinds && owners.isEmpty() && universe < 0; }
     };
 
     /** A heading of the grouped list and its rows, in patch order. */
@@ -170,6 +182,11 @@ public:
     bool writeXlsx(const QString &path, GroupBy by = ByNone, QString *error = nullptr) const;
     /** The printable list, a table per section (what the PDF is made from). */
     QString toHtml(const QString &title, GroupBy by = ByUniverse) const;
+    /** Lay the printable list out on @p device (a printer or a PDF writer) at
+     *  the page size, orientation and margins the device already has: the PDF
+     *  sets landscape Letter first, Print… leaves what the print dialog chose.
+     *  What Print… and the PDF share. */
+    void paintTo(QPagedPaintDevice *device, const QString &title, GroupBy by = ByUniverse) const;
     /** Write the PDF to @p path (landscape Letter). False, with @p error, if
      *  the file can't be written. */
     bool writePdf(const QString &path, const QString &title, QString *error = nullptr,

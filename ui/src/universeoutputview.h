@@ -21,6 +21,8 @@
 #define UNIVERSEOUTPUTVIEW_H
 
 #include <QByteArray>
+#include <QColor>
+#include <QRect>
 #include <QWidget>
 
 class QLabel;
@@ -34,8 +36,9 @@ class Doc;
 /**
  * What one universe is sending, live ("it would be nice to see what's being
  * sent out on a U if selected"): its 512 channels as a grid, each with its
- * value and a bar as high, each fixture's channels shaded together and named
- * where they start. Values are what goes out -- after the grand master -- as
+ * value, coloured by the kind of channel (red, green, blue ... a dimmer, pan
+ * and tilt arrows) and brighter the higher the value, with a legend under
+ * it; a fixture's name is on the hover, not in the blocks. Values are what goes out -- after the grand master -- as
  * the universe writes them; a hover says whose channel it is and what.
  */
 class UniverseOutputView final : public QWidget
@@ -44,6 +47,17 @@ class UniverseOutputView final : public QWidget
 
 public:
     explicit UniverseOutputView(Doc *doc, QWidget *parent = nullptr);
+
+    /** What a channel is, for the colour of its block: an emitter colour, a
+     *  dimmer, pan, tilt, or one of the other groups (read from the
+     *  definition's group and colour as the Simple Desk reads them). */
+    enum Kind { Plain = 0, Red, Green, Blue, Amber, White, UV, Cyan, Magenta, Yellow, Lime, Indigo,
+                Dimmer, Pan, Tilt, ColourWheel, Gobo, Shutter, Speed, PrismKind, BeamKind,
+                EffectKind, OtherKind };
+    static Kind kindOf(const class QLCChannel *channel);
+    /** The block's fill: a dull shade at 0 rising to the bright colour at 255. */
+    static QColor fillFor(Kind kind, int value);
+    static QColor emitterColour(Kind kind);
 
     /** Show @p universe (an index; invalid shows nothing). */
     void setUniverse(quint32 universe);
@@ -70,6 +84,14 @@ public:
     /** The address the label at the left of grid row @p row reads (the
      *  row's first channel, from the live column count). */
     int rowStart(int row) const { return row * m_cols + 1; }
+    /** Test mode on the map (Doc::testChannels()): a click or a drag on a
+     *  block sets that channel's value (top of the block 255, bottom 0), a
+     *  double-click asks for a number 0-255, a right-click lets that channel
+     *  go. Off: the map only looks. */
+    void setTestMode(bool on);
+    bool testMode() const { return m_testMode; }
+    /** The value a press at @p y gives in @p cell. */
+    static int valueAtY(const QRect &cell, int y);
     /** The channel (0-based) the header line is describing, or -1. */
     int hovered() const { return m_hovered; }
 
@@ -77,7 +99,15 @@ protected:
     void paintEvent(QPaintEvent *) override;
     bool event(QEvent *e) override;
     void mouseMoveEvent(QMouseEvent *e) override;
+    void mousePressEvent(QMouseEvent *e) override;
+    void mouseReleaseEvent(QMouseEvent *e) override;
+    void mouseDoubleClickEvent(QMouseEvent *e) override;
     void leaveEvent(QEvent *e) override;
+
+private:
+    static void paintMark(class QPainter &p, Kind kind, const QRect &cell, int value);
+    void paintLegend(class QPainter &p, int top);
+    int legendHeight() const;
 
 private slots:
     void slotUniverseWritten(quint32 index, const QByteArray &data);
@@ -92,6 +122,11 @@ private:
      *  text (-1). */
     void hoverChannel(int channel);
     int m_hovered = -1;
+    bool m_testMode = false;
+    int m_dragChannel = -1;
+    int m_pressY = 0;
+    bool m_pendingClick = false;
+    void applyTest(int channel, int y);
 
     Doc *m_doc;
     quint32 m_universe;

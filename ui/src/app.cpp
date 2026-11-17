@@ -117,6 +117,7 @@
 #include <QDialogButtonBox>
 #include <QListWidget>
 #include "doc.h"
+#include "testchannels.h"
 #include "fixturerest.h"
 #include "shutterautoopen.h"
 #include "fixture.h"
@@ -1446,6 +1447,7 @@ void App::initDoc()
     Q_ASSERT(m_doc == NULL);
     m_doc = new Doc(this);
 
+    connect(m_doc->testChannels(), &TestChannels::changed, this, &App::updateTestChip);
     connect(m_doc, SIGNAL(modified(bool)), this, SLOT(slotDocModified(bool)));
     connect(m_doc->showEmbedding(), &ShowEmbedding::changed, this,
             [this]() { AppUtil::updateShowEmbeddingStatus(m_doc); });
@@ -5307,7 +5309,7 @@ QList<QWidget *> App::statusChipsByPriority() const
         m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
         goHeld ? m_statusStandby : nullptr,
         m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusShowOnlyLabel,
-        m_statusOverridesChip, m_statusProgrammerLabel,
+        m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
         goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
@@ -9043,6 +9045,20 @@ void App::initStatusBar()
     });
     m_overridesPoll->start();
 
+    // Connections' Test mode: while it holds channels over the show, say so
+    // from every tab; a click turns it off.
+    m_statusTestChip = new QToolButton(this);
+    m_statusTestChip->setObjectName("footerTestChannels");
+    m_statusTestChip->setAutoRaise(true);
+    m_statusTestChip->setStyleSheet("QToolButton { color: #a06000; font-weight: bold; padding: 0 6px; border: none; }");
+    m_statusTestChip->hide();
+    connect(m_statusTestChip, &QToolButton::clicked, this, [this]() {
+        if (m_doc != nullptr && m_doc->testChannels() != nullptr)
+            m_doc->testChannels()->setOn(false);
+    });
+    sb->addPermanentWidget(m_statusTestChip);
+    updateTestChip();
+
     // Persistent Design/Operate indicator — see app.h for why this is
     // separate from the mode-toggle button (which shows the destination
     // mode, not the current one). Always visible.
@@ -9129,7 +9145,7 @@ void App::initStatusBar()
     // centred vertically -- a chip slots in here without its own rules.
     {
         const int h = fontMetrics().height() + 4;
-        const QList<QWidget *> items = { m_statusSelectionLabel, m_statusPadModeLabel, m_statusOverridesChip,
+        const QList<QWidget *> items = { m_statusSelectionLabel, m_statusPadModeLabel, m_statusOverridesChip, m_statusTestChip,
                                          m_statusFollowLabel, m_statusModeChipLabel, m_statusStage,
                                          m_statusProgrammerLabel, m_statusDirtyLabel };
         for (QWidget *w : items)
@@ -10267,6 +10283,22 @@ void App::slotPadModeChanged(Doc::PadMode mode)
         tr("<span style='color:%1;font-weight:bold;'>"
            "▦ Pad: %2</span>").arg(color).arg(label));
     m_statusPadModeLabel->show();
+}
+
+void App::updateTestChip()
+{
+    if (m_statusTestChip == nullptr || m_doc == nullptr || m_doc->testChannels() == nullptr)
+        return;
+    TestChannels *t = m_doc->testChannels();
+    if (!t->chipShown())
+    {
+        m_statusTestChip->hide();
+        return;
+    }
+    m_statusTestChip->setText(t->chipText());
+    m_statusTestChip->setToolTip(tr("Test mode is holding channels over the show. "
+                                    "Click to stop Test and let them all go."));
+    m_statusTestChip->show();
 }
 
 void App::updateFollowChip()

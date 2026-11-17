@@ -256,6 +256,7 @@ private:
     class ShowReview *m_showReview = nullptr;
     class GoLog *m_goLog = nullptr;
     class OutputRuleKeeper *m_outputRuleKeeper = nullptr;
+    class TestChannels *m_testChannels = nullptr;
     NetworkTopology *m_networkTopology;
     TimecodeSource *m_timecodeSource;
     class TimecodeCues *m_timecodeCues = nullptr;
@@ -1282,6 +1283,9 @@ public:
     /** Applies the fixtures' output rules (Blackout / Grand Master exempt,
      *  Switch, OnAtOpen) to the universes (OutputRuleKeeper) */
     class OutputRuleKeeper *outputRuleKeeper() const { return m_outputRuleKeeper; }
+    /** Test mode on Connections' DMX map: single channels held over the
+     *  show (testchannels.h). Never null; never saved. */
+    class TestChannels *testChannels() const { return m_testChannels; }
 
     /*********************************************************************
      * Network Topology

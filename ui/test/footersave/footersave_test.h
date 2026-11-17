@@ -53,6 +53,7 @@ private slots:
     /** The Load chip has room for its stall text, and the Next cue shortens
      *  to a share of the window, so neither pushes the chips after it out */
     void theLoadAndNextChipsKeepTheirRoom();
+    void theTestChannelsChipSaysHowManyAreHeld();
     /** A jump that only looks keeps the Show Tree's cue playing; leaving the
      *  tab any other way stops it, as it always did */
     void aLookingJumpKeepsThePreviewPlaying();

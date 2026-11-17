@@ -182,7 +182,7 @@ void PatchLabels_Test::aPatchedLabel()
     r.mountedOn = QStringLiteral("Truss FOH · 2.5 m along");
     const PatchLabels::Label l = PatchLabels::label(r);
     QCOMPARE(l.name, QStringLiteral("Wash 3"));
-    QCOMPARE(l.address, QStringLiteral("U3 · 101"));            // one-based, both
+    QCOMPARE(l.address, QStringLiteral("U3.101"));            // one-based, both
     QCOMPARE(l.detail, QStringLiteral("16-channel · 16 ch"));
     QCOMPARE(l.mount, QStringLiteral("Truss FOH · 2.5 m along"));
 
@@ -198,7 +198,7 @@ void PatchLabels_Test::unpatchedAndClashLabels()
     PatchList::Row clash = row(QStringLiteral("Clash"), 0, 11);
     clash.patched = false;
     clash.clash = true;
-    QCOMPARE(PatchLabels::label(clash).address, QStringLiteral("clash · U1 · 12"));
+    QCOMPARE(PatchLabels::label(clash).address, QStringLiteral("clash · U1.012"));
 }
 
 void PatchLabels_Test::aNetworkLabelCarriesItsIp()
@@ -232,7 +232,7 @@ void PatchLabels_Test::theUniverseIsNamed()
     PatchList::Row r = row(QStringLiteral("Wash"), 2, 0);
     QVERIFY(PatchLabels::label(r).universe.isEmpty());       // the default name says nothing
     r.universeName = QStringLiteral("Stage left");
-    QCOMPARE(PatchLabels::label(r).address, QStringLiteral("U3 · 1"));
+    QCOMPARE(PatchLabels::label(r).address, QStringLiteral("U3.001"));
     QCOMPARE(PatchLabels::label(r).universe, QStringLiteral("Stage left"));
 
     // Not patched: no universe to name.
@@ -267,14 +267,14 @@ void PatchLabels_Test::aLabelFromTheShow()
     QCOMPARE(rs.size(), 2);
     PatchLabels::Label l = PatchLabels::label(rs.at(0));
     QCOMPARE(l.name, QStringLiteral("Front 1"));
-    QCOMPARE(l.address, QStringLiteral("U2 · 41"));
+    QCOMPARE(l.address, QStringLiteral("U2.041"));
     QCOMPARE(l.universe, QStringLiteral("Stage left"));
     QVERIFY2(l.detail.endsWith(QStringLiteral("6 ch")), qPrintable(l.detail));
     QVERIFY(l.network.isEmpty());
     QCOMPARE(l.mount, doc.monitorProperties()->mountDescription(f->id()));
 
     l = PatchLabels::label(rs.at(1));
-    QCOMPARE(l.address, QStringLiteral("U3 · 1"));
+    QCOMPARE(l.address, QStringLiteral("U3.001"));
     QVERIFY(l.universe.isEmpty());
     QCOMPARE(l.network, QStringLiteral("WLED · lantern-2"));
 }
@@ -392,9 +392,17 @@ void PatchLabels_Test::theTemplateRenders()
     QCOMPARE(PatchLabels::render(QString(), r, false), QStringLiteral("Spot 3 D101"));
     QCOMPARE(PatchLabels::render(PatchLabels::defaultTemplate(), r, false), QStringLiteral("Spot 3 D101"));
     // More than one: the universe first.
-    QCOMPARE(PatchLabels::render(QString(), r, true), QStringLiteral("Spot 3 D2.101"));
-    QCOMPARE(PatchLabels::address(r, true), QStringLiteral("2.101"));
+    QCOMPARE(PatchLabels::render(QString(), r, true), QStringLiteral("Spot 3 U2.101"));
+    QCOMPARE(PatchLabels::address(r, true), QStringLiteral("U2.101"));
     QCOMPARE(PatchLabels::address(r, false), QStringLiteral("101"));
+
+    // A saved template with the old "D{address}" reads the same on many universes.
+    QCOMPARE(PatchLabels::render(QStringLiteral("{name} D{address}"), r, true), QStringLiteral("Spot 3 U2.101"));
+    r.universe = 2; r.address = 0;
+    QCOMPARE(PatchLabels::render(QString(), r, true), QStringLiteral("Spot 3 U3.001"));
+    QCOMPARE(PatchList::dmxAddress(2, 1), QStringLiteral("U3.001"));
+    QCOMPARE(PatchList::dmxRange(2, 1, 12), QStringLiteral("U3.001–012"));
+    r.universe = 1; r.address = 100;
 
     // Every field.
     QCOMPARE(PatchLabels::render(QStringLiteral("{name}|{address}|{universe}|{mode}|{location}|{owner}|{group}"),

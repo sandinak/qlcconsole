@@ -64,7 +64,7 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 9. **Fixtures → Patch List…**: grouped by **Location**; change **Group by**
    to **Universe** and **Type**.
 10. **Save XLSX…** into **Documents → qlcconsole** and open it.
-11. **Print Labels…**: read the preview (names and "D1.214"), **Save PDF…**.
+11. **Print Labels…**: read the preview (names and "U1.214"), **Save PDF…**.
 
    ![The patch list](../../images/lesson-3-1/patch-list.png)
 

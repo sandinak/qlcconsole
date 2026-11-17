@@ -414,9 +414,14 @@ the menu bar's **Fixtures → Patch List…**, or the Lighting Studio's
    several, or a heading for all of its rows) for **Print Label…** /
    **Print N Labels…**, **Print Labels for the List Shown…** and **Copy the
    List**.
-5. **Save XLSX…** — the export (below).
+5. **Save XLSX…** — the export (below). **Print…** sends the list shown
+   straight to the system's print dialog (the same page as **Save PDF…**).
 6. **Print Labels…** — labels for the rows selected, or for the list shown
    (below).
+
+In **Connections**, right-click a universe and choose **Patch List for
+U13…** to open this list with only the fixtures patched on that universe (a
+line beside the filters says so, and **All universes** shows them all again).
 
 What Show and Owner leave out is left out of the copy, the exports, the PDF
 and the labels too, and they follow the grouping.
@@ -444,7 +449,10 @@ and the labels too, and they follow the grouping.
   numbers as numbers.
 - **Save PDF…** — a landscape Letter page, a table per heading (per
   universe headed with where that universe goes), the header row repeated
-  on each page.
+  on each page. Addresses on a list that is not grouped by universe read
+  "U3.001–012". The CSV and XLSX have a **DMX address** column that reads
+  the same way. The same form is used in the Fixture Manager's clash note,
+  the Patch dialog's "moves from" and Duplicate Structure's preview.
 - **Copy** — the CSV on the clipboard, to paste straight into a sheet.
 
 #### Labels
@@ -473,7 +481,9 @@ print dialog, or saves it as a PDF.
 
 **The address:** `{address}` is the DMX start address, one-based —
 "101". When the show patches fixtures in **more than one universe** it says
-which first, a dot between — "2.101" (so "Spot 3 D2.101"). That is decided
+which first, as grandMA writes it: **U2.101**, the universe, a dot, the
+address padded to three digits ("Spot 3 U2.101"; address 1 on universe 3 is
+"U3.001"). A saved template with `D{address}` reads the same way. That is decided
 over the whole show, not the fixtures you are labelling, so every label of
 a show reads the same way. A fixture still in the inventory gets "—"; one in
 an address clash, the address it asked for.

@@ -30,6 +30,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QFileDialog>
+#include <QPrintDialog>
+#include <QPrinter>
 #include <QMessageBox>
 #include <QTextStream>
 #include <QClipboard>
@@ -101,6 +103,15 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
         m_owner->addItem(RigOwner::displayName(o), int(o));
     bar->addWidget(new QLabel(tr("Owner:"), this));
     bar->addWidget(m_owner);
+    bar->addSpacing(12);
+    m_universeNote = new QLabel(this);
+    m_universeNote->setObjectName(QStringLiteral("patchListUniverseNote"));
+    m_universeNote->setVisible(false);
+    bar->addWidget(m_universeNote);
+    m_allUniverses = new QPushButton(tr("All universes"), this);
+    m_allUniverses->setObjectName(QStringLiteral("patchListAllUniverses"));
+    m_allUniverses->setVisible(false);
+    bar->addWidget(m_allUniverses);
     bar->addStretch(1);
 
     m_summary = new QLabel(this);
@@ -140,6 +151,9 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     QPushButton *pdfBtn = btns->addButton(tr("Save PDF…"), QDialogButtonBox::ActionRole);
     pdfBtn->setObjectName(QStringLiteral("patchListPdf"));
     pdfBtn->setToolTip(tr("Save a printable list of what is shown, a table per group"));
+    QPushButton *printBtn = btns->addButton(tr("Print…"), QDialogButtonBox::ActionRole);
+    printBtn->setObjectName(QStringLiteral("patchListPrint"));
+    printBtn->setToolTip(tr("Print the list shown through the system's print dialog"));
     QPushButton *labelsBtn = btns->addButton(tr("Print Labels…"), QDialogButtonBox::ActionRole);
     labelsBtn->setObjectName(QStringLiteral("patchListLabels"));
     labelsBtn->setToolTip(tr("Print a label per fixture shown (or the selected rows), or save them as a PDF"));
@@ -161,6 +175,8 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     connect(csvBtn, &QPushButton::clicked, this, &PatchListDialog::slotSaveCsv);
     connect(xlsxBtn, &QPushButton::clicked, this, &PatchListDialog::slotSaveXlsx);
     connect(pdfBtn, &QPushButton::clicked, this, &PatchListDialog::slotSavePdf);
+    connect(printBtn, &QPushButton::clicked, this, &PatchListDialog::slotPrint);
+    connect(m_allUniverses, &QPushButton::clicked, this, [this]() { setUniverse(-1); });
     connect(labelsBtn, &QPushButton::clicked, this, &PatchListDialog::slotLabels);
 }
 
@@ -198,7 +214,25 @@ PatchList::Filter PatchListDialog::filter() const
     const RigOwner::Owner o = RigOwner::Owner(m_owner->currentData().toInt());
     if (o != RigOwner::Unset)
         f.owners << o;
+    f.universe = m_universe;
     return f;
+}
+
+void PatchListDialog::setUniverse(int universe)
+{
+    m_universe = universe;
+    m_universeNote->setVisible(universe >= 0);
+    m_allUniverses->setVisible(universe >= 0);
+    if (universe >= 0)
+    {
+        m_universeNote->setText(tr("Only %1").arg(tr("Universe %1").arg(universe + 1)));
+        setWindowTitle(tr("Patch List for U%1").arg(universe + 1));
+    }
+    else
+    {
+        setWindowTitle(tr("Patch List"));
+    }
+    slotRefill();
 }
 
 void PatchListDialog::setKind(PatchList::Kind kind)
@@ -379,6 +413,21 @@ void PatchListDialog::slotSavePdf()
     if (!shown().writePdf(path, m_title, &error, groupBy()))
         QMessageBox::warning(this, tr("Save Patch List"),
                              tr("Could not save %1:\n%2").arg(path, error));
+}
+
+void PatchListDialog::slotPrint()
+{
+    QPrinter printer(QPrinter::HighResolution);
+    printer.setDocName(m_title);
+    // The starting point (landscape Letter, as the PDF); the print dialog may change it.
+    printer.setPageSize(QPageSize(QPageSize::Letter));
+    printer.setPageOrientation(QPageLayout::Landscape);
+    printer.setPageMargins(QMarginsF(12, 12, 12, 12), QPageLayout::Millimeter);
+    QPrintDialog dlg(&printer, this);
+    dlg.setWindowTitle(tr("Print Patch List"));
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    shown().paintTo(&printer, m_title, groupBy());
 }
 
 QList<PatchList::Row> PatchListDialog::selectedRows() const

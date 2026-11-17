@@ -171,6 +171,8 @@ private:
     void forgetPendingPatch(quint32 universe);
     void renameUniverse(quint32 universe);
     void deleteUniverse(quint32 universe);
+    /** The patch list, only @p universe's fixtures ("Patch List for U13…"). */
+    void openPatchList(quint32 universe);
     /** Append a new universe (always the last one — see deleteUniverse()'s
      *  own "only the last can go" rule for why numbering never has gaps). */
     void addUniverse();
@@ -432,6 +434,18 @@ private:
     class QSplitter *m_universeSplit = nullptr;
     class QSplitter *m_outerSplit = nullptr;
     class QScrollArea *m_outScroll = nullptr;
+    /** Test mode (Doc::testChannels()): the Test button, and the banner that
+     *  says "Testing channels: N held" (or why Test is refused). */
+    class QPushButton *m_testButton = nullptr;
+    class QLabel *m_testBanner = nullptr;
+public:
+    /** Turn Test mode on or off, as the Test button does. On is refused in
+     *  Operate: false, with the reason in the banner. */
+    bool setTestMode(bool on);
+    QPushButton *testButton() const { return m_testButton; }
+    QLabel *testBanner() const { return m_testBanner; }
+private:
+    void updateTestBanner();
     bool m_userSplit = false;
     int m_laidOutWidth = 0;
     /** Show @p item's universe (and leg) in the pane. */

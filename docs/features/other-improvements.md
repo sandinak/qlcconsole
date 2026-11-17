@@ -124,7 +124,33 @@ pointer is as it moves: the address, and whose channel it is with that
 fixture's range ("124 · Front Wash 3 (121-136) · ch 4 Blue"), or the free
 run it sits in ("121 · free 121-140, 20 channels"); a pointer that rests
 gets the same with the value it sends. On a narrower window the grid
-puts fewer channels on a row; the settings keep their width. They are the
+puts fewer channels on a row; the settings keep their width.
+
+**Test.** The **Test** button on the Connections bar turns on Test mode:
+click a channel's block on the map to set it (the top of the block is 255,
+the bottom 0), drag to move it, double-click to type 0-255, right-click to let
+that channel go. The values sit **on top of whatever is playing**; held
+channels are outlined, a banner and the footer say **Testing channels: N
+held**, and turning Test off (the button, the footer chip, leaving the tab)
+lets all of them go at once, each channel back to what the show gives it.
+The **emergency stop** and **All Off** turn Test off too, and it stays off
+until you turn it on again. Test is refused in **Operate** (the banner says
+why) and Operate ends it; Test follows Operate: wherever Operate is not on (Design, or a Teaching show in Design) it works. A
+Show-only fixture keeps its rule: a channel set on it stays safe. Test values
+are never saved: closing the show clears them.
+
+**What each block is.** A block is coloured by the kind of channel it
+carries, read from the fixture definition's channel group and colour, as the
+Simple Desk reads them: red, green, blue, amber, white and UV channels are a
+dull shade of their colour at 0 and rise to the bright colour at 255; a dimmer
+is a grey ramp; a **pan** channel draws a left-right arrow that moves along
+the block with its value, a **tilt** channel an up-down arrow that moves up
+with it; gobo, colour wheel, shutter, speed, prism, beam and effect channels
+each have a small mark that brightens with the value. A channel nothing is
+patched to stays plain. Fixture names are not written in the blocks: point at
+one and the line above (and the tooltip) names its fixture, mode and channel,
+as the Simple Desk does. A small legend under the grid says what the colours
+and marks are. They are the
 universe's editor: no window opens on top of them. A double-click edits in
 place what is under it — a patch cell, or the universe's name (to rename
 it).

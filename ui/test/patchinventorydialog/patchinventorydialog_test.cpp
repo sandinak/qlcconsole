@@ -659,7 +659,7 @@ void PatchInventoryDialog_Test::placeMovesTheSelectionAsABlock()
     QCOMPARE(plan[1].address, quint32(120));
     QCOMPARE(plan[2].universe, quint32(0));          // C was not selected
     QCOMPARE(plan[2].address, quint32(60));
-    QVERIFY(dlg.m_table->item(0, COL_STATUS)->text().startsWith("moves from 1.21"));
+    QVERIFY(dlg.m_table->item(0, COL_STATUS)->text().startsWith("moves from U1.021"));
     QVERIFY(dlg.m_apply->isEnabled());
 }
 

@@ -356,7 +356,7 @@ void FixtureTreeWidget_Test::addressClashesGetTheirOwnRootAtTheTop()
     QCOMPARE(root->childCount(), 1);
     QTreeWidgetItem *row = root->child(0);
     QCOMPARE(row->text(0), QString("Clash"));
-    QVERIFY2(row->text(tree.m_addressColumn).contains("clashes at 1.3"),
+    QVERIFY2(row->text(tree.m_addressColumn).contains("clashes at U1.003"),
              qPrintable(row->text(tree.m_addressColumn)));
     QVERIFY(row->toolTip(tree.m_addressColumn).contains("Owner"));
 

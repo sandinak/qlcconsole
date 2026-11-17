@@ -58,6 +58,8 @@
 #include "connectioneditor.h"
 #include "networkroute.h"
 #include "universeoutputview.h"
+#include "testchannels.h"
+#include "patchlistdialog.h"
 #include "deviceprofile.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
@@ -382,9 +384,29 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     bar->addSpacing(12);
     bar->addWidget(hint);
     bar->addStretch(1);
+    /* Test: set single channels from the DMX map to see what a fixture does.
+       Held values sit over the show until Test is turned off (or the e-stop,
+       or leaving the tab); not in Operate. */
+    m_testButton = new QPushButton(tr("Test"), this);
+    m_testButton->setObjectName(QStringLiteral("connectionsTest"));
+    m_testButton->setCheckable(true);
+    m_testButton->setToolTip(tr("Test channels: click or drag a channel's block on the DMX map to set "
+                                "its value (double-click to type 0-255, right-click to let it go). "
+                                "Values sit on top of what plays; turning Test off lets them all go. "
+                                "Not in Operate."));
+    connect(m_testButton, &QPushButton::clicked, this, [this](bool on) { setTestMode(on); });
+    bar->addWidget(m_testButton);
     bar->addWidget(m_undo);
     bar->addWidget(m_rescan);
     lay->addWidget(new ShrinkableBar(barRow, this));
+    m_testBanner = new QLabel(this);
+    m_testBanner->setObjectName(QStringLiteral("connectionsTestBanner"));
+    m_testBanner->setWordWrap(true);
+    m_testBanner->setStyleSheet(QStringLiteral(
+        "QLabel { background: #f5a623; color: #000; font-weight: bold; padding: 3px 8px; }"));
+    m_testBanner->hide();
+    lay->addWidget(m_testBanner);
+    connect(m_doc->testChannels(), &TestChannels::changed, this, [this]() { updateTestBanner(); });
 
     if (m_doc->inputOutputMap() != NULL
             && m_doc->inputOutputMap()->patchUndo() != NULL)
@@ -763,8 +785,58 @@ void ConnectionsTree::showEvent(QShowEvent *ev)
     m_refreshTimer->start();
 }
 
+bool ConnectionsTree::setTestMode(bool on)
+{
+    QString why;
+    TestChannels *t = m_doc->testChannels();
+    const bool done = t->setOn(on, &why);
+    if (!done)
+    {
+        // Said in the banner, not a window: why Test is not allowed now.
+        m_testBanner->setText(why);
+        m_testBanner->show();
+        QTimer::singleShot(8000, this, [this]() {
+            if (!m_doc->testChannels()->isOn())
+                m_testBanner->hide();
+        });
+    }
+    else
+    {
+        updateTestBanner();
+    }
+    m_testButton->setChecked(t->isOn());
+    m_output->setTestMode(t->isOn());
+    return done;
+}
+
+void ConnectionsTree::updateTestBanner()
+{
+    TestChannels *t = m_doc->testChannels();
+    // The engine ended it (the e-stop, Operate, a new show): the button follows.
+    m_testButton->setChecked(t->isOn());
+    m_output->setTestMode(t->isOn());
+    if (t->isOn())
+    {
+        m_testBanner->setText(t->bannerText());
+        m_testBanner->show();
+    }
+    else if (!t->endedBecause().isEmpty())
+    {
+        // Ended by itself (the patch moved under it): said, until it is turned on again.
+        m_testBanner->setText(t->endedBecause());
+        m_testBanner->show();
+    }
+    else
+    {
+        m_testBanner->hide();
+    }
+}
+
 void ConnectionsTree::hideEvent(QHideEvent *ev)
 {
+    // Leaving the tab ends Test mode: nothing is held behind the operator's back.
+    if (m_doc != nullptr && m_doc->testChannels() != nullptr && m_doc->testChannels()->isOn())
+        m_doc->testChannels()->setOn(false);
     m_refreshTimer->stop();
     /* "New" means new since you last looked. Leaving the tab is the natural
        end of looking; anything still unpatched next time is just unpatched. */
@@ -2836,6 +2908,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         {
             const quint32 uni = uniVar.toUInt();
             QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
             QAction *retgt = (item->data(COL_NAME, ROLE_OUTPUT).toBool()
                               && pluginSupportsTargetsIn(m_doc, plugin))
                 ? menu.addAction(UniversePatcher::retargetText(plugin)) : NULL;
@@ -2850,6 +2923,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                 retargetPatch(uni, plugin, line);
             else if (c == ren)
                 renameUniverse(uni);
+            else if (c == plist)
+                openPatchList(uni);
             else if (c == unp)
                 unpatchFromLine(uni, plugin, line,
                                 item->data(COL_NAME, ROLE_OUTPUT).toBool());
@@ -3007,6 +3082,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         /* Where it goes is set in the pane beside the list (selecting the
            row shows it there): no window for it here. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
@@ -3015,6 +3091,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == ren)
             renameUniverse(uni);
+        else if (chosen == plist)
+            openPatchList(uni);
         else if (chosen == del)
             deleteUniverse(uni);
         return;
@@ -3094,6 +3172,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         /* Patch it to an interface that IS here: the pane beside the list,
            which says what it is waiting for and replaces it. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
         menu.addSeparator();
         QAction *forget = menu.addAction(tr("Unpatch…"));
         menu.addSeparator();
@@ -3104,6 +3183,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == ren)
             renameUniverse(uni);
+        else if (chosen == plist)
+            openPatchList(uni);
         else if (chosen == forget)
             forgetPendingPatch(uni);
         else if (chosen == del)
@@ -3123,6 +3204,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            is selected. It used to be a dozen entries here, each its own small
            dialog, then one window ("Edit Connection…") the pane repeated. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
         /* Wording matters here: a universe can be patched to several lines, so
            removing it from THIS one must not read as deleting the universe.
            Conflating the two would quietly destroy a fan-out. */
@@ -3137,6 +3219,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == ren)
             renameUniverse(uni);
+        else if (chosen == plist)
+            openPatchList(uni);
         else if (chosen == unp)
             unpatchFromLine(uni, plugin, line, output);
         else if (chosen == del)
@@ -3498,6 +3582,16 @@ bool ConnectionsTree::handleUniversalMenuAction(QAction *chosen, QTreeWidgetItem
         return true;
     }
     return false;
+}
+
+void ConnectionsTree::openPatchList(quint32 universe)
+{
+    /* The patch list, only this universe's fixtures: not modal, so the
+       tree stays usable beside it. */
+    PatchListDialog *dlg = new PatchListDialog(m_doc, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setUniverse(int(universe));
+    dlg->show();
 }
 
 void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *item,

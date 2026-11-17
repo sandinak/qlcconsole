@@ -196,6 +196,25 @@ void PatchListDialog_Test::theTableIsInPatchOrder()
     QCOMPARE(t->topLevelItem(2)->text(0), QString("— not patched"));
 }
 
+void PatchListDialog_Test::oneUniverseAndAPrintButton()
+{
+    dimmer(m_doc, "Far", 2, 0);
+    PatchListDialog dlg(m_doc);
+    dlg.setGroupBy(PatchList::ByNone);
+    QCOMPARE(dlg.tree()->topLevelItemCount(), 4);
+    dlg.setUniverse(2);
+    QCOMPARE(dlg.tree()->topLevelItemCount(), 1);
+    QCOMPARE(dlg.tree()->topLevelItem(0)->text(1), QString("Far"));
+    // The unpatched fixture is on no universe: not listed; the exports follow.
+    QVERIFY(!dlg.shown().toCsv().contains("Spare"));
+    dlg.setUniverse(-1);
+    QCOMPARE(dlg.tree()->topLevelItemCount(), 4);
+    // Print… beside Save PDF…, opening the system print dialog.
+    QPushButton *print = dlg.findChild<QPushButton *>("patchListPrint");
+    QVERIFY(print != nullptr);
+    QCOMPARE(print->text(), QString("Print…"));
+}
+
 void PatchListDialog_Test::theColumnsHaveNoChannelCount()
 {
     PatchListDialog dlg(m_doc);
@@ -645,7 +664,7 @@ void PatchListDialog_Test::theLabelsKnowTheShowUsesTwoUniverses()
         ld->reject();
     });
     dlg.slotPrintSelectedLabels();
-    QCOMPARE(preview, QString("Spot 3 D2.101"));
+    QCOMPARE(preview, QString("Spot 3 U2.101"));
 }
 
 /* What is missing stands out: the Patch cell of a fixture with no address

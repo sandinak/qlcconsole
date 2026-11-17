@@ -45,6 +45,7 @@
 
 // Its public face only: included before the define below.
 #include "controllertestdialog.h"
+#include "patchlistdialog.h"
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
@@ -56,6 +57,11 @@
 #include "connectionstree.h"
 #include "universeoutputview.h"
 #include "fixture.h"
+#include "testchannels.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "qlcfixturedefcache.h"
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
@@ -2760,6 +2766,245 @@ void ConnectionsTree_Test::theUniverseGridSaysTheAddressUnderThePointer()
     QVERIFY2(header->text().startsWith("122 · Front Wash"), qPrintable(header->text()));
 }
 
+/* A fixture with one channel of each kind the map colours: Red, Dimmer,
+   Pan, Tilt, in a mode called "Basic". */
+static Fixture *kindsFixture(Doc *doc, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Map");
+    def->setModel("Kinds");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Basic");
+    const struct { const char *name; QLCChannel::Preset preset; } ch[] = {
+        { "Red", QLCChannel::IntensityRed }, { "Dimmer", QLCChannel::IntensityDimmer },
+        { "Pan", QLCChannel::PositionPan }, { "Tilt", QLCChannel::PositionTilt } };
+    for (int i = 0; i < 4; i++)
+    {
+        QLCChannel *c = new QLCChannel();
+        c->setName(ch[i].name);
+        c->setPreset(ch[i].preset);
+        def->addChannel(c);
+        mode->insertChannel(c, i);
+    }
+    def->addMode(mode);
+    if (!doc->fixtureDefCache()->addFixtureDef(def))
+    {
+        delete def;
+        return nullptr;
+    }
+    Fixture *f = new Fixture(doc);
+    f->setName("Kinds 1");
+    f->setFixtureDefinition(def, mode);
+    f->setUniverse(0);
+    f->setAddress(address);
+    if (!doc->addFixture(f))
+    {
+        delete f;
+        return nullptr;
+    }
+    return f;
+}
+
+/* The map says what each block is: red dull at 0 and bright at 255, a grey
+   dimmer, a pan arrow moving left to right and a tilt arrow up, nothing in
+   an unpatched block, and a legend; read from pixels, as the operator sees
+   them. */
+void ConnectionsTree_Test::theMapColoursChannelsByKindAndValue()
+{
+    QVERIFY(kindsFixture(m_doc, 0) != nullptr);          // channels 1-4
+    UniverseOutputView view(m_doc);
+    view.setUniverse(0);
+    view.fitWidth(UniverseOutputView::widthFor(16));
+    view.resize(view.sizeHint());
+    auto shot = [&](uchar red, uchar dim, uchar pan, uchar tilt) {
+        QByteArray data(512, char(0));
+        data[0] = char(red); data[1] = char(dim); data[2] = char(pan); data[3] = char(tilt);
+        view.slotUniverseWritten(0, data);
+        return view.grab().toImage();
+    };
+    // Mid-right of a cell: clear of the channel number and the value.
+    auto probe = [&](const QImage &img, int ch) {
+        const QRect c = view.cellRect(ch);
+        return QColor(img.pixel(c.right() - 3, c.top() + c.height() / 2));
+    };
+    const QImage low = shot(0, 0, 0, 0);
+    const QImage high = shot(255, 255, 255, 255);
+
+    // Red: dull but red at 0, bright at 255.
+    const QColor r0 = probe(low, 0), r255 = probe(high, 0);
+    QVERIFY2(r255.lightness() > r0.lightness() + 40, qPrintable(r0.name() + " -> " + r255.name()));
+    QVERIFY2(r255.red() > 200 && r255.green() < 80 && r255.blue() < 80, qPrintable(r255.name()));
+    QVERIFY(r0.red() > r0.green());
+    // Dimmer: a grey ramp.
+    const QColor d0 = probe(low, 1), d255 = probe(high, 1);
+    QVERIFY(d0.red() == d0.green() && d0.green() == d0.blue());
+    QVERIFY(d255.red() == d255.green() && d255.green() == d255.blue());
+    QVERIFY(d255.red() > d0.red() + 100);
+    // Unpatched: plain.
+    QCOMPARE(probe(low, 100).name(), QString("#22242a"));
+    QCOMPARE(probe(high, 100).name(), QString("#22242a"));
+
+    // The arrows: where the arrow-coloured pixels are, in the pan and tilt cells.
+    auto centroid = [&](const QImage &img, int ch) {
+        const QRect c = view.cellRect(ch);
+        double sx = 0, sy = 0;
+        int n = 0;
+        for (int y = c.top(); y <= c.bottom(); ++y)
+            for (int x = c.left(); x <= c.right(); ++x)
+            {
+                const QColor px(img.pixel(x, y));
+                if (qAbs(px.red() - 120) < 30 && qAbs(px.green() - 200) < 30 && px.blue() > 220)
+                {
+                    sx += x; sy += y; ++n;
+                }
+            }
+        return n > 0 ? QPointF(sx / n - c.left(), sy / n - c.top()) : QPointF(-1, -1);
+    };
+    const QImage panLow = shot(0, 0, 0, 128), panHigh = shot(0, 0, 255, 128);
+    QVERIFY(centroid(panLow, 2).x() >= 0 && centroid(panHigh, 2).x() >= 0);
+    QVERIFY2(centroid(panHigh, 2).x() > centroid(panLow, 2).x() + 8,
+             qPrintable(QString("%1 -> %2").arg(centroid(panLow, 2).x()).arg(centroid(panHigh, 2).x())));
+    // Tilt: higher on the block for a higher value (the tilt cell is mostly clear of the number).
+    const QImage tiltLow = shot(0, 0, 128, 0), tiltHigh = shot(0, 0, 128, 255);
+    QVERIFY(centroid(tiltLow, 3).y() >= 0 && centroid(tiltHigh, 3).y() >= 0);
+    QVERIFY2(centroid(tiltHigh, 3).y() < centroid(tiltLow, 3).y() - 8,
+             qPrintable(QString("%1 -> %2").arg(centroid(tiltLow, 3).y()).arg(centroid(tiltHigh, 3).y())));
+
+
+    // The legend under the grid: a bright red swatch below the last row.
+    bool legend = false;
+    for (int y = high.height() - 70; y < high.height() && !legend; ++y)
+        for (int x = 0; x < high.width(); ++x)
+            if (QColor(high.pixel(x, y)) == UniverseOutputView::fillFor(UniverseOutputView::Red, 255))
+            {
+                legend = true;
+                break;
+            }
+    QVERIFY(legend);
+}
+
+/* Test on the map: a click or drag sets a channel, the banner and button say
+   so, Operate refuses it with a reason, leaving the tab lets go. */
+void ConnectionsTree_Test::testModeSetsChannelsFromTheMap()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, stub->name(), "", 0, false, 0));
+    ConnectionsTree tree(m_doc);
+    tree.resize(1400, 800);
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    UniverseOutputView *map = tree.m_output;
+    map->setUniverse(0);
+    map->fitWidth(UniverseOutputView::widthFor(16));
+    map->resize(map->sizeHint());
+    TestChannels *t = m_doc->testChannels();
+    QVERIFY(tree.testButton() != nullptr);
+    QCOMPARE(tree.testButton()->text(), QString("Test"));
+    QVERIFY(!tree.testBanner()->isVisible());
+
+    // Off: a click does nothing.
+    QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(20).center());
+    QCOMPARE(t->heldCount(), 0);
+
+    tree.testButton()->click();
+    QVERIFY(t->isOn());
+    QVERIFY(tree.testBanner()->isVisible());
+    QVERIFY2(tree.testBanner()->text().startsWith("TEST MODE:"), qPrintable(tree.testBanner()->text()));
+    QVERIFY(!tree.testBanner()->text().contains("0 "));
+    // A click at the top of a block: 255; dragged to its bottom: 0.
+    const QRect cell = map->cellRect(20);
+    QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.top()));
+    QCOMPARE(t->heldCount(), 0);              // a click waits out a possible double-click
+    QTRY_COMPARE(int(t->value(0, 20)), 255);
+    QCOMPARE(tree.testBanner()->text(),
+             QString("TEST MODE: 1 channel held over the show. Click Test to let them go."));
+    QTest::mousePress(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.top()));
+    QMouseEvent move(QEvent::MouseMove, QPointF(cell.center().x(), cell.bottom()),
+                     map->mapToGlobal(QPointF(cell.center().x(), cell.bottom())),
+                     Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(map, &move);
+    QTest::mouseRelease(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.bottom()));
+    QCOMPARE(int(t->value(0, 20)), 0);
+    QVERIFY(t->holds(0, 20));
+    // Right-click lets that channel go.
+    QTest::mouseClick(map, Qt::RightButton, Qt::NoModifier, cell.center());
+    QCOMPARE(t->heldCount(), 0);
+
+    // A double-click types a value and never sends the first click's value.
+    QTimer::singleShot(0, [&]() {
+        QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+        if (d != nullptr)
+        {
+            QCOMPARE(t->heldCount(), 0);      // nothing was sent before the dialog opened
+            d->setIntValue(77);
+            d->accept();
+        }
+    });
+    QTest::mousePress(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(40).center());
+    QTest::mouseRelease(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(40).center());
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(map->cellRect(40).center()),
+                    map->mapToGlobal(QPointF(map->cellRect(40).center())),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(map, &dbl);
+    QCOMPARE(int(t->value(0, 40)), 77);
+    QTest::qWait(QApplication::doubleClickInterval() + 100);
+    QCOMPARE(int(t->value(0, 40)), 77);       // the pending click did not land after it
+    t->release(0, 40);
+
+    // Leaving the tab lets go of everything.
+    QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(30).center());
+    QTRY_COMPARE(t->heldCount(), 1);
+    tree.hide();
+    QVERIFY(!t->isOn());
+    QVERIFY(!tree.testButton()->isChecked());
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    QVERIFY(!tree.testBanner()->isVisible());
+
+    // The patch moving under it ends it, and the banner says so.
+    tree.testButton()->click();
+    QVERIFY(t->isOn());
+    Fixture *late = new Fixture(m_doc);
+    late->setName("Late");
+    late->setChannels(1);
+    late->setAddress(200);
+    QVERIFY(m_doc->addFixture(late));
+    QVERIFY(!t->isOn());
+    QVERIFY(!tree.testButton()->isChecked());
+    QVERIFY(tree.testBanner()->isVisible());
+    QVERIFY2(tree.testBanner()->text().contains("patch"), qPrintable(tree.testBanner()->text()));
+
+    // Operate refuses it, and says why.
+    m_doc->setMode(Doc::Operate);
+    tree.testButton()->click();
+    QVERIFY(!t->isOn());
+    QVERIFY(tree.testBanner()->isVisible());
+    QVERIFY2(tree.testBanner()->text().contains("Operate"), qPrintable(tree.testBanner()->text()));
+    QVERIFY(!tree.testButton()->isChecked());
+    m_doc->setMode(Doc::Design);
+}
+
+/* Hover: the fixture, its mode and the channel, as the Simple Desk says it. */
+void ConnectionsTree_Test::theMapHoverNamesFixtureModeAndChannel()
+{
+    QVERIFY(kindsFixture(m_doc, 10) != nullptr);
+    UniverseOutputView view(m_doc);
+    view.setUniverse(0);
+    view.fitWidth(UniverseOutputView::widthFor(16));
+    view.resize(view.sizeHint());
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    const QString d = view.describe(12);                  // Pan
+    QVERIFY2(d.contains("Kinds 1") && d.contains("mode Basic") && d.contains("Pan"), qPrintable(d));
+    const QPoint at = view.cellRect(12).center();
+    QHelpEvent help(QEvent::ToolTip, at, view.mapToGlobal(at));
+    QApplication::sendEvent(&view, &help);
+    QTRY_VERIFY(QToolTip::text().isEmpty() == false);
+    QVERIFY2(QToolTip::text().contains("Kinds 1") && QToolTip::text().contains("mode Basic")
+             && QToolTip::text().contains("Pan"), qPrintable(QToolTip::text()));
+    QToolTip::hideText();
+}
+
 /* "why does U07 read FART2(SR)": a target's name is kept by its address,
    and outlived the box it was given to. Forgetting a target forgets its
    name unless something still goes by that address; declaring an address
@@ -2809,6 +3054,39 @@ void ConnectionsTree_Test::aTargetsNameDoesNotOutliveIt()
     QCOMPARE(openedOn.count(), 2);
     QCOMPARE(openedOn.at(1), QString("FART2(SR) DMX"));
     QCOMPARE(iom->targetAlias("172.18.2.61"), QString());
+}
+
+void ConnectionsTree_Test::aUniverseOpensItsOwnPatchList()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    const struct { const char *name; quint32 uni; } fx[] = { { "On One", 0 }, { "On Two A", 1 }, { "On Two B", 1 } };
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(fx[i].name);
+        f->setUniverse(fx[i].uni);
+        f->setAddress(quint32(i) * 10);
+        f->setChannels(3);
+        QVERIFY(m_doc->addFixture(f));
+    }
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    const QStringList menu = contextMenuOn(tree, 1, "Patch List for U2");
+    QVERIFY2(menu.contains("Patch List for U2…"), qPrintable(menu.join(" | ")));
+    QApplication::processEvents();
+    PatchListDialog *dlg = tree.findChild<PatchListDialog *>();
+    QVERIFY(dlg != nullptr);
+    QVERIFY(dlg->isVisible());
+    QStringList names;
+    foreach (const PatchList::Row &r, dlg->shownRows())
+        names << r.name;
+    names.sort();
+    QCOMPARE(names, QStringList({ "On Two A", "On Two B" }));
+    QCOMPARE(dlg->windowTitle(), QString("Patch List for U2"));
+    delete dlg;
 }
 
 void ConnectionsTree_Test::aUniversesMenuHasNoEditConnection()

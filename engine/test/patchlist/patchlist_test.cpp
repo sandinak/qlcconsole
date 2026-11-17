@@ -171,7 +171,21 @@ void PatchList_Test::theCsvIsSpreadsheetSafe()
     QVERIFY(lines.at(0).startsWith(QStringLiteral("Fixture,ID,Manufacturer")));
     QVERIFY2(lines.at(1).startsWith(QStringLiteral("\"Par, \"\"big\"\" one\",")), qPrintable(lines.at(1)));
     // Universe 1, address 1, last channel 4.
-    QVERIFY2(lines.at(1).contains(QStringLiteral(",4,1,,1,4,DMX,")), qPrintable(lines.at(1)));
+    QVERIFY2(lines.at(1).contains(QStringLiteral(",4,1,,1,4,U1.001–004,DMX,")), qPrintable(lines.at(1)));
+}
+
+void PatchList_Test::addressesReadUniverseDotAddress()
+{
+    dimmer(m_doc, QStringLiteral("Par A"), 2, 0);
+    dimmer(m_doc, QStringLiteral("Par B"), 0, 10);
+    const PatchList list = PatchList::build(m_doc);
+    // The CSV and the PDF's table say "U3.001", padded to three digits.
+    const QString csv = list.toCsv(PatchList::ByNone);
+    QVERIFY2(csv.contains(QStringLiteral("U3.001–004")), qPrintable(csv));
+    QVERIFY2(csv.contains(QStringLiteral("U1.011–014")), qPrintable(csv));
+    const QString html = list.toHtml(QStringLiteral("T"), PatchList::ByLocation);
+    QVERIFY2(html.contains(QStringLiteral("U3.001–004")), qPrintable(html));
+    QVERIFY(!html.contains(QStringLiteral("D3.1")));
 }
 
 void PatchList_Test::theCsvFollowsThePlotUnits()
