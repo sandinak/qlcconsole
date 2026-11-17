@@ -1251,7 +1251,13 @@ void ContextMenus_Test::aLayerHasOneMenuEverywhere()
         canon = ContextMenu::kindBlock(&menu);
         QCOMPARE(canon.first(), QString("ctxOpenLayer"));
         QCOMPARE(canon.last(), QString("stDeleteLayer"));
-        QVERIFY(ContextMenu::contextItems(&menu).contains("+ Cue"));      // the tree's own, on top
+        // The tree's own, on top, in the New submenu (UX-80).
+        QMenu *made = menu.findChild<QMenu *>("stNewMenu");
+        QVERIFY(made != nullptr);
+        QStringList madeTexts;
+        for (QAction *a : made->actions())
+            madeTexts << a->text();
+        QVERIFY2(madeTexts.contains("+ Cue"), qPrintable(madeTexts.join(" | ")));
     }
 
     // The same layer's row in the Workbench (docked in the Show Tree).

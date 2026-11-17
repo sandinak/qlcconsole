@@ -7375,7 +7375,7 @@ void Monitor_Test::theLayersListOffersEverythingThePlotDoes()
         {
             QMenu m;
             panel.buildContextMenu(&m, rowFor(QStringLiteral("fixture"), spot->id()));
-            QAction *a = menuAction(&m, QStringLiteral("Mount on > Tower > Tower > Top of Tower"));
+            QAction *a = menuAction(&m, QStringLiteral("Plot Setup > Mount on > Tower > Tower > Top of Tower"));
             QVERIFY2(a != nullptr, "the fixture's row cannot mount it on a tower");
             a->trigger();
             QCOMPARE(props->fixtureRigProps(spot->id()).towerId, tower->id());
@@ -14339,7 +14339,10 @@ void Monitor_Test::aLightFootprintSaysWhoseItIs()
         QMenu fixMenu;
         view.buildItemMenu(&fixMenu, QStringLiteral("fixture"), spot->id(), MonitorGraphicsView::MenuPlace());
         QAction *act = nullptr;
-        foreach (QAction *a, fixMenu.actions())
+        // In the Plot Setup submenu (UX-80).
+        QMenu *setup = fixMenu.findChild<QMenu *>(QStringLiteral("plotSetupMenu"));
+        QVERIFY(setup != nullptr);
+        foreach (QAction *a, setup->actions())
             if (a->text().contains(QStringLiteral("Light Footprint")))
                 act = a;
         QVERIFY2(act != nullptr, "a fixture offers no way to show where its light lands");
