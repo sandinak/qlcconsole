@@ -581,9 +581,12 @@ void SystemTuning_Test::aPadsBatteryIsNotTheComputers()
         }
         return true;
     };
-    // A Pi on mains, a DualSense paired at 15% and running down.
+    // A Pi on mains, a DualSense paired at 15% and running down. (Linux
+    // names it ps-controller-battery-<address>, colons and all; the colons
+    // are left out here because Windows, which runs this test too, refuses
+    // them in a file name, and the probe never reads the name.)
     QVERIFY(supply("AC", { { "type", "Mains" }, { "online", "1" } }));
-    QVERIFY(supply("ps-controller-battery-a0:b1:c2:d3:e4:f5",
+    QVERIFY(supply("ps-controller-battery-a0b1c2d3e4f5",
            { { "type", "Battery" }, { "scope", "Device" }, { "status", "Discharging" }, { "capacity", "15" } }));
     int percent = 0;
     QCOMPARE(SystemProbe::readPowerSupplies(root.path(), &percent), 0);
