@@ -5375,7 +5375,9 @@ void EffectInstance_Test::fireSpreadIntensityScalesTheFire()
             QXmlStreamReader r(&buf);
             r.readNextStartElement();
             old.second->clearEffectParamValues();
+            const QString path = old.second->scriptPath();
             QVERIFY(old.second->loadXML(r));
+            old.second->setScriptPath(path);     // saved by name; a show's load finds the file
             QCOMPARE(old.second->effectParamValues().value("fireIntensity"), 50.0);
             QVERIFY(!old.second->effectParamValues().contains("intensity"));
         }

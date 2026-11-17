@@ -2124,7 +2124,9 @@ void LookEditor_Test::fireSpreadShowsItsIntensity()
         QXmlStreamReader r2(&b2);
         r2.readNextStartElement();
         look->clearEffectParamValues();
+        const QString path = look->scriptPath();
         QVERIFY(look->loadXML(r2));
+        look->setScriptPath(path);              // saved by name; a show's load finds the file
     }
     LookEditor oldLook(&doc);
     oldLook.setPalette(look->id());

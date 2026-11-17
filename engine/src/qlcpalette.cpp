@@ -1899,7 +1899,7 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
         /* Fire Spread's Intensity was an unnamed 0-1 "intensity" until
            board Q259: a look saved with it becomes its Intensity (0.5 ->
            50 %), shown and played as one setting. */
-        if (m_scriptPath.endsWith(QLatin1String("fire-spread.js"))
+        if (QFileInfo(m_scriptPath).completeBaseName() == QLatin1String("fire-spread")
             && m_effectParamValues.contains(QStringLiteral("intensity")))
         {
             const double old = m_effectParamValues.take(QStringLiteral("intensity"));
