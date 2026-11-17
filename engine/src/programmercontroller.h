@@ -1001,6 +1001,13 @@ private:
     void sayNoController();
     bool m_padPresent = false;
     quint32 m_ownerUniverse = 0xFFFFFFFF;
+    /** The owner's identity (ControllerJobs) when it took the tools: the
+     *  line it was on gone, its twin line still here takes them on
+     *  (padLost()) -- the gone line can no longer say whose it was. */
+    QString m_ownerIdentity;
+    /** Another line, still patched, of the pad @p identity names (one
+     *  pad listed twice); UINT_MAX: none. */
+    quint32 twinLineOf(const QString &identity, quint32 except) const;
     /** Nobody is using the controller tools (no tool running, no venue
      *  being named; a focus cue that only waits holds no owner). */
     void releaseOwnerIfIdle();

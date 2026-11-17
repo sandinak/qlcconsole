@@ -1988,7 +1988,9 @@ void PadRun_Test::menuStartsAndStopsTheWalk()
     m_doc->setMode(Doc::Operate);
     QString why;
     QVERIFY(!run->startWalk(0xFFFFFFFF, &why));
-    QVERIFY(why.contains("GO first"));
+    // The whole way round: a pad's GO needs the arm, an armed pad does not walk.
+    QVERIFY2(why.contains("Play a cue first (GO on the laptop, or arm, GO and disarm here)"), qPrintable(why));
+    QVERIFY(!why.contains(QLatin1Char('{')));
     m_doc->setMode(Doc::Design);
 }
 

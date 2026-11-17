@@ -169,12 +169,14 @@ int PadTraces_Test::inputsNamed(const QString &name) const
 
 void PadTraces_Test::cloneFlipToXbox()
 {
-    /* The bench as it happened: Create + Options held ~3 s (View + Menu 1 s
-       switches the role, which drops the arm: no button arms or disarms
-       but the chord, rule 3, a role switch is one of the exceptions); the
-       pad leaves; three Xbox 360 arrivals at its port, two leaving again.
-       Disarmed, nothing arms it again, no stale device stays, a GO from
-       what came back moves no cue. */
+    /* The bench as it happened: Create + Options held ~3 s (View + Menu;
+       since board Q251 the hold switches nothing -- not the role, not the
+       arm -- but on the clone it is what flips it to its Xbox mode); the
+       pad leaves, which drops the arm (rule 3, the pad lost); three Xbox
+       360 arrivals at its port, two leaving again. Disarmed, nothing arms
+       it again, no stale device stays, and the Xbox pad that stays,
+       patched onto the pad's universe as the operator does, inherits no
+       arm: its LT + A is "Not armed", no GO. */
     flip(true);
 }
 
@@ -215,12 +217,33 @@ void PadTraces_Test::flip(bool hold)
         QCOMPARE(run->notice(), QString("Disarmed: the controller went away."));
     QVERIFY(m_hid->inputs().contains(kDualSense) == false);
 
-    // The clone comes back as an Xbox pad, three times over.
+    /* The clone comes back as an Xbox pad, three times over. The one that
+       stays is another device (the DualSense's patch waits for it, kept
+       offline): the operator patches it onto the pad's universe in
+       Inputs/Outputs before pressing anything. */
+    int arrivals = 0;
+    QVERIFY(m_player->playUntil([&arrivals](const PadTracePlayer::Event &e) {
+        return e.ev == QLatin1String("arrived") && e.o.value("name").toString() == kXbox && ++arrivals == 3; }));
+    QTRY_COMPARE_WITH_TIMEOUT(inputsNamed(kXbox), 1, 2000);
+    QCOMPARE(patchPads(kXbox), 1);
+    QVERIFY(m_doc->inputOutputMap()->inputPatch(1)->isPatched());
+    // Its LT + A (four changes), heard on the pad's universe after Pad Run.
+    int heard = 0;
+    const QMetaObject::Connection listen = connect(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged,
+                                                   this, [&heard](quint32 u) { heard += u == 1 ? 1 : 0; });
+    auto unlisten = qScopeGuard([&]() { disconnect(listen); });
     m_player->playAll();
     VERIFY_CLEAN_PLAY();
+    QTRY_VERIFY2_WITH_TIMEOUT(heard >= 4, qPrintable(QString("the Xbox pad's LT + A: %1 of its 4 changes reached "
+                                                             "its universe").arg(heard)), 2000);
     QTest::qWait(100);
+    QVERIFY2(commandCount(int(ShowControl::Go)) == 1,
+             qPrintable(QString("the GO from what came back moved a cue (%1 GOs in all): it inherited the arm")
+                            .arg(commandCount(int(ShowControl::Go)))));
     QVERIFY2(run->isArmed() == false, "the arm came back by itself");
-    QCOMPARE(commandCount(int(ShowControl::Go)), 1);    // the GO from the Xbox pad moved nothing
+    // Read as a GO press, and refused: not armed.
+    QVERIFY2(run->notice().startsWith(QLatin1String("Not armed")),
+             qPrintable(QString("the Xbox pad's LT + A was not read as a GO press: '%1'").arg(run->notice())));
     QCOMPARE(commandCount(int(ShowControl::AllOff)), 0);
     QCOMPARE(inputsNamed(kDualSense), 0);
     QCOMPARE(inputsNamed(kXbox), 1);                    // the two that left are not kept

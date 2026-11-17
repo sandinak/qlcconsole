@@ -2182,6 +2182,183 @@ void FollowSpotFeel_Test::q253ATwinPadDoesNotDoubleSteer()
     h.pc->slotControllerInputChanged(0, 2, 127, QString());
 }
 
+namespace
+{
+/* Pad A listed twice (universes 0 and 1, one address: q253Pads()'s twin)
+   and pad B on universe 2, with Focus only. */
+void twinAndAnother(IOPluginStub *stub, InputOutputMap *iom, ControllerJobs *jobs)
+{
+    q253Pads(stub, iom, true);
+    stub->m_lineNames << "Pad B (AA:BB:CC:00:00:02)";
+    iom->setInputPatch(2, stub->name(), QString(), 2);
+    jobs->setJobs(jobs->identityOfUniverse(2), ControllerJobs::Jobs(ControllerJobs::Focus));
+}
+}
+
+void FollowSpotFeel_Test::aToolKeepsItsTwinPadWhenOneLineGoes()
+{
+    /* Twin follow-ups (0.4.13): padLost() cleared the tools' owner when
+       the exact owning line went, though the pad's twin line was still
+       here. With two pads, isToolsPad() was then false for that pad until
+       its next press -- and with the Follow spot job too, its stick
+       steered the follow spot instead of the tool it was working. The
+       twin line takes the tools on. */
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    twinAndAnother(stub, iom, jobs);
+    auto restore = qScopeGuard([&]() {
+        h.pc->focusSession()->stop();
+        jobs->resetAll();
+        q253Unpads(stub, iom);
+        iom->setInputPatch(2, QString(), QString(), QLCIOPlugin::invalidLine());
+        h.pc->refreshStickBinding();
+    });
+    PadRun *run = h.pc->padRun();
+    QVERIFY(run->sameController(0, 1));
+    QVERIFY(!run->sameController(0, 2));
+    QCOMPARE(run->padCount(), 2);
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    QCOMPARE(h.pc->m_panUniverse, quint32(0));
+    const Q253Show show = q253Show(m_doc, h, false, false);
+    h.use(h.rig.targetScene);
+
+    // A Quick Focus on another light (not the spot's), taken by A on line 0.
+    FocusSession::Options o;
+    o.fixtures = { show.other->id() };
+    o.first.kind = FocusSession::Reference::Target;
+    o.first.id = show.elsewhere->id();
+    QString why;
+    QVERIFY2(h.pc->focusSession()->start(o, &why), qPrintable(why));
+    h.pc->claimController(0);
+    QVERIFY(h.pc->isToolsPad(1));
+
+    // Line 0 goes (one of the pad's two listings); line 1 is the same pad.
+    QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    h.pc->refreshStickBinding();
+    QCOMPARE(h.pc->m_panUniverse, quint32(1));
+    QVERIFY2(h.pc->controllerOwner() == 1,
+             qPrintable(QString("the owning line went and the tools' owner is %1, not the pad's twin line")
+                            .arg(int(h.pc->controllerOwner()))));
+    QVERIFY(h.pc->isToolsPad(1));
+    QVERIFY(!h.pc->isToolsPad(2));
+    // The Focus panels' line names the pad.
+    QCOMPARE(h.pc->controllerOwnerName(), QString("Pad A (AA:BB:CC:00:00:01)"));
+
+    // Its stick is the tool's: the head being focused moves, the spot holds.
+    QSignalSpy nudged(h.pc->focusSession(), &FocusSession::offsetChanged);
+    h.pc->slotControllerInputChanged(1, 0, 255, QString());
+    h.pc->slotControllerInputChanged(1, 2, 255, QString());
+    const double d = driftAfter(h);
+    QVERIFY2(d < 0.005, qPrintable(QString("the tool's pad, its owning line gone, steered the follow spot %1 m "
+                                           "with its twin line").arg(d)));
+    QVERIFY2(!nudged.isEmpty(), "the tool's pad, its owning line gone, moved nothing of the tool");
+    h.pc->slotControllerInputChanged(1, 0, 127, QString());
+    h.pc->slotControllerInputChanged(1, 2, 127, QString());
+    // B's press is still another pad's: told so, the owner kept.
+    QStringList said;
+    const QMetaObject::Connection listen = connect(h.pc, &ProgrammerController::operatorAnnounce, this,
+                                                   [&said](const QString &text) { said << text; });
+    q253Press(h, 2, kQA);
+    disconnect(listen);
+    QCOMPARE(q253Said(said, "Another controller is in use."), 1);
+    QCOMPARE(h.pc->controllerOwner(), quint32(1));
+}
+
+void FollowSpotFeel_Test::aTwinPadsDpadIsOneFollowSpotStep_data()
+{
+    QTest::addColumn<bool>("tool");
+    QTest::newRow("no tool") << false;
+    QTest::newRow("a tool on another pad") << true;
+}
+
+void FollowSpotFeel_Test::aTwinPadsDpadIsOneFollowSpotStep()
+{
+    /* Twin follow-ups (0.4.13): followSpotTakes() came before the twin
+       filter (downOnTwinLine()), with a tool running on another pad and
+       with none: a pad listed twice sends each D-pad press on both lines,
+       and the follow spot's speed and size stepped twice a press. */
+    QFETCH(bool, tool);
+    const quint32 kUp = 20, kDown = 21, kLeft = 22, kRight = 23;
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    twinAndAnother(stub, iom, jobs);
+    QStringList said;
+    const QMetaObject::Connection listen = connect(h.pc, &ProgrammerController::operatorAnnounce, this,
+                                                   [&said](const QString &text) { said << text; });
+    auto restore = qScopeGuard([&]() {
+        disconnect(listen);
+        h.pc->focusSession()->stop();
+        jobs->resetAll();
+        q253Unpads(stub, iom);
+        iom->setInputPatch(2, QString(), QString(), QLCIOPlugin::invalidLine());
+        h.pc->refreshStickBinding();
+    });
+    QVERIFY(h.pc->padRun()->sameController(0, 1));
+    FollowSpotMover *m = h.pc->followSpotMover();
+    QVERIFY(m != nullptr);
+    m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    const Q253Show show = q253Show(m_doc, h, false, false);
+    h.use(h.rig.targetScene);
+    for (int i = 0; i < 5; ++i)
+        h.tick();
+    QVERIFY(h.pc->followSpotStatus().state != ProgrammerController::FollowSpotStatus::Off);
+    if (tool)
+    {
+        // Pad B works a Quick Focus on another light; A steers the spot.
+        FocusSession::Options o;
+        o.fixtures = { show.other->id() };
+        o.first.kind = FocusSession::Reference::Target;
+        o.first.id = show.elsewhere->id();
+        QString why;
+        QVERIFY2(h.pc->focusSession()->start(o, &why), qPrintable(why));
+        h.pc->claimController(2);
+        QVERIFY(!h.pc->isToolsPad(0));
+    }
+    auto input = [&](quint32 u, quint32 ch, uchar v) { h.pc->slotControllerInputChanged(u, ch, v, QString()); };
+    // One press as the pad sends it: on both lines.
+    auto both = [&](quint32 ch) {
+        input(0, ch, 255);
+        input(1, ch, 255);
+        input(0, ch, 0);
+        input(1, ch, 0);
+    };
+    QCOMPARE(m->multiplier(), 1.0);
+    both(kUp);
+    QVERIFY2(m->multiplier() == 1.5,
+             qPrintable(QString("one D-pad Up on the twin pad: speed x%1, not x1.5").arg(m->multiplier())));
+    both(kDown);
+    QCOMPARE(m->multiplier(), 1.0);
+    // Either line alone is still the pad's.
+    input(1, kUp, 255);
+    input(1, kUp, 0);
+    QCOMPARE(m->multiplier(), 1.5);
+    input(0, kDown, 255);
+    input(0, kDown, 0);
+    QCOMPARE(m->multiplier(), 1.0);
+
+    // Size: what one line's press says, the twin pad's press says once.
+    said.clear();
+    input(0, kRight, 255);
+    input(0, kRight, 0);
+    const int once = int(said.size());
+    QVERIFY2(once >= 1, "D-pad Right on one line said nothing (no control)");
+    said.clear();
+    both(kLeft);
+    QVERIFY2(said.size() == once, qPrintable(QString("one D-pad Left on the twin pad stepped the size %1 times: %2")
+                                                 .arg(said.size()).arg(said.join(" | "))));
+}
+
 void FollowSpotFeel_Test::report()
 {
     if (qEnvironmentVariableIsEmpty("QLC_FSPOT_REPORT"))

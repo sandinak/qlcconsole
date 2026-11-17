@@ -399,6 +399,17 @@ void PadRunRules_Test::tick()
     QCoreApplication::processEvents();
 }
 
+void PadRunRules_Test::stopAllByHand()
+{
+    /* stopAllFunctions() waits for the timer thread to stop what runs:
+       with the timer ticked by hand there is none, so the ticks are ours. */
+    MasterTimer *mt = m_doc->masterTimer();
+    mt->m_stopAllFunctions = true;
+    for (int i = 0; i < 5; ++i)
+        tick();
+    mt->m_stopAllFunctions = false;
+}
+
 int PadRunRules_Test::doubleBuzzes(const QSignalSpy &spy)
 {
     int n = 0;
@@ -1211,10 +1222,14 @@ void PadRunRules_Test::aBouncingButton()
 void PadRunRules_Test::theDuplicateDevice()
 {
     /* The same pad seen twice (macOS can list one controller as two HID
-       devices) and patched to two universes: every press arrives on both. */
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+       devices: one address) and patched to two universes, one identity:
+       every press arrives on both lines, and is one press of one pad --
+       one GO a LT + A, nobody told "another controller runs cues", one
+       ALL OFF a squeeze of the four. */
+    twinLines();
     PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(run->sameController(0, 1));
+    QCOMPARE(run->padCount(), 1);
     run->setEnabled(true);
     run->setArmChordMs(15);
     auto both = [&](quint32 ch, uchar v) {
@@ -1226,25 +1241,35 @@ void PadRunRules_Test::theDuplicateDevice()
     QTRY_VERIFY(run->isArmed());
     both(kRB, 0);
     both(kLB, 0);
-    both(kLT, 255);
-    both(kA, 255);
-    both(kA, 0);
-    both(kLT, 0);
-    QCOMPARE(goes(), 1);                     // one GO, not two
-    QEXPECT_FAIL("", "the twin's press is refused aloud on every GO (reported, not fixed)", Continue);
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    m_said.clear();
+    for (int go = 1; go <= 2; ++go)
+    {
+        both(kLT, 255);
+        both(kA, 255);
+        both(kA, 0);
+        both(kLT, 0);
+        QVERIFY2(goes() == go, qPrintable(QString("LT + A number %1 on the pad listed twice: %2 GOs in all")
+                                              .arg(go).arg(goes())));
+    }
     QCOMPARE(saidCount("is running cues"), 0);
-    // The stop on both: how many ALL OFFs.
-    both(kLB, 255);
-    both(kRB, 255);
-    both(kLT, 255);
-    both(kRT, 255);
-    qInfo() << "the duplicated pad's emergency stop sent" << stops() << "ALL OFF(s)";
-    QVERIFY(stops() >= 1);
-    QVERIFY(!run->isArmed());
-    both(kRT, 0);
-    both(kLT, 0);
-    both(kRB, 0);
-    both(kLB, 0);
+    // The stop on both: one ALL OFF a squeeze.
+    for (int squeeze = 1; squeeze <= 2; ++squeeze)
+    {
+        both(kLB, 255);
+        both(kRB, 255);
+        both(kLT, 255);
+        both(kRT, 255);
+        QVERIFY2(stops() == squeeze, qPrintable(QString("squeeze %1 of the four on the pad listed twice: %2 "
+                                                        "ALL OFFs in all").arg(squeeze).arg(stops())));
+        QVERIFY(!run->isArmed());
+        both(kRT, 0);
+        both(kLT, 0);
+        both(kRB, 0);
+        both(kLB, 0);
+        QCOMPARE(stops(), squeeze);
+    }
+    QCOMPARE(goes(), 2);
 }
 
 void PadRunRules_Test::aPadOnTwoUniversesIsOnePad_data()
@@ -1266,8 +1291,7 @@ void PadRunRules_Test::aPadOnTwoUniversesIsOnePad()
        lines; each line once passed the arm check with its own held LT, so
        one LT + A sent a GO a line: a cue skipped with the double-GO guard
        off, "Second GO held" and a long buzz on every GO with it on, and
-       one RT started two hits sharing a place. theDuplicateDevice does
-       not show it: its two lines are two name-only identities. */
+       one RT started two hits sharing a place. */
     QFETCH(QString, by);
     QFETCH(int, order);
     makeShow();
@@ -1753,6 +1777,65 @@ void PadRunRules_Test::twinPadsToldApartAreTwoPads()
     QVERIFY(run->isArmed());
 }
 
+void PadRunRules_Test::aTwinPadsTriggerSentTwoWaysIsOneWalkStep()
+{
+    /* Twin follow-ups (0.4.13): the walk read both triggers once for the
+       whole pad. A pad listed twice whose lines report a trigger two ways
+       -- one line digital (0 / 255), the other analog, its ramp behind --
+       went through that one hysteresis interleaved: the analog line's low
+       sample let go of the press the digital line made, and its ramp up
+       pressed again. One pull, two cue steps. Each line is read apart now,
+       the pad's press either line's, as the Run map's Line. */
+    makeShow();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 cue3 = st->addCue(m_list, 1, "Finale");
+    {
+        ShowTree::Target t;
+        t.fixtures = m_spots;
+        ShowTree::Look l;
+        l.key = ShowTree::KeyDimmer;
+        l.palettes = { m_doc->palettes().first()->id() };
+        QVERIFY(st->setLayerLook(cue3, st->addLayer(cue3, t, "Spots"), l));
+    }
+    twinLines();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    axis(kMenu, 255, 0);
+    axis(kMenu, 255, 1);
+    axis(kMenu, 0, 0);
+    axis(kMenu, 0, 1);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    QCOMPARE(pc->refineSession()->cueId(), m_cue1);
+    const QList<quint32> want = { m_cue2, cue3 };
+    for (int pull = 0; pull < 2; ++pull)
+    {
+        // One pull: line 0 digital, line 1's analog ramp behind it.
+        axis(kRT, 255, 0);
+        for (uchar v : { uchar(30), uchar(90), uchar(140), uchar(200), uchar(255) })
+            axis(kRT, v, 1);
+        QVERIFY2(pc->refineSession()->cueId() == want.at(pull),
+                 qPrintable(QString("pull %1 of RT on the twin pad stepped the walk %2")
+                                .arg(pull + 1)
+                                .arg(pc->refineSession()->cueId() == cue3 && pull == 0 ? "twice" : "wrong")));
+        // Let go: line 0 at once, line 1's ramp down behind it.
+        axis(kRT, 0, 0);
+        for (uchar v : { uchar(200), uchar(120), uchar(60), uchar(0) })
+            axis(kRT, v, 1);
+        QCOMPARE(pc->refineSession()->cueId(), want.at(pull));
+    }
+    // Back with LT the same way: one step.
+    axis(kLT, 255, 1);
+    for (uchar v : { uchar(30), uchar(200), uchar(255) })
+        axis(kLT, v, 0);
+    QCOMPARE(pc->refineSession()->cueId(), m_cue2);
+    axis(kLT, 0, 1);
+    axis(kLT, 0, 0);
+    if (run->isWalking())
+        run->stopWalk();
+}
+
 /*****************************************************************************
  * Rules 2 and 6: one state, the light
  *****************************************************************************/
@@ -1786,7 +1869,9 @@ void PadRunRules_Test::theLightAfterAToolOrWalkEndsStopped()
 void PadRunRules_Test::aFadingCueShowsPlayingForItsFade()
 {
     /* Rule 6: a cue with a 3 s fade shows playing (the blink) for its fade
-       and stops after. The real GO path and the real master timer. */
+       and stops after. The real GO path; the master timer ticked by hand
+       (20 ms a tick), so the fade's clock is the test's, never the wall's,
+       and the blink's look (lightTick()) read after each tick. */
     makeShow();
     ShowTreeController *st = m_doc->showTree();
     ShowTree::Cue c = *st->cue(m_cue1);
@@ -1798,41 +1883,36 @@ void PadRunRules_Test::aFadingCueShowsPlayingForItsFade()
         return sc->execute(r);      // the main thread's; OSC's own thread runs execute() itself
     });
     m_doc->setMode(Doc::Operate);
+    auto done = qScopeGuard([this]() {
+        stopAllByHand();
+        m_doc->setMode(Doc::Design);
+    });
     PadRun *run = m_doc->programmer()->padRun();
     run->setEnabled(true);
     arm(true);
-    m_doc->masterTimer()->start();
-    auto stopTimer = qScopeGuard([this]() { m_doc->masterTimer()->stop(); });
     axis(kLT, 255);
-    QElapsedTimer t;
-    t.start();
     press(kA);
     axis(kLT, 0);
     QCOMPARE(goes(), 1);
-    QVERIFY(run->isPlaying());
+    QVERIFY(run->isPlaying());      // the GO's flash
+    // The flash over (its 0.4 s is the wall's): the fade alone from here.
+    run->m_flash->stop();
 
-    // Sampled through the fade (after the 0.4 s flash) and well after it.
-    QList<QPair<qint64, bool>> samples;
-    while (t.elapsed() < 5000)
-    {
-        QTest::qWait(20);
-        samples << qMakePair(t.elapsed(), run->isPlaying());
-    }
+    const int tickMs = int(MasterTimer::tick());
     qint64 lastPlaying = -1;
-    for (const auto &smp : samples)
-        if (smp.second)
-            lastPlaying = smp.first;
-    qInfo() << "a 3 s fade showed playing until" << lastPlaying << "ms";
-    for (const auto &smp : samples)
+    for (int ms = tickMs; ms <= 4600; ms += tickMs)
     {
-        if (smp.first >= 700 && smp.first <= 2700)
-            QVERIFY2(smp.second, qPrintable(QString("not playing %1 ms into a 3 s fade").arg(smp.first)));
-        if (smp.first >= 4300)
-            QVERIFY2(!smp.second, qPrintable(QString("still playing %1 ms into a 3 s fade").arg(smp.first)));
+        tick();
+        run->lightTick();
+        if (run->isPlaying())
+            lastPlaying = ms;
+        if (ms >= 100 && ms <= 2900)
+            QVERIFY2(run->isPlaying(), qPrintable(QString("not playing %1 ms into a 3 s fade").arg(ms)));
+        if (ms >= 3100)
+            QVERIFY2(!run->isPlaying(), qPrintable(QString("still playing %1 ms into a 3 s fade").arg(ms)));
     }
+    qInfo() << "a 3 s fade showed playing until" << lastPlaying << "ms";
     QCOMPARE(m_doc->programmer()->padLight(), PadRun::armedColour());
-    m_doc->masterTimer()->stopAllFunctions();
-    m_doc->setMode(Doc::Design);
 }
 
 /*****************************************************************************
@@ -3914,6 +3994,100 @@ void PadRunRules_Test::q252ALaptopToolMidWalkDisarmsTheRunner()
     QCOMPARE(goes(), 0);
 }
 
+void PadRunRules_Test::aRefusedWalkBesideLetsGoAtOnce()
+{
+    /* Twin follow-ups (0.4.13): pad B's walk beside the runner claimed the
+       tools and, refused, let go of them only on the next event-loop turn.
+       Pad C's Menu in the same turn claimed nothing (B still owned them),
+       its walk started owned by B, C's own presses were "Another
+       controller is in use", and the deferred let-go never came (a tool
+       ran). It lets go at once, as the plain Menu walk does. */
+    makeShow();
+    m_stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)" << "Pad B (AA:BB:CC:00:00:02)"
+                                        << "Pad C (AA:BB:CC:00:00:03)";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u : { 0u, 1u, 2u })
+        QVERIFY(iom->setInputPatch(u, m_stub->name(), QString(), u));
+    ControllerJobs *jobs = m_doc->programmer()->controllerJobs();
+    jobs->setJobs(jobs->identityOfUniverse(0), ControllerJobs::Jobs(int(CJ::RunCues)));
+    jobs->setJobs(jobs->identityOfUniverse(1), ControllerJobs::Jobs(int(CJ::Focus)));
+    jobs->setJobs(jobs->identityOfUniverse(2), ControllerJobs::Jobs(int(CJ::Focus)));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    // A cue with no layer picked on the laptop: B's walk beside is refused.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 blackout = st->addCue(m_list, 0, "Blackout");
+    st->pickCue(blackout);
+    press(kMenu, 1);
+    QVERIFY(!run->isWalking());
+    // The same turn: a cue with lights picked, and C's Menu.
+    st->pickCue(m_cue1);
+    press(kMenu, 2);
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    QVERIFY2(pc->controllerOwner() == 2,
+             qPrintable(QString("C's walk is owned by universe %1").arg(int(pc->controllerOwner()))));
+    QCoreApplication::processEvents();
+    QCOMPARE(pc->controllerOwner(), quint32(2));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: Walk · Pad C (…00:03)"));
+    // C steps its walk: never "Another controller is in use".
+    const int inUse = saidCount("Another controller is in use.");
+    press(kRT, 2);
+    QCOMPARE(saidCount("Another controller is in use."), inUse);
+    QCOMPARE(pc->refineSession()->cueId(), m_cue2);
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    if (run->isWalking())
+        run->stopWalk();
+}
+
+void PadRunRules_Test::theWalkOnADeletedCueHeldOnStage()
+{
+    /* Twin follow-ups (0.4.13), with fix/0413-tree-running-cue: the cue on
+       stage deleted holds its light until the next GO
+       (Chaser::holdsRemovedStep()). No cue of the list runs, so the walk
+       in Operate said "Nothing running to walk: GO first" with the light
+       up. There is no cue left to walk (the held step's cue is gone): the
+       walk is refused, and says what is on stage and the way round: in
+       Operate a pad's GO needs the arm, and an armed pad does not walk. */
+    makeShow();
+    QVERIFY(m_doc->function(listChaser()) != nullptr);
+    m_doc->showControl()->setMainCueList(listChaser());
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    ShowTreeController *st = m_doc->showTree();
+    m_doc->setMode(Doc::Operate);
+    auto done = qScopeGuard([this]() {
+        stopAllByHand();
+        m_doc->setMode(Doc::Design);
+    });
+    run->setEnabled(true);
+    QVERIFY(runOnList(ShowControl::Go, ShowControl::RouteKey));
+    for (int i = 0; i < 3; ++i)
+        tick();
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(listChaser()));
+    QVERIFY(chaser != nullptr && chaser->isRunning());
+    QCOMPARE(st->runningCue(m_list), m_cue1);
+    QCOMPARE(run->cueInHand(), m_cue1);
+    // The cue on stage deleted: held until GO.
+    QVERIFY(st->removeCue(m_cue1));
+    for (int i = 0; i < 3; ++i)
+        tick();
+    chaser = qobject_cast<Chaser *>(m_doc->function(listChaser()));
+    QVERIFY(chaser != nullptr && chaser->isRunning());
+    QVERIFY(chaser->holdsRemovedStep());
+    run->showNotice(QString());
+    press(kMenu, 0);
+    QVERIFY(!run->isWalking());
+    QVERIFY2(!run->notice().contains("Nothing running"), qPrintable(run->notice()));
+    QCOMPARE(run->notice(), pc->padText(QString("The cue on stage was deleted: its light is held until the next GO. "
+                                                "Play a cue first (GO on the laptop, or arm, GO and disarm here), "
+                                                "then press {Menu}.")));
+    QVERIFY(!run->notice().contains(QLatin1Char('{')));
+    QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
+}
+
 /*****************************************************************************
  * Second review of 46cfdd708
  *****************************************************************************/
@@ -3970,6 +4144,66 @@ void PadRunRules_Test::review2TheWalkerUnpluggedMidWalk()
     QVERIFY2(!run->isWalking(), "the walker went away and its walk went on");
     QVERIFY(run->isArmed());
     QCOMPARE(run->notice(), QString("Walk ended: the controller walking it went away."));
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::aTwinWalkersLineDroppingKeepsTheWalkBeside()
+{
+    /* Review of the twin follow-ups: forgetPad() ended a walk beside the
+       runner when the walker's line went (sameController() is true for
+       the line itself), though the walker's pad, listed twice, was still
+       there on its twin line: "the controller walking it went away", and
+       what it had not kept was put back. The walk goes on on the twin
+       line, as the tools do (padLost()); the runner keeps its arm. */
+    makeShow();
+    m_stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)" << "Pad B (AA:BB:CC:00:00:02)"
+                                        << "Pad B (AA:BB:CC:00:00:02)";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u : { 0u, 1u, 2u })
+        QVERIFY(iom->setInputPatch(u, m_stub->name(), QString(), u));
+    ControllerJobs *jobs = m_doc->programmer()->controllerJobs();
+    jobs->setJobs(jobs->identityOfUniverse(0), ControllerJobs::Jobs(int(CJ::RunCues)));
+    jobs->setJobs(jobs->identityOfUniverse(1), ControllerJobs::Jobs(int(CJ::Focus)));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    QVERIFY(run->sameController(1, 2));
+    QCOMPARE(run->padCount(), 2);
+    run->setEnabled(true);
+    arm(true, 0);
+    // B's Menu, on both its lines: the walk beside the runner, B's.
+    for (uchar v : { uchar(255), uchar(0) })
+    {
+        axis(kMenu, v, 1);
+        axis(kMenu, v, 2);
+    }
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    QCOMPARE(pc->controllerOwner(), quint32(1));
+    // A change not kept on the walk.
+    RefineSession *r = pc->refineSession();
+    QVERIFY(r->nudgeLevel(-40.0f));
+    QVERIFY(r->hasPending());
+    const int pending = r->pendingCount();
+    run->showNotice(QString());
+    // B's walking line goes; its twin line stays.
+    drop(1);
+    QVERIFY2(run->isWalking(), qPrintable(QString("the walker's twin line is still here and the walk ended: '%1'")
+                                              .arg(run->notice())));
+    QVERIFY2(r->hasPending() && r->pendingCount() == pending, "what the walk had not kept was put back");
+    QVERIFY(!run->notice().startsWith("Walk ended"));
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    QCOMPARE(pc->controllerOwner(), quint32(2));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: Walk · Pad B (…00:02)"));
+    // The runner is still beside the walk: its GO plays nothing.
+    withLt(kA, 0);
+    QCOMPARE(goes(), 0);
+    QVERIFY(run->notice().contains("is walking the show"));
+    r->revert();
+    // B's Menu on the line left ends the walk; the runner's GO works.
+    press(kMenu, 2);
+    QTRY_VERIFY(!run->isWalking());
+    QVERIFY(run->isArmed());
     withLt(kA, 0);
     QCOMPARE(goes(), 1);
 }

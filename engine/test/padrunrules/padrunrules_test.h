@@ -130,6 +130,9 @@ private slots:
      *  own stop, its own chord, one runner. */
     void twinPadsToldApartAreTwoPads_data();
     void twinPadsToldApartAreTwoPads();
+    /** Twin follow-ups (0.4.13): a twin pad whose lines send a trigger
+     *  two ways (one digital, one analog) steps the walk once a pull. */
+    void aTwinPadsTriggerSentTwoWaysIsOneWalkStep();
 
     /* Rules 2 and 6: one state, the light */
     void theLightAfterAToolOrWalkEndsStopped();
@@ -263,12 +266,23 @@ private slots:
     void q252TheStopDuringABesideWalk_data();
     void q252TheStopDuringABesideWalk();
     void q252ALaptopToolMidWalkDisarmsTheRunner();
+    /** Twin follow-ups (0.4.13): a walk beside the runner refused lets go
+     *  of the tools at once -- another pad's Menu in the same event-loop
+     *  turn walks as that pad, not under the refused pad's name. */
+    void aRefusedWalkBesideLetsGoAtOnce();
+    /** Twin follow-ups (0.4.13): the cue on stage deleted (its light held
+     *  until GO): the pad's walk says so, never "Nothing running". */
+    void theWalkOnADeletedCueHeldOnStage();
     /* Second review of 46cfdd708 */
     /** 1: Operate mid-walk ends a walk beside the runner. */
     void review2OperateMidWalkEndsABesideWalk();
     /** 2: the walker loses Focus, or is unplugged, mid-walk. */
     void review2TheWalkerLosesFocusMidWalk();
     void review2TheWalkerUnpluggedMidWalk();
+    /** Twin follow-ups review: the walker beside the runner is a pad
+     *  listed twice and its walking line drops: the walk goes on on its
+     *  twin line (nothing put back), the runner stays armed. */
+    void aTwinWalkersLineDroppingKeepsTheWalkBeside();
     /** 5: the runner's swipe beside a walk steps nothing. */
     void review2ARunnersSwipeBesideAWalk();
     /** 6: the role switched mid-walk ends a walk beside the runner. */
@@ -328,6 +342,8 @@ private:
     bool runOnList(ShowControl::Command command, ShowControl::Route route);
     /** One MasterTimer tick, then the queued signals delivered. */
     void tick();
+    /** Every function stopped, on a timer ticked by hand (tick()). */
+    void stopAllByHand();
 
 private:
     Doc *m_doc = nullptr;
