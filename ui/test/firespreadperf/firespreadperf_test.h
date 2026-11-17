@@ -55,6 +55,7 @@ private:
     EffectInstance *m_fire = nullptr;
     QHash<int, QByteArray> m_universes;
     QSet<quint32> m_uplights;
+    QList<quint32> m_lookFixtures;
     bool m_uplightsDark = false;
 };
 

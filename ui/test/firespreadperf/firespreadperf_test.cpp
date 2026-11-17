@@ -43,6 +43,7 @@
 #include "fixture.h"
 #include "scene.h"
 #include "fixturegroup.h"
+#include "effectscriptrunner.h"
 #include "doc.h"
 
 #include "firespreadperf_test.h"
@@ -129,6 +130,7 @@ void FireSpreadPerf_Test::initTestCase()
         if (groups.isEmpty() ? !underTheFire(fx) : !chosen.contains(fx->id()))
             continue;
         look->addFixture(fx->id());
+        m_lookFixtures << fx->id();
         heads += fx->heads();
         ++fixtures;
     }
@@ -319,6 +321,51 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
     }
     m_uplightsDark = false;
     v.setLiveValues(false);
+
+    /* (a) as the app runs it: the look playing, the MasterTimer on its own
+       thread, and the effect runner's tick -- every effect's script, then
+       its writes published -- on this (the GUI) thread, where the rig view
+       paints too. A 3 s spread, then the fire burning. */
+    {
+        QLCPalette *fast = new QLCPalette(QLCPalette::Effect, doc);
+        fast->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
+        fast->setEffectParamValue(QStringLiteral("edge"), 0.354);
+        fast->setEffectParamValue(QStringLiteral("seed"), 327.0);
+        fast->setEffectParamValue(QStringLiteral("spreadTime"), 3.0);
+        fast->setEffectParamValue(EffectRuns::runsKey(), 0);
+        QVERIFY(doc->addPalette(fast));
+        Scene *look = new Scene(doc);
+        QVERIFY(doc->addFunction(look));
+        for (quint32 fid : std::as_const(m_lookFixtures))
+            look->addFixture(fid);
+        look->addPalette(fast->id());
+        EffectScriptRunner *runner = doc->effectScriptRunner();
+        QVERIFY(runner != nullptr);
+        look->start(doc->masterTimer(), FunctionParent::master());
+        QTRY_VERIFY_WITH_TIMEOUT(runner->instanceForPalette(fast->id()) != nullptr, 3000);
+        runner->m_tickTimer.stop();         // its ticks by hand, timed
+        QElapsedTimer run;
+        run.start();
+        double sp = 0, spMax = 0, bu = 0, buMax = 0;
+        int spN = 0, buN = 0;
+        while (run.elapsed() < 4500)
+        {
+            const qint64 at = run.elapsed();
+            QElapsedTimer f;
+            f.start();
+            runner->slotTick();
+            const double ms = f.nsecsElapsed() / 1e6;
+            if (at > 200 && at < 2800) { sp += ms; spMax = qMax(spMax, ms); ++spN; }
+            else if (at > 3600) { bu += ms; buMax = qMax(buMax, ms); ++buN; }
+            while (f.elapsed() < 20)
+                QCoreApplication::processEvents(QEventLoop::AllEvents, 2);
+        }
+        REPORT("effect runner tick (script + publish + GC, GUI thread): spreading %.2f ms (max %.2f, %d ticks), burning %.2f ms (max %.2f, %d ticks)",
+               spN ? sp / spN : 0.0, spMax, spN, buN ? bu / buN : 0.0, buMax, buN);
+        runner->m_tickTimer.start();
+        look->stop(FunctionParent::master());
+        settle(300);
+    }
 
     if (qEnvironmentVariableIsSet("FIRE_PERF_REPORT"))
         QFAIL(qPrintable(g_report.join(QStringLiteral(" | "))));

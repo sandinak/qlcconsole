@@ -202,6 +202,7 @@ private:
     /** Drives the ticks by hand (instanceForPalette(), slotTick()); a
      *  friend, not a test-side `#define private public`. */
     friend class PixelBoxes_Test;
+    friend class FireSpreadPerf_Test;
 
     /** Destroy the parked engine for @p paletteId, if any. */
     void discardParked(quint32 paletteId);
