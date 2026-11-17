@@ -8441,6 +8441,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         showingOutput ? beamVisibility(fx, rp, traits, beamNow) : 1.0;
 
     bool emitting = false;
+    QColor slotCol[3];                      // a staff's Color 1/2/3 as shown
+    int slotCount = 0;
     if (showingOutput)
     {
         QColor live = col;
@@ -8449,6 +8451,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         {
             col = shadeLive(live, dim, unlit, visibility);
             emitting = true;
+            if (traits.look == Fixture::StaffLook)
+            {
+                QColor raw[3];
+                slotCount = fixtureColourSlots(fx, vals, raw);
+                for (int s = 1; s < 3; ++s)
+                    if (raw[s].isValid())
+                        slotCol[s] = shadeLive(raw[s], dim, unlit, visibility);
+            }
         }
     }
     if (!emitting)
@@ -9313,7 +9323,28 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 p.drawRect(r.adjusted(-3, -3, 3, 3));
             }
             p.setPen(QPen(col.darker(150), 1.4));
-            p.setBrush(col);
+            if (slotCount > 1)
+            {
+                /* The staff shows the slots it is sent, in bands along it:
+                   Color 1, then 2, then 3 where it has light. */
+                QList<QColor> bands;
+                bands << col;
+                for (int s = 1; s < 3; ++s)
+                    if (slotCol[s].isValid())
+                        bands << slotCol[s];
+                const bool tall = r.height() >= r.width();
+                QLinearGradient g(tall ? r.center().x() : r.left(), tall ? r.top() : r.center().y(),
+                                  tall ? r.center().x() : r.right(), tall ? r.bottom() : r.center().y());
+                const double n = bands.size();
+                for (int i = 0; i < bands.size(); ++i)
+                {
+                    g.setColorAt(qMax(0.0, i / n + 0.02), bands.at(i));
+                    g.setColorAt(qMin(1.0, (i + 1) / n - 0.02), bands.at(i));
+                }
+                p.setBrush(QBrush(g));
+            }
+            else
+                p.setBrush(col);
             p.drawPath(body);
             const QRectF lens = stageLookLensRect(traits.look, r, m_plane != Top);
             if (lens.isValid())

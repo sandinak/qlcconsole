@@ -52,6 +52,11 @@ their own; their detailed notes follow below this section.
 
 ### The rig and the stage
 
+- **A staff over a riser is no longer hidden, and shows its colours**: a
+  staff or lantern placed with no height rests on the deck, step or riser
+  under it (an explicit height still wins; saving doesn't freeze it), and a
+  WLED staff is drawn in the Color 1, 2 and 3 it is sent, in bands, not the
+  brightest of all of them (red and purple read yellow).
 - **The Rig Overview in a Blackout shows only the light the rig puts out**:
   no colour, no clash red and no selection edge until Dim, House or Work
   light.

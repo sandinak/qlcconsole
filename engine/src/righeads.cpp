@@ -309,17 +309,49 @@ QVector3D RigHeads::fixtureCentre(Doc *doc, quint32 fid)
     Fixture *fx = doc->fixture(fid);
     if (fx == nullptr || fx->fixtureMode() == nullptr)
         return w;
+    QVector3D at = w;
+    at.setZ(restingZ(doc, fid, w));
     const QLCPhysical &phys = fx->fixtureMode()->physical();
     const float physW = phys.width() > 0 ? float(phys.width()) / 1000.0f : 0.0f;
     const float physH = phys.height() > 0 ? float(phys.height()) / 1000.0f : 0.0f;
     if (physW <= 0.0f && physH <= 0.0f)
-        return w;
+        return at;
 
     /* Width and HEIGHT, not width and depth, however odd that reads for a
        top-down view: MonitorGraphicsView::updateFixture() sizes its icon
        physical().width() x physical().height() in every view, plan included,
        so the corner the plot anchored is the corner of a W x H box. */
-    return QVector3D(w.x() + physW * 0.5f, w.y() + physH * 0.5f, w.z());
+    return QVector3D(w.x() + physW * 0.5f, w.y() + physH * 0.5f, at.z());
+}
+
+float RigHeads::restingZ(Doc *doc, quint32 fid, const QVector3D &stored)
+{
+    /* An explicit height always wins; so does anything not standing on the
+       ground (a held wand is placed by the hand, a hung light by its mount). */
+    if (stored.z() != 0.0f || doc == nullptr || doc->monitorProperties() == nullptr)
+        return stored.z();
+    const Fixture *fx = doc->fixture(fid);
+    if (fx == nullptr)
+        return stored.z();
+    const Fixture::StageLook look = fx->stageLook();
+    if (look != Fixture::StaffLook && look != Fixture::LanternLook)
+        return stored.z();
+    MonitorProperties *props = doc->monitorProperties();
+    if (props->fixtureRigProps(fid).isHeld())
+        return stored.z();
+
+    /* The tallest surface under the point: a platform's deck, the tread of a
+       step, a riser stacked on a deck; else the floor. The stored XY is the
+       plot's, which is the fixture's anchor, so the point is what is "over". */
+    float top = 0.0f;
+    const QList<StagePlatform *> all = props->platforms();
+    for (const StagePlatform *pl : all)
+    {
+        if (!pl->containsPoint(stored.x(), stored.y()))
+            continue;
+        top = qMax(top, props->platformBaseZ(pl->id()) + pl->topAt(stored.x(), stored.y()));
+    }
+    return top;
 }
 
 QVector<QVector3D> RigHeads::headPositions(Doc *doc, quint32 fid)

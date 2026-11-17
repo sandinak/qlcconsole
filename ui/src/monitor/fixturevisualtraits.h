@@ -282,6 +282,13 @@ double starTurnRate(const Fixture *fx, const QByteArray &vals);
  *          callers can fall back to their static appearance. */
 bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
 
+/** The colour slots a fixture is sent: out[0] is the primary (a WLED Effect Mode's
+ *  Color 1, or the plain colour channels), out[1] its "Secondary" and out[2]
+ *  its "Tertiary" colour; invalid for a slot with no channels or no light.
+ *  Returns how many slots there are up to the last one with a colour (0 or 1:
+ *  nothing beyond the primary to show). */
+int fixtureColourSlots(Fixture *fx, const QByteArray &values, QColor out[3]);
+
 /** The same, from a caller-supplied set of channel values rather than from the
  *  fixture itself. A renderer walking a whole rig takes ONE snapshot up front,
  *  so a frame shows a single instant instead of tearing across the stage as
