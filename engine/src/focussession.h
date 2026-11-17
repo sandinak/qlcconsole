@@ -785,6 +785,7 @@ private:
         float lensSaved = 0.0f, lensLive = 0.0f;
     };
     QHash<quint32, DraftHead> m_draft;
+    bool m_goingDark = false;       ///< stopForEmergency(): no write lights it again
     QString m_draftVenue;           ///< where its saves would go: the venue, or empty (the show)
     /** The lights the draft applies to now (draftCount()). */
     QList<quint32> draftFixtures() const;

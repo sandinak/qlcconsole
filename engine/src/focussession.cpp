@@ -338,6 +338,7 @@ bool FocusSession::start(const Options &options, QString *why)
     if (m_active)
         stop();
 
+    m_goingDark = false;
     m_options = options;
     m_targetPage = false;
     m_order = (options.order == ByStagePosition) ? stageOrder(m_doc, heads) : heads;
@@ -804,7 +805,9 @@ void FocusSession::stopForEmergency()
 {
     if (!m_active)
         return;
-    /* 1. The light out, at once: nothing below comes before it. */
+    /* 1. The light out, at once: nothing below comes before it, and
+       nothing on the way out (discardAll()'s rebuild) lights it again. */
+    m_goingDark = true;
     {
         QMutexLocker locker(&m_writesMutex);
         m_writes.clear();
@@ -837,6 +840,7 @@ void FocusSession::stopForEmergency()
     }
     /* 3. Every light back to its last save, as any stop. */
     stop();
+    m_goingDark = false;
     if (!draft.isEmpty())
         emit draftChanged();
 }
@@ -2205,7 +2209,8 @@ void FocusSession::tick(double dt)
 void FocusSession::rebuildWrites()
 {
     QHash<QPair<int, int>, uchar> writes;
-    if (m_active)
+    // Ending for the emergency stop: nothing lit again on the way out (Q258).
+    if (m_active && !m_goingDark)
     {
         auto put = [&](Fixture *fx, quint32 ch, uchar value) {
             const int addr = int(fx->address()) + int(ch);
