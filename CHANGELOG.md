@@ -35,7 +35,8 @@ their own; their detailed notes follow below this section.
   beside another pad's tool and no longer swings round a whole turn when
   walked across the stage; venue focus starts with LT + Menu, and the pad
   can walk the show cue by cue.
-- **Hits:** a finished one-shot lets go, and each cue starts at hit 1.
+- **Hits:** a finished one-shot lets go, each cue starts at hit 1, and a hit
+  already playing when a cue fires plays to its end.
 - **Controllers are recorded once and checked on every change**: a guided
   walk checks a pad's mapping, and Connections shows each control answer.
 
@@ -93,6 +94,11 @@ their own; their detailed notes follow below this section.
   The emergency stop still works there. A proper fix is planned for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on
   first run (More info ▸ Run anyway).
+- **Not yet tried on real hardware:** the Steam Deck's Blind / Solo
+  buttons, the DualSense adaptive triggers and touchpad swipes, the Stream
+  Deck + in a real Companion, and a third-party "Edge" pad's back buttons
+  (a Deck checklist is in
+  [gamepad-remote.md](docs/features/gamepad-remote.md#hardware-checklist)).
 - **The CSV patch export has a new *DMX address* column**, so the columns
   after it move one place: a spreadsheet macro reading them by position
   needs updating.
