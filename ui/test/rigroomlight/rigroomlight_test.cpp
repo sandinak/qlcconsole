@@ -965,9 +965,9 @@ void RigRoomLight_Test::aboveDimTheClashAndTheSelectionAreAsBefore()
 
 /* Q260, on the pixels: Rig Overview, Room = Blackout, a clashing pair and a
    strip selected. No clash red and no selection edge around them; at Dim and
-   above both are drawn. The selection edge is measured as what selecting
-   changes inside the fixture's own box (the frame with the same fixtures
-   unselected is the reference), the clash red as red-dominant pixels there. */
+   above both are drawn. The selection edge is measured as the light-grey
+   pixels selecting adds inside the fixture's own box (the frame with the same
+   fixtures unselected is the reference), the clash red as red-dominant pixels there. */
 void RigRoomLight_Test::aBlackoutHasNoClashRedAndNoSelectionEdge()
 {
     loadStageShow();
@@ -1033,10 +1033,11 @@ void RigRoomLight_Test::aBlackoutHasNoClashRedAndNoSelectionEdge()
             int red = 0;
             for (quint32 fid : std::as_const(pair))
                 inBox(sel, drawnBox(v, fid), [&](int x, int y) { red += redDominant(sel.pixelColor(x, y)) ? 1 : 0; });
+            /* Light-grey pixels (an edge line: unselected edges and unlit
+               faces are under luma 100 in a Blackout) that selecting adds. */
             int edge = 0;
             inBox(sel, drawnBox(v, strip), [&](int x, int y) {
-                const QColor a = sel.pixelColor(x, y), b = none.pixelColor(x, y);
-                if (qAbs(a.red() - b.red()) > 24 || qAbs(a.green() - b.green()) > 24 || qAbs(a.blue() - b.blue()) > 24)
+                if (luma(sel.pixelColor(x, y)) >= 100.0 && luma(none.pixelColor(x, y)) < 100.0)
                     ++edge;
             });
             if (room.level < 0.30)
