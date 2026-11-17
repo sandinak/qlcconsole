@@ -263,15 +263,26 @@ void PadHit_Test::everySurfaceNamesTheNextHit()
                                      .value(QStringLiteral("hit")).toString();
         QVERIFY2(run->armedHitText() == armed,
                  qPrintable(QString("%1: PadRun '%2', want '%3'").arg(when, run->armedHitText(), armed)));
-        QVERIFY2(line->isHidden() == armed.isEmpty() && line->text() == armed,
-                 qPrintable(QString("%1: Run tab '%2' (hidden %3), want '%4'")
-                                .arg(when, line->text()).arg(line->isHidden()).arg(armed)));
-        if (armed.isEmpty())
-            QVERIFY2(!chip->text().contains(QString::fromUtf8("Hit ▸")),
-                     qPrintable(QString("%1: chip '%2' names a hit").arg(when, chip->text())));
-        else if (run->notice().isEmpty())      // a notice takes the hit's place for its seconds
-            QVERIFY2(chip->text() == run->roleText() + QStringLiteral(" · ") + armed,
-                     qPrintable(QString("%1: chip '%2', want '%3'").arg(when, chip->text(), armed)));
+        // The label and the chip are redrawn from PadRun's signals on the
+        // event loop: under load they trail settle(), so they are waited
+        // for, not read at once (the model above is already final).
+        auto drawn = [&]() -> QString {
+            if (!(line->isHidden() == armed.isEmpty() && line->text() == armed))
+                return QString("%1: Run tab '%2' (hidden %3), want '%4'")
+                           .arg(when, line->text()).arg(line->isHidden()).arg(armed);
+            if (armed.isEmpty())
+            {
+                if (chip->text().contains(QString::fromUtf8("Hit ▸")))
+                    return QString("%1: chip '%2' names a hit").arg(when, chip->text());
+            }
+            else if (run->notice().isEmpty())      // a notice takes the hit's place for its seconds
+            {
+                if (chip->text() != run->roleText() + QStringLiteral(" · ") + armed)
+                    return QString("%1: chip '%2', want '%3'").arg(when, chip->text(), armed);
+            }
+            return QString();
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(drawn().isEmpty(), qPrintable(drawn()), 3000);
         QVERIFY2(pageSays == page && pageSays == run->hitText(),
                  qPrintable(QString("%1: phone '%2', PadRun '%3', want '%4'").arg(when, pageSays, run->hitText(), page)));
     };
