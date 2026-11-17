@@ -13,6 +13,9 @@ step with the README and the docs:
 | Gallery | `tools/site/gallery.txt` (groups of pictures; captions are the docs' alt text) |
 | News | `tools/site/news/<tag>.md`, one short post per GitHub release, dated from GitHub |
 
+The top bar keeps six tabs; the rest are dropdowns under them (a page's
+`parent` in build.py, or `parent:` in a page's front matter).
+
 Links to other docs go to the file on GitHub; pictures are uploaded to the
 site's media library.
 

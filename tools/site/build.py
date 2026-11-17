@@ -249,21 +249,25 @@ for fn in sorted(os.listdir(os.path.join(HERE, "pages"))):
         meta, body = front_matter(read("tools/site/pages/" + fn))
         html = md(body, "README.md").replace("<p><img", '<p class="qc-example"><img')
         extra_pages.append({"slug": meta["slug"], "title": meta["title"],
-                            "menu_order": int(meta.get("menu_order", 50)), "content": wrap(STYLE + html)})
+                            "menu_order": int(meta.get("menu_order", 50)), "parent": meta.get("parent", ""),
+                            "content": wrap(STYLE + html)})
 
+# The top bar is the theme's page list: a page with a "parent" (a slug that
+# comes before it below) is a dropdown under that page, which keeps the bar
+# to six tabs (Home, Features, Download, Getting started, Support, About).
 pages = [
     {"slug": "home", "title": "qlcconsole", "menu_order": 0, "content": wrap(home)},
     {"slug": "features", "title": "Features", "menu_order": 1, "content": wrap(features_page)},
-    {"slug": "gallery", "title": "Gallery", "menu_order": 2, "gallery": gallery,
+    {"slug": "gallery", "title": "Gallery", "menu_order": 2, "parent": "features", "gallery": gallery,
      "content": wrap(STYLE + "<p>qlcconsole running, every picture taken from the app itself. "
                      "Click a picture to see it full size.</p>")},
     {"slug": "download", "title": "Download", "menu_order": 4, "content": wrap(download)},
     {"slug": "getting-started", "title": "Getting started", "menu_order": 5,
      "content": wrap(STYLE + md(section(readme, "Getting started"), "README.md")
                      + '<h2 id="documentation">Documentation</h2>' + md(section(readme, "Documentation"), "README.md"))},
-    {"slug": "coming-from-qlc-4", "title": "Coming from QLC+ 4", "menu_order": 6,
+    {"slug": "coming-from-qlc-4", "title": "Coming from QLC+ 4", "menu_order": 6, "parent": "getting-started",
      "content": wrap(STYLE + md(strip_title(read("docs/features/coming-from-qlc4.md")), "docs/features/coming-from-qlc4.md"))},
-    {"slug": "teachers", "title": "For teachers", "menu_order": 7,
+    {"slug": "teachers", "title": "For teachers", "menu_order": 7, "parent": "getting-started",
      "content": wrap(STYLE + f'<p class="qc-cta"><a class="qc-btn qc-primary" href="{COURSE}">Open the course site</a></p>'
                      + md(section(readme, "For teachers"), "README.md"))},
     {"slug": "support", "title": "Support", "menu_order": 8, "content": wrap(STYLE + md(strip_title(read("SUPPORT.md")), "SUPPORT.md"))},
@@ -271,7 +275,7 @@ pages = [
      "content": wrap(STYLE + md(section(readme, "Built on QLC+"), "README.md")
                      + '<h2 id="for-developers">For developers</h2>' + md(section(readme, "For developers"), "README.md")
                      + "<h2>Licence</h2>" + md(section(readme, "License"), "README.md"))},
-    {"slug": "news", "title": "News", "menu_order": 10, "content": ""},
+    {"slug": "news", "title": "News", "menu_order": 10, "parent": "about", "content": ""},
 ] + extra_pages
 
 # --- News: one short post per release in tools/site/news/

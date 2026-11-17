@@ -92,11 +92,15 @@ try:
         return ids[0]
 
     page_ids = {}
-    for p in site["pages"]:
+    # Parents first, so a child's parent has an ID; no parent puts it back on
+    # the top bar.
+    for p in sorted(site["pages"], key=lambda p: bool(p.get("parent"))):
         content = fill(p["content"])
         if p.get("gallery"):
             content += "\n\n" + gallery_blocks(p["gallery"])
-        page_ids[p["slug"]] = upsert("page", p["slug"], p["title"], content, [f"--menu_order={p['menu_order']}"])
+        parent = page_ids[p["parent"]] if p.get("parent") else 0
+        page_ids[p["slug"]] = upsert("page", p["slug"], p["title"], content,
+                                     [f"--menu_order={p['menu_order']}", f"--post_parent={parent}"])
         print("page", p["slug"])
 
     cats = {}

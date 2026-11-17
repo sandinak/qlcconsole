@@ -2,6 +2,7 @@
 slug: examples
 title: Examples
 menu_order: 3
+parent: features
 ---
 Real show files to open, poke at and take apart. They are all **safe on any
 network**: no universe has an output and no light has a network address, so
