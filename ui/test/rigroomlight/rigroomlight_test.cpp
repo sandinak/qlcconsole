@@ -388,6 +388,299 @@ void RigRoomLight_Test::aSelectedFixtureKeepsItsEdge()
              qPrintable(QString("a selected fixture's edge sank with the room: luma %1").arg(brightest)));
 }
 
+/* ---- The Blackout invariant, on the pixels ------------------------------
+ *
+ * "Room = Blackout, nothing playing": no fixture is putting out light, so
+ * nothing on screen may be a colour. Measured as HSV on each pixel of the
+ * frame the operator sees: saturation (max-min)/max above 0.35 AND value
+ * max/255 above 0.25. Why those two:
+ *   - 0.35: a neutral grey edge or label is under 0.1, a warm lamp-housing
+ *     tint about 0.2; the selection's mint green (120,220,140) is 0.45, the
+ *     overlap red 0.84, a cyan guide 1.0 -- every colour this view has drawn
+ *     as an outline is well above it.
+ *   - 0.25: below about 64 on the brightest channel a colour reads as black
+ *     on this canvas (a red drape at blackout is a near-black red, which is
+ *     what a dark room does to it); above it, it reads as a colour.
+ * A real clash's red (the overlap warning, kept in a blackout) is the one
+ * exception, allowed only inside that fixture's own box on screen. */
+namespace
+{
+
+struct ColourFinding
+{
+    int count = 0;
+    QStringList where;      // the worst cells, each with a sample colour and what is there
+};
+
+bool saturatedLit(QRgb px)
+{
+    const int r = qRed(px), g = qGreen(px), b = qBlue(px);
+    const int mx = qMax(r, qMax(g, b)), mn = qMin(r, qMin(g, b));
+    if (mx <= 0)
+        return false;
+    const double v = mx / 255.0;
+    const double s = double(mx - mn) / double(mx);
+    return s > 0.35 && v > 0.25;
+}
+
+QRectF screenBox(StructureStudioView &v, quint32 fid)
+{
+    QVector3D k[8];
+    v.fixtureBoxCorners(fid, classifyFixture(v.m_doc->fixture(fid)), k);
+    QRectF r;
+    for (const QVector3D &q : k)
+    {
+        const QPointF s = v.w2s(q);
+        r = r.isNull() ? QRectF(s, QSizeF(0.01, 0.01)) : r.united(QRectF(s, QSizeF(0.01, 0.01)));
+    }
+    return r.adjusted(-4, -4, 4, 4);
+}
+
+/* Every saturated pixel of @p img, apart from a clash's red inside its own
+   fixture's box, grouped in 40-pixel cells: the busiest twelve, each with a
+   sample colour and the fixtures whose centre is in it. */
+ColourFinding findColour(StructureStudioView &v, const QImage &img)
+{
+    QList<QRectF> clashes;
+    for (quint32 fid : std::as_const(v.m_overlappingFixtures))
+        if (v.m_doc->fixture(fid) != nullptr)
+            clashes << screenBox(v, fid);
+    const int cell = 40;
+    QMap<QPair<int, int>, QPair<int, QRgb> > cells;
+    ColourFinding f;
+    for (int y = 0; y < img.height(); ++y)
+    {
+        const QRgb *line = reinterpret_cast<const QRgb *>(img.constScanLine(y));
+        for (int x = 0; x < img.width(); ++x)
+        {
+            const QRgb px = line[x];
+            if (!saturatedLit(px))
+                continue;
+            if (redDominant(QColor(px)))
+            {
+                bool inClash = false;
+                for (const QRectF &r : std::as_const(clashes))
+                    inClash = inClash || r.contains(QPointF(x, y));
+                if (inClash)
+                    continue;
+            }
+            ++f.count;
+            auto &c = cells[qMakePair(x / cell, y / cell)];
+            if (c.first++ == 0)
+                c.second = px;
+        }
+    }
+    QList<QPair<int, QPair<int, int> > > order;
+    for (auto it = cells.cbegin(); it != cells.cend(); ++it)
+        order << qMakePair(it.value().first, it.key());
+    std::sort(order.begin(), order.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+    for (int i = 0; i < order.size() && i < 12; ++i)
+    {
+        const QPair<int, int> key = order.at(i).second;
+        const QRect r(key.first * cell, key.second * cell, cell, cell);
+        QStringList names;
+        for (quint32 fid : v.mountedFixtures())
+            if (r.contains(v.w2s(v.fixtureCentre(fid)).toPoint()) && names.size() < 4)
+                names << v.m_doc->fixture(fid)->name();
+        f.where << QStringLiteral("x %1-%2 y %3-%4: %5 px, e.g. %6%7")
+                       .arg(r.left()).arg(r.right()).arg(r.top()).arg(r.bottom())
+                       .arg(order.at(i).first).arg(colourText(QColor(cells.value(key).second)))
+                       .arg(names.isEmpty() ? QString() : QStringLiteral(" near ") + names.join(QStringLiteral(", ")));
+    }
+    return f;
+}
+
+enum StageViewKind { ViewTop, ViewFront, ViewSide, ViewBack, ViewOverview, ViewAbove };
+
+void setStageView(StructureStudioView &v, int which)
+{
+    v.setStandOnCentreStage(false);
+    switch (which)
+    {
+    case ViewTop:   v.setPlane(StructureStudioView::Top); break;
+    case ViewFront: v.setPlane(StructureStudioView::Front); break;
+    case ViewSide:  v.setPlane(StructureStudioView::Side); break;
+    case ViewBack:  v.setPlane(StructureStudioView::Back); break;
+    case ViewOverview:
+        // As the Rig Overview opens: 45°, stood at centre stage.
+        v.setPlane(StructureStudioView::Angled);
+        v.setStandOnCentreStage(true);
+        break;
+    default:
+        v.setPlane(StructureStudioView::Angled);
+        v.setAngledView(20.0, 30.0);
+        break;
+    }
+}
+
+}
+
+void RigRoomLight_Test::loadStageShow()
+{
+    if (m_stageShowLoaded)
+        return;
+    if (m_app == nullptr)
+    {
+        m_app = new App();
+        m_app->init();
+    }
+    QLCFixtureDefCache *cache = m_app->doc()->fixtureDefCache();
+    cache->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures"));
+    m_app->clearDocument();
+    QCOMPARE(m_app->loadXML(QStringLiteral(RIGROOM_SRC_DIR "/stage-show.qlcc")), QFile::NoError);
+    m_app->doc()->resetModified();
+    QVERIFY2(m_app->doc()->fixtures().size() > 150,
+             qPrintable(QString("the stage show has %1 fixtures").arg(m_app->doc()->fixtures().size())));
+    settle(100);
+    m_stageShowLoaded = true;
+}
+
+void RigRoomLight_Test::blackoutDrawsNoColour_data()
+{
+    QTest::addColumn<int>("view");
+    QTest::addColumn<bool>("selectAll");
+    const struct { const char *name; int view; } views[] = {
+        { "top", ViewTop }, { "front", ViewFront }, { "side", ViewSide }, { "back", ViewBack },
+        { "45 overview", ViewOverview }, { "45 above", ViewAbove } };
+    for (const auto &v : views)
+    {
+        QTest::newRow(qPrintable(QStringLiteral("%1, nothing selected").arg(v.name))) << v.view << false;
+        QTest::newRow(qPrintable(QStringLiteral("%1, whole rig selected").arg(v.name))) << v.view << true;
+    }
+}
+
+void RigRoomLight_Test::blackoutDrawsNoColour()
+{
+    QFETCH(int, view);
+    QFETCH(bool, selectAll);
+    loadStageShow();
+    Doc *doc = m_app->doc();
+    for (Fixture *fx : doc->fixtures())
+        fx->setOwnChannelValues(QByteArray(int(fx->channels()), 0));   // nothing playing
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.setLocked(true);
+    v.setLiveValues(true);
+    v.setBeams(true);
+    v.setAmbient(0.0);
+    setStageView(v, view);
+    QList<quint32> all;
+    if (selectAll)
+        for (Fixture *fx : doc->fixtures())
+            all << fx->id();
+    v.setHighlight(all);
+    v.resize(1280, 800);
+    v.reload();
+    settle(30);
+    v.m_overlapAge.invalidate();
+    const QImage img = v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    const QString tag = QString(QTest::currentDataTag()).replace(QLatin1Char(' '), QLatin1Char('-'))
+                            .remove(QLatin1Char(',')).replace(QStringLiteral("°"), QString());
+    if (!dir.isEmpty())
+        img.save(QDir(dir).filePath(QStringLiteral("%1-blackout-%2.png")
+                                        .arg(qEnvironmentVariable("QLC_SHOT_STATE", QStringLiteral("after")), tag)));
+
+    const ColourFinding f = findColour(v, img);
+    QVERIFY2(f.count == 0,
+             qPrintable(QStringLiteral("%1 saturated pixels in a blackout (%2 clash fixtures allowed), at:\n  %3")
+                            .arg(f.count).arg(v.m_overlappingFixtures.size()).arg(f.where.join(QStringLiteral("\n  ")))));
+}
+
+void RigRoomLight_Test::aLitFixtureIsInColourInABlackout()
+{
+    loadStageShow();
+    Doc *doc = m_app->doc();
+    for (Fixture *fx : doc->fixtures())
+        fx->setOwnChannelValues(QByteArray(int(fx->channels()), 0));
+
+    // A step's strip, patched, at full red: its dimmers and its red, nothing else.
+    Fixture *lit = nullptr;
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name().startsWith(QLatin1String("CS")) && fx->isPatched() && fx->heads() > 8)
+        {
+            lit = fx;
+            break;
+        }
+    QVERIFY2(lit != nullptr, "no patched step strip in the stage show");
+    QByteArray vals(int(lit->channels()), 0);
+    for (quint32 ch = 0; ch < lit->channels(); ++ch)
+    {
+        const QLCChannel *c = lit->channel(ch);
+        if (c != nullptr && c->group() == QLCChannel::Intensity
+            && (c->colour() == QLCChannel::Red || c->colour() == QLCChannel::NoColour))
+            vals[int(ch)] = char(255);
+    }
+    QVERIFY(lit->setOwnChannelValues(vals));
+
+    for (int view : { int(ViewOverview), int(ViewFront) })
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.setLocked(true);
+        v.setLiveValues(true);
+        v.setBeams(true);
+        v.setAmbient(0.0);
+        setStageView(v, view);
+        v.setHighlight({});
+        v.resize(1280, 800);
+        v.reload();
+        settle(30);
+        const QImage img = v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+        const QRectF box = screenBox(v, lit->id()).adjusted(-6, -6, 6, 6);
+        int red = 0;
+        for (int y = qMax(0, int(box.top())); y < qMin(img.height(), int(box.bottom())); ++y)
+            for (int x = qMax(0, int(box.left())); x < qMin(img.width(), int(box.right())); ++x)
+            {
+                const QRgb px = img.pixel(x, y);
+                if (saturatedLit(px) && redDominant(QColor(px)))
+                    ++red;
+            }
+        QVERIFY2(red >= 20, qPrintable(QStringLiteral("view %1: %2 lit red pixels on %3 (box %4,%5 %6x%7)")
+                                       .arg(view).arg(red).arg(lit->name())
+                                       .arg(box.x()).arg(box.y()).arg(box.width()).arg(box.height())));
+    }
+    lit->setOwnChannelValues(QByteArray(int(lit->channels()), 0));
+}
+
+void RigRoomLight_Test::selectedNamesNeverOverlap()
+{
+    loadStageShow();
+    Doc *doc = m_app->doc();
+    for (Fixture *fx : doc->fixtures())
+        fx->setOwnChannelValues(QByteArray(int(fx->channels()), 0));
+    for (int view : { int(ViewOverview), int(ViewAbove), int(ViewFront), int(ViewTop) })
+    {
+        StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+        v.setLocked(true);
+        v.setLiveValues(true);
+        v.setAmbient(0.0);
+        setStageView(v, view);
+        QList<quint32> all;
+        for (Fixture *fx : doc->fixtures())
+            all << fx->id();
+        v.setHighlight(all);
+        v.resize(1280, 800);
+        v.reload();
+        v.grab();
+        const QList<QRectF> names = v.drawnNameLabels();
+        QVERIFY2(!names.isEmpty(), qPrintable(QStringLiteral("view %1: no names drawn").arg(view)));
+        int clashes = 0;
+        QString first;
+        for (int i = 0; i < names.size(); ++i)
+            for (int j = i + 1; j < names.size(); ++j)
+                if (names.at(i).intersects(names.at(j)))
+                {
+                    if (clashes++ == 0)
+                        first = QStringLiteral("(%1,%2 %3x%4) and (%5,%6)").arg(names.at(i).x()).arg(names.at(i).y())
+                                    .arg(names.at(i).width()).arg(names.at(i).height())
+                                    .arg(names.at(j).x()).arg(names.at(j).y());
+                }
+        QVERIFY2(clashes == 0, qPrintable(QStringLiteral("view %1: %2 of %3 names overlap, first %4")
+                                          .arg(view).arg(clashes).arg(names.size()).arg(first)));
+    }
+}
+
 void RigRoomLight_Test::userShowShots()
 {
     const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");

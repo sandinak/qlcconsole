@@ -474,6 +474,7 @@ private:
     mutable QList<QVector3D> m_floorPoints;
     mutable QList<QRectF> m_callouts;      ///< this frame's measurement texts (drawnCallouts())
     mutable QList<QRectF> m_edgeLabels;    ///< ...and the edge labels, put clear of them
+    mutable QList<QRectF> m_nameLabels;    ///< this frame's fixture names (drawnNameLabels())
     mutable QImage m_floorImage;    ///< the angled floor grid, drawn once (drawGrid())
     mutable QString m_floorKey;     ///< the view it was drawn for
     mutable QElapsedTimer m_floorPointsAge;
@@ -742,6 +743,8 @@ private:
      *  line drawing in whatever colour its edge happens to be, yet never
      *  lost against the canvas. */
     QColor roomEdge(const QColor &edge) const;
+    /** A fixture's name in a flat view, at @p at (its baseline). */
+    void drawFixtureName(QPainter &p, const QPointF &at, const QString &name) const;
 
     /** Whether fid's PERSISTED locks -- layout, its layer, its group chain, or
      *  the truss/pipe/tower/platform it is mounted on -- forbid moving it.
@@ -848,6 +851,8 @@ public:
      *  coordinates: what a test reads to see none is drawn over another. */
     QList<QRectF> drawnCallouts() const { return m_callouts; }
     QList<QRectF> drawnEdgeLabels() const { return m_edgeLabels; }
+    /** The last frame's fixture names, where each was written. */
+    QList<QRectF> drawnNameLabels() const { return m_nameLabels; }
 private:
 
     /** The three stage axes as a small labelled tripod, for the angled view

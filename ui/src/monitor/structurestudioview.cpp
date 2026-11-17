@@ -3019,7 +3019,12 @@ void StructureStudioView::flushOps(QPainter &p) const
         }
         p.setPen(o.pen);
         if (!o.poly.isEmpty())
+        {
+            const QFontMetricsF fm(p.font());
+            m_nameLabels << QRectF(o.poly.at(0).x(), o.poly.at(0).y() - fm.ascent(),
+                                   fm.horizontalAdvance(o.text), fm.height());
             p.drawText(o.poly.at(0), o.text);
+        }
     }
 
     if (!drawn)
@@ -8979,7 +8984,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         {
             p.setPen(QColor(210, 214, 220));
             if (nameEveryone || hi)
-                p.drawText(QPointF(r.right() + 4, c.y() - 6), fx->name());
+                drawFixtureName(p, QPointF(r.right() + 4, c.y() - 6), fx->name());
         }
         return;
     }
@@ -9340,8 +9345,17 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     {
         p.setPen(QColor(210, 214, 220));
         if (nameEveryone || hi)
-            p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
+            drawFixtureName(p, QPointF(c.x() + 8, c.y() - 6), fx->name());
     }
+}
+
+/* A fixture's name in a flat view, at @p at (its baseline). */
+void StructureStudioView::drawFixtureName(QPainter &p, const QPointF &at, const QString &name) const
+{
+    const QFontMetricsF fm(p.font());
+    const QRectF r(at.x(), at.y() - fm.ascent(), fm.horizontalAdvance(name), fm.height());
+    m_nameLabels << r;
+    p.drawText(at, name);
 }
 
 QSize StructureStudioView::headGrid(Fixture *fx, const FixtureVisualTraits &traits) const
@@ -10846,6 +10860,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     ++m_paintCount;
     m_callouts.clear();
     m_edgeLabels.clear();
+    m_nameLabels.clear();
     /* The frame budget. While values change fast (a value-driven frame close
        on the last one) the rig is drawn without supersampling -- a third of
        the work -- and one full-quality frame follows when they stop. Still
