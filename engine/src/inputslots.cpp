@@ -163,12 +163,21 @@ int InputOutputMap::slotDeviceLine(quint32 universe, const Universe::InputSlotDe
        one it has is its DEVICE, wherever it moved (round-8 review: a pad
        before it unplugged shifts it, and a spare onto its old line). */
     InputPatch *ip = m_universeArray.at(universe)->inputPatch();
+    /* @p other holds line @p l: by its DEVICE where the plugin tells one,
+       not by the line index it was patched to -- a slot universe later in
+       the order may still sit on its old index after a pad before it went
+       (applyInputSlots() walks them in order), and two slots must not
+       swap pads over it. */
+    auto holds = [plugin](const InputPatch *other, quint32 l) {
+        return other->deviceId() != 0 ? other->deviceId() == plugin->inputDeviceId(l)
+                                      : other->input() == l;
+    };
     // Another universe is patched to line @p l now.
     auto takenByOther = [&](quint32 l) {
         for (quint32 u = 0; u < universesCount(); ++u)
         {
             const InputPatch *other = u == universe ? nullptr : m_universeArray.at(u)->inputPatch();
-            if (other != nullptr && other->plugin() == plugin && other->input() == l)
+            if (other != nullptr && other->plugin() == plugin && holds(other, l))
                 return true;
         }
         return false;
@@ -195,7 +204,7 @@ int InputOutputMap::slotDeviceLine(quint32 universe, const Universe::InputSlotDe
             if (u == universe)
                 continue;
             InputPatch *other = m_universeArray.at(u)->inputPatch();
-            if (other != nullptr && other->plugin() == plugin && int(other->input()) == l)
+            if (other != nullptr && other->plugin() == plugin && holds(other, quint32(l)))
                 taken = true;
             foreach (const Universe::InputSlotDevice &d, m_universeArray.at(u)->inputSlot())
                 if (d.anyGamepad == false && d.plugin == dev.plugin && d.uid == lines.at(l))

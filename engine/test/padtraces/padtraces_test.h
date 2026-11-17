@@ -72,6 +72,11 @@ private slots:
     /** An "any" slot follows its pad's device to another line, never the
      *  spare that moved onto its old line. */
     void anAnySlotFollowsItsPadNotTheLine();
+    /** Two "any" slots, each on its own pad; a pad before both goes: each
+     *  follows its own pad, armed, its stop on its own universe -- they
+     *  never swap pads over the line the other still sits on. */
+    void twoAnySlotsKeepTheirOwnPads_data();
+    void twoAnySlotsKeepTheirOwnPads();
     /** A spare that was here re-enumerates where it is: still not the pad
      *  a universe waits for. */
     void aSpareReenumeratedTakesNoUniverse_data();
