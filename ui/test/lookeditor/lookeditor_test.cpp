@@ -2002,6 +2002,94 @@ void LookEditor_Test::aWavesLengthIsOneCycle()
     QVERIFY(EffectOrigin::scriptCycleParam(chase->scriptPath()).isEmpty());
 }
 
+/* A Fire Spread look, as the effect page shows it. */
+static QLCPalette *aFireSpread(Doc &doc)
+{
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Fire Spread");
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
+    return doc.addPalette(look) ? look : nullptr;
+}
+
+/* Fire Spread's Colours: Fire by default, with Front Width and Flicker
+   Behind greyed (they are Front and Behind's); choosing Front and Behind
+   brings them back, Front Width 1.5 s in 0.1 to 20, Flicker Behind on. */
+void LookEditor_Test::fireSpreadOffersFrontAndBehindColours()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    LookEditor ed(&doc);
+    ed.setPalette(look->id());
+
+    QComboBox *colours = ed.findChild<QComboBox *>("effectParam_colours");
+    QVERIFY2(colours != nullptr, "no Colours setting");
+    QCOMPARE(colours->count(), 2);
+    QCOMPARE(colours->itemText(0), QString("Fire"));
+    QCOMPARE(colours->itemText(1), QString("Front and Behind"));
+    QCOMPARE(colours->currentIndex(), 0);
+    QDoubleSpinBox *width = ed.findChild<QDoubleSpinBox *>("effectParam_frontWidth");
+    QComboBox *flicker = ed.findChild<QComboBox *>("effectParam_flickerBehind");
+    QVERIFY(width != nullptr && flicker != nullptr);
+    QCOMPARE(width->value(), 1.5);
+    QCOMPARE(width->minimum(), 0.1);
+    QCOMPARE(width->maximum(), 20.0);
+    QCOMPARE(flicker->currentText(), QString("On"));
+    QVERIFY(!width->isEnabled());
+    QVERIFY(!flicker->isEnabled());
+    QVERIFY2(width->toolTip().startsWith("Set by Colours: Fire"), qPrintable(width->toolTip()));
+
+    colours->setCurrentIndex(1);
+    QCOMPARE(look->effectParamValues().value("colours"), 1.0);
+    QVERIFY(width->isEnabled());
+    QVERIFY(flicker->isEnabled());
+    width->setValue(3.0);
+    QCOMPARE(look->effectParamValues().value("frontWidth"), 3.0);
+    flicker->setCurrentIndex(0);
+    QCOMPARE(look->effectParamValues().value("flickerBehind"), 0.0);
+}
+
+/* Pictures of Fire Spread's settings at three window sizes, as it opens
+   and with Front and Behind chosen (when it has that). Only with
+   QLC_SHOT_DIR set. */
+void LookEditor_Test::fireSpreadSettingsShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("pictures only with QLC_SHOT_DIR");
+    QDir().mkpath(dir);
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    LookEditor ed(&doc);
+    ed.show();
+    ed.setPalette(look->id());
+    auto shoot = [&](const QString &name) {
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            ed.resize(sz);
+            QApplication::processEvents();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            // The settings from Flare down: where Colours sits.
+            QWidget *row = ed.findChild<QWidget *>("effectParam_speed");
+            if (row == nullptr)
+                row = ed.findChild<QWidget *>("effectParam_flare");
+            for (QScrollArea *sa : ed.findChildren<QScrollArea *>())
+                if (row != nullptr && sa->widget() != nullptr && sa->widget()->isAncestorOf(row))
+                    sa->ensureWidgetVisible(row, 0, 120);
+            QApplication::processEvents();
+            QVERIFY(ed.grab().save(dir + QStringLiteral("/%1-%2x%3.png")
+                                       .arg(name).arg(sz.width()).arg(sz.height())));
+        }
+    };
+    shoot(QStringLiteral("fire-spread-settings"));
+    if (QComboBox *colours = ed.findChild<QComboBox *>("effectParam_colours"))
+    {
+        colours->setCurrentIndex(1);
+        shoot(QStringLiteral("fire-spread-front-and-behind"));
+    }
+}
+
 void LookEditor_Test::theBrowsersListsAreAToZ()
 {
     Doc doc(this);

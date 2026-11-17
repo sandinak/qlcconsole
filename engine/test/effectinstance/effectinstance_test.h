@@ -36,6 +36,34 @@ private slots:
     /** Fire Spread on a rig: a dimmer at the Aim target and a pixel strip
      *  away from it, pixel by pixel, run on Loop: it never starts again. */
     void fireSpreadBurnsTheRigFromTheAimTarget();
+    /** Fire Spread's Colours: Front and Behind with the effect's own
+     *  Colour looks (blue, red) under it, to DMX: a reached par is blue,
+     *  red once the backfill reaches it, flickering; a dimmer burns as
+     *  Fire's; a colour-wheel mover dark until reached, then on its blue
+     *  slot at full, then its red one flickering on its dimmer; no pan. */
+    void fireSpreadFrontAndBehindTakesItsOwnColours();
+    /** A Dimmer at 50% under Fire Spread puts an RGB par with no dimmer and
+     *  a par's dimmer at half, in Fire and in Front and Behind; with the
+     *  look's own Dimmer at 50% above it too, a quarter (each once). */
+    void fireSpreadTakesItsOwnDimmer();
+    /** Spotlight Chase with no colour of its own on RGB and RGBW washes with
+     *  no dimmer, a red cue under them: the hot spot is that red at the
+     *  chase's level; green, blue and white stay 0 (to DMX). */
+    void spotlightChaseBrightensTheColourUnderIt();
+    /** A level on a forced-LTP RGB wash: the cue's value stays, and is
+     *  kept when the cue and the chase stop (never run down to 0). */
+    void aLevelLeavesAnLtpChannelItsValue();
+    /** Spotlight Chase and a dimmer effect on one wash with no dimmer: the
+     *  cue's red scaled by both, the same in either order. */
+    void aLevelAndADimmerScaleTheCueInEitherOrder();
+    /** A level stopped: the cue's colour at once; released over a fade: back
+     *  up to it by the end. */
+    void aLevelLetsGoWhenTheEffectStopsOrFadesOut();
+    /** Color Chase's Peak dimmer on RGBW washes with no dimmer: the chase
+     *  and the background at that level. */
+    void colorChasePeakDimmerOnAWashWithNoDimmer();
+    /** Rainbow at 50% on an RGBW wash with no dimmer: half, not a quarter. */
+    void aWashWithNoDimmerFadesInAStraightLine();
     /** The matrix effects on a box of RGB and white pixel rows, eight boxes
      *  as one canvas, its RGB-only and white-only modes and a plain RGB
      *  matrix: each head told what it emits, every effect running through

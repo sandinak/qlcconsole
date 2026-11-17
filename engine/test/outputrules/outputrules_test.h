@@ -154,6 +154,7 @@ private slots:
     void whatAScriptUnderATestStartsIsHeld();
     /** 4: a preview's effect on it is held from the first live frame */
     void aPreviewsEffectIsHeldFromTheFirstLiveFrame();
+    void aLevelOnAShowOnlyWashStaysHeld();
     /** 5: "not ours" stays zero over a held safe value */
     void notOursStaysZeroUnderTheHold();
     /** 8: made Show only mid-show, only that fixture is reset */
