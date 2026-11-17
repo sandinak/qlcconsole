@@ -30,6 +30,9 @@ class InputDeviceNotices_Test final : public QObject
 private slots:
     void aPadOfTheSameNameIsNotTakenOverSilently_data();
     void aPadOfTheSameNameIsNotTakenOverSilently();
+    /** Two universes wait for one name, one spare is free: only the first
+     *  (where a replugged spare goes) is told to replug it. */
+    void onlyTheFirstWaitingUniverseIsToldToReplug();
     void initTestCase();
     void init();
     void cleanup();

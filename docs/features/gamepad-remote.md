@@ -330,10 +330,12 @@ show from any pad.
   universe, its arm, the LT it holds and a stop it is squeezing.
   A spare of the same model that is already connected (on charge, say)
   never takes over an unplugged pad's universe by itself: the notice says
-  the universe waits for its own pad. When a spare that no universe uses
-  is connected, the notice also says how to use it there: unplug it and
-  plug it back in, or patch it in Inputs/Outputs. A pad another universe
-  uses is never suggested.
+  the universe waits for its own device. When a spare that no universe
+  uses is connected, the notice also says how to use it there: unplug it
+  and plug it back in, or patch it in Inputs/Outputs. With two universes
+  waiting for that model, only the first (the lower number, the one a
+  replugged spare goes to) is told. A pad another universe uses is never
+  suggested.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a

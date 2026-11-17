@@ -380,14 +380,19 @@ it holds, and the chip says why."
   already here when it went, nor re-enumerated from one that was
   (`retryOfflinePatches()`, `Universe::OfflinePatch::notTheDevice`). A pad
   already connected never takes over by itself (it may not be the same
-  pad): the notice says the universe waits for its own pad, and -- only
-  when that other pad is no universe's (`InputOutputMap::
-  hasFreeInputDevice()`) -- that it takes over once unplugged and plugged
-  back in, or patched in Inputs/Outputs. Another universe's pad is never
-  offered. An "any game controller" slot follows its pad's device id to
-  whatever line it moved to (never a spare that moved onto its old line);
-  the line-and-name rule is kept only for plugins with no ids. A plugin with no ids keeps the
-  name rule, as before. Every value is read with the roles its device had
+  pad): the notice says the universe waits for its own device, and --
+  only when that other pad is no universe's (`InputOutputMap::
+  hasFreeInputDevice()`), and only for the first universe in order that
+  waits for that name (the one `retryOfflinePatches()` gives a replugged
+  spare) -- that it takes over once unplugged and plugged back in, or
+  patched in Inputs/Outputs. Another universe's pad is never offered. An
+  "any game controller" slot follows its pad's device id to whatever line
+  it moved to (never a spare that moved onto its old line), and a line is
+  another universe's by the device that universe's patch follows, not by
+  the line index it was patched to (`slotDeviceLine()`): two "any" slots
+  keep their own pads when a pad before both goes, though the later one is
+  looked at after the earlier has moved. A plugin with no ids keeps the
+  line-and-name rule, as before. Every value is read with the roles its device had
   (`ProgrammerController::controllerRole()` learns a universe's roles while
   its device is known, and again at once after a patch, device, profile,
   slot or configuration change, once what was read has been delivered,
@@ -409,16 +414,18 @@ it holds, and the chip says why."
   change on that pad has stopped already, and the next full squeeze stops
   again). Its twin lines' latches are cleared too, so a twin line still
   reading all four fires the stop again on its next reading -- a second
-  stop, which errs the safe way. Known limit (round-5 review): an "any
-  game controller" slot (`InputOutputMap::applyInputSlots()`) picks a
-  pad by its kind, not by device id; with two pads in two such slots and
-  the first unplugged, the first slot can take the second pad's line and
-  the second slot wait offline (its pad disarmed); and a named slot
-  device always takes the first line of its name, so it never reaches the
-  second of two pads of one name. Not built here. Fixed here: an "any"
-  slot no longer keeps a line another universe's patch is on (a manual
-  patch and an "any" slot on one pad), and a slot moving to another
-  device is a pad lost (by device id, never "the same name"). Known
+  stop, which errs the safe way. Known limits (round-5 review): an "any
+  game controller" slot (`InputOutputMap::applyInputSlots()`) keeps its
+  own pad by device id while that pad is here, but once its pad is gone
+  it takes the first free line of any game controller -- a pad by its
+  kind, not the one it had (as a pad lost and a new one: disarmed); and a
+  named slot device always takes the first line of its name, so it never
+  reaches the second of two pads of one name. Not built here. Fixed here:
+  an "any" slot no longer keeps a line another universe's patch is on (a
+  manual patch and an "any" slot on one pad); a slot moving to another
+  device is a pad lost (by device id, never "the same name"); and two
+  "any" slots no longer swap pads when a pad before both is unplugged
+  (lines taken by device id, `PadTraces_Test::twoAnySlotsKeepTheirOwnPads`). Known
   limits with no stable identity for a pad (Linux joysticks and
   same-model macOS pads without one): a spare plugged in while B is away
   and before B returns is taken for B; and when every pad sleeps at once

@@ -68,7 +68,9 @@ public:
         /** Not connected, while another device of that exact name is: the
          *  universe waits for its own one (a pad already connected never
          *  takes it over by itself). @c spareHere: one of them is no
-         *  universe's (it may take over, unplugged and plugged back in). */
+         *  universe's (it may take over, unplugged and plugged back in) and
+         *  this is the first universe in order waiting for that name (the
+         *  one a replugged spare goes to). */
         bool sameNameHere = false;
         bool spareHere = false;
     };
