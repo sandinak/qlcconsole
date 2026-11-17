@@ -19,7 +19,7 @@
 #include <QHash>
 
 #include "outputlayer.h"
-#include "qlcglobal.h"
+#include "qlcengine_export.h"
 
 class Doc;
 

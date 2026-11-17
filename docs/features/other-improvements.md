@@ -135,7 +135,7 @@ held**, and turning Test off (the button, the footer chip, leaving the tab)
 lets all of them go at once, each channel back to what the show gives it.
 The **emergency stop** and **All Off** turn Test off too, and it stays off
 until you turn it on again. Test is refused in **Operate** (the banner says
-why) and Operate ends it; it works in Design and in a Teaching show. A
+why) and Operate ends it; Test follows Operate: wherever Operate is not on (Design, or a Teaching show in Design) it works. A
 Show-only fixture keeps its rule: a channel set on it stays safe. Test values
 are never saved: closing the show clears them.
 
