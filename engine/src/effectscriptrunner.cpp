@@ -1190,8 +1190,16 @@ void EffectScriptRunner::writeDMX(MasterTimer *timer, QList<Universe*> universes
         // scene's level (e.g. a candle dimmer flicker under a lit base).
         if (w.replace)
             fc.addFlag(FadeChannel::Override);
+        // A level: what is under it, times the level (FadeChannel::Mix
+        // at depth 0: none of its own value). Fading in or out, the level
+        // is already part way from 1 (composeWrites()).
+        if (w.multiply && w.scale >= 0)
+        {
+            fc.addFlag(FadeChannel::Override | FadeChannel::Mix);
+            fc.setMix(0.0f, w.scale);
+        }
         // Fading in or out: part way from what is under it to its value.
-        if (w.depth < 1.0f)
+        else if (w.depth < 1.0f)
         {
             fc.addFlag(FadeChannel::Override | FadeChannel::Mix);
             if (!w.replace && w.htp)
@@ -1256,6 +1264,8 @@ QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<Ef
         if (w.scale >= 0)
         {
             mul[i] *= wScale;
+            if (!w.multiply)
+                c.multiply = false;         // a base of its own: scaled as before
             if (!haveSet.at(i))
                 c.base = w.base;
             if (partial || c.depth < 1.0f)
@@ -1286,12 +1296,20 @@ QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<Ef
             }
             c.replace = c.replace || w.replace;
             c.htp = c.htp && w.htp;
+            c.multiply = false;             // a value set: scaled, not what is under
             haveSet[i] = true;
         }
     }
     for (int i = 0; i < composed.size(); ++i)
     {
         EffectInstance::DmxWrite &c = composed[i];
+        // Only levels on it: what is under it, times them all.
+        if (c.multiply && !haveSet.at(i))
+        {
+            c.scale = mul.at(i);
+            c.value = uchar(qBound(0, qRound(c.base * mul.at(i)), 255));
+            continue;
+        }
         // Part way: what is under it is scaled by the dimmers too.
         if (c.depth < 1.0f)
             c.scale = mul.at(i);

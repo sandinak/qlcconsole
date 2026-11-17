@@ -108,12 +108,14 @@
             var lc = (palettes.look && palettes.look.colors) ? palettes.look.colors[0] : null;
             var haveColour = lc && lc.r !== undefined;
 
-            // A head with no dimmer and no look colour to scale (an RGBW
-            // wash with no dimmer channel) still carries the chase as a
-            // dimmer: the host scales the colour the cue gives it. Without
-            // it the chase didn't show there at all.
-            if (f.hasDimmer || !haveColour)
+            // A head with no dimmer and no look colour of its own (an RGB or
+            // RGBW wash with no dimmer channel) carries the chase as a level:
+            // the host brightens and dims the colour the cue already gives
+            // it, never adding white or an emitter the cue has at 0.
+            if (f.hasDimmer)
                 intent.dimmer = bright;
+            else if (!haveColour)
+                intent.level = bright;
 
             // Where the look points it (its Aim or Pan/Tilt) stands, unless a
             // position palette is bound to the effect itself.

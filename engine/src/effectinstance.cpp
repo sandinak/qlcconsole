@@ -2768,6 +2768,40 @@ EffectInstance::parseIntents(const QJSValue &intents,
             }
         }
 
+        /* "level": brighten and dim what is already on this head -- the
+           colour the cue or a layer under the effect gives it -- on a head
+           with no dimmer (Spotlight Chase with no colour of its own). Each
+           emitter is what is under it times the level, never more: an
+           emitter the cue has at 0 stays at 0, and no white is added. The
+           look's own colour counts as under it too. Not with a dimmer or a
+           colour in the same intent. */
+        {
+            const QJSValue &levelVal = iv("level");
+            if (!levelVal.isUndefined() && dimVal.isUndefined() && !carriesColour
+                && fxi->fixtureMode() != nullptr)
+            {
+                const float level = qBound(0.0f, (float)levelVal.toNumber(), 1.0f);
+                const float mul = 1.0f + (level - 1.0f) * envelope;   // none of it while it isn't on
+                for (quint32 c : headChannels)
+                {
+                    const QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                    if (ch == nullptr)
+                        continue;
+                    const bool isEmitter = (ch->group() == QLCChannel::Intensity
+                                            || ch->group() == QLCChannel::Colour)
+                                           && ch->colour() != QLCChannel::NoColour;
+                    if (!isEmitter)
+                        continue;
+                    const uchar base = sceneBaseValue(fid, c, 0);
+                    DmxWrite w{uniIdx, (int)fxi->address() + (int)c,
+                               (uchar)qBound(0, (int)qRound(base * mul), 255), fxi->id(), c,
+                               /*replace=*/true, mul, base};
+                    w.multiply = true;
+                    writes.append(w);
+                }
+            }
+        }
+
         // RGB colour channels (additive mixing fixtures)
         int colourWritesBefore = writes.size();
         // Respect the look's master Dimmer on colour output, but ONLY for fixtures

@@ -42,12 +42,14 @@ private slots:
      *  Fire's; a colour-wheel mover dark until reached, then on its blue
      *  slot at full, then its red one flickering on its dimmer; no pan. */
     void fireSpreadFrontAndBehindTakesItsOwnColours();
-    /** A Dimmer at 50% under Fire Spread puts an RGB par with no dimmer at
-     *  half, in Fire and in Front and Behind. */
+    /** A Dimmer at 50% under Fire Spread puts an RGB par with no dimmer and
+     *  a par's dimmer at half, in Fire and in Front and Behind; with the
+     *  look's own Dimmer at 50% above it too, a quarter (each once). */
     void fireSpreadTakesItsOwnDimmer();
-    /** Spotlight Chase with no look colour on RGBW washes with no dimmer:
-     *  the chase shows, wash by wash. */
-    void spotlightChaseShowsOnAWashWithNoDimmer();
+    /** Spotlight Chase with no colour of its own on RGB and RGBW washes with
+     *  no dimmer, a red cue under them: the hot spot is that red at the
+     *  chase's level; green, blue and white stay 0 (to DMX). */
+    void spotlightChaseBrightensTheColourUnderIt();
     /** Color Chase's Peak dimmer on RGBW washes with no dimmer: the chase
      *  and the background at that level. */
     void colorChasePeakDimmerOnAWashWithNoDimmer();
