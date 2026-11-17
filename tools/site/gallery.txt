@@ -1,0 +1,47 @@
+# The Gallery page on qlcconsole.org: "## Section" starts a group, then one
+# repo path per line. The caption is the picture's alt text in the docs; to
+# override it, add " | Caption" after the path.
+
+## The rig, as the audience sees it
+docs/course/images/lesson-1-1/rig-chorus.png | The chorus cue on the teaching stage, in the Rig Overview
+docs/course/images/lesson-1-1/rig-pose.png | The opening pose: the stage dark under a blue cyc, two performers on their marks
+docs/course/images/lesson-2-6/rig-verse-stab.png | The Red Stab hit fired over the verse, washing the house in red
+docs/images/lighting-studio-performers-3d.png
+docs/images/lighting-studio-rig-overview-3d.png
+
+## Writing the show
+docs/course/images/lesson-1-1/showtree-tab.png | The Show Tree: the Library, the cues and their layers, and the cue page
+docs/images/show-tree-workbench.png
+docs/course/images/lesson-2-7/chorus-subcues.png | The chorus split into sub-cues
+docs/images/build-tab-layout.png
+docs/images/programming-tab-look-editor-color.png
+docs/images/programming-tab-effect-browser.png
+docs/images/build-effects-menu.png
+
+## The plot and the Lighting Studio
+docs/images/lighting-studio-top-view.png
+docs/images/lighting-studio-stage-marks.png
+docs/images/lighting-studio-front-view-badges.png
+docs/images/lighting-studio-truss-editor.png
+docs/images/lighting-studio-fixture-mount-properties.png
+
+## Focus and venues
+docs/images/focus-calls-panel.png
+docs/images/refine-panel.png
+docs/images/focus-mode-controller-map.png
+docs/images/focus-report.png
+docs/images/venue-rig-page.png
+
+## Patching and connections
+docs/images/connections-devices-tab.png
+docs/images/connections-by-universe.png
+docs/images/patch-dialog.png
+docs/images/patch-list.png
+docs/images/patch-labels.png
+
+## Running the show
+docs/course/images/lesson-1-5/run-standby.png | The Run tab: the cue list, STANDBY, and big GO, Back, Pause and Stop
+docs/course/images/lesson-2-7/run-subgo.png | Sub GO stepping through the chorus's sub-cues
+docs/course/images/lesson-2-6/vc-hits.png | Busking hits as Virtual Console buttons
+docs/images/getting-started-main-window.png
+docs/images/views-classic.png
