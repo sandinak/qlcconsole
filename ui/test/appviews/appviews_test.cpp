@@ -3230,7 +3230,10 @@ void AppViews_Test::simpleDeskOpensAndClosesOnDemand()
     // Only it has a close button, and it closes it.
     QVERIFY(tabs->tabBar()->tabButton(at, QTabBar::RightSide) != nullptr);
     QVERIFY(tabs->tabBar()->tabButton(0, QTabBar::RightSide) == nullptr);
-    tabs->tabBar()->tabButton(at, QTabBar::RightSide)->click();
+    {
+        QWidget *x = tabs->tabBar()->tabButton(at, QTabBar::RightSide);
+        QTest::mouseClick(x, Qt::LeftButton, Qt::NoModifier, x->rect().center());
+    }
     QVERIFY(!barTexts(m_app).contains("Simple Desk"));
     QCOMPARE(barTexts(m_app).size(), 7);
     m_app->setTabLabelMode(App::TabIconAndText);
