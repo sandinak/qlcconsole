@@ -51,6 +51,9 @@
 #include "focuscontrolmap.h"
 #include "focusmodepanel.h"
 #include "focussession.h"
+#include "outputrulekeeper.h"
+#include "showcontrol.h"
+#include "universe.h"
 #include "gamepadrole.h"
 #include "qlcphysical.h"
 #include "stagetarget.h"
@@ -665,6 +668,92 @@ void FocusMode_Test::theDefaultFollowsTheDevice()
     QCOMPARE(FocusModePanel::defaultInput(m_doc), FocusSession::KeyboardInput);
     panel->findChild<QToolButton *>("focusUseController")->click();
     QCOMPARE(FocusModePanel::defaultInput(m_doc), FocusSession::ControllerInput);
+}
+
+void FocusMode_Test::theStopKeepsUnsavedFocusAsADraft()
+{
+    FocusSession *s = m_doc->programmer()->focusSession();
+    MonitorProperties *props = m_doc->monitorProperties();
+    auto tidy = qScopeGuard([this]() { m_doc->outputRuleKeeper()->noteGo(); });
+    QList<Universe *> ua;
+    auto dimmerOut = [&](quint32 fid) {
+        ua = m_doc->inputOutputMap()->claimUniverses();
+        ua[0]->processFaders();                     // one frame
+        const int v = int(ua[0]->preGMValue(int(m_doc->fixture(fid)->address()) + 2));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    auto stopAll = [this]() {
+        ShowControl::Request off;
+        off.command = ShowControl::AllOff;
+        QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    };
+    auto pickUpButton = [](FocusModePanel *p) { return p->findChild<QPushButton *>("focusDraftPickUp"); };
+    auto offerShown = [](FocusModePanel *p) {
+        QWidget *w = p->findChild<QWidget *>("focusDraftOffer");
+        return w != nullptr && w->isVisibleTo(p);
+    };
+
+    QString why;
+    QPointer<FocusModePanel> panel = FocusModePanel::startWith(
+        m_doc, nullptr, optionsFor(m_heads, m_target), &why, int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY(!offerShown(panel));                 // nothing kept yet: no offer
+    // Two lights nudged, not saved.
+    const quint32 first = s->currentFixture();
+    s->nudge(2.0f, 1.0f);
+    s->next();
+    const quint32 second = s->currentFixture();
+    s->nudge(-1.5f, 0.5f);
+    QCOMPARE(s->unsavedFixtures().size(), 2);
+    const FocusSession::Offset firstLive = s->liveOffset(first);
+    const FocusSession::Offset secondLive = s->liveOffset(second);
+    QVERIFY(dimmerOut(second) > 0);              // its light on
+
+    // The stop: the light dark in the very next frame, the rig as saved.
+    stopAll();
+    QCOMPARE(dimmerOut(second), 0);
+    QVERIFY(!s->isActive());
+    QTRY_VERIFY(panel.isNull());
+    QCOMPARE(props->fixtureRigProps(first).panOffsetDeg, 0.0f);
+    QCOMPARE(props->fixtureRigProps(second).panOffsetDeg, 0.0f);
+
+    // Started again: the offer, with the count; nothing picked up by itself.
+    panel = FocusModePanel::startWith(m_doc, nullptr, optionsFor(m_heads, m_target), &why,
+                                      int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY2(offerShown(panel), "no offer to pick up the focus the emergency stop ended");
+    QVERIFY(pickUpButton(panel) != nullptr);
+    QCOMPARE(pickUpButton(panel)->text(), QString("Pick up where you stopped (2 unsaved changes)"));
+    QVERIFY(s->unsavedFixtures().isEmpty());
+    // Pick up: the values back, still unsaved; the offer gone.
+    pickUpButton(panel)->click();
+    QCOMPARE(s->liveOffset(first), firstLive);
+    QCOMPARE(s->liveOffset(second), secondLive);
+    QCOMPARE(props->fixtureRigProps(first).panOffsetDeg, firstLive.pan);
+    QCOMPARE(s->unsavedFixtures().size(), 2);
+    QVERIFY(!offerShown(panel));
+
+    // Stopped again with them unsaved; this time Discard.
+    stopAll();
+    QTRY_VERIFY(panel.isNull());
+    panel = FocusModePanel::startWith(m_doc, nullptr, optionsFor(m_heads, m_target), &why,
+                                      int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY(offerShown(panel));
+    QPushButton *discard = panel->findChild<QPushButton *>("focusDraftDiscard");
+    QVERIFY(discard != nullptr);
+    discard->click();
+    QVERIFY(!offerShown(panel));
+    QCOMPARE(s->liveOffset(first), FocusSession::Offset());
+    QVERIFY(s->unsavedFixtures().isEmpty());
+    panel->requestExit();
+    QTRY_VERIFY(panel.isNull());
+    // Gone for good: the next start offers nothing.
+    panel = FocusModePanel::startWith(m_doc, nullptr, optionsFor(m_heads, m_target), &why,
+                                      int(FocusSession::KeyboardInput));
+    QVERIFY2(panel != nullptr, qPrintable(why));
+    QVERIFY(!offerShown(panel));
 }
 
 void FocusMode_Test::theKeyboardIgnoresTheController()

@@ -245,6 +245,30 @@ public:
     static QList<quint32> stageOrder(Doc *doc, const QList<quint32> &fixtures);
 
     /*********************************************************************
+     * The emergency stop's draft (board Q258)
+     *********************************************************************/
+public:
+    /** The emergency stop ends the session (PadRun::stopStruck()). Its
+     *  light goes out first -- the Focus layer let go of, as stop() does --
+     *  and only then are the lights not saved taken as a draft for this
+     *  show and session: copied from what the session holds in memory, no
+     *  file, no lock, nothing the stop waits on. Then stop(): every light
+     *  back to its last save, as before. */
+    void stopForEmergency();
+    /** A draft is held (until picked up, discarded or the show closed). */
+    bool hasDraft() const { return !m_draft.isEmpty(); }
+    /** How many lights of the running session the draft would change: the
+     *  draft's lights in this session, saved to the same place (the venue
+     *  applied, or the show), not changed or saved since. 0: nothing to
+     *  offer. */
+    int draftCount() const;
+    /** Put the draft's values on those lights, unsaved (to Save or put
+     *  back as any change); the draft is gone. How many. */
+    int pickUpDraft();
+    /** Drop the draft. */
+    void discardDraft();
+
+    /*********************************************************************
      * Where it is
      *********************************************************************/
 public:
@@ -598,6 +622,11 @@ signals:
     void announce(const QString &text, int priority = ControllerScheme::WherePriority);
     /** Said because the operator asked (Say the light): always spoken. */
     void sayLight(const QString &text);
+    /** A start found the emergency stop's draft for @p count of its lights:
+     *  the screen (the focus panel) offers to pick it up or discard it. */
+    void draftOffered(int count);
+    /** The draft was taken, picked up or dropped. */
+    void draftChanged();
 
 private:
     struct Head
@@ -744,6 +773,24 @@ private:
     int m_blinkPhase = 0;
     quint32 m_blinkFid = 0xFFFFFFFF;
     QTimer m_blinkTimer;
+
+    /** One light as the emergency stop left it (board Q258): what it was
+     *  saved as then, and what it was set to, not saved. */
+    struct DraftHead
+    {
+        Offset saved, live;
+        bool fixed = false;
+        QVector3D landSaved, first;
+        int beam = 0;
+        float lensSaved = 0.0f, lensLive = 0.0f;
+    };
+    QHash<quint32, DraftHead> m_draft;
+    QString m_draftVenue;           ///< where its saves would go: the venue, or empty (the show)
+    /** The lights the draft applies to now (draftCount()). */
+    QList<quint32> draftFixtures() const;
+    QString saveDestination() const;
+    /** After a start: the draft offered, if it has any of its lights. */
+    void offerDraft();
 
     mutable QMutex m_writesMutex;
     QHash<QPair<int, int>, uchar> m_writes;

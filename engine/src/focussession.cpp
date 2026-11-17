@@ -77,6 +77,9 @@ FocusSession::FocusSession(Doc *doc, QObject *parent)
             if (mode == Doc::Operate && !m_options.allowOperate)
                 stop();
         });
+    // The emergency stop's draft is this show's, this session's (Q258).
+    if (m_doc != nullptr)
+        connect(m_doc, &Doc::cleared, this, &FocusSession::discardDraft);
     /* Which heads are unsaved can change with any of these; tell it once. */
     connect(this, &FocusSession::offsetChanged, this, &FocusSession::checkUnsaved);
     connect(this, &FocusSession::started, this, &FocusSession::checkUnsaved);
@@ -430,6 +433,7 @@ bool FocusSession::start(const Options &options, QString *why)
         emit starting();
         enterCall(0);
         emit started();
+        offerDraft();
         return true;
     }
 
@@ -461,6 +465,7 @@ bool FocusSession::start(const Options &options, QString *why)
     flashSelection();
     // The first line is said at once (Q171): nothing to settle yet.
     emit announce(wherePhrase(), ControllerScheme::WhereNowPriority);
+    offerDraft();
     return true;
 }
 
@@ -789,6 +794,143 @@ void FocusSession::stop()
         m_breathTimer->stop();
     m_breathClock.invalidate();
     emit stopped();
+}
+
+/*****************************************************************************
+ * The emergency stop's draft (board Q258)
+ *****************************************************************************/
+
+void FocusSession::stopForEmergency()
+{
+    if (!m_active)
+        return;
+    /* 1. The light out, at once: nothing below comes before it. */
+    {
+        QMutexLocker locker(&m_writesMutex);
+        m_writes.clear();
+    }
+    m_layer.clear();
+    /* 2. Then the draft, from memory only: what each light not saved was
+       set to, and what it was saved as then. A new stop with nothing
+       unsaved keeps the draft already held. */
+    QHash<quint32, DraftHead> draft;
+    for (quint32 fid : m_all)
+    {
+        const Head &h = m_heads[fid];
+        if (!h.dirty())
+            continue;
+        DraftHead d;
+        d.saved = h.saved;
+        d.live = h.live;
+        d.fixed = h.fixed;
+        d.landSaved = h.landSaved;
+        d.first = h.first;
+        d.beam = h.beam;
+        d.lensSaved = h.lensSaved;
+        d.lensLive = h.lensLive;
+        draft.insert(fid, d);
+    }
+    if (!draft.isEmpty())
+    {
+        m_draft = draft;
+        m_draftVenue = saveDestination();
+    }
+    /* 3. Every light back to its last save, as any stop. */
+    stop();
+    if (!draft.isEmpty())
+        emit draftChanged();
+}
+
+QString FocusSession::saveDestination() const
+{
+    return savesToVenue() ? m_venues->activeVenue() : QString();
+}
+
+QList<quint32> FocusSession::draftFixtures() const
+{
+    QList<quint32> out;
+    if (!m_active || m_draft.isEmpty() || saveDestination() != m_draftVenue)
+        return out;
+    for (quint32 fid : m_all)
+    {
+        auto it = m_draft.constFind(fid);
+        if (it == m_draft.constEnd())
+            continue;
+        const Head &h = m_heads[fid];
+        const DraftHead &d = it.value();
+        // Changed or saved since (here, or by another session): not ours to put back.
+        if (h.dirty() || h.fixed != d.fixed || h.beam != d.beam || h.lensSaved != d.lensSaved)
+            continue;
+        // A fixed light's landing is worked out again from its rig: 5 mm is the same place.
+        if (h.fixed ? (h.landSaved - d.landSaved).length() > 0.005f : h.saved != d.saved)
+            continue;
+        out << fid;
+    }
+    return out;
+}
+
+int FocusSession::draftCount() const
+{
+    return draftFixtures().size();
+}
+
+void FocusSession::offerDraft()
+{
+    const int n = draftCount();
+    if (n <= 0)
+        return;
+    /* The screen asks (the focus panel); a pad never picks from a list
+       (PadRun rule 3): it starts fresh, and is told where the choice is. */
+    emit draftOffered(n);
+    emit announce(n == 1 ? tr("1 change from before the emergency stop kept: pick it up or discard it "
+                              "on the computer.")
+                         : tr("%1 changes from before the emergency stop kept: pick them up or discard "
+                              "them on the computer.").arg(n), ControllerScheme::ConfirmPriority);
+}
+
+int FocusSession::pickUpDraft()
+{
+    const QList<quint32> fids = draftFixtures();
+    for (quint32 fid : fids)
+    {
+        Head &h = m_heads[fid];
+        const DraftHead &d = m_draft[fid];
+        if (h.beam == LensSetByHand && d.lensLive != h.lensLive)
+        {
+            h.lensLive = d.lensLive;
+            applyLens(fid, h.lensLive);
+        }
+        if (h.fixed)
+        {
+            h.first = d.first;
+            applyLanding(fid, h, false);
+        }
+        else
+        {
+            h.live = d.live;
+            applyOffset(fid, h.live);
+        }
+        emit offsetChanged(fid);
+    }
+    m_draft.clear();
+    m_draftVenue.clear();
+    if (!fids.isEmpty())
+        rebuildWrites();
+    emit draftChanged();
+    if (!fids.isEmpty())
+        emit announce(fids.size() == 1 ? tr("Picked up where you stopped: 1 light not saved.")
+                                       : tr("Picked up where you stopped: %1 lights not saved.").arg(fids.size()),
+                      ControllerScheme::ConfirmPriority);
+    return int(fids.size());
+}
+
+void FocusSession::discardDraft()
+{
+    if (m_draft.isEmpty())
+        return;
+    m_draft.clear();
+    m_draftVenue.clear();
+    emit draftChanged();
 }
 
 /*****************************************************************************

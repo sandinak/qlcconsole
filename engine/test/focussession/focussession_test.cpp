@@ -51,6 +51,8 @@
 #include "qlcphysical.h"
 #include "hidprofile.h"
 #include "stagetarget.h"
+#include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "qlcchannel.h"
 #include "aimsolver.h"
 #include "universe.h"
@@ -867,6 +869,112 @@ void FocusSession_Test::performEndsIt()
     QVERIFY(!s->isActive());
     QCOMPARE(m_doc->monitorProperties()->fixtureRigProps(a->id()).panOffsetDeg, 1.0f);
     m_doc->setMode(Doc::Design);
+}
+
+void FocusSession_Test::theEmergencyStopKeepsADraft()
+{
+    Fixture *a = makeSpot(m_doc, "A", 2.0f, 2.0f);
+    Fixture *b = makeSpot(m_doc, "B", 4.0f, 2.0f);
+    Fixture *c = makeSpot(m_doc, "C", 6.0f, 2.0f);
+    StageTarget *mark = makeTarget(m_doc, "Mark", QVector3D(4.0f, 6.0f, 0.0f));
+    FocusSession *s = m_doc->programmer()->focusSession();
+    MonitorProperties *props = m_doc->monitorProperties();
+    const QList<quint32> heads = { a->id(), b->id(), c->id() };
+    auto dimmer = [this](Fixture *f) {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        ua[0]->processFaders();                     // one frame
+        const int v = int(ua[0]->preGMValue(int(f->address()) + 2));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    auto stopAll = [this]() {
+        ShowControl::Request off;
+        off.command = ShowControl::AllOff;
+        QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+        m_doc->outputRuleKeeper()->noteGo();       // the next stop is struck afresh
+    };
+
+    // No draft: the stop puts the light out in the same frame.
+    QVERIFY(s->start(optionsFor(heads, mark->id())));
+    Fixture *lit = m_doc->fixture(s->currentFixture());
+    QVERIFY(dimmer(lit) > 0);
+    stopAll();
+    QCOMPARE(dimmer(lit), 0);
+    QVERIFY(!s->hasDraft());
+
+    // Three lights nudged, not saved; the stop: dark in the same frame.
+    QVERIFY(s->start(optionsFor(heads, mark->id())));
+    QHash<quint32, FocusSession::Offset> live;
+    for (int i = 0; i < 3; ++i)
+    {
+        s->nudge(1.0f + i, -0.5f * i);
+        live.insert(s->currentFixture(), s->liveOffset(s->currentFixture()));
+        if (i < 2)
+            s->next();
+    }
+    QCOMPARE(s->unsavedFixtures().size(), 3);
+    lit = m_doc->fixture(s->currentFixture());
+    QVERIFY(dimmer(lit) > 0);
+    stopAll();
+    QCOMPARE(dimmer(lit), 0);
+    QVERIFY(!s->isActive());
+    QVERIFY(s->pendingWrites().isEmpty());
+    for (quint32 fid : heads)
+        QCOMPARE(props->fixtureRigProps(fid).panOffsetDeg, 0.0f);   // the rig as saved
+    QVERIFY(s->hasDraft());
+
+    // Started again: offered with its count; nothing put back by itself.
+    QSignalSpy offered(s, &FocusSession::draftOffered);
+    QVERIFY(s->start(optionsFor(heads, mark->id())));
+    QCOMPARE(offered.count(), 1);
+    QCOMPARE(offered.first().at(0).toInt(), 3);
+    QCOMPARE(s->draftCount(), 3);
+    QVERIFY(s->unsavedFixtures().isEmpty());
+    QCOMPARE(s->pickUpDraft(), 3);
+    for (quint32 fid : heads)
+    {
+        QCOMPARE(s->liveOffset(fid), live.value(fid));
+        QCOMPARE(props->fixtureRigProps(fid).panOffsetDeg, live.value(fid).pan);
+    }
+    QCOMPARE(s->unsavedFixtures().size(), 3);
+    QVERIFY(!s->hasDraft());
+    QCOMPARE(s->draftCount(), 0);
+
+    // Stopped again: discarded, the next start offers nothing.
+    stopAll();
+    QVERIFY(s->hasDraft());
+    offered.clear();
+    QVERIFY(s->start(optionsFor(heads, mark->id())));
+    QCOMPARE(offered.count(), 1);
+    s->discardDraft();
+    QCOMPARE(s->draftCount(), 0);
+    for (quint32 fid : heads)
+        QCOMPARE(s->liveOffset(fid), FocusSession::Offset());
+    s->stop();
+    offered.clear();
+    QVERIFY(s->start(optionsFor(heads, mark->id())));
+    QCOMPARE(offered.count(), 0);
+
+    // A light saved since: not the draft's to put back (two of three offered).
+    s->stop();
+    QVERIFY(s->start(optionsFor(heads, mark->id())));
+    for (int i = 0; i < 3; ++i)
+    {
+        s->nudge(1.0f, 0.0f);
+        if (i < 2)
+            s->next();
+    }
+    stopAll();
+    QVERIFY(s->start(optionsFor(heads, mark->id())));
+    s->nudge(0.5f, 0.0f);
+    s->save();
+    QCOMPARE(s->draftCount(), 2);
+    s->stop();
+
+    // The show closed: the draft goes with it.
+    QVERIFY(s->hasDraft());
+    m_doc->clearContents();
+    QVERIFY(!s->hasDraft());
 }
 
 namespace

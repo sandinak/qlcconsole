@@ -54,6 +54,12 @@ private slots:
     void theDefaultFollowsTheDevice();
     /** On the keyboard the controller moves nothing. */
     void theKeyboardIgnoresTheController();
+    /** Board Q258: the emergency stop ends a focus with lights not saved:
+     *  its light dark at once (the DMX), the changes kept as a draft; the
+     *  next start's panel offers "Pick up where you stopped (N unsaved
+     *  changes)" or Discard; Pick up puts the values back, Discard drops
+     *  them. */
+    void theStopKeepsUnsavedFocusAsADraft();
     /** A button, a stick, a key: each lights its place on the map. */
     void pressingLightsTheControl();
     /** H holds every light and lets go; , . the zoom; ; ' the focus. */

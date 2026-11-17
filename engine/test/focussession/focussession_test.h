@@ -91,6 +91,11 @@ private slots:
     void theSessionKeepsTheControllerAwake();
     /** Going into Perform ends Focus mode and drops unsaved nudges. */
     void performEndsIt();
+    /** Board Q258: the emergency stop ends the focus with its light dark
+     *  in the same frame, draft or no draft; the lights not saved are kept
+     *  as a draft that the next start offers with its count; picked up,
+     *  the values come back unsaved; discarded, or the show closed, gone. */
+    void theEmergencyStopKeepsADraft();
     /** What the views draw for the focused head is where it is MEANT to
      *  point -- at its reference -- through a nudge, Save, Revert, Zero, Undo
      *  and a discard; nothing for any other head, or once it stops. */

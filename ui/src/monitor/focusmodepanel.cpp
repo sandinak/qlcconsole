@@ -771,6 +771,29 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     m_progressLabel->setObjectName(QStringLiteral("focusProgress"));
 
     vl->addWidget(m_titleLabel);
+    /* The emergency stop ended a focus with lights not saved (Q258): they
+       were kept as a draft; here, on the screen, the choice -- a pad never
+       picks from a list (PadRun rule 3), it starts fresh. */
+    m_draftOffer = new QWidget(this);
+    m_draftOffer->setObjectName(QStringLiteral("focusDraftOffer"));
+    {
+        QHBoxLayout *dl = new QHBoxLayout(m_draftOffer);
+        dl->setContentsMargins(0, 0, 0, 0);
+        m_draftPickUp = new QPushButton(m_draftOffer);
+        m_draftPickUp->setObjectName(QStringLiteral("focusDraftPickUp"));
+        m_draftPickUp->setFocusPolicy(Qt::NoFocus);
+        m_draftPickUp->setToolTip(tr("The emergency stop ended the last focus with these lights not saved: "
+                                     "put them back as they were, still to save"));
+        QPushButton *discard = new QPushButton(tr("Discard"), m_draftOffer);
+        discard->setObjectName(QStringLiteral("focusDraftDiscard"));
+        discard->setFocusPolicy(Qt::NoFocus);
+        discard->setToolTip(tr("Forget the changes the emergency stop kept"));
+        dl->addWidget(m_draftPickUp, 1);
+        dl->addWidget(discard);
+        connect(m_draftPickUp, &QPushButton::clicked, this, [this]() { m_session->pickUpDraft(); });
+        connect(discard, &QPushButton::clicked, this, [this]() { m_session->discardDraft(); });
+    }
+    vl->addWidget(m_draftOffer);
     vl->addWidget(m_callLabel);
     vl->addWidget(m_nameLabel);
     vl->addWidget(m_nameNoteLabel);
@@ -931,6 +954,9 @@ FocusModePanel::FocusModePanel(Doc *doc, QWidget *parent)
     connect(m_session, &FocusSession::callChanged, this, &FocusModePanel::refresh);
     connect(m_session, &FocusSession::scopeChanged, this, &FocusModePanel::refresh);
     connect(m_session, &FocusSession::exitRequested, this, [this]() { requestExit(); });
+    connect(m_session, &FocusSession::draftChanged, this, &FocusModePanel::refreshDraftOffer);
+    connect(m_session, &FocusSession::draftOffered, this, &FocusModePanel::refreshDraftOffer);
+    refreshDraftOffer();
     // Ended under it -- into Perform, say: close without asking.
     connect(m_session, &FocusSession::stopped, this, [this]() {
         if (!m_finishing)
@@ -950,6 +976,15 @@ FocusModePanel::~FocusModePanel()
         m_session->stop();
         finish();
     }
+}
+
+void FocusModePanel::refreshDraftOffer()
+{
+    const int n = m_session->isActive() ? m_session->draftCount() : 0;
+    if (n > 0)
+        m_draftPickUp->setText(n == 1 ? tr("Pick up where you stopped (1 unsaved change)")
+                                      : tr("Pick up where you stopped (%1 unsaved changes)").arg(n));
+    m_draftOffer->setVisible(n > 0);
 }
 
 void FocusModePanel::refresh()
