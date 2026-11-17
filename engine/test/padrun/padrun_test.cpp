@@ -1820,6 +1820,14 @@ void PadRun_Test::theStopFromAnyPadInEveryFocusState()
     fourOnB();
     QCOMPARE(stops(), 1);
     QCOMPARE(run->state(), PadRun::Stopped);
+    // The stop lets go of the focus cue (as its list's stop does): GO onto it again.
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    auto cueAgain = [&]() {
+        fcc->cueCurrent(m_list, m_empty);
+        fcc->cueCurrent(m_list, m_cue1);
+        QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    };
+    cueAgain();
 
     // Naming the venue, A the owner: B's four.
     arm(true, 0);
@@ -1829,6 +1837,8 @@ void PadRun_Test::theStopFromAnyPadInEveryFocusState()
     fourOnB();
     QCOMPARE(stops(), 2);
     QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    cueAgain();
 
     // The calls running, A the owner: B's four.
     if (fcc->state() == FocusCallCue::Armed)
@@ -1843,7 +1853,9 @@ void PadRun_Test::theStopFromAnyPadInEveryFocusState()
     fourOnB();
     QCOMPARE(stops(), 3);
     QCOMPARE(run->state(), PadRun::Stopped);
-    pc->focusSession()->finish();
+    // The calls ended with the stop (E9).
+    QVERIFY(!pc->focusSession()->isActive());
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
 }
 
 void PadRun_Test::reviewOnePadListedTwiceStopsOnce()
