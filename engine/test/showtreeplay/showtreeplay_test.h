@@ -91,8 +91,40 @@ private slots:
     void aHeldCueHitLetsGoOverItsFadeOutWhenItsCueEnds();
     void aListHitDoesNothingWhileItsListIsntRunning();
 
+    /* From the independent evaluation of 0.4.12. */
+    /** runningCue() finds a cue with sub-cues while it plays. */
+    void theRunningCueWithSubCuesIsFound();
+    /** A cue added or deleted earlier in a running list leaves the cue on
+     *  stage as the running one, and the next GO plays the next cue and
+     *  nothing of a cue that never played. */
+    void anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage();
+    /** A cue LOADed on standby stays the one loaded when a cue is added
+     *  before it: GO plays it. */
+    void aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt();
+    /** The cue on stage deleted from its running list: its light held, no
+     *  cue named as running, and GO plays the cue now in its place. */
+    void theCueOnStageDeletedHoldsUntilGoThenTheNextPlays();
+    /** Back while a deleted cue is held plays the cue before it; with the
+     *  first cue deleted, the held cue stays and the list runs on. */
+    void backWhileADeletedCueIsHeldPlaysTheCueBeforeIt();
+    /** The first cue deleted on stage keeps the list's starting state: no
+     *  ghost of it on a later Back. */
+    void theFirstCueDeletedLeavesTheListsStartingState();
+    /** A held deleted cue's Collection deleted from the show: let go of. */
+    void aHeldDeletedCuesFunctionDeletedLetsGo();
+    /** Undoing the delete of the held cue makes it the running cue again. */
+    void undoingTheDeleteOfTheHeldCueMakesItRunAgain();
+    /** Chaser::setSteps() mid-run: the GO after a step added at the top
+     *  puts on nothing of it (the runner's tracked state follows). */
+    void stepsSetMidRunCarryTheTrackedState();
+    /** The main cue list picked outside the tree (a chaser editor) is not
+     *  taken back by undoing an unrelated tree edit. */
+    void aMainListPickedElsewhereSurvivesAnUnrelatedUndo();
+
 private:
     quint32 dimmer(int level, const QString &name);
+    /** One list, cue i setting fixture 0 to @a levels[i], current. */
+    quint32 levelsList(const QList<int> &levels, QList<quint32> *cues);
     FixtureGroup *group(const QString &name, const QList<quint32> &fixtures);
     /** A production with one list of @a cues cues, each lighting group
      *  @a groupId at @a level: its list id. */

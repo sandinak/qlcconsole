@@ -136,6 +136,22 @@ public:
      *  (ChaserStep::SubGoFollow: auto-follow sub-cues). */
     void setSubCueFollow(bool enable) { m_subCueFollow = enable; }
 
+    /** The chaser's steps went from $before to $after (Chaser::setSteps()):
+     *  each running step, the current index and the tracked state follow
+     *  their function to its new index. The step on stage gone: it is held
+     *  until the next GO (holdsRemovedStep()), the current index the step
+     *  before its place, so GO plays the step now there. Called with the
+     *  chaser's runner lock held. Returns whether the current index moved. */
+    bool remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after);
+    /** A step plays whose own step was deleted (held until the next GO). */
+    bool holdsRemovedStep() const;
+    /** Function @a fid is going from the Doc: a held step playing it goes
+     *  (with the chaser's runner lock held). */
+    void functionRemoved(quint32 fid);
+    /** Where step @a from of @a before is in @a after: the same index if it
+     *  still plays the same function, else the nearest that does; -1: gone. */
+    static int followStep(const QList<ChaserStep> &before, const QList<ChaserStep> &after, int from);
+
     /**
      * Compute next step for manual fading
      */
@@ -311,7 +327,8 @@ private:
      *  whichever of them was running first. */
     void raiseMembers(const Function *f, QList<Universe *> universes, int depth = 0);
 
-    int m_restackFrom = -1;                 //! The step started last (-1: none yet)
+    int m_restackFrom = -1;                 //! The step started last (-1: none yet; -2: none before, still running)
+    bool m_heldGone = false;                //! A held deleted cue's function was deleted: wait for GO
     QSet<int> m_visited;                    //! The steps started since the list started
     QSet<QPair<quint32, quint32> > m_touched; //! Fixture channels a restack has put back
     QList<QByteArray> m_startStage;         //! The universes when the list started

@@ -107,6 +107,9 @@ void ChaserRunner::slotChaserChanged()
     QList<ChaserRunnerStep*> delList;
     foreach (ChaserRunnerStep *step, m_runnerSteps)
     {
+        // Its step deleted while on stage (remapSteps()): held until GO.
+        if (step->m_index < 0)
+            continue;
         if (!m_chaser->steps().contains(ChaserStep(step->m_function->id())))
         {
             // Disappearing function: remove step
@@ -456,6 +459,182 @@ int ChaserRunner::randomStepIndex(int step) const
    return step;
 }
 
+int ChaserRunner::followStep(const QList<ChaserStep> &before, const QList<ChaserStep> &after, int from)
+{
+    if (from < 0 || from >= before.count())
+        return -1;
+    // The same index if it still plays that function, else the nearest
+    // index that does; gone: -1.
+    const quint32 fid = before.at(from).fid;
+    if (from < after.count() && after.at(from).fid == fid)
+        return from;
+    // A tie (the function twice, as near either side): toward where the
+    // steps added or taken away put it.
+    const int shifted = from + int(after.count() - before.count());
+    int best = -1;
+    for (int j = 0; j < after.count(); ++j)
+    {
+        if (after.at(j).fid != fid)
+            continue;
+        if (best < 0 || qAbs(j - from) < qAbs(best - from)
+            || (qAbs(j - from) == qAbs(best - from) && qAbs(j - shifted) < qAbs(best - shifted)))
+            best = j;
+    }
+    return best;
+}
+
+bool ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after)
+{
+    // The step before @a from that is still there, in @a after; none: -1.
+    auto slotBefore = [&](int from) {
+        int to = -1;
+        for (int k = qMin(from, int(before.count())) - 1; to < 0 && k >= 0; --k)
+            to = followStep(before, after, k);
+        return to;
+    };
+    auto remap = [&](ChaserRunnerStep *step) {
+        if (step == NULL || step->m_index < 0)
+            return;
+        const int to = followStep(before, after, step->m_index);
+        if (to >= 0)
+            step->m_index = to;
+    };
+    /* A step playing whose own step is gone (the cue on stage deleted):
+       held on stage, as it is, until the next GO -- not let go of, and no
+       other cue started in its place (m_index -1: no step of the list). */
+    for (ChaserRunnerStep *step : std::as_const(m_runnerSteps))
+    {
+        if (step != NULL && step->m_index >= 0 && followStep(before, after, step->m_index) < 0)
+            step->m_index = -1;
+        else
+            remap(step);
+    }
+    for (ChaserRunnerStep *step : std::as_const(m_leavingSteps))
+        remap(step);
+    for (ChaserRunnerStep *step : std::as_const(m_handedOverSteps))
+        remap(step);
+    for (ChaserRunnerStep *step : std::as_const(m_handedOverLater))
+        remap(step);
+
+    const int was = m_lastRunStepIdx;
+    bool currentGone = false;
+    if (m_lastRunStepIdx >= 0 && m_lastRunStepIdx < before.count())
+    {
+        const int to = followStep(before, after, m_lastRunStepIdx);
+        if (to >= 0)
+        {
+            m_lastRunStepIdx = to;
+        }
+        else
+        {
+            currentGone = true;
+            /* The cue on stage is gone: the list stands just before where it
+               was, so the next GO plays the cue that slid into its place,
+               as the next one after the step before -- no restack (nothing
+               to put back but what the cues before set, which tracking
+               already left). */
+            m_lastRunStepIdx = slotBefore(m_lastRunStepIdx);
+            // None before it: -2, "no step before" but not a fresh start
+            // (stepStarted() would take the stage, the held light in it,
+            // as the list's starting state).
+            m_restackFrom = m_lastRunStepIdx >= 0 ? m_lastRunStepIdx : -2;
+        }
+    }
+
+    /* The tracked state follows too: the step started last and those played
+       since the list started. Left on the old indices, the next GO would
+       look like a jump (isNextStep() false) and restack() would put on what
+       a cue that never played sets. A step that is gone: the one before it
+       that is still there (else none), and out of the visited ones. */
+    if (m_restackFrom >= 0 && !currentGone)
+    {
+        int to = followStep(before, after, m_restackFrom);
+        if (to < 0)
+            to = slotBefore(m_restackFrom);
+        m_restackFrom = to >= 0 ? to : -2;
+    }
+    QSet<int> visited;
+    for (int k : std::as_const(m_visited))
+    {
+        const int to = followStep(before, after, k);
+        if (to >= 0)
+            visited.insert(to);
+    }
+    m_visited = visited;
+
+    /* A held step whose step is back (the delete undone): the running step
+       again, where it now is. */
+    for (ChaserRunnerStep *step : std::as_const(m_runnerSteps))
+    {
+        if (step == NULL || step->m_index >= 0 || step->m_function == NULL || currentGone)
+            continue;
+        for (int j = 0; j < after.count(); ++j)
+        {
+            if (after.at(j).fid != step->m_function->id())
+                continue;
+            step->m_index = j;
+            m_lastRunStepIdx = j;
+            m_restackFrom = j;
+            m_visited.insert(j);
+            break;
+        }
+    }
+
+    // A jump waiting for the beat or the next write: to the same cue.
+    if (m_pendingAction.m_action == ChaserSetStepIndex && m_pendingAction.m_stepIndex >= 0)
+    {
+        const int to = followStep(before, after, m_pendingAction.m_stepIndex);
+        if (to >= 0)
+            m_pendingAction.m_stepIndex = to;
+        else
+            m_pendingAction.m_action = ChaserNoAction;     // its cue is gone
+    }
+    if (m_pendingSubAction.m_action == ChaserSubSetStep && m_pendingSubAction.m_stepIndex >= 0)
+    {
+        const int to = followStep(before, after, m_pendingSubAction.m_stepIndex);
+        if (to >= 0)
+            m_pendingSubAction.m_stepIndex = to;
+        else
+            m_pendingSubAction.m_action = ChaserNoAction;
+    }
+
+    if (before.count() != after.count())
+        fillOrder(after.count());
+    return m_lastRunStepIdx != was;
+}
+
+void ChaserRunner::functionRemoved(quint32 fid)
+{
+    /* A step held after its cue was deleted plays a function no step of the
+       list names, so slotChaserChanged() never lets go of it: going from
+       the Doc (Doc::deleteFunction(), the function still there), it goes
+       here, or the runner would keep a dangling pointer. */
+    QList<ChaserRunnerStep *> gone;
+    for (ChaserRunnerStep *step : std::as_const(m_runnerSteps))
+        if (step != NULL && step->m_index < 0 && step->m_function != NULL && step->m_function->id() == fid)
+            gone << step;
+    for (ChaserRunnerStep *step : std::as_const(gone))
+    {
+        stopStepFunction(step);
+        m_runnerSteps.removeAll(step);
+        delete step;
+    }
+    // Its light gone with it; the list still waits for GO (write() must not
+    // start the next step by itself).
+    if (!gone.isEmpty() && m_runnerSteps.isEmpty())
+        m_heldGone = true;
+}
+
+bool ChaserRunner::holdsRemovedStep() const
+{
+    if (m_heldGone)
+        return true;
+    for (const ChaserRunnerStep *step : m_runnerSteps)
+        if (step != NULL && step->m_index < 0)
+            return true;
+    return false;
+}
+
 void ChaserRunner::fillOrder()
 {
     fillOrder(m_chaser->stepsCount());
@@ -490,7 +669,9 @@ void ChaserRunner::adjustStepIntensity(qreal fraction, int requestedStepIndex, i
 
     foreach (ChaserRunnerStep *step, m_runnerSteps)
     {
-        if (stepIndex == step->m_index && step->m_function != NULL)
+        // The list's master reaches a step held after its cue was deleted.
+        if ((stepIndex == step->m_index || (requestedStepIndex == -1 && step->m_index < 0))
+            && step->m_function != NULL)
         {
             if (requestedStepIndex == -1 && step->m_function->type() == Function::SceneType)
             {
@@ -525,6 +706,7 @@ void ChaserRunner::clearRunningList(bool handOver)
 {
     if (handOver == false)
     {
+        m_heldGone = false;
         // Stopping: the restacked state is let go of with the rest.
         dismissRestack();
         m_restackFrom = -1;
@@ -543,7 +725,8 @@ void ChaserRunner::clearRunningList(bool handOver)
         if (step->m_function)
         {
             // restore the original Function fade out time
-            step->m_function->setOverrideFadeOutSpeed(stepFadeOut(step->m_index));
+            step->m_function->setOverrideFadeOutSpeed(step->m_index >= 0 ? stepFadeOut(step->m_index)
+                                                                         : step->m_fadeOut);
             if (handOver && (step->m_function->type() == Function::CollectionType || step->m_subCues))
             {
                 m_lastFunctionID = step->m_subCues ? Function::invalidId() : blendSceneId(step->m_function);
@@ -665,7 +848,9 @@ void ChaserRunner::stepStarted(int index, QList<Universe *> universes, bool jump
 
     const int from = m_restackFrom;
     m_restackFrom = index;
-    if (from < 0)
+    // -1: the list starting; -2: no step before, the list still running
+    // (the cue on stage before it was deleted) -- its starting state stays.
+    if (from == -1)
     {
         m_visited.clear();
         m_touched.clear();
@@ -1293,6 +1478,33 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     if (m_chaser->stepsCount() == 0)
         return false;
 
+    /* Back while a deleted cue is held: the cue before it is the step the
+       list stands on (remapSteps()), so Back plays that one. None (the
+       first cue was deleted): the held cue stays, as Back on a first cue. */
+    if (m_pendingAction.m_action == ChaserPreviousStep && holdsRemovedStep())
+    {
+        if (m_lastRunStepIdx >= 0)
+        {
+            m_pendingAction.m_action = ChaserSetStepIndex;
+            m_pendingAction.m_stepIndex = m_lastRunStepIdx;
+        }
+        else
+        {
+            m_pendingAction.m_action = ChaserNoAction;
+        }
+    }
+
+    /* Back on the first cue a SingleShot list plays (every Show Tree list):
+       there is no cue before it. The cue stays on stage -- Back never stops
+       the list (it would fade out while the operator saw it "stay"). Only
+       SingleShot: a Loop goes round to its last cue, a Ping Pong turns. */
+    if (m_pendingAction.m_action == ChaserPreviousStep
+        && m_chaser->runOrder() == Function::SingleShot
+        && !m_runnerSteps.isEmpty() && getNextStepIndex() < 0)
+    {
+        m_pendingAction.m_action = ChaserNoAction;
+    }
+
     /* GO on the beat (docs/design/PLAYBACK_TIMING_DESIGN.md, P1): a step change waits for
        the next whole beat or bar of the chaser's clock. The chase carries on
        as it is meanwhile; a second GO in the same beat replaces the first
@@ -1342,12 +1554,14 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
     {
         case ChaserNextStep:
         case ChaserPreviousStep:
+            m_heldGone = false;
             clearRunningList(true);
             // the actual action will be performed below, on startNewStep
         break;
         case ChaserSetStepIndex:
             if (m_pendingAction.m_stepIndex != -1)
             {
+                m_heldGone = false;
                 clearRunningList(true);
                 if (m_chaser->runOrder() == Function::Random && !m_subCueHeld)
                     m_lastRunStepIdx = randomStepIndex(m_pendingAction.m_stepIndex);
@@ -1409,7 +1623,8 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         // (SetStepIndex / Next / Previous, handled above) change the step.
         // Held as sub-cues, likewise: a step changes on a Sub GO -- unless
         // it auto-follows (SubGoFollow, a finite hold).
-        if (m_externalClock == false && (m_subCueHeld == false || m_subCueFollow) &&
+        // A step whose own step was deleted on stage holds until GO.
+        if (m_externalClock == false && step->m_index >= 0 && (m_subCueHeld == false || m_subCueFollow) &&
             step->m_duration != Function::infiniteSpeed() &&
             ((m_chaser->tempoType() == Function::Time && step->m_elapsed >= step->m_duration) ||
              (m_chaser->tempoType() == Function::Beats && step->m_elapsedBeats >= step->m_duration)))
@@ -1454,6 +1669,13 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         // the beat too, rather than starting now and jumping on the beat.
         leaveSteps();
         m_pendingAction = held;
+        return true;
+    }
+
+    // A held deleted cue's function deleted: nothing on, the list waits.
+    if (m_runnerSteps.isEmpty() && m_heldGone)
+    {
+        leaveSteps();
         return true;
     }
 

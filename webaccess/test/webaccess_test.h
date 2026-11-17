@@ -134,6 +134,8 @@ private slots:
     void focusFollowsTheRemoteGoAndPinRules();
     void aBurstOfNudgesIsOneMove();
     void focusRoundTripOnLoopback();
+    /** The cue on stage deleted: the page says it is held until GO. */
+    void theRunPageSaysADeletedCueIsHeld();
     void theRunStateCarriesEveryNoteOfTheCue();
     void theRunStateCarriesShowStatusAndFocus();
 

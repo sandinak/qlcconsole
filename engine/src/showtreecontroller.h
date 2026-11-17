@@ -178,6 +178,12 @@ private:
     void applyProductionTimecode();
     quint32 m_current = 0xFFFFFFFF;
     bool m_settingMain = false;
+    /** Production -> its main list as picked outside the tree (a chaser
+     *  editor's "Main cue list", an import): the operator's choice, not an
+     *  undo step, so an undo or redo of a tree edit keeps it (it would
+     *  otherwise put back the snapshot's main list, and GO the old list).
+     *  A main list set in the tree (an undo step) takes its place. */
+    QHash<quint32, quint32> m_outsideMain;
 
     /************************************************************************
      * Sub-cues (P6, §3C, D9, D25): a cue's sub-cues 4.1, 4.2... are a list of

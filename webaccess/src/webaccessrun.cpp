@@ -671,7 +671,8 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("list")] = l != nullptr ? l->name : ch->name();
 
     const bool running = ch->isRunning();
-    const int cur = running ? ch->currentStepIndex() : -1;
+    // A deleted cue held until GO: no cue of the list is on.
+    const int cur = running && !ch->holdsRemovedStep() ? ch->currentStepIndex() : -1;
     const int curSub = running ? ch->currentSubCueIndex() : -1;
     const int standby = sc->standbyStep(ch);
     const bool loaded = sc->loadedStep(ch->id()) >= 0;
@@ -687,7 +688,16 @@ QByteArray WebAccessRun::stateJson() const
     o[QStringLiteral("hasSub")] = hasSub;
     o[QStringLiteral("loaded")] = loaded;
 
-    if (running)
+    if (running && ch->holdsRemovedStep())
+    {
+        // The cue on stage deleted from the list: held until GO (as the
+        // Run tab says); NEXT is the cue now in its place.
+        QJsonObject now;
+        now[QStringLiteral("name")] = tr("A deleted cue — held until GO");
+        now[QStringLiteral("held")] = true;
+        o[QStringLiteral("now")] = now;
+    }
+    else if (running)
     {
         // The sub-cue is the cue on now when there is one: its number is the full one.
         QJsonObject now = cueObject(m_doc, ch, lid, cur, -1);
@@ -707,7 +717,8 @@ QByteArray WebAccessRun::stateJson() const
         o[QStringLiteral("subNext")] = cueObject(m_doc, ch, lid, cur, subNext);
 
     // The song section of the cue on now, else of the one next.
-    quint32 sectionCue = running ? st->cueOfStep(lid, cur, -1) : st->cueOfStep(lid, standby, -1);
+    const bool onCue = running && !ch->holdsRemovedStep();
+    quint32 sectionCue = onCue ? st->cueOfStep(lid, cur, -1) : st->cueOfStep(lid, standby, -1);
     Section sec;
     if (sectionCue != 0xFFFFFFFF && st->sectionOfCue(sectionCue, &sec))
         o[QStringLiteral("section")] = sectionTitle(sec);

@@ -115,6 +115,15 @@ public:
     bool replaceStep(const ChaserStep& step, int index);
 
     /**
+     * Replace every step with $steps at once. A running chase keeps the
+     * steps it plays: its runner follows each one to its new index (by
+     * function), so a step added or removed before the one on stage leaves
+     * that one on stage, and the next GO plays the step after it. A list
+     * with a step that plays this chaser itself is refused (as addStep()).
+     */
+    void setSteps(const QList<ChaserStep> &steps);
+
+    /**
      * Move a step from $sourceIdx to $destIdx
      *
      * @param sourceIdx Source index of the step
@@ -376,6 +385,11 @@ public:
 
     /** Get the current step number */
     int currentStepIndex() const;
+
+    /** Running, a step plays whose own step was deleted (the cue on stage
+     *  deleted from its list): held until the next GO, which plays the step
+     *  now in its place. currentStepIndex() is then the step before. */
+    bool holdsRemovedStep() const;
 
     /** Compute next step for manual fading */
     int computeNextStep(int currentStepIndex) const;
