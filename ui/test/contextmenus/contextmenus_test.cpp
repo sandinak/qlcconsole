@@ -1474,19 +1474,26 @@ void ContextMenus_Test::testFixtureNeverDoesNothing()
     mgr.resize(900, 600);
     mgr.show();
     const quint32 fid = m_fixtures.first();
-    QTreeWidgetItem *fixRow = findRow(mgr.m_fixtures_tree, [fid](QTreeWidgetItem *it) {
-        return it->data(0, PROP_ID).isValid() && it->data(0, PROP_ID).toUInt() == fid
-               && !it->data(0, PROP_GROUP).isValid() && !it->data(0, PROP_HEAD).isValid();
-    });
-    QTreeWidgetItem *grpRow = findRow(mgr.m_fixtures_tree, [this](QTreeWidgetItem *it) {
-        return it->data(0, PROP_GROUP).isValid() && it->data(0, PROP_GROUP).toUInt() == m_groupA;
-    });
-    QVERIFY(fixRow != nullptr && grpRow != nullptr);
+    // Rows are found again for each pass: the tree rebuilds itself on a change.
+    auto fixRowNow = [&]() {
+        return findRow(mgr.m_fixtures_tree, [fid](QTreeWidgetItem *it) {
+            return it->data(0, PROP_ID).isValid() && it->data(0, PROP_ID).toUInt() == fid
+                   && !it->data(0, PROP_GROUP).isValid() && !it->data(0, PROP_HEAD).isValid();
+        });
+    };
+    auto grpRowNow = [&]() {
+        return findRow(mgr.m_fixtures_tree, [this](QTreeWidgetItem *it) {
+            return it->data(0, PROP_GROUP).isValid() && it->data(0, PROP_GROUP).toUInt() == m_groupA;
+        });
+    };
+    QVERIFY(fixRowNow() != nullptr && grpRowNow() != nullptr);
 
     int pass = 0;
-    for (QTreeWidgetItem *row : { grpRow, fixRow })
+    for (bool onGroup : { true, false })
     {
-        selectOnly(mgr.m_fixtures_tree, fixRow);     // the last fixture's state is what went stale
+        selectOnly(mgr.m_fixtures_tree, fixRowNow());     // the last fixture's state is what went stale
+        QTreeWidgetItem *row = onGroup ? grpRowNow() : fixRowNow();
+        QVERIFY(row != nullptr);
         selectOnly(mgr.m_fixtures_tree, row);
         bool found = false, enabled = false;
         QString tip, all = QStringLiteral("no popup");
