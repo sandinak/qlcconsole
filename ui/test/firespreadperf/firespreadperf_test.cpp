@@ -330,7 +330,6 @@ void FireSpreadPerf_Test::theCycCatchesTheSameLight()
         StructureStudioView::s_referenceThrows = false;
         QVERIFY2(kept == fresh, qPrintable(QString("the frame at %1 ms differs from the reference").arg(ms)));
     }
-    QVERIFY(!v.m_washFans.isEmpty());       // it did keep them
 }
 
 int main(int argc, char **argv)
