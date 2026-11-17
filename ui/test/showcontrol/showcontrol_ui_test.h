@@ -42,6 +42,9 @@ private slots:
     // Connections' Show control & sync page
     void thePageShowsTheCurrentSettings();
     void editingThePageChangesTheListener();
+    /** Board Q257, Windows forced: MSC in cannot be turned on and says why
+     *  on the page; MIDI timecode in cannot be chosen. */
+    void windowsRefusesMscAndMidiTimecodeInOnThePage();
     void aCommandReceivedShowsAsLast();
     void aPortInUseShowsAnError();
     void theTimecodeSourceAndHealth();

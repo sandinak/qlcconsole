@@ -43,6 +43,7 @@
 #include "showcontrol.h"
 #include "showwebaccess.h"
 #include "inputpatch.h"
+#include "padrun.h"
 #include "doc.h"
 
 namespace
@@ -264,8 +265,24 @@ QGroupBox *ShowControlSyncPage::buildMscGroup()
     m_mscLast->setWordWrap(true);
     form->addRow(tr("Last received:"), m_mscLast);
 
+    // Windows (board Q257): MSC in is refused, with the words, where it is turned on.
+    m_mscRefused = noteLabel(PadRun::notSupportedText(), box);
+    m_mscRefused->setObjectName(QStringLiteral("scMscRefused"));
+    m_mscRefused->setVisible(!PadRun::padRunSupported());
+    form->addRow(m_mscRefused);
+
     connect(m_mscCheck, &QCheckBox::toggled, this, [this](bool on) {
-        if (!m_updating && m_listener)
+        if (m_updating)
+            return;
+        if (on && !PadRun::padRunSupported())
+        {
+            m_updating = true;
+            m_mscCheck->setChecked(false);
+            m_updating = false;
+            m_mscRefused->setVisible(true);
+            return;
+        }
+        if (m_listener)
             m_listener->setMscEnabled(on);
     });
     connect(m_mscDeviceSpin, &QSpinBox::valueChanged, this, [this](int id) {
@@ -456,6 +473,11 @@ QGroupBox *ShowControlSyncPage::buildMtcGroup()
 
     form->addRow(noteLabel(tr("A show follows it when Follow MTC is on in Shows; its offset "
                               "is set there too."), box));
+    // Windows (board Q257): MIDI timecode in is refused, with the words, where it is chosen.
+    m_mtcRefused = noteLabel(tr("MIDI timecode in: %1").arg(PadRun::notSupportedText()), box);
+    m_mtcRefused->setObjectName(QStringLiteral("scMtcRefused"));
+    m_mtcRefused->setVisible(!PadRun::padRunSupported());
+    form->addRow(m_mtcRefused);
     return box;
 }
 
@@ -824,6 +846,13 @@ void ShowControlSyncPage::slotMtcSourceActivated(int index)
     const qint32 uni = m_mtcSourceCombo->itemData(index).toInt();
     if (uni == tc->sourceUniverse())
         return;
+    const InputPatch *ip = uni >= 0 ? m_doc->inputOutputMap()->inputPatch(quint32(uni)) : nullptr;
+    if (!PadRun::padRunSupported() && ip != nullptr && ip->pluginName() == QLatin1String("MIDI"))
+    {
+        m_mtcRefused->setVisible(true);
+        refreshMidiInputs();        // the combo back to what is chosen
+        return;
+    }
     tc->setSourceUniverse(uni);
     m_doc->setModified();       // saved with the show
 }

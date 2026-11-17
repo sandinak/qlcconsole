@@ -158,6 +158,8 @@ struct TestGuard
     {
         // Says to the program, and to the gate's check, that this ran.
         setEnv("QLC_TEST_OFFSCREEN_GUARD", "1");
+        // Pad Run is refused on Windows (board Q257); the tests that arm run there as on a Mac.
+        setEnv("QLC_PADRUN_PLATFORM", "any");
         if (!isSet("QLC_TEST_REAL_SCREEN"))
             setEnv("QT_QPA_PLATFORM", "offscreen");
 #if defined(__APPLE__)

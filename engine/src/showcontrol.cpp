@@ -36,6 +36,7 @@
 #include "qlcioplugin.h"
 #include "chaser.h"
 #include "doc.h"
+#include "padrun.h"
 #include "teachingsettings.h"
 #include "showtreecontroller.h"
 
@@ -789,6 +790,9 @@ void ShowControl::handleSysEx(quint32 universe, const QByteArray &sysEx)
         return;
     Request r;
     if (!parseMsc(sysEx, m_mscDeviceId, &r))
+        return;
+    // Windows (board Q257): no cue runs from MSC, the stop still does.
+    if (!PadRun::padRunSupported() && r.command != AllOff && r.command != Stop)
         return;
     m_source = Msc;
     m_sourceUniverse = universe;

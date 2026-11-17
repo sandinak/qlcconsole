@@ -25,6 +25,7 @@
 #include "controllerjobs.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
+#include <atomic>
 #include "showtreecontroller.h"
 #include "refinesession.h"
 #include "focussession.h"
@@ -589,6 +590,11 @@ void PadRun::armChordFired(const QString &pad)
        nothing that comes in while they stay held (a DualSense's resting
        trigger noise) times it again (pad-trace replay, 2026-11-16). */
     m_pads[pad].spent = true;
+    if (!m_armed && !padRunSupported())
+    {
+        refuse(Arm, notSupportedText());
+        return;
+    }
     /* One runner (CONTROLLER_JOBS.md 6): another pad's arm -- or the arm a
        venue focus put by -- is not this one's to drop or share. */
     if (m_armed && !sameController(u, m_armUniverse))
@@ -609,10 +615,53 @@ void PadRun::armChordFired(const QString &pad)
     setArmed(!m_armed, m_armed ? m_armUniverse : u);
 }
 
+namespace
+{
+std::atomic<int> g_platform { int(PadRun::PlatformAuto) };
+}
+
+void PadRun::setPlatformForTest(Platform platform)
+{
+    g_platform = int(platform);
+}
+
+bool PadRun::padRunSupported()
+{
+    switch (Platform(g_platform.load()))
+    {
+    case PlatformWindows:
+        return false;
+    case PlatformOther:
+        return true;
+    case PlatformAuto:
+        if (qEnvironmentVariable("QLC_PADRUN_PLATFORM") == QLatin1String("any"))
+            return true;
+        break;
+    case PlatformReal:
+        break;
+    }
+#ifdef Q_OS_WIN
+    return false;
+#else
+    return true;
+#endif
+}
+
+QString PadRun::notSupportedText()
+{
+    return tr("Running the show from a controller is macOS/Linux for now.");
+}
+
 bool PadRun::setArmed(bool on, quint32 universe)
 {
     if (on == m_armed)
         return true;
+    // Never the stop: only the arm is refused here (board Q257).
+    if (on && !padRunSupported())
+    {
+        refuse(Arm, notSupportedText());
+        return false;
+    }
     // Disarmed: the pad that armed is the one told.
     if (!on)
         universe = m_armUniverse;

@@ -23,6 +23,7 @@
 #include <QTime>
 
 #include "showcontrollistener.h"
+#include "padrun.h"
 #include "inputoutputmap.h"
 #include "showcontrol.h"
 #include "doc.h"
@@ -63,6 +64,9 @@ int ShowControlListener::oscPort()
 
 bool ShowControlListener::mscEnabled()
 {
+    // Windows (board Q257): off, and not turned on.
+    if (!PadRun::padRunSupported())
+        return false;
     // On: MSC only arrives on a MIDI input someone patched.
     return QSettings().value(SETTINGS_MSC_ON, true).toBool();
 }
@@ -105,6 +109,8 @@ void ShowControlListener::setOscPort(int port)
 
 void ShowControlListener::setMscEnabled(bool on)
 {
+    if (on && !PadRun::padRunSupported())
+        return;
     QSettings().setValue(SETTINGS_MSC_ON, on);
     apply();
 }

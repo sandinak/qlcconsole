@@ -102,6 +102,11 @@ computer, not the show.
 
 ## GO from the game controller (Pad Run)
 
+> **Windows: not yet.** On Windows the controller does not arm, so it runs
+> no cue: the chip in the footer says *Running the show from a controller is
+> macOS/Linux for now.* The emergency stop from the pad (LB + RB + LT + RT)
+> still works there. A Windows check on the bench comes first.
+
 Stand anywhere with an Xbox, DualShock 4 or DualSense controller and run
 the show from it. The controller has two **roles**:
 
@@ -706,6 +711,11 @@ given as an argument can be a number or text; a float is read to the
 digits it holds (4.2, not 4.199999809).
 
 ## MIDI Show Control — QLab's MIDI cue
+
+> **Windows: not yet.** On Windows, MIDI Show Control in and MIDI timecode in
+> are refused (the page says *Running the show from a controller is
+> macOS/Linux for now.*). ALL OFF and STOP from MSC still work. Art-Net and
+> LTC timecode, and OSC, are not affected.
 
 1. **Connections**: patch the MIDI port QLab sends on as an **input** of any
    universe (the same as for MIDI timecode).

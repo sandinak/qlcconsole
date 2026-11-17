@@ -610,6 +610,101 @@ void PadRunRules_Test::theStopsOwnBumpersDoNotArm()
     QCOMPARE(run->state(), PadRun::Armed);
 }
 
+namespace
+{
+struct PlatformGuard
+{
+    explicit PlatformGuard(PadRun::Platform p) { PadRun::setPlatformForTest(p); }
+    ~PlatformGuard() { PadRun::setPlatformForTest(PadRun::PlatformAuto); }
+};
+}
+
+void PadRunRules_Test::windowsRefusesTheArmChordAndSaysSo()
+{
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    hold(kLB, true);
+    hold(kRB, true);
+    QTRY_VERIFY2(run->notice() == PadRun::notSupportedText(), qPrintable(run->notice()));
+    QVERIFY(run->chipNotice().contains("macOS/Linux for now"));
+    QVERIFY(!run->isArmed());
+    hold(kRB, false);
+    hold(kLB, false);
+    // LT + A on a pad that cannot arm moves nothing.
+    hold(kLT, true);
+    hold(kA, true);
+    hold(kA, false);
+    hold(kLT, false);
+    QCOMPARE(goes(), 0);
+    QVERIFY(!run->setArmed(true));
+    QCOMPARE(run->state(), PadRun::Run);
+}
+
+void PadRunRules_Test::windowsStillStopsFromThePad()
+{
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    const int before = stops();
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(stops(), before + 1);
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+    QCOMPARE(run->state(), PadRun::Stopped);
+}
+
+void PadRunRules_Test::windowsRefusesMscCuesButNotItsStop()
+{
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    ShowControl *sc = m_doc->showControl();
+    sc->setMscEnabled(true);
+    sc->setMscDeviceId(1);
+    auto msc = [&](uchar cmd) {
+        // F0 7F <dev> 02 <fmt=1 lighting> <cmd> F7
+        QByteArray b;
+        b.append(char(0xF0)).append(char(0x7F)).append(char(1)).append(char(2)).append(char(1))
+         .append(char(cmd)).append(char(0xF7));
+        sc->handleSysEx(0, b);
+    };
+    msc(0x01);      // GO
+    QCOMPARE(goes(), 0);
+    msc(0x08);      // ALL_OFF
+    QCOMPARE(stops(), 1);
+    PadRun::setPlatformForTest(PadRun::PlatformOther);
+    msc(0x01);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::theRealPlatformArmsOrRefusesAndAlwaysStops()
+{
+    const PlatformGuard guard(PadRun::PlatformReal);   // ignores the test guard's "any"
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+#ifdef Q_OS_WIN
+    QVERIFY(!PadRun::padRunSupported());
+    QVERIFY(!run->setArmed(true));
+    QCOMPARE(run->notice(), PadRun::notSupportedText());
+#else
+    QVERIFY(PadRun::padRunSupported());
+    QVERIFY(run->setArmed(true));
+    QVERIFY(run->isArmed());
+    run->setArmed(false);
+#endif
+    const int before = stops();
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(stops(), before + 1);
+}
+
 void PadRunRules_Test::aTriggerInTheArmChordSpendsIt()
 {
     /* LB + RB, a trigger touched on the way to the stop and let go: the

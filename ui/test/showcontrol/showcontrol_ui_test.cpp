@@ -45,6 +45,8 @@
 #include "timecodesource.h"
 #include "functionparent.h"
 #include "showcontrol.h"
+#include "padrun.h"
+#include <QScopeGuard>
 #include "showwebaccess.h"
 #include "qrencoder.h"
 #include "chaserstep.h"
@@ -306,6 +308,31 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
 }
 
 /* Editing on the page saves the setting and puts it into effect at once. */
+void ShowControlUi_Test::windowsRefusesMscAndMidiTimecodeInOnThePage()
+{
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    auto restore = qScopeGuard([]() { PadRun::setPlatformForTest(PadRun::PlatformAuto); });
+    ShowControlListener::setSettings(false, freePort(), true, 1);
+    ShowControlListener listener(m_doc);
+    ShowControlSyncPage page(m_doc);
+    page.setListener(&listener);
+    page.show();
+    QCheckBox *msc = page.findChild<QCheckBox *>("scMscEnabled");
+    QLabel *why = page.findChild<QLabel *>("scMscRefused");
+    QVERIFY(msc != nullptr && why != nullptr);
+    QVERIFY(!msc->isChecked());                      // a saved "on" is not shown on
+    QVERIFY(!ShowControlListener::mscEnabled());
+    QVERIFY(why->isVisible());
+    QVERIFY2(why->text().contains("macOS/Linux for now"), qPrintable(why->text()));
+    msc->setChecked(true);
+    QVERIFY(!msc->isChecked());                      // refused
+    QVERIFY(!m_doc->showControl()->mscEnabled());
+    QVERIFY(!ShowControlListener::mscEnabled());
+    QLabel *mtc = page.findChild<QLabel *>("scMtcRefused");
+    QVERIFY(mtc != nullptr && mtc->isVisible());
+    QVERIFY2(mtc->text().contains("macOS/Linux for now"), qPrintable(mtc->text()));
+}
+
 void ShowControlUi_Test::editingThePageChangesTheListener()
 {
     const int port = freePort();

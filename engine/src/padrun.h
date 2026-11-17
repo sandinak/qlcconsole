@@ -298,6 +298,20 @@ public:
     bool isArmed() const { return m_armed; }
     /** The pad that armed, whose presses count (UINT_MAX: not armed). */
     quint32 armedUniverse() const { return m_armed ? m_armUniverse : UINT_MAX; }
+    /** Whether this platform runs the show from a controller: false on
+     *  Windows for 0.5.0 (board Q257: the HID plugin's hotplug and the MIDI
+     *  SysEx input behave differently there; a Windows bench check comes
+     *  first, a 0.5.x item). Refused there: arming, so every cue command
+     *  and hit, MIDI Show Control cue commands and MIDI timecode in. Never
+     *  refused: the stop (the pad's four together, MSC ALL OFF and STOP). */
+    static bool padRunSupported();
+    /** The words every refusal on Windows says. */
+    static QString notSupportedText();
+    /** What padRunSupported() reads: the real platform (Auto: also the
+     *  QLC_PADRUN_PLATFORM=any the test guard sets, so the tests that arm
+     *  run on every platform), or one chosen by a test. */
+    enum Platform { PlatformAuto, PlatformReal, PlatformWindows, PlatformOther };
+    static void setPlatformForTest(Platform platform);
     /** Arm or disarm as the chord on @p universe would (the chord's own
      *  end, and for tests); refused while a tool has the pad or walking. */
     bool setArmed(bool on, quint32 universe = 0);
