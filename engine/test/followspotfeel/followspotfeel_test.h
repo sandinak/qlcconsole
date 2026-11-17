@@ -87,6 +87,16 @@ private slots:
      *  its fine stick is one share, and with the follow spot and the tool
      *  on that pad its twin line's stick is the tool's, not the spot's. */
     void q253ATwinPadDoesNotDoubleSteer();
+    /** Twin follow-ups (0.4.13): the tool's owning line of a pad listed
+     *  twice goes, its twin line stays: the pad keeps the tool -- its stick
+     *  steers the tool, not the follow spot beside it, and the panels name
+     *  it. */
+    void aToolKeepsItsTwinPadWhenOneLineGoes();
+    /** Twin follow-ups (0.4.13): one D-pad press on a pad listed twice is
+     *  one speed or size step of the follow spot, with no tool and with a
+     *  tool on another pad. */
+    void aTwinPadsDpadIsOneFollowSpotStep_data();
+    void aTwinPadsDpadIsOneFollowSpotStep();
     /** The review of f16599314: lights the tool aims at the follow spot's
      *  own subject (a focus reference, an Aim look) move when the spot
      *  moves it, so the spot holds for them too, every tool. */

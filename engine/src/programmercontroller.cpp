@@ -2182,6 +2182,7 @@ void ProgrammerController::claimController(quint32 universe)
     if (m_ownerUniverse != 0xFFFFFFFF)
         return;
     m_ownerUniverse = universe;
+    m_ownerIdentity = m_controllerJobs->identityOfUniverse(universe);
     emit focusControllerChanged();     // the panels name it
 }
 
@@ -3316,6 +3317,21 @@ bool ProgrammerController::downOnTwinLine(quint32 universe, int role) const
     return false;
 }
 
+quint32 ProgrammerController::twinLineOf(const QString &identity, quint32 except) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr || identity.isEmpty() || ControllerJobs::isNameOnly(identity))
+        return 0xFFFFFFFF;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (u != except && ip != nullptr && ip->isPatched() && isPadUniverse(u)
+            && m_controllerJobs->identityOfUniverse(u) == identity)
+            return u;
+    }
+    return 0xFFFFFFFF;
+}
+
 void ProgrammerController::padLost(quint32 universe)
 {
     /* As an unplug: nothing it held is held -- the chords made of it, the
@@ -3340,10 +3356,13 @@ void ProgrammerController::padLost(quint32 universe)
         m_padRun->forgetPad(universe);
     /* The pad that owns the tools went (unplugged, swapped in its slot):
        the tool runs on with no owner, the next pad with the Focus job to
-       press takes it (review 12, as a job taken away). */
+       press takes it (review 12, as a job taken away). Only that line of
+       a pad listed twice went: the pad is still here, on its twin line,
+       and keeps the tools -- its sticks stay the tool's, never the follow
+       spot's beside it. */
     if (m_ownerUniverse != 0xFFFFFFFF && m_ownerUniverse == universe)
     {
-        m_ownerUniverse = 0xFFFFFFFF;
+        m_ownerUniverse = twinLineOf(m_ownerIdentity, universe);
         emit focusControllerChanged();
     }
     // Its pushes went with it (no release comes): the follow spot lets go.
@@ -3912,6 +3931,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
                 && (active || (role == FocusCallCue::startRole() && !m_padRun->isEnabled())))
             {
                 m_ownerUniverse = universe;
+                m_ownerIdentity = m_controllerJobs->identityOfUniverse(universe);
                 emit focusControllerChanged();     // the panels name it
             }
         }
@@ -3925,7 +3945,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
 
     /* One pad listed twice (one identity on two universes) sends each
        press on both lines. The tools and the walk keep one state for the
-       whole pad (PadRun::handleWalk() has no line), so the pad's press is
+       whole pad (PadRun::handleWalk() reads only its triggers a line
+       apart), so the pad's press is
        the first line's and its copy is nothing -- one Menu started the walk
        on one line and stopped it on the other. While a tool has the pad
        its release is the last line's to let go (one View, one undo). In
@@ -4214,7 +4235,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     {
         /* Walking the show (Q192): its own map for the triggers (cues),
            the bumpers (layers), Y (scope / hold: tag) and Menu (stop). */
-        if (m_padRun->handleWalk(role, value))
+        if (m_padRun->handleWalk(role, value, universe))
             return true;
         if (isPan || role == GamepadRole::LeftX)
             m_toolPanNorm = norm;
@@ -6167,9 +6188,14 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         }
         return true;
     }
+    /* One pad listed twice sends each D-pad press on both lines: the
+       first line's is the step, its copy nothing (one press, one step). */
+    const bool dpad = role == GamepadRole::DpadUp || role == GamepadRole::DpadDown
+                      || role == GamepadRole::DpadRight || role == GamepadRole::DpadLeft;
+    const bool dpadCopy = dpad && value > 0 && downOnTwinLine(universe, role);
     if (role == GamepadRole::DpadUp || role == GamepadRole::DpadDown)
     {
-        if (value > 0)
+        if (value > 0 && !dpadCopy)
         {
             m_followMover->stepMultiplier(role == GamepadRole::DpadUp ? 1 : -1);
             m_followSpeedClock.restart();
@@ -6183,7 +6209,7 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
        beam angle with no size set. For the run; Save Positions keeps it. */
     if (role == GamepadRole::DpadRight || role == GamepadRole::DpadLeft)
     {
-        if (value > 0)
+        if (value > 0 && !dpadCopy)
         {
             const bool changed = stepFollowSpotSize(role == GamepadRole::DpadRight ? 1 : -1);
             m_followSizeClock.restart();

@@ -350,9 +350,14 @@ show from any pad.
   controller twice; with the same address (or USB port) it is one
   controller here: the Pad chip names no second runner, both get the same
   light, and one press is one action -- one LT + A is one GO, one RT one
-  hit, the four one stop, one Menu one walk -- and its fine stick steers
-  the follow spot once, not twice as fast. Two pads of one model told
-  apart by address or USB port stay two pads.
+  hit, the four one stop, one Menu one walk, one trigger pull one cue
+  step of the walk (even when one listing sends the trigger as a button
+  and the other as an axis), one D-pad press one follow spot speed or
+  size step -- and its fine stick steers the follow spot once, not twice
+  as fast. If one of its two listings drops while it works a tool, the
+  pad keeps the tool on the other: its sticks stay the tool's, never the
+  follow spot's. Two pads of one model told apart by address or USB port
+  stay two pads.
 - **Each pad times its own arm chord.** Another pad squeezing LB + RB
   while the runner holds its own never cuts the runner's half second.
 

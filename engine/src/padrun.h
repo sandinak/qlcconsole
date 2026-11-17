@@ -589,6 +589,10 @@ public:
     quint32 walkCue() const;
     /** The cue in hand for startWalk() (invalid: none). */
     quint32 cueInHand() const;
+    /** The list's cue on stage was deleted and its light is held until
+     *  the next GO (Chaser::holdsRemovedStep()): no cue of the list runs,
+     *  yet one is lit -- the walk says so, never "nothing running". */
+    bool holdsDeletedCue() const;
     /** To the next (@p delta 1) or previous (-1) cue of the cue's list, as
      *  Focus this cue on it. Design only: in Operate the cue moves with GO
      *  (quiet Refine, Q130). Refused, and said, with changes not kept. */
@@ -603,8 +607,10 @@ public:
      *  step (View + B or the laptop's undo takes it back). */
     bool toggleNeedsWork();
     /** A pad control while walking, from ProgrammerController's routing
-     *  (Focus this cue owns the rest): true when the walking map took it. */
-    bool handleWalk(GamepadRole::Role role, uchar value);
+     *  (Focus this cue owns the rest): true when the walking map took it.
+     *  @p universe: the line it came on (a pad listed twice reads each
+     *  line's triggers apart). */
+    bool handleWalk(GamepadRole::Role role, uchar value, quint32 universe = UINT_MAX);
     /** The controller tick while walking: the hold of Y, the level. */
     void walkTick(double dt);
     /** LB is held as the walk's modifier (level, the light itself). */
@@ -862,7 +868,17 @@ private:
     /** A cue step restarts Focus this cue: its stop is not the walk's. */
     bool m_restarting = false;
     bool m_solo = false;
-    ControllerScheme::TriggerButton m_walkRt, m_walkLt;
+    /** The walk's triggers, a line apart (a pad listed twice may send a
+     *  trigger digital on one line and analog on the other): each line its
+     *  own hysteresis, the pad's press is either line's (as the Run map's
+     *  Line and padHeld()) -- one pull, one step. */
+    struct WalkTriggers
+    {
+        ControllerScheme::TriggerButton lt, rt;
+    };
+    QHash<quint32, WalkTriggers> m_walkTriggers;
+    /** RT (@p right) or LT down on any line of @p universe's pad. */
+    bool walkTriggerDown(quint32 universe, bool right) const;
     ControllerScheme::LongPress m_holdY { tagHoldSeconds() };
     /** LB held as the modifier, and whether anything was done with it (a
      *  tap of LB alone steps back a layer on its release). */

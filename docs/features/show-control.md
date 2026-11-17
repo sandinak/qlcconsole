@@ -422,7 +422,9 @@ View + B (or undo on the laptop) puts the light back.
   is refused, and the voice says to keep it (A) or go back (B) first.
 - **In Operate** the walk follows the quiet Refine rules. Only the
   running cue can be walked, GO moves it, nothing blinks or dims, and solo
-  is refused.
+  is refused. If the cue on stage was deleted (its light held until GO),
+  there is no cue to walk: Menu says *The cue on stage was deleted: its
+  light is held until GO. GO, then walk.*
 - **No GO while walking**, and no arm. Menu first, then arm (hold LB + RB) and hold LT + A.
 - A focus-call cue that is armed still takes Menu to begin its calls.
   When the laptop then asks "Still at *venue*?", **hold A** for a second

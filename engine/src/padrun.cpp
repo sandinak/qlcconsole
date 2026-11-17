@@ -1202,6 +1202,7 @@ void PadRun::forgetPad(quint32 universe)
        holds all four of a stop that really fired, so a squeeze completed
        afresh -- on a line that joins mid-squeeze too -- stops. */
     m_held.remove(universe);
+    m_walkTriggers.remove(universe);
     // The walk's modifier and level, if it was the walker's pad.
     if (isWalking() && m_pc != nullptr && m_pc->controllerOwner() != UINT_MAX
         && sameController(universe, m_pc->controllerOwner()))
@@ -2290,6 +2291,18 @@ quint32 PadRun::cueInHand() const
     return list->cues.at(step >= 0 && step < list->cues.size() ? step : 0).id;
 }
 
+bool PadRun::holdsDeletedCue() const
+{
+    if (m_doc == nullptr)
+        return false;
+    // The list cueInHand() reads.
+    quint32 chaser = listChaser();
+    if (chaser == UINT_MAX && m_doc->showControl() != nullptr)
+        chaser = m_doc->showControl()->mainCueList();
+    const Chaser *c = qobject_cast<const Chaser *>(m_doc->function(chaser));
+    return c != nullptr && c->isRunning() && c->holdsRemovedStep();
+}
+
 QString PadRun::cueLabel(quint32 cueId) const
 {
     const ShowTree::Cue *c = m_doc->showTree() != nullptr ? m_doc->showTree()->cue(cueId) : nullptr;
@@ -2323,8 +2336,11 @@ void PadRun::walkStarted()
     }
     stopArmChords();
     forgetHeld();
-    m_walkRt.reset();
-    m_walkLt.reset();
+    /* The triggers as the walk begins; a cue step (this restart) keeps
+       them: the pull that stepped is still down, and its next samples on
+       either line are the same pull, never another step. */
+    if (!m_walking)
+        m_walkTriggers.clear();
     m_holdY.reset();
     releaseModifier();
     m_lbUsed = true;        // an LB still held from the step: not a tap
@@ -2347,8 +2363,7 @@ void PadRun::walkEnded()
     m_pc->refineSession()->setWalking(false);
     releaseModifier();
     m_holdY.reset();
-    m_walkRt.reset();
-    m_walkLt.reset();
+    m_walkTriggers.clear();
     setSolo(false);
     forgetHeld();       // what was held while walking was the walk's (but the four)
     emit walkingChanged(false);
@@ -2411,7 +2426,10 @@ bool PadRun::startWalkBeside(quint32 universe)
     {
         m_walkBeside = false;
         m_walker = UINT_MAX;
-        m_pc->releaseControllerSoon();
+        /* Let go at once, as a plain Menu walk's refusal: another pad's
+           Menu already queued in this event-loop turn takes the tools,
+           never a walk started under this pad's name. */
+        m_pc->releaseControllerNow();
         return false;
     }
     return true;
@@ -2437,6 +2455,10 @@ bool PadRun::startWalk(quint32 cueId, QString *why)
         return refuseWalk(m_pc->padText(tr("Armed. To walk, disarm first: hold {LB} and {RB}.")), why);
     if (cueId == 0xFFFFFFFF)
         cueId = cueInHand();
+    /* The cue on stage deleted (its light held until GO): there is no cue
+       left to walk -- said as it is, never "nothing running". */
+    if (cueId == 0xFFFFFFFF && m_doc->mode() == Doc::Operate && holdsDeletedCue())
+        return refuseWalk(tr("The cue on stage was deleted: its light is held until GO. GO, then walk."), why);
     if (cueId == 0xFFFFFFFF)
         return refuseWalk(m_doc->mode() == Doc::Operate
                           ? tr("Nothing running to walk: GO first, or walk the show in Design.")
@@ -2594,7 +2616,15 @@ void PadRun::releaseModifier()
     m_levelMoved = false;
 }
 
-bool PadRun::handleWalk(GamepadRole::Role role, uchar value)
+bool PadRun::walkTriggerDown(quint32 universe, bool right) const
+{
+    for (auto it = m_walkTriggers.constBegin(); it != m_walkTriggers.constEnd(); ++it)
+        if ((right ? it->rt : it->lt).isDown() && sameController(it.key(), universe))
+            return true;
+    return false;
+}
+
+bool PadRun::handleWalk(GamepadRole::Role role, uchar value, quint32 universe)
 {
     if (!isWalking())
         return false;
@@ -2624,8 +2654,11 @@ bool PadRun::handleWalk(GamepadRole::Role role, uchar value)
         case PreviousCue:
         {
             const bool right = role == GamepadRole::RightTrigger;
-            ControllerScheme::TriggerButton &t = right ? m_walkRt : m_walkLt;
-            const bool pressed = t.update(value / 255.0f);
+            // This line's reading; a step when the pad (any line) goes down.
+            const bool was = walkTriggerDown(universe, right);
+            WalkTriggers &line = m_walkTriggers[universe];
+            (right ? line.rt : line.lt).update(value / 255.0f);
+            const bool pressed = !was && walkTriggerDown(universe, right);
             if (m_lbHeld)
             {
                 // With LB held the triggers are the level (walkTick()), not cues.

@@ -360,7 +360,18 @@ it holds, and the chip says why."
 - **One pad seen twice** steers once: a twin line's fine stick is that
   pad's one share (`fineSlot()`), never added to itself; the owner's twin
   line is the owner (the owner check uses `sameController()`, as
-  `isToolsPad()` does).
+  `isToolsPad()` does). Its D-pad press is one speed or size step: the
+  copy on the twin line is nothing (`downOnTwinLine()` inside
+  `followSpotTakes()`, with a tool on another pad and with none). The
+  owning line lost (`padLost()`) with its twin line still patched: the
+  twin line takes the tools on (`twinLineOf()`, by the owner's identity
+  kept when it took them -- the gone line no longer says whose it was),
+  so its sticks never fall to the follow spot. The walk reads its
+  triggers a line apart and steps on the pad's press
+  (`PadRun::walkTriggerDown()`), as the Run map's `Line`: one line
+  digital and the other analog step once a pull. A walk refused beside
+  the runner lets go of the tools at once (`releaseControllerNow()`), as
+  the plain Menu walk's and a swipe's do.
 - **The tick beside a tool.** The controller tick now runs the follow
   spot's own part while a tool runs: `joystickScene()` (a running cue's
   follow spot found, `endLiveFollow()` and its restore glide when that
