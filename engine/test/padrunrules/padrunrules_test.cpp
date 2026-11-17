@@ -1222,10 +1222,14 @@ void PadRunRules_Test::aBouncingButton()
 void PadRunRules_Test::theDuplicateDevice()
 {
     /* The same pad seen twice (macOS can list one controller as two HID
-       devices) and patched to two universes: every press arrives on both. */
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+       devices: one address) and patched to two universes, one identity:
+       every press arrives on both lines, and is one press of one pad --
+       one GO a LT + A, nobody told "another controller runs cues", one
+       ALL OFF a squeeze of the four. */
+    twinLines();
     PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(run->sameController(0, 1));
+    QCOMPARE(run->padCount(), 1);
     run->setEnabled(true);
     run->setArmChordMs(15);
     auto both = [&](quint32 ch, uchar v) {
@@ -1237,25 +1241,35 @@ void PadRunRules_Test::theDuplicateDevice()
     QTRY_VERIFY(run->isArmed());
     both(kRB, 0);
     both(kLB, 0);
-    both(kLT, 255);
-    both(kA, 255);
-    both(kA, 0);
-    both(kLT, 0);
-    QCOMPARE(goes(), 1);                     // one GO, not two
-    QEXPECT_FAIL("", "the twin's press is refused aloud on every GO (reported, not fixed)", Continue);
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    m_said.clear();
+    for (int go = 1; go <= 2; ++go)
+    {
+        both(kLT, 255);
+        both(kA, 255);
+        both(kA, 0);
+        both(kLT, 0);
+        QVERIFY2(goes() == go, qPrintable(QString("LT + A number %1 on the pad listed twice: %2 GOs in all")
+                                              .arg(go).arg(goes())));
+    }
     QCOMPARE(saidCount("is running cues"), 0);
-    // The stop on both: how many ALL OFFs.
-    both(kLB, 255);
-    both(kRB, 255);
-    both(kLT, 255);
-    both(kRT, 255);
-    qInfo() << "the duplicated pad's emergency stop sent" << stops() << "ALL OFF(s)";
-    QVERIFY(stops() >= 1);
-    QVERIFY(!run->isArmed());
-    both(kRT, 0);
-    both(kLT, 0);
-    both(kRB, 0);
-    both(kLB, 0);
+    // The stop on both: one ALL OFF a squeeze.
+    for (int squeeze = 1; squeeze <= 2; ++squeeze)
+    {
+        both(kLB, 255);
+        both(kRB, 255);
+        both(kLT, 255);
+        both(kRT, 255);
+        QVERIFY2(stops() == squeeze, qPrintable(QString("squeeze %1 of the four on the pad listed twice: %2 "
+                                                        "ALL OFFs in all").arg(squeeze).arg(stops())));
+        QVERIFY(!run->isArmed());
+        both(kRT, 0);
+        both(kLT, 0);
+        both(kRB, 0);
+        both(kLB, 0);
+        QCOMPARE(stops(), squeeze);
+    }
+    QCOMPARE(goes(), 2);
 }
 
 void PadRunRules_Test::aPadOnTwoUniversesIsOnePad_data()
@@ -1277,8 +1291,7 @@ void PadRunRules_Test::aPadOnTwoUniversesIsOnePad()
        lines; each line once passed the arm check with its own held LT, so
        one LT + A sent a GO a line: a cue skipped with the double-GO guard
        off, "Second GO held" and a long buzz on every GO with it on, and
-       one RT started two hits sharing a place. theDuplicateDevice does
-       not show it: its two lines are two name-only identities. */
+       one RT started two hits sharing a place. */
     QFETCH(QString, by);
     QFETCH(int, order);
     makeShow();
