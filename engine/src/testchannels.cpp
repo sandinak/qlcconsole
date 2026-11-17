@@ -8,6 +8,7 @@
 #include <QObject>
 
 #include "testchannels.h"
+#include "fadechannel.h"
 #include "fixture.h"
 #include "doc.h"
 
