@@ -3004,7 +3004,7 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree 4",
                            "Timeline 5", "Virtual Console 6", "Run 7",
-                           "|", "Functions", "Build", "Simple Desk" }));
+                           "|", "Functions", "Build", "Simple Desk D" }));
 
     m_app->setWorkspaceView(App::ClassicView);
     QCOMPARE(windowJumpsAsShown(m_app),
@@ -3223,6 +3223,7 @@ void AppViews_Test::simpleDeskOpensAndClosesOnDemand()
         if (a->data().toString() == "Simple Desk")
             desk = a;
     QVERIFY(desk != nullptr);
+    QCOMPARE(desk->shortcut(), QKeySequence("CTRL+SHIFT+D"));
     desk->trigger();
     QVERIFY(barTexts(m_app).contains("Simple Desk"));
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);

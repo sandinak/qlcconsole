@@ -218,7 +218,7 @@ Which of these you see depends on the view (below).
 
 - **qlcconsole** — seven tabs, in show order: Connections, Fixtures,
   Lighting Studio, Show Tree, Timeline (QLC+'s Shows), Virtual Console and
-  Run. **Simple Desk** opens when you ask for it (**Window ▸ Simple Desk**)
+  Run. **Simple Desk** opens when you ask for it (**Window ▸ Simple Desk**, ⇧⌘D)
   as a tab with a close button. Build and Functions are in Everything
   (**Window** switches there for them, with a line to come back). Build keeps running hidden: the
   Show Tree borrows its Workbench and its programmer strip. The **Rig Overview** (⇧⌘R) opens in its

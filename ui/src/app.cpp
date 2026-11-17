@@ -6526,7 +6526,9 @@ void App::updateWindowJumps()
     {
         m_windowMenu->removeAction(jump);
         m_windowMenu->insertAction(m_windowJumpsEnd, jump);
-        jump->setShortcut(QKeySequence());
+        // Simple Desk opens on demand (Q262): D for Desk while it has no number.
+        jump->setShortcut(jump->data().toString() == tr("Simple Desk")
+                              ? QKeySequence(QStringLiteral("CTRL+SHIFT+D")) : QKeySequence());
     }
     m_windowHiddenSeparator->setVisible(hidden.isEmpty() == false);
 }
