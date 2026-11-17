@@ -10327,12 +10327,12 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
         if (holding.size() == 1)
         {
             const quint32 fgId = holding.first()->id();
-            menu->addAction(tr("Remove from Fixture Group “%1”").arg(holding.first()->name()),
+            groupMenu->addAction(tr("Remove from Fixture Group “%1”").arg(holding.first()->name()),
                             this, [removeFrom, fgId]() { removeFrom(fgId); });
         }
         else if (holding.size() > 1)
         {
-            QMenu *from = menu->addMenu(tr("Remove from Fixture Group"));
+            QMenu *from = groupMenu->addMenu(tr("Remove from Fixture Group"));
             for (FixtureGroup *fg : holding)
             {
                 const quint32 fgId = fg->id();
@@ -10928,7 +10928,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         }
     }
     // In the show's units, as the plot's other dialogs.
-    QAction *heightAct = menu->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
+    QAction *heightAct = plotSetup->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
                     this, [this, fid]() {
         if (!MonitorFixtureItem::askMountingHeight(this, m_doc->monitorProperties(), fid))
             return;

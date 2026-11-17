@@ -2166,6 +2166,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(QString(), m_cueFocusState);
         if (FocusCallCue *fcc = m_doc->programmer()->focusCallCue())
             connect(fcc, &FocusCallCue::stateChanged, this, &ShowTreeView::refreshFocusCallState);
+        /* How the layer is built (split, children, parts, detach) is one
+           Layer Tools submenu: the menu stays short (UX-80). */
+        QMenu *structure = menu.addMenu(ContextMenu::Kind, tr("Layer Tools"), QStringLiteral("stStructure"));
         /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own values
            from the stage, with the controller. */
         QPushButton *refine = new QPushButton(tr("Focus This Cue\342\200\246"), inner);
@@ -8857,15 +8860,13 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         }
         /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own
            values from the stage, on the controller, starting on this layer. */
-        QAction *refine = menu.add(ContextMenu::Kind, tr("Focus This Cue…"), [this, cueId, layerId]() {
+        QAction *refine = structure->addAction(tr("Focus This Cue…"), this, [this, cueId, layerId]() {
             RefinePanel::open(m_doc, window(), cueId, layerId);
-        }, QStringLiteral("stRefineLayer"));
+        });
+        refine->setObjectName(QStringLiteral("stRefineLayer"));
         FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
                                 tr("Move, zoom, focus and recolour this cue from the stage with the "
                                    "controller: the layer as a whole, or one fixture as an exception"));
-        /* How the layer is built (split, children, parts, detach) is one
-           Layer Tools submenu: the menu stays short (UX-80). */
-        QMenu *structure = menu.addMenu(ContextMenu::Kind, tr("Layer Tools"), QStringLiteral("stStructure"));
         QAction *split = structure->addAction(tr("Split Layer (One per Group)"), this, [this, cueId, layerId]() {
             QString why;
             if (!splitLayer(cueId, layerId, &why))
