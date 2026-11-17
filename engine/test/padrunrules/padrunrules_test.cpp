@@ -1856,7 +1856,9 @@ void PadRunRules_Test::theLightAfterAToolOrWalkEndsStopped()
 void PadRunRules_Test::aFadingCueShowsPlayingForItsFade()
 {
     /* Rule 6: a cue with a 3 s fade shows playing (the blink) for its fade
-       and stops after. The real GO path and the real master timer. */
+       and stops after. The real GO path; the master timer ticked by hand
+       (20 ms a tick), so the fade's clock is the test's, never the wall's,
+       and the blink's look (lightTick()) read after each tick. */
     makeShow();
     ShowTreeController *st = m_doc->showTree();
     ShowTree::Cue c = *st->cue(m_cue1);
@@ -1868,41 +1870,36 @@ void PadRunRules_Test::aFadingCueShowsPlayingForItsFade()
         return sc->execute(r);      // the main thread's; OSC's own thread runs execute() itself
     });
     m_doc->setMode(Doc::Operate);
+    auto done = qScopeGuard([this]() {
+        stopAllByHand();
+        m_doc->setMode(Doc::Design);
+    });
     PadRun *run = m_doc->programmer()->padRun();
     run->setEnabled(true);
     arm(true);
-    m_doc->masterTimer()->start();
-    auto stopTimer = qScopeGuard([this]() { m_doc->masterTimer()->stop(); });
     axis(kLT, 255);
-    QElapsedTimer t;
-    t.start();
     press(kA);
     axis(kLT, 0);
     QCOMPARE(goes(), 1);
-    QVERIFY(run->isPlaying());
+    QVERIFY(run->isPlaying());      // the GO's flash
+    // The flash over (its 0.4 s is the wall's): the fade alone from here.
+    run->m_flash->stop();
 
-    // Sampled through the fade (after the 0.4 s flash) and well after it.
-    QList<QPair<qint64, bool>> samples;
-    while (t.elapsed() < 5000)
-    {
-        QTest::qWait(20);
-        samples << qMakePair(t.elapsed(), run->isPlaying());
-    }
+    const int tickMs = int(MasterTimer::tick());
     qint64 lastPlaying = -1;
-    for (const auto &smp : samples)
-        if (smp.second)
-            lastPlaying = smp.first;
-    qInfo() << "a 3 s fade showed playing until" << lastPlaying << "ms";
-    for (const auto &smp : samples)
+    for (int ms = tickMs; ms <= 4600; ms += tickMs)
     {
-        if (smp.first >= 700 && smp.first <= 2700)
-            QVERIFY2(smp.second, qPrintable(QString("not playing %1 ms into a 3 s fade").arg(smp.first)));
-        if (smp.first >= 4300)
-            QVERIFY2(!smp.second, qPrintable(QString("still playing %1 ms into a 3 s fade").arg(smp.first)));
+        tick();
+        run->lightTick();
+        if (run->isPlaying())
+            lastPlaying = ms;
+        if (ms >= 100 && ms <= 2900)
+            QVERIFY2(run->isPlaying(), qPrintable(QString("not playing %1 ms into a 3 s fade").arg(ms)));
+        if (ms >= 3100)
+            QVERIFY2(!run->isPlaying(), qPrintable(QString("still playing %1 ms into a 3 s fade").arg(ms)));
     }
+    qInfo() << "a 3 s fade showed playing until" << lastPlaying << "ms";
     QCOMPARE(m_doc->programmer()->padLight(), PadRun::armedColour());
-    m_doc->masterTimer()->stopAllFunctions();
-    m_doc->setMode(Doc::Design);
 }
 
 /*****************************************************************************
