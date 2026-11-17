@@ -128,6 +128,7 @@ public:
     /** @reimp -- HIDDevice::location(): the USB port, by platform. */
     QString inputDeviceLocation(quint32 input) const override;
     quint64 inputDeviceId(quint32 input) const override;
+    quint64 inputDeviceReplacement(quint64 id) const override;
 
     /** @reimp — starts every joystick (patched or not) reporting raw input. */
     bool setInputDiagnostics(bool enable) override;
@@ -291,6 +292,8 @@ private:
      *  it is asked for while the device is listed; forgotten when it goes. */
     quint64 deviceId(HIDDevice *dev);
     QHash<const HIDDevice *, quint64> m_deviceIds;
+    /** A device id -> the id of the device that replaced it in place. */
+    QHash<quint64, quint64> m_replacedBy;
     quint64 m_nextDeviceId = 0;
 
     std::shared_ptr<HIDScanShared> m_shared;

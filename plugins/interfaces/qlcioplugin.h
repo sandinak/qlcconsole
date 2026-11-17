@@ -732,6 +732,18 @@ public:
     { Q_UNUSED(input); return 0; }
 
     /**
+     * The device that replaced device @p id where it was -- the same
+     * physical device re-enumerated at its own path or port (a power
+     * cycle, a sleep) -- following any chain of such replacements: its
+     * inputDeviceId(). 0 when @p id was not replaced in place (it was
+     * unplugged, or the plugin can't tell: the default). A patch follows
+     * this, never a name: another pad of the same name that moved onto
+     * the line is not the device that went (round-6 review).
+     */
+    virtual quint64 inputDeviceReplacement(quint64 id) const
+    { Q_UNUSED(id); return 0; }
+
+    /**
      * Diagnostics, for the Controller test window: while on, report every
      * raw input every device reads -- patched or not -- through
      * inputDiagnostic(). Returns false when the plugin has none to give

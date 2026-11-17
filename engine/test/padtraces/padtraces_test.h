@@ -62,6 +62,10 @@ private slots:
     /** A pad unplugged and back: its universe reopens on it, never on the
      *  pad of the same name that took its line meanwhile. */
     void aPadUnpluggedAndBackTakesNoOtherPad();
+    /** A spare of the same name on charge never takes an unplugged pad's
+     *  universe; the pad plugged back does (both backends). */
+    void aSpareOnChargeTakesNoUniverse_data();
+    void aSpareOnChargeTakesNoUniverse();
     void triggerRest();
     void triggerRestDuringTheChord();
     void aSessionIsRecorded();

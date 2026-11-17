@@ -161,7 +161,13 @@ int InputOutputMap::slotDeviceLine(quint32 universe, const Universe::InputSlotDe
     /* Any game controller: the one it has, while it is still here (two
        pads on must not swap it to and fro), else the first one free. */
     InputPatch *ip = m_universeArray.at(universe)->inputPatch();
-    if (ip != nullptr && ip->plugin() == plugin && ip->isPatched()
+    bool keptTaken = false;     // another universe is patched to that line now
+    for (quint32 u = 0; ip != nullptr && u < universesCount() && keptTaken == false; ++u)
+    {
+        const InputPatch *other = u == universe ? nullptr : m_universeArray.at(u)->inputPatch();
+        keptTaken = other != nullptr && other->plugin() == plugin && other->input() == ip->input();
+    }
+    if (ip != nullptr && ip->plugin() == plugin && ip->isPatched() && keptTaken == false
         && int(ip->input()) < lines.count() && lines.at(int(ip->input())) == ip->inputUID()
         && isGamepadLine(plugin, ip->input()))
         return int(ip->input());

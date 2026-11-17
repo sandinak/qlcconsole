@@ -1158,6 +1158,17 @@ private:
     void refreshPadFamily();
     /** The gamepad role of an input channel, from its device profile. */
     int controllerRole(quint32 universe, quint32 channel) const;
+    /** The plugin's answer now, for the device on the patch's line. */
+    int liveControllerRole(quint32 universe, quint32 channel) const;
+    /** Each universe's roles by channel, learnt while its device is known
+     *  (controllerRole() reads them): a value delivered after the device
+     *  went is read with its own layout (round-6 review). */
+    static constexpr quint32 kRoleMapChannels = 128;
+    mutable QHash<quint32, QVector<int>> m_roleMaps;
+    void learnRoles(quint32 universe) const;
+    /** Forget @p universe's roles (UINT_MAX: every universe's), to be
+     *  learnt again on its next value. */
+    void forgetRoles(quint32 universe);
     /** Focus mode's share of slotControllerInputChanged(). True if it took
      *  the event. @p knownRole: controllerRole() if already worked out. */
     bool routeFocusInput(quint32 universe, quint32 channel, uchar value, int knownRole = -1);

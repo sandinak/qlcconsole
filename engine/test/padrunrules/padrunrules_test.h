@@ -78,6 +78,9 @@ private slots:
      *  again or let go: it goes out first, and the stop fires. */
     void aBufferedStopPressCountsBeforeARepatch_data();
     void aBufferedStopPressCountsBeforeARepatch();
+    /** A press read on one pad and delivered after another model took its
+     *  line is read with the first pad's layout: no GO. */
+    void anotherModelsLayoutReadsNoBufferedPress();
     /** A release with no press seen since the device was new is no click
      *  (LS, RS). */
     void aReleaseWithNoPressSeenDoesNothing();

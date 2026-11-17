@@ -370,12 +370,21 @@ it holds, and the chip says why."
   device (id 0) is concluded nothing about, as before. A patch follows
   its device by id (`InputOutputMap::followInputDevices()`), and never
   takes a line whose device another patch follows: two pads of one name
-  each keep their own universe. A patch whose device is gone stays on its
-  own line only if that line still carries its name and no other patch
-  follows the device there (the pad re-enumerated where it was: a pad lost
-  and a new one, on its own universe); otherwise it waits offline, and a
-  pad plugged back reopens it -- on a line of its name no other patch
-  follows (`retryOfflinePatches()`). Before any patch is set again or let
+  each keep their own universe. A patch whose device is gone follows the
+  device that replaced it in place, as its plugin says
+  (`QLCIOPlugin::inputDeviceReplacement()`: the HID plugin's same-path
+  re-enumeration) -- a pad lost and a new one, on its own universe; never
+  a device by its name (a spare of that name on charge is not the pad that
+  went). Otherwise it waits offline, and the pad plugged back reopens it:
+  a line of its name that no other patch follows and whose device was not
+  already here when it went (`retryOfflinePatches()`,
+  `Universe::OfflinePatch::notTheDevice`). A plugin with no ids keeps the
+  name rule, as before. Every value is read with the roles its device had
+  (`ProgrammerController::controllerRole()` learns a universe's roles while
+  its device is known, and again after a patch, device, profile, slot or
+  configuration change, once what was read has been delivered): a press
+  delivered after its pad was unplugged, or after another model took its
+  line, is never read with another layout. Before any patch is set again or let
   go (a re-patch, an unplug, a controller slot's change), what it read and
   has not delivered goes out first, with the patch it was read on
   (`InputOutputMap::setInputPatch()` calls `InputPatch::deliverNow()`
@@ -395,7 +404,11 @@ it holds, and the chip says why."
   game controller" slot (`InputOutputMap::applyInputSlots()`) picks a
   pad by its kind, not by device id; with two pads in two such slots and
   the first unplugged, the first slot can take the second pad's line and
-  the second slot wait offline (its pad disarmed). Not built here.
+  the second slot wait offline (its pad disarmed); and a named slot
+  device always takes the first line of its name, so it never reaches the
+  second of two pads of one name. Not built here. Fixed here: an "any"
+  slot no longer keeps a line another universe's patch is on (a manual
+  patch and an "any" slot on one pad).
 - **The restore glide waits for a tool.** A cue's follow spot ending
   glides its subject back where the show has it; while a tool's lights
   aim at that subject the glide waits where it is, and goes on when the

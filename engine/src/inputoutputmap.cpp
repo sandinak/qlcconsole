@@ -1360,14 +1360,20 @@ int InputOutputMap::retryOfflinePatches()
                    patch follows (two pads of one name: that pad stays its
                    universe's); the next line of the name, if one is free
                    (round-5 review). */
-                if (line >= 0 && rec.tag == Universe::InputPatchTag
-                    && inputDeviceFollowed(plugin, plugin->inputDeviceId(quint32(line)), NULL))
+                auto usable = [&](int l) {
+                    const quint64 id = plugin->inputDeviceId(quint32(l));
+                    return inputDeviceFollowed(plugin, id, NULL) == false
+                           && (id == 0 || rec.notTheDevice.contains(id) == false);
+                };
+                if (line >= 0 && rec.tag == Universe::InputPatchTag && usable(line) == false)
                 {
+                    /* Not a device that was here when it went (a spare of
+                       that name, on charge), nor one another patch follows:
+                       the pad plugged back (round-6 review). */
                     const QStringList names = plugin->inputs();
                     line = -1;
                     for (int l = 0; l < names.size() && line < 0; ++l)
-                        if (names.at(l) == rec.uid
-                            && inputDeviceFollowed(plugin, plugin->inputDeviceId(quint32(l)), NULL) == false)
+                        if (names.at(l) == rec.uid && usable(l))
                             line = l;
                 }
                 if (line < 0)
@@ -2034,16 +2040,18 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
             for (int l = 0; l < lines.size() && line < 0; ++l)
                 if (plugin->inputDeviceId(quint32(l)) == id)
                     line = l;
-            /* Its device is gone. On its own line, under its name, a device
-               no other patch follows: the pad re-enumerated where it was --
-               it stays there, and is a pad lost and a new one (the engine
-               sees the id change). Never a line another patch's device is
-               on: that pad keeps its own universe (round-5 review). Else
-               gone: kept offline, and a pad plugged back reopens it. */
-            const quint32 own = ip->input();
-            if (line < 0 && own < quint32(lines.size()) && lines.at(int(own)) == device
-                && inputDeviceFollowed(plugin, plugin->inputDeviceId(own), ip) == false)
-                line = int(own);
+            /* Its device is gone. Re-enumerated where it was (the plugin
+               says which device replaced it): follow that one -- a pad
+               lost and a new one, on its own universe (the engine sees the
+               id change). Never by name: another pad of that name on the
+               line, a spare on charge, is not the pad that went (round-6
+               review). Else gone: kept offline, and the pad plugged back
+               reopens it. */
+            if (line < 0)
+                if (const quint64 again = plugin->inputDeviceReplacement(id))
+                    for (int l = 0; l < lines.size() && line < 0; ++l)
+                        if (plugin->inputDeviceId(quint32(l)) == again)
+                            line = l;
         }
         else
             line = lines.indexOf(device);
@@ -2070,6 +2078,10 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         rec.plugin = plugin->name();
         rec.uid = device;
         rec.line = ip->input();
+        // The devices here as it went: none of them is the one that went.
+        for (int l = 0; l < lines.size(); ++l)
+            if (const quint64 here = plugin->inputDeviceId(quint32(l)))
+                rec.notTheDevice.insert(here);
         rec.profile = ip->profileName();
         rec.hidProfile = ip->hidProfileName();
         rec.params = ip->getPluginParameters();

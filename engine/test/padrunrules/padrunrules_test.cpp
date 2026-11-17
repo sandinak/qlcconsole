@@ -723,10 +723,39 @@ void PadRunRules_Test::aBufferedStopPressCountsBeforeARepatch()
     QCOMPARE(stops(), 0);
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (unpatch)
+    {
+        // Unplugged: the device is gone from its plugin before the patch goes.
+        m_stub->m_lineChannelRoles[0] = QMap<quint32, QString>();
         QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    }
     else
         QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
     QVERIFY2(stops() == 1, "the stop press read before the patch changed was lost");
+}
+
+void PadRunRules_Test::anotherModelsLayoutReadsNoBufferedPress()
+{
+    /* The runner armed, LT held; a button with no role on its pad read but
+       not yet delivered as another model shifts onto its line -- one whose
+       layout makes that channel A. The press is read with the pad that
+       read it: nothing; never a GO (round-6 review). */
+    makeShow();
+    m_stub->m_deviceIds = { { 0, 1 } };
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    m_doc->setMode(Doc::Operate);
+    auto restore = qScopeGuard([&]() { m_doc->setMode(Doc::Design); });
+    arm(true, 0);
+    axis(kLT, 255);
+    emit m_stub->valueChanged(0, 0, kUnroled, 255);     // buffered: no frame has run
+    QMap<quint32, QString> other = xboxRoles();
+    other.insert(kUnroled, "a");
+    m_stub->m_lineChannelRoles[0] = other;
+    m_stub->m_deviceIds[0] = 2;
+    emit m_stub->configurationChanged();
+    QVERIFY2(goes() == 0, "the old pad's unroled button was read with the new model's layout: a GO");
+    QVERIFY(!run->isArmed());
+    axis(kLT, 0);
 }
 
 void PadRunRules_Test::noStopOnAnArmAfterADeviceChange()

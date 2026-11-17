@@ -508,6 +508,65 @@ void PadTraces_Test::aPadUnpluggedAndBackTakesNoOtherPad()
     QVERIFY2(run->isArmed() && run->armedUniverse() == 2, qPrintable(run->notice()));
 }
 
+void PadTraces_Test::aSpareOnChargeTakesNoUniverse_data()
+{
+    QTest::addColumn<bool>("located");
+    QTest::newRow("macOS-like: each pad its USB location") << true;
+    QTest::newRow("Linux-like: no location, one name") << false;
+}
+
+void PadTraces_Test::aSpareOnChargeTakesNoUniverse()
+{
+    /* A and B patched (universes 1 and 2), C connected and unpatched (a
+       spare on charge), all of one name. B is unplugged: C moves onto B's
+       line, but universe 2 waits for B -- C is not B. B is plugged back:
+       universe 2 is B's again, its stop live (round-6 review). */
+    QFETCH(bool, located);
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    QStringList paths;
+    for (int i = 0; i < 3; ++i)
+        paths << (located ? QStringLiteral("USB_045e_028e_%1000000").arg(i + 1)
+                          : QStringLiteral("/dev/input/js%1").arg(i));
+    const QString a = paths.at(0), b = paths.at(1), c = paths.at(2);
+    for (int i = 0; i < 3; ++i)
+    {
+        m_fake->list(paths.at(i), 0x045e, 0x028e, name, 0, quint64(i + 1));
+        q253Scan(name, i + 1);
+    }
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(1, QStringLiteral("HID"), QString(), 0));
+    QVERIFY(iom->setInputPatch(2, QStringLiteral("HID"), QString(), 1));
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(q253In(b, kPadLb, 255));
+    QVERIFY(q253In(b, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QCOMPARE(run->armedUniverse(), quint32(2));
+    QVERIFY(q253In(b, kPadRb, 0));
+    QVERIFY(q253In(b, kPadLb, 0));
+    // B unplugged: C moves onto line 1.
+    m_fake->unlist(b);
+    q253Scan(name, 2);
+    QCOMPARE(q253Line(c), 1);
+    QCOMPARE(iom->inputPatch(1)->input(), quint32(0));
+    QVERIFY2(iom->inputPatch(2) == nullptr || iom->inputPatch(2)->input() == QLCIOPlugin::invalidLine(),
+             "universe 2 took the spare on charge");
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmed(), 2000);
+    // B back: universe 2 is B's.
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 7);
+    q253Scan(name, 3);
+    QCOMPARE(q253Line(b), 2);
+    QTRY_VERIFY2_WITH_TIMEOUT(iom->inputPatch(2) != nullptr && iom->inputPatch(2)->input() == 2,
+                              "universe 2 did not come back to B", 3000);
+    QCOMPARE(iom->inputPatch(1)->input(), quint32(0));
+    for (quint32 ch : { kPadLb, kPadRb, kPadLt, kPadRt })
+        QVERIFY(q253In(b, ch, 255));
+    QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::AllOff)), 1, 2000);
+    for (quint32 ch : { kPadRt, kPadLt, kPadRb, kPadLb })
+        QVERIFY(q253In(b, ch, 0));
+    Q_UNUSED(a);
+}
+
 void PadTraces_Test::triggerRest()
 {
     /* Triggers resting at ~8 % and the sticks' jitter: the chord still

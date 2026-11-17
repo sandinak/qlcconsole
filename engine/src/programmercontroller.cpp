@@ -424,6 +424,7 @@ ProgrammerController::ProgrammerController(Doc *doc)
         m_padDevices.clear();
         m_noDeviceId.clear();
         m_seenDown.clear();
+        m_roleMaps.clear();
         if (m_boundFromProfile)
         {
             m_panBound = m_tiltBound = m_boundFromProfile = false;
@@ -438,6 +439,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::profileChanged, this, &ProgrammerController::scheduleStickRefresh);
+        // Another profile: the controls' roles are learnt again.
+        connect(iom, &InputOutputMap::profileChanged, this, [this](quint32 universe) { forgetRoles(universe); });
+        connect(iom, &InputOutputMap::inputSlotChanged, this, [this](quint32 universe) { forgetRoles(universe); });
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::universeAdded, this, &ProgrammerController::scheduleStickRefresh);
@@ -3229,6 +3233,7 @@ void ProgrammerController::connectControllerInput()
            went (a Linux joystick with no location): nothing changed for it
            -- it keeps its arm, its held safety, its chord (board Q253's
            fourth review). Anything else is a pad lost. */
+        forgetRoles(universe);      // another patch: its roles learnt afresh
         const QPair<QString, quint64> now = padDevice(universe);
         const QPair<QString, quint64> was = m_padDevices.value(universe);
         m_padDevices.insert(universe, now);
@@ -3286,6 +3291,8 @@ void ProgrammerController::checkPadDevices()
         m_padDevices.insert(universe, now);
         padLost(universe);
     }
+    // Delivered with the roles they were read with; now as the devices are.
+    forgetRoles(UINT_MAX);
 }
 
 void ProgrammerController::padLost(quint32 universe)
@@ -3491,7 +3498,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     }
 }
 
-int ProgrammerController::controllerRole(quint32 universe, quint32 channel) const
+int ProgrammerController::liveControllerRole(quint32 universe, quint32 channel) const
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
     InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
@@ -3501,6 +3508,41 @@ int ProgrammerController::controllerRole(quint32 universe, quint32 channel) cons
     const quint32 device = ip->deviceChannel(channel);
     return GamepadRole::fromProfile(ip->plugin()->inputChannelRole(ip->input(), device),
                                     ip->plugin()->inputChannelName(ip->input(), device));
+}
+
+void ProgrammerController::learnRoles(quint32 universe) const
+{
+    /* Every control's role while the device behind the patch is known: a
+       value it read and that is delivered after its plugin dropped it (an
+       unplug, another model shifted onto its line) is read with ITS layout
+       -- a stop press is still a stop press, never another pad's GO
+       (round-6 review). Learnt again when the patch, the device or the
+       plugin's configuration changes (after what was read is delivered). */
+    QVector<int> &roles = m_roleMaps[universe];
+    roles.resize(kRoleMapChannels);
+    for (quint32 ch = 0; ch < kRoleMapChannels; ++ch)
+        roles[int(ch)] = liveControllerRole(universe, ch);
+}
+
+void ProgrammerController::forgetRoles(quint32 universe)
+{
+    if (universe == UINT_MAX)
+        m_roleMaps.clear();
+    else
+        m_roleMaps.remove(universe);
+}
+
+int ProgrammerController::controllerRole(quint32 universe, quint32 channel) const
+{
+    if (channel >= kRoleMapChannels)
+        return liveControllerRole(universe, channel);
+    auto it = m_roleMaps.constFind(universe);
+    if (it == m_roleMaps.constEnd())
+    {
+        learnRoles(universe);
+        it = m_roleMaps.constFind(universe);
+    }
+    return it->at(int(channel));
 }
 
 ProgrammerController::FocusController ProgrammerController::focusController(quint32 only) const

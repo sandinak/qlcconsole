@@ -1167,6 +1167,14 @@ quint64 HIDPlugin::deviceId(HIDDevice *dev)
     return it.value();
 }
 
+quint64 HIDPlugin::inputDeviceReplacement(quint64 id) const
+{
+    quint64 now = 0;
+    for (int hops = 0; hops < 64 && m_replacedBy.contains(id); ++hops)
+        now = id = m_replacedBy.value(id);
+    return now;
+}
+
 quint64 HIDPlugin::inputDeviceId(quint32 input) const
 {
     /* An id given when the device came into the list and never given
@@ -1422,7 +1430,11 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
         emit deviceAdded(dev);
         setupDiagnostics(dev);
         changed = true;
-        m_deviceIds.remove(old);            // its line's device is another now
+        // Its line's device is another now -- the same pad, re-enumerated there.
+        const quint64 oldId = m_deviceIds.value(old, 0);
+        m_deviceIds.remove(old);
+        if (oldId != 0)
+            m_replacedBy.insert(oldId, deviceId(dev));
     }
     else
     {
