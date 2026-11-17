@@ -5944,7 +5944,8 @@ void App::slotChooseTabs()
     dlg.setWindowTitle(tr("Tabs"));
     QVBoxLayout *col = new QVBoxLayout(&dlg);
     QLabel *hint = new QLabel(tr("Tick the tabs to show and drag them into order. Connections "
-                                 "and Run are always there. Saved with the show."), &dlg);
+                                 "and Run are always there. Saved with the show.\n"
+                                 "Simple Desk opens from Window ▸ Simple Desk (⇧⌘D)."), &dlg);
     hint->setWordWrap(true);
     col->addWidget(hint);
     QListWidget *list = new QListWidget(&dlg);
@@ -6199,7 +6200,12 @@ void App::updateWorkspaceViewActions()
     foreach (QAction *a, m_workspaceViewActions)
         a->setChecked(a->data().toInt() == int(m_workspaceView));
     if (m_chooseTabsAction != nullptr)      // Classic stays stock QLC+
+    {
         m_chooseTabsAction->setEnabled(m_workspaceView != ClassicView);
+        m_chooseTabsAction->setToolTip(m_workspaceView == ClassicView
+            ? tr("Classic keeps QLC+'s own tabs; switch view to choose")
+            : tr("Choose and order the tabs along the bottom; saved with the show"));
+    }
 }
 
 void App::showViewNotice(const QString &text, const QString &buttonText,

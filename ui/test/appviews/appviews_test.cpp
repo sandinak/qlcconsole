@@ -3207,6 +3207,7 @@ void AppViews_Test::runAndConnectionsCantBeUnchecked()
     m_app->setCustomTabs(QStringList());
     m_app->setWorkspaceView(App::ClassicView);
     QVERIFY(!act->isEnabled());
+    QCOMPARE(act->toolTip(), QString("Classic keeps QLC+'s own tabs; switch view to choose"));
     m_app->setWorkspaceView(App::ConsoleView);
     m_app->setTabLabelMode(App::TabIconAndText);
     m_app->doc()->resetModified();
