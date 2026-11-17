@@ -2845,6 +2845,11 @@ void FixtureManager::refreshTestAction()
         m_testAction->setToolTip(tr("Test works on one fixture. Pick a fixture in the group, or use Locate to flash them all."));
     else
         m_testAction->setToolTip(tr("Test works on one fixture. Select a single fixture."));
+    if (!oneFixture)
+    {
+        m_resetAction->setEnabled(false);
+        m_resetAction->setToolTip(tr("Reset works on one fixture. Select a single fixture."));
+    }
 }
 
 void FixtureManager::slotTestFixture()
@@ -3579,7 +3584,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
     if (!patchedSel.isEmpty())
     {
-        returnToInv = setupMenu->addAction(patchedSel.size() > 1
+        returnToInv = cm.add(ContextMenu::Kind, patchedSel.size() > 1
                                          ? tr("Return %1 Fixtures to Inventory…").arg(patchedSel.size())
                                          : tr("Return to Inventory…"));
         returnToInv->setEnabled(m_doc->mode() == Doc::Design);
@@ -3592,9 +3597,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     {
         refreshTestAction();
         cm.add(ContextMenu::Place, m_testAction);
-        // Reset acts on one fixture: a group row has none to offer.
-        if (selFixtures.isEmpty() == false)
-            cm.add(ContextMenu::Place, m_resetAction);
+        // Reset acts on one fixture: greyed, with the reason, on a group or several.
+        cm.add(ContextMenu::Place, m_resetAction);
     }
     QAction *whyOn = NULL;     // ContextMenus::rig offers it
 
@@ -3882,6 +3886,9 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
 
     // ---- The view ----
+    /* The list's view: on a fixture or group row the menu is full, and the
+       toolbar and the roots carry it (UX-80). */
+    if (!haveFixtureOrGroupSelection)
     {
         QMenu *viewMenu = cm.addMenu(ContextMenu::View, tr("View"));
         viewMenu->addAction(m_expandAllAction);

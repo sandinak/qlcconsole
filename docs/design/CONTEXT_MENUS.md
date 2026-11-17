@@ -480,7 +480,7 @@ offscreen; the others were counted from the source (`exec(` sites in
 | Fixture group, Fixture Manager | same | 18 → 14 | same | Reset dropped for a group (it never applied); **Add to Group** alone is not a one-item Group ▸ |
 | Fixture group in Build, Plot Layers, Scenes, Library | `contextmenus.cpp` `rig()` | 8–14 | kind block | none |
 | Fixture, Build / Scenes / Library | same | 4–12 | kind block | none |
-| Fixture on the plot and Plot Layers | `monitorgraphicsview.cpp` `buildItemMenu` | 19 → 14 | place, kind | footprint, masking, mounting, height and studio component are **Plot Setup ▸**; New Map Layer from Selection… is in Move to Layer ▸. It has no Test Fixture item (Locate is its find-it), so the silent no-op was the Fixture Manager's only |
+| Fixture on the plot and Plot Layers | `monitorgraphicsview.cpp` `buildItemMenu` | 19 → 14 | place, kind | footprint, masking, mounting, height and studio component are **Mounting && Masking ▸** (Show Light Footprint stays top-level; the height row is inside, to fit 14); New Map Layer from Selection… is in Move to Layer ▸. It has no Test Fixture item (Locate is its find-it), so the silent no-op was the Fixture Manager's only |
 | Stage feature, plot and Layers | same | 12 | kind block, Delete last | none |
 | Stage piece, no-light zone | same | 5 | place, Edit, Delete | none |
 | Empty plot | `monitor.cpp` | 7 | | none |
@@ -488,7 +488,7 @@ offscreen; the others were counted from the source (`exec(` sites in
 | Function (Scenes, Effects, Library, Workbench) | `function()` | 8–10 | kind block | none |
 | Build ▸ Scenes folder / empty | `programmingoutline.cpp` | 10 / 6 | | none |
 | Functions tab | `functionmanager.cpp` | 17 → 7 | Kind, Selection, Organise, View, Edit, Delete last | the twelve creators are **New ▸** |
-| Show Tree layer (tree, Workbench) | `showtreeview.cpp` `fillLayerMenu` | 20 / 18 → 12 / 13 | place, open, kind, Edit, Delete | **New ▸** (the four + items on a cue or layer), **Structure ▸** (Split Layer, Add Child Layer ▸, Remove from Layer ▸, Detach to Plain Scene), **Clipboard ▸** (Cut, Copy, Paste, Duplicate); the course helper `treeMenu` finds an item inside an area submenu by its own text |
+| Show Tree layer (tree, Workbench) | `showtreeview.cpp` `fillLayerMenu` | 20 / 18 → 12 / 13 | place, open, kind, Edit, Delete | **New ▸** (the four + items on a cue or layer), **Layer Tools ▸** (Split Layer, Add Child Layer ▸, Remove from Layer ▸, Detach to Plain Scene), **Clipboard ▸** (Cut, Copy; Paste and Duplicate stay top-level); the course helper `treeMenu` finds an item inside an area submenu by its own text |
 | Show Tree layer carried in | same | 10–11 | place, open | none |
 | Show Tree cue, list, production, hit | `showtreeview.cpp`, `treecuestack.cpp` | 2–14 | creation first, Delete last | counted from source only |
 | Connections rows (14 menus) | `connectionstree.cpp` | 5–15 → 4–14 | list view and Add Universe on top, the row's items, Delete last | Collapse/Expand are **View ▸**; not built by the test (needs a live patch), counted from source |
