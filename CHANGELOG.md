@@ -111,6 +111,11 @@ their own; their detailed notes follow below this section.
   the head's 16-bit mode for a follow spot.
 - **A free-flying follow spot (no Aim look) is not turned by the
   operator's facing**; aimed spots are.
+- **Fire Spread on a very large pixel rig can make the screen choppy.**
+  On a rig of about 7,700 heads (mostly pixel bars), the effect's tick
+  takes about 10 ms of the screen's thread while the fire spreads, so a
+  4-core Mac may redraw unevenly. Moving effect ticks off the screen's
+  thread is planned for 0.5.x.
 - **Hold at the end of a WLED effect can't freeze over Art-Net or E1.31**;
   it does over Network (WLED).
 - **On macOS, Activity Monitor's Real Memory can climb during a long
