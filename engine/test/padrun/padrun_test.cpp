@@ -37,6 +37,7 @@
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
 #include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "padrun_test.h"
 #include "controlmap.h"
 #include "inputpatch.h"
@@ -635,11 +636,11 @@ void PadRun_Test::theEmergencyStop()
     hold(kRB, false);
     hold(kLB, false);
 
-    // An ALL OFF carried out, from anywhere, is the stop again: still Stopped.
-    emit m_doc->showControl()->commandCarried(ShowControl::AllOff, true);
+    // A command is not the end of it: the stop is over when the keeper's is
+    // (a GO that drives the show again; PadRunRules_Test drives the real one).
+    emit m_doc->showControl()->commandHandled(QStringLiteral("GO"), true);
     QCOMPARE(run->state(), PadRun::Stopped);
-    // The show run again from anywhere (the keys, the Run tab): no longer Stopped.
-    emit m_doc->showControl()->commandCarried(ShowControl::Go, true);
+    emit m_doc->outputRuleKeeper()->emergencyStopEnded();
     QCOMPARE(run->state(), PadRun::Run);
     QVERIFY(!pc->padLight().isValid());
 

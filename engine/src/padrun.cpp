@@ -28,6 +28,7 @@
 #include "refinesession.h"
 #include "focussession.h"
 #include "focuscallcue.h"
+#include "outputrulekeeper.h"
 #include "showcontrol.h"
 #include "effectscriptrunner.h"
 #include "functionparent.h"
@@ -117,10 +118,9 @@ PadRun::~PadRun()
 
 void PadRun::hookShowControl()
 {
-    /* Stopped ends when the show is run again from anywhere (the keys, the
-       Run tab): the pad's red would otherwise outlast what it reports.
-       Doc makes its ShowControl after the programmer, so this is also
-       tried when the role comes on. */
+    /* Doc makes its ShowControl after the programmer, so this is also
+       tried when the role comes on. (Stopped ends with the keeper's stop,
+       stopEnded(), not here.) */
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
     if (st != nullptr && !m_showTreeHooked)
     {
@@ -133,15 +133,6 @@ void PadRun::hookShowControl()
     if (sc == nullptr || m_showControlHooked)
         return;
     m_showControlHooked = true;
-    /* Never an ALL OFF, from any route: it is the stop (stopStruck()), not
-       the show run again. */
-    connect(sc, &ShowControl::commandCarried, this, [this](ShowControl::Command command, bool done) {
-        if (m_stopped && !m_stopping && done && command != ShowControl::AllOff)
-        {
-            m_stopped = false;
-            sync();
-        }
-    });
     /* The double-GO guard held a command, from anywhere (ShowControl::run(),
        its rule 2): the pad says it as every surface does, in the same words
        -- one long buzz, and the voice. Not its notice: the footer's Next
@@ -597,6 +588,8 @@ void PadRun::emergencyStop()
     /* Stopped first (stopStruck()), then the ALL OFF: the stop's own
        emergencyStopStruck() comes back here during run() and is the same
        stop, struck once. */
+    // A stop on top of a stop is said once (review 0.4.13).
+    const bool already = m_stopped;
     m_stopping = true;
     m_struckNow = false;
     stopStruck();
@@ -611,7 +604,8 @@ void PadRun::emergencyStop()
     m_stopping = false;
     m_struckNow = false;
     emit commandSent(ShowControl::AllOff, done);
-    sayStopped();
+    if (!already)
+        sayStopped();
 }
 
 void PadRun::stopStruck()
@@ -621,6 +615,13 @@ void PadRun::stopStruck()
         return;
     if (m_stopping)
         m_struckNow = true;
+    /* Another route's, queued here: over already by the time it lands (a
+       GO, a new session, another show loaded) -- the arm still drops and
+       the tools still end, but the show is not painted red that its footer
+       does not hold (one source). */
+    const OutputRuleKeeper *keeper = m_doc != nullptr ? m_doc->outputRuleKeeper() : nullptr;
+    const bool over = !m_stopping && keeper != nullptr && !keeper->emergencyStopped();
+    const bool already = m_stopped;
     /* One stopped state, whatever route the stop came by (rule 2): the arm
        drops, a focus's put-by arm is forgotten, the state is Stopped -- all
        before a tool ends below, so nothing its end does re-arms the pad
@@ -631,7 +632,8 @@ void PadRun::stopStruck()
     m_armed = false;
     m_armUniverse = UINT_MAX;
     m_focusArm = UINT_MAX;
-    m_stopped = true;
+    if (!over)
+        m_stopped = true;
     m_playing = false;
     m_flash->stop();
     if (was)
@@ -648,9 +650,23 @@ void PadRun::stopStruck()
         m_endingForStop = false;
     }
     sync();
-    // From another route (OSC, MSC, the phone, the laptop): every pad told too.
-    if (!m_stopping && m_enabled)
+    // From another route (OSC, MSC, the phone, the laptop): every pad told
+    // too -- once, not again on top of a stop.
+    if (!m_stopping && m_enabled && !over && !already)
         sayStopped();
+}
+
+void PadRun::stopEnded()
+{
+    /* The keeper's stop is over (OutputRuleKeeper::emergencyStopEnded()):
+       a GO that really drives the show again (not a timecode one, not a
+       Load or Reset), a new session, another show. The red goes with the
+       footer's "held: emergency stop" -- one source (rule 2). An arm by
+       the chord ends it on the pad as before. */
+    if (!m_stopped || m_stopping)
+        return;
+    m_stopped = false;
+    sync();
 }
 
 void PadRun::sayStopped()

@@ -308,16 +308,14 @@ void FocusCallCue::disarm()
 
 void FocusCallCue::cut()
 {
-    // A start asking for the venue: given up, the cue waits again (lit nothing).
-    if (m_state == NamingVenue)
-    {
-        m_askTimer->stop();
-        setState(Armed);
+    /* No focus cue after the stop: the ALL OFF stops its list, which lets
+       go of a waiting cue a tick later anyway (functionStopped ->
+       disarm()). Running calls, a start asking for the venue and a cue
+       waiting all go now, at once: the operator GOes onto the focus cue
+       again to have it. */
+    if (m_state == Idle)
         return;
-    }
-    // A cue only waiting lights nothing and stays: after the stop it needs an arm.
-    if (m_state != Running)
-        return;
+    m_askTimer->stop();
     m_cue = m_list = kInvalid;
     setState(Idle);
 }

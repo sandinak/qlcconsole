@@ -295,6 +295,9 @@ function sendStop(){
   stopTimer=setTimeout(function(){if(stopSending)stopNotDone('STOP NOT CONFIRMED',
     'Stop not confirmed: the console did not answer. Stop from the laptop.')},3000)}
 function stopAck(answer){
+  /* Only the answer to a stop this page is sending: a late or stray one
+     (after the time ran out, or another page's) changes nothing shown. */
+  if(!stopSending)return;
   if(answer==='ok'){stopDone();return}
   if(answer==='needpin'){unlocked=false;askPin('')}
   stopNotDone('STOP NOT SENT',answer==='refused'?'Stop not sent: GO from the phone is off on the laptop (Show Settings).'

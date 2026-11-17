@@ -84,10 +84,10 @@ public:
     /** Let go of an armed cue (the list moved on, or stopped). */
     void disarm();
     /** The emergency stop, quietly (the stop says what happened; "Venue
-     *  focus ended." would talk over it): running calls are let go of (the
-     *  caller ends the focus session), a start asking for the venue is
-     *  given up (Armed again), a cue only waiting stays -- after the stop
-     *  it needs an arm to start (PadRun). */
+     *  focus ended." would talk over it): no focus cue after it -- running
+     *  calls (the caller ends the focus session), a start asking for the
+     *  venue and a cue only waiting are all let go of (Idle), as the list's
+     *  own stop would a tick later. GO onto the focus cue again to have it. */
     void cut();
 
     /** While NamingVenue: the venue's name (empty: a new one for today's

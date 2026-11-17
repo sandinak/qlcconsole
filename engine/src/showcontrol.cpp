@@ -469,7 +469,6 @@ bool ShowControl::execute(const Request &request)
             markTaken(listId, request.command);
         const QString line = how.isEmpty() ? what : what + QStringLiteral(" — ") + how;
         emit commandHandled(line, done);
-        emit commandCarried(request.command, done);
         emit commandFrom(m_source, m_sourceUniverse, line, done);
         return done;
     };

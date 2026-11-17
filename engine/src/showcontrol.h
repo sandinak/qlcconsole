@@ -350,11 +350,6 @@ signals:
      *  line saying which and why: "GO cue 12.5 — Main", "GO cue 9: no such
      *  cue in Main". */
     void commandHandled(const QString &what, bool done);
-    /** The same command, by what it was: emitted with commandHandled() by
-     *  execute(), on the thread the command arrived on. PadRun reads it:
-     *  a command carried out ends the pad's red Stopped -- but never an
-     *  ALL OFF, from any route (one stopped state, rule 2). */
-    void commandCarried(ShowControl::Command command, bool done);
 
     /** The same, with where the command came from -- and for MSC, the
      *  universe whose MIDI input it arrived on (UINT_MAX otherwise). */

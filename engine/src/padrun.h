@@ -514,11 +514,15 @@ public:
     /** The emergency stop struck, from any route (the pad's own, OSC, MSC,
      *  the phone, the laptop; ProgrammerController::endToolsForStop(), on
      *  the main thread): the one stopped state (rule 2) -- the arm
-     *  dropped, a focus's put-by arm forgotten, Stopped until a command
-     *  other than ALL OFF is carried out or the pad arms -- and then the
+     *  dropped, a focus's put-by arm forgotten, Stopped until the keeper's
+     *  stop is over (stopEnded()) or the pad arms -- and then the
      *  focus tools ended (E9), so none of their ends re-arms the pad or
      *  says GO works again. Another route's stop is said on every pad. */
     void stopStruck();
+    /** The keeper's emergency stop is over (OutputRuleKeeper::
+     *  emergencyStopEnded()): Stopped ends -- the pad's red and the
+     *  footer's hold read one source. Main thread. */
+    void stopEnded();
     /** Fire the armed hit: start it, or let it go when it runs (a finished
      *  one-shot plays again). Says its name; false, said, when none is
      *  armed or the show is in Design. */

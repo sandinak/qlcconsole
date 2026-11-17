@@ -295,6 +295,12 @@ signals:
      *  Desk lets go of what was not moved since; the programmer ends its
      *  focus tools, E9). Emitted on the thread that struck it. */
     void emergencyStopStruck(quint32 epoch);
+    /** emergencyStopped() went false: the first GO after the stop (not a
+     *  timecode or other automatic one), a new session (Operate, Blind
+     *  ending in Operate, a show loaded) or the show cleared. On the main
+     *  thread. The pad's red follows it (PadRun::stopEnded()): the pad and
+     *  the footer read one source. */
+    void emergencyStopEnded();
 
 private:
     void scheduleRebuild();

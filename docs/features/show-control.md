@@ -173,9 +173,11 @@ them:
   STOPPED**), over a walk or a tool too. An ALL OFF from anywhere else
   (the laptop, the phone page, OSC or MSC) does the same: the pad turns
   red, buzzes three times and says so, and a focus or walk it was armed
-  beside never arms it again. It stays red until you arm again or a run
-  command goes through from anywhere: a GO, Back or Stop from the laptop,
-  the phone page or OSC. Another ALL OFF never ends the red. There is no
+  beside never arms it again. It stays red until you arm again, or until
+  the footer's **held: emergency stop** ends -- the two go together: a GO
+  that drives the show again from anywhere (the laptop, the phone page,
+  OSC, MSC, a VC Cue List) or switching into Operate. A cue reached by
+  timecode, a Load, a Reset or another ALL OFF does not end it. There is no
   "stop the list" on the pad:
   stop a list on the Run tab.
 - **A pad with no light buzzes instead.** Two short buzzes: armed. One
