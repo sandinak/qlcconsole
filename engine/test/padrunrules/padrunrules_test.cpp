@@ -1499,6 +1499,67 @@ void PadRunRules_Test::aTwinPadsButtonsAfterAWalkAct()
     QCOMPARE(goes(), 1);
 }
 
+void PadRunRules_Test::aTwinPadsMenuIsOneWalk_data()
+{
+    QTest::addColumn<int>("first");     // the line each change arrives on first
+    QTest::newRow("line 0 first") << 0;
+    QTest::newRow("line 1 first") << 1;
+}
+
+void PadRunRules_Test::aTwinPadsMenuIsOneWalk()
+{
+    /* Merge of board Q253 into 0.4.13: one Menu on a pad listed twice
+       started the walk on one line (PadRun::handle()) and stopped it on
+       the other -- the copy went to the walk's own map (handleWalk(), one
+       state for the whole pad), read as a second Menu. One press, one
+       action: the walk starts and stays on; either line's triggers steer
+       it; the next real Menu stops it, and its copy starts nothing. */
+    QFETCH(int, first);
+    makeShow();
+    twinLines();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    const quint32 a = quint32(first), b = 1 - quint32(first);
+    auto both = [&](quint32 ch, uchar v) {
+        axis(ch, v, a);
+        axis(ch, v, b);
+    };
+    // One Menu, as the pad sends it: on both lines.
+    both(kMenu, 255);
+    QVERIFY2(run->isWalking(), qPrintable(QString("one Menu on a pad listed twice left no walk: '%1'")
+                                              .arg(run->notice())));
+    both(kMenu, 0);
+    QVERIFY(run->isWalking());
+    QCOMPARE(pc->controllerOwner(), a);
+    QCOMPARE(pc->refineSession()->cueId(), m_cue1);
+    // RT on both lines: one step.
+    both(kRT, 255);
+    both(kRT, 0);
+    QVERIFY2(pc->refineSession()->cueId() == m_cue2, "one RT on the twin pad did not step the walk once");
+    // LT from the other line alone: a step back (either line steers it).
+    axis(kLT, 255, b);
+    axis(kLT, 0, b);
+    QVERIFY2(pc->refineSession()->cueId() == m_cue1, "the other line's LT did not step the walk");
+    // RT from the first line alone: forward again.
+    axis(kRT, 255, a);
+    axis(kRT, 0, a);
+    QCOMPARE(pc->refineSession()->cueId(), m_cue2);
+    QVERIFY(run->isWalking());
+    // The next real Menu stops it; its copy on the other line starts nothing.
+    both(kMenu, 255);
+    QVERIFY2(!run->isWalking(), "the second Menu did not stop the walk");
+    both(kMenu, 0);
+    QVERIFY2(!run->isWalking(), "the second Menu's copy started the walk again");
+    // And a third Menu walks again (nothing of the press stuck on a line).
+    both(kMenu, 255);
+    both(kMenu, 0);
+    QVERIFY2(run->isWalking(), "a Menu after the walk was swallowed");
+    if (run->isWalking())
+        run->stopWalk();
+}
+
 void PadRunRules_Test::twinPadsToldApartAreTwoPads_data()
 {
     QTest::addColumn<QString>("by");

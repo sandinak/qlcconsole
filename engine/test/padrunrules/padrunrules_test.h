@@ -115,6 +115,8 @@ private slots:
     /** A twin pad's buttons after a walk ended on the laptop: its next
      *  Menu walks, its LT + A is one GO. */
     void aTwinPadsButtonsAfterAWalkAct();
+    void aTwinPadsMenuIsOneWalk_data();
+    void aTwinPadsMenuIsOneWalk();
     /** Twin pads told apart (address, USB port) stay two pads: each its
      *  own stop, its own chord, one runner. */
     void twinPadsToldApartAreTwoPads_data();
