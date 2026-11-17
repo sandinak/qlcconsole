@@ -210,83 +210,83 @@
 <context>
     <name>WebAccessBase</name>
     <message>
-        <location filename="webaccessbase.cpp" line="431"/>
+        <location filename="webaccessbase.cpp" line="432"/>
         <source>Loading project...</source>
         <translation type="unfinished">Project laden...</translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="470"/>
+        <location filename="webaccessbase.cpp" line="471"/>
         <source>Web access lets this computer change the show. To change it from another device, start qlcconsole with -wa and log in.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="489"/>
+        <location filename="webaccessbase.cpp" line="490"/>
         <source>A page on another site may not control this console.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="526"/>
+        <location filename="webaccessbase.cpp" line="527"/>
         <source>A fixture definition is a .qxf file.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="539"/>
+        <location filename="webaccessbase.cpp" line="540"/>
         <source>Fixture stored and loaded</source>
         <translation type="unfinished">Fixture opgeslagen en geladen</translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="749"/>
+        <location filename="webaccessbase.cpp" line="763"/>
         <source>A username is letters, digits and . _ @ - only.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="754"/>
+        <location filename="webaccessbase.cpp" line="768"/>
         <source>Username and password are required fields.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="761"/>
-        <location filename="webaccessbase.cpp" line="792"/>
+        <location filename="webaccessbase.cpp" line="775"/>
+        <location filename="webaccessbase.cpp" line="806"/>
         <source>User level has to be a positive integer.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="785"/>
+        <location filename="webaccessbase.cpp" line="799"/>
         <source>Username is required.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="807"/>
+        <location filename="webaccessbase.cpp" line="821"/>
         <source>Error while saving passwords file.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="835"/>
+        <location filename="webaccessbase.cpp" line="849"/>
         <source>Network configuration changed. Reboot to apply the changes.</source>
         <translation type="unfinished">Netwerkconfiguratie is gewijzigd. Herstart om de wijzigingen toe te passen.</translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="837"/>
+        <location filename="webaccessbase.cpp" line="851"/>
         <source>An error occurred while updating the network configuration.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="854"/>
+        <location filename="webaccessbase.cpp" line="868"/>
         <source>Wi-Fi hotspot successfully activated.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="856"/>
+        <location filename="webaccessbase.cpp" line="870"/>
         <source>An error occurred while creating a Wi-Fi hotspot.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="861"/>
+        <location filename="webaccessbase.cpp" line="875"/>
         <source>Wi-Fi hotspot successfully deactivated.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessbase.cpp" line="878"/>
+        <location filename="webaccessbase.cpp" line="892"/>
         <source>Autostart configuration changed</source>
         <translation type="unfinished">Autostart configuratie gewijzigd</translation>
     </message>
@@ -582,23 +582,28 @@
 <context>
     <name>WebAccessRun</name>
     <message>
-        <location filename="webaccessrun.cpp" line="496"/>
-        <source>Solo a layer of the cue in the preview, or the whole cue again ({LB} held; Design)</source>
+        <location filename="webaccessrun.cpp" line="534"/>
+        <source>Solo a layer of the cue in the preview, or the whole cue again (armed, {LT} held; Design)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessrun.cpp" line="497"/>
-        <source>Solo the next layer ({LB} held)</source>
+        <location filename="webaccessrun.cpp" line="535"/>
+        <source>Solo the next layer (armed, {LT} held)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessrun.cpp" line="498"/>
-        <source>Solo the previous layer ({LB} held)</source>
+        <location filename="webaccessrun.cpp" line="536"/>
+        <source>Solo the previous layer (armed, {LT} held)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="webaccessrun.cpp" line="500"/>
-        <source>Blind: the rig muted, the screens live ({LB} held; Design)</source>
+        <location filename="webaccessrun.cpp" line="538"/>
+        <source>Blind: the rig muted, the screens live (armed, {LT} held; Design)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="webaccessrun.cpp" line="696"/>
+        <source>A deleted cue — held until GO</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

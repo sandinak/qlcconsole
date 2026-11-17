@@ -4,44 +4,44 @@
 <context>
     <name>DMXUSB</name>
     <message>
-        <location filename="dmxusb.cpp" line="158"/>
+        <location filename="dmxusb.cpp" line="261"/>
         <source>This plugin provides DMX output support for</source>
         <translation type="unfinished">Tämä liitännäinen tukee</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="162"/>
+        <location filename="dmxusb.cpp" line="265"/>
         <source>and compatible devices.</source>
         <translation type="unfinished">Ei tunnistettuja laitteita.</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="176"/>
+        <location filename="dmxusb.cpp" line="279"/>
         <source>No output support available.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="178"/>
+        <location filename="dmxusb.cpp" line="281"/>
         <source>Make sure that you have your hardware firmly plugged in. NOTE: FTDI VCP interface is not supported by this plugin.</source>
         <translation type="unfinished">Varmista, että laitteisto on kytkettynä. Huomaa: Tämä liitännäinen ei tue FTDI VCP-interfacea.</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="187"/>
-        <location filename="dmxusb.cpp" line="305"/>
+        <location filename="dmxusb.cpp" line="290"/>
+        <location filename="dmxusb.cpp" line="431"/>
         <source>Device is operating correctly.</source>
         <translation type="unfinished">Laite toimii oikein.</translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="189"/>
-        <location filename="dmxusb.cpp" line="307"/>
+        <location filename="dmxusb.cpp" line="292"/>
+        <location filename="dmxusb.cpp" line="433"/>
         <source>Driver in use: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="223"/>
+        <location filename="dmxusb.cpp" line="349"/>
         <source>DMX USB %1: %2</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="dmxusb.cpp" line="292"/>
+        <location filename="dmxusb.cpp" line="418"/>
         <source>No input support available.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -188,18 +188,18 @@
 <context>
     <name>EnttecDMXUSBPro</name>
     <message>
-        <location filename="enttecdmxusbpro.cpp" line="314"/>
-        <location filename="enttecdmxusbpro.cpp" line="316"/>
+        <location filename="enttecdmxusbpro.cpp" line="315"/>
+        <location filename="enttecdmxusbpro.cpp" line="317"/>
         <source>Protocol</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="enttecdmxusbpro.cpp" line="319"/>
+        <location filename="enttecdmxusbpro.cpp" line="320"/>
         <source>Manufacturer</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="enttecdmxusbpro.cpp" line="321"/>
+        <location filename="enttecdmxusbpro.cpp" line="322"/>
         <source>Serial number</source>
         <translation type="unfinished"></translation>
     </message>
@@ -211,7 +211,7 @@
         <location filename="nanodmx.cpp" line="236"/>
         <location filename="stageprofi.cpp" line="141"/>
         <location filename="usbdmxlegacy.cpp" line="134"/>
-        <location filename="vinceusbdmx512.cpp" line="235"/>
+        <location filename="vinceusbdmx512.cpp" line="250"/>
         <source>Protocol</source>
         <translation type="unfinished"></translation>
     </message>
@@ -220,7 +220,7 @@
         <location filename="nanodmx.cpp" line="243"/>
         <location filename="stageprofi.cpp" line="148"/>
         <location filename="usbdmxlegacy.cpp" line="137"/>
-        <location filename="vinceusbdmx512.cpp" line="239"/>
+        <location filename="vinceusbdmx512.cpp" line="254"/>
         <source>Serial number</source>
         <translation type="unfinished"></translation>
     </message>
@@ -229,7 +229,7 @@
         <location filename="nanodmx.cpp" line="238"/>
         <location filename="stageprofi.cpp" line="143"/>
         <location filename="usbdmxlegacy.cpp" line="135"/>
-        <location filename="vinceusbdmx512.cpp" line="237"/>
+        <location filename="vinceusbdmx512.cpp" line="252"/>
         <source>Output</source>
         <translation type="unfinished"></translation>
     </message>
@@ -243,22 +243,22 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="enttecdmxusbpro.cpp" line="579"/>
+        <location filename="enttecdmxusbpro.cpp" line="606"/>
         <source>MIDI Input</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="enttecdmxusbpro.cpp" line="581"/>
+        <location filename="enttecdmxusbpro.cpp" line="608"/>
         <source>DMX Input</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="enttecdmxusbpro.cpp" line="586"/>
+        <location filename="enttecdmxusbpro.cpp" line="613"/>
         <source>MIDI Output</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="enttecdmxusbpro.cpp" line="588"/>
+        <location filename="enttecdmxusbpro.cpp" line="615"/>
         <source>DMX Output</source>
         <translation type="unfinished"></translation>
     </message>

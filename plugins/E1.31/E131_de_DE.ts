@@ -99,7 +99,7 @@ Bitte vor Bestätigung korrigieren.</translation>
 <context>
     <name>E131Controller</name>
     <message>
-        <location filename="e131controller.cpp" line="481"/>
+        <location filename="e131controller.cpp" line="520"/>
         <source>E1.31 to %1: not reachable since %2</source>
         <translation type="unfinished"></translation>
     </message>
@@ -118,13 +118,13 @@ Bitte vor Bestätigung korrigieren.</translation>
     </message>
     <message>
         <location filename="e131plugin.cpp" line="162"/>
-        <location filename="e131plugin.cpp" line="360"/>
+        <location filename="e131plugin.cpp" line="380"/>
         <source>Status: Not open</source>
         <translation>Status: Nicht geöffnet</translation>
     </message>
     <message>
         <location filename="e131plugin.cpp" line="165"/>
-        <location filename="e131plugin.cpp" line="363"/>
+        <location filename="e131plugin.cpp" line="383"/>
         <source>Status: Open</source>
         <translation>Status: Geöffnet</translation>
     </message>
@@ -134,22 +134,22 @@ Bitte vor Bestätigung korrigieren.</translation>
         <translation>Gesendete Pakete: </translation>
     </message>
     <message>
-        <location filename="e131plugin.cpp" line="256"/>
+        <location filename="e131plugin.cpp" line="276"/>
         <source>%1 (universe %2)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="e131plugin.cpp" line="257"/>
+        <location filename="e131plugin.cpp" line="277"/>
         <source>%1 (universes %2)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="e131plugin.cpp" line="356"/>
+        <location filename="e131plugin.cpp" line="376"/>
         <source>Input</source>
         <translation>Eingang</translation>
     </message>
     <message>
-        <location filename="e131plugin.cpp" line="365"/>
+        <location filename="e131plugin.cpp" line="385"/>
         <source>Packets received: </source>
         <translation>Empfangene Pakete: </translation>
     </message>

@@ -32,14 +32,12 @@
 <context>
     <name>HIDDMXDevice</name>
     <message>
-        <location filename="hiddmxdevice.cpp" line="62"/>
         <source>HID DMX Interface Error</source>
-        <translation>Chyba rozhraní HID DMX</translation>
+        <translation type="vanished">Chyba rozhraní HID DMX</translation>
     </message>
     <message>
-        <location filename="hiddmxdevice.cpp" line="63"/>
         <source>Unable to open %1. Make sure the udev rule is installed.</source>
-        <translation>Nepodařilo se otevřít %1. Ujistěte se, že rozhraní udev je nainstalováno.</translation>
+        <translation type="vanished">Nepodařilo se otevřít %1. Ujistěte se, že rozhraní udev je nainstalováno.</translation>
     </message>
 </context>
 <context>
@@ -58,17 +56,17 @@
 <context>
     <name>HIDOSXJoystick</name>
     <message>
-        <location filename="macx/hidosxjoystick.cpp" line="360"/>
+        <location filename="macx/hidosxjoystick.cpp" line="391"/>
         <source>macOS does not list this controller any more</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="macx/hidosxjoystick.cpp" line="362"/>
+        <location filename="macx/hidosxjoystick.cpp" line="393"/>
         <source>macOS is not letting qlcconsole read the controller. Allow qlcconsole in System Settings → Privacy &amp; Security → Input Monitoring, then quit and reopen it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="macx/hidosxjoystick.cpp" line="366"/>
+        <location filename="macx/hidosxjoystick.cpp" line="397"/>
         <source>macOS could not open the controller (IOKit error 0x%1)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -76,9 +74,29 @@
 <context>
     <name>HIDPlugin</name>
     <message>
-        <location filename="hidplugin.cpp" line="481"/>
+        <location filename="hidplugin.cpp" line="751"/>
         <source>This plugin provides support for HID-based joysticks, gamepads and some USB DMX adapters.</source>
         <translation>Tento plugin přidává podporu pro pákové ovladače (joysticky) založené na standardu HID.</translation>
+    </message>
+    <message>
+        <location filename="hidplugin.cpp" line="1251"/>
+        <source>HID DMX Interface Error</source>
+        <translation type="unfinished">Chyba rozhraní HID DMX</translation>
+    </message>
+    <message>
+        <location filename="hidplugin.cpp" line="1252"/>
+        <source>Unable to open %1. Make sure the udev rule is installed.</source>
+        <translation type="unfinished">Nepodařilo se otevřít %1. Ujistěte se, že rozhraní udev je nainstalováno.</translation>
+    </message>
+    <message>
+        <location filename="hidplugin.cpp" line="1461"/>
+        <source>USB controllers — the system&apos;s device list is not answering; the show keeps running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="hidplugin.cpp" line="1468"/>
+        <source>%1 — not answering; skipped, the show keeps running</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
