@@ -1789,11 +1789,11 @@ void FollowSpotFeel_Test::q253TheStopEndsTheToolAndItsHold()
     QString why;
     QVERIFY2(q253Start(h, show, tool, show.elsewhere->id(), &why), qPrintable(why));
     QCOMPARE(h.pc->controllerOwner(), quint32(0));
-    QCOMPARE(h.pc->followSpotStatus().heldBy, q253Name(tool));
     // B's stick pushed again through the hold; A's own stick is the tool's.
     input(1, 0, 230);
     input(0, 0, 255);
     QVERIFY(driftAfter(h) < 0.005);
+    QCOMPARE(h.pc->followSpotStatus().heldBy, q253Name(tool));
 
     // A's four: the stop.
     for (quint32 ch : { 14u, 15u, 4u, kQRT })
