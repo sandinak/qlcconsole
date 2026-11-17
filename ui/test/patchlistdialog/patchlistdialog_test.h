@@ -35,6 +35,7 @@ private slots:
     void cleanup();
 
     void theTableIsInPatchOrder();
+    void oneUniverseAndAPrintButton();
     void theColumnsHaveNoChannelCount();
     void groupedByLocationByDefault();
     void groupByIsRemembered();

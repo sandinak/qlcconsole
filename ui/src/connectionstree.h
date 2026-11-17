@@ -171,6 +171,8 @@ private:
     void forgetPendingPatch(quint32 universe);
     void renameUniverse(quint32 universe);
     void deleteUniverse(quint32 universe);
+    /** The patch list, only @p universe's fixtures ("Patch List for U13…"). */
+    void openPatchList(quint32 universe);
     /** Append a new universe (always the last one — see deleteUniverse()'s
      *  own "only the last can go" rule for why numbering never has gaps). */
     void addUniverse();

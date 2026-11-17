@@ -20,6 +20,7 @@
 #ifndef PATCHLIST_H
 #define PATCHLIST_H
 
+#include <QPagedPaintDevice>
 #include <QStringList>
 #include <QVector3D>
 #include <QColor>
@@ -117,9 +118,12 @@ public:
         Kind kind = AllKinds;
         /** Only these owners; empty: anybody's. */
         QList<RigOwner::Owner> owners;
+        /** Only the fixtures patched (or clashing) on this universe
+         *  (zero-based); -1: every universe. */
+        int universe = -1;
 
         bool accepts(const Row &row) const;
-        bool isEmpty() const { return kind == AllKinds && owners.isEmpty(); }
+        bool isEmpty() const { return kind == AllKinds && owners.isEmpty() && universe < 0; }
     };
 
     /** A heading of the grouped list and its rows, in patch order. */
@@ -178,6 +182,9 @@ public:
     bool writeXlsx(const QString &path, GroupBy by = ByNone, QString *error = nullptr) const;
     /** The printable list, a table per section (what the PDF is made from). */
     QString toHtml(const QString &title, GroupBy by = ByUniverse) const;
+    /** Lay the printable list out on @p device (a printer or a PDF writer),
+     *  landscape Letter margins as the PDF has. What Print… and the PDF share. */
+    void paintTo(QPagedPaintDevice *device, const QString &title, GroupBy by = ByUniverse) const;
     /** Write the PDF to @p path (landscape Letter). False, with @p error, if
      *  the file can't be written. */
     bool writePdf(const QString &path, const QString &title, QString *error = nullptr,

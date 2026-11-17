@@ -373,6 +373,8 @@ bool PatchList::Filter::accepts(const Row &row) const
         return false;
     if (kind == Pixel && !row.pixel)
         return false;
+    if (universe >= 0 && !((row.patched || row.clash) && int(row.universe) == universe))
+        return false;
     return owners.isEmpty() || owners.contains(row.ownerKind);
 }
 
@@ -698,17 +700,22 @@ bool PatchList::writePdf(const QString &path, const QString &title, QString *err
     QPdfWriter writer(path);
     writer.setTitle(title);
     writer.setCreator(QStringLiteral("qlcconsole"));
-    writer.setPageSize(QPageSize(QPageSize::Letter));
-    writer.setPageOrientation(QPageLayout::Landscape);
-    writer.setPageMargins(QMarginsF(12, 12, 12, 12), QPageLayout::Millimeter);
+    paintTo(&writer, title, by);
+    return true;
+}
 
-    /* Lay the page out in points at the writer's printable size. Without a
+void PatchList::paintTo(QPagedPaintDevice *device, const QString &title, GroupBy by) const
+{
+    device->setPageSize(QPageSize(QPageSize::Letter));
+    device->setPageOrientation(QPageLayout::Landscape);
+    device->setPageMargins(QMarginsF(12, 12, 12, 12), QPageLayout::Millimeter);
+
+    /* Lay the page out in points at the device's printable size. Without a
        page size of its own, QTextDocument::print() adds a 2 cm margin inside
-       the writer's, wasting a quarter of a landscape page. */
+       the device's, wasting a quarter of a landscape page. */
     QTextDocument doc;
     doc.setDocumentMargin(0);
-    doc.setPageSize(writer.pageLayout().paintRectPoints().size());
+    doc.setPageSize(device->pageLayout().paintRectPoints().size());
     doc.setHtml(toHtml(title, by));
-    doc.print(&writer);
-    return true;
+    doc.print(device);
 }

@@ -414,9 +414,14 @@ the menu bar's **Fixtures → Patch List…**, or the Lighting Studio's
    several, or a heading for all of its rows) for **Print Label…** /
    **Print N Labels…**, **Print Labels for the List Shown…** and **Copy the
    List**.
-5. **Save XLSX…** — the export (below).
+5. **Save XLSX…** — the export (below). **Print…** sends the list shown
+   straight to the system's print dialog (the same page as **Save PDF…**).
 6. **Print Labels…** — labels for the rows selected, or for the list shown
    (below).
+
+In **Connections**, right-click a universe and choose **Patch List for
+U13…** to open this list with only the fixtures patched on that universe (a
+line beside the filters says so, and **All universes** shows them all again).
 
 What Show and Owner leave out is left out of the copy, the exports, the PDF
 and the labels too, and they follow the grouping.

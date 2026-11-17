@@ -58,6 +58,7 @@
 #include "connectioneditor.h"
 #include "networkroute.h"
 #include "universeoutputview.h"
+#include "patchlistdialog.h"
 #include "deviceprofile.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
@@ -2836,6 +2837,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         {
             const quint32 uni = uniVar.toUInt();
             QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
             QAction *retgt = (item->data(COL_NAME, ROLE_OUTPUT).toBool()
                               && pluginSupportsTargetsIn(m_doc, plugin))
                 ? menu.addAction(UniversePatcher::retargetText(plugin)) : NULL;
@@ -2850,6 +2852,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
                 retargetPatch(uni, plugin, line);
             else if (c == ren)
                 renameUniverse(uni);
+            else if (c == plist)
+                openPatchList(uni);
             else if (c == unp)
                 unpatchFromLine(uni, plugin, line,
                                 item->data(COL_NAME, ROLE_OUTPUT).toBool());
@@ -3007,6 +3011,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         /* Where it goes is set in the pane beside the list (selecting the
            row shows it there): no window for it here. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
@@ -3015,6 +3020,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == ren)
             renameUniverse(uni);
+        else if (chosen == plist)
+            openPatchList(uni);
         else if (chosen == del)
             deleteUniverse(uni);
         return;
@@ -3094,6 +3101,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         /* Patch it to an interface that IS here: the pane beside the list,
            which says what it is waiting for and replaces it. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
         menu.addSeparator();
         QAction *forget = menu.addAction(tr("Unpatch…"));
         menu.addSeparator();
@@ -3104,6 +3112,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == ren)
             renameUniverse(uni);
+        else if (chosen == plist)
+            openPatchList(uni);
         else if (chosen == forget)
             forgetPendingPatch(uni);
         else if (chosen == del)
@@ -3123,6 +3133,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            is selected. It used to be a dozen entries here, each its own small
            dialog, then one window ("Edit Connection…") the pane repeated. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
+        QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
         /* Wording matters here: a universe can be patched to several lines, so
            removing it from THIS one must not read as deleting the universe.
            Conflating the two would quietly destroy a fan-out. */
@@ -3137,6 +3148,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == ren)
             renameUniverse(uni);
+        else if (chosen == plist)
+            openPatchList(uni);
         else if (chosen == unp)
             unpatchFromLine(uni, plugin, line, output);
         else if (chosen == del)
@@ -3498,6 +3511,16 @@ bool ConnectionsTree::handleUniversalMenuAction(QAction *chosen, QTreeWidgetItem
         return true;
     }
     return false;
+}
+
+void ConnectionsTree::openPatchList(quint32 universe)
+{
+    /* The patch list, only this universe's fixtures: not modal, so the
+       tree stays usable beside it. */
+    PatchListDialog *dlg = new PatchListDialog(m_doc, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setUniverse(int(universe));
+    dlg->show();
 }
 
 void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *item,

@@ -159,6 +159,7 @@ private slots:
        second filled in; Art-Net, sACN and a USB widget each show their own
        settings in it; OK is one undo step, Cancel changes nothing. */
     void doubleClickingAUniverseOpensNoWindow();
+    void aUniverseOpensItsOwnPatchList();
     void aUniversesMenuHasNoEditConnection();
     void byUniverseOutputSaysWhereEachProtocolGoes();
     void aTargetsNameDoesNotOutliveIt();

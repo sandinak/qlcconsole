@@ -75,6 +75,10 @@ public:
     void setKind(PatchList::Kind kind);
     /** Only @p owner's fixtures; RigOwner::Unset for anybody's. */
     void setOwner(RigOwner::Owner owner);
+    /** Only what is patched on @p universe (zero-based); -1: every universe.
+     *  Connections' "Patch List for U13…" opens it so. */
+    void setUniverse(int universe);
+    int universe() const { return m_universe; }
 
     /** The fixture rows shown, in the order shown. */
     QList<PatchList::Row> shownRows() const;
@@ -97,6 +101,8 @@ public slots:
     void slotSaveCsv();
     void slotSaveXlsx();
     void slotSavePdf();
+    /** The list shown, through the system's print dialog. */
+    void slotPrint();
     /** Labels for the list shown (or the rows picked). */
     void slotLabels();
     /** Labels for the rows picked. */
@@ -120,6 +126,9 @@ private:
     QComboBox *m_kind;
     QComboBox *m_owner;
     QLabel *m_summary;
+    QLabel *m_universeNote;
+    QPushButton *m_allUniverses;
+    int m_universe = -1;
 };
 
 /** @} */

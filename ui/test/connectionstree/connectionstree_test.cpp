@@ -45,6 +45,7 @@
 
 // Its public face only: included before the define below.
 #include "controllertestdialog.h"
+#include "patchlistdialog.h"
 
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
@@ -2809,6 +2810,39 @@ void ConnectionsTree_Test::aTargetsNameDoesNotOutliveIt()
     QCOMPARE(openedOn.count(), 2);
     QCOMPARE(openedOn.at(1), QString("FART2(SR) DMX"));
     QCOMPARE(iom->targetAlias("172.18.2.61"), QString());
+}
+
+void ConnectionsTree_Test::aUniverseOpensItsOwnPatchList()
+{
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(1, stub->name(), "", 0, false, 0));
+    const struct { const char *name; quint32 uni; } fx[] = { { "On One", 0 }, { "On Two A", 1 }, { "On Two B", 1 } };
+    for (int i = 0; i < 3; i++)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(fx[i].name);
+        f->setUniverse(fx[i].uni);
+        f->setAddress(quint32(i) * 10);
+        f->setChannels(3);
+        QVERIFY(m_doc->addFixture(f));
+    }
+    ConnectionsTree tree(m_doc);
+    showUniverseList(tree);
+
+    const QStringList menu = contextMenuOn(tree, 1, "Patch List for U2");
+    QVERIFY2(menu.contains("Patch List for U2…"), qPrintable(menu.join(" | ")));
+    QApplication::processEvents();
+    PatchListDialog *dlg = tree.findChild<PatchListDialog *>();
+    QVERIFY(dlg != nullptr);
+    QVERIFY(dlg->isVisible());
+    QStringList names;
+    foreach (const PatchList::Row &r, dlg->shownRows())
+        names << r.name;
+    names.sort();
+    QCOMPARE(names, QStringList({ "On Two A", "On Two B" }));
+    QCOMPARE(dlg->windowTitle(), QString("Patch List for U2"));
+    delete dlg;
 }
 
 void ConnectionsTree_Test::aUniversesMenuHasNoEditConnection()
