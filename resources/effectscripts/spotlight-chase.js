@@ -105,8 +105,14 @@
             var bright = dimForDistance(dist, trail, trailShape);
 
             var intent = {};
+            var lc = (palettes.look && palettes.look.colors) ? palettes.look.colors[0] : null;
+            var haveColour = lc && lc.r !== undefined;
 
-            if (f.hasDimmer)
+            // A head with no dimmer and no look colour to scale (an RGBW
+            // wash with no dimmer channel) still carries the chase as a
+            // dimmer: the host scales the colour the cue gives it. Without
+            // it the chase didn't show there at all.
+            if (f.hasDimmer || !haveColour)
                 intent.dimmer = bright;
 
             // Where the look points it (its Aim or Pan/Tilt) stands, unless a
@@ -119,8 +125,7 @@
             // Scale the look's colour by the hot-spot brightness so the trail
             // shows on pure-RGB fixtures. No look colour → omit (the dimmer
             // channel still carries the chase; the scene Colour look shows).
-            var lc = (palettes.look && palettes.look.colors) ? palettes.look.colors[0] : null;
-            if (lc && lc.r !== undefined) {
+            if (haveColour) {
                 intent.r = Math.round(lc.r * bright);
                 intent.g = Math.round(lc.g * bright);
                 intent.b = Math.round(lc.b * bright);

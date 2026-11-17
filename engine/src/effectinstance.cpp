@@ -953,7 +953,7 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
         if (!fxi || !fxi->fixtureMode())
             continue;
 
-        bool hasRGB = false, hasPT = false, hasDimmer = false;
+        bool hasRGB = false, hasPT = false, hasDimmer = false, hasEmitter = false;
         bool hasShutt = false, hasColorWheel = false, hasUV = false;
         for (quint32 c = 0; c < fxi->channels(); ++c)
         {
@@ -971,8 +971,14 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
                         hasRGB = true;
                     else if (ch->colour() == QLCChannel::UV)
                         hasUV = true;
-                    else
+                    // A dimmer is a level channel with no colour, the rule
+                    // readFixtureFacts() tells a script by (fixture.hasDimmer).
+                    // A white or amber emitter is not one, but a light of
+                    // only those is still a dimmer effect's to drive.
+                    else if (ch->colour() == QLCChannel::NoColour)
                         hasDimmer = true;
+                    else
+                        hasEmitter = true;
                     break;
                 case QLCChannel::Colour:
                     if (ch->colour() == QLCChannel::Red   ||
@@ -1011,7 +1017,7 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
                  tl == QLatin1String("movers")   ||
                  tl == QLatin1String("spot")     ||
                  tl == QLatin1String("beam"))    && hasPT)         { matches = true; break; }
-            if (tl == QLatin1String("dimmer")    && hasDimmer)     { matches = true; break; }
+            if (tl == QLatin1String("dimmer")    && (hasDimmer || hasEmitter)) { matches = true; break; }
             if (tl == QLatin1String("shutter")   && hasShutt)      { matches = true; break; }
             if (tl == QLatin1String("colorwheel") && hasColorWheel){ matches = true; break; }
             if ((tl == QLatin1String("uv")       ||
@@ -1848,6 +1854,9 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
                 // told it had one, so a spread left its pixels not yet reached
                 // to the look's colour ("a pixel of a bar whose one dimmer
                 // serves every pixel") and they were lit from the start.
+                // The rule: any Intensity channel with no colour of its own
+                // is a dimmer (Fixture::hasDimmer() is narrower: the master,
+                // or each head's first Intensity channel).
                 if (ch->colour() == QLCChannel::Red)        hasR = true;
                 else if (ch->colour() == QLCChannel::Green)  hasG = true;
                 else if (ch->colour() == QLCChannel::Blue)   hasB = true;
@@ -2223,6 +2232,16 @@ QJSValue EffectInstance::buildPalettesObject() const
     QJSValue lookObj = eng->newObject();
     lookObj.setProperty("colors", colorsArr);
     lookObj.setProperty("dimmer", lookDimmer);
+    /* The effect's own Dimmer (one under it), apart: the host applies the
+       look's own Dimmer itself, but not an effect's that takes the look's
+       colours -- its level is the script's to apply (Fire Spread's). */
+    {
+        QList<QColor> own;
+        double ownDimmer = -1.0;
+        ownLook(own, ownDimmer);
+        if (ownDimmer >= 0.0)
+            lookObj.setProperty("ownDimmer", ownDimmer);
+    }
     obj.setProperty("look", lookObj);
 
     return obj;

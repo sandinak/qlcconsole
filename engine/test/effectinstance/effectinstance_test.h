@@ -42,6 +42,17 @@ private slots:
      *  Fire's; a colour-wheel mover dark until reached, then on its blue
      *  slot at full, then its red one flickering on its dimmer; no pan. */
     void fireSpreadFrontAndBehindTakesItsOwnColours();
+    /** A Dimmer at 50% under Fire Spread puts an RGB par with no dimmer at
+     *  half, in Fire and in Front and Behind. */
+    void fireSpreadTakesItsOwnDimmer();
+    /** Spotlight Chase with no look colour on RGBW washes with no dimmer:
+     *  the chase shows, wash by wash. */
+    void spotlightChaseShowsOnAWashWithNoDimmer();
+    /** Color Chase's Peak dimmer on RGBW washes with no dimmer: the chase
+     *  and the background at that level. */
+    void colorChasePeakDimmerOnAWashWithNoDimmer();
+    /** Rainbow at 50% on an RGBW wash with no dimmer: half, not a quarter. */
+    void aWashWithNoDimmerFadesInAStraightLine();
     /** The matrix effects on a box of RGB and white pixel rows, eight boxes
      *  as one canvas, its RGB-only and white-only modes and a plain RGB
      *  matrix: each head told what it emits, every effect running through

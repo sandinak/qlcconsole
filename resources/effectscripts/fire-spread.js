@@ -263,7 +263,7 @@
         return out;
     }
 
-    effect.tick = function(fixtures, inputs, palettes, params, state) {
+    function fireTick(fixtures, inputs, palettes, params, state) {
         var t      = num(inputs._time, 0);
         var speed  = num(params.speed, 1.0);
         var inten  = num(params.intensity, 1.0);
@@ -305,6 +305,8 @@
         var table = new Array(256);     // this tick's colours, one object a flame step
         var shared = { none: {}, off: { dimmer: 0 } };
         var on = { dimmer: inten > 0 ? 1 : 0 };
+        if (state)
+            state._on = on;                 // a relay's: the effect's own Dimmer leaves it be
 
         // Colours: Front and Behind, with a colour to be the front. Without
         // one it is Fire, as ever (the loop below).
@@ -372,6 +374,41 @@
                 out[i] = burn(fixtures[i], hot, level, true);
         }
         return out;
+    }
+
+    /* The effect's own Dimmer look (one under it in the look's list):
+       its level, on top of the fire's. The look's own Dimmer (above the
+       effects) the host applies itself. A head that shows its level in its
+       colour takes it as a dimmer (the host scales its colour by it), a
+       head with a dimmer has its dimmer scaled; a relay stays as it is
+       (between on and off it would chatter). Only with a Dimmer of its own:
+       otherwise every head is what fireTick gave, object for object. */
+    function ownLevel(out, level, on) {
+        for (var i = 0; i < out.length; i++) {
+            var o = out[i];
+            if (o === on || o === undefined)
+                continue;
+            var d = o.dimmer;
+            if (d === 0)
+                continue;
+            if (d === undefined && o.r === undefined && o.w === undefined)
+                continue;                       // left to what is under it
+            var c = {};
+            for (var key in o)
+                c[key] = o[key];
+            c.dimmer = (d === undefined ? 1 : d) * level;
+            out[i] = c;
+        }
+        return out;
+    }
+
+    effect.tick = function(fixtures, inputs, palettes, params, state) {
+        var out = fireTick(fixtures, inputs, palettes, params, state);
+        var look = palettes ? palettes.look : undefined;
+        var own = look ? look.ownDimmer : undefined;
+        if (own === undefined || own >= 1)
+            return out;
+        return ownLevel(out, Math.max(0, own), state ? state._on : undefined);
     };
 
     return effect;

@@ -168,6 +168,13 @@ look's level: a Breathe (5% to 100%) on a look at 20% breathes between
 1% and 20%. On a light without a dimmer it scales the look's colour,
 white included.
 
+A light's white, amber or UV emitters are not a dimmer. A wash of RGB and
+white with no dimmer channel (an RGBW par, a bar of colour and white
+pixels) fades in its colour the way an RGB-only wash does, in a straight
+line: half the effect's level is half the light. Before 0.4.13 those
+lights were taken to have a dimmer and their mid-levels came out darker,
+a quarter at half, so check the fades you set on them.
+
 An effect written to run once (a wand sweep) starts on **Once**, with its
 own end. It can loop too: each run starts again from the beginning.
 
@@ -391,6 +398,13 @@ To play a fire in two colours:
 2. Under the effect, add a Colour look for the front, then one for the
    backfill.
 3. Set **Front Width** to how long each head holds the front's colour.
+
+Change **Colours** or **Front Width** while the effect is playing and it
+cuts over at once: heads already burning jump to what the new setting
+gives them, without a fade. Set them before the cue runs.
+
+A Dimmer look placed under the effect sets the fire's level on every head,
+in both Colours settings.
 
 A head that can't show colour keeps the plain fire. A dimmer flickers in
 level as before, and a relay switches on as the front reaches it. A colour

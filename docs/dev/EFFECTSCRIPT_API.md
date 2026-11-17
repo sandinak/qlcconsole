@@ -273,6 +273,7 @@ colours than they declare slots for (e.g. an N-way spread):
 |---|---|
 | `palettes.look.colors` | `[{ r, g, b }, …]` — every Colour look, **precedence order** |
 | `palettes.look.dimmer` | `0..1` — the look's master dimmer (`1.0` if none) |
+| `palettes.look.ownDimmer` | `0..1` — the effect's own Dimmer look (one under it in the list), absent when it has none. A script that reads `palettes.look` takes its colours itself, so the host no longer adds that Dimmer to its intents: apply it yourself (Fire Spread does). The look's own Dimmer (above the effects) the host still applies |
 
 ### `params` — user parameter values
 
