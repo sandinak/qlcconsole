@@ -942,8 +942,9 @@ void PadBenchShow_Test::buildSaveAndCheck()
 void PadBenchShow_Test::theCommittedShowChecksOut()
 {
     const QString show = QStringLiteral(PADBENCH_COMMITTED);
-    if (!QFileInfo::exists(show))
-        QSKIP("test-workspaces/PadBench.qlcc is not there yet");
+    // Committed, so missing is a failure (a rename or a bad archive must not
+    // pass as a skip).
+    QVERIFY2(QFileInfo::exists(show), qPrintable("committed show is missing: " + show));
     // A copy, venues beside it: opening it never writes into the repo.
     QTemporaryDir dir;
     const QString copy = dir.filePath(QStringLiteral("PadBench.qlcc"));
@@ -991,8 +992,9 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
 {
     const QString pad = QStringLiteral(PADBENCH_COMMITTED);
     const QString dance = QStringLiteral(DANCE_SHOW);
-    if (!QFileInfo::exists(pad) || !QFileInfo::exists(dance))
-        QSKIP("the test shows are not there");
+    // Both are committed: a missing one is a failure, not a skip.
+    QVERIFY2(QFileInfo::exists(pad), qPrintable("committed show is missing: " + pad));
+    QVERIFY2(QFileInfo::exists(dance), qPrintable("committed show is missing: " + dance));
     QTemporaryDir dir;
     const QString padCopy = dir.filePath(QStringLiteral("PadBench.qlcc"));
     const QString danceCopy = dir.filePath(QStringLiteral("Dance.qlcc"));
@@ -1107,8 +1109,9 @@ void PadBenchShow_Test::openingAShowOverOneThatPlays()
 void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
 {
     const QString show = QStringLiteral(PADBENCH_COMMITTED);
-    if (!QFileInfo::exists(show))
-        QSKIP("test-workspaces/PadBench.qlcc is not there yet");
+    // Committed, so missing is a failure (a rename or a bad archive must not
+    // pass as a skip).
+    QVERIFY2(QFileInfo::exists(show), qPrintable("committed show is missing: " + show));
     QTemporaryDir dir;
     const QString copy = dir.filePath(QStringLiteral("PadBench.qlcc"));
     QVERIFY(QFile::copy(show, copy));

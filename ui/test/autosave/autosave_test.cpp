@@ -662,22 +662,35 @@ void Autosave_Test::openTheSavedShowKeepsTheAutosaveAside()
     // File ▸ Open: the file chosen, then the question.
     bool chosen = false;
     bool asked = false;
+    bool primed = false;
     onModal([&](QWidget *w) {
         if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
         {
             // The dialog reads its folder in the background, and an accept
             // before it holds our file takes whatever else it holds (under
-            // load, a different file with no autosave beside it). So accept
-            // only once it reports the show as the selection, else try
-            // again on the next tick.
-            fd->setDirectory(QFileInfo(show).absolutePath());
-            fd->selectFile(show);
+            // load, a different file with no autosave beside it). So the
+            // folder and file are asked for ONCE (setDirectory again on
+            // every tick restarts that read, so a loaded host never saw it
+            // finish), and then each tick only waits for the dialog to
+            // report the show as the selection.
+            if (!primed)
+            {
+                primed = true;
+                fd->setDirectory(QFileInfo(show).absolutePath());
+                fd->selectFile(show);
+                return false;
+            }
             // Compared as canonical paths: a temp folder under /var is
             // /private/var to the dialog once it has read it.
             const QString picked = fd->selectedFiles().value(0);
             if (picked.isEmpty()
                 || QFileInfo(picked).canonicalFilePath() != QFileInfo(show).canonicalFilePath())
+            {
+                // A bare file name in the folder it has, never an absolute
+                // path that could change the directory (and restart the read).
+                fd->selectFile(QFileInfo(show).fileName());
                 return false;
+            }
             chosen = true;
             static_cast<QDialog *>(fd)->accept();
             return false;

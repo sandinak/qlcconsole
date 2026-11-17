@@ -258,6 +258,26 @@ void PadRun_Test::press(quint32 channel, quint32 universe)
     emit m_doc->inputOutputMap()->inputValueChanged(universe, channel, 0, QString());
 }
 
+/* "A hold past every hold time" -- on the tick that counts holds, not on the
+   wall clock. The pad's holds (A keeps all after 1.0 s, RS and B after 0.6 s,
+   Y tags after 0.8 s) are LongPress timers advanced by dt in
+   ProgrammerController::applyDesignJoystick(), one 20 ms tick at a time, so
+   calling it back to back advances them by exactly that much with no waiting:
+   deterministic, and as fast as the machine is. (A 60 ms qWait here was
+   shorter than every hold, so the check could never see one fire.) The tick
+   count comes from the longest hold plus a margin. */
+static void heldPastEveryHoldTime(ProgrammerController *pc)
+{
+    const int ticks = int(ControllerScheme::keepAllHoldSeconds() / 0.02) + 25;
+    for (int i = 0; i < ticks; ++i)
+    {
+        pc->applyDesignJoystick();
+        // A hold's effect that goes through a deferred call (a queued slot,
+        // singleShot(0)) must land inside the per-control loop, not later.
+        QCoreApplication::processEvents();
+    }
+}
+
 void PadRun_Test::axis(quint32 channel, uchar value, quint32 universe)
 {
     emit m_doc->inputOutputMap()->inputValueChanged(universe, channel, value, QString());
@@ -967,7 +987,7 @@ void PadRun_Test::nothingOnThePadLeavesTheRunRole()
             press(ch);
             check(what + " pressed");
             hold(ch, true);
-            QTest::qWait(60);
+            heldPastEveryHoldTime(pc);
             check(what + " held");
             hold(ch, false);
             check(what + " let go");
@@ -1265,7 +1285,7 @@ void PadRun_Test::theVenueFocusSweep()
             press(ch);
             check(what + " pressed");
             hold(ch, true);
-            QTest::qWait(60);
+            heldPastEveryHoldTime(pc);
             check(what + " held");
             hold(ch, false);
             check(what + " let go");
@@ -1288,7 +1308,13 @@ void PadRun_Test::theVenueFocusSweep()
         {
             hold(kView, true);
             hold(kMenu, true);
+            // Held past the chord's time (30 ms): in FOCUS the hold does
+            // nothing -- not even the "Run / Tools is switched on the
+            // computer" notice, which is the Run and Tools roles' (FOCUS
+            // keeps its own standing words). Since Q251 check()'s "still
+            // enabled" cannot fail; the wrong notice can.
             QTest::qWait(80);
+            QVERIFY2(run->notice() != PadRun::roleSwitchText(), qPrintable(run->notice()));
             hold(kMenu, false);
             hold(kView, false);
             check("FOCUS, View + Menu held");
@@ -2936,9 +2962,13 @@ void PadRun_Test::theRoleChordResistsAccidents()
     hold(kMenu, false);
     hold(kView, false);
     QTest::qWait(150);
-    QVERIFY(run->isEnabled());
+    // Since Q251 nothing on the pad switches the role, so "still enabled"
+    // could not fail. What a brush shows is what it says: nothing at all (a
+    // chord held past its time says where the switch is; a brush does not).
+    QVERIFY2(run->notice().isEmpty(), qPrintable(run->notice()));
     QVERIFY(!run->isWalking());
     QCOMPARE(focusAsked.count(), 1);
+    QVERIFY(run->isEnabled());      // the computer's switch is the only one
     run->setEnabled(false);
 }
 

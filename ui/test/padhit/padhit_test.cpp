@@ -263,15 +263,26 @@ void PadHit_Test::everySurfaceNamesTheNextHit()
                                      .value(QStringLiteral("hit")).toString();
         QVERIFY2(run->armedHitText() == armed,
                  qPrintable(QString("%1: PadRun '%2', want '%3'").arg(when, run->armedHitText(), armed)));
-        QVERIFY2(line->isHidden() == armed.isEmpty() && line->text() == armed,
-                 qPrintable(QString("%1: Run tab '%2' (hidden %3), want '%4'")
-                                .arg(when, line->text()).arg(line->isHidden()).arg(armed)));
-        if (armed.isEmpty())
-            QVERIFY2(!chip->text().contains(QString::fromUtf8("Hit ▸")),
-                     qPrintable(QString("%1: chip '%2' names a hit").arg(when, chip->text())));
-        else if (run->notice().isEmpty())      // a notice takes the hit's place for its seconds
-            QVERIFY2(chip->text() == run->roleText() + QStringLiteral(" · ") + armed,
-                     qPrintable(QString("%1: chip '%2', want '%3'").arg(when, chip->text(), armed)));
+        // The label and the chip are redrawn from PadRun's signals on the
+        // event loop: under load they trail settle(), so they are waited
+        // for, not read at once (the model above is already final).
+        auto drawn = [&]() -> QString {
+            if (!(line->isHidden() == armed.isEmpty() && line->text() == armed))
+                return QString("%1: Run tab '%2' (hidden %3), want '%4'")
+                           .arg(when, line->text()).arg(line->isHidden()).arg(armed);
+            if (armed.isEmpty())
+            {
+                if (chip->text().contains(QString::fromUtf8("Hit ▸")))
+                    return QString("%1: chip '%2' names a hit").arg(when, chip->text());
+            }
+            else if (run->notice().isEmpty())      // a notice takes the hit's place for its seconds
+            {
+                if (chip->text() != run->roleText() + QStringLiteral(" · ") + armed)
+                    return QString("%1: chip '%2', want '%3'").arg(when, chip->text(), armed);
+            }
+            return QString();
+        };
+        QTRY_VERIFY2_WITH_TIMEOUT(drawn().isEmpty(), qPrintable(drawn()), 3000);
         QVERIFY2(pageSays == page && pageSays == run->hitText(),
                  qPrintable(QString("%1: phone '%2', PadRun '%3', want '%4'").arg(when, pageSays, run->hitText(), page)));
     };
@@ -321,7 +332,7 @@ void PadHit_Test::everySurfaceNamesTheNextHit()
         if (!m_app->m_padChipShort)
             QVERIFY2(chip->text().contains(QString::fromUtf8("Hit ▸ Breathe")), qPrintable(chip->text()));
         QVERIFY(chip->text().startsWith(QStringLiteral("Pad: ARMED")));
-        QCOMPARE(line->text(), hit("Breathe"));
+        QTRY_COMPARE_WITH_TIMEOUT(line->text(), hit("Breathe"), 3000);     // redrawn on the loop, not with the model
         m_app->resize(1280, 800);
         settle(300);
         QTRY_VERIFY2(chip->text().contains(QString::fromUtf8("Hit ▸")), qPrintable(chip->text()));
@@ -602,7 +613,7 @@ void PadHit_Test::aOneShotHitEndsOnItsOwnTimeNotAtTheGo()
     WebAccessRun phone(doc);
     QTRY_COMPARE_WITH_TIMEOUT(run->armedHitText(), hit("Flash (one-shot)"), 1000);
     settle();
-    QCOMPARE(line->text(), hit("Flash (one-shot)"));
+    QTRY_COMPARE_WITH_TIMEOUT(line->text(), hit("Flash (one-shot)"), 3000);     // redrawn on the loop
     QCOMPARE(QJsonDocument::fromJson(phone.stateJson()).object().value(QStringLiteral("hit")).toString(),
              hit("Flash (one-shot)"));
     /* The footer chip says it too -- unless the footer is too narrow for the

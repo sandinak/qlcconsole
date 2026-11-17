@@ -9,7 +9,9 @@
 #    QSettings at a temporary INI folder before main(). The top-level
 #    CMakeLists.txt adds it to every program under a test/ dir. Its mark in a binary: QLC_TEST_SETTINGS_ISOLATED.
 #  - platforms/linux/unittest.sh on macOS compares `defaults export` of the
-#    app's domain before and after the run (--defaults-before / --defaults-after).
+#    app's domain before and after the run (--defaults-before / --defaults-after),
+#    key by key, leaving out the keys the person's own running app writes by
+#    itself (APP_OWNED below) so that app can't fail a gate.
 #
 #   check-test-settings.sh --source REPO          the CMake wiring is in place
 #   check-test-settings.sh --build DIR [TEST...]  the programs each test.sh runs
@@ -100,22 +102,76 @@ check_build()
     return 0
 }
 
+# Keys the person's own running app writes by itself while a gate runs on a Mac
+# in use (dink, 2026-11: lookeditor/recentEffects failed the gate): window and
+# dialog geometry, splitter positions, the Look editor's recent effects, the
+# update check's time. EXACT keys and narrow patterns only -- a broad glob
+# would hide what a leaking test writes (workspace/recent0..N, the File >
+# Recent list; virtualconsole/*size, slidermatrix/defaultSize, workspace/size;
+# venue/lastdir). Every other key stays guarded. The plist spells "a/b" as
+# "a.b", so '?' stands for either. Shell globs, case-insensitive, space
+# separated; QLC_PREFS_APP_OWNED overrides, and an EMPTY one filters nothing.
+APP_OWNED_DEFAULT="*?geometry *splitter* *?windowstate lookeditor?recenteffects updates?lastcheck"
+
+# One "key = value" line per top-level key of the domain, app-owned keys left
+# out. Where python3 is missing or fails, the raw export is used (stricter,
+# never looser). Returns 1 when `defaults export` itself fails.
+render_domain()
+{
+    local d="$1" raw out APP_OWNED="${QLC_PREFS_APP_OWNED-$APP_OWNED_DEFAULT}"
+    raw=$(defaults export "$d" - 2>/dev/null) || return 1
+    if command -v python3 >/dev/null 2>&1; then
+        if out=$(printf '%s\n' "$raw" | QLC_APP_OWNED="$APP_OWNED" python3 -I -c '
+import sys, os, plistlib, fnmatch
+raw = sys.stdin.buffer.read()
+if not raw.strip():
+    sys.exit(0)
+d = plistlib.loads(raw)
+pats = os.environ.get("QLC_APP_OWNED", "").lower().split()
+for k in sorted(d):
+    if any(fnmatch.fnmatchcase(k.lower().replace(".", "?"), p.replace("/", "?")) for p in pats):
+        continue
+    print("%s = %r" % (k, d[k]))
+' 2>/dev/null); then
+            printf '%s' "$out"; [ -n "$out" ] && echo
+            return 0
+        fi
+        echo "check-test-settings: python3 failed on $d; comparing the raw export." >&2
+    fi
+    printf '%s\n' "$raw"
+    return 0
+}
+
 # What `defaults` says about each domain; nothing (and a clean skip) where
 # there is no `defaults`. A domain with no preferences yet exports as nothing.
 snapshot()
 {
-    local d
+    local d out bad=0
     command -v defaults >/dev/null 2>&1 || return 1
     for d in $DOMAINS; do
         echo "## $d"
-        defaults export "$d" - 2>/dev/null
+        # (a domain with no preferences exports as an empty dict, exit 0; a
+        # failing export is the guard gone blind: said, and failed, not
+        # compared as "nothing changed")
+        if out=$(render_domain "$d"); then
+            [ -n "$out" ] && printf '%s\n' "$out"
+        else
+            echo "## (defaults export of $d FAILED)"
+            bad=$((bad + 1))
+        fi
     done
+    [ "$bad" -eq 0 ] || return 2
     return 0
 }
 
 defaults_before()
 {
-    snapshot > "$1" || { echo "check-test-settings: no 'defaults' here; real-preferences check skipped."; rm -f "$1"; return 0; }
+    snapshot > "$1"
+    case $? in
+        0) ;;
+        2) echo "check-test-settings: 'defaults export' failed; the real-preferences check cannot see anything." ;;
+        *) echo "check-test-settings: no 'defaults' here; real-preferences check skipped."; rm -f "$1" ;;
+    esac
     return 0
 }
 
@@ -124,7 +180,13 @@ defaults_after()
     local before="$1" now
     [ -f "$before" ] || return 0     # skipped before
     now="$before.after"
-    snapshot > "$now" || { rm -f "$now"; return 0; }
+    snapshot > "$now"
+    case $? in
+        0) ;;
+        2) echo "check-test-settings: THE GUARD IS BLIND: 'defaults export' failed, so the real preferences were not compared."
+           rm -f "$now"; return 1 ;;
+        *) rm -f "$now"; return 0 ;;
+    esac
     if ! diff -u "$before" "$now" > "$now.diff"; then
         echo "check-test-settings: THE TESTS CHANGED THE REAL PREFERENCES (defaults export, before -> after):"
         cat "$now.diff"
@@ -193,6 +255,57 @@ self_test()
         echo "$out" | grep -q 'metres' || { echo "self-test FAILED: no diff shown"; exit 1; }
         exit 0
     ) || fails=$((fails + 1))
+    # App-owned keys (the running app's own writes) are ignored, any other
+    # key is still caught: the guard must stay meaningful.
+    if command -v python3 >/dev/null 2>&1; then
+        mkdir -p "$tmp/bin3"
+        printf '#!/bin/sh\ncat "%s/plist" 2>/dev/null\n' "$tmp" > "$tmp/bin3/defaults"
+        chmod +x "$tmp/bin3/defaults"
+        mkplist() { printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>%s</dict></plist>\n' "$1" > "$tmp/plist"; }
+        mkplist '<key>units/length</key><string>ft</string><key>lookeditor/recentEffects</key><string>a</string>'
+        (
+            export PATH="$tmp/bin3:$PATH" QLC_PREFS_DOMAINS="org.test.b"
+            defaults_before "$tmp/snap3" >/dev/null
+            mkplist '<key>units/length</key><string>ft</string><key>lookeditor/recentEffects</key><string>b</string><key>x/geometry</key><data>AA==</data>'
+            defaults_after "$tmp/snap3" >/dev/null 2>&1 || { echo "self-test FAILED: the running app's own keys flagged"; exit 1; }
+            defaults_before "$tmp/snap3" >/dev/null
+            mkplist '<key>units/length</key><string>m</string><key>lookeditor/recentEffects</key><string>a</string>'
+            out=$(defaults_after "$tmp/snap3" 2>&1) && { echo "self-test FAILED: a test's write of units/length not caught"; exit 1; }
+            echo "$out" | grep -q 'units/length' || { echo "self-test FAILED: no key shown"; exit 1; }
+            exit 0
+        ) || fails=$((fails + 1))
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+        (
+            export PATH="$tmp/bin3:$PATH" QLC_PREFS_DOMAINS="org.test.c"
+            # What a leaking test writes through App stays caught: the File >
+            # Recent list, the last folder, sizes (the old broad globs hid them).
+            for k in workspace/recent0 venue/lastdir virtualconsole/buttonsize workspace/size; do
+                mkplist "<key>$k</key><string>a</string>"
+                defaults_before "$tmp/snap4" >/dev/null
+                mkplist "<key>$k</key><string>b</string>"
+                out=$(defaults_after "$tmp/snap4" 2>&1) && { echo "self-test FAILED: a test's write of $k not caught"; exit 1; }
+            done
+            # An empty QLC_PREFS_APP_OWNED filters nothing.
+            mkplist '<key>lookeditor/recentEffects</key><string>a</string>'
+            QLC_PREFS_APP_OWNED="" defaults_before "$tmp/snap5" >/dev/null
+            mkplist '<key>lookeditor/recentEffects</key><string>b</string>'
+            QLC_PREFS_APP_OWNED="" defaults_after "$tmp/snap5" >/dev/null 2>&1 && { echo "self-test FAILED: an empty override still filters"; exit 1; }
+            # python3 that fails: the raw export is compared, the guard is not blind.
+            mkdir -p "$tmp/bin4"
+            printf '#!/bin/sh\nexit 1\n' > "$tmp/bin4/python3"; chmod +x "$tmp/bin4/python3"
+            mkplist '<key>units/length</key><string>ft</string>'
+            PATH="$tmp/bin4:$PATH" defaults_before "$tmp/snap6" >/dev/null 2>&1
+            mkplist '<key>units/length</key><string>m</string>'
+            PATH="$tmp/bin4:$PATH" defaults_after "$tmp/snap6" >/dev/null 2>&1 && { echo "self-test FAILED: a failing python3 blinded the guard"; exit 1; }
+            # `defaults export` failing on both sides: loud, not "unchanged".
+            printf '#!/bin/sh\nexit 1\n' > "$tmp/bin4/defaults"; chmod +x "$tmp/bin4/defaults"
+            PATH="$tmp/bin4:$PATH" defaults_before "$tmp/snap7" >/dev/null 2>&1
+            out=$(PATH="$tmp/bin4:$PATH" defaults_after "$tmp/snap7" 2>&1) && { echo "self-test FAILED: failing defaults export passed as unchanged"; exit 1; }
+            echo "$out" | grep -q BLIND || { echo "self-test FAILED: blind guard not said"; exit 1; }
+            exit 0
+        ) || fails=$((fails + 1))
+    fi
     # No `defaults` at all: skipped cleanly (an empty PATH dir keeps the shell's builtins only).
     mkdir -p "$tmp/bin2"
     for c in rm diff cat; do ln -s "$(command -v $c)" "$tmp/bin2/$c"; done

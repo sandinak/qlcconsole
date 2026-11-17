@@ -29,7 +29,9 @@ import os
 import re
 import subprocess
 import sys
+import shutil
 import tempfile
+import time
 
 CODE = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".mm", ".m", ".js", ".qml")
 MARK = re.compile(r"^(<{7} |>{7} |\|{7} |<{7}$|>{7}$)", re.M)
@@ -203,8 +205,17 @@ def selftest():
     t("a lost brace is seen", problems_in("a.cpp", "void f() {\n", "void f() {\n}\n", "void f() {\n}\n") != [])
     t("a file unbalanced on both sides is not blamed",
       problems_in("a.h", "#if A\n{ x\n", "#if A\n{\n", "#if A\n{ y\n") == [])
-    with tempfile.TemporaryDirectory() as d:
-        env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", HOME=d, GIT_AUTHOR_NAME="t",
+    # The scratch repo is removed by hand, retrying: a git that is still
+    # winding down (auto maintenance, a lazy fsmonitor) can add a file under
+    # .git/info while TemporaryDirectory is deleting it, which failed the run
+    # with "Directory not empty: 'info'". Those background jobs are also
+    # switched off.
+    d = tempfile.mkdtemp(prefix="merge-check-selftest.")
+    try:
+        env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", HOME=d,
+                   GIT_CONFIG_COUNT="3", GIT_CONFIG_KEY_0="gc.auto", GIT_CONFIG_VALUE_0="0",
+                   GIT_CONFIG_KEY_1="maintenance.auto", GIT_CONFIG_VALUE_1="false",
+                   GIT_CONFIG_KEY_2="core.fsmonitor", GIT_CONFIG_VALUE_2="false", GIT_AUTHOR_NAME="t",
                    GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
         cwd = os.getcwd()
         os.chdir(d)
@@ -262,6 +273,14 @@ def selftest():
               r.returncode == 0 and open("CHANGELOG.md").read() == "### Fixed\n\n- one\n- three\n- two\n\n## [0.1]\n")
         finally:
             os.chdir(cwd)
+    finally:
+        for _ in range(20):
+            shutil.rmtree(d, ignore_errors=True)
+            if not os.path.exists(d):
+                break
+            time.sleep(0.25)
+    if os.path.exists(d):
+        print("merge-check.py self-test: warning: could not remove " + d, file=sys.stderr)
     print("merge-check.py self-test: " + ("ok" if fails == 0 else f"{fails} failed"))
     return 1 if fails else 0
 
