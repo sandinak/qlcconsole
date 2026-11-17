@@ -281,7 +281,13 @@ Room, Haze, Quality) to step to its next choice; its arrow lists them
 all. **Room** is how much light there is in the house apart from the
 rig: **Work light**, **House** (the default), **Dim** or **Blackout**.
 Edges follow it as surfaces do: in a Blackout an unlit deck, bar or box
-is a dim shape with a faint grey edge, not a line drawing.
+is a dim shape with a faint grey edge, not a line drawing. Below House,
+**colour is light**: whatever is not a fixture's own output -- a
+fixture's plot colour, the selection, aim traces, targets, stage marks,
+rulers and guides -- loses its colour, down to grey in a Blackout, in
+every view. What has colour then is what the rig is lighting, plus a
+real clash's red. A selected fixture in a Blackout has a light grey edge;
+its name is written beside it unless another name is already there.
 **Owner** shows **All** fixtures (the default), **House only** (the room's
 own rig) or **Ours only** (the tour package and rentals), by each
 fixture's owner (set in the Fixture Manager; a fixture follows its group
@@ -2642,7 +2648,8 @@ Two small but load-bearing visual cues:
   into it. In the Rig Overview that edge is in the **Room**'s light, like
   the body: at work light as bright as above, in a **Blackout** a faint
   grey, so an unlit fixture, deck or box is a dim shape and only what the
-  rig is lighting stands out. A selected fixture keeps its bright edge.
+  rig is lighting stands out. A selected fixture keeps a bright edge: the
+  selection's green at House and above, a light grey in a Blackout.
 - **Overlap warnings** — if two fixtures' physical bodies actually occupy
   the same real-world space (two heads stacked at the same truss offset, or
   a deck fixture dragged into another's footprint), both draw with a flat

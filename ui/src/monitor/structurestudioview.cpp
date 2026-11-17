@@ -271,7 +271,7 @@ void StructureStudioView::drawUnsavedMarks(QPainter &p) const
     /* Over the rig, like the stage marks: a light being focused that has
        changes not saved yet. The one being focused keeps its own ring and
        gets only the badge. */
-    const QColor pending(240, 200, 40);
+    const QColor pending = roomInk(QColor(240, 200, 40));
     p.save();
     p.setRenderHint(QPainter::Antialiasing, true);
     for (quint32 fid : m_unsaved)
@@ -1488,7 +1488,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
            handle -- the beams aimed at it land along it. */
         if (t->isLine())
         {
-            const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+            const QColor mark = roomInk(t->color().isValid() ? t->color() : QColor(255, 180, 0));
             const QVector<QVector3D> world = props->targetLinePoints(t);
             const LineCurve curve(world);
             const QVector<QVector3D> &sm = curve.samples();
@@ -1515,7 +1515,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
             const QSizeF fp = props->targetFootprint(t);     // in the blocking shown
             const float hw = float(fp.width()) * 0.5f;
             const float hd = float(fp.height()) * 0.5f;
-            const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+            const QColor mark = roomInk(t->color().isValid() ? t->color() : QColor(255, 180, 0));
             /* Movable gear is turned on the deck (the ] and [ keys): the house
                side is +y until it is. */
             const double rad = double(t->rotation()) * M_PI / 180.0;
@@ -1647,7 +1647,7 @@ void StructureStudioView::drawStageFigures(QPainter &p) const
            aim point less the aim height is the deck under the person. */
         const QVector3D aim = props->targetAimPoint(t, true);
         const QVector3D foot(aim.x(), aim.y(), aim.z() - props->targetAimHeight(t, true));
-        const QColor mark = t->color().isValid() ? t->color() : QColor(255, 180, 0);
+        const QColor mark = roomInk(t->color().isValid() ? t->color() : QColor(255, 180, 0));
         /* One of the performers faces the front of the deck it stands on
            (turned with it); any other person faces the house. */
         const QVector2D facing = PerformerFill::isPerformer(props, t)
@@ -2266,7 +2266,7 @@ void StructureStudioView::drawOperatorMark(QPainter &p) const
     if (!m_operatorMark.on)
         return;
     p.save();
-    const QColor colour(255, 196, 0);
+    const QColor colour = roomInk(QColor(255, 196, 0));
     if (m_plane == Top || m_plane == Angled)
     {
         /* A chevron on the floor pointing the way they face, as the Lighting
@@ -2346,9 +2346,10 @@ void StructureStudioView::drawStageMarks(QPainter &p) const
     };
 
     p.save();
-    const QColor centreColour(170, 215, 255);       // as the plot draws them
-    const QColor curtainColour(240, 130, 130);
-    const QColor numberColour(240, 210, 110);
+    // As the plot draws them, in the room's light (roomInk()).
+    const QColor centreColour = roomInk(QColor(170, 215, 255));
+    const QColor curtainColour = roomInk(QColor(240, 130, 130));
+    const QColor numberColour = roomInk(QColor(240, 210, 110));
     const double unit = props->gridUnitMetres();
     const double cx = props->stageCentre().x();
     const double dsY = props->downstageEdgeY();
@@ -2576,6 +2577,7 @@ void StructureStudioView::drawPipe(QPainter &p, const Pipe *pipe) const
                          && (pipe->id() == m_selectedPipeBarId || pipe->id() == m_dragPipeBarId);
     QColor c = selected ? QColor(255, 190, 60) : pipe->color();
     if (!c.isValid()) c = QColor(150, 200, 220);
+    c = roomInk(c);
     p.setPen(QPen(c, pipe->isVertical() ? 3.0 : 2.5, Qt::SolidLine, Qt::RoundCap));
     p.drawLine(a, b);
     // end caps
@@ -3005,6 +3007,9 @@ void StructureStudioView::flushOps(QPainter &p) const
     }   // !drawn: the CPU
 
     // Text last, in screen space: depth-testing a label is not meaningful.
+    // Nearest first (a larger depth is nearer: viewDepth()).
+    std::stable_sort(labels.begin(), labels.end(),
+                     [](const DrawOp *a, const DrawOp *b) { return a->depth > b->depth; });
     for (const DrawOp *op : std::as_const(labels))
     {
         const DrawOp &o = *op;
@@ -3017,9 +3022,23 @@ void StructureStudioView::flushOps(QPainter &p) const
             }
             continue;
         }
+        if (o.poly.isEmpty())
+            continue;
+        /* A name where another is already written is left out: with a whole
+           row of strips or bars selected, every name went on top of the next
+           and none of them could be read. Nearest first, so what is left out
+           is behind. */
+        const QFontMetricsF fm(p.font());
+        const QRectF r(o.poly.at(0).x(), o.poly.at(0).y() - fm.ascent(),
+                       fm.horizontalAdvance(o.text), fm.height());
+        bool taken = false;
+        for (const QRectF &n : std::as_const(m_nameLabels))
+            taken = taken || n.intersects(r);
+        if (taken)
+            continue;
+        m_nameLabels << r;
         p.setPen(o.pen);
-        if (!o.poly.isEmpty())
-            p.drawText(o.poly.at(0), o.text);
+        p.drawText(o.poly.at(0), o.text);
     }
 
     if (!drawn)
@@ -3275,6 +3294,11 @@ static QColor fixtureEdgeColor(const QColor &base)
                   base.alpha());
 }
 
+/* The room level at which every mark has its full colour: House, the
+ * Rig Overview's default. Below it colour drains out of whatever is not
+ * light (roomInk()), so House and Work light look as they always have. */
+static const double kRoomColourFull = 0.62;
+
 QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &base,
                                                   bool emitting, bool roomLit) const
 {
@@ -3282,8 +3306,19 @@ QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &bas
     if (m_overlappingFixtures.contains(fid))
         return kOverlapWarning;
     const QColor tint = fixtureEdgeColor(base);
-    // Selected or being dragged: the edge is the selection, not the room's.
-    if (!roomLit || fid == m_dragFid || m_highlight.contains(fid))
+    /* Selected or being dragged: the edge is the selection, not the room's --
+       bright at House and above; below it a quieter light grey, so a whole
+       selected rig in a Blackout is findable without being a bright line
+       drawing of itself. */
+    if (fid == m_dragFid || m_highlight.contains(fid))
+    {
+        const double k = qBound(0.0, m_ambient / kRoomColourFull, 1.0);
+        const QColor soft(128, 130, 136);
+        auto mix = [k](int s, int t) { return qBound(0, qRound(s + (t - s) * k), 255); };
+        return QColor(mix(soft.red(), tint.red()), mix(soft.green(), tint.green()),
+                      mix(soft.blue(), tint.blue()), tint.alpha());
+    }
+    if (!roomLit)
         return tint;
     QColor e = roomEdge(tint);
     if (emitting)
@@ -3309,6 +3344,32 @@ QColor StructureStudioView::roomEdge(const QColor &edge) const
     auto mix = [k](int faint, int own) { return qRound(faint + (own - faint) * k); };
     return QColor(mix(kFaint.red(), edge.red()), mix(kFaint.green(), edge.green()),
                   mix(kFaint.blue(), edge.blue()), edge.alpha());
+}
+
+QColor StructureStudioView::roomInk(const QColor &c) const
+{
+    const double k = qBound(0.0, m_ambient / kRoomColourFull, 1.0);
+    if (k >= 1.0 || !c.isValid())
+        return c;
+    const double l = 0.30 * c.red() + 0.59 * c.green() + 0.11 * c.blue();
+    auto mix = [l, k](int v) { return qBound(0, qRound(l + (v - l) * k), 255); };
+    return QColor(mix(c.red()), mix(c.green()), mix(c.blue()), c.alpha());
+}
+
+QColor StructureStudioView::selectionInk(int alpha) const
+{
+    QColor c = roomInk(QColor(120, 220, 140));
+    c.setAlpha(alpha);
+    return c;
+}
+
+QColor StructureStudioView::selectionFill(const QColor &own) const
+{
+    const double k = qBound(0.0, m_ambient / kRoomColourFull, 1.0);
+    const QColor mint(120, 220, 140);
+    auto mix = [k](int o, int m) { return qBound(0, qRound(o + (m - o) * k), 255); };
+    return QColor(mix(own.red(), mint.red()), mix(own.green(), mint.green()),
+                  mix(own.blue(), mint.blue()));
 }
 
 bool StructureStudioView::boomResizeLocked(const Pipe *pipe) const
@@ -3622,7 +3683,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
      * mistaken for the bar's actual gel. */
     const bool barSelected = (kind == TrussKind)
                             && (id == m_selectedBarId || id == m_dragBarId);
-    const QColor steel = barSelected ? QColor(255, 190, 60) : QColor(150, 154, 165);
+    const QColor steel = roomInk(barSelected ? QColor(255, 190, 60) : QColor(150, 154, 165));
     const QColor plate(120, 126, 140);
 
     // A clear steel base plate on the floor: a filled disc in Top, a low solid
@@ -3683,8 +3744,8 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             if (pipe->isVertical() && !boomResizeLocked(pipe))
             {
                 const QPointF top = w2s(pipe->positionAt(pipe->length()));
-                p.setPen(QPen(QColor(0, 190, 255), 1.4));
-                p.setBrush(QColor(0, 190, 255, 160));
+                p.setPen(QPen(roomInk(QColor(0, 190, 255)), 1.4));
+                p.setBrush(roomInk(QColor(0, 190, 255, 160)));
                 p.drawEllipse(top, 4.0, 4.0);
             }
         }
@@ -3729,7 +3790,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             if (t->hasFaces())
             {
                 // Its faced sides, as thick edges in the panels' colour.
-                QColor fc = t->facesColour();
+                QColor fc = roomInk(t->facesColour());
                 if (fc.lightness() < 60)
                     fc = fc.lighter(260);           // a black facade, still seen on the dark plan
                 p.setPen(QPen(fc, 4.0, Qt::SolidLine, Qt::FlatCap));
@@ -3772,7 +3833,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
                 const QRectF band = QRectF(w2s(QVector3D(x0, y0, t->facesFrom())),
                                            w2s(QVector3D(x1, y1, t->facesTo()))).normalized();
                 const QImage pattern = patternImage(t->facesPattern());
-                p.fillRect(band, t->facesColour());
+                p.fillRect(band, roomInk(t->facesColour()));
                 if (!pattern.isNull())
                 {
                     p.save();
@@ -3884,7 +3945,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             const float from = t->sockFrom(), to = t->sockTo();
             const int segments = qBound(1, int((to - from) / 0.2f + 0.5f), 200);
             const QVector<QVector3D> glow = sockGlow(t, segments);
-            const QColor fabric = t->sockColour();
+            const QColor fabric = roomInk(t->sockColour());     // the light on it is glow
             const QPointF dir = (b - a) / axis.length();
             const QPointF off = QPointF(-dir.y(), dir.x()) * (wpx / 2.0 + 1.0);
             p.setPen(Qt::NoPen);
@@ -3958,7 +4019,9 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
            colour that tells decks apart on the plan -- "on the rig .. they
            should be their correct color (black for risers)". */
         const PropPaint paint = platformPaint(pl);
-        QColor pc = paint.fill;
+        /* The flat views paint it as it is, not in the room's light as the
+           45° faces are: below House its colour drains (roomInk()). */
+        QColor pc = (m_plane == Angled) ? paint.fill : roomInk(paint.fill);
         /* Solid. These were alpha 70, so decks read as panes of glass: stacked
            steps showed through each other and you could see the floor through a
            riser. Fixtures are painted after the structures, so they still show
@@ -3967,7 +4030,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         // Crisp edge: a dark halo under a bright outline so the outline reads on
         // the dark canvas AND where platforms overlap (stacked steps).
         const QColor halo = pc.darker(230);
-        const QColor edge = paint.edge;
+        const QColor edge = (m_plane == Angled) ? paint.edge : roomInk(paint.edge);
         // Two-pass outline helper (halo first, bright edge on top).
         auto outline = [&](const QRectF &r) {
             p.setBrush(fill);
@@ -4222,13 +4285,13 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         Scenery *sc = props->scenery(id);
         if (sc == nullptr) return;
         const PropPaint paint = sceneryPaint(sc, sceneryWarned(sc->id()));
-        QColor cloth = paint.fill;
+        QColor cloth = roomInk(paint.fill);     // its paint shows only in light
         const double af = 0.18 + 0.82 * m_ambient;
         cloth = QColor(qRound(cloth.red() * af), qRound(cloth.green() * af), qRound(cloth.blue() * af));
         if (sc->isSeeThrough())
             cloth.setAlpha(70);
         // A warning is the outline, the cloth keeps its colour.
-        const QColor seam = paint.outline ? paint.edge : sc->isSeeThrough() ? QColor() : cloth.darker(118);
+        const QColor seam = paint.outline ? roomInk(paint.edge) : sc->isSeeThrough() ? QColor() : cloth.darker(118);
         const double seamWidth = paint.outline ? 1.8 : 0.6;
         const bool folds = sc->isCloth() && sc->kind() != Scenery::Cyclorama && !sc->isSeeThrough();
         const double half = double(sc->thickness()) / 2.0;
@@ -4306,7 +4369,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
     {
         // A studio frame group: mark its local-frame origin (fixtures draw on top).
         const QPointF o = w2s(props->group(id).origin);
-        p.setPen(QPen(QColor(120, 160, 200, 160), 1.0, Qt::DashLine));
+        p.setPen(QPen(roomInk(QColor(120, 160, 200, 160)), 1.0, Qt::DashLine));
         p.drawLine(o - QPointF(9, 0), o + QPointF(9, 0));
         p.drawLine(o - QPointF(0, 9), o + QPointF(0, 9));
     }
@@ -5593,7 +5656,7 @@ void StructureStudioView::drawAimTrace(QPainter &p, const QVector3D &from,
     if (len < 0.05)
         return;
 
-    QColor c = colour;
+    QColor c = roomInk(colour);     // where it is aimed is not light
     c.setAlpha(150);
 
     // About a dash every 200 mm, capped so a long throw is not a thousand ops.
@@ -6839,7 +6902,7 @@ void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
             const QVector3D tip = headMid + beam * float(qMax(0.25, h * 1.4));
             emitLine(w2s(headMid), w2s(tip),
                      viewDepth(headMid), viewDepth(tip),
-                     overlapAwareEdgeColor(fid, col, false, false), 1.4, p);
+                     fixtureEdgeColor(col), 1.4, p);   // where it points: not the body's clash
 
             if (m_beams && look.beamLevel > 0.01)
             {
@@ -8306,22 +8369,32 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     const double visibility =
         showingOutput ? beamVisibility(fx, rp, traits, beamNow) : 1.0;
 
+    bool emitting = false;
     if (showingOutput)
     {
         QColor live = col;
         uchar dim = 0;
         if (fixtureLiveState(fx, vals, live, dim, valsComplete))
+        {
             col = shadeLive(live, dim, unlit, visibility);
+            emitting = true;
+        }
     }
-    else
+    if (!emitting)
     {
-        // Not showing output: the fixture is just an object in the room.
+        /* Not showing output: the fixture is just an object in the room, and
+           its plot colour is not light -- below House it drains to grey
+           (roomInk()), so a Blackout shows no colour it is not emitting. */
         const double af = 0.30 + 0.70 * m_ambient;
+        col = roomInk(col);
         col = QColor(qRound(col.red() * af), qRound(col.green() * af),
                      qRound(col.blue() * af));
     }
-    if (drag)     col = QColor(255, 196, 64);
-    else if (hi)  col = QColor(120, 220, 140);
+    /* Selected or dragged: the selection's colour in the room's light. In a
+       Blackout a selected body stays as dark as it is and the selection is
+       its edge (overlapAwareEdgeColor()), a light grey, never a lit green. */
+    if (drag)     col = roomInk(QColor(255, 196, 64));
+    else if (hi)  col = selectionFill(col);
 
 
     // Tower-shelf mount, in an elevation: a fixture resting on (or hung
@@ -8968,7 +9041,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         }
         if (hi)
         {
-            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+            QPen halo(selectionInk(160)); halo.setWidth(3);
             p.setPen(halo); p.setBrush(Qt::NoBrush);
             p.drawPath(bodyPath);
         }
@@ -8979,7 +9052,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         {
             p.setPen(QColor(210, 214, 220));
             if (nameEveryone || hi)
-                p.drawText(QPointF(r.right() + 4, c.y() - 6), fx->name());
+                drawFixtureName(p, QPointF(r.right() + 4, c.y() - 6), fx->name());
         }
         return;
     }
@@ -9018,7 +9091,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                                           : moverPlanPath(unitRect);
                 if (hi)
                 {
-                    QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+                    QPen halo(selectionInk(160)); halo.setWidth(3);
                     p.setPen(halo); p.setBrush(Qt::NoBrush);
                     p.drawPath(body);
                 }
@@ -9044,7 +9117,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), hung, units);
             if (hi)
             {
-                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+                QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
                 p.drawPath(body);
             }
@@ -9076,7 +9149,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         }
         if (hi)
         {
-            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+            QPen halo(selectionInk(160)); halo.setWidth(3);
             p.setPen(halo); p.setBrush(Qt::NoBrush);
             p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), wPx * 0.4, wPx * 0.4);
         }
@@ -9144,7 +9217,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             }
             if (!leds.tag.isEmpty())
             {
-                p.setPen(QColor(230, 200, 120));
+                p.setPen(roomInk(QColor(230, 200, 120)));
                 p.drawText(QPointF(r.right() + 4, r.bottom()), leds.tag);
                 p.setPen(Qt::NoPen);
             }
@@ -9163,7 +9236,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const QPainterPath body = stageLookBodyPath(traits.look, r, m_plane != Top);
             if (hi)
             {
-                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+                QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
                 p.drawRect(r.adjusted(-3, -3, 3, 3));
             }
@@ -9192,7 +9265,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         {
             if (hi)
             {
-                QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(3);
+                QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
                 p.drawRoundedRect(r.adjusted(-3, -3, 3, 3), 3, 3);
             }
@@ -9246,7 +9319,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const double len = qSqrt(d.x() * d.x() + d.y() * d.y());
                 halo << (len > 1e-6 ? q + d * (3.0 / len) : q);
             }
-            p.setPen(QPen(QColor(120, 220, 140, 160), 3));
+            p.setPen(QPen(selectionInk(160), 3));
             p.setBrush(Qt::NoBrush);
             p.drawPolygon(halo);
         }
@@ -9282,6 +9355,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             rim = rim.darker(110);
         if (drag || hi)
             rim = rim.lighter(140);
+        rim = roomInk(rim);         // a plot colour, not light: grey in a Blackout
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(QColor(0, 0, 0, 150), (drag || hi) ? 3.6 : 3.0, Qt::SolidLine,
                       Qt::SquareCap, Qt::MiterJoin));
@@ -9320,7 +9394,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         // (Laser/Hazer/Smoke/Fan/Flower/Effect/Other).
         if (hi)
         {
-            QPen halo(QColor(120, 220, 140, 160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
+            QPen halo(selectionInk(160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
             p.setPen(halo);
             p.drawLine(a, b);
         }
@@ -9340,8 +9414,36 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     {
         p.setPen(QColor(210, 214, 220));
         if (nameEveryone || hi)
-            p.drawText(QPointF(c.x() + 8, c.y() - 6), fx->name());
+            drawFixtureName(p, QPointF(c.x() + 8, c.y() - 6), fx->name());
     }
+}
+
+/* A fixture's name in a flat view, at @p at (its baseline), unless another
+ * is already written there. */
+void StructureStudioView::drawFixtureName(QPainter &p, const QPointF &at, const QString &name) const
+{
+    /* Written after every body (drawFixtures()): drawn as each fixture was,
+       the next one's body painted over the last one's name. */
+    m_pendingNames << PendingName{ at, name, p.pen().color() };
+}
+
+void StructureStudioView::flushFixtureNames(QPainter &p) const
+{
+    const QFontMetricsF fm(p.font());
+    for (const PendingName &n : std::as_const(m_pendingNames))
+    {
+        const QRectF r(n.at.x(), n.at.y() - fm.ascent(), fm.horizontalAdvance(n.text), fm.height());
+        // One over another can't be read: the later one is left out.
+        bool taken = false;
+        for (const QRectF &o : std::as_const(m_nameLabels))
+            taken = taken || o.intersects(r);
+        if (taken)
+            continue;
+        m_nameLabels << r;
+        p.setPen(n.pen);
+        p.drawText(n.at, n.text);
+    }
+    m_pendingNames.clear();
 }
 
 QSize StructureStudioView::headGrid(Fixture *fx, const FixtureVisualTraits &traits) const
@@ -9456,8 +9558,10 @@ void StructureStudioView::drawFixtures(QPainter &p) const
        you opened the overview to look at. Show them only for what is selected
        there. */
     const bool nameEveryone = (m_kind != StageKind);
+    m_pendingNames.clear();
     foreach (quint32 fid, fixturesInDrawOrder())
         drawOneFixture(p, fid, nameEveryone);
+    flushFixtureNames(p);
 }
 
 static qlonglong ssvTrailingNum(const QString &s)
@@ -9889,7 +9993,7 @@ void StructureStudioView::drawRotateHandle(QPainter &p) const
     const RotateHandle h = rotateHandle();
     if (h.mode == RotateHandle::None)
         return;
-    const QColor accent(255, 184, 64);
+    const QColor accent = roomInk(QColor(255, 184, 64));
     const bool active = (m_rotate.mode != RotateHandle::None) || m_hoverKnob;
 
     p.save();
@@ -10230,7 +10334,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
         { lblEvery = cand; if (cand * pxPerUnit >= 34.0) break; }
 
     const QColor band(26, 26, 26), edge(60, 60, 60);
-    const QColor tickCol(150, 150, 150), textCol(190, 190, 190), axisCol(120, 160, 220);
+    const QColor tickCol(150, 150, 150), textCol(190, 190, 190), axisCol = roomInk(QColor(120, 160, 220));
     const double GW = 34.0, GH = 22.0;
     QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
 
@@ -10256,7 +10360,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
         if (topZ > 0.01)
         {
             const double sy = w2s(axisWorldPoint(!(m_rotation & 1), topZ)).y();
-            const QColor mk(80, 170, 255);   // same blue as the main-window ruler cursor
+            const QColor mk = roomInk(QColor(80, 170, 255));   // same blue as the main-window ruler cursor
             p.setPen(QPen(mk, 1.0));          // full-width guide line at the max height
             p.drawLine(QPointF(GW, sy), QPointF(width(), sy));
             p.setBrush(mk);
@@ -10280,11 +10384,11 @@ void StructureStudioView::drawRulers(QPainter &p) const
         const double aVal = centreA + k * stepM;
         const double sx = w2s(axisWorldPoint(m_rotation & 1, aVal)).x();
         if (sx < GW || sx > width() + 20) continue;
-        p.setPen((k == 0) ? QPen(QColor(0, 190, 255), 1.2) : QPen(tickCol, 1.0));
+        p.setPen((k == 0) ? QPen(roomInk(QColor(0, 190, 255)), 1.2) : QPen(tickCol, 1.0));
         p.drawLine(QPointF(sx, by), QPointF(sx, by + 6));
         if (k % lblEvery == 0)
         {
-            p.setPen((k == 0) ? QColor(0, 190, 255) : textCol);
+            p.setPen((k == 0) ? roomInk(QColor(0, 190, 255)) : textCol);
             p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter,
                        (k == 0 && fromCl) ? QStringLiteral("CL") : QString::number(qAbs(k)));
         }
@@ -10307,14 +10411,14 @@ void StructureStudioView::drawRulers(QPainter &p) const
     // Cursor marker (blue, like the main window) + selected-fixture marker (green).
     if (m_hasCursor)
     {
-        p.setPen(QPen(QColor(80, 170, 255), 1.0));
+        p.setPen(QPen(roomInk(QColor(80, 170, 255)), 1.0));
         if (vert) p.drawLine(QPointF(0, m_cursorPx.y()), QPointF(GW, m_cursorPx.y()));
         p.drawLine(QPointF(m_cursorPx.x(), by), QPointF(m_cursorPx.x(), height()));
     }
     if (!m_highlight.isEmpty())
     {
         const QPointF s = w2s(fixtureCentre(*m_highlight.begin()));
-        p.setPen(QPen(QColor(120, 220, 140), 1.0)); p.setBrush(QColor(120, 220, 140));
+        p.setPen(QPen(selectionInk(), 1.0)); p.setBrush(selectionInk());
         if (vert) { QPolygonF t; t << QPointF(GW + 1, s.y()) << QPointF(GW + 7, s.y() - 4) << QPointF(GW + 7, s.y() + 4); p.drawPolygon(t); }
         QPolygonF t2; t2 << QPointF(s.x(), by) << QPointF(s.x() - 4, by + 7) << QPointF(s.x() + 4, by + 7); p.drawPolygon(t2);
     }
@@ -10426,7 +10530,7 @@ QString StructureStudioView::cursorReadoutText(const QPointF &px) const
 void StructureStudioView::drawCursorReadout(QPainter &p) const
 {
     if (!m_hasCursor) return;
-    p.setPen(QPen(QColor(0, 190, 255, 110), 0.8, Qt::DashLine));
+    p.setPen(QPen(roomInk(QColor(0, 190, 255, 110)), 0.8, Qt::DashLine));
     p.drawLine(QPointF(0, m_cursorPx.y()), QPointF(width(), m_cursorPx.y()));
     p.drawLine(QPointF(m_cursorPx.x(), 0), QPointF(m_cursorPx.x(), height()));
 
@@ -10487,7 +10591,7 @@ void StructureStudioView::drawAxisTripod(QPainter &p) const
         if (l < 1e-6)
             continue;                       // dead-on into the screen
         v = QPointF(v.x() / l * len, v.y() / l * len);
-        p.setPen(QPen(ax.col, 1.4));
+        p.setPen(QPen(roomInk(ax.col), 1.4));
         p.drawLine(o, o + v);
         p.drawText(QRectF(o.x() + v.x() * 1.28 - 12, o.y() + v.y() * 1.28 - 7, 24, 14),
                    Qt::AlignCenter, QString::fromLatin1(ax.name));
@@ -10543,7 +10647,7 @@ void StructureStudioView::drawOrientationLabels(QPainter &p) const
                       qMax(1.0, height() - GH - 8));
 
     QFont f = p.font(); f.setPixelSize(9); p.setFont(f);
-    p.setPen(QColor(120, 160, 220, 190));      // the rulers' axis blue
+    p.setPen(roomInk(QColor(120, 160, 220, 190)));      // the rulers' axis blue
 
     /* Each label in the middle of its edge -- unless a measurement is drawn
        there: the height ruler's "max H" callout, a tower's height dimension
@@ -10846,6 +10950,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     ++m_paintCount;
     m_callouts.clear();
     m_edgeLabels.clear();
+    m_nameLabels.clear();
     /* The frame budget. While values change fast (a value-driven frame close
        on the last one) the rig is drawn without supersampling -- a third of
        the work -- and one full-quality frame follows when they stop. Still
@@ -12143,7 +12248,7 @@ void StructureStudioView::drawLanternSolid(QPainter &p, const QVector3D corner[8
             }
         }
         if (!tag.isEmpty())
-            emitLabel(QPointF(c.x() + r + 4, c.y() + r + 10), z, tag, QColor(230, 200, 120), p);
+            emitLabel(QPointF(c.x() + r + 4, c.y() + r + 10), z, tag, roomInk(QColor(230, 200, 120)), p);
         return;
     }
 
@@ -12186,5 +12291,5 @@ void StructureStudioView::drawLanternSolid(QPainter &p, const QVector3D corner[8
         }
     }
     if (!tag.isEmpty())
-        emitLabel(QPointF(c.x() + r + 4, c.y() + r + 10), z, tag, QColor(230, 200, 120), p);
+        emitLabel(QPointF(c.x() + r + 4, c.y() + r + 10), z, tag, roomInk(QColor(230, 200, 120)), p);
 }
