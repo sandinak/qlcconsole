@@ -31,6 +31,7 @@
 #include "structurestudioview.h"
 #include "monitorgraphicsview.h"
 #include "monitor.h"
+#include "effectinstance.h"
 #undef private
 #undef protected
 #include "qlcfixturedefcache.h"
@@ -321,6 +322,40 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
     }
     m_uplightsDark = false;
     v.setLiveValues(false);
+
+    /* (a) in its parts: the script's own tick, the rest of the instance's
+       tick (the heads in, the answers out), the publish, a GC. */
+    {
+        EffectInstance *in = m_fire;
+        double cellsMs = 0, buildMs = 0, callMs = 0, parseMs = 0, gcMs = 0;
+        int k = 0;
+        for (qint64 ms = 1000; ms <= 7000; ms += 250, ++k)
+        {
+            in->setOffStageClock(ms);
+            QElapsedTimer t;
+            t.start();
+            int cols = 1, rows = 1;
+            const QList<EffectInstance::EffectCell> cells = in->effectiveCells(cols, rows);
+            const qint64 a = t.nsecsElapsed();
+            QJSValue fixtures = in->buildFixturesArray(cells, cols, rows);
+            QJSValue inputs = in->buildInputsObject();
+            QJSValue palettes = in->buildPalettesObject();
+            QJSValue params = in->buildParamsObject();
+            QJSValue data = in->buildDataChannelsObject();
+            const qint64 b = t.nsecsElapsed();
+            QJSValue result = in->m_script.callTick(fixtures, inputs, palettes, params, in->m_state, data);
+            const qint64 c = t.nsecsElapsed();
+            const QList<EffectInstance::DmxWrite> w = in->parseIntents(result, cells);
+            const qint64 d = t.nsecsElapsed();
+            in->collectGarbage();
+            const qint64 e = t.nsecsElapsed();
+            cellsMs += a / 1e6; buildMs += (b - a) / 1e6; callMs += (c - b) / 1e6;
+            parseMs += (d - c) / 1e6; gcMs += (e - d) / 1e6;
+            QVERIFY(!w.isEmpty());
+        }
+        REPORT("spreading tick in parts: cells %.2f, heads in %.2f, script %.2f, answers out %.2f, a GC %.2f ms",
+               cellsMs / k, buildMs / k, callMs / k, parseMs / k, gcMs / k);
+    }
 
     /* (a) as the app runs it: the look playing, the MasterTimer on its own
        thread, and the effect runner's tick -- every effect's script, then
