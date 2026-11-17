@@ -588,7 +588,7 @@ public:
     /** A line of @p plugin named @p name whose device no input patch
      *  follows (by QLCIOPlugin::inputDeviceId(); with no ids, no patch on
      *  the line): a pad of that name that no universe has. */
-    bool hasFreeInputDevice(const QLCIOPlugin *plugin, const QString &name) const;
+    bool hasFreeInputDevice(QLCIOPlugin *plugin, const QString &name) const;
 
     /** How a patch with saved identity @p uid would resolve here: a line
      *  index, or -1 when nothing on this machine reaches it. */

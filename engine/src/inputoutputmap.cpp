@@ -2102,7 +2102,7 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         emit offlinePatchesChanged();
 }
 
-bool InputOutputMap::hasFreeInputDevice(const QLCIOPlugin *plugin, const QString &name) const
+bool InputOutputMap::hasFreeInputDevice(QLCIOPlugin *plugin, const QString &name) const
 {
     if (plugin == NULL)
         return false;
