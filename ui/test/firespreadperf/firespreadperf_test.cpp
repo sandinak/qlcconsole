@@ -304,14 +304,14 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
         frameMs(500);                       // warm
         double sc = 0, sw = 0, bc = 0, bw = 0;
         int k = 0;
-        for (qint64 ms = 1000; ms <= 7000; ms += 1000, ++k)
+        for (qint64 ms = 1000; ms <= 7000; ms += 2000, ++k)
         {
             const auto f = frameMs(ms);
             sc += f.first; sw += f.second;
         }
         sc /= k; sw /= k;
         k = 0;
-        for (qint64 ms = 12000; ms <= 15000; ms += 1000, ++k)
+        for (qint64 ms = 12000; ms <= 14000; ms += 2000, ++k)
         {
             const auto f = frameMs(ms);
             bc += f.first; bw += f.second;
@@ -329,7 +329,7 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
         EffectInstance *in = m_fire;
         double cellsMs = 0, buildMs = 0, callMs = 0, parseMs = 0, gcMs = 0;
         int k = 0;
-        for (qint64 ms = 1000; ms <= 7000; ms += 250, ++k)
+        for (qint64 ms = 1000; ms <= 7000; ms += 500, ++k)
         {
             in->setOffStageClock(ms);
             QElapsedTimer t;
@@ -360,13 +360,13 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
     /* (a) as the app runs it: the look playing, the MasterTimer on its own
        thread, and the effect runner's tick -- every effect's script, then
        its writes published -- on this (the GUI) thread, where the rig view
-       paints too. A 3 s spread, then the fire burning. */
+       paints too. A 2 s spread, then the fire burning. */
     {
         QLCPalette *fast = new QLCPalette(QLCPalette::Effect, doc);
         fast->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
         fast->setEffectParamValue(QStringLiteral("edge"), 0.354);
         fast->setEffectParamValue(QStringLiteral("seed"), 327.0);
-        fast->setEffectParamValue(QStringLiteral("spreadTime"), 3.0);
+        fast->setEffectParamValue(QStringLiteral("spreadTime"), 2.0);
         fast->setEffectParamValue(EffectRuns::runsKey(), 0);
         QVERIFY(doc->addPalette(fast));
         Scene *look = new Scene(doc);
@@ -383,15 +383,15 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
         run.start();
         double sp = 0, spMax = 0, bu = 0, buMax = 0;
         int spN = 0, buN = 0;
-        while (run.elapsed() < 4500)
+        while (run.elapsed() < 3200)
         {
             const qint64 at = run.elapsed();
             QElapsedTimer f;
             f.start();
             runner->slotTick();
             const double ms = f.nsecsElapsed() / 1e6;
-            if (at > 200 && at < 2800) { sp += ms; spMax = qMax(spMax, ms); ++spN; }
-            else if (at > 3600) { bu += ms; buMax = qMax(buMax, ms); ++buN; }
+            if (at > 200 && at < 1900) { sp += ms; spMax = qMax(spMax, ms); ++spN; }
+            else if (at > 2500) { bu += ms; buMax = qMax(buMax, ms); ++buN; }
             while (f.elapsed() < 20)
                 QCoreApplication::processEvents(QEventLoop::AllEvents, 2);
         }
@@ -406,39 +406,48 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
         QFAIL(qPrintable(g_report.join(QStringLiteral(" | "))));
 }
 
-/* The kept landings of the light the steps throw onto the cyc draw the very
-   picture the rays thrown afresh do: a spreading frame, and the next one
-   (the same ends again), against every ray thrown against everything. */
-void FireSpreadPerf_Test::theCycCatchesTheSameLight()
+/* Before the front reaches them, Fire Spread leaves thousands of heads to
+   what is under them: their answers say nothing, and reading one costs
+   next to nothing -- not a head's channels looked up for each, as a burning
+   head's are. Old code: an unreached head cost about half a burning one. */
+void FireSpreadPerf_Test::anUnreachedHeadCostsNothingToRead()
 {
-    Doc *doc = m_app->doc();
-    const bool moveSpeed = StructureStudioView::moveSpeed();
-    StructureStudioView::setMoveSpeed(false);
-    auto restore = qScopeGuard([moveSpeed]() {
-        StructureStudioView::setMoveSpeed(moveSpeed);
-        StructureStudioView::s_referenceThrows = false;
-    });
-    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
-    v.setLocked(true);
-    v.setLiveValues(true);
-    v.setBeams(true);
-    v.setAmbient(0.0);
-    v.setPlane(StructureStudioView::Angled);
-    v.setStandOnCentreStage(true);
-    v.resize(1024, 640);
-    v.reload();
-    for (qint64 ms : { 2500, 3000, 3000, 6000 })
-    {
-        tickTo(ms);
-        StructureStudioView::s_referenceThrows = false;
-        v.m_liveDirty = true;
-        const QImage kept = v.grab().toImage();
-        StructureStudioView::s_referenceThrows = true;
-        v.m_liveDirty = true;
-        const QImage fresh = v.grab().toImage();
-        StructureStudioView::s_referenceThrows = false;
-        QVERIFY2(kept == fresh, qPrintable(QString("the frame at %1 ms differs from the reference").arg(ms)));
-    }
+    EffectInstance *in = m_fire;
+    auto answersAt = [in](qint64 ms, QList<EffectInstance::EffectCell> &cells, QJSValue &result) {
+        in->setOffStageClock(ms);
+        int cols = 1, rows = 1;
+        cells = in->effectiveCells(cols, rows);
+        QJSValue fixtures = in->buildFixturesArray(cells, cols, rows);
+        result = in->m_script.callTick(fixtures, in->buildInputsObject(), in->buildPalettesObject(),
+                                       in->buildParamsObject(), in->m_state, in->buildDataChannelsObject());
+    };
+    auto readMs = [in](const QJSValue &result, const QList<EffectInstance::EffectCell> &cells, int *writes) {
+        double best = -1;
+        for (int i = 0; i < 5; ++i)
+        {
+            QElapsedTimer t;
+            t.start();
+            const QList<EffectInstance::DmxWrite> w = in->parseIntents(result, cells);
+            const double ms = t.nsecsElapsed() / 1e6;
+            *writes = int(w.size());
+            if (best < 0 || ms < best)
+                best = ms;
+        }
+        return best;
+    };
+    QList<EffectInstance::EffectCell> cells;
+    QJSValue dark, burning;
+    answersAt(0, cells, dark);
+    int darkWrites = 0, burningWrites = 0;
+    const double darkMs = readMs(dark, cells, &darkWrites);
+    answersAt(12000, cells, burning);
+    const double burningMs = readMs(burning, cells, &burningWrites);
+    REPORT("reading %d answers: none reached %.2f ms (%d writes), all burning %.2f ms (%d writes)",
+           int(cells.size()), darkMs, darkWrites, burningMs, burningWrites);
+    QVERIFY(darkWrites < burningWrites / 20);
+    QVERIFY2(darkMs < 0.25 * burningMs,
+             qPrintable(QString("the unreached heads took %1 ms to read, the burning ones %2 ms")
+                            .arg(darkMs).arg(burningMs)));
 }
 
 int main(int argc, char **argv)

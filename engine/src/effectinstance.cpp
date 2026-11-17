@@ -2580,6 +2580,12 @@ EffectInstance::parseIntents(const QJSValue &intents,
             kit.next();
             keys.append(qMakePair(kit.name(), kit.value()));
         }
+        /* An answer that says nothing (Fire Spread's head the front has not
+           reached: left to what is under it) writes nothing: nothing below
+           reads a key it does not have. Asking the head for its channels
+           first was most of a spread's reading while thousands waited. */
+        if (keys.isEmpty())
+            continue;
         /* By reference: a QJSValue copy is a persistent handle of the
            engine's, taken and given back -- a dozen and more a head. */
         static const QJSValue undefinedValue;

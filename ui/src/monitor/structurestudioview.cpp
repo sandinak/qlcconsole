@@ -8113,15 +8113,6 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
             sceneries << sc;
     if (sceneries.isEmpty())
         return out;
-    /* The kept fans hold while the scenery they land on (and the list's
-       order, which numbers its pieces) and the curtains' poses do. */
-    const quint64 washScene = m_throwScene ^ (m_drapeKey * 0x9e3779b97f4a7c15ULL);
-    if (!m_washSceneSet || washScene != m_washScene || m_washFans.size() > 20000)
-    {
-        m_washFans.clear();
-        m_washScene = washScene;
-        m_washSceneSet = true;
-    }
 
     // A ray leaves through the top, then lands on the first scenery it meets.
     auto cast = [&](const QVector3D &from, const QVector3D &d, int &which, QVector3D &at) -> bool {
@@ -8160,11 +8151,11 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
         return (dir * float(qCos(th)) + (u * float(qCos(ang)) + v * float(qSin(ang))) * float(qSin(th))).normalized();
     };
 
-    /* The rays from one end: every landing, in the order thrown, with the
-       piece it is on. */
+    QHash<int, QVector<QVector3D> > hits;      // per piece of scenery
     static const int RINGS = 4, SECTORS = 32;
-    auto fanFrom = [&](const QVector3D &from) {
-        QVector<QPair<int, QVector3D> > fan;
+    const QVector3D apexes[2] = { a, b };
+    for (const QVector3D &from : apexes)
+    {
         // Rings out to the edge; between a hit and a miss, find the edge.
         QVector<int> lastRing(SECTORS, -2);
         for (int ri = 0; ri <= RINGS; ++ri)
@@ -8179,7 +8170,7 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
                 QVector3D at;
                 const bool hit = cast(from, ray(r, ang), w, at);
                 if (hit)
-                    fan << qMakePair(w, at);
+                    hits[w] << at;
                 ring[si] = hit ? w : -1;
                 if (ri == 0)
                     for (int k = 0; k < SECTORS; ++k) ring[k] = ring[0];
@@ -8199,7 +8190,7 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
                     QVector3D atm;
                     const double rh = hit0 ? r0 : r1, ah = hit0 ? a0 : a1;
                     if (cast(from, ray(rh, ah), wm, atm))
-                        fan << qMakePair(wm, atm);
+                        hits[wm] << atm;
                 };
                 if (ri > 0)
                 {
@@ -8214,26 +8205,6 @@ QVector<QVector<QVector3D> > StructureStudioView::washOnScenery(const QVector3D 
             }
             lastRing = ring;
         }
-        return fan;
-    };
-
-    QHash<int, QVector<QVector3D> > hits;      // per piece of scenery
-    const QVector3D apexes[2] = { a, b };
-    for (const QVector3D &from : apexes)
-    {
-        if (s_referenceThrows)
-        {
-            for (const QPair<int, QVector3D> &h : fanFrom(from))
-                hits[h.first] << h.second;
-            continue;
-        }
-        const WashFanKey fk{ { from.x(), from.y(), from.z(), dir.x(), dir.y(), dir.z(), float(half),
-                               aperture.ax0, aperture.ax1, aperture.ay0, aperture.ay1, aperture.az } };
-        auto it = m_washFans.find(fk);
-        if (it == m_washFans.end())
-            it = m_washFans.insert(fk, fanFrom(from));
-        for (const QPair<int, QVector3D> &h : it.value())
-            hits[h.first] << h.second;
     }
 
     // Each piece's patch: the outline of where it was hit, on its own surface.
