@@ -694,7 +694,7 @@ void PadRunRules_Test::windowsAFocusPadStartsNoVenueFocus()
     jobs->setJob(jobs->identityOfUniverse(0), ControllerJobs::RunCues, false);
     run->setEnabled(true);
     const PlatformGuard guard(PadRun::PlatformWindows);
-    ltMenu();
+    ltMenu(0);
     QVERIFY2(fcc->state() == FocusCallCue::Armed && !run->isFocusing(),
              "LT + Menu started the venue focus from a pad on Windows");
     QCOMPARE(run->notice(), PadRun::notSupportedText());
