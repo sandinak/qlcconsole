@@ -99,6 +99,11 @@ private slots:
     void aLengthShowsAndTakesTheChosenUnit();
     void theFollowSpotEditorSaysWhatItIsDoing();
     void aWavesLengthIsOneCycle();
+    /** Fire Spread's Colours: Fire, its Front and Behind settings greyed
+     *  until Front and Behind is chosen. */
+    void fireSpreadOffersFrontAndBehindColours();
+    /** Fire Spread's settings pictured (QLC_SHOT_DIR only). */
+    void fireSpreadSettingsShots();
     /** "if we go from Red to Dark Red .. we should auto update the title ..
      *  only update the color part .. the folder should stay consistent."
      *  The name field follows live; the value and the name are one Undo. */

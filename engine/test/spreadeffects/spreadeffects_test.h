@@ -49,6 +49,21 @@ private slots:
      *  the step bars and PL-4003s burn pixel by pixel and are dark, pixel
      *  by pixel, until the fire reaches them. */
     void fireSpreadOnTheShowsKinds();
+    /** Fire Spread's Colours: Fire (the default), and Front and Behind
+     *  with no colour to be the front, are byte for byte the script as it
+     *  was before the choice (data/fire-spread-0412.js), on every kind of
+     *  head, ragged, flaring, cooled, over the cue's time. */
+    void fireSpreadInFireIsAsItWas();
+    /** Front and Behind: the look's first colour as the front reaches a
+     *  head, its second after the backfill (a short crossfade), flickering
+     *  in level or steady (Flicker Behind); dark before the front; a
+     *  colour wheel on the nearest slot, never between; a dimmer burns as
+     *  Fire's, a relay switches; one colour: fire behind the front. */
+    void fireSpreadFrontAndBehind();
+    /** The backfill Front Width behind each head; with an Edge ragged in
+     *  its own seeded way, never ahead of the front, the same seed the
+     *  same. */
+    void fireSpreadBackfillIsRaggedBySeed();
     /** Spell Spread on the same kinds: the lantern in the colour at the
      *  look's level, effect channels untouched; the relay is not its; a
      *  pixel not yet reached is not written. */

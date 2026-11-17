@@ -4964,6 +4964,145 @@ void EffectInstance_Test::fireSpreadBurnsTheRigFromTheAimTarget()
     }
 }
 
+void EffectInstance_Test::fireSpreadFrontAndBehindTakesItsOwnColours()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    // An RGB par (no dimmer) on the point, a dimmer 2 m out, a colour-wheel
+    // mover (its dimmer in its head) 4 m out.
+    QLCFixtureDef *parDef = makePixelDef("Front par", 1, 0);
+    m_doc->fixtureDefCache()->addFixtureDef(parDef);
+    Fixture *par = new Fixture(m_doc);
+    par->setFixtureDefinition(parDef, parDef->modes().first());
+    par->setUniverse(0);
+    par->setAddress(0);
+    QVERIFY(m_doc->addFixture(par));
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0));
+    Fixture *dim = oneDimmerFixture(m_doc, 100);
+    props->setFixturePosition(dim->id(), 0, 0, QVector3D(3000.0f, 1000.0f, 0));
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("FireWheelSpot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *pan = new QLCChannel(); pan->setName("Pan"); pan->setPreset(QLCChannel::PositionPan);
+    QLCChannel *wheel = new QLCChannel(); wheel->setName("Color wheel"); wheel->setGroup(QLCChannel::Colour);
+    const struct { int lo, hi; QColor c; const char *n; } wheelSlots[] = {
+        { 0, 9, QColor(255, 255, 255), "Open" }, { 10, 19, QColor(255, 0, 0), "Red" },
+        { 20, 29, QColor(0, 0, 255), "Blue" }, { 30, 39, QColor(255, 140, 0), "Orange" } };
+    for (const auto &sl : wheelSlots)
+    {
+        QLCCapability *cap = new QLCCapability(uchar(sl.lo), uchar(sl.hi), sl.n);
+        cap->setResource(0, sl.c);
+        wheel->addCapability(cap);
+    }
+    QLCChannel *wdim = new QLCChannel(); wdim->setName("Dimmer"); wdim->setPreset(QLCChannel::IntensityDimmer);
+    QList<QLCChannel *> chans = { pan, wheel, wdim };
+    for (int c = 0; c < chans.size(); c++)
+    {
+        def->addChannel(chans.at(c));
+        mode->insertChannel(chans.at(c), c);
+    }
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1); head.addChannel(2);
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    m_doc->fixtureDefCache()->addFixtureDef(def);
+    Fixture *spot = new Fixture(m_doc);
+    spot->setFixtureDefinition(def, mode);
+    spot->setUniverse(0);
+    spot->setAddress(200);
+    QVERIFY(m_doc->addFixture(spot));
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(5000.0f, 1000.0f, 0));
+
+    StageTarget *point = props->addStageTarget();
+    point->setName("Ignition");
+    point->setPosition(QVector3D(1.0f, 1.0f, 0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(point->id());
+    QVERIFY(m_doc->addPalette(aim));
+
+    // Front and Behind, a hard edge, no flare: the front 2 s wide.
+    QLCPalette *fire = new QLCPalette(QLCPalette::Effect, m_doc);
+    fire->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
+    fire->setEffectParamValue("colours", 1);
+    fire->setEffectParamValue("spreadTime", 8.0);
+    fire->setEffectParamValue("edge", 0.0);
+    fire->setEffectParamValue("flare", 0.0);
+    fire->setEffectParamValue("frontWidth", 2.0);
+    fire->setEffectParamValue(EffectRuns::runsKey(), 0);      // Loop
+    QVERIFY(m_doc->addPalette(fire));
+    // The effect's own colours, under it: blue the front, red behind.
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setValue(QColor(0, 0, 255));
+    QVERIFY(m_doc->addPalette(blue));
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setValue(QColor(255, 0, 0));
+    QVERIFY(m_doc->addPalette(red));
+    QVERIFY(QLCPalette::effectUsesLookColours(fire));          // they are its own, not painted on
+
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    for (Fixture *fx : { par, dim, spot })
+        scene->addFixture(fx->id());
+    for (QLCPalette *p : { aim, fire, blue, red })
+        scene->addPalette(p->id());
+    EffectInstance inst(m_doc, scene->id(), fire->id());
+    QVERIFY2(inst.isValid(), "fire-spread.js did not load");
+    QCOMPARE(inst.buildInputsObject().property("_fromTargetFar").toNumber(), 4.0);
+
+    // What each channel gets at clock @p ms: (fixture, channel) -> value.
+    auto at = [&](qint64 ms) {
+        inst.setOffStageClock(ms);
+        inst.runTick();
+        QHash<QPair<quint32, quint32>, int> out;
+        for (const EffectInstance::DmxWrite &w : inst.dmxWrites())
+            out.insert(qMakePair(w.fixtureId, w.channel), w.value);
+        return out;
+    };
+    auto v = [](const QHash<QPair<quint32, quint32>, int> &f, Fixture *fx, quint32 ch) {
+        return f.value(qMakePair(fx->id(), ch), -1);
+    };
+
+    // 1 s: the par, reached, is the front's blue; the dimmer and the
+    // mover not yet reached are dark.
+    QHash<QPair<quint32, quint32>, int> f = at(1000);
+    QCOMPARE(v(f, par, 0), 0);
+    QCOMPARE(v(f, par, 1), 0);
+    QCOMPARE(v(f, par, 2), 255);
+    QCOMPARE(v(f, dim, 0), 0);
+    QCOMPARE(v(f, spot, 2), 0);
+    // 3 s: the backfill has reached the par: red, burning.
+    QSet<int> reds;
+    for (qint64 ms = 3000; ms < 8000; ms += 250)
+    {
+        f = at(ms);
+        QVERIFY2(v(f, par, 0) > 0, qPrintable(QString("par dark at %1 ms").arg(ms)));
+        QCOMPARE(v(f, par, 1), 0);
+        QCOMPARE(v(f, par, 2), 0);
+        reds.insert(v(f, par, 0));
+        if (ms >= 4100)
+            QVERIFY(v(f, dim, 0) > 0);                          // the dimmer burns as Fire's
+        QCOMPARE(v(f, spot, 2), 0);                             // the mover, 4 m out: dark
+    }
+    QVERIFY2(reds.size() > 4, "the backfill does not flicker");
+    // 9 s: the mover is reached: its wheel on blue, its dimmer full.
+    f = at(9000);
+    QVERIFY2(v(f, spot, 1) >= 20 && v(f, spot, 1) <= 29, qPrintable(QString("wheel at %1").arg(v(f, spot, 1))));
+    QCOMPARE(v(f, spot, 2), 255);
+    // 11 s on: the backfill: the wheel on red, the flicker on its dimmer.
+    // It never moves (no pan).
+    QSet<int> levels;
+    for (qint64 ms = 11000; ms < 16000; ms += 250)
+    {
+        f = at(ms);
+        QVERIFY2(v(f, spot, 1) >= 10 && v(f, spot, 1) <= 19, qPrintable(QString("wheel at %1").arg(v(f, spot, 1))));
+        levels.insert(v(f, spot, 2));
+        QVERIFY(!f.contains(qMakePair(spot->id(), quint32(0))));
+    }
+    QVERIFY(levels.size() > 4);
+}
+
 /*****************************************************************************
  * Matrix effects
  *****************************************************************************/
