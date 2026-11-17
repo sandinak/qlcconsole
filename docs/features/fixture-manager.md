@@ -421,7 +421,7 @@ the menu bar's **Fixtures → Patch List…**, or the Lighting Studio's
 
 In **Connections**, right-click a universe and choose **Patch List for
 U13…** to open this list with only the fixtures patched on that universe (a
-line beside the filters says so, and **All universes** shows them all again).
+line beside the filters says so, and **All Universes** shows them all again).
 
 What Show and Owner leave out is left out of the copy, the exports, the PDF
 and the labels too, and they follow the grouping.

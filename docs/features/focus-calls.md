@@ -446,8 +446,8 @@ are one checklist:
    back on the rig, but their changes are kept as a draft for this show
    until you quit or open another. To focus again, GO onto the focus cue.
    The next time a focus starts on those lights (from the laptop, LT +
-   Menu or a Focus pad), its panel on the laptop shows **Pick up where you
-   stopped (3 unsaved changes)** and **Discard**: pick up puts the
+   Menu or a Focus pad), its panel on the laptop shows **Pick Up Where You
+   Stopped (3 Unsaved Changes)** and **Discard**: pick up puts the
    changes back, still not saved (save or put back each as usual);
    Discard forgets them. The pad starts fresh and never makes the choice
    (the voice says to make it on the computer). A light saved or changed

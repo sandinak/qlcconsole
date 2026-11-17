@@ -56,7 +56,7 @@ private slots:
     void theKeyboardIgnoresTheController();
     /** Board Q258: the emergency stop ends a focus with lights not saved:
      *  its light dark at once (the DMX), the changes kept as a draft; the
-     *  next start's panel offers "Pick up where you stopped (N unsaved
+     *  next start's panel offers "Pick Up Where You Stopped (N Unsaved
      *  changes)" or Discard; Pick up puts the values back, Discard drops
      *  them. */
     void theStopKeepsUnsavedFocusAsADraft();

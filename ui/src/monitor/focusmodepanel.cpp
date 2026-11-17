@@ -982,8 +982,8 @@ void FocusModePanel::refreshDraftOffer()
 {
     const int n = m_session->isActive() ? m_session->draftCount() : 0;
     if (n > 0)
-        m_draftPickUp->setText(n == 1 ? tr("Pick up where you stopped (1 unsaved change)")
-                                      : tr("Pick up where you stopped (%1 unsaved changes)").arg(n));
+        m_draftPickUp->setText(n == 1 ? tr("Pick Up Where You Stopped (1 Unsaved Change)")
+                                      : tr("Pick Up Where You Stopped (%1 Unsaved Changes)").arg(n));
     m_draftOffer->setVisible(n > 0);
 }
 

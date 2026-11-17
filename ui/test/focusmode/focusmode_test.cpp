@@ -724,7 +724,7 @@ void FocusMode_Test::theStopKeepsUnsavedFocusAsADraft()
     QVERIFY2(panel != nullptr, qPrintable(why));
     QVERIFY2(offerShown(panel), "no offer to pick up the focus the emergency stop ended");
     QVERIFY(pickUpButton(panel) != nullptr);
-    QCOMPARE(pickUpButton(panel)->text(), QString("Pick up where you stopped (2 unsaved changes)"));
+    QCOMPARE(pickUpButton(panel)->text(), QString("Pick Up Where You Stopped (2 Unsaved Changes)"));
     QVERIFY(s->unsavedFixtures().isEmpty());
     // Pick up: the values back, still unsaved; the offer gone.
     pickUpButton(panel)->click();
@@ -742,9 +742,9 @@ void FocusMode_Test::theStopKeepsUnsavedFocusAsADraft()
     QVERIFY2(panel != nullptr, qPrintable(why));
     QVERIFY(offerShown(panel));
     // A draft light nudged since the start leaves the offer: the count follows.
-    QCOMPARE(pickUpButton(panel)->text(), QString("Pick up where you stopped (2 unsaved changes)"));
+    QCOMPARE(pickUpButton(panel)->text(), QString("Pick Up Where You Stopped (2 Unsaved Changes)"));
     s->nudge(0.2f, 0.0f);
-    QCOMPARE(pickUpButton(panel)->text(), QString("Pick up where you stopped (1 unsaved change)"));
+    QCOMPARE(pickUpButton(panel)->text(), QString("Pick Up Where You Stopped (1 Unsaved Change)"));
     s->revert();
     QPushButton *discard = panel->findChild<QPushButton *>("focusDraftDiscard");
     QVERIFY(discard != nullptr);

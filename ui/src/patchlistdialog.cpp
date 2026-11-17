@@ -108,7 +108,7 @@ PatchListDialog::PatchListDialog(Doc *doc, QWidget *parent)
     m_universeNote->setObjectName(QStringLiteral("patchListUniverseNote"));
     m_universeNote->setVisible(false);
     bar->addWidget(m_universeNote);
-    m_allUniverses = new QPushButton(tr("All universes"), this);
+    m_allUniverses = new QPushButton(tr("All Universes"), this);
     m_allUniverses->setObjectName(QStringLiteral("patchListAllUniverses"));
     m_allUniverses->setVisible(false);
     bar->addWidget(m_allUniverses);

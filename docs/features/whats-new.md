@@ -24,7 +24,7 @@ The first public release since 0.4.3: it carries 0.4.4 through 0.4.13
   [Fire Spread](effects.md#fire-spread).
 - **The emergency stop is Everything is off**, from every pad, the phone,
   OSC and MSC. The phone's stop needs only the PIN. A venue focus stopped
-  by it keeps its unsaved changes: **Pick up where you stopped**. See
+  by it keeps its unsaved changes: **Pick Up Where You Stopped**. See
   [A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show).
 - **The Rig Overview in a Blackout** shows only the light the rig puts
   out: no clash red and no selection edge until Dim.

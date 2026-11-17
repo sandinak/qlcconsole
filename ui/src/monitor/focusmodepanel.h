@@ -266,7 +266,7 @@ private:
     /** "Controller paused: <reason>" (ControllerKeepAlive). */
     QLabel *m_pausedLabel;
     QPushButton *m_backButton;
-    /** "Pick up where you stopped (3 unsaved changes)" | Discard (Q258). */
+    /** "Pick Up Where You Stopped (3 Unsaved Changes)" | Discard (Q258). */
     QWidget *m_draftOffer = nullptr;
     QPushButton *m_draftPickUp = nullptr;
     FocusControlMap *m_map;
