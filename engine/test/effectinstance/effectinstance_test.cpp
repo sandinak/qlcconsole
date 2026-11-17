@@ -5533,7 +5533,7 @@ void EffectInstance_Test::aLevelLetsGoWhenTheEffectStopsOrFadesOut()
     m_doc->addFunction(scene);
     scene->addFixture(wash->id());
     scene->addPalette(chase->id());
-    scene->setPaletteFade(chase->id(), 0, 1000);
+    scene->setPaletteFade(chase->id(), 1000, 1000);
     EffectScriptRunner *runner = m_doc->effectScriptRunner();
     MasterTimer timer(m_doc);
     QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 255);
@@ -5542,6 +5542,9 @@ void EffectInstance_Test::aLevelLetsGoWhenTheEffectStopsOrFadesOut()
     runner->createInstancesForScene(scene->id());
     EffectInstance *inst = runner->instanceForPalette(chase->id());
     QVERIFY(inst != nullptr);
+    QVERIFY(inst->hasDepthFade());
+    inst->m_depthStartMs = 0;
+    inst->setDepthClock(5000);                  // all the way in
     qint64 lowAt = -1;
     for (qint64 ms = 0; ms < 4000 && lowAt < 0; ms += 50)
     {
@@ -5560,16 +5563,17 @@ void EffectInstance_Test::aLevelLetsGoWhenTheEffectStopsOrFadesOut()
     runner->createInstancesForScene(scene->id());
     inst = runner->instanceForPalette(chase->id());
     QVERIFY(inst != nullptr);
+    inst->m_depthStartMs = 0;
+    inst->setDepthClock(5000);
     inst->setOffStageClock(lowAt);
     inst->runTick();
     const int low = uchar(runnerFrame(m_doc, runner, &timer).at(100));
     QVERIFY(low < 60);
     runner->destroyInstancesForScene(scene->id(), true);
     QVERIFY(inst->isFadingOut());
-    inst->setDepthClock(0);
-    inst->m_depthStartMs = 0;
+    inst->m_depthStartMs = 5000;
     int last = low;
-    for (int ms = 100; ms <= 1000; ms += 100)
+    for (int ms = 5100; ms <= 6000; ms += 100)
     {
         inst->setDepthClock(ms);
         inst->runTick();
