@@ -1372,8 +1372,12 @@ int InputOutputMap::retryOfflinePatches()
                 }
                 if (line < 0)
                     continue;
+                /* Reopened on the line chosen here (two lines of one name
+                   resolve to the saved line number when it carries it). */
+                Universe::OfflinePatch chosen = rec;
+                chosen.line = quint32(line);
                 uni->removeOfflinePatch(k);
-                loadPatch(i, rec);
+                loadPatch(i, chosen);
                 reconnected++;
                 if (rec.tag == Universe::InputPatchTag && uni->inputPatch() != NULL)
                     emit inputDeviceConnected(i, rec.plugin, rec.uid.isEmpty()
