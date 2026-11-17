@@ -2438,7 +2438,7 @@ void Monitor_Test::theSideListNamesEveryFixture()
     QCOMPARE(rows.value("Office Staff")->data(0, LayersTreeWidget::UnplacedFidRole).toUInt(), staged->id());
     QVERIFY(!rows.value("Placed Staff")->data(0, LayersTreeWidget::UnplacedFidRole).isValid());
     // Findable by name.
-    QLineEdit *search = panel->findChild<QLineEdit *>();
+    QLineEdit *search = panel->m_search;
     if (search != nullptr)
     {
         search->setText("Office");
