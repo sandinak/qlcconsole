@@ -334,8 +334,8 @@ show from any pad.
   uses is connected, the notice also says how to use it there: unplug it
   and plug it back in, or patch it in Inputs/Outputs. With two universes
   waiting for that model, only the first (the lower number, the one a
-  replugged spare goes to) is told. A pad another universe uses is never
-  suggested.
+  replugged spare goes to) is told; when notices disagree, follow the
+  latest. A pad another universe uses is never suggested.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a

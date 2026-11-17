@@ -792,6 +792,81 @@ void PadTraces_Test::twoAnySlotsKeepTheirOwnPads()
         QVERIFY(q253In(b, ch, 0));
 }
 
+void PadTraces_Test::aWaitingSlotTakesNoPadReenumeratedInPlace_data()
+{
+    QTest::addColumn<bool>("located");
+    QTest::addColumn<bool>("handPatched");
+    QTest::newRow("macOS-like, the pad patched by hand") << true << true;
+    QTest::newRow("macOS-like, the pad an \"any\" slot's") << true << false;
+    QTest::newRow("Linux-like, the pad patched by hand") << false << true;
+    QTest::newRow("Linux-like, the pad an \"any\" slot's") << false << false;
+}
+
+void PadTraces_Test::aWaitingSlotTakesNoPadReenumeratedInPlace()
+{
+    /* One pad, Q, universe 2's (patched by hand, or its "any" slot's);
+       universe 1's "any" slot waits, ahead of it in order. Q re-enumerates
+       where it is (a sleep, a power cycle): a new id on the same line,
+       which universe 2's patch learns only at its reconnect() -- after the
+       slots are looked at. Universe 1 keeps waiting: Q is never patched to
+       two universes, and its stop is heard on universe 2 alone (review of
+       17a7dfb6e). */
+    QFETCH(bool, located);
+    QFETCH(bool, handPatched);
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    const QString q = located ? QStringLiteral("USB_045e_028e_1000000") : QStringLiteral("/dev/input/js0");
+    m_fake->list(q, 0x045e, 0x028e, name, 0, 1);
+    q253Scan(name, 1);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Universe::InputSlotDevice any;
+    any.plugin = QStringLiteral("HID");
+    any.anyGamepad = true;
+    if (handPatched)
+        QVERIFY(iom->setInputPatch(2, QStringLiteral("HID"), QString(), 0));
+    else
+        iom->setInputSlot(2, { any });
+    QTRY_VERIFY_WITH_TIMEOUT(iom->inputPatch(2) != nullptr && iom->inputPatch(2)->input() == 0, 2000);
+    iom->setInputSlot(1, { any });
+    QVERIFY2(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine(),
+             "the waiting slot took a pad another universe has");
+    startRunning();
+    QStringList heard;
+    const QMetaObject::Connection listen = connect(iom, &InputOutputMap::inputValueChanged, this,
+        [&heard](quint32 u, quint32 ch, uchar v) { heard << QString("u%1:ch%2=%3").arg(u).arg(ch).arg(v); });
+    auto unlisten = qScopeGuard([&]() { disconnect(listen); });
+
+    // Q re-enumerates where it is.
+    m_fake->unlist(q);
+    m_fake->list(q, 0x045e, 0x028e, name, 0, 5);
+    QMetaObject::invokeMethod(m_hid, "rescanDevices", Qt::DirectConnection);
+    QTRY_VERIFY_WITH_TIMEOUT(m_fake->opens(q) >= 2, 3000);
+    QTest::qWait(150);
+    QCOMPARE(q253Line(q), 0);
+    QVERIFY2(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine(),
+             "the waiting slot took the pad re-enumerated in place");
+    QVERIFY2(iom->inputPatch(2) != nullptr && iom->inputPatch(2)->input() == 0,
+             "the pad's own universe lost it");
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        if (u == 2)
+            continue;
+        const InputPatch *p = iom->inputPatch(u);
+        QVERIFY2(p == nullptr || p->plugin() != m_hid || p->input() != 0,
+                 qPrintable(QString("universe %1 is patched to Q too").arg(u + 1)));
+    }
+
+    // Q's stop: heard on universe 2 alone, and it stops.
+    heard.clear();
+    for (quint32 ch : { kPadLb, kPadRb, kPadLt, kPadRt })
+        QVERIFY(q253In(q, ch, 255));
+    QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::AllOff)), 1, 2000);
+    QVERIFY2(heard.contains(QStringLiteral("u2:ch5=255")), qPrintable(heard.join(QStringLiteral(" "))));
+    foreach (const QString &h, heard)
+        QVERIFY2(h.startsWith(QStringLiteral("u2:")), qPrintable(QString("heard off Q's universe: %1").arg(h)));
+    for (quint32 ch : { kPadRt, kPadLt, kPadRb, kPadLb })
+        QVERIFY(q253In(q, ch, 0));
+}
+
 void PadTraces_Test::triggerRest()
 {
     /* Triggers resting at ~8 % and the sticks' jitter: the chord still

@@ -77,6 +77,11 @@ private slots:
      *  never swap pads over the line the other still sits on. */
     void twoAnySlotsKeepTheirOwnPads_data();
     void twoAnySlotsKeepTheirOwnPads();
+    /** A pad re-enumerated in place (hand-patched, or an "any" slot's)
+     *  is still its universe's: a waiting "any" slot ahead of it in order
+     *  never takes it while the patch has yet to learn the new id. */
+    void aWaitingSlotTakesNoPadReenumeratedInPlace_data();
+    void aWaitingSlotTakesNoPadReenumeratedInPlace();
     /** A spare that was here re-enumerates where it is: still not the pad
      *  a universe waits for. */
     void aSpareReenumeratedTakesNoUniverse_data();
