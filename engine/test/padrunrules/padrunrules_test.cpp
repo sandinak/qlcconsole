@@ -45,6 +45,7 @@
 #include "qlcioplugin.h"
 #include "showcontrol.h"
 #include "outputrulekeeper.h"
+#include "genericfader.h"
 #include "padrunrules_test.h"
 #include "refinesession.h"
 #include "controlmap.h"
@@ -369,6 +370,31 @@ void PadRunRules_Test::offPadStop()
     QVERIFY(osc->wait(5000));
     delete osc;
     QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+}
+
+quint32 PadRunRules_Test::listChaser() const
+{
+    const ShowTree::CueList *cl = m_doc->showTree()->cueList(m_list);
+    return cl != nullptr ? cl->chaser : Function::invalidId();
+}
+
+bool PadRunRules_Test::runOnList(ShowControl::Command command, ShowControl::Route route)
+{
+    ShowControl *sc = m_doc->showControl();
+    sc->setRunHandler([this, sc](const ShowControl::Request &r, ShowControl::Route rt) {
+        m_runs << qMakePair(r, rt);
+        return sc->execute(r);
+    });
+    ShowControl::Request r;
+    r.command = command;
+    r.chaser = listChaser();
+    return sc->run(r, route);
+}
+
+void PadRunRules_Test::tick()
+{
+    m_doc->masterTimer()->timerTick();
     QCoreApplication::processEvents();
 }
 
@@ -1958,16 +1984,141 @@ void PadRunRules_Test::anOffPadStopTurnsTheArmedPadRed()
     QCOMPARE(run->state(), PadRun::Stopped);
     QVERIFY(!run->isArmed());
     QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
-    bool three = false;
-    for (const QList<QVariant> &r : rumbled)
-        three = three || r.at(0).toInt() == 3;
-    QVERIFY2(three, "the pad was not told of the stop");
-    // A second ALL OFF from anywhere leaves it red too.
+    auto threes = [&rumbled]() {
+        int n = 0;
+        for (const QList<QVariant> &r : rumbled)
+            n += r.at(0).toInt() == 3 ? 1 : 0;
+        return n;
+    };
+    QCOMPARE(threes(), 1);
+    const int said = saidCount("Emergency stop");
+    // A second ALL OFF from anywhere leaves it red too -- and is said once.
     offPadStop();
     QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(threes(), 1);
+    QCOMPARE(saidCount("Emergency stop"), said);
     // Armed again by the chord: the red ends.
     arm(true, 0);
     QCOMPARE(run->state(), PadRun::Armed);
+}
+
+void PadRunRules_Test::aTimecodeGoAfterTheStopLeavesThePadRed()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    makeFocusCue();
+    QVERIFY(m_doc->function(listChaser()) != nullptr);
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    run->setEnabled(true);
+    arm(true, 0);
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(keeper->emergencyStopped());
+    focusCueAgain();        // the focus cue waits again
+    // LTC rolls on and the next cue's time passes: a GO, but no hand's.
+    {
+        GenericFader::StampScope byTimecode(0);
+        QVERIFY(runOnList(ShowControl::Go, ShowControl::RouteTimecode));
+    }
+    tick();
+    QVERIFY2(keeper->emergencyStopped(), "the footer's hold ended on a timecode GO");
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    // Nobody brought the show back: the Focus-only pad is refused (Q254).
+    if (pc->focusCallCue()->state() != FocusCallCue::Armed)
+        focusCueAgain();
+    ltMenu(1);
+    QVERIFY(pc->focusCallCue()->state() != FocusCallCue::Running);
+    QVERIFY(!pc->focusSession()->isActive());
+    QCOMPARE(run->notice(), QString("Emergency stop: arm a pad (or GO on the computer) before the venue focus."));
+}
+
+void PadRunRules_Test::aResetAfterTheStopLeavesThePadRed()
+{
+    makeShow();
+    QVERIFY(m_doc->function(listChaser()) != nullptr);
+    m_doc->setMode(Doc::Operate);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(runOnList(ShowControl::Reset, ShowControl::RouteKey));
+    tick();
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+}
+
+void PadRunRules_Test::aRealGoEndsTheRedAndTheHoldTogether()
+{
+    makeShow();
+    QVERIFY(m_doc->function(listChaser()) != nullptr);
+    m_doc->setMode(Doc::Operate);
+    PadRun *run = m_doc->programmer()->padRun();
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    run->setEnabled(true);
+    arm(true, 0);
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY(runOnList(ShowControl::Go, ShowControl::RouteKey));
+    tick();
+    QVERIFY(!keeper->emergencyStopped());
+    QVERIFY(keeper->showOnlyHeldBy() != OutputRuleKeeper::HeldByEmergencyStop);
+    QCOMPARE(run->state(), PadRun::Run);
+    QVERIFY(lightOn(0) != PadRun::stoppedColour().name());
+}
+
+void PadRunRules_Test::aVcCueListGoOrOperateEndsTheRed()
+{
+    makeShow();
+    QVERIFY(m_doc->function(listChaser()) != nullptr);
+    m_doc->setMode(Doc::Operate);
+    PadRun *run = m_doc->programmer()->padRun();
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    run->setEnabled(true);
+    arm(true, 0);
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    // A VC Cue List's GO: the double-GO guard asked, its chaser stepped,
+    // and the keeper told (VCCueList::admitDirect(), its own noteGo()).
+    QVERIFY(m_doc->showControl()->admitDirect(listChaser(), ShowControl::Go, ShowControl::RouteVcCueList));
+    keeper->noteGo();
+    tick();
+    QVERIFY(!keeper->emergencyStopped());
+    QCOMPARE(run->state(), PadRun::Run);
+
+    // Into Operate again after a stop: a new session, the stop over.
+    arm(true, 0);
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    m_doc->setMode(Doc::Design);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    m_doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    QVERIFY(!keeper->emergencyStopped());
+    QCOMPARE(run->state(), PadRun::Run);
+}
+
+void PadRunRules_Test::aLateStopPaintsNoRedTheFooterDoesNotHold()
+{
+    makeShow();
+    m_doc->setMode(Doc::Operate);
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
+    QSignalSpy rumbled(pc, &ProgrammerController::padRumbled);
+    // A stop queued from OSC's thread lands after the show moved on.
+    pc->endToolsForStop();
+    QVERIFY(!run->isArmed());
+    QVERIFY(run->state() != PadRun::Stopped);
+    QVERIFY(lightOn(0) != PadRun::stoppedColour().name());
+    for (const QList<QVariant> &r : rumbled)
+        QVERIFY(r.at(0).toInt() != 3);
 }
 
 void PadRunRules_Test::jobsRunAndFocusOnOnePadAsBefore()
@@ -2325,12 +2476,29 @@ void PadRunRules_Test::reviewNoVenueFocusFromAStoppedShow()
     PadRun *run = pc->padRun();
     FocusCallCue *fcc = pc->focusCallCue();
     run->setEnabled(true);
+    // The list really playing, on the real MasterTimer (as in the app).
+    QVERIFY(m_doc->function(listChaser()) != nullptr);
+    QVERIFY(runOnList(ShowControl::Go, ShowControl::RouteKey));
+    tick();
+    tick();
+    if (fcc->state() != FocusCallCue::Armed)
+        fcc->cueCurrent(m_list, m_cue1);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
     arm(true, 0);
     for (quint32 ch : { kLB, kRB, kLT, kRT })
         axis(ch, 255, 0);
     for (quint32 ch : { kRT, kLT, kRB, kLB })
         axis(ch, 0, 0);
     QCOMPARE(run->state(), PadRun::Stopped);
+    // The ALL OFF stopped the list: a tick later nothing waits on its cue.
+    tick();
+    tick();
+    QVERIFY(!m_doc->function(listChaser())->isRunning());
+    QCOMPARE(fcc->state(), FocusCallCue::Idle);
+    ltMenu(1);
+    QVERIFY(!pc->focusSession()->isActive());
+    // GO'd onto the focus cue again, still stopped: no venue focus from a pad.
+    focusCueAgain();
     ltMenu(1);
     QCOMPARE(fcc->state(), FocusCallCue::Armed);
     QCOMPARE(run->state(), PadRun::Stopped);

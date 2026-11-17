@@ -113,6 +113,20 @@ private slots:
     /** An off-pad ALL OFF turns an armed pad red (Stopped, one state on
      *  every surface); that ALL OFF does not end the red, a new arm does. */
     void anOffPadStopTurnsTheArmedPadRed();
+    /** A timecode GO after the stop (LTC rolling on) does not bring the
+     *  show back: the pad stays red with the footer's hold, and a
+     *  Focus-only pad is still refused the venue focus (Q254). */
+    void aTimecodeGoAfterTheStopLeavesThePadRed();
+    /** Reset after the stop plays nothing: still red. */
+    void aResetAfterTheStopLeavesThePadRed();
+    /** A real GO (execute()) ends the red and the footer's hold together. */
+    void aRealGoEndsTheRedAndTheHoldTogether();
+    /** A VC Cue List's GO (admitDirect() and noteGo()) and a switch into
+     *  Operate end the red with the hold, too. */
+    void aVcCueListGoOrOperateEndsTheRed();
+    /** A queued stop landing after the show moved on (a GO, another show)
+     *  drops the arm but paints no red the footer does not hold. */
+    void aLateStopPaintsNoRedTheFooterDoesNotHold();
     /** One pad with Run cues and Focus: as before (armed, LT + Menu, the
      *  arm put by and back; not armed, refused saying to arm). */
     void jobsRunAndFocusOnOnePadAsBefore();
@@ -218,6 +232,12 @@ private:
     void offPadStop();
     /** "GO works again" double buzzes since @p spy began. */
     static int doubleBuzzes(const QSignalSpy &spy);
+    /** The main list's chaser (the Show Tree list makeShow() made). */
+    quint32 listChaser() const;
+    /** @p command on the main list from @p route, carried out for real. */
+    bool runOnList(ShowControl::Command command, ShowControl::Route route);
+    /** One MasterTimer tick, then the queued signals delivered. */
+    void tick();
 
 private:
     Doc *m_doc = nullptr;

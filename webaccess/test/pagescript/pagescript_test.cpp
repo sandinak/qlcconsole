@@ -1065,6 +1065,10 @@ void PageScript_Test::noStopIsShownThatWasNotSent()
     QVERIFY(text(QStringLiteral("msg")).contains(QStringLiteral("connection")));
     pad(QJsonObject(), 50);
 
+    // A stray answer, nothing being sent: nothing shown changes.
+    hear(QStringLiteral("RUN|ack|alloff|ok"));
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT CONFIRMED"));
+
     // A closed socket: nothing can go, and the page says so.
     pad(four);
     QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT SENT"));
