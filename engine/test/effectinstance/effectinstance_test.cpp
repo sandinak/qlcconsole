@@ -5355,10 +5355,35 @@ void EffectInstance_Test::fireSpreadIntensityScalesTheFire()
         const auto asItWas = look(-1);          // never set: 100 %
         const auto full = look(100);
         const auto half = look(50);
+        /* A look saved before Intensity, with the old 0-1 "intensity" at
+           0.5: loaded, it is Intensity 50 % and the old key is gone. */
+        const auto old = look(-1);
+        {
+            QLCPalette src(QLCPalette::Effect, m_doc);
+            src.setID(old.second->id());
+            src.setScriptPath(old.second->scriptPath());
+            for (auto it = old.second->effectParamValues().constBegin();
+                 it != old.second->effectParamValues().constEnd(); ++it)
+                src.setEffectParamValue(it.key(), it.value());
+            src.setEffectParamValue("intensity", 0.5);
+            QBuffer buf;
+            buf.open(QIODevice::WriteOnly);
+            QXmlStreamWriter w(&buf);
+            QVERIFY(src.saveXML(&w));
+            buf.close();
+            buf.open(QIODevice::ReadOnly);
+            QXmlStreamReader r(&buf);
+            r.readNextStartElement();
+            old.second->clearEffectParamValues();
+            QVERIFY(old.second->loadXML(r));
+            QCOMPARE(old.second->effectParamValues().value("fireIntensity"), 50.0);
+            QVERIFY(!old.second->effectParamValues().contains("intensity"));
+        }
         EffectInstance a(m_doc, asItWas.first->id(), asItWas.second->id());
         EffectInstance b(m_doc, full.first->id(), full.second->id());
         EffectInstance c(m_doc, half.first->id(), half.second->id());
-        QVERIFY(a.isValid() && b.isValid() && c.isValid());
+        EffectInstance d(m_doc, old.first->id(), old.second->id());
+        QVERIFY(a.isValid() && b.isValid() && c.isValid() && d.isValid());
         int compared = 0;
         for (qint64 ms = 10000; ms < 20000; ms += 500)
         {
@@ -5366,6 +5391,7 @@ void EffectInstance_Test::fireSpreadIntensityScalesTheFire()
             const auto f100 = writesAt(b, ms);
             const auto f50 = writesAt(c, ms);
             QCOMPARE(unset, f100);
+            QCOMPARE(writesAt(d, ms), f50);       // the old 0.5 plays as 50 %
             // What carries the level: the RGB par's colour, the other's dimmer.
             const QList<QPair<quint32, quint32>> levels = {
                 qMakePair(par->id(), 0u), qMakePair(par->id(), 1u), qMakePair(par->id(), 2u),

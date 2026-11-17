@@ -49,7 +49,9 @@ private slots:
     /** Fire Spread's Intensity (board Q259) at 50 %: an RGB par with no
      *  dimmer at half its colour, a par's dimmer at half and its colour
      *  the fire's (once, not a quarter); never set, as at 100 %. In Fire and in
-     *  Front and Behind. A setting of 0-100 %, 100 % to start. */
+     *  Front and Behind. A setting of 0-100 %, 100 % to start. A look saved
+     *  with the old 0-1 "intensity" at 0.5 loads as Intensity 50 % and
+     *  plays as it. */
     void fireSpreadIntensityScalesTheFire();
     /** Spotlight Chase with no colour of its own on RGB and RGBW washes with
      *  no dimmer, a red cue under them: the hot spot is that red at the

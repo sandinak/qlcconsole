@@ -890,6 +890,27 @@ void SpreadEffects_Test::fireSpreadHoldsAsItEndsUntilLetGo()
         QVERIFY(inst.runDone());
     }
 
+    /* Once to Release still ends on time (the cue's, here the effect's own
+       8 s), not when the fire has spread: let go then, not before. */
+    {
+        QLCPalette *fire = effectPalette(m_doc, "fire-spread.js", { { "edge", 0.0 }, { "spreadTime", 2.0 } });
+        fire->setEffectParamValue(EffectRuns::runsKey(), 1);         // Once
+        fire->setEffectParamValue(EffectRuns::atEndKey(), 1);        // Release
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        scene->addFixture(nearWash->id());
+        scene->addFixture(farWash->id());
+        scene->addPalette(aim->id());
+        scene->addPalette(fire->id());
+        EffectInstance inst(m_doc, scene->id(), fire->id());
+        QVERIFY(inst.isValid());
+        QHash<quint64, int> f = frameAt(inst, 5000);
+        QVERIFY2(lit(f, nearWash) && lit(f, farWash), "Once to Release let go when the fire had spread");
+        f = frameAt(inst, 8500);
+        QVERIFY2(f.isEmpty(), "Once to Release did not let go at its time");
+        QVERIFY(inst.runDone());
+    }
+
     /* On the wire: a fire of a third of a second, no flare, run Once and
        held; then let go each way. Over black: 0 after. */
     QLCPalette *fire = effectPalette(m_doc, "fire-spread.js",

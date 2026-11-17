@@ -437,12 +437,12 @@ it again from the point.
 
 **Keeping the fire as it ends.** To have the fire spread once and then
 stay on stage as it stands, set **Runs** to **Once** and **At the end**
-to **Hold** (the default for Once). With **Length** on auto, Once runs
+to **Hold** (the default for Once). With **Length** on auto, Once to Hold runs
 until the fire has reached every head and settled, however long the
 spread takes, and then holds that last frame. It holds until the cue
 is released, you GO to a cue without the effect, or you use **Stop all**
 or the emergency stop (**All Off**), which clear it at once. **Release**
-instead lets go at the end. A set **Length** ends the run at that time
+instead lets go at the end of the cue's time, as before. A set **Length** ends the run at that time
 instead.
 
 | Setting | Does |

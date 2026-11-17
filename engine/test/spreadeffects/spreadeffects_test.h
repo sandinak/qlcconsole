@@ -65,7 +65,8 @@ private slots:
      *  generic 8 s -- and that last frame stays, every wash burning, frame
      *  for frame long after. On the wire: held, then let go to 0 by each
      *  of the cue released, GO to a cue without the effect, Stop all and
-     *  the emergency stop (All Off). */
+     *  the emergency stop (All Off). Once to Release still ends at its
+     *  time, not when the fire has spread. */
     void fireSpreadHoldsAsItEndsUntilLetGo();
     /** Fire Spread's Colours: Fire (the default), and Front and Behind
      *  with no colour to be the front, are byte for byte the script as it

@@ -2108,6 +2108,30 @@ void LookEditor_Test::fireSpreadShowsItsIntensity()
     QDoubleSpinBox *inten = again.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
     QVERIFY(inten != nullptr);
     QCOMPARE(inten->text(), QString("50%"));
+
+    // A look saved with the old 0-1 "intensity" at 0.5 opens on 50%.
+    {
+        QLCPalette src(QLCPalette::Effect, &doc);
+        src.setID(look->id());
+        src.setScriptPath(look->scriptPath());
+        src.setEffectParamValue("intensity", 0.5);
+        QBuffer b2;
+        b2.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w2(&b2);
+        QVERIFY(src.saveXML(&w2));
+        b2.close();
+        b2.open(QIODevice::ReadOnly);
+        QXmlStreamReader r2(&b2);
+        r2.readNextStartElement();
+        look->clearEffectParamValues();
+        QVERIFY(look->loadXML(r2));
+    }
+    LookEditor oldLook(&doc);
+    oldLook.setPalette(look->id());
+    QDoubleSpinBox *fromOld = oldLook.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
+    QVERIFY(fromOld != nullptr);
+    QCOMPARE(fromOld->text(), QString("50%"));
+    QVERIFY(oldLook.findChild<QWidget *>("effectParam_intensity") == nullptr);
 }
 
 /* Pictures of Fire Spread's settings at three window sizes, as it opens

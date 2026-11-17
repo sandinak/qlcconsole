@@ -30,9 +30,9 @@
   Intensity (0-100 %) scales the fire's own light, every head but a relay
   (on or off), as the effect's own Dimmer does (ownLevel()); 0 % leaves a
   relay off too. A look saved before it with the old 0-1 "intensity"
-  still plays at that level (read, not shown).
+  becomes its Intensity as the show loads (QLCPalette::loadXML()).
 
-  Run Once (the look's Runs), with Length auto, it ends when the fire has
+  Run Once to Hold (the look's Runs), with Length auto, it ends when the fire has
   reached every head and settled (state.done; effect.endsWhenDone) -- not
   at the cue's time -- and At the end: Hold keeps that last frame until
   the cue is released, stopped or replaced.
