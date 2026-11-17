@@ -1150,9 +1150,40 @@ void HIDPlugin::dropDevice(HIDDevice *dev)
     if (m_trace != nullptr && dev->axisCount() >= 0)
         m_trace->gone(dev);
     m_devices.removeAll(dev);
+    m_deviceIds.remove(dev);
     m_diagnosticsStarted.remove(dev);
     emit deviceRemoved(dev);
     disposeOffThread(dev);
+}
+
+quint64 HIDPlugin::deviceId(HIDDevice *dev)
+{
+    auto it = m_deviceIds.find(dev);
+    if (it == m_deviceIds.end())
+    {
+        it = m_deviceIds.insert(dev, ++m_nextDeviceId);
+        dev->setDeviceId(it.value());       // carried with each value it reads
+    }
+    return it.value();
+}
+
+quint64 HIDPlugin::inputDeviceReplacement(quint64 id) const
+{
+    quint64 now = 0;
+    for (int hops = 0; hops < 64 && m_replacedBy.contains(id); ++hops)
+        now = id = m_replacedBy.value(id);
+    return now;
+}
+
+quint64 HIDPlugin::inputDeviceId(quint32 input) const
+{
+    /* An id given when the device came into the list and never given
+       again (a pointer can be: a device made where a dropped one was):
+       the same while it stays, whatever line it moves to; another device
+       on the line, another id (board Q253's fourth review). */
+    if (input >= quint32(m_devices.size()))
+        return 0;
+    return m_deviceIds.value(m_devices.at(int(input)), 0);
 }
 
 void HIDPlugin::renumberLines()
@@ -1165,7 +1196,10 @@ void HIDPlugin::renumberLines()
        them, or back after being switched off, sent its input under a line
        no patch listens to. Keep them in step. */
     for (int i = 0; i < m_devices.size(); ++i)
+    {
         m_devices.at(i)->setLine(quint32(i));
+        deviceId(m_devices.at(i));      // a device new to the list gets its id
+    }
 }
 
 void HIDPlugin::applyScan(const QList<HIDFound> &found, const QSet<QString> &stale,
@@ -1396,6 +1430,11 @@ void HIDPlugin::applyOpened(const QString &path, quint64 job, HIDDevice *dev)
         emit deviceAdded(dev);
         setupDiagnostics(dev);
         changed = true;
+        // Its line's device is another now -- the same pad, re-enumerated there.
+        const quint64 oldId = m_deviceIds.value(old, 0);
+        m_deviceIds.remove(old);
+        if (oldId != 0)
+            m_replacedBy.insert(oldId, deviceId(dev));
     }
     else
     {
@@ -1543,6 +1582,7 @@ void HIDPlugin::addDevice(HIDDevice* device)
 
     device->setLine(quint32(m_devices.count()));
     m_devices.append(device);
+    deviceId(device);
     if (m_trace != nullptr && device->axisCount() >= 0)
         m_trace->arrived(device, QString());
     emit deviceAdded(device);
@@ -1556,6 +1596,7 @@ void HIDPlugin::removeDevice(HIDDevice* device)
 
     m_devices.removeAll(device);
 
+    m_deviceIds.remove(device);
     emit deviceRemoved(device);
     delete device;
 
@@ -1705,11 +1746,27 @@ void HIDPlugin::ensureStickTimer()
         m_stickTimer->start();
 }
 
-void HIDPlugin::slotDeviceValue(quint32 universe, quint32 line, quint32 channel, uchar value)
+void HIDPlugin::slotDeviceValue(quint64 device, quint32 line, quint32 channel, uchar value)
 {
-    /* Queued from the device's thread: found by its line, never the
-       sender (it may have been replaced since). */
-    HIDDevice *dev = device(line);
+    /* Queued from the device's thread: found by its id, never the sender
+       (it may have been replaced since). A value read before the device
+       moved to another line (one before it went) is the device's on the
+       line it is on now -- a stop press in flight on a pad that stays is
+       not lost across another pad's drop, nor given to the pad now on its
+       old line (round-5 review). A device gone since: its value goes
+       nowhere. */
+    const quint32 universe = UINT_MAX;
+    if (device != 0)
+    {
+        int now = -1;
+        for (int i = 0; i < m_devices.size() && now < 0; ++i)
+            if (m_deviceIds.value(m_devices.at(i), 0) == device)
+                now = i;
+        if (now < 0)
+            return;
+        line = quint32(now);
+    }
+    HIDDevice *dev = this->device(line);
     if (dev != nullptr && dev->line() == line)
     {
         if (StickFilter *f = stickFilter(dev))

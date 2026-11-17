@@ -16,6 +16,7 @@
 */
 
 #include <QTimer>
+#include <QSet>
 
 #include "inputdevicenotices.h"
 #include "inputoutputmap.h"
@@ -56,6 +57,10 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
     if (iom == nullptr)
         return list;
 
+    /* A spare unplugged and plugged back goes to the first universe in
+       order that waits for its name (retryOfflinePatches()): only that one
+       is told it can take it over. */
+    QSet<QString> advised;
     foreach (Universe *uni, iom->universes())
     {
         if (uni == nullptr)
@@ -95,6 +100,15 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
             d.connected = false;
             d.slotCount = slotNames.count();
             d.slotDevices = slotNames;
+            d.sameNameHere = plugin->inputs().contains(rec.uid);
+            // One that no universe has: only that one may take over (round-8 review).
+            d.spareHere = d.sameNameHere && iom->hasFreeInputDevice(plugin, rec.uid);
+            if (d.spareHere && uni->hasInputSlot() == false)
+            {
+                const QString key = rec.plugin + QLatin1Char('\n') + rec.uid;
+                d.spareHere = advised.contains(key) == false;
+                advised.insert(key);
+            }
             list << d;
         }
     }
@@ -125,6 +139,31 @@ QString InputDeviceNotices::kindName(const QString &plugin)
     if (plugin == QLatin1String("MIDI"))
         return tr("MIDI device");
     return tr("Input device");
+}
+
+QString InputDeviceNotices::goneText(const Device &d, bool disconnected)
+{
+    /* Another device of that exact name connected: the universe is not
+       given it by itself (it may not be the same pad; board Q253). One no
+       universe has may be used here -- said how; one another universe has
+       is that universe's, and nothing is said of it (round-8 review). */
+    if (d.spareHere)
+        return disconnected
+            ? tr("%1 '%2' disconnected — universe %3 waits for its own device. Another '%2' is connected: "
+                 "to use it here, unplug it and plug it back in, or patch it in Inputs/Outputs.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+            : tr("%1 '%2' not connected — universe %3 waits for its own device. Another '%2' is connected: "
+                 "to use it here, unplug it and plug it back in, or patch it in Inputs/Outputs.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+    if (d.sameNameHere)
+        return disconnected
+            ? tr("%1 '%2' disconnected — universe %3 waits for its own device.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+            : tr("%1 '%2' not connected — universe %3 waits for its own device.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+    return disconnected
+        ? tr("%1 '%2' disconnected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+        : tr("%1 '%2' not connected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1);
 }
 
 void InputDeviceNotices::schedule()
@@ -163,14 +202,12 @@ void InputDeviceNotices::settleNow()
         else if (d.connected == false && known == false)
         {
             // A show opened with it switched off, or asleep.
-            said << tr("%1 '%2' not connected — universe %3")
-                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+            said << goneText(d, false);
             warning = true;
         }
         else if (d.connected == false && was->connected)
         {
-            said << tr("%1 '%2' disconnected — universe %3")
-                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+            said << goneText(d, true);
             warning = true;
         }
         else if (d.connected && d.slotCount > 1 && seen && (known == false || was->connected == false))
@@ -238,8 +275,11 @@ void InputDeviceNotices::updateStatus(const QList<Device> &now) const
     {
         if (d.connected)
             continue;
-        const QString line = tr("%1 '%2' not connected — universe %3")
-                                 .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+        // The footer's plain line: waiting for its own device, when one of that name is here.
+        const QString line = d.sameNameHere
+            ? tr("%1 '%2' not connected — universe %3 waits for its own device")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+            : tr("%1 '%2' not connected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1);
         if (first.isEmpty())
             first = line;
         items << line;

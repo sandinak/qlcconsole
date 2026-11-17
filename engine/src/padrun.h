@@ -415,6 +415,8 @@ public:
      *  made on it drops as controllerLost() -- its releases may never have
      *  come, so a held safety is no safety on the pad there now. */
     void forgetPad(quint32 universe);
+    /** A walk's cue step restarts Focus this cue: its stop is no end. */
+    bool isRestarting() const { return m_restarting; }
 
     /*********************************************************************
      * Venue focus from the pad (rule 6)
@@ -482,7 +484,7 @@ public:
     void updateTriggers(bool force = false);
 
     /** A touchpad reading / click, kept for the tick. */
-    void touchValue(GamepadRole::Role role, float norm);
+    void touchValue(GamepadRole::Role role, float norm, quint32 universe = UINT_MAX);
     void touchClick(bool down);
     /** The controller tick: a swipe made since the last, acted on. */
     void swipeTick(double dt);
@@ -661,8 +663,9 @@ private:
     void armChordFired(const QString &pad);
     /** Start or stop timing the chord of the pad on @p universe from what
      *  it holds now (padHeld()). Each pad times its own chord
-     *  (CONTROLLER_JOBS.md 6). */
-    void armChordUpdate(quint32 universe);
+     *  (CONTROLLER_JOBS.md 6). @p bumperDown: this event was a bumper
+     *  going down (a spent chord pressed again is told to let go of both). */
+    void armChordUpdate(quint32 universe, bool bumperDown = false);
     /** Stop timing every pad's chord. */
     void stopArmChords();
     /** reset() without telling the screens (the caller does). @p four:
@@ -828,6 +831,8 @@ private:
     bool m_chordPending = false;    ///< both down, still timing
     bool m_chordFired = false;      ///< switched: the releases do nothing
     TouchSwipe m_swipe;
+    /** The pad the touchpad was last read from: a swipe's walk is its. */
+    quint32 m_touchUniverse = UINT_MAX;
     /** A GO just went: playing, whatever its fade. */
     QTimer *m_flash = nullptr;
     QTimer *m_noticeTimer = nullptr;

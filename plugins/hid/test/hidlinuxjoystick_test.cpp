@@ -91,9 +91,9 @@ bool press(int writer, short value)
 }
 }
 
-void HIDLinuxJoystick_Test::padValue(quint32 universe, quint32 line, quint32 channel, uchar value)
+void HIDLinuxJoystick_Test::padValue(quint64 device, quint32 line, quint32 channel, uchar value)
 {
-    Q_UNUSED(universe);
+    Q_UNUSED(device);
     Q_UNUSED(line);
     if (channel == 0)
         s_pressed.storeRelaxed(value);
@@ -131,8 +131,8 @@ void HIDLinuxJoystick_Test::aPadThatGoesIsWaitedForAndReadAgain()
     HIDLinuxJoystick *pad = new HIDLinuxJoystick(nullptr, 0, &info);
     s_pressed.storeRelaxed(-1);
     /* By name: the plugin's signals are its DLL's (dllsignals_test). */
-    QVERIFY(connect(pad, SIGNAL(valueChanged(quint32,quint32,quint32,uchar)),
-                    this, SLOT(padValue(quint32,quint32,quint32,uchar)), Qt::QueuedConnection));
+    QVERIFY(connect(pad, SIGNAL(valueChanged(quint64,quint32,quint32,uchar)),
+                    this, SLOT(padValue(quint64,quint32,quint32,uchar)), Qt::QueuedConnection));
     QVERIFY(pad->openInput());
     QTRY_VERIFY(pad->isRunning());
     QVERIFY(pad->handle() >= 0);

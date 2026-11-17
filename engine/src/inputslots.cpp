@@ -160,9 +160,39 @@ int InputOutputMap::slotDeviceLine(quint32 universe, const Universe::InputSlotDe
         return lines.indexOf(dev.uid);
 
     /* Any game controller: the one it has, while it is still here (two
-       pads on must not swap it to and fro), else the first one free. */
+       pads on must not swap it to and fro), else the first one free. The
+       one it has is its DEVICE, wherever it moved (round-8 review: a pad
+       before it unplugged shifts it, and a spare onto its old line). */
     InputPatch *ip = m_universeArray.at(universe)->inputPatch();
-    if (ip != nullptr && ip->plugin() == plugin && ip->isPatched()
+    /* @p other holds line @p l: by its DEVICE where the plugin tells one,
+       not by the line index it was patched to -- a slot universe later in
+       the order may still sit on its old index after a pad before it went
+       (applyInputSlots() walks them in order), and two slots must not
+       swap pads over it. */
+    auto holds = [plugin](const InputPatch *other, quint32 l) {
+        return other->deviceId() != 0 ? other->deviceId() == plugin->inputDeviceId(l)
+                                      : other->input() == l;
+    };
+    // Another universe is patched to line @p l now.
+    auto takenByOther = [&](quint32 l) {
+        for (quint32 u = 0; u < universesCount(); ++u)
+        {
+            const InputPatch *other = u == universe ? nullptr : m_universeArray.at(u)->inputPatch();
+            if (other != nullptr && other->plugin() == plugin && holds(other, l))
+                return true;
+        }
+        return false;
+    };
+    if (ip != nullptr && ip->plugin() == plugin && ip->isPatched() && ip->deviceId() != 0)
+    {
+        for (int l = 0; l < lines.count(); ++l)
+            if (plugin->inputDeviceId(quint32(l)) == ip->deviceId() && isGamepadLine(plugin, quint32(l))
+                && takenByOther(quint32(l)) == false)
+                return l;
+    }
+    const bool keptTaken = ip != nullptr && takenByOther(ip->input());
+    if (ip != nullptr && ip->plugin() == plugin && ip->isPatched() && keptTaken == false
+        && ip->deviceId() == 0
         && int(ip->input()) < lines.count() && lines.at(int(ip->input())) == ip->inputUID()
         && isGamepadLine(plugin, ip->input()))
         return int(ip->input());
@@ -175,7 +205,7 @@ int InputOutputMap::slotDeviceLine(quint32 universe, const Universe::InputSlotDe
             if (u == universe)
                 continue;
             InputPatch *other = m_universeArray.at(u)->inputPatch();
-            if (other != nullptr && other->plugin() == plugin && int(other->input()) == l)
+            if (other != nullptr && other->plugin() == plugin && holds(other, quint32(l)))
                 taken = true;
             foreach (const Universe::InputSlotDevice &d, m_universeArray.at(u)->inputSlot())
                 if (d.anyGamepad == false && d.plugin == dev.plugin && d.uid == lines.at(l))
@@ -285,7 +315,13 @@ bool InputOutputMap::applyInputSlot(quint32 universe)
     if (winner >= 0)
     {
         const QString uid = plugin->inputs().value(line);
-        if (winner == live && patched && ip->plugin() == plugin && ip->inputUID() == uid)
+        /* "Still the one" is the same DEVICE where the plugin can tell
+           (QLCIOPlugin::inputDeviceId()), not the same name: another pad of
+           that name is a pad lost and a new one, through setInputPatch()
+           below -- never moved onto silently, armed (round-7 review). */
+        const quint64 lineId = plugin->inputDeviceId(quint32(line));
+        const bool sameDevice = ip == nullptr || ip->deviceId() == 0 || lineId == 0 || ip->deviceId() == lineId;
+        if (winner == live && patched && ip->plugin() == plugin && ip->inputUID() == uid && sameDevice)
         {
             if (int(ip->input()) != line)
             {

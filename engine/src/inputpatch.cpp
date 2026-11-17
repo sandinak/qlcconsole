@@ -102,6 +102,9 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     m_profile = profile;
     m_inputUID = (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
                  ? m_plugin->inputs().value(int(m_pluginLine)) : QString();
+    // The device it is patched to (0: the plugin can't tell): followed by it.
+    m_deviceId = (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+                 ? m_plugin->inputDeviceId(m_pluginLine) : 0;
 
     if (m_plugin != NULL)
     {
@@ -152,6 +155,10 @@ bool InputPatch::reconnect()
 {
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
     {
+        /* The device on the line now (another, if one took its place): the
+           plugin's list says, not the open -- read here, as the patch is
+           reconnected, not when the deferred open runs (IODeferral). */
+        m_deviceId = m_plugin->inputDeviceId(m_pluginLine);
         QLCIOPlugin *plugin = m_plugin;
         const quint32 line = m_pluginLine, universe = m_universe;
         const QMap<QString, QVariant> params = m_parametersCache;
@@ -398,13 +405,24 @@ void InputPatch::flush(quint32 universe)
     if (universe != UINT_MAX && universe != m_universe)
         return;
 
+    /* Off the GUI thread, the frame goes from the buffer to the queue in
+       ONE locked step (round-5 review): a deliverNow() between the two
+       would find neither, and the frame would come later -- after the
+       pad was reset, as the new device's. */
+    const bool here = QThread::currentThread() == thread();
     QHash<quint32, InputValue> batch;
     {
         QMutexLocker inputBufferLocker(&m_inputBufferMutex);
-        batch.swap(m_inputBuffer);
+        if (m_inputBuffer.isEmpty())
+            return;
+        if (here)
+            batch.swap(m_inputBuffer);
+        else
+        {
+            m_pendingFrames.append(m_inputBuffer);
+            m_inputBuffer.clear();
+        }
     }
-    if (batch.isEmpty())
-        return;
 
     /* Universe::processFaders() flushes on the universe's own thread, once a
        frame, and every receiver lives on the GUI thread: emitting there made
@@ -412,14 +430,42 @@ void InputPatch::flush(quint32 universe)
        universes of changing Art-Net input, with the event queue's lock fought
        over by every universe thread). One queued call per universe per frame
        instead; the values go out from the GUI thread, in the same order, to
-       the same receivers (pb5). */
-    if (QThread::currentThread() == thread())
+       the same receivers (pb5). The frame waits in m_pendingFrames, so
+       deliverNow() can still deliver it first. */
+    if (here)
     {
         emitValues(batch);
         return;
     }
-    QMetaObject::invokeMethod(this, [this, batch = std::move(batch)]() { emitValues(batch); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(this, &InputPatch::deliverPendingFrame, Qt::QueuedConnection);
+}
+
+void InputPatch::deliverPendingFrame()
+{
+    QHash<quint32, InputValue> batch;
+    {
+        QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+        if (m_pendingFrames.isEmpty())
+            return;     // delivered already (deliverNow())
+        batch = m_pendingFrames.takeFirst();
+    }
+    emitValues(batch);
+}
+
+void InputPatch::deliverNow()
+{
+    QList<QHash<quint32, InputValue>> frames;
+    {
+        QMutexLocker inputBufferLocker(&m_inputBufferMutex);
+        frames.swap(m_pendingFrames);
+        if (!m_inputBuffer.isEmpty())
+        {
+            frames.append(m_inputBuffer);
+            m_inputBuffer.clear();
+        }
+    }
+    for (const QHash<quint32, InputValue> &frame : std::as_const(frames))
+        emitValues(frame);
 }
 
 void InputPatch::emitValues(const QHash<quint32, InputValue> &values)

@@ -304,12 +304,44 @@ show from any pad.
   cues. The walk beside the runner also ends by itself, saying why, if
   the show goes into Operate, the role is switched, or the walking pad
   loses its Focus job or is unplugged (a change not kept goes back).
+- **The follow spot beside a tool.** A pad with Follow spot keeps
+  steering the spot (its sticks, the fine stick, D-pad speed and size)
+  while another pad works a tool: Venue focus, Focus mode, Focus this cue
+  or look, or the walk. If the tool is working on the follow spot's own
+  lights (the focus call, the walk's layer, or the cue or look being
+  focused lights one of them, or aims a light at the subject the follow
+  spot is following), the spot **holds** instead: it stops at
+  once, the follow spot chip in the footer says *Follow spot holds:
+  Venue Focus is working on its lights* (or the tool it is), and nothing
+  pushed on its pad moves it. When the tool ends or moves off those
+  lights it steers again once its stick has come back to centre: a stick
+  held through the change never jumps the spot. One pad with both jobs
+  gives its sticks to the tool, as before. A tool started on the laptop
+  belongs to the first pad with Focus to press a button (not the D-pad:
+  on the follow spot's pad that stays the spot's); until then the follow
+  spot's pad steers on, and with only one controller connected the tool
+  has its sticks at once.
 - Buzzes, trigger feel and the names of buttons in a message go to the
   pad they are about: the runner's armed triggers and GO buzz are on the
   runner, the emergency stop buzzes every pad.
   Focus mode is in the Tools role, and Run /
   Tools is switched on the computer (the Run tab's **Pad:** button) for
   every pad: a View + Menu tap in Run on a Focus-only pad says so.
+- **A pad that is replaced is a pad lost.** If the pad that runs cues
+  re-enumerates, or (on Linux, two pads of one name) another pad takes its
+  place on its line because one before it was unplugged, it is disarmed as
+  if unplugged: the chip says *Disarmed: the controller went away.*, and
+  nothing it was holding counts. Arm again with LB + RB. Another pad
+  being unplugged does not disturb the pads that stay: each keeps its own
+  universe, its arm, the LT it holds and a stop it is squeezing.
+  A spare of the same model that is already connected (on charge, say)
+  never takes over an unplugged pad's universe by itself: the notice says
+  the universe waits for its own device. When a spare that no universe
+  uses is connected, the notice also says how to use it there: unplug it
+  and plug it back in, or patch it in Inputs/Outputs. With two universes
+  waiting for that model, only the first (the lower number, the one a
+  replugged spare goes to) is told. A pad another universe uses is never
+  suggested.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a
@@ -318,8 +350,9 @@ show from any pad.
   controller twice; with the same address (or USB port) it is one
   controller here: the Pad chip names no second runner, both get the same
   light, and one press is one action -- one LT + A is one GO, one RT one
-  hit, the four one stop. Two pads of one model told apart by address
-  or USB port stay two pads.
+  hit, the four one stop -- and its fine stick steers
+  the follow spot once, not twice as fast. Two pads of one model told
+  apart by address or USB port stay two pads.
 - **Each pad times its own arm chord.** Another pad squeezing LB + RB
   while the runner holds its own never cuts the runner's half second.
 
@@ -370,6 +403,45 @@ list. Set pad A to **Run cues** only and pad B to **Focus** only.
     Menu. *Expected:* refused: *Not armed. To start the venue focus, hold
     LB and RB to arm, then LT + Menu.* Arm A, LT + Menu: **Pad: FOCUS**,
     not armed; LT + Menu again: ARMED (as before jobs).
+14. The follow spot beside a walk. Set A to **Focus** only and B to
+    **Follow spot** only; the show in Design, a follow spot on (its scene
+    open in the Workbench, B named as its stick on the footer chip), and
+    a cue whose first layer lights other fixtures and whose second layer
+    lights the follow spot's. Pick that cue, turn the Run role on and
+    press Menu on A (the walk, on layer 1). Push B's left stick.
+    *Expected:* the subject moves; the follow spot chip says *stick
+    moving* and nothing about holding. B's right stick trims it, B's
+    D-pad Up steps the speed.
+15. Keep B's stick pushed and press RB on A (the walk's next layer: the
+    follow spot's lights). *Expected:* the spot stops at once; the follow
+    spot chip says *Follow spot holds: the walk is working on its lights*;
+    B's sticks and D-pad move nothing.
+16. Still holding B's stick, press LB on A (back to layer 1).
+    *Expected:* the hold words go, but the spot does not move. Let B's
+    stick come back to centre, then push it: the spot steers again.
+17. On A press Menu (the walk ends) while B steers. *Expected:* the spot
+    keeps moving with B's stick throughout; nothing jumps.
+18. Walk ended, B steering. Start **Focus This Look** on the laptop on a
+    look that lights the follow spot's fixtures, then press Y on A (A
+    takes the tool). *Expected:* the follow spot chip says *Follow spot
+    holds: Focus This Look is working on its lights*; A's sticks work the
+    look; B's stick moves nothing. End the look on the laptop, let B's
+    stick come back to centre and push: the spot steers.
+19. A walking (Run role, Design), B steering: on A, press RT to step to
+    the next cue. *Expected:* B's stick and held right stick keep the spot
+    moving; A's sticks stay the walk's; a press on a third pad with Focus
+    says *Another controller is in use.*
+20. Arm A, hold LT, and switch A off and on (or unplug it and plug it
+    back) still holding LT. *Expected:* the chip says *Disarmed: the
+    controller went away.*; pressing A plays nothing. Arm again (LB + RB),
+    hold LT and press A: GO. With three pads of the same kind, arm the
+    last one, hold its LT, and unplug the first: the last stays armed, LT
+    + A plays, and plugging the first back in gives it its own universe
+    again (not another pad's).
+21. Set A to Run cues. Disarmed, on A: hold LB + RB, squeeze LT and let it go,
+    let go of RB and press it again. *Expected:* nothing arms; the chip
+    says *Let go of both bumpers, then hold LB and RB again.* Let go of
+    both and hold LB + RB: it arms.
 
 Write down any step that did not give its expected result, with the pads
 and how they were connected.

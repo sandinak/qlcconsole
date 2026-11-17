@@ -23,6 +23,8 @@
 #include <QLabel>
 #include <QtTest>
 #include <QScopeGuard>
+#include <QRegularExpression>
+#include <QDir>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -60,6 +62,7 @@
 #include "qlcpoint.h"
 #include "cuerunner.h"
 #include "controlmap.h"
+#include "scene.h"
 
 #include "padrunrulesui_test.h"
 #include "../common/padframe.h"
@@ -982,6 +985,205 @@ void PadRunRulesUi_Test::venueFocusShots()
     run->setEnabled(false, false);
     doc->setMode(Doc::Design);
     settle(50);
+}
+
+void PadRunRulesUi_Test::aChangedDeviceDisarmsOnTheChip()
+{
+    /* Another device behind the armed pad's patch (re-enumerated where it
+       was, another pad shifted onto its line): the pad lost -- the footer's
+       chip, as drawn, and the Run tab's button say it is not armed and why
+       (board Q253's fourth review). */
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    m_stub->m_deviceIds = { { 0, 1 } };
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    PadRun *run = doc->programmer()->padRun();
+    auto restore = qScopeGuard([&]() {
+        m_stub->m_deviceIds.clear();
+        run->setEnabled(false, false);
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        settle(50);
+    });
+    run->setEnabled(true, false);
+    run->setArmChordMs(15);
+    auto value = [&](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    value(kLB, 255);
+    value(kRB, 255);
+    QTRY_VERIFY(run->isArmed());
+    value(kRB, 0);
+    value(kLB, 0);
+    value(kLT, 255);
+    QLabel *chip = m_app->padRoleChip();
+    QToolButton *btn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+    QVERIFY(btn != nullptr);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && chip->text().startsWith(QStringLiteral("Pad: ARMED")),
+                              qPrintable(chip->text()), 2000);
+    m_stub->m_deviceIds[0] = 2;
+    emit m_stub->configurationChanged();
+    settle(50);
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->text() == QStringLiteral("Pad: Run · Disarmed: the controller went away."),
+                              qPrintable(chip->text()), 2000);
+    QCOMPARE(btn->text(), QString("Pad: Run"));
+    QVERIFY2(!chip->styleSheet().contains(PadRun::armedColour().name()), qPrintable(chip->styleSheet()));
+    value(kLT, 0);
+}
+
+void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
+{
+    Doc *doc = m_app->doc();
+    ProgrammerController *pc = doc->programmer();
+    // Three lights: two the follow spot plays, one it does not.
+    QList<quint32> fids;
+    for (int i = 0; i < 3; ++i)
+    {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test");
+        def->setModel(QString("Q253 Spot %1").arg(i));
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        QLCFixtureHead head;
+        const QLCChannel::Group groups[] = { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity };
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("Ch %1").arg(k));
+            ch->setGroup(groups[k]);
+            ch->setControlByte(QLCChannel::MSB);
+            def->addChannel(ch);
+            mode->insertChannel(ch, k);
+            head.addChannel(k);
+        }
+        mode->insertHead(-1, head);
+        def->addMode(mode);
+        Fixture *fxi = new Fixture(doc);
+        fxi->setName(QString("Q253 Spot %1").arg(i + 1));
+        fxi->setFixtureDefinition(def, mode);
+        fxi->setUniverse(0);
+        fxi->setAddress(quint32(200 + i * 3));
+        doc->addFixture(fxi);
+        fids << fxi->id();
+    }
+    QLCPalette *follow = new QLCPalette(QLCPalette::Effect, doc);
+    follow->setName("Followspot");
+    follow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/followspot.js");
+    doc->addPalette(follow);
+    Scene *spot = new Scene(doc);
+    spot->setName("Follow");
+    doc->addFunction(spot);
+    spot->addFixture(fids.at(0));
+    spot->addFixture(fids.at(1));
+    spot->addPalette(follow->id());
+    // It follows a subject; another light aimed at that subject moves with it.
+    StageTarget *subject = doc->monitorProperties()->addStageTarget();
+    subject->setName("Soloist");
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, doc);
+    aim->setName("On Soloist");
+    aim->setStageTargetId(subject->id());
+    doc->addPalette(aim);
+    spot->addPalette(aim->id());
+    Scene *aimed = new Scene(doc);
+    aimed->setName("Another light on the subject");
+    doc->addFunction(aimed);
+    aimed->addFixture(fids.at(2));
+    aimed->addPalette(aim->id());
+    Scene *mine = new Scene(doc);
+    mine->setName("On the spot's lights");
+    doc->addFunction(mine);
+    mine->addFixture(fids.at(1));
+    Scene *others = new Scene(doc);
+    others->setName("On another light");
+    doc->addFunction(others);
+    others->addFixture(fids.at(2));
+    const quint32 wasFocused = pc->m_focusedSceneId;
+    pc->m_focusedSceneId = spot->id();      // the Workbench's follow spot
+    RefineSession *r = pc->refineSession();
+    r->setFlashEnabled(false);
+    auto restore = qScopeGuard([&]() {
+        r->stop();
+        pc->m_focusedSceneId = wasFocused;
+        doc->deleteFunction(spot->id());
+        doc->deleteFunction(mine->id());
+        doc->deleteFunction(others->id());
+        doc->deleteFunction(aimed->id());
+        doc->deletePalette(follow->id());
+        doc->deletePalette(aim->id());
+        doc->monitorProperties()->removeStageTarget(subject->id());
+        for (quint32 fid : fids)
+            doc->deleteFixture(fid);
+        settle(50);
+    });
+    QLabel *chip = m_app->followChip();
+    const QString held("Follow spot holds: Focus This Look is working on its lights");
+    QTRY_VERIFY_WITH_TIMEOUT(chip->isVisible(), 2000);
+    QVERIFY2(!chip->property("fullText").toString().contains(held), qPrintable(chip->property("fullText").toString()));
+
+    // Focus This Look on one of its lights: it holds, and the chip says why.
+    QString why;
+    QVERIFY2(r->startScene({ mine->id() }, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->property("fullText").toString().contains(held),
+                              qPrintable(chip->property("fullText").toString()), 2000);
+    QVERIFY2(chip->toolTip().contains(held), qPrintable(chip->toolTip()));
+    QCOMPARE(pc->followSpotStatus().heldBy, QString("Focus This Look"));
+    /* What the footer draws, at three sizes: the chip's own text (the
+       variant the footer fitted, "holds: Focus This Look" in its short
+       form too), on screen inside the window, and drawn (its pixels).
+       QLC_SHOT_DIR: saved for the UX review. */
+    auto shown = [&]() {
+        QString t = chip->text();
+        t.remove(QRegularExpression(QStringLiteral("<[^>]*>")));
+        return t.replace(QStringLiteral("&amp;"), QStringLiteral("&"));
+    };
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+        QDir().mkpath(shotDir);
+    const QSize was = m_app->size();
+    for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        m_app->resize(z);
+        settle(200);
+        const QString where = QString("%1x%2: '%3'").arg(z.width()).arg(z.height()).arg(shown());
+        QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && shown().contains(QStringLiteral("holds: Focus This Look")),
+                                  qPrintable(where), 2000);
+        const QPoint right = chip->mapTo(m_app, QPoint(chip->width(), chip->height()));
+        QVERIFY2(chip->width() > 20 && right.x() <= m_app->width() && right.y() <= m_app->height(),
+                 qPrintable(QString("%1: the chip is squeezed or off the window").arg(where)));
+        const QImage drawn = chip->grab().toImage();
+        QSet<QRgb> colours;
+        for (int y = 0; y < drawn.height() && colours.size() < 3; ++y)
+            for (int x = 0; x < drawn.width() && colours.size() < 3; ++x)
+                colours.insert(drawn.pixel(x, y));
+        QVERIFY2(colours.size() >= 2, qPrintable(QString("%1: the chip draws nothing").arg(where)));
+        if (!shotDir.isEmpty())
+        {
+            const QPixmap full = m_app->grab();
+            const int h = 44 * int(full.devicePixelRatio());
+            full.copy(0, full.height() - h, full.width(), h)
+                .save(QDir(shotDir).filePath(QStringLiteral("after-footer-follow-spot-holds-%1x%2.png")
+                                             .arg(z.width()).arg(z.height())));
+            m_app->grab().save(QDir(shotDir).filePath(QStringLiteral("after-window-follow-spot-holds-%1x%2.png")
+                                                      .arg(z.width()).arg(z.height())));
+        }
+    }
+    m_app->resize(was);
+    settle(50);
+
+    // On another light: no hold, nothing said of one.
+    r->stop();
+    QVERIFY2(r->startScene({ others->id() }, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_VERIFY2_WITH_TIMEOUT(!chip->property("fullText").toString().contains("holds")
+                                  && !shown().contains(QStringLiteral("holds")),
+                              qPrintable(shown()), 2000);
+    QCOMPARE(pc->followSpotStatus().heldBy, QString());
+    r->stop();
+
+    // A light aimed at the follow spot's subject (not one of its own): it holds too.
+    QVERIFY2(r->startScene({ aimed->id() }, 0xFFFFFFFF, &why), qPrintable(why));
+    QTRY_VERIFY2_WITH_TIMEOUT(chip->isVisible() && shown().contains(QStringLiteral("holds: Focus This Look")),
+                              qPrintable(shown()), 2000);
+    QCOMPARE(pc->followSpotStatus().heldBy, QString("Focus This Look"));
+    r->stop();
+    QTRY_VERIFY2_WITH_TIMEOUT(!shown().contains(QStringLiteral("holds")), qPrintable(shown()), 2000);
 }
 
 int main(int argc, char **argv)

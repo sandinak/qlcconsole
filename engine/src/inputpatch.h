@@ -106,6 +106,10 @@ public:
 
     /** An input line provided by the assigned plugin */
     quint32 input() const;
+    /** The device this patch opened (QLCIOPlugin::inputDeviceId(); 0: the
+     *  plugin can't tell), as of its last set() or reconnect(): a device
+     *  that moves to another line is followed by it, not by its name. */
+    quint64 deviceId() const { return m_deviceId; }
 
     /** Friendly name of the assigned input line */
     QString inputName() const;
@@ -182,6 +186,7 @@ private:
     quint32 m_pluginLine;
     /** The line's name when it was patched (inputUID()) */
     QString m_inputUID;
+    quint64 m_deviceId = 0;
     /** The reference of an input profile if activated by the user (otherwise NULL) */
     QLCInputProfile* m_profile;
     /** HID device profile name assigned by user (stored by name, not pointer) */
@@ -221,10 +226,22 @@ public:
      *  channelMap(), setChannelMap()), and the mutex is not recursive. */
     QMutex m_inputBufferMutex;
     QHash<quint32, InputValue> m_inputBuffer;
+    /** Frames flushed on a universe thread and not yet delivered on the
+     *  GUI thread, oldest first (guarded by m_inputBufferMutex): kept here,
+     *  not in a queued call, so deliverNow() can deliver them first. */
+    QList<QHash<quint32, InputValue>> m_pendingFrames;
+
+    /** Deliver, now and in order, every value read and not yet delivered
+     *  -- the frames flushed and queued, then the buffer -- before the
+     *  device behind this patch is treated as gone (its stop press still
+     *  counts; board Q253's fourth review). GUI thread. */
+    void deliverNow();
 
 private:
     /** Emit inputValueChanged() for each of @p values (GUI thread). */
     void emitValues(const QHash<quint32, InputValue> &values);
+    /** The oldest flushed frame, delivered (the universe thread's queued call). */
+    void deliverPendingFrame();
 };
 
 /** @} */

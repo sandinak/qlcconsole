@@ -425,13 +425,13 @@ void HIDOSXJoystick::emitChanges()
     {
         if (m_sentValid && m_sent.axes[a] == m_state.axes[a])
             continue;
-        emit valueChanged(UINT_MAX, m_line, quint32(a), m_state.axes[a]);
+        emit valueChanged(deviceId(), m_line, quint32(a), m_state.axes[a]);
     }
     for (int b = 0; b < ButtonCount; ++b)
     {
         if (m_sentValid && m_sent.buttons[b] == m_state.buttons[b])
             continue;
-        emit valueChanged(UINT_MAX, m_line, quint32(m_axesNumber + b),
+        emit valueChanged(deviceId(), m_line, quint32(m_axesNumber + b),
                           m_state.buttons[b] ? UCHAR_MAX : 0);
     }
     if (m_buttonsNumber >= ButtonCount + TouchCount)
@@ -440,7 +440,7 @@ void HIDOSXJoystick::emitChanges()
         {
             if (m_sentValid && m_sent.touch[t] == m_state.touch[t])
                 continue;
-            emit valueChanged(UINT_MAX, m_line, quint32(m_axesNumber + ButtonCount + t),
+            emit valueChanged(deviceId(), m_line, quint32(m_axesNumber + ButtonCount + t),
                               m_state.touch[t]);
         }
     }
@@ -466,7 +466,7 @@ bool HIDOSXJoystick::readEvent()
         if (value != m_buttonsValues[b].value)
         {
             const uchar val = value != 0 ? UCHAR_MAX : 0;
-            emit valueChanged(UINT_MAX, m_line, m_axesNumber + b, val);
+            emit valueChanged(deviceId(), m_line, m_axesNumber + b, val);
             m_buttonsValues[b].value = value;
             if (diag)
             {
@@ -488,7 +488,7 @@ bool HIDOSXJoystick::readEvent()
         {
             // Normalize raw axis value to 0–255 using the element's logical range.
             const uchar norm = scaleToByte(value, m_axesValues[a].logicalMin, m_axesValues[a].logicalMax);
-            emit valueChanged(UINT_MAX, m_line, a, norm);
+            emit valueChanged(deviceId(), m_line, a, norm);
             m_axesValues[a].value = value;
             if (diag)
             {

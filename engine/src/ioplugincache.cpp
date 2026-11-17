@@ -92,6 +92,7 @@ void IOPluginCache::load(const QDir& dir)
                 m_plugins << ptr;
                 connect(ptr, SIGNAL(configurationChanged()),
                         this, SLOT(slotConfigurationChanged()));
+
 #if !defined(Q_OS_ANDROID) && !defined(Q_OS_IOS)
                 if (hotplug.isValid() && hotplug.toBool() == true)
                     HotPlugMonitor::connectListener(ptr);

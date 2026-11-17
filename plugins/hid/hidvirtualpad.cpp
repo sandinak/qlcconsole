@@ -74,7 +74,7 @@ void HIDVirtualPad::inject(quint32 channel, uchar value)
 {
     // As HIDOSXJoystick sends what it reads: any universe, this line.
     if (m_open)
-        emit valueChanged(UINT_MAX, m_line, channel, value);
+        emit valueChanged(deviceId(), m_line, channel, value);
 }
 
 QList<HIDVirtualPad *> HIDVirtualPad::fromEnvironment(HIDPlugin *parent)

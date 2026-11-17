@@ -596,6 +596,10 @@ public:
     /** Re-pick every slot's live device now (done by itself on each device
      *  change and retry tick). */
     void applyInputSlots();
+    /** A line of @p plugin named @p name whose device no input patch
+     *  follows (by QLCIOPlugin::inputDeviceId(); with no ids, no patch on
+     *  the line): a pad of that name that no universe has. */
+    bool hasFreeInputDevice(QLCIOPlugin *plugin, const QString &name) const;
 
     /** How a patch with saved identity @p uid would resolve here: a line
      *  index, or -1 when nothing on this machine reaches it. */
@@ -934,6 +938,12 @@ private:
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
     void slotPluginConfigurationChanged(QLCIOPlugin* plugin);
+private:
+    /** Another input patch than @p except follows device @p id of
+     *  @p plugin (QLCIOPlugin::inputDeviceId(); 0: none can). */
+    bool inputDeviceFollowed(const QLCIOPlugin *plugin, quint64 id, const InputPatch *except) const;
+private slots:
+
     void slotRetryOfflinePatches();
 
 private:

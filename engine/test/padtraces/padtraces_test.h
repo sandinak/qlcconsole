@@ -46,6 +46,41 @@ private slots:
     void cloneFlipToXbox();
     void cloneLeavesWhileArmed();
     void twinListing();
+    /** Two same-named pads with no location: A arms, holds LT and goes; B
+     *  moves onto A's line: pad A lost -- disarmed, said; B's LT + A plays
+     *  nothing (board Q253's fourth review). */
+    void aShiftedLineIsNoSafety();
+    /** Another pad's drop leaves the runner as it was (macOS-like and
+     *  Linux-like): armed, its held LT a safety, three of four of a stop
+     *  completed by the fourth. */
+    void anotherPadsDropLeavesTheRunnerAsItWas_data();
+    void anotherPadsDropLeavesTheRunnerAsItWas();
+    /** A pad re-enumerated at its path keeps its own universe (its stop
+     *  live); the other pad keeps its arm. */
+    void aPadReenumeratedKeepsItsUniverse_data();
+    void aPadReenumeratedKeepsItsUniverse();
+    /** A pad unplugged and back: its universe reopens on it, never on the
+     *  pad of the same name that took its line meanwhile. */
+    void aPadUnpluggedAndBackTakesNoOtherPad();
+    /** A spare of the same name on charge never takes an unplugged pad's
+     *  universe; the pad plugged back does (both backends). */
+    void aSpareOnChargeTakesNoUniverse_data();
+    void aSpareOnChargeTakesNoUniverse();
+    /** An "any" slot moved off a line another universe was patched to is
+     *  a pad lost: disarmed, the spare's A plays nothing. */
+    void anAnySlotTakesNoPadSilently();
+    /** An "any" slot follows its pad's device to another line, never the
+     *  spare that moved onto its old line. */
+    void anAnySlotFollowsItsPadNotTheLine();
+    /** Two "any" slots, each on its own pad; a pad before both goes: each
+     *  follows its own pad, armed, its stop on its own universe -- they
+     *  never swap pads over the line the other still sits on. */
+    void twoAnySlotsKeepTheirOwnPads_data();
+    void twoAnySlotsKeepTheirOwnPads();
+    /** A spare that was here re-enumerates where it is: still not the pad
+     *  a universe waits for. */
+    void aSpareReenumeratedTakesNoUniverse_data();
+    void aSpareReenumeratedTakesNoUniverse();
     void triggerRest();
     void triggerRestDuringTheChord();
     void aSessionIsRecorded();
@@ -64,6 +99,11 @@ private:
     void flip(bool hold);
     int commandCount(int command) const;
     int inputsNamed(const QString &name) const;
+    /** Rescan until @p count pads named @p name are listed. */
+    void q253Scan(const QString &name, int count);
+    int q253Line(const QString &path) const;
+    /** A reading on the pad at @p path, as it would send it. */
+    bool q253In(const QString &path, quint32 ch, uint value);
 
     QTemporaryDir *m_pluginDir = nullptr;
     QTemporaryDir *m_recordDir = nullptr;

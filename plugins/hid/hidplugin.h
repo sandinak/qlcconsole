@@ -127,6 +127,8 @@ public:
     QString inputDeviceKind(quint32 input) const override;
     /** @reimp -- HIDDevice::location(): the USB port, by platform. */
     QString inputDeviceLocation(quint32 input) const override;
+    quint64 inputDeviceId(quint32 input) const override;
+    quint64 inputDeviceReplacement(quint64 id) const override;
 
     /** @reimp — starts every joystick (patched or not) reporting raw input. */
     bool setInputDiagnostics(bool enable) override;
@@ -260,7 +262,7 @@ private slots:
     void slotRawInput(quint32 line, const QString &element, int raw, int channel, int value);
     /** Every reading of every device: its sticks' rest taken out
      *  (StickFilter), then sent on if the device is patched. */
-    void slotDeviceValue(quint32 universe, quint32 line, quint32 channel, uchar value);
+    void slotDeviceValue(quint64 device, quint32 line, quint32 channel, uchar value);
     void slotStickTick();
 
 private slots:
@@ -286,6 +288,13 @@ private:
     /** Out of the list, its reader stopped and deleted off this thread. */
     void dropDevice(HIDDevice *dev);
     void renumberLines();
+    /** @p dev's id (QLCIOPlugin::inputDeviceId()), given the first time
+     *  it is asked for while the device is listed; forgotten when it goes. */
+    quint64 deviceId(HIDDevice *dev);
+    QHash<const HIDDevice *, quint64> m_deviceIds;
+    /** A device id -> the id of the device that replaced it in place. */
+    QHash<quint64, quint64> m_replacedBy;
+    quint64 m_nextDeviceId = 0;
 
     std::shared_ptr<HIDScanShared> m_shared;
     HIDBackend *m_testBackend = nullptr;

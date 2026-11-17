@@ -365,7 +365,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         }
         /* Both bumpers and no trigger, held: the arm changes. Anything
            else of the four ends the timing. */
-        armChordUpdate(universe);
+        armChordUpdate(universe, down && (role == GamepadRole::LB || role == GamepadRole::RB));
         /* RT's pull on its own is the hit (below) -- not with a bumper or
            LT down: LT + RT together is the stop in the making, never a
            hit. The rest of the four is done. */
@@ -491,6 +491,16 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
             return true;
         }
     }
+    /* Menu walks: the walker owns the walk's tool from its start (Q135),
+       as beside the runner -- so its sticks are the walk's and another
+       pad's follow spot steers on beside it (board Q253). */
+    if (action == Walk && m_pc != nullptr && !isWalking())
+    {
+        m_pc->claimController(universe);
+        if (!trigger(action))
+            m_pc->releaseControllerSoon();
+        return true;
+    }
     trigger(action);
     return true;
 }
@@ -522,7 +532,7 @@ void PadRun::stopArmChords()
             p.chord->stop();
 }
 
-void PadRun::armChordUpdate(quint32 universe)
+void PadRun::armChordUpdate(quint32 universe, bool bumperDown)
 {
     const QString pad = padId(universe);
     const Held h = padHeld(pad);
@@ -558,6 +568,13 @@ void PadRun::armChordUpdate(quint32 universe)
        pad that "will not arm" with nothing to show for it. */
     if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
         showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
+    /* Both bumpers down again, no trigger, but the chord is spent (it
+       fired, was refused, or a trigger came with them; or a tool took the
+       pad mid-chord): one bumper pressed again to try once more times
+       nothing -- the screen says what does. */
+    else if (bumperDown && h.lb && h.rb && !h.anyTrigger() && h.spent && !isFocusing() && !isWalking()
+             && !isBesideTool(universe) && m_pc != nullptr)
+        showNotice(m_pc->padText(tr("Let go of both bumpers, then hold {LB} and {RB} again.")));
 }
 
 void PadRun::armChordFired(const QString &pad)
@@ -1098,10 +1115,22 @@ void PadRun::forgetPad(quint32 universe)
     // The walker beside the runner went (second review 2).
     if (m_walkBeside && isWalking() && sameController(universe, m_walker))
         endBesideWalk(tr("Walk ended: the controller walking it went away."));
-    /* That line's reading goes; the pad's other line, still here, keeps
-       its own: what each pad holds is re-read from what is left (the line
-       gone may no longer say whose it was). */
+    /* That line's reading goes (a pad lost, or another device behind its
+       patch, board Q253's fourth review: nothing it held is held); the
+       pad's other line, still here, keeps its own: what each pad holds is
+       re-read from what is left (the line gone may no longer say whose it
+       was). The stop latch is the pad's: still set only while what is left
+       holds all four of a stop that really fired, so a squeeze completed
+       afresh -- on a line that joins mid-squeeze too -- stops. */
     m_held.remove(universe);
+    // The walk's modifier and level, if it was the walker's pad.
+    if (isWalking() && m_pc != nullptr && m_pc->controllerOwner() != UINT_MAX
+        && sameController(universe, m_pc->controllerOwner()))
+    {
+        m_lbHeld = false;
+        m_lbUsed = false;
+        m_levelUp = m_levelDown = 0.0f;
+    }
     for (auto it = m_pads.begin(); it != m_pads.end(); ++it)
     {
         const Held h = padHeld(it.key());
@@ -1694,10 +1723,13 @@ void PadRun::updateTriggers(bool force)
         m_pc->setPadTriggers(triggerState(), force);
 }
 
-void PadRun::touchValue(GamepadRole::Role role, float norm)
+void PadRun::touchValue(GamepadRole::Role role, float norm, quint32 universe)
 {
-    if (m_enabled)
-        m_swipe.setValue(role, norm);
+    if (!m_enabled)
+        return;
+    m_swipe.setValue(role, norm);
+    if (universe != UINT_MAX)
+        m_touchUniverse = universe;
 }
 
 void PadRun::touchClick(bool down)
@@ -1735,8 +1767,14 @@ bool PadRun::swipe(TouchSwipe::Swipe s)
     // Run, not walking: a walk from the next / previous cue, Design only.
     if (m_doc->mode() == Doc::Operate)
         return refuseWalk(tr("In Operate the cue moves with GO."));
+    // The pad that swiped owns the walk (Q135), as one that pressed Menu.
+    if (m_touchUniverse != UINT_MAX)
+        m_pc->claimController(m_touchUniverse);
     if (!startWalk())
+    {
+        m_pc->releaseControllerSoon();
         return false;
+    }
     return stepCue(delta);
 }
 
@@ -2385,6 +2423,8 @@ bool PadRun::stepCue(int delta)
         if (!tryStart(from))
         {
             walkEnded();
+            // No walk now: its owner goes once this press is done (and is said).
+            m_pc->releaseControllerSoon();
             return false;
         }
     }

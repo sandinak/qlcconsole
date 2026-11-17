@@ -122,6 +122,15 @@ public:
      *  list -- the input number a patch opens it by, and which InputPatch
      *  takes its values for. */
     void setLine(quint32 line) { m_line = line; }
+    /** The plugin's id for this device (QLCIOPlugin::inputDeviceId()),
+     *  carried with each value it reads: a value queued before the device
+     *  moved to another line is delivered on the line it is on then
+     *  (round-5 review). Read on the device's thread. */
+    quint64 deviceId() const { return m_deviceId.load(); }
+    void setDeviceId(quint64 id) { m_deviceId.store(id); }
+protected:
+    std::atomic<quint64> m_deviceId { 0 };
+public:
 
     virtual bool hasInput() const { return false; }
     virtual bool hasOutput() const { return false; }
@@ -223,12 +232,12 @@ signals:
     /**
      * Signal that is emitted when an input channel's value is changed
      *
-     * @param universe The universe where the event happened
-     * @param line The input line that received the signal
+     * @param device The device's id (deviceId(); 0: not given yet)
+     * @param line The input line it was on when it read the value
      * @param channel The channel whose value has changed
      * @param value The changed value
      */
-    void valueChanged(quint32 universe, quint32 line, quint32 channel, uchar value);
+    void valueChanged(quint64 device, quint32 line, quint32 channel, uchar value);
 
     /**
      * Diagnostics (setDiagnostics()): one raw input as the device reported

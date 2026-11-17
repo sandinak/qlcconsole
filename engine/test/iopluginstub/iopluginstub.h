@@ -165,6 +165,10 @@ public:
     QString m_deviceKind;
     /** What inputDeviceLocation() reports, by input line ("USB 14200000") */
     QMap<quint32, QString> m_lineLocations;
+    /** QLCIOPlugin::inputDeviceId() per line (0, unknown, when unset):
+     *  a test changes one to put another device behind a patch. */
+    QMap<quint32, quint64> m_deviceIds;
+    quint64 inputDeviceId(quint32 input) const override { return m_deviceIds.value(input); }
     /** inputDeviceLocation() calls (a real plugin may read /sys for each) */
     mutable int m_locationAsks = 0;
     /** setInputDiagnostics() calls: +1 on, -1 off */

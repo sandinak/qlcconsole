@@ -315,10 +315,13 @@ ProgrammerController::ProgrammerController(Doc *doc)
         if (m_focusSession->isActive())
             m_focusSession->stop();
         connectControllerInput();
-        centreFineSticks();
+        /* The tool's sticks only (centreToolSticks(), below): a pad steering
+           the follow spot beside it keeps its fine stick, through a walk's
+           every cue step too (Q253). */
         m_touch.reset();
         refreshPadFamily();
         m_refineSession->setStick(RefineSession::Coarse, 0.5f, 0.5f);
+        m_refineSession->setStick(RefineSession::Fine, 0.5f, 0.5f);
         m_joyTickClock.invalidate();
         refreshControllerKeepAlive();
         m_padPresent = focusController().present;
@@ -327,7 +330,16 @@ ProgrammerController::ProgrammerController(Doc *doc)
     });
     connect(m_refineSession, &RefineSession::stopped, this, [this]() {
         refreshControllerKeepAlive();
-        releaseOwnerIfIdle();
+        /* A walk's cue step stops Focus this cue to start it on the next
+           cue: no end, so the walker keeps the walk (review of Q253). */
+        if (m_padRun == nullptr || !m_padRun->isRestarting())
+            releaseOwnerIfIdle();
+    });
+    // Its sticks start centred; the follow spot's stay its own (Q253).
+    connect(m_refineSession, &RefineSession::started, this, [this]() {
+        centreToolSticks();
+        ++m_toolGeneration;
+        syncSpotToolPad();
     });
     /* Focus mode takes the stick from the follow spot's data channel while it
        runs (a free-flying follow spot must not fly while its stick is
@@ -337,8 +349,13 @@ ProgrammerController::ProgrammerController(Doc *doc)
         if (m_refineSession != nullptr && m_refineSession->isActive())
             m_refineSession->stop();
         connectControllerInput();    // even with no follow-spot axes bound
-        centreFineSticks();
-        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        /* The tool's sticks start centred; the follow spot's are its own
+           (board Q253: another pad may steer it beside the tool -- the
+           tool's pad lets go of it, syncSpotToolPad()). */
+        centreToolSticks();
+        ++m_toolGeneration;
+        m_focusSession->setStick(FocusSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
+        syncSpotToolPad();
         emit joystickUpdated(0.5f, 0.5f);
         m_joyTickClock.invalidate();
         refreshControllerKeepAlive();
@@ -404,6 +421,10 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_doc, &Doc::loaded, this, &ProgrammerController::scheduleStickRefresh);
     connect(m_doc, &Doc::clearing, this, [this]() {
         m_lastStickName.clear();        // a new show: its own pads
+        m_padDevices.clear();
+        m_noDeviceId.clear();
+        m_seenDown.clear();
+        m_roleMaps.clear();
         if (m_boundFromProfile)
         {
             m_panBound = m_tiltBound = m_boundFromProfile = false;
@@ -418,6 +439,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::profileChanged, this, &ProgrammerController::scheduleStickRefresh);
+        // Another profile: the controls' roles are learnt again.
+        connect(iom, &InputOutputMap::profileChanged, this, [this](quint32 universe) { forgetRoles(universe); });
+        connect(iom, &InputOutputMap::inputSlotChanged, this, [this](quint32 universe) { forgetRoles(universe); });
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ProgrammerController::scheduleStickRefresh);
         connect(iom, &InputOutputMap::universeAdded, this, &ProgrammerController::scheduleStickRefresh);
@@ -1950,9 +1974,10 @@ void ProgrammerController::setHolding(bool on)
     if (on == m_holding)
         return;
     m_holding = on;
-    // Let go of the sticks and holds: nothing creeps on while held or after.
-    m_panNorm = m_tiltNorm = 0.5f;
-    centreFineSticks();
+    /* Let go of the sticks and holds: nothing creeps on while held or
+       after. The tool's sticks: a follow spot steered beside it from
+       another pad is that pad's (Q253). */
+    centreToolSticks();
     m_holdA.reset();
     m_holdB.reset();
     m_touch.reset();
@@ -2082,6 +2107,7 @@ void ProgrammerController::freezeController()
 {
     m_panNorm = m_tiltNorm = 0.5f;
     centreFineSticks();
+    centreToolSticks();
     m_holdA.reset();
     m_holdB.reset();
     m_holdVenueA.reset();
@@ -2154,8 +2180,11 @@ void ProgrammerController::releaseOwnerIfIdle()
        holds no owner, as one that is gone (review 0.4.10, H1). */
     const FocusCallCue::State cue = m_focusCallCue->state();
     if (!m_focusSession->isActive() && !m_refineSession->isActive()
-        && (cue == FocusCallCue::Idle || cue == FocusCallCue::Armed))
+        && (cue == FocusCallCue::Idle || cue == FocusCallCue::Armed) && m_ownerUniverse != 0xFFFFFFFF)
+    {
         m_ownerUniverse = 0xFFFFFFFF;
+        emit focusControllerChanged();      // the panels and FOCUS name no pad now
+    }
 }
 
 void ProgrammerController::releaseControllerSoon()
@@ -2693,6 +2722,254 @@ void ProgrammerController::letGoOfFollowSpotInputs(quint32 universe, bool stick)
     emit joystickUpdated(m_panNorm, m_tiltNorm);
 }
 
+/*********************************************************************
+ * The follow spot beside a tool (board Q253)
+ *********************************************************************/
+
+QString ProgrammerController::followSpotHeldText(const QString &tool)
+{
+    return tr("Follow spot holds: %1 is working on its lights").arg(tool);
+}
+
+QString ProgrammerController::toolName() const
+{
+    const bool refine = m_refineSession != nullptr && m_refineSession->isActive();
+    if (!refine && (m_focusSession == nullptr || !m_focusSession->isActive()))
+        return QString();
+    if (refine && m_padRun != nullptr && m_padRun->isWalking())
+        return tr("the walk");
+    // The Run tab's and the footer's names for it (PadRun::holder()).
+    return m_padRun != nullptr ? m_padRun->holder() : QString();
+}
+
+bool ProgrammerController::isToolsPad(quint32 universe) const
+{
+    if (m_ownerUniverse != 0xFFFFFFFF)
+        return m_padRun->sameController(universe, m_ownerUniverse);
+    /* No pad has taken the tool yet (it began on the laptop): one
+       controller is the tool's, as it always was; with more, the first
+       press of a pad with Focus takes it (Q135) and the follow spot's pad
+       keeps steering until then. */
+    return m_controllerJobs->has(universe, ControllerJobs::Focus) && m_padRun->padCount() <= 1;
+}
+
+quint32 ProgrammerController::fineSlot(quint32 universe) const
+{
+    if (m_finePads.contains(universe))
+        return universe;
+    for (auto it = m_finePads.constBegin(); it != m_finePads.constEnd(); ++it)
+        if (m_padRun->sameController(it.key(), universe))
+            return it.key();
+    return universe;
+}
+
+void ProgrammerController::centreToolSticks()
+{
+    m_toolPanNorm = m_toolTiltNorm = 0.5f;
+    m_toolFineX = m_toolFineY = 0.5f;
+}
+
+bool ProgrammerController::spotStickCentred(float norm) const
+{
+    const double dz = m_followMover != nullptr ? m_followMover->settings().deadzone : 0.10;
+    return FollowSpotDrive::shape(2.0 * double(norm) - 1.0, dz, 0.0) == 0.0;
+}
+
+void ProgrammerController::noteSpotAxis(quint32 universe, int role, bool pan, bool tilt, float norm)
+{
+    const bool deflected = !spotStickCentred(norm);
+    if (pan || tilt)
+    {
+        (pan ? m_panLatched : m_tiltLatched) = deflected;
+        return;
+    }
+    if ((role != GamepadRole::RightX && role != GamepadRole::RightY)
+        || !m_controllerJobs->has(universe, ControllerJobs::FollowSpot))
+        return;
+    const quint64 key = (quint64(fineSlot(universe)) << 1) | (role == GamepadRole::RightX ? 0u : 1u);
+    if (deflected)
+        m_fineLatched.insert(key);
+    else
+        m_fineLatched.remove(key);
+}
+
+void ProgrammerController::takeSpotStick(bool pan, float norm)
+{
+    bool &latched = pan ? m_panLatched : m_tiltLatched;
+    if (latched)
+    {
+        // Held through a hold or a tool: nothing until it has been centred.
+        if (!spotStickCentred(norm))
+            return;
+        latched = false;
+    }
+    (pan ? m_panNorm : m_tiltNorm) = norm;
+    if (m_recalHeld)
+        applyFollowSpotSticks();    // the push that sets the facing
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
+}
+
+void ProgrammerController::zeroAndLatchSpot(quint32 universe, bool stick)
+{
+    if (stick)
+    {
+        m_panLatched = m_panLatched || !spotStickCentred(m_panNorm);
+        m_tiltLatched = m_tiltLatched || !spotStickCentred(m_tiltNorm);
+    }
+    QList<quint32> shares;
+    for (auto it = m_finePads.constBegin(); it != m_finePads.constEnd(); ++it)
+    {
+        if (universe != UINT_MAX && !m_padRun->sameController(it.key(), universe))
+            continue;
+        shares << it.key();
+        if (!spotStickCentred(float(it.value().x())))
+            m_fineLatched.insert(quint64(it.key()) << 1);
+        if (!spotStickCentred(float(it.value().y())))
+            m_fineLatched.insert((quint64(it.key()) << 1) | 1u);
+    }
+    letGoOfFollowSpotInputs(universe, stick);
+    for (quint32 share : std::as_const(shares))
+        if (universe != UINT_MAX && share != universe)
+            letGoOfFollowSpotInputs(share, false);
+}
+
+bool ProgrammerController::refreshToolSets(bool tick)
+{
+    const bool focus = m_focusSession != nullptr && m_focusSession->isActive();
+    const bool refine = !focus && m_refineSession != nullptr && m_refineSession->isActive();
+    if (!focus && !refine)
+        return false;
+
+    /* The tool's lights, again only when what it works on changed: the
+       venue focus's call, the walk's layer, another cue or session -- and
+       once a second, for a cue or look edited meanwhile. */
+    ToolLightsKey key;
+    key.kind = focus ? 1 : 2;
+    key.generation = m_toolGeneration;
+    const bool walking = refine && m_padRun != nullptr && m_padRun->isWalking();
+    if (focus)
+    {
+        key.index = m_focusSession->callIndex();
+        key.count = m_focusSession->count();
+    }
+    else
+    {
+        key.id = m_refineSession->cueId();
+        key.count = int(m_refineSession->layers().size());
+        key.layer = walking ? m_refineSession->currentLayer() : UINT_MAX;
+    }
+    if (!(key == m_toolLightsKey) || (tick && --m_toolLightsTicks <= 0))
+    {
+        if (!(key == m_toolLightsKey))
+            m_spotLightsTicks = 0;      // a new tool: the spot's own looked at again too
+        m_toolLightsKey = key;
+        m_toolLightsTicks = 50;
+        m_toolLights.clear();
+        m_toolTargets.clear();
+        /* Venue focus: the call being focused; Quick Focus: its list; the
+           walk: the layer walked; Focus This Cue / Look: every light of
+           the cue (or the scenes) it can step to. */
+        const QList<quint32> fids = focus ? m_focusSession->order()
+                                    : walking ? m_refineSession->layerFixtures()
+                                              : m_refineSession->cueFixtures();
+        for (quint32 fid : fids)
+            m_toolLights.insert(fid);
+        /* The stage targets its lights aim at (review of Q253): a light
+           aimed at the target the follow spot moves moves with it. */
+        if (focus)
+        {
+            const FocusSession::Options &o = m_focusSession->options();
+            for (const FocusSession::Reference &r : { o.first, o.second, m_focusSession->currentCall().target })
+                if (r.kind == FocusSession::Reference::Target)
+                    m_toolTargets.insert(r.id);
+        }
+        else
+            m_toolTargets = m_refineSession->aimTargets(walking);
+        m_toolNameCached = toolName();
+    }
+    return true;
+}
+
+QString ProgrammerController::toolOnSpotLights(quint32 sceneId, quint32 targetId, bool tick)
+{
+    if (sceneId == UINT_MAX || !refreshToolSets(tick))
+        return QString();
+
+    // The follow spot's own lights: its scene's fixtures and groups.
+    if (sceneId != m_spotLightsScene || (tick && --m_spotLightsTicks <= 0))
+    {
+        m_spotLightsScene = sceneId;
+        m_spotLightsTicks = 50;     // once a second, for a scene edited meanwhile
+        m_spotLights.clear();
+        if (const Scene *scene = qobject_cast<const Scene *>(m_doc->function(sceneId)))
+        {
+            for (quint32 fid : scene->fixtures())
+                m_spotLights.insert(fid);
+            for (quint32 gid : scene->fixtureGroups())
+                if (const FixtureGroup *g = m_doc->fixtureGroup(gid))
+                    for (quint32 fid : g->fixtureList())
+                        m_spotLights.insert(fid);
+        }
+    }
+    // Its subject: lights the tool aims at it move when the spot moves it.
+    if (targetId != UINT_MAX && m_toolTargets.contains(targetId))
+        return m_toolNameCached;
+    const QSet<quint32> &few = m_spotLights.size() <= m_toolLights.size() ? m_spotLights : m_toolLights;
+    const QSet<quint32> &many = &few == &m_spotLights ? m_toolLights : m_spotLights;
+    for (quint32 fid : few)
+        if (many.contains(fid))
+            return m_toolNameCached;
+    return QString();
+}
+
+void ProgrammerController::syncSpotHold(const QString &tool)
+{
+    if (tool == m_spotHeldBy)
+        return;
+    const bool begins = m_spotHeldBy.isEmpty();
+    m_spotHeldBy = tool;
+    if (!begins || tool.isEmpty())
+        return;
+    /* The hold begins: the subject stops now -- the mover first, so the
+       free-fly script hears no speed (the data channel carries none once
+       the mover is off) -- then nothing pushed on the spot stays pushed
+       (no drift, no velocity kept for when it ends), and a stick held
+       through it moves nothing until centred. The data channel is told
+       whatever was pushed: sticks already centred, the spot still gliding,
+       left the last speed in it. */
+    if (m_followMover != nullptr)
+        m_followMover->follow(UINT_MAX, UINT_MAX);
+    m_followVelocitySent = false;
+    zeroAndLatchSpot(UINT_MAX, true);
+    emit joystickUpdated(m_panNorm, m_tiltNorm);
+}
+
+void ProgrammerController::syncSpotToolPad()
+{
+    const bool active = (m_focusSession != nullptr && m_focusSession->isActive())
+                        || (m_refineSession != nullptr && m_refineSession->isActive());
+    if (active == m_spotSeenActive && m_ownerUniverse == m_spotSeenOwner
+        && m_toolGeneration == m_spotSeenGeneration)
+        return;
+    m_spotSeenActive = active;
+    m_spotSeenOwner = m_ownerUniverse;
+    m_spotSeenGeneration = m_toolGeneration;
+    if (!active)
+        return;
+    /* A tool began, or a pad took it: what the tool's pad had pushed on
+       the follow spot is let go (its sticks are the tool's now), and a
+       stick it holds moves the spot again only once centred. */
+    // The bound stick's pads: pan and tilt may be bound to two (by hand).
+    if (m_panBound && isToolsPad(m_panUniverse))
+        zeroAndLatchSpot(m_panUniverse, true);
+    if (m_tiltBound && m_tiltUniverse != m_panUniverse && isToolsPad(m_tiltUniverse))
+        zeroAndLatchSpot(m_tiltUniverse, true);
+    QList<quint32> pads = m_finePads.keys();
+    for (quint32 u : std::as_const(pads))
+        if (m_finePads.contains(u) && isToolsPad(u))
+            zeroAndLatchSpot(u, false);
+}
+
 QString ProgrammerController::axisLabel(quint32 universe, quint32 channel) const
 {
     if (!m_doc->inputOutputMap())
@@ -2835,6 +3112,7 @@ void ProgrammerController::refreshStickBinding()
     m_tiltChannel = s.tiltChannel;
     m_boundFromProfile = s.pan || s.tilt;
     m_panNorm = m_tiltNorm = 0.5f;
+    m_panLatched = m_tiltLatched = false;   // another stick: none of the old one's latch
     qDebug() << "[Stick]" << (m_boundFromProfile ? "bound:" : "none")
              << "u=" << s.universe << "pan ch=" << (s.pan ? int(s.panChannel) : -1)
              << "tilt ch=" << (s.tilt ? int(s.tiltChannel) : -1) << followSpotStickName();
@@ -2951,31 +3229,24 @@ void ProgrammerController::connectControllerInput()
        the pad now there starts in its own colour, so it is told the
        state's light again. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, [this](quint32 universe) {
-        if (m_padRun != nullptr)
-            m_padRun->forgetPad(universe);
-        /* The pad that owns the tools went (unplugged, swapped in its
-           slot): the tool runs on with no owner, the next pad with the
-           Focus job to press takes it (review 12, as a job taken away). */
-        if (m_ownerUniverse != 0xFFFFFFFF && m_ownerUniverse == universe)
-        {
-            m_ownerUniverse = 0xFFFFFFFF;
-            emit focusControllerChanged();
-        }
-        // Its pushes went with it (no release comes): the follow spot lets go.
-        const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
-        if (stick || m_finePads.contains(universe) || (m_recalHeld && m_recalUniverse == universe))
-            letGoOfFollowSpotInputs(universe, stick);
-        if (m_padLight.isValid() || m_padLightTarget != UINT_MAX)
-        {
-            const QColor light = m_padLight;
-            m_padLight = QColor();
-            m_padLightTarget = UINT_MAX - 2;     // not known: sent again
-            if (light.isValid())
-                setPadLight(light);
-            else
-                refreshPadLight();
-        }
+        /* The same device, moved to another line because one before it
+           went (a Linux joystick with no location): nothing changed for it
+           -- it keeps its arm, its held safety, its chord (board Q253's
+           fourth review). Anything else is a pad lost. */
+        forgetRoles(universe);      // another patch: its roles learnt afresh
+        const QPair<QString, quint64> now = padDevice(universe);
+        const QPair<QString, quint64> was = m_padDevices.value(universe);
+        m_padDevices.insert(universe, now);
+        m_noDeviceId.remove(universe);
+        if (was.second != 0 && was == now)
+            return;
+        padLost(universe);
     });
+    /* A device that changed behind a patch (replaced where it was, or
+       another shifted onto its line): a pad lost and a new one plugged in
+       (rule 3, "the pad lost disarms"). */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::pluginConfigurationChanged,
+            this, &ProgrammerController::checkPadDevices);
     // Blackout or the Grand Master to zero mid-session: said.
     auto recheck = [this]() {
         checkRigOutput(m_focusSession->isActive() ? m_focusSession->currentFixture()
@@ -2984,6 +3255,90 @@ void ProgrammerController::connectControllerInput()
     connect(m_doc->inputOutputMap(), &InputOutputMap::blackoutChanged, this, recheck);
     connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged, this, recheck);
     m_controllerInputConnected = true;
+}
+
+QPair<QString, quint64> ProgrammerController::padDevice(quint32 universe) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr && universe < iom->universesCount() ? iom->inputPatch(universe) : nullptr;
+    if (ip == nullptr || ip->plugin() == nullptr || ip->input() == QLCIOPlugin::invalidLine())
+        return qMakePair(QString(), quint64(0));
+    return qMakePair(ip->plugin()->name(), ip->plugin()->inputDeviceId(ip->input()));
+}
+
+void ProgrammerController::checkPadDevices()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return;
+    m_noDeviceId.clear();       // a plugin may tell its devices apart now
+    const QList<quint32> known = m_padDevices.keys();
+    for (quint32 universe : known)
+    {
+        const QPair<QString, quint64> was = m_padDevices.value(universe);
+        const QPair<QString, quint64> now = padDevice(universe);
+        // An id that was not known, or a pad merely gone quiet: nothing to conclude.
+        if (was.second == 0 || was == now)
+        {
+            m_padDevices.insert(universe, now);
+            continue;
+        }
+        /* Another device behind this patch now. What the old one read and
+           was not delivered yet goes out first, in order -- its stop press
+           counts -- then the pad is lost (board Q253's fourth review). */
+        if (InputPatch *ip = universe < iom->universesCount() ? iom->inputPatch(universe) : nullptr)
+            ip->deliverNow();
+        m_padDevices.insert(universe, now);
+        padLost(universe);
+    }
+    // Delivered with the roles they were read with; now as the devices are.
+    forgetRoles(UINT_MAX);
+}
+
+void ProgrammerController::padLost(quint32 universe)
+{
+    /* As an unplug: nothing it held is held -- the chords made of it, the
+       buttons seen down, the Run role's four and its stop latch, the walk's
+       modifier -- an arm made on it drops (rule 3), a tool it owned runs on
+       with no owner, what it pushed on the follow spot lets go. The device
+       there now starts from nothing; its own readings are new input. */
+    const bool owned = m_ownerUniverse == 0xFFFFFFFF
+                       || (m_padRun != nullptr && m_padRun->sameController(universe, m_ownerUniverse));
+    m_heldRoles.pads.remove(universe);
+    m_seenDown.remove(universe);
+    if (owned)
+    {
+        m_viewChord = false;
+        m_centreChord = false;
+        m_stickChord = false;
+        m_rsChord = false;
+        m_focusLt.reset();
+        m_focusLtChord = false;
+    }
+    if (m_padRun != nullptr)
+        m_padRun->forgetPad(universe);
+    /* The pad that owns the tools went (unplugged, swapped in its slot):
+       the tool runs on with no owner, the next pad with the Focus job to
+       press takes it (review 12, as a job taken away). */
+    if (m_ownerUniverse != 0xFFFFFFFF && m_ownerUniverse == universe)
+    {
+        m_ownerUniverse = 0xFFFFFFFF;
+        emit focusControllerChanged();
+    }
+    // Its pushes went with it (no release comes): the follow spot lets go.
+    const bool stick = (m_panBound && m_panUniverse == universe) || (m_tiltBound && m_tiltUniverse == universe);
+    if (stick || m_finePads.contains(universe) || (m_recalHeld && m_recalUniverse == universe))
+        letGoOfFollowSpotInputs(universe, stick);
+    if (m_padLight.isValid() || m_padLightTarget != UINT_MAX)
+    {
+        const QColor light = m_padLight;
+        m_padLight = QColor();
+        m_padLightTarget = UINT_MAX - 2;     // not known: sent again
+        if (light.isValid())
+            setPadLight(light);
+        else
+            refreshPadLight();
+    }
 }
 
 void ProgrammerController::updateFollowspotJsBindings()
@@ -3049,6 +3404,35 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     // Something came in: a controller being found again after a sleep is.
     m_keepAlive->noteInput();
 
+    /* The device behind this patch, as first known (padLost() on a
+       change). Asked once a patch: a plugin that reports no ids (MIDI, OSC,
+       Art-Net input) is not asked again on every value (round-5 review);
+       a patch or configuration change asks again. */
+    {
+        const auto known = m_padDevices.constFind(universe);
+        if ((known == m_padDevices.constEnd() || known->second == 0) && !m_noDeviceId.contains(universe))
+        {
+            const QPair<QString, quint64> now = padDevice(universe);
+            m_padDevices.insert(universe, now);
+            if (now.second == 0)
+                m_noDeviceId.insert(universe);
+        }
+    }
+    /* A button's release with no press seen since the pad was new (a pad
+       lost and back, another device behind the patch, or held as the app
+       started): the end of a hold that is not this one's -- never a click
+       (View's undo, a stick click's page turn). */
+    if (role < 0)
+        role = controllerRole(universe, channel);
+    if (role != GamepadRole::None && !GamepadRole::isAxis(GamepadRole::Role(role))
+        && !GamepadRole::isTouch(GamepadRole::Role(role)))
+    {
+        if (value > 0)
+            m_seenDown[universe].insert(role);
+        else if (!m_seenDown[universe].remove(role))
+            return;
+    }
+
     if (routeFocusInput(universe, channel, value, role))
         return;
 
@@ -3084,18 +3468,12 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     // held stick keeps moving at a rate set by its deflection.
     if (m_panBound && universe == m_panUniverse && channel == m_panChannel)
     {
-        m_panNorm = norm;
-        if (m_recalHeld)
-            applyFollowSpotSticks();    // the push that sets the facing
-        emit joystickUpdated(m_panNorm, m_tiltNorm);
+        takeSpotStick(true, norm);
         return;
     }
     if (m_tiltBound && universe == m_tiltUniverse && channel == m_tiltChannel)
     {
-        m_tiltNorm = norm;
-        if (m_recalHeld)
-            applyFollowSpotSticks();
-        emit joystickUpdated(m_panNorm, m_tiltNorm);
+        takeSpotStick(false, norm);
         return;
     }
 
@@ -3120,7 +3498,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     }
 }
 
-int ProgrammerController::controllerRole(quint32 universe, quint32 channel) const
+int ProgrammerController::liveControllerRole(quint32 universe, quint32 channel) const
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
     InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
@@ -3130,6 +3508,43 @@ int ProgrammerController::controllerRole(quint32 universe, quint32 channel) cons
     const quint32 device = ip->deviceChannel(channel);
     return GamepadRole::fromProfile(ip->plugin()->inputChannelRole(ip->input(), device),
                                     ip->plugin()->inputChannelName(ip->input(), device));
+}
+
+void ProgrammerController::learnRoles(quint32 universe) const
+{
+    /* Every control's role while the device behind the patch is known: a
+       value it read and that is delivered after its plugin dropped it (an
+       unplug, another model shifted onto its line) is read with ITS layout
+       -- a stop press is still a stop press, never another pad's GO
+       (round-6 review). Learnt again when the patch, the device or the
+       plugin's configuration changes (after what was read is delivered). */
+    QVector<int> &roles = m_roleMaps[universe];
+    roles.resize(kRoleMapChannels);
+    for (quint32 ch = 0; ch < kRoleMapChannels; ++ch)
+        roles[int(ch)] = liveControllerRole(universe, ch);
+}
+
+void ProgrammerController::forgetRoles(quint32 universe)
+{
+    /* Learnt again at once, from the device there now (round-7 review): a
+       value read meanwhile and delivered after that device went is read
+       with its roles, not the next device's. */
+    const QList<quint32> which = universe == UINT_MAX ? m_roleMaps.keys() : QList<quint32>{ universe };
+    for (quint32 u : which)
+        learnRoles(u);
+}
+
+int ProgrammerController::controllerRole(quint32 universe, quint32 channel) const
+{
+    if (channel >= kRoleMapChannels)
+        return liveControllerRole(universe, channel);
+    auto it = m_roleMaps.constFind(universe);
+    if (it == m_roleMaps.constEnd())
+    {
+        learnRoles(universe);
+        it = m_roleMaps.constFind(universe);
+    }
+    return it->at(int(channel));
 }
 
 ProgrammerController::FocusController ProgrammerController::focusController(quint32 only) const
@@ -3366,7 +3781,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         m_padRun->tellRefused(m_padRun->isBesideFocus(universe) ? m_padRun->focusBesideText()
                                                                 : m_padRun->walkBesideText());
     if (GamepadRole::isTouch(role) && swipes)
-        m_padRun->touchValue(role, norm);
+        m_padRun->touchValue(role, norm, universe);
     else if (role == GamepadRole::TouchClick && swipes)
         m_padRun->touchClick(value > 0);
     /* The Controller Test is open and no tool has the pad: its buttons and
@@ -3397,6 +3812,40 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
     if (role == GamepadRole::None && !active)
         return false;
+    /* Board Q253: the follow spot beside a tool. A pad with the Follow
+       spot job that is not the tool's keeps steering the spot -- its
+       bound stick, fine stick, D-pad speed and size, the facing push --
+       unless the tool works on the spot's own lights: then it holds, what
+       the pad sends moves nothing, and its status says why. The tool's
+       own pad (the same pad with both jobs) is the tool's, as before. */
+    if (active)
+    {
+        syncSpotToolPad();
+        const bool spotControl = isPan || isTilt || role == GamepadRole::RightX || role == GamepadRole::RightY
+                                 || role == GamepadRole::DpadUp || role == GamepadRole::DpadDown
+                                 || role == GamepadRole::DpadLeft || role == GamepadRole::DpadRight
+                                 || role == GamepadRole::LS;
+        if (spotControl && m_followStatus.state != FollowSpotStatus::Off && !isToolsPad(universe)
+            && m_controllerJobs->has(universe, ControllerJobs::FollowSpot))
+        {
+            syncSpotHold(toolOnSpotLights(m_followStatus.sceneId, m_followStatus.targetId, false));
+            if (!m_spotHeldBy.isEmpty())
+            {
+                noteSpotAxis(universe, int(role), isPan, isTilt, norm);
+                return true;
+            }
+            if (isPan || isTilt)
+            {
+                takeSpotStick(isPan, norm);
+                return true;
+            }
+            if (followSpotTakes(universe, channel, int(role), value))
+                return true;
+        }
+        // A follow spot stick the spot did not take: latched while deflected.
+        if (isPan || isTilt || role == GamepadRole::RightX || role == GamepadRole::RightY)
+            noteSpotAxis(universe, int(role), isPan, isTilt, norm);
+    }
     /* Another pad's venue focus in the Run role (board Q250): this pad's
        buttons and triggers are the Run map's, which plays nothing until
        the focus ends and says so (the runner keeps its arm) -- never the
@@ -3445,7 +3894,7 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
                 emit focusControllerChanged();     // the panels name it
             }
         }
-        else if (universe != m_ownerUniverse)
+        else if (!m_padRun->sameController(universe, m_ownerUniverse))
         {
             if (press)
                 warnOperator(tr("Another controller is in use."));
@@ -3732,13 +4181,13 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
         if (m_padRun->handleWalk(role, value))
             return true;
         if (isPan || role == GamepadRole::LeftX)
-            m_panNorm = norm;
+            m_toolPanNorm = norm;
         else if (isTilt || role == GamepadRole::LeftY)
-            m_tiltNorm = norm;
+            m_toolTiltNorm = norm;
         else if (role == GamepadRole::RightX)
-            m_fineNormX = norm;
+            m_toolFineX = norm;
         else if (role == GamepadRole::RightY)
-            m_fineNormY = norm;
+            m_toolFineY = norm;
         else if (role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger)
             m_refineSession->setTrigger(role == GamepadRole::LeftTrigger ? 0 : 1, norm);
         /* View + A (board Q118): keep at the source cue (View itself is
@@ -3753,8 +4202,8 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
             // Down applies (a held D-pad arm repeats); up stops it.
             m_refineSession->press(ControllerScheme::verbFor(role), value > 0);
         }
-        m_refineSession->setStick(RefineSession::Coarse, m_panNorm, m_tiltNorm);
-        m_refineSession->setStick(RefineSession::Fine, m_fineNormX, m_fineNormY);
+        m_refineSession->setStick(RefineSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
+        m_refineSession->setStick(RefineSession::Fine, m_toolFineX, m_toolFineY);
         return true;
     }
 
@@ -3782,18 +4231,18 @@ bool ProgrammerController::routeFocusInput(quint32 universe, quint32 channel, uc
     }
     else if (isPan || role == GamepadRole::LeftX)
     {
-        m_panNorm = norm;
-        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        m_toolPanNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
     }
     else if (isTilt || role == GamepadRole::LeftY)
     {
-        m_tiltNorm = norm;
-        m_focusSession->setStick(FocusSession::Coarse, m_panNorm, m_tiltNorm);
+        m_toolTiltNorm = norm;
+        m_focusSession->setStick(FocusSession::Coarse, m_toolPanNorm, m_toolTiltNorm);
     }
     else if (role == GamepadRole::RightX || role == GamepadRole::RightY)
     {
-        (role == GamepadRole::RightX ? m_fineNormX : m_fineNormY) = norm;
-        m_focusSession->setStick(FocusSession::Fine, m_fineNormX, m_fineNormY);
+        (role == GamepadRole::RightX ? m_toolFineX : m_toolFineY) = norm;
+        m_focusSession->setStick(FocusSession::Fine, m_toolFineX, m_toolFineY);
     }
     else if (FocusSession::controlFor(role) != FocusSession::NoControl)
     {
@@ -3818,6 +4267,7 @@ void ProgrammerController::applyDesignJoystick()
     }
     if (m_padRun != nullptr && (m_focusSession == nullptr || !m_focusSession->isActive()))
         m_padRun->swipeTick(m_designJoyTimer != nullptr ? m_designJoyTimer->interval() / 1000.0 : 0.02);
+    bool tool = false;      // a controller tool ticked: the follow spot only beside it
     if (m_focusSession != nullptr && m_focusSession->isActive())
     {
         m_focusSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
@@ -3837,10 +4287,9 @@ void ProgrammerController::applyDesignJoystick()
         heldTick(dt);
         applyTouch();
         m_focusSession->tick(dt);
-        m_followMover->follow(UINT_MAX, UINT_MAX);
-        return;
+        tool = true;
     }
-    if (m_refineSession != nullptr && m_refineSession->isActive())
+    else if (m_refineSession != nullptr && m_refineSession->isActive())
     {
         m_refineSession->setStickResponse(m_joystickDeadzone, m_joystickSensitivity);
         const double nominal = m_designJoyTimer != nullptr
@@ -3856,9 +4305,15 @@ void ProgrammerController::applyDesignJoystick()
         m_padRun->walkTick(dt);     // walking: Y held tags the cue
         applyTouch();
         m_refineSession->tick(dt);
-        m_followMover->follow(UINT_MAX, UINT_MAX);
-        return;
+        tool = true;
     }
+    /* Board Q253: a tool on the pad no longer stops the follow spot. A pad
+       that is not the tool's steers it on beside the tool (its inputs
+       are its own: routeFocusInput()), unless the tool works on the
+       spot's own lights -- then it holds, stopped at once, and its status
+       says why (updateFollowSpotStatus()). The tool's pad lets go of it. */
+    if (tool)
+        syncSpotToolPad();
 
     // Run-mode joystick: for an Aim look, drag the stage target in floor space
     // (the scene re-resolves per-fixture pan/tilt from the moved target).  A
@@ -3872,6 +4327,14 @@ void ProgrammerController::applyDesignJoystick()
     Scene *scene = joystickScene();
     updateFollowSpotStatus(scene);
     if (!scene)
+    {
+        m_followMover->follow(UINT_MAX, UINT_MAX);
+        return;
+    }
+    /* Beside a tool, a follow spot only (no other Aim look is dragged
+       while a tool has the pad), and not while the tool works on its
+       lights. */
+    if (tool && (m_followStatus.state == FollowSpotStatus::Off || !m_followStatus.heldBy.isEmpty()))
     {
         m_followMover->follow(UINT_MAX, UINT_MAX);
         return;
@@ -4990,6 +5453,19 @@ void ProgrammerController::advanceRestoreGlide()
 {
     if (!m_glide.active)
         return;
+    /* A tool works on lights aimed at the subject gliding back: it waits
+       where it is until the tool ends or moves off them, then glides on
+       (second review of Q253) -- never moved under the operator. */
+    if (refreshToolSets(false) && m_toolTargets.contains(m_glide.targetId))
+    {
+        /* Where it is now is where it goes on from, the whole fade again
+           (third review of Q253): never a jump from the old start. */
+        if (MonitorProperties *mp = m_doc->monitorProperties())
+            if (StageTarget *tgt = mp->stageTarget(m_glide.targetId))
+                m_glide.from = tgt->positionIn(mp->liveBlocking());
+        m_glide.elapsedMs = 0;
+        return;
+    }
     MonitorProperties *mProps = m_doc->monitorProperties();
     StageTarget *tgt = mProps ? mProps->stageTarget(m_glide.targetId) : nullptr;
     if (tgt == nullptr)
@@ -5145,6 +5621,9 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
                 st.facingSaid = m_facingSaid;
                 st.facingShort = m_facingShort;
             }
+            /* A tool working on its lights holds it (Q253): said, and
+               everything pushed on it let go. */
+            st.heldBy = toolOnSpotLights(st.sceneId, st.targetId, true);
             if (!stickPatched())
                 st.state = FollowSpotStatus::NoStick;
             else if (m_followMovedClock.isValid() && m_followMovedClock.elapsed() < 400)
@@ -5155,6 +5634,7 @@ void ProgrammerController::updateFollowSpotStatus(Scene *scene)
         else
             st.targetId = UINT_MAX;
     }
+    syncSpotHold(st.heldBy);
     if (st != m_followStatus)
     {
         const bool onOff = (st.state == FollowSpotStatus::Off) != (m_followStatus.state == FollowSpotStatus::Off);
@@ -5610,8 +6090,18 @@ bool ProgrammerController::followSpotTakes(quint32 universe, quint32 channel, in
         return false;
     if (role == GamepadRole::RightX || role == GamepadRole::RightY)
     {
-        // This pad's own share, by axis (H-A); a pad first heard is at rest.
-        QPointF &mine = m_finePads.insert(universe, m_finePads.value(universe, QPointF(0.5, 0.5))).value();
+        /* This pad's own share, by axis (H-A); a pad first heard is at
+           rest. The same pad seen twice is one share (Q253). */
+        const quint32 slot = fineSlot(universe);
+        const quint64 key = (quint64(slot) << 1) | (role == GamepadRole::RightX ? 0u : 1u);
+        if (m_fineLatched.contains(key))
+        {
+            // Held through a hold or a tool: nothing until it has been centred.
+            if (!spotStickCentred(value / 255.0f))
+                return true;
+            m_fineLatched.remove(key);
+        }
+        QPointF &mine = m_finePads.insert(slot, m_finePads.value(slot, QPointF(0.5, 0.5))).value();
         (role == GamepadRole::RightX ? mine.rx() : mine.ry()) = value / 255.0;
         combineFineSticks();
         if (m_recalHeld)
@@ -5717,6 +6207,10 @@ QString ProgrammerController::followSpotStatusText() const
         on += QStringLiteral(" · ") + st.saved;
     else if (st.sizeShown && !followSpotSizeText(st).isEmpty())
         on += QStringLiteral(" · ") + followSpotSizeText(st);
+    // A tool on its lights (Q253): it holds, and the line says why.
+    if (!st.heldBy.isEmpty())
+        return (who.isEmpty() ? tr("Follow spot") : tr("Following %1").arg(who)) + on
+               + QStringLiteral(" · ") + followSpotHeldText(st.heldBy);
     // Setting the facing: the subject holds still, and the line says why.
     if (st.settingFacing)
         return (who.isEmpty() ? tr("Follow spot") : tr("Following %1").arg(who)) + on;

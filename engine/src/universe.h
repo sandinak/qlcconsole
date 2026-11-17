@@ -1193,6 +1193,11 @@ public:
         QString hidProfile;
         QString network;
         QMap<QString, QVariant> params;
+        /** An input that went with its device (InputOutputMap::
+         *  followInputDevices()): the devices still here then
+         *  (QLCIOPlugin::inputDeviceId()) -- not the one to reopen it on.
+         *  Not saved. */
+        QSet<quint64> notTheDevice;
     };
 
     QList<OfflinePatch> offlinePatches() const;

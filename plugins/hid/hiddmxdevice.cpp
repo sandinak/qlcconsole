@@ -178,7 +178,7 @@ void HIDDMXDevice::run()
                         unsigned char value = buffer[i + 1];
                         if ((unsigned char)m_dmx_in_cmp.at(channel) != value)
                         {
-                            emit valueChanged(UINT_MAX, m_line, channel, value);
+                            emit valueChanged(deviceId(), m_line, channel, value);
                             m_dmx_in_cmp[channel] = value;
                         }
                     }

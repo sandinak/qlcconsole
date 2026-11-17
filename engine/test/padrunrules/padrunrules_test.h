@@ -54,6 +54,36 @@ private slots:
     /* Rules 3 and 5: the chords */
     void theStopsOwnBumpersDoNotArm();
     void aTriggerInTheArmChordSpendsIt();
+    /** A spent chord (a trigger came with the bumpers, or the chord
+     *  fired) with one bumper pressed again: nothing changes, and the chip
+     *  says to let go of both -- never a silent retry (the jobs-alone
+     *  review's nit, board Q253's branch). */
+    void aSpentChordPressedAgainSaysLetGo();
+    /** Another pad comes or goes (the plugin rescans): a pad already here
+     *  keeps what it holds -- its LT still a safety, three of the four
+     *  still a stop with the fourth (second review of Q253). */
+    void aHotPlugKeepsTheOtherPadsHeld();
+    /** Another device behind a patch is a pad lost and a new one: the
+     *  runner disarmed (said), nothing held counts, the new device arms
+     *  and GOs with its own controls; a rescan of the same device changes
+     *  nothing (board Q253's fourth review). */
+    void aChangedDeviceIsALostPad();
+    /** The old device's stop press, read and not yet delivered, counts
+     *  before the reset; the new device's squeeze stops again. */
+    void aBufferedStopPressCountsBeforeTheReset();
+    /** The four held through a device change: the new device's arm chord
+     *  arms, no stop. */
+    void noStopOnAnArmAfterADeviceChange();
+    /** The fourth of a stop read but not delivered as the patch is set
+     *  again or let go: it goes out first, and the stop fires. */
+    void aBufferedStopPressCountsBeforeARepatch_data();
+    void aBufferedStopPressCountsBeforeARepatch();
+    /** A press read on one pad and delivered after another model took its
+     *  line is read with the first pad's layout: no GO. */
+    void anotherModelsLayoutReadsNoBufferedPress();
+    /** A release with no press seen since the device was new is no click
+     *  (LS, RS). */
+    void aReleaseWithNoPressSeenDoesNothing();
     /** Rule 3 (pad-trace replay, 2026-11-16): a chord that fired (or was
      *  refused) does not fire again while both bumpers stay held, whatever
      *  else comes in -- a DualSense's resting trigger noise above all. */

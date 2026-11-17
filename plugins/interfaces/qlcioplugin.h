@@ -719,6 +719,31 @@ public:
     { Q_UNUSED(input); return QString(); }
 
     /**
+     * Which device input line @p input reads now, as an id the plugin never
+     * gives another device: the same while the device stays (whatever its
+     * line becomes after another one goes), another once a different
+     * device is on the line -- a pad replaced where it was, or another
+     * shifted onto the line. The engine treats a patch whose device id
+     * changed as a pad lost and a new one plugged in (board Q253's fourth
+     * review). 0 when the plugin can't tell (the default): nothing is
+     * concluded from it.
+     */
+    virtual quint64 inputDeviceId(quint32 input) const
+    { Q_UNUSED(input); return 0; }
+
+    /**
+     * The device that replaced device @p id where it was -- the same
+     * physical device re-enumerated at its own path or port (a power
+     * cycle, a sleep) -- following any chain of such replacements: its
+     * inputDeviceId(). 0 when @p id was not replaced in place (it was
+     * unplugged, or the plugin can't tell: the default). A patch follows
+     * this, never a name: another pad of the same name that moved onto
+     * the line is not the device that went (round-6 review).
+     */
+    virtual quint64 inputDeviceReplacement(quint64 id) const
+    { Q_UNUSED(id); return 0; }
+
+    /**
      * Diagnostics, for the Controller test window: while on, report every
      * raw input every device reads -- patched or not -- through
      * inputDiagnostic(). Returns false when the plugin has none to give
@@ -935,11 +960,12 @@ private:
 
 /* The interface's identity, bumped whenever its virtual table changes
    (review 13 L6: 0.4.8 added flushOutput(), forgetOutput() and the
-   closing-frame source; 0.4.9 inputDeviceLocation()): a plugin built
+   closing-frame source; 0.4.9 inputDeviceLocation(); 0.4.13
+   inputDeviceId()): a plugin built
    against an older one is refused
    by QPluginLoader -- it would call through the wrong slots -- rather than
    loaded. Every in-tree plugin names it with this macro. */
-#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.9.1"
+#define QLCIOPlugin_iid "org.qlcconsole.QLCIOPlugin/0.4.13.1"
 
 Q_DECLARE_INTERFACE(QLCIOPlugin, QLCIOPlugin_iid)
 

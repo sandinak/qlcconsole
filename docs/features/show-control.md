@@ -153,7 +153,9 @@ them:
 
 - **One hold, one change.** Once LB + RB have armed, disarmed or been
   refused, holding them on changes nothing more: let go of both to use
-  the chord again.
+  the chord again. Letting go of one bumper and pressing it again is not
+  a new hold: the footer says *Let go of both bumpers, then hold LB and
+  RB again.*
 - **Armed stays armed.** The arm drops only on the LB + RB hold, or with
   no button of the Run map at all: the role is switched (the Run tab's
   **Pad:** button, on the computer), a tool started on the laptop takes the pad, the

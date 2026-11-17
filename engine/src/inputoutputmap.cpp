@@ -112,6 +112,7 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
 
     connect(doc->ioPluginCache(), SIGNAL(pluginConfigurationChanged(QLCIOPlugin*)),
             this, SLOT(slotPluginConfigurationChanged(QLCIOPlugin*)));
+
     connect(doc->masterTimer(), SIGNAL(beat()), this, SLOT(slotMasterTimerBeat()));
 
     /* Kept offline patches reconnect by themselves when their network shows
@@ -621,6 +622,17 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         qWarning() << Q_FUNC_INFO << "Universe" << universe << "out of bounds.";
         return false;
     }
+
+    /* What the patch there read and has not delivered yet goes out first,
+       with the patch as it was -- its device's roles -- before it is
+       replaced or let go: a stop press in flight still counts (board
+       Q253, requirement D). Here, with no lock held: the receivers take
+       m_universeMutex (see the note before inputPatchChanged below). And
+       before the IODeferral below: whatever those values make the
+       receivers do reaches the old patch's device as it is, not after the
+       change. */
+    if (InputPatch *before = m_universeArray.at(universe)->inputPatch())
+        before->deliverNow();
 
     /* The device closed and opened after the universes are let go: a
        controller whose reader stopped answering waits there (up to
@@ -1387,15 +1399,46 @@ int InputOutputMap::retryOfflinePatches()
                 if (plugin == NULL)
                     continue;
                 const bool hasIdentity = rec.uid.isEmpty() == false && rec.uid != KOutputNone;
-                const int line = hasIdentity
+                int line = hasIdentity
                         ? resolveSavedLine(plugin, rec.tag != Universe::InputPatchTag, rec.uid,
                                            rec.network, NetworkRoute::targetFromParameters(rec.params),
                                            rec.line)
                         : int(rec.line);
+                /* An input back by its name: never onto a device another
+                   patch follows (two pads of one name: that pad stays its
+                   universe's); the next line of the name, if one is free
+                   (round-5 review). */
+                auto usable = [&](int l) {
+                    const quint64 id = plugin->inputDeviceId(quint32(l));
+                    if (inputDeviceFollowed(plugin, id, NULL) || (id != 0 && rec.notTheDevice.contains(id)))
+                        return false;
+                    /* Nor one of those re-enumerated where it was since (a
+                       sleep, a port's power cycle): still not the pad that
+                       went (round-7 review). */
+                    for (quint64 here : rec.notTheDevice)
+                        if (id != 0 && plugin->inputDeviceReplacement(here) == id)
+                            return false;
+                    return true;
+                };
+                if (line >= 0 && rec.tag == Universe::InputPatchTag && usable(line) == false)
+                {
+                    /* Not a device that was here when it went (a spare of
+                       that name, on charge), nor one another patch follows:
+                       the pad plugged back (round-6 review). */
+                    const QStringList names = plugin->inputs();
+                    line = -1;
+                    for (int l = 0; l < names.size() && line < 0; ++l)
+                        if (names.at(l) == rec.uid && usable(l))
+                            line = l;
+                }
                 if (line < 0)
                     continue;
+                /* Reopened on the line chosen here (two lines of one name
+                   resolve to the saved line number when it carries it). */
+                Universe::OfflinePatch chosen = rec;
+                chosen.line = quint32(line);
                 uni->removeOfflinePatch(k);
-                loadPatch(i, rec);
+                loadPatch(i, chosen);
                 reconnected++;
                 if (rec.tag == Universe::InputPatchTag && uni->inputPatch() != NULL)
                     emit inputDeviceConnected(i, rec.plugin, rec.uid.isEmpty()
@@ -2049,7 +2092,32 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
             continue;   // a controller slot: applyInputSlots() follows it
 
         const QString device = ip->inputUID();
-        const int line = lines.indexOf(device);
+        /* The device it opened, by its id where the plugin gives one: two
+           pads of one name are told apart (a Linux joystick has no
+           location), so a pad renumbered when one before it went is
+           followed, not the first of that name (board Q253's fourth
+           review). Gone, or no id: by name, as ever. */
+        int line = -1;
+        if (const quint64 id = ip->deviceId())
+        {
+            for (int l = 0; l < lines.size() && line < 0; ++l)
+                if (plugin->inputDeviceId(quint32(l)) == id)
+                    line = l;
+            /* Its device is gone. Re-enumerated where it was (the plugin
+               says which device replaced it): follow that one -- a pad
+               lost and a new one, on its own universe (the engine sees the
+               id change). Never by name: another pad of that name on the
+               line, a spare on charge, is not the pad that went (round-6
+               review). Else gone: kept offline, and the pad plugged back
+               reopens it. */
+            if (line < 0)
+                if (const quint64 again = plugin->inputDeviceReplacement(id))
+                    for (int l = 0; l < lines.size() && line < 0; ++l)
+                        if (plugin->inputDeviceId(quint32(l)) == again)
+                            line = l;
+        }
+        else
+            line = lines.indexOf(device);
         if (line == int(ip->input()))
             continue;   // where it was: reconnect() below is enough
 
@@ -2073,6 +2141,10 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         rec.plugin = plugin->name();
         rec.uid = device;
         rec.line = ip->input();
+        // The devices here as it went: none of them is the one that went.
+        for (int l = 0; l < lines.size(); ++l)
+            if (const quint64 here = plugin->inputDeviceId(quint32(l)))
+                rec.notTheDevice.insert(here);
         rec.profile = ip->profileName();
         rec.hidProfile = ip->hidProfileName();
         rec.params = ip->getPluginParameters();
@@ -2085,6 +2157,42 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
 
     if (kept)
         emit offlinePatchesChanged();
+}
+
+bool InputOutputMap::hasFreeInputDevice(QLCIOPlugin *plugin, const QString &name) const
+{
+    if (plugin == NULL)
+        return false;
+    const QStringList lines = plugin->inputs();
+    for (int l = 0; l < lines.size(); ++l)
+    {
+        if (lines.at(l) != name)
+            continue;
+        const quint64 id = plugin->inputDeviceId(quint32(l));
+        bool taken = false;
+        for (Universe *uni : m_universeArray)
+        {
+            const InputPatch *p = uni->inputPatch();
+            if (p != NULL && p->plugin() == plugin && (id != 0 ? p->deviceId() == id : p->input() == quint32(l)))
+                taken = true;
+        }
+        if (taken == false)
+            return true;
+    }
+    return false;
+}
+
+bool InputOutputMap::inputDeviceFollowed(const QLCIOPlugin *plugin, quint64 id, const InputPatch *except) const
+{
+    if (id == 0)
+        return false;
+    for (Universe *uni : m_universeArray)
+    {
+        const InputPatch *p = uni->inputPatch();
+        if (p != NULL && p != except && p->plugin() == plugin && p->deviceId() == id)
+            return true;
+    }
+    return false;
 }
 
 QString InputOutputMap::networkOnlyText(const QString &device)

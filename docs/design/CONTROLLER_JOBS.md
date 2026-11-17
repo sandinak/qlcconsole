@@ -209,7 +209,7 @@ runner, the focus owner (`controllerOwner()`) or a job (`hasJob`,
 | `routeFocusInput()`, "Still at…?" A held | answers yes | Focus + owner | no |
 | `routeFocusInput()`, View + Menu | the hold / the tap | none (the hold switches nothing, Q251), Focus (the tap: Focus mode, Tools) | no: the role is the computer's for every pad now; a Focus pad without Run cues tapping in Run is told on the screen where Focus mode is |
 | `focusController()` | the pad the focus tools read and name | Focus | **was**: could pick a pad without Focus. Now one with the job first |
-| `followSpotTakes()`, the bound sticks, a profile's follow spot button, `refreshStickBinding()`, `combineFineSticks()` | the follow spot | Follow spot | no: never the arm, the runner or a tool owner. While any tool runs the follow spot holds (the tick feeds the tool), as before jobs. Q253 (steer beside a tool unless it works on the spot's lights) is open, below |
+| `followSpotTakes()`, the bound sticks, a profile's follow spot button, `refreshStickBinding()`, `combineFineSticks()` | the follow spot | Follow spot | no: never the arm or the runner. **Was**: while any tool ran the follow spot held, every pad's (the tick fed the tool and returned first). Q253 (built, below): beside a tool the follow spot is steered by a Follow spot pad that is not the tool's (`isToolsPad()`), and holds only while the tool works on its own lights (`toolOnSpotLights()`); a twin line's fine stick is one share (`fineSlot()`) |
 | `sendPadFeedback()`, `padRumble()`, `setPadTriggers()`, `padFamily()` | which pad is told | (feedback) | **was**: the tools' pad (`focusController()`, a Focus pad first) for every buzz, trigger feel and control name -- the runner's armed triggers and GO buzzes went to the focus pad. Now the acting pad, else the state's pad (review 1) |
 | `ui/src/controllertestdialog.cpp` | the test takes the pad, disarms the runner | none | no (documented: arm again on close); **was**: not beside a venue focus -- now in every case (review 9) |
 | `ui/src/app.cpp` ⌘↩ with a focus cue armed | the laptop starts it | none | no |
@@ -295,17 +295,175 @@ and FOCUS names no pad until one does.
 Already true before the build: the stop from either pad (`watchStop()`
 first); a playing hit not cut (a walk starts or stops no function).
 
-### Open, for the owner (board Q253, not built here)
+### The follow spot beside a tool (board Q253, option a)
 
-The follow spot pad keeps steering while another pad's tool runs, unless
-that tool is working on the follow spot's own lights (then it holds, its
-sticks zeroed, the chip saying why). Not built on this branch: while any
-tool runs, `applyDesignJoystick()` hands the controller tick to the tool
-and returns before the follow spot's integration, and `routeFocusInput()`
-gives a tool's time to its owner; steering beside a tool needs the tick
-split per pad, and "its lights" needs each tool's live fixture set (the
-focus call's, the walk's layer, Focus this cue's cue). Today the follow
-spot holds while any tool runs, as before jobs.
+Decided by the owner 2026-11-16: "the follow spot keeps steering during
+another pad's tool unless that tool works on the spot's own lights; then
+it holds, and the chip says why."
+
+- **The tool's pad and the others.** While a tool runs (Quick Focus /
+  Focus mode, Venue Focus, Focus This Cue, Focus This Look, the walk), the
+  tool's pad is its owner (Q135; the walk's pad owns it from its start, a
+  Menu or a swipe), or the owner's twin line (`isToolsPad()`). A tool
+  begun on the laptop is no pad's until a pad with Focus presses: with
+  one controller here that pad is the tool's at once, as before; with
+  more, the follow spot's pad keeps steering until a press takes the
+  tool. Its sticks are the tool's (`m_toolPanNorm`..., apart from the
+  follow spot's). A walk's cue step (RT, LT, a swipe) restarts Focus this
+  cue on the next cue: that stop is no end, so the walker stays the
+  owner (`PadRun::isRestarting()`; review of f16599314, blocker 1).
+- **Another pad with Follow spot steers on**: its bound stick, its fine
+  stick, D-pad speed and size and the facing push, as with no tool
+  (`routeFocusInput()`, before the beside-the-runner and owner checks);
+  the controller tick runs the follow spot after the tool's
+  (`applyDesignJoystick()`). Its other buttons are as before beside a
+  tool (the Run map's refusals, "Another controller is in use.", "This
+  controller doesn't do focus.").
+- **Unless the tool works on the spot's own lights**: the fixtures of the
+  follow spot's scene (its groups too) meet the tool's live set -- the
+  venue focus's current call, Quick Focus's list, the walk's current
+  layer, every layer of the cue (or every scene) Focus This Cue / Look
+  steps through (`toolOnSpotLights()`; both sets cached, the tool's
+  worked out again only when its call, cue, layer or session changes, the
+  spot's when its scene changes, and both once a second for an edit
+  meanwhile). **Its lights include the ones tied to its subject**: when
+  the follow spot follows a stage target and the tool's live looks aim
+  at that target -- a focus reference or call target, an Aim look of the
+  cue, its layer or the scene -- moving the subject would re-aim those
+  lights under the operator, so the spot holds for them too (decided, the
+  conservative reading of the owner's answer: hold whenever moving the
+  spot would move the tool's lights). Then the spot
+  **holds**: what was pushed on it is let go and it stops at once (no
+  drift, no velocity kept for later), nothing a pad sends moves it, and
+  its one status (`FollowSpotStatus::heldBy`) says why. The mover is
+  stopped before the data channel is told, so a free-fly script hears no
+  speed through the hold (no stale `vx` / `vy`); the channel is told even
+  when the sticks were already centred and the spot only gliding -- the footer's
+  follow spot chip, the Look Editor's line and the rig view's tip read
+  "Follow spot holds: <tool> is working on its lights" (no second
+  source).
+- **No jump after.** When the tool ends or moves off those lights (another
+  call, another layer), the spot steers again from zeroed sticks: an axis
+  that was deflected when the spot stopped taking it (the hold, or its pad
+  becoming the tool's) moves nothing until it has read centre once
+  (`m_panLatched`, `m_tiltLatched`, `m_fineLatched`). A stick held through
+  the change never moves the spot.
+- **One pad with both jobs** (or its twin line): the tool has its sticks,
+  as before; what it had pushed on the spot is let go when the tool
+  begins or the pad takes it, and the same no-jump rule applies at the
+  tool's end. A tool starting (or a walk's cue step) touches only the
+  tool's sticks: another pad's fine stick held beside it stays.
+- **One pad seen twice** steers once: a twin line's fine stick is that
+  pad's one share (`fineSlot()`), never added to itself; the owner's twin
+  line is the owner (the owner check uses `sameController()`, as
+  `isToolsPad()` does).
+- **The tick beside a tool.** The controller tick now runs the follow
+  spot's own part while a tool runs: `joystickScene()` (a running cue's
+  follow spot found, `endLiveFollow()` and its restore glide when that
+  cue ends), `advanceRestoreGlide()`, `updateFollowSpotStatus()` and the
+  once-a-second stick search. Before, all of it waited for the tool's
+  end; a glide or a cue change during a tool now happens on time.
+- **Another device behind a patch is a pad lost (rule 3: "the pad lost
+  disarms").** Each input patch's device is known by an id its plugin
+  never gives another device (`QLCIOPlugin::inputDeviceId()`; the HID
+  plugin's, kept per device: the same whatever line it moves to). When a
+  plugin's configuration changes, after the patches have followed their
+  devices to new lines, a patch whose device id changed -- a pad
+  re-enumerated at its path, or another pad shifted onto its line when
+  one before it went (Linux joysticks with no location) -- is treated
+  exactly as an unplug followed by a plug (`ProgrammerController::
+  checkPadDevices()`, `padLost()`): what the old device read and the
+  input patch had not delivered yet goes out first, in order
+  (`InputPatch::deliverNow()`: a stop press of the old device counts);
+  then an arm made on it drops, saying "Disarmed: the controller went
+  away." on the chip; a tool it owned runs on with no owner; what it
+  pushed on the follow spot lets go; and nothing it held is held -- the
+  Run role's four and the stop's latch (on its twin lines too), the
+  chords and buttons, the walk's modifier and level. The device there
+  now starts from nothing: it arms with its own two controls, and GOs
+  with its own LT + A. A pad that only moved lines (the same device id)
+  is told nothing: it keeps its arm, its held safety, a chord or a stop
+  squeeze in progress, and every reading. A plugin that can't tell a
+  device (id 0) is concluded nothing about, as before. A patch follows
+  its device by id (`InputOutputMap::followInputDevices()`), and never
+  takes a line whose device another patch follows: two pads of one name
+  each keep their own universe. A patch whose device is gone follows the
+  device that replaced it in place, as its plugin says
+  (`QLCIOPlugin::inputDeviceReplacement()`: the HID plugin's same-path
+  re-enumeration) -- a pad lost and a new one, on its own universe; never
+  a device by its name (a spare of that name on charge is not the pad that
+  went). Otherwise it waits offline, and the pad plugged back reopens it:
+  a line of its name that no other patch follows and whose device was not
+  already here when it went, nor re-enumerated from one that was
+  (`retryOfflinePatches()`, `Universe::OfflinePatch::notTheDevice`). A pad
+  already connected never takes over by itself (it may not be the same
+  pad): the notice says the universe waits for its own device, and --
+  only when that other pad is no universe's (`InputOutputMap::
+  hasFreeInputDevice()`), and only for the first universe in order that
+  waits for that name (the one `retryOfflinePatches()` gives a replugged
+  spare) -- that it takes over once unplugged and plugged back in, or
+  patched in Inputs/Outputs. Another universe's pad is never offered. An
+  "any game controller" slot follows its pad's device id to whatever line
+  it moved to (never a spare that moved onto its old line), and a line is
+  another universe's by the device that universe's patch follows, not by
+  the line index it was patched to (`slotDeviceLine()`): two "any" slots
+  keep their own pads when a pad before both goes, though the later one is
+  looked at after the earlier has moved. A plugin with no ids keeps the
+  line-and-name rule, as before. Every value is read with the roles its device had
+  (`ProgrammerController::controllerRole()` learns a universe's roles while
+  its device is known, and again at once after a patch, device, profile,
+  slot or configuration change, once what was read has been delivered,
+  never later from whatever device is there then): a press
+  delivered after its pad was unplugged, or after another model took its
+  line, is never read with another layout. Before any patch is set again or let
+  go (a re-patch, an unplug, a controller slot's change), what it read and
+  has not delivered goes out first, with the patch it was read on
+  (`InputOutputMap::setInputPatch()` calls `InputPatch::deliverNow()`
+  with no lock held), and a frame flushed on a universe thread moves from
+  the buffer to the delivery queue in one locked step. In the HID plugin
+  each value carries its device's id, so a value read before its device
+  moved to another line is delivered on its line then, and a gone
+  device's value goes nowhere (`HIDPlugin::slotDeviceValue()`). A button's
+  release with no press seen since its pad was new is ignored (never a
+  View undo or a stick click). decided (inherent): three of the four
+  held on the pad whose device changed are gone with it -- the new
+  device must squeeze the stop afresh (a full squeeze held across the
+  change on that pad has stopped already, and the next full squeeze stops
+  again). Its twin lines' latches are cleared too, so a twin line still
+  reading all four fires the stop again on its next reading -- a second
+  stop, which errs the safe way. Known limits (round-5 review): an "any
+  game controller" slot (`InputOutputMap::applyInputSlots()`) keeps its
+  own pad by device id while that pad is here, but once its pad is gone
+  it takes the first free line of any game controller -- a pad by its
+  kind, not the one it had (as a pad lost and a new one: disarmed); and a
+  named slot device always takes the first line of its name, so it never
+  reaches the second of two pads of one name. Not built here. Fixed here:
+  an "any" slot no longer keeps a line another universe's patch is on (a
+  manual patch and an "any" slot on one pad); a slot moving to another
+  device is a pad lost (by device id, never "the same name"); and two
+  "any" slots no longer swap pads when a pad before both is unplugged
+  (lines taken by device id, `PadTraces_Test::twoAnySlotsKeepTheirOwnPads`). Known
+  limits with no stable identity for a pad (Linux joysticks and
+  same-model macOS pads without one): a spare plugged in while B is away
+  and before B returns is taken for B; and when every pad sleeps at once
+  the pads of one name come back in the order they wake, each universe
+  taking the next. The way forward is a device serial
+  (`HIDFound::serial`) as the identity where the pad gives one -- not
+  built here.
+- **The restore glide waits for a tool.** A cue's follow spot ending
+  glides its subject back where the show has it; while a tool's lights
+  aim at that subject the glide waits where it is, and goes on when the
+  tool ends or moves off them, from where the subject is then, over the
+  whole fade (`advanceRestoreGlide()`).
+- Unchanged: the emergency stop is read first on every pad (4), the arm
+  takes two controls, the runner's GO family rules beside a focus or a
+  walk (11, Q252), and one status source per surface (9).
+
+decided (by the builder, can change): the live set of Focus This Cue /
+Look started on the laptop is the whole cue (every layer it can step to),
+the walk's only its current layer; with one controller a laptop tool has
+the sticks at once (invariant 1); a beside pad's D-pad is the spot's, so a
+press that is to take an ownerless tool is any other button.
 
 ## Where it is set
 
@@ -345,3 +503,31 @@ window still open.
   start (engine/test/padrunrules) and a one-shot (ui/test/padhit); the
   chip, button and lights (ui/test/padrunrules
   `focusBesideTheRunnerOnEverySurface`).
+- The follow spot beside a tool (Q253): every tool x its lights inside the
+  spot's or not x the spot on the tool's pad or another, on the real
+  follow spot path (the subject's motion): steers or holds, the status
+  words, the sticks zeroed on hold, no jump at the tool's start or end or
+  from a stick held through it (engine/test/followspotfeel
+  `q253TheSpotBesideEveryTool`); one pad seen twice steers once
+  (`q253ATwinPadDoesNotDoubleSteer`); lights aimed at the spot's subject
+  hold it, every tool (`q253TargetTiedLightsHoldTheSpot`); a free-fly
+  spot's script hears no speed through the hold
+  (`q253AFreeFlySpotHoldsStill`); a walk's cue steps keep its owner and a
+  beside pad's fine stick (`q253AWalksCueStepsKeepItsOwnerAndTheSpot`);
+  the footer's chip as drawn, at three sizes
+  (ui/test/padrunrules `q253TheFollowChipSaysWhyItHolds`); another
+  pad's hot-plug keeps what a pad holds (engine/test/padrunrules
+  `aHotPlugKeepsTheOtherPadsHeld`); the
+  restore glide waits for a tool aimed at the subject
+  (`q253TheRestoreGlideWaitsForTheTool`); another device behind a patch is
+  a pad lost (`aChangedDeviceIsALostPad`, `noStopOnAnArmAfterADeviceChange`,
+  `aBufferedStopPressCountsBeforeTheReset`,
+  `aReleaseWithNoPressSeenDoesNothing`; the chip as drawn,
+  ui/test/padrunrules `aChangedDeviceDisarmsOnTheChip`); a device's id
+  follows it (plugins/hid/test `aDevicesIdFollowsTheDevice`); through the
+  real HID plugin, a pad shifted onto another's line disarms it and
+  another pad's drop leaves the runner as it was, with and without
+  locations (engine/test/padtraces `aShiftedLineIsNoSafety`,
+  `anotherPadsDropLeavesTheRunnerAsItWas`, `aPadReenumeratedKeepsItsUniverse`,
+  `aPadUnpluggedAndBackTakesNoOtherPad`); a queued value follows its
+  device (plugins/hid/test `aQueuedValueFollowsItsDevice`).

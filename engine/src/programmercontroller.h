@@ -578,6 +578,11 @@ public:
         /** The same in fewer words, for a narrow footer: "Facing 270°, as it
          *  was", "Facing unchanged: push further". */
         QString facingShort;
+        /** Board Q253: a controller tool is working on the follow spot's
+         *  own lights, so the spot holds (its sticks zeroed) until the tool
+         *  ends or moves off them -- the tool's name ("Venue Focus", "the
+         *  walk"); empty when nothing holds it. followSpotHeldText(). */
+        QString heldBy;
 
         bool operator==(const FollowSpotStatus &o) const
         {
@@ -587,11 +592,25 @@ public:
                    && sizeCm == o.sizeCm && beamDeg == o.beamDeg && padSet == o.padSet
                    && sizeShown == o.sizeShown && limit == o.limit && saved == o.saved
                    && settingFacing == o.settingFacing && facingSaid == o.facingSaid
-                   && facingShort == o.facingShort;
+                   && facingShort == o.facingShort && heldBy == o.heldBy;
         }
         bool operator!=(const FollowSpotStatus &o) const { return !(*this == o); }
     };
     FollowSpotStatus followSpotStatus() const { return m_followStatus; }
+    /** "Follow spot holds: Venue Focus is working on its lights" (board
+     *  Q253): FollowSpotStatus::heldBy in words, for every surface that
+     *  shows the follow spot's status (its footer chip, the Look Editor,
+     *  the rig view's tip). */
+    static QString followSpotHeldText(const QString &tool);
+    /** The controller tool running now in the operator's words: "Venue
+     *  Focus", "Quick Focus", "Focus This Cue", "Focus This Look", "the
+     *  walk"; empty with none. */
+    QString toolName() const;
+    /** Board Q253: @p universe's pad is the running tool's -- its owner (or
+     *  the owner's twin line), or, with no owner yet, a pad with Focus
+     *  when it is the only controller here. Its sticks are the tool's;
+     *  every other pad's follow spot controls stay the follow spot's. */
+    bool isToolsPad(quint32 universe) const;
     /** "Speed ×1.5": the D-pad's speed step, as the indicators say it. */
     static QString followSpotSpeedText(double multiplier);
     /** The follow spot's Top Speed now, metres a second (x1). */
@@ -1005,6 +1024,23 @@ private:
         void clear() { pads.clear(); }
     };
     HeldRoles m_heldRoles;
+    /** Per pad universe, the device last seen behind its patch: the
+     *  plugin and its QLCIOPlugin::inputDeviceId() (0: not known). */
+    QHash<quint32, QPair<QString, quint64>> m_padDevices;
+    /** Per pad universe, the buttons seen down since its device was new:
+     *  a release with none seen is ignored. */
+    QHash<quint32, QSet<int>> m_seenDown;
+    /** Universes whose plugin gave no device id when last asked: not asked
+     *  on every value (cleared by a patch or configuration change). */
+    QSet<quint32> m_noDeviceId;
+    QPair<QString, quint64> padDevice(quint32 universe) const;
+    /** After a plugin's configuration changed: a pad patch whose device id
+     *  changed (replaced, or another shifted onto its line) is a pad lost
+     *  and a new one -- what the old one read is delivered first. */
+    void checkPadDevices();
+    /** The pad on @p universe is gone (unplugged, re-patched to another
+     *  device, or another device behind its patch): as an unplug. */
+    void padLost(quint32 universe);
     float m_fineNormX = 0.5f, m_fineNormY = 0.5f;
     /** The follow spot's fine stick, per pad and per axis (review 0.4.10
      *  verify, H-A): universe -> its last X and Y readings (0..1). The
@@ -1016,8 +1052,90 @@ private:
     QHash<quint32, QPointF> m_finePads;
     /** The pad whose LS began the facing push (UINT_MAX: none). */
     quint32 m_recalUniverse = UINT_MAX;
+    /** The share @p universe's fine stick is kept under: the pad's own, or
+     *  its twin line's when the same pad is seen twice (one identity), so
+     *  one physical stick is one share, never two (board Q253). */
+    quint32 fineSlot(quint32 universe) const;
     /** m_fineNormX/Y from m_finePads. */
     void combineFineSticks();
+    /** The tool's own sticks (board Q253): what the tool's pad pushes, kept
+     *  apart from the follow spot's (m_panNorm, m_tiltNorm, m_fineNormX/Y),
+     *  so another pad steering the spot beside a tool and the tool's pad
+     *  never write into each other. */
+    float m_toolPanNorm = 0.5f, m_toolTiltNorm = 0.5f;
+    float m_toolFineX = 0.5f, m_toolFineY = 0.5f;
+    void centreToolSticks();
+    /** Board Q253: a stick axis of the follow spot's that was deflected
+     *  when the spot stopped taking it (a tool's hold on its lights, its
+     *  pad becoming the tool's) moves nothing until it has been back to
+     *  centre once -- a stick held through the change never jumps the
+     *  spot. Coarse pan / tilt, and each pad's fine axes by its share
+     *  (fineSlot() << 1 | axis). */
+    bool m_panLatched = false, m_tiltLatched = false;
+    QSet<quint64> m_fineLatched;
+    /** Inside the follow spot's deadzone. */
+    bool spotStickCentred(float norm) const;
+    /** A follow spot stick axis read while the spot does not take it:
+     *  deflected, it is latched; centred, let go. */
+    void noteSpotAxis(quint32 universe, int role, bool pan, bool tilt, float norm);
+    /** The bound stick's reading, as the follow spot takes it (the latch
+     *  first). */
+    void takeSpotStick(bool pan, float norm);
+    /** The follow spot lets go of what @p universe's pad (UINT_MAX: every
+     *  pad) pushed and latches what was deflected (board Q253). @p stick:
+     *  the bound stick too. */
+    void zeroAndLatchSpot(quint32 universe, bool stick);
+    /** The lights the running tool works on now (board Q253): the venue
+     *  focus's call, Quick Focus's list, Focus This Cue's or Look's whole
+     *  cue or scenes, the walk's layer -- worked out again only when the
+     *  tool, its call, cue or layer changes (m_toolLightsKey), never every
+     *  tick. The follow spot's own lights likewise, by its scene (and
+     *  again every second, for a scene edited meanwhile). */
+    struct ToolLightsKey
+    {
+        int kind = 0;               ///< 0 none, 1 FocusSession, 2 RefineSession
+        int generation = 0;         ///< a session started again
+        int index = -1;             ///< the venue focus's call
+        int count = 0;              ///< its heads, or the cue's layers
+        quint32 id = UINT_MAX;      ///< Refine's cue
+        quint32 layer = UINT_MAX;   ///< the walk's layer
+        bool operator==(const ToolLightsKey &o) const
+        {
+            return kind == o.kind && generation == o.generation && index == o.index
+                   && count == o.count && id == o.id && layer == o.layer;
+        }
+    } m_toolLightsKey;
+    int m_toolGeneration = 0;
+    QSet<quint32> m_toolLights;
+    QSet<quint32> m_spotLights;
+    quint32 m_spotLightsScene = UINT_MAX;
+    int m_spotLightsTicks = 0;
+    /** The tool's name when it works on the follow spot's lights in scene
+     *  @p sceneId (empty: it does not, or no tool runs). @p tick: the
+     *  controller tick (the spot's own lights are looked at again now and
+     *  then). */
+    QString toolOnSpotLights(quint32 sceneId, quint32 targetId, bool tick);
+    /** The running tool's lights, targets and name, worked out again when
+     *  it changed (and with @p tick once a second); false with no tool. */
+    bool refreshToolSets(bool tick);
+    /** The stage targets the tool's live looks aim at (its calls' and
+     *  references', its cue's or layer's Aim looks): the follow spot
+     *  moving its subject @p targetId moves those lights (review of Q253). */
+    QSet<quint32> m_toolTargets;
+    int m_toolLightsTicks = 0;
+    /** toolName() as of the last change of the tool (not a tr() a tick). */
+    QString m_toolNameCached;
+    /** The hold the follow spot is under now (m_followStatus.heldBy as it
+     *  will be): from no hold to one, everything pushed on it is let go
+     *  and latched and it stops at once. */
+    void syncSpotHold(const QString &tool);
+    QString m_spotHeldBy;
+    /** A tool started or another pad took it: the follow spot lets go of
+     *  (and latches) what the tool's pad had pushed on it. */
+    void syncSpotToolPad();
+    bool m_spotSeenActive = false;
+    quint32 m_spotSeenOwner = UINT_MAX;
+    int m_spotSeenGeneration = 0;
     /** Every pad's fine stick centred (a tool, a mode change, a hold). */
     void centreFineSticks();
     /** The follow spot lets go of what @p universe's pad left it (UINT_MAX:
@@ -1040,6 +1158,17 @@ private:
     void refreshPadFamily();
     /** The gamepad role of an input channel, from its device profile. */
     int controllerRole(quint32 universe, quint32 channel) const;
+    /** The plugin's answer now, for the device on the patch's line. */
+    int liveControllerRole(quint32 universe, quint32 channel) const;
+    /** Each universe's roles by channel, learnt while its device is known
+     *  (controllerRole() reads them): a value delivered after the device
+     *  went is read with its own layout (round-6 review). */
+    static constexpr quint32 kRoleMapChannels = 128;
+    mutable QHash<quint32, QVector<int>> m_roleMaps;
+    void learnRoles(quint32 universe) const;
+    /** Learn @p universe's roles again now (UINT_MAX: every universe
+     *  learnt so far), from the device on its line now. */
+    void forgetRoles(quint32 universe);
     /** Focus mode's share of slotControllerInputChanged(). True if it took
      *  the event. @p knownRole: controllerRole() if already worked out. */
     bool routeFocusInput(quint32 universe, quint32 channel, uchar value, int knownRole = -1);
