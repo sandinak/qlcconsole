@@ -419,3 +419,50 @@ RGB Matrix (the Workbench said "Effect look…", last).
   sub-cue rows are in Organise: one item, its words following the selection.
 - Show Review's "I meant it" is a review-row action, not an object menu.
   The cyc-backwash layer item is in Kind of a cue layer.
+
+## 4. Rules for making a menu (2026-11-17)
+
+*Ask: "our menus are getting long again .. make them flow from top to
+bottom based on action .. if they're long consider submenus by area ..
+write a set of rules for generation so that we're always consistent."*
+These are UX-79 and UX-80 in [UX_RULES.md](../dev/UX_RULES.md);
+`ui/test/contextmenus` (`everyMenuKeepsTheLaws`) enforces them on every
+menu it can build offscreen.
+
+1. **Bands, top to bottom, by what you do with the thing.** The eight
+   sections of 3.1 are these bands:
+
+   | Band | What you do | Sections of 3.1 |
+   |---|---|---|
+   | 0 | Where you are (the place's own items, the list's view) | Place, View |
+   | 1 | Open or edit it | Open |
+   | 2 | Act on it live: test, locate, flash, solo, why is this on | Kind |
+   | 3 | Arrange it: move, align, group, layer, select more like it | Selection, Organise |
+   | 4 | Copy, duplicate, export, rename | Edit |
+   | 5 | Properties and settings | Kind (settings), Open (properties dialogs) |
+   | 6 | Remove or delete it, always last | Remove |
+
+   One separator between bands, none inside one.
+2. **A delete is the last item.** "Delete X…" (destroy) has nothing after
+   it. "Remove from Y" is the place's and sits in band 0.
+3. **At most 12 items at the top level** (about 10 is the aim). Past that,
+   items by area go into a submenu named for the area ("Align ▸", "Layer ▸",
+   "Export ▸", "Group ▸"). The top level keeps the band's first and most-used
+   items.
+4. **Never a submenu of one item.** Put it in the parent.
+5. **One action, one place, one set of words.** The same action sits in the
+   same band and has the same text in every menu (3.2). A new item for a
+   kind goes into that kind's builder (`ui/src/contextmenus.cpp`), not into
+   one place's menu.
+6. **A greyed item says why.** An item the person would expect stays, greyed,
+   with the reason in its tooltip ("Test works on one fixture. Select a single
+   fixture."). It does not vanish and it does not stay enabled.
+7. **Every item does something visible or says why it can't.** A trigger that
+   opens nothing, changes nothing and says nothing is a bug (the Fixture
+   Manager's Test Fixture kept the last fixture's enabled state on a group
+   row and did nothing).
+8. **New menus** are built with `ContextMenu` (sections), count their items
+   against rule 3, and add themselves to the inventory below with the test
+   that builds them. A menu the test cannot reach is built so that it can
+   (a `fillContextMenu(QMenu *, …)` that the popup then calls).
+

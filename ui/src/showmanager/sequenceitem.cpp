@@ -872,10 +872,6 @@ void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     if (m_editable && m_selectedSteps.isEmpty() == false && !stepsLocked())
     {
         const int n = m_selectedSteps.count();
-        QAction *del = menu.addAction(n > 1 ? tr("Delete %1 Selected Cues").arg(n)
-                                            : tr("Delete cue"));
-        connect(del, &QAction::triggered, this, [this]() { deleteSelectedCues(); });
-
         QAction *scale = menu.addAction(n > 1 ? tr("Scale %1 Cues' Timing…").arg(n)
                                               : tr("Scale cue timing…"));
         connect(scale, &QAction::triggered, this, [this]() {
@@ -895,6 +891,16 @@ void SequenceItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 
     foreach (QAction *action, getDefaultActions())
         menu.addAction(action);
+
+    // Delete is the last item (UX-79).
+    if (m_editable && m_selectedSteps.isEmpty() == false && !stepsLocked())
+    {
+        const int n = m_selectedSteps.count();
+        menu.addSeparator();
+        QAction *del = menu.addAction(n > 1 ? tr("Delete %1 Selected Cues").arg(n)
+                                            : tr("Delete cue"));
+        connect(del, &QAction::triggered, this, [this]() { deleteSelectedCues(); });
+    }
 
     menu.exec(QCursor::pos());
 }

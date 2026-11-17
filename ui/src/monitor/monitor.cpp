@@ -11910,7 +11910,9 @@ void Monitor::showFixturePropertiesById(quint32 fxId)
         // Select the item and use the full editor (includes position/rotation/gel)
         m_graphicsView->scene()->clearSelection();
         item->setSelected(true);
-        showFixtureItemEditor();
+        // By id, not by what the selection kept: a fixture on a hidden or
+        // locked layer is not selectable and the editor used to not open.
+        showFixtureItemEditor(QList<quint32>() << fxId);
     }
     else
     {
