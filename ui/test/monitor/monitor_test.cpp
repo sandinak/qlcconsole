@@ -2336,7 +2336,7 @@ void Monitor_Test::aPlacedStaffIsDrawn()
     Fixture *staff = new Fixture(doc.data());
     staff->setName("Office Staff");
     staff->setFixtureDefinition(def, def->mode("Effect (15ch)"));
-    staff->setConnection(Fixture::NetworkConnection);
+    staff->setConnection(Fixture::Network);
     staff->setTransport(Fixture::WledTransport);
     staff->setStageLook(Fixture::StaffLook);
     staff->setPatched(patched);
@@ -2403,7 +2403,7 @@ void Monitor_Test::theSideListNamesEveryFixture()
         Fixture *f = new Fixture(doc.data());
         f->setName(name);
         f->setFixtureDefinition(def, def->mode("Effect (15ch)"));
-        f->setConnection(Fixture::NetworkConnection);
+        f->setConnection(Fixture::Network);
         f->setTransport(Fixture::WledTransport);
         f->setStageLook(Fixture::StaffLook);
         f->setPatched(patched);
