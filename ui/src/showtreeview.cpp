@@ -8864,8 +8864,8 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
                                 tr("Move, zoom, focus and recolour this cue from the stage with the "
                                    "controller: the layer as a whole, or one fixture as an exception"));
         /* How the layer is built (split, children, parts, detach) is one
-           Structure submenu: the menu stays short (UX-80). */
-        QMenu *structure = menu.addMenu(ContextMenu::Kind, tr("Structure"), QStringLiteral("stStructure"));
+           Layer Tools submenu: the menu stays short (UX-80). */
+        QMenu *structure = menu.addMenu(ContextMenu::Kind, tr("Layer Tools"), QStringLiteral("stStructure"));
         QAction *split = structure->addAction(tr("Split Layer (One per Group)"), this, [this, cueId, layerId]() {
             QString why;
             if (!splitLayer(cueId, layerId, &why))
@@ -8970,19 +8970,21 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
             clip->addAction(tr("Cut"), QKeySequence::Cut, this, place.cut)->setObjectName(QStringLiteral("stCutLayer"));
         if (place.copy)
             clip->addAction(tr("Copy"), QKeySequence::Copy, this, place.copy)->setObjectName(QStringLiteral("stCopyLayer"));
+        // Paste and Duplicate stay at the top level: they are the ones used most.
         if (place.paste)
         {
             const bool cueClip = !m_commander->clipboard.cues.isEmpty();
-            QAction *paste = clip->addAction(cueClip ? tr("Paste After This Cue")
-                                                     : (m_commander->clipboard.cut ? tr("Move Here, After This Layer")
-                                                                                   : tr("Paste After This Layer")),
-                                             QKeySequence::Paste, this, place.paste);
-            paste->setObjectName(QStringLiteral("stPasteHere"));
+            QAction *paste = menu.add(ContextMenu::Edit,
+                                      cueClip ? tr("Paste After This Cue")
+                                              : (m_commander->clipboard.cut ? tr("Move Here, After This Layer")
+                                                                            : tr("Paste After This Layer")),
+                                      place.paste, QStringLiteral("stPasteHere"));
+            paste->setShortcut(QKeySequence::Paste);
             paste->setEnabled(!m_commander->clipboard.isEmpty());
         }
         if (place.duplicate)
-            clip->addAction(tr("Duplicate"), QKeySequence(Qt::CTRL | Qt::Key_D), this, place.duplicate)
-                ->setObjectName(QStringLiteral("stDuplicateLayer"));
+            menu.add(ContextMenu::Edit, tr("Duplicate"), place.duplicate, QStringLiteral("stDuplicateLayer"))
+                ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
         const QString name = own->name;
         menu.add(ContextMenu::Edit, tr("Rename…"), [this, layerId, name]() {
             bool ok = false;

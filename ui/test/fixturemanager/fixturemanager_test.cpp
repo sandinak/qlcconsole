@@ -1008,9 +1008,9 @@ void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
     QTreeWidgetItem *stagedRow = fixtureRow(mgr, staged->id());
     QVERIFY(realRow != nullptr && stagedRow != nullptr);
 
-    QVERIFY(contextMenuTexts(mgr, realRow).contains("Fixture Setup ▸ Return to Inventory…"));
+    QVERIFY(contextMenuTexts(mgr, realRow).contains("Return to Inventory…"));
     const QStringList st = contextMenuTexts(mgr, stagedRow);
-    QVERIFY2(!st.contains("Fixture Setup ▸ Return to Inventory…"), qPrintable(st.join(" | ")));
+    QVERIFY2(!st.contains("Return to Inventory…"), qPrintable(st.join(" | ")));
     QVERIFY2(st.contains("Patch…"), qPrintable(st.join(" | ")));
 
     /* "we should clean up that menu to organize it", and since 2026-11-03
@@ -1018,8 +1018,8 @@ void FixtureManager_Test::returnToInventoryIsOfferedForPatchedFixturesOnly()
        submenus) on top, then the fixture's own menu as everywhere --
        Fixture Properties…, Patch… -- and deleting it last. */
     const QStringList rt = contextMenuTexts(mgr, realRow);
-    const QStringList order = { "Test Fixture…", "Group", "Fixture Setup", "Fixture Setup ▸ Return to Inventory…",
-                                "Fixture Properties…", "Patch…", "Delete…" };
+    const QStringList order = { "Test Fixture…", "Group", "Fixture Setup",
+                                "Fixture Properties…", "Patch…", "Return to Inventory…", "Delete…" };
     int last = -1;
     foreach (const QString &t, order)
     {

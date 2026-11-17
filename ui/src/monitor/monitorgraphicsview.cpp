@@ -10681,19 +10681,20 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
        these: what only the plot does with it. */
     /* Where this one lands, on its own -- no need to select it first, and it
        stays drawn while you look at something else. */
-    /* What only the plot does with a fixture is one "Plot Setup" submenu, so
+    /* What only the plot does with a fixture is one "Mounting && Masking" submenu, so
        the menu stays short (UX-80): footprint, masking, mounting, height,
        studio component. */
-    QMenu *plotSetup = menu->addMenu(tr("Plot Setup"));
-    plotSetup->setObjectName(QStringLiteral("plotSetupMenu"));
+    QMenu *plotSetup = nullptr;      // "Mounting & Masking", filed below the two rows kept at the top
     {
         const bool fpOn = fixtureFootprintShown(fid);
-        QAction *fp = plotSetup->addAction(tr("Show Light Footprint"), this, [this, fid]() {
+        QAction *fp = menu->addAction(tr("Show Light Footprint"), this, [this, fid]() {
             setFixtureFootprintShown(fid, !fixtureFootprintShown(fid));
         });
         fp->setCheckable(true);
         fp->setChecked(fpOn);
         fp->setToolTip(tr("Draw where this head's beam lands, in Top view"));
+        plotSetup = menu->addMenu(tr("Mounting && Masking"));
+        plotSetup->setObjectName(QStringLiteral("plotSetupMenu"));
         /* Tape over the front of the light: opens its Fixture Properties,
            where the Masking row is. */
         QAction *mask = plotSetup->addAction(tr("Masking…"), this, [fid]() {
@@ -10927,7 +10928,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         }
     }
     // In the show's units, as the plot's other dialogs.
-    QAction *heightAct = plotSetup->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
+    QAction *heightAct = menu->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
                     this, [this, fid]() {
         if (!MonitorFixtureItem::askMountingHeight(this, m_doc->monitorProperties(), fid))
             return;

@@ -1048,9 +1048,11 @@ A place leaves out only what makes no sense there:
   group or several it is greyed and its tip says to pick one), Reset (one
   fixture), a **Group** submenu (Add to Group ▸, Remove from Group, Rebuild
   Composite from Members), **Fixture Setup ▸** (Definition & Mode…, Change
-  Definition…, Edit Fixture Definition…, Plot Symbol ▸, Return to
-  Inventory…, Power ▸, Channel Behaviour & Modifiers…) and **View ▸**
-  (Expand All, Collapse All). **Delete…** for fixtures is last.
+  Definition…, Edit Fixture Definition…, Plot Symbol ▸, Power ▸,
+  Channel Behaviour & Modifiers…). **Return to Inventory…** sits next to
+  Patch…. **Reset** is greyed, with its reason, on a group or several
+  fixtures. **View ▸** (Expand All, Collapse All) is on the roots, not on
+  a fixture or group row. **Delete…** for fixtures is last.
 - **A Build scene** lists a group or fixture as part of that scene. It
   adds **Remove from Scene** and **Focus This Look…** on top, and has no
   Delete, Move to Folder or Select All Similar.
