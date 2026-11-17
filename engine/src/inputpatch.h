@@ -106,6 +106,10 @@ public:
 
     /** An input line provided by the assigned plugin */
     quint32 input() const;
+    /** The device this patch opened (QLCIOPlugin::inputDeviceId(); 0: the
+     *  plugin can't tell), as of its last set() or reconnect(): a device
+     *  that moves to another line is followed by it, not by its name. */
+    quint64 deviceId() const { return m_deviceId; }
 
     /** Friendly name of the assigned input line */
     QString inputName() const;
@@ -182,6 +186,7 @@ private:
     quint32 m_pluginLine;
     /** The line's name when it was patched (inputUID()) */
     QString m_inputUID;
+    quint64 m_deviceId = 0;
     /** The reference of an input profile if activated by the user (otherwise NULL) */
     QLCInputProfile* m_profile;
     /** HID device profile name assigned by user (stored by name, not pointer) */

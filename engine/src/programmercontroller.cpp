@@ -3392,9 +3392,12 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     // Something came in: a controller being found again after a sleep is.
     m_keepAlive->noteInput();
 
-    // The device behind this patch, as first heard (padLost() on a change).
-    if (!m_padDevices.contains(universe))
-        m_padDevices.insert(universe, padDevice(universe));
+    // The device behind this patch, as first known (padLost() on a change).
+    {
+        const auto known = m_padDevices.constFind(universe);
+        if (known == m_padDevices.constEnd() || known->second == 0)
+            m_padDevices.insert(universe, padDevice(universe));
+    }
     /* A button's release with no press seen since the pad was new (a pad
        lost and back, another device behind the patch, or held as the app
        started): the end of a hold that is not this one's -- never a click

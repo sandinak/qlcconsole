@@ -94,6 +94,9 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     m_profile = profile;
     m_inputUID = (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
                  ? m_plugin->inputs().value(int(m_pluginLine)) : QString();
+    // The device it is patched to (0: the plugin can't tell): followed by it.
+    m_deviceId = (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
+                 ? m_plugin->inputDeviceId(m_pluginLine) : 0;
 
     if (m_plugin != NULL)
     {
@@ -147,6 +150,8 @@ bool InputPatch::reconnect()
         usleep(GRACE_MS * 1000);
 #endif
         bool ret = m_plugin->openInput(m_pluginLine, m_universe);
+        // The device on the line now (another, if one took its place).
+        m_deviceId = m_plugin->inputDeviceId(m_pluginLine);
         if (ret == true)
         {
             QMap<QString, QVariant>::iterator it = m_parametersCache.begin();

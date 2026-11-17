@@ -1997,7 +1997,18 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
             continue;   // a controller slot: applyInputSlots() follows it
 
         const QString device = ip->inputUID();
-        const int line = lines.indexOf(device);
+        /* The device it opened, by its id where the plugin gives one: two
+           pads of one name are told apart (a Linux joystick has no
+           location), so a pad renumbered when one before it went is
+           followed, not the first of that name (board Q253's fourth
+           review). Gone, or no id: by name, as ever. */
+        int line = -1;
+        if (const quint64 id = ip->deviceId())
+            for (int l = 0; l < lines.size() && line < 0; ++l)
+                if (plugin->inputDeviceId(quint32(l)) == id)
+                    line = l;
+        if (line < 0)
+            line = lines.indexOf(device);
         if (line == int(ip->input()))
             continue;   // where it was: reconnect() below is enough
 

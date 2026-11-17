@@ -995,8 +995,8 @@ void PadRunRulesUi_Test::aChangedDeviceDisarmsOnTheChip()
        (board Q253's fourth review). */
     Doc *doc = m_app->doc();
     InputOutputMap *iom = doc->inputOutputMap();
-    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
     m_stub->m_deviceIds = { { 0, 1 } };
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
     PadRun *run = doc->programmer()->padRun();
     auto restore = qScopeGuard([&]() {
         m_stub->m_deviceIds.clear();

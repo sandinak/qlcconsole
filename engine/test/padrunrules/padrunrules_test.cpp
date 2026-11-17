@@ -735,16 +735,19 @@ void PadRunRules_Test::aReleaseWithNoPressSeenDoesNothing()
     const RefineSession::Page first = r->page();
     press(kLS);
     QVERIFY(r->page() != first);
-    // Held across a device change, let go: nothing.
+    // Held across a device change, let go: nothing. (One at a time: both
+    // clicks together are the freeze chord.)
     const RefineSession::Page page = r->page();
     hold(kLS, true);
-    hold(kRS, true);
     m_stub->m_deviceIds[0] = 2;
     emit m_stub->configurationChanged();
-    const int said = int(m_said.size());
     hold(kLS, false);
-    hold(kRS, false);
     QVERIFY2(r->page() == page, "the release of a click held across a device change turned the page");
+    hold(kRS, true);
+    m_stub->m_deviceIds[0] = 3;
+    emit m_stub->configurationChanged();
+    const int said = int(m_said.size());
+    hold(kRS, false);
     QVERIFY2(int(m_said.size()) == said, qPrintable(QString("RS's release said: %1").arg(m_said.mid(said).join(" | "))));
     // A release never pressed at all: nothing.
     hold(kLS, false);
