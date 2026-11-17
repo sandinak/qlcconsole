@@ -137,13 +137,50 @@ static void keepFades(QList<Look> &to, const QList<Look> &from)
     }
 }
 
-/** The same for a cue's looks and its layers (by position). */
+/** The same for a cue's looks and its layers. A layer takes the fades of
+    its own self in @a fromLayers -- the same content (fades aside), else
+    the same name and target -- never of the layer at its place: a layer
+    inserted, moved or deleted elsewhere must not hand one layer's fades to
+    another (two Dimmer effects in one cue share a key). A layer with no
+    match keeps the fades it has. */
 static void keepCueFades(QList<Look> &looks, QList<Layer> &layers, const QList<Look> &fromLooks,
                          const QList<Layer> &fromLayers)
 {
     keepFades(looks, fromLooks);
-    for (int i = 0; i < layers.count() && i < fromLayers.count(); ++i)
-        keepFades(layers[i].looks, fromLayers.at(i).looks);
+    QVector<bool> used(fromLayers.count(), false);
+    QVector<int> match(layers.count(), -1);
+    // Same content first, for every layer, so a weaker match never takes
+    // a layer another one is exactly.
+    for (int i = 0; i < layers.count(); ++i)
+    {
+        const QString content = layerContent(layers.at(i), false);
+        for (int k = 0; k < fromLayers.count(); ++k)
+            if (!used.at(k) && layerContent(fromLayers.at(k), false) == content)
+            {
+                used[k] = true;
+                match[i] = k;
+                break;
+            }
+    }
+    for (int i = 0; i < layers.count(); ++i)
+    {
+        if (match.at(i) >= 0)
+            continue;
+        const Layer &l = layers.at(i);
+        for (int k = 0; k < fromLayers.count(); ++k)
+        {
+            const Layer &f = fromLayers.at(k);
+            if (!used.at(k) && f.name == l.name && f.target.signature() == l.target.signature())
+            {
+                used[k] = true;
+                match[i] = k;
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < layers.count(); ++i)
+        if (match.at(i) >= 0)
+            keepFades(layers[i].looks, fromLayers.at(match.at(i)).looks);
 }
 
 /** Whether every use of reusable layer @a rid in @a ps has the same effect
