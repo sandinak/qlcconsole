@@ -69,6 +69,9 @@ private slots:
     /** An "any" slot moved off a line another universe was patched to is
      *  a pad lost: disarmed, the spare's A plays nothing. */
     void anAnySlotTakesNoPadSilently();
+    /** An "any" slot follows its pad's device to another line, never the
+     *  spare that moved onto its old line. */
+    void anAnySlotFollowsItsPadNotTheLine();
     /** A spare that was here re-enumerates where it is: still not the pad
      *  a universe waits for. */
     void aSpareReenumeratedTakesNoUniverse_data();

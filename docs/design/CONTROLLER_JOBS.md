@@ -380,9 +380,13 @@ it holds, and the chip says why."
   already here when it went, nor re-enumerated from one that was
   (`retryOfflinePatches()`, `Universe::OfflinePatch::notTheDevice`). A pad
   already connected never takes over by itself (it may not be the same
-  pad): the notice says the universe waits for its own one, and that the
-  other takes over once unplugged and plugged back in, or patched in
-  Inputs/Outputs. A plugin with no ids keeps the
+  pad): the notice says the universe waits for its own pad, and -- only
+  when that other pad is no universe's (`InputOutputMap::
+  hasFreeInputDevice()`) -- that it takes over once unplugged and plugged
+  back in, or patched in Inputs/Outputs. Another universe's pad is never
+  offered. An "any game controller" slot follows its pad's device id to
+  whatever line it moved to (never a spare that moved onto its old line);
+  the line-and-name rule is kept only for plugins with no ids. A plugin with no ids keeps the
   name rule, as before. Every value is read with the roles its device had
   (`ProgrammerController::controllerRole()` learns a universe's roles while
   its device is known, and again at once after a patch, device, profile,

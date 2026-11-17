@@ -159,15 +159,30 @@ int InputOutputMap::slotDeviceLine(quint32 universe, const Universe::InputSlotDe
         return lines.indexOf(dev.uid);
 
     /* Any game controller: the one it has, while it is still here (two
-       pads on must not swap it to and fro), else the first one free. */
+       pads on must not swap it to and fro), else the first one free. The
+       one it has is its DEVICE, wherever it moved (round-8 review: a pad
+       before it unplugged shifts it, and a spare onto its old line). */
     InputPatch *ip = m_universeArray.at(universe)->inputPatch();
-    bool keptTaken = false;     // another universe is patched to that line now
-    for (quint32 u = 0; ip != nullptr && u < universesCount() && keptTaken == false; ++u)
+    // Another universe is patched to line @p l now.
+    auto takenByOther = [&](quint32 l) {
+        for (quint32 u = 0; u < universesCount(); ++u)
+        {
+            const InputPatch *other = u == universe ? nullptr : m_universeArray.at(u)->inputPatch();
+            if (other != nullptr && other->plugin() == plugin && other->input() == l)
+                return true;
+        }
+        return false;
+    };
+    if (ip != nullptr && ip->plugin() == plugin && ip->isPatched() && ip->deviceId() != 0)
     {
-        const InputPatch *other = u == universe ? nullptr : m_universeArray.at(u)->inputPatch();
-        keptTaken = other != nullptr && other->plugin() == plugin && other->input() == ip->input();
+        for (int l = 0; l < lines.count(); ++l)
+            if (plugin->inputDeviceId(quint32(l)) == ip->deviceId() && isGamepadLine(plugin, quint32(l))
+                && takenByOther(quint32(l)) == false)
+                return l;
     }
+    const bool keptTaken = ip != nullptr && takenByOther(ip->input());
     if (ip != nullptr && ip->plugin() == plugin && ip->isPatched() && keptTaken == false
+        && ip->deviceId() == 0
         && int(ip->input()) < lines.count() && lines.at(int(ip->input())) == ip->inputUID()
         && isGamepadLine(plugin, ip->input()))
         return int(ip->input());

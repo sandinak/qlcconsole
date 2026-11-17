@@ -28,6 +28,7 @@ class InputDeviceNotices_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void aPadOfTheSameNameIsNotTakenOverSilently_data();
     void aPadOfTheSameNameIsNotTakenOverSilently();
     void initTestCase();
     void init();

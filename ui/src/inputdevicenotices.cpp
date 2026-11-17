@@ -96,6 +96,8 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
             d.slotCount = slotNames.count();
             d.slotDevices = slotNames;
             d.sameNameHere = plugin->inputs().contains(rec.uid);
+            // One that no universe has: only that one may take over (round-8 review).
+            d.spareHere = d.sameNameHere && iom->hasFreeInputDevice(plugin, rec.uid);
             list << d;
         }
     }
@@ -128,15 +130,29 @@ QString InputDeviceNotices::kindName(const QString &plugin)
     return tr("Input device");
 }
 
-QString InputDeviceNotices::waitText(const Device &d)
+QString InputDeviceNotices::goneText(const Device &d, bool disconnected)
 {
-    /* Another device of that exact name is connected (a spare on charge):
-       it is not taken over by itself -- that one may not be the same pad
-       (board Q253's round-7 review). Said, so it doesn't read as a bug. */
-    if (d.connected || d.sameNameHere == false)
-        return QString();
-    return tr(": it waits for that one. Another '%1' is connected; to use it here, unplug it and "
-              "plug it back in, or patch it in Inputs/Outputs").arg(d.name);
+    /* Another device of that exact name connected: the universe is not
+       given it by itself (it may not be the same pad; board Q253). One no
+       universe has may be used here -- said how; one another universe has
+       is that universe's, and nothing is said of it (round-8 review). */
+    if (d.spareHere)
+        return disconnected
+            ? tr("%1 '%2' disconnected — universe %3 waits for its own pad. Another '%2' is connected: "
+                 "to use it here, unplug it and plug it back in, or patch it in Inputs/Outputs.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+            : tr("%1 '%2' not connected — universe %3 waits for its own pad. Another '%2' is connected: "
+                 "to use it here, unplug it and plug it back in, or patch it in Inputs/Outputs.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+    if (d.sameNameHere)
+        return disconnected
+            ? tr("%1 '%2' disconnected — universe %3 waits for its own pad.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+            : tr("%1 '%2' not connected — universe %3 waits for its own pad.")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+    return disconnected
+        ? tr("%1 '%2' disconnected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+        : tr("%1 '%2' not connected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1);
 }
 
 void InputDeviceNotices::schedule()
@@ -175,14 +191,12 @@ void InputDeviceNotices::settleNow()
         else if (d.connected == false && known == false)
         {
             // A show opened with it switched off, or asleep.
-            said << tr("%1 '%2' not connected — universe %3")
-                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1) + waitText(d);
+            said << goneText(d, false);
             warning = true;
         }
         else if (d.connected == false && was->connected)
         {
-            said << tr("%1 '%2' disconnected — universe %3")
-                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1) + waitText(d);
+            said << goneText(d, true);
             warning = true;
         }
         else if (d.connected && d.slotCount > 1 && seen && (known == false || was->connected == false))
@@ -250,8 +264,11 @@ void InputDeviceNotices::updateStatus(const QList<Device> &now) const
     {
         if (d.connected)
             continue;
-        const QString line = tr("%1 '%2' not connected — universe %3")
-                                 .arg(kindName(d.plugin), d.name).arg(d.universe + 1) + waitText(d);
+        // The footer's plain line: waiting for its own pad, when one of that name is here.
+        const QString line = d.sameNameHere
+            ? tr("%1 '%2' not connected — universe %3 waits for its own pad")
+                  .arg(kindName(d.plugin), d.name).arg(d.universe + 1)
+            : tr("%1 '%2' not connected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1);
         if (first.isEmpty())
             first = line;
         items << line;

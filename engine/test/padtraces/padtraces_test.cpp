@@ -660,6 +660,53 @@ void PadTraces_Test::aSpareReenumeratedTakesNoUniverse()
                               "universe 2 did not come back to B", 3000);
 }
 
+void PadTraces_Test::anAnySlotFollowsItsPadNotTheLine()
+{
+    /* Linux-like, no locations: B on line 0 (patched by hand, universe 2),
+       A on line 1 (universe 1's "any game controller" slot, armed), spare
+       C on line 2. B goes: A moves to line 0, C to line 1. The slot follows
+       A, its device -- still armed -- and never keeps line 1 for C (round-8
+       review). */
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    const QString b = QStringLiteral("/dev/input/js0"), a = QStringLiteral("/dev/input/js1"),
+                  c = QStringLiteral("/dev/input/js2");
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 1);
+    q253Scan(name, 1);
+    m_fake->list(a, 0x045e, 0x028e, name, 0, 2);
+    q253Scan(name, 2);
+    m_fake->list(c, 0x045e, 0x028e, name, 0, 3);
+    q253Scan(name, 3);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(2, QStringLiteral("HID"), QString(), 0));
+    Universe::InputSlotDevice any;
+    any.plugin = QStringLiteral("HID");
+    any.anyGamepad = true;
+    iom->setInputSlot(1, { any });
+    QTRY_VERIFY_WITH_TIMEOUT(iom->inputPatch(1) != nullptr && iom->inputPatch(1)->input() == 1, 2000);
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(q253In(a, kPadLb, 255));
+    QVERIFY(q253In(a, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QCOMPARE(run->armedUniverse(), quint32(1));
+    QVERIFY(q253In(a, kPadRb, 0));
+    QVERIFY(q253In(a, kPadLb, 0));
+    // B goes.
+    m_fake->unlist(b);
+    q253Scan(name, 2);
+    QCOMPARE(q253Line(a), 0);
+    QCOMPARE(q253Line(c), 1);
+    QTRY_VERIFY2_WITH_TIMEOUT(iom->inputPatch(1) != nullptr && iom->inputPatch(1)->input() == 0,
+                              "universe 1's slot did not follow its pad", 2000);
+    QVERIFY2(run->isArmed() && run->armedUniverse() == 1, qPrintable(QString("'%1'").arg(run->notice())));
+    // A's stop, on universe 1, stops.
+    for (quint32 ch : { kPadLb, kPadRb, kPadLt, kPadRt })
+        QVERIFY(q253In(a, ch, 255));
+    QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::AllOff)), 1, 2000);
+    for (quint32 ch : { kPadRt, kPadLt, kPadRb, kPadLb })
+        QVERIFY(q253In(a, ch, 0));
+}
+
 void PadTraces_Test::triggerRest()
 {
     /* Triggers resting at ~8 % and the sticks' jitter: the chord still

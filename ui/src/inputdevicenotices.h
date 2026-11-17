@@ -67,12 +67,14 @@ public:
         QStringList slotDevices;
         /** Not connected, while another device of that exact name is: the
          *  universe waits for its own one (a pad already connected never
-         *  takes it over by itself). */
+         *  takes it over by itself). @c spareHere: one of them is no
+         *  universe's (it may take over, unplugged and plugged back in). */
         bool sameNameHere = false;
+        bool spareHere = false;
     };
-    /** The words for a universe waiting for its own device while another
-     *  of that name is connected; empty when none is. */
-    static QString waitText(const Device &d);
+    /** What is said for @p d gone: @p disconnected (it was here), else
+     *  not connected (the show opened without it); in a whole sentence. */
+    static QString goneText(const Device &d, bool disconnected);
 
     /** Every input patched to a device (a plugin whose lines are hardware):
      *  the open ones, and the ones kept offline whose plugin is here. */

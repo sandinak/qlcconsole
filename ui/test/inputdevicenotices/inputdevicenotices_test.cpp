@@ -80,19 +80,33 @@ void InputDeviceNotices_Test::cleanup()
     ShowStatus::instance()->clearStatus(QStringLiteral("input.devices"));
 }
 
+void InputDeviceNotices_Test::aPadOfTheSameNameIsNotTakenOverSilently_data()
+{
+    QTest::addColumn<bool>("otherPatched");
+    QTest::newRow("the other pad is no universe's (a spare)") << false;
+    QTest::newRow("the other pad is universe 3's") << true;
+}
+
 void InputDeviceNotices_Test::aPadOfTheSameNameIsNotTakenOverSilently()
 {
     /* Two pads of one name; the one universe 2 is patched to goes, the
-       other stays connected. Universe 2 waits for its own pad, and the
-       notice and the footer say so -- and how to use the other one --
-       rather than "disconnected" while a pad of that name is right there
-       (round-7 review). */
+       other stays connected. Universe 2 waits for its own pad, and says
+       so. Only when the other is no universe's is the operator told how to
+       use it here -- never to unplug another universe's pad (round-8
+       review). */
+    QFETCH(bool, otherPatched);
     const QString pad = QStringLiteral("Pad");
     InputOutputMap *iom = m_doc->inputOutputMap();
     m_stub->m_lineNames = QStringList() << pad << pad;
     m_stub->m_deviceIds = { { 0, 11 }, { 1, 12 } };
     QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 0));
-    auto restore = qScopeGuard([&]() { m_stub->m_deviceIds.clear(); });
+    if (otherPatched)
+        QVERIFY(iom->setInputPatch(2, m_stub->name(), QString(), 1));
+    auto restore = qScopeGuard([&]() {
+        m_stub->m_deviceIds.clear();
+        iom->setInputPatch(2, KInputNone, QString(), QLCIOPlugin::invalidLine());
+        iom->forgetOfflinePatches(2);
+    });
     InputDeviceNotices notices(m_doc);
     notices.setSettleTime(100);
     notices.settleNow();
@@ -103,13 +117,15 @@ void InputDeviceNotices_Test::aPadOfTheSameNameIsNotTakenOverSilently()
     QVERIFY2(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine(),
              "universe 2 took the other pad of that name");
     QTRY_COMPARE(said.count(), 1);
-    const QString want = QString("Input device 'Pad' disconnected — universe 2: it waits for that one. "
-                                 "Another 'Pad' is connected; to use it here, unplug it and plug it back "
-                                 "in, or patch it in Inputs/Outputs");
+    const QString want = otherPatched
+        ? QString("Input device 'Pad' disconnected — universe 2 waits for its own pad.")
+        : QString("Input device 'Pad' disconnected — universe 2 waits for its own pad. Another 'Pad' is "
+                  "connected: to use it here, unplug it and plug it back in, or patch it in Inputs/Outputs.");
     QCOMPARE(said.at(0).at(0).toString(), want);
+    QVERIFY2(otherPatched == false || said.at(0).at(0).toString().contains("unplug") == false,
+             "another universe's pad was offered as a spare");
     const ShowStatus::Entry e = footerEntry();
-    QVERIFY2(e.summary.contains("it waits for that one") && e.summary.contains("unplug it and plug it back in"),
-             qPrintable(e.summary));
+    QCOMPARE(e.summary, QString("Input device 'Pad' not connected — universe 2 waits for its own pad"));
 }
 
 void InputDeviceNotices_Test::aDisconnectIsSaidOnceSettled()

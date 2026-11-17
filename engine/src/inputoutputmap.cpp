@@ -2102,6 +2102,29 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
         emit offlinePatchesChanged();
 }
 
+bool InputOutputMap::hasFreeInputDevice(const QLCIOPlugin *plugin, const QString &name) const
+{
+    if (plugin == NULL)
+        return false;
+    const QStringList lines = plugin->inputs();
+    for (int l = 0; l < lines.size(); ++l)
+    {
+        if (lines.at(l) != name)
+            continue;
+        const quint64 id = plugin->inputDeviceId(quint32(l));
+        bool taken = false;
+        for (Universe *uni : m_universeArray)
+        {
+            const InputPatch *p = uni->inputPatch();
+            if (p != NULL && p->plugin() == plugin && (id != 0 ? p->deviceId() == id : p->input() == quint32(l)))
+                taken = true;
+        }
+        if (taken == false)
+            return true;
+    }
+    return false;
+}
+
 bool InputOutputMap::inputDeviceFollowed(const QLCIOPlugin *plugin, quint64 id, const InputPatch *except) const
 {
     if (id == 0)
