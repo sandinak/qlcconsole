@@ -4049,7 +4049,8 @@ void PadRunRules_Test::theWalkOnADeletedCueHeldOnStage()
        (Chaser::holdsRemovedStep()). No cue of the list runs, so the walk
        in Operate said "Nothing running to walk: GO first" with the light
        up. There is no cue left to walk (the held step's cue is gone): the
-       walk is refused, and says what is on stage. */
+       walk is refused, and says what is on stage and the way round: in
+       Operate a pad's GO needs the arm, and an armed pad does not walk. */
     makeShow();
     QVERIFY(m_doc->function(listChaser()) != nullptr);
     m_doc->showControl()->setMainCueList(listChaser());
@@ -4080,7 +4081,10 @@ void PadRunRules_Test::theWalkOnADeletedCueHeldOnStage()
     press(kMenu, 0);
     QVERIFY(!run->isWalking());
     QVERIFY2(!run->notice().contains("Nothing running"), qPrintable(run->notice()));
-    QCOMPARE(run->notice(), QString("The cue on stage was deleted: its light is held until GO. GO, then walk."));
+    QCOMPARE(run->notice(), pc->padText(QString("The cue on stage was deleted: its light is held until the next GO. "
+                                                "Play a cue first (GO on the laptop, or arm, GO and disarm here), "
+                                                "then press {Menu}.")));
+    QVERIFY(!run->notice().contains(QLatin1Char('{')));
     QCOMPARE(pc->controllerOwner(), quint32(0xFFFFFFFF));
 }
 
@@ -4140,6 +4144,66 @@ void PadRunRules_Test::review2TheWalkerUnpluggedMidWalk()
     QVERIFY2(!run->isWalking(), "the walker went away and its walk went on");
     QVERIFY(run->isArmed());
     QCOMPARE(run->notice(), QString("Walk ended: the controller walking it went away."));
+    withLt(kA, 0);
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::aTwinWalkersLineDroppingKeepsTheWalkBeside()
+{
+    /* Review of the twin follow-ups: forgetPad() ended a walk beside the
+       runner when the walker's line went (sameController() is true for
+       the line itself), though the walker's pad, listed twice, was still
+       there on its twin line: "the controller walking it went away", and
+       what it had not kept was put back. The walk goes on on the twin
+       line, as the tools do (padLost()); the runner keeps its arm. */
+    makeShow();
+    m_stub->m_lineNames = QStringList() << "Pad A (AA:BB:CC:00:00:01)" << "Pad B (AA:BB:CC:00:00:02)"
+                                        << "Pad B (AA:BB:CC:00:00:02)";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u : { 0u, 1u, 2u })
+        QVERIFY(iom->setInputPatch(u, m_stub->name(), QString(), u));
+    ControllerJobs *jobs = m_doc->programmer()->controllerJobs();
+    jobs->setJobs(jobs->identityOfUniverse(0), ControllerJobs::Jobs(int(CJ::RunCues)));
+    jobs->setJobs(jobs->identityOfUniverse(1), ControllerJobs::Jobs(int(CJ::Focus)));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    QVERIFY(run->sameController(1, 2));
+    QCOMPARE(run->padCount(), 2);
+    run->setEnabled(true);
+    arm(true, 0);
+    // B's Menu, on both its lines: the walk beside the runner, B's.
+    for (uchar v : { uchar(255), uchar(0) })
+    {
+        axis(kMenu, v, 1);
+        axis(kMenu, v, 2);
+    }
+    QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    QCOMPARE(pc->controllerOwner(), quint32(1));
+    // A change not kept on the walk.
+    RefineSession *r = pc->refineSession();
+    QVERIFY(r->nudgeLevel(-40.0f));
+    QVERIFY(r->hasPending());
+    const int pending = r->pendingCount();
+    run->showNotice(QString());
+    // B's walking line goes; its twin line stays.
+    drop(1);
+    QVERIFY2(run->isWalking(), qPrintable(QString("the walker's twin line is still here and the walk ended: '%1'")
+                                              .arg(run->notice())));
+    QVERIFY2(r->hasPending() && r->pendingCount() == pending, "what the walk had not kept was put back");
+    QVERIFY(!run->notice().startsWith("Walk ended"));
+    QVERIFY(run->isArmed());
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    QCOMPARE(pc->controllerOwner(), quint32(2));
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: Walk · Pad B (…00:02)"));
+    // The runner is still beside the walk: its GO plays nothing.
+    withLt(kA, 0);
+    QCOMPARE(goes(), 0);
+    QVERIFY(run->notice().contains("is walking the show"));
+    r->revert();
+    // B's Menu on the line left ends the walk; the runner's GO works.
+    press(kMenu, 2);
+    QTRY_VERIFY(!run->isWalking());
+    QVERIFY(run->isArmed());
     withLt(kA, 0);
     QCOMPARE(goes(), 1);
 }

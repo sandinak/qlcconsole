@@ -279,6 +279,10 @@ private slots:
     /** 2: the walker loses Focus, or is unplugged, mid-walk. */
     void review2TheWalkerLosesFocusMidWalk();
     void review2TheWalkerUnpluggedMidWalk();
+    /** Twin follow-ups review: the walker beside the runner is a pad
+     *  listed twice and its walking line drops: the walk goes on on its
+     *  twin line (nothing put back), the runner stays armed. */
+    void aTwinWalkersLineDroppingKeepsTheWalkBeside();
     /** 5: the runner's swipe beside a walk steps nothing. */
     void review2ARunnersSwipeBesideAWalk();
     /** 6: the role switched mid-walk ends a walk beside the runner. */

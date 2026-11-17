@@ -423,8 +423,10 @@ View + B (or undo on the laptop) puts the light back.
 - **In Operate** the walk follows the quiet Refine rules. Only the
   running cue can be walked, GO moves it, nothing blinks or dims, and solo
   is refused. If the cue on stage was deleted (its light held until GO),
-  there is no cue to walk: Menu says *The cue on stage was deleted: its
-  light is held until GO. GO, then walk.*
+  there is no cue to walk: Menu says so, and that a cue has to play
+  first. With nothing running, Menu says the same way round: a GO from
+  the pad needs the arm and an armed pad does not walk, so GO on the
+  laptop (or arm, GO and disarm), then press Menu.
 - **No GO while walking**, and no arm. Menu first, then arm (hold LB + RB) and hold LT + A.
 - A focus-call cue that is armed still takes Menu to begin its calls.
   When the laptop then asks "Still at *venue*?", **hold A** for a second

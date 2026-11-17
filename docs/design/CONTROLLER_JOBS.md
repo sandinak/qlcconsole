@@ -369,7 +369,12 @@ it holds, and the chip says why."
   so its sticks never fall to the follow spot. The walk reads its
   triggers a line apart and steps on the pad's press
   (`PadRun::walkTriggerDown()`), as the Run map's `Line`: one line
-  digital and the other analog step once a pull. A walk refused beside
+  digital and the other analog step once a pull. A walk beside the
+  runner whose walker's line goes, its twin line still patched, walks on
+  on the twin line (`PadRun::forgetPad()`, by the walker's `padId()` kept
+  as the walk began: `m_walkerId`, `lineOfPad()`): nothing is put back and
+  the runner keeps its arm; the line holding the arm still disarms when
+  it goes. A walk refused beside
   the runner lets go of the tools at once (`releaseControllerNow()`), as
   the plain Menu walk's and a swipe's do.
 - **The tick beside a tool.** The controller tick now runs the follow

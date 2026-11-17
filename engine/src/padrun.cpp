@@ -1189,11 +1189,35 @@ bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
     return true;
 }
 
+quint32 PadRun::lineOfPad(const QString &pad, quint32 except) const
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    // "#n": a pad told by its universe alone has no other line.
+    if (iom == nullptr || m_pc == nullptr || pad.isEmpty() || pad.startsWith(QLatin1Char('#')))
+        return UINT_MAX;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (u != except && ip != nullptr && ip->isPatched() && m_pc->isPadUniverse(u) && padId(u) == pad)
+            return u;
+    }
+    return UINT_MAX;
+}
+
 void PadRun::forgetPad(quint32 universe)
 {
-    // The walker beside the runner went (second review 2).
+    /* The walker beside the runner went (second review 2) -- unless only
+       that line of a pad listed twice went: the walk goes on on its twin
+       line, as the tools do (ProgrammerController::padLost()). The gone
+       line no longer says whose it was: the walker's pad is m_walkerId. */
     if (m_walkBeside && isWalking() && sameController(universe, m_walker))
-        endBesideWalk(tr("Walk ended: the controller walking it went away."));
+    {
+        const quint32 twin = universe == m_walker ? lineOfPad(m_walkerId, universe) : m_walker;
+        if (twin == UINT_MAX)
+            endBesideWalk(tr("Walk ended: the controller walking it went away."));
+        else
+            m_walker = twin;
+    }
     /* That line's reading goes (a pad lost, or another device behind its
        patch, board Q253's fourth review: nothing it held is held); the
        pad's other line, still here, keeps its own: what each pad holds is
@@ -2421,6 +2445,7 @@ bool PadRun::startWalkBeside(quint32 universe)
     // The walker owns the walk's tool (Q135); the runner keeps its arm.
     m_walkBeside = true;
     m_walker = universe;
+    m_walkerId = padId(universe);
     m_pc->claimController(universe);
     if (!startWalk())
     {
@@ -2457,11 +2482,16 @@ bool PadRun::startWalk(quint32 cueId, QString *why)
         cueId = cueInHand();
     /* The cue on stage deleted (its light held until GO): there is no cue
        left to walk -- said as it is, never "nothing running". */
+    /* In Operate a GO from the pad needs the arm, and an armed pad does
+       not walk: the words say the whole way round. */
     if (cueId == 0xFFFFFFFF && m_doc->mode() == Doc::Operate && holdsDeletedCue())
-        return refuseWalk(tr("The cue on stage was deleted: its light is held until GO. GO, then walk."), why);
+        return refuseWalk(m_pc->padText(tr("The cue on stage was deleted: its light is held until the next GO. "
+                                           "Play a cue first (GO on the laptop, or arm, GO and disarm here), "
+                                           "then press {Menu}.")), why);
     if (cueId == 0xFFFFFFFF)
         return refuseWalk(m_doc->mode() == Doc::Operate
-                          ? tr("Nothing running to walk: GO first, or walk the show in Design.")
+                          ? m_pc->padText(tr("Nothing running to walk. Play a cue first (GO on the laptop, or arm, "
+                                             "GO and disarm here), then press {Menu}; or walk the show in Design."))
                           : tr("No cue to walk: pick one in the Show Tree."), why);
     QString reason;
     if (!tryStart(cueId, &reason))

@@ -817,6 +817,12 @@ private:
      *  the runner keeps its arm; m_walker is the walking pad. */
     bool m_walkBeside = false;
     quint32 m_walker = UINT_MAX;
+    /** The walker's pad (padId()) as the walk began: its line lost, its
+     *  twin line still here walks on (forgetPad()). */
+    QString m_walkerId;
+    /** Another line, still patched, of the pad @p pad (padId()); UINT_MAX:
+     *  none. */
+    quint32 lineOfPad(const QString &pad, quint32 except) const;
     /** Q252: start the walk on @p universe beside the armed runner. */
     bool startWalkBeside(quint32 universe);
     /** End a walk beside the runner that can't go on (Operate, the role
