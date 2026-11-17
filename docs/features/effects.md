@@ -346,7 +346,15 @@ point catches first and the fire runs outward across the floor at an even
 speed, so a head twice as far away catches twice as late. As each head
 catches it flares, brighter and whiter, and within a second settles into
 Firelight's flicker. Once the whole rig has caught it keeps burning for as
-long as the look plays. Until the fire reaches a head, that head is dark.
+long as the look plays.
+
+**It burns over what's there.** Until the fire reaches a head, Fire Spread
+leaves that head alone: it shows whatever is under it, the layers below or
+the look's own Colour and Dimmer. Where the fire is, the fire lays over
+it. Over black, nothing lit under it, a head stays dark until the fire
+reaches it. To keep the stage dark before the fire, give the look no
+Colour or Dimmer of its own above the effect (a Colour look under the
+effect is the effect's own and doesn't light anything before the fire).
 
 The point is the look's **Aim target**, the same one the Spread row's
 *out from the target* uses, so there is no setting for it: pick it the way
@@ -369,10 +377,7 @@ lantern in its Effect mode takes the fire's colour and level; its effect,
 speed and palette channels are left as they are. A relay, such as a silk
 flame's, switches on as the fire catches it and stays on: a flicker would
 chatter it. A pixel bar burns pixel by pixel as the fire crosses it, and
-each pixel is dark until the fire reaches it. On a pixel bar whose one
-dimmer serves all its pixels, a pixel the fire hasn't reached shows
-whatever is under the effect instead (that dimmer dark would darken the
-whole bar), which is dark when the look has no Colour look.
+each pixel shows what is under it until the fire reaches it.
 
 To bring a colour in the same way without the fire, use
 [Spell Spread](#spell-spread).
@@ -411,8 +416,12 @@ Change **Colours** or **Front Width** while the effect is playing and it
 cuts over at once: heads already burning jump to what the new setting
 gives them, without a fade. Set them before the cue runs.
 
-A Dimmer look placed under the effect sets the fire's level on every head,
-in both Colours settings.
+**Intensity** sets how bright the fire is, from 0 to 100% (100% to
+start): at 50% every head burns half as bright. It scales only the fire's
+own light: a head the fire hasn't reached keeps what is under it. A relay
+stays on unless Intensity is 0%. A Dimmer look placed under the effect
+sets the fire's level the same way, and the two multiply. Both work in
+either Colours setting.
 
 A head that can't show colour keeps the plain fire. A dimmer flickers in
 level as before, and a relay switches on as the front reaches it. A colour
@@ -425,8 +434,16 @@ The spread is how the effect opens. It isn't a cycle. On **Runs: Loop**
 never starts again from the point, and the next cue that keeps the same
 effect keeps it burning. Once the look has stopped, starting it again lights
 it again from the point.
-**Once** burns for one **Length** (auto takes the cue's time), then
-**Hold** freezes the last frame or **Release** lets go.
+
+**Keeping the fire as it ends.** To have the fire spread once and then
+stay on stage as it stands, set **Runs** to **Once** and **At the end**
+to **Hold** (the default for Once). With **Length** on auto, Once runs
+until the fire has reached every head and settled, however long the
+spread takes, and then holds that last frame. It holds until the cue
+is released, you GO to a cue without the effect, or you use **Stop all**
+or the emergency stop (**All Off**), which clear it at once. **Release**
+instead lets go at the end. A set **Length** ends the run at that time
+instead.
 
 | Setting | Does |
 |---|---|
@@ -438,7 +455,7 @@ it again from the point.
 | **Front Width** | Front and Behind: seconds each head holds the front's colour before the backfill reaches it (1.5; 0.1 to 20) |
 | **Flicker Behind** | Front and Behind: the backfill flickers in level like the fire; Off holds it steady (On). A fire backfill (one colour) always flickers |
 | **Flicker Speed** | How fast the fire flickers, as Firelight's (1) |
-| **Intensity** | Overall brightness (1) |
+| **Intensity** | How bright the fire is, 0 to 100%; scales only the fire's own light (100%) |
 | **Coolness** | Shifts the fire toward blue-white: 0 fire, 1 ice (0) |
 | **Seed** | The same seed gives the same fire every run (1) |
 

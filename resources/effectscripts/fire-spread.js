@@ -20,12 +20,22 @@
   point, and a next cue that tracks it keeps it burning. Started again
   after it has stopped, it lights again from the point.
 
-  Before the front a head is dark: dimmer 0, which the host takes as "none
-  of the look's level" -- on a pixel bar with no dimmer, pixel by pixel; on
-  one whose single dimmer serves every pixel, a pixel not yet reached is
-  left to what is under it. Moving heads get colour and dimmer only. A
-  relay (a silk flame's fan) switches on as it catches and stays on: its
-  flicker would chatter it.
+  Before the front a head is left to what is under it: the layers below,
+  or the look's own values (board Q259: it casts over what is there). Over
+  black, as the show it was made for plays it, that is dark until the
+  front arrives. Where the fire is, it lays over what is there. Moving
+  heads get colour and dimmer only. A relay (a silk flame's fan) switches
+  on as it catches and stays on: its flicker would chatter it.
+
+  Intensity (0-100 %) scales the fire's own light, every head but a relay
+  (on or off), as the effect's own Dimmer does (ownLevel()); 0 % leaves a
+  relay off too. A look saved before it with the old 0-1 "intensity"
+  still plays at that level (read, not shown).
+
+  Run Once (the look's Runs), with Length auto, it ends when the fire has
+  reached every head and settled (state.done; effect.endsWhenDone) -- not
+  at the cue's time -- and At the end: Hold keeps that last frame until
+  the cue is released, stopped or replaced.
 
   Pure & testable: no Math.random, and what it keeps in state (when each
   head catches, each head's flame phases) is worked out again whenever the
@@ -63,7 +73,8 @@
     effect.targetDistance = true;   // fixture.fromTarget, inputs._fromTargetFar
     effect.cueTime        = true;   // inputs._cueTime, for Spread over: The cue's time
     effect.naturalDurationMs = 8000;
-    effect.notes = "The head nearest the look's Aim target catches fire first and the fire spreads outward across the floor at an even speed until every head burns, then keeps flickering like Firelight for as long as the look plays. Add an Aim look for the point it starts from; without one it starts at centre stage. Spread Time is how long the fire takes to reach the farthest head (or take the cue's time). Edge makes the front ragged; Flare is the flash as a head catches. Heads are dark until the fire reaches them; a relay (a silk flame) switches on as it catches. Colours: Front and Behind makes the look's first colour the front and its second the backfill a Front Width behind (one colour: fire behind the front). Needs the rig placed in the 2D plan: heads all in one place catch together.";
+    effect.endsWhenDone   = true;   // Runs: Once ends when every head burns (state.done)
+    effect.notes = "The head nearest the look's Aim target catches fire first and the fire spreads outward across the floor at an even speed until every head burns, then keeps flickering like Firelight for as long as the look plays. Add an Aim look for the point it starts from; without one it starts at centre stage. Spread Time is how long the fire takes to reach the farthest head (or take the cue's time). Edge makes the front ragged; Flare is the flash as a head catches. A light the fire hasn't reached keeps what is under it (dark over black); a relay (a silk flame) switches on as it catches. Colours: Front and Behind makes the look's first colour the front and its second the backfill a Front Width behind (one colour: fire behind the front). Intensity scales the fire's own light. Runs: Once, At the end: Hold keeps the fire as it stands once it has reached everything. Needs the rig placed in the 2D plan: heads all in one place catch together.";
     effect.fixtureTypes = [
         "rgb", "rgbw", "rgba", "rgbwa", "rgbwauv",
         "wash", "spot", "beam", "dimmer", "color", "colorwheel",
@@ -92,7 +103,8 @@
           defaultValue: 1, values: ["Off", "On"],
           activeWhen: [{ param: "colours", is: [1] }] },
         { name: "speed",     label: "Flicker Speed", description: "Flicker speed multiplier, as Firelight's", min: 0.1, max: 5.0, defaultValue: 1.0 },
-        { name: "intensity", description: "Overall brightness (0-1)",    min: 0.0, max: 1.0, defaultValue: 1.0 },
+        { name: "fireIntensity", label: "Intensity", description: "How bright the fire is: 100% as it burns, 50% half as bright. Only the fire's own light: a light it hasn't reached keeps what is under it",
+          unit: "%", min: 0, max: 100, defaultValue: 100 },
         { name: "coolness",  description: "Add blue (0=fire, 1=ice)",    min: 0.0, max: 1.0, defaultValue: 0.0 },
         { name: "seed",      label: "Seed",      description: "Random seed (same seed, same fire)", type: "float", min: 1, max: 999, defaultValue: 1 }
     ];
@@ -163,18 +175,22 @@
        and with an Edge a little early or late of its own (up to half the
        width at Edge 1; a seeded hash, so repeatable): never so early the
        front's colour doesn't show. Kept in state until the first front's
-       arrivals or the width change. */
+       arrivals or the width change: { at, last }, last the latest. */
     function backfillArrivals(A, seed, edge, width, state) {
         var b = state ? state._behind : undefined;
         if (b !== undefined && b.places === A && b.width === width)
-            return b.at;
-        var n = A.at.length, at = new Float64Array(n);
+            return b;
+        var n = A.at.length, at = new Float64Array(n), last = 0;
         var seed2 = seed + 0.5;         // its own hash: the user's seeds are whole
-        for (var i = 0; i < n; i++)
+        for (var i = 0; i < n; i++) {
             at[i] = A.at[i] + width * (1 + edge * BACK_JITTER * (2 * SPREAD.hash(i + 1, seed2) - 1));
+            if (at[i] > last)
+                last = at[i];
+        }
+        b = { places: A, width: width, at: at, last: last };
         if (state)
-            state._behind = { places: A, width: width, at: at };
-        return at;
+            state._behind = b;
+        return b;
     }
 
     /* Colours: Front and Behind. Each head: dark (kindling in the front's
@@ -186,7 +202,11 @@
         var t = o.t, inten = o.inten, flareK = o.flareK, c1 = o.c1, c2 = o.c2;
         var width = Math.max(0.1, Math.min(20, num(params.frontWidth, 1.5)));
         var flicker = c2 === null || num(params.flickerBehind, 1) >= 0.5;
-        var at = A.at, at2 = backfillArrivals(A, o.seed, o.edge, width, state);
+        var B = backfillArrivals(A, o.seed, o.edge, width, state);
+        var at = A.at, at2 = B.at;
+        // Done (a run of Once ends here) once the backfill has reached every head.
+        if (state && t < B.last + BLEND_S)
+            state.done = false;
         var ph = bank.ph, kinds = bank.kind, n = fixtures.length;
         var k0 = k[0], k1 = k[1], k2 = k[2], k3 = k[3], k4 = k[4], k5 = k[5];
         var steadyQ = 255;                      // Flicker Behind off: the backfill at full
@@ -196,13 +216,13 @@
             var age = t - at[i];
             var kd = kinds[i];
             if (kd === RELAY) {
-                out[i] = age >= 0 ? on : shared.off;
+                out[i] = age >= 0 ? on : shared.none;
                 continue;
             }
             var f = fixtures[i];
             if (age < 0) {
                 if (o.kindle <= 0 || age < -o.kindle) {
-                    out[i] = SPREAD.dark(f, shared);
+                    out[i] = shared.none;               // left to what is under it
                     continue;
                 }
                 var kk = 1 + age / o.kindle;
@@ -266,7 +286,7 @@
     function fireTick(fixtures, inputs, palettes, params, state) {
         var t      = num(inputs._time, 0);
         var speed  = num(params.speed, 1.0);
-        var inten  = num(params.intensity, 1.0);
+        var inten  = num(params.intensity, 1.0);   // a look saved before Intensity (0-1)
         var cool   = num(params.coolness, 0.0);
         var edge   = Math.max(0, Math.min(1, num(params.edge, 0.3)));
         var flareK = Math.max(0, Math.min(1, num(params.flare, 0.6)));
@@ -300,11 +320,16 @@
                 state._flames = bank;
         }
         var ph = bank.ph, kinds = bank.kind;
+        /* Done (effect.endsWhenDone: a run of Once ends here, and At the
+           end: Hold keeps this frame) once every head has caught and its
+           flare settled; Front and Behind waits for the backfill too. */
+        if (state)
+            state.done = t >= A.last + (flareK > 0 ? FLARE_S : ATTACK_S);
         var k = FIRE.clock(t, speed);
         var k0 = k[0], k1 = k[1], k2 = k[2], k3 = k[3], k4 = k[4], k5 = k[5];
         var table = new Array(256);     // this tick's colours, one object a flame step
         var shared = { none: {}, off: { dimmer: 0 } };
-        var on = { dimmer: inten > 0 ? 1 : 0 };
+        var on = { dimmer: inten > 0 && num(params.fireIntensity, 100) > 0 ? 1 : 0 };
         if (state)
             state._on = on;                 // a relay's: the effect's own Dimmer leaves it be
 
@@ -327,14 +352,15 @@
 
             // A relay: off until the fire catches, then on, and it stays on.
             if (kd === RELAY) {
-                out[i] = age >= 0 ? on : shared.off;
+                out[i] = age >= 0 ? on : shared.none;
                 continue;
             }
 
             if (age < 0) {
-                // Not reached: dark. Just before, with an Edge, it kindles.
+                // Not reached: left to what is under it (Q259: dark over
+                // black). Just before, with an Edge, it kindles.
                 if (kindle <= 0 || age < -kindle) {
-                    out[i] = SPREAD.dark(fixtures[i], shared);
+                    out[i] = shared.none;
                     continue;
                 }
                 var kk = 1 + age / kindle;                      // 0..1 up to the catch
@@ -376,8 +402,8 @@
         return out;
     }
 
-    /* The effect's own Dimmer look (one under it in the look's list):
-       its level, on top of the fire's. The look's own Dimmer (above the
+    /* Intensity, and the effect's own Dimmer look (one under it in the
+       look's list): their level, on top of the fire's. The look's own Dimmer (above the
        effects) the host applies itself. A head that shows its level in its
        colour takes it as a dimmer (the host scales its colour by it), a
        head with a dimmer has its dimmer scaled; a relay stays as it is
@@ -406,9 +432,11 @@
         var out = fireTick(fixtures, inputs, palettes, params, state);
         var look = palettes ? palettes.look : undefined;
         var own = look ? look.ownDimmer : undefined;
-        if (own === undefined || own >= 1)
+        var level = (own === undefined ? 1 : Math.max(0, own))
+                  * Math.max(0, Math.min(100, num(params.fireIntensity, 100))) / 100;
+        if (level >= 1)
             return out;
-        return ownLevel(out, Math.max(0, own), state ? state._on : undefined);
+        return ownLevel(out, level, state ? state._on : undefined);
     };
 
     return effect;

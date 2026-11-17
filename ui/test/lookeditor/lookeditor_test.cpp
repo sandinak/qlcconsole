@@ -2049,6 +2049,61 @@ void LookEditor_Test::fireSpreadOffersFrontAndBehindColours()
     QCOMPARE(look->effectParamValues().value("flickerBehind"), 0.0);
 }
 
+void LookEditor_Test::fireSpreadShowsItsIntensity()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    {
+        LookEditor ed(&doc);
+        ed.setPalette(look->id());
+        QDoubleSpinBox *inten = ed.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
+        QVERIFY2(inten != nullptr, "no Intensity setting");
+        QCOMPARE(inten->value(), 100.0);
+        QCOMPARE(inten->minimum(), 0.0);
+        QCOMPARE(inten->maximum(), 100.0);
+        QCOMPARE(inten->suffix(), QString("%"));
+        QCOMPARE(inten->text(), QString("100%"));
+        // Its row is called Intensity, beside the other settings.
+        bool named = false;
+        for (QLabel *l : ed.findChildren<QLabel *>())
+            if (l->text() == QLatin1String("Intensity") && l->isVisibleTo(&ed))
+                named = true;
+        QVERIFY2(named, "no row called Intensity");
+        QVERIFY(ed.findChild<QWidget *>("effectParam_flare") != nullptr);
+        // No second, unnamed brightness beside it.
+        QVERIFY(ed.findChild<QWidget *>("effectParam_intensity") == nullptr);
+
+        inten->setValue(50.0);
+        QCOMPARE(look->effectParamValues().value("fireIntensity"), 50.0);
+
+        QDoubleSpinBox *len = ed.findChild<QDoubleSpinBox *>("effectRunLength");
+        QVERIFY(len != nullptr);
+        QVERIFY2(len->toolTip().contains("reached every light"), qPrintable(len->toolTip()));
+    }
+
+    // Kept in the show file.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    QVERIFY(look->saveXML(&w));
+    buf.close();
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&buf);
+    r.readNextStartElement();
+    QLCPalette *back = new QLCPalette(QLCPalette::Effect, &doc);
+    QVERIFY(back->loadXML(r));
+    QCOMPARE(back->effectParamValues().value("fireIntensity"), 50.0);
+    QVERIFY(doc.addPalette(back));
+
+    // The page opens on it again.
+    LookEditor again(&doc);
+    again.setPalette(back->id());
+    QDoubleSpinBox *inten = again.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
+    QVERIFY(inten != nullptr);
+    QCOMPARE(inten->text(), QString("50%"));
+}
+
 /* Pictures of Fire Spread's settings at three window sizes, as it opens
    and with Front and Behind chosen (when it has that). Only with
    QLC_SHOT_DIR set. */

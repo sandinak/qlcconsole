@@ -46,6 +46,11 @@ private slots:
      *  a par's dimmer at half, in Fire and in Front and Behind; with the
      *  look's own Dimmer at 50% above it too, a quarter (each once). */
     void fireSpreadTakesItsOwnDimmer();
+    /** Fire Spread's Intensity (board Q259) at 50 %: an RGB par with no
+     *  dimmer at half its colour, a par's dimmer at half and its colour
+     *  the fire's (once, not a quarter); never set, as at 100 %. In Fire and in
+     *  Front and Behind. A setting of 0-100 %, 100 % to start. */
+    void fireSpreadIntensityScalesTheFire();
     /** Spotlight Chase with no colour of its own on RGB and RGBW washes with
      *  no dimmer, a red cue under them: the hot spot is that red at the
      *  chase's level; green, blue and white stay 0 (to DMX). */

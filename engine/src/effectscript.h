@@ -176,6 +176,12 @@ public:
      *  naturalDurationMs -- what a one-shot's run length is. Declared as
      *  `effect.cueTime = true`. */
     bool        wantsCueTime() const { return m_wantsCueTime; }
+    /** A run of Once with its Length on auto ends when the script says it
+     *  is done (state.done), not at the cue's time: Fire Spread ends when
+     *  the fire has reached every head, and holds (At the end: Hold) as it
+     *  stands then. A set Length, or N times, still ends on time. Declared
+     *  as `effect.endsWhenDone = true`. */
+    bool        endsWhenDone() const { return m_endsWhenDone; }
     QStringList hostSpreadParams() const
     {
         QStringList out;
@@ -320,6 +326,7 @@ private:
     bool        m_wantsTargetDistance = false;
     bool        m_wantsFloorPlace = false;
     bool        m_wantsCueTime = false;
+    bool        m_endsWhenDone = false;
     QString     m_hostSpreadParam;
     QStringList m_fixtureTypes;
 

@@ -41,6 +41,12 @@
 #include "inputoutputmap.h"
 #undef protected
 #undef private
+#include "chaser.h"
+#include "chaserstep.h"
+#include "chaseraction.h"
+#include "effectscriptrunner.h"
+#include "fixturerest.h"
+#include "outputrulekeeper.h"
 #include "monitorproperties.h"
 #include "stagetarget.h"
 
@@ -573,29 +579,31 @@ void SpreadEffects_Test::fireSpreadOnTheShowsKinds()
             QVERIFY(f.value(key(lantern->id(), 6)) > 0);      // red: it burns
             lanternLit = true;
         }
-        // The relay: off or on, nothing between, and once on it stays on.
+        // The relay: left to what is under it (not written) until it
+        // catches, then on, nothing between, and once on it stays on.
         const int relay = f.value(key(flame->id(), 0), -1);
-        QVERIFY2(relay == 0 || relay == 255, qPrintable(QString("relay at %1 at %2 ms").arg(relay).arg(ms)));
+        QVERIFY2(relay == -1 || relay == 255, qPrintable(QString("relay at %1 at %2 ms").arg(relay).arg(ms)));
         if (relay != lastRelay && lastRelay >= 0)
             ++relayFlips;
         lastRelay = relay;
         if (relay == 255 && relayOn < 0)
             relayOn = ms;
-        // The bars: each pixel dark (written 0) until it catches.
+        // The bars: each pixel left to what is under it (not written)
+        // until it catches (Q259).
         for (int p = 0; p < 64; ++p)
         {
             if (stepLit[p] < 0 && pixelLit(f, step->id(), p))
                 stepLit[p] = ms;
             if (stepLit[p] < 0)
-                QVERIFY2(pixelWritten(f, step->id(), p),
-                         qPrintable(QString("step pixel %1 left to what is under it at %2 ms").arg(p).arg(ms)));
+                QVERIFY2(!pixelWritten(f, step->id(), p),
+                         qPrintable(QString("step pixel %1 written before the fire at %2 ms").arg(p).arg(ms)));
         }
         for (int p = 0; p < 40; ++p)
         {
             if (barLit[p] < 0 && pixelLit(f, bar->id(), p))
                 barLit[p] = ms;
             if (barLit[p] < 0)
-                QVERIFY(pixelWritten(f, bar->id(), p));
+                QVERIFY(!pixelWritten(f, bar->id(), p));
         }
     }
     QVERIFY(lanternLit);
@@ -623,8 +631,9 @@ void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
        truss and one on the wide truss (RGB rows and white rows, no dimmer:
        its 165ch mode), a wall washer on a step top (16 RGB pixels and 16
        white, no dimmer: 64ch). A white emitter is no dimmer: told it had
-       one, Fire Spread left each pixel it hadn't reached to the look's
-       colour, so the washes were lit from the start. */
+       one, Fire Spread lit them by the look's colour from the start. Over
+       black (nothing under them, no colour of the look's own: the show's
+       way, Q259) they are dark until it reaches them. */
     QLCFixtureDef *xlDef = loadDef(m_doc, kData + "Warmdance-XL-450.qxf");
     QLCFixtureDef *washerDef = loadDef(m_doc, kFixtures + "Oppsk/Oppsk-Wall-Washer-Light-Bar.qxf");
     QVERIFY(xlDef && washerDef);
@@ -647,7 +656,6 @@ void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
     m_doc->addFunction(scene);
     for (Fixture *f : washes)
         scene->addFixture(f->id());
-    scene->addPalette(colourPalette(m_doc, QColor(0, 255, 0))->id());     // the look's colour
     scene->addPalette(aimAt(m_doc, QVector3D(-6.0f, 9.0f, 0))->id());
     scene->addPalette(fire->id());
     EffectInstance inst(m_doc, scene->id(), fire->id());
@@ -683,9 +691,9 @@ void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
             QVERIFY2(catchesAt.value(f->id()) > 2000, qPrintable(QString("%1 catches at %2 ms").arg(f->name()).arg(catchesAt.value(f->id()))));
     }
 
-    // What the effect writes: at the start and just before the fire reaches
-    // each wash, every channel of it 0 -- its RGB rows and its white rows;
-    // once the fire has passed it, it burns.
+    // What the effect writes: at the start nothing (left to what is under
+    // it, Q259), just before the fire reaches each wash nothing lit -- its
+    // RGB rows and its white rows; once the fire has passed it, it burns.
     auto channelsLit = [](const QHash<quint64, int> &f, Fixture *fx) {
         int lit = 0;
         for (quint32 c = 0; c < fx->channels(); ++c)
@@ -698,8 +706,8 @@ void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
     {
         QCOMPARE(channelsLit(f, fx), 0);
         for (quint32 c = 0; c < fx->channels(); ++c)
-            QVERIFY2(f.contains(key(fx->id(), c)),
-                     qPrintable(QString("%1 channel %2 left to the look's colour at the start").arg(fx->name()).arg(c)));
+            QVERIFY2(!f.contains(key(fx->id(), c)),
+                     qPrintable(QString("%1 channel %2 written before the fire").arg(fx->name()).arg(c)));
     }
     for (Fixture *fx : washes)
     {
@@ -710,7 +718,7 @@ void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
     for (Fixture *fx : washes)
         QVERIFY2(channelsLit(f, fx) > 0, qPrintable(QString("%1 dark after the fire passed it").arg(fx->name())));
 
-    // And on the wire, the look's green under the effect: dark at the start.
+    // And on the wire, over black: dark at the start.
     MasterTimer *timer = m_doc->masterTimer();
     fire->setEffectParamValue("spreadTime", 120.0);         // nothing reached while we look
     scene->start(timer, FunctionParent::master());
@@ -730,6 +738,244 @@ void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
                      qPrintable(QString("%1 channel %2 at %3 before the fire").arg(fx->name()).arg(c)
                                 .arg(uchar(dmx.at(int(fx->address() + c))))));
     /* Left playing (cleanup() keeps the Doc), as theCueUnderShowsUntilTheSpellArrives. */
+}
+
+namespace
+{
+/* The effect runner hears of starts and stops queued, as in the app (there
+   the MasterTimer is its own thread): a direct call here would come while
+   the tick holds the universes the runner claims (FollowSpotFeel_Test). */
+void queueTheRunner(Doc *doc)
+{
+    EffectScriptRunner *runner = doc->effectScriptRunner();
+    MasterTimer *mt = doc->masterTimer();
+    QObject::disconnect(mt, SIGNAL(functionStarted(quint32)), runner, SLOT(slotFunctionStarted(quint32)));
+    QObject::disconnect(mt, SIGNAL(functionStopped(quint32)), runner, SLOT(slotFunctionStopped(quint32)));
+    QObject::disconnect(mt, SIGNAL(functionStartedAgain(quint32,quint32)),
+                        runner, SLOT(slotFunctionStartedAgain(quint32,quint32)));
+    QObject::connect(mt, SIGNAL(functionStarted(quint32)), runner, SLOT(slotFunctionStarted(quint32)),
+                     Qt::QueuedConnection);
+    QObject::connect(mt, SIGNAL(functionStopped(quint32)), runner, SLOT(slotFunctionStopped(quint32)),
+                     Qt::QueuedConnection);
+    QObject::connect(mt, SIGNAL(functionStartedAgain(quint32,quint32)),
+                     runner, SLOT(slotFunctionStartedAgain(quint32,quint32)), Qt::QueuedConnection);
+}
+
+/* Universe 1 on the wire after @p ticks of the MasterTimer (the runner
+   ticks on its own timer meanwhile): its first @p n channels. */
+QByteArray wireAfter(Doc *doc, int ticks, int n = 16)
+{
+    MasterTimer *timer = doc->masterTimer();
+    for (int i = 0; i < ticks; ++i)
+    {
+        timer->timerTick();
+        QTest::qWait(15);
+    }
+    QList<Universe *> unis = doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : unis)
+        u->processFaders();
+    const QByteArray dmx = unis.first()->preGMValues().left(n);
+    doc->inputOutputMap()->releaseUniverses(false);
+    return dmx;
+}
+
+QString bytes(const QByteArray &b, int from, int n)
+{
+    QStringList out;
+    for (int i = from; i < from + n; ++i)
+        out << QString::number(uchar(b.at(i)));
+    return out.join(' ');
+}
+}
+
+void SpreadEffects_Test::fireSpreadCastsOverWhatIsThere()
+{
+    queueTheRunner(m_doc);
+    QLCFixtureDef *rgbDef = loadDef(m_doc, kFixtures + "Generic/Generic-Generic-RGB.qxf");
+    QVERIFY(rgbDef != nullptr);
+    // Two RGB washes (no dimmer) 8 m apart: the fire starts on the first.
+    Fixture *nearWash = place(m_doc, rgbDef, "RGB", "Near", 0, 0, QVector3D(1000, 2000, 0));
+    Fixture *farWash = place(m_doc, rgbDef, "RGB", "Far", 0, 3, QVector3D(9000, 2000, 0));
+    QVERIFY(nearWash && farWash);
+
+    // The cue under them: green.
+    Scene *under = new Scene(m_doc);
+    m_doc->addFunction(under);
+    under->addFixture(nearWash->id());
+    under->addFixture(farWash->id());
+    under->addPalette(colourPalette(m_doc, QColor(0, 255, 0))->id());
+
+    // The fire over them, two minutes to reach the far one.
+    QLCPalette *fire = effectPalette(m_doc, "fire-spread.js",
+                                     { { "edge", 0.0 }, { "flare", 0.0 }, { "spreadTime", 120.0 } });
+    Scene *over = new Scene(m_doc);
+    m_doc->addFunction(over);
+    over->addFixture(nearWash->id());
+    over->addFixture(farWash->id());
+    over->addPalette(aimAt(m_doc, QVector3D(1.0f, 2.0f, 0))->id());
+    over->addPalette(fire->id());
+
+    MasterTimer *timer = m_doc->masterTimer();
+    under->start(timer, FunctionParent::master());
+    const QByteArray green = wireAfter(m_doc, 12);
+    QCOMPARE(bytes(green, 0, 6), QString("0 255 0 0 255 0"));
+
+    over->start(timer, FunctionParent::master());
+    QByteArray dmx = wireAfter(m_doc, 12);
+    QElapsedTimer waited;
+    waited.start();
+    while (uchar(dmx.at(0)) == 0 && waited.elapsed() < 2000)
+        dmx = wireAfter(m_doc, 4);
+    // The near wash burns: the fire's red over the green.
+    QVERIFY2(uchar(dmx.at(0)) > 0, qPrintable(QString("near wash %1").arg(bytes(dmx, 0, 3))));
+    QVERIFY2(bytes(dmx, 0, 3) != QString("0 255 0"), qPrintable(bytes(dmx, 0, 3)));
+    // The far wash, not reached: the cue's green, as it was.
+    QVERIFY2(bytes(dmx, 3, 3) == QString("0 255 0"),
+             qPrintable(QString("far wash %1 before the fire reached it; the cue under it %2")
+                        .arg(bytes(dmx, 3, 3), bytes(green, 3, 3))));
+
+    // Let go (the runner told queued) so the Doc can go.
+    timer->m_stopAllFunctions = true;
+    timer->timerTick();
+    timer->timerTick();
+    timer->m_stopAllFunctions = false;
+    QCoreApplication::processEvents();
+}
+
+void SpreadEffects_Test::fireSpreadHoldsAsItEndsUntilLetGo()
+{
+    queueTheRunner(m_doc);
+    QLCFixtureDef *rgbDef = loadDef(m_doc, kFixtures + "Generic/Generic-Generic-RGB.qxf");
+    QVERIFY(rgbDef != nullptr);
+    Fixture *nearWash = place(m_doc, rgbDef, "RGB", "Near", 0, 0, QVector3D(1000, 2000, 0));
+    Fixture *farWash = place(m_doc, rgbDef, "RGB", "Far", 0, 3, QVector3D(9000, 2000, 0));
+    QVERIFY(nearWash && farWash);
+    QLCPalette *aim = aimAt(m_doc, QVector3D(1.0f, 2.0f, 0));
+
+    auto lit = [](const QHash<quint64, int> &f, Fixture *fx) {
+        return f.value(key(fx->id(), 0), 0) + f.value(key(fx->id(), 1), 0) + f.value(key(fx->id(), 2), 0) > 0;
+    };
+
+    /* By the effect's own clock: Once, Hold, Length auto; the fire takes
+       20 s to reach the far wash. */
+    {
+        QLCPalette *fire = effectPalette(m_doc, "fire-spread.js", { { "edge", 0.0 }, { "spreadTime", 20.0 } });
+        fire->setEffectParamValue(EffectRuns::runsKey(), 1);         // Once
+        fire->setEffectParamValue(EffectRuns::atEndKey(), 0);        // Hold
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        scene->addFixture(nearWash->id());
+        scene->addFixture(farWash->id());
+        scene->addPalette(aim->id());
+        scene->addPalette(fire->id());
+        EffectInstance inst(m_doc, scene->id(), fire->id());
+        QVERIFY2(inst.isValid(), qPrintable(inst.error()));
+
+        QHash<quint64, int> f = frameAt(inst, 10000);
+        QVERIFY(lit(f, nearWash));
+        QVERIFY(!lit(f, farWash));
+        // After the fire has reached everything: both burn, and that frame
+        // stays, frame for frame.
+        const QHash<quint64, int> end = frameAt(inst, 25000);
+        QVERIFY2(lit(end, farWash), "the far wash is dark once the run of Once is over");
+        QVERIFY(lit(end, nearWash));
+        for (qint64 ms : { 30000, 60000, 300000 })
+            QVERIFY2(frameAt(inst, ms) == end, qPrintable(QString("not held at %1 ms").arg(ms)));
+        QVERIFY(inst.runDone());
+    }
+
+    /* On the wire: a fire of a third of a second, no flare, run Once and
+       held; then let go each way. Over black: 0 after. */
+    QLCPalette *fire = effectPalette(m_doc, "fire-spread.js",
+                                     { { "edge", 0.0 }, { "flare", 0.0 }, { "spreadTime", 0.3 } });
+    fire->setEffectParamValue(EffectRuns::runsKey(), 1);
+    fire->setEffectParamValue(EffectRuns::atEndKey(), 0);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(nearWash->id());
+    scene->addFixture(farWash->id());
+    scene->addPalette(aim->id());
+    scene->addPalette(fire->id());
+    Scene *nextCue = new Scene(m_doc);               // a cue without the effect
+    m_doc->addFunction(nextCue);
+    Chaser *list = new Chaser(m_doc);
+    m_doc->addFunction(list);
+    list->setDurationMode(Chaser::Common);
+    list->setDuration(Function::infiniteSpeed());   // each cue holds until GO
+    list->setFadeInMode(Chaser::Common);
+    list->setFadeInSpeed(0);
+    list->setFadeOutMode(Chaser::Common);
+    list->setFadeOutSpeed(0);
+    list->addStep(ChaserStep(scene->id()));
+    list->addStep(ChaserStep(nextCue->id()));
+    MasterTimer *timer = m_doc->masterTimer();
+    const QByteArray dark(6, '\0');
+
+    enum LetGo { Released, NextCue, StopAll, EmergencyStop };
+    const char *names[] = { "the cue released", "GO to the next cue", "Stop all", "the emergency stop" };
+    for (LetGo how : { Released, NextCue, StopAll, EmergencyStop })
+    {
+        if (how == NextCue)
+            list->start(timer, FunctionParent::master());
+        else
+            scene->start(timer, FunctionParent::master());
+        // Past the spread's end: held, both lit, the same frame on.
+        QByteArray held = wireAfter(m_doc, 12);
+        QElapsedTimer waited;
+        waited.start();
+        while ((uchar(held.at(3)) == 0 && uchar(held.at(4)) == 0) && waited.elapsed() < 3000)
+            held = wireAfter(m_doc, 4);
+        QTest::qWait(400);
+        held = wireAfter(m_doc, 4);
+        QVERIFY2(held.left(6) != dark, qPrintable(QString("%1: dark %2").arg(names[how], bytes(held, 0, 6))));
+        QVERIFY2(uchar(held.at(0)) + uchar(held.at(1)) > 0 && uchar(held.at(3)) + uchar(held.at(4)) > 0,
+                 qPrintable(QString("%1: not every wash burns %2").arg(names[how], bytes(held, 0, 6))));
+        for (int i = 0; i < 3; ++i)
+        {
+            QTest::qWait(150);
+            const QByteArray again = wireAfter(m_doc, 4);
+            QVERIFY2(again.left(6) == held.left(6),
+                     qPrintable(QString("%1: not held, %2 then %3").arg(names[how], bytes(held, 0, 6), bytes(again, 0, 6))));
+        }
+
+        switch (how)
+        {
+            case Released:
+                scene->stop(FunctionParent::master());
+            break;
+            case NextCue:
+            {
+                ChaserAction go;
+                go.m_action = ChaserNextStep;
+                go.m_stepIndex = -1;
+                go.m_masterIntensity = 1.0;
+                go.m_stepIntensity = 1.0;
+                go.m_fadeMode = Chaser::FromFunction;
+                list->setAction(go);
+            }
+            break;
+            case StopAll:
+                timer->m_stopAllFunctions = true;
+                timer->timerTick();
+                timer->timerTick();
+                timer->m_stopAllFunctions = false;
+                FixtureRest::restAfterStop(m_doc);
+            break;
+            case EmergencyStop:
+                m_doc->outputRuleKeeper()->emergencyStop();
+            break;
+        }
+        const QByteArray after = wireAfter(m_doc, 12);
+        QVERIFY2(after.left(6) == dark,
+                 qPrintable(QString("%1: still %2 after it").arg(names[how], bytes(after, 0, 6))));
+        if (how == NextCue)
+        {
+            QVERIFY(nextCue->isRunning());
+            list->stop(FunctionParent::master());
+            wireAfter(m_doc, 4);
+        }
+        QVERIFY2(!scene->isRunning(), names[how]);
+    }
 }
 
 void SpreadEffects_Test::fireSpreadInFireIsAsItWas()
@@ -787,11 +1033,30 @@ void SpreadEffects_Test::fireSpreadInFireIsAsItWas()
         {
             const QVariantMap at = with(in, "_time", tick * 0.1);
             const QList<QVariantMap> was = scriptFrameColours(before, rig, at, set, two);
+            /* A head the fire hasn't reached was held dark; since Q259 it is
+               left to what is under it (nothing written). Everything else
+               byte for byte. */
+            auto same = [&](const QList<QVariantMap> &got) {
+                QCOMPARE(got.size(), was.size());
+                for (int i = 0; i < got.size(); ++i)
+                {
+                    if (got.at(i).isEmpty() && was.at(i) == QVariantMap({ { "dimmer", 0 } }))
+                        continue;
+                    QVERIFY2(got.at(i) == was.at(i),
+                             qPrintable(QString("head %1 at %2 s differs").arg(i).arg(tick * 0.1)));
+                }
+            };
             // Fire by default, and chosen; and Front and Behind with no
             // colour to be the front: byte for byte what it was.
-            QCOMPARE(scriptFrameColours(now, rig, at, set, two), was);
-            QCOMPARE(scriptFrameColours(now, rig, at, with(set, "colours", 0), two), was);
-            QCOMPARE(scriptFrameColours(now, rig, at, with(set, "colours", 1), {}), was);
+            same(scriptFrameColours(now, rig, at, set, two));
+            if (QTest::currentTestFailed())
+                return;
+            same(scriptFrameColours(now, rig, at, with(set, "colours", 0), two));
+            if (QTest::currentTestFailed())
+                return;
+            same(scriptFrameColours(now, rig, at, with(set, "colours", 1), {}));
+            if (QTest::currentTestFailed())
+                return;
             ++frames;
         }
     QCOMPARE(frames, 5 * 121);
@@ -832,14 +1097,14 @@ void SpreadEffects_Test::fireSpreadFrontAndBehind()
         QCOMPARE(at(7.0, hard, two).at(3), rgb(0, 0, 255));         // a pixel
         QCOMPARE(at(1.0, hard, two).at(0), with(rgb(0, 0, 255), "dimmer", 1));
     }
-    // A head the front hasn't reached yet is dark.
+    // A head the front hasn't reached yet is left to what is under it
+    // (Q259): nothing written, the relay's neither.
     {
         const QList<QVariantMap> f = at(3.9, hard, two);
-        QVERIFY(!lit(f.at(2)));
-        QVERIFY(!lit(f.at(3)));
-        QVERIFY(!lit(f.at(4)));
-        QCOMPARE(f.at(3), QVariantMap({ { "dimmer", 0 } }));
-        QCOMPARE(f.at(5), QVariantMap({ { "dimmer", 0 } }));       // the relay: off
+        QCOMPARE(f.at(2), QVariantMap());
+        QCOMPARE(f.at(3), QVariantMap());
+        QCOMPARE(f.at(4), QVariantMap());
+        QCOMPARE(f.at(5), QVariantMap());
     }
     // After the backfill: the second colour, flickering in level (the
     // colour-only par in its colour, the par and the wheel on the dimmer).

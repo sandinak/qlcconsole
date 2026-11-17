@@ -4669,9 +4669,8 @@ void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
                 caught[i] = t;
             if (t < expect[i] - 1e-6)
             {
-                // Nothing before the front: a dimmer of none, and no colour.
-                QCOMPARE(f.at(i).size(), 1);
-                QCOMPARE(f.at(i).value("dimmer").toDouble(), 0.0);
+                // Nothing before the front: left to what is under it (Q259).
+                QVERIFY2(f.at(i).isEmpty(), qPrintable(QString("head %1 written at %2").arg(i).arg(t)));
             }
         }
     }
@@ -4782,11 +4781,10 @@ void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
         QVERIFY(farLit(2.2));
     }
 
-    /* Pixels not yet reached. One with only a level: dark by its own
-       dimmer. An RGB pixel of a bar with no dimmer (the show's step bars):
-       dark too, pixel by pixel, its colour scaled to none. An RGB pixel of
-       a bar whose one dimmer serves every pixel: left to what is under it
-       (that dimmer at none would darken the whole bar). */
+    /* Pixels not yet reached: every kind left to what is under it (Q259)
+       -- one with only a level, an RGB pixel of a bar with no dimmer (the
+       show's step bars), one of a bar whose one dimmer serves every
+       pixel. */
     {
         QJSEngine *eng = fs.engine();
         QJSValue fixtures = eng->newArray(3);
@@ -4808,8 +4806,8 @@ void EffectInstance_Test::fireSpreadCatchesOutwardFromThePoint()
         params.setProperty("edge", 0);
         QJSValue state = fs.newState();
         const QJSValue out = fs.callTick(fixtures, inputs, eng->newObject(), params, state, eng->newObject());
-        QCOMPARE(out.property(0u).property("dimmer").toNumber(), 0.0);
-        QCOMPARE(out.property(1u).property("dimmer").toNumber(), 0.0);
+        QVERIFY(out.property(0u).property("dimmer").isUndefined());
+        QVERIFY(out.property(1u).property("dimmer").isUndefined());
         QVERIFY(out.property(1u).property("r").isUndefined());
         QVERIFY(out.property(2u).property("dimmer").isUndefined());
         QVERIFY(out.property(2u).property("r").isUndefined());
@@ -5064,15 +5062,15 @@ void EffectInstance_Test::fireSpreadFrontAndBehindTakesItsOwnColours()
     };
 
     // 1 s: the par, reached, is the front's blue; the dimmer and the
-    // mover not yet reached are dark.
+    // mover not yet reached are not written (left to what is under them).
     QHash<QPair<quint32, quint32>, int> f = at(1000);
     QVERIFY2(qAbs(inst.buildInputsObject().property("_fromTargetFar").toNumber() - 4.0) < 1e-3,
              qPrintable(QString::number(inst.buildInputsObject().property("_fromTargetFar").toNumber())));
     QCOMPARE(v(f, par, 0), 0);
     QCOMPARE(v(f, par, 1), 0);
     QCOMPARE(v(f, par, 2), 255);
-    QCOMPARE(v(f, dim, 0), 0);
-    QCOMPARE(v(f, spot, 2), 0);
+    QCOMPARE(v(f, dim, 0), -1);
+    QCOMPARE(v(f, spot, 2), -1);
     // 3 s: the backfill has reached the par: red, burning.
     QSet<int> reds;
     for (qint64 ms = 3000; ms < 8000; ms += 250)
@@ -5084,7 +5082,7 @@ void EffectInstance_Test::fireSpreadFrontAndBehindTakesItsOwnColours()
         reds.insert(v(f, par, 0));
         if (ms >= 4100)
             QVERIFY(v(f, dim, 0) > 0);                          // the dimmer burns as Fire's
-        QCOMPARE(v(f, spot, 2), 0);                             // the mover, 4 m out: dark
+        QCOMPARE(v(f, spot, 2), -1);                            // the mover, 4 m out: not yet
     }
     QVERIFY2(reds.size() > 4, "the backfill does not flicker");
     // 9 s: the mover is reached: its wheel on blue, its dimmer full.
@@ -5275,6 +5273,116 @@ void EffectInstance_Test::fireSpreadTakesItsOwnDimmer()
             }
             // The dimmer par's colour is the fire's, not dimmed again.
             QCOMPARE(half.value(qMakePair(dimPar->id(), 1u), 0), full.value(qMakePair(dimPar->id(), 1u), 0));
+        }
+        QVERIFY(compared > 20);
+    }
+}
+
+void EffectInstance_Test::fireSpreadIntensityScalesTheFire()
+{
+    {
+        EffectScript fs;
+        QVERIFY(fs.load(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js"));
+        bool found = false;
+        for (const EffectScript::ParamDef &d : fs.paramDefs())
+            if (d.name == QLatin1String("fireIntensity"))
+            {
+                found = true;
+                QCOMPARE(d.displayLabel(), QString("Intensity"));
+                QCOMPARE(d.unit, QString("%"));
+                QCOMPARE(d.min, 0.0f);
+                QCOMPARE(d.max, 100.0f);
+                QCOMPARE(d.defaultValue, 100.0f);
+            }
+        QVERIFY2(found, "Fire Spread has no Intensity setting");
+    }
+
+    // An RGB par with no dimmer, a par with a master dimmer, a relay.
+    QLCFixtureDef *parDef = makePixelDef("Intensity par", 1, 0);
+    m_doc->fixtureDefCache()->addFixtureDef(parDef);
+    Fixture *par = new Fixture(m_doc);
+    par->setFixtureDefinition(parDef, parDef->modes().first());
+    par->setUniverse(1);
+    par->setAddress(0);
+    QVERIFY(m_doc->addFixture(par));
+    QLCFixtureDef *dimDef = new QLCFixtureDef();
+    dimDef->setManufacturer("Test"); dimDef->setModel("Intensity dimmer par");
+    {
+        QLCFixtureMode *mode = new QLCFixtureMode(dimDef);
+        mode->setName("4ch");
+        const QLCChannel::Preset presets[] = { QLCChannel::IntensityMasterDimmer, QLCChannel::IntensityRed,
+                                               QLCChannel::IntensityGreen, QLCChannel::IntensityBlue };
+        for (int c = 0; c < 4; ++c)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("d%1").arg(c));
+            ch->setPreset(presets[c]);
+            dimDef->addChannel(ch);
+            mode->insertChannel(ch, quint32(c));
+        }
+        QLCFixtureHead head;
+        head.addChannel(1); head.addChannel(2); head.addChannel(3);
+        mode->insertHead(-1, head);
+        mode->cacheHeads();
+        dimDef->addMode(mode);
+    }
+    m_doc->fixtureDefCache()->addFixtureDef(dimDef);
+    Fixture *dimPar = new Fixture(m_doc);
+    dimPar->setFixtureDefinition(dimDef, dimDef->modes().first());
+    dimPar->setUniverse(1);
+    dimPar->setAddress(10);
+    QVERIFY(m_doc->addFixture(dimPar));
+
+    for (int colours = 0; colours <= 1; ++colours)
+    {
+        auto look = [&](double intensity) {
+            QVariantMap set = { { "colours", colours }, { "edge", 0.0 }, { "flare", 0.0 } };
+            if (intensity >= 0)
+                set.insert("fireIntensity", intensity);
+            QLCPalette *fire = effectOn(m_doc, "fire-spread.js", set);
+            Scene *scene = new Scene(m_doc);
+            m_doc->addFunction(scene);
+            scene->addFixture(par->id());
+            scene->addFixture(dimPar->id());
+            scene->addPalette(fire->id());
+            if (colours == 1)
+            {
+                scene->addPalette(colourLook(m_doc, QColor(0, 0, 255))->id());
+                scene->addPalette(colourLook(m_doc, QColor(255, 0, 0))->id());
+            }
+            return qMakePair(scene, fire);
+        };
+        const auto asItWas = look(-1);          // never set: 100 %
+        const auto full = look(100);
+        const auto half = look(50);
+        EffectInstance a(m_doc, asItWas.first->id(), asItWas.second->id());
+        EffectInstance b(m_doc, full.first->id(), full.second->id());
+        EffectInstance c(m_doc, half.first->id(), half.second->id());
+        QVERIFY(a.isValid() && b.isValid() && c.isValid());
+        int compared = 0;
+        for (qint64 ms = 10000; ms < 20000; ms += 500)
+        {
+            const auto unset = writesAt(a, ms);
+            const auto f100 = writesAt(b, ms);
+            const auto f50 = writesAt(c, ms);
+            QCOMPARE(unset, f100);
+            // What carries the level: the RGB par's colour, the other's dimmer.
+            const QList<QPair<quint32, quint32>> levels = {
+                qMakePair(par->id(), 0u), qMakePair(par->id(), 1u), qMakePair(par->id(), 2u),
+                qMakePair(dimPar->id(), 0u) };
+            for (const auto &k : levels)
+            {
+                const int f = f100.value(k, 0);
+                const int h = f50.value(k, 0);
+                QVERIFY2(qAbs(h - qRound(f * 0.5)) <= 1,
+                         qPrintable(QString("colours %1, %2 ms, fixture %3 channel %4: %5 at Intensity 50%, %6 at 100%")
+                                    .arg(colours).arg(ms).arg(k.first).arg(k.second).arg(h).arg(f)));
+                if (f > 20)
+                    ++compared;
+            }
+            // The dimmer par's colour is the fire's, not dimmed again.
+            for (quint32 ch : { 1u, 2u, 3u })
+                QCOMPARE(f50.value(qMakePair(dimPar->id(), ch), 0), f100.value(qMakePair(dimPar->id(), ch), 0));
         }
         QVERIFY(compared > 20);
     }

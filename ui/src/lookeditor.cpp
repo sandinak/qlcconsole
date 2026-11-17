@@ -4261,8 +4261,13 @@ void LookEditor::rebuildEffectDynWidget()
         len->setDecimals(1);
         len->setSuffix(tr(" s"));
         len->setSpecialValueText(tr("auto"));   // 0 → follow the cue / chase step
-        len->setToolTip(tr("How long one run lasts. auto = the cue or chase step's time (else the "
-                           "effect's own); set a time to fix it."));
+        /* A script that ends when it is done (Fire Spread: once the fire
+           has reached everything): auto is that, not the cue's time. */
+        len->setToolTip(tmpScript.endsWhenDone()
+            ? tr("How long one run lasts. auto = until the effect has finished (%1: the fire has "
+                 "reached every light); set a time to cut it there.").arg(tmpScript.name())
+            : tr("How long one run lasts. auto = the cue or chase step's time (else the "
+                 "effect's own); set a time to fix it."));
         len->setValue(rs.lengthMs / 1000.0);
         /* A wave (its script names a cycleParam): Once is one whole cycle,
            so its Length is the cycle's -- one breath of a Breathe. Typed or

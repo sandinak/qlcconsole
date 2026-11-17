@@ -50,11 +50,23 @@ private slots:
      *  by pixel, until the fire reaches them. */
     void fireSpreadOnTheShowsKinds();
     /** The show's washes (an XL-450 on each truss, a step top's wall
-     *  washer: RGB and white pixels, no dimmer) are dark until the fire
-     *  reaches them, the look's colour under the effect and all: none says
-     *  it has a dimmer, every channel written 0 at the start and just
-     *  before its catch, burning after; 0 on the wire at the start. */
+     *  washer: RGB and white pixels, no dimmer), over black, are dark until
+     *  the fire reaches them: none says it has a dimmer, the effect writes
+     *  nothing to them at the start and nothing lit just before its catch,
+     *  burning after; 0 on the wire at the start. */
     void fireSpreadLeavesTheWashesDarkUntilItReachesThem();
+    /** Board Q259, over what's there: a cue under two RGB washes lights
+     *  them green; Fire Spread over them from the first wash's place. On
+     *  the wire the wash the fire hasn't reached keeps the cue's green,
+     *  value for value; the one it has burns in the fire's colours. */
+    void fireSpreadCastsOverWhatIsThere();
+    /** Board Q259, hold at the end: run Once (At the end: Hold, Length
+     *  auto) it runs until the fire has reached every head -- not the
+     *  generic 8 s -- and that last frame stays, every wash burning, frame
+     *  for frame long after. On the wire: held, then let go to 0 by each
+     *  of the cue released, GO to a cue without the effect, Stop all and
+     *  the emergency stop (All Off). */
+    void fireSpreadHoldsAsItEndsUntilLetGo();
     /** Fire Spread's Colours: Fire (the default), and Front and Behind
      *  with no colour to be the front, are byte for byte the script as it
      *  was before the choice (data/fire-spread-0412.js), on every kind of
