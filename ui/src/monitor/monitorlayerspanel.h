@@ -61,6 +61,9 @@ class LayersTreeWidget final : public QTreeWidget
 public:
     explicit LayersTreeWidget(QWidget *parent = nullptr) : QTreeWidget(parent) {}
 
+    /** The role a row carries when it is a fixture that is not on the plot yet. */
+    static constexpr int UnplacedFidRole = Qt::UserRole + 77;
+
 private:
     int m_scrollRoom = 0;           ///< how far the bar lies over the list
 
@@ -111,9 +114,6 @@ protected:
         e->setDropAction(Qt::CopyAction);   // never a Move → Qt won't remove rows
         e->accept();
     }
-
-    /** The role a row carries when it is a fixture that is not on the plot yet. */
-    static constexpr int UnplacedFidRole = Qt::UserRole + 77;
 
     void startDrag(Qt::DropActions supportedActions) override
     {
