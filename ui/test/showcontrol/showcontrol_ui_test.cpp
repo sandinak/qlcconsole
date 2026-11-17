@@ -335,7 +335,7 @@ void ShowControlUi_Test::windowsMscStopStillReachesTheShow()
     QCOMPARE(runs, QList<ShowControl::Command>() << ShowControl::AllOff);
     msc(0x02);      // STOP
     QCOMPARE(runs.size(), 2);
-    QCOMPARE(runs.at(1), ShowControl::Stop);
+    QCOMPARE(runs.at(1), ShowControl::Pause);   // MSC STOP halts
 }
 
 void ShowControlUi_Test::windowsRefusesMscAndMidiTimecodeInOnThePage()

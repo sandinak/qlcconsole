@@ -792,8 +792,9 @@ void ShowControl::handleSysEx(quint32 universe, const QByteArray &sysEx)
     if (!parseMsc(sysEx, m_mscDeviceId, &r))
         return;
     /* Windows (board Q257): MSC in is off and cannot be turned on, so no cue
-       runs from it; the stop never waits on that setting. */
-    if (PadRun::padRunSupported() ? !m_mscEnabled : (r.command != AllOff && r.command != Stop))
+       runs from it; the stops (ALL_OFF, GO_OFF, and STOP, which
+       parses to Pause) never wait on that setting. */
+    if (PadRun::padRunSupported() ? !m_mscEnabled : (r.command != AllOff && r.command != Stop && r.command != Pause))
         return;
     m_source = Msc;
     m_sourceUniverse = universe;
