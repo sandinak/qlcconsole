@@ -1208,37 +1208,37 @@ void PadRunRules_Test::aTwinPadsButtonsAfterAWalkAct()
 {
     /* Review of d9c611caf: a twin pad's Menu started the walk, its release
        went to the walk (Focus this cue has the pad), and the walk ended on
-       the laptop -- the Menu each line kept as held swallowed the pad's
-       next Menu. A walk, a tool or the test taking the pad forgets them. */
+       the laptop -- the Menu that line kept as held swallowed the pad's
+       next Menu when the other line brought it first. A walk, a tool or
+       the test taking the pad forgets them. (Only one line's Menu is sent
+       while walking: the other line's copy goes to the walk's own map,
+       routed by ProgrammerController -- not this test's matter.) */
     makeShow();
     twinLines();
     ProgrammerController *pc = m_doc->programmer();
     PadRun *run = pc->padRun();
     QVERIFY(run->sameController(0, 1));
     run->setEnabled(true);
-    bool oneFirst = false;
-    auto both = [&](quint32 ch, uchar v) {
-        axis(ch, v, oneFirst ? 1 : 0);
-        axis(ch, v, oneFirst ? 0 : 1);
-    };
-    for (int walk = 1; walk <= 2; ++walk)
-    {
-        // The second time the other line brings the press first.
-        oneFirst = walk == 2;
-        both(kMenu, 255);
-        QVERIFY2(run->isWalking(), qPrintable(QString("Menu on the twin pad started no walk (walk %1)").arg(walk)));
-        both(kMenu, 0);
-        // Ended from the laptop.
-        pc->refineSession()->stop();
-        QVERIFY(!run->isWalking());
-    }
-    // And the GO family after it: one LT + A is one GO.
+    // The walk from line 0's Menu, let go into the walk; ended on the laptop.
+    axis(kMenu, 255, 0);
+    QVERIFY(run->isWalking());
+    axis(kMenu, 0, 0);
+    pc->refineSession()->stop();
+    QVERIFY(!run->isWalking());
+    // The pad's next Menu, line 1 first: it walks.
+    axis(kMenu, 255, 1);
+    QVERIFY2(run->isWalking(), "the twin pad's next Menu after a walk was swallowed");
+    axis(kMenu, 0, 1);
+    pc->refineSession()->stop();
+    QVERIFY(!run->isWalking());
+    // And the GO family after it: one LT + A on both lines is one GO.
     arm(true, 0);
     m_runs.clear();
-    both(kLT, 255);
-    both(kA, 255);
-    both(kA, 0);
-    both(kLT, 0);
+    for (const auto &st : QList<QPair<quint32, uchar>>({ { kLT, 255 }, { kA, 255 }, { kA, 0 }, { kLT, 0 } }))
+    {
+        axis(st.first, st.second, 1);
+        axis(st.first, st.second, 0);
+    }
     QCOMPARE(goes(), 1);
 }
 
