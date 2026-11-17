@@ -10,6 +10,17 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Pad Run, MSC and MTC in on Windows (board Q257, for 0.5.x)
+
+Refused on Windows for 0.5.0 (`PadRun::padRunSupported()`): arming, MSC cue
+commands and MIDI timecode in; the pad's emergency stop and MSC ALL OFF / STOP
+still work. The fix is a 0.5.x item: the HID plugin's hotplug and the MIDI
+SysEx input path behave differently there. **Needs a Windows bench check** (the
+Win10 VM and a real pad) of hotplug, the stop, and an MSC GO from QLab, then
+lift the refusal and drop the "Windows: not yet" notes in docs/features/show-control.md.
+
+---
+
 ## PatchUndo doesn't round-trip a pending leg
 
 `PatchUndo::captureOne()` records a pending output leg (its interface away)

@@ -43,6 +43,7 @@
 #include "showcontrol.h"
 #include "mastertimer.h"
 #include "padrun.h"
+#include "outputrulekeeper.h"
 #include "controllerjobs.h"
 #include "qlcfile.h"
 #include "qlcfixturedef.h"
@@ -458,6 +459,43 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
     value(kLB, 0);
     QVERIFY2(run->isArmed(), qPrintable(diag2));
     doc->masterTimer()->stopAllFunctions();
+}
+
+void PadRunRulesUi_Test::windowsRefusalShowsOnTheFooterChip()
+{
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    auto restore = qScopeGuard([]() { PadRun::setPlatformForTest(PadRun::PlatformAuto); });
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    PadRun *run = doc->programmer()->padRun();
+    run->setArmChordMs(15);
+    run->setEnabled(true, false);
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    auto value = [&](quint32 ch, uchar v) { emit iom->inputValueChanged(0, ch, v, QString()); };
+    value(kLB, 255);
+    value(kRB, 255);
+    QTRY_VERIFY2(run->notice() == PadRun::notSupportedText(), qPrintable(run->notice()));
+    settle();
+    QVERIFY(chip->isVisible());
+    QVERIFY2(chip->text().contains(QStringLiteral("macOS/Linux for now")), qPrintable(chip->text()));
+    QVERIFY(!run->isArmed());
+    value(kRB, 0);
+    value(kLB, 0);
+    // The stop still works there, and shows red.
+    value(kLB, 255);
+    value(kRB, 255);
+    value(kLT, 255);
+    value(kRT, 255);
+    settle();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    value(kRT, 0);
+    value(kLT, 0);
+    value(kRB, 0);
+    value(kLB, 0);
+    doc->outputRuleKeeper()->noteGo();     // the show is no longer held: the next test starts clean
+    run->setEnabled(false, false);
 }
 
 void PadRunRulesUi_Test::focusOnEverySurface()

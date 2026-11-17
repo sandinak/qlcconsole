@@ -43,6 +43,10 @@ private slots:
      *  Menu again: ARMED, and the Run tab says the list waits (Venue focus
      *  done: LT + A for the next cue) with no command sent. */
     void focusOnEverySurface();
+    /** Board Q257, Windows forced: the arm chord is refused and the footer's
+     *  Pad chip, as drawn, says "Running the show from a controller is
+     *  macOS/Linux for now."; the stop still turns it red. */
+    void windowsRefusalShowsOnTheFooterChip();
     /** Controller jobs on the real surfaces: two pads, A arms -- the
      *  button and the footer chip name it, only A's light shows the arm;
      *  B without Run cues is told so on the chip; B with it is told A runs

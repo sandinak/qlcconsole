@@ -45,6 +45,8 @@
 #include "timecodesource.h"
 #include "functionparent.h"
 #include "showcontrol.h"
+#include "padrun.h"
+#include <QScopeGuard>
 #include "showwebaccess.h"
 #include "qrencoder.h"
 #include "chaserstep.h"
@@ -303,6 +305,62 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
     ShowControlSyncPage early(m_doc);
     QVERIFY(!early.findChild<QCheckBox *>("scOscEnabled")->isEnabled());
     QCOMPARE(early.findChild<QSpinBox *>("scOscPort")->value(), port);
+}
+
+/* Board Q257: Windows refuses MSC cues, but the stop gets through the real
+   listener path (MSC in is off there, and ALL OFF still runs). */
+void ShowControlUi_Test::windowsMscStopStillReachesTheShow()
+{
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    auto restore = qScopeGuard([]() { PadRun::setPlatformForTest(PadRun::PlatformAuto); });
+    ShowControlListener::setSettings(false, freePort(), true, 1);
+    ShowControlListener listener(m_doc);        // apply(): MSC in is off on Windows
+    ShowControl *sc = m_doc->showControl();
+    QVERIFY(!sc->mscEnabled());
+    QList<ShowControl::Command> runs;
+    sc->setRunHandler([&runs](const ShowControl::Request &r, ShowControl::Route) {
+        runs << r.command;
+        return true;
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(ShowControl::RunHandler()); });
+    auto msc = [&](int command) {
+        QByteArray b;
+        b.append(char(0xF0)).append(char(0x7F)).append(char(1)).append(char(0x02))
+         .append(char(1)).append(char(command)).append(char(0xF7));
+        sc->handleSysEx(0, b);
+    };
+    msc(0x01);      // GO: refused
+    QVERIFY(runs.isEmpty());
+    msc(0x08);      // ALL_OFF
+    QCOMPARE(runs, QList<ShowControl::Command>() << ShowControl::AllOff);
+    msc(0x02);      // STOP
+    QCOMPARE(runs.size(), 2);
+    QCOMPARE(runs.at(1), ShowControl::Pause);   // MSC STOP halts
+}
+
+void ShowControlUi_Test::windowsRefusesMscAndMidiTimecodeInOnThePage()
+{
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    auto restore = qScopeGuard([]() { PadRun::setPlatformForTest(PadRun::PlatformAuto); });
+    ShowControlListener::setSettings(false, freePort(), true, 1);
+    ShowControlListener listener(m_doc);
+    ShowControlSyncPage page(m_doc);
+    page.setListener(&listener);
+    page.show();
+    QCheckBox *msc = page.findChild<QCheckBox *>("scMscEnabled");
+    QLabel *why = page.findChild<QLabel *>("scMscRefused");
+    QVERIFY(msc != nullptr && why != nullptr);
+    QVERIFY(!msc->isChecked());                      // a saved "on" is not shown on
+    QVERIFY(!ShowControlListener::mscEnabled());
+    QVERIFY(why->isVisible());
+    QVERIFY2(why->text().contains("macOS/Linux for now"), qPrintable(why->text()));
+    msc->setChecked(true);
+    QVERIFY(!msc->isChecked());                      // refused
+    QVERIFY(!m_doc->showControl()->mscEnabled());
+    QVERIFY(!ShowControlListener::mscEnabled());
+    QLabel *mtc = page.findChild<QLabel *>("scMtcRefused");
+    QVERIFY(mtc != nullptr && mtc->isVisible());
+    QVERIFY2(mtc->text().contains("macOS/Linux for now"), qPrintable(mtc->text()));
 }
 
 /* Editing on the page saves the setting and puts it into effect at once. */

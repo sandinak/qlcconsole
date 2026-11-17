@@ -54,6 +54,16 @@ private slots:
 
     /* Rules 3 and 5: the chords */
     void theStopsOwnBumpersDoNotArm();
+    /** Board Q257: on Windows (forced here) the arm chord is refused with
+     *  the words on the notice and the chip, nothing arms, no cue runs. */
+    void windowsRefusesTheArmChordAndSaysSo();
+    /** ... and still the stop: the four together reach ALL OFF there. */
+    void windowsStillStopsFromThePad();
+    /** ... and MIDI Show Control: cues refused, ALL OFF and STOP not. */
+    void windowsRefusesMscCuesButNotItsStop();
+    /** The real platform, no override: Windows refuses to arm and its stop
+     *  reaches ALL OFF; macOS and Linux arm. (Windows CI runs this.) */
+    void theRealPlatformArmsOrRefusesAndAlwaysStops();
     void aTriggerInTheArmChordSpendsIt();
     /** A spent chord (a trigger came with the bumpers, or the chord
      *  fired) with one bumper pressed again: nothing changes, and the chip

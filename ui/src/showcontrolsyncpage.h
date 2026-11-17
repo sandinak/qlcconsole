@@ -127,6 +127,8 @@ private:
 
     // MSC in
     QCheckBox *m_mscCheck;
+    QLabel *m_mscRefused = nullptr;
+    QLabel *m_mtcRefused = nullptr;
     QSpinBox *m_mscDeviceSpin;
     QComboBox *m_mscInputCombo;
     QLabel *m_mscInputs;

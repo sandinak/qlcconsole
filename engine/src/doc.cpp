@@ -86,6 +86,7 @@
 #include "fixturegroup.h"
 #include "programmercontroller.h"
 #include "padrun.h"
+#include "inputpatch.h"
 #include "venuecorrections.h"
 #include "parkeffect.h"
 #include "focuscalls.h"
@@ -216,8 +217,17 @@ Doc::Doc(QObject* parent, int universes)
 
     // Route absolute input timecode (e.g. MIDI Time Code) into the shared
     // timecode source that the Show timeline can follow.
-    connect(m_ioMap, SIGNAL(inputTimeCodeChanged(quint32,quint32,uchar)),
-            timecodeSource(), SLOT(updateTimeCode(quint32,quint32,uchar)));
+    connect(m_ioMap, &InputOutputMap::inputTimeCodeChanged, this,
+            [this](quint32 universe, quint32 ms, uchar fps) {
+        // Windows (board Q257): MIDI timecode in is refused; Art-Net and LTC are not.
+        if (!PadRun::padRunSupported())
+        {
+            const InputPatch *ip = m_ioMap->inputPatch(universe);
+            if (ip != nullptr && ip->pluginName() == QLatin1String("MIDI"))
+                return;
+        }
+        timecodeSource()->updateTimeCode(universe, ms, fps);
+    });
 
     // Effect script runner — drives JS effect instances for scenes that
     // reference Effect-type palettes. These are AUTO connections: queued for

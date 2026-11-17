@@ -25,6 +25,7 @@
 #include "controllerjobs.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
+#include <atomic>
 #include "showtreecontroller.h"
 #include "refinesession.h"
 #include "focussession.h"
@@ -266,7 +267,8 @@ void PadRun::setEnabled(bool on, bool say)
     emit enabledChanged(on);
     sync();
     if (say && m_pc != nullptr)
-        m_pc->tellOperator(on ? m_pc->padText(tr("Run role. Hold {LB} and {RB} to arm."))
+        m_pc->tellOperator(on ? (padRunSupported() ? m_pc->padText(tr("Run role. Hold {LB} and {RB} to arm."))
+                                                   : notSupportedText())
                               : tr("Run role off."),
                            ControllerScheme::ConfirmPriority);
 }
@@ -465,7 +467,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     {
         if (!m_armed)
         {
-            refuse(action, tr("Not armed: hold {LB} and {RB}."));
+            refuse(action, padRunSupported() ? tr("Not armed: hold {LB} and {RB}.") : notSupportedText());
             return true;
         }
         if (!sameController(universe, m_armUniverse))
@@ -562,14 +564,16 @@ void PadRun::armChordUpdate(quint32 universe, bool bumperDown)
        why -- a trigger that does not come back up would otherwise make a
        pad that "will not arm" with nothing to show for it. */
     if (h.lb && h.rb && h.anyTrigger() && !h.all() && m_pc != nullptr)
-        showNotice(m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
+        showNotice(!padRunSupported() ? notSupportedText()
+                                      : m_pc->padText(tr("To arm, let go of everything, then hold {LB} and {RB}.")));
     /* Both bumpers down again, no trigger, but the chord is spent (it
        fired, was refused, or a trigger came with them; or a tool took the
        pad mid-chord): one bumper pressed again to try once more times
        nothing -- the screen says what does. */
     else if (bumperDown && h.lb && h.rb && !h.anyTrigger() && h.spent && !isFocusing() && !isWalking()
              && !isBesideTool(universe) && m_pc != nullptr)
-        showNotice(m_pc->padText(tr("Let go of both bumpers, then hold {LB} and {RB} again.")));
+        showNotice(!padRunSupported() ? notSupportedText()
+                                      : m_pc->padText(tr("Let go of both bumpers, then hold {LB} and {RB} again.")));
 }
 
 void PadRun::armChordFired(const QString &pad)
@@ -589,6 +593,11 @@ void PadRun::armChordFired(const QString &pad)
        nothing that comes in while they stay held (a DualSense's resting
        trigger noise) times it again (pad-trace replay, 2026-11-16). */
     m_pads[pad].spent = true;
+    if (!m_armed && !padRunSupported())
+    {
+        refuse(Arm, notSupportedText());
+        return;
+    }
     /* One runner (CONTROLLER_JOBS.md 6): another pad's arm -- or the arm a
        venue focus put by -- is not this one's to drop or share. */
     if (m_armed && !sameController(u, m_armUniverse))
@@ -609,10 +618,58 @@ void PadRun::armChordFired(const QString &pad)
     setArmed(!m_armed, m_armed ? m_armUniverse : u);
 }
 
+namespace
+{
+std::atomic<int> g_platform { int(PadRun::PlatformAuto) };
+}
+
+void PadRun::setPlatformForTest(Platform platform)
+{
+    g_platform = int(platform);
+}
+
+bool PadRun::padRunSupported()
+{
+    switch (Platform(g_platform.load()))
+    {
+    case PlatformWindows:
+        return false;
+    case PlatformOther:
+        return true;
+    case PlatformAuto:
+    {
+        // Test-only, read once: honoured only where the test guard ran.
+        static const bool testAny = qEnvironmentVariable("QLC_TEST_OFFSCREEN_GUARD") == QLatin1String("1")
+                                    && qEnvironmentVariable("QLC_PADRUN_PLATFORM") == QLatin1String("any");
+        if (testAny)
+            return true;
+        break;
+    }
+    case PlatformReal:
+        break;
+    }
+#ifdef Q_OS_WIN
+    return false;
+#else
+    return true;
+#endif
+}
+
+QString PadRun::notSupportedText()
+{
+    return tr("Running the show from a controller is macOS/Linux for now.");
+}
+
 bool PadRun::setArmed(bool on, quint32 universe)
 {
     if (on == m_armed)
         return true;
+    // Never the stop: only the arm is refused here (board Q257).
+    if (on && !padRunSupported())
+    {
+        refuse(Arm, notSupportedText());
+        return false;
+    }
     // Disarmed: the pad that armed is the one told.
     if (!on)
         universe = m_armUniverse;
@@ -1329,7 +1386,8 @@ void PadRun::focusStartPress(quint32 universe, bool safetyHeld)
        ever (one pad with every job is as before). */
     if (!m_armed && hasJob(universe, ControllerJobs::RunCues))
     {
-        refuse(Walk, tr("Not armed. To start the venue focus, hold {LB} and {RB} to arm, then {LT} + {Menu}."));
+        refuse(Walk, !padRunSupported() ? notSupportedText()
+                   : tr("Not armed. To start the venue focus, hold {LB} and {RB} to arm, then {LT} + {Menu}."));
         return;
     }
     /* The Focus job on its own (board Q250): a pad with no arm to give --
