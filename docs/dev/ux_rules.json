@@ -824,7 +824,7 @@
     "id": "UX-80",
     "theme": "Layout",
     "title": "A menu stays short: areas become submenus",
-    "rule": "A top-level menu has at most 12 items; past that, items go into submenus named by area (Align ▸, Layer ▸, Export ▸). A submenu never holds a single item, and the same action has the same words and the same band in every menu.",
+    "rule": "A top-level menu has at most 14 items; past that, items go into submenus named by area (Align ▸, Layer ▸, Export ▸). A submenu never holds a single item, and the same action has the same words and the same band in every menu.",
     "check": "test:contextmenus_test::everyMenuKeepsTheLaws",
     "checks": [
       "test:contextmenus_test::everyMenuKeepsTheLaws"

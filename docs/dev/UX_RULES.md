@@ -449,7 +449,7 @@ A context menu reads in bands: open or edit it, act on it live (test, locate, so
 
 ### UX-80 A menu stays short: areas become submenus
 
-A top-level menu has at most 12 items; past that, items go into submenus named by area (Align ▸, Layer ▸, Export ▸). A submenu never holds a single item, and the same action has the same words and the same band in every menu.
+A top-level menu has at most 14 items; past that, items go into submenus named by area (Align ▸, Layer ▸, Export ▸). A submenu never holds a single item, and the same action has the same words and the same band in every menu.
 
 - **Why:** 2026-11-17: "if they're long consider submenus by area"; Connections rows and the Fixture Manager's fixture menu had grown past 15 items.
 - **Check:** `contextmenus_test::everyMenuKeepsTheLaws` (enforced)

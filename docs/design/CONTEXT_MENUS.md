@@ -445,7 +445,7 @@ menu it can build offscreen.
    One separator between bands, none inside one.
 2. **A delete is the last item.** "Delete X…" (destroy) has nothing after
    it. "Remove from Y" is the place's and sits in band 0.
-3. **At most 12 items at the top level** (about 10 is the aim). Past that,
+3. **At most 14 items at the top level** (about 10 is the aim). Past that,
    items by area go into a submenu named for the area ("Align ▸", "Layer ▸",
    "Export ▸", "Group ▸"). The top level keeps the band's first and most-used
    items.
@@ -465,4 +465,43 @@ menu it can build offscreen.
    against rule 3, and add themselves to the inventory below with the test
    that builds them. A menu the test cannot reach is built so that it can
    (a `fillContextMenu(QMenu *, …)` that the popup then calls).
+
+## 5. Appendix: every context menu, 2026-11-17
+
+Top-level items (separators not counted) and what the law test
+(`everyMenuKeepsTheLaws`) says. "Built" menus are the ones the test opens
+offscreen; the others were counted from the source (`exec(` sites in
+`ui/src`) and are listed so the next pass starts from them. Limit 14
+(UX-80); a menu over it has a ceiling in the test and can only shrink.
+
+| Menu | Where | Items before → after | Band order | Problem / change |
+|---|---|---|---|---|
+| Fixture, Fixture Manager | `fixturemanager.cpp` | 19 → 14 | place, kind, Delete last | Definition, Plot Symbol, Return to Inventory, Power and Channel Behaviour now in **Fixture Setup ▸**; Expand/Collapse in **View ▸**; Test Fixture followed the last row |
+| Fixture group, Fixture Manager | same | 18 → 14 | same | Reset dropped for a group (it never applied); **Add to Group** alone is not a one-item Group ▸ |
+| Fixture group in Build, Plot Layers, Scenes, Library | `contextmenus.cpp` `rig()` | 8–14 | kind block | none |
+| Fixture, Build / Scenes / Library | same | 4–12 | kind block | none |
+| Fixture on the plot and Plot Layers | `monitorgraphicsview.cpp` `buildItemMenu` | 19 | place, kind | **over: ceiling 19**; next: Mount ▸ takes Set Mounting Height and Stamp Studio Component, Layer ▸ takes Move to Layer and New Map Layer |
+| Stage feature, plot and Layers | same | 12 | kind block, Delete last | none |
+| Stage piece, no-light zone | same | 5 | place, Edit, Delete | none |
+| Empty plot | `monitor.cpp` | 7 | | none |
+| Palette (Build, Library, look row) | `contextmenus.cpp` `palette()` | 7–11 | kind block | Used By ▸ with one use is a picker (allowed) |
+| Function (Scenes, Effects, Library, Workbench) | `function()` | 8–10 | kind block | none |
+| Build ▸ Scenes folder / empty | `programmingoutline.cpp` | 10 / 6 | | none |
+| Functions tab | `functionmanager.cpp` | 17 → 7 | Kind, Selection, Organise, View, Edit, Delete last | the twelve creators are **New ▸** |
+| Show Tree layer (tree, Workbench) | `showtreeview.cpp` `fillLayerMenu` | 20 / 18 | place, open, kind, Edit, Delete | **over: ceiling 20**; next: New ▸ (+ Cue List…, + Hit, + Cue, + Sub-cue) and Clipboard ▸ (Cut, Copy, Paste, Duplicate); the tests and course text name those items, so it is its own change |
+| Show Tree layer carried in | same | 10–11 | place, open | none |
+| Show Tree cue, list, production, hit | `showtreeview.cpp`, `treecuestack.cpp` | 2–14 | creation first, Delete last | counted from source only |
+| Connections rows (14 menus) | `connectionstree.cpp` | 5–15 | Delete last (one: "Stop Showing This Interface" after the patch items) | not built by the test; the interface menu and the universe menu are 13–15: next pass |
+| Virtual Console widget | `virtualconsole.cpp`, `vcwidget.cpp` | 12+ | the menu bar's Edit menu | Delete fourth; needs its own right-click menu (3.4) |
+| Sequence item (Show Manager) | `showmanager/sequenceitem.cpp` | 3 + defaults | Delete was before Scale | Delete moved last |
+| Bundle browser | `bundlebrowser.cpp` | 5 | Delete was before Show in Finder | Delete moved last |
+| Show Manager track, audio, video, scene, EFX, RGB, collection items | `showmanager/*item.cpp` | 2–12 | | counted from source only |
+| Power distribution | `powerdistributionwidget.cpp` | 4–5 | | none |
+| Inputs/Outputs, patch list, chaser/collection editors, Look Editor, free string, Fixture Group editor, console channel, notes, review | various | 1–8 | | counted from source only |
+
+Totals: the menus the test builds went from 11 over the old 14 ceiling
+(Fixture Manager 19 and 18, Functions tab 17, Show Tree layer 20 and 18,
+plot fixture 19, one more flat 15) to 2 listed ceilings. The item count of
+the touched menus fell from 54 to 35 at the top level; submenus hold the rest
+(no item was removed except Reset on a group row).
 

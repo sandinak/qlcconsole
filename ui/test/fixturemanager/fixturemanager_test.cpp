@@ -1129,15 +1129,19 @@ bool chooseFromContextMenu(FixtureManager &mgr, QTreeWidgetItem *item, const QSt
             }
         /* In Fixture Setup: open the submenu, and look again in it. */
         foreach (QAction *a, m->actions())
-            if (a->menu() != nullptr && a->menu()->objectName() == QLatin1String("fixtureSetupMenu"))
-                foreach (QAction *b, a->menu()->actions())
-                    if (b->text() == text)
-                    {
-                        m->setActiveAction(a);
-                        QTest::keyClick(m, Qt::Key_Right);
-                        QTimer::singleShot(10, *poll);
-                        return;
-                    }
+        {
+            if (a->menu() == nullptr || a->menu()->objectName() != QLatin1String("fixtureSetupMenu"))
+                continue;
+            foreach (QAction *b, a->menu()->actions())
+            {
+                if (b->text() != text)
+                    continue;
+                m->setActiveAction(a);
+                QTest::keyClick(m, Qt::Key_Right);
+                QTimer::singleShot(10, *poll);
+                return;
+            }
+        }
         m->close();
     };
     QTimer::singleShot(0, *poll);
