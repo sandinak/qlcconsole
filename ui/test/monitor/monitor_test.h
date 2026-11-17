@@ -1093,6 +1093,8 @@ private slots:
      *  Rig Overview, staged or patched. */
     void aPlacedStaffIsDrawn_data();
     void aPlacedStaffIsDrawn();
+    /** The side list names every fixture: placed, unplaced, staged, WLED. */
+    void theSideListNamesEveryFixture();
 
 private:
     Doc* m_doc;

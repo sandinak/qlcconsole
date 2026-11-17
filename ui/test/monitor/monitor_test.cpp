@@ -2389,6 +2389,65 @@ void Monitor_Test::aPlacedStaffIsDrawn()
     QVERIFY2(differing > 20, qPrintable(QStringLiteral("the staff paints %1 pixels").arg(differing)));
 }
 
+/* "No individual fixtures show up in the side bar": the rendered rows name a
+   placed fixture and every one that is not on the plot -- a staged WLED
+   staff, a patched one never placed -- and each unplaced row can be dragged
+   onto the plot. */
+void Monitor_Test::theSideListNamesEveryFixture()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    auto wled = [&](const char *name, bool patched, quint32 addr) {
+        Fixture *f = new Fixture(doc.data());
+        f->setName(name);
+        f->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+        f->setConnection(Fixture::NetworkConnection);
+        f->setTransport(Fixture::WledTransport);
+        f->setStageLook(Fixture::StaffLook);
+        f->setPatched(patched);
+        f->setAddress(addr);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+    Fixture *staged = wled("Office Staff", false, 0);
+    Fixture *unplacedPatched = wled("OfficeStaff", true, 30);
+    Fixture *placed = wled("Placed Staff", true, 60);
+    QVERIFY(staged && unplacedPatched && placed);
+    doc->monitorProperties()->setFixturePosition(placed->id(), 0, 0, QVector3D(3000, 3000, 0));
+
+    QWidget parent;
+    Monitor mon(&parent, doc.data());
+    parent.show();
+    QApplication::processEvents();
+    MonitorLayersPanel *panel = mon.findChild<MonitorLayersPanel *>();
+    QVERIFY(panel != nullptr);
+    panel->reload();
+    QTreeWidget *tree = panel->findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+
+    QMap<QString, QTreeWidgetItem *> rows;
+    for (QTreeWidgetItemIterator it(tree); *it != nullptr; ++it)
+        rows.insert((*it)->text(0), *it);
+    QVERIFY2(rows.contains("Placed Staff"), "the placed fixture has its row");
+    for (const char *n : { "Office Staff", "OfficeStaff" })
+    {
+        QVERIFY2(rows.contains(n), n);
+        QVERIFY(rows.value(n)->data(0, LayersTreeWidget::UnplacedFidRole).isValid());
+    }
+    QCOMPARE(rows.value("Office Staff")->data(0, LayersTreeWidget::UnplacedFidRole).toUInt(), staged->id());
+    QVERIFY(!rows.value("Placed Staff")->data(0, LayersTreeWidget::UnplacedFidRole).isValid());
+    // Findable by name.
+    QLineEdit *search = panel->findChild<QLineEdit *>();
+    if (search != nullptr)
+    {
+        search->setText("Office");
+        QApplication::processEvents();
+        QVERIFY(!rows.value("Office Staff")->isHidden());
+        QVERIFY(rows.value("Placed Staff")->isHidden());
+    }
+}
+
 QTEST_MAIN(Monitor_Test)
 
 /****************************************************************************
