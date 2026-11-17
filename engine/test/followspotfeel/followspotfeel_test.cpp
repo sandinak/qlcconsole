@@ -1810,8 +1810,11 @@ void FollowSpotFeel_Test::q253TheStopEndsTheToolAndItsHold()
     QVERIFY2(h.pc->followSpotStatus().heldBy.isEmpty(),
              qPrintable(tool + ": still held by " + h.pc->followSpotStatus().heldBy));
     QVERIFY2(!h.pc->followSpotStatusText().contains("Follow spot holds"), qPrintable(h.pc->followSpotStatusText()));
-    /* (The tool's own sticks are not asserted here: every tool's start
-       centres them, so nothing a person sees reads them after the stop.) */
+    // The tool's sticks centred: nothing of A's push is kept for the next.
+    QCOMPARE(h.pc->m_toolPanNorm, 0.5f);
+    QCOMPARE(h.pc->m_toolTiltNorm, 0.5f);
+    QCOMPARE(h.pc->m_toolFineX, 0.5f);
+    QCOMPARE(h.pc->m_toolFineY, 0.5f);
 
     // The spot on again: B's stick, held through the stop, moves nothing...
     h.use(h.rig.targetScene);
