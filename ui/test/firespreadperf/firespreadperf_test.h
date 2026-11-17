@@ -21,6 +21,7 @@
 #include <QObject>
 #include <QHash>
 #include <QByteArray>
+#include <QSet>
 
 class App;
 class Doc;
@@ -53,6 +54,8 @@ private:
     App *m_app = nullptr;
     EffectInstance *m_fire = nullptr;
     QHash<int, QByteArray> m_universes;
+    QSet<quint32> m_uplights;
+    bool m_uplightsDark = false;
 };
 
 #endif

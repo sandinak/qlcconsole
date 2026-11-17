@@ -42,9 +42,7 @@
 #include "scenery.h"
 #include "fixture.h"
 #include "scene.h"
-#include "mastertimer.h"
-#include "inputoutputmap.h"
-#include "universe.h"
+#include "fixturegroup.h"
 #include "doc.h"
 
 #include "firespreadperf_test.h"
@@ -95,7 +93,11 @@ void FireSpreadPerf_Test::initTestCase()
     m_app->init();
     m_app->doc()->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures"));
     m_app->clearDocument();
-    QCOMPARE(m_app->loadXML(QStringLiteral(STAGE_SHOW)), QFile::NoError);
+    /* FIRE_PERF_SHOW: a show read where it is (never copied), its Fire
+       Spread on the groups FIRE_PERF_GROUPS names (comma-separated) and
+       its uplights (FIRE_PERF_UPLIGHTS) measured lit and dark. */
+    const QString show = qEnvironmentVariable("FIRE_PERF_SHOW", QStringLiteral(STAGE_SHOW));
+    QCOMPARE(m_app->loadXML(show), QFile::NoError);
     Doc *doc = m_app->doc();
     doc->resetModified();
     // The main drape open, as the stage is looked at (no curtain fixture driving it).
@@ -109,10 +111,22 @@ void FireSpreadPerf_Test::initTestCase()
     Scene *look = new Scene(doc);
     QVERIFY(doc->addFunction(look));
     int heads = 0, fixtures = 0;
+    const QStringList groups = qEnvironmentVariable("FIRE_PERF_GROUPS").split(QLatin1Char(','), Qt::SkipEmptyParts);
+    const QStringList uplights = qEnvironmentVariable("FIRE_PERF_UPLIGHTS").split(QLatin1Char(','), Qt::SkipEmptyParts);
+    QSet<quint32> chosen;
+    for (FixtureGroup *g : doc->fixtureGroups())
+    {
+        if (groups.contains(g->name()) || uplights.contains(g->name()))
+            for (quint32 id : g->fixtureList())
+                chosen << id;
+        if (uplights.contains(g->name()))
+            for (quint32 id : g->fixtureList())
+                m_uplights << id;
+    }
     for (Fixture *fx : doc->fixtures())
     {
         fx->setOwnChannelValues(QByteArray(int(fx->channels()), 0));
-        if (!underTheFire(fx))
+        if (groups.isEmpty() ? !underTheFire(fx) : !chosen.contains(fx->id()))
             continue;
         look->addFixture(fx->id());
         heads += fx->heads();
@@ -129,6 +143,7 @@ void FireSpreadPerf_Test::initTestCase()
     m_fire = new EffectInstance(doc, look->id(), fire->id());
     QVERIFY2(m_fire->isValid(), qPrintable(m_fire->error()));
     REPORT("Fire Spread over %d fixtures, %d heads", fixtures, heads);
+    REPORT("(%d of them uplights)", int(m_uplights.size()));
     QVERIFY(heads > 5000);
 }
 
@@ -166,6 +181,11 @@ int FireSpreadPerf_Test::tickTo(qint64 ms, double *tickMs, double *applyMs)
     int changed = 0;
     for (Fixture *fx : m_app->doc()->fixtures())
     {
+        if (m_uplightsDark && m_uplights.contains(fx->id()))
+        {
+            fx->setOwnChannelValues(QByteArray(int(fx->channels()), 0));
+            continue;
+        }
         const auto it = m_universes.constFind(int(fx->universe()));
         if (it != m_universes.constEnd() && fx->setChannelValues(it.value()))
             ++changed;
@@ -273,8 +293,10 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
         v.repaint();
         return QPair<double, double>((cpuNs(wall) - c0) / 1e6, (wall.nsecsElapsed() - w0) / 1e6);
     };
-    for (bool beams : { true, false })
+    for (int pass = 0; pass < (m_uplights.isEmpty() ? 2 : 3); ++pass)
     {
+        const bool beams = pass != 1;
+        m_uplightsDark = pass == 2;
         v.setBeams(beams);
         frameMs(500);                       // warm
         double sc = 0, sw = 0, bc = 0, bw = 0;
@@ -292,54 +314,11 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
             bc += f.first; bw += f.second;
         }
         bc /= k; bw /= k;
-        REPORT("rig overview frame, beams %s: spreading %.1f ms CPU (%.1f wall), burning %.1f ms CPU (%.1f wall)",
-              beams ? "on" : "off", sc, sw, bc, bw);
+        REPORT("rig overview frame, beams %s%s: spreading %.1f ms CPU (%.1f wall), burning %.1f ms CPU (%.1f wall)",
+              beams ? "on" : "off", m_uplightsDark ? ", uplights dark" : "", sc, sw, bc, bw);
     }
+    m_uplightsDark = false;
     v.setLiveValues(false);
-
-    /* (a) again, as the engine runs it: the look playing on the MasterTimer,
-       a whole engine frame (every function's write, every universe's
-       faders) at a time, over a 3 s spread then the fire burning. */
-    {
-        QLCPalette *fast = new QLCPalette(QLCPalette::Effect, doc);
-        fast->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
-        fast->setEffectParamValue(QStringLiteral("edge"), 0.354);
-        fast->setEffectParamValue(QStringLiteral("seed"), 327.0);
-        fast->setEffectParamValue(QStringLiteral("spreadTime"), 3.0);
-        fast->setEffectParamValue(EffectRuns::runsKey(), 0);
-        QVERIFY(doc->addPalette(fast));
-        Scene *look = new Scene(doc);
-        QVERIFY(doc->addFunction(look));
-        for (Fixture *fx : doc->fixtures())
-            if (underTheFire(fx))
-                look->addFixture(fx->id());
-        look->addPalette(fast->id());
-        MasterTimer *mt = doc->masterTimer();
-        auto engineFrame = [&]() {
-            mt->timerTick();
-            for (Universe *u : doc->inputOutputMap()->universes())
-                u->processFaders();
-        };
-        look->start(mt, FunctionParent::master());
-        QElapsedTimer run;
-        run.start();
-        double sp = 0, spMax = 0, bu = 0, buMax = 0;
-        int spN = 0, buN = 0;
-        while (run.elapsed() < 4500)
-        {
-            const qint64 at = run.elapsed();
-            QElapsedTimer f;
-            f.start();
-            engineFrame();
-            const double ms = f.nsecsElapsed() / 1e6;
-            if (at > 200 && at < 2800) { sp += ms; spMax = qMax(spMax, ms); ++spN; }
-            else if (at > 3600) { bu += ms; buMax = qMax(buMax, ms); ++buN; }
-        }
-        REPORT("engine frame (look on the MasterTimer): spreading %.2f ms (max %.2f, %d frames), burning %.2f ms (max %.2f, %d frames)",
-               spN ? sp / spN : 0.0, spMax, spN, buN ? bu / buN : 0.0, buMax, buN);
-        look->stop(FunctionParent::master());
-        engineFrame();
-    }
 
     if (qEnvironmentVariableIsSet("FIRE_PERF_REPORT"))
         QFAIL(qPrintable(g_report.join(QStringLiteral(" | "))));
