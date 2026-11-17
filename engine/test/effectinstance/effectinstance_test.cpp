@@ -5198,6 +5198,10 @@ void EffectInstance_Test::fireSpreadTakesItsOwnDimmer()
             dimDef->addChannel(ch);
             mode->insertChannel(ch, quint32(c));
         }
+        QLCFixtureHead head;                  // the colours; the dimmer is the master
+        head.addChannel(1); head.addChannel(2); head.addChannel(3);
+        mode->insertHead(-1, head);
+        mode->cacheHeads();
         dimDef->addMode(mode);
     }
     m_doc->fixtureDefCache()->addFixtureDef(dimDef);
