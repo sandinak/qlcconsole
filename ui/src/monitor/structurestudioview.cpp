@@ -3294,10 +3294,10 @@ static QColor fixtureEdgeColor(const QColor &base)
                   base.alpha());
 }
 
-/* The room level at which every mark has its full colour: House, the
- * Rig Overview's default. Below it colour drains out of whatever is not
- * light (roomInk()), so House and Work light look as they always have. */
-static const double kRoomColourFull = 0.62;
+/* The room level at which every mark has its full colour: Dim. Below it
+ * colour drains out of whatever is not light (roomInk()), to none in a
+ * Blackout; Dim, House and Work light look as they always have. */
+static const double kRoomColourFull = 0.30;
 
 QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &base,
                                                   bool emitting, bool roomLit) const
@@ -3307,7 +3307,7 @@ QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &bas
         return kOverlapWarning;
     const QColor tint = fixtureEdgeColor(base);
     /* Selected or being dragged: the edge is the selection, not the room's --
-       bright at House and above; below it a quieter light grey, so a whole
+       bright at Dim and above; below it a quieter light grey, so a whole
        selected rig in a Blackout is findable without being a bright line
        drawing of itself. */
     if (fid == m_dragFid || m_highlight.contains(fid))
@@ -4020,7 +4020,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
            should be their correct color (black for risers)". */
         const PropPaint paint = platformPaint(pl);
         /* The flat views paint it as it is, not in the room's light as the
-           45° faces are: below House its colour drains (roomInk()). */
+           45° faces are: below Dim its colour drains (roomInk()). */
         QColor pc = (m_plane == Angled) ? paint.fill : roomInk(paint.fill);
         /* Solid. These were alpha 70, so decks read as panes of glass: stacked
            steps showed through each other and you could see the floor through a
@@ -4285,7 +4285,7 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
         Scenery *sc = props->scenery(id);
         if (sc == nullptr) return;
         const PropPaint paint = sceneryPaint(sc, sceneryWarned(sc->id()));
-        QColor cloth = roomInk(paint.fill);     // its paint shows only in light
+        QColor cloth = paint.fill;
         const double af = 0.18 + 0.82 * m_ambient;
         cloth = QColor(qRound(cloth.red() * af), qRound(cloth.green() * af), qRound(cloth.blue() * af));
         if (sc->isSeeThrough())
@@ -8383,7 +8383,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     if (!emitting)
     {
         /* Not showing output: the fixture is just an object in the room, and
-           its plot colour is not light -- below House it drains to grey
+           its plot colour is not light -- below Dim it drains to grey
            (roomInk()), so a Blackout shows no colour it is not emitting. */
         const double af = 0.30 + 0.70 * m_ambient;
         col = roomInk(col);

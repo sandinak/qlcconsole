@@ -732,7 +732,7 @@ private:
      *
      *  The usual tint is in the room's light (roomEdge()), as the body's faces
      *  are; a selected or dragged fixture's is the selection's, bright at
-     *  House and above and a quieter light grey below it; @p emitting (its body is
+     *  Dim and above and a quieter light grey below it; @p emitting (its body is
      *  showing its own output) keeps the edge at least as bright as @p base,
      *  so a lit fixture still reads lit. @p roomLit false: the plain tint,
      *  for a mark that is not a surface (a mover's aim stub). */
@@ -747,15 +747,15 @@ private:
     /** The one rule for colour in a dark room: colour is light. Anything
      *  drawn that is not a fixture's own output -- a selection, an aim
      *  trace, a target, a stage mark, a guide, a fixture's unlit body or its
-     *  plot colour -- keeps its colour at House light and above and loses it
-     *  as the room goes below House, to a neutral grey of the same
-     *  brightness in a Blackout: still readable, never a colour. A real
+     *  plot colour -- keeps its colour at Dim and above and loses it as the
+     *  room goes below Dim, to a neutral grey of the same brightness in a
+     *  Blackout: still readable, never a colour. A real
      *  clash's warning red is the only mark that keeps its colour. */
     QColor roomInk(const QColor &c) const;
     /** The selection's colour, in the room's light (roomInk()): the plot's
-     *  mint at House and above, a light neutral grey in a Blackout. */
+     *  mint at Dim and above, a light neutral grey in a Blackout. */
     QColor selectionInk(int alpha = 255) const;
-    /** What a selected body is filled with: the selection's mint at House
+    /** What a selected body is filled with: the selection's mint at Dim
      *  and above, going to @p own (as it would be unselected) as the room
      *  goes dark -- in a Blackout a selection is its edge, not a lit body. */
     QColor selectionFill(const QColor &own) const;
