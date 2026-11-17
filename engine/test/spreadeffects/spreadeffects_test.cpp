@@ -583,7 +583,7 @@ void SpreadEffects_Test::fireSpreadOnTheShowsKinds()
         // catches, then on, nothing between, and once on it stays on.
         const int relay = f.value(key(flame->id(), 0), -1);
         QVERIFY2(relay == -1 || relay == 255, qPrintable(QString("relay at %1 at %2 ms").arg(relay).arg(ms)));
-        if (relay != lastRelay && lastRelay >= 0)
+        if (relay != lastRelay)        // from not written (-1) to on: one flip
             ++relayFlips;
         lastRelay = relay;
         if (relay == 255 && relayOn < 0)
