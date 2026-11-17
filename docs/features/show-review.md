@@ -284,6 +284,11 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   tracks into send nothing there, but a Back to the cue or running it again
   presses it again. Give the press a cue of its own and set **Release After
   This Cue** on it ([Candles](stage-targets.md#candles)).
+- **CUE-18** A reusable layer or cue whose uses have effect fades of their
+  own: a show saved before the uses shared an effect's fade in and out.
+  Each use plays its own, as saved, and a change to one use's fades stays
+  that use's. **Fix** makes them one: every use takes the first use's fades
+  (one undo step) ([Reusable layers and cues](show-tree.md#reusable-layers-and-cues)).
 
 **Hits**
 

@@ -1036,6 +1036,15 @@ public:
     };
     /** Every use of reusable @a reusableId, in tree order. */
     QList<ReusableUse> reusableUses(quint32 reusableId) const;
+    /** Whether every use of reusable @a reusableId has the same effect
+     *  fades. A show saved before they were shared (0.4.12) may have uses
+     *  that differ: each then keeps its own, as saved, and the rest of the
+     *  reusable stays linked (Show Review CUE-18). */
+    bool reusableFadesShared(quint32 reusableId) const;
+    /** Make the effect fades of reusable @a reusableId's uses one: every
+     *  use takes the first use's (tree order). One undo step; false when
+     *  they are shared already. */
+    bool shareReusableFades(quint32 reusableId);
     /** Delete a reusable. While it is used it is refused (@a why names the
      *  uses), unless @a unlinkUses: then every use becomes a plain copy as
      *  it is, and the reusable goes -- one undo step. */

@@ -10676,6 +10676,9 @@ bool App::reviewJump(QWidget *parent, const QString &jump, const QVariantList &d
     }
     if (jump == QLatin1String("panturn"))
         return centrePansFromReview(parent, data);
+    if (jump == QLatin1String("sharefades"))
+        // CUE-18: the uses take the first use's fades, one undo step.
+        return m_doc->showTree()->shareReusableFades(id);
     return false;
 }
 

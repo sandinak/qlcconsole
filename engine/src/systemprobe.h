@@ -149,6 +149,10 @@ namespace SystemProbe
     QLC_ENGINE_EXPORT int parseThrottled(const QString &vcgencmd);
     /** A /proc/<pid>/stat line: its command and CPU ticks; false if malformed */
     QLC_ENGINE_EXPORT bool parseProcStat(const QString &stat, QString *name, qint64 *ticks);
+    /** onBattery() on Linux, read from a power_supply class directory
+     *  (/sys/class/power_supply, or a test's copy): 1 on battery, 0 on
+     *  mains or no battery of the computer's own; @a percent its charge. */
+    QLC_ENGINE_EXPORT int readPowerSupplies(const QString &dir, int *percent = nullptr);
 }
 
 /** @} */

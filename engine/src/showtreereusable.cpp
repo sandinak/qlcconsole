@@ -96,6 +96,138 @@ static QList<Layer> renumbered(const QList<Layer> &layers, const QList<Layer> &k
     return out;
 }
 
+/* An effect look's fade in / out is part of what the uses of a reusable
+   share. A show saved before that (0.4.12) can have uses whose fades
+   differ: each keeps its own, as saved, until they agree again (Show
+   Review CUE-18 says so, and shareReusableFades() makes them one). */
+
+/** The effect fades of @a looks, by key. */
+static QString fadeSig(const QList<Look> &looks)
+{
+    QStringList parts;
+    for (const Look &l : looks)
+        if (isEffectKey(l.key))
+            parts << QStringLiteral("%1=%2/%3").arg(l.key).arg(l.fadeIn).arg(l.fadeOut);
+    parts.sort();
+    return parts.join(QLatin1Char(';'));
+}
+
+static QString cueFadeSig(const Cue &c)
+{
+    QStringList parts(fadeSig(c.looks));
+    for (const Layer &l : c.layers)
+        parts << fadeSig(l.looks);
+    return parts.join(QLatin1Char('#'));
+}
+
+/** @a to's effect looks take the fades @a from has for the same key. */
+static void keepFades(QList<Look> &to, const QList<Look> &from)
+{
+    for (Look &l : to)
+    {
+        if (!isEffectKey(l.key))
+            continue;
+        for (const Look &f : from)
+            if (f.key == l.key)
+            {
+                l.fadeIn = f.fadeIn;
+                l.fadeOut = f.fadeOut;
+                break;
+            }
+    }
+}
+
+/** The same for a cue's looks and its layers. A layer takes the fades of
+    its own self in @a fromLayers -- the same content (fades aside), else
+    the same name and target -- never of the layer at its place: a layer
+    inserted, moved or deleted elsewhere must not hand one layer's fades to
+    another (two Dimmer effects in one cue share a key). A layer with no
+    match keeps the fades it has. */
+static void keepCueFades(QList<Look> &looks, QList<Layer> &layers, const QList<Look> &fromLooks,
+                         const QList<Layer> &fromLayers)
+{
+    keepFades(looks, fromLooks);
+    QVector<bool> used(fromLayers.count(), false);
+    QVector<int> match(layers.count(), -1);
+    // Same content first, for every layer, so a weaker match never takes
+    // a layer another one is exactly.
+    for (int i = 0; i < layers.count(); ++i)
+    {
+        const QString content = layerContent(layers.at(i), false);
+        for (int k = 0; k < fromLayers.count(); ++k)
+            if (!used.at(k) && layerContent(fromLayers.at(k), false) == content)
+            {
+                used[k] = true;
+                match[i] = k;
+                break;
+            }
+    }
+    for (int i = 0; i < layers.count(); ++i)
+    {
+        if (match.at(i) >= 0)
+            continue;
+        const Layer &l = layers.at(i);
+        for (int k = 0; k < fromLayers.count(); ++k)
+        {
+            const Layer &f = fromLayers.at(k);
+            if (!used.at(k) && f.name == l.name && f.target.signature() == l.target.signature())
+            {
+                used[k] = true;
+                match[i] = k;
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < layers.count(); ++i)
+        if (match.at(i) >= 0)
+            keepFades(layers[i].looks, fromLayers.at(match.at(i)).looks);
+}
+
+/** Whether every use of reusable layer @a rid in @a ps has the same effect
+    fades (none: true); @a first gets the first use, in tree order. */
+static bool layerUsesAgree(const QList<Production> &ps, quint32 rid, const Layer **first)
+{
+    *first = nullptr;
+    QString sig;
+    for (const Production &p : ps)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+                for (const Layer &layer : c.layers)
+                {
+                    if (layer.reusable != rid)
+                        continue;
+                    if (*first == nullptr)
+                    {
+                        *first = &layer;
+                        sig = fadeSig(layer.looks);
+                    }
+                    else if (fadeSig(layer.looks) != sig)
+                        return false;
+                }
+    return true;
+}
+
+static bool cueUsesAgree(const QList<Production> &ps, quint32 rid, const Cue **first)
+{
+    *first = nullptr;
+    QString sig;
+    for (const Production &p : ps)
+        for (const CueList &l : p.lists)
+            for (const Cue &c : l.cues)
+            {
+                if (c.reusable != rid)
+                    continue;
+                if (*first == nullptr)
+                {
+                    *first = &c;
+                    sig = cueFadeSig(c);
+                }
+                else if (cueFadeSig(c) != sig)
+                    return false;
+            }
+    return true;
+}
+
 /****************************************************************************
  * Lookups
  ****************************************************************************/
@@ -164,23 +296,42 @@ void ShowTreeController::syncReusables(const QList<Production> &before, QList<Pr
     if (m_reusableLayers.isEmpty() && m_reusableCues.isEmpty())
         return;
 
-    // What each use was before the edit.
-    QHash<QString, QString> wasLayer;
-    QHash<quint32, QString> wasCue;
+    // What each use was before the edit (with its effect fades, and
+    // without: for a reusable whose uses keep their own).
+    QHash<QString, QString> wasLayer, wasLayerNoFades;
+    QHash<quint32, QString> wasCue, wasCueNoFades;
     for (const Production &p : before)
         for (const CueList &l : p.lists)
             for (const Cue &c : l.cues)
             {
                 if (c.reusable != invalidId())
-                    wasCue.insert(c.id, QString::number(c.reusable) + QLatin1Char('|') + cueContent(c));
+                {
+                    const QString rid = QString::number(c.reusable) + QLatin1Char('|');
+                    wasCue.insert(c.id, rid + cueContent(c));
+                    wasCueNoFades.insert(c.id, rid + cueContent(c, false));
+                }
                 for (const Layer &layer : c.layers)
                     if (layer.reusable != invalidId())
-                        wasLayer.insert(useKey(c.id, layer.id, layer.reusable), layerContent(layer));
+                    {
+                        const QString key = useKey(c.id, layer.id, layer.reusable);
+                        wasLayer.insert(key, layerContent(layer));
+                        wasLayerNoFades.insert(key, layerContent(layer, false));
+                    }
             }
 
     auto syncLayers = [&](bool adopt) {
         for (ReusableLayer &r : m_reusableLayers)
         {
+            // Fades shared (the uses agreed before the edit): they are the
+            // reusable's. Not (a show from before they were): each use
+            // keeps its own, and only the rest is made the same.
+            const Layer *firstUse = nullptr;
+            const bool fades = layerUsesAgree(before, r.id, &firstUse);
+            // Once, before the edit is taken: the pass after the cues' must
+            // not put the fades from before the edit back.
+            if (adopt && fades && firstUse != nullptr)
+                keepFades(r.looks, firstUse->looks);
+            const QHash<QString, QString> &was = fades ? wasLayer : wasLayerNoFades;
             Layer def;
             def.name = r.name;
             def.target = r.target;
@@ -196,8 +347,8 @@ void ShowTreeController::syncReusables(const QList<Production> &before, QList<Pr
                             if (!adopt || changed != nullptr || layer.reusable != r.id)
                                 continue;
                             const QString key = useKey(c.id, layer.id, r.id);
-                            if (wasLayer.contains(key) && wasLayer.value(key) != layerContent(layer)
-                                && layerContent(layer) != layerContent(def))
+                            if (was.contains(key) && was.value(key) != layerContent(layer, fades)
+                                && layerContent(layer, fades) != layerContent(def, fades))
                                 changed = &layer;
                         }
             if (changed != nullptr)
@@ -210,25 +361,31 @@ void ShowTreeController::syncReusables(const QList<Production> &before, QList<Pr
                 def.target = r.target;
                 def.looks = r.looks;
             }
-            const QString content = layerContent(def);
+            const QString content = layerContent(def, fades);
             for (Production &p : after)
                 for (CueList &l : p.lists)
                     for (Cue &c : l.cues)
                         for (Layer &layer : c.layers)
-                            if (layer.reusable == r.id && layerContent(layer) != content)
+                            if (layer.reusable == r.id && layerContent(layer, fades) != content)
                             {
+                                const QList<Look> own = layer.looks;
                                 layer.name = r.name;
                                 layer.target = r.target;
                                 layer.looks = r.looks;
+                                if (!fades)
+                                    keepFades(layer.looks, own);
                             }
             // A reusable cue's layers may use it too.
             for (ReusableCue &rc : m_reusableCues)
                 for (Layer &layer : rc.layers)
                     if (layer.reusable == r.id)
                     {
+                        const QList<Look> own = layer.looks;
                         layer.name = r.name;
                         layer.target = r.target;
                         layer.looks = r.looks;
+                        if (!fades)
+                            keepFades(layer.looks, own);
                     }
         }
     };
@@ -237,15 +394,21 @@ void ShowTreeController::syncReusables(const QList<Production> &before, QList<Pr
 
     for (ReusableCue &r : m_reusableCues)
     {
+        // As for a layer: fades shared only while the uses agree.
+        const Cue *firstUse = nullptr;
+        const bool fades = cueUsesAgree(before, r.id, &firstUse);
+        if (fades && firstUse != nullptr)
+            keepCueFades(r.looks, r.layers, firstUse->looks, firstUse->layers);
+        const QHash<quint32, QString> &was = fades ? wasCue : wasCueNoFades;
         const Cue *changed = nullptr;
         for (const Production &p : after)
             for (const CueList &l : p.lists)
                 for (const Cue &c : l.cues)
                 {
-                    if (changed != nullptr || c.reusable != r.id || !wasCue.contains(c.id))
+                    if (changed != nullptr || c.reusable != r.id || !was.contains(c.id))
                         continue;
-                    const QString now = QString::number(c.reusable) + QLatin1Char('|') + cueContent(c);
-                    if (wasCue.value(c.id) != now && cueContent(c) != cueContent(asCue(r)))
+                    const QString now = QString::number(c.reusable) + QLatin1Char('|') + cueContent(c, fades);
+                    if (was.value(c.id) != now && cueContent(c, fades) != cueContent(asCue(r), fades))
                         changed = &c;
                 }
         if (changed != nullptr)
@@ -263,17 +426,21 @@ void ShowTreeController::syncReusables(const QList<Production> &before, QList<Pr
             }
         }
         const Cue def = asCue(r);
-        const QString content = cueContent(def);
+        const QString content = cueContent(def, fades);
         for (Production &p : after)
             for (CueList &l : p.lists)
                 for (Cue &c : l.cues)
-                    if (c.reusable == r.id && cueContent(c) != content)
+                    if (c.reusable == r.id && cueContent(c, fades) != content)
                     {
+                        const QList<Look> ownLooks = c.looks;
+                        const QList<Layer> ownLayers = c.layers;
                         c.name = r.name;
                         c.mode = r.mode;
                         c.mixOverlap = r.mixOverlap;
                         c.looks = r.looks;
                         c.layers = renumbered(r.layers, c.layers, [this] { return newId(); }, true);
+                        if (!fades)
+                            keepCueFades(c.looks, c.layers, ownLooks, ownLayers);
                     }
     }
 
@@ -473,6 +640,64 @@ bool ShowTreeController::renameReusable(quint32 reusableId, const QString &name)
         for (ReusableCue &r : m_reusableCues)
             if (r.id == reusableId)
                 r.name = n;
+        return true;
+    });
+}
+
+bool ShowTreeController::reusableFadesShared(quint32 reusableId) const
+{
+    const Layer *firstLayer = nullptr;
+    const Cue *firstCue = nullptr;
+    if (reusableLayer(reusableId) != nullptr)
+        return layerUsesAgree(m_productions, reusableId, &firstLayer);
+    if (reusableCue(reusableId) != nullptr)
+        return cueUsesAgree(m_productions, reusableId, &firstCue);
+    return true;
+}
+
+bool ShowTreeController::shareReusableFades(quint32 reusableId)
+{
+    if (reusableFadesShared(reusableId))
+        return false;
+    const QString name = reusableName(reusableId);
+    return edit(tr("Share the fades of %1").arg(name), [&](QList<Production> &work) {
+        // Every use (and the reusable) takes the first use's, tree order.
+        const Layer *firstLayer = nullptr;
+        const Cue *firstCue = nullptr;
+        if (reusableLayer(reusableId) != nullptr)
+        {
+            layerUsesAgree(work, reusableId, &firstLayer);
+            if (firstLayer == nullptr)
+                return false;
+            const QList<Look> from = firstLayer->looks;
+            for (ReusableLayer &r : m_reusableLayers)
+                if (r.id == reusableId)
+                    keepFades(r.looks, from);
+            for (Production &p : work)
+                for (CueList &l : p.lists)
+                    for (Cue &c : l.cues)
+                        for (Layer &layer : c.layers)
+                            if (layer.reusable == reusableId)
+                                keepFades(layer.looks, from);
+            for (ReusableCue &rc : m_reusableCues)
+                for (Layer &layer : rc.layers)
+                    if (layer.reusable == reusableId)
+                        keepFades(layer.looks, from);
+            return true;
+        }
+        cueUsesAgree(work, reusableId, &firstCue);
+        if (firstCue == nullptr)
+            return false;
+        const QList<Look> looks = firstCue->looks;
+        const QList<Layer> layers = firstCue->layers;
+        for (ReusableCue &r : m_reusableCues)
+            if (r.id == reusableId)
+                keepCueFades(r.looks, r.layers, looks, layers);
+        for (Production &p : work)
+            for (CueList &l : p.lists)
+                for (Cue &c : l.cues)
+                    if (c.reusable == reusableId)
+                        keepCueFades(c.looks, c.layers, looks, layers);
         return true;
     });
 }

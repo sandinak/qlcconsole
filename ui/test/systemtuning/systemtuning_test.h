@@ -59,6 +59,7 @@ private slots:
     void theFullSpeedBoxUpdatesTheList();
 
     void toolOutputIsRead();
+    void aPadsBatteryIsNotTheComputers();
     void frameTimingCountsLateAndDropped();
     void measuredItemFollowsTheLateFrames();
     void universeThreadsAdviceFollowsTheNumbers();

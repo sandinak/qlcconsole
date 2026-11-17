@@ -32,6 +32,9 @@
 #include <QThread>
 #include <QThreadPool>
 #include <QDeadlineTimer>
+#include <QTemporaryDir>
+#include <QDir>
+#include <QFile>
 
 #include "systemtuning_test.h"
 #include "systemtuningpage.h"
@@ -556,6 +559,43 @@ void SystemTuning_Test::toolOutputIsRead()
     QCOMPARE(name, QStringLiteral("tmux: (server) x"));
     QCOMPARE(ticks, qint64(42));
     QVERIFY(SystemProbe::parseProcStat(QStringLiteral("garbage"), &name, &ticks) == false);
+}
+
+/* Linux counts the computer's own battery only: a Bluetooth pad's
+   (power_supply scope "Device") is not "On battery N%: plug it in", and
+   pre-show does not say Not ready over a pad running low. */
+void SystemTuning_Test::aPadsBatteryIsNotTheComputers()
+{
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    // False when a file couldn't be written: the caller's QVERIFY fails the test.
+    auto supply = [&root](const QString &name, const QHash<QString, QString> &files) {
+        if (!QDir().mkpath(root.filePath(name)))
+            return false;
+        for (auto it = files.cbegin(); it != files.cend(); ++it)
+        {
+            QFile f(root.filePath(name + QLatin1Char('/') + it.key()));
+            const QByteArray text = it.value().toUtf8() + "\n";
+            if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(text) != text.size())
+                return false;
+        }
+        return true;
+    };
+    // A Pi on mains, a DualSense paired at 15% and running down.
+    QVERIFY(supply("AC", { { "type", "Mains" }, { "online", "1" } }));
+    QVERIFY(supply("ps-controller-battery-a0:b1:c2:d3:e4:f5",
+           { { "type", "Battery" }, { "scope", "Device" }, { "status", "Discharging" }, { "capacity", "15" } }));
+    int percent = 0;
+    QCOMPARE(SystemProbe::readPowerSupplies(root.path(), &percent), 0);
+    QCOMPARE(percent, -1);
+
+    // A laptop's own battery (no scope, as most say, or "System"): counted.
+    QVERIFY(supply("BAT0", { { "type", "Battery" }, { "status", "Charging" }, { "capacity", "80" } }));
+    QCOMPARE(SystemProbe::readPowerSupplies(root.path(), &percent), 0);
+    QCOMPARE(percent, 80);
+    QVERIFY(supply("BAT0", { { "type", "Battery" }, { "scope", "System" }, { "status", "Discharging" }, { "capacity", "64" } }));
+    QCOMPARE(SystemProbe::readPowerSupplies(root.path(), &percent), 1);
+    QCOMPARE(percent, 64);
 }
 
 void SystemTuning_Test::frameTimingCountsLateAndDropped()

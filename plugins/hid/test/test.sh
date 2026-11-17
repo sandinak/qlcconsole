@@ -13,6 +13,11 @@ else
     ../../hidrescan_test || exit $?
 fi
 
+# The joystick reader when its pad goes and comes back: Linux's only.
+if [ -x ../../hidlinuxjoystick_test ]; then
+    ../../hidlinuxjoystick_test || exit $?
+fi
+
 # The GameController framework side: a Mac's only.
 [ "$(uname)" = Darwin ] || exit 0
 if [ -x ../../hidgamecontroller_test.app/Contents/MacOS/hidgamecontroller_test ]; then

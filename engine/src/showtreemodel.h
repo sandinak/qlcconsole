@@ -549,9 +549,11 @@ namespace ShowTree
     /** What makes two uses of a reusable the same (P4): a layer's name,
      *  target and looks; a cue's name, mode, overlap, cue looks and its
      *  layers' content (with release, their parents by position and
-     *  their own links), not ids, timing, includes or tracking. */
-    QLC_ENGINE_EXPORT QString layerContent(const Layer &layer);
-    QLC_ENGINE_EXPORT QString cueContent(const Cue &cue);
+     *  their own links), not ids, timing, includes or tracking. An
+     *  effect's fade in / out is content too, unless @a fades is false
+     *  (a reusable whose uses kept fades of their own: syncReusables). */
+    QLC_ENGINE_EXPORT QString layerContent(const Layer &layer, bool fades = true);
+    QLC_ENGINE_EXPORT QString cueContent(const Cue &cue, bool fades = true);
 
     /************************************************************************
      * Resolution: what each cue really plays (§2)

@@ -807,6 +807,69 @@ void CueRunner_Test::clickLoadsDoubleClickJumps()
     runner.hide();
 }
 
+/* LOAD next / previous with tonight's running order: they put on standby
+   the cue GO comes to next in the order the list plays -- not the cue at
+   that place in number order, and never a song left out tonight (a GO on
+   a LOADed cue plays it as if named, skipped or not). */
+void CueRunner_Test::loadNextAndPreviousFollowTheRunningOrder()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Show");
+    QVERIFY(st->setNumbering(prod, Numbering::Hundreds));
+    QString why;
+    quint32 prev = invalidId();
+    for (const char *num : { "100", "200", "300", "400" })
+    {
+        const quint32 id = st->addCue(list, prev == invalidId() ? -1 : st->cueList(list)->indexOf(prev),
+                                      QStringLiteral("Song %1").arg(num));
+        Cue c = *st->cue(id);
+        c.number = QString::fromLatin1(num);
+        QVERIFY2(st->setCue(c, &why), qPrintable(why));
+        prev = id;
+    }
+    st->setCurrentProduction(prod);
+    // Tonight: 100, 300, 200 (left out), 400.
+    QList<RunningSong> order = st->runningOrder(prod);
+    QCOMPARE(order.count(), 4);
+    std::swap(order[1], order[2]);
+    order[2].skip = true;
+    QVERIFY(st->setRunningOrder(prod, order));
+
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(800, 600);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    Chaser *ch = runner.chaser();
+    QVERIFY(ch != nullptr);
+    QCOMPARE(ch->stepCue(1), QString("300"));
+    runner.refresh();
+    QVERIFY(runner.nextText().contains("100"));
+
+    // LOAD next: 300 (the next song tonight), not 200 (next by number).
+    QVERIFY(runner.canLoadNext());
+    runner.loadNext();
+    runner.refresh();
+    QVERIFY2(runner.nextText().startsWith("▷ STANDBY 300"), qPrintable(runner.nextText()));
+    QCOMPARE(rowFor(runner.cueTree(), "300")->text(0), QString("▷ STANDBY"));
+    // Again: 400 -- 200 is left out tonight.
+    runner.loadNext();
+    runner.refresh();
+    QVERIFY2(runner.nextText().startsWith("▷ STANDBY 400"), qPrintable(runner.nextText()));
+    QVERIFY(!runner.canLoadNext());
+    // LOAD previous: back to 300, over 200.
+    QVERIFY(runner.canLoadPrevious());
+    runner.loadPrevious();
+    runner.refresh();
+    QVERIFY2(runner.nextText().startsWith("▷ STANDBY 300"), qPrintable(runner.nextText()));
+    // GO plays the cue on standby: 300, and its levels are the ones out.
+    runner.go();
+    settle();
+    QCOMPARE(ch->currentStepIndex(), 1);
+    QCOMPARE(st->cueOfStep(list, ch->currentStepIndex()), st->cueList(list)->cues.at(2).id);
+    runner.hide();
+}
+
 /* LIVE_BLIND.md: in Design a cue clicked in the Run is what the stage
    shows (and on standby: GO plays the same); in Operate a click only loads
    -- only the run is live. Leaving the Run lets go of its pick. */

@@ -1372,8 +1372,9 @@ static void saveLooks(QXmlStreamWriter *doc, const QList<Look> &looks)
         if (!l.value.isEmpty())
             doc->writeAttribute(QStringLiteral("Value"), l.value);
         // An effect's fades: absent is FadeSnap, as a show saved before
-        // them plays (an older build ignores both).
-        if (isEffectKey(l.key) && !l.none)
+        // them plays (an older build ignores both). A None effect keeps
+        // its own too, so it reloads as it was saved.
+        if (isEffectKey(l.key))
         {
             auto fade = [](int ms) {
                 return ms == Look::FadeFollowCue ? QStringLiteral("cue") : QString::number(ms);
@@ -2060,33 +2061,41 @@ bool loadXML(QXmlStreamReader &root, ReusableCue &reusable)
  * Reusable content (P4)
  ****************************************************************************/
 
-static QString looksContent(const QList<Look> &looks)
+static QString looksContent(const QList<Look> &looks, bool fades)
 {
     QStringList parts;
     for (const Look &l : looks)
-        parts << QStringLiteral("%1=%2/%3/%4/%5").arg(l.key, idsToString(l.palettes), idsToString(l.own),
-                                                      l.none ? QStringLiteral("none") : QString(), l.value);
+    {
+        QString part = QStringLiteral("%1=%2/%3/%4/%5").arg(l.key, idsToString(l.palettes), idsToString(l.own),
+                                                            l.none ? QStringLiteral("none") : QString(), l.value);
+        // An effect's fades are its content too (Look::operator==): the
+        // uses of a reusable layer share them, and a cue that differs
+        // only in them differs.
+        if (fades && isEffectKey(l.key))
+            part += QStringLiteral("/%1/%2").arg(l.fadeIn).arg(l.fadeOut);
+        parts << part;
+    }
     parts.sort();
     return parts.join(QLatin1Char(';'));
 }
 
-QString layerContent(const Layer &layer)
+QString layerContent(const Layer &layer, bool fades)
 {
-    return QStringLiteral("%1|%2|%3").arg(layer.name, layer.target.signature(), looksContent(layer.looks));
+    return QStringLiteral("%1|%2|%3").arg(layer.name, layer.target.signature(), looksContent(layer.looks, fades));
 }
 
-QString cueContent(const Cue &cue)
+QString cueContent(const Cue &cue, bool fades)
 {
     QStringList parts;
     parts << cue.name << cueModeToString(cue.mode) << (cue.mixOverlap ? QStringLiteral("mix") : QString())
-          << looksContent(cue.looks);
+          << looksContent(cue.looks, fades);
     for (const Layer &l : cue.layers)
     {
         int parent = -1;
         for (int k = 0; k < cue.layers.count(); ++k)
             if (l.parent != invalidId() && cue.layers.at(k).id == l.parent)
                 parent = k;
-        parts << QStringLiteral("[%1|%2|%3|%4]").arg(layerContent(l)).arg(l.release ? 1 : 0).arg(parent)
+        parts << QStringLiteral("[%1|%2|%3|%4]").arg(layerContent(l, fades)).arg(l.release ? 1 : 0).arg(parent)
                  .arg(l.reusable == invalidId() ? QString() : QString::number(l.reusable));
     }
     return parts.join(QLatin1Char('#'));

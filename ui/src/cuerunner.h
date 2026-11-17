@@ -251,6 +251,10 @@ private:
     void applyInteractive();
     /** The cue number LOAD takes for main cue @a step. */
     QString stepCue(int step) const;
+    /** The step LOAD next (@a delta +1) or previous (-1) puts on standby:
+     *  the next one GO comes to from the standby cue, skipped ones passed
+     *  over; -1: none. */
+    int loadStep(int delta) const;
     void rebuildTree();
     void updateStates();
     void fillFollowBox();
