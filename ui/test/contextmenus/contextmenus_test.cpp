@@ -1510,7 +1510,7 @@ void ContextMenus_Test::testFixtureNeverDoesNothing()
                 {
                     found = true;
                     enabled = a->isEnabled();
-                    tip = a->toolTip();
+                    tip = (a->toolTip() == a->text().remove('&')) ? QString() : a->toolTip();   // Qt's default tip is the text
                 }
             m->close();
         });
