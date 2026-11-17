@@ -286,10 +286,13 @@ is a dim shape with a faint grey edge, not a line drawing. In a Blackout,
 fixture's plot colour, the selection, aim traces, targets, stage marks,
 rulers and guides -- is drawn in grey, in every view (at Dim and above
 it keeps its colour). What has colour then is what the rig is lighting, plus
-the marks that tell you something: a real clash's red, the amber badge of a
-focus change not saved yet, and a Show Review warning's amber outline. A
-selected or dragged fixture in a Blackout has a light grey edge; its name
-is written beside it unless another name is already there.
+the marks that tell you something: the amber badge of a focus change not
+saved yet and a Show Review warning's amber outline. A Blackout also has no
+clash red and no selection edge: a clashing pair and a selected fixture
+look like any other unlit one, and both come back at **Dim** and above
+(**Show Review** still lists the clashes, whatever the room). A fixture
+being dragged keeps its light grey edge; a selected fixture's name is
+written beside it unless another name is already there.
 **Owner** shows **All** fixtures (the default), **House only** (the room's
 own rig) or **Ours only** (the tour package and rentals), by each
 fixture's owner (set in the Fixture Manager; a fixture follows its group
@@ -2655,14 +2658,15 @@ Two small but load-bearing visual cues:
   into it. In the Rig Overview that edge is in the **Room**'s light, like
   the body: at work light as bright as above, in a **Blackout** a faint
   grey, so an unlit fixture, deck or box is a dim shape and only what the
-  rig is lighting stands out. A selected fixture keeps a bright edge: the
-  selection's green at Dim and above, a light grey in a Blackout.
+  rig is lighting stands out. A selected fixture keeps a bright edge at
+  Dim and above (the selection's green); in a Blackout it has none.
 - **Overlap warnings** — if two fixtures' physical bodies actually occupy
   the same real-world space (two heads stacked at the same truss offset, or
   a deck fixture dragged into another's footprint), both draw with a flat
   warning-red outline instead of their normal contrast tint — deliberately
   independent of either fixture's own color and of the room, so it reads as
-  a warning rather than an odd shade. Each body is measured as it is
+  a warning rather than an odd shade. (A Blackout draws no red: it comes
+  back at Dim and above, and Show Review lists the clashes at any level.) Each body is measured as it is
   rigged: bars stood on end side by side, or strips stacked up a step's
   face each touching the next, are not in the same space.
 

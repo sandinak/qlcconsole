@@ -3318,14 +3318,17 @@ QColor StructureStudioView::overlapAwareEdgeColor(quint32 fid, const QColor &bas
                                                   bool emitting, bool roomLit) const
 {
     static const QColor kOverlapWarning(255, 70, 40);
-    if (m_overlappingFixtures.contains(fid))
+    /* Below Dim (a Blackout) no clash red and no selection edge: both come
+       back at Dim and above. Show Review still lists the clashes. */
+    const bool blackout = m_ambient < kRoomColourFull;
+    if (!blackout && m_overlappingFixtures.contains(fid))
         return kOverlapWarning;
     const QColor tint = fixtureEdgeColor(base);
     /* Selected or being dragged: the edge is the selection, not the room's --
        bright at Dim and above; below it a quieter light grey, so a whole
        selected rig in a Blackout is findable without being a bright line
        drawing of itself. */
-    if (fid == m_dragFid || m_highlight.contains(fid))
+    if (fid == m_dragFid || (!blackout && m_highlight.contains(fid)))
     {
         const double k = qBound(0.0, m_ambient / kRoomColourFull, 1.0);
         const QColor soft = selectionGrey();
@@ -8392,6 +8395,9 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     Fixture *fx = m_doc->fixture(fid);
     const QPointF c = w2s(fixtureCentre(fid));
     const bool hi = m_highlight.contains(fid);
+    /* The selection's edge is drawn from Dim up; in a Blackout there is none
+       (a drag keeps its own, dragBelowDim). */
+    const bool hiEdge = hi && m_ambient >= kRoomColourFull;
     const bool drag = (fid == m_dragFid);
     /* Below Dim a dragged body is not lit in the drag's amber
        (selectionFill()); in the flat views its outline says it is the one
@@ -9105,7 +9111,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             bodyPath.addPolygon(bodyPoly);
             bodyPath.closeSubpath();
         }
-        if (hi || dragBelowDim)
+        if (hiEdge || dragBelowDim)
         {
             QPen halo(selectionInk(160)); halo.setWidth(3);
             p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9155,7 +9161,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const QPainterPath body = traits.look != Fixture::AutoLook
                                           ? stageLookBodyPath(traits.look, unitRect)
                                           : moverPlanPath(unitRect);
-                if (hi || dragBelowDim)
+                if (hiEdge || dragBelowDim)
                 {
                     QPen halo(selectionInk(160)); halo.setWidth(3);
                     p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9181,7 +9187,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             const bool hung = (rp.mountingType == Truss::TopHung);
             const QPainterPath body = moverElevationPath(
                 QRectF(c.x() - halfW, c.y() - totalH * 0.5, halfW * 2, totalH), hung, units);
-            if (hi || dragBelowDim)
+            if (hiEdge || dragBelowDim)
             {
                 QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9213,7 +9219,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             p.setBrush(QColor(72, 72, 78));
             p.drawPath(stageLookBodyPath(Fixture::LanternLook, outer, side));
         }
-        if (hi || dragBelowDim)
+        if (hiEdge || dragBelowDim)
         {
             QPen halo(selectionInk(160)); halo.setWidth(3);
             p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9300,7 +9306,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             /* The LD's stage look: a followspot's barrel, a staff's rod...
                the same shape as on the plot, in its colour. */
             const QPainterPath body = stageLookBodyPath(traits.look, r, m_plane != Top);
-            if (hi || dragBelowDim)
+            if (hiEdge || dragBelowDim)
             {
                 QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9329,7 +9335,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         }
         else
         {
-            if (hi || dragBelowDim)
+            if (hiEdge || dragBelowDim)
             {
                 QPen halo(selectionInk(160)); halo.setWidth(3);
                 p.setPen(halo); p.setBrush(Qt::NoBrush);
@@ -9374,7 +9380,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         if (silhouette.size() < 3)
             silhouette = QPolygonF(boxPx);
 
-        if (hi || dragBelowDim)
+        if (hiEdge || dragBelowDim)
         {
             // Outline the silhouette itself, offset outward from its centre.
             const QPointF mid = silhouette.boundingRect().center();
@@ -9458,7 +9464,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         // Generic fallback -- unchanged original bar+dots rendering, for
         // any fixture Type this session didn't give a dedicated shape
         // (Laser/Hazer/Smoke/Fan/Flower/Effect/Other).
-        if (hi || dragBelowDim)
+        if (hiEdge || dragBelowDim)
         {
             QPen halo(selectionInk(160)); halo.setWidth(9); halo.setCapStyle(Qt::RoundCap);
             p.setPen(halo);
