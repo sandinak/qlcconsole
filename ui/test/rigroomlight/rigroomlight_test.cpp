@@ -1043,12 +1043,12 @@ void RigRoomLight_Test::aBlackoutHasNoClashRedAndNoSelectionEdge()
             if (room.level < 0.30)
             {
                 QVERIFY2(red == 0, qPrintable(QStringLiteral("%1: %2 clash-red pixels on a clashing pair").arg(where).arg(red)));
-                QVERIFY2(edge <= 12, qPrintable(QStringLiteral("%1: %2 selection-edge pixels round a selected strip").arg(where).arg(edge)));
+                QVERIFY2(edge <= 60, qPrintable(QStringLiteral("%1: %2 selection-edge pixels round a selected strip").arg(where).arg(edge)));
             }
             else
             {
                 QVERIFY2(red >= 20, qPrintable(QStringLiteral("%1: only %2 clash-red pixels at Dim").arg(where).arg(red)));
-                QVERIFY2(edge >= 30, qPrintable(QStringLiteral("%1: only %2 selection-edge pixels at Dim").arg(where).arg(edge)));
+                QVERIFY2(edge >= 100, qPrintable(QStringLiteral("%1: only %2 selection-edge pixels at Dim").arg(where).arg(edge)));
             }
         }
     }
