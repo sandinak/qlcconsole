@@ -94,10 +94,8 @@ their own; their detailed notes follow below this section.
   The emergency stop still works there. A proper fix is planned for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on
   first run (More info ▸ Run anyway).
-- **Not yet tried on real hardware:** the Steam Deck's Blind / Solo
-  buttons, the DualSense adaptive triggers and touchpad swipes, the Stream
-  Deck + in a real Companion, and a third-party "Edge" pad's back buttons
-  (a Deck checklist is in
+- **The Steam Deck as a web and focus remote is not yet tried on real
+  hardware** (a checklist is in
   [gamepad-remote.md](docs/features/gamepad-remote.md#hardware-checklist)).
 - **The CSV patch export has a new *DMX address* column**, so the columns
   after it move one place: a spreadsheet macro reading them by position
