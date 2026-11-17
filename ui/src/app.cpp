@@ -5906,17 +5906,19 @@ void App::setCustomTabs(const QStringList &tabs, bool markModified)
     foreach (const QString &t, tabs)
         if (all.contains(t) && !set.contains(t))
             set << t;
-    if (!set.contains(tr("Connections")))
-        set.prepend(tr("Connections"));
-    if (!set.contains(tr("Run")))
-        set.append(tr("Run"));
+    // Connections leads and Run ends: where a dead output is found, and the pad's status.
+    set.removeAll(tr("Connections"));
+    set.removeAll(tr("Run"));
+    set.prepend(tr("Connections"));
+    set.append(tr("Run"));
     if (set == workspaceViewTabs(m_workspaceView))
         set.clear();                    // the view's own: nothing to keep
     if (set == m_customTabs)
         return;
     m_customTabs = set;
     m_openTabs.clear();
-    m_functionsWindowShown = effectiveViewTabs().contains(tr("Functions"));
+    m_functionsWindowShown = (m_workspaceView != ClassicView && !m_customTabs.isEmpty()
+                                  ? m_customTabs : workspaceViewTabs(m_workspaceView)).contains(tr("Functions"));
     applyWorkspaceTabs();
     if (markModified && m_doc != NULL)
         m_doc->setModified();
@@ -6025,7 +6027,8 @@ void App::setWorkspaceView(WorkspaceView view, bool markModified)
     const bool changed = view != m_workspaceView;
     m_workspaceView = view;
     m_openTabs.clear();
-    m_functionsWindowShown = effectiveViewTabs().contains(tr("Functions"));
+    m_functionsWindowShown = (m_workspaceView != ClassicView && !m_customTabs.isEmpty()
+                                  ? m_customTabs : workspaceViewTabs(view)).contains(tr("Functions"));
     applyWorkspaceTabs();
     if (changed)
         hideViewNotice();
