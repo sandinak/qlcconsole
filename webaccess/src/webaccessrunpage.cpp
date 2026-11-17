@@ -129,7 +129,7 @@ button:disabled{opacity:.35}
 <div class="row" id="rigrow"><button id="blind" disabled title="Blind: the rig muted, the console's screens live (Design)">BLIND</button><button id="soloprev" disabled title="Solo the previous layer">&lsaquo;</button><button id="solo" disabled title="Solo: only one layer of the cue in the Show Tree preview plays">SOLO</button><button id="solonext" disabled title="Solo the next layer">&rsaquo;</button></div>
 <button id="testbtn" type="button">Controller test</button>
 </div>
-<div id="lock"><p id="lockwhy">This show asks for its PIN before the page can send GO.</p>
+<div id="lock"><p id="lockwhy">This show asks for its PIN before the page can send GO or its emergency stop.</p>
 <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN">
 <div class="err" id="pinerr"></div><button id="pinok">Unlock</button></div>
 )HTML";
@@ -174,7 +174,8 @@ function paint(){
   /* A second GO held by the double-GO guard, from anywhere: the console's words (st.goHeld). */
   if(st.goHeld){if(st.goHeld!==lastHeld&&navigator.vibrate)navigator.vibrate(300);msg(st.goHeld);lastHeld=st.goHeld}
   else if(lastHeld){if($('msg').textContent===lastHeld)msg('');lastHeld=''}
-  if(st.remote&&st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
+  /* The PIN unlocks the emergency stop even with remote GO off (Q256). */
+  if(st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
   $('go').textContent=st.paused?'GO (paused)':'GO';
   rig(canRig());statusList();padLabels();showHit()}
 /* Teaching's held output, Blind and Solo (Design): what the console's footer and Show Tree say. */
@@ -301,15 +302,16 @@ function stopAck(answer){
   if(answer==='ok'){stopDone();return}
   if(answer==='needpin'){unlocked=false;askPin('')}
   stopNotDone('STOP NOT SENT',answer==='refused'?'Stop not sent: GO from the phone is off on the laptop (Show Settings).'
-    :answer==='needpin'?'Stop not sent: give the show\'s PIN on this page first.'
+    :answer==='needpin'?'Stop not sent: enter the PIN'
     :'Stop not done: the console refused it. Stop from the laptop.')}
 /* Why the page may not send the emergency stop, in plain words; empty when
-   it may. The page never shows a stop it did not send. The stop asks what
-   every command asks (remote GO on, the PIN given) unless the console says
-   otherwise (st.stopFree, ShowControl::kWebStopNeedsRemote: board Q256). */
-function stopRefusal(){if(st.stopFree)return '';
-  if(!st.remote)return 'Stop not sent: GO from the phone is off on the laptop (Show Settings).';
-  if(st.pin&&!unlocked)return 'Stop not sent: give the show\'s PIN on this page first.';
+   it may. The page never shows a stop it did not send. The console says
+   what the stop needs (ShowControl's rule, board Q256): the show's PIN
+   when it has one (st.stopNeedsPin), never remote GO (st.stopNeedsRemote
+   false); the server checks the same rule, and its ack is what shows. */
+function stopRefusal(){
+  if(st.stopNeedsRemote===true&&!st.remote)return 'Stop not sent: GO from the phone is off on the laptop (Show Settings).';
+  if(st.stopNeedsPin!==false&&st.pin&&!unlocked){askPin('');return 'Stop not sent: enter the PIN'}
   return ''}
 /* What RT fires next, in the console's words (st.hit: PadRun's one source),
    while this pad is armed; nothing when a pull would fire nothing. */

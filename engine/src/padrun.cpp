@@ -704,8 +704,10 @@ void PadRun::stopStruck()
     {
         m_endingForStop = true;
         m_pc->focusCallCue()->cut();
+        /* Its light out first, then what was not saved kept as a draft
+           from memory (Q258): the next start offers it on the screen. */
         if (m_pc->focusSession()->isActive())
-            m_pc->focusSession()->stop();
+            m_pc->focusSession()->stopForEmergency();
         if (m_pc->refineSession()->isActive())
             m_pc->refineSession()->stop();
         m_endingForStop = false;

@@ -58,6 +58,9 @@ private slots:
      *  read back on open and applied -- and the show file never takes a
      *  venue's corrections. */
     void correctionsGoToTheVenueNotTheShow();
+    /** Q258: the emergency stop's draft is offered only where its saves
+     *  would go: not under another venue, nor the show's own. */
+    void theStopsDraftStaysWithItsVenue();
     /** Switching venues puts one venue's corrections in place of the
      *  other's; none is the show as built. */
     void switchingVenues();

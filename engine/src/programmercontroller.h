@@ -202,7 +202,9 @@ public:
      *  "Everything is off", so a focus tool lighting the rig through its
      *  own layer ends -- Quick focus, Venue focus (its cue let go of,
      *  quietly: the stop says what happened) and Focus this cue / the pad's
-     *  walk. What they had not saved is put back. */
+     *  walk. What they had not saved is put back; a focus's unsaved
+     *  lights are kept as a draft first, from memory, after its light is
+     *  out (FocusSession::stopForEmergency(), Q258). */
     void endToolsForStop();
 
     /** How Focus mode, Focus calls and Refine tell the operator where they

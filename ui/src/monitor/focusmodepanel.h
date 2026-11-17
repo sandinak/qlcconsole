@@ -223,6 +223,9 @@ private:
     void styleUseButtons();
     /** The keep-alive's pause, said -- unless the note already says it. */
     void refreshPaused();
+    /** The emergency stop's draft (Q258): the offer shown while it has
+     *  lights in this session, its count in the button. */
+    void refreshDraftOffer();
     /** What a key does here; false for a key Focus mode does not use. */
     bool handleKey(int key, Qt::KeyboardModifiers modifiers);
     /** On the keyboard for want of a controller and one is here: take it
@@ -263,6 +266,9 @@ private:
     /** "Controller paused: <reason>" (ControllerKeepAlive). */
     QLabel *m_pausedLabel;
     QPushButton *m_backButton;
+    /** "Pick up where you stopped (3 unsaved changes)" | Discard (Q258). */
+    QWidget *m_draftOffer = nullptr;
+    QPushButton *m_draftPickUp = nullptr;
     FocusControlMap *m_map;
     /** On the keyboard for want of a controller (it went, or none was
      *  connected at the start): it takes over when one connects. */

@@ -559,6 +559,7 @@ protected:
     void processFaders();
     friend class ShowTree_Test; // drives frames by hand, no `#define protected public`
     friend class PixelBoxes_Test;
+    friend class FocusMode_Test;      // the focus light's DMX at the emergency stop (Q258)
 
     /** DMX writer thread worker method */
     void run() override;

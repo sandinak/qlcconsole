@@ -441,9 +441,17 @@ are one checklist:
    In **Pad: FOCUS** no cue plays from the controller (no GO, Back, Sub
    GO, Sub Back or hit), the focus has the pad exactly as below, and the
    emergency stop (all four: LB + RB + LT + RT) still stops everything:
-   it ends the focus too (no focus light is left on, and lights not
-   saved are put back) and lets go of the focus cue, waiting or running.
-   To focus again, GO onto the focus cue. No venue focus starts from a
+   it ends the focus too and lets go of the focus cue, waiting or
+   running. The focus light goes out at once; lights not saved are put
+   back on the rig, but their changes are kept as a draft for this show
+   until you quit or open another. To focus again, GO onto the focus cue.
+   The next time a focus starts on those lights (from the laptop, LT +
+   Menu or a Focus pad), its panel on the laptop shows **Pick up where you
+   stopped (3 unsaved changes)** and **Discard**: pick up puts the
+   changes back, still not saved (save or put back each as usual);
+   Discard forgets them. The pad starts fresh and never makes the choice
+   (the voice says to make it on the computer). A light saved or changed
+   since the stop is left as it is. No venue focus starts from a
    pad while the show is held by the stop: "Emergency stop: the show is
    held until a GO (the cue pad, or GO on the computer)." Arming alone
    does not bring it back; the cue pad's LT + A, or GO on the computer,
