@@ -19,6 +19,7 @@
 
 #include <QtTest>
 #include <QBuffer>
+#include <QFormLayout>
 #include <QXmlStreamWriter>
 #include <QScrollArea>
 #include <QToolButton>
@@ -2065,11 +2066,16 @@ void LookEditor_Test::fireSpreadShowsItsIntensity()
         QCOMPARE(inten->suffix(), QString("%"));
         QCOMPARE(inten->text(), QString("100%"));
         // Its row is called Intensity, beside the other settings.
-        bool named = false;
-        for (QLabel *l : ed.findChildren<QLabel *>())
-            if (l->text() == QLatin1String("Intensity") && l->isVisibleTo(&ed))
-                named = true;
-        QVERIFY2(named, "no row called Intensity");
+        QWidget *row = inten->parentWidget();
+        QVERIFY(row != nullptr && row->parentWidget() != nullptr);
+        QFormLayout *form = nullptr;
+        for (QFormLayout *fl : row->parentWidget()->findChildren<QFormLayout *>())
+            if (fl->indexOf(row) >= 0)
+                form = fl;
+        QVERIFY2(form != nullptr, "the Intensity field is not in the settings form");
+        QLabel *name = qobject_cast<QLabel *>(form->labelForField(row));
+        QVERIFY(name != nullptr);
+        QCOMPARE(name->text(), QString("Intensity"));
         QVERIFY(ed.findChild<QWidget *>("effectParam_flare") != nullptr);
         // No second, unnamed brightness beside it.
         QVERIFY(ed.findChild<QWidget *>("effectParam_intensity") == nullptr);
