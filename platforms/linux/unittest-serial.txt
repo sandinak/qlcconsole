@@ -66,3 +66,9 @@ engine/test/padtraces
 # real scene through the effect runner, which ticks on its own wall-clock
 # timer: a held frame is checked over real time (Q259).
 engine/test/spreadeffects
+
+# Fire Spread over the stage show's whole rig (0.4.13): in the gate only
+# anUnreachedHeadCostsNothingToRead, which compares two wall-clock reads (a
+# dark answer list under a quarter of a burning one's); the full measurement
+# runs by hand (FIRE_PERF=1 or FIRE_PERF_SHOW).
+ui/test/firespreadperf
