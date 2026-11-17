@@ -1264,8 +1264,11 @@ QList<EffectInstance::DmxWrite> EffectScriptRunner::composeWrites(const QList<Ef
         if (w.scale >= 0)
         {
             mul[i] *= wScale;
-            if (!w.multiply)
-                c.multiply = false;         // a base of its own: scaled as before
+            /* A level with a dimmer on a head with none (Spotlight Chase
+               over a Candle): both scale what is under it, whichever comes
+               first in the list -- the dimmer's own base (full when the look
+               sets none) would have made it full white, or dark, by order. */
+            c.multiply = c.multiply || w.multiply;
             if (!haveSet.at(i))
                 c.base = w.base;
             if (partial || c.depth < 1.0f)

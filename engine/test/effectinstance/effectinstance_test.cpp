@@ -5358,6 +5358,231 @@ void EffectInstance_Test::spotlightChaseBrightensTheColourUnderIt()
     }
 }
 
+namespace
+{
+/* A red cue under @p washes, as a scene's fader puts it there: an Auto
+   fader, before the effects' Override one. Red at @p red on each wash's
+   channel 0, nothing on the others. */
+QSharedPointer<GenericFader> redUnder(Doc *doc, const QList<Fixture *> &washes, uint red)
+{
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    QSharedPointer<GenericFader> under = ua.first()->requestFader(Universe::Auto);
+    doc->inputOutputMap()->releaseUniverses(false);
+    QList<FadeChannel> chans;
+    for (Fixture *f : washes)
+    {
+        FadeChannel fc(doc, f->id(), 0);
+        fc.setTarget(red);
+        fc.setCurrent(red);
+        fc.setFadeTime(0);
+        chans << fc;
+    }
+    under->replaceAll(chans);
+    return under;
+}
+
+void dismiss(Doc *doc, const QSharedPointer<GenericFader> &f)
+{
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    ua.first()->dismissFader(f);
+    doc->inputOutputMap()->releaseUniverses(false);
+}
+
+/* The runner's frame at its instances' clocks: universe 0's values. */
+QByteArray runnerFrame(Doc *doc, EffectScriptRunner *runner, MasterTimer *timer)
+{
+    runner->publishWrites();
+    QList<Universe *> u = doc->inputOutputMap()->claimUniverses();
+    runner->writeDMX(timer, u);
+    u.first()->processFaders();
+    const QByteArray dmx = u.first()->preGMValues();
+    doc->inputOutputMap()->releaseUniverses(false);
+    return dmx;
+}
+}
+
+void EffectInstance_Test::aLevelLeavesAnLtpChannelItsValue()
+{
+    /* An RGB wash whose emitters are forced LTP: they keep their last value
+       when nothing writes them. A level read "under" from that last value
+       -- its own output once the cue let go -- and ran it down to 0 a tick
+       at a time. There it scales only the look's own colour (none here), so
+       the cue's red stays as it is, and is kept when the cue and the chase
+       both stop. */
+    Fixture *wash = nullptr;
+    {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel("LTP wash");
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                               QLCChannel::IntensityBlue };
+        for (int c = 0; c < 3; ++c)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("c%1").arg(c));
+            ch->setPreset(presets[c]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(c));
+        }
+        def->addMode(mode);
+        m_doc->fixtureDefCache()->addFixtureDef(def);
+        wash = new Fixture(m_doc);
+        wash->setFixtureDefinition(def, mode);
+        wash->setName("LTP wash");
+        wash->setUniverse(0);
+        wash->setAddress(100);
+        wash->setForcedLTPChannels({ 0, 1, 2 });
+        QVERIFY(m_doc->addFixture(wash));
+    }
+    QLCPalette *chase = effectOn(m_doc, "spotlight-chase.js", {});
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(wash->id());
+    scene->addPalette(chase->id());
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *inst = runner->instanceForPalette(chase->id());
+    QVERIFY(inst != nullptr);
+    MasterTimer timer(m_doc);
+    QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 200);
+
+    // The cue and the chase together, then the cue let go: the red is 200
+    // throughout.
+    for (int i = 0; i < 40; ++i)
+    {
+        if (i == 20)
+            dismiss(m_doc, under);
+        inst->setOffStageClock(i * 100);
+        inst->runTick();
+        const QByteArray dmx = runnerFrame(m_doc, runner, &timer);
+        QVERIFY2(uchar(dmx.at(100)) == 200, qPrintable(QString("tick %1: red %2").arg(i).arg(uchar(dmx.at(100)))));
+    }
+    // The chase stopped too: the last value is kept.
+    runner->destroyInstancesForScene(scene->id(), false);
+    for (int i = 0; i < 10; ++i)
+    {
+        const QByteArray dmx = runnerFrame(m_doc, runner, &timer);
+        QCOMPARE(int(uchar(dmx.at(100))), 200);
+    }
+}
+
+void EffectInstance_Test::aLevelAndADimmerScaleTheCueInEitherOrder()
+{
+    /* Spotlight Chase and a dimmer effect (a candle at half) on one RGB wash
+       with no dimmer, the cue's red under them: both scale the red, in
+       either order in the look -- the dimmer's own base (full white, the
+       look setting no colour) made it white, or dark, by order. */
+    QTemporaryDir dir;
+    const QString half = halfDimmerScript(dir);
+    QVERIFY(!half.isEmpty());
+    QVector<QVector<int>> reds(2);
+    for (int order = 0; order <= 1; ++order)
+    {
+        cleanup();
+        init();
+        Fixture *wash = rgbwWash(m_doc, "Wash", 100, 0, false);
+        QVERIFY(wash != nullptr);
+        QLCPalette *chase = effectOn(m_doc, "spotlight-chase.js", {});
+        QLCPalette *candle = new QLCPalette(QLCPalette::Effect, m_doc);
+        candle->setScriptPath(half);
+        m_doc->addPalette(candle);
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        scene->addFixture(wash->id());
+        scene->addPalette(order == 0 ? chase->id() : candle->id());
+        scene->addPalette(order == 0 ? candle->id() : chase->id());
+        EffectScriptRunner *runner = m_doc->effectScriptRunner();
+        runner->createInstancesForScene(scene->id());
+        EffectInstance *a = runner->instanceForPalette(chase->id());
+        EffectInstance *b = runner->instanceForPalette(candle->id());
+        QVERIFY(a != nullptr && b != nullptr);
+        MasterTimer timer(m_doc);
+        QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 255);
+        for (qint64 ms = 0; ms < 3000; ms += 100)
+        {
+            a->setOffStageClock(ms);
+            a->runTick();
+            b->setOffStageClock(ms);
+            b->runTick();
+            const QByteArray dmx = runnerFrame(m_doc, runner, &timer);
+            const int r = uchar(dmx.at(100));
+            QVERIFY2(r <= 128, qPrintable(QString("order %1, %2 ms: red %3 over half").arg(order).arg(ms).arg(r)));
+            QCOMPARE(int(uchar(dmx.at(101))), 0);
+            QCOMPARE(int(uchar(dmx.at(102))), 0);
+            reds[order] << r;
+        }
+        int top = 0;
+        for (int r : reds[order])
+            top = qMax(top, r);
+        QVERIFY2(top > 60, qPrintable(QString("order %1: the red peaks at %2").arg(order).arg(top)));
+        runner->destroyInstancesForScene(scene->id(), false);
+        dismiss(m_doc, under);
+    }
+    QCOMPARE(reds[0], reds[1]);
+}
+
+void EffectInstance_Test::aLevelLetsGoWhenTheEffectStopsOrFadesOut()
+{
+    /* When the chase stops, the wash is the cue's red again at once; fading
+       out, it goes back to the red over the fade, and is the red at the end. */
+    Fixture *wash = rgbwWash(m_doc, "Wash", 100, 0, false);
+    QVERIFY(wash != nullptr);
+    QLCPalette *chase = effectOn(m_doc, "spotlight-chase.js", {});
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(wash->id());
+    scene->addPalette(chase->id());
+    scene->setPaletteFade(chase->id(), 0, 1000);
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    MasterTimer timer(m_doc);
+    QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 255);
+
+    // Find a moment the chase holds it low.
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *inst = runner->instanceForPalette(chase->id());
+    QVERIFY(inst != nullptr);
+    qint64 lowAt = -1;
+    for (qint64 ms = 0; ms < 4000 && lowAt < 0; ms += 50)
+    {
+        inst->setOffStageClock(ms);
+        inst->runTick();
+        if (uchar(runnerFrame(m_doc, runner, &timer).at(100)) < 60)
+            lowAt = ms;
+    }
+    QVERIFY2(lowAt >= 0, "the chase never dimmed the red");
+
+    // Stopped at once: the red, untouched.
+    runner->destroyInstancesForScene(scene->id(), false);
+    QCOMPARE(int(uchar(runnerFrame(m_doc, runner, &timer).at(100))), 255);
+
+    // Again, released over its 1 s fade: up from the chase's level to the red.
+    runner->createInstancesForScene(scene->id());
+    inst = runner->instanceForPalette(chase->id());
+    QVERIFY(inst != nullptr);
+    inst->setOffStageClock(lowAt);
+    inst->runTick();
+    const int low = uchar(runnerFrame(m_doc, runner, &timer).at(100));
+    QVERIFY(low < 60);
+    runner->destroyInstancesForScene(scene->id(), true);
+    QVERIFY(inst->isFadingOut());
+    inst->setDepthClock(0);
+    inst->m_depthStartMs = 0;
+    int last = low;
+    for (int ms = 100; ms <= 1000; ms += 100)
+    {
+        inst->setDepthClock(ms);
+        inst->runTick();
+        const int r = uchar(runnerFrame(m_doc, runner, &timer).at(100));
+        QVERIFY2(r >= last - 1, qPrintable(QString("%1 ms into the fade: %2 after %3").arg(ms).arg(r).arg(last)));
+        last = r;
+    }
+    QVERIFY2(last >= 250, qPrintable(QString("faded out, the red is %1").arg(last)));
+    runner->slotTick();                 // reaped
+    QCOMPARE(int(uchar(runnerFrame(m_doc, runner, &timer).at(100))), 255);
+    dismiss(m_doc, under);
+}
+
 void EffectInstance_Test::colorChasePeakDimmerOnAWashWithNoDimmer()
 {
     QList<Fixture *> washes;

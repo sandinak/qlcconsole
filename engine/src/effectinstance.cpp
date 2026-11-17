@@ -2782,6 +2782,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             {
                 const float level = qBound(0.0f, (float)levelVal.toNumber(), 1.0f);
                 const float mul = 1.0f + (level - 1.0f) * envelope;   // none of it while it isn't on
+                const QList<int> forcedHTP = fxi->forcedHTPChannels();
+                const QList<int> forcedLTP = fxi->forcedLTPChannels();
                 for (quint32 c : headChannels)
                 {
                     const QLCChannel *ch = fxi->fixtureMode()->channel(c);
@@ -2792,11 +2794,24 @@ EffectInstance::parseIntents(const QJSValue &intents,
                                            && ch->colour() != QLCChannel::NoColour;
                     if (!isEmitter)
                         continue;
+                    /* What is under it is only there to read on an HTP
+                       channel: the universe starts those from 0 each tick.
+                       An LTP one (a Colour-group emitter, or one forced LTP)
+                       keeps its last value, the effect's own once nothing
+                       under it writes it -- times the level each tick, it
+                       would run down to 0 and stay there. There the look's
+                       own value is scaled, as a dimmer does; with none, it
+                       is left as it is. */
+                    const bool htp = forcedHTP.contains(int(c))
+                        || (ch->group() == QLCChannel::Intensity && !forcedLTP.contains(int(c)));
+                    const quint64 k = (quint64(fid) << 32) | c;
+                    if (!htp && !m_sceneBaseValues.contains(k))
+                        continue;
                     const uchar base = sceneBaseValue(fid, c, 0);
                     DmxWrite w{uniIdx, (int)fxi->address() + (int)c,
                                (uchar)qBound(0, (int)qRound(base * mul), 255), fxi->id(), c,
                                /*replace=*/true, mul, base};
-                    w.multiply = true;
+                    w.multiply = htp;
                     writes.append(w);
                 }
             }

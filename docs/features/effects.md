@@ -312,6 +312,14 @@ colour. Once the look has stopped, starting it again spreads it again.
 | **Wave** | A travelling sine wave across the fixtures |
 | **Native Strobe** | The fixture's own shutter strobe |
 
+On a wash with no dimmer channel, a **Spotlight Chase** with no colour of
+its own brightens and dims the colour already on each light: everything
+below it is scaled by the chase, the cue, the look's own colour, layers
+placed above its own in the list, and a Workbench preview playing there
+too. It never adds white or lights an emitter that is off. On a channel
+that holds its last value (forced LTP), it scales only the look's own
+colour, or leaves the light as it is.
+
 **Crackle** rests every fixture at a quiet level and, at random moments,
 snaps one up to the look's own level in the look's own colour, then fades it
 back to rest. Sparkle flashes and fades like stars; Crackle keeps the

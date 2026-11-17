@@ -50,6 +50,15 @@ private slots:
      *  no dimmer, a red cue under them: the hot spot is that red at the
      *  chase's level; green, blue and white stay 0 (to DMX). */
     void spotlightChaseBrightensTheColourUnderIt();
+    /** A level on a forced-LTP RGB wash: the cue's value stays, and is
+     *  kept when the cue and the chase stop (never run down to 0). */
+    void aLevelLeavesAnLtpChannelItsValue();
+    /** Spotlight Chase and a dimmer effect on one wash with no dimmer: the
+     *  cue's red scaled by both, the same in either order. */
+    void aLevelAndADimmerScaleTheCueInEitherOrder();
+    /** A level stopped: the cue's colour at once; released over a fade: back
+     *  up to it by the end. */
+    void aLevelLetsGoWhenTheEffectStopsOrFadesOut();
     /** Color Chase's Peak dimmer on RGBW washes with no dimmer: the chase
      *  and the background at that level. */
     void colorChasePeakDimmerOnAWashWithNoDimmer();

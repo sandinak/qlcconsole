@@ -1651,6 +1651,64 @@ void OutputRules_Test::aPreviewsEffectIsHeldFromTheFirstLiveFrame()
     QCOMPARE(sent(Flame), 0);
 }
 
+/* A level (Spotlight Chase on a wash with no dimmer and no colour of its
+   own) scales what is under it: on a Show-only wash in Operate, played by
+   a preview, every emitter stays held at its safe value -- a level never
+   reads the held channel up. */
+void OutputRules_Test::aLevelOnAShowOnlyWashStaysHeld()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(QStringLiteral("Show-only RGB wash"));
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("3ch"));
+    const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                           QLCChannel::IntensityBlue };
+    for (int c = 0; c < 3; ++c)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(c));
+        ch->setPreset(presets[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(c));
+    }
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *wash = new Fixture(m_doc);
+    wash->setName(QStringLiteral("Wash"));
+    wash->setFixtureDefinition(def, mode);
+    wash->setUniverse(0);
+    wash->setAddress(40);
+    wash->setOutputRules(Fixture::ShowOnly);
+    QVERIFY(m_doc->addFixture(wash));
+    m_doc->outputRuleKeeper()->rebuild();
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, m_doc);
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/spotlight-chase.js");
+    m_doc->addPalette(look);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(wash->id());
+    scene->addPalette(look->id());
+    m_doc->addFunction(scene);
+    auto teardown = qScopeGuard([this, scene]() {
+        m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), false);
+    });
+    m_doc->setMode(Doc::Operate);
+    scene->start(m_doc->masterTimer(), FunctionParent::preview(0x7));
+    for (int i = 0; i < 12; i++)
+    {
+        m_doc->masterTimer()->timerTick();
+        m_doc->effectScriptRunner()->slotTick();
+        m_doc->masterTimer()->timerTick();
+        for (int c = 0; c < 3; ++c)
+        {
+            frame(40 + c);
+            QVERIFY2(sent(40 + c) == int(OutputRuleKeeper::safeValue(wash, quint32(c))),
+                     qPrintable(QString("emitter %1 at %2 in a preview in Operate").arg(c).arg(sent(40 + c))));
+        }
+    }
+}
+
 void OutputRules_Test::notOursStaysZeroUnderTheHold()
 {
     addDimmer("Flame", Flame, Fixture::ShowOnly);
