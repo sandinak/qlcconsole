@@ -443,9 +443,11 @@ are one checklist:
    emergency stop (all four: LB + RB + LT + RT) still stops everything:
    it ends the focus too (no focus light is left on, and lights not
    saved are put back) and lets go of the focus cue, waiting or running.
-   To focus again, GO onto the focus cue, and arm a pad (or GO on the
-   computer) first: no venue focus starts from a pad while the show is
-   stopped.
+   To focus again, GO onto the focus cue. No venue focus starts from a
+   pad while the show is held by the stop: "Emergency stop: the show is
+   held until a GO (the cue pad, or GO on the computer)." Arming alone
+   does not bring it back; the cue pad's LT + A, or GO on the computer,
+   does.
    If the controller goes away mid-focus, the focus is held as below and
    the controller comes back not armed.
 

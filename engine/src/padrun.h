@@ -523,6 +523,9 @@ public:
      *  emergencyStopEnded()): Stopped ends -- the pad's red and the
      *  footer's hold read one source. Main thread. */
     void stopEnded();
+    /** The keeper still holds the show from the emergency stop
+     *  (OutputRuleKeeper::emergencyStopped()): what the footer says. */
+    bool showHeld() const;
     /** Fire the armed hit: start it, or let it go when it runs (a finished
      *  one-shot plays again). Says its name; false, said, when none is
      *  armed or the show is in Design. */

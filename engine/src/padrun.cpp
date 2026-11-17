@@ -259,7 +259,9 @@ void PadRun::setEnabled(bool on, bool say)
     if (m_walkBeside && isWalking())
         endBesideWalk(tr("Walk ended: the controller role changed."));
     clear(false);       // the four were not read in Tools
-    m_stopped = false;
+    // Red stays while the keeper still holds the stop (one source).
+    if (!showHeld())
+        m_stopped = false;
     m_enabled = on;
     // Switched: the words saying where it is switched have done their job.
     if (m_notice == roleSwitchText())
@@ -576,7 +578,11 @@ bool PadRun::setArmed(bool on, quint32 universe)
             m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), universe);
         else
             m_pc->padRumble(1, ControllerScheme::rumbleLongMs(), universe);
-        m_pc->tellOperator(on ? m_pc->padText(tr("Armed. {LT} and {A} is GO.")) : tr("Disarmed."),
+        // Armed after the stop, the show still held: said, not plain ARMED.
+        m_pc->tellOperator(!on ? tr("Disarmed.")
+                               : showHeld() ? m_pc->padText(tr("Armed. The show is held from the emergency stop: "
+                                                               "{LT} and {A} brings it back."))
+                                            : m_pc->padText(tr("Armed. {LT} and {A} is GO.")),
                            ControllerScheme::ConfirmPriority);
     }
     return true;
@@ -663,10 +669,23 @@ void PadRun::stopEnded()
        Load or Reset), a new session, another show. The red goes with the
        footer's "held: emergency stop" -- one source (rule 2). An arm by
        the chord ends it on the pad as before. */
-    if (!m_stopped || m_stopping)
+    if (m_stopping)
+        return;
+    /* A late one: a GO's "ended" queued from a plugin's thread, landing
+       after a new stop was struck here. The keeper holds the new one. */
+    if (showHeld())
+        return;
+    if (!m_stopped && !m_armed)
         return;
     m_stopped = false;
+    m_shownState = -1;      // an arm's "held" words go with the hold
     sync();
+}
+
+bool PadRun::showHeld() const
+{
+    const OutputRuleKeeper *keeper = m_doc != nullptr ? m_doc->outputRuleKeeper() : nullptr;
+    return keeper != nullptr && keeper->emergencyStopped();
 }
 
 void PadRun::sayStopped()
@@ -882,10 +901,15 @@ QString PadRun::roleText() const
         case Tools:         return tr("Pad: Tools");
         case Run:           return tr("Pad: Run");
         case Armed:
+        {
+            /* Armed after the stop while the footer still holds the show:
+               never a plain ARMED beside "held" (one source, rule 2). */
+            const QString held = showHeld() ? tr(" \u00B7 held: LT + A brings the show back") : QString();
             // Two pads or more: which one runs cues (CONTROLLER_JOBS.md 9).
             if (padCount() > 1 && !runnerName().isEmpty())
-                return tr("Pad: ARMED \u00B7 %1").arg(runnerName());
-            return tr("Pad: ARMED");
+                return tr("Pad: ARMED \u00B7 %1").arg(runnerName()) + held;
+            return tr("Pad: ARMED") + held;
+        }
         case Stopped:       return tr("Pad: STOPPED");
         case Walking:
             // Beside the runner (Q252), with more than one pad: who walks.
@@ -1159,12 +1183,13 @@ bool PadRun::isFocusCueWaiting() const
 
 void PadRun::focusStartPress(quint32 universe, bool safetyHeld)
 {
-    /* After the emergency stop nothing comes up from a pad until the stop
-       is over (an arm, or a GO on the computer): every surface says
-       STOPPED (review 5; decided, safe default -- can change). */
-    if (m_stopped)
+    /* After the emergency stop nothing comes up from a pad until the show
+       is brought back: a GO from a pad that runs cues or from the computer
+       (Q254; review 5). The keeper's hold decides, not the pad's red: an
+       arm alone does not bring the show back (one source, rule 2). */
+    if (m_stopped || showHeld())
     {
-        refuse(Walk, tr("Emergency stop: arm a pad (or GO on the computer) before the venue focus."));
+        refuse(Walk, tr("Emergency stop: the show is held until a GO (the cue pad, or GO on the computer)."));
         return;
     }
     // The start is never one button (rules 3 and 6): LT + Menu, always.

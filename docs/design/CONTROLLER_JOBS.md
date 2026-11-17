@@ -235,10 +235,14 @@ Written before the fixes, every caller swept against them:
   work it (a runner with Focus: at once, as for a laptop start). A pad
   that held View as the focus began and let it go meanwhile has let go
   (the held buttons are kept before any early return).
-- **After the emergency stop** a pad's LT + Menu starts no venue focus:
-  "Emergency stop: arm a pad (or GO on the computer) before the venue
-  focus." (decided as the safe default, can change). The laptop still
-  can.
+- **After the emergency stop** a pad's LT + Menu starts no venue focus
+  while the show is held (OutputRuleKeeper::emergencyStopped(), what the
+  footer says): "Emergency stop: the show is held until a GO (the cue
+  pad, or GO on the computer)." An arm alone does not bring the show
+  back; the runner's LT + A or a GO on the computer does (Q254; decided as
+  the safe default, can change). The laptop still can. Armed while held,
+  the pad says **Pad: ARMED · held: LT + A brings the show back**, in the
+  arm's colour.
 - The words of a press refused beside the focus (or a walk) go when it
   ends; the Run tab's focus-start line follows a job edit or a pad
   plugged in or out as the footer does.
