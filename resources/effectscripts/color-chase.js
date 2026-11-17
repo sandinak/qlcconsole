@@ -67,15 +67,19 @@
             bright = bright * bright; // square for sharper edges
 
             var intent = {};
+            // Peak Dimmer: on the head's dimmer, or -- a head with no dimmer
+            // channel (an RGB or RGBW wash) -- in its colour, the background
+            // too.
+            var k = f.hasDimmer ? 1 : dimmer;
             if (f.hasDimmer)
                 intent.dimmer = (bg ? dimmer : bright * dimmer);
 
             if (bright > 0) {
-                intent.r = Math.round(fc.r * bright);
-                intent.g = Math.round(fc.g * bright);
-                intent.b = Math.round(fc.b * bright);
+                intent.r = Math.round(fc.r * bright * k);
+                intent.g = Math.round(fc.g * bright * k);
+                intent.b = Math.round(fc.b * bright * k);
             } else if (bg) {
-                intent.r = bg.r; intent.g = bg.g; intent.b = bg.b;
+                intent.r = Math.round(bg.r * k); intent.g = Math.round(bg.g * k); intent.b = Math.round(bg.b * k);
             } else {
                 intent.r = 0; intent.g = 0; intent.b = 0;
             }

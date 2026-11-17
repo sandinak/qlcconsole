@@ -63,6 +63,7 @@
 #include "groupmasters.h"
 #include "scene.h"
 #include "padrun.h"
+#include "outputrulekeeper.h"
 #include "programmercontroller.h"
 #include "focuscalls.h"
 #include "controlmap.h"
@@ -598,7 +599,13 @@ void CueRunner_Test::thePadRoleShowsOnTheRunTab()
     // The emergency stop: red, until armed again.
     run->emergencyStop();
     shows("Pad: STOPPED", PadRun::stoppedColour());
+    /* Armed again while the footer still holds the show: the button says
+       so, in the arm's colour -- never a plain ARMED beside "held". */
     QVERIFY(run->setArmed(true));
+    shows(QString::fromUtf8("Pad: ARMED \u00B7 held: LT + A brings the show back"), PadRun::armedColour());
+    // A GO brings the show back (the keeper's hold ends): plain ARMED.
+    m_doc->outputRuleKeeper()->noteGo();
+    QApplication::processEvents();
     shows("Pad: ARMED", PadRun::armedColour());
     // Disarmed: gone the moment it is.
     QVERIFY(run->setArmed(false));

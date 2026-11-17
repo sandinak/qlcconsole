@@ -175,6 +175,19 @@ class QXmlStreamWriter;
  *  E7. The cut happens on the calling thread, at once; only the footer is
  *      told later. What the Simple Desk lets go of is only what was not
  *      moved since the stop.
+ *  E8. Once the functions are stopped, every fixture is put at rest, as
+ *      Stop all does, through the same code (FixtureRest::restAfterStop()):
+ *      a fogger, a hazer or a WLED effect not marked Show only stops too
+ *      ("Everything is off"; UX-70). On the main thread, never waiting for
+ *      the MasterTimer.
+ *  E9. A focus tool lighting the rig through its own layer (Quick focus,
+ *      Venue focus, Focus this cue / the pad's walk) ends with it
+ *      (ProgrammerController::emergencyStopStruck(), on the main thread):
+ *      what it had not saved is put back, as leaving it unsaved does. The
+ *      pad goes Stopped first, whatever route the stop came by
+ *      (PadRun::stopStruck()). The follow spot (FollowSpotMover) is not
+ *      stopped: it holds a position only, and its light came from the cue
+ *      the stop has stopped.
  *
  * When OnAtOpen fixtures come on is the show's setting (saved with it,
  * Settings > Output): when you switch to Operate (the default, the safer
@@ -279,8 +292,15 @@ signals:
     /** The Show-only fixtures, or why they are held, changed */
     void showOnlyChanged();
     /** The emergency stop struck, starting session @p epoch (the Simple
-     *  Desk lets go of what was not moved since) */
+     *  Desk lets go of what was not moved since; the programmer ends its
+     *  focus tools, E9). Emitted on the thread that struck it. */
     void emergencyStopStruck(quint32 epoch);
+    /** emergencyStopped() went false: the first GO after the stop (not a
+     *  timecode or other automatic one), a new session (Operate, Blind
+     *  ending in Operate, a show loaded) or the show cleared. On the main
+     *  thread. The pad's red follows it (PadRun::stopEnded()): the pad and
+     *  the footer read one source. */
+    void emergencyStopEnded();
 
 private:
     void scheduleRebuild();

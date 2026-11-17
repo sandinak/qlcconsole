@@ -177,7 +177,7 @@ One object per (filtered) fixture in the scene. Fields:
 | `headRGB` | bool | **This head** has additive R, G and B. |
 | `headWhite` | bool | **This head** has a white emitter. A box of RGB rows and white rows (the Warmdance XL-450's 165ch mode) has heads that are one or the other: send a white head only `w`, an RGB head no `w` (on a head with no white, `w` is made of its R, G and B, and a `w` of 0 there blacks out its colour). |
 | `hasColorWheel` | bool | Has a colour wheel channel. |
-| `hasDimmer` | bool | Has a master/intensity dimmer. |
+| `hasDimmer` | bool | Has a master/intensity dimmer: a channel that sets the level, not a white, amber or UV emitter (an RGBW wash with no dimmer says no). |
 | `hasGobo` | bool | Has a gobo channel. |
 | `hasShutter` | bool | Has a shutter/strobe channel. |
 | `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |
@@ -273,6 +273,7 @@ colours than they declare slots for (e.g. an N-way spread):
 |---|---|
 | `palettes.look.colors` | `[{ r, g, b }, …]` — every Colour look, **precedence order** |
 | `palettes.look.dimmer` | `0..1` — the look's master dimmer (`1.0` if none) |
+| `palettes.look.ownDimmer` | `0..1` — the effect's own Dimmer look (one under it in the list), absent when it has none. A script that reads `palettes.look` takes its colours itself, so the host no longer adds that Dimmer to its intents: apply it yourself (Fire Spread does). The look's own Dimmer (above the effects) the host still applies |
 
 ### `params` — user parameter values
 
@@ -352,6 +353,7 @@ palette retains that channel. Return `{}` to drive nothing for a fixture.
 | `aimX`,`aimY`,`aimZ` | metres (absolute world) | **World-space aim.** Give `aimX`+`aimY` (and optional `aimZ`, default 0) and the host solves this fixture's pan/tilt with the shared **AimSolver** — the same rig geometry the Aim palette uses, so the beam points the same way in Edit and Run. Lets every head converge on its **own** stage point (e.g. a different point on a shape's outline). Needs the fixture placed in the 2D Monitor; unsolvable fixtures are skipped. Explicit `pan`/`tilt` override this if both are present. |
 | `panSpin`, `tiltSpin` | -1..1 | **Free rotation** (heads with `fixture.spin`): > 0 clockwise, < 0 counter-clockwise, its size from the slowest the head goes (just above 0) to its fastest (1); **0 stops it** (the definition's stop value; a `band` head has none: send `pan` to point it). The host finds the channel and the DMX in the head's own capability ranges (`FreeRotation`, engine/src/freerotation.h): a channel of its own or a band on the pan channel, slow-to-fast or fast-to-slow, presets or the words of the definition. A head that only goes one way goes that way. Written whole, never mixed part way during a fade (`DmxWrite::snap`). Gobo and prism rotation are never touched. |
 | `dimmer` | 0.0–1.0 | Master intensity channel. |
+| `level` | 0.0–1.0 | On a head with no dimmer channel, and only without `dimmer` or a colour in the same intent: each of the head's emitters is **what is under the effect** (the cue, a layer below, the look's own colour) times this. It brightens and dims the colour already there: an emitter at 0 stays at 0, no white is added. Spotlight Chase uses it on a wash with no dimmer when the look gives it no colour. |
 | `r`,`g`,`b`,`w`,`a`,`uv` | 0–255 | Additive colour channels (Red/Green/Blue/White/Amber/UV). If `r/g/b` are given but the fixture has **no** additive RGB, the host falls back to the **closest colour-wheel slot**. |
 
 > Units recap: **degrees** for angles, **0..1** for normalized levels, **0..255**

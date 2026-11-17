@@ -196,6 +196,15 @@ public:
      *  Never null. */
     FocusCallCue *focusCallCue() const { return m_focusCallCue; }
 
+    /** The emergency stop struck, from any route (OutputRuleKeeper::
+     *  emergencyStopStruck(), rule E9; on the main thread): the pad's one
+     *  stopped state first (PadRun::stopStruck(): disarmed, red), then
+     *  "Everything is off", so a focus tool lighting the rig through its
+     *  own layer ends -- Quick focus, Venue focus (its cue let go of,
+     *  quietly: the stop says what happened) and Focus this cue / the pad's
+     *  walk. What they had not saved is put back. */
+    void endToolsForStop();
+
     /** How Focus mode, Focus calls and Refine tell the operator where they
      *  are: the rig's blinks, the voice, or both (the operator's choice, kept
      *  by the UI in Settings, not in the show). Lights only: nothing is said

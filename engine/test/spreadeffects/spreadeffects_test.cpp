@@ -16,6 +16,7 @@
 #include <QtTest>
 #include <QElapsedTimer>
 #include <QTemporaryDir>
+#include <QDir>
 #include <QFile>
 #include <QTextStream>
 #include <cmath>
@@ -149,11 +150,11 @@ bool pixelWritten(const QHash<quint64, int> &f, quint32 fid, int pixel)
 }
 
 /* One tick of @p script by itself: @p heads (each a map of the
-   descriptor's fields) at @p inputs, the look's colour @p look (none when
-   invalid), @p set over the defaults. One map an intent. */
-QList<QVariantMap> scriptFrame(EffectScript &script, const QList<QVariantMap> &heads,
-                               const QVariantMap &inputs, const QVariantMap &set,
-                               const QColor &look = QColor(200, 0, 0))
+   descriptor's fields) at @p inputs, the look's colours @p looks in
+   order, @p set over the defaults. One map an intent. */
+QList<QVariantMap> scriptFrameColours(EffectScript &script, const QList<QVariantMap> &heads,
+                                      const QVariantMap &inputs, const QVariantMap &set,
+                                      const QList<QColor> &looks)
 {
     QJSEngine *eng = script.engine();
     QJSValue fixtures = eng->newArray(uint(heads.size()));
@@ -175,14 +176,14 @@ QList<QVariantMap> scriptFrame(EffectScript &script, const QList<QVariantMap> &h
         params.setProperty(it.key(), it.value().toDouble());
     QJSValue palettes = eng->newObject();
     QJSValue lookObj = eng->newObject();
-    QJSValue colours = eng->newArray(look.isValid() ? 1 : 0);
-    if (look.isValid())
+    QJSValue colours = eng->newArray(uint(looks.size()));
+    for (int i = 0; i < looks.size(); ++i)
     {
         QJSValue c = eng->newObject();
-        c.setProperty("r", look.red());
-        c.setProperty("g", look.green());
-        c.setProperty("b", look.blue());
-        colours.setProperty(0, c);
+        c.setProperty("r", looks.at(i).red());
+        c.setProperty("g", looks.at(i).green());
+        c.setProperty("b", looks.at(i).blue());
+        colours.setProperty(quint32(i), c);
     }
     lookObj.setProperty("colors", colours);
     lookObj.setProperty("dimmer", 1.0);
@@ -193,6 +194,15 @@ QList<QVariantMap> scriptFrame(EffectScript &script, const QList<QVariantMap> &h
     for (int i = 0; i < heads.size(); ++i)
         frame << out.property(quint32(i)).toVariant().toMap();
     return frame;
+}
+
+/* The same with the look's one colour @p look (none when invalid). */
+QList<QVariantMap> scriptFrame(EffectScript &script, const QList<QVariantMap> &heads,
+                               const QVariantMap &inputs, const QVariantMap &set,
+                               const QColor &look = QColor(200, 0, 0))
+{
+    return scriptFrameColours(script, heads, inputs, set,
+                              look.isValid() ? QList<QColor>{ look } : QList<QColor>());
 }
 
 bool lit(const QVariantMap &o)
@@ -605,6 +615,363 @@ void SpreadEffects_Test::fireSpreadOnTheShowsKinds()
     for (int p = 0; p < 40; ++p)
         QVERIFY(barLit[p] >= 0);
     QVERIFY(barLit[39] > barLit[0]);
+}
+
+void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
+{
+    /* The show's washes, one from each place: an XL-450 on the centre
+       truss and one on the wide truss (RGB rows and white rows, no dimmer:
+       its 165ch mode), a wall washer on a step top (16 RGB pixels and 16
+       white, no dimmer: 64ch). A white emitter is no dimmer: told it had
+       one, Fire Spread left each pixel it hadn't reached to the look's
+       colour, so the washes were lit from the start. */
+    QLCFixtureDef *xlDef = loadDef(m_doc, kData + "Warmdance-XL-450.qxf");
+    QLCFixtureDef *washerDef = loadDef(m_doc, kFixtures + "Oppsk/Oppsk-Wall-Washer-Light-Bar.qxf");
+    QVERIFY(xlDef && washerDef);
+    // Where the show stands them (mm): the towers' trusses upstage, the
+    // step top downstage.
+    Fixture *trussC = place(m_doc, xlDef, "165ch", "T2-CW", 0, 0, QVector3D(4755.0f, 3463.0f, 1524.0f));
+    Fixture *trussW = place(m_doc, xlDef, "165ch", "T3-SW", 0, 170, QVector3D(7278.5f, 3640.1f, 1524.0f));
+    Fixture *stepTop = place(m_doc, washerDef, "64ch", "DS4t2", 0, 340, QVector3D(9844.8f, 7389.7f, 0));
+    QVERIFY(trussC && trussW && stepTop);
+    QCOMPARE(trussC->channels(), 165u);
+    QCOMPARE(stepTop->channels(), 64u);
+    QCOMPARE(trussC->masterIntensityChannel(), QLCChannel::invalid());
+    QCOMPARE(stepTop->masterIntensityChannel(), QLCChannel::invalid());
+    const QList<Fixture *> washes = { trussC, trussW, stepTop };
+
+    // The fire starts stage right of everything, downstage: the nearest
+    // wash is metres away.
+    QLCPalette *fire = effectPalette(m_doc, "fire-spread.js", { { "edge", 0.0 }, { "flare", 0.0 }, { "spreadTime", 10.0 } });
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    for (Fixture *f : washes)
+        scene->addFixture(f->id());
+    scene->addPalette(colourPalette(m_doc, QColor(0, 255, 0))->id());     // the look's colour
+    scene->addPalette(aimAt(m_doc, QVector3D(-6.0f, 9.0f, 0))->id());
+    scene->addPalette(fire->id());
+    EffectInstance inst(m_doc, scene->id(), fire->id());
+    QVERIFY2(inst.isValid(), qPrintable(inst.error()));
+
+    // No wash says it has a dimmer.
+    {
+        int cols = 0, rows = 0;
+        const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+        const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
+        QCOMPARE(cells.size(), 75 + 75 + 32);
+        for (int i = 0; i < cells.size(); ++i)
+            QVERIFY2(!arr.property(quint32(i)).property("hasDimmer").toBool(),
+                     qPrintable(QString("cell %1 (fixture %2 head %3) says it has a dimmer")
+                                .arg(i).arg(cells.at(i).fixtureId).arg(cells.at(i).head)));
+    }
+
+    // When each wash's nearest pixel catches.
+    QHash<quint32, qint64> catchesAt;
+    {
+        frameAt(inst, 0);
+        const double farthest = inst.buildInputsObject().property("_fromTargetFar").toNumber();
+        int cols = 0, rows = 0;
+        const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+        const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
+        for (int i = 0; i < cells.size(); ++i)
+        {
+            const qint64 ms = qint64(arr.property(quint32(i)).property("fromTarget").toNumber() / farthest * 10000.0);
+            const quint32 fid = cells.at(i).fixtureId;
+            catchesAt[fid] = catchesAt.contains(fid) ? qMin(catchesAt.value(fid), ms) : ms;
+        }
+        for (Fixture *f : washes)
+            QVERIFY2(catchesAt.value(f->id()) > 2000, qPrintable(QString("%1 catches at %2 ms").arg(f->name()).arg(catchesAt.value(f->id()))));
+    }
+
+    // What the effect writes: at the start and just before the fire reaches
+    // each wash, every channel of it 0 -- its RGB rows and its white rows;
+    // once the fire has passed it, it burns.
+    auto channelsLit = [](const QHash<quint64, int> &f, Fixture *fx) {
+        int lit = 0;
+        for (quint32 c = 0; c < fx->channels(); ++c)
+            if (f.value(key(fx->id(), c), 0) > 0)
+                ++lit;
+        return lit;
+    };
+    QHash<quint64, int> f = frameAt(inst, 0);
+    for (Fixture *fx : washes)
+    {
+        QCOMPARE(channelsLit(f, fx), 0);
+        for (quint32 c = 0; c < fx->channels(); ++c)
+            QVERIFY2(f.contains(key(fx->id(), c)),
+                     qPrintable(QString("%1 channel %2 left to the look's colour at the start").arg(fx->name()).arg(c)));
+    }
+    for (Fixture *fx : washes)
+    {
+        f = frameAt(inst, catchesAt.value(fx->id()) - 100);
+        QVERIFY2(channelsLit(f, fx) == 0, qPrintable(QString("%1 lit before the fire reached it").arg(fx->name())));
+    }
+    f = frameAt(inst, 10500);
+    for (Fixture *fx : washes)
+        QVERIFY2(channelsLit(f, fx) > 0, qPrintable(QString("%1 dark after the fire passed it").arg(fx->name())));
+
+    // And on the wire, the look's green under the effect: dark at the start.
+    MasterTimer *timer = m_doc->masterTimer();
+    fire->setEffectParamValue("spreadTime", 120.0);         // nothing reached while we look
+    scene->start(timer, FunctionParent::master());
+    for (int i = 0; i < 12; ++i)
+    {
+        timer->timerTick();
+        QTest::qWait(15);
+    }
+    QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : unis)
+        u->processFaders();
+    const QByteArray dmx = unis.first()->preGMValues();
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    for (Fixture *fx : washes)
+        for (quint32 c = 0; c < fx->channels(); ++c)
+            QVERIFY2(uchar(dmx.at(int(fx->address() + c))) == 0,
+                     qPrintable(QString("%1 channel %2 at %3 before the fire").arg(fx->name()).arg(c)
+                                .arg(uchar(dmx.at(int(fx->address() + c))))));
+    /* Left playing (cleanup() keeps the Doc), as theCueUnderShowsUntilTheSpellArrives. */
+}
+
+void SpreadEffects_Test::fireSpreadInFireIsAsItWas()
+{
+    EffectScript now;
+    QVERIFY(now.load(kScripts + "fire-spread.js"));
+    // The choice is there, and Fire is the default: a show saved before it
+    // plays Fire.
+    bool hasColours = false;
+    for (const EffectScript::ParamDef &d : now.paramDefs())
+        if (d.name == QLatin1String("colours"))
+        {
+            hasColours = true;
+            QCOMPARE(d.defaultValue, 0.0f);
+            QCOMPARE(d.enumValues, QStringList({ "Fire", "Front and Behind" }));
+        }
+    QVERIFY2(hasColours, "Fire Spread has no Colours setting");
+
+    // The script as it was before Colours (data/fire-spread-0412.js),
+    // beside today's libraries.
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    QVERIFY(QDir().mkpath(dir.filePath("lib")));
+    QVERIFY(QFile::copy(kScripts + "lib/fire.js", dir.filePath("lib/fire.js")));
+    QVERIFY(QFile::copy(kScripts + "lib/spread.js", dir.filePath("lib/spread.js")));
+    QVERIFY(QFile::copy(kData + "fire-spread-0412.js", dir.filePath("fire-spread.js")));
+    EffectScript before;
+    QVERIFY(before.load(dir.filePath("fire-spread.js")));
+
+    // Every kind: a par, a dimmer, a colour-only par, a colour-wheel mover,
+    // a pixel of a bar with no dimmer, one of a bar with one dimmer, a
+    // dimmer pixel, a relay.
+    const QList<QVariantMap> rig = {
+        { { "hasRGB", true }, { "hasDimmer", true }, { "fromTarget", 0.0 } },
+        { { "hasDimmer", true }, { "fromTarget", 1.0 } },
+        { { "hasRGB", true }, { "fromTarget", 2.0 } },
+        { { "hasColorWheel", true }, { "hasDimmer", true }, { "hasPanTilt", true }, { "fromTarget", 3.0 } },
+        { { "heads", 8 }, { "hasRGB", true }, { "headRGB", true }, { "fromTarget", 4.0 } },
+        { { "heads", 8 }, { "hasRGB", true }, { "headRGB", true }, { "hasDimmer", true }, { "fromTarget", 2.5 } },
+        { { "heads", 8 }, { "headRGB", false }, { "fromTarget", 3.5 } },
+        { { "hasDimmer", true }, { "switches", true }, { "fromTarget", 1.5 } },
+    };
+    const QVariantMap in = { { "_fromTargetFar", 4.0 }, { "_cueTime", 3.0 } };
+    const QList<QColor> two = { QColor(0, 0, 255), QColor(255, 0, 0) };
+    const QList<QVariantMap> sets = {
+        {},
+        { { "edge", 1.0 }, { "seed", 3.0 } },
+        { { "edge", 0.0 }, { "flare", 1.0 } },
+        { { "coolness", 0.5 }, { "intensity", 0.7 }, { "speed", 2.0 } },
+        { { "spreadOver", 1 } },
+    };
+    int frames = 0;
+    for (const QVariantMap &set : sets)
+        for (int tick = 0; tick <= 120; ++tick)
+        {
+            const QVariantMap at = with(in, "_time", tick * 0.1);
+            const QList<QVariantMap> was = scriptFrameColours(before, rig, at, set, two);
+            // Fire by default, and chosen; and Front and Behind with no
+            // colour to be the front: byte for byte what it was.
+            QCOMPARE(scriptFrameColours(now, rig, at, set, two), was);
+            QCOMPARE(scriptFrameColours(now, rig, at, with(set, "colours", 0), two), was);
+            QCOMPARE(scriptFrameColours(now, rig, at, with(set, "colours", 1), {}), was);
+            ++frames;
+        }
+    QCOMPARE(frames, 5 * 121);
+}
+
+void SpreadEffects_Test::fireSpreadFrontAndBehind()
+{
+    EffectScript fs;
+    QVERIFY(fs.load(kScripts + "fire-spread.js"));
+    // A par with a dimmer on the point, a colour-only par 1 m out, a
+    // colour-wheel mover 2 m, a pixel of a bar with no dimmer 3 m, a dimmer
+    // 3.5 m, a relay 4 m.
+    const QList<QVariantMap> rig = {
+        { { "hasRGB", true }, { "hasDimmer", true }, { "fromTarget", 0.0 } },
+        { { "hasRGB", true }, { "fromTarget", 1.0 } },
+        { { "hasColorWheel", true }, { "hasDimmer", true }, { "hasPanTilt", true }, { "fromTarget", 2.0 } },
+        { { "heads", 64 }, { "hasRGB", true }, { "headRGB", true }, { "fromTarget", 3.0 } },
+        { { "hasDimmer", true }, { "fromTarget", 3.5 } },
+        { { "hasDimmer", true }, { "switches", true }, { "fromTarget", 4.0 } },
+    };
+    const QVariantMap in = { { "_fromTargetFar", 4.0 } };
+    const QColor blue(0, 0, 255), red(255, 0, 0);
+    // Catches at 0, 2, 4, 6, 7 and 8 s; the backfill 1.5 s after each.
+    const QVariantMap hard = { { "colours", 1 }, { "edge", 0.0 }, { "flare", 0.0 },
+                               { "spreadTime", 8.0 }, { "frontWidth", 1.5 } };
+    const QVariantMap fire = { { "edge", 0.0 }, { "flare", 0.0 }, { "spreadTime", 8.0 } };
+    auto at = [&](double t, const QVariantMap &set, const QList<QColor> &looks) {
+        return scriptFrameColours(fs, rig, with(in, "_time", t), set, looks);
+    };
+    const QList<QColor> two = { blue, red };
+
+    // Between the fronts: a head reached shows the first colour, at full.
+    {
+        const QList<QVariantMap> f = at(3.0, hard, two);
+        QCOMPARE(f.at(1), rgb(0, 0, 255));                          // reached at 2, the backfill at 3.5
+        const QList<QVariantMap> g = at(5.0, hard, two);
+        QCOMPARE(g.at(2), with(rgb(0, 0, 255), "dimmer", 1));      // the wheel on its blue slot
+        QCOMPARE(at(7.0, hard, two).at(3), rgb(0, 0, 255));         // a pixel
+        QCOMPARE(at(1.0, hard, two).at(0), with(rgb(0, 0, 255), "dimmer", 1));
+    }
+    // A head the front hasn't reached yet is dark.
+    {
+        const QList<QVariantMap> f = at(3.9, hard, two);
+        QVERIFY(!lit(f.at(2)));
+        QVERIFY(!lit(f.at(3)));
+        QVERIFY(!lit(f.at(4)));
+        QCOMPARE(f.at(3), QVariantMap({ { "dimmer", 0 } }));
+        QCOMPARE(f.at(5), QVariantMap({ { "dimmer", 0 } }));       // the relay: off
+    }
+    // After the backfill: the second colour, flickering in level (the
+    // colour-only par in its colour, the par and the wheel on the dimmer).
+    QSet<int> parLevels, plainReds, wheelLevels;
+    for (double t = 10; t < 20; t += 0.25)
+    {
+        const QList<QVariantMap> f = at(t, hard, two);
+        QCOMPARE(f.at(0).value("r").toInt(), 255);
+        QCOMPARE(f.at(0).value("g").toInt(), 0);
+        QCOMPARE(f.at(0).value("b").toInt(), 0);
+        parLevels.insert(qRound(f.at(0).value("dimmer").toDouble() * 100));
+        QVERIFY(!f.at(1).contains("dimmer"));
+        QCOMPARE(f.at(1).value("g").toInt(), 0);
+        QCOMPARE(f.at(1).value("b").toInt(), 0);
+        plainReds.insert(f.at(1).value("r").toInt());
+        QCOMPARE(f.at(2).value("r").toInt(), 255);                  // the wheel's red slot
+        QCOMPARE(f.at(2).value("b").toInt(), 0);
+        wheelLevels.insert(qRound(f.at(2).value("dimmer").toDouble() * 100));
+        QCOMPARE(f.at(3).value("g").toInt(), 0);
+        QCOMPARE(f.at(3).value("b").toInt(), 0);
+        // The dimmer can't show a colour: it burns as Fire's. The relay is on.
+        QCOMPARE(f.at(4), scriptFrameColours(fs, rig, with(in, "_time", t), fire, two).at(4));
+        QCOMPARE(f.at(5), QVariantMap({ { "dimmer", 1 } }));
+        for (const QVariantMap &o : f)
+            QVERIFY(!o.contains("pan") && !o.contains("tilt"));
+    }
+    QVERIFY(parLevels.size() > 5);
+    QVERIFY(plainReds.size() > 5);
+    QVERIFY(wheelLevels.size() > 5);
+    // Just after the backfill reaches it, a head is between the two colours.
+    {
+        const QVariantMap mid = at(3.7, hard, two).at(1);       // 0.2 s into a 0.4 s blend
+        QVERIFY2(mid.value("b").toInt() > 50 && mid.value("b").toInt() < 205, qPrintable(QString::number(mid.value("b").toInt())));
+        QVERIFY(mid.value("r").toInt() > 0);
+        // A colour wheel never stops between slots: blue, then red.
+        for (double t = 5.5; t < 6.0; t += 0.05)
+        {
+            const QVariantMap w = at(t, hard, two).at(2);
+            QVERIFY((w.value("r").toInt() == 0 && w.value("b").toInt() == 255)
+                    || (w.value("r").toInt() == 255 && w.value("b").toInt() == 0));
+        }
+    }
+    // Flicker Behind off: the backfill is steady.
+    for (double t = 10; t < 12; t += 0.25)
+    {
+        const QList<QVariantMap> f = at(t, with(hard, "flickerBehind", 0), two);
+        QCOMPARE(f.at(0), with(rgb(255, 0, 0), "dimmer", 1));
+        QCOMPARE(f.at(1), rgb(255, 0, 0));
+        QCOMPARE(f.at(3), rgb(255, 0, 0));
+    }
+    // Only one colour: the front is it, and behind the front it burns as
+    // the fire does.
+    QCOMPARE(at(3.0, hard, { blue }).at(1), rgb(0, 0, 255));
+    for (double t = 10; t < 14; t += 0.5)
+        QCOMPARE(at(t, hard, { blue }), scriptFrameColours(fs, rig, with(in, "_time", t), fire, { blue }));
+    // ...and Flicker Behind changes nothing then: a fire always flickers.
+    QCOMPARE(at(11.0, with(hard, "flickerBehind", 0), { blue }), at(11.0, hard, { blue }));
+
+    // The Flare: the front's colour whiter as it catches, then the colour.
+    {
+        const QVariantMap flaring = at(2.1, with(hard, "flare", 1.0), two).at(1);
+        QVERIFY(flaring.value("r").toInt() > 100 && flaring.value("g").toInt() > 100);
+        QCOMPARE(at(3.2, with(hard, "flare", 1.0), two).at(1), rgb(0, 0, 255));
+        // Never on the wheel: it holds the blue slot.
+        QCOMPARE(at(4.1, with(hard, "flare", 1.0), two).at(2).value("r").toInt(), 0);
+    }
+    // Front Width: the backfill that much behind.
+    QCOMPARE(at(5.5, with(hard, "frontWidth", 4.0), two).at(1), rgb(0, 0, 255));
+    QVERIFY(at(6.5, with(hard, "frontWidth", 4.0), two).at(1).value("b").toInt() == 0);
+}
+
+void SpreadEffects_Test::fireSpreadBackfillIsRaggedBySeed()
+{
+    EffectScript fs;
+    QVERIFY(fs.load(kScripts + "fire-spread.js"));
+    // Sixteen colour-only pars in a line out from the point.
+    QList<QVariantMap> rig;
+    for (int i = 0; i < 16; ++i)
+        rig << QVariantMap({ { "hasRGB", true }, { "fromTarget", double(i) } });
+    const QVariantMap in = { { "_fromTargetFar", 15.0 } };
+    const QList<QColor> two = { QColor(0, 0, 255), QColor(255, 0, 0) };
+
+    /* When each catches (its blue up: a kindle is fainter) and when its
+       backfill arrives (the first of its red), to a frame. */
+    auto fronts = [&](const QVariantMap &set, QVector<double> &caught, QVector<double> &filled) {
+        caught.fill(-1, rig.size());
+        filled.fill(-1, rig.size());
+        for (int tick = 0; tick <= 700; ++tick)
+        {
+            const double t = tick * 0.02;
+            const QList<QVariantMap> f = scriptFrameColours(fs, rig, with(in, "_time", t), set, two);
+            for (int i = 0; i < rig.size(); ++i)
+            {
+                if (caught[i] < 0 && f.at(i).value("b").toInt() >= 200)
+                    caught[i] = t;
+                if (filled[i] < 0 && f.at(i).value("r").toInt() > 0)
+                    filled[i] = t;
+            }
+        }
+    };
+    const QVariantMap base = { { "colours", 1 }, { "flare", 0.0 }, { "spreadTime", 8.0 },
+                               { "frontWidth", 1.5 } };
+    QVector<double> caught, filled;
+
+    // A hard edge: the backfill Front Width behind every head (less the
+    // front's 60 ms snap up).
+    fronts(with(base, "edge", 0.0), caught, filled);
+    for (int i = 0; i < rig.size(); ++i)
+        QVERIFY2(caught[i] >= 0 && qAbs(filled[i] - caught[i] - 1.5) <= 0.08,
+                 qPrintable(QString("head %1: caught %2, filled %3").arg(i).arg(caught[i]).arg(filled[i])));
+
+    // A ragged edge: the backfill is ragged too, in its own way (not the
+    // front's ragged line moved back), up to half the width early or late,
+    // so the front's colour always shows; the same seed the same, another
+    // seed another.
+    QVariantMap ragged = with(with(base, "edge", 1.0), "seed", 3.0);
+    fronts(ragged, caught, filled);
+    QSet<int> gaps;
+    for (int i = 0; i < rig.size(); ++i)
+    {
+        const double gap = filled[i] - caught[i];
+        QVERIFY2(caught[i] >= 0 && filled[i] >= 0 && gap >= 0.75 - 0.08 && gap <= 2.25 + 0.04,
+                 qPrintable(QString("head %1: caught %2, filled %3").arg(i).arg(caught[i]).arg(filled[i])));
+        gaps.insert(qRound(gap * 10));
+    }
+    QVERIFY2(gaps.size() > 4, qPrintable(QString("%1 different gaps").arg(gaps.size())));
+    QVector<double> caught2, filled2;
+    fronts(ragged, caught2, filled2);
+    QCOMPARE(caught2, caught);
+    QCOMPARE(filled2, filled);
+    fronts(with(ragged, "seed", 4.0), caught2, filled2);
+    QVERIFY(filled2 != filled);
 }
 
 void SpreadEffects_Test::spellSpreadOnTheShowsKinds()

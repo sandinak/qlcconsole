@@ -85,6 +85,7 @@
 #include "qlcphysical.h"
 #include "fixturegroup.h"
 #include "programmercontroller.h"
+#include "padrun.h"
 #include "venuecorrections.h"
 #include "parkeffect.h"
 #include "focuscalls.h"
@@ -182,6 +183,13 @@ Doc::Doc(QObject* parent, int universes)
     m_goLog->attach();
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
+    /* The emergency stop ends the focus tools too (E9): queued to the main
+       thread when it struck on another (an OSC or MSC plugin's). */
+    connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopStruck,
+            m_programmer, &ProgrammerController::endToolsForStop);
+    // The pad's red ends when the stop does: one source with the footer.
+    connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopEnded,
+            m_programmer->padRun(), &PadRun::stopEnded);
 
     // Track running Scenes for programmer edit-routing (LTP).
     // DirectConnection: the signal is emitted from MasterTimer's worker

@@ -953,7 +953,7 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
         if (!fxi || !fxi->fixtureMode())
             continue;
 
-        bool hasRGB = false, hasPT = false, hasDimmer = false;
+        bool hasRGB = false, hasPT = false, hasDimmer = false, hasEmitter = false;
         bool hasShutt = false, hasColorWheel = false, hasUV = false;
         for (quint32 c = 0; c < fxi->channels(); ++c)
         {
@@ -971,8 +971,14 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
                         hasRGB = true;
                     else if (ch->colour() == QLCChannel::UV)
                         hasUV = true;
-                    else
+                    // A dimmer is a level channel with no colour, the rule
+                    // readFixtureFacts() tells a script by (fixture.hasDimmer).
+                    // A white or amber emitter is not one, but a light of
+                    // only those is still a dimmer effect's to drive.
+                    else if (ch->colour() == QLCChannel::NoColour)
                         hasDimmer = true;
+                    else
+                        hasEmitter = true;
                     break;
                 case QLCChannel::Colour:
                     if (ch->colour() == QLCChannel::Red   ||
@@ -1011,7 +1017,7 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
                  tl == QLatin1String("movers")   ||
                  tl == QLatin1String("spot")     ||
                  tl == QLatin1String("beam"))    && hasPT)         { matches = true; break; }
-            if (tl == QLatin1String("dimmer")    && hasDimmer)     { matches = true; break; }
+            if (tl == QLatin1String("dimmer")    && (hasDimmer || hasEmitter)) { matches = true; break; }
             if (tl == QLatin1String("shutter")   && hasShutt)      { matches = true; break; }
             if (tl == QLatin1String("colorwheel") && hasColorWheel){ matches = true; break; }
             if ((tl == QLatin1String("uv")       ||
@@ -1843,10 +1849,18 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
             case QLCChannel::Intensity:
                 // IntensityRed/Green/Blue presets land in the Intensity group
                 // but carry a colour value — treat them as additive RGB channels.
+                // A white, amber or UV emitter is in the group too, and is no
+                // dimmer: a wash of RGB and white pixels with no dimmer was
+                // told it had one, so a spread left its pixels not yet reached
+                // to the look's colour ("a pixel of a bar whose one dimmer
+                // serves every pixel") and they were lit from the start.
+                // The rule: any Intensity channel with no colour of its own
+                // is a dimmer (Fixture::hasDimmer() is narrower: the master,
+                // or each head's first Intensity channel).
                 if (ch->colour() == QLCChannel::Red)        hasR = true;
                 else if (ch->colour() == QLCChannel::Green)  hasG = true;
                 else if (ch->colour() == QLCChannel::Blue)   hasB = true;
-                else f.hasDimmer = true;
+                else if (ch->colour() == QLCChannel::NoColour) f.hasDimmer = true;
                 break;
             case QLCChannel::Beam:
                 if (ch->preset() == QLCChannel::BeamZoomSmallBig
@@ -2218,6 +2232,16 @@ QJSValue EffectInstance::buildPalettesObject() const
     QJSValue lookObj = eng->newObject();
     lookObj.setProperty("colors", colorsArr);
     lookObj.setProperty("dimmer", lookDimmer);
+    /* The effect's own Dimmer (one under it), apart: the host applies the
+       look's own Dimmer itself, but not an effect's that takes the look's
+       colours -- its level is the script's to apply (Fire Spread's). */
+    {
+        QList<QColor> own;
+        double ownDimmer = -1.0;
+        ownLook(own, ownDimmer);
+        if (ownDimmer >= 0.0)
+            lookObj.setProperty("ownDimmer", ownDimmer);
+    }
     obj.setProperty("look", lookObj);
 
     return obj;
@@ -2740,6 +2764,55 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     const uchar out = (uchar)qBound(0, (int)qRound(base * mul), 255);
                     writes.append({uniIdx, (int)fxi->address() + (int)c,
                                    out, fxi->id(), c, /*replace=*/true, mul, base});
+                }
+            }
+        }
+
+        /* "level": brighten and dim what is already on this head -- the
+           colour the cue or a layer under the effect gives it -- on a head
+           with no dimmer (Spotlight Chase with no colour of its own). Each
+           emitter is what is under it times the level, never more: an
+           emitter the cue has at 0 stays at 0, and no white is added. The
+           look's own colour counts as under it too. Not with a dimmer or a
+           colour in the same intent. */
+        {
+            const QJSValue &levelVal = iv("level");
+            if (!levelVal.isUndefined() && dimVal.isUndefined() && !carriesColour
+                && fxi->fixtureMode() != nullptr)
+            {
+                const float level = qBound(0.0f, (float)levelVal.toNumber(), 1.0f);
+                const float mul = 1.0f + (level - 1.0f) * envelope;   // none of it while it isn't on
+                const QList<int> forcedHTP = fxi->forcedHTPChannels();
+                const QList<int> forcedLTP = fxi->forcedLTPChannels();
+                for (quint32 c : headChannels)
+                {
+                    const QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                    if (ch == nullptr)
+                        continue;
+                    const bool isEmitter = (ch->group() == QLCChannel::Intensity
+                                            || ch->group() == QLCChannel::Colour)
+                                           && ch->colour() != QLCChannel::NoColour;
+                    if (!isEmitter)
+                        continue;
+                    /* What is under it is only there to read on an HTP
+                       channel: the universe starts those from 0 each tick.
+                       An LTP one (a Colour-group emitter, or one forced LTP)
+                       keeps its last value, the effect's own once nothing
+                       under it writes it -- times the level each tick, it
+                       would run down to 0 and stay there. There the look's
+                       own value is scaled, as a dimmer does; with none, it
+                       is left as it is. */
+                    const bool htp = forcedHTP.contains(int(c))
+                        || (ch->group() == QLCChannel::Intensity && !forcedLTP.contains(int(c)));
+                    const quint64 k = (quint64(fid) << 32) | c;
+                    if (!htp && !m_sceneBaseValues.contains(k))
+                        continue;
+                    const uchar base = sceneBaseValue(fid, c, 0);
+                    DmxWrite w{uniIdx, (int)fxi->address() + (int)c,
+                               (uchar)qBound(0, (int)qRound(base * mul), 255), fxi->id(), c,
+                               /*replace=*/true, mul, base};
+                    w.multiply = htp;
+                    writes.append(w);
                 }
             }
         }

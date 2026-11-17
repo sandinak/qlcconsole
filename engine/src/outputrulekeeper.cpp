@@ -62,12 +62,14 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     connect(doc, &Doc::cleared, this, [this]() {
         // Another show: its own start, no emergency stop carried over, no
         // automatic widget armed.
-        m_stopEpoch.store(0, std::memory_order_relaxed);
+        const bool wasStopped = m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0;
         Function::clearAutoSources();
         startSession();
         m_onAtOpenWhen = defaultOnAtOpenWhen();
         m_seenOperate = m_doc->mode() == Doc::Operate;
         scheduleRebuild();
+        if (wasStopped)
+            emit emergencyStopEnded();
     });
     connect(doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
         /* Show only, Operate starting: a new session -- what was started
@@ -105,6 +107,9 @@ void OutputRuleKeeper::startSession()
     Function::startLiveSession();
     if (m_doc->masterTimer() != nullptr)
         m_doc->masterTimer()->refreshPreviewGates();
+    // A stop from before is over with it (emergencyStopped() reads false now).
+    if (m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0)
+        emit emergencyStopEnded();
 }
 
 void OutputRuleKeeper::markNow(quint32 id)
@@ -377,6 +382,12 @@ void OutputRuleKeeper::emergencyStop()
         // The gates of whatever is still running, worked out as a tick would.
         if (m_doc->masterTimer() != nullptr)
             m_doc->masterTimer()->refreshPreviewGates();
+        /* Then every fixture at rest, as Stop all does (one path:
+           FixtureRest::restAfterStop()): a fogger or a WLED effect not
+           marked Show only kept the last value its cue sent (UX-70). Here,
+           on the main thread; it takes the universes' frame locks as a patch
+           does and never waits for the MasterTimer. */
+        FixtureRest::restAfterStop(m_doc);
     };
     if (thread() == QThread::currentThread())
         stopAll();
@@ -409,6 +420,7 @@ void OutputRuleKeeper::noteGo()
         QMetaObject::invokeMethod(this, [this]() {
             m_lastHeldBy = showOnlyHeldBy();
             emit showOnlyChanged();
+            emit emergencyStopEnded();
         }, thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
 }
 

@@ -4964,6 +4964,696 @@ void EffectInstance_Test::fireSpreadBurnsTheRigFromTheAimTarget()
     }
 }
 
+void EffectInstance_Test::fireSpreadFrontAndBehindTakesItsOwnColours()
+{
+    MonitorProperties *props = m_doc->monitorProperties();
+    // An RGB par (no dimmer) on the point, a dimmer 2 m out, a colour-wheel
+    // mover (its dimmer in its head) 4 m out.
+    QLCFixtureDef *parDef = makePixelDef("Front par", 1, 0);
+    m_doc->fixtureDefCache()->addFixtureDef(parDef);
+    Fixture *par = new Fixture(m_doc);
+    par->setFixtureDefinition(parDef, parDef->modes().first());
+    par->setUniverse(0);
+    par->setAddress(300);
+    QVERIFY(m_doc->addFixture(par));
+    props->setFixturePosition(par->id(), 0, 0, QVector3D(1000.0f, 1000.0f, 0));
+    Fixture *dim = oneDimmerFixture(m_doc, 100);
+    props->setFixturePosition(dim->id(), 0, 0, QVector3D(3000.0f, 1000.0f, 0));
+
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel("FireWheelSpot");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCChannel *pan = new QLCChannel(); pan->setName("Pan"); pan->setPreset(QLCChannel::PositionPan);
+    QLCChannel *wheel = new QLCChannel(); wheel->setName("Color wheel"); wheel->setGroup(QLCChannel::Colour);
+    const struct { int lo, hi; QColor c; const char *n; } wheelSlots[] = {
+        { 0, 9, QColor(255, 255, 255), "Open" }, { 10, 19, QColor(255, 0, 0), "Red" },
+        { 20, 29, QColor(0, 0, 255), "Blue" }, { 30, 39, QColor(255, 140, 0), "Orange" } };
+    for (const auto &sl : wheelSlots)
+    {
+        QLCCapability *cap = new QLCCapability(uchar(sl.lo), uchar(sl.hi), sl.n);
+        cap->setResource(0, sl.c);
+        wheel->addCapability(cap);
+    }
+    QLCChannel *wdim = new QLCChannel(); wdim->setName("Dimmer"); wdim->setPreset(QLCChannel::IntensityDimmer);
+    QList<QLCChannel *> chans = { pan, wheel, wdim };
+    for (int c = 0; c < chans.size(); c++)
+    {
+        def->addChannel(chans.at(c));
+        mode->insertChannel(chans.at(c), c);
+    }
+    QLCFixtureHead head;
+    head.addChannel(0); head.addChannel(1); head.addChannel(2);
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    m_doc->fixtureDefCache()->addFixtureDef(def);
+    Fixture *spot = new Fixture(m_doc);
+    spot->setFixtureDefinition(def, mode);
+    spot->setUniverse(0);
+    spot->setAddress(400);
+    QVERIFY(m_doc->addFixture(spot));
+    props->setFixturePosition(spot->id(), 0, 0, QVector3D(5000.0f, 1000.0f, 0));
+
+    StageTarget *point = props->addStageTarget();
+    point->setName("Ignition");
+    point->setPosition(QVector3D(1.0f, 1.0f, 0));
+    QLCPalette *aim = new QLCPalette(QLCPalette::Aim, m_doc);
+    aim->setStageTargetId(point->id());
+    QVERIFY(m_doc->addPalette(aim));
+
+    // Front and Behind, a hard edge, no flare: the front 2 s wide.
+    QLCPalette *fire = new QLCPalette(QLCPalette::Effect, m_doc);
+    fire->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
+    fire->setEffectParamValue("colours", 1);
+    fire->setEffectParamValue("spreadTime", 8.0);
+    fire->setEffectParamValue("edge", 0.0);
+    fire->setEffectParamValue("flare", 0.0);
+    fire->setEffectParamValue("frontWidth", 2.0);
+    fire->setEffectParamValue(EffectRuns::runsKey(), 0);      // Loop
+    QVERIFY(m_doc->addPalette(fire));
+    // The effect's own colours, under it: blue the front, red behind.
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setValue(QColor(0, 0, 255));
+    QVERIFY(m_doc->addPalette(blue));
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, m_doc);
+    red->setValue(QColor(255, 0, 0));
+    QVERIFY(m_doc->addPalette(red));
+    QVERIFY(QLCPalette::effectUsesLookColours(fire));          // they are its own, not painted on
+
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    for (Fixture *fx : { par, dim, spot })
+        scene->addFixture(fx->id());
+    for (QLCPalette *p : { aim, fire, blue, red })
+        scene->addPalette(p->id());
+    EffectInstance inst(m_doc, scene->id(), fire->id());
+    QVERIFY2(inst.isValid(), "fire-spread.js did not load");
+
+    // What each channel gets at clock @p ms: (fixture, channel) -> value.
+    auto at = [&](qint64 ms) {
+        inst.setOffStageClock(ms);
+        inst.runTick();
+        QHash<QPair<quint32, quint32>, int> out;
+        for (const EffectInstance::DmxWrite &w : inst.dmxWrites())
+            out.insert(qMakePair(w.fixtureId, w.channel), w.value);
+        return out;
+    };
+    auto v = [](const QHash<QPair<quint32, quint32>, int> &f, Fixture *fx, quint32 ch) {
+        return f.value(qMakePair(fx->id(), ch), -1);
+    };
+
+    // 1 s: the par, reached, is the front's blue; the dimmer and the
+    // mover not yet reached are dark.
+    QHash<QPair<quint32, quint32>, int> f = at(1000);
+    QVERIFY2(qAbs(inst.buildInputsObject().property("_fromTargetFar").toNumber() - 4.0) < 1e-3,
+             qPrintable(QString::number(inst.buildInputsObject().property("_fromTargetFar").toNumber())));
+    QCOMPARE(v(f, par, 0), 0);
+    QCOMPARE(v(f, par, 1), 0);
+    QCOMPARE(v(f, par, 2), 255);
+    QCOMPARE(v(f, dim, 0), 0);
+    QCOMPARE(v(f, spot, 2), 0);
+    // 3 s: the backfill has reached the par: red, burning.
+    QSet<int> reds;
+    for (qint64 ms = 3000; ms < 8000; ms += 250)
+    {
+        f = at(ms);
+        QVERIFY2(v(f, par, 0) > 0, qPrintable(QString("par dark at %1 ms").arg(ms)));
+        QCOMPARE(v(f, par, 1), 0);
+        QCOMPARE(v(f, par, 2), 0);
+        reds.insert(v(f, par, 0));
+        if (ms >= 4100)
+            QVERIFY(v(f, dim, 0) > 0);                          // the dimmer burns as Fire's
+        QCOMPARE(v(f, spot, 2), 0);                             // the mover, 4 m out: dark
+    }
+    QVERIFY2(reds.size() > 4, "the backfill does not flicker");
+    // 9 s: the mover is reached: its wheel on blue, its dimmer full.
+    f = at(9000);
+    QVERIFY2(v(f, spot, 1) >= 20 && v(f, spot, 1) <= 29, qPrintable(QString("wheel at %1").arg(v(f, spot, 1))));
+    QCOMPARE(v(f, spot, 2), 255);
+    // 11 s on: the backfill: the wheel on red, the flicker on its dimmer.
+    // It never moves (no pan).
+    QSet<int> levels;
+    for (qint64 ms = 11000; ms < 16000; ms += 250)
+    {
+        f = at(ms);
+        QVERIFY2(v(f, spot, 1) >= 10 && v(f, spot, 1) <= 19, qPrintable(QString("wheel at %1").arg(v(f, spot, 1))));
+        levels.insert(v(f, spot, 2));
+        QVERIFY(!f.contains(qMakePair(spot->id(), quint32(0))));
+    }
+    QVERIFY(levels.size() > 4);
+}
+
+namespace
+{
+/* An RGBW wash with no dimmer channel: one head of red, green, blue and
+   white (an RGBW par, the show's XL-450 rows in one). */
+Fixture *rgbwWash(Doc *doc, const QString &name, quint32 address, quint32 universe = 1, bool white = true)
+{
+    const QString model = white ? QStringLiteral("RGBW wash") : QStringLiteral("RGB wash");
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef("Test", model);
+    if (def == nullptr)
+    {
+        def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(model);
+        def->setType(QLCFixtureDef::ColorChanger);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName(white ? "4ch" : "3ch");
+        const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                               QLCChannel::IntensityBlue, QLCChannel::IntensityWhite };
+        for (int c = 0; c < (white ? 4 : 3); ++c)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("c%1").arg(c));
+            ch->setPreset(presets[c]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(c));
+        }
+        def->addMode(mode);
+        doc->fixtureDefCache()->addFixtureDef(def);
+    }
+    Fixture *fx = new Fixture(doc);
+    fx->setFixtureDefinition(def, def->modes().first());
+    fx->setName(name);
+    fx->setUniverse(universe);
+    fx->setAddress(address);
+    if (!doc->addFixture(fx))
+        return nullptr;
+    return fx;
+}
+
+QLCPalette *effectOn(Doc *doc, const QString &script, const QVariantMap &set)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Effect, doc);
+    p->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/" + script);
+    for (auto it = set.constBegin(); it != set.constEnd(); ++it)
+        p->setEffectParamValue(it.key(), it.value().toDouble());
+    p->setEffectParamValue(EffectRuns::runsKey(), 0);      // Loop
+    doc->addPalette(p);
+    return p;
+}
+
+QLCPalette *colourLook(Doc *doc, const QColor &c)
+{
+    QLCPalette *p = new QLCPalette(QLCPalette::Color, doc);
+    p->setValue(c);
+    doc->addPalette(p);
+    return p;
+}
+
+/* (fixture, channel) -> value the effect writes at clock @p ms. */
+QHash<QPair<quint32, quint32>, int> writesAt(EffectInstance &inst, qint64 ms)
+{
+    inst.setOffStageClock(ms);
+    inst.runTick();
+    QHash<QPair<quint32, quint32>, int> out;
+    for (const EffectInstance::DmxWrite &w : inst.dmxWrites())
+        out.insert(qMakePair(w.fixtureId, w.channel), w.value);
+    return out;
+}
+}
+
+void EffectInstance_Test::fireSpreadTakesItsOwnDimmer()
+{
+    // An RGB par with no dimmer, and a par with a master dimmer, side by side.
+    QLCFixtureDef *parDef = makePixelDef("Dimmed par", 1, 0);
+    m_doc->fixtureDefCache()->addFixtureDef(parDef);
+    Fixture *par = new Fixture(m_doc);
+    par->setFixtureDefinition(parDef, parDef->modes().first());
+    par->setUniverse(1);
+    par->setAddress(0);
+    QVERIFY(m_doc->addFixture(par));
+    QLCFixtureDef *dimDef = new QLCFixtureDef();
+    dimDef->setManufacturer("Test"); dimDef->setModel("Dimmer par");
+    {
+        QLCFixtureMode *mode = new QLCFixtureMode(dimDef);
+        mode->setName("4ch");
+        const QLCChannel::Preset presets[] = { QLCChannel::IntensityMasterDimmer, QLCChannel::IntensityRed,
+                                               QLCChannel::IntensityGreen, QLCChannel::IntensityBlue };
+        for (int c = 0; c < 4; ++c)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("d%1").arg(c));
+            ch->setPreset(presets[c]);
+            dimDef->addChannel(ch);
+            mode->insertChannel(ch, quint32(c));
+        }
+        QLCFixtureHead head;                  // the colours; the dimmer is the master
+        head.addChannel(1); head.addChannel(2); head.addChannel(3);
+        mode->insertHead(-1, head);
+        mode->cacheHeads();
+        dimDef->addMode(mode);
+    }
+    m_doc->fixtureDefCache()->addFixtureDef(dimDef);
+    Fixture *dimPar = new Fixture(m_doc);
+    dimPar->setFixtureDefinition(dimDef, dimDef->modes().first());
+    dimPar->setUniverse(1);
+    dimPar->setAddress(10);
+    QVERIFY(m_doc->addFixture(dimPar));
+    QVERIFY(dimPar->masterIntensityChannel() == 0);
+
+    auto dimmerLook = [&]() {
+        QLCPalette *half = new QLCPalette(QLCPalette::Dimmer, m_doc);
+        half->setValue(128);
+        m_doc->addPalette(half);
+        return half->id();
+    };
+    for (int colours = 0; colours <= 1; ++colours)
+    {
+        /* The same fire three times: by itself; with a Dimmer at 50% under
+           it (its own); with the look's own Dimmer at 50% above it as well
+           -- each applied once: a quarter, not an eighth. */
+        auto look = [&](bool own, bool lookDimmer) {
+            QLCPalette *fire = effectOn(m_doc, "fire-spread.js",
+                                        { { "colours", colours }, { "edge", 0.0 }, { "flare", 0.0 } });
+            Scene *scene = new Scene(m_doc);
+            m_doc->addFunction(scene);
+            scene->addFixture(par->id());
+            scene->addFixture(dimPar->id());
+            if (lookDimmer)
+                scene->addPalette(dimmerLook());
+            scene->addPalette(fire->id());
+            if (colours == 1)
+            {
+                scene->addPalette(colourLook(m_doc, QColor(0, 0, 255))->id());
+                scene->addPalette(colourLook(m_doc, QColor(255, 0, 0))->id());
+            }
+            if (own)
+                scene->addPalette(dimmerLook());
+            return qMakePair(scene, fire);
+        };
+        const auto plain = look(false, false);
+        const auto owned = look(true, false);
+        const auto both = look(true, true);
+        EffectInstance a(m_doc, plain.first->id(), plain.second->id());
+        EffectInstance b(m_doc, owned.first->id(), owned.second->id());
+        EffectInstance c(m_doc, both.first->id(), both.second->id());
+        QVERIFY(a.isValid() && b.isValid() && c.isValid());
+        int compared = 0;
+        for (qint64 ms = 10000; ms < 20000; ms += 500)
+        {
+            const auto full = writesAt(a, ms);
+            const auto half = writesAt(b, ms);
+            const auto quarter = writesAt(c, ms);
+            // What carries the level: the RGB par's colour, the other's dimmer.
+            const QList<QPair<quint32, quint32>> levels = {
+                qMakePair(par->id(), 0u), qMakePair(par->id(), 1u), qMakePair(par->id(), 2u),
+                qMakePair(dimPar->id(), 0u) };
+            for (const auto &k : levels)
+            {
+                const int f = full.value(k, 0);
+                const int h = half.value(k, 0);
+                const int q = quarter.value(k, 0);
+                QVERIFY2(qAbs(h - qRound(f * 128.0 / 255.0)) <= 1,
+                         qPrintable(QString("colours %1, %2 ms, fixture %3 channel %4: %5 with its own Dimmer at 50%, %6 without")
+                                    .arg(colours).arg(ms).arg(k.first).arg(k.second).arg(h).arg(f)));
+                QVERIFY2(qAbs(q - qRound(f * (128.0 / 255.0) * (128.0 / 255.0))) <= 2,
+                         qPrintable(QString("colours %1, %2 ms, fixture %3 channel %4: %5 with the look's and its own Dimmer at 50%, %6 without")
+                                    .arg(colours).arg(ms).arg(k.first).arg(k.second).arg(q).arg(f)));
+                if (f > 20)
+                    ++compared;
+            }
+            // The dimmer par's colour is the fire's, not dimmed again.
+            QCOMPARE(half.value(qMakePair(dimPar->id(), 1u), 0), full.value(qMakePair(dimPar->id(), 1u), 0));
+        }
+        QVERIFY(compared > 20);
+    }
+}
+
+void EffectInstance_Test::spotlightChaseBrightensTheColourUnderIt()
+{
+    /* Washes with no dimmer and no colour of the chase's own: the cue's red
+       under them (a layer before the effect). The hot spot is that red at
+       the chase's level, the trail dims it; green, blue and white stay 0 --
+       never white, never an emitter the cue has at 0. An RGB wash and an
+       RGBW one. */
+    for (int white = 0; white <= 1; ++white)
+    {
+        cleanup();
+        init();
+        const int width = white ? 4 : 3;
+        QList<Fixture *> washes;
+        for (int i = 0; i < 4; ++i)
+        {
+            washes << rgbwWash(m_doc, QString("Wash %1").arg(i + 1), quint32(100 + i * 8), 0, white == 1);
+            QVERIFY(washes.last() != nullptr);
+        }
+        QLCPalette *chase = effectOn(m_doc, "spotlight-chase.js", {});
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        for (Fixture *f : washes)
+            scene->addFixture(f->id());
+        scene->addPalette(chase->id());
+        EffectScriptRunner *runner = m_doc->effectScriptRunner();
+        runner->createInstancesForScene(scene->id());
+        EffectInstance *inst = runner->instanceForPalette(chase->id());
+        QVERIFY(inst != nullptr);
+
+        // The cue under them: red, as a scene's fader would put it there.
+        MasterTimer timer(m_doc);
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        QSharedPointer<GenericFader> under = ua.first()->requestFader(Universe::Auto);
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        QList<FadeChannel> red;
+        for (Fixture *f : washes)
+        {
+            FadeChannel fc(m_doc, f->id(), 0);
+            fc.setTarget(255);
+            fc.setCurrent(255);
+            fc.setFadeTime(0);
+            red << fc;
+        }
+        under->replaceAll(red);
+
+        QVector<int> top(4, 0), low(4, 255);
+        for (qint64 ms = 0; ms < 8000; ms += 100)
+        {
+            inst->setOffStageClock(ms);
+            inst->runTick();
+            runner->publishWrites();
+            QList<Universe *> u = m_doc->inputOutputMap()->claimUniverses();
+            runner->writeDMX(&timer, u);
+            u.first()->processFaders();
+            const QByteArray dmx = u.first()->preGMValues();
+            m_doc->inputOutputMap()->releaseUniverses(false);
+            for (int i = 0; i < 4; ++i)
+            {
+                const int a = int(washes.at(i)->address());
+                const int r = uchar(dmx.at(a));
+                top[i] = qMax(top[i], r);
+                low[i] = qMin(low[i], r);
+                for (int c = 1; c < width; ++c)
+                    QVERIFY2(uchar(dmx.at(a + c)) == 0,
+                             qPrintable(QString("%1 wash %2 channel %3 at %4 ms: %5")
+                                        .arg(white ? "RGBW" : "RGB").arg(i + 1).arg(c).arg(ms).arg(uchar(dmx.at(a + c)))));
+            }
+        }
+        for (int i = 0; i < 4; ++i)
+            QVERIFY2(top[i] > 200 && low[i] < 100,
+                     qPrintable(QString("%1 wash %2's red between %3 and %4")
+                                .arg(white ? "RGBW" : "RGB").arg(i + 1).arg(low[i]).arg(top[i])));
+        ua = m_doc->inputOutputMap()->claimUniverses();
+        ua.first()->dismissFader(under);
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    }
+}
+
+namespace
+{
+/* A red cue under @p washes, as a scene's fader puts it there: an Auto
+   fader, before the effects' Override one. Red at @p red on each wash's
+   channel 0, nothing on the others. */
+QSharedPointer<GenericFader> redUnder(Doc *doc, const QList<Fixture *> &washes, uint red)
+{
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    QSharedPointer<GenericFader> under = ua.first()->requestFader(Universe::Auto);
+    doc->inputOutputMap()->releaseUniverses(false);
+    QList<FadeChannel> chans;
+    for (Fixture *f : washes)
+    {
+        FadeChannel fc(doc, f->id(), 0);
+        fc.setTarget(red);
+        fc.setCurrent(red);
+        fc.setFadeTime(0);
+        chans << fc;
+    }
+    under->replaceAll(chans);
+    return under;
+}
+
+void dismiss(Doc *doc, const QSharedPointer<GenericFader> &f)
+{
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    ua.first()->dismissFader(f);
+    doc->inputOutputMap()->releaseUniverses(false);
+}
+
+/* The runner's frame at its instances' clocks: universe 0's values. */
+QByteArray runnerFrame(Doc *doc, EffectScriptRunner *runner, MasterTimer *timer)
+{
+    runner->publishWrites();
+    QList<Universe *> u = doc->inputOutputMap()->claimUniverses();
+    runner->writeDMX(timer, u);
+    u.first()->processFaders();
+    const QByteArray dmx = u.first()->preGMValues();
+    doc->inputOutputMap()->releaseUniverses(false);
+    return dmx;
+}
+}
+
+void EffectInstance_Test::aLevelLeavesAnLtpChannelItsValue()
+{
+    /* An RGB wash whose emitters are forced LTP: they keep their last value
+       when nothing writes them. A level read "under" from that last value
+       -- its own output once the cue let go -- and ran it down to 0 a tick
+       at a time. There it scales only the look's own colour (none here), so
+       the cue's red stays as it is, and is kept when the cue and the chase
+       both stop. */
+    Fixture *wash = nullptr;
+    {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel("LTP wash");
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("3ch");
+        const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                               QLCChannel::IntensityBlue };
+        for (int c = 0; c < 3; ++c)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString("c%1").arg(c));
+            ch->setPreset(presets[c]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(c));
+        }
+        def->addMode(mode);
+        m_doc->fixtureDefCache()->addFixtureDef(def);
+        wash = new Fixture(m_doc);
+        wash->setFixtureDefinition(def, mode);
+        wash->setName("LTP wash");
+        wash->setUniverse(0);
+        wash->setAddress(100);
+        wash->setForcedLTPChannels({ 0, 1, 2 });
+        QVERIFY(m_doc->addFixture(wash));
+    }
+    QLCPalette *chase = effectOn(m_doc, "spotlight-chase.js", {});
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(wash->id());
+    scene->addPalette(chase->id());
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *inst = runner->instanceForPalette(chase->id());
+    QVERIFY(inst != nullptr);
+    MasterTimer timer(m_doc);
+    QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 200);
+
+    // The cue and the chase together, then the cue let go: the red is 200
+    // throughout.
+    for (int i = 0; i < 40; ++i)
+    {
+        if (i == 20)
+            dismiss(m_doc, under);
+        inst->setOffStageClock(i * 100);
+        inst->runTick();
+        const QByteArray dmx = runnerFrame(m_doc, runner, &timer);
+        QVERIFY2(uchar(dmx.at(100)) == 200, qPrintable(QString("tick %1: red %2").arg(i).arg(uchar(dmx.at(100)))));
+    }
+    // The chase stopped too: the last value is kept.
+    runner->destroyInstancesForScene(scene->id(), false);
+    for (int i = 0; i < 10; ++i)
+    {
+        const QByteArray dmx = runnerFrame(m_doc, runner, &timer);
+        QCOMPARE(int(uchar(dmx.at(100))), 200);
+    }
+}
+
+void EffectInstance_Test::aLevelAndADimmerScaleTheCueInEitherOrder()
+{
+    /* Spotlight Chase and a dimmer effect (a candle at half) on one RGB wash
+       with no dimmer, the cue's red under them: both scale the red, in
+       either order in the look -- the dimmer's own base (full white, the
+       look setting no colour) made it white, or dark, by order. */
+    QTemporaryDir dir;
+    const QString half = halfDimmerScript(dir);
+    QVERIFY(!half.isEmpty());
+    QVector<QVector<int>> reds(2);
+    for (int order = 0; order <= 1; ++order)
+    {
+        cleanup();
+        init();
+        Fixture *wash = rgbwWash(m_doc, "Wash", 100, 0, false);
+        QVERIFY(wash != nullptr);
+        QLCPalette *chase = effectOn(m_doc, "spotlight-chase.js", {});
+        QLCPalette *candle = new QLCPalette(QLCPalette::Effect, m_doc);
+        candle->setScriptPath(half);
+        m_doc->addPalette(candle);
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        scene->addFixture(wash->id());
+        scene->addPalette(order == 0 ? chase->id() : candle->id());
+        scene->addPalette(order == 0 ? candle->id() : chase->id());
+        EffectScriptRunner *runner = m_doc->effectScriptRunner();
+        runner->createInstancesForScene(scene->id());
+        EffectInstance *a = runner->instanceForPalette(chase->id());
+        EffectInstance *b = runner->instanceForPalette(candle->id());
+        QVERIFY(a != nullptr && b != nullptr);
+        MasterTimer timer(m_doc);
+        QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 255);
+        for (qint64 ms = 0; ms < 3000; ms += 100)
+        {
+            a->setOffStageClock(ms);
+            a->runTick();
+            b->setOffStageClock(ms);
+            b->runTick();
+            const QByteArray dmx = runnerFrame(m_doc, runner, &timer);
+            const int r = uchar(dmx.at(100));
+            QVERIFY2(r <= 128, qPrintable(QString("order %1, %2 ms: red %3 over half").arg(order).arg(ms).arg(r)));
+            QCOMPARE(int(uchar(dmx.at(101))), 0);
+            QCOMPARE(int(uchar(dmx.at(102))), 0);
+            reds[order] << r;
+        }
+        int top = 0;
+        for (int r : reds[order])
+            top = qMax(top, r);
+        QVERIFY2(top > 60, qPrintable(QString("order %1: the red peaks at %2").arg(order).arg(top)));
+        runner->destroyInstancesForScene(scene->id(), false);
+        dismiss(m_doc, under);
+    }
+    QCOMPARE(reds[0], reds[1]);
+}
+
+void EffectInstance_Test::aLevelLetsGoWhenTheEffectStopsOrFadesOut()
+{
+    /* A level of 20% (as a chase's trail) on the cue's red: when the
+       effect stops, the wash is the red again at once; released over its
+       1 s fade, it goes back up to the red, all the way by the end. */
+    Fixture *wash = rgbwWash(m_doc, "Wash", 100, 0, false);
+    QVERIFY(wash != nullptr);
+    QTemporaryDir dir;
+    QFile js(dir.filePath("level.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Level';"
+             " e.tick = function(fixtures) { return fixtures.map(function() { return { level: 0.2 }; }); };"
+             " return e; })()");
+    js.close();
+    QLCPalette *dim = new QLCPalette(QLCPalette::Effect, m_doc);
+    dim->setScriptPath(js.fileName());
+    m_doc->addPalette(dim);
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(wash->id());
+    scene->addPalette(dim->id());
+    scene->setPaletteFade(dim->id(), 1000, 1000);
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    MasterTimer timer(m_doc);
+    QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 255);
+    auto red = [&](EffectInstance *inst) {
+        if (inst != nullptr)
+            inst->runTick();
+        return int(uchar(runnerFrame(m_doc, runner, &timer).at(100)));
+    };
+
+    // In: a fifth of the red. Stopped at once: the red, untouched.
+    runner->createInstancesForScene(scene->id());
+    EffectInstance *inst = runner->instanceForPalette(dim->id());
+    QVERIFY(inst != nullptr);
+    QVERIFY(inst->hasDepthFade());
+    inst->m_depthStartMs = 0;
+    inst->setDepthClock(5000);                  // all the way in
+    QCOMPARE(red(inst), 51);
+    runner->destroyInstancesForScene(scene->id(), false);
+    QCOMPARE(red(nullptr), 255);
+
+    // Again, released over its fade: up from a fifth to the red.
+    runner->createInstancesForScene(scene->id());
+    inst = runner->instanceForPalette(dim->id());
+    QVERIFY(inst != nullptr);
+    inst->m_depthStartMs = 0;
+    inst->setDepthClock(5000);
+    QCOMPARE(red(inst), 51);
+    runner->destroyInstancesForScene(scene->id(), true);
+    QVERIFY(inst->isFadingOut());
+    inst->m_depthStartMs = 5000;
+    int last = 51;
+    for (int ms = 5100; ms <= 6000; ms += 100)
+    {
+        inst->setDepthClock(ms);
+        const int r = red(inst);
+        const int want = qRound(255.0 * (0.2 + 0.8 * (ms - 5000) / 1000.0));
+        QVERIFY2(qAbs(r - want) <= 2 && r >= last,
+                 qPrintable(QString("%1 ms into the fade: %2, wanted %3").arg(ms - 5000).arg(r).arg(want)));
+        last = r;
+    }
+    QCOMPARE(last, 255);
+    QVERIFY(inst->fadeOutDone());
+    runner->slotTick();                         // reaped
+    QCOMPARE(red(nullptr), 255);
+    dismiss(m_doc, under);
+}
+
+void EffectInstance_Test::colorChasePeakDimmerOnAWashWithNoDimmer()
+{
+    QList<Fixture *> washes;
+    for (int i = 0; i < 4; ++i)
+    {
+        washes << rgbwWash(m_doc, QString("Wash %1").arg(i + 1), quint32(i * 8));
+        QVERIFY(washes.last() != nullptr);
+    }
+    QLCPalette *chase = effectOn(m_doc, "color-chase.js", { { "dimmer", 0.5 } });
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    for (Fixture *f : washes)
+        scene->addFixture(f->id());
+    scene->addPalette(chase->id());
+    scene->addPalette(colourLook(m_doc, QColor(255, 0, 0))->id());   // the chase
+    scene->addPalette(colourLook(m_doc, QColor(0, 0, 255))->id());   // the background
+    EffectInstance inst(m_doc, scene->id(), chase->id());
+    QVERIFY(inst.isValid());
+    // Peak at 50%: the chase never above half, the background at half.
+    int topRed = 0, backgrounds = 0;
+    for (qint64 ms = 0; ms < 8000; ms += 100)
+    {
+        const auto f = writesAt(inst, ms);
+        for (Fixture *w : washes)
+        {
+            const int r = f.value(qMakePair(w->id(), 0u), 0);
+            const int b = f.value(qMakePair(w->id(), 2u), 0);
+            topRed = qMax(topRed, r);
+            if (r == 0 && b > 0)
+            {
+                QVERIFY2(qAbs(b - 128) <= 1, qPrintable(QString("%1's background at %2 at %3 ms").arg(w->name()).arg(b).arg(ms)));
+                ++backgrounds;
+            }
+        }
+    }
+    QVERIFY2(topRed > 40 && topRed <= 128, qPrintable(QString("the chase peaks at %1").arg(topRed)));
+    QVERIFY(backgrounds > 20);
+}
+
+void EffectInstance_Test::aWashWithNoDimmerFadesInAStraightLine()
+{
+    /* A mid-level on an RGBW wash with no dimmer channel: half the level
+       is half the light, as on an RGB-only wash. Taken to have a dimmer,
+       it was a quarter (the level in its colour, and again as a dimmer). */
+    Fixture *wash = rgbwWash(m_doc, "Wash", 0);
+    QVERIFY(wash != nullptr);
+    QLCPalette *rainbow = effectOn(m_doc, "rainbow.js", { { "dimmer", 0.5 } });
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(wash->id());
+    scene->addPalette(rainbow->id());
+    EffectInstance inst(m_doc, scene->id(), rainbow->id());
+    QVERIFY(inst.isValid());
+    for (qint64 ms = 0; ms < 5000; ms += 250)
+    {
+        const auto f = writesAt(inst, ms);
+        int top = 0;
+        for (quint32 c = 0; c < 3; ++c)
+            top = qMax(top, f.value(qMakePair(wash->id(), c), 0));
+        QVERIFY2(top >= 126 && top <= 129, qPrintable(QString("at %1 ms the brightest emitter is %2, not half").arg(ms).arg(top)));
+    }
+}
+
 /*****************************************************************************
  * Matrix effects
  *****************************************************************************/

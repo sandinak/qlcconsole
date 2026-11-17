@@ -469,6 +469,7 @@ void PageScript_Test::everyPadWordNeedsTheArmAndItsTrigger()
     QVERIFY(sent().isEmpty());
     pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } }, armMs + 200);
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
+    hear(QStringLiteral("RUN|ack|alloff|ok"));          // shown once the console has done it
     QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("EMERGENCY STOP"));
     pad(QJsonObject(), 50);
     pad(QJsonObject{ { "lt", 1 } });
@@ -532,6 +533,7 @@ void PageScript_Test::theStopsOwnBumpersDoNotArmThePage()
             armPad();
         pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } });
         QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
+        hear(QStringLiteral("RUN|ack|alloff|ok"));
         // The triggers let go first, the bumpers still squeezed past the chord's time.
         pad(QJsonObject{ { "lb", 1 }, { "rb", 1 } }, armMs + 200);
         QVERIFY2(text(QStringLiteral("armed")) == QStringLiteral("EMERGENCY STOP"),
@@ -620,6 +622,7 @@ void PageScript_Test::theArmedHitIsNamedUnderTheBanner()
     pad(QJsonObject{ { "lt", 1 }, { "rt", 1 }, { "lb", 1 } });
     pad(QJsonObject{ { "lt", 1 }, { "rt", 1 }, { "lb", 1 }, { "rb", 1 } });
     QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|alloff") });
+    hear(QStringLiteral("RUN|ack|alloff|ok"));
     QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("EMERGENCY STOP"));
     QVERIFY(!shown(QStringLiteral("padhit")));
     pad(QJsonObject(), 50);
@@ -993,6 +996,84 @@ void PageScript_Test::focusShowsBlindAndTeaching()
     QVERIFY(shown(QStringLiteral("teach")));
     QVERIFY(text(QStringLiteral("held")).contains(QStringLiteral("rig is muted")));
     QVERIFY(text(QStringLiteral("held")).contains(QStringLiteral("Teaching holds real output")));
+}
+
+void PageScript_Test::noStopIsShownThatWasNotSent()
+{
+    /* Remote GO off (Show Settings, off by default) or the show's PIN not
+       given yet: the page's pad may not send the emergency stop (board
+       Q256 keeps today's rule: ShowControl::kWebStopNeedsRemote), and the
+       server would refuse it anyway. The page turned its banner red and
+       read EMERGENCY STOP all the same (eval/0412): the person holding the
+       pad was told the show stopped when no ALL OFF went. Now it says the
+       stop was NOT sent, and why. */
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    const QList<QJsonObject> states = { liveRun(QJsonObject{ { "remote", false } }),
+                                        liveRun(QJsonObject{ { "pin", true } }) };
+    for (const QJsonObject &state : states)
+    {
+        runState(state);
+        pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } });
+        const QStringList words = sent();
+        const bool claimsStop = shown(QStringLiteral("armed"))
+                                && text(QStringLiteral("armed")) == QStringLiteral("EMERGENCY STOP");
+        const bool remoteOn = state.value(QStringLiteral("remote")).toBool();
+        QVERIFY2(!claimsStop || words.contains(QStringLiteral("QLC+RUN|alloff")),
+                 qPrintable(QString("the page says EMERGENCY STOP and sent no ALL OFF (%1)")
+                                .arg(remoteOn ? QStringLiteral("PIN not given") : QStringLiteral("remote GO off"))));
+        QVERIFY(!words.contains(QStringLiteral("QLC+RUN|alloff")));
+        // Said plainly: not sent, and why.
+        QVERIFY(shown(QStringLiteral("armed")));
+        QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT SENT"));
+        QVERIFY2(text(QStringLiteral("msg")).contains(remoteOn ? QStringLiteral("PIN") : QStringLiteral("GO from the phone is off")),
+                 qPrintable(text(QStringLiteral("msg"))));
+        pad(QJsonObject(), 50);
+    }
+    const QJsonObject four{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } };
+    // Allowed (remote GO on, no PIN): the stop goes; SENDING STOP until the
+    // console says it is done, and only then EMERGENCY STOP.
+    runState(liveRun());
+    pad(four);
+    QVERIFY(sent().contains(QStringLiteral("QLC+RUN|alloff")));
+    QCOMPARE(text(QStringLiteral("armed")), QString::fromUtf8("SENDING STOP\u2026"));
+    hear(QStringLiteral("RUN|ack|alloff|ok"));
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("EMERGENCY STOP"));
+    pad(QJsonObject(), 50);
+
+    // Refused by the console (its rule said no after all): never red.
+    pad(four);
+    QVERIFY(sent().contains(QStringLiteral("QLC+RUN|alloff")));
+    hear(QStringLiteral("RUN|ack|alloff|refused"));
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT SENT"));
+    QVERIFY(text(QStringLiteral("msg")).contains(QStringLiteral("GO from the phone is off")));
+    pad(QJsonObject(), 50);
+
+    // No answer at all: not confirmed, said so, after a few seconds.
+    pad(four);
+    QVERIFY(sent().contains(QStringLiteral("QLC+RUN|alloff")));
+    pad(four, 3500);
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT CONFIRMED"));
+    pad(QJsonObject(), 50);
+
+    // The connection drops while it is on its way: not confirmed.
+    pad(four);
+    QVERIFY(sent().contains(QStringLiteral("QLC+RUN|alloff")));
+    js(QStringLiteral("__ws().close()"));
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT CONFIRMED"));
+    QVERIFY(text(QStringLiteral("msg")).contains(QStringLiteral("connection")));
+    pad(QJsonObject(), 50);
+
+    // A stray answer, nothing being sent: nothing shown changes.
+    hear(QStringLiteral("RUN|ack|alloff|ok"));
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT CONFIRMED"));
+
+    // A closed socket: nothing can go, and the page says so.
+    pad(four);
+    QCOMPARE(text(QStringLiteral("armed")), QStringLiteral("STOP NOT SENT"));
+    QVERIFY(text(QStringLiteral("msg")).contains(QStringLiteral("lost the console")));
+    pad(QJsonObject(), 50);
 }
 
 QTEST_MAIN(PageScript_Test)

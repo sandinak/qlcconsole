@@ -39,7 +39,7 @@ void StructureStudioView::drawHandProp(const StageTarget *t, QPainter &p) const
 
     if (t->kind() == StageTarget::Kind::Staff)
     {
-        emitLine(w2s(b), w2s(top), viewDepth(b), viewDepth(top), QColor(205, 150, 90), 3.0, p);
+        emitLine(w2s(b), w2s(top), viewDepth(b), viewDepth(top), roomInk(QColor(205, 150, 90)), 3.0, p);
         return;
     }
 

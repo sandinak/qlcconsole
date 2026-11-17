@@ -1386,11 +1386,15 @@ void PadBenchShow_Test::padRunWithTheFollowSpotPlaying()
     press(kRT, 0);
     press(kLT, 0);
     surfaces(QStringLiteral("Pad: STOPPED"), PadRun::stoppedColour(), "the four let go");
-    // Armed again and a GO: the show runs, and the red is gone.
+    /* Armed again: the red is gone from the pad, but the footer still
+       holds the show -- every surface says so, in the arm's colour. A GO
+       brings the show back, and with it plain ARMED. */
     chord(true);
-    surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "armed after the stop");
+    surfaces(QString::fromUtf8("Pad: ARMED \u00B7 held: LT + A brings the show back"), PadRun::armedColour(),
+             "armed after the stop");
     with(kLT, kA);
     QTRY_VERIFY_WITH_TIMEOUT(st->runningCue(mainList->id) != ShowTree::invalidId(), 3000);
+    surfaces(QStringLiteral("Pad: ARMED"), PadRun::armedColour(), "the GO after the stop");
     chord(false);
     surfaces(QStringLiteral("Pad: Run"), QColor(), "disarmed");
 

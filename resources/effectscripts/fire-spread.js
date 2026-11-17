@@ -34,6 +34,20 @@
   for every head at once, its colours in 256 steps), the front and how
   each kind of head shows it are shared with Spell Spread (lib/spread.js).
 
+  Colours: Front and Behind. The look's first colour (the effect's own
+  Colour, else the look's) is the front: a head snaps to it as the front
+  reaches it, with the Flare. A second front follows from the same point,
+  Front Width seconds behind each head, and with an Edge ragged again in
+  its own seeded way (up to half the width either side, so the front's
+  colour always shows); as it reaches a head the head
+  crossfades over BLEND_S into the second colour, the backfill, and burns
+  there with the fire's flicker in level (Flicker Behind; off, steady).
+  With only one colour the backfill is the fire itself; with none, or on
+  a head with no colour (a dimmer, a white pixel), it is Fire as ever. A
+  colour wheel holds the nearest slot to each colour, never blended. When
+  the second front reaches each head is worked out with the first, and
+  kept in state with it.
+
   A Direction (the fire dying back to the point) would only change when
   a head is reached (SPREAD.front): the front is the same distance over
   time, read the other way.
@@ -49,7 +63,7 @@
     effect.targetDistance = true;   // fixture.fromTarget, inputs._fromTargetFar
     effect.cueTime        = true;   // inputs._cueTime, for Spread over: The cue's time
     effect.naturalDurationMs = 8000;
-    effect.notes = "The head nearest the look's Aim target catches fire first and the fire spreads outward across the floor at an even speed until every head burns, then keeps flickering like Firelight for as long as the look plays. Add an Aim look for the point it starts from; without one it starts at centre stage. Spread Time is how long the fire takes to reach the farthest head (or take the cue's time). Edge makes the front ragged; Flare is the flash as a head catches. Heads are dark until the fire reaches them; a relay (a silk flame) switches on as it catches. Needs the rig placed in the 2D plan: heads all in one place catch together.";
+    effect.notes = "The head nearest the look's Aim target catches fire first and the fire spreads outward across the floor at an even speed until every head burns, then keeps flickering like Firelight for as long as the look plays. Add an Aim look for the point it starts from; without one it starts at centre stage. Spread Time is how long the fire takes to reach the farthest head (or take the cue's time). Edge makes the front ragged; Flare is the flash as a head catches. Heads are dark until the fire reaches them; a relay (a silk flame) switches on as it catches. Colours: Front and Behind makes the look's first colour the front and its second the backfill a Front Width behind (one colour: fire behind the front). Needs the rig placed in the 2D plan: heads all in one place catch together.";
     effect.fixtureTypes = [
         "rgb", "rgbw", "rgba", "rgbwa", "rgbwauv",
         "wash", "spot", "beam", "dimmer", "color", "colorwheel",
@@ -69,6 +83,14 @@
           type: "float", min: 0, max: 1, defaultValue: 0.3 },
         { name: "flare",     label: "Flare",     description: "How bright and white a head flares as it catches",
           type: "float", min: 0, max: 1, defaultValue: 0.6 },
+        { name: "colours",   label: "Colours",   description: "Fire: the fire's own colours. Front and Behind: the look's first colour (the effect's own Colour, else the look's) is the front, its second the backfill behind it (one colour: fire behind)",
+          defaultValue: 0, values: ["Fire", "Front and Behind"] },
+        { name: "frontWidth", label: "Front Width", description: "Seconds the front's colour holds on a head before the backfill reaches it",
+          type: "float", min: 0.1, max: 20, defaultValue: 1.5,
+          activeWhen: [{ param: "colours", is: [1] }] },
+        { name: "flickerBehind", label: "Flicker Behind", description: "The backfill flickers in level like the fire; off, it is steady (a fire behind always flickers)",
+          defaultValue: 1, values: ["Off", "On"],
+          activeWhen: [{ param: "colours", is: [1] }] },
         { name: "speed",     label: "Flicker Speed", description: "Flicker speed multiplier, as Firelight's", min: 0.1, max: 5.0, defaultValue: 1.0 },
         { name: "intensity", description: "Overall brightness (0-1)",    min: 0.0, max: 1.0, defaultValue: 1.0 },
         { name: "coolness",  description: "Add blue (0=fire, 1=ice)",    min: 0.0, max: 1.0, defaultValue: 0.0 },
@@ -80,9 +102,54 @@
     var KINDLE_S = 0.6;     // at Edge 1, a head kindles this long before it catches
     var HOT = { r: 255, g: 235, b: 170 };   // the flare's colour
     var ORANGE = { r: 255, g: 60, b: 0 };   // a colour wheel's one fire slot
+    var BLEND_S = 0.4;      // Front and Behind: the backfill crossfades in over this long
+    var BACK_JITTER = 0.5;  // ...and at Edge 1 reaches a head up to half the width early or late
 
     var num = SPREAD.num;
-    var OTHER = 0, PIXEL = 1, RELAY = 2;    // the kinds of head the tick tells apart
+    // The kinds of head the tick tells apart. LEVEL (no colour: a dimmer, a
+    // white or dimmer pixel) and WHEEL (a colour wheel, no mixing) burn as
+    // OTHER in Fire; only Front and Behind tells them apart.
+    var OTHER = 0, PIXEL = 1, RELAY = 2, LEVEL = 3, WHEEL = 4;
+
+    function colourAt(L, i) {
+        var c = L[i];
+        return (c && c.r !== undefined) ? c : null;
+    }
+
+    /* Two intents of one head mixed, @p x of the way from @p a to @p b:
+       the colours and the levels. A head that shows black as { dimmer: 0 }
+       is black in colour. A colour wheel's slot is never mixed (the wheel
+       would chase): it is @p a's until half way, then @p b's. */
+    function mix(a, b, x, wheel) {
+        var o = {}, any = false;
+        if (wheel) {
+            var w = x < 0.5 ? a : b;
+            o.r = w.r; o.g = w.g; o.b = w.b;
+        } else {
+            var keys = ["r", "g", "b", "w"];
+            for (var k = 0; k < 4; k++) {
+                var key = keys[k];
+                if (a[key] === undefined && b[key] === undefined)
+                    continue;
+                var va = a[key] === undefined ? 0 : a[key];
+                var vb = b[key] === undefined ? 0 : b[key];
+                o[key] = Math.round(va + (vb - va) * x);
+                any = any || o[key] > 0;
+            }
+        }
+        var da = a.dimmer, db = b.dimmer;
+        var aBlack = da === 0 && a.r === undefined && a.w === undefined;
+        var bBlack = db === 0 && b.r === undefined && b.w === undefined;
+        if (da !== undefined && db !== undefined)
+            o.dimmer = da + (db - da) * x;
+        else if (da !== undefined && !aBlack)
+            o.dimmer = da;
+        else if (db !== undefined && !bBlack)
+            o.dimmer = db;
+        if (o.dimmer === undefined && !any)
+            return { dimmer: 0 };
+        return o;
+    }
 
     /* What a head shows, burning at @p level (0..1 of the look) in colour
        @p c (Firelight's, or hotter while it flares): SPREAD.light, a colour
@@ -91,7 +158,112 @@
         return SPREAD.light(f, c, level, firelight, ORANGE);
     }
 
-    effect.tick = function(fixtures, inputs, palettes, params, state) {
+    /* When the backfill reaches each head: Front Width after the front
+       did, so it follows the front's own ragged line from the same point,
+       and with an Edge a little early or late of its own (up to half the
+       width at Edge 1; a seeded hash, so repeatable): never so early the
+       front's colour doesn't show. Kept in state until the first front's
+       arrivals or the width change. */
+    function backfillArrivals(A, seed, edge, width, state) {
+        var b = state ? state._behind : undefined;
+        if (b !== undefined && b.places === A && b.width === width)
+            return b.at;
+        var n = A.at.length, at = new Float64Array(n);
+        var seed2 = seed + 0.5;         // its own hash: the user's seeds are whole
+        for (var i = 0; i < n; i++)
+            at[i] = A.at[i] + width * (1 + edge * BACK_JITTER * (2 * SPREAD.hash(i + 1, seed2) - 1));
+        if (state)
+            state._behind = { places: A, width: width, at: at };
+        return at;
+    }
+
+    /* Colours: Front and Behind. Each head: dark (kindling in the front's
+       colour) before the front; the front's colour c1 with the Flare once
+       it is reached; then, as the backfill reaches it, a BLEND_S crossfade
+       into c2 burning with the flicker in level (or steady), or, with no
+       c2, into the fire itself. A head with no colour (LEVEL) is Fire's. */
+    function frontAndBehind(fixtures, inputs, params, state, A, bank, k, table, shared, on, o) {
+        var t = o.t, inten = o.inten, flareK = o.flareK, c1 = o.c1, c2 = o.c2;
+        var width = Math.max(0.1, Math.min(20, num(params.frontWidth, 1.5)));
+        var flicker = c2 === null || num(params.flickerBehind, 1) >= 0.5;
+        var at = A.at, at2 = backfillArrivals(A, o.seed, o.edge, width, state);
+        var ph = bank.ph, kinds = bank.kind, n = fixtures.length;
+        var k0 = k[0], k1 = k[1], k2 = k[2], k3 = k[3], k4 = k[4], k5 = k[5];
+        var steadyQ = 255;                      // Flicker Behind off: the backfill at full
+        var behindPx = new Array(256);          // a pixel's backfill, one object a flame step
+        var out = new Array(n);
+        for (var i = 0; i < n; i++) {
+            var age = t - at[i];
+            var kd = kinds[i];
+            if (kd === RELAY) {
+                out[i] = age >= 0 ? on : shared.off;
+                continue;
+            }
+            var f = fixtures[i];
+            if (age < 0) {
+                if (o.kindle <= 0 || age < -o.kindle) {
+                    out[i] = SPREAD.dark(f, shared);
+                    continue;
+                }
+                var kk = 1 + age / o.kindle;
+                var glow = 0.3 * kk * FIRE.flame(t * 3, i * 1.618 + o.fseed + 5, o.speed);
+                out[i] = kd === LEVEL ? burn(f, FIRE.colour(0.1, o.cool, inten), glow * inten, false)
+                                      : SPREAD.light(f, c1, glow * inten, false, c1);
+                continue;
+            }
+
+            // The flame, as Fire's: the backfill's flicker, and the fire.
+            var j = i * 6;
+            var flame = 0.5 + 0.25 * (k0 * ph[j + 1] + k1 * ph[j])
+                            + 0.15 * (k2 * ph[j + 3] + k3 * ph[j + 2])
+                            + 0.10 * (k4 * ph[j + 5] + k5 * ph[j + 4]);
+            flame = flame < 0 ? 0 : (flame > 1 ? 1 : flame);
+            var q = (flame * 255 + 0.5) | 0;
+            var c = table[q];
+            if (c === undefined)
+                c = table[q] = FIRE.colour(q / 255, o.cool, inten);
+            var w = (age < FLARE_S && flareK > 0) ? flareK * Math.pow(1 - age / FLARE_S, 2) : 0;
+
+            if (kd === LEVEL) {
+                // No colour to show: Fire's, its flare in level.
+                var lv = flame * inten;
+                lv = lv + (inten - lv) * w;
+                out[i] = burn(f, c, age < ATTACK_S ? lv * (age / ATTACK_S) : lv, age >= ATTACK_S);
+                continue;
+            }
+
+            var age2 = t - at2[i];
+            var behind = null;
+            if (age2 >= 0) {
+                // The backfill: c2 with the flicker in level, or the fire.
+                if (c2 === null)
+                    behind = kd === PIXEL ? c : burn(f, c, flame * inten, true);
+                else {
+                    var bq = flicker ? q : steadyQ;
+                    if (kd === PIXEL) {
+                        behind = behindPx[bq];
+                        if (behind === undefined)
+                            behind = behindPx[bq] = SPREAD.light(f, c2, bq / 255 * inten, false, c2);
+                    } else
+                        behind = SPREAD.light(f, c2, bq / 255 * inten, false, c2);
+                }
+                if (age2 >= BLEND_S) {
+                    out[i] = behind;
+                    continue;
+                }
+            }
+
+            // The front: c1 at full, flaring hot as it catches.
+            var fc = w > 0 ? { r: Math.round(c1.r + (HOT.r - c1.r) * w),
+                               g: Math.round(c1.g + (HOT.g - c1.g) * w),
+                               b: Math.round(c1.b + (HOT.b - c1.b) * w) } : c1;
+            var front = SPREAD.light(f, fc, age < ATTACK_S ? inten * (age / ATTACK_S) : inten, false, c1);
+            out[i] = behind === null ? front : mix(front, behind, age2 / BLEND_S, kd === WHEEL);
+        }
+        return out;
+    }
+
+    function fireTick(fixtures, inputs, palettes, params, state) {
         var t      = num(inputs._time, 0);
         var speed  = num(params.speed, 1.0);
         var inten  = num(params.intensity, 1.0);
@@ -119,7 +291,9 @@
                 var fs = fixtures[s];
                 seeds[s] = s * 1.618 + fseed;
                 kind[s] = fs.switches ? RELAY
-                        : (fs.heads > 1 && fs.headRGB !== false && !fs.hasDimmer) ? PIXEL : OTHER;
+                        : fs.heads > 1 ? (fs.headRGB === false ? LEVEL : (!fs.hasDimmer ? PIXEL : OTHER))
+                        : (fs.hasColorWheel && !fs.hasRGB) ? WHEEL
+                        : !fs.hasRGB ? LEVEL : OTHER;
             }
             bank = { n: n, fseed: fseed, places: A, ph: FIRE.phases(seeds), kind: kind };
             if (state)
@@ -131,6 +305,20 @@
         var table = new Array(256);     // this tick's colours, one object a flame step
         var shared = { none: {}, off: { dimmer: 0 } };
         var on = { dimmer: inten > 0 ? 1 : 0 };
+        if (state)
+            state._on = on;                 // a relay's: the effect's own Dimmer leaves it be
+
+        // Colours: Front and Behind, with a colour to be the front. Without
+        // one it is Fire, as ever (the loop below).
+        if (num(params.colours, 0) >= 0.5) {
+            var L = (palettes && palettes.look && palettes.look.colors) ? palettes.look.colors : [];
+            var c1 = colourAt(L, 0);
+            if (c1 !== null)
+                return frontAndBehind(fixtures, inputs, params, state, A, bank, k, table, shared, on,
+                                      { t: t, speed: speed, inten: inten, cool: cool, flareK: flareK,
+                                        seed: seed, spread: spread, edge: edge, kindle: kindle,
+                                        fseed: fseed, c1: c1, c2: colourAt(L, 1) });
+        }
 
         var out = new Array(n);
         for (var i = 0; i < n; i++) {
@@ -186,6 +374,41 @@
                 out[i] = burn(fixtures[i], hot, level, true);
         }
         return out;
+    }
+
+    /* The effect's own Dimmer look (one under it in the look's list):
+       its level, on top of the fire's. The look's own Dimmer (above the
+       effects) the host applies itself. A head that shows its level in its
+       colour takes it as a dimmer (the host scales its colour by it), a
+       head with a dimmer has its dimmer scaled; a relay stays as it is
+       (between on and off it would chatter). Only with a Dimmer of its own:
+       otherwise every head is what fireTick gave, object for object. */
+    function ownLevel(out, level, on) {
+        for (var i = 0; i < out.length; i++) {
+            var o = out[i];
+            if (o === on || o === undefined)
+                continue;
+            var d = o.dimmer;
+            if (d === 0)
+                continue;
+            if (d === undefined && o.r === undefined && o.w === undefined)
+                continue;                       // left to what is under it
+            var c = {};
+            for (var key in o)
+                c[key] = o[key];
+            c.dimmer = (d === undefined ? 1 : d) * level;
+            out[i] = c;
+        }
+        return out;
+    }
+
+    effect.tick = function(fixtures, inputs, palettes, params, state) {
+        var out = fireTick(fixtures, inputs, palettes, params, state);
+        var look = palettes ? palettes.look : undefined;
+        var own = look ? look.ownDimmer : undefined;
+        if (own === undefined || own >= 1)
+            return out;
+        return ownLevel(out, Math.max(0, own), state ? state._on : undefined);
     };
 
     return effect;

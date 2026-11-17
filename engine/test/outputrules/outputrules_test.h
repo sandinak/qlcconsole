@@ -154,6 +154,7 @@ private slots:
     void whatAScriptUnderATestStartsIsHeld();
     /** 4: a preview's effect on it is held from the first live frame */
     void aPreviewsEffectIsHeldFromTheFirstLiveFrame();
+    void aLevelOnAShowOnlyWashStaysHeld();
     /** 5: "not ours" stays zero over a held safe value */
     void notOursStaysZeroUnderTheHold();
     /** 8: made Show only mid-show, only that fixture is reset */
@@ -305,6 +306,13 @@ private slots:
     void sweepLastLook();
     void sweepCueStack();
     void sweepEffectRunner();
+
+    /** The emergency stop (ShowControl AllOff) leaves a fogger at rest, as
+     *  Stop all does (E8; UX-70: "a fog machine kept pumping"). */
+    void theEmergencyStopPutsAFoggerAtRest();
+    /** The emergency stop in FOCUS ("Everything is off.") ends the focus:
+     *  no focus light left on (E9). */
+    void theEmergencyStopEndsTheFocusLight();
 
 private:
     /** One processFaders() frame; the output value at @p address */

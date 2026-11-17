@@ -166,12 +166,24 @@ them:
   alone, the safety only brushed, or the right trigger in its place does
   nothing, and the Pad chip says what it needs ("GO is LT held and A.").
 - **The emergency stop** stops everything that plays (the same as ALL
-  OFF), in the Run role whatever the pad is doing. The arm drops, and the
+  OFF), in the Run role whatever the pad is doing, and then puts every
+  fixture at rest as **Stop all** does: a fogger, a hazer or a WLED effect
+  stops too, whether it is marked Show only or not (pan and tilt stay
+  where they are). A Quick focus, Venue focus, Focus this cue or walk
+  running then ends with it, and what it had not saved is put back. The arm drops, and the
   button, the frame, the chip and the pad's light turn red (**Pad:
-  STOPPED**), over a walk or a tool too, until you arm again or any run
-  command goes through from anywhere: a GO, Back or Stop from the laptop,
-  the phone page or OSC, or an ALL OFF from another route (the pad's own
-  four again leave it red). There is no "stop the list" on the pad:
+  STOPPED**), over a walk or a tool too. An ALL OFF from anywhere else
+  (the laptop, the phone page, OSC or MSC) does the same: the pad turns
+  red, buzzes three times and says so, and a focus or walk it was armed
+  beside never arms it again. It stays red until the footer's **held:
+  emergency stop** ends -- the two go together: a GO that drives the show
+  again from anywhere (the laptop, the phone page, OSC, MSC, a VC Cue
+  List) or switching into Operate. A cue reached by timecode, a Load, a
+  Reset, another ALL OFF or switching the role off and on does not end
+  it. You can arm again (LB + RB) while it is held: the pad then reads
+  **Pad: ARMED · held: LT + A brings the show back**, and your LT + A
+  brings it back. Until then no pad starts a venue focus. There is no
+  "stop the list" on the pad:
   stop a list on the Run tab.
 - **A pad with no light buzzes instead.** Two short buzzes: armed. One
   long: disarmed. Three long: the emergency stop. An Xbox pad's light

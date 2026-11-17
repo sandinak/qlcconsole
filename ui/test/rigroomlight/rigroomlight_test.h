@@ -44,6 +44,27 @@ private slots:
     /** A selected fixture's edge is the selection's, whatever the room. */
     void aSelectedFixtureKeepsItsEdge();
 
+    /** The invariant, on the pixels: a school stage rig (stage-show.qlcc,
+     *  a real show stripped to its rig) in every view, Room = Blackout,
+     *  nothing playing, with nothing selected and with the whole rig selected
+     *  -- no pixel is a saturated colour (HSV saturation > 0.35 at value
+     *  > 0.25), apart from a real clash's red and a status mark's amber
+     *  (an unsaved focus change, a Show Review warning). Lists where any is. */
+    void blackoutDrawsNoColour_data();
+    void blackoutDrawsNoColour();
+    /** And the other side of it: one fixture lit is in colour where it is. */
+    void aLitFixtureIsInColourInABlackout();
+    /** The whole rig selected: no name is written over another (as painted,
+     *  checked against every name the view wanted to write). */
+    void selectedNamesNeverOverlap();
+    /** Work light, House and Dim as before: a clashing mover's edges and
+     *  aim stub in the warning red at every level, a selected strip in the
+     *  mint at Dim and above (not in a Blackout). */
+    void aboveDimTheClashAndTheSelectionAreAsBefore();
+    /** An unsaved focus change's badge keeps its amber in a Blackout, and is
+     *  allowed by the invariant as a status mark. */
+    void statusMarksKeepTheirColourInABlackout();
+
     /** Review shots of a real show (repro/show.qlcc beside the test, never
      *  committed) in Blackout and House, with a per-object list of the
      *  red-dominant colours each draws. Skipped when there is no show or no
@@ -51,7 +72,11 @@ private slots:
     void userShowShots();
 
 private:
+    /** stage-show.qlcc loaded into m_app (once). */
+    void loadStageShow();
+
     App *m_app = nullptr;
+    bool m_stageShowLoaded = false;
 };
 
 #endif

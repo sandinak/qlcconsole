@@ -1651,6 +1651,64 @@ void OutputRules_Test::aPreviewsEffectIsHeldFromTheFirstLiveFrame()
     QCOMPARE(sent(Flame), 0);
 }
 
+/* A level (Spotlight Chase on a wash with no dimmer and no colour of its
+   own) scales what is under it: on a Show-only wash in Operate, played by
+   a preview, every emitter stays held at its safe value -- a level never
+   reads the held channel up. */
+void OutputRules_Test::aLevelOnAShowOnlyWashStaysHeld()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(QStringLiteral("Show-only RGB wash"));
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("3ch"));
+    const QLCChannel::Preset presets[] = { QLCChannel::IntensityRed, QLCChannel::IntensityGreen,
+                                           QLCChannel::IntensityBlue };
+    for (int c = 0; c < 3; ++c)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString("c%1").arg(c));
+        ch->setPreset(presets[c]);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(c));
+    }
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *wash = new Fixture(m_doc);
+    wash->setName(QStringLiteral("Wash"));
+    wash->setFixtureDefinition(def, mode);
+    wash->setUniverse(0);
+    wash->setAddress(40);
+    wash->setOutputRules(Fixture::ShowOnly);
+    QVERIFY(m_doc->addFixture(wash));
+    m_doc->outputRuleKeeper()->rebuild();
+
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, m_doc);
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/spotlight-chase.js");
+    m_doc->addPalette(look);
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(wash->id());
+    scene->addPalette(look->id());
+    m_doc->addFunction(scene);
+    auto teardown = qScopeGuard([this, scene]() {
+        m_doc->effectScriptRunner()->destroyInstancesForScene(scene->id(), false);
+    });
+    m_doc->setMode(Doc::Operate);
+    scene->start(m_doc->masterTimer(), FunctionParent::preview(0x7));
+    for (int i = 0; i < 12; i++)
+    {
+        m_doc->masterTimer()->timerTick();
+        m_doc->effectScriptRunner()->slotTick();
+        m_doc->masterTimer()->timerTick();
+        for (int c = 0; c < 3; ++c)
+        {
+            frame(40 + c);
+            QVERIFY2(sent(40 + c) == int(OutputRuleKeeper::safeValue(wash, quint32(c))),
+                     qPrintable(QString("emitter %1 at %2 in a preview in Operate").arg(c).arg(sent(40 + c))));
+        }
+    }
+}
+
 void OutputRules_Test::notOursStaysZeroUnderTheHold()
 {
     addDimmer("Flame", Flame, Fixture::ShowOnly);
@@ -3606,6 +3664,82 @@ void OutputRules_Test::aHeldAutoRemoveChannelLetsGoOfNothing()
     QVERIFY2(held == false, "a held writer left the channel \"set\"");
     QVERIFY(token != 0);
     QVERIFY2(letGoBy != token, "a held writer is named as letting go of the channel");
+}
+
+/*****************************************************************************
+ * The emergency stop is "Everything is off" (eval/0412, E8 and E9)
+ *****************************************************************************/
+
+void OutputRules_Test::theEmergencyStopPutsAFoggerAtRest()
+{
+    /* E8: Stop all puts every fixture at rest (UX-70: "a fog machine kept
+       pumping"), and so does the emergency stop -- the pad's four, the phone
+       page's, an OSC or MSC ALL OFF, all ShowControl AllOff -- through the
+       same code (FixtureRest::restAfterStop()). Before, the stop cut only
+       Show-only channels: a fogger not marked Show only kept the fog level
+       its cue left on its LTP channel while the pad said "Emergency stop.
+       Everything is off." */
+    enum { Fog = 50 };
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(QStringLiteral("Eval Fogger"));
+    def->setType(QLCFixtureDef::Smoke);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("1ch"));
+    QLCChannel *fog = new QLCChannel();
+    fog->setName(QStringLiteral("Fog"));
+    fog->setGroup(QLCChannel::Effect);         // LTP, as a fogger's output often is
+    def->addChannel(fog);
+    mode->insertChannel(fog, 0);
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *fogger = new Fixture(m_doc);
+    fogger->setName(QStringLiteral("Fogger"));
+    fogger->setFixtureDefinition(def, mode);
+    fogger->setUniverse(0);
+    fogger->setAddress(quint32(Fog));
+    QVERIFY(m_doc->addFixture(fogger));
+    m_doc->outputRuleKeeper()->rebuild();
+
+    Scene *s = new Scene(m_doc);
+    s->setValue(fogger->id(), 0, 200);
+    m_doc->addFunction(s);
+    s->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 5; i++)
+        tickFrame(Fog);
+    QCOMPARE(sent(Fog), 200);                   // the cue's fog
+
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    for (int i = 0; i < 10; i++)
+        tickFrame(Fog);
+    QCOMPARE(m_doc->masterTimer()->runningFunctions(), 0);
+    QVERIFY2(sent(Fog) == 0, qPrintable(QString("the fogger still gets %1 after the emergency stop "
+                                                "(Stop all would have put it at rest)").arg(sent(Fog))));
+}
+
+void OutputRules_Test::theEmergencyStopEndsTheFocusLight()
+{
+    /* E9, padrun.h rule 6: in FOCUS "the four-together stop still stops";
+       focus-calls.md: "still stops everything"; the pad says "Emergency
+       stop. Everything is off." A venue or quick focus lights its fixture
+       through its own layer (Universe::Focus, over everything but Park),
+       which stopping functions does not touch: the stop ends the focus. */
+    const quint32 stage = m_doc->fixtureForAddress(Stage);
+    m_doc->monitorProperties()->setFixturePosition(stage, 0, 0, QVector3D(4000, 2000, 5));
+    startFocus(stage, 1.0f);
+    QCOMPARE(frame(Stage), 255);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    QVERIFY(m_doc->showControl()->run(off, ShowControl::RoutePad));
+    int after = 0;
+    for (int i = 0; i < 3; i++)
+        after = tickFrame(Stage);
+    QVERIFY2(after == 0, qPrintable(QString("the focus light is at %1 after \"Everything is off\"").arg(after)));
+    QCOMPARE(sent(Stage), 0);
+    // Ended, not paused: every surface reads the tool from the session.
+    QVERIFY(!m_doc->programmer()->focusSession()->isActive());
 }
 
 QTEST_GUILESS_MAIN(OutputRules_Test)

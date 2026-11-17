@@ -6191,10 +6191,13 @@ bool App::runCommand(const ShowControl::Request &request, ShowControl::Route rou
     }
 
     /* 2. Refused: the phone Run page's GO while the show does not allow
-       remote GO (Show Settings; off by default). decided: Operate's PIN and
+       remote GO (Show Settings; off by default) -- the emergency stop as
+       ShowControl::webNeedsRemote() says (board Q256), the rule the web
+       server reads too. decided: Operate's PIN and
        Teaching lock Design, not GO (can change); the PIN is the page's, once
        per session (webaccess), because only it knows the session. */
-    if (route == ShowControl::RouteWeb && !m_doc->operateSettings()->remoteGo())
+    if (route == ShowControl::RouteWeb && ShowControl::webNeedsRemote(request.command)
+            && !m_doc->operateSettings()->remoteGo())
     {
         emit sc->commandHandled(tr("%1 from the web page: remote GO is off in Show Settings")
                                 .arg(ShowControl::commandName(request.command)), false);

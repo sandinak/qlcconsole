@@ -60,6 +60,10 @@ public:
                                  //       another effect's colour on the channel is
                                  //       scaled instead (EffectScriptRunner composes)
         uchar   base = 0;
+        bool    multiply = false; // with @scale: what is UNDER the effect on this channel
+                                  // (every layer and cue before it) times @scale, not
+                                  // @base times it -- an intent's "level" on a head with
+                                  // no dimmer (FadeChannel::Mix at depth 0)
         int     layer = 0;       // the effect's place in its look's list: lower wins
         bool    htp = false;     // a colour that only adds to what's there (a sparkle
                                  // over a pulse): combined highest-wins, not by layer
