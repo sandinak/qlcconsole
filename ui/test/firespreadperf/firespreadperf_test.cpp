@@ -209,11 +209,20 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
 
     // (c) with the Lighting Studio's 2D plot listening to every fixture.
     {
+        // The App's own Lighting Studio (one at a time), its plot open.
         QWidget parent;
-        Monitor mon(&parent, doc);
-        parent.resize(1000, 700);
-        parent.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        Monitor *mon = Monitor::instance();
+        QScopedPointer<Monitor> made;
+        if (mon == nullptr)
+        {
+            made.reset(new Monitor(&parent, doc));
+            mon = made.data();
+        }
+        QWidget *shown = mon->window();
+        shown->resize(1000, 700);
+        shown->show();
+        QVERIFY(QTest::qWaitForWindowExposed(shown));
+        QVERIFY(mon->m_graphicsView != nullptr);
         settle(200);
         double sp = 0, bu = 0;
         int k = 0;
@@ -286,6 +295,42 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
     v.setLiveValues(false);
     if (qEnvironmentVariableIsSet("FIRE_PERF_REPORT"))
         QFAIL(qPrintable(g_report.join(QStringLiteral(" | "))));
+}
+
+/* The kept landings of the light the steps throw onto the cyc draw the very
+   picture the rays thrown afresh do: a spreading frame, and the next one
+   (the same ends again), against every ray thrown against everything. */
+void FireSpreadPerf_Test::theCycCatchesTheSameLight()
+{
+    Doc *doc = m_app->doc();
+    const bool moveSpeed = StructureStudioView::moveSpeed();
+    StructureStudioView::setMoveSpeed(false);
+    auto restore = qScopeGuard([moveSpeed]() {
+        StructureStudioView::setMoveSpeed(moveSpeed);
+        StructureStudioView::s_referenceThrows = false;
+    });
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.setLocked(true);
+    v.setLiveValues(true);
+    v.setBeams(true);
+    v.setAmbient(0.0);
+    v.setPlane(StructureStudioView::Angled);
+    v.setStandOnCentreStage(true);
+    v.resize(1024, 640);
+    v.reload();
+    for (qint64 ms : { 2500, 3000, 3000, 6000 })
+    {
+        tickTo(ms);
+        StructureStudioView::s_referenceThrows = false;
+        v.m_liveDirty = true;
+        const QImage kept = v.grab().toImage();
+        StructureStudioView::s_referenceThrows = true;
+        v.m_liveDirty = true;
+        const QImage fresh = v.grab().toImage();
+        StructureStudioView::s_referenceThrows = false;
+        QVERIFY2(kept == fresh, qPrintable(QString("the frame at %1 ms differs from the reference").arg(ms)));
+    }
+    QVERIFY(!v.m_washFans.isEmpty());       // it did keep them
 }
 
 int main(int argc, char **argv)

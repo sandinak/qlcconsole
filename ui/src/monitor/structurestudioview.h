@@ -1068,6 +1068,25 @@ private:
     static bool s_referenceThrows;
     mutable quint32 m_throwFrame = 0;
     mutable int m_throwsUsed = 0;
+    /** Where the rays from one end of a lit stretch of a bar in a box land
+     *  on the scenery (washOnScenery()): each landing in the order thrown,
+     *  with the piece it is on. A stretch ends on a column edge of its bar,
+     *  so while a front runs along a rig of step rows (Fire Spread) the same
+     *  few ends come back stretch after stretch and frame after frame: their
+     *  rays were thrown afresh every time -- a few hundred scenery tests an
+     *  end, thousands of ends a frame. Kept until what they land on changes
+     *  (m_washScene: throwScene() and the curtains' poses). */
+    struct WashFanKey
+    {
+        float v[12];
+        bool operator==(const WashFanKey &o) const
+        { return keysEqual(v, o.v); }
+    };
+    friend size_t qHash(const WashFanKey &k, size_t seed = 0)
+    { return keysHash(k.v, seed); }
+    mutable QHash<WashFanKey, QVector<QPair<int, QVector3D> > > m_washFans;
+    mutable quint64 m_washScene = 0;
+    mutable bool m_washSceneSet = false;
     /** A split pool's mesh, as it landed (drawBeamCone()): kept while the
      *  beam and the scene stay put, so a frame only projects it. */
     struct BeamMeshKey

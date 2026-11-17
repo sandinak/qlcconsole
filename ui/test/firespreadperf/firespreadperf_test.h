@@ -42,6 +42,9 @@ private slots:
     /** ms per tick of the effect and per frame of the view, reported */
     void costsWhileTheFireSpreads();
 
+    /** The kept washes on the cyc draw the picture thrown afresh does */
+    void theCycCatchesTheSameLight();
+
 private:
     /** Runs the effect at @a ms and puts what it writes on the fixtures;
      *  returns the fixtures whose values changed */
