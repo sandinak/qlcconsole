@@ -129,7 +129,15 @@ connects. (can change: a pad's serial over USB, when one says it.)
    not change as a line comes or goes). An action fires on the pad's
    press only: a press already down on its other line is the same press.
    The chord, the stop and the safety read the pad's state; one chord
-   timer a pad, one stop a press of the pad's four. Each pad (each
+   timer a pad, one stop a press of the pad's four. The chord's *spent*
+   is the pad's too (`PadRun::Held::spent`, never a line's): once the
+   chord has decided (armed, disarmed, refused) or a trigger came with
+   both bumpers, the pad's chord is spent until both bumpers are up on
+   every line of it. A line lagging its twin by a whole press (it reports
+   the press after the other line has let go) acts twice: the double-GO
+   guard holds the second GO (*Second GO held* and its buzz), two Backs
+   go back two cues, a toggle hit flashes on and off. Nothing has shown a
+   real pad lag that far. Each pad (each
    identity) times its own arm chord (rule 6's "its chord timing
    untouched").
 10. **Jobs changed live.** Taking Run cues from the runner disarms it (no

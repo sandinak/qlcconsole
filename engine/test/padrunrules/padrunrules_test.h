@@ -82,6 +82,9 @@ private slots:
     void aTwinLineAddedMidChordArmsNothing();
     /** The lower line dropping leaves the other line's four. */
     void theLowerLineDroppingMidFourStillStops();
+    /** A twin pad's buttons after a walk ended on the laptop: its next
+     *  Menu walks, its LT + A is one GO. */
+    void aTwinPadsButtonsAfterAWalkAct();
     /** Twin pads told apart (address, USB port) stay two pads: each its
      *  own stop, its own chord, one runner. */
     void twinPadsToldApartAreTwoPads_data();

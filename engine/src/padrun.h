@@ -718,33 +718,45 @@ private:
     QString padId(quint32 universe) const;
     /** What the pad @p pad holds: each of the four down on any of its
      *  lines (each line keeps its own trigger hysteresis), with the pad's
-     *  spent chord. One line: that line's Held. */
+     *  spent chord. One line: that line's reading. */
     struct Held;
     Held padHeld(const QString &pad) const;
     /** @p role is held down on another line of @p universe's pad. */
     bool downElsewhere(quint32 universe, GamepadRole::Role role) const;
+    /** padId() read once a line for the event being read (m_padIds). */
+    void beginPadIds();
+    void endPadIds(bool wasOn);
 
 private:
     Doc *m_doc;
     ProgrammerController *m_pc;
     bool m_enabled = false;
-    /** What a line holds now, of the four controls the chords are made
-     *  of (and its other buttons). A pad's is padHeld(): its lines OR'd. */
-    struct Held
+    /** What one line holds now, of the four controls the chords are made
+     *  of (and its other buttons). No spent chord here: that is the pad's
+     *  (Held, padHeld()), so a line's reading read for it does not build. */
+    struct Line
     {
         bool lb = false;
         bool rb = false;
         ControllerScheme::TriggerButton lt, rt;
-        /** A trigger was down with both bumpers (the stop, or one on its
-         *  way): no arm until both bumpers are up and squeezed afresh. The
-         *  pad's (Pad::spent), set in padHeld(). */
-        bool spent = false;
         QSet<int> buttons;          ///< the other buttons down on this line
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };
+    /** What a pad holds: its lines OR'd (padHeld()), and its chord. */
+    struct Held : Line
+    {
+        /** A trigger was down with both bumpers (the stop, or one on its
+         *  way), or the chord has decided: no arm until both bumpers are
+         *  up on every line of the pad and squeezed afresh (Pad::spent). */
+        bool spent = false;
+    };
     /** By universe: each line its own, as the pad's plugin reports it. */
-    QHash<quint32, Held> m_held;
+    QHash<quint32, Line> m_held;
+    /** padId() for the event being read: worked out once a line an event
+     *  (watchStop(), handle()), never kept past it. */
+    mutable QHash<quint32, QString> m_padIds;
+    bool m_padIdsOn = false;
     /** What is the pad's, not a line's (by padId()). */
     struct Pad
     {

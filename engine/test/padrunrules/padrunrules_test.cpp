@@ -1204,6 +1204,44 @@ void PadRunRules_Test::theLowerLineDroppingMidFourStillStops()
     QCOMPARE(run->state(), PadRun::Stopped);
 }
 
+void PadRunRules_Test::aTwinPadsButtonsAfterAWalkAct()
+{
+    /* Review of d9c611caf: a twin pad's Menu started the walk, its release
+       went to the walk (Focus this cue has the pad), and the walk ended on
+       the laptop -- the Menu each line kept as held swallowed the pad's
+       next Menu. A walk, a tool or the test taking the pad forgets them. */
+    makeShow();
+    twinLines();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    bool oneFirst = false;
+    auto both = [&](quint32 ch, uchar v) {
+        axis(ch, v, oneFirst ? 1 : 0);
+        axis(ch, v, oneFirst ? 0 : 1);
+    };
+    for (int walk = 1; walk <= 2; ++walk)
+    {
+        // The second time the other line brings the press first.
+        oneFirst = walk == 2;
+        both(kMenu, 255);
+        QVERIFY2(run->isWalking(), qPrintable(QString("Menu on the twin pad started no walk (walk %1)").arg(walk)));
+        both(kMenu, 0);
+        // Ended from the laptop.
+        pc->refineSession()->stop();
+        QVERIFY(!run->isWalking());
+    }
+    // And the GO family after it: one LT + A is one GO.
+    arm(true, 0);
+    m_runs.clear();
+    both(kLT, 255);
+    both(kA, 255);
+    both(kA, 0);
+    both(kLT, 0);
+    QCOMPARE(goes(), 1);
+}
+
 void PadRunRules_Test::twinPadsToldApartAreTwoPads_data()
 {
     QTest::addColumn<QString>("by");

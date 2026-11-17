@@ -18,6 +18,7 @@
 */
 
 #include <QTimer>
+#include <QScopeGuard>
 #include <climits>
 
 #include "programmercontroller.h"
@@ -296,6 +297,11 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
         || role == GamepadRole::RightX || role == GamepadRole::RightY)
         return false;
 
+    // Each line's pad worked out once for this event.
+    const bool padIdsWere = m_padIdsOn;
+    beginPadIds();
+    const auto padIds = qScopeGuard([this, padIdsWere]() { endPadIds(padIdsWere); });
+
     const bool down = value > 0;
     const bool chordControl = role == GamepadRole::LB || role == GamepadRole::RB
                               || role == GamepadRole::LeftTrigger || role == GamepadRole::RightTrigger;
@@ -319,7 +325,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
            two universes): the pad's press was acted on there -- one
            press, one action. One line: never. */
         const bool elsewhere = down && downElsewhere(universe, role);
-        Held &line = m_held[universe];
+        Line &line = m_held[universe];
         if (down)
             line.buttons.insert(int(role));
         else
@@ -987,6 +993,11 @@ void PadRun::controllerLost()
 
 void PadRun::forgetHeld()
 {
+    /* The other buttons go: their releases went to whatever had the pad
+       (a walk, a tool, the test), and one left down would swallow the
+       next press of it on the pad's other line. */
+    for (auto it = m_held.begin(); it != m_held.end(); ++it)
+        it.value().buttons.clear();
     // The four's bits stay; a chord begun before is no chord after.
     for (auto it = m_held.constBegin(); it != m_held.constEnd(); ++it)
     {
@@ -1021,7 +1032,7 @@ bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
 {
     /* Each line keeps its own reading (its trigger hysteresis); the pad's
        is the lines OR'd (padHeld()). */
-    Held &line = m_held[universe];
+    Line &line = m_held[universe];
     bool rtPressed = false;
     switch (role)
     {
@@ -1058,6 +1069,9 @@ bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
     if (role != GamepadRole::LB && role != GamepadRole::RB
         && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)
         return false;
+    const bool padIdsWere = m_padIdsOn;
+    beginPadIds();
+    const auto padIds = qScopeGuard([this, padIdsWere]() { endPadIds(padIdsWere); });
     m_noted.rtPressed = noteHeld(universe, role, value);
     m_noted.universe = universe;
     m_noted.role = int(role);
@@ -1393,11 +1407,31 @@ bool PadRun::sameController(quint32 a, quint32 b) const
 
 QString PadRun::padId(quint32 universe) const
 {
+    if (m_padIdsOn)
+    {
+        const auto it = m_padIds.constFind(universe);
+        if (it != m_padIds.constEnd())
+            return it.value();
+    }
     const ControllerJobs *jobs = m_pc != nullptr ? m_pc->controllerJobs() : nullptr;
-    const QString id = jobs != nullptr ? jobs->identityOfUniverse(universe) : QString();
+    QString id = jobs != nullptr ? jobs->identityOfUniverse(universe) : QString();
     if (id.isEmpty() || ControllerJobs::isNameOnly(id))
-        return QStringLiteral("#%1").arg(universe);
+        id = QStringLiteral("#%1").arg(universe);
+    if (m_padIdsOn)
+        m_padIds.insert(universe, id);
     return id;
+}
+
+void PadRun::beginPadIds()
+{
+    m_padIdsOn = true;
+}
+
+void PadRun::endPadIds(bool wasOn)
+{
+    m_padIdsOn = wasOn;
+    if (!wasOn)
+        m_padIds.clear();
 }
 
 PadRun::Held PadRun::padHeld(const QString &pad) const
@@ -1405,7 +1439,7 @@ PadRun::Held PadRun::padHeld(const QString &pad) const
     Held out;
     for (auto it = m_held.constBegin(); it != m_held.constEnd(); ++it)
     {
-        const Held &line = it.value();
+        const Line &line = it.value();
         if (!line.lb && !line.rb && !line.anyTrigger() && line.buttons.isEmpty())
             continue;
         if (padId(it.key()) != pad)
@@ -1429,7 +1463,7 @@ bool PadRun::downElsewhere(quint32 universe, GamepadRole::Role role) const
     {
         if (it.key() == universe)
             continue;
-        const Held &line = it.value();
+        const Line &line = it.value();
         bool down = false;
         switch (role)
         {
