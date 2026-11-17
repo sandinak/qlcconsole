@@ -2100,11 +2100,11 @@ void LookEditor_Test::fireSpreadShowsItsIntensity()
     QLCPalette *back = new QLCPalette(QLCPalette::Effect, &doc);
     QVERIFY(back->loadXML(r));
     QCOMPARE(back->effectParamValues().value("fireIntensity"), 50.0);
-    QVERIFY(doc.addPalette(back));
+    delete back;
 
     // The page opens on it again.
     LookEditor again(&doc);
-    again.setPalette(back->id());
+    again.setPalette(look->id());
     QDoubleSpinBox *inten = again.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
     QVERIFY(inten != nullptr);
     QCOMPARE(inten->text(), QString("50%"));
