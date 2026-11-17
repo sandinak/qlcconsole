@@ -30,6 +30,7 @@
 
 #include <QMap>
 #include <QFont>
+#include "patchlist.h"
 #include "treekeepview.h"
 #include "fixturetreewidget.h"
 #include "monitor.h"
@@ -891,8 +892,7 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
 
     if (m_addressColumn && fixture->addressClash())
     {
-        item->setText(m_addressColumn, tr("clashes at %1.%2").arg(fixture->universe() + 1)
-                                                              .arg(fixture->address() + 1));
+        item->setText(m_addressColumn, tr("clashes at %1").arg(PatchList::dmxAddress(fixture->universe(), fixture->address() + 1)));
         item->setForeground(m_addressColumn, QBrush(QColor(220, 70, 70)));
         Fixture *owner = m_doc->fixture(m_doc->fixtureForAddress(fixture->universeAddress()));
         item->setToolTip(m_addressColumn,

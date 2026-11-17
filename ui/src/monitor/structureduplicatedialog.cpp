@@ -33,6 +33,7 @@
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include "patchlist.h"
 #include "structureduplicatedialog.h"
 #include "patchplanner.h"
 #include "doc.h"
@@ -238,7 +239,7 @@ void StructureDuplicateDialog::refresh()
     {
         Fixture *src = m_doc->fixture(r.sourceId);
         const QString where = r.patched
-            ? QStringLiteral("%1.%2").arg(r.universe + 1).arg(r.address + 1) : tr("unpatched");
+            ? PatchList::dmxAddress(r.universe, r.address + 1) : tr("unpatched");
         QTreeWidgetItem *it = new QTreeWidgetItem(m_rows, {
             src != nullptr ? src->name() : QString(), r.name,
             PatchPlanner::structureName(m_doc, r.target), where, r.note });

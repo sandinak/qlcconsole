@@ -25,6 +25,7 @@
 #include <QSettings>
 #include <QCheckBox>
 #include <QStandardItemModel>
+#include "patchlist.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "patchinventorydialog.h"
@@ -903,8 +904,8 @@ void PatchInventoryDialog::refreshConflicts()
         else if (fx != NULL && fx->isPatched() && !moved)
             text = remode ? tr("mode changes") : tr("unchanged");
         else if (moved)
-            text = remode ? tr("moves from %1.%2, mode changes").arg(fx->universe() + 1).arg(fx->address() + 1)
-                          : tr("moves from %1.%2").arg(fx->universe() + 1).arg(fx->address() + 1);
+            text = remode ? tr("moves from %1, mode changes").arg(PatchList::dmxAddress(fx->universe(), fx->address() + 1))
+                          : tr("moves from %1").arg(PatchList::dmxAddress(fx->universe(), fx->address() + 1));
         else if (plan.at(r).newUniverse)
             text = tr("new universe");
         else

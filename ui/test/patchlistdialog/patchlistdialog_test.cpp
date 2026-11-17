@@ -645,7 +645,7 @@ void PatchListDialog_Test::theLabelsKnowTheShowUsesTwoUniverses()
         ld->reject();
     });
     dlg.slotPrintSelectedLabels();
-    QCOMPARE(preview, QString("Spot 3 D2.101"));
+    QCOMPARE(preview, QString("Spot 3 U2.101"));
 }
 
 /* What is missing stands out: the Patch cell of a fixture with no address

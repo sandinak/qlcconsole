@@ -100,6 +100,14 @@ public:
      *  universe, by fixture type, or not at all. */
     enum GroupBy { ByLocation = 0, ByUniverse, ByType, ByNone };
 
+    /** A DMX address the way the crew reads it (grandMA's universe.address):
+     *  universe 3 (zero-based 2), address 1 is "U3.001". @p address is
+     *  one-based. The one formatter labels, the patch list, its CSV and PDF
+     *  and the other places that print both use. */
+    static QString dmxAddress(quint32 universe, quint32 address);
+    /** A span on one universe: "U3.001–012" (a single channel: "U3.001"). */
+    static QString dmxRange(quint32 universe, quint32 first, quint32 last);
+
     /** Which fixtures: all, the discrete ones, or the pixel / matrix ones. */
     enum Kind { AllKinds = 0, Discrete, Pixel };
 

@@ -146,7 +146,7 @@ void StructureDuplicateUi_Test::theDialogPreviewsBeforeAnythingIsMade()
     QVERIFY(rows != nullptr);
     QVERIFY(rows->topLevelItemCount() >= 6);
     QCOMPARE(rows->topLevelItem(0)->text(1), QString("T2-Spot 1"));
-    QCOMPARE(rows->topLevelItem(0)->text(3), QString("1.31"));
+    QCOMPARE(rows->topLevelItem(0)->text(3), QString("U1.031"));
     // Nothing was made by looking.
     QCOMPARE(r.doc->fixtures().size(), 3);
 

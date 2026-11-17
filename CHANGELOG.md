@@ -27,6 +27,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A multi-universe address reads "U3.001".** Labels, the patch list, its CSV, XLSX and PDF, the clash note in the Fixture Manager, the Patch dialog's "moves from" and Duplicate Structure's preview write universe 3, address 1 as grandMA does -- **U3.001**, the universe, a dot, the address padded to three digits -- from one shared formatter (it was "D3.1" on a label and a mix of other forms elsewhere). A saved label template with `D{address}` reads the same. The CSV gains a **DMX address** column.
+
 - **Fire Spread in two colours: a front and a backfill.** Fire Spread's new **Colours** setting, **Front and Behind**, makes the look's first colour (the effect's own Colour, else the look's) the front: a head snaps to it, with the Flare, as the fire reaches it. A second front follows from the same point **Front Width** seconds behind (1.5; ragged by the Edge in its own seeded way) and crossfades each head into the second colour, the backfill, which flickers in level like the fire, or holds steady with **Flicker Behind** off. With one colour the fire burns behind the front; a dimmer, a relay and a head with no colour burn as before, a colour wheel takes its nearest slot for each colour. **Fire**, the default, plays exactly as before. One change for an existing look: a Colour look placed under a Fire Spread is now the effect's own colour (as under Spell Spread) and is no longer painted on the heads the fire leaves dark; a Dimmer look under it sets the fire's level on every head, in both settings.
 
 ### Developer notes

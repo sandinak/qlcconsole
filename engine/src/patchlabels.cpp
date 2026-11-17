@@ -149,7 +149,7 @@ QString PatchLabels::address(const PatchList::Row &row, bool multiUniverse)
     if (!row.patched && !row.clash)
         return QStringLiteral("—");
     if (multiUniverse)
-        return QStringLiteral("%1.%2").arg(row.universe + 1).arg(row.firstChannel());
+        return PatchList::dmxAddress(row.universe, row.firstChannel());
     return QString::number(row.firstChannel());
 }
 
@@ -167,7 +167,11 @@ QString PatchLabels::render(const QString &text, const PatchList::Row &row, bool
     };
     /* One pass: a name with "{address}" in it stays as it is. */
     static const QRegularExpression field(QStringLiteral("\\{(\\w+)\\}"));
-    const QString tmpl = text.isEmpty() ? defaultTemplate() : text;
+    QString tmpl = text.isEmpty() ? defaultTemplate() : text;
+    /* "D{address}" is the single-universe form; a multi-universe address
+       reads "U3.001" and carries its own letter. */
+    if (multiUniverse)
+        tmpl.replace(QStringLiteral("D{address}"), QStringLiteral("{address}"));
     QString out;
     int from = 0;
     QRegularExpressionMatchIterator it = field.globalMatch(tmpl);
@@ -212,7 +216,7 @@ PatchLabels::Label PatchLabels::label(const PatchList::Row &row)
     Label l;
     l.name = row.name;
 
-    const QString at = QStringLiteral("U%1 · %2").arg(row.universe + 1).arg(row.firstChannel());
+    const QString at = PatchList::dmxAddress(row.universe, row.firstChannel());
     if (row.clash)
         l.address = QStringLiteral("clash · %1").arg(at);
     else if (row.patched)

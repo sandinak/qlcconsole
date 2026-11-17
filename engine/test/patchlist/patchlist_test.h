@@ -40,6 +40,7 @@ private slots:
     void aClashIsListedWhereItAsked();
     void onlyTheIdsAskedFor();
     void theCsvIsSpreadsheetSafe();
+    void addressesReadUniverseDotAddress();
     void theCsvFollowsThePlotUnits();
     void aGelIsListedOnlyWhenSomeFixtureHasOne();
     void theHtmlHasATablePerUniverse();

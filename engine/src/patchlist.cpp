@@ -46,6 +46,18 @@
 #include "truss.h"
 #include "doc.h"
 
+QString PatchList::dmxAddress(quint32 universe, quint32 address)
+{
+    return QStringLiteral("U%1.%2").arg(universe + 1).arg(address, 3, 10, QLatin1Char('0'));
+}
+
+QString PatchList::dmxRange(quint32 universe, quint32 first, quint32 last)
+{
+    if (last <= first)
+        return dmxAddress(universe, first);
+    return QStringLiteral("%1–%2").arg(dmxAddress(universe, first)).arg(last, 3, 10, QLatin1Char('0'));
+}
+
 QString PatchList::Row::patchText() const
 {
     const QString range = channels > 1
@@ -483,7 +495,7 @@ QList<QStringList> PatchList::table(GroupBy by) const
     header << QStringLiteral("Fixture") << QStringLiteral("ID") << QStringLiteral("Manufacturer")
            << QStringLiteral("Model") << QStringLiteral("Mode") << QStringLiteral("Channels")
            << QStringLiteral("Universe") << QStringLiteral("Universe name")
-           << QStringLiteral("Address") << QStringLiteral("Last channel")
+           << QStringLiteral("Address") << QStringLiteral("Last channel") << QStringLiteral("DMX address")
            << QStringLiteral("Connection") << QStringLiteral("IP") << QStringLiteral("Output")
            << QStringLiteral("Mounted on")
            << QStringLiteral("X (%1)").arg(unit) << QStringLiteral("Y (%1)").arg(unit)
@@ -512,6 +524,7 @@ QList<QStringList> PatchList::table(GroupBy by) const
                  << (at ? r.universeName : QString())
                  << (at ? QString::number(r.firstChannel()) : QString())
                  << (at ? QString::number(r.lastChannel()) : QString())
+                 << (at ? dmxRange(r.universe, r.firstChannel(), r.lastChannel()) : QString())
                  << (r.network ? QStringLiteral("Network (%1)").arg(r.transport) : QStringLiteral("DMX"))
                  << r.ip << r.output << r.mountedOn
                  << (r.onPlot ? coord(r.position.x(), m_unit) : QString())
@@ -634,7 +647,7 @@ QString PatchList::toHtml(const QString &title, GroupBy by) const
                 const QString range = r.channels > 1
                     ? QStringLiteral("%1–%2").arg(r.firstChannel()).arg(r.lastChannel())
                     : QString::number(r.firstChannel());
-                addr = by == ByUniverse ? range : QStringLiteral("%1 · %2").arg(r.universe + 1).arg(range);
+                addr = by == ByUniverse ? range : dmxRange(r.universe, r.firstChannel(), r.lastChannel());
             }
             if (r.clash)
                 addr += QStringLiteral(" <b>clash</b>");
