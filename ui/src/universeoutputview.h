@@ -21,6 +21,8 @@
 #define UNIVERSEOUTPUTVIEW_H
 
 #include <QByteArray>
+#include <QColor>
+#include <QRect>
 #include <QWidget>
 
 class QLabel;
@@ -44,6 +46,17 @@ class UniverseOutputView final : public QWidget
 
 public:
     explicit UniverseOutputView(Doc *doc, QWidget *parent = nullptr);
+
+    /** What a channel is, for the colour of its block: an emitter colour, a
+     *  dimmer, pan, tilt, or one of the other groups (read from the
+     *  definition's group and colour as the Simple Desk reads them). */
+    enum Kind { Plain = 0, Red, Green, Blue, Amber, White, UV, Cyan, Magenta, Yellow, Lime, Indigo,
+                Dimmer, Pan, Tilt, ColourWheel, Gobo, Shutter, Speed, PrismKind, BeamKind,
+                EffectKind, OtherKind };
+    static Kind kindOf(const class QLCChannel *channel);
+    /** The block's fill: a dull shade at 0 rising to the bright colour at 255. */
+    static QColor fillFor(Kind kind, int value);
+    static QColor emitterColour(Kind kind);
 
     /** Show @p universe (an index; invalid shows nothing). */
     void setUniverse(quint32 universe);
@@ -78,6 +91,11 @@ protected:
     bool event(QEvent *e) override;
     void mouseMoveEvent(QMouseEvent *e) override;
     void leaveEvent(QEvent *e) override;
+
+private:
+    static void paintMark(class QPainter &p, Kind kind, const QRect &cell, int value);
+    void paintLegend(class QPainter &p, int top);
+    int legendHeight() const;
 
 private slots:
     void slotUniverseWritten(quint32 index, const QByteArray &data);

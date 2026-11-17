@@ -27,6 +27,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Connections' DMX map shows what each block is.** Blocks are coloured by the channel's kind and value, read from the fixture definition as the Simple Desk does: red, green, blue, amber, white and UV a dull shade at 0 rising to bright at 255, a dimmer a grey ramp, pan and tilt an arrow placed by the value (left-right, up-down), the other kinds a small consistent mark; unpatched channels stay plain, and a small legend explains them. Hover a channel for its fixture, mode and channel name; the names are no longer written inside the blocks.
+
 - **Patch list: one universe, and Print.** Right-click a universe in Connections and choose **Patch List for U13…** to see only the fixtures patched there (the exports and labels follow; **All universes** clears it). The Patch List itself gets a **Print…** button that opens the system print dialog directly, as Print Labels does, beside Save PDF.
 
 - **A multi-universe address reads "U3.001".** Labels, the patch list, its CSV, XLSX and PDF, the clash note in the Fixture Manager, the Patch dialog's "moves from" and Duplicate Structure's preview write universe 3, address 1 as grandMA does -- **U3.001**, the universe, a dot, the address padded to three digits -- from one shared formatter (it was "D3.1" on a label and a mix of other forms elsewhere). A saved label template with `D{address}` reads the same. The CSV gains a **DMX address** column.

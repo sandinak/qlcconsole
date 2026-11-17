@@ -57,6 +57,10 @@
 #include "connectionstree.h"
 #include "universeoutputview.h"
 #include "fixture.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcchannel.h"
+#include "fixturedefcache.h"
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
@@ -2759,6 +2763,144 @@ void ConnectionsTree_Test::theUniverseGridSaysTheAddressUnderThePointer()
     QVERIFY2(view.describe(121).startsWith("122 · Front Wash 3 (121-136) · ch 2"),
              qPrintable(view.describe(121)));
     QVERIFY2(header->text().startsWith("122 · Front Wash"), qPrintable(header->text()));
+}
+
+/* A fixture with one channel of each kind the map colours: Red, Dimmer,
+   Pan, Tilt, in a mode called "Basic". */
+static Fixture *kindsFixture(Doc *doc, quint32 address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Map");
+    def->setModel("Kinds");
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("Basic");
+    const struct { const char *name; QLCChannel::Preset preset; } ch[] = {
+        { "Red", QLCChannel::IntensityRed }, { "Dimmer", QLCChannel::IntensityDimmer },
+        { "Pan", QLCChannel::PositionPan }, { "Tilt", QLCChannel::PositionTilt } };
+    for (int i = 0; i < 4; i++)
+    {
+        QLCChannel *c = new QLCChannel();
+        c->setName(ch[i].name);
+        c->setPreset(ch[i].preset);
+        def->addChannel(c);
+        mode->insertChannel(c, i);
+    }
+    def->addMode(mode);
+    if (!doc->fixtureDefCache()->addFixtureDef(def))
+    {
+        delete def;
+        return nullptr;
+    }
+    Fixture *f = new Fixture(doc);
+    f->setName("Kinds 1");
+    f->setFixtureDefinition(def, mode);
+    f->setUniverse(0);
+    f->setAddress(address);
+    if (!doc->addFixture(f))
+    {
+        delete f;
+        return nullptr;
+    }
+    return f;
+}
+
+/* The map says what each block is: red dull at 0 and bright at 255, a grey
+   dimmer, a pan arrow moving left to right and a tilt arrow up, nothing in
+   an unpatched block, and a legend; read from pixels, as the operator sees
+   them. */
+void ConnectionsTree_Test::theMapColoursChannelsByKindAndValue()
+{
+    QVERIFY(kindsFixture(m_doc, 0) != nullptr);          // channels 1-4
+    UniverseOutputView view(m_doc);
+    view.setUniverse(0);
+    view.fitWidth(UniverseOutputView::widthFor(16));
+    view.resize(view.sizeHint());
+    auto shot = [&](uchar red, uchar dim, uchar pan, uchar tilt) {
+        QByteArray data(512, char(0));
+        data[0] = char(red); data[1] = char(dim); data[2] = char(pan); data[3] = char(tilt);
+        view.slotUniverseWritten(0, data);
+        return view.grab().toImage();
+    };
+    // Mid-right of a cell: clear of the channel number and the value.
+    auto probe = [&](const QImage &img, int ch) {
+        const QRect c = view.cellRect(ch);
+        return QColor(img.pixel(c.right() - 3, c.top() + c.height() / 2));
+    };
+    const QImage low = shot(0, 0, 0, 0);
+    const QImage high = shot(255, 255, 255, 255);
+
+    // Red: dull but red at 0, bright at 255.
+    const QColor r0 = probe(low, 0), r255 = probe(high, 0);
+    QVERIFY2(r255.lightness() > r0.lightness() + 40, qPrintable(r0.name() + " -> " + r255.name()));
+    QVERIFY2(r255.red() > 200 && r255.green() < 80 && r255.blue() < 80, qPrintable(r255.name()));
+    QVERIFY(r0.red() > r0.green());
+    // Dimmer: a grey ramp.
+    const QColor d0 = probe(low, 1), d255 = probe(high, 1);
+    QVERIFY(d0.red() == d0.green() && d0.green() == d0.blue());
+    QVERIFY(d255.red() == d255.green() && d255.green() == d255.blue());
+    QVERIFY(d255.red() > d0.red() + 100);
+    // Unpatched: plain.
+    QCOMPARE(probe(low, 100).name(), QString("#22242a"));
+    QCOMPARE(probe(high, 100).name(), QString("#22242a"));
+
+    // The arrows: where the arrow-coloured pixels are, in the pan and tilt cells.
+    auto centroid = [&](const QImage &img, int ch) {
+        const QRect c = view.cellRect(ch);
+        double sx = 0, sy = 0;
+        int n = 0;
+        for (int y = c.top(); y <= c.bottom(); ++y)
+            for (int x = c.left(); x <= c.right(); ++x)
+            {
+                const QColor px(img.pixel(x, y));
+                if (qAbs(px.red() - 120) < 30 && qAbs(px.green() - 200) < 30 && px.blue() > 220)
+                {
+                    sx += x; sy += y; ++n;
+                }
+            }
+        return n > 0 ? QPointF(sx / n - c.left(), sy / n - c.top()) : QPointF(-1, -1);
+    };
+    const QImage panLow = shot(0, 0, 0, 128), panHigh = shot(0, 0, 255, 128);
+    QVERIFY(centroid(panLow, 2).x() >= 0 && centroid(panHigh, 2).x() >= 0);
+    QVERIFY2(centroid(panHigh, 2).x() > centroid(panLow, 2).x() + 8,
+             qPrintable(QString("%1 -> %2").arg(centroid(panLow, 2).x()).arg(centroid(panHigh, 2).x())));
+    // Tilt: higher on the block for a higher value (the tilt cell is mostly clear of the number).
+    const QImage tiltLow = shot(0, 0, 128, 0), tiltHigh = shot(0, 0, 128, 255);
+    QVERIFY(centroid(tiltLow, 3).y() >= 0 && centroid(tiltHigh, 3).y() >= 0);
+    QVERIFY2(centroid(tiltHigh, 3).y() < centroid(tiltLow, 3).y() - 8,
+             qPrintable(QString("%1 -> %2").arg(centroid(tiltLow, 3).y()).arg(centroid(tiltHigh, 3).y())));
+
+
+    // The legend under the grid: a bright red swatch below the last row.
+    bool legend = false;
+    for (int y = high.height() - 24; y < high.height() && !legend; ++y)
+        for (int x = 0; x < high.width(); ++x)
+            if (QColor(high.pixel(x, y)) == UniverseOutputView::fillFor(UniverseOutputView::Red, 255))
+            {
+                legend = true;
+                break;
+            }
+    QVERIFY(legend);
+}
+
+/* Hover: the fixture, its mode and the channel, as the Simple Desk says it. */
+void ConnectionsTree_Test::theMapHoverNamesFixtureModeAndChannel()
+{
+    QVERIFY(kindsFixture(m_doc, 10) != nullptr);
+    UniverseOutputView view(m_doc);
+    view.setUniverse(0);
+    view.fitWidth(UniverseOutputView::widthFor(16));
+    view.resize(view.sizeHint());
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    const QString d = view.describe(12);                  // Pan
+    QVERIFY2(d.contains("Kinds 1") && d.contains("mode Basic") && d.contains("Pan"), qPrintable(d));
+    const QPoint at = view.cellRect(12).center();
+    QHelpEvent help(QEvent::ToolTip, at, view.mapToGlobal(at));
+    QApplication::sendEvent(&view, &help);
+    QTRY_VERIFY(QToolTip::text().isEmpty() == false);
+    QVERIFY2(QToolTip::text().contains("Kinds 1") && QToolTip::text().contains("mode Basic")
+             && QToolTip::text().contains("Pan"), qPrintable(QToolTip::text()));
+    QToolTip::hideText();
 }
 
 /* "why does U07 read FART2(SR)": a target's name is kept by its address,

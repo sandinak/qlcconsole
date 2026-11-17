@@ -160,6 +160,8 @@ private slots:
        settings in it; OK is one undo step, Cancel changes nothing. */
     void doubleClickingAUniverseOpensNoWindow();
     void aUniverseOpensItsOwnPatchList();
+    void theMapColoursChannelsByKindAndValue();
+    void theMapHoverNamesFixtureModeAndChannel();
     void aUniversesMenuHasNoEditConnection();
     void byUniverseOutputSaysWhereEachProtocolGoes();
     void aTargetsNameDoesNotOutliveIt();
