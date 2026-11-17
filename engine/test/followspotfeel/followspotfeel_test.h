@@ -106,6 +106,12 @@ private slots:
      *  its subject: the subject's glide back waits while the focus runs,
      *  then glides home. */
     void q253TheRestoreGlideWaitsForTheTool();
+    /** The emergency stop ends every tool (E9) and Q253's hold with it:
+     *  nothing says the spot holds, the tool's sticks are centred, and a
+     *  stick held through the stop moves the spot again only once centred
+     *  and pushed -- every tool. */
+    void q253TheStopEndsTheToolAndItsHold_data();
+    void q253TheStopEndsTheToolAndItsHold();
 
     /* Where the operator stands (FollowSpotOperator). */
     void stickUpGoesAwayFromTheOperator();

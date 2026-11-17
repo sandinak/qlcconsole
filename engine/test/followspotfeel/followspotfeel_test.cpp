@@ -1743,6 +1743,93 @@ void FollowSpotFeel_Test::q253TheSpotBesideEveryTool()
     driftAfter(h);
 }
 
+void FollowSpotFeel_Test::q253TheStopEndsTheToolAndItsHold_data()
+{
+    QTest::addColumn<QString>("tool");
+    for (const char *tool : { "quick", "venue", "cue", "look", "walk" })
+        QTest::newRow(tool) << QString(tool);
+}
+
+void FollowSpotFeel_Test::q253TheStopEndsTheToolAndItsHold()
+{
+    /* Merge of board Q253 with the 0.4.13 emergency stop: pad A works a
+       tool on the follow spot's own lights (the spot, pad B's, holds);
+       A's four strike the stop. */
+    QFETCH(QString, tool);
+    using CJ = ControllerJobs;
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    PadRun *run = h.pc->padRun();
+    jobs->resetAll();
+    q253Pads(stub, iom, false);
+    auto restore = qScopeGuard([&]() {
+        h.pc->focusSession()->stop();
+        h.pc->refineSession()->stop();
+        run->setEnabled(false, false);
+        jobs->resetAll();
+        q253Unpads(stub, iom);
+        h.pc->refreshStickBinding();
+    });
+    jobs->setJobs(jobs->identityOfUniverse(0), CJ::Jobs(CJ::RunCues | CJ::Focus));
+    jobs->setJobs(jobs->identityOfUniverse(1), CJ::Jobs(CJ::FollowSpot));
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->refreshStickBinding();
+    QCOMPARE(h.pc->m_panUniverse, quint32(1));
+    const Q253Show show = q253Show(m_doc, h, true, false);
+    h.use(h.rig.targetScene);
+    auto input = [&](quint32 u, quint32 ch, uchar v) { h.pc->slotControllerInputChanged(u, ch, v, QString()); };
+    run->setEnabled(true, false);
+    // Control: B steers the spot.
+    input(1, 0, 255);
+    QVERIFY2(travel(h, 15) > 0.05, "the stick moved nothing before any tool (no control)");
+    QString why;
+    QVERIFY2(q253Start(h, show, tool, show.elsewhere->id(), &why), qPrintable(why));
+    QCOMPARE(h.pc->controllerOwner(), quint32(0));
+    QCOMPARE(h.pc->followSpotStatus().heldBy, q253Name(tool));
+    // B's stick pushed again through the hold; A's own stick is the tool's.
+    input(1, 0, 230);
+    input(0, 0, 255);
+    QVERIFY(driftAfter(h) < 0.005);
+
+    // A's four: the stop.
+    for (quint32 ch : { 14u, 15u, 4u, kQRT })
+        input(0, ch, 255);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QVERIFY2(!h.pc->focusSession()->isActive() && !h.pc->refineSession()->isActive(),
+             qPrintable(tool + ": the tool ran on through the emergency stop"));
+    QVERIFY(!run->isWalking());
+    for (quint32 ch : { kQRT, 4u, 15u, 14u })
+        input(0, ch, 0);
+    input(0, 0, 127);
+    driftAfter(h);
+    // The hold went with the tool: nothing says the spot holds.
+    QVERIFY2(h.pc->followSpotStatus().heldBy.isEmpty(),
+             qPrintable(tool + ": still held by " + h.pc->followSpotStatus().heldBy));
+    QVERIFY2(!h.pc->followSpotStatusText().contains("Follow spot holds"), qPrintable(h.pc->followSpotStatusText()));
+    // The tool's sticks centred: nothing of A's push is kept for the next.
+    QCOMPARE(h.pc->m_toolPanNorm, 0.5f);
+    QCOMPARE(h.pc->m_toolTiltNorm, 0.5f);
+    QCOMPARE(h.pc->m_toolFineX, 0.5f);
+    QCOMPARE(h.pc->m_toolFineY, 0.5f);
+
+    // The spot on again: B's stick, held through the stop, moves nothing...
+    h.use(h.rig.targetScene);
+    input(1, 0, 240);
+    const double d = driftAfter(h);
+    QVERIFY2(d < 0.005, qPrintable(QString("%1: a stick held through the stop jumped the spot %2 m").arg(tool).arg(d)));
+    // ...until centred and pushed.
+    input(1, 0, 127);
+    driftAfter(h);
+    input(1, 0, 255);
+    QVERIFY2(travel(h, 15) > 0.05, qPrintable(tool + ": centred and pushed after the stop, the spot did not steer"));
+    input(1, 0, 127);
+    driftAfter(h);
+}
+
 void FollowSpotFeel_Test::q253TargetTiedLightsHoldTheSpot_data()
 {
     QTest::addColumn<QString>("tool");

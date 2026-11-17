@@ -1516,6 +1516,64 @@ void PadRunRules_Test::theLowerLineDroppingMidFourStillStops()
     QCOMPARE(run->state(), PadRun::Stopped);
 }
 
+void PadRunRules_Test::aLineJoiningMidSqueezeStillStops()
+{
+    /* Merge of board Q253 with 0.4.13: a squeeze held across a device
+       change counts as fired only when the stop really fired. */
+    makeShow();
+    twinLines(true);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    for (quint32 ch : { kLB, kRB, kLT })
+        axis(ch, 255, 1);
+    QCOMPARE(stops(), 0);
+    // The pad's other line arrives, and its first report completes the four.
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(run->sameController(0, 1));
+    for (quint32 ch : { kLB, kRB, kLT })
+        axis(ch, 255, 0);
+    QCOMPARE(stops(), 0);
+    axis(kRT, 255, 0);
+    QVERIFY2(stops() == 1, qPrintable(QString("the four completed on a line that joined sent %1 ALL OFFs").arg(stops())));
+    QCOMPARE(run->state(), PadRun::Stopped);
+    axis(kRT, 255, 1);
+    QCOMPARE(stops(), 1);
+}
+
+void PadRunRules_Test::aFourHeldAcrossALineBackIsOneStop()
+{
+    makeShow();
+    twinLines();
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+    {
+        axis(ch, 255, 0);
+        axis(ch, 255, 1);
+    }
+    QCOMPARE(stops(), 1);
+    // Line 0 goes and comes back, the four still held on the pad.
+    drop(0);
+    back(0);
+    QVERIFY(run->sameController(0, 1));
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, 0);
+    QVERIFY2(stops() == 1, qPrintable(QString("the same squeeze, held across a line coming back, sent %1 ALL OFFs")
+                                          .arg(stops())));
+    // Let go on both, squeezed again: the next stop.
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+    {
+        axis(ch, 0, 0);
+        axis(ch, 0, 1);
+    }
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+    {
+        axis(ch, 255, 1);
+        axis(ch, 255, 0);
+    }
+    QCOMPARE(stops(), 2);
+}
+
 void PadRunRules_Test::aTwinPadsButtonsAfterAWalkAct()
 {
     /* Review of d9c611caf: a twin pad's Menu started the walk, its release
@@ -2933,6 +2991,123 @@ void PadRunRules_Test::anArmAfterTheStopBringsNothingBackUntilAGo()
         focusCueAgain();
     ltMenu(1);
     QCOMPARE(fcc->state(), FocusCallCue::Running);
+}
+
+void PadRunRules_Test::aLostPadLeavesTheShowHeld_data()
+{
+    QTest::addColumn<bool>("unplugged");
+    QTest::newRow("another device behind its patch") << false;
+    QTest::newRow("unplugged and back") << true;
+}
+
+void PadRunRules_Test::aLostPadLeavesTheShowHeld()
+{
+    /* Merge of board Q253 with the 0.4.13 emergency stop: Q253's pad lost
+       (padLost(), forgetPad()) never clears the one stopped state. */
+    QFETCH(bool, unplugged);
+    makeShow();
+    m_stub->m_deviceIds = { { 0, 1 } };
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(listChaser());
+    sc->setRunHandler([this, sc](const ShowControl::Request &r, ShowControl::Route rt) {
+        m_runs << qMakePair(r, rt);
+        return sc->execute(r);
+    });
+    m_doc->setMode(Doc::Operate);
+    auto restore = qScopeGuard([&]() { m_doc->setMode(Doc::Design); });
+    PadRun *run = m_doc->programmer()->padRun();
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    run->setEnabled(true);
+    arm(true, 0);
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        hold(ch, true, 0);
+    QCOMPARE(stops(), 1);
+    QVERIFY(keeper->emergencyStopped());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        hold(ch, false, 0);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    if (unplugged)
+    {
+        drop(0);
+        QCOMPARE(run->state(), PadRun::Stopped);
+        QVERIFY(keeper->emergencyStopped());
+        back(0);
+    }
+    else
+    {
+        m_stub->m_deviceIds[0] = 2;
+        emit m_stub->configurationChanged();
+    }
+    QCoreApplication::processEvents();
+    QVERIFY2(run->state() == PadRun::Stopped, "a pad lost after the stop ended the red");
+    QVERIFY2(keeper->emergencyStopped(), "a pad lost after the stop ended the show's hold");
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    // The pad there now arms: its own act, the show still held, and said so.
+    arm(true, 0);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QVERIFY(keeper->emergencyStopped());
+    QVERIFY2(run->roleText().contains("held: LT + A brings the show back"), qPrintable(run->roleText()));
+    // Only a GO brings the show back.
+    withLt(kA, 0);
+    QCoreApplication::processEvents();
+    QVERIFY(!keeper->emergencyStopped());
+    QVERIFY(!run->roleText().contains("held"));
+}
+
+void PadRunRules_Test::aStopEndsALostPadsToolOnce_data()
+{
+    QTest::addColumn<bool>("walk");
+    QTest::newRow("the pad's walk") << true;
+    QTest::newRow("Focus this cue, taken by the pad") << false;
+}
+
+void PadRunRules_Test::aStopEndsALostPadsToolOnce()
+{
+    QFETCH(bool, walk);
+    makeShow();
+    m_stub->m_deviceIds = { { 0, 1 } };
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    RefineSession *r = pc->refineSession();
+    run->setEnabled(true);
+    if (walk)
+    {
+        press(kMenu, 0);
+        QVERIFY2(run->isWalking(), qPrintable(run->notice()));
+    }
+    else
+    {
+        QString why;
+        QVERIFY2(r->start(m_cue1, 0xFFFFFFFF, &why), qPrintable(why));
+        press(kRS, 0);      // the pad takes it (Q135)
+    }
+    QCOMPARE(pc->controllerOwner(), quint32(0));
+    // Another device behind the patch: the pad lost, its tool runs on.
+    m_stub->m_deviceIds[0] = 2;
+    emit m_stub->configurationChanged();
+    QVERIFY(r->isActive());
+    QSignalSpy ended(r, &RefineSession::stopped);
+    QSignalSpy armed(run, &PadRun::armedChanged);
+    QSignalSpy buzzes(pc, &ProgrammerController::padRumbled);
+    const int walkOff = saidCount("Walk off");
+    const int stopSaid = saidCount("Emergency stop. Everything is off.");
+    // The pad there now squeezes the four.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        hold(ch, true, 0);
+    QCOMPARE(stops(), 1);
+    QVERIFY2(!r->isActive(), "the stop left the tool running");
+    QVERIFY(!run->isWalking());
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        hold(ch, false, 0);
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+    QVERIFY2(ended.count() == 1, qPrintable(QString("the tool ended %1 times").arg(ended.count())));
+    QCOMPARE(saidCount("Walk off"), walkOff);
+    QCOMPARE(saidCount("Emergency stop. Everything is off."), stopSaid + 1);
+    QVERIFY2(!run->isArmed() && armed.count() == 0, "the stop's end of the tool armed the pad");
+    QCOMPARE(doubleBuzzes(buzzes), 0);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(pc->controllerOwner(), 0xFFFFFFFFu);
 }
 
 void PadRunRules_Test::aTimecodeGoAfterTheStopLeavesThePadRed()

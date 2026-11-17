@@ -113,6 +113,14 @@ private slots:
     void aTwinLineAddedMidChordArmsNothing();
     /** The lower line dropping leaves the other line's four. */
     void theLowerLineDroppingMidFourStillStops();
+    /** A twin line patched in while the pad's other line holds three of
+     *  the four: the fourth on the new line completes the stop, which
+     *  fires (it had not). */
+    void aLineJoiningMidSqueezeStillStops();
+    /** The four held on both lines, the stop fired; one line goes and
+     *  comes back still holding them: no second stop (it really fired);
+     *  let go and squeezed again: a stop. */
+    void aFourHeldAcrossALineBackIsOneStop();
     /** A twin pad's buttons after a walk ended on the laptop: its next
      *  Menu walks, its LT + A is one GO. */
     void aTwinPadsButtonsAfterAWalkAct();
@@ -185,6 +193,17 @@ private slots:
      *  the pad, the role off and on keeps the red, a Focus-only pad is
      *  refused until the runner's GO brings the show back. */
     void anArmAfterTheStopBringsNothingBackUntilAGo();
+    /** A pad lost after the stop (another device behind its patch, or
+     *  unplugged and back) disarms nothing more and never ends the hold:
+     *  the pad stays red, the footer holds the show, a new arm says so,
+     *  and only a GO brings it back. */
+    void aLostPadLeavesTheShowHeld_data();
+    void aLostPadLeavesTheShowHeld();
+    /** A tool whose pad was lost (it runs on, ownerless) ended by the stop:
+     *  ended once, said once (the stop's line, no "Walk off"), never
+     *  re-armed. */
+    void aStopEndsALostPadsToolOnce_data();
+    void aStopEndsALostPadsToolOnce();
     /** Reset after the stop plays nothing: still red. */
     void aResetAfterTheStopLeavesThePadRed();
     /** A real GO (execute()) ends the red and the footer's hold together. */
