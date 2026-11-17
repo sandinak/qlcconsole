@@ -210,51 +210,6 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
     REPORT("values to fixtures (no view): spreading %.2f ms (%d fixtures changed), burning %.2f ms (%d)",
           spreadApply, spreadChanged, burnApply, burnChanged);
 
-    /* (a) again, as the engine runs it: the look playing on the MasterTimer,
-       a whole engine frame (every function's write, every universe's
-       faders) at a time, over a 3 s spread then the fire burning. */
-    {
-        QLCPalette *fast = new QLCPalette(QLCPalette::Effect, doc);
-        fast->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
-        fast->setEffectParamValue(QStringLiteral("edge"), 0.354);
-        fast->setEffectParamValue(QStringLiteral("seed"), 327.0);
-        fast->setEffectParamValue(QStringLiteral("spreadTime"), 3.0);
-        fast->setEffectParamValue(EffectRuns::runsKey(), 0);
-        QVERIFY(doc->addPalette(fast));
-        Scene *look = new Scene(doc);
-        QVERIFY(doc->addFunction(look));
-        for (Fixture *fx : doc->fixtures())
-            if (underTheFire(fx))
-                look->addFixture(fx->id());
-        look->addPalette(fast->id());
-        MasterTimer *mt = doc->masterTimer();
-        auto engineFrame = [&]() {
-            mt->timerTick();
-            for (Universe *u : doc->inputOutputMap()->universes())
-                u->processFaders();
-        };
-        look->start(mt, FunctionParent::master());
-        QElapsedTimer run;
-        run.start();
-        double sp = 0, spMax = 0, bu = 0, buMax = 0;
-        int spN = 0, buN = 0;
-        while (run.elapsed() < 4500)
-        {
-            const qint64 at = run.elapsed();
-            QElapsedTimer f;
-            f.start();
-            engineFrame();
-            const double ms = f.nsecsElapsed() / 1e6;
-            if (at > 200 && at < 2800) { sp += ms; spMax = qMax(spMax, ms); ++spN; }
-            else if (at > 3600) { bu += ms; buMax = qMax(buMax, ms); ++buN; }
-        }
-        look->stop(FunctionParent::master());
-        engineFrame();
-        engineFrame();
-        REPORT("engine frame (look on the MasterTimer): spreading %.2f ms (max %.2f, %d frames), burning %.2f ms (max %.2f, %d frames)",
-               spN ? sp / spN : 0.0, spMax, spN, buN ? bu / buN : 0.0, buMax, buN);
-    }
-
     // (c) with the Lighting Studio's 2D plot listening to every fixture.
     {
         // The App's own Lighting Studio (one at a time), its plot open.
@@ -341,6 +296,51 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
               beams ? "on" : "off", sc, sw, bc, bw);
     }
     v.setLiveValues(false);
+
+    /* (a) again, as the engine runs it: the look playing on the MasterTimer,
+       a whole engine frame (every function's write, every universe's
+       faders) at a time, over a 3 s spread then the fire burning. */
+    {
+        QLCPalette *fast = new QLCPalette(QLCPalette::Effect, doc);
+        fast->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/fire-spread.js");
+        fast->setEffectParamValue(QStringLiteral("edge"), 0.354);
+        fast->setEffectParamValue(QStringLiteral("seed"), 327.0);
+        fast->setEffectParamValue(QStringLiteral("spreadTime"), 3.0);
+        fast->setEffectParamValue(EffectRuns::runsKey(), 0);
+        QVERIFY(doc->addPalette(fast));
+        Scene *look = new Scene(doc);
+        QVERIFY(doc->addFunction(look));
+        for (Fixture *fx : doc->fixtures())
+            if (underTheFire(fx))
+                look->addFixture(fx->id());
+        look->addPalette(fast->id());
+        MasterTimer *mt = doc->masterTimer();
+        auto engineFrame = [&]() {
+            mt->timerTick();
+            for (Universe *u : doc->inputOutputMap()->universes())
+                u->processFaders();
+        };
+        look->start(mt, FunctionParent::master());
+        QElapsedTimer run;
+        run.start();
+        double sp = 0, spMax = 0, bu = 0, buMax = 0;
+        int spN = 0, buN = 0;
+        while (run.elapsed() < 4500)
+        {
+            const qint64 at = run.elapsed();
+            QElapsedTimer f;
+            f.start();
+            engineFrame();
+            const double ms = f.nsecsElapsed() / 1e6;
+            if (at > 200 && at < 2800) { sp += ms; spMax = qMax(spMax, ms); ++spN; }
+            else if (at > 3600) { bu += ms; buMax = qMax(buMax, ms); ++buN; }
+        }
+        REPORT("engine frame (look on the MasterTimer): spreading %.2f ms (max %.2f, %d frames), burning %.2f ms (max %.2f, %d frames)",
+               spN ? sp / spN : 0.0, spMax, spN, buN ? bu / buN : 0.0, buMax, buN);
+        look->stop(FunctionParent::master());
+        engineFrame();
+    }
+
     if (qEnvironmentVariableIsSet("FIRE_PERF_REPORT"))
         QFAIL(qPrintable(g_report.join(QStringLiteral(" | "))));
 }
