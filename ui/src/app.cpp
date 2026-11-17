@@ -5911,7 +5911,7 @@ void App::setCustomTabs(const QStringList &tabs, bool markModified)
     set.removeAll(tr("Run"));
     set.prepend(tr("Connections"));
     set.append(tr("Run"));
-    if (set == workspaceViewTabs(m_workspaceView))
+    if (tabs.isEmpty() || set == workspaceViewTabs(m_workspaceView))
         set.clear();                    // the view's own: nothing to keep
     if (set == m_customTabs)
         return;

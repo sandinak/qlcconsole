@@ -533,7 +533,8 @@ void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
     QCOMPARE(tabs->count(), views + 3);   // Everything: + Functions, Build, Shows
     m_app->setTabLabelMode(App::TabTextOnly);
     for (int i = 0; i < tabs->count(); ++i)
-        QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString());
+        QCOMPARE(tabs->tabText(i), tabs->tabBar()->tabData(i).toString() == "Shows"
+                                       ? QString("Timeline") : tabs->tabBar()->tabData(i).toString());
     m_app->setTabLabelMode(App::TabIconAndText);
 
     // Back in qlcconsole: no tab again.
@@ -3002,7 +3003,7 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree 4",
-                           "Shows 5", "Virtual Console 6", "Run 7",
+                           "Timeline 5", "Virtual Console 6", "Run 7",
                            "|", "Functions", "Build", "Simple Desk" }));
 
     m_app->setWorkspaceView(App::ClassicView);
@@ -3023,7 +3024,7 @@ void AppViews_Test::windowShortcutsFollowTheView()
     m_app->setWorkspaceView(App::EverythingView);
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Functions 4",
-                           "Build 5", "Show Tree 6", "Shows 7", "Virtual Console 8",
+                           "Build 5", "Show Tree 6", "Timeline 7", "Virtual Console 8",
                            "Simple Desk 9", "Run 0" }));
 
     // A tab in a window of its own keeps its number.
