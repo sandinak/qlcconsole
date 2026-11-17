@@ -65,7 +65,14 @@ public:
         int slotPosition = 0;
         int slotCount = 0;
         QStringList slotDevices;
+        /** Not connected, while another device of that exact name is: the
+         *  universe waits for its own one (a pad already connected never
+         *  takes it over by itself). */
+        bool sameNameHere = false;
     };
+    /** The words for a universe waiting for its own device while another
+     *  of that name is connected; empty when none is. */
+    static QString waitText(const Device &d);
 
     /** Every input patched to a device (a plugin whose lines are hardware):
      *  the open ones, and the ones kept offline whose plugin is here. */

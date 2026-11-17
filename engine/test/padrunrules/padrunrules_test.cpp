@@ -703,8 +703,10 @@ void PadRunRules_Test::aBufferedStopPressCountsBeforeTheReset()
 void PadRunRules_Test::aBufferedStopPressCountsBeforeARepatch_data()
 {
     QTest::addColumn<bool>("unpatch");
-    QTest::newRow("patched again") << false;
-    QTest::newRow("unpatched (unplugged)") << true;
+    QTest::addColumn<bool>("rescanFirst");
+    QTest::newRow("patched again") << false << false;
+    QTest::newRow("unpatched (unplugged)") << true << false;
+    QTest::newRow("unplugged after a rescan") << true << true;
 }
 
 void PadRunRules_Test::aBufferedStopPressCountsBeforeARepatch()
@@ -714,11 +716,15 @@ void PadRunRules_Test::aBufferedStopPressCountsBeforeARepatch()
        change): the press goes out first, with the patch it was read on,
        and the stop fires (round-5 review, requirement D). */
     QFETCH(bool, unpatch);
+    QFETCH(bool, rescanFirst);
     makeShow();
     PadRun *run = m_doc->programmer()->padRun();
     run->setEnabled(true);
     for (quint32 ch : { kLB, kRB, kLT })
         hold(ch, true);
+    // A rescan for something else first: the roles stay known (round-7 review).
+    if (rescanFirst)
+        emit m_stub->configurationChanged();
     emit m_stub->valueChanged(0, 0, kRT, 255);      // buffered: no frame has run
     QCOMPARE(stops(), 0);
     InputOutputMap *iom = m_doc->inputOutputMap();
@@ -747,6 +753,8 @@ void PadRunRules_Test::anotherModelsLayoutReadsNoBufferedPress()
     auto restore = qScopeGuard([&]() { m_doc->setMode(Doc::Design); });
     arm(true, 0);
     axis(kLT, 255);
+    // A rescan for something else first: the roles stay known (round-7 review).
+    emit m_stub->configurationChanged();
     emit m_stub->valueChanged(0, 0, kUnroled, 255);     // buffered: no frame has run
     QMap<quint32, QString> other = xboxRoles();
     other.insert(kUnroled, "a");

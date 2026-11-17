@@ -17,6 +17,7 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QScopeGuard>
 
 #include "inputdevicenotices_test.h"
 #include "inputdevicenotices.h"
@@ -77,6 +78,38 @@ void InputDeviceNotices_Test::cleanup()
     m_stub->m_lineNames.clear();
     m_stub->m_lineDeviceKind.clear();
     ShowStatus::instance()->clearStatus(QStringLiteral("input.devices"));
+}
+
+void InputDeviceNotices_Test::aPadOfTheSameNameIsNotTakenOverSilently()
+{
+    /* Two pads of one name; the one universe 2 is patched to goes, the
+       other stays connected. Universe 2 waits for its own pad, and the
+       notice and the footer say so -- and how to use the other one --
+       rather than "disconnected" while a pad of that name is right there
+       (round-7 review). */
+    const QString pad = QStringLiteral("Pad");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_stub->m_lineNames = QStringList() << pad << pad;
+    m_stub->m_deviceIds = { { 0, 11 }, { 1, 12 } };
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 0));
+    auto restore = qScopeGuard([&]() { m_stub->m_deviceIds.clear(); });
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(100);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+    // The first goes: the other moves onto line 0.
+    m_stub->m_deviceIds = { { 0, 12 } };
+    rescanned(m_stub, QStringList() << pad);
+    QVERIFY2(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine(),
+             "universe 2 took the other pad of that name");
+    QTRY_COMPARE(said.count(), 1);
+    const QString want = QString("Input device 'Pad' disconnected — universe 2: it waits for that one. "
+                                 "Another 'Pad' is connected; to use it here, unplug it and plug it back "
+                                 "in, or patch it in Inputs/Outputs");
+    QCOMPARE(said.at(0).at(0).toString(), want);
+    const ShowStatus::Entry e = footerEntry();
+    QVERIFY2(e.summary.contains("it waits for that one") && e.summary.contains("unplug it and plug it back in"),
+             qPrintable(e.summary));
 }
 
 void InputDeviceNotices_Test::aDisconnectIsSaidOnceSettled()

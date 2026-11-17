@@ -28,6 +28,7 @@
 #include "controllerjobs.h"
 #include "programmercontroller.h"
 #include "inputoutputmap.h"
+#include "universe.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "mastertimer.h"
@@ -565,6 +566,98 @@ void PadTraces_Test::aSpareOnChargeTakesNoUniverse()
     for (quint32 ch : { kPadRt, kPadLt, kPadRb, kPadLb })
         QVERIFY(q253In(b, ch, 0));
     Q_UNUSED(a);
+}
+
+void PadTraces_Test::anAnySlotTakesNoPadSilently()
+{
+    /* Universe 1 has an "any game controller" slot on pad A, armed, LT
+       held. Universe 2 is patched by hand onto A's line; spare C, of the
+       same name, is connected. The slot moves to C -- as a pad lost and a
+       new one: disarmed, and C's A plays nothing (round-7 review). */
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    const QString a = QStringLiteral("/dev/input/js0"), c = QStringLiteral("/dev/input/js1");
+    m_fake->list(a, 0x045e, 0x028e, name, 0, 1);
+    q253Scan(name, 1);
+    m_fake->list(c, 0x045e, 0x028e, name, 0, 2);
+    q253Scan(name, 2);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Universe::InputSlotDevice any;
+    any.plugin = QStringLiteral("HID");
+    any.anyGamepad = true;
+    iom->setInputSlot(1, { any });
+    QTRY_VERIFY_WITH_TIMEOUT(iom->inputPatch(1) != nullptr && iom->inputPatch(1)->input() == 0, 2000);
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    QStringList heard;
+    const QMetaObject::Connection listen = connect(iom, &InputOutputMap::inputValueChanged, this,
+        [&heard](quint32 u, quint32 ch, uchar v) { heard << QString("u%1:ch%2=%3").arg(u).arg(ch).arg(v); });
+    auto unlisten = qScopeGuard([&]() { disconnect(listen); });
+    QVERIFY(q253In(a, kPadLb, 255));
+    QVERIFY(q253In(a, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QVERIFY(q253In(a, kPadRb, 0));
+    QVERIFY(q253In(a, kPadLb, 0));
+    QVERIFY(q253In(a, kPadLt, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u1:ch2=255")), 2000);
+    // Universe 2 by hand onto A's line; the slots are looked at again.
+    QVERIFY(iom->setInputPatch(2, QStringLiteral("HID"), QString(), 0));
+    iom->applyInputSlots();
+    QTRY_VERIFY_WITH_TIMEOUT(iom->inputPatch(1) != nullptr && iom->inputPatch(1)->input() == 1, 2000);
+    QVERIFY2(!run->isArmed(), "the slot moved onto the spare, still armed");
+    // C's A: nothing plays.
+    QVERIFY(q253In(c, kPadA, 255));
+    QVERIFY(q253In(c, kPadA, 0));
+    QTest::qWait(100);
+    QCOMPARE(commandCount(int(ShowControl::Go)), 0);
+    QVERIFY(q253In(a, kPadLt, 0));
+}
+
+void PadTraces_Test::aSpareReenumeratedTakesNoUniverse_data()
+{
+    QTest::addColumn<bool>("located");
+    QTest::newRow("macOS-like: each pad its USB location") << true;
+    QTest::newRow("Linux-like: no location, one name") << false;
+}
+
+void PadTraces_Test::aSpareReenumeratedTakesNoUniverse()
+{
+    /* B (universe 2) is unplugged and waits; spare C, here when B went,
+       re-enumerates at its own path (a sleep, a port's power cycle): still
+       not B -- universe 2 keeps waiting. B back: universe 2 is B's (round-7
+       review). */
+    QFETCH(bool, located);
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    QStringList paths;
+    for (int i = 0; i < 3; ++i)
+        paths << (located ? QStringLiteral("USB_045e_028e_%1000000").arg(i + 1)
+                          : QStringLiteral("/dev/input/js%1").arg(i));
+    const QString b = paths.at(1), c = paths.at(2);
+    for (int i = 0; i < 3; ++i)
+    {
+        m_fake->list(paths.at(i), 0x045e, 0x028e, name, 0, quint64(i + 1));
+        q253Scan(name, i + 1);
+    }
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(1, QStringLiteral("HID"), QString(), 0));
+    QVERIFY(iom->setInputPatch(2, QStringLiteral("HID"), QString(), 1));
+    startRunning();
+    m_fake->unlist(b);
+    q253Scan(name, 2);
+    QVERIFY(iom->inputPatch(2) == nullptr || iom->inputPatch(2)->input() == QLCIOPlugin::invalidLine());
+    // C re-enumerates where it is.
+    m_fake->unlist(c);
+    m_fake->list(c, 0x045e, 0x028e, name, 0, 8);
+    QMetaObject::invokeMethod(m_hid, "rescanDevices", Qt::DirectConnection);
+    QTRY_COMPARE_WITH_TIMEOUT(m_fake->opens(c), 2, 3000);
+    QTest::qWait(150);
+    QMetaObject::invokeMethod(iom, "slotRetryOfflinePatches", Qt::DirectConnection);
+    QVERIFY2(iom->inputPatch(2) == nullptr || iom->inputPatch(2)->input() == QLCIOPlugin::invalidLine(),
+             "universe 2 took the spare re-enumerated where it was");
+    // B back.
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 9);
+    q253Scan(name, 3);
+    QTRY_VERIFY2_WITH_TIMEOUT(iom->inputPatch(2) != nullptr && int(iom->inputPatch(2)->input()) == q253Line(b),
+                              "universe 2 did not come back to B", 3000);
 }
 
 void PadTraces_Test::triggerRest()

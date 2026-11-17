@@ -95,6 +95,7 @@ QList<InputDeviceNotices::Device> InputDeviceNotices::devices() const
             d.connected = false;
             d.slotCount = slotNames.count();
             d.slotDevices = slotNames;
+            d.sameNameHere = plugin->inputs().contains(rec.uid);
             list << d;
         }
     }
@@ -125,6 +126,17 @@ QString InputDeviceNotices::kindName(const QString &plugin)
     if (plugin == QLatin1String("MIDI"))
         return tr("MIDI device");
     return tr("Input device");
+}
+
+QString InputDeviceNotices::waitText(const Device &d)
+{
+    /* Another device of that exact name is connected (a spare on charge):
+       it is not taken over by itself -- that one may not be the same pad
+       (board Q253's round-7 review). Said, so it doesn't read as a bug. */
+    if (d.connected || d.sameNameHere == false)
+        return QString();
+    return tr(": it waits for that one. Another '%1' is connected; to use it here, unplug it and "
+              "plug it back in, or patch it in Inputs/Outputs").arg(d.name);
 }
 
 void InputDeviceNotices::schedule()
@@ -164,13 +176,13 @@ void InputDeviceNotices::settleNow()
         {
             // A show opened with it switched off, or asleep.
             said << tr("%1 '%2' not connected — universe %3")
-                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1) + waitText(d);
             warning = true;
         }
         else if (d.connected == false && was->connected)
         {
             said << tr("%1 '%2' disconnected — universe %3")
-                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+                        .arg(kindName(d.plugin), d.name).arg(d.universe + 1) + waitText(d);
             warning = true;
         }
         else if (d.connected && d.slotCount > 1 && seen && (known == false || was->connected == false))
@@ -239,7 +251,7 @@ void InputDeviceNotices::updateStatus(const QList<Device> &now) const
         if (d.connected)
             continue;
         const QString line = tr("%1 '%2' not connected — universe %3")
-                                 .arg(kindName(d.plugin), d.name).arg(d.universe + 1);
+                                 .arg(kindName(d.plugin), d.name).arg(d.universe + 1) + waitText(d);
         if (first.isEmpty())
             first = line;
         items << line;

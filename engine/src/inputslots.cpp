@@ -290,7 +290,13 @@ bool InputOutputMap::applyInputSlot(quint32 universe)
     if (winner >= 0)
     {
         const QString uid = plugin->inputs().value(line);
-        if (winner == live && patched && ip->plugin() == plugin && ip->inputUID() == uid)
+        /* "Still the one" is the same DEVICE where the plugin can tell
+           (QLCIOPlugin::inputDeviceId()), not the same name: another pad of
+           that name is a pad lost and a new one, through setInputPatch()
+           below -- never moved onto silently, armed (round-7 review). */
+        const quint64 lineId = plugin->inputDeviceId(quint32(line));
+        const bool sameDevice = ip == nullptr || ip->deviceId() == 0 || lineId == 0 || ip->deviceId() == lineId;
+        if (winner == live && patched && ip->plugin() == plugin && ip->inputUID() == uid && sameDevice)
         {
             if (int(ip->input()) != line)
             {

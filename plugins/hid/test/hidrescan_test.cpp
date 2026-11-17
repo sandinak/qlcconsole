@@ -285,6 +285,49 @@ void HIDRescan_Test::aDevicesIdFollowsTheDevice()
     QCOMPARE(m_plugin->inputDeviceId(0), idB2);
 }
 
+void HIDRescan_Test::aReplacementChainIsFollowed()
+{
+    /* inputDeviceReplacement(): the device that replaced one where it was,
+       through every re-enumeration since; 0 for a device never replaced,
+       or one unplugged (round-7 review). */
+    const QString a = QStringLiteral("/dev/input/js0"), b = QStringLiteral("/dev/input/js1");
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    m_plugin->setTestBackend(quintptr(m_fake));
+    auto settle = [&](int count) {
+        m_plugin->rescanDevices();
+        QTRY_VERIFY_WITH_TIMEOUT(m_plugin->isScanning() == false && m_plugin->openingCount() == 0
+                                     && countOf(m_plugin->inputs(), name) == count, 3000);
+        QTest::qWait(30);
+    };
+    m_fake->list(a, 0x045e, 0x0b13, name, 0, 1);
+    settle(1);
+    m_fake->list(b, 0x045e, 0x0b13, name, 0, 2);
+    settle(2);
+    const quint64 idA = m_plugin->inputDeviceId(0), idB = m_plugin->inputDeviceId(1);
+    QCOMPARE(m_plugin->inputDeviceReplacement(idA), quint64(0));
+    QCOMPARE(m_plugin->inputDeviceReplacement(12345), quint64(0));
+    QList<quint64> chain { idB };
+    for (quint64 instance : { 3, 4, 5 })
+    {
+        m_fake->unlist(b);
+        m_fake->list(b, 0x045e, 0x0b13, name, 0, instance);
+        m_plugin->rescanDevices();
+        QTRY_COMPARE_WITH_TIMEOUT(m_fake->opens(b), int(chain.size()) + 1, 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(m_plugin->isScanning() == false && m_plugin->openingCount() == 0, 3000);
+        QTest::qWait(30);
+        chain << m_plugin->inputDeviceId(1);
+        QVERIFY(chain.last() != 0 && chain.last() != chain.at(chain.size() - 2));
+    }
+    // Every id in the chain leads to the device there now.
+    for (int i = 0; i < chain.size() - 1; ++i)
+        QCOMPARE(m_plugin->inputDeviceReplacement(chain.at(i)), chain.last());
+    QCOMPARE(m_plugin->inputDeviceReplacement(chain.last()), quint64(0));
+    // A unplugged: never replaced.
+    m_fake->unlist(a);
+    settle(1);
+    QCOMPARE(m_plugin->inputDeviceReplacement(idA), quint64(0));
+}
+
 void HIDRescan_Test::aQueuedValueFollowsItsDevice()
 {
     /* A value read on the device's thread and queued before another pad

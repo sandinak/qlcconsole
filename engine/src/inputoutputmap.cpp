@@ -1362,8 +1362,15 @@ int InputOutputMap::retryOfflinePatches()
                    (round-5 review). */
                 auto usable = [&](int l) {
                     const quint64 id = plugin->inputDeviceId(quint32(l));
-                    return inputDeviceFollowed(plugin, id, NULL) == false
-                           && (id == 0 || rec.notTheDevice.contains(id) == false);
+                    if (inputDeviceFollowed(plugin, id, NULL) || (id != 0 && rec.notTheDevice.contains(id)))
+                        return false;
+                    /* Nor one of those re-enumerated where it was since (a
+                       sleep, a port's power cycle): still not the pad that
+                       went (round-7 review). */
+                    for (quint64 here : rec.notTheDevice)
+                        if (id != 0 && plugin->inputDeviceReplacement(here) == id)
+                            return false;
+                    return true;
                 };
                 if (line >= 0 && rec.tag == Universe::InputPatchTag && usable(line) == false)
                 {

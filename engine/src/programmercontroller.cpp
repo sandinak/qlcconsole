@@ -3526,10 +3526,12 @@ void ProgrammerController::learnRoles(quint32 universe) const
 
 void ProgrammerController::forgetRoles(quint32 universe)
 {
-    if (universe == UINT_MAX)
-        m_roleMaps.clear();
-    else
-        m_roleMaps.remove(universe);
+    /* Learnt again at once, from the device there now (round-7 review): a
+       value read meanwhile and delivered after that device went is read
+       with its roles, not the next device's. */
+    const QList<quint32> which = universe == UINT_MAX ? m_roleMaps.keys() : QList<quint32>{ universe };
+    for (quint32 u : which)
+        learnRoles(u);
 }
 
 int ProgrammerController::controllerRole(quint32 universe, quint32 channel) const

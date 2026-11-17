@@ -1166,8 +1166,8 @@ private:
     static constexpr quint32 kRoleMapChannels = 128;
     mutable QHash<quint32, QVector<int>> m_roleMaps;
     void learnRoles(quint32 universe) const;
-    /** Forget @p universe's roles (UINT_MAX: every universe's), to be
-     *  learnt again on its next value. */
+    /** Learn @p universe's roles again now (UINT_MAX: every universe
+     *  learnt so far), from the device on its line now. */
     void forgetRoles(quint32 universe);
     /** Focus mode's share of slotControllerInputChanged(). True if it took
      *  the event. @p knownRole: controllerRole() if already worked out. */

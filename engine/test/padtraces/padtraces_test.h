@@ -66,6 +66,13 @@ private slots:
      *  universe; the pad plugged back does (both backends). */
     void aSpareOnChargeTakesNoUniverse_data();
     void aSpareOnChargeTakesNoUniverse();
+    /** An "any" slot moved off a line another universe was patched to is
+     *  a pad lost: disarmed, the spare's A plays nothing. */
+    void anAnySlotTakesNoPadSilently();
+    /** A spare that was here re-enumerates where it is: still not the pad
+     *  a universe waits for. */
+    void aSpareReenumeratedTakesNoUniverse_data();
+    void aSpareReenumeratedTakesNoUniverse();
     void triggerRest();
     void triggerRestDuringTheChord();
     void aSessionIsRecorded();

@@ -377,12 +377,17 @@ it holds, and the chip says why."
   a device by its name (a spare of that name on charge is not the pad that
   went). Otherwise it waits offline, and the pad plugged back reopens it:
   a line of its name that no other patch follows and whose device was not
-  already here when it went (`retryOfflinePatches()`,
-  `Universe::OfflinePatch::notTheDevice`). A plugin with no ids keeps the
+  already here when it went, nor re-enumerated from one that was
+  (`retryOfflinePatches()`, `Universe::OfflinePatch::notTheDevice`). A pad
+  already connected never takes over by itself (it may not be the same
+  pad): the notice says the universe waits for its own one, and that the
+  other takes over once unplugged and plugged back in, or patched in
+  Inputs/Outputs. A plugin with no ids keeps the
   name rule, as before. Every value is read with the roles its device had
   (`ProgrammerController::controllerRole()` learns a universe's roles while
-  its device is known, and again after a patch, device, profile, slot or
-  configuration change, once what was read has been delivered): a press
+  its device is known, and again at once after a patch, device, profile,
+  slot or configuration change, once what was read has been delivered,
+  never later from whatever device is there then): a press
   delivered after its pad was unplugged, or after another model took its
   line, is never read with another layout. Before any patch is set again or let
   go (a re-patch, an unplug, a controller slot's change), what it read and
@@ -408,7 +413,15 @@ it holds, and the chip says why."
   device always takes the first line of its name, so it never reaches the
   second of two pads of one name. Not built here. Fixed here: an "any"
   slot no longer keeps a line another universe's patch is on (a manual
-  patch and an "any" slot on one pad).
+  patch and an "any" slot on one pad), and a slot moving to another
+  device is a pad lost (by device id, never "the same name"). Known
+  limits with no stable identity for a pad (Linux joysticks and
+  same-model macOS pads without one): a spare plugged in while B is away
+  and before B returns is taken for B; and when every pad sleeps at once
+  the pads of one name come back in the order they wake, each universe
+  taking the next. The way forward is a device serial
+  (`HIDFound::serial`) as the identity where the pad gives one -- not
+  built here.
 - **The restore glide waits for a tool.** A cue's follow spot ending
   glides its subject back where the show has it; while a tool's lights
   aim at that subject the glide waits where it is, and goes on when the
