@@ -10,7 +10,108 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [0.4.13] - Unreleased
+## [0.5.0] - Unreleased
+
+The first public release since 0.4.3. It carries everything built in
+0.4.4 to 0.4.13, which were tested on our own rigs and never published on
+their own; their detailed notes follow below this section.
+
+### Run the show from a game controller
+
+- **Pad Run is rebuilt on its rules.** Arming takes both bumpers; LT is the
+  safety for GO, Back and sub-cues; RT fires the armed hit, and the pad says
+  which hit before you pull. Each pad has jobs (Run cues, Follow spot,
+  Focus), chosen on the computer, and the footer and every pad show one
+  status. A pad that is unplugged or replaced disarms and says so; a pad
+  macOS lists twice acts once per press.
+- **LB + RB + LT + RT is the emergency stop, from every pad, in every
+  state.** It, the phone or Deck page's stop and an OSC or MSC ALL OFF now
+  mean *Everything is off*: every cue stopped and every fixture at rest,
+  foggers and WLED effects included. The show is then held until a GO. The
+  phone's stop needs only the PIN; it says *STOP NOT SENT* and why when it
+  was not sent. A focus interrupted by the stop keeps its unsaved changes
+  to pick up.
+- **Follow spot and venue focus from the pad.** The follow spot steers on
+  beside another pad's tool and no longer swings round a whole turn when
+  walked across the stage; venue focus starts with LT + Menu, and the pad
+  can walk the show cue by cue.
+- **Hits:** a finished one-shot lets go, and each cue starts at hit 1.
+- **Controllers are recorded once and checked on every change**: a guided
+  walk checks a pad's mapping, and Connections shows each control answer.
+
+### The Show Tree and playback
+
+- Two GOs a moment apart play one cue; after a crash the Run tab offers the
+  cue the show was on; Back on the first cue keeps it; deleting the cue on
+  stage holds its light until GO.
+- The Workbench opens Blind in Operate (Play Live is one click), every
+  colour and level change is one undo step, and Renumber Song… names the
+  cues.
+- Cues from the script and the command line (`hit "Slam" for cue 2.3`).
+
+### The rig and the stage
+
+- **The Rig Overview in a Blackout shows only the light the rig puts out**:
+  no colour, no clash red and no selection edge until Dim, House or Work
+  light.
+- Props someone holds, hand-held IR candles lit by the show, boxes with
+  LEDs on the front, a gobo on the backdrop as on the floor, and a facing
+  arrow you drag to point a fixture.
+- Every fixture not on the plot is listed and can be dragged on.
+- **Output rule *Show only*:** a laser, fogger, flame relay or DMX curtain
+  fires only from what is started in Operate.
+
+### Connections and patching
+
+- **Connections' DMX map** shows what each block is, with a legend and
+  hover, and a **Test mode** to bring up channels by hand.
+- **Patch List** per universe, with Print…; a multi-universe address reads
+  **U3.001** everywhere, and the CSV export has a *DMX address* column.
+- Patching a universe to a WLED sets the WLED up; By universe edits in
+  place; a device that hangs no longer stops the other universes' DMX.
+
+### Effects
+
+- **Fire Spread**: the stage catches from one point, in two colours (front
+  and backfill), over what is already lit, with an Intensity and a hold at
+  the end.
+- **Spell Spread**: a colour reaches the lights one by one.
+
+### The workspace
+
+- **Choose your tabs** per show (View ▸ Workspace ▸ Tabs…); the Simple Desk
+  opens on demand (Window ▸ Simple Desk).
+- Right-click menus are shorter and in the order you work: at most 14
+  items, Delete last.
+- Open the last show at start; Operate keeps the screen awake.
+- 0 fixture definitions from QLC+ upstream this release (the library was
+  already current).
+
+### Known issues
+
+- **Windows: Pad Run, MSC in and MIDI timecode in are refused for now.**
+  The emergency stop still works there. A proper fix is planned for 0.5.x.
+- **The Windows installer is not code-signed**, so SmartScreen warns on
+  first run (More info ▸ Run anyway).
+- **The CSV patch export has a new *DMX address* column**, so the columns
+  after it move one place: a spreadsheet macro reading them by position
+  needs updating.
+- **Tabs can't yet be locked by skill level**, and the Everything view
+  still opens the Simple Desk by default.
+- **RGB colour effects** (Rainbow, Color Spread and the like) don't run on
+  colour-wheel or CMY movers, so the effect picker doesn't offer them for
+  such groups.
+- **A follow spot on a head in an 8-bit mode moves in its DMX steps.** Use
+  the head's 16-bit mode for a follow spot.
+- **A free-flying follow spot (no Aim look) is not turned by the
+  operator's facing**; aimed spots are.
+- **Hold at the end of a WLED effect can't freeze over Art-Net or E1.31**;
+  it does over Network (WLED).
+- **On macOS, Activity Monitor's Real Memory can climb during a long
+  on-screen session** (about 50 MB an hour): memory the app has freed that
+  macOS still counts. The app's own memory stays flat.
+
+## [0.4.13] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
@@ -50,7 +151,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Test quality.** Four flaky tests no longer fail under load: autosave's File > Open case (the file dialog's folder is asked for once, not restarted every tick), padhit's "every surface names the next hit" (waits for the Run tab line and chip to redraw), merge-check's self-test (its scratch repo is removed with retries), and the gate's real-preferences check, which now compares key by key and leaves out the keys the person's own running app writes (dialog geometry, splitters, the Look editor's recent effects, the update check's time; exact keys only) while still failing on any other key a test writes. Tests that could not fail now can: padrun's "held past every hold time" drives the hold ticks (the old 60 ms wait was shorter than every hold), padbench's committed shows missing is a failure not a skip, and View + Menu holds assert the "switched on the computer" notice instead of a role that can no longer change.
 
-## [0.4.12] - Unreleased
+## [0.4.12] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
@@ -62,14 +163,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Record a game controller once, test it on every change.** Set `QLC_HID_RECORD=<folder>` and the HID plugin writes a trace of the session there (`pads-<date-time>.jsonl`: each pad arriving and leaving, with its identity, every value it delivers, every open that failed or stuck), at no cost when unset and never holding up the reader (a file stops at about 200 MB with a final `truncated` line; a write that fails, such as a full disk, warns once and ends the recording). The gate replays traces from `engine/test/padtraces/traces/` through the real plugin into Pad Run: a DualSense clone flipping to an Xbox 360 pad, one pad listed twice, triggers resting at 8 % and noisy sticks (synthetic until a real pad is recorded; docs/dev/PAD_TRACES.md).
 - **A device that hangs while it is opened or closed no longer stops the other universes' DMX.** On a show machine a USB device re-enumerating left a system call that never returned and wedged its whole hub. Any device on it -- a USB DMX interface, a game controller, a MIDI surface -- opened, closed or reconnected while the universes were held stopped every universe's output, not just its own. Every patch change now does its bookkeeping first and opens, closes or aims the device after the universes are let go: patching, reconnecting, unpatching an output or feedback patch, and a controller that moved to another USB line, went away or came back. A patch whose device is being opened or closed sends nothing until that is done, while the other universes carry on. A HID DMX interface's input reader is now stopped with the same 300 ms limit as a game controller's. Known limits: a DMX interface that hangs while it is *sending* a frame (Blackout, Blind and the universe's own frames write to it synchronously) can still stop the output; and the opens and closes run on the app's main thread, so one that never returns still holds the app there, Pad Run's emergency stop with it.
 
-## [0.4.11] - Unreleased
+## [0.4.11] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
 - **The Run tab's frame goes the moment Pad Run disarms (macOS).** The orange (armed), red (stopped) or blue (focus) frame round the Run tab stayed on screen on a Mac after the pad disarmed, though the button and the footer chip had changed. The frame is now drawn by a widget of its own that is repainted with every state change, so it is gone with them. It does not move anything on the tab. Also fixed: switching a Run tab between its full and compact size could leave its Pad, Venue focus and hit widgets dangling, so the next Pad Run change could crash.
 - **A game controller that stops answering no longer freezes the app.** Holding View + Menu (Create + Options) on a DualSense clone flips it to Xbox 360 mode: it drops off USB and comes back, and macOS can leave the new device half-opened for good. The whole app hung on it (bench, 0.4.10). Controllers are now found and opened off the app's main thread, each with a 2-second limit: one that doesn't answer is skipped and named in the footer ("Xbox 360 Controller for Windows (USB 2124000) — not answering"), while the other pads, the DMX output and every pad's emergency stop carry on. The system may keep holding that pad, and the USB hub it is on, until the computer restarts: the footer says to restart this Mac to free its USB after the show, not to replug it. A pad that drops out mid-Pad-Run disarms as for an unplug ("Disarmed: the controller went away."). Closing the show and quitting never wait on a stuck pad, though with one stuck the app may not finish quitting until a restart; it says so as it quits.
 
-## [0.4.10] - Unreleased
+## [0.4.10] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
@@ -78,7 +179,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **The pan turn after its review: only on purpose.** Moving a head on the plot in Operate never changes its pan turn, nor does a re-patch of a placed head, an Undo, a Cancel or the Patch Planner putting the rig back; only a first patch or a placement in Design looks at it. A venue switch that applies a venue's own turn says so on the notice line. Show Review's MOV-14 now also names a head no turn can clear (a front truss at the stage's edge facing the audience) and says the real fix, turning its Facing toward the stage; its fix warns when the head is live, and several selected are one undo step. The action has one name everywhere: **Centre the Pan on Stage** (**Centre Their Pans on Stage** for several). A head's margin from its seam is worked out exactly, not from half-degree samples. Fixed too, older than the turn: a head that had to reach a place half a turn round, tilting back through home, landed twice its tilt calibration off the mark.
 - **Controller jobs and the pan turn after their review.** The emergency stop (both bumpers and both triggers) is now read first, on every pad, before anything else: a second pad's stop is no longer swallowed while a venue focus that was given up still held the first pad as its owner, and it stops the show with the Controller Test open too (the window still shows the presses; it now says the pad that runs cues is disarmed while it is open, to arm again with LB + RB). A venue focus start given up or refused lets its pad go. A follow spot no longer drifts on with no stick held when a pad loses its Follow spot job mid-push, or the binding changes (another pad, Bind by hand, unplugged): what that pad left pushed is let go, and only that pad's. The fine stick is kept per pad: with two pads trimming, their pushes add (up to a full push), and one pad's resting stick never hides another's push. One pad that macOS lists twice is one controller: one emergency stop (one ALL OFF, one rumble, one message), the Pad chip names no second runner and both lines get the same light. Fixture Properties' **Centre on Stage**, **Earlier Turn** and **Later Turn** warn first, as MOV-14's fix does, when the head is live (Operate, or a running look): its beam moves now, a whole turn round. A venue keeps a head's pan turn only when the turn was changed there, so the show's own turn stands otherwise; and applying a venue in Operate never swings a head round: its turn waits for Design, and the notice line says so both times. A venue left in Operate keeps its turn on the live head until Design, but the show file always gets the show's own turn; a head turned by hand in Operate keeps the turn you chose.
 
-## [0.4.9] - Unreleased
+## [0.4.9] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
@@ -91,7 +192,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Before the house opens: one page.** Show Review ▸ **Before the House Opens…** (also offered once a session when you go to Operate) shows, a line each, whether every universe reaches its node, the macOS Local Network permission, the show's controllers, Show Review's blockers, the footer's other not-ready entries, mains power, the screen staying awake, DMX off Wi-Fi, the rest of Settings ▸ Performance, and autosave. Each line has a symbol and a word (never colour alone), says what is wrong, and offers the app's own fix in one click. The channel check walks every light from the pad in Quick Focus, and the dress-rehearsal checklist is its help page. **Show Review's Fix ▸ on a cue deleted since the check** now says "That cue is gone" instead of doing nothing.
 - **Course for the show's new tools.** Lesson 2.5 gains a section on props in a hand (a staff in one cue and gone in a later one, Give Each a Prop, candles lit by the IR Candle Remote's Select with Dim and Brighten as presses); Lesson 3.5 names the **Hit ▸** line on Pad Run; Lesson 3.8's teacher guide gets a Before the House Opens and dress-rehearsal note; Level 3 student pages 3.1-3.4, 3.7 and 3.10 now show their pictures.
-## [0.4.8] - Unreleased
+## [0.4.8] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
@@ -106,7 +207,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **A channel modifier taken off no longer leaves its "zero" going out.** Removing a modifier (or a reset) left the old modifier's zero value (255 on an inverted channel) on the wire every frame.
 - **Output rule "Show only": a laser, fogger, flame relay or DMX curtain fires only from what is started, set or moved in Operate.** Right-click a fixture or group ▸ Output Rules… ▸ Show only. In Design, Blind, the Workbench, Locate, Solo, focus, previews and editors' Test buttons it stays at its safe value (off, closed); the plot still draws what it would do with a "held" badge, and the footer says so ("Lasers held: Design"). Cues left running from Design, and a Park, Mark, cue stack, VC slider or Simple Desk channel left from Design, hold it until a GO or a move in Operate; a GO on a list already playing makes it the show without restarting it. A cue that lets go never fades it out; a last look never holds it. Blackout always wins, even over Ignore Blackout. The emergency stop cuts every Show-only fixture at once, no fade, and starts afresh: nothing from before the stop comes back — not a fade-out, a stored level, a Park or a fader left up — until it is GO'd or moved again. Automatic writers wait for you: audio triggers and a VC Clock drive it only once you switch them on, touch them or work them (key, MIDI/OSC, web) in Operate — never on their own first peak or schedule — and what an audio bar does to a VC button, slider or cue list is the audio widget's; timecode drives it only once Follow timecode is armed in Operate; input passthrough never reaches it; opening a show (over the web in Operate too) starts afresh, and a saved Park holds it until set again. A cue a Script started keeps driving after the Script ends. Identify and Reset are refused for it and for anything patched over its addresses, as Locate is; the VC step button steps only the show's list; move-in-black never pre-sets it; a Show-only fixture moved mid-show is held at its new address at once. Every frame a Show-only channel is worked out from scratch (safe, plus only what counts now): a cue letting go cuts it on any channel, a fogger's LTP fog channel too; a GO in Blind needs a GO again after Blind; a Show Tree cue list following timecode drives it only once its Follow timecode is switched on in Operate; a VC button's flash drives it; an XY pad set by the console (a load, a page change) does not; a cue stack, fader or desk channel does not reach a Show-only fixture patched onto its addresses until moved again. Every send goes through the same rule, not only the frame: Blackout, Blind on and off, All Off, Identify and a plugin's own send put a Show-only fixture at safe or at what the GO gives it, never a preview's value; entering Blind sends the Show-only fixtures to safe (the rest of the rig keeps its look), and All Off and Blackout reach the rig in Blind. Moving, re-aiming, holding or unpatching an output (or removing its universe) sends its Show-only fixtures safe first, and the frame reaches the device -- USB interfaces and WLED included, before the rig check's own hold -- with the rest of the rig as before Blind when in Blind; a universe added in Blind is held as the others are. Show-only fixtures need a network output in this version — Art-Net, sACN (E1.31) or WLED, aimed anywhere, a visualiser on this computer included: a universe with one can't be patched to anything else (USB, MIDI, Loopback, OSC: refused, saying why); one already there is held when a fixture on it is made Show only — on its own, as a group, patched or remapped together, its last frame sends every Show-only channel safe first — or when a show is opened; while it is held, the interface it was on is kept for its lasers (every other universe on it is held too, nothing else opens onto it, and a patch onto it is refused, saying to remove that output to free it); and they all come back as before once the rule is off — such an interface can be unplugged, swapped or rescanned and come back as another device. A former laser universe that shared a USB interface comes back on that very interface, or by name if it moved; removing, moving or holding one output of a universe never stops another output of that universe on the same interface; a closing frame whose send failed is sent once more (not from an interface the rig check holds); a held WLED's closing state is never skipped while a look is on its way. A passthrough or Loopback chain from a network output on this computer on to a USB interface is not checked (a known limit, in the help). Two identical interfaces in a saved show load on their saved lines. A fixture moved by any number of channels, or re-moded, needs a fresh GO; a fixture patched over a Show-only one cannot turn it on (On when not in use and Ignore Blackout do nothing there).
 
-## [0.4.7] - Unreleased
+## [0.4.7] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
@@ -116,7 +217,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Command line: `hit "Slam" for cue 2.3`** (or `for list`) makes a hit scoped to that cue; a cue that doesn't exist is refused with the reason, and a hit already there is selected, not duplicated.
 - **A new venue asks for its name in the same step.** The field comes filled with the date and selected (Enter takes it, typing replaces it), instead of an empty box that quietly became a timestamp.
 
-## [0.4.6] - Unreleased
+## [0.4.6] - not released (ships as part of 0.5.0)
 
 ### Changed and fixed
 
@@ -136,7 +237,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **The UX flows walk the view in use.** F-04 and F-07 now go through the Show Tree's Workbench (Build is hidden in the qlcconsole view), and F-13 (run the show from the pad) and F-14 (fire a staff hit) are added, their pad steps manual.
 
-## [0.4.5] - Unreleased
+## [0.4.5] - not released (ships as part of 0.5.0)
 
 0.4.5 is the release after 0.4.3. **0.4.4 was never published** (decided
 2026-11-14): running the show from a game controller was rebuilt before it
@@ -179,7 +280,7 @@ changes in this section on top.
 
 - **Fewer avoidable gate failures and waits (process review of 2026-11-13).** `--quick` now builds with the -Werror set CI fails on, and `--strict` adds the Release leg with the same tests; the pool brings test screenshots back (`--shots DIR`); `make rc HOSTS=…` installs a signed test build on our Macs without waiting for notarization, and notarization itself polls instead of trusting `notarytool --wait`; CHANGELOG.md and TEST_MAP.md merge without conflicts (`.gitattributes`, `Mnew` row ids numbered on the train); `tools/merge-check.py` resolves "both added" conflicts and refuses a merge that lost a brace; `tools/gitsync.sh` fetches over port 443 and pushes a gated SHA to main only with its gate line. See [RELEASE.md](docs/dev/RELEASE.md#process-tools) and the agent brief, [AGENT_BRIEF.md](docs/dev/AGENT_BRIEF.md).
 
-## [0.4.4] - not released (2026-11-13; ships as part of 0.4.5)
+## [0.4.4] - not released (2026-11-13; ships as part of 0.5.0)
 
 qlcconsole 0.4.4 follows 0.4.3 with the follow spot operator's point of
 view and more of the show run from a controller. A follow spot's **Operator**
