@@ -17865,6 +17865,218 @@ static QLCFixtureDef *standInDef(bool withPictures = false)
     return def;
 }
 
+/* A small show like a show-choir stage: a pale cyc 2.4 m upstage of a pipe,
+   a small LED spot hung on it whose gobo wheel names its slots (a stand-in
+   pattern, the same with or without the app's picture library). */
+struct GoboStage
+{
+    Doc doc;
+    Fixture *fx = nullptr;
+    Scenery *cyc = nullptr;
+    explicit GoboStage(QObject *parent) : doc(parent)
+    {
+        MonitorProperties *props = doc.monitorProperties();
+        props->setGridUnits(MonitorProperties::Meters);
+        props->setGridSize(QVector3D(14, 6, 10));
+        cyc = props->addScenery();
+        cyc->setOriginX(7.0f);
+        cyc->setOriginY(1.24f);
+        cyc->setWidth(11.0f);
+        cyc->setHeight(6.0f);
+        Truss *pipe = props->addTruss();
+        pipe->setName("Pipe"); pipe->setType(Truss::Horizontal);
+        pipe->setOrigin(QVector3D(3.0f, 3.65f, 2.9f)); pipe->setDirection(QPointF(1.0, 0.0));
+        pipe->setLength(8.0f); pipe->setWidth(0.05f);
+
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel("Gobo Spot");
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName("4ch");
+        auto add = [&](QLCChannel *c, int at) { def->addChannel(c); mode->insertChannel(c, quint32(at)); };
+        QLCChannel *pan = new QLCChannel(); pan->setName("Pan"); pan->setPreset(QLCChannel::PositionPan);
+        add(pan, 0);
+        QLCChannel *tilt = new QLCChannel(); tilt->setName("Tilt"); tilt->setPreset(QLCChannel::PositionTilt);
+        add(tilt, 1);
+        QLCChannel *dim = new QLCChannel(); dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
+        dim->setControlByte(QLCChannel::MSB);
+        add(dim, 2);
+        QLCChannel *wheel = new QLCChannel(); wheel->setName("Color"); wheel->setGroup(QLCChannel::Colour);
+        wheel->setControlByte(QLCChannel::MSB);
+        QLCCapability *white = new QLCCapability(0, 255, "White");
+        white->setPreset(QLCCapability::ColorMacro);
+        white->setResource(0, QColor(Qt::white));
+        wheel->addCapability(white);
+        add(wheel, 4);
+        QLCChannel *g = new QLCChannel(); g->setName("Gobo"); g->setGroup(QLCChannel::Gobo);
+        g->setControlByte(QLCChannel::MSB);
+        g->addCapability(new QLCCapability(0, 9, "Open"));
+        g->addCapability(new QLCCapability(10, 19, "3 Spots"));
+        g->addCapability(new QLCCapability(20, 255, "Zebra"));
+        add(g, 3);
+        // A small LED spot: 1000 lm, a 20-degree lens.
+        QLCPhysical ph;
+        ph.setLensDegreesMin(20); ph.setLensDegreesMax(20);
+        ph.setBulbLumens(1000);
+        ph.setPowerConsumption(50);
+        mode->setPhysical(ph);
+        def->addMode(mode);
+        fx = new Fixture(&doc);
+        fx->setName("Spot"); fx->setFixtureDefinition(def, mode);
+        doc.addFixture(fx);
+        props->setFixturePosition(fx->id(), 0, 0, QVector3D(0, 0, 0));
+        FixtureRigProps rp;
+        rp.trussId = pipe->id(); rp.trussOffset = 3.0f;      // x = 6 m
+        props->setFixtureRigProps(fx->id(), rp);
+    }
+    void send(int pan, int tilt, int gobo)
+    {
+        QByteArray v(5, char(0));                        // the colour wheel at White
+        v[0] = char(pan); v[1] = char(tilt); v[2] = char(255); v[3] = char(gobo);
+        fx->setChannelValues(v);
+    }
+};
+
+/* The pan and tilt that land the spot's beam nearest @p want, on the cyc
+   (@p onCyc) or the floor; false if none does. */
+static bool aimGoboSpot(GoboStage &st, StructureStudioView &view, bool onCyc, const QVector3D &want,
+                        int &panOut, int &tiltOut, QVector3D &hitOut, QVector3D &normalOut)
+{
+    const QVector3D apex = view.fixtureCentre(st.fx->id());
+    double best = 1e9;
+    for (int pan = 0; pan < 256; pan += 2)
+        for (int tilt = 0; tilt < 256; tilt += 2)
+        {
+            st.send(pan, tilt, 0);
+            const QVector3D d = view.moverAim(st.fx->id(), 0).normalized();
+            if (d.isNull())
+                continue;
+            bool hit = false;
+            int surf = 0;
+            QVector3D n;
+            const double t = view.beamThrow(apex, d, &hit, &n, &surf);
+            if (!hit || (onCyc ? surf != -1 - int(st.cyc->id()) : n.z() < 0.99f))
+                continue;
+            const QVector3D q = apex + d * float(t);
+            const double miss = double((q - want).length());
+            if (miss < best)
+            {
+                best = miss; panOut = pan; tiltOut = tilt; hitOut = q; normalOut = n;
+            }
+        }
+    return best < 0.5;
+}
+
+/* Of the pixels inside where the beam lands, the share that change when the
+   gobo goes in. */
+static double goboShowsAt(GoboStage &st, StructureStudioView &view, int pan, int tilt,
+                          const QVector3D &hit, const QVector3D &normal, const QString &shot)
+{
+    const QVector3D apex = view.fixtureCentre(st.fx->id());
+    const QVector3D d = (hit - apex).normalized();
+    const double t = double((hit - apex).length());
+    // Inside the beam's own angle: the pattern, not its soft rim.
+    const QVector<QVector3D> ring = view.beamFootprint(apex, d, qDegreesToRadians(20.0 / 2.0) * 0.85, t, true, normal);
+    QPolygonF poly;
+    for (const QVector3D &q : ring)
+        poly << view.w2s(q);
+    st.send(pan, tilt, 5);                           // Open
+    const QImage open = view.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    st.send(pan, tilt, 15);                          // 3 Spots
+    const QImage gobo = view.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty() && !shot.isEmpty())
+    {
+        QDir().mkpath(shots);
+        open.save(QStringLiteral("%1/%2-open.png").arg(shots, shot));
+        gobo.save(QStringLiteral("%1/%2-gobo.png").arg(shots, shot));
+    }
+    const qreal dpr = open.devicePixelRatio() > 0 ? open.devicePixelRatio() : 1.0;
+    const QRect box = poly.boundingRect().toAlignedRect();
+    int inside = 0, changed = 0;
+    for (int y = box.top(); y <= box.bottom(); ++y)
+        for (int x = box.left(); x <= box.right(); ++x)
+        {
+            if (!poly.containsPoint(QPointF(x + 0.5, y + 0.5), Qt::OddEvenFill))
+                continue;
+            const int px = int(x * dpr), py = int(y * dpr);
+            if (px < 0 || py < 0 || px >= open.width() || py >= open.height())
+                continue;
+            ++inside;
+            const QRgb a = open.pixel(px, py), b = gobo.pixel(px, py);
+            const int diff = qMax(qAbs(qRed(a) - qRed(b)), qMax(qAbs(qGreen(a) - qGreen(b)), qAbs(qBlue(a) - qBlue(b))));
+            if (diff > 16)
+                ++changed;
+        }
+    qInfo().noquote() << shot << changed << "of" << inside << "footprint pixels changed";
+    return inside > 30 ? double(changed) / inside : -1.0;
+}
+
+void Monitor_Test::aGoboShowsOnTheCycWhereTheBeamLands()
+{
+    GoboStage st(this);
+    StructureStudioView view(&st.doc, StructureStudioView::StageKind, 0);
+    view.resize(1100, 680);
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    view.setLiveValues(true);
+    view.setBeams(true);
+    view.setHaze(1.0);
+    view.setGpu(false);
+    int pan = 0, tilt = 0;
+    QVector3D hit, n;
+    // Square on to the cloth, 2 m up, straight upstage of the spot.
+    QVERIFY(aimGoboSpot(st, view, true, QVector3D(6.0f, 1.24f, 2.0f), pan, tilt, hit, n));
+    QVERIFY2(qAbs(n.y()) > 0.99f, "the pool lies on the cloth");
+    // For review (QLC_SHOT_DIR): the gobo on the cyc in house light, three sizes.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        view.setAmbient(0.62);
+        st.send(pan, tilt, 15);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            view.resize(sz);
+            view.fitToRig();
+            view.grab().save(QStringLiteral("%1/gobo-cyc-house-%2x%3.png").arg(shots).arg(sz.width()).arg(sz.height()));
+        }
+        view.resize(1100, 680);
+        view.fitToRig();
+    }
+    for (double room : { 0.62, 0.30, 0.0 })     // House, Dim, Blackout
+    {
+        view.setAmbient(room);
+        const double share = goboShowsAt(st, view, pan, tilt, hit, n,
+                                         QStringLiteral("gobo-cyc-room%1").arg(int(room * 100)));
+        QVERIFY2(share > 0.15, qPrintable(QStringLiteral("room %1: %2 of the pool on the cyc changed with the gobo in")
+                                             .arg(room).arg(share)));
+    }
+}
+
+void Monitor_Test::aGoboStillShowsOnTheFloor()
+{
+    GoboStage st(this);
+    StructureStudioView view(&st.doc, StructureStudioView::StageKind, 0);
+    view.resize(1100, 680);
+    view.reload();
+    view.setPlane(StructureStudioView::Angled);
+    view.setLiveValues(true);
+    view.setBeams(true);
+    view.setHaze(1.0);
+    view.setGpu(false);
+    int pan = 0, tilt = 0;
+    QVector3D hit, n;
+    QVERIFY(aimGoboSpot(st, view, false, QVector3D(6.0f, 2.6f, 0.0f), pan, tilt, hit, n));
+    for (double room : { 0.62, 0.0 })
+    {
+        view.setAmbient(room);
+        const double share = goboShowsAt(st, view, pan, tilt, hit, n,
+                                         QStringLiteral("gobo-floor-room%1").arg(int(room * 100)));
+        QVERIFY2(share > 0.15, qPrintable(QStringLiteral("room %1: %2 of the pool on the floor changed with the gobo in")
+                                             .arg(room).arg(share)));
+    }
+}
+
 void Monitor_Test::aGoboWithNoPictureDrawsAStandIn()
 {
     QLCFixtureDef *def = standInDef();

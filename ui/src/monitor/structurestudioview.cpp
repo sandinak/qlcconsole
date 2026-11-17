@@ -5854,6 +5854,35 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     const double baseA = 95.0 * level * room * spread * qBound(0.0, haze, 1.0) * m_haze
                          * (gobo ? qBound(0.05, optics->coverage, 1.0) : 1.0);
     const double poolA = 130.0 * level * room * spread;
+    /* What a pool adds has to read on what it lands on ("set a gobo on a
+       spot and I don't see it on the back drop").
+     *
+       Light is laid over the frame by Screen, which adds less the lighter
+       the surface already is: on a pale cyc in house light (about 60% grey)
+       a pool added well under half what it did on the dark deck, and a
+       gobo -- which takes most of that away -- was lost on the cloth while
+       the same spot's gobo read on the floor. A pool on a piece of scenery
+       is made that much stronger, by how light the cloth reads in this
+       room, so it adds what it would on the deck. The deck and floor are
+       dark and keep their strength. */
+    auto poolColour = [&](int surface) {
+        double gain = 1.0;
+        if (surface < 0)
+        {
+            const Scenery *sc = props->scenery(quint32(-1 - surface));
+            if (sc != nullptr && !sc->isSeeThrough())
+            {
+                // As drawOneStructure() lights it: its colour by the room's light.
+                const QColor fill = sceneryPaint(sc).fill;
+                const double lit = qMax(fill.redF(), qMax(fill.greenF(), fill.blueF()))
+                                   * (0.18 + 0.82 * m_ambient);
+                gain /= qMax(0.35, 1.0 - lit);
+            }
+        }
+        QColor c = colour;
+        c.setAlpha(qBound(0, int(poolA * gain), 220));
+        return c;
+    };
 
     // Where it ends: the pool's shape, and the far end of the cone's outline.
     const QVector<QVector3D> footprint = beamFootprint(apex, d, halfAngleRad, len, lands, landNormal);
@@ -6124,8 +6153,15 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             for (int k = 0; k < N; ++k)
                 if (landed[k] && pt[k] >= 0.04)
                     landings.append(BeamLanding{ surf[k], meshQ.at(k) });
-        QColor cellCol = colour;
-        cellCol.setAlpha(qBound(0, int(poolA), 220));
+        // Each surface's own strength (poolColour()), worked out once.
+        QVarLengthArray<QPair<int, QColor>, 4> cellCols;
+        auto cellColFor = [&](int surface) {
+            for (const auto &sc : cellCols)
+                if (sc.first == surface)
+                    return sc.second;
+            cellCols.append(qMakePair(surface, poolColour(surface)));
+            return cellCols.last().second;
+        };
         auto tri = [&](int i, int j, int k) {
             if (!landed[i] || !landed[j] || !landed[k])
                 return;
@@ -6134,7 +6170,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             if (pt[i] < 0.04 && pt[j] < 0.04 && pt[k] < 0.04)
                 return;                                   // all metal here
             emitLightTri(px[i], px[j], px[k], pz[i], pz[j], pz[k],
-                         pt[i], pt[j], pt[k], cellCol, p);
+                         pt[i], pt[j], pt[k], cellColFor(surf[i]), p);
         };
         for (int ri = 0; ri < RINGS; ++ri)
             for (int si = 0; si < SECTORS; ++si)
@@ -6188,8 +6224,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 const double rs = qMin(r, 0.985);
                 pt[k] = BeamOptics::sample(optics->mask, rs * qCos(a), rs * qSin(a));
             }
-        QColor cellCol = colour;
-        cellCol.setAlpha(qBound(0, int(poolA), 220));
+        const QColor cellCol = poolColour(axisSurface);
         auto tri = [&](int i, int j, int k) {
             if (pt[i] < 0.04 && pt[j] < 0.04 && pt[k] < 0.04)
                 return;                                   // all metal here
@@ -6213,8 +6248,7 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
            triangles a ring with their alpha per corner, which the rasteriser
            fades smoothly -- far cheaper than the gobo's mesh, which a plain
            pool doesn't need. */
-        QColor poolCol = colour;
-        poolCol.setAlpha(qBound(0, int(poolA), 220));
+        const QColor poolCol = poolColour(axisSurface);
         const double fieldHalf = halfAngleRad * fieldMult;
         static const double kRings[] = { 0.0, 0.5, 1.0 };   // of the fade, core to rim
         QVector<QVector<QPointF>> ringPx;

@@ -1782,7 +1782,11 @@ the Rig Overview show what it's actually doing, not just where it sits:
   optics are doing: the gobo in the current slot (an open slot, or a wheel
   spinning between slots, shows none), turned by gobo rotation, repeated by
   a prism and turned by prism rotation. It shows on the floor, a deck, or
-  the cyc, and dims the haze by how much light the gobo passes. Your own gobo
+  the cyc, and dims the haze by how much light the gobo passes. A pool
+  reads as strongly on a pale cyc, drape or wall as on the dark deck: a
+  spot's gobo on the cyc shows as it does on the floor, in every Room
+  setting (it used to come out much fainter on the cloth, and a gobo was
+  lost there). Your own gobo
   pictures go in a slot per fixture: right-click a fixture on the plot →
   **Gobo Wheels…**, optionally for every fixture of its type.
   **Loaded gobos.** When you load your own glass in a light (the moon in
