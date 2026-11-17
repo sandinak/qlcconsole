@@ -5524,66 +5524,70 @@ void EffectInstance_Test::aLevelAndADimmerScaleTheCueInEitherOrder()
 
 void EffectInstance_Test::aLevelLetsGoWhenTheEffectStopsOrFadesOut()
 {
-    /* When the chase stops, the wash is the cue's red again at once; fading
-       out, it goes back to the red over the fade, and is the red at the end. */
+    /* A level of 20% (as a chase's trail) on the cue's red: when the
+       effect stops, the wash is the red again at once; released over its
+       1 s fade, it goes back up to the red, all the way by the end. */
     Fixture *wash = rgbwWash(m_doc, "Wash", 100, 0, false);
     QVERIFY(wash != nullptr);
-    QLCPalette *chase = effectOn(m_doc, "spotlight-chase.js", {});
+    QTemporaryDir dir;
+    QFile js(dir.filePath("level.js"));
+    QVERIFY(js.open(QIODevice::WriteOnly));
+    js.write("(function() { var e = {}; e.apiVersion = 1; e.name = 'Level';"
+             " e.tick = function(fixtures) { return fixtures.map(function() { return { level: 0.2 }; }); };"
+             " return e; })()");
+    js.close();
+    QLCPalette *dim = new QLCPalette(QLCPalette::Effect, m_doc);
+    dim->setScriptPath(js.fileName());
+    m_doc->addPalette(dim);
     Scene *scene = new Scene(m_doc);
     m_doc->addFunction(scene);
     scene->addFixture(wash->id());
-    scene->addPalette(chase->id());
-    scene->setPaletteFade(chase->id(), 1000, 1000);
+    scene->addPalette(dim->id());
+    scene->setPaletteFade(dim->id(), 1000, 1000);
     EffectScriptRunner *runner = m_doc->effectScriptRunner();
     MasterTimer timer(m_doc);
     QSharedPointer<GenericFader> under = redUnder(m_doc, { wash }, 255);
+    auto red = [&](EffectInstance *inst) {
+        if (inst != nullptr)
+            inst->runTick();
+        return int(uchar(runnerFrame(m_doc, runner, &timer).at(100)));
+    };
 
-    // Find a moment the chase holds it low.
+    // In: a fifth of the red. Stopped at once: the red, untouched.
     runner->createInstancesForScene(scene->id());
-    EffectInstance *inst = runner->instanceForPalette(chase->id());
+    EffectInstance *inst = runner->instanceForPalette(dim->id());
     QVERIFY(inst != nullptr);
     QVERIFY(inst->hasDepthFade());
     inst->m_depthStartMs = 0;
     inst->setDepthClock(5000);                  // all the way in
-    qint64 lowAt = -1;
-    for (qint64 ms = 0; ms < 4000 && lowAt < 0; ms += 50)
-    {
-        inst->setOffStageClock(ms);
-        inst->runTick();
-        if (uchar(runnerFrame(m_doc, runner, &timer).at(100)) < 60)
-            lowAt = ms;
-    }
-    QVERIFY2(lowAt >= 0, "the chase never dimmed the red");
-
-    // Stopped at once: the red, untouched.
+    QCOMPARE(red(inst), 51);
     runner->destroyInstancesForScene(scene->id(), false);
-    QCOMPARE(int(uchar(runnerFrame(m_doc, runner, &timer).at(100))), 255);
+    QCOMPARE(red(nullptr), 255);
 
-    // Again, released over its 1 s fade: up from the chase's level to the red.
+    // Again, released over its fade: up from a fifth to the red.
     runner->createInstancesForScene(scene->id());
-    inst = runner->instanceForPalette(chase->id());
+    inst = runner->instanceForPalette(dim->id());
     QVERIFY(inst != nullptr);
     inst->m_depthStartMs = 0;
     inst->setDepthClock(5000);
-    inst->setOffStageClock(lowAt);
-    inst->runTick();
-    const int low = uchar(runnerFrame(m_doc, runner, &timer).at(100));
-    QVERIFY(low < 60);
+    QCOMPARE(red(inst), 51);
     runner->destroyInstancesForScene(scene->id(), true);
     QVERIFY(inst->isFadingOut());
     inst->m_depthStartMs = 5000;
-    int last = low;
+    int last = 51;
     for (int ms = 5100; ms <= 6000; ms += 100)
     {
         inst->setDepthClock(ms);
-        inst->runTick();
-        const int r = uchar(runnerFrame(m_doc, runner, &timer).at(100));
-        QVERIFY2(r >= last - 1, qPrintable(QString("%1 ms into the fade: %2 after %3").arg(ms).arg(r).arg(last)));
+        const int r = red(inst);
+        const int want = qRound(255.0 * (0.2 + 0.8 * (ms - 5000) / 1000.0));
+        QVERIFY2(qAbs(r - want) <= 2 && r >= last,
+                 qPrintable(QString("%1 ms into the fade: %2, wanted %3").arg(ms - 5000).arg(r).arg(want)));
         last = r;
     }
-    QVERIFY2(last >= 250, qPrintable(QString("faded out, the red is %1").arg(last)));
-    runner->slotTick();                 // reaped
-    QCOMPARE(int(uchar(runnerFrame(m_doc, runner, &timer).at(100))), 255);
+    QCOMPARE(last, 255);
+    QVERIFY(inst->fadeOutDone());
+    runner->slotTick();                         // reaped
+    QCOMPARE(red(nullptr), 255);
     dismiss(m_doc, under);
 }
 
