@@ -46,6 +46,9 @@
 
 #include "firespreadperf_test.h"
 
+static QStringList g_report;
+#define REPORT(...) do { const QString l = QString::asprintf(__VA_ARGS__); qInfo("%s", qPrintable(l)); g_report << l; } while (0)
+
 namespace
 {
 /** The process's CPU time in ns: the view renders on a thread pool, and
@@ -122,7 +125,7 @@ void FireSpreadPerf_Test::initTestCase()
     look->addPalette(fire->id());
     m_fire = new EffectInstance(doc, look->id(), fire->id());
     QVERIFY2(m_fire->isValid(), qPrintable(m_fire->error()));
-    qInfo("Fire Spread over %d fixtures, %d heads", fixtures, heads);
+    REPORT("Fire Spread over %d fixtures, %d heads", fixtures, heads);
     QVERIFY(heads > 5000);
 }
 
@@ -200,8 +203,8 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
         burnApply += ap;
     }
     burnTick /= n; burnApply /= n; burnChanged /= n;
-    qInfo("effect tick: spreading %.2f ms, burning %.2f ms", spreadTick, burnTick);
-    qInfo("values to fixtures (no view): spreading %.2f ms (%d fixtures changed), burning %.2f ms (%d)",
+    REPORT("effect tick: spreading %.2f ms, burning %.2f ms", spreadTick, burnTick);
+    REPORT("values to fixtures (no view): spreading %.2f ms (%d fixtures changed), burning %.2f ms (%d)",
           spreadApply, spreadChanged, burnApply, burnChanged);
 
     // (c) with the Lighting Studio's 2D plot listening to every fixture.
@@ -229,7 +232,7 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
             bu += ap;
         }
         bu /= k;
-        qInfo("values to fixtures with the 2D plot open: spreading %.2f ms, burning %.2f ms", sp, bu);
+        REPORT("values to fixtures with the 2D plot open: spreading %.2f ms, burning %.2f ms", sp, bu);
     }
 
     // (b) A frame of the Rig Overview (45°, centre stage, beams, Live).
@@ -277,10 +280,12 @@ void FireSpreadPerf_Test::costsWhileTheFireSpreads()
             bc += f.first; bw += f.second;
         }
         bc /= k; bw /= k;
-        qInfo("rig overview frame, beams %s: spreading %.1f ms CPU (%.1f wall), burning %.1f ms CPU (%.1f wall)",
+        REPORT("rig overview frame, beams %s: spreading %.1f ms CPU (%.1f wall), burning %.1f ms CPU (%.1f wall)",
               beams ? "on" : "off", sc, sw, bc, bw);
     }
     v.setLiveValues(false);
+    if (qEnvironmentVariableIsSet("FIRE_PERF_REPORT"))
+        QFAIL(qPrintable(g_report.join(QStringLiteral(" | "))));
 }
 
 int main(int argc, char **argv)
