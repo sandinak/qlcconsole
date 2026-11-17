@@ -192,7 +192,8 @@ void Chaser::setSteps(const QList<ChaserStep> &steps)
     for (const ChaserStep &step : steps)
         if (step.fid == this->id())
             return;
-    int moved = -1;
+    bool moved = false;
+    int now = -1;
     {
         // The runner lock first (as write()), so the MasterTimer never sees
         // the new steps with the old indices. Nothing here waits on a device.
@@ -204,7 +205,10 @@ void Chaser::setSteps(const QList<ChaserStep> &steps)
             m_steps = steps;
         }
         if (m_runner != NULL)
+        {
             moved = m_runner->remapSteps(before, steps);
+            now = m_runner->currentStepIndex();
+        }
         if (m_startupAction.m_action == ChaserSetStepIndex && m_startupAction.m_stepIndex >= 0)
         {
             // A start asked for a cue (not running yet): the same cue.
@@ -216,8 +220,8 @@ void Chaser::setSteps(const QList<ChaserStep> &steps)
 
     emit changed(this->id());
     emit stepsListChanged(this->id());
-    if (moved >= 0)
-        emit currentStepChanged(moved);
+    if (moved)
+        emit currentStepChanged(now);
 }
 
 bool Chaser::moveStep(int sourceIdx, int destIdx)
@@ -957,6 +961,12 @@ int Chaser::currentStepIndex() const
             ret = m_runner->currentStepIndex();
     }
     return ret;
+}
+
+bool Chaser::holdsRemovedStep() const
+{
+    QMutexLocker runnerLocker(const_cast<QRecursiveMutex*>(&m_runnerMutex));
+    return m_runner != NULL && m_runner->holdsRemovedStep();
 }
 
 int Chaser::computeNextStep(int currentStepIndex) const

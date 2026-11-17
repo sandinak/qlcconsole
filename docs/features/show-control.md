@@ -48,6 +48,9 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
 - Editing a list while it runs — a cue deleted, recorded or pasted before
   the one on stage — leaves the cue on stage where it is; the next GO
   plays the cue after it. A cue LOADed on standby stays the one loaded.
+- Deleting the cue that is on stage holds its light as it is: the Run tab
+  says *A deleted cue — held until GO*, the cue now in its place is
+  **NEXT**, and GO plays it.
 - From a game controller: [Pad Run](#go-from-the-game-controller-pad-run).
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its

@@ -137,10 +137,14 @@ public:
     void setSubCueFollow(bool enable) { m_subCueFollow = enable; }
 
     /** The chaser's steps went from $before to $after (Chaser::setSteps()):
-     *  each running step, and the current index, follow their function to
-     *  its new index. Called with the chaser's runner lock held. Returns the
-     *  new current index if it moved, else -1. */
-    int remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after);
+     *  each running step, the current index and the tracked state follow
+     *  their function to its new index. The step on stage gone: it is held
+     *  until the next GO (holdsRemovedStep()), the current index the step
+     *  before its place, so GO plays the step now there. Called with the
+     *  chaser's runner lock held. Returns whether the current index moved. */
+    bool remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after);
+    /** A step plays whose own step was deleted (held until the next GO). */
+    bool holdsRemovedStep() const;
     /** Where step @a from of @a before is in @a after: the same index if it
      *  still plays the same function, else the nearest that does; -1: gone. */
     static int followStep(const QList<ChaserStep> &before, const QList<ChaserStep> &after, int from);

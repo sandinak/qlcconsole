@@ -1772,7 +1772,11 @@ void CueRunner::updateStates()
     }
 
     const bool running = ch != nullptr && ch->isRunning();
-    const int cur = running ? ch->currentStepIndex() : -1;
+    // The cue on stage deleted from the list: its light held until GO, no
+    // row of the list playing; the list stands just before its place.
+    const bool heldDeleted = running && ch->holdsRemovedStep();
+    const int at = running ? ch->currentStepIndex() : -1;
+    const int cur = heldDeleted ? -1 : at;
     const int curSub = running ? ch->currentSubCueIndex() : -1;
     const int standby = ch == nullptr ? -1 : sc->standbyStep(ch);
     const bool loaded = ch != nullptr && sc->loadedStep(ch->id()) >= 0;
@@ -1805,7 +1809,7 @@ void CueRunner::updateStates()
                 else if (step == standby)
                     state = loaded && loadedSub < 0 ? tr("▷ STANDBY") : tr("NEXT");
                 else
-                    done = running && step < cur;
+                    done = running && (heldDeleted ? step <= at : step < cur);
             }
             else if (step == cur)
             {
@@ -1848,6 +1852,8 @@ void CueRunner::updateStates()
         m_now->setText(QString());
     else if (!running)
         m_now->setText(tr("Stopped"));
+    else if (heldDeleted)
+        m_now->setText(tr("▶ A deleted cue — held until GO"));
     else
     {
         QString t = tr("▶ %1").arg(cueText(m_doc, ch, lid, cur, -1));

@@ -107,6 +107,9 @@ void ChaserRunner::slotChaserChanged()
     QList<ChaserRunnerStep*> delList;
     foreach (ChaserRunnerStep *step, m_runnerSteps)
     {
+        // Its step deleted while on stage (remapSteps()): held until GO.
+        if (step->m_index < 0)
+            continue;
         if (!m_chaser->steps().contains(ChaserStep(step->m_function->id())))
         {
             // Disappearing function: remove step
@@ -465,24 +468,47 @@ int ChaserRunner::followStep(const QList<ChaserStep> &before, const QList<Chaser
     const quint32 fid = before.at(from).fid;
     if (from < after.count() && after.at(from).fid == fid)
         return from;
+    // A tie (the function twice, as near either side): toward where the
+    // steps added or taken away put it.
+    const int shifted = from + int(after.count() - before.count());
     int best = -1;
     for (int j = 0; j < after.count(); ++j)
-        if (after.at(j).fid == fid && (best < 0 || qAbs(j - from) < qAbs(best - from)))
+    {
+        if (after.at(j).fid != fid)
+            continue;
+        if (best < 0 || qAbs(j - from) < qAbs(best - from)
+            || (qAbs(j - from) == qAbs(best - from) && qAbs(j - shifted) < qAbs(best - shifted)))
             best = j;
+    }
     return best;
 }
 
-int ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after)
+bool ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<ChaserStep> &after)
 {
+    // The step before @a from that is still there, in @a after; none: -1.
+    auto slotBefore = [&](int from) {
+        int to = -1;
+        for (int k = qMin(from, int(before.count())) - 1; to < 0 && k >= 0; --k)
+            to = followStep(before, after, k);
+        return to;
+    };
     auto remap = [&](ChaserRunnerStep *step) {
-        if (step == NULL)
+        if (step == NULL || step->m_index < 0)
             return;
         const int to = followStep(before, after, step->m_index);
         if (to >= 0)
             step->m_index = to;
     };
+    /* A step playing whose own step is gone (the cue on stage deleted):
+       held on stage, as it is, until the next GO -- not let go of, and no
+       other cue started in its place (m_index -1: no step of the list). */
     for (ChaserRunnerStep *step : std::as_const(m_runnerSteps))
-        remap(step);
+    {
+        if (step != NULL && step->m_index >= 0 && followStep(before, after, step->m_index) < 0)
+            step->m_index = -1;
+        else
+            remap(step);
+    }
     for (ChaserRunnerStep *step : std::as_const(m_leavingSteps))
         remap(step);
     for (ChaserRunnerStep *step : std::as_const(m_handedOverSteps))
@@ -490,13 +516,25 @@ int ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<Chaser
     for (ChaserRunnerStep *step : std::as_const(m_handedOverLater))
         remap(step);
 
-    int moved = -1;
+    const int was = m_lastRunStepIdx;
+    bool currentGone = false;
+    if (m_lastRunStepIdx >= 0 && m_lastRunStepIdx < before.count())
     {
         const int to = followStep(before, after, m_lastRunStepIdx);
-        if (to >= 0 && to != m_lastRunStepIdx)
+        if (to >= 0)
         {
             m_lastRunStepIdx = to;
-            moved = to;
+        }
+        else
+        {
+            currentGone = true;
+            /* The cue on stage is gone: the list stands just before where it
+               was, so the next GO plays the cue that slid into its place,
+               as the next one after the step before -- no restack (nothing
+               to put back but what the cues before set, which tracking
+               already left). */
+            m_lastRunStepIdx = slotBefore(m_lastRunStepIdx);
+            m_restackFrom = m_lastRunStepIdx;
         }
     }
 
@@ -505,12 +543,10 @@ int ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<Chaser
        look like a jump (isNextStep() false) and restack() would put on what
        a cue that never played sets. A step that is gone: the one before it
        that is still there (else none), and out of the visited ones. */
-    if (m_restackFrom >= 0)
+    if (m_restackFrom >= 0 && !currentGone)
     {
-        int to = followStep(before, after, m_restackFrom);
-        for (int k = m_restackFrom - 1; to < 0 && k >= 0; --k)
-            to = followStep(before, after, k);
-        m_restackFrom = to;
+        const int to = followStep(before, after, m_restackFrom);
+        m_restackFrom = to >= 0 ? to : slotBefore(m_restackFrom);
     }
     QSet<int> visited;
     for (int k : std::as_const(m_visited))
@@ -541,7 +577,15 @@ int ChaserRunner::remapSteps(const QList<ChaserStep> &before, const QList<Chaser
 
     if (before.count() != after.count())
         fillOrder(after.count());
-    return moved;
+    return m_lastRunStepIdx != was;
+}
+
+bool ChaserRunner::holdsRemovedStep() const
+{
+    for (const ChaserRunnerStep *step : m_runnerSteps)
+        if (step != NULL && step->m_index < 0)
+            return true;
+    return false;
 }
 
 void ChaserRunner::fillOrder()
@@ -578,7 +622,9 @@ void ChaserRunner::adjustStepIntensity(qreal fraction, int requestedStepIndex, i
 
     foreach (ChaserRunnerStep *step, m_runnerSteps)
     {
-        if (stepIndex == step->m_index && step->m_function != NULL)
+        // The list's master reaches a step held after its cue was deleted.
+        if ((stepIndex == step->m_index || (requestedStepIndex == -1 && step->m_index < 0))
+            && step->m_function != NULL)
         {
             if (requestedStepIndex == -1 && step->m_function->type() == Function::SceneType)
             {
@@ -631,7 +677,8 @@ void ChaserRunner::clearRunningList(bool handOver)
         if (step->m_function)
         {
             // restore the original Function fade out time
-            step->m_function->setOverrideFadeOutSpeed(stepFadeOut(step->m_index));
+            step->m_function->setOverrideFadeOutSpeed(step->m_index >= 0 ? stepFadeOut(step->m_index)
+                                                                         : step->m_fadeOut);
             if (handOver && (step->m_function->type() == Function::CollectionType || step->m_subCues))
             {
                 m_lastFunctionID = step->m_subCues ? Function::invalidId() : blendSceneId(step->m_function);
@@ -1508,7 +1555,8 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         // (SetStepIndex / Next / Previous, handled above) change the step.
         // Held as sub-cues, likewise: a step changes on a Sub GO -- unless
         // it auto-follows (SubGoFollow, a finite hold).
-        if (m_externalClock == false && (m_subCueHeld == false || m_subCueFollow) &&
+        // A step whose own step was deleted on stage holds until GO.
+        if (m_externalClock == false && step->m_index >= 0 && (m_subCueHeld == false || m_subCueFollow) &&
             step->m_duration != Function::infiniteSpeed() &&
             ((m_chaser->tempoType() == Function::Time && step->m_elapsed >= step->m_duration) ||
              (m_chaser->tempoType() == Function::Beats && step->m_elapsedBeats >= step->m_duration)))

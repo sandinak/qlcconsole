@@ -386,6 +386,11 @@ public:
     /** Get the current step number */
     int currentStepIndex() const;
 
+    /** Running, a step plays whose own step was deleted (the cue on stage
+     *  deleted from its list): held until the next GO, which plays the step
+     *  now in its place. currentStepIndex() is then the step before. */
+    bool holdsRemovedStep() const;
+
     /** Compute next step for manual fading */
     int computeNextStep(int currentStepIndex) const;
 

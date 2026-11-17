@@ -1983,6 +1983,9 @@ quint32 ShowTreeController::runningCue(quint32 listId) const
     Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list->chaser));
     if (chaser == nullptr || !chaser->isRunning())
         return invalidId();
+    // The cue on stage deleted: held until GO, no cue of the list runs.
+    if (chaser->holdsRemovedStep())
+        return invalidId();
     const int idx = chaser->currentStepIndex();
     ChaserStep *step = idx < 0 ? nullptr : chaser->stepAt(idx);
     if (step == nullptr)
@@ -5401,7 +5404,8 @@ void ShowTreeController::bake()
                 chaser->setSteps(steps);
                 // The cue LOADed on standby too: the same cue, not the
                 // index (GO would play the one that slid into its place).
-                if (ShowControl *sc = m_doc->showControl())
+                ShowControl *sc = m_doc->showControl();
+                if (sc != nullptr && sameSteps(chaser->steps(), steps))
                 {
                     const int loaded = sc->loadedStep(chaser->id());
                     if (loaded >= 0)
