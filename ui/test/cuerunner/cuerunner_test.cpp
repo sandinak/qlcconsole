@@ -685,6 +685,39 @@ void CueRunner_Test::theRunTabHasTheGroupMasters()
     QVERIFY(compact.findChild<GroupMasterStrip *>() == nullptr);
 }
 
+void CueRunner_Test::theCueOnStageDeletedIsSaidHeldUntilGo()
+{
+    /* The cue on stage deleted from its list: its light is held until GO,
+       and the Run tab says so -- no cue of the list marked playing, the
+       cue now in its place is NEXT, and GO plays it. */
+    const QList<quint32> ids = show();
+    ShowTreeController *st = m_doc->showTree();
+    CueRunner runner(m_doc, CueRunner::Full);
+    QToolButton *go = runner.findChild<QToolButton *>("crGo");
+    go->click();
+    QHash<quint32, uchar> v = settle();
+    runner.refresh();
+    QCOMPARE(runner.nowText(), QString("▶ 1 One"));
+    QCOMPARE(int(v[0]), 127);
+
+    QVERIFY(st->removeCue(ids[1]));
+    v = settle();
+    runner.refresh();
+    QCOMPARE(int(v[0]), 127);                   // held
+    QCOMPARE(runner.nowText(), QString("▶ A deleted cue — held until GO"));
+    QTreeWidget *tree = runner.cueTree();
+    QCOMPARE(tree->topLevelItem(0)->text(0), QString("NEXT"));       // Two, now first
+    QVERIFY2(runner.nextText().startsWith(QString("NEXT")) && runner.nextText().contains(QString("Two")),
+             qPrintable(runner.nextText()));
+
+    go->click();
+    v = settle();
+    runner.refresh();
+    QVERIFY2(runner.nowText().startsWith(QString("▶")) && runner.nowText().contains(QString("Two")),
+             qPrintable(runner.nowText()));
+    QCOMPARE(int(v[0]), 255);
+}
+
 void CueRunner_Test::goSubGoBackAndWhatChanges()
 {
     show();

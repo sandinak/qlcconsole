@@ -45,6 +45,8 @@ private slots:
     /** Teaching: terms on the Run tab's heads and buttons carry the glossary */
     void glossaryLinesOnTheRunTab();
     void goSubGoBackAndWhatChanges();
+    /** The cue on stage deleted: "held until GO", the next cue is NEXT. */
+    void theCueOnStageDeletedIsSaidHeldUntilGo();
     /** The pad's role on the Run tab (0.4 Pad Run): Tools / Run / ARMED,
      *  a click switches it, and the tooltip carries the button map. */
     void thePadRoleShowsOnTheRunTab();

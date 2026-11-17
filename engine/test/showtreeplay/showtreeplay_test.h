@@ -101,6 +101,9 @@ private slots:
     /** A cue LOADed on standby stays the one loaded when a cue is added
      *  before it: GO plays it. */
     void aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt();
+    /** The cue on stage deleted from its running list: its light held, no
+     *  cue named as running, and GO plays the cue now in its place. */
+    void theCueOnStageDeletedHoldsUntilGoThenTheNextPlays();
     /** Chaser::setSteps() mid-run: the GO after a step added at the top
      *  puts on nothing of it (the runner's tracked state follows). */
     void stepsSetMidRunCarryTheTrackedState();

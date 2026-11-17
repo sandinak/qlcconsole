@@ -2477,6 +2477,43 @@ void ShowTreePlay_Test::stepsSetMidRunCarryTheTrackedState()
                                                "(the head's pan at %1), though it never played").arg(panNow())));
 }
 
+void ShowTreePlay_Test::theCueOnStageDeletedHoldsUntilGoThenTheNextPlays()
+{
+    /* The cue on stage deleted from its running list. The runner kept its
+       old index, which now named the cue after it: the next GO skipped that
+       one (and restacked, putting on what a cue that never played set).
+       Now its light is held as it is -- no cue of the list named as
+       running -- and GO plays the cue that slid into its place. */
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    QVERIFY(chaser() != nullptr);
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser());
+        settle();
+    }
+    QCOMPARE(st->runningCue(listId), cues[2]);
+    QCOMPARE(int(settle(5)[0]), 120);
+
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(10)[0]), 120);          // held, not let go of, nothing else started
+    QVERIFY(chaser()->isRunning());
+    QCOMPARE(st->runningCue(listId), ShowTree::invalidId());
+    QCOMPARE(chaser()->currentStepIndex(), 1);  // just before its place
+    QCOMPARE(m_doc->showControl()->standbyStep(chaser()), 2);   // NEXT: cue 4
+
+    go(chaser());
+    QVERIFY2(int(settle(5)[0]) == 160,
+             qPrintable(QString("GO after the cue on stage was deleted played %1, not cue 4")
+                            .arg(int(settle(1)[0]))));
+    QCOMPARE(st->runningCue(listId), cues[3]);
+    go(chaser());
+    QCOMPARE(int(settle(5)[0]), 200);
+    QCOMPARE(st->runningCue(listId), cues[4]);
+}
+
 void ShowTreePlay_Test::aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt()
 {
     /* LOAD keeps a step index on standby (ShowControl); a cue added before
