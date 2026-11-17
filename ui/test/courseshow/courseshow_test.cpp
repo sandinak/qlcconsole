@@ -2506,7 +2506,7 @@ void CourseShow_Test::lessonDmxAndPatching()
             if (r.name == QLatin1String("SR Truss Spot 1"))
                 label = PatchLabels::render(PatchLabels::defaultTemplate(), r, pl.multiUniverse());
         qInfo().noquote() << "[3.1] label:" << label;
-        QCOMPARE(label, QStringLiteral("SR Truss Spot 1 D1.214"));
+        QCOMPARE(label, QStringLiteral("SR Truss Spot 1 U1.214"));
     }
     doc->resetModified();
 }

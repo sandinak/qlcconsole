@@ -157,7 +157,7 @@ Switch roles after each part.
 15. Back in the Patch List, click **Print Labels…**. Leave **Label says**
     as it is and read the preview.
     - *You should see:* a label for each light: its name, then **D** and
-      its address (universe first, as the rig has several: "D1.214").
+      its address (universe first, as the rig has several: "U1.214").
       Click **Save PDF…** to print them later; this is what goes on the
       cable end and on the light.
 
