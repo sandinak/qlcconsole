@@ -2514,6 +2514,186 @@ void ShowTreePlay_Test::theCueOnStageDeletedHoldsUntilGoThenTheNextPlays()
     QCOMPARE(st->runningCue(listId), cues[4]);
 }
 
+void ShowTreePlay_Test::backWhileADeletedCueIsHeldPlaysTheCueBeforeIt()
+{
+    /* A deleted cue held until GO: the list stands on the cue before it.
+       Back plays that one (it played the one before that); with the first
+       cue deleted there is none, and the held cue stays -- the list never
+       stops under it. */
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    for (int i = 0; i < 3; ++i)
+    {
+        QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+        settle();
+    }
+    QCOMPARE(st->runningCue(listId), cues[2]);
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(5)[0]), 120);           // held
+    QVERIFY(sc->execute({ ShowControl::Back, QString(), QString() }));
+    QVERIFY2(int(settle(5)[0]) == 80, qPrintable(QString("Back while cue 3 was held played %1, not cue 2")
+                                                      .arg(int(settle(1)[0]))));
+    QCOMPARE(st->runningCue(listId), cues[1]);
+    chaser()->stop(FunctionParent::master());
+    settle();
+
+    // The first cue deleted while on stage: Back keeps it, the list runs.
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 40);
+    QCOMPARE(st->runningCue(listId), cues[0]);
+    QVERIFY(st->removeCue(cues[0]));
+    QCOMPARE(int(settle(5)[0]), 40);
+    QSignalSpy said(sc, &ShowControl::commandHandled);
+    QVERIFY(sc->execute({ ShowControl::Back, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 40);
+    QVERIFY2(chaser()->isRunning(), "Back with the first cue deleted and held stopped the list");
+    QVERIFY(!said.isEmpty());
+    QVERIFY2(said.last().at(0).toString().contains(QStringLiteral("it stays until GO")),
+             qPrintable(said.last().at(0).toString()));
+    // A Back sent straight to the chaser: the same.
+    ChaserAction back;
+    back.m_action = ChaserPreviousStep;
+    back.m_stepIndex = -1;
+    back.m_masterIntensity = 1.0;
+    back.m_stepIntensity = 1.0;
+    back.m_fadeMode = Chaser::FromFunction;
+    chaser()->setAction(back);
+    QCOMPARE(int(settle(5)[0]), 40);
+    QVERIFY(chaser()->isRunning());
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 80);            // cue 2, now first
+    QCOMPARE(st->runningCue(listId), cues[1]);
+}
+
+void ShowTreePlay_Test::theFirstCueDeletedLeavesTheListsStartingState()
+{
+    /* The first cue deleted while on stage: the next GO is not the list
+       starting again -- it used to take the stage as it stood (the deleted
+       cue's held pan in it) as the list's starting state, so a later Back
+       brought back a ghost of the deleted cue. Plain Collections, a head's
+       pan (LTP). */
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Clay Paky", "Sharpy");
+    QVERIFY(def != nullptr);
+    Fixture *head = new Fixture(m_doc);
+    head->setName("Spot");
+    head->setFixtureDefinition(def, def->mode("Standard"));
+    head->setAddress(8);
+    head->setUniverse(0);
+    m_doc->addFixture(head);
+    const quint32 pan = head->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    QVERIFY(pan != QLCChannel::invalid());
+    auto cue = [this](const QList<SceneValue> &values) {
+        Scene *scene = new Scene(m_doc);
+        for (const SceneValue &v : values)
+            scene->setValue(v.fxi, v.channel, v.value);
+        m_doc->addFunction(scene);
+        Collection *coll = new Collection(m_doc);
+        coll->addFunction(scene->id());
+        m_doc->addFunction(coll);
+        ChaserStep step(coll->id(), 0, Function::infiniteSpeed(), 0);
+        step.duration = Function::infiniteSpeed();
+        return step;
+    };
+    auto panNow = [this, pan]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(8 + pan)));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    const quint32 dim = m_fixtures[0];
+    QList<ChaserStep> steps;
+    steps << cue({ SceneValue(dim, 0, 40), SceneValue(head->id(), pan, 200) })
+          << cue({ SceneValue(dim, 0, 80) })
+          << cue({ SceneValue(dim, 0, 120), SceneValue(head->id(), pan, 50) })
+          << cue({ SceneValue(dim, 0, 160) });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setRunOrder(Function::SingleShot);
+    chaser->setFadeInMode(Chaser::PerStep);
+    chaser->setFadeOutMode(Chaser::PerStep);
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    chaser->setSteps(steps);
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 40);
+    QCOMPARE(panNow(), 200);
+
+    steps.removeFirst();                        // cue 1 deleted on stage
+    chaser->setSteps(steps);
+    QCOMPARE(panNow(), 200);                    // held
+    go(chaser);                                 // the new first: no pan
+    QCOMPARE(int(settle(5)[0]), 80);
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(panNow(), 50);
+
+    ChaserAction back;
+    back.m_action = ChaserPreviousStep;
+    back.m_stepIndex = -1;
+    back.m_masterIntensity = 1.0;
+    back.m_stepIntensity = 1.0;
+    back.m_fadeMode = Chaser::FromFunction;
+    chaser->setAction(back);
+    QCOMPARE(int(settle(5)[0]), 80);
+    QVERIFY2(panNow() == 0, qPrintable(QString("Back to the new cue 1 put the deleted cue's pan back "
+                                               "(%1), not the stage as the list found it").arg(panNow())));
+}
+
+void ShowTreePlay_Test::aHeldDeletedCuesFunctionDeletedLetsGo()
+{
+    /* A deleted cue held until GO plays a Collection no step names; if
+       that Collection is then deleted from the show (Function Manager, a
+       clear), the runner lets go of it -- it kept a dangling pointer, used
+       on the next write, GO or master change. */
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser());
+        settle();
+    }
+    const quint32 coll = st->cue(cues[2])->collection;
+    QVERIFY(m_doc->function(coll) != nullptr);
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(5)[0]), 120);           // held
+    QVERIFY(m_doc->deleteFunction(coll));
+    settle(5);
+    chaser()->adjustAttribute(0.5, Function::Intensity);
+    settle(2);
+    chaser()->adjustAttribute(1.0, Function::Intensity);
+    go(chaser());
+    QCOMPARE(int(settle(5)[0]), 160);           // cue 4
+    QCOMPARE(st->runningCue(listId), cues[3]);
+}
+
+void ShowTreePlay_Test::undoingTheDeleteOfTheHeldCueMakesItRunAgain()
+{
+    // Deleted while on stage, held, then the delete undone: the cue is the
+    // running one again, and GO plays the cue after it.
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser());
+        settle();
+    }
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(st->runningCue(listId), ShowTree::invalidId());
+    QVERIFY(st->undo());
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(st->runningCue(listId), cues[2]);
+    go(chaser());
+    QCOMPARE(int(settle(5)[0]), 160);
+    QCOMPARE(st->runningCue(listId), cues[3]);
+}
+
 void ShowTreePlay_Test::aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt()
 {
     /* LOAD keeps a step index on standby (ShowControl); a cue added before

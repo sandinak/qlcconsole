@@ -2609,6 +2609,47 @@ void WebAccess_Test::focusRoundTripOnLoopback()
     s->stop();
 }
 
+void WebAccess_Test::theRunPageSaysADeletedCueIsHeld()
+{
+    /* The cue on stage deleted from its list: held until GO. The page says
+       what the Run tab says -- not the cue before it as "on now" -- NEXT is
+       the cue now in its place, and the GO is logged from no cue. */
+    Chaser *list = runShow();
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    MasterTimer *timer = m_doc->masterTimer();
+    auto tick = [timer]() { for (int i = 0; i < 4; ++i) timer->timerTick(); };
+    WebAccessRun run(m_doc);
+    auto state = [&]() { return QJsonDocument::fromJson(run.stateJson()).object(); };
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    tick();
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    tick();
+    QCOMPARE(state().value("now").toObject().value("name").toString(), QStringLiteral("Verse"));
+
+    quint32 listId = 0xFFFFFFFF;
+    st->productionOfChaser(list->id(), &listId);
+    const ShowTree::CueList *l = st->cueList(listId);
+    QVERIFY(l != nullptr && l->cues.count() == 3);
+    QVERIFY(st->removeCue(l->cues.at(1).id));
+    tick();
+    QJsonObject now = state().value("now").toObject();
+    QCOMPARE(now.value("name").toString(), QStringLiteral("A deleted cue — held until GO"));
+    QVERIFY(!now.contains("num"));
+    QCOMPARE(state().value("next").toObject().value("name").toString(), QStringLiteral("Chorus"));
+
+    int from = -99;
+    QObject counting;
+    connect(sc, &ShowControl::cueTaken, &counting,
+            [&from](ShowControl::Command, quint32, int fromStep) { from = fromStep; });
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    tick();
+    QCOMPARE(from, -1);
+    QCOMPARE(state().value("now").toObject().value("name").toString(), QStringLiteral("Chorus"));
+    list->stop(FunctionParent::master());
+    tick();
+}
+
 void WebAccess_Test::theRunStateCarriesEveryNoteOfTheCue()
 {
     runShow();

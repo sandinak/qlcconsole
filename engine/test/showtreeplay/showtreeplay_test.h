@@ -104,6 +104,16 @@ private slots:
     /** The cue on stage deleted from its running list: its light held, no
      *  cue named as running, and GO plays the cue now in its place. */
     void theCueOnStageDeletedHoldsUntilGoThenTheNextPlays();
+    /** Back while a deleted cue is held plays the cue before it; with the
+     *  first cue deleted, the held cue stays and the list runs on. */
+    void backWhileADeletedCueIsHeldPlaysTheCueBeforeIt();
+    /** The first cue deleted on stage keeps the list's starting state: no
+     *  ghost of it on a later Back. */
+    void theFirstCueDeletedLeavesTheListsStartingState();
+    /** A held deleted cue's Collection deleted from the show: let go of. */
+    void aHeldDeletedCuesFunctionDeletedLetsGo();
+    /** Undoing the delete of the held cue makes it the running cue again. */
+    void undoingTheDeleteOfTheHeldCueMakesItRunAgain();
     /** Chaser::setSteps() mid-run: the GO after a step added at the top
      *  puts on nothing of it (the runner's tracked state follows). */
     void stepsSetMidRunCarryTheTrackedState();
