@@ -9,6 +9,8 @@
 
 #include "testchannels.h"
 #include "fadechannel.h"
+#include "inputoutputmap.h"
+#include "universe.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -114,4 +116,15 @@ void TestChannels::apply()
             levels.append({ Fixture::invalidId(), abs, it.value() });
     }
     m_layer.set(levels);
+
+    /* An address no fixture owns has nothing that gives it a value once the
+       layer lets go, so it would keep the last test value: put it back to 0. */
+    for (quint32 abs : m_applied)
+    {
+        if (m_values.contains(abs) || m_doc->fixtureForAddress(abs) != Fixture::invalidId())
+            continue;
+        if (Universe *u = m_doc->inputOutputMap()->universe(abs / 512))
+            u->reset(int(abs % 512), 1);
+    }
+    m_applied = m_values.keys();
 }

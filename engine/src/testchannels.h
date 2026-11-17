@@ -61,6 +61,7 @@ private:
     Doc *m_doc;
     bool m_on = false;
     QHash<quint32, uchar> m_values;
+    QList<quint32> m_applied;   //!< the addresses the layer held last time
     OutputLayer m_layer;
 };
 
