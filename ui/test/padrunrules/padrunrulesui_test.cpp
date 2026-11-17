@@ -493,6 +493,7 @@ void PadRunRulesUi_Test::windowsRefusalShowsOnTheFooterChip()
     value(kLT, 0);
     value(kRB, 0);
     value(kLB, 0);
+    doc->outputRuleKeeper()->noteGo();     // the show is no longer held: the next test starts clean
     run->setEnabled(false, false);
 }
 
