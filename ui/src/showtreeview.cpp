@@ -2166,9 +2166,6 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(QString(), m_cueFocusState);
         if (FocusCallCue *fcc = m_doc->programmer()->focusCallCue())
             connect(fcc, &FocusCallCue::stateChanged, this, &ShowTreeView::refreshFocusCallState);
-        /* How the layer is built (split, children, parts, detach) is one
-           Layer Tools submenu: the menu stays short (UX-80). */
-        QMenu *structure = menu.addMenu(ContextMenu::Kind, tr("Layer Tools"), QStringLiteral("stStructure"));
         /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own values
            from the stage, with the controller. */
         QPushButton *refine = new QPushButton(tr("Focus This Cue\342\200\246"), inner);
@@ -8858,6 +8855,9 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
                 EffectLayerDialog::design(m_doc, this, cueId, layerId, dt);
             }, QStringLiteral("stDesignEffectLayer"));
         }
+        /* How the layer is built (split, children, parts, detach) is one
+           Layer Tools submenu: the menu stays short (UX-80). */
+        QMenu *structure = menu.addMenu(ContextMenu::Kind, tr("Layer Tools"), QStringLiteral("stStructure"));
         /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own
            values from the stage, on the controller, starting on this layer. */
         QAction *refine = structure->addAction(tr("Focus This Cue…"), this, [this, cueId, layerId]() {
