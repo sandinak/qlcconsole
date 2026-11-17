@@ -102,10 +102,13 @@ computer, not the show.
 
 ## GO from the game controller (Pad Run)
 
-> **Windows: not yet.** On Windows the controller does not arm, so it runs
-> no cue: the chip in the footer says *Running the show from a controller is
-> macOS/Linux for now.* The emergency stop from the pad (LB + RB + LT + RT)
-> still works there. A Windows check on the bench comes first.
+> **Windows: not yet.** On Windows a game controller does nothing but the
+> emergency stop (LB + RB + LT + RT), which still works there in every state.
+> It does not arm or run cues, start the venue focus (LT + Menu), walk the
+> show or Quiet Refine, or move the follow spot: each press says *Running
+> the show from a controller is macOS/Linux for now.* on the footer's chip.
+> The focus, walk and follow spot tools on the screen, by mouse and
+> keyboard, work as everywhere. A Windows check on the bench comes first.
 
 Stand anywhere with an Xbox, DualShock 4 or DualSense controller and run
 the show from it. The controller has two **roles**:

@@ -59,6 +59,9 @@ private slots:
     /** Review 0.4.10: a stick bound by hand, held, its pad's Follow spot
      *  job taken away, then let go: the subject must stop. */
     void reviewAHandBoundStickHeldAsItsJobGoes();
+    /** Board Q257's follow-up: on Windows a pad's follow spot stick moves
+     *  no head (DMX), the same push that moves it elsewhere. */
+    void windowsAPadsStickMovesNoSpot();
     /** Review 0.4.10: two pads, A steering with its fine stick pushed; the
      *  Follow spot job handed to B; A lets go: the subject must stop. */
     void reviewAFineStickHeldAsTheJobIsHandedOver();

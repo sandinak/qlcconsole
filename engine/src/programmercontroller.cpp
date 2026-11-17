@@ -3473,6 +3473,28 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
             return;
     }
 
+    /* Windows (board Q257, its follow-up): a game controller does nothing
+       but the emergency stop -- no venue focus, no walk or Quiet Refine,
+       no follow spot, no tool, no profile action. Its bumpers and
+       triggers still go to the Run map, which refuses the arm and the hit
+       and keeps the stop (watchStop(), above); any other press is told
+       why. A MIDI or OSC input is no pad and is not touched; the screen's
+       own tools, by mouse or keyboard, are not either. */
+    if (!PadRun::padRunSupported()
+        && (role != GamepadRole::None || isPadUniverse(universe)))
+    {
+        const GamepadRole::Role r = GamepadRole::Role(role);
+        if (r == GamepadRole::LB || r == GamepadRole::RB
+            || r == GamepadRole::LeftTrigger || r == GamepadRole::RightTrigger)
+        {
+            if (m_padRun != nullptr)
+                m_padRun->handle(universe, r, value);
+        }
+        else if (value > 0 && !GamepadRole::isAxis(r) && !GamepadRole::isTouch(r) && m_padRun != nullptr)
+            m_padRun->tellRefused(PadRun::notSupportedText());
+        return;
+    }
+
     if (routeFocusInput(universe, channel, value, role))
         return;
 

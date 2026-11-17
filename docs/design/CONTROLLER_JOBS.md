@@ -188,6 +188,7 @@ runner, the focus owner (`controllerOwner()`) or a job (`hasJob`,
 | Where | Gate | Job | Needed another job? |
 |---|---|---|---|
 | `PadRun::watchStop()` (top of `slotControllerInputChanged()`) | the four, first | none (everyone's) | no |
+| `slotControllerInputChanged()`, before `routeFocusInput()` | Windows (`!PadRun::padRunSupported()`, Q257 follow-up): a pad's four go to `PadRun::handle()` (arm and hit refused there), every other control is swallowed and a press says `notSupportedText()` -- no focus, walk, Quiet Refine, follow spot, tool or profile action | none: the platform | no |
 | `PadRun::handle()`, the four | arm chord, the hit | Run cues | no |
 | `PadRun::handle()`, the map | Menu is Focus's, the rest Run cues' | both, apart | no |
 | `PadRun::handle()`, FOCUS | GO family, hit, RS, Menu while focusing | Run cues (RS, refusals), Focus (Menu) | **was**: the runner's presses never reached it once the calls ran (they were told "doesn't do focus"). Fixed: routed here, refused with the focus's pad named; a playing hit can be let go |

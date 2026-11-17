@@ -1261,6 +1261,55 @@ void FollowSpotFeel_Test::reviewAHandBoundStickHeldAsItsJobGoes()
                                            "%1 m in 20 frames: the last push stays in m_panNorm").arg(d)));
 }
 
+void FollowSpotFeel_Test::windowsAPadsStickMovesNoSpot()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    const QMap<quint32, QString> roles = stub->m_channelRoles;
+    stub->m_channelRoles = { { 0, "lx" }, { 1, "ly" } };     // a game controller's left stick
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    auto restore = qScopeGuard([&]() {
+        PadRun::setPlatformForTest(PadRun::PlatformAuto);
+        stub->m_channelRoles = roles;
+        jobs->resetAll();
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    });
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->bindPanAxis();
+    h.pc->slotControllerInputChanged(0, 0, 127, QString());
+    h.pc->bindTiltAxis();
+    h.pc->slotControllerInputChanged(0, 1, 127, QString());
+    h.use(h.rig.targetScene);
+
+    // The 16-bit head's pan and tilt after a full push held 30 frames.
+    const int a = int(h.rig.fine->address());
+    auto panTilt = [&]() { return dmx(m_doc).mid(a, 4); };
+    auto push = [&]() {
+        for (int i = 0; i < 40; ++i)
+            h.tick();
+        const QByteArray before = panTilt();
+        h.pc->slotControllerInputChanged(0, 0, 255, QString());
+        h.pc->slotControllerInputChanged(0, 1, 0, QString());
+        for (int i = 0; i < 30; ++i)
+            h.tick();
+        const QByteArray after = panTilt();
+        h.pc->slotControllerInputChanged(0, 0, 127, QString());
+        h.pc->slotControllerInputChanged(0, 1, 127, QString());
+        return before != after;
+    };
+
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    QVERIFY2(!push(), "a pad's follow spot stick moved the spot's pan/tilt on Windows");
+    // Control: the same push moves it on macOS and Linux.
+    PadRun::setPlatformForTest(PadRun::PlatformOther);
+    QVERIFY2(push(), "the control push moved nothing: the test proves nothing");
+}
+
 void FollowSpotFeel_Test::reviewAFineStickHeldAsTheJobIsHandedOver()
 {
     Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };

@@ -90,8 +90,11 @@ their own; their detailed notes follow below this section.
 
 ### Known issues
 
-- **Windows: Pad Run, MSC in and MIDI timecode in are refused for now.**
-  The emergency stop still works there. A proper fix is planned for 0.5.x.
+- **Windows: a game controller does nothing but the emergency stop for
+  now.** Pad Run, the pad's venue focus, walk, Quiet Refine and follow spot
+  are refused there (the screen's own tools are not), as are MSC in and MIDI
+  timecode in. The emergency stop still works there. A proper fix is planned
+  for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on
   first run (More info ▸ Run anyway).
 - **Not yet tried on real hardware:** the Steam Deck's Blind / Solo
