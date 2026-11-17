@@ -579,10 +579,15 @@ private slots:
     void aGoboWhosePictureIsAFolderDrawsAStandIn();
     /** "set a gobo on a spot and I don't see it on the back drop": the
      *  rig view, a spot aimed at the cyc, gobo open and then set -- the
-     *  pattern shows where the beam lands, in House, Dim and Blackout. */
+     *  pattern shows where the beam lands: House is the proof, Dim and
+     *  Blackout are regression guards. */
     void aGoboShowsOnTheCycWhereTheBeamLands();
     /** ...and still on the floor (the guard for the case that worked). */
     void aGoboStillShowsOnTheFloor();
+    /** Four white washes stacked on the pale cyc in House keep their
+     *  shading (no large area clipped to white), and the gobo still reads
+     *  over them. */
+    void washesOnTheCycKeepTheirShadingAndTheGoboReads();
     void selectAllTakesEverythingSelectable();
     void aDecksCountBubbleMovesWithIt();
     /** "when I zoom in, the blue circles can stay the same size so what's

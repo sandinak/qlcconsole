@@ -17867,12 +17867,15 @@ static QLCFixtureDef *standInDef(bool withPictures = false)
 
 /* A small show like a show-choir stage: a pale cyc 2.4 m upstage of a pipe,
    a small LED spot hung on it whose gobo wheel names its slots (a stand-in
-   pattern, the same with or without the app's picture library). */
+   pattern, the same with or without the app's picture library), and room
+   on the pipe for washes. */
 struct GoboStage
 {
     Doc doc;
-    Fixture *fx = nullptr;
+    Fixture *fx = nullptr;                   // the gobo spot
+    QList<Fixture *> washes;
     Scenery *cyc = nullptr;
+    Truss *pipe = nullptr;
     explicit GoboStage(QObject *parent) : doc(parent)
     {
         MonitorProperties *props = doc.monitorProperties();
@@ -17883,72 +17886,91 @@ struct GoboStage
         cyc->setOriginY(1.24f);
         cyc->setWidth(11.0f);
         cyc->setHeight(6.0f);
-        Truss *pipe = props->addTruss();
+        pipe = props->addTruss();
         pipe->setName("Pipe"); pipe->setType(Truss::Horizontal);
         pipe->setOrigin(QVector3D(3.0f, 3.65f, 2.9f)); pipe->setDirection(QPointF(1.0, 0.0));
         pipe->setLength(8.0f); pipe->setWidth(0.05f);
-
+        fx = addLight(QStringLiteral("Spot"), 20, true, 3.0f, 0);   // x = 6 m
+    }
+    /* A small white LED mover, 1000 lm: Pan, Tilt, Dimmer, [Gobo,] Color
+       (White at 0). */
+    Fixture *addLight(const QString &name, int lensDeg, bool withGobo, float along, quint32 address)
+    {
         QLCFixtureDef *def = new QLCFixtureDef();
-        def->setManufacturer("Test"); def->setModel("Gobo Spot");
+        def->setManufacturer("Test"); def->setModel(withGobo ? "Gobo Spot" : "LED Wash");
         def->setType(QLCFixtureDef::MovingHead);
         QLCFixtureMode *mode = new QLCFixtureMode(def);
-        mode->setName("4ch");
-        auto add = [&](QLCChannel *c, int at) { def->addChannel(c); mode->insertChannel(c, quint32(at)); };
+        mode->setName(withGobo ? "5ch" : "4ch");
+        int at = 0;
+        auto add = [&](QLCChannel *c) { def->addChannel(c); mode->insertChannel(c, quint32(at++)); };
         QLCChannel *pan = new QLCChannel(); pan->setName("Pan"); pan->setPreset(QLCChannel::PositionPan);
-        add(pan, 0);
+        add(pan);
         QLCChannel *tilt = new QLCChannel(); tilt->setName("Tilt"); tilt->setPreset(QLCChannel::PositionTilt);
-        add(tilt, 1);
+        add(tilt);
         QLCChannel *dim = new QLCChannel(); dim->setName("Dimmer"); dim->setGroup(QLCChannel::Intensity);
         dim->setControlByte(QLCChannel::MSB);
-        add(dim, 2);
+        add(dim);
+        if (withGobo)
+        {
+            QLCChannel *g = new QLCChannel(); g->setName("Gobo"); g->setGroup(QLCChannel::Gobo);
+            g->setControlByte(QLCChannel::MSB);
+            g->addCapability(new QLCCapability(0, 9, "Open"));
+            g->addCapability(new QLCCapability(10, 19, "3 Spots"));
+            g->addCapability(new QLCCapability(20, 255, "Zebra"));
+            add(g);
+        }
         QLCChannel *wheel = new QLCChannel(); wheel->setName("Color"); wheel->setGroup(QLCChannel::Colour);
         wheel->setControlByte(QLCChannel::MSB);
         QLCCapability *white = new QLCCapability(0, 255, "White");
         white->setPreset(QLCCapability::ColorMacro);
         white->setResource(0, QColor(Qt::white));
         wheel->addCapability(white);
-        add(wheel, 4);
-        QLCChannel *g = new QLCChannel(); g->setName("Gobo"); g->setGroup(QLCChannel::Gobo);
-        g->setControlByte(QLCChannel::MSB);
-        g->addCapability(new QLCCapability(0, 9, "Open"));
-        g->addCapability(new QLCCapability(10, 19, "3 Spots"));
-        g->addCapability(new QLCCapability(20, 255, "Zebra"));
-        add(g, 3);
-        // A small LED spot: 1000 lm, a 20-degree lens.
+        add(wheel);
         QLCPhysical ph;
-        ph.setLensDegreesMin(20); ph.setLensDegreesMax(20);
+        ph.setLensDegreesMin(lensDeg); ph.setLensDegreesMax(lensDeg);
         ph.setBulbLumens(1000);
         ph.setPowerConsumption(50);
         mode->setPhysical(ph);
         def->addMode(mode);
-        fx = new Fixture(&doc);
-        fx->setName("Spot"); fx->setFixtureDefinition(def, mode);
-        doc.addFixture(fx);
-        props->setFixturePosition(fx->id(), 0, 0, QVector3D(0, 0, 0));
+        Fixture *f = new Fixture(&doc);
+        f->setName(name); f->setFixtureDefinition(def, mode);
+        f->setAddress(address);
+        if (!doc.addFixture(f))
+            return nullptr;
+        MonitorProperties *props = doc.monitorProperties();
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(0, 0, 0));
         FixtureRigProps rp;
-        rp.trussId = pipe->id(); rp.trussOffset = 3.0f;      // x = 6 m
-        props->setFixtureRigProps(fx->id(), rp);
+        rp.trussId = pipe->id(); rp.trussOffset = along;
+        props->setFixtureRigProps(f->id(), rp);
+        return f;
     }
-    void send(int pan, int tilt, int gobo)
+    // Its pan, tilt, dimmer and (a spot) gobo; the colour wheel at White.
+    static void send(Fixture *f, int pan, int tilt, int dim, int gobo = 0)
     {
-        QByteArray v(5, char(0));                        // the colour wheel at White
-        v[0] = char(pan); v[1] = char(tilt); v[2] = char(255); v[3] = char(gobo);
-        fx->setChannelValues(v);
+        // setChannelValues() takes the universe, from its channel 0.
+        const int at = int(f->address());
+        QByteArray v(at + int(f->channels()), char(0));
+        v[at] = char(pan); v[at + 1] = char(tilt); v[at + 2] = char(dim);
+        if (f->channels() == 5)
+            v[at + 3] = char(gobo);
+        f->setChannelValues(v);
     }
+    void send(int pan, int tilt, int gobo) { send(fx, pan, tilt, 255, gobo); }
 };
 
-/* The pan and tilt that land the spot's beam nearest @p want, on the cyc
+/* The pan and tilt that land @p f's beam nearest @p want, on the cyc
    (@p onCyc) or the floor; false if none does. */
-static bool aimGoboSpot(GoboStage &st, StructureStudioView &view, bool onCyc, const QVector3D &want,
-                        int &panOut, int &tiltOut, QVector3D &hitOut, QVector3D &normalOut)
+static bool aimStageLight(GoboStage &st, StructureStudioView &view, Fixture *f, bool onCyc,
+                          const QVector3D &want, int &panOut, int &tiltOut, QVector3D &hitOut,
+                          QVector3D &normalOut)
 {
-    const QVector3D apex = view.fixtureCentre(st.fx->id());
+    const QVector3D apex = view.fixtureCentre(f->id());
     double best = 1e9;
     for (int pan = 0; pan < 256; pan += 2)
         for (int tilt = 0; tilt < 256; tilt += 2)
         {
-            st.send(pan, tilt, 0);
-            const QVector3D d = view.moverAim(st.fx->id(), 0).normalized();
+            GoboStage::send(f, pan, tilt, 0);
+            const QVector3D d = view.moverAim(f->id(), 0).normalized();
             if (d.isNull())
                 continue;
             bool hit = false;
@@ -17967,15 +17989,26 @@ static bool aimGoboSpot(GoboStage &st, StructureStudioView &view, bool onCyc, co
     return best < 0.5;
 }
 
-/* Of the pixels inside where the beam lands, the share that change when the
-   gobo goes in. */
-static double goboShowsAt(GoboStage &st, StructureStudioView &view, int pan, int tilt,
-                          const QVector3D &hit, const QVector3D &normal, const QString &shot)
+/* The gobo inside where the beam lands (within its own angle: the pattern,
+   not its soft rim). */
+struct GoboSeen
+{
+    int inside = 0;         // footprint pixels
+    double share = -1.0;    // of them, changed by more than the threshold, open -> gobo
+    int p90 = 0, most = 0;  // that change, levels: 90th percentile, largest
+    /* The pattern itself, with the gobo in: how far the brightest tenth of
+       the footprint (light through the holes) stands above the darkest
+       tenth (the metal's shadow), in grey levels. What the eye reads. */
+    int pattern = 0;
+};
+
+static GoboSeen goboShowsAt(GoboStage &st, StructureStudioView &view, int pan, int tilt,
+                            const QVector3D &hit, const QVector3D &normal, int threshold,
+                            const QString &shot)
 {
     const QVector3D apex = view.fixtureCentre(st.fx->id());
     const QVector3D d = (hit - apex).normalized();
     const double t = double((hit - apex).length());
-    // Inside the beam's own angle: the pattern, not its soft rim.
     const QVector<QVector3D> ring = view.beamFootprint(apex, d, qDegreesToRadians(20.0 / 2.0) * 0.85, t, true, normal);
     QPolygonF poly;
     for (const QVector3D &q : ring)
@@ -17991,31 +18024,49 @@ static double goboShowsAt(GoboStage &st, StructureStudioView &view, int pan, int
         open.save(QStringLiteral("%1/%2-open.png").arg(shots, shot));
         gobo.save(QStringLiteral("%1/%2-gobo.png").arg(shots, shot));
     }
-    const qreal dpr = open.devicePixelRatio() > 0 ? open.devicePixelRatio() : 1.0;
     const QRect box = poly.boundingRect().toAlignedRect();
-    int inside = 0, changed = 0;
+    QVector<int> diffs, greys;
+    int changed = 0;
     for (int y = box.top(); y <= box.bottom(); ++y)
         for (int x = box.left(); x <= box.right(); ++x)
         {
-            if (!poly.containsPoint(QPointF(x + 0.5, y + 0.5), Qt::OddEvenFill))
+            if (!poly.containsPoint(QPointF(x + 0.5, y + 0.5), Qt::OddEvenFill)
+                || x < 0 || y < 0 || x >= open.width() || y >= open.height())
                 continue;
-            const int px = int(x * dpr), py = int(y * dpr);
-            if (px < 0 || py < 0 || px >= open.width() || py >= open.height())
-                continue;
-            ++inside;
-            const QRgb a = open.pixel(px, py), b = gobo.pixel(px, py);
+            const QRgb a = open.pixel(x, y), b = gobo.pixel(x, y);
             const int diff = qMax(qAbs(qRed(a) - qRed(b)), qMax(qAbs(qGreen(a) - qGreen(b)), qAbs(qBlue(a) - qBlue(b))));
-            if (diff > 16)
+            diffs << diff;
+            greys << qGray(b);
+            if (diff > threshold)
                 ++changed;
         }
-    qInfo().noquote() << shot << changed << "of" << inside << "footprint pixels changed";
-    return inside > 30 ? double(changed) / inside : -1.0;
+    GoboSeen seen;
+    seen.inside = diffs.size();
+    if (seen.inside > 30)
+    {
+        std::sort(diffs.begin(), diffs.end());
+        seen.share = double(changed) / seen.inside;
+        seen.p90 = diffs.at(int(diffs.size() * 0.9));
+        seen.most = diffs.last();
+        std::sort(greys.begin(), greys.end());
+        seen.pattern = greys.at(int(greys.size() * 0.9)) - greys.at(int(greys.size() * 0.1));
+    }
+    const QString line = QStringLiteral("%1: %2 of %3 footprint pixels changed by more than %4 levels (share %5), "
+                                        "90th percentile %6, largest %7; the pattern %8 levels (holes over metal)")
+                             .arg(shot).arg(changed).arg(seen.inside).arg(threshold)
+                             .arg(seen.share, 0, 'f', 3).arg(seen.p90).arg(seen.most).arg(seen.pattern);
+    qInfo().noquote() << line;
+    if (!shots.isEmpty())
+    {
+        QFile f(shots + QStringLiteral("/gobo-numbers.txt"));
+        if (f.open(QIODevice::Append | QIODevice::Text))
+            f.write(line.toUtf8() + "\n");
+    }
+    return seen;
 }
 
-void Monitor_Test::aGoboShowsOnTheCycWhereTheBeamLands()
+static void setUpRigView(StructureStudioView &view)
 {
-    GoboStage st(this);
-    StructureStudioView view(&st.doc, StructureStudioView::StageKind, 0);
     view.resize(1100, 680);
     view.reload();
     view.setPlane(StructureStudioView::Angled);
@@ -18023,10 +18074,25 @@ void Monitor_Test::aGoboShowsOnTheCycWhereTheBeamLands()
     view.setBeams(true);
     view.setHaze(1.0);
     view.setGpu(false);
+}
+
+/* How far a gobo's pattern must stand out, holes over metal, in grey
+   levels. On the old code a white 1000 lm spot's gobo on the pale cyc in
+   House stood out by 12 (Dim 22, Blackout 35) while on the deck it stood
+   out by 26: it read on the floor and not on the cloth. Fixed, the cyc
+   reads 27. */
+static const int kPatternLevels = 20;
+
+void Monitor_Test::aGoboShowsOnTheCycWhereTheBeamLands()
+{
+    GoboStage st(this);
+    QVERIFY(st.fx != nullptr);
+    StructureStudioView view(&st.doc, StructureStudioView::StageKind, 0);
+    setUpRigView(view);
     int pan = 0, tilt = 0;
     QVector3D hit, n;
     // Square on to the cloth, 2 m up, straight upstage of the spot.
-    QVERIFY(aimGoboSpot(st, view, true, QVector3D(6.0f, 1.24f, 2.0f), pan, tilt, hit, n));
+    QVERIFY(aimStageLight(st, view, st.fx, true, QVector3D(6.0f, 1.24f, 2.0f), pan, tilt, hit, n));
     QVERIFY2(qAbs(n.y()) > 0.99f, "the pool lies on the cloth");
     // For review (QLC_SHOT_DIR): the gobo on the cyc in house light, three sizes.
     const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
@@ -18043,38 +18109,143 @@ void Monitor_Test::aGoboShowsOnTheCycWhereTheBeamLands()
         view.resize(1100, 680);
         view.fitToRig();
     }
+    // Every room measured first, so a failure says all three.
+    QMap<int, GoboSeen> seen;
     for (double room : { 0.62, 0.30, 0.0 })     // House, Dim, Blackout
     {
         view.setAmbient(room);
-        const double share = goboShowsAt(st, view, pan, tilt, hit, n,
-                                         QStringLiteral("gobo-cyc-room%1").arg(int(room * 100)));
-        QVERIFY2(share > 0.15, qPrintable(QStringLiteral("room %1: %2 of the pool on the cyc changed with the gobo in")
-                                             .arg(room).arg(share)));
+        seen.insert(int(room * 100), goboShowsAt(st, view, pan, tilt, hit, n, 10,
+                                                 QStringLiteral("gobo-cyc-room%1").arg(int(room * 100))));
     }
+    /* House is the proof: the pale cloth lit by the room, where the pattern
+       was lost (12 levels on the old code). */
+    QVERIFY2(seen.value(62).pattern >= kPatternLevels,
+             qPrintable(QStringLiteral("House: the gobo on the cyc stands out by %1 levels, under %2")
+                            .arg(seen.value(62).pattern).arg(kPatternLevels)));
+    /* Dim and Blackout are regression guards: the cloth is darker there
+       and the pattern read on the old code too (22 and 35 levels). */
+    for (int room : { 30, 0 })
+        QVERIFY2(seen.value(room).pattern >= kPatternLevels,
+                 qPrintable(QStringLiteral("room %1: the gobo on the cyc stands out by %2 levels")
+                                .arg(room).arg(seen.value(room).pattern)));
+    // And in every room the gobo going in changes the pool.
+    for (int room : { 62, 30, 0 })
+        QVERIFY2(seen.value(room).share > 0.15,
+                 qPrintable(QStringLiteral("room %1: %2 of the pool changed with the gobo in")
+                                .arg(room).arg(seen.value(room).share)));
 }
 
 void Monitor_Test::aGoboStillShowsOnTheFloor()
 {
     GoboStage st(this);
+    QVERIFY(st.fx != nullptr);
     StructureStudioView view(&st.doc, StructureStudioView::StageKind, 0);
-    view.resize(1100, 680);
-    view.reload();
-    view.setPlane(StructureStudioView::Angled);
-    view.setLiveValues(true);
-    view.setBeams(true);
-    view.setHaze(1.0);
-    view.setGpu(false);
+    setUpRigView(view);
     int pan = 0, tilt = 0;
     QVector3D hit, n;
-    QVERIFY(aimGoboSpot(st, view, false, QVector3D(6.0f, 2.6f, 0.0f), pan, tilt, hit, n));
+    QVERIFY(aimStageLight(st, view, st.fx, false, QVector3D(6.0f, 2.6f, 0.0f), pan, tilt, hit, n));
     for (double room : { 0.62, 0.0 })
     {
         view.setAmbient(room);
-        const double share = goboShowsAt(st, view, pan, tilt, hit, n,
-                                         QStringLiteral("gobo-floor-room%1").arg(int(room * 100)));
-        QVERIFY2(share > 0.15, qPrintable(QStringLiteral("room %1: %2 of the pool on the floor changed with the gobo in")
-                                             .arg(room).arg(share)));
+        const GoboSeen seen = goboShowsAt(st, view, pan, tilt, hit, n, 10,
+                                          QStringLiteral("gobo-floor-room%1").arg(int(room * 100)));
+        QVERIFY2(seen.pattern >= kPatternLevels && seen.share > 0.15,
+                 qPrintable(QStringLiteral("room %1: the gobo on the floor stands out by %2 levels, %3 of it changed")
+                                .arg(room).arg(seen.pattern).arg(seen.share)));
     }
+}
+
+/* Washes on the pale cyc stay a lit cloth, not a white sheet ("white ..
+   it's too overdriven"): four white 1000 lm washes stacked on it in House
+   keep their shading -- nothing large clipped to white, a real spread of
+   levels -- and the gobo spot's pattern still reads on top of them. */
+void Monitor_Test::washesOnTheCycKeepTheirShadingAndTheGoboReads()
+{
+    GoboStage st(this);
+    QVERIFY(st.fx != nullptr);
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *w = st.addLight(QStringLiteral("Wash %1").arg(i + 1), 40, false,
+                                 1.5f + float(i), quint32(16 + 8 * i));
+        QVERIFY(w != nullptr);
+        st.washes << w;
+    }
+    StructureStudioView view(&st.doc, StructureStudioView::StageKind, 0);
+    setUpRigView(view);
+    view.setAmbient(0.62);
+    // Each wash on the cloth about the spot's pool, the spot on its middle.
+    QVector<QPair<int, int>> aims;
+    for (Fixture *w : st.washes)
+    {
+        int pan = 0, tilt = 0;
+        QVector3D hit, n;
+        QVERIFY(aimStageLight(st, view, w, true, QVector3D(6.0f, 1.24f, 2.0f), pan, tilt, hit, n));
+        aims << qMakePair(pan, tilt);
+    }
+    int pan = 0, tilt = 0;
+    QVector3D hit, n;
+    QVERIFY(aimStageLight(st, view, st.fx, true, QVector3D(6.0f, 1.24f, 2.0f), pan, tilt, hit, n));
+    auto washesAt = [&](int dim) {
+        for (int i = 0; i < st.washes.size(); ++i)
+            GoboStage::send(st.washes.at(i), aims.at(i).first, aims.at(i).second, dim);
+    };
+
+    // The cloth with nothing on it, then the four washes up.
+    washesAt(0);
+    GoboStage::send(st.fx, pan, tilt, 0);
+    const QImage dark = view.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    washesAt(255);
+    const QImage lit = view.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    QVector<int> levels;
+    int clipped = 0;
+    for (int y = 0; y < lit.height(); ++y)
+        for (int x = 0; x < lit.width(); ++x)
+        {
+            const QRgb a = lit.pixel(x, y), b = dark.pixel(x, y);
+            if (qMax(qRed(a), qMax(qGreen(a), qBlue(a))) - qMax(qRed(b), qMax(qGreen(b), qBlue(b))) < 8)
+                continue;                                  // not the washes' light
+            levels << qGray(a);
+            if (qMin(qRed(a), qMin(qGreen(a), qBlue(a))) >= 250)
+                ++clipped;
+        }
+    QVERIFY2(levels.size() > 2000, qPrintable(QString::number(levels.size())));
+    std::sort(levels.begin(), levels.end());
+    const int spread = levels.at(int(levels.size() * 0.95)) - levels.at(int(levels.size() * 0.05));
+    const double clippedShare = double(clipped) / levels.size();
+    const QString line = QStringLiteral("washes on the cyc: %1 lit pixels, %2 clipped (%3), levels 5%..95% %4..%5 (spread %6)")
+                             .arg(levels.size()).arg(clipped).arg(clippedShare, 0, 'f', 4)
+                             .arg(levels.at(int(levels.size() * 0.05))).arg(levels.at(int(levels.size() * 0.95)))
+                             .arg(spread);
+    qInfo().noquote() << line;
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        QFile f(shots + QStringLiteral("/gobo-numbers.txt"));
+        if (f.open(QIODevice::Append | QIODevice::Text))
+            f.write(line.toUtf8() + "\n");
+        // For review: the washes and the gobo spot on the cyc, House, three sizes.
+        st.send(pan, tilt, 15);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+        {
+            view.resize(sz);
+            view.fitToRig();
+            view.grab().save(QStringLiteral("%1/washes-cyc-house-%2x%3.png").arg(shots).arg(sz.width()).arg(sz.height()));
+        }
+        view.resize(1100, 680);
+        view.fitToRig();
+    }
+    // The gobo spot on top of the washes.
+    const GoboSeen seen = goboShowsAt(st, view, pan, tilt, hit, n, 10, QStringLiteral("washes-gobo-cyc-room62"));
+
+    // Washes are drawn as they always were (no gain): shaded, never a white sheet.
+    QVERIFY2(clippedShare < 0.02, qPrintable(line));
+    QVERIFY2(spread >= 20, qPrintable(line));
+    /* Four washes put far more light on the cloth than the spot: its gobo
+       is fainter over them, as it is in a theatre, but still there (12
+       levels; 6 on the old code). */
+    QVERIFY2(seen.pattern >= 9, qPrintable(QStringLiteral("the gobo over the washes stands out by %1 levels")
+                                               .arg(seen.pattern)));
 }
 
 void Monitor_Test::aGoboWithNoPictureDrawsAStandIn()

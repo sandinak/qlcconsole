@@ -5854,20 +5854,27 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
     const double baseA = 95.0 * level * room * spread * qBound(0.0, haze, 1.0) * m_haze
                          * (gobo ? qBound(0.05, optics->coverage, 1.0) : 1.0);
     const double poolA = 130.0 * level * room * spread;
-    /* What a pool adds has to read on what it lands on ("set a gobo on a
+    /* A gobo's pattern has to read on what it lands on ("set a gobo on a
        spot and I don't see it on the back drop").
      *
        Light is laid over the frame by Screen, which adds less the lighter
        the surface already is: on a pale cyc in house light (about 60% grey)
        a pool added well under half what it did on the dark deck, and a
-       gobo -- which takes most of that away -- was lost on the cloth while
-       the same spot's gobo read on the floor. A pool on a piece of scenery
-       is made that much stronger, by how light the cloth reads in this
-       room, so it adds what it would on the deck. The deck and floor are
-       dark and keep their strength. */
+       gobo -- which takes most of that light away -- was lost on the cloth
+       while the same spot's gobo read on the floor. A gobo's pool on a
+       piece of scenery is made stronger, by how light the cloth reads in
+       this room, so its pattern stands out as it does on the deck.
+     *
+       Only a gobo's, and never more in all than the open beam: the gain is
+       held to what the glass takes away (1 / its coverage), so a gobo pool
+       puts no more light on the cloth than the same spot open did. A plain
+       pool -- a wash on the cyc, several of them stacked -- is drawn as
+       before: lifting those as well drove a lit cyc to a flat white
+       (white "too overdriven", above). The deck and floor are dark and
+       keep their strength. */
     auto poolColour = [&](int surface) {
         double gain = 1.0;
-        if (surface < 0)
+        if (gobo && surface < 0)
         {
             const Scenery *sc = props->scenery(quint32(-1 - surface));
             if (sc != nullptr && !sc->isSeeThrough())
@@ -5876,7 +5883,8 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
                 const QColor fill = sceneryPaint(sc).fill;
                 const double lit = qMax(fill.redF(), qMax(fill.greenF(), fill.blueF()))
                                    * (0.18 + 0.82 * m_ambient);
-                gain /= qMax(0.35, 1.0 - lit);
+                gain = qMin(1.0 / qMax(0.35, 1.0 - lit),
+                            1.0 / qBound(0.05, optics->coverage, 1.0));
             }
         }
         QColor c = colour;
@@ -6153,7 +6161,9 @@ void StructureStudioView::drawBeamCone(QPainter &p, const QVector3D &apex,
             for (int k = 0; k < N; ++k)
                 if (landed[k] && pt[k] >= 0.04)
                     landings.append(BeamLanding{ surf[k], meshQ.at(k) });
-        // Each surface's own strength (poolColour()), worked out once.
+        /* Each surface's own strength (poolColour()), worked out once. A
+           cell lies on one surface: tri() leaves out any whose corners land
+           on different ones, so its first corner's surface is all of it. */
         QVarLengthArray<QPair<int, QColor>, 4> cellCols;
         auto cellColFor = [&](int surface) {
             for (const auto &sc : cellCols)
