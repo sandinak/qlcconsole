@@ -2,6 +2,37 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
+## 0.5.0 (November 2026)
+
+The first public release since 0.4.3: it carries 0.4.4 through 0.4.13
+(their sections follow). New since 0.4.12:
+
+- **Choose your tabs.** **View ▸ Workspace ▸ Tabs…** picks the tabs a show
+  uses, saved with the show; Run and Connections always stay. The Simple
+  Desk opens when you want it: **Window ▸ Simple Desk**. See
+  [Views](getting-started.md#views).
+- **Connections' DMX map** shows what each block is, with a legend and
+  hover, and **Test** brings channels up by hand. See
+  [Connections and patch](other-improvements.md#connections--patch).
+- **The patch list** shows one universe and prints; right-click a universe
+  in Connections for its Patch List. A multi-universe address reads
+  **U3.001**. See [The patch list](fixture-manager.md#the-patch-list).
+- **Right-click menus are shorter**: at most 14 items, in the order you
+  work, Delete last. See [Context menu](fixture-manager.md#context-menu).
+- **Fire Spread** comes in two colours, burns over what is already lit,
+  has an Intensity and can hold as it ends. See
+  [Fire Spread](effects.md#fire-spread).
+- **The emergency stop is Everything is off**, from every pad, the phone,
+  OSC and MSC. The phone's stop needs only the PIN. A venue focus stopped
+  by it keeps its unsaved changes: **Pick up where you stopped**. See
+  [A venue focus cue](focus-calls.md#a-venue-focus-cue-pre-show).
+- **The Rig Overview in a Blackout** shows only the light the rig puts
+  out: no clash red and no selection edge until Dim.
+- **Every fixture not on the plot is listed** in the Inventory and the
+  Plot layers panel, and can be dragged on.
+- **On Windows, Pad Run, MSC in and MIDI timecode in are refused for
+  now**; the emergency stop still works there.
+
 ## 0.4.12 (November 2026)
 
 This section covers 0.4.5 through 0.4.12.
