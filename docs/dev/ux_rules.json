@@ -803,6 +803,40 @@
     }
   },
   {
+    "id": "UX-79",
+    "theme": "Layout",
+    "title": "A menu flows top to bottom by what you do with the thing",
+    "rule": "A context menu reads in bands: open or edit it, act on it live (test, locate, solo), arrange it (move, align, group, layer), copy, duplicate or export it, its properties and settings, and last remove or delete it. A separator stands between bands, a delete is always the last item, and an item that cannot work is greyed with its reason in the tooltip, never silent.",
+    "check": "test:contextmenus_test::everyMenuKeepsTheLaws",
+    "checks": [
+      "test:contextmenus_test::everyMenuKeepsTheLaws",
+      "test:contextmenus_test::testFixtureNeverDoesNothing",
+      "test:contextmenus_test::theCanonCatchesDrift"
+    ],
+    "enforced": true,
+    "why": "2026-11-17: \"our menus are getting long again .. make them flow from top to bottom based on action\"; right-click a fixture, Test Fixture, \"didn't do anything\" (the action kept the last fixture's enabled state on a group row and its slot gave up without a word).",
+    "example": {
+      "right": "Fixture: Fixture Properties… | Locate, Test Fixture… | Group ▸ | Duplicate | Delete…  (Test greyed on a group, tooltip: pick one fixture)",
+      "wrong": "Delete… in the middle, Test Fixture… enabled on a group row and doing nothing"
+    }
+  },
+  {
+    "id": "UX-80",
+    "theme": "Layout",
+    "title": "A menu stays short: areas become submenus",
+    "rule": "A top-level menu has at most 14 items; past that, items go into submenus named by area (Align ▸, Layer ▸, Export ▸). A submenu never holds a single item, and the same action has the same words and the same band in every menu.",
+    "check": "test:contextmenus_test::everyMenuKeepsTheLaws",
+    "checks": [
+      "test:contextmenus_test::everyMenuKeepsTheLaws"
+    ],
+    "enforced": true,
+    "why": "2026-11-17: \"if they're long consider submenus by area\"; Connections rows and the Fixture Manager's fixture menu had grown past 15 items.",
+    "example": {
+      "right": "Fixture Manager: 9 items and Group ▸, Power ▸",
+      "wrong": "A flat 17-item list; a submenu \"Power ▸\" with one entry"
+    }
+  },
+  {
     "id": "UX-41",
     "theme": "Consistency across views",
     "title": "One object, one menu",

@@ -1664,7 +1664,7 @@ props, images and nodes:
   [One selection](build.md#one-selection).
 - **Selection ▸** on a fixture's right-click menu: **New Layer from
   Selection**, **Add to Current Layer** and **Create Fixture Group from
-  Selection…**. **New Map Layer from Selection…** (in the layers part of
+  Selection…**. **Move to Layer ▸ New Map Layer from Selection…** (in the layers part of
   the menu) moves the selection onto a new layer of the plot.
 - **Select All** (Ctrl/⌘+A, or **More → Select All**) selects every
   visible, selectable object on the plot at once.

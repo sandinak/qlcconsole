@@ -150,7 +150,7 @@ Each row's right-click offers what that level of the wiring owns:
   and, last, **Delete Universe…** (where it goes is in the settings beside
   the list). Those act on the one row you right-clicked; ⌘-click several
   universes first for **Retarget N Selected Universes…** and **Transmit
-  Mode of N Selected Universes**. **Collapse All Below**, **Expand All
+  Mode of N Selected Universes**. **View ▸ Collapse All Below**, **Expand All
   Below** and **Add Universe** are on top of every row's menu.
 
 ### Editing a connection

@@ -419,3 +419,89 @@ RGB Matrix (the Workbench said "Effect look…", last).
   sub-cue rows are in Organise: one item, its words following the selection.
 - Show Review's "I meant it" is a review-row action, not an object menu.
   The cyc-backwash layer item is in Kind of a cue layer.
+
+## 4. Rules for making a menu (2026-11-17)
+
+*Ask: "our menus are getting long again .. make them flow from top to
+bottom based on action .. if they're long consider submenus by area ..
+write a set of rules for generation so that we're always consistent."*
+These are UX-79 and UX-80 in [UX_RULES.md](../dev/UX_RULES.md);
+`ui/test/contextmenus` (`everyMenuKeepsTheLaws`) enforces them on every
+menu it can build offscreen.
+
+1. **Bands, top to bottom, by what you do with the thing.** The eight
+   sections of 3.1 are these bands:
+
+   | Band | What you do | Sections of 3.1 |
+   |---|---|---|
+   | 0 | Where you are (the place's own items, the list's view) | Place, View |
+   | 1 | Open or edit it | Open |
+   | 2 | Act on it live: test, locate, flash, solo, why is this on | Kind |
+   | 3 | Arrange it: move, align, group, layer, select more like it | Selection, Organise |
+   | 4 | Copy, duplicate, export, rename | Edit |
+   | 5 | Properties and settings | Kind (settings), Open (properties dialogs) |
+   | 6 | Remove or delete it, always last | Remove |
+
+   One separator between bands, none inside one.
+2. **A delete is the last item.** "Delete X…" (destroy) has nothing after
+   it. "Remove from Y" is the place's and sits in band 0.
+3. **At most 14 items at the top level** (about 10 is the aim). Past that,
+   items by area go into a submenu named for the area ("Align ▸", "Layer ▸",
+   "Export ▸", "Group ▸"). The top level keeps the band's first and most-used
+   items.
+4. **Never a submenu of one item.** Put it in the parent.
+5. **One action, one place, one set of words.** The same action sits in the
+   same band and has the same text in every menu (3.2). A new item for a
+   kind goes into that kind's builder (`ui/src/contextmenus.cpp`), not into
+   one place's menu.
+6. **A greyed item says why.** An item the person would expect stays, greyed,
+   with the reason in its tooltip ("Test works on one fixture. Select a single
+   fixture."). It does not vanish and it does not stay enabled.
+7. **Every item does something visible or says why it can't.** A trigger that
+   opens nothing, changes nothing and says nothing is a bug (the Fixture
+   Manager's Test Fixture kept the last fixture's enabled state on a group
+   row and did nothing).
+8. **New menus** are built with `ContextMenu` (sections), count their items
+   against rule 3, and add themselves to the inventory below with the test
+   that builds them. A menu the test cannot reach is built so that it can
+   (a `fillContextMenu(QMenu *, …)` that the popup then calls).
+
+## 5. Appendix: every context menu, 2026-11-17
+
+Top-level items (separators not counted) and what the law test
+(`everyMenuKeepsTheLaws`) says. "Built" menus are the ones the test opens
+offscreen; the others were counted from the source (`exec(` sites in
+`ui/src`) and are listed so the next pass starts from them. Limit 14
+(UX-80). It is 14, not 12, because the plot fixture menu and the Show Tree cue menus, with their conditional items, reach 13–14 even split by area; 12 would need a second pass over the Show Tree cue rows.
+
+| Menu | Where | Items before → after | Band order | Problem / change |
+|---|---|---|---|---|
+| Fixture, Fixture Manager | `fixturemanager.cpp` | 19 → 14 | place, kind, Delete last | Definition, Plot Symbol, Return to Inventory, Power and Channel Behaviour now in **Fixture Setup ▸**; Expand/Collapse in **View ▸**; Test Fixture followed the last row |
+| Fixture group, Fixture Manager | same | 18 → 14 | same | Reset dropped for a group (it never applied); **Add to Group** alone is not a one-item Group ▸ |
+| Fixture group in Build, Plot Layers, Scenes, Library | `contextmenus.cpp` `rig()` | 8–14 | kind block | none |
+| Fixture, Build / Scenes / Library | same | 4–12 | kind block | none |
+| Fixture on the plot and Plot Layers | `monitorgraphicsview.cpp` `buildItemMenu` | 19 → 14 | place, kind | footprint, masking, mounting, height and studio component are **Plot Setup ▸**; New Map Layer from Selection… is in Move to Layer ▸. It has no Test Fixture item (Locate is its find-it), so the silent no-op was the Fixture Manager's only |
+| Stage feature, plot and Layers | same | 12 | kind block, Delete last | none |
+| Stage piece, no-light zone | same | 5 | place, Edit, Delete | none |
+| Empty plot | `monitor.cpp` | 7 | | none |
+| Palette (Build, Library, look row) | `contextmenus.cpp` `palette()` | 7–11 | kind block | Used By ▸ with one use is a picker (allowed) |
+| Function (Scenes, Effects, Library, Workbench) | `function()` | 8–10 | kind block | none |
+| Build ▸ Scenes folder / empty | `programmingoutline.cpp` | 10 / 6 | | none |
+| Functions tab | `functionmanager.cpp` | 17 → 7 | Kind, Selection, Organise, View, Edit, Delete last | the twelve creators are **New ▸** |
+| Show Tree layer (tree, Workbench) | `showtreeview.cpp` `fillLayerMenu` | 20 / 18 → 12 / 13 | place, open, kind, Edit, Delete | **New ▸** (the four + items on a cue or layer), **Structure ▸** (Split Layer, Add Child Layer ▸, Remove from Layer ▸, Detach to Plain Scene), **Clipboard ▸** (Cut, Copy, Paste, Duplicate); the course helper `treeMenu` finds an item inside an area submenu by its own text |
+| Show Tree layer carried in | same | 10–11 | place, open | none |
+| Show Tree cue, list, production, hit | `showtreeview.cpp`, `treecuestack.cpp` | 2–14 | creation first, Delete last | counted from source only |
+| Connections rows (14 menus) | `connectionstree.cpp` | 5–15 → 4–14 | list view and Add Universe on top, the row's items, Delete last | Collapse/Expand are **View ▸**; not built by the test (needs a live patch), counted from source |
+| Virtual Console widget | `virtualconsole.cpp`, `vcwidget.cpp` | 12+ | Properties, Rename, Swap · Background … Stacking · Cut, Copy, Paste · the widget's own ▸ · Delete | Delete is last (the menu bar's Edit menu changes with it, since one menu serves both) |
+| Sequence item (Show Manager) | `showmanager/sequenceitem.cpp` | 3 + defaults | Delete was before Scale | Delete moved last |
+| Bundle browser | `bundlebrowser.cpp` | 5 | Delete was before Show in Finder | Delete moved last |
+| Show Manager track, audio, video, scene, EFX, RGB, collection items | `showmanager/*item.cpp` | 2–12 | | counted from source only |
+| Power distribution | `powerdistributionwidget.cpp` | 4–5 | | none |
+| Inputs/Outputs, patch list, chaser/collection editors, Look Editor, free string, Fixture Group editor, console channel, notes, review | various | 1–8 | | counted from source only |
+
+Totals: the menus the test builds went from 11 over the old 14 ceiling
+(Fixture Manager 19 and 18, Functions tab 17, Show Tree layer 20 and 18,
+plot fixture 19, one more flat 15) to 2 listed ceilings. The item count of
+the touched menus fell from 54 to 35 at the top level; submenus hold the rest
+(no item was removed except Reset on a group row).
+

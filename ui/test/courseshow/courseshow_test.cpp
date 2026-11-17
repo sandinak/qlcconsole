@@ -3897,11 +3897,26 @@ bool treeMenu(ShowTreeView *view, QTreeWidgetItem *item, const QStringList &path
     settle(50);
     bool chose = false;
     QStringList seen;
-    QTimer::singleShot(100, [&chose, &seen, path]() {
+    QTimer::singleShot(100, [&chose, &seen, path0 = path]() {
         for (QWidget *w : QApplication::topLevelWidgets())
             if (QMenu *m = qobject_cast<QMenu *>(w))
                 if (m->isVisible())
                 {
+                    /* An item the menu keeps in an area submenu (New, Structure,
+                       Clipboard) is named by its own text: go through it. */
+                    QStringList path = path0;
+                    bool top = false;
+                    for (QAction *a : m->actions())
+                        top = top || a->text() == path.first();
+                    if (!top)
+                        for (QAction *a : m->actions())
+                            if (a->menu() != nullptr)
+                                for (QAction *b : a->menu()->actions())
+                                    if (b->text() == path.first())
+                                    {
+                                        path.prepend(a->text());
+                                        break;
+                                    }
                     QMenu *at = m;
                     for (int i = 0; i < path.count() && at != nullptr; ++i)
                     {

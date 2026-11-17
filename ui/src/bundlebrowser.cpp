@@ -328,16 +328,18 @@ void BundleBrowser::slotContextMenu(const QPoint &pos)
 
     QMenu menu(this);
     menu.addAction(tr("Stamp to Look"), this, &BundleBrowser::slotStamp);
+    menu.addAction(tr("Show in Finder"), this, &BundleBrowser::slotRevealInFinder);
     menu.addSeparator();
     menu.addAction(tr("Edit…"),         this, &BundleBrowser::slotEdit);
     menu.addAction(tr("Duplicate"),     this, &BundleBrowser::slotDuplicate);
 
+    // Delete is the last item (UX-79).
     const QString userDir = BundleCache::userBundlesDirectory().absolutePath();
     if (b.path.startsWith(userDir))
+    {
+        menu.addSeparator();
         menu.addAction(tr("Delete"),    this, &BundleBrowser::slotDelete);
-
-    menu.addSeparator();
-    menu.addAction(tr("Show in Finder"), this, &BundleBrowser::slotRevealInFinder);
+    }
     menu.exec(m_tree->mapToGlobal(pos));
 }
 

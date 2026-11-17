@@ -1287,11 +1287,13 @@ void FunctionManager::slotTreeContextMenuRequested()
        deleting last. */
     QMenu menu(this);
     ContextMenu cm(&menu);
+    // Making one: a New submenu (UX-80: twelve creators were the menu).
+    QMenu *newMenu = cm.addMenu(ContextMenu::Kind, tr("New"), QStringLiteral("functionNewMenu"));
     for (QAction *a : { m_addSceneAction, m_addChaserAction, m_addSequenceAction, m_addEFXAction,
                         m_addCollectionAction, m_addRGBMatrixAction, m_addScriptAction,
-                        m_addAudioAction, m_addVideoAction, m_wizardAction, m_addPaletteAction,
-                        m_paletteManagerAction })
-        cm.add(ContextMenu::Kind, a);
+                        m_addAudioAction, m_addVideoAction, m_addPaletteAction, m_wizardAction })
+        newMenu->addAction(a);
+    cm.add(ContextMenu::Kind, m_paletteManagerAction);
     cm.add(ContextMenu::Selection, m_selectAllAction);
     cm.add(ContextMenu::Organise, m_addFolderAction);
     cm.add(ContextMenu::View, m_showTreeFunctionsAction);

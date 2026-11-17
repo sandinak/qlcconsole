@@ -99,10 +99,84 @@ static QString texts(const QMenu *menu)
     return t.join(" | ");
 }
 
+/* The ordering and length laws (CONTEXT_MENUS.md section 4). Every menu the
+   tests build is checked as it is built; the last test reports the lot. */
+static QStringList g_lawProblems;
+static QStringList g_inventory;
+
+static bool isDeleteType(const QAction *a)
+{
+    const QString n = nameOf(a);
+    return a->menu() == nullptr
+           && (a->text().remove('&').startsWith(QLatin1String("Delete")) || n.contains(QLatin1String("Delete")));
+}
+
+static int realItems(const QMenu *m)
+{
+    int n = 0;
+    for (QAction *a : m->actions())
+        if (!a->isSeparator())
+            ++n;
+    return n;
+}
+
+static const int kMaxTopLevel = 14;
+
+/* A picker lists the show's own things (folders, layers, uses, circuits):
+   its length is the show's, and a one-choice picker keeps its place so the
+   menu does not change shape. */
+static bool isPicker(const QMenu *m)
+{
+    static const QStringList names = { "ctxMoveToFolder", "ctxUsedBy", "selectionMenu" };
+    static const QStringList texts_ = { "Add Child Layer", "Deck", "Truss", "Boom", "Tower", "Set to", "Set in This Cue", "Add to Circuit", "Move to Layer",
+                                        "Add to Group", "Used By", "Move to Folder", "Remove from Layer" };
+    for (const QString &t : texts_)
+        if (m->title().startsWith(t))
+            return true;
+    return names.contains(m->objectName());
+}
+
+static QStringList lawProblems(const QMenu *menu, int ceiling, const QString &path = QString())
+{
+    QStringList out;
+    const QList<QAction *> acts = menu->actions();
+    int lastDelete = -1;
+    for (int i = 0; i < acts.size(); ++i)
+        if (!acts.at(i)->isSeparator() && isDeleteType(acts.at(i)))
+            lastDelete = i;
+    if (lastDelete >= 0)
+        for (int i = lastDelete + 1; i < acts.size(); ++i)
+            if (!acts.at(i)->isSeparator())
+                out << QStringLiteral("\"%1\" comes after \"%2\": a delete is last")
+                           .arg(acts.at(i)->text(), acts.at(lastDelete)->text());
+    if (path.isEmpty() && realItems(menu) > ceiling)
+        out << QStringLiteral("%1 top-level items (at most %2): group by area").arg(realItems(menu)).arg(ceiling);
+    for (QAction *a : acts)
+        if (a->menu() != nullptr)
+        {
+            if (realItems(a->menu()) == 1 && !isPicker(a->menu()))
+                out << QStringLiteral("submenu \"%1\" has one item: put it in its parent").arg(a->text());
+            out << lawProblems(a->menu(), ceiling, path + a->text() + "/");
+        }
+    return out;
+}
+
+static void recordMenu(const QMenu *menu, const char *where)
+{
+    QStringList t;
+    for (QAction *a : menu->actions())
+        t << (a->isSeparator() ? QStringLiteral("---") : (a->menu() ? a->text() + " >" : a->text()));
+    const QString line = QStringLiteral("%1 | %2 | %3").arg(QLatin1String(where)).arg(realItems(menu)).arg(t.join(" ; "));
+    g_inventory << line;
+    for (const QString &p : lawProblems(menu, kMaxTopLevel))
+        g_lawProblems << (p + "\n    in: " + line);
+}
+
 #define VERIFY_CANON(menu) \
     do { \
         const QStringList problems_ = ContextMenu::checkCanon(menu); \
         QVERIFY2(problems_.isEmpty(), qPrintable(problems_.join("; ") + "\n  in: " + texts(menu))); \
+        recordMenu(menu, __func__); \
     } while (0)
 
 /* A menu a widget opens with exec(): read when it pops up, then closed */
@@ -122,6 +196,7 @@ static QStringList popupCheck(const std::function<void()> &open, QStringList *ca
         problems = ContextMenu::checkCanon(m);
         if (!problems.isEmpty())
             problems << ("in: " + texts(m));
+        recordMenu(m, "popup");
         if (canon != nullptr)
             *canon = canonItems(m);
         if (kind != nullptr)
@@ -854,10 +929,8 @@ void ContextMenus_Test::theFunctionsTabFollowsTheCanon()
     fm.show();
     const QStringList problems = popupCheck([&]() { fm.slotTreeContextMenuRequested(); });
     QVERIFY2(problems.isEmpty(), qPrintable(problems.join("; ")));
-    // Delete last, New Sequence offered as in the toolbar.
-    QMenu probe;
+    // Delete last.
     QVERIFY(fm.m_deleteAction->property(ContextMenu::sectionProperty()).toInt() == ContextMenu::Remove);
-    QVERIFY(fm.m_addSequenceAction->property(ContextMenu::sectionProperty()).isValid());
 }
 
 /****************************************************************************
@@ -1178,7 +1251,13 @@ void ContextMenus_Test::aLayerHasOneMenuEverywhere()
         canon = ContextMenu::kindBlock(&menu);
         QCOMPARE(canon.first(), QString("ctxOpenLayer"));
         QCOMPARE(canon.last(), QString("stDeleteLayer"));
-        QVERIFY(ContextMenu::contextItems(&menu).contains("+ Cue"));      // the tree's own, on top
+        // The tree's own, on top, in the New submenu (UX-80).
+        QMenu *made = menu.findChild<QMenu *>("stNewMenu");
+        QVERIFY(made != nullptr);
+        QStringList madeTexts;
+        for (QAction *a : made->actions())
+            madeTexts << a->text();
+        QVERIFY2(madeTexts.contains("+ Cue"), qPrintable(madeTexts.join(" | ")));
     }
 
     // The same layer's row in the Workbench (docked in the Show Tree).
@@ -1377,6 +1456,94 @@ void ContextMenus_Test::theRigViewFollowsTheCanon()
     gv->buildItemMenu(&piece, QStringLiteral("stage"), MonitorProperties::CurtainPiece, place);
     VERIFY_CANON(&piece);
     QCOMPARE(ContextMenu::kindBlock(&piece), QStringList({ "stagePieceProperties" }));
+}
+
+/* "right click a fixture, Test Fixture, it didn't do anything": the action
+   kept the last fixture's enabled state on a group row, and its slot gave up
+   without a word. Now it is greyed with its reason, or it opens something. */
+void ContextMenus_Test::testFixtureNeverDoesNothing()
+{
+    QWidget host;
+    Monitor mon(&host, m_doc);
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(900, 600);
+    mgr.show();
+    const quint32 fid = m_fixtures.first();
+    // Rows are found again for each pass: the tree rebuilds itself on a change.
+    auto fixRowNow = [&]() {
+        return findRow(mgr.m_fixtures_tree, [fid](QTreeWidgetItem *it) {
+            return it->data(0, PROP_ID).isValid() && it->data(0, PROP_ID).toUInt() == fid
+                   && !it->data(0, PROP_GROUP).isValid() && !it->data(0, PROP_HEAD).isValid();
+        });
+    };
+    auto grpRowNow = [&]() {
+        return findRow(mgr.m_fixtures_tree, [this](QTreeWidgetItem *it) {
+            return it->data(0, PROP_GROUP).isValid() && it->data(0, PROP_GROUP).toUInt() == m_groupA;
+        });
+    };
+    QVERIFY(fixRowNow() != nullptr && grpRowNow() != nullptr);
+
+    int pass = 0;
+    for (bool onGroup : { true, false })
+    {
+        selectOnly(mgr.m_fixtures_tree, fixRowNow());     // the last fixture's state is what went stale
+        QTreeWidgetItem *row = onGroup ? grpRowNow() : fixRowNow();
+        QVERIFY(row != nullptr);
+        selectOnly(mgr.m_fixtures_tree, row);
+        bool found = false, enabled = false;
+        QString tip, all = QStringLiteral("no popup");
+        QTimer poll;
+        poll.setInterval(10);
+        QObject::connect(&poll, &QTimer::timeout, [&]() {
+            QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+            if (m == nullptr)
+                return;
+            poll.stop();
+            all = texts(m);
+            for (QAction *a : m->actions())
+                if (a->text() == QStringLiteral("Test Fixture…"))
+                {
+                    found = true;
+                    enabled = a->isEnabled();
+                    tip = (a->toolTip() == a->text().remove('&')) ? QString() : a->toolTip();   // Qt's default tip is the text
+                }
+            m->close();
+        });
+        poll.start();
+        mgr.slotContextMenuRequested(mgr.m_fixtures_tree->visualItemRect(row).center());
+        ++pass;
+        QVERIFY2(found, qPrintable(QStringLiteral("no Test Fixture… in the menu, pass %1: %2").arg(pass).arg(all)));
+        if (!enabled)
+        {
+            QVERIFY2(!tip.isEmpty(), "a greyed Test Fixture says why");
+            continue;
+        }
+        // Enabled: something must open (the fixture's editor).
+        bool opened = false;
+        QTimer::singleShot(200, []() {});
+        QTimer watch;
+        watch.setInterval(10);
+        QObject::connect(&watch, &QTimer::timeout, [&]() {
+            if (QWidget *w = QApplication::activeModalWidget())
+            {
+                opened = true;
+                watch.stop();
+                w->close();
+            }
+        });
+        watch.start();
+        QTimer::singleShot(1500, &watch, &QTimer::stop);
+        mgr.slotTestFixture();
+        QVERIFY2(opened, "an enabled Test Fixture opens something");
+    }
+}
+
+/* The last test: every menu built above obeyed the laws. */
+void ContextMenus_Test::everyMenuKeepsTheLaws()
+{
+    qWarning().noquote() << "MENU INVENTORY (place | top-level items | order)\n" + g_inventory.join("\n");
+    QVERIFY2(!g_inventory.isEmpty(), "the earlier tests built no menus");
+    QVERIFY2(g_lawProblems.isEmpty(), qPrintable(g_lawProblems.join("\n")));
 }
 
 QTEST_MAIN(ContextMenus_Test)

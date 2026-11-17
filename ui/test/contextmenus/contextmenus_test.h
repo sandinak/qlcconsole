@@ -59,6 +59,8 @@ private slots:
     void aCarriedInLayerOffersTheTrackOps();
     void theShowTreeMenusFollowTheCanon();
     void theRigViewFollowsTheCanon();
+    void testFixtureNeverDoesNothing();
+    void everyMenuKeepsTheLaws();
 
 private:
     Doc *m_doc = nullptr;

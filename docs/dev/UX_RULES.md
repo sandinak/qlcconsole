@@ -41,14 +41,14 @@ that have one. Change both files together.
 | Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77 | 14 | 8 |
 | Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25 | 6 | 5 |
 | Feedback & state | UX-26, UX-27, UX-28, UX-29, UX-30, UX-31, UX-32, UX-33 | 8 | 6 |
-| Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40, UX-78 | 8 | 6 |
+| Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40, UX-78, UX-79, UX-80 | 10 | 8 |
 | Consistency across views | UX-41, UX-42, UX-43, UX-44, UX-45, UX-46, UX-47, UX-48 | 8 | 6 |
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
 | Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 3 |
 
-Main check: 46 tests, 23 review, 6 walker, 3 manual. 46 of 78 enforced.
+Main check: 48 tests, 23 review, 6 walker, 3 manual. 48 of 80 enforced.
 
 ## Units & numbers
 
@@ -437,6 +437,24 @@ Turning the plot (or any view that turns) turns the drawing, never the words: ev
 - **Check:** `monitor_test::plotTextStaysUprightAtEveryTurn` (enforced)
 - **Right:** `Turned 90°: "Performers row 7 (Default)" level, in the targets' size, beside its dashed ring`
 - **Wrong:** `Turned 90°: the ghost label on its side, three times the size, over the targets`
+
+### UX-79 A menu flows top to bottom by what you do with the thing
+
+A context menu reads in bands: open or edit it, act on it live (test, locate, solo), arrange it (move, align, group, layer), copy, duplicate or export it, its properties and settings, and last remove or delete it. A separator stands between bands, a delete is always the last item, and an item that cannot work is greyed with its reason in the tooltip, never silent.
+
+- **Why:** 2026-11-17: "our menus are getting long again .. make them flow from top to bottom based on action"; right-click a fixture, Test Fixture, "didn't do anything" (the action kept the last fixture's enabled state on a group row and its slot gave up without a word).
+- **Check:** `contextmenus_test::everyMenuKeepsTheLaws`, `contextmenus_test::testFixtureNeverDoesNothing`, `contextmenus_test::theCanonCatchesDrift` (enforced)
+- **Right:** `Fixture: Fixture Properties… | Locate, Test Fixture… | Group ▸ | Duplicate | Delete…  (Test greyed on a group, tooltip: pick one fixture)`
+- **Wrong:** `Delete… in the middle, Test Fixture… enabled on a group row and doing nothing`
+
+### UX-80 A menu stays short: areas become submenus
+
+A top-level menu has at most 14 items; past that, items go into submenus named by area (Align ▸, Layer ▸, Export ▸). A submenu never holds a single item, and the same action has the same words and the same band in every menu.
+
+- **Why:** 2026-11-17: "if they're long consider submenus by area"; Connections rows and the Fixture Manager's fixture menu had grown past 15 items.
+- **Check:** `contextmenus_test::everyMenuKeepsTheLaws` (enforced)
+- **Right:** `Fixture Manager: 9 items and Group ▸, Power ▸`
+- **Wrong:** `A flat 17-item list; a submenu "Power ▸" with one entry`
 
 ## Consistency across views
 

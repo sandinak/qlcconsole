@@ -447,6 +447,10 @@ private slots:
     void slotRemove();
     void slotProperties();
     void slotTestFixture();
+    /** Test Fixture follows the selection each time: enabled for exactly one
+     *  fixture row, else greyed with the reason (it used to keep the last
+     *  fixture's state on a group row and do nothing when clicked). */
+    void refreshTestAction();
     void slotLocateFixture();
     void slotResetFixture();
     void slotFadeConfig();

@@ -3520,7 +3520,10 @@ void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *i
     {
         collapseAll = new QAction(tr("Collapse All Below"), &menu);
         expandAll = new QAction(tr("Expand All Below"), &menu);
-        top << collapseAll << expandAll;
+        QMenu *view = new QMenu(tr("View"), &menu);     // two items of the list's own view (UX-80)
+        view->addAction(collapseAll);
+        view->addAction(expandAll);
+        top << view->menuAction();
     }
 
     /* Add Universe, on EVERY row, not just empty space -- empty space was

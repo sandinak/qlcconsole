@@ -1044,12 +1044,13 @@ says the hazers, foggers, fans and lasers are left alone.
 
 A place leaves out only what makes no sense there:
 
-- **The Fixtures tab** adds on top: Definition & Mode…, Change
-  Definition…, Edit Fixture Definition…, Plot Symbol ▸ (below), Return to
-  Inventory…, Test Fixture…, Reset, a **Group** submenu (Add to Group ▸,
-  Remove from Group, Rebuild Composite from Members), a **Power** submenu
-  (Add to Circuit ▸, Remove from Circuit) and Channel Behaviour &
-  Modifiers…. **Delete…** for fixtures is last.
+- **The Fixtures tab** adds on top: **Test Fixture…** (one fixture; on a
+  group or several it is greyed and its tip says to pick one), Reset (one
+  fixture), a **Group** submenu (Add to Group ▸, Remove from Group, Rebuild
+  Composite from Members), **Fixture Setup ▸** (Definition & Mode…, Change
+  Definition…, Edit Fixture Definition…, Plot Symbol ▸, Return to
+  Inventory…, Power ▸, Channel Behaviour & Modifiers…) and **View ▸**
+  (Expand All, Collapse All). **Delete…** for fixtures is last.
 - **A Build scene** lists a group or fixture as part of that scene. It
   adds **Remove from Scene** and **Focus This Look…** on top, and has no
   Delete, Move to Folder or Select All Similar.

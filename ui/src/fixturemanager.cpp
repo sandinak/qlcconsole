@@ -2832,6 +2832,21 @@ void FixtureManager::slotProperties()
         editFixtureProperties();
 }
 
+void FixtureManager::refreshTestAction()
+{
+    QTreeWidgetItem *item = m_fixtures_tree->currentItem();
+    const bool oneFixture = item != NULL && item->data(KColumnName, PROP_ID).isValid()
+                            && item->data(KColumnName, PROP_HEAD).isValid() == false
+                            && m_fixtures_tree->selectedItems().size() == 1;
+    m_testAction->setEnabled(oneFixture);
+    if (oneFixture)
+        m_testAction->setToolTip(tr("Open this fixture's test: identify it, reset it, set its channels."));
+    else if (item != NULL && item->data(KColumnName, PROP_GROUP).isValid())
+        m_testAction->setToolTip(tr("Test works on one fixture. Pick a fixture in the group, or use Locate to flash them all."));
+    else
+        m_testAction->setToolTip(tr("Test works on one fixture. Select a single fixture."));
+}
+
 void FixtureManager::slotTestFixture()
 {
     QTreeWidgetItem* item = m_fixtures_tree->currentItem();
@@ -3381,6 +3396,12 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     const bool haveFixtureOrGroupSelection = selFixtures.isEmpty() == false
                                            || selGroups.isEmpty() == false;
 
+    /* Properties-band items (definition, plot symbol, power, fade) live in one
+       "Fixture Setup" submenu so the menu stays short (UX-80); it is filed
+       into the menu below, after Group. */
+    QMenu *setupMenu = new QMenu(tr("Fixture Setup"), &menu);
+    setupMenu->setObjectName(QStringLiteral("fixtureSetupMenu"));
+
     // ---- The fixture itself ----
     QAction *editDefinition = NULL;
     QString editDefinitionPath;
@@ -3417,7 +3438,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (selFixtures.size() == 1 && m_doc->mode() != Doc::Operate)
         {
             const quint32 fid = selFixtures.first();
-            cm.add(ContextMenu::Place, tr("Definition && Mode…"), [this, fid]() {
+            QAction *defMode = setupMenu->addAction(tr("Definition && Mode…"));
+            connect(defMode, &QAction::triggered, this, [this, fid]() {
                 editDefinitionAndMode(this, m_doc, fid);
             });
         }
@@ -3462,13 +3484,14 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             editDefinitionPath = sharedDefinitionSourceFile(m_doc, defFids, &defCount);
             if (editDefinitionPath.isEmpty() == false)
             {
-                editDefinition = cm.add(ContextMenu::Place, tr("Edit Fixture Definition…"));
+                editDefinition = setupMenu->addAction(tr("Edit Fixture Definition…"));
                 editDefinition->setObjectName(QStringLiteral("editFixtureDefinitionAction"));
             }
             else if (defCount > 1)
             {
-                cm.add(ContextMenu::Place, tr("Edit Fixture Definition… (several definitions)"))
-                    ->setEnabled(false);
+                QAction *several = setupMenu->addAction(tr("Edit Fixture Definition… (several definitions)"));
+                several->setEnabled(false);
+                several->setToolTip(tr("The selection uses more than one definition; pick fixtures of one kind to edit it."));
             }
         }
         /* What they look like on stage -- icon, plot and studio shape -- for
@@ -3489,8 +3512,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             }
             if (!lookFids.isEmpty())
             {
-                QMenu *lookMenu = cm.addMenu(ContextMenu::Place, tr("Plot Symbol"),
-                                             QStringLiteral("stageLookMenu"));
+                QMenu *lookMenu = setupMenu->addMenu(tr("Plot Symbol"));
+                lookMenu->setObjectName(QStringLiteral("stageLookMenu"));
                 fillStageLookMenu(lookMenu, m_doc, lookFids);
             }
         }
@@ -3556,7 +3579,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
     if (!patchedSel.isEmpty())
     {
-        returnToInv = cm.add(ContextMenu::Place, patchedSel.size() > 1
+        returnToInv = setupMenu->addAction(patchedSel.size() > 1
                                          ? tr("Return %1 Fixtures to Inventory…").arg(patchedSel.size())
                                          : tr("Return to Inventory…"));
         returnToInv->setEnabled(m_doc->mode() == Doc::Design);
@@ -3567,8 +3590,11 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     // ---- Finding it on the rig ----
     if (haveFixtureOrGroupSelection)
     {
+        refreshTestAction();
         cm.add(ContextMenu::Place, m_testAction);
-        cm.add(ContextMenu::Place, m_resetAction);
+        // Reset acts on one fixture: a group row has none to offer.
+        if (selFixtures.isEmpty() == false)
+            cm.add(ContextMenu::Place, m_resetAction);
     }
     QAction *whyOn = NULL;     // ContextMenus::rig offers it
 
@@ -3593,10 +3619,19 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             return groupMenu;
         };
         const QList<FixtureGroup*> groups = m_doc->fixtureGroups();
+        bool canRebuild = false;
+        if (selGroups.size() == 1)
+        {
+            FixtureGroup *rg = m_doc->fixtureGroup(selGroups.first());
+            canRebuild = rg != NULL && rg->headSubGroupMap().isEmpty() == false;
+        }
+        // Group ▸ with a single entry is that entry, at the top (UX-80).
+        const bool groupAlone = groups.isEmpty() == false && selFixtures.isEmpty() && !canRebuild;
         if (groups.isEmpty() == false)
         {
             // Fixtures join it; a group selected comes in as a block.
-            copyIntoMenu = groups_()->addMenu(tr("Add to Group"));
+            copyIntoMenu = groupAlone ? cm.addMenu(ContextMenu::Place, tr("Add to Group"))
+                                      : groups_()->addMenu(tr("Add to Group"));
             foreach (FixtureGroup *g, groups)
             {
                 if (g == NULL)
@@ -3623,7 +3658,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         // Power circuits live in the power-distribution pane on the right.
         if (selFixtures.isEmpty() == false)
         {
-            QMenu *powerMenu = cm.addMenu(ContextMenu::Place, tr("Power"));
+            QMenu *powerMenu = setupMenu->addMenu(tr("Power"));
             PowerDistribution *pd = m_doc->powerDistribution();
             circuitMenu = powerMenu->addMenu(selFixtures.size() > 1
                 ? tr("Add %1 Fixtures to Circuit").arg(selFixtures.size())
@@ -3657,7 +3692,8 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             }
             removeFromCircuit = powerMenu->addAction(tr("Remove from Circuit"));
         }
-        cm.add(ContextMenu::Place, m_fadeConfigAction);
+        setupMenu->addAction(m_fadeConfigAction);
+        cm.add(ContextMenu::Place, setupMenu->menuAction());
 
         // ---- Deleting it: fixtures (a group alone: Delete Fixture Group…) ----
         if (selFixtures.isEmpty() == false)
@@ -3846,8 +3882,11 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
     }
 
     // ---- The view ----
-    cm.add(ContextMenu::View, m_expandAllAction);
-    cm.add(ContextMenu::View, m_collapseAllAction);
+    {
+        QMenu *viewMenu = cm.addMenu(ContextMenu::View, tr("View"));
+        viewMenu->addAction(m_expandAllAction);
+        viewMenu->addAction(m_collapseAllAction);
+    }
     cm.finish();
 
     QAction *chosen = menu.exec(QCursor::pos());
