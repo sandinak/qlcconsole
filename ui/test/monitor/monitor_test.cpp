@@ -2374,7 +2374,10 @@ void Monitor_Test::aPlacedStaffIsDrawn()
         if (view != nullptr)
             view->reload();
         else
+        {
             mon->m_graphicsView->refreshAllItems();
+            mon->m_graphicsView->centerOn(mon->m_graphicsView->m_fixtures.value(staff->id()));
+        }
         QApplication::processEvents();
         return shown->grab().toImage().convertToFormat(QImage::Format_RGB32);
     };
@@ -15841,6 +15844,7 @@ void Monitor_Test::inventoryPanelListsEveryFixtureNotOnThePlot()
     Fixture *again = new Fixture(m_doc);
     again->setName("Patched Drop");
     again->setChannels(3);
+    again->setAddress(300);
     QVERIFY(m_doc->addFixture(again));
     cleanup.ids << again->id();
     panel->reload();
