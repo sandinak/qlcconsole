@@ -36,6 +36,12 @@ private slots:
     /** Fire Spread on a rig: a dimmer at the Aim target and a pixel strip
      *  away from it, pixel by pixel, run on Loop: it never starts again. */
     void fireSpreadBurnsTheRigFromTheAimTarget();
+    /** Fire Spread's Colours: Front and Behind with the effect's own
+     *  Colour looks (blue, red) under it, to DMX: a reached par is blue,
+     *  red once the backfill reaches it, flickering; a dimmer burns as
+     *  Fire's; a colour-wheel mover dark until reached, then on its blue
+     *  slot at full, then its red one flickering on its dimmer; no pan. */
+    void fireSpreadFrontAndBehindTakesItsOwnColours();
     /** The matrix effects on a box of RGB and white pixel rows, eight boxes
      *  as one canvas, its RGB-only and white-only modes and a plain RGB
      *  matrix: each head told what it emits, every effect running through

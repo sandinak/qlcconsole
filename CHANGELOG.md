@@ -16,6 +16,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Fire Spread no longer starts with the washes lit.** A wash with white (or amber, or UV) emitters and no dimmer, such as the XL-450 bars on the trusses and the wall washers on the step tops, was taken by every effect to have a dimmer, so Fire Spread left each of its pixels the fire had not reached to the look's colour: the washes were lit from the start instead of catching as the fire reached them. Such a wash now says it has no dimmer, and is dark until the fire reaches it, as the help says. Other effects on those washes carry their level in the colour, as on any wash with no dimmer.
 
+### Added
+
+- **Fire Spread in two colours: a front and a backfill.** Fire Spread's new **Colours** setting, **Front and Behind**, makes the look's first colour (the effect's own Colour, else the look's) the front: a head snaps to it, with the Flare, as the fire reaches it. A second front follows from the same point **Front Width** seconds behind (1.5; ragged by the Edge in its own seeded way) and crossfades each head into the second colour, the backfill, which flickers in level like the fire, or holds steady with **Flicker Behind** off. With one colour the fire burns behind the front; a dimmer, a relay and a head with no colour burn as before, a colour wheel takes its nearest slot for each colour. **Fire**, the default, plays exactly as before. One change for an existing look: a Colour look placed under a Fire Spread is now the effect's own colour (as under Spell Spread) and is no longer painted on the heads the fire leaves dark.
+
 ## [0.4.12] - Unreleased
 
 ### Changed and fixed

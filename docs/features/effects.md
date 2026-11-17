@@ -362,6 +362,42 @@ whole bar), which is dark when the look has no Colour look.
 To bring a colour in the same way without the fire, use
 [Spell Spread](#spell-spread).
 
+**A front in one colour, the fire behind in another.** A fire is often played as a line of hot colour sweeping the stage with
+the burn following on: a white-hot or blue edge with red behind it, or a
+green spell's front with the stage left smouldering orange. **Colours:
+Front and Behind** does that with the look's own colours, so the fire
+can match the show's palette instead of Firelight's.
+
+- **Colour 1 is the front.** As the front reaches a head, the head snaps
+  to it, with the Flare.
+- **Colour 2 is the backfill.** A second front follows from the same
+  point, **Front Width** seconds behind. As it reaches a head, the head
+  crossfades into colour 2 and keeps burning there, flickering in level
+  like the fire. Turn **Flicker Behind** off for a steady backfill.
+- **One colour:** the front is that colour and the fire burns behind it.
+- **No colour:** it is plain Fire.
+
+The colours are the effect's own Colour looks (put them under the effect
+in the look's list, front first), else the look's. Front Width sets how
+deep the band of front colour is: at an even spread speed, a wider front
+is a deeper band across the floor. Edge makes the backfill's line ragged
+too, in its own way, but never so early that a head skips the front
+colour.
+
+To play a fire in two colours:
+
+1. Pick **Fire Spread** as the layer's effect, and set **Colours** to
+   **Front and Behind**.
+2. Under the effect, add a Colour look for the front, then one for the
+   backfill.
+3. Set **Front Width** to how long each head holds the front's colour.
+
+A head that can't show colour keeps the plain fire. A dimmer flickers in
+level as before, and a relay switches on as the front reaches it. A colour
+wheel goes to its nearest slot for each colour, the front's and then the
+backfill's, and never stops between slots. A moving head takes colour and
+dimmer only.
+
 The spread is how the effect opens. It isn't a cycle. On **Runs: Loop**
 (the default) the fire spreads once from the start and then burns. It
 never starts again from the point, and the next cue that keeps the same
@@ -376,6 +412,9 @@ it again from the point.
 | **Spread Time** | Seconds for the fire to reach the farthest head (8) |
 | **Edge** | How ragged the front is: 0 is a hard line; up to 1, heads catch a little early or late at random and kindle with a faint ember just before (0.3) |
 | **Flare** | How bright and white a head flares as it catches (0.6) |
+| **Colours** | **Fire**, the fire's own colours (the default); or **Front and Behind**, the look's first colour as the front and its second as the backfill behind it |
+| **Front Width** | Front and Behind: seconds each head holds the front's colour before the backfill reaches it (1.5; 0.1 to 20) |
+| **Flicker Behind** | Front and Behind: the backfill flickers in level like the fire; Off holds it steady (On). A fire backfill (one colour) always flickers |
 | **Flicker Speed** | How fast the fire flickers, as Firelight's (1) |
 | **Intensity** | Overall brightness (1) |
 | **Coolness** | Shifts the fire toward blue-white: 0 fire, 1 ice (0) |
