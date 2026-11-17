@@ -1997,9 +1997,100 @@ void PadRunRules_Test::anOffPadStopTurnsTheArmedPadRed()
     QCOMPARE(run->state(), PadRun::Stopped);
     QCOMPARE(threes(), 1);
     QCOMPARE(saidCount("Emergency stop"), said);
-    // Armed again by the chord: the red ends.
+    /* Armed again by the chord: the runner's own act, the red gone from
+       the pad -- but the footer still holds the show, so the pad says so
+       (never a plain ARMED beside "held"), in the arm's colour. */
     arm(true, 0);
     QCOMPARE(run->state(), PadRun::Armed);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    QCOMPARE(run->roleText(), QString::fromUtf8("Pad: ARMED \u00B7 held: LT + A brings the show back"));
+    QCOMPARE(lightOn(0), PadRun::armedColour().name());
+}
+
+void PadRunRules_Test::aLateEndedNeverClearsANewStop()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    makeFocusCue();
+    const quint32 chaser = listChaser();
+    QVERIFY(m_doc->function(chaser) != nullptr);
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    ShowControl *sc = m_doc->showControl();
+    run->setEnabled(true);
+    arm(true, 0);
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    // An OSC GO from its own thread ends the stop there; its "ended" is
+    // queued here...
+    QThread *osc = QThread::create([sc, chaser]() {
+        ShowControl::Request r;
+        r.command = ShowControl::Go;
+        r.chaser = chaser;
+        sc->run(r, ShowControl::RouteOsc);
+    });
+    osc->start();
+    QVERIFY(osc->wait(5000));
+    delete osc;
+    QVERIFY(!keeper->emergencyStopped());
+    // ...and a pad's stop goes before the event loop turns.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+        axis(ch, 255, 0);
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+        axis(ch, 0, 0);
+    QVERIFY(keeper->emergencyStopped());
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+    // The late "ended" is the old stop's: the new one holds, red on the pad.
+    QVERIFY(keeper->emergencyStopped());
+    QCOMPARE(run->state(), PadRun::Stopped);
+    QCOMPARE(lightOn(0), PadRun::stoppedColour().name());
+    focusCueAgain();
+    ltMenu(1);
+    QCOMPARE(pc->focusCallCue()->state(), FocusCallCue::Armed);
+    QCOMPARE(run->notice(), QString("Emergency stop: the show is held until a GO (the cue pad, or GO on the computer)."));
+}
+
+void PadRunRules_Test::anArmAfterTheStopBringsNothingBackUntilAGo()
+{
+    makeShow();
+    twoPads(int(CJ::RunCues), int(CJ::Focus));
+    makeFocusCue();
+    QVERIFY(m_doc->function(listChaser()) != nullptr);
+    m_doc->showControl()->setMainCueList(listChaser());
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    run->setEnabled(true);
+    offPadStop();
+    QCOMPARE(run->state(), PadRun::Stopped);
+    // The role off and on again: still red while the footer holds the show.
+    run->setEnabled(false);
+    run->setEnabled(true);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    // A arms: its own act, allowed -- the show still held, and said so.
+    arm(true, 0);
+    QCOMPARE(run->state(), PadRun::Armed);
+    QVERIFY(keeper->emergencyStopped());
+    QVERIFY2(run->roleText().contains("held: LT + A brings the show back"), qPrintable(run->roleText()));
+    QCOMPARE(lightOn(0), PadRun::armedColour().name());
+    // B's LT + Menu: refused while the footer holds the show (Q254).
+    focusCueAgain();
+    ltMenu(1);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QVERIFY(!pc->focusSession()->isActive());
+    QCOMPARE(run->notice(), QString("Emergency stop: the show is held until a GO (the cue pad, or GO on the computer)."));
+    // A's LT + A: the GO brings the show back; B starts the focus.
+    withLt(kA, 0);
+    QCoreApplication::processEvents();
+    QVERIFY(!keeper->emergencyStopped());
+    QVERIFY(!run->roleText().contains("held"));
+    if (fcc->state() != FocusCallCue::Armed)
+        focusCueAgain();
+    ltMenu(1);
+    QCOMPARE(fcc->state(), FocusCallCue::Running);
 }
 
 void PadRunRules_Test::aTimecodeGoAfterTheStopLeavesThePadRed()
@@ -2032,7 +2123,7 @@ void PadRunRules_Test::aTimecodeGoAfterTheStopLeavesThePadRed()
     ltMenu(1);
     QVERIFY(pc->focusCallCue()->state() != FocusCallCue::Running);
     QVERIFY(!pc->focusSession()->isActive());
-    QCOMPARE(run->notice(), QString("Emergency stop: arm a pad (or GO on the computer) before the venue focus."));
+    QCOMPARE(run->notice(), QString("Emergency stop: the show is held until a GO (the cue pad, or GO on the computer)."));
 }
 
 void PadRunRules_Test::aResetAfterTheStopLeavesThePadRed()
@@ -2502,9 +2593,19 @@ void PadRunRules_Test::reviewNoVenueFocusFromAStoppedShow()
     ltMenu(1);
     QCOMPARE(fcc->state(), FocusCallCue::Armed);
     QCOMPARE(run->state(), PadRun::Stopped);
-    QCOMPARE(run->notice(), QString("Emergency stop: arm a pad (or GO on the computer) before the venue focus."));
-    // Armed again, the stop is over: B starts it.
+    QCOMPARE(run->notice(), QString("Emergency stop: the show is held until a GO (the cue pad, or GO on the computer)."));
+    // Armed again: still held, still refused (Q254: a GO brings it back).
     arm(true, 0);
+    ltMenu(1);
+    QCOMPARE(fcc->state(), FocusCallCue::Armed);
+    QCOMPARE(run->notice(), QString("Emergency stop: the show is held until a GO (the cue pad, or GO on the computer)."));
+    // The runner's GO brings the show back: B starts it.
+    m_doc->showControl()->setMainCueList(listChaser());
+    withLt(kA, 0);
+    QCoreApplication::processEvents();
+    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
+    if (fcc->state() != FocusCallCue::Armed)
+        focusCueAgain();
     ltMenu(1);
     QCOMPARE(fcc->state(), FocusCallCue::Running);
 }

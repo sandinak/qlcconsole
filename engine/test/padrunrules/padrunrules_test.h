@@ -117,6 +117,13 @@ private slots:
      *  show back: the pad stays red with the footer's hold, and a
      *  Focus-only pad is still refused the venue focus (Q254). */
     void aTimecodeGoAfterTheStopLeavesThePadRed();
+    /** An OSC GO's "ended", queued from its thread, landing after a new
+     *  pad stop: the new stop holds, the pad red, the focus refused. */
+    void aLateEndedNeverClearsANewStop();
+    /** Armed after the stop while the footer holds the show: said so on
+     *  the pad, the role off and on keeps the red, a Focus-only pad is
+     *  refused until the runner's GO brings the show back. */
+    void anArmAfterTheStopBringsNothingBackUntilAGo();
     /** Reset after the stop plays nothing: still red. */
     void aResetAfterTheStopLeavesThePadRed();
     /** A real GO (execute()) ends the red and the footer's hold together. */
