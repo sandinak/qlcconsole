@@ -493,7 +493,7 @@ bool PadRun::handle(quint32 universe, GamepadRole::Role role, uchar value)
     {
         m_pc->claimController(universe);
         if (!trigger(action))
-            m_pc->releaseControllerSoon();
+            m_pc->releaseControllerNow();
         return true;
     }
     trigger(action);
@@ -1852,7 +1852,7 @@ bool PadRun::swipe(TouchSwipe::Swipe s)
         m_pc->claimController(m_touchUniverse);
     if (!startWalk())
     {
-        m_pc->releaseControllerSoon();
+        m_pc->releaseControllerNow();
         return false;
     }
     return stepCue(delta);

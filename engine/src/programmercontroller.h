@@ -322,6 +322,11 @@ public:
      *  Armed, again): its owner is let go once the event that did it is
      *  done, so any pad with Focus may start it (review 0.4.10, H1). */
     void releaseControllerSoon();
+    /** A walk the pad's press claimed the tools for, refused at once (in
+     *  Operate, after the stop, no cue): let go now, if nothing uses them
+     *  -- another pad's press already queued behind it (its arm chord, with
+     *  a focus cue waiting) is never refused as "in use". */
+    void releaseControllerNow() { releaseOwnerIfIdle(); }
 
     /** Board Q170, a PlayStation pad's touchpad as a trackpad: a finger
      *  dragged right across the whole pad nudges pan this many degrees

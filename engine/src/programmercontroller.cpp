@@ -281,6 +281,11 @@ ProgrammerController::ProgrammerController(Doc *doc)
             m_refineSession->setHolding(false);
             emit holdingChanged(false);
         }
+        /* Nor its sticks (the emergency stop ending it too, E9): only the
+           tools read them, and a pad steering the follow spot beside it
+           keeps its own (Q253). */
+        if (!m_focusSession->isActive() && !m_refineSession->isActive())
+            centreToolSticks();
     };
     connect(m_focusSession, &FocusSession::stopped, this, letGo);
     connect(m_refineSession, &RefineSession::stopped, this, letGo);
