@@ -122,7 +122,24 @@ connects. (can change: a pad's serial over USB, when one says it.)
    pad its own colour, every pad red after the stop. One pad: as before.
    The same pad seen twice (one identity on two universes) is one
    controller: counted once (no runner's name on the chip), and told one
-   light, the same colour on both lines (review 0.4.10, M1).
+   light, the same colour on both lines (review 0.4.10, M1). Its presses
+   are one pad's (eval 0.4.12): each line keeps its own reading (its own
+   trigger hysteresis), and the pad holds a control while any of its lines
+   does (`PadRun::padHeld()`, keyed by `padId()`, the identity, which does
+   not change as a line comes or goes). An action fires on the pad's
+   press only: a press already down on its other line is the same press.
+   The chord, the stop and the safety read the pad's state; one chord
+   timer a pad, one stop a press of the pad's four. The chord's *spent*
+   is the pad's too (`PadRun::Held::spent`, never a line's): once the
+   chord has decided (armed, disarmed, refused) or a trigger came with
+   both bumpers, the pad's chord is spent until both bumpers are up on
+   every line of it. A line lagging its twin by a whole press (it reports
+   the press after the other line has let go) acts twice: the double-GO
+   guard holds the second GO (*Second GO held* and its buzz), two Backs
+   go back two cues, a toggle hit flashes on and off. Nothing has shown a
+   real pad lag that far. Each pad (each
+   identity) times its own arm chord (rule 6's "its chord timing
+   untouched").
 10. **Jobs changed live.** Taking Run cues from the runner disarms it (no
    button: rule 3's "with no button at all"); taking Focus from the pad
    that owns a tool lets the ownership go; taking Follow spot from the

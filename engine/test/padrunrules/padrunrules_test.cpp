@@ -935,6 +935,393 @@ void PadRunRules_Test::theDuplicateDevice()
     both(kLB, 0);
 }
 
+void PadRunRules_Test::aPadOnTwoUniversesIsOnePad_data()
+{
+    QTest::addColumn<QString>("by");        // what makes the two lines one identity
+    QTest::addColumn<int>("order");         // 0: line 0 first, 1: line 1 first, 2: the lead changes each step
+    for (const QString &by : { QString("address"), QString("USB port") })
+    {
+        QTest::newRow(qPrintable(by + ", in step")) << by << 0;
+        QTest::newRow(qPrintable(by + ", line 1 first")) << by << 1;
+        QTest::newRow(qPrintable(by + ", the lead changes each step")) << by << 2;
+    }
+}
+
+void PadRunRules_Test::aPadOnTwoUniversesIsOnePad()
+{
+    /* One pad on two universes, one identity (the bench of
+       reviewTheSamePadTwiceIsToldOneLight). Every change arrives on both
+       lines; each line once passed the arm check with its own held LT, so
+       one LT + A sent a GO a line: a cue skipped with the double-GO guard
+       off, "Second GO held" and a long buzz on every GO with it on, and
+       one RT started two hits sharing a place. theDuplicateDevice does
+       not show it: its two lines are two name-only identities. */
+    QFETCH(QString, by);
+    QFETCH(int, order);
+    makeShow();
+    if (by == QLatin1String("address"))
+        m_stub->m_lineNames = QStringList() << "Pad (AA:BB:CC:00:00:01)" << "Pad (AA:BB:CC:00:00:01)";
+    else
+        m_stub->m_lineLocations = { { 0, "USB 14200000" }, { 1, "USB 14200000" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    ShowTreeController *st = m_doc->showTree();
+    // Two hits at one place: one pull is one of them, the next pull the other.
+    QList<quint32> hits;
+    for (const char *name : { "Strobe", "Flash" })
+    {
+        const quint32 hit = st->addHit(ShowTree::HitScope::Production, st->productions().first().id, name);
+        QVERIFY(hit != ShowTree::invalidId());
+        ShowTree::Target t;
+        t.fixtures = m_spots;
+        ShowTree::Look l;
+        l.key = ShowTree::KeyDimmer;
+        l.palettes = { m_doc->palettes().first()->id() };
+        QVERIFY(st->setLayerLook(hit, st->addLayer(hit, t, "Spots"), l));
+        hits << hit;
+    }
+    m_doc->setMode(Doc::Operate);
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(run->sameController(0, 1));
+    QCOMPARE(run->padCount(), 1);
+    run->setEnabled(true);
+    run->setArmChordMs(15);
+    // A gesture as the pad sends it: each change on both lines.
+    using Steps = QList<QPair<quint32, uchar>>;
+    auto gesture = [&](const Steps &steps) {
+        int i = 0;
+        for (const auto &s : steps)
+        {
+            const bool oneFirst = order == 1 || (order == 2 && (i++ % 2) == 1);
+            axis(s.first, s.second, oneFirst ? 1 : 0);
+            axis(s.first, s.second, oneFirst ? 0 : 1);
+        }
+    };
+    QSignalSpy armed(run, &PadRun::armedChanged);
+    gesture({ { kLB, 255 }, { kRB, 255 } });
+    QTRY_VERIFY(run->isArmed());
+    gesture({ { kRB, 0 }, { kLB, 0 } });
+    QCOMPARE(armed.count(), 1);
+    QCOMPARE(run->roleText(), QString("Pad: ARMED"));
+
+    // Rule 4, the GO family: one LT + button, one command.
+    m_runs.clear();
+    m_said.clear();
+    int n = 0;
+    for (quint32 button : { kA, kB, kX, kY })
+    {
+        gesture({ { kLT, 255 }, { button, 255 }, { button, 0 }, { kLT, 0 } });
+        ++n;
+        QVERIFY2(goes() == n, qPrintable(QString("LT + button %1 once on one pad (seen on two universes) sent %2 "
+                                                 "commands in all, %3 expected").arg(button).arg(goes()).arg(n)));
+    }
+    QCOMPARE(m_runs.first().first.command, ShowControl::Go);
+    QCOMPARE(saidCount("is running cues"), 0);
+    QCOMPARE(saidCount("Second GO"), 0);
+    QVERIFY(run->isArmed());
+
+    // The hit: one pull, one hit.
+    QSignalSpy fired(run, &PadRun::hitFired);
+    gesture({ { kRT, 255 }, { kRT, 0 } });
+    QVERIFY2(fired.count() == 1, qPrintable(QString("one RT fired %1 hits").arg(fired.count())));
+    gesture({ { kRT, 255 }, { kRT, 0 } });
+    QCOMPARE(fired.count(), 2);
+    m_doc->masterTimer()->stopAllFunctions();
+
+    // Disarm: one chord, one change.
+    gesture({ { kLB, 255 }, { kRB, 255 } });
+    QTRY_VERIFY(!run->isArmed());
+    gesture({ { kRB, 0 }, { kLB, 0 } });
+    QCOMPARE(armed.count(), 2);
+
+    // The stop, armed or not: once a press, and again on the next press.
+    arm(true, 0);
+    for (int press = 1; press <= 2; ++press)
+    {
+        gesture({ { kLB, 255 }, { kRB, 255 }, { kLT, 255 }, { kRT, 255 } });
+        QVERIFY2(stops() == press, qPrintable(QString("stop press %1 sent %2 ALL OFFs in all").arg(press).arg(stops())));
+        QCOMPARE(run->state(), PadRun::Stopped);
+        QVERIFY(!run->isArmed());
+        gesture({ { kRT, 0 }, { kLT, 0 }, { kRB, 0 }, { kLB, 0 } });
+        QCOMPARE(stops(), press);
+    }
+    QCOMPARE(goes(), 4);
+}
+
+void PadRunRules_Test::twinLines(bool lower)
+{
+    // One pad (one address) on universes 0 and 1; @p lower: 0 not yet patched.
+    m_stub->m_lineNames = QStringList() << "Pad (AA:BB:CC:00:00:01)" << "Pad (AA:BB:CC:00:00:01)";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (lower)
+        QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    else
+        QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+}
+
+void PadRunRules_Test::twinLinesReadTheTriggersApartAndStopOnce()
+{
+    /* Review of 201fa9f28 (blocker): a pad's two lines (Bluetooth and USB,
+       at their own report rates) sample a trigger differently. Read as one
+       reading, line 1's late 39 (below releaseAt) let go of an LT line 0
+       had fully pulled, its 255 was then an "echo" -- and the four never
+       made a stop. Each line keeps its own reading; the pad's is either. */
+    makeShow();
+    twinLines();
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    for (quint32 ch : { kLB, kRB })
+    {
+        axis(ch, 255, 0);
+        axis(ch, 255, 1);
+    }
+    for (uchar v : { uchar(41), uchar(122), uchar(255) })
+        axis(kLT, v, 0);
+    for (uchar v : { uchar(39), uchar(125), uchar(255) })
+        axis(kLT, v, 1);
+    QCOMPARE(stops(), 0);
+    // RT the same way, the other line ahead.
+    for (uchar v : { uchar(38), uchar(120), uchar(255) })
+        axis(kRT, v, 1);
+    QVERIFY2(stops() == 1, qPrintable(QString("the four held on one pad sent %1 ALL OFFs").arg(stops())));
+    for (uchar v : { uchar(42), uchar(126), uchar(255) })
+        axis(kRT, v, 0);
+    QCOMPARE(stops(), 1);
+    QCOMPARE(run->state(), PadRun::Stopped);
+    // Let go on both: one stop still; the four again: a second.
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+    {
+        axis(ch, 0, 0);
+        axis(ch, 0, 1);
+    }
+    QCOMPARE(stops(), 1);
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+    {
+        axis(ch, 255, 1);
+        axis(ch, 255, 0);
+    }
+    QCOMPARE(stops(), 2);
+}
+
+void PadRunRules_Test::twinLinesReadTheTriggersApartAndHitOnce()
+{
+    /* The same two readings of RT: a stale low sample on one line must
+       not let RT go and a later one press it again -- one pull, one hit. */
+    makeShow();
+    twinLines();
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> hits;
+    for (const char *name : { "Strobe", "Flash" })
+    {
+        const quint32 hit = st->addHit(ShowTree::HitScope::Production, st->productions().first().id, name);
+        QVERIFY(hit != ShowTree::invalidId());
+        ShowTree::Target t;
+        t.fixtures = m_spots;
+        ShowTree::Look l;
+        l.key = ShowTree::KeyDimmer;
+        l.palettes = { m_doc->palettes().first()->id() };
+        QVERIFY(st->setLayerLook(hit, st->addLayer(hit, t, "Spots"), l));
+        hits << hit;
+    }
+    m_doc->setMode(Doc::Operate);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    QSignalSpy fired(run, &PadRun::hitFired);
+    for (int pull = 1; pull <= 2; ++pull)
+    {
+        // Line 0 pulls to 200, line 1 reports 39, 125 (stale), then 255.
+        for (uchar v : { uchar(41), uchar(122), uchar(200) })
+            axis(kRT, v, 0);
+        for (uchar v : { uchar(39), uchar(125), uchar(255) })
+            axis(kRT, v, 1);
+        axis(kRT, 255, 0);
+        QVERIFY2(fired.count() == pull,
+                 qPrintable(QString("pull %1: %2 hits fired in all").arg(pull).arg(fired.count())));
+        // Let go, line 1 behind with a stale high sample.
+        axis(kRT, 0, 0);
+        axis(kRT, 180, 1);
+        axis(kRT, 0, 1);
+        QCOMPARE(fired.count(), pull);
+    }
+    QCOMPARE(goes(), 0);
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+void PadRunRules_Test::aTwinLineAddedMidChordArmsNothing()
+{
+    /* Rule 3, review of 201fa9f28: the pad's other line patched onto a
+       lower universe while its chord is held moved the pad's state to a
+       new key; the chord's timer, on the old one, fired on what was held
+       there -- after the bumpers were let go. */
+    makeShow();
+    twinLines(true);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    run->setArmChordMs(300);
+    hold(kLB, true, 1);
+    hold(kRB, true, 1);
+    QVERIFY(run->isArmChordPending());
+    // The twin line arrives below, then the chord is let go early.
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(run->sameController(0, 1));
+    hold(kRB, false, 1);
+    hold(kLB, false, 1);
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 3000);
+    QVERIFY2(!run->isArmed(), "a chord let go before its time armed");
+    // A whole chord on the pad now still arms (from either line).
+    run->setArmChordMs(15);
+    hold(kLB, true, 0);
+    hold(kRB, true, 1);
+    QTRY_VERIFY(run->isArmed());
+    hold(kRB, false, 1);
+    hold(kLB, false, 0);
+    QVERIFY(run->isArmed());
+}
+
+void PadRunRules_Test::theLowerLineDroppingMidFourStillStops()
+{
+    /* Review of 201fa9f28: the lower line dropping wiped the one reading
+       the pad's lines shared -- the other line's held LB + RB + LT with
+       it -- so RT on the line still there made no stop. */
+    makeShow();
+    twinLines();
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    for (quint32 ch : { kLB, kRB, kLT })
+    {
+        axis(ch, 255, 0);
+        axis(ch, 255, 1);
+    }
+    QCOMPARE(stops(), 0);
+    drop(0);
+    axis(kRT, 255, 1);
+    QVERIFY2(stops() == 1, qPrintable(QString("RT with LB + RB + LT held on the line left sent %1 ALL OFFs")
+                                          .arg(stops())));
+    QCOMPARE(run->state(), PadRun::Stopped);
+}
+
+void PadRunRules_Test::aTwinPadsButtonsAfterAWalkAct()
+{
+    /* Review of d9c611caf: a twin pad's Menu started the walk, its release
+       went to the walk (Focus this cue has the pad), and the walk ended on
+       the laptop -- the Menu that line kept as held swallowed the pad's
+       next Menu when the other line brought it first. A walk, a tool or
+       the test taking the pad forgets them. (Only one line's Menu is sent
+       while walking: the other line's copy goes to the walk's own map,
+       routed by ProgrammerController -- not this test's matter.) */
+    makeShow();
+    twinLines();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    QVERIFY(run->sameController(0, 1));
+    run->setEnabled(true);
+    // The walk from line 0's Menu, let go into the walk; ended on the laptop.
+    axis(kMenu, 255, 0);
+    QVERIFY(run->isWalking());
+    axis(kMenu, 0, 0);
+    pc->refineSession()->stop();
+    QVERIFY(!run->isWalking());
+    // The pad's next Menu, line 1 first: it walks.
+    axis(kMenu, 255, 1);
+    QVERIFY2(run->isWalking(), "the twin pad's next Menu after a walk was swallowed");
+    axis(kMenu, 0, 1);
+    pc->refineSession()->stop();
+    QVERIFY(!run->isWalking());
+    // And the GO family after it: one LT + A on both lines is one GO.
+    arm(true, 0);
+    m_runs.clear();
+    for (const auto &st : QList<QPair<quint32, uchar>>({ { kLT, 255 }, { kA, 255 }, { kA, 0 }, { kLT, 0 } }))
+    {
+        axis(st.first, st.second, 1);
+        axis(st.first, st.second, 0);
+    }
+    QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::twinPadsToldApartAreTwoPads_data()
+{
+    QTest::addColumn<QString>("by");
+    QTest::newRow("address") << "address";
+    QTest::newRow("USB port") << "USB port";
+}
+
+void PadRunRules_Test::twinPadsToldApartAreTwoPads()
+{
+    /* Two pads of one model, told apart by their address or their USB
+       port (ControllerJobs' identity): two pads, whatever arrives at the
+       same moment. */
+    QFETCH(QString, by);
+    makeShow();
+    if (by == QLatin1String("address"))
+        m_stub->m_lineNames = QStringList() << "Pad (AA:BB:CC:00:00:01)" << "Pad (AA:BB:CC:00:00:02)";
+    else
+        m_stub->m_lineLocations = { { 0, "USB 14200000" }, { 1, "USB 14300000" } };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(!run->sameController(0, 1));
+    QCOMPARE(run->padCount(), 2);
+    run->setEnabled(true);
+    arm(true, 0);
+    // The same LT + A on both at once: the runner's GO goes, the other's is refused.
+    m_runs.clear();
+    run->showNotice(QString());
+    for (const auto &s : QList<QPair<quint32, uchar>>({ { kLT, 255 }, { kA, 255 }, { kA, 0 }, { kLT, 0 } }))
+    {
+        axis(s.first, s.second, 0);
+        axis(s.first, s.second, 1);
+    }
+    QCOMPARE(goes(), 1);
+    QVERIFY2(run->notice().endsWith("is running cues."), qPrintable(run->notice()));
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    // Each pad's four is its own stop: once a press on each.
+    int expected = 0;
+    for (quint32 u : { 0u, 1u })
+    {
+        for (quint32 ch : { kLB, kRB, kLT, kRT })
+            axis(ch, 255, u);
+        ++expected;
+        QVERIFY2(stops() == expected, qPrintable(QString("pad %1's stop: %2 ALL OFFs in all").arg(u).arg(stops())));
+        for (quint32 ch : { kRT, kLT, kRB, kLB })
+            axis(ch, 0, u);
+    }
+    // Both at once: each pad's press is a stop.
+    for (quint32 ch : { kLB, kRB, kLT, kRT })
+    {
+        axis(ch, 255, 0);
+        axis(ch, 255, 1);
+    }
+    QCOMPARE(stops(), expected + 2);
+    for (quint32 ch : { kRT, kLT, kRB, kLB })
+    {
+        axis(ch, 0, 0);
+        axis(ch, 0, 1);
+    }
+    QCOMPARE(stops(), expected + 2);
+    // Both chords at once, nobody armed: one pad arms, the other is told who runs cues.
+    run->setArmChordMs(15);
+    m_said.clear();
+    for (quint32 ch : { kLB, kRB })
+    {
+        axis(ch, 255, 0);
+        axis(ch, 255, 1);
+    }
+    QTRY_VERIFY(run->isArmed());
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 5000);
+    QCOMPARE(saidCount("is running cues"), 1);
+    for (quint32 ch : { kRB, kLB })
+    {
+        axis(ch, 0, 0);
+        axis(ch, 0, 1);
+    }
+    QVERIFY(run->isArmed());
+}
+
 /*****************************************************************************
  * Rules 2 and 6: one state, the light
  *****************************************************************************/
@@ -1534,6 +1921,143 @@ void PadRunRules_Test::jobsOneRunnerAtATime()
     hold(kLB, false, 0);
     QCOMPARE(run->armedUniverse(), quint32(1));
     QCOMPARE(run->notice(), QString::fromUtf8("Pad B (\u202600:02) is running cues."));
+}
+
+void PadRunRules_Test::anotherPadsChordLeavesTheRunnersTiming()
+{
+    /* Invariant 6: another pad's arm chord is refused "and nothing on the
+       runner changes: still armed, its held safety still held, its chord
+       timing untouched". The chord timer was one for every pad: B's
+       chord, squeezed while the runner A held its disarm chord, took it,
+       B letting go stopped it, and A -- still holding LB + RB -- never
+       disarmed. */
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    arm(true, 0);
+    QCOMPARE(run->armedUniverse(), quint32(0));
+    run->setArmChordMs(300);
+    // A holds its disarm chord...
+    hold(kLB, true, 0);
+    hold(kRB, true, 0);
+    QVERIFY(run->isArmChordPending());
+    // ...and B squeezes and lets go of its own inside A's time (no event
+    // loop turn between: deterministic, whatever the machine's load).
+    hold(kLB, true, 1);
+    hold(kRB, true, 1);
+    hold(kRB, false, 1);
+    hold(kLB, false, 1);
+    QVERIFY(run->isArmChordPending());
+    // A keeps holding, past its chord's time: it disarms.
+    QTRY_VERIFY2_WITH_TIMEOUT(!run->isArmed(),
+                              "the runner held LB + RB past the chord's time and is still armed: "
+                              "another pad's chord took its timing", 3000);
+    QCOMPARE(run->roleText(), QString("Pad: Run"));
+    hold(kRB, false, 0);
+    hold(kLB, false, 0);
+    QVERIFY(!run->isArmed());
+}
+
+void PadRunRules_Test::everyChordOnTwoPads_data()
+{
+    QTest::addColumn<int>("start");     // 0: nobody armed, 1: A armed, 2: B armed
+    QTest::addColumn<int>("move");      // what B does inside A's chord time
+    const char *starts[] = { "nobody armed", "A armed", "B armed" };
+    const char *moves[] = { "B squeezes its chord and lets go", "B's chord with LT (spent)",
+                            "B one bumper", "B LT + A", "B RT alone", "B squeezes twice" };
+    for (int s = 0; s < 3; ++s)
+        for (int m = 0; m < 6; ++m)
+            QTest::newRow(qPrintable(QString("%1, %2").arg(starts[s], moves[m]))) << s << m;
+}
+
+void PadRunRules_Test::everyChordOnTwoPads()
+{
+    QFETCH(int, start);
+    QFETCH(int, move);
+    makeShow();
+    twoPads(int(CJ::AllJobs), int(CJ::AllJobs));
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    if (start == 1)
+        arm(true, 0);
+    if (start == 2)
+        arm(true, 1);
+    run->setArmChordMs(300);
+    m_said.clear();
+    m_runs.clear();
+    QSignalSpy changes(run, &PadRun::armedChanged);
+    // A's chord down, and everything B does inside A's time (no event loop
+    // turn between: deterministic, whatever the machine's load).
+    hold(kLB, true, 0);
+    hold(kRB, true, 0);
+    QVERIFY(run->isArmChordPending());
+    switch (move)
+    {
+        case 0:
+        case 5:
+            hold(kLB, true, 1);
+            hold(kRB, true, 1);
+            hold(kRB, false, 1);
+            hold(kLB, false, 1);
+            break;
+        case 1:
+            hold(kLB, true, 1);
+            hold(kRB, true, 1);
+            axis(kLT, 255, 1);
+            axis(kLT, 0, 1);
+            hold(kRB, false, 1);
+            hold(kLB, false, 1);
+            break;
+        case 2:
+            hold(kLB, true, 1);
+            hold(kLB, false, 1);
+            break;
+        case 3:
+            withLt(kA, 1);
+            break;
+        default:
+            press(kRT, 1);
+            break;
+    }
+    QVERIFY2(run->isArmChordPending(), "B's move stopped A's chord timing");
+    if (move == 5)
+    {
+        // B's chord again, held this time, then let go before A's time is up.
+        hold(kLB, true, 1);
+        hold(kRB, true, 1);
+        hold(kRB, false, 1);
+        hold(kLB, false, 1);
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(!run->isArmChordPending(), 3000);
+    // A's chord ended as it would alone.
+    switch (start)
+    {
+        case 0:
+            QVERIFY(run->isArmed());
+            QCOMPARE(run->armedUniverse(), quint32(0));
+            QCOMPARE(changes.count(), 1);
+            break;
+        case 1:
+            QVERIFY(!run->isArmed());
+            QCOMPARE(changes.count(), 1);
+            break;
+        default:
+            // B runs cues: A's chord is refused, once, and B is as it was.
+            QVERIFY(run->isArmed());
+            QCOMPARE(run->armedUniverse(), quint32(1));
+            QCOMPARE(changes.count(), 0);
+            QCOMPARE(saidCount("is running cues"), 1);
+            break;
+    }
+    const bool armedNow = run->isArmed();
+    hold(kRB, false, 0);
+    hold(kLB, false, 0);
+    // Rule 3: nothing B did armed or disarmed, and the release changes nothing.
+    QCOMPARE(run->isArmed(), armedNow);
+    QCOMPARE(stops(), 0);
+    // Rule 4: B's GO is only a GO if B runs cues (and it held LT).
+    QCOMPARE(goes(), (move == 3 && start == 2) ? 1 : 0);
 }
 
 void PadRunRules_Test::jobsTheStopFromAPadWithNoJobs()

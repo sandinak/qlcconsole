@@ -69,6 +69,26 @@ private slots:
     void theSamePressTwiceIsOneGo();
     void aBouncingButton();
     void theDuplicateDevice();
+    /** One pad seen on two universes, one identity (eval 0.4.12): one
+     *  press is one action -- one GO, one hit, one stop -- whichever line
+     *  brings it first, in step or a gesture behind. */
+    void aPadOnTwoUniversesIsOnePad_data();
+    void aPadOnTwoUniversesIsOnePad();
+    /** Review of 201fa9f28: a pad's lines read its triggers apart (each
+     *  its own hysteresis); the pad holds what either holds. */
+    void twinLinesReadTheTriggersApartAndStopOnce();
+    void twinLinesReadTheTriggersApartAndHitOnce();
+    /** Rule 3: the twin line patched in below mid-chord arms nothing. */
+    void aTwinLineAddedMidChordArmsNothing();
+    /** The lower line dropping leaves the other line's four. */
+    void theLowerLineDroppingMidFourStillStops();
+    /** A twin pad's buttons after a walk ended on the laptop: its next
+     *  Menu walks, its LT + A is one GO. */
+    void aTwinPadsButtonsAfterAWalkAct();
+    /** Twin pads told apart (address, USB port) stay two pads: each its
+     *  own stop, its own chord, one runner. */
+    void twinPadsToldApartAreTwoPads_data();
+    void twinPadsToldApartAreTwoPads();
 
     /* Rules 2 and 6: one state, the light */
     void theLightAfterAToolOrWalkEndsStopped();
@@ -84,6 +104,15 @@ private slots:
     void jobsEveryControlOnASecondPad_data();
     void jobsEveryControlOnASecondPad();
     void jobsOneRunnerAtATime();
+    /** CONTROLLER_JOBS.md invariant 6 (eval 0.4.12): another pad's
+     *  chord, squeezed and let go inside the runner's, leaves the
+     *  runner's chord timing untouched. */
+    void anotherPadsChordLeavesTheRunnersTiming();
+    /** The sweep: A holds its chord while B does each thing a pad can do
+     *  with the four, from every arm state. A's chord ends as it would
+     *  alone; B's never arms or disarms anything. */
+    void everyChordOnTwoPads_data();
+    void everyChordOnTwoPads();
     void jobsTheStopFromAPadWithNoJobs();
     void jobsOnePadNothingSavedIsAsBefore();
     void jobsEachPadsLight();
@@ -191,6 +220,9 @@ private:
     /** Pads A (universe 0) and B (universe 1), told apart by address,
      *  with these jobs (ControllerJobs::Jobs as int). */
     void twoPads(int jobsA, int jobsB);
+    /** One pad (one address) on universes 0 and 1; @p lower: universe 0
+     *  not patched yet (the twin line comes later). */
+    void twinLines(bool lower = false);
     /** The last light sent to input line @p line ("": its own; "none"). */
     QString lightOn(quint32 line) const;
     /** The feedback of @p kind ("triggers", "rumble") sent to @p line,

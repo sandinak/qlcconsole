@@ -656,10 +656,15 @@ private:
     void roleChordFired();
     /** Say @p text on the screen (notice()) for noticeMs(). */
     void showNotice(const QString &text);
-    /** LB + RB held long enough: the arm changes. */
-    void armChordFired();
-    /** Start or stop timing the chord from what @p universe holds now. */
+    /** LB + RB held long enough on the pad @p pad (padId()): the arm
+     *  changes. */
+    void armChordFired(const QString &pad);
+    /** Start or stop timing the chord of the pad on @p universe from what
+     *  it holds now (padHeld()). Each pad times its own chord
+     *  (CONTROLLER_JOBS.md 6). */
     void armChordUpdate(quint32 universe);
+    /** Stop timing every pad's chord. */
+    void stopArmChords();
     /** reset() without telling the screens (the caller does). @p four:
      *  keep the four's held bits (the stop reads them in every state; only
      *  a role switch, where they were not read, forgets them). */
@@ -706,28 +711,60 @@ private:
     /** One of the four (LB, RB, LT, RT) read into m_held: the bumpers, the
      *  triggers' hysteresis, the spent chord. True on RT's press. */
     bool noteHeld(quint32 universe, GamepadRole::Role role, uchar value);
-    /** The same pad on another universe (one identity) has fired the stop
-     *  for the chord now held: one stop per physical pad. */
-    bool twinStopFired(quint32 universe) const;
+    /** The pad on @p universe: its identity (ControllerJobs) when that
+     *  tells one pad from another, else the universe itself. It does not
+     *  change when the pad's other line comes or goes, so a pad listed
+     *  twice is one pad and twin pads told apart (address, USB port) two. */
+    QString padId(quint32 universe) const;
+    /** What the pad @p pad holds: each of the four down on any of its
+     *  lines (each line keeps its own trigger hysteresis), with the pad's
+     *  spent chord. One line: that line's reading. */
+    struct Held;
+    Held padHeld(const QString &pad) const;
+    /** @p role is held down on another line of @p universe's pad. */
+    bool downElsewhere(quint32 universe, GamepadRole::Role role) const;
+    /** padId() read once a line for the event being read (m_padIds). */
+    void beginPadIds();
+    void endPadIds(bool wasOn);
 
 private:
     Doc *m_doc;
     ProgrammerController *m_pc;
     bool m_enabled = false;
-    /** What a pad holds now, of the four controls the chords are made of. */
-    struct Held
+    /** What one line holds now, of the four controls the chords are made
+     *  of (and its other buttons). No spent chord here: that is the pad's
+     *  (Held, padHeld()), so a line's reading read for it does not build. */
+    struct Line
     {
         bool lb = false;
         bool rb = false;
         ControllerScheme::TriggerButton lt, rt;
-        bool stopFired = false;     ///< the four made a stop: not again until one is up
-        /** A trigger was down with both bumpers (the stop, or one on its
-         *  way): no arm until both bumpers are up and squeezed afresh. */
-        bool spent = false;
+        QSet<int> buttons;          ///< the other buttons down on this line
         bool anyTrigger() const { return lt.isDown() || rt.isDown(); }
         bool all() const { return lb && rb && lt.isDown() && rt.isDown(); }
     };
-    QHash<quint32, Held> m_held;
+    /** What a pad holds: its lines OR'd (padHeld()), and its chord. */
+    struct Held : Line
+    {
+        /** A trigger was down with both bumpers (the stop, or one on its
+         *  way), or the chord has decided: no arm until both bumpers are
+         *  up on every line of the pad and squeezed afresh (Pad::spent). */
+        bool spent = false;
+    };
+    /** By universe: each line its own, as the pad's plugin reports it. */
+    QHash<quint32, Line> m_held;
+    /** padId() for the event being read: worked out once a line an event
+     *  (watchStop(), handle()), never kept past it. */
+    mutable QHash<quint32, QString> m_padIds;
+    bool m_padIdsOn = false;
+    /** What is the pad's, not a line's (by padId()). */
+    struct Pad
+    {
+        bool stopFired = false;     ///< the four made a stop: not again until one is up
+        bool spent = false;         ///< Held::spent, for the pad's combined bumpers
+        QTimer *chord = nullptr;    ///< the arm chord's timing
+    };
+    QHash<QString, Pad> m_pads;
     /** The event watchStop() last read (and RT's press in it), for handle()
      *  to take instead of reading it again. */
     struct Noted
@@ -775,8 +812,7 @@ private:
     /** What the screens were last told of the hit, so hitChanged() goes once. */
     QString m_shownHit;
     QString m_shownArmedHit;
-    QTimer *m_armChord = nullptr;
-    quint32 m_chordUniverse = UINT_MAX;
+    int m_armChordMs = armChordMs();
     /** What the screens were last told, so stateChanged() goes once. */
     int m_shownState = int(Tools);
     QString m_shownText;

@@ -315,8 +315,13 @@ show from any pad.
   controller, whatever its jobs, whatever the pads are doing: a tool or a
   venue focus on another pad, or the Controller Test open.
 - **One pad listed twice is one pad.** macOS sometimes lists one
-  controller twice; with the same address it is one controller here: the
-  Pad chip names no second runner and both get the same light.
+  controller twice; with the same address (or USB port) it is one
+  controller here: the Pad chip names no second runner, both get the same
+  light, and one press is one action -- one LT + A is one GO, one RT one
+  hit, the four one stop. Two pads of one model told apart by address
+  or USB port stay two pads.
+- **Each pad times its own arm chord.** Another pad squeezing LB + RB
+  while the runner holds its own never cuts the runner's half second.
 
 ### Check jobs with two real pads
 
