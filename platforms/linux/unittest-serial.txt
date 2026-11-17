@@ -61,3 +61,8 @@ plugins/hid/test
 # over the usual 10 s because the timing IS the input; the longest test, the
 # clone flip, runs ~5 s); next to other legs' tests a chord's timer can be late.
 engine/test/padtraces
+
+# Fire Spread over the stage show's whole rig (0.4.13): reports the effect's
+# tick and the Rig Overview's frame in ms while the front spreads and once
+# everything burns, and holds a spreading frame to a burning one's cost.
+ui/test/firespreadperf
