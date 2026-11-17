@@ -61,7 +61,7 @@
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
 #include "qlcchannel.h"
-#include "fixturedefcache.h"
+#include "qlcfixturedefcache.h"
 #include "iopluginstub.h"
 #include "ioplugincache.h"
 #include "inputoutputmap.h"
