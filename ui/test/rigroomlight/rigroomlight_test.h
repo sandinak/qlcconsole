@@ -61,6 +61,9 @@ private slots:
      *  aim stub in the warning red at every level, a selected strip in the
      *  mint at Dim and above (not in a Blackout). */
     void aboveDimTheClashAndTheSelectionAreAsBefore();
+    /** Q260: in a Blackout a clashing pair shows no red and a selection no
+     *  edge, in pixels at three window sizes; at Dim both are drawn. */
+    void aBlackoutHasNoClashRedAndNoSelectionEdge();
     /** An unsaved focus change's badge keeps its amber in a Blackout, and is
      *  allowed by the invariant as a status mark. */
     void statusMarksKeepTheirColourInABlackout();

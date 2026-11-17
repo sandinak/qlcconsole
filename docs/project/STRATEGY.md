@@ -460,7 +460,7 @@ Notes:
 | W7 conversions (EFX → movement effect, RGB Matrix → matrix effect) | 2 | 3 | effect designer | 4 | M | M | 1.2 | LATER |
 | Power by intensity per circuit | 2 | 3 | power model | 5 | M | M | 1 | LATER |
 | MCP server / plain-language command line | 2 | 2 | engine headless load | 8 | M | H | 0.4 | DONE as AI Assist P2/P3 (2026-10-31); a headless server on a file is not built |
-| Relative / multiply layers (tilt over an effect, masks) | 2 | 3 | look stacking | 10 | H | H | 0.4 | NO for now: pro-console semantics, engine risk |
+| Relative / multiply layers (tilt over an effect, masks) | 2 | 3 | look stacking | 10 | H | H | 0.4 | NO for now: pro-console semantics, engine risk. An effect may still scale what is under it on HTP channels (the effect-only `level`, Q261 2026-11-17); layers do not multiply |
 | Fixture Editor inside the main window | 1 | 2 | fixture editor | 5 | M | M | 0.3 | NO: the separate editor works |
 | Ableton Link | 1 | 1 | none | 5 | H | H | 0.1 | NO: GPL, not this audience |
 | NDI / video pixel mapping | 1 | 1 | none | 20 | H | H | 0.03 | NO: media-server territory |

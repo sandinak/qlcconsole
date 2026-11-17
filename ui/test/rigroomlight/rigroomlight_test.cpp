@@ -289,13 +289,18 @@ void RigRoomLight_Test::stackedStripsAreNotAnOverlap()
     QVERIFY(v.m_overlappingFixtures.contains(rows.first()));
     QVERIFY(!v.m_overlappingFixtures.contains(rows.last()));
 
-    // And in a blackout the warning is still the warning: it is not the room's.
-    v.setAmbient(0.0);
+    // At Dim the warning is the warning (not the room's); in a blackout there is none (Q260).
+    v.setAmbient(0.30);
     v.grab();
     bool warned = false;
     for (const QColor &c : fixtureEdges(v, dup->id()))
         warned = warned || redDominant(c);
-    QVERIFY2(warned, "a real overlap lost its warning edge");
+    QVERIFY2(warned, "a real overlap lost its warning edge at Dim");
+    v.setAmbient(0.0);
+    v.grab();
+    for (const QColor &c : fixtureEdges(v, dup->id()))
+        QVERIFY2(!redDominant(c), qPrintable("a clash's red in a blackout: " + colourText(c)));
+    QVERIFY(v.m_overlappingFixtures.contains(dup->id()));   // still a clash, for Show Review
 }
 
 void RigRoomLight_Test::uprightBarsSideBySideAreNotAnOverlap()
@@ -390,9 +395,7 @@ void RigRoomLight_Test::aSelectedFixtureKeepsItsEdge()
     QVERIFY2(brightest > 150.0,
              qPrintable(QString("a selected fixture's edge at House: luma %1").arg(brightest)));
 
-    /* In a Blackout: still well clear of an unselected edge (luma 70 at
-       most, blackoutEdgesAreFaintAndNeutral), but a neutral light grey --
-       a selection is not light. */
+    /* In a Blackout: the selection has no edge, only the neutral faint one. */
     v.setAmbient(0.0);
     v.grab();
     brightest = 0.0;
@@ -402,8 +405,10 @@ void RigRoomLight_Test::aSelectedFixtureKeepsItsEdge()
         QVERIFY2(qAbs(c.red() - c.green()) <= 12 && qAbs(c.green() - c.blue()) <= 12,
                  qPrintable("a coloured selection edge in a blackout: " + colourText(c)));
     }
-    QVERIFY2(brightest >= 110.0,
-             qPrintable(QString("a selected fixture's edge lost in a blackout: luma %1").arg(brightest)));
+    /* Q260: no selection edge at all in a Blackout -- the faint edge any
+       unselected fixture has (blackoutEdgesAreFaintAndNeutral). */
+    QVERIFY2(brightest <= 70.0,
+             qPrintable(QString("a selected fixture still has an edge in a blackout: luma %1").arg(brightest)));
 
     /* Dragged, in a Blackout: an edge in the same selection grey, not a
        filled light body (it was the drag's amber, then a lit grey box). */
@@ -450,8 +455,8 @@ void RigRoomLight_Test::aSelectedFixtureKeepsItsEdge()
  *   - 0.25: below about 64 on the brightest channel a colour reads as black
  *     on this canvas (a red drape at blackout is a near-black red, which is
  *     what a dark room does to it); above it, it reads as a colour.
- * A real clash's red (the overlap warning, kept in a blackout) is the one
- * exception, allowed only inside that fixture's own box on screen. */
+ * A clash's red is not drawn in a blackout (Q260); the allowance below for it
+ * is now never used. */
 namespace
 {
 
@@ -915,8 +920,8 @@ void RigRoomLight_Test::aboveDimTheClashAndTheSelectionAreAsBefore()
         v.setAmbient(room.level);
         v.setHighlight({});
         v.grab();
-        /* A clash's red at every level -- body edges and the aim stub, the
-           line that points out of it (the stub took the room's grey once). */
+        /* A clash's red from Dim up -- body edges and the aim stub, the
+           line that points out of it; none in a Blackout (Q260). */
         for (quint32 fid : std::as_const(movers))
         {
             int edges = 0, stubs = 0;
@@ -927,7 +932,8 @@ void RigRoomLight_Test::aboveDimTheClashAndTheSelectionAreAsBefore()
                 if (o.kind == StructureStudioView::DrawOp::Line && o.pen == warning)
                     ++stubs;
             }
-            QVERIFY2(edges > 0 && stubs > 0,
+            const bool blackout = room.level < 0.30;
+            QVERIFY2(blackout ? (edges == 0 && stubs == 0) : (edges > 0 && stubs > 0),
                      qPrintable(QStringLiteral("%1, %2: %3 red edges, %4 red stubs")
                                     .arg(room.name, doc->fixture(fid)->name()).arg(edges).arg(stubs)));
         }
@@ -955,6 +961,99 @@ void RigRoomLight_Test::aboveDimTheClashAndTheSelectionAreAsBefore()
         else
             QVERIFY2(!sawMint, "Blackout: a selected strip is still filled in the mint");
     }
+}
+
+/* Q260, on the pixels: Rig Overview, Room = Blackout, a clashing pair and a
+   strip selected. No clash red and no selection edge around them; at Dim and
+   above both are drawn. The selection edge is measured as the light-grey
+   pixels selecting adds inside the fixture's own box (the frame with the same
+   fixtures unselected is the reference), the clash red as red-dominant pixels there. */
+void RigRoomLight_Test::aBlackoutHasNoClashRedAndNoSelectionEdge()
+{
+    loadStageShow();
+    Doc *doc = m_app->doc();
+    for (Fixture *fx : doc->fixtures())
+        fx->setOwnChannelValues(QByteArray(int(fx->channels()), 0));
+    const bool moveSpeed = StructureStudioView::moveSpeed();
+    StructureStudioView::setMoveSpeed(false);
+    auto restoreMoveSpeed = qScopeGuard([moveSpeed]() { StructureStudioView::setMoveSpeed(moveSpeed); });
+
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.setLocked(true);
+    v.setLiveValues(true);
+    setStageView(v, ViewOverview);
+    v.resize(1280, 800);
+    v.reload();
+    v.grab();
+
+    QList<quint32> pair;
+    for (quint32 fid : std::as_const(v.m_overlappingFixtures))
+        if (classifyFixture(doc->fixture(fid)).kind == FixtureSilhouette::Mover)
+            pair << fid;
+    QVERIFY2(pair.size() >= 2, "no clashing pair of movers in the stage show");
+    quint32 strip = Fixture::invalidId();
+    for (Fixture *fx : doc->fixtures())
+        if (fx->name() == QLatin1String("DS1 #1") && !v.m_overlappingFixtures.contains(fx->id()))
+            strip = fx->id();
+    QVERIFY(strip != Fixture::invalidId());
+    QList<quint32> selected = pair;
+    selected << strip;
+
+    auto frame = [&](double level, const QList<quint32> &sel, const QSize &size) {
+        v.resize(size);
+        v.setAmbient(level);
+        v.setHighlight(sel);
+        v.reload();
+        settle(30);
+        v.m_overlapAge.invalidate();
+        v.grab();
+        return v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
+    };
+    auto inBox = [&](const QImage &img, const QRectF &box, auto &&visit) {
+        for (int y = qMax(0, int(box.top())); y <= qMin(img.height() - 1, int(box.bottom())); ++y)
+            for (int x = qMax(0, int(box.left())); x <= qMin(img.width() - 1, int(box.right())); ++x)
+                visit(x, y);
+    };
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    const QString state = qEnvironmentVariable("QLC_SHOT_STATE", QStringLiteral("after"));
+
+    const QSize sizes[] = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        const struct { double level; const char *name; } rooms[] = { { 0.0, "blackout" }, { 0.30, "dim" } };
+        for (const auto &room : rooms)
+        {
+            const QImage none = frame(room.level, {}, sz);
+            const QImage sel = frame(room.level, selected, sz);
+            if (!dir.isEmpty())
+                sel.save(QDir(dir).filePath(QStringLiteral("%1-q260-%2-%3x%4.png")
+                                                .arg(state, QString::fromLatin1(room.name)).arg(sz.width()).arg(sz.height())));
+            const QString where = QStringLiteral("%1 %2x%3").arg(QString::fromLatin1(room.name)).arg(sz.width()).arg(sz.height());
+
+            int red = 0;
+            for (quint32 fid : std::as_const(pair))
+                inBox(sel, drawnBox(v, fid), [&](int x, int y) { red += redDominant(sel.pixelColor(x, y)) ? 1 : 0; });
+            /* Light-grey pixels (an edge line: unselected edges and unlit
+               faces are under luma 100 in a Blackout) that selecting adds. */
+            int edge = 0;
+            inBox(sel, drawnBox(v, strip), [&](int x, int y) {
+                if (luma(sel.pixelColor(x, y)) >= 100.0 && luma(none.pixelColor(x, y)) < 100.0)
+                    ++edge;
+            });
+            if (room.level < 0.30)
+            {
+                QVERIFY2(red == 0, qPrintable(QStringLiteral("%1: %2 clash-red pixels on a clashing pair").arg(where).arg(red)));
+                QVERIFY2(edge <= 60, qPrintable(QStringLiteral("%1: %2 selection-edge pixels round a selected strip").arg(where).arg(edge)));
+            }
+            else
+            {
+                QVERIFY2(red >= 20, qPrintable(QStringLiteral("%1: only %2 clash-red pixels at Dim").arg(where).arg(red)));
+                QVERIFY2(edge >= 100, qPrintable(QStringLiteral("%1: only %2 selection-edge pixels at Dim").arg(where).arg(edge)));
+            }
+        }
+    }
+    // Show Review still lists them: the clash is a fact of the rig, not of the room.
+    QVERIFY(v.m_overlappingFixtures.contains(pair.first()));
 }
 
 void RigRoomLight_Test::statusMarksKeepTheirColourInABlackout()
