@@ -333,6 +333,12 @@ quint32 Chaser::totalDuration()
 
 void Chaser::slotFunctionRemoved(quint32 fid)
 {
+    {
+        // A step held after its cue was deleted, playing @a fid: let go of.
+        QMutexLocker runnerLocker(&m_runnerMutex);
+        if (m_runner != NULL)
+            m_runner->functionRemoved(fid);
+    }
     int count;
     {
         QMutexLocker stepListLocker(&m_stepListMutex);
