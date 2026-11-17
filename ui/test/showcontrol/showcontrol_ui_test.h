@@ -45,6 +45,8 @@ private slots:
     /** Board Q257, Windows forced: MSC in cannot be turned on and says why
      *  on the page; MIDI timecode in cannot be chosen. */
     void windowsRefusesMscAndMidiTimecodeInOnThePage();
+    /** ... and ALL OFF and STOP over MSC still run, through the real listener. */
+    void windowsMscStopStillReachesTheShow();
     void aCommandReceivedShowsAsLast();
     void aPortInUseShowsAnError();
     void theTimecodeSourceAndHealth();

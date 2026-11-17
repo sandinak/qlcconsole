@@ -786,13 +786,14 @@ QList<quint32> ShowControl::mscUniverses() const
 
 void ShowControl::handleSysEx(quint32 universe, const QByteArray &sysEx)
 {
-    if (!m_mscEnabled || !acceptsMscFrom(universe))
+    if (!acceptsMscFrom(universe))
         return;
     Request r;
     if (!parseMsc(sysEx, m_mscDeviceId, &r))
         return;
-    // Windows (board Q257): no cue runs from MSC, the stop still does.
-    if (!PadRun::padRunSupported() && r.command != AllOff && r.command != Stop)
+    /* Windows (board Q257): MSC in is off and cannot be turned on, so no cue
+       runs from it; the stop never waits on that setting. */
+    if (PadRun::padRunSupported() ? !m_mscEnabled : (r.command != AllOff && r.command != Stop))
         return;
     m_source = Msc;
     m_sourceUniverse = universe;

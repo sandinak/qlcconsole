@@ -307,7 +307,37 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
     QCOMPARE(early.findChild<QSpinBox *>("scOscPort")->value(), port);
 }
 
-/* Editing on the page saves the setting and puts it into effect at once. */
+/* Board Q257: Windows refuses MSC cues, but the stop gets through the real
+   listener path (MSC in is off there, and ALL OFF still runs). */
+void ShowControlUi_Test::windowsMscStopStillReachesTheShow()
+{
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    auto restore = qScopeGuard([]() { PadRun::setPlatformForTest(PadRun::PlatformAuto); });
+    ShowControlListener::setSettings(false, freePort(), true, 1);
+    ShowControlListener listener(m_doc);        // apply(): MSC in is off on Windows
+    ShowControl *sc = m_doc->showControl();
+    QVERIFY(!sc->mscEnabled());
+    QList<ShowControl::Command> runs;
+    sc->setRunHandler([&runs](const ShowControl::Request &r, ShowControl::Route) {
+        runs << r.command;
+        return true;
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(ShowControl::RunHandler()); });
+    auto msc = [&](int command) {
+        QByteArray b;
+        b.append(char(0xF0)).append(char(0x7F)).append(char(1)).append(char(0x02))
+         .append(char(1)).append(char(command)).append(char(0xF7));
+        sc->handleSysEx(0, b);
+    };
+    msc(0x01);      // GO: refused
+    QVERIFY(runs.isEmpty());
+    msc(0x08);      // ALL_OFF
+    QCOMPARE(runs, QList<ShowControl::Command>() << ShowControl::AllOff);
+    msc(0x02);      // STOP
+    QCOMPARE(runs.size(), 2);
+    QCOMPARE(runs.at(1), ShowControl::Stop);
+}
+
 void ShowControlUi_Test::windowsRefusesMscAndMidiTimecodeInOnThePage()
 {
     PadRun::setPlatformForTest(PadRun::PlatformWindows);
@@ -333,6 +363,7 @@ void ShowControlUi_Test::windowsRefusesMscAndMidiTimecodeInOnThePage()
     QVERIFY2(mtc->text().contains("macOS/Linux for now"), qPrintable(mtc->text()));
 }
 
+/* Editing on the page saves the setting and puts it into effect at once. */
 void ShowControlUi_Test::editingThePageChangesTheListener()
 {
     const int port = freePort();
