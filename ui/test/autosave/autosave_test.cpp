@@ -686,7 +686,9 @@ void Autosave_Test::openTheSavedShowKeepsTheAutosaveAside()
             if (picked.isEmpty()
                 || QFileInfo(picked).canonicalFilePath() != QFileInfo(show).canonicalFilePath())
             {
-                fd->selectFile(show);       // the folder read is left alone
+                // A bare file name in the folder it has, never an absolute
+                // path that could change the directory (and restart the read).
+                fd->selectFile(QFileInfo(show).fileName());
                 return false;
             }
             chosen = true;

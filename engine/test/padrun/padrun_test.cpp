@@ -270,7 +270,12 @@ static void heldPastEveryHoldTime(ProgrammerController *pc)
 {
     const int ticks = int(ControllerScheme::keepAllHoldSeconds() / 0.02) + 25;
     for (int i = 0; i < ticks; ++i)
+    {
         pc->applyDesignJoystick();
+        // A hold's effect that goes through a deferred call (a queued slot,
+        // singleShot(0)) must land inside the per-control loop, not later.
+        QCoreApplication::processEvents();
+    }
 }
 
 void PadRun_Test::axis(quint32 channel, uchar value, quint32 universe)

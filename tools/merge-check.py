@@ -279,6 +279,8 @@ def selftest():
             if not os.path.exists(d):
                 break
             time.sleep(0.25)
+    if os.path.exists(d):
+        print("merge-check.py self-test: warning: could not remove " + d, file=sys.stderr)
     print("merge-check.py self-test: " + ("ok" if fails == 0 else f"{fails} failed"))
     return 1 if fails else 0
 
