@@ -926,8 +926,9 @@ opened — over the web while in Operate too). So:
   had not moved since. The footer says **… held: emergency stop -- a GO or
   a control you move drives them again** until the next GO (what that GO
   does not drive stays held) or the next switch of mode.
-  Other lights stop as All Off always stopped them. Opening another show
-  clears it.
+  Every other fixture is then put at rest, as **Stop all** does: fog and
+  haze off, effects stopped, gobos and colour wheels open, pan and tilt
+  left where they are. Opening another show clears it.
 - **With On when not in use**, Show only wins: nothing turns a laser or a
   flame on just because nothing else is using it.
 - **The VC step button** in Operate steps only the show: the most recent

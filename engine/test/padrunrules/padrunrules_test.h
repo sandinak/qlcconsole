@@ -27,6 +27,7 @@
 #include "showcontrol.h"
 
 class IOPluginStub;
+class QSignalSpy;
 class PadRun;
 class Doc;
 
@@ -129,6 +130,39 @@ private slots:
     /** The four from either pad while the other pad's venue focus runs. */
     void jobsTheStopDuringAnotherPadsFocus_data();
     void jobsTheStopDuringAnotherPadsFocus();
+    /** An ALL OFF from another route (OSC, from its own thread) after the
+     *  laptop started a venue focus with the pad armed: the pad is Stopped
+     *  and stays disarmed -- the focus's put-by arm never comes back, no
+     *  "GO works again" double buzz. */
+    void anOffPadStopNeverReArmsAPadPutByForAFocus();
+    /** The same for a runner kept armed beside another pad's focus (Q250)
+     *  or beside a walk (Q252); the walk's end says nothing over the stop. */
+    void anOffPadStopBesideAFocusOrAWalk_data();
+    void anOffPadStopBesideAFocusOrAWalk();
+    /** An off-pad ALL OFF turns an armed pad red (Stopped, one state on
+     *  every surface); that ALL OFF does not end the red, a new arm does. */
+    void anOffPadStopTurnsTheArmedPadRed();
+    /** A timecode GO after the stop (LTC rolling on) does not bring the
+     *  show back: the pad stays red with the footer's hold, and a
+     *  Focus-only pad is still refused the venue focus (Q254). */
+    void aTimecodeGoAfterTheStopLeavesThePadRed();
+    /** An OSC GO's "ended", queued from its thread, landing after a new
+     *  pad stop: the new stop holds, the pad red, the focus refused. */
+    void aLateEndedNeverClearsANewStop();
+    /** Armed after the stop while the footer holds the show: said so on
+     *  the pad, the role off and on keeps the red, a Focus-only pad is
+     *  refused until the runner's GO brings the show back. */
+    void anArmAfterTheStopBringsNothingBackUntilAGo();
+    /** Reset after the stop plays nothing: still red. */
+    void aResetAfterTheStopLeavesThePadRed();
+    /** A real GO (execute()) ends the red and the footer's hold together. */
+    void aRealGoEndsTheRedAndTheHoldTogether();
+    /** A VC Cue List's GO (admitDirect() and noteGo()) and a switch into
+     *  Operate end the red with the hold, too. */
+    void aVcCueListGoOrOperateEndsTheRed();
+    /** A queued stop landing after the show moved on (a GO, another show)
+     *  drops the arm but paints no red the footer does not hold. */
+    void aLateStopPaintsNoRedTheFooterDoesNotHold();
     /** One pad with Run cues and Focus: as before (armed, LT + Menu, the
      *  arm put by and back; not armed, refused saying to arm). */
     void jobsRunAndFocusOnOnePadAsBefore();
@@ -232,6 +266,17 @@ private:
     int stops() const;
     /** Announcements said since @p from that contain @p part. */
     int saidCount(const QString &part) const;
+    /** The real ALL OFF (ShowControl::execute()), as OSC sends it: from a
+     *  thread of its own, then the main thread's queue run. */
+    void offPadStop();
+    /** "GO works again" double buzzes since @p spy began. */
+    static int doubleBuzzes(const QSignalSpy &spy);
+    /** The main list's chaser (the Show Tree list makeShow() made). */
+    quint32 listChaser() const;
+    /** @p command on the main list from @p route, carried out for real. */
+    bool runOnList(ShowControl::Command command, ShowControl::Route route);
+    /** One MasterTimer tick, then the queued signals delivered. */
+    void tick();
 
 private:
     Doc *m_doc = nullptr;

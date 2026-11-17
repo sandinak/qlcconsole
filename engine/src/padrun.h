@@ -61,8 +61,8 @@ class Doc;
  *                        / A / B)
  *   LB + RB + LT + RT    EMERGENCY STOP: everything stops (ALL OFF), in
  *                        the Run role whatever the pad is doing (armed or
- *                        not, walking, a tool holding it; not while the
- *                        Controller Test is open); the arm drops and every
+ *                        not, walking, a tool holding it, the Controller
+ *                        Test open too); the arm drops and every
  *                        surface shows red, over a walk or a tool too
  *   (the bumpers are the mode only: the arm, and the stop's four)
  *   RS           say the list and what is on standby
@@ -508,6 +508,24 @@ public:
     /** Everything stops (ALL OFF through run()), the arm drops, the state
      *  is Stopped. */
     void emergencyStop();
+    /** Every pad told of the stop: three long buzzes on every pad, the
+     *  voice and the notice. */
+    void sayStopped();
+    /** The emergency stop struck, from any route (the pad's own, OSC, MSC,
+     *  the phone, the laptop; ProgrammerController::endToolsForStop(), on
+     *  the main thread): the one stopped state (rule 2) -- the arm
+     *  dropped, a focus's put-by arm forgotten, Stopped until the keeper's
+     *  stop is over (stopEnded()) or the pad arms -- and then the
+     *  focus tools ended (E9), so none of their ends re-arms the pad or
+     *  says GO works again. Another route's stop is said on every pad. */
+    void stopStruck();
+    /** The keeper's emergency stop is over (OutputRuleKeeper::
+     *  emergencyStopEnded()): Stopped ends -- the pad's red and the
+     *  footer's hold read one source. Main thread. */
+    void stopEnded();
+    /** The keeper still holds the show from the emergency stop
+     *  (OutputRuleKeeper::emergencyStopped()): what the footer says. */
+    bool showHeld() const;
     /** Fire the armed hit: start it, or let it go when it runs (a finished
      *  one-shot plays again). Says its name; false, said, when none is
      *  armed or the show is in Design. */
@@ -806,6 +824,8 @@ private:
     /** holder() when last seen: a change forgets what was held. */
     QString m_lastHolder;
     bool m_stopping = false;    ///< the stop's own ALL OFF is going through run()
+    bool m_struckNow = false;   ///< the pad's own stop has struck (stopStruck()) already
+    bool m_endingForStop = false;   ///< the stop is ending the focus tools (quiet)
     bool m_heldNow = false;     ///< the double-GO guard held the command trigger() sent
     bool m_showControlHooked = false;
     bool m_showTreeHooked = false;

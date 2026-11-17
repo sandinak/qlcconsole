@@ -1926,6 +1926,12 @@ void ProgrammerController::padRumble(int pulses, int lengthMs, quint32 universe)
     emit padRumbled(pulses, lengthMs);
 }
 
+void ProgrammerController::endToolsForStop()
+{
+    // The pad's stopped state first, then the tools: PadRun does both, in that order.
+    m_padRun->stopStruck();
+}
+
 void ProgrammerController::tellOperator(const QString &text, int priority)
 {
     if (priority >= ControllerScheme::ImportantPriority)

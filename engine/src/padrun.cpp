@@ -29,6 +29,7 @@
 #include "refinesession.h"
 #include "focussession.h"
 #include "focuscallcue.h"
+#include "outputrulekeeper.h"
 #include "showcontrol.h"
 #include "effectscriptrunner.h"
 #include "functionparent.h"
@@ -114,10 +115,9 @@ PadRun::~PadRun()
 
 void PadRun::hookShowControl()
 {
-    /* Stopped ends when the show is run again from anywhere (the keys, the
-       Run tab): the pad's red would otherwise outlast what it reports.
-       Doc makes its ShowControl after the programmer, so this is also
-       tried when the role comes on. */
+    /* Doc makes its ShowControl after the programmer, so this is also
+       tried when the role comes on. (Stopped ends with the keeper's stop,
+       stopEnded(), not here.) */
     ShowTreeController *st = m_doc != nullptr ? m_doc->showTree() : nullptr;
     if (st != nullptr && !m_showTreeHooked)
     {
@@ -130,13 +130,6 @@ void PadRun::hookShowControl()
     if (sc == nullptr || m_showControlHooked)
         return;
     m_showControlHooked = true;
-    connect(sc, &ShowControl::commandHandled, this, [this](const QString &, bool done) {
-        if (m_stopped && !m_stopping && done)
-        {
-            m_stopped = false;
-            sync();
-        }
-    });
     /* The double-GO guard held a command, from anywhere (ShowControl::run(),
        its rule 2): the pad says it as every surface does, in the same words
        -- one long buzz, and the voice. Not its notice: the footer's Next
@@ -263,7 +256,9 @@ void PadRun::setEnabled(bool on, bool say)
     if (m_walkBeside && isWalking())
         endBesideWalk(tr("Walk ended: the controller role changed."));
     clear(false);       // the four were not read in Tools
-    m_stopped = false;
+    // Red stays while the keeper still holds the stop (one source).
+    if (!showHeld())
+        m_stopped = false;
     m_enabled = on;
     // Switched: the words saying where it is switched have done their job.
     if (m_notice == roleSwitchText())
@@ -622,7 +617,11 @@ bool PadRun::setArmed(bool on, quint32 universe)
             m_pc->padRumble(2, ControllerScheme::rumbleShortMs(), universe);
         else
             m_pc->padRumble(1, ControllerScheme::rumbleLongMs(), universe);
-        m_pc->tellOperator(on ? m_pc->padText(tr("Armed. {LT} and {A} is GO.")) : tr("Disarmed."),
+        // Armed after the stop, the show still held: said, not plain ARMED.
+        m_pc->tellOperator(!on ? tr("Disarmed.")
+                               : showHeld() ? m_pc->padText(tr("Armed. The show is held from the emergency stop: "
+                                                               "{LT} and {A} brings it back."))
+                                            : m_pc->padText(tr("Armed. {LT} and {A} is GO.")),
                            ControllerScheme::ConfirmPriority);
     }
     return true;
@@ -630,37 +629,112 @@ bool PadRun::setArmed(bool on, quint32 universe)
 
 void PadRun::emergencyStop()
 {
-    stopArmChords();
     hookShowControl();
+    /* Stopped first (stopStruck()), then the ALL OFF: the stop's own
+       emergencyStopStruck() comes back here during run() and is the same
+       stop, struck once. */
+    // A stop on top of a stop is said once (review 0.4.13).
+    const bool already = m_stopped;
+    m_stopping = true;
+    m_struckNow = false;
+    stopStruck();
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     bool done = false;
     if (sc != nullptr)
     {
         ShowControl::Request r;
         r.command = ShowControl::AllOff;
-        m_stopping = true;      // its own commandHandled() does not end Stopped
         done = sc->run(r, ShowControl::RoutePad);
-        m_stopping = false;
     }
+    m_stopping = false;
+    m_struckNow = false;
+    emit commandSent(ShowControl::AllOff, done);
+    if (!already)
+        sayStopped();
+}
+
+void PadRun::stopStruck()
+{
+    // The pad's own stop: struck already, before its ALL OFF went.
+    if (m_stopping && m_struckNow)
+        return;
+    if (m_stopping)
+        m_struckNow = true;
+    /* Another route's, queued here: over already by the time it lands (a
+       GO, a new session, another show loaded) -- the arm still drops and
+       the tools still end, but the show is not painted red that its footer
+       does not hold (one source). */
+    const OutputRuleKeeper *keeper = m_doc != nullptr ? m_doc->outputRuleKeeper() : nullptr;
+    const bool over = !m_stopping && keeper != nullptr && !keeper->emergencyStopped();
+    const bool already = m_stopped;
+    /* One stopped state, whatever route the stop came by (rule 2): the arm
+       drops, a focus's put-by arm is forgotten, the state is Stopped -- all
+       before a tool ends below, so nothing its end does re-arms the pad
+       or says GO works again. */
+    stopArmChords();
     const bool was = m_armed;
     m_armed = false;
     m_armUniverse = UINT_MAX;
-    m_focusArm = UINT_MAX;      // a focus ending after the stop does not re-arm
-    m_stopped = true;
+    m_focusArm = UINT_MAX;
+    if (!over)
+        m_stopped = true;
     m_playing = false;
     m_flash->stop();
-    emit commandSent(ShowControl::AllOff, done);
     if (was)
         emit armedChanged(false);
-    sync();
+    // E9: the focus tools end with it, quietly (the stop speaks for itself).
     if (m_pc != nullptr)
     {
-        // Every pad buzzes: the stop is everyone's (review 1).
-        m_pc->padRumble(3, ControllerScheme::rumbleLongMs(), ProgrammerController::kAllPads);
-        const QString said = tr("Emergency stop. Everything is off.");
-        m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
-        showNotice(said);
+        m_endingForStop = true;
+        m_pc->focusCallCue()->cut();
+        if (m_pc->focusSession()->isActive())
+            m_pc->focusSession()->stop();
+        if (m_pc->refineSession()->isActive())
+            m_pc->refineSession()->stop();
+        m_endingForStop = false;
     }
+    sync();
+    // From another route (OSC, MSC, the phone, the laptop): every pad told
+    // too -- once, not again on top of a stop.
+    if (!m_stopping && m_enabled && !over && !already)
+        sayStopped();
+}
+
+void PadRun::stopEnded()
+{
+    /* The keeper's stop is over (OutputRuleKeeper::emergencyStopEnded()):
+       a GO that really drives the show again (not a timecode one, not a
+       Load or Reset), a new session, another show. The red goes with the
+       footer's "held: emergency stop" -- one source (rule 2). An arm by
+       the chord ends it on the pad as before. */
+    if (m_stopping)
+        return;
+    /* A late one: a GO's "ended" queued from a plugin's thread, landing
+       after a new stop was struck here. The keeper holds the new one. */
+    if (showHeld())
+        return;
+    if (!m_stopped && !m_armed)
+        return;
+    m_stopped = false;
+    m_shownState = -1;      // an arm's "held" words go with the hold
+    sync();
+}
+
+bool PadRun::showHeld() const
+{
+    const OutputRuleKeeper *keeper = m_doc != nullptr ? m_doc->outputRuleKeeper() : nullptr;
+    return keeper != nullptr && keeper->emergencyStopped();
+}
+
+void PadRun::sayStopped()
+{
+    if (m_pc == nullptr)
+        return;
+    // Every pad buzzes: the stop is everyone's (review 1).
+    m_pc->padRumble(3, ControllerScheme::rumbleLongMs(), ProgrammerController::kAllPads);
+    const QString said = tr("Emergency stop. Everything is off.");
+    m_pc->tellOperator(said, ControllerScheme::ConfirmPriority);
+    showNotice(said);
 }
 
 /*****************************************************************************
@@ -863,10 +937,15 @@ QString PadRun::roleText() const
         case Tools:         return tr("Pad: Tools");
         case Run:           return tr("Pad: Run");
         case Armed:
+        {
+            /* Armed after the stop while the footer still holds the show:
+               never a plain ARMED beside "held" (one source, rule 2). */
+            const QString held = showHeld() ? tr(" \u00B7 held: LT + A brings the show back") : QString();
             // Two pads or more: which one runs cues (CONTROLLER_JOBS.md 9).
             if (padCount() > 1 && !runnerName().isEmpty())
-                return tr("Pad: ARMED \u00B7 %1").arg(runnerName());
-            return tr("Pad: ARMED");
+                return tr("Pad: ARMED \u00B7 %1").arg(runnerName()) + held;
+            return tr("Pad: ARMED") + held;
+        }
         case Stopped:       return tr("Pad: STOPPED");
         case Walking:
             // Beside the runner (Q252), with more than one pad: who walks.
@@ -1168,12 +1247,13 @@ bool PadRun::isFocusCueWaiting() const
 
 void PadRun::focusStartPress(quint32 universe, bool safetyHeld)
 {
-    /* After the emergency stop nothing comes up from a pad until the stop
-       is over (an arm, or a GO on the computer): every surface says
-       STOPPED (review 5; decided, safe default -- can change). */
-    if (m_stopped)
+    /* After the emergency stop nothing comes up from a pad until the show
+       is brought back: a GO from a pad that runs cues or from the computer
+       (Q254; review 5). The keeper's hold decides, not the pad's red: an
+       arm alone does not bring the show back (one source, rule 2). */
+    if (m_stopped || showHeld())
     {
-        refuse(Walk, tr("Emergency stop: arm a pad (or GO on the computer) before the venue focus."));
+        refuse(Walk, tr("Emergency stop: the show is held until a GO (the cue pad, or GO on the computer)."));
         return;
     }
     // The start is never one button (rules 3 and 6): LT + Menu, always.
@@ -2260,7 +2340,9 @@ void PadRun::walkEnded()
             });
     }
     sync();
-    m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
+    // Ended by the emergency stop: its own line speaks.
+    if (!m_endingForStop)
+        m_pc->tellOperator(tr("Walk off. Run role."), ControllerScheme::ConfirmPriority);
 }
 
 void PadRun::endBesideWalk(const QString &reason)

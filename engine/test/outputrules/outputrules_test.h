@@ -307,6 +307,13 @@ private slots:
     void sweepCueStack();
     void sweepEffectRunner();
 
+    /** The emergency stop (ShowControl AllOff) leaves a fogger at rest, as
+     *  Stop all does (E8; UX-70: "a fog machine kept pumping"). */
+    void theEmergencyStopPutsAFoggerAtRest();
+    /** The emergency stop in FOCUS ("Everything is off.") ends the focus:
+     *  no focus light left on (E9). */
+    void theEmergencyStopEndsTheFocusLight();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);
