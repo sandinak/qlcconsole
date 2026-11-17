@@ -74,6 +74,10 @@ private slots:
     /** The four held through a device change: the new device's arm chord
      *  arms, no stop. */
     void noStopOnAnArmAfterADeviceChange();
+    /** The fourth of a stop read but not delivered as the patch is set
+     *  again or let go: it goes out first, and the stop fires. */
+    void aBufferedStopPressCountsBeforeARepatch_data();
+    void aBufferedStopPressCountsBeforeARepatch();
     /** A release with no press seen since the device was new is no click
      *  (LS, RS). */
     void aReleaseWithNoPressSeenDoesNothing();

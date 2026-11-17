@@ -421,6 +421,9 @@ ProgrammerController::ProgrammerController(Doc *doc)
     connect(m_doc, &Doc::loaded, this, &ProgrammerController::scheduleStickRefresh);
     connect(m_doc, &Doc::clearing, this, [this]() {
         m_lastStickName.clear();        // a new show: its own pads
+        m_padDevices.clear();
+        m_noDeviceId.clear();
+        m_seenDown.clear();
         if (m_boundFromProfile)
         {
             m_panBound = m_tiltBound = m_boundFromProfile = false;
@@ -3229,6 +3232,7 @@ void ProgrammerController::connectControllerInput()
         const QPair<QString, quint64> now = padDevice(universe);
         const QPair<QString, quint64> was = m_padDevices.value(universe);
         m_padDevices.insert(universe, now);
+        m_noDeviceId.remove(universe);
         if (was.second != 0 && was == now)
             return;
         padLost(universe);
@@ -3262,6 +3266,7 @@ void ProgrammerController::checkPadDevices()
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (iom == nullptr)
         return;
+    m_noDeviceId.clear();       // a plugin may tell its devices apart now
     const QList<quint32> known = m_padDevices.keys();
     for (quint32 universe : known)
     {
@@ -3392,11 +3397,19 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     // Something came in: a controller being found again after a sleep is.
     m_keepAlive->noteInput();
 
-    // The device behind this patch, as first known (padLost() on a change).
+    /* The device behind this patch, as first known (padLost() on a
+       change). Asked once a patch: a plugin that reports no ids (MIDI, OSC,
+       Art-Net input) is not asked again on every value (round-5 review);
+       a patch or configuration change asks again. */
     {
         const auto known = m_padDevices.constFind(universe);
-        if (known == m_padDevices.constEnd() || known->second == 0)
-            m_padDevices.insert(universe, padDevice(universe));
+        if ((known == m_padDevices.constEnd() || known->second == 0) && !m_noDeviceId.contains(universe))
+        {
+            const QPair<QString, quint64> now = padDevice(universe);
+            m_padDevices.insert(universe, now);
+            if (now.second == 0)
+                m_noDeviceId.insert(universe);
+        }
     }
     /* A button's release with no press seen since the pad was new (a pad
        lost and back, another device behind the patch, or held as the app

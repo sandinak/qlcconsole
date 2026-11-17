@@ -105,9 +105,9 @@ bool HIDWindowsJoystick::readEvent()
                 (m_buttonsMask & JOY_BUTTON_MASK(i)))
             {
                 if (m_info.dwButtons & JOY_BUTTON_MASK(i))
-                    emit valueChanged(UINT_MAX, m_line, m_axesNumber + i, 255);
+                    emit valueChanged(deviceId(), m_line, m_axesNumber + i, 255);
                 else
-                    emit valueChanged(UINT_MAX, m_line, m_axesNumber + i, 0);
+                    emit valueChanged(deviceId(), m_line, m_axesNumber + i, 0);
             }
         }
         m_buttonsMask = m_info.dwButtons;
@@ -128,7 +128,7 @@ bool HIDWindowsJoystick::readEvent()
             uchar val = SCALE(double(cmpVals.at(i)), double(0), double(USHRT_MAX),
                         double(0), double(UCHAR_MAX));
             if (val != (uchar)m_axesValues.at(i))
-                emit valueChanged(UINT_MAX, m_line, i, val);
+                emit valueChanged(deviceId(), m_line, i, val);
             m_axesValues[i] = val;
         }
     }

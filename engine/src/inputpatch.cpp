@@ -372,13 +372,24 @@ void InputPatch::flush(quint32 universe)
     if (universe != UINT_MAX && universe != m_universe)
         return;
 
+    /* Off the GUI thread, the frame goes from the buffer to the queue in
+       ONE locked step (round-5 review): a deliverNow() between the two
+       would find neither, and the frame would come later -- after the
+       pad was reset, as the new device's. */
+    const bool here = QThread::currentThread() == thread();
     QHash<quint32, InputValue> batch;
     {
         QMutexLocker inputBufferLocker(&m_inputBufferMutex);
-        batch.swap(m_inputBuffer);
+        if (m_inputBuffer.isEmpty())
+            return;
+        if (here)
+            batch.swap(m_inputBuffer);
+        else
+        {
+            m_pendingFrames.append(m_inputBuffer);
+            m_inputBuffer.clear();
+        }
     }
-    if (batch.isEmpty())
-        return;
 
     /* Universe::processFaders() flushes on the universe's own thread, once a
        frame, and every receiver lives on the GUI thread: emitting there made
@@ -388,14 +399,10 @@ void InputPatch::flush(quint32 universe)
        instead; the values go out from the GUI thread, in the same order, to
        the same receivers (pb5). The frame waits in m_pendingFrames, so
        deliverNow() can still deliver it first. */
-    if (QThread::currentThread() == thread())
+    if (here)
     {
         emitValues(batch);
         return;
-    }
-    {
-        QMutexLocker inputBufferLocker(&m_inputBufferMutex);
-        m_pendingFrames.append(std::move(batch));
     }
     QMetaObject::invokeMethod(this, &InputPatch::deliverPendingFrame, Qt::QueuedConnection);
 }

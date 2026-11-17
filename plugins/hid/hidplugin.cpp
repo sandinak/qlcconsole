@@ -1156,11 +1156,14 @@ void HIDPlugin::dropDevice(HIDDevice *dev)
     disposeOffThread(dev);
 }
 
-quint64 HIDPlugin::deviceId(const HIDDevice *dev)
+quint64 HIDPlugin::deviceId(HIDDevice *dev)
 {
     auto it = m_deviceIds.find(dev);
     if (it == m_deviceIds.end())
+    {
         it = m_deviceIds.insert(dev, ++m_nextDeviceId);
+        dev->setDeviceId(it.value());       // carried with each value it reads
+    }
     return it.value();
 }
 
@@ -1351,7 +1354,7 @@ void HIDPlugin::openTimedOut(const QString &path, quint64 job)
             dropDevice(old);
             renumberLines();
             emit configurationChanged();
-            }
+        }
     }
     noteProblems();
 }
@@ -1731,11 +1734,27 @@ void HIDPlugin::ensureStickTimer()
         m_stickTimer->start();
 }
 
-void HIDPlugin::slotDeviceValue(quint32 universe, quint32 line, quint32 channel, uchar value)
+void HIDPlugin::slotDeviceValue(quint64 device, quint32 line, quint32 channel, uchar value)
 {
-    /* Queued from the device's thread: found by its line, never the
-       sender (it may have been replaced since). */
-    HIDDevice *dev = device(line);
+    /* Queued from the device's thread: found by its id, never the sender
+       (it may have been replaced since). A value read before the device
+       moved to another line (one before it went) is the device's on the
+       line it is on now -- a stop press in flight on a pad that stays is
+       not lost across another pad's drop, nor given to the pad now on its
+       old line (round-5 review). A device gone since: its value goes
+       nowhere. */
+    const quint32 universe = UINT_MAX;
+    if (device != 0)
+    {
+        int now = -1;
+        for (int i = 0; i < m_devices.size() && now < 0; ++i)
+            if (m_deviceIds.value(m_devices.at(i), 0) == device)
+                now = i;
+        if (now < 0)
+            return;
+        line = quint32(now);
+    }
+    HIDDevice *dev = this->device(line);
     if (dev != nullptr && dev->line() == line)
     {
         if (StickFilter *f = stickFilter(dev))

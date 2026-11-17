@@ -43,6 +43,9 @@ private slots:
     /** inputDeviceId(): the same while a device stays, whatever its line;
      *  another for another device on the line; never reused. */
     void aDevicesIdFollowsTheDevice();
+    /** A value queued before its device moved lines arrives on its line
+     *  now; a gone device's goes nowhere. */
+    void aQueuedValueFollowsItsDevice();
     void aPadListedTwiceIsOneDevice();
     void oneOpenPerPathHoweverOftenItRescans();
     void oneScanAtATime();

@@ -285,6 +285,51 @@ void HIDRescan_Test::aDevicesIdFollowsTheDevice()
     QCOMPARE(m_plugin->inputDeviceId(0), idB2);
 }
 
+void HIDRescan_Test::aQueuedValueFollowsItsDevice()
+{
+    /* A value read on the device's thread and queued before another pad
+       went (renumbering the lines): delivered on the line its device is
+       on then -- never lost, never another pad's; a gone device's value
+       goes nowhere (round-5 review). */
+    const QString a = QStringLiteral("/dev/input/js0"), c = QStringLiteral("/dev/input/js1");
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    m_plugin->setTestBackend(quintptr(m_fake));
+    auto settle = [&](int count) {
+        m_plugin->rescanDevices();
+        QTRY_VERIFY_WITH_TIMEOUT(m_plugin->isScanning() == false && m_plugin->openingCount() == 0
+                                     && countOf(m_plugin->inputs(), name) == count, 3000);
+        QTest::qWait(30);
+    };
+    m_fake->list(a, 0x045e, 0x0b13, name, 0, 1);
+    settle(1);
+    m_fake->list(c, 0x045e, 0x0b13, name, 0, 2);
+    settle(2);
+    const quint64 idA = m_plugin->inputDeviceId(0), idC = m_plugin->inputDeviceId(1);
+    QVERIFY(idA != 0 && idC != 0);
+    QVERIFY(m_plugin->openInput(1, 5));             // C patched (universe 5)
+    QSignalSpy values(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)));
+    // A goes: C is on line 0, and its patch with it (as the engine follows it).
+    m_fake->unlist(a);
+    settle(1);
+    QCOMPARE(m_plugin->inputDeviceId(0), idC);
+    m_plugin->closeInput(1, 5);
+    QVERIFY(m_plugin->openInput(0, 5));
+    // C's RT, read before the drop on line 1, delivered now.
+    QVERIFY(QMetaObject::invokeMethod(m_plugin, "slotDeviceValue", Qt::DirectConnection,
+                                      Q_ARG(quint64, idC), Q_ARG(quint32, 1), Q_ARG(quint32, 5),
+                                      Q_ARG(uchar, uchar(255))));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(1).toUInt(), 0u);      // C's line now
+    QCOMPARE(values.at(0).at(2).toUInt(), 5u);
+    QCOMPARE(values.at(0).at(3).toUInt(), 255u);
+    // A's, read before it went: nowhere.
+    QVERIFY(QMetaObject::invokeMethod(m_plugin, "slotDeviceValue", Qt::DirectConnection,
+                                      Q_ARG(quint64, idA), Q_ARG(quint32, 0), Q_ARG(quint32, 5),
+                                      Q_ARG(uchar, uchar(255))));
+    QCOMPARE(values.count(), 1);
+    m_plugin->closeInput(0, 5);
+}
+
 void HIDRescan_Test::aPadListedTwiceIsOneDevice()
 {
     m_fake->list(kOtherPath, 0x054c, 0x0ce6, kOtherName);

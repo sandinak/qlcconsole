@@ -604,6 +604,14 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         return false;
     }
 
+    /* What the patch there read and has not delivered yet goes out first,
+       with the patch as it was -- its device's roles -- before it is
+       replaced or let go: a stop press in flight still counts (board
+       Q253, requirement D). Here, with no lock held: the receivers take
+       m_universeMutex (see the note before inputPatchChanged below). */
+    if (InputPatch *before = m_universeArray.at(universe)->inputPatch())
+        before->deliverNow();
+
     /* Patched by hand to one device (or unpatched): a controller slot gives
        way, unless that device is one of its own. */
     if (m_applyingSlot == false && m_universeArray.at(universe)->hasInputSlot())
@@ -1343,11 +1351,25 @@ int InputOutputMap::retryOfflinePatches()
                 if (plugin == NULL)
                     continue;
                 const bool hasIdentity = rec.uid.isEmpty() == false && rec.uid != KOutputNone;
-                const int line = hasIdentity
+                int line = hasIdentity
                         ? resolveSavedLine(plugin, rec.tag != Universe::InputPatchTag, rec.uid,
                                            rec.network, NetworkRoute::targetFromParameters(rec.params),
                                            rec.line)
                         : int(rec.line);
+                /* An input back by its name: never onto a device another
+                   patch follows (two pads of one name: that pad stays its
+                   universe's); the next line of the name, if one is free
+                   (round-5 review). */
+                if (line >= 0 && rec.tag == Universe::InputPatchTag
+                    && inputDeviceFollowed(plugin, plugin->inputDeviceId(quint32(line)), NULL))
+                {
+                    const QStringList names = plugin->inputs();
+                    line = -1;
+                    for (int l = 0; l < names.size() && line < 0; ++l)
+                        if (names.at(l) == rec.uid
+                            && inputDeviceFollowed(plugin, plugin->inputDeviceId(quint32(l)), NULL) == false)
+                            line = l;
+                }
                 if (line < 0)
                     continue;
                 uni->removeOfflinePatch(k);
@@ -2004,10 +2026,22 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
            review). Gone, or no id: by name, as ever. */
         int line = -1;
         if (const quint64 id = ip->deviceId())
+        {
             for (int l = 0; l < lines.size() && line < 0; ++l)
                 if (plugin->inputDeviceId(quint32(l)) == id)
                     line = l;
-        if (line < 0)
+            /* Its device is gone. On its own line, under its name, a device
+               no other patch follows: the pad re-enumerated where it was --
+               it stays there, and is a pad lost and a new one (the engine
+               sees the id change). Never a line another patch's device is
+               on: that pad keeps its own universe (round-5 review). Else
+               gone: kept offline, and a pad plugged back reopens it. */
+            const quint32 own = ip->input();
+            if (line < 0 && own < quint32(lines.size()) && lines.at(int(own)) == device
+                && inputDeviceFollowed(plugin, plugin->inputDeviceId(own), ip) == false)
+                line = int(own);
+        }
+        else
             line = lines.indexOf(device);
         if (line == int(ip->input()))
             continue;   // where it was: reconnect() below is enough
@@ -2043,6 +2077,19 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
 
     if (kept)
         emit offlinePatchesChanged();
+}
+
+bool InputOutputMap::inputDeviceFollowed(const QLCIOPlugin *plugin, quint64 id, const InputPatch *except) const
+{
+    if (id == 0)
+        return false;
+    for (Universe *uni : m_universeArray)
+    {
+        const InputPatch *p = uni->inputPatch();
+        if (p != NULL && p != except && p->plugin() == plugin && p->deviceId() == id)
+            return true;
+    }
+    return false;
 }
 
 QString InputOutputMap::networkOnlyText(const QString &device)

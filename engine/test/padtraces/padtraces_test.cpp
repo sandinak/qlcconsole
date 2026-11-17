@@ -317,18 +317,23 @@ void PadTraces_Test::aShiftedLineIsNoSafety()
     QVERIFY(q253In(a, kPadLb, 0));
     QVERIFY(q253In(a, kPadLt, 255));
     QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u1:ch2=255")), 2000);
-    // A goes: B is on line 0 now, universe 1 still patched there.
+    /* A goes: B is on line 0 now. Universe 2 follows B there; universe 1
+       does not take B (another patch follows it): A's universe waits,
+       offline, and pad A is lost. */
     m_fake->unlist(a);
     q253Scan(name, 1);
     QCOMPARE(q253Line(b), 0);
-    QCOMPARE(m_doc->inputOutputMap()->inputPatch(1)->input(), quint32(0));
-    QTRY_VERIFY2_WITH_TIMEOUT(!run->isArmed(), "the arm stayed on universe 1 with another pad behind it", 2000);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY2(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine(),
+             qPrintable(QString("universe 1 took line %1").arg(iom->inputPatch(1)->input())));
+    QCOMPARE(iom->inputPatch(2)->input(), quint32(0));
+    QTRY_VERIFY2_WITH_TIMEOUT(!run->isArmed(), "the arm stayed with pad A gone", 2000);
     QCOMPARE(run->roleText(), QString("Pad: Run"));
     QCOMPARE(run->chipNotice(), QString("Disarmed: the controller went away."));
     // B's LT + A: nothing plays (B has not armed).
     heard.clear();
     QVERIFY(q253In(b, kPadLt, 255));
-    QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u1:ch2=255")), 2000);
+    QTRY_VERIFY_WITH_TIMEOUT(heard.contains(QStringLiteral("u2:ch2=255")), 2000);
     QVERIFY(q253In(b, kPadA, 255));
     QVERIFY(q253In(b, kPadA, 0));
     QTest::qWait(100);
@@ -384,7 +389,11 @@ void PadTraces_Test::anotherPadsDropLeavesTheRunnerAsItWas()
     m_fake->unlist(paths.at(0));
     q253Scan(name, 2);
     QCOMPARE(q253Line(c), 1);
-    QCOMPARE(m_doc->inputOutputMap()->inputPatch(3)->input(), quint32(1));
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QCOMPARE(iom->inputPatch(3)->input(), quint32(1));
+    QCOMPARE(iom->inputPatch(2)->input(), quint32(0));
+    QVERIFY2(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine(),
+             "the gone pad's universe took another pad's line");
     QVERIFY2(run->isArmed() && run->armedUniverse() == 3,
              qPrintable(QString("another pad's drop disarmed the runner: '%1'").arg(run->notice())));
     // Its LT, held throughout, is still the safety: A plays.
@@ -401,12 +410,102 @@ void PadTraces_Test::anotherPadsDropLeavesTheRunnerAsItWas()
     m_fake->unlist(paths.at(1));
     q253Scan(name, 1);
     QCOMPARE(q253Line(c), 0);
+    QCOMPARE(iom->inputPatch(3)->input(), quint32(0));
+    QVERIFY(iom->inputPatch(2) == nullptr || iom->inputPatch(2)->input() == QLCIOPlugin::invalidLine());
     QCOMPARE(commandCount(int(ShowControl::AllOff)), 0);
     QVERIFY(q253In(c, kPadRt, 255));
     QTRY_VERIFY2_WITH_TIMEOUT(commandCount(int(ShowControl::AllOff)) == 1,
                               "a stop squeezed three of four across another pad's drop did not fire", 2000);
     for (quint32 ch : { kPadRt, kPadLt, kPadRb, kPadLb })
         QVERIFY(q253In(c, ch, 0));
+}
+
+void PadTraces_Test::aPadReenumeratedKeepsItsUniverse_data()
+{
+    QTest::addColumn<bool>("located");
+    QTest::newRow("macOS-like: each pad its USB location") << true;
+    QTest::newRow("Linux-like: no location, one name") << false;
+}
+
+void PadTraces_Test::aPadReenumeratedKeepsItsUniverse()
+{
+    /* Two pads of one name; A runs cues. B re-enumerates where it is (a
+       power cycle, a sleep: the same path, another device): universe 2
+       stays on B's line -- its new device, its stop live -- and never
+       takes A's; A keeps its arm (round-5 review). */
+    QFETCH(bool, located);
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    const QString a = located ? QStringLiteral("USB_045e_028e_1000000") : QStringLiteral("/dev/input/js0");
+    const QString b = located ? QStringLiteral("USB_045e_028e_2000000") : QStringLiteral("/dev/input/js1");
+    m_fake->list(a, 0x045e, 0x028e, name, 0, 1);
+    q253Scan(name, 1);
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 2);
+    q253Scan(name, 2);
+    QCOMPARE(patchPads(name), 2);
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    QVERIFY(q253In(a, kPadLb, 255));
+    QVERIFY(q253In(a, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QVERIFY(q253In(a, kPadRb, 0));
+    QVERIFY(q253In(a, kPadLb, 0));
+    // B re-enumerates at its path.
+    m_fake->unlist(b);
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 3);
+    QMetaObject::invokeMethod(m_hid, "rescanDevices", Qt::DirectConnection);
+    QTRY_COMPARE_WITH_TIMEOUT(m_fake->opens(b), 2, 3000);
+    QTest::qWait(150);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QCOMPARE(q253Line(a), 0);
+    QCOMPARE(q253Line(b), 1);
+    QCOMPARE(iom->inputPatch(1)->input(), quint32(0));
+    QVERIFY2(iom->inputPatch(2) != nullptr && iom->inputPatch(2)->input() == 1,
+             qPrintable(QString("universe 2 went to line %1, not B's own")
+                        .arg(iom->inputPatch(2) != nullptr ? int(iom->inputPatch(2)->input()) : -1)));
+    QVERIFY2(run->isArmed() && run->armedUniverse() == 1, qPrintable(run->notice()));
+    // B's stop, on its own universe, stops.
+    for (quint32 ch : { kPadLb, kPadRb, kPadLt, kPadRt })
+        QVERIFY(q253In(b, ch, 255));
+    QTRY_COMPARE_WITH_TIMEOUT(commandCount(int(ShowControl::AllOff)), 1, 2000);
+    for (quint32 ch : { kPadRt, kPadLt, kPadRb, kPadLb })
+        QVERIFY(q253In(b, ch, 0));
+}
+
+void PadTraces_Test::aPadUnpluggedAndBackTakesNoOtherPad()
+{
+    /* Two pads of one name; A goes: its universe waits offline, B's
+       universe follows B onto line 0 and B (now the runner) stays armed.
+       A comes back (after B in the list): its universe reopens on A, not
+       on B (round-5 review). */
+    const QString name = QStringLiteral("Xbox Wireless Controller");
+    const QString a = QStringLiteral("/dev/input/js0"), b = QStringLiteral("/dev/input/js1");
+    m_fake->list(a, 0x045e, 0x028e, name, 0, 1);
+    q253Scan(name, 1);
+    m_fake->list(b, 0x045e, 0x028e, name, 0, 2);
+    q253Scan(name, 2);
+    QCOMPARE(patchPads(name), 2);
+    startRunning();
+    PadRun *run = m_doc->programmer()->padRun();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(q253In(b, kPadLb, 255));
+    QVERIFY(q253In(b, kPadRb, 255));
+    QTRY_VERIFY_WITH_TIMEOUT(run->isArmed(), 2000);
+    QCOMPARE(run->armedUniverse(), quint32(2));
+    QVERIFY(q253In(b, kPadRb, 0));
+    QVERIFY(q253In(b, kPadLb, 0));
+    m_fake->unlist(a);
+    q253Scan(name, 1);
+    QCOMPARE(q253Line(b), 0);
+    QCOMPARE(iom->inputPatch(2)->input(), quint32(0));
+    QVERIFY(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine());
+    QVERIFY2(run->isArmed() && run->armedUniverse() == 2, qPrintable(run->notice()));
+    // A is back.
+    m_fake->list(a, 0x045e, 0x028e, name, 0, 4);
+    q253Scan(name, 2);
+    QCOMPARE(q253Line(a), 1);
+    QTRY_VERIFY_WITH_TIMEOUT(iom->inputPatch(1) != nullptr && iom->inputPatch(1)->input() == 1, 3000);
+    QCOMPARE(iom->inputPatch(2)->input(), quint32(0));
+    QVERIFY2(run->isArmed() && run->armedUniverse() == 2, qPrintable(run->notice()));
 }
 
 void PadTraces_Test::triggerRest()

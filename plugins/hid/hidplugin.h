@@ -261,7 +261,7 @@ private slots:
     void slotRawInput(quint32 line, const QString &element, int raw, int channel, int value);
     /** Every reading of every device: its sticks' rest taken out
      *  (StickFilter), then sent on if the device is patched. */
-    void slotDeviceValue(quint32 universe, quint32 line, quint32 channel, uchar value);
+    void slotDeviceValue(quint64 device, quint32 line, quint32 channel, uchar value);
     void slotStickTick();
 
 private slots:
@@ -289,7 +289,7 @@ private:
     void renumberLines();
     /** @p dev's id (QLCIOPlugin::inputDeviceId()), given the first time
      *  it is asked for while the device is listed; forgotten when it goes. */
-    quint64 deviceId(const HIDDevice *dev);
+    quint64 deviceId(HIDDevice *dev);
     QHash<const HIDDevice *, quint64> m_deviceIds;
     quint64 m_nextDeviceId = 0;
 

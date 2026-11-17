@@ -325,9 +325,9 @@ show from any pad.
   re-enumerates, or (on Linux, two pads of one name) another pad takes its
   place on its line because one before it was unplugged, it is disarmed as
   if unplugged: the chip says *Disarmed: the controller went away.*, and
-  nothing it was holding counts. Arm again with LB + RB. A pad that is
-  only renumbered because another one went keeps everything: its arm, the
-  LT it holds, a stop it is squeezing.
+  nothing it was holding counts. Arm again with LB + RB. Another pad
+  being unplugged does not disturb the pads that stay: each keeps its own
+  universe, its arm, the LT it holds and a stop it is squeezing.
 - **The emergency stop is on every pad.** In the Run role, both bumpers
   and both triggers together stop everything from any connected
   controller, whatever its jobs, whatever the pads are doing: a tool or a
@@ -415,8 +415,10 @@ list. Set pad A to **Run cues** only and pad B to **Focus** only.
 20. Arm A, hold LT, and switch A off and on (or unplug it and plug it
     back) still holding LT. *Expected:* the chip says *Disarmed: the
     controller went away.*; pressing A plays nothing. Arm again (LB + RB),
-    hold LT and press A: GO. With three pads, arm the last one, hold its
-    LT, and unplug the first: it stays armed and LT + A plays.
+    hold LT and press A: GO. With three pads of the same kind, arm the
+    last one, hold its LT, and unplug the first: the last stays armed, LT
+    + A plays, and plugging the first back in gives it its own universe
+    again (not another pad's).
 21. Set A to Run cues. Disarmed, on A: hold LB + RB, squeeze LT and let it go,
     let go of RB and press it again. *Expected:* nothing arms; the chip
     says *Let go of both bumpers, then hold LB and RB again.* Let go of

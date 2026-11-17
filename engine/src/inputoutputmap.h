@@ -923,6 +923,11 @@ private:
 private slots:
    /** Slot that catches plugin configuration change notifications from UIPluginCache */
     void slotPluginConfigurationChanged(QLCIOPlugin* plugin);
+private:
+    /** Another input patch than @p except follows device @p id of
+     *  @p plugin (QLCIOPlugin::inputDeviceId(); 0: none can). */
+    bool inputDeviceFollowed(const QLCIOPlugin *plugin, quint64 id, const InputPatch *except) const;
+private slots:
 
     void slotRetryOfflinePatches();
 

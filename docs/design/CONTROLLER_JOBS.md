@@ -367,12 +367,35 @@ it holds, and the chip says why."
   with its own LT + A. A pad that only moved lines (the same device id)
   is told nothing: it keeps its arm, its held safety, a chord or a stop
   squeeze in progress, and every reading. A plugin that can't tell a
-  device (id 0) is concluded nothing about, as before. A button's
+  device (id 0) is concluded nothing about, as before. A patch follows
+  its device by id (`InputOutputMap::followInputDevices()`), and never
+  takes a line whose device another patch follows: two pads of one name
+  each keep their own universe. A patch whose device is gone stays on its
+  own line only if that line still carries its name and no other patch
+  follows the device there (the pad re-enumerated where it was: a pad lost
+  and a new one, on its own universe); otherwise it waits offline, and a
+  pad plugged back reopens it -- on a line of its name no other patch
+  follows (`retryOfflinePatches()`). Before any patch is set again or let
+  go (a re-patch, an unplug, a controller slot's change), what it read and
+  has not delivered goes out first, with the patch it was read on
+  (`InputOutputMap::setInputPatch()` calls `InputPatch::deliverNow()`
+  with no lock held), and a frame flushed on a universe thread moves from
+  the buffer to the delivery queue in one locked step. In the HID plugin
+  each value carries its device's id, so a value read before its device
+  moved to another line is delivered on its line then, and a gone
+  device's value goes nowhere (`HIDPlugin::slotDeviceValue()`). A button's
   release with no press seen since its pad was new is ignored (never a
   View undo or a stick click). decided (inherent): three of the four
   held on the pad whose device changed are gone with it -- the new
   device must squeeze the stop afresh (a full squeeze held across the
-  change has stopped already, and the next full squeeze stops again).
+  change on that pad has stopped already, and the next full squeeze stops
+  again). Its twin lines' latches are cleared too, so a twin line still
+  reading all four fires the stop again on its next reading -- a second
+  stop, which errs the safe way. Known limit (round-5 review): an "any
+  game controller" slot (`InputOutputMap::applyInputSlots()`) picks a
+  pad by its kind, not by device id; with two pads in two such slots and
+  the first unplugged, the first slot can take the second pad's line and
+  the second slot wait offline (its pad disarmed). Not built here.
 - **The restore glide waits for a tool.** A cue's follow spot ending
   glides its subject back where the show has it; while a tool's lights
   aim at that subject the glide waits where it is, and goes on when the
@@ -451,4 +474,6 @@ window still open.
   real HID plugin, a pad shifted onto another's line disarms it and
   another pad's drop leaves the runner as it was, with and without
   locations (engine/test/padtraces `aShiftedLineIsNoSafety`,
-  `anotherPadsDropLeavesTheRunnerAsItWas`).
+  `anotherPadsDropLeavesTheRunnerAsItWas`, `aPadReenumeratedKeepsItsUniverse`,
+  `aPadUnpluggedAndBackTakesNoOtherPad`); a queued value follows its
+  device (plugins/hid/test `aQueuedValueFollowsItsDevice`).

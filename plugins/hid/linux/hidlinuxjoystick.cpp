@@ -131,7 +131,7 @@ void HIDLinuxJoystick::readControlMap()
 
 void HIDLinuxJoystick::emitButton(int index, bool down)
 {
-    emit valueChanged(UINT_MAX, m_line, quint32(GamepadLayout::AxisCount + index),
+    emit valueChanged(deviceId(), m_line, quint32(GamepadLayout::AxisCount + index),
                       down ? UCHAR_MAX : 0);
 }
 
@@ -176,7 +176,7 @@ bool HIDLinuxJoystick::readEvent()
                 {
                     val = SCALE(double(ev.value), double(SHRT_MIN), double(SHRT_MAX),
                                 double(0), double(UCHAR_MAX));
-                    emit valueChanged(UINT_MAX, m_line, quint32(m.index), val);
+                    emit valueChanged(deviceId(), m_line, quint32(m.index), val);
                 }
                 else if (m.kind == HatElement)
                 {
@@ -206,7 +206,7 @@ bool HIDLinuxJoystick::readEvent()
             ch = quint32(m_axesNumber + ev.number);
 
             /* Generate and post an event */
-            emit valueChanged(UINT_MAX, m_line, ch, val);
+            emit valueChanged(deviceId(), m_line, ch, val);
         }
         else if ((ev.type & ~JS_EVENT_INIT) == JS_EVENT_AXIS)
         {
@@ -215,7 +215,7 @@ bool HIDLinuxJoystick::readEvent()
             ch = quint32(ev.number);
 
             qDebug() << "HID JS" << m_line << ch << val;
-            emit valueChanged(UINT_MAX, m_line, ch, val);
+            emit valueChanged(deviceId(), m_line, ch, val);
         }
         else
         {

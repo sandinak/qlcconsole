@@ -656,11 +656,13 @@ void PadRunRules_Test::aChangedDeviceIsALostPad()
     emit m_stub->configurationChanged();
     QVERIFY2(!run->isArmed(), "another device behind the patch kept the arm");
     QCOMPARE(run->notice(), QString("Disarmed: the controller went away."));
-    press(kA);
-    QCOMPARE(goes(), 0);
-    // The new device's own: two controls arm, its LT + A is a GO.
-    axis(kLT, 0);
+    /* The new device arms with its own two controls; the old device's LT
+       is not its safety: A alone plays nothing. */
     arm(true, 0);
+    press(kA);
+    QVERIFY2(goes() == 0, "the old device's held LT was the new device's safety");
+    // Its own LT + A is a GO.
+    axis(kLT, 0);
     withLt(kA, 0);
     QCOMPARE(goes(), 1);
     // The same device after a rescan (its id unchanged): nothing changes.
@@ -696,6 +698,35 @@ void PadRunRules_Test::aBufferedStopPressCountsBeforeTheReset()
     QCOMPARE(stops(), 2);
     for (quint32 ch : { kRT, kLT, kRB, kLB })
         hold(ch, false);
+}
+
+void PadRunRules_Test::aBufferedStopPressCountsBeforeARepatch_data()
+{
+    QTest::addColumn<bool>("unpatch");
+    QTest::newRow("patched again") << false;
+    QTest::newRow("unpatched (unplugged)") << true;
+}
+
+void PadRunRules_Test::aBufferedStopPressCountsBeforeARepatch()
+{
+    /* Three of the four held, the fourth read but not yet delivered, as
+       the patch is set again or let go (a re-patch, an unplug, a slot's
+       change): the press goes out first, with the patch it was read on,
+       and the stop fires (round-5 review, requirement D). */
+    QFETCH(bool, unpatch);
+    makeShow();
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(true);
+    for (quint32 ch : { kLB, kRB, kLT })
+        hold(ch, true);
+    emit m_stub->valueChanged(0, 0, kRT, 255);      // buffered: no frame has run
+    QCOMPARE(stops(), 0);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (unpatch)
+        QVERIFY(iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine()));
+    else
+        QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    QVERIFY2(stops() == 1, "the stop press read before the patch changed was lost");
 }
 
 void PadRunRules_Test::noStopOnAnArmAfterADeviceChange()

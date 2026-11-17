@@ -1030,6 +1030,9 @@ private:
     /** Per pad universe, the buttons seen down since its device was new:
      *  a release with none seen is ignored. */
     QHash<quint32, QSet<int>> m_seenDown;
+    /** Universes whose plugin gave no device id when last asked: not asked
+     *  on every value (cleared by a patch or configuration change). */
+    QSet<quint32> m_noDeviceId;
     QPair<QString, quint64> padDevice(quint32 universe) const;
     /** After a plugin's configuration changed: a pad patch whose device id
      *  changed (replaced, or another shifted onto its line) is a pad lost

@@ -55,6 +55,13 @@ private slots:
      *  completed by the fourth. */
     void anotherPadsDropLeavesTheRunnerAsItWas_data();
     void anotherPadsDropLeavesTheRunnerAsItWas();
+    /** A pad re-enumerated at its path keeps its own universe (its stop
+     *  live); the other pad keeps its arm. */
+    void aPadReenumeratedKeepsItsUniverse_data();
+    void aPadReenumeratedKeepsItsUniverse();
+    /** A pad unplugged and back: its universe reopens on it, never on the
+     *  pad of the same name that took its line meanwhile. */
+    void aPadUnpluggedAndBackTakesNoOtherPad();
     void triggerRest();
     void triggerRestDuringTheChord();
     void aSessionIsRecorded();
