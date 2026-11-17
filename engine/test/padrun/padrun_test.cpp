@@ -1304,11 +1304,12 @@ void PadRun_Test::theVenueFocusSweep()
             hold(kView, true);
             hold(kMenu, true);
             // Held past the chord's time (30 ms): in FOCUS the hold does
-            // nothing and says nothing (the "switched on the computer" notice
-            // is the Run and Tools roles'). Since Q251 check()'s "still
-            // enabled" cannot fail; the silence can.
+            // nothing -- not even the "Run / Tools is switched on the
+            // computer" notice, which is the Run and Tools roles' (FOCUS
+            // keeps its own standing words). Since Q251 check()'s "still
+            // enabled" cannot fail; the wrong notice can.
             QTest::qWait(80);
-            QVERIFY2(run->notice().isEmpty(), qPrintable(run->notice()));
+            QVERIFY2(run->notice() != PadRun::roleSwitchText(), qPrintable(run->notice()));
             hold(kMenu, false);
             hold(kView, false);
             check("FOCUS, View + Menu held");
