@@ -298,6 +298,12 @@ private:
     /** The current view's tabs, in order, with Functions in or out by
      *  setFunctionsWindowShown(). */
     QStringList effectiveViewTabs() const;
+    /** Language-independent names of Everything's tabs, as a show stores them. */
+    static QStringList tabKeys();
+    /** Run and Connections can't be hidden (Q262). */
+    static bool tabIsRequired(const QString &label);
+    void closeOpenedTab(int index);
+    void slotChooseTabs();
     /** Put the tab bar in step with the view: its tabs in its order, the
      *  rest put away (or left in their own windows). */
     void applyWorkspaceTabs();
@@ -307,6 +313,11 @@ private:
     void applyClassicChrome();
     /** Whether @p label is a tab of the current view. */
     bool tabInView(const QString &label) const;
+public:
+    /** The show's own tab set, empty for the view's default (View ▸ Tabs…). */
+    QStringList customTabs() const;
+    void setCustomTabs(const QStringList &tabs, bool markModified = true);
+private:
     /** Where @p label goes in the tab bar now: after the docked tabs that
      *  come before it in the current view. */
     int tabInsertIndex(const QString &label) const;
@@ -842,6 +853,9 @@ private:
     void openContextWindow(QWidget *context, const QString &tabLabel);
     QList<QWidget *> m_parkedContexts;      ///< views with no tab (parkContext())
     bool m_functionsWindowShown = false;    ///< setFunctionsWindowShown()
+    QStringList m_customTabs;               ///< View ▸ Tabs…: the show's own set (empty: the view's)
+    QStringList m_openTabs;                 ///< opened on demand, closable (Simple Desk)
+    QAction *m_chooseTabsAction = nullptr;
 public slots:
     void slotReattachContext();
 

@@ -217,9 +217,10 @@ Which of these you see depends on the view (below).
 **View ▸ Workspace** picks which tabs the main window shows:
 
 - **qlcconsole** — seven tabs, in show order: Connections, Fixtures,
-  Lighting Studio, Show Tree, Virtual Console, Simple Desk and Run.
-  Build, Shows and Functions are in Everything (**Window** switches there
-  for them, with a line to come back). Build keeps running hidden: the
+  Lighting Studio, Show Tree, Timeline (QLC+'s Shows), Virtual Console and
+  Run. **Simple Desk** opens when you ask for it (**Window ▸ Simple Desk**, ⇧⌘D)
+  as a tab with a close button. Build and Functions are in Everything
+  (**Window** switches there for them, with a line to come back). Build keeps running hidden: the
   Show Tree borrows its Workbench and its programmer strip. The **Rig Overview** (⇧⌘R) opens in its
   own window, kept in front of the main window.
 - **Classic QLC+** — the QLC+ tabs in QLC+'s order and names: Fixtures,
@@ -229,7 +230,14 @@ Which of these you see depends on the view (below).
   address tool, Full Screen, help, dump, live edit) and the Fixtures and
   Functions tabs' full rows of buttons. The footer shows only the mode,
   the Grand Master and Ready.
-- **Everything** — every tab.
+- **Everything** — every tab (Shows reads Timeline here too).
+
+**View ▸ Workspace ▸ Tabs…** picks which tabs the qlcconsole and
+Everything views show and in what order: tick a tab, drag it into place.
+Connections (where a dead output shows) and Run (the pad's status) are
+always on. The choice is saved with the show and comes back when it
+opens; a show without one gets its view's tabs, and Restore Defaults puts
+them back. Classic QLC+ keeps QLC+'s own tabs.
 
 ![The Classic QLC+ view](../images/views-classic.png)
 

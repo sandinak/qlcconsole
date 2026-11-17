@@ -152,6 +152,10 @@ private slots:
      *  Show Tree (or saved by qlcconsole) in qlcconsole; a new show in
      *  qlcconsole. */
     void aShowWithoutAViewOpensInItsDefault();
+    void theTabBarDefaultsPerView();
+    void aCustomTabSetRoundTripsThroughTheShow();
+    void runAndConnectionsCantBeUnchecked();
+    void simpleDeskOpensAndClosesOnDemand();
     /** File ▸ Upgrade This Show… on a Classic show: offered (once) the
      *  qlcconsole view, as a quiet line with a button. */
     void upgradingAClassicShowOffersTheConsoleView();

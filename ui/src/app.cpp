@@ -114,6 +114,8 @@
 #include <memory>
 #include <atomic>
 #include <QProgressDialog>
+#include <QDialogButtonBox>
+#include <QListWidget>
 #include "doc.h"
 #include "fixturerest.h"
 #include "shutterautoopen.h"
@@ -586,6 +588,8 @@ void App::init()
     m_tab = new QTabWidget(central);
     m_tab->setObjectName("MainTabs");
     m_tab->setTabPosition(QTabWidget::South);
+    m_tab->setTabsClosable(true);        // only Simple Desk, opened on demand, shows one
+    connect(m_tab, &QTabWidget::tabCloseRequested, this, &App::closeOpenedTab);
     /* A quiet line above the tabs about the view (showViewNotice()). */
     {
         QFrame *notice = new QFrame(central);
@@ -929,6 +933,7 @@ void App::init()
        (Classic, for someone who said new shows start there). Functions has
        no tab in it (board Q32): Window → Functions switches to a view that
        has the stock Functions tab (Q73). */
+    m_customTabs.clear();
     setWorkspaceView(newShowView(), false);
     // Load and apply the tab label mode preference.
     {
@@ -1414,6 +1419,7 @@ void App::clearDocument()
     hideViewNotice();
     if (m_inputNotices != nullptr)
         m_inputNotices->reset();
+    m_customTabs.clear();
     setWorkspaceView(newShowView(), false);
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
@@ -3428,8 +3434,9 @@ void App::initMenuBar()
               QT_TR_NOOP("The QLC+ tabs, in QLC+'s order: Fixtures, Functions, Shows, "
                          "Virtual Console, Simple Desk, Inputs/Outputs") },
             { ConsoleView, "viewWorkspaceConsole",
-              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Show Tree, Virtual Console, "
-                         "Simple Desk and Run; Build, Shows and Functions are in Everything") },
+              QT_TR_NOOP("Connections, Fixtures, Lighting Studio, Show Tree, Timeline, Virtual "
+                         "Console and Run; Simple Desk opens from the Window menu; Build and "
+                         "Functions are in Everything") },
             { EverythingView, "viewWorkspaceEverything",
               QT_TR_NOOP("Every tab") } };
         for (const auto &v : views)
@@ -3445,6 +3452,11 @@ void App::initMenuBar()
             connect(a, &QAction::triggered, this, [this, view]() { setWorkspaceView(view); });
             m_workspaceViewActions << a;
         }
+        workspace->addSeparator();
+        m_chooseTabsAction = workspace->addAction(tr("Tabs…"));
+        m_chooseTabsAction->setObjectName(QStringLiteral("viewTabsAction"));
+        m_chooseTabsAction->setToolTip(tr("Choose and order the tabs along the bottom; saved with the show"));
+        connect(m_chooseTabsAction, &QAction::triggered, this, &App::slotChooseTabs);
         updateWorkspaceViewActions();
         viewMenu->addSeparator();
     }
@@ -5693,15 +5705,15 @@ QStringList App::workspaceViewTabs(WorkspaceView view)
         return { tr("Fixtures"), tr("Functions"), tr("Shows"), tr("Virtual Console"),
                  tr("Simple Desk"), tr("Connections") };
     case ConsoleView:
-        // Seven tabs, in show order (Q79): no Functions (Q32) or Shows -- they
-        // are in Everything. The Lighting Studio stays (Branson, after Q79).
+        // Seven tabs, in show order (Q79, Q262): no Functions (Q32); Shows
+        // reads Timeline (tabDisplayLabel()). Simple Desk opens on demand
+        // as a tab you can close (Window menu). The Lighting Studio stays (Branson, after Q79).
         // No Build (Q228): its programmer strip is the Show Tree's too, the
         // Library has the palettes, and scenes and collections are built in
         // Classic / Everything; it runs on, hidden, lending the Show Tree its
-        // Workbench. Simple Desk, a QLC+ user's channel check, sits after the
-        // Virtual Console, before Run (Q71).
+        // Workbench.
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"),
-                 tr("Show Tree"), tr("Virtual Console"), tr("Simple Desk"), tr("Run") };
+                 tr("Show Tree"), tr("Shows"), tr("Virtual Console"), tr("Run") };
     case EverythingView:
     default:
         return { tr("Connections"), tr("Fixtures"), tr("Lighting Studio"), tr("Functions"),
@@ -5820,26 +5832,157 @@ QString App::tabDisplayLabel(const QString &label) const
 {
     if (m_workspaceView == ClassicView && label == tr("Connections"))
         return tr("Inputs/Outputs");
+    // QLC+'s Shows is the Timeline here (Q262); Classic keeps QLC+'s word.
+    if (m_workspaceView != ClassicView && label == tr("Shows"))
+        return tr("Timeline");
     return label;
 }
 
 QStringList App::effectiveViewTabs() const
 {
-    QStringList order = workspaceViewTabs(m_workspaceView);
+    const QStringList all = workspaceViewTabs(EverythingView);
     const QString functions = tr("Functions");
-    if (m_functionsWindowShown && !order.contains(functions))
+    QStringList order;
+    if (m_workspaceView != ClassicView && !m_customTabs.isEmpty())
     {
-        // At its place among everything (after Lighting Studio).
-        const QStringList all = workspaceViewTabs(EverythingView);
-        const int at = all.indexOf(functions);
+        // View ▸ Tabs… (Q262): the show's own set, in its own order.
+        order = m_customTabs;
+    }
+    else
+    {
+        order = workspaceViewTabs(m_workspaceView);
+        if (m_functionsWindowShown && !order.contains(functions))
+        {
+            // At its place among everything (after Lighting Studio).
+            const int at = all.indexOf(functions);
+            int i = 0;
+            while (i < order.size() && all.indexOf(order.at(i)) < at)
+                ++i;
+            order.insert(i, functions);
+        }
+        else if (!m_functionsWindowShown)
+            order.removeAll(functions);
+    }
+    // Opened on demand (Simple Desk): at its place among everything.
+    foreach (const QString &open, m_openTabs)
+    {
+        if (order.contains(open))
+            continue;
+        const int at = all.indexOf(open);
         int i = 0;
         while (i < order.size() && all.indexOf(order.at(i)) < at)
             ++i;
-        order.insert(i, functions);
+        order.insert(i, open);
     }
-    else if (!m_functionsWindowShown)
-        order.removeAll(functions);
     return order;
+}
+
+QStringList App::tabKeys()
+{
+    // In Everything's order; the key is what a show file stores.
+    return { QStringLiteral("Connections"), QStringLiteral("Fixtures"),
+             QStringLiteral("Lighting Studio"), QStringLiteral("Functions"),
+             QStringLiteral("Build"), QStringLiteral("Show Tree"), QStringLiteral("Shows"),
+             QStringLiteral("Virtual Console"), QStringLiteral("Simple Desk"),
+             QStringLiteral("Run") };
+}
+
+bool App::tabIsRequired(const QString &label)
+{
+    return label == tr("Run") || label == tr("Connections");
+}
+
+QStringList App::customTabs() const
+{
+    return m_customTabs;
+}
+
+void App::setCustomTabs(const QStringList &tabs, bool markModified)
+{
+    const QStringList all = workspaceViewTabs(EverythingView);
+    QStringList set;
+    // Everything's order is the only one the stock tabs were ever in; the
+    // chosen order is kept, the unknown dropped, Run and Connections forced.
+    foreach (const QString &t, tabs)
+        if (all.contains(t) && !set.contains(t))
+            set << t;
+    // Connections leads and Run ends: where a dead output is found, and the pad's status.
+    set.removeAll(tr("Connections"));
+    set.removeAll(tr("Run"));
+    set.prepend(tr("Connections"));
+    set.append(tr("Run"));
+    if (tabs.isEmpty() || set == workspaceViewTabs(m_workspaceView))
+        set.clear();                    // the view's own: nothing to keep
+    if (set == m_customTabs)
+        return;
+    m_customTabs = set;
+    m_openTabs.clear();
+    m_functionsWindowShown = (m_workspaceView != ClassicView && !m_customTabs.isEmpty()
+                                  ? m_customTabs : workspaceViewTabs(m_workspaceView)).contains(tr("Functions"));
+    applyWorkspaceTabs();
+    if (markModified && m_doc != NULL)
+        m_doc->setModified();
+}
+
+void App::closeOpenedTab(int index)
+{
+    if (m_tab == NULL || index < 0 || index >= m_tab->count())
+        return;
+    const QString label = m_tab->tabBar()->tabData(index).toString();
+    if (!m_openTabs.contains(label))
+        return;
+    m_openTabs.removeAll(label);
+    applyWorkspaceTabs();
+}
+
+void App::slotChooseTabs()
+{
+    if (m_workspaceView == ClassicView)
+        return;
+    QDialog dlg(this);
+    dlg.setObjectName(QStringLiteral("chooseTabsDialog"));
+    dlg.setWindowTitle(tr("Tabs"));
+    QVBoxLayout *col = new QVBoxLayout(&dlg);
+    QLabel *hint = new QLabel(tr("Tick the tabs to show and drag them into order. Connections "
+                                 "and Run are always there. Saved with the show.\n"
+                                 "Simple Desk opens from Window ▸ Simple Desk (⇧⌘D)."), &dlg);
+    hint->setWordWrap(true);
+    col->addWidget(hint);
+    QListWidget *list = new QListWidget(&dlg);
+    list->setObjectName(QStringLiteral("chooseTabsList"));
+    list->setDragDropMode(QAbstractItemView::InternalMove);
+    col->addWidget(list);
+    const QStringList now = effectiveViewTabs();
+    QStringList rest = workspaceViewTabs(EverythingView);
+    foreach (const QString &t, now)
+        rest.removeAll(t);
+    auto add = [&](const QString &t, bool on) {
+        QListWidgetItem *it = new QListWidgetItem(tabDisplayLabel(t), list);
+        it->setData(Qt::UserRole, t);
+        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+        if (!tabIsRequired(t))
+            it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
+        it->setCheckState(on || tabIsRequired(t) ? Qt::Checked : Qt::Unchecked);
+    };
+    foreach (const QString &t, now)
+        add(t, true);
+    foreach (const QString &t, rest)
+        add(t, false);
+    QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel
+                                                 | QDialogButtonBox::RestoreDefaults, &dlg);
+    box->setObjectName(QStringLiteral("chooseTabsButtons"));
+    col->addWidget(box);
+    connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+    connect(box->button(QDialogButtonBox::RestoreDefaults), &QPushButton::clicked, &dlg,
+            [this, &dlg]() { setCustomTabs(QStringList()); dlg.reject(); });
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    QStringList chosen;
+    for (int i = 0; i < list->count(); ++i)
+        if (list->item(i)->checkState() == Qt::Checked)
+            chosen << list->item(i)->data(Qt::UserRole).toString();
+    setCustomTabs(chosen);
 }
 
 bool App::tabInView(const QString &label) const
@@ -5884,7 +6027,9 @@ void App::setWorkspaceView(WorkspaceView view, bool markModified)
 {
     const bool changed = view != m_workspaceView;
     m_workspaceView = view;
-    m_functionsWindowShown = workspaceViewTabs(view).contains(tr("Functions"));
+    m_openTabs.clear();
+    m_functionsWindowShown = (m_workspaceView != ClassicView && !m_customTabs.isEmpty()
+                                  ? m_customTabs : workspaceViewTabs(view)).contains(tr("Functions"));
     applyWorkspaceTabs();
     if (changed)
         hideViewNotice();
@@ -5958,6 +6103,9 @@ void App::applyWorkspaceTabs()
         const int idx = m_tab->addTab(w, w->property("tabIcon").value<QIcon>(), label);
         m_tab->tabBar()->setTabData(idx, label);
         w->setProperty("tabIndex", idx);
+        // Only a tab opened on demand has a close button (Simple Desk).
+        if (!m_openTabs.contains(label))
+            m_tab->tabBar()->setTabButton(idx, QTabBar::RightSide, nullptr);
     }
 
     if (front != NULL && m_tab->indexOf(front) >= 0)
@@ -6051,6 +6199,13 @@ void App::updateWorkspaceViewActions()
 {
     foreach (QAction *a, m_workspaceViewActions)
         a->setChecked(a->data().toInt() == int(m_workspaceView));
+    if (m_chooseTabsAction != nullptr)      // Classic stays stock QLC+
+    {
+        m_chooseTabsAction->setEnabled(m_workspaceView != ClassicView);
+        m_chooseTabsAction->setToolTip(m_workspaceView == ClassicView
+            ? tr("Classic keeps QLC+'s own tabs; switch view to choose")
+            : tr("Choose and order the tabs along the bottom; saved with the show"));
+    }
 }
 
 void App::showViewNotice(const QString &text, const QString &buttonText,
@@ -6281,6 +6436,16 @@ void App::showContext(const QString &tabLabel)
         return;
     }
 
+    /* Simple Desk is on demand outside Classic / Everything (Q262): it opens
+       as a tab you can close. */
+    if (!tabInView(tabLabel) && tabLabel == tr("Simple Desk") && contextWidget(tabLabel) != nullptr)
+    {
+        m_openTabs << tabLabel;
+        applyWorkspaceTabs();
+        showContext(tabLabel);
+        return;
+    }
+
     /* Not in this view (View ▸ Workspace): show everything, and say so --
        the show is the same, only the tabs on show change. */
     if (!tabInView(tabLabel) && contextWidget(tabLabel) != nullptr
@@ -6367,7 +6532,9 @@ void App::updateWindowJumps()
     {
         m_windowMenu->removeAction(jump);
         m_windowMenu->insertAction(m_windowJumpsEnd, jump);
-        jump->setShortcut(QKeySequence());
+        // Simple Desk opens on demand (Q262): D for Desk while it has no number.
+        jump->setShortcut(jump->data().toString() == tr("Simple Desk")
+                              ? QKeySequence(QStringLiteral("CTRL+SHIFT+D")) : QKeySequence());
     }
     m_windowHiddenSeparator->setVisible(hidden.isEmpty() == false);
 }
@@ -7050,6 +7217,7 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     QString activeWindowName = doc.attributes().value(KXMLQLCWorkspaceWindow).toString();
     // The view it was saved in (absent: an older show; see below).
     const QString viewKey = doc.attributes().value(KXMLQLCWorkspaceView).toString();
+    const QString tabsAttr = doc.attributes().value(QStringLiteral("Tabs")).toString();
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
     m_showTreeNoticeDismissed = false;      // P45: back each time the show opens
@@ -7183,7 +7351,18 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
         WorkspaceView view = workspaceViewFromKey(viewKey, &known);
         if (!known)
             view = defaultViewForLoadedShow();
+        m_customTabs.clear();
+        const QStringList all = workspaceViewTabs(EverythingView), keys = tabKeys();
+        foreach (const QString &k, tabsAttr.split(QLatin1Char('|'), Qt::SkipEmptyParts))
+            if (keys.contains(k))
+                m_customTabs << all.at(keys.indexOf(k));
         setWorkspaceView(view, false);
+        if (!m_customTabs.isEmpty())
+        {
+            const QStringList loaded = m_customTabs;
+            m_customTabs.clear();
+            setCustomTabs(loaded, false);
+        }
     }
 
     if (goToConsole == true)
@@ -7262,6 +7441,15 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
     /* The view it is shown in (View ▸ Workspace). An attribute, which QLC+
        and older qlcconsole builds read past. */
     doc.writeAttribute(KXMLQLCWorkspaceView, workspaceViewKey(m_workspaceView));
+    if (!m_customTabs.isEmpty())
+    {
+        // View ▸ Tabs…: English keys in Everything's order's names.
+        const QStringList all = workspaceViewTabs(EverythingView), keys = tabKeys();
+        QStringList out;
+        foreach (const QString &t, m_customTabs)
+            out << keys.value(all.indexOf(t));
+        doc.writeAttribute(QStringLiteral("Tabs"), out.join(QLatin1Char('|')));
+    }
 
     doc.writeStartElement(KXMLQLCCreator);
     doc.writeTextElement(KXMLQLCCreatorName, APPNAME);

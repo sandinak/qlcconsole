@@ -44,7 +44,8 @@ app: true
 ![The Show Tree tab](../../images/lesson-1-1/showtree-tab.png)
 
 - **The tabs** are along the bottom (**7**): Connections, Fixtures, Lighting Studio, Show Tree,
-  Virtual Console, Simple Desk and Run. Click one, or use **Window** and its shortcut.
+  Timeline, Virtual Console and Run. Click one, or use **Window** and its shortcut.
+  Simple Desk opens from **Window** when you need it; **View ▸ Workspace ▸ Tabs…** changes the set.
 - **The footer**, under the tabs, says whether your work is saved (bottom
   right) and reads *No outputs: preview only* in class: the course shows
   aren't connected to real lights.
