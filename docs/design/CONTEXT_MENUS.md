@@ -472,7 +472,7 @@ Top-level items (separators not counted) and what the law test
 (`everyMenuKeepsTheLaws`) says. "Built" menus are the ones the test opens
 offscreen; the others were counted from the source (`exec(` sites in
 `ui/src`) and are listed so the next pass starts from them. Limit 14
-(UX-80); a menu over it has a ceiling in the test and can only shrink.
+(UX-80). It is 14, not 12, because the plot fixture menu and the Show Tree cue menus, with their conditional items, reach 13–14 even split by area; 12 would need a second pass over the Show Tree cue rows.
 
 | Menu | Where | Items before → after | Band order | Problem / change |
 |---|---|---|---|---|
@@ -480,7 +480,7 @@ offscreen; the others were counted from the source (`exec(` sites in
 | Fixture group, Fixture Manager | same | 18 → 14 | same | Reset dropped for a group (it never applied); **Add to Group** alone is not a one-item Group ▸ |
 | Fixture group in Build, Plot Layers, Scenes, Library | `contextmenus.cpp` `rig()` | 8–14 | kind block | none |
 | Fixture, Build / Scenes / Library | same | 4–12 | kind block | none |
-| Fixture on the plot and Plot Layers | `monitorgraphicsview.cpp` `buildItemMenu` | 19 | place, kind | **over: ceiling 19**; next: Mount ▸ takes Set Mounting Height and Stamp Studio Component, Layer ▸ takes Move to Layer and New Map Layer |
+| Fixture on the plot and Plot Layers | `monitorgraphicsview.cpp` `buildItemMenu` | 19 → 14 | place, kind | footprint, masking, mounting, height and studio component are **Plot Setup ▸**; New Map Layer from Selection… is in Move to Layer ▸. It has no Test Fixture item (Locate is its find-it), so the silent no-op was the Fixture Manager's only |
 | Stage feature, plot and Layers | same | 12 | kind block, Delete last | none |
 | Stage piece, no-light zone | same | 5 | place, Edit, Delete | none |
 | Empty plot | `monitor.cpp` | 7 | | none |
@@ -488,11 +488,11 @@ offscreen; the others were counted from the source (`exec(` sites in
 | Function (Scenes, Effects, Library, Workbench) | `function()` | 8–10 | kind block | none |
 | Build ▸ Scenes folder / empty | `programmingoutline.cpp` | 10 / 6 | | none |
 | Functions tab | `functionmanager.cpp` | 17 → 7 | Kind, Selection, Organise, View, Edit, Delete last | the twelve creators are **New ▸** |
-| Show Tree layer (tree, Workbench) | `showtreeview.cpp` `fillLayerMenu` | 20 / 18 | place, open, kind, Edit, Delete | **over: ceiling 20**; next: New ▸ (+ Cue List…, + Hit, + Cue, + Sub-cue) and Clipboard ▸ (Cut, Copy, Paste, Duplicate); the tests and course text name those items, so it is its own change |
+| Show Tree layer (tree, Workbench) | `showtreeview.cpp` `fillLayerMenu` | 20 / 18 → 12 / 13 | place, open, kind, Edit, Delete | **New ▸** (the four + items on a cue or layer), **Structure ▸** (Split Layer, Add Child Layer ▸, Remove from Layer ▸, Detach to Plain Scene), **Clipboard ▸** (Cut, Copy, Paste, Duplicate); the course helper `treeMenu` finds an item inside an area submenu by its own text |
 | Show Tree layer carried in | same | 10–11 | place, open | none |
 | Show Tree cue, list, production, hit | `showtreeview.cpp`, `treecuestack.cpp` | 2–14 | creation first, Delete last | counted from source only |
-| Connections rows (14 menus) | `connectionstree.cpp` | 5–15 | Delete last (one: "Stop Showing This Interface" after the patch items) | not built by the test; the interface menu and the universe menu are 13–15: next pass |
-| Virtual Console widget | `virtualconsole.cpp`, `vcwidget.cpp` | 12+ | the menu bar's Edit menu | Delete fourth; needs its own right-click menu (3.4) |
+| Connections rows (14 menus) | `connectionstree.cpp` | 5–15 → 4–14 | list view and Add Universe on top, the row's items, Delete last | Collapse/Expand are **View ▸**; not built by the test (needs a live patch), counted from source |
+| Virtual Console widget | `virtualconsole.cpp`, `vcwidget.cpp` | 12+ | Properties, Rename, Swap · Background … Stacking · Cut, Copy, Paste · the widget's own ▸ · Delete | Delete is last (the menu bar's Edit menu changes with it, since one menu serves both) |
 | Sequence item (Show Manager) | `showmanager/sequenceitem.cpp` | 3 + defaults | Delete was before Scale | Delete moved last |
 | Bundle browser | `bundlebrowser.cpp` | 5 | Delete was before Show in Finder | Delete moved last |
 | Show Manager track, audio, video, scene, EFX, RGB, collection items | `showmanager/*item.cpp` | 2–12 | | counted from source only |

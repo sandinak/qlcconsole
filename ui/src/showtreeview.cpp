@@ -8863,11 +8863,15 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         FocusMenu::setAvailable(refine, FocusMenu::focusCueBlocked(m_doc),
                                 tr("Move, zoom, focus and recolour this cue from the stage with the "
                                    "controller: the layer as a whole, or one fixture as an exception"));
-        QAction *split = menu.add(ContextMenu::Kind, tr("Split Layer (One per Group)"), [this, cueId, layerId]() {
+        /* How the layer is built (split, children, parts, detach) is one
+           Structure submenu: the menu stays short (UX-80). */
+        QMenu *structure = menu.addMenu(ContextMenu::Kind, tr("Structure"), QStringLiteral("stStructure"));
+        QAction *split = structure->addAction(tr("Split Layer (One per Group)"), this, [this, cueId, layerId]() {
             QString why;
             if (!splitLayer(cueId, layerId, &why))
                 QMessageBox::information(this, tr("Split layer"), why);
-        }, QStringLiteral("stSplitLayer"));
+        });
+        split->setObjectName(QStringLiteral("stSplitLayer"));
         split->setEnabled(own->pieces().count() > 1);
         split->setToolTip(tr("One layer per group (and one on its fixtures), each with these looks; "
                              "it keeps tracking as before"));
@@ -8875,7 +8879,8 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         // inside it, or what the Library has selected.
         if (!own->target.isOpaque())
         {
-            QMenu *childMenu = menu.addMenu(ContextMenu::Kind, tr("Add Child Layer"), QStringLiteral("stAddChild"));
+            QMenu *childMenu = structure->addMenu(tr("Add Child Layer"));
+            childMenu->setObjectName(QStringLiteral("stAddChild"));
             QList<FixtureGroup *> inside;
             for (FixtureGroup *g : m_doc->fixtureGroups())
             {
@@ -8918,7 +8923,8 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         // A layer on several groups can lose one (never its last).
         if (!own->target.isOpaque() && own->target.groups.count() + own->target.fixtures.count() > 1)
         {
-            QMenu *from = menu.addMenu(ContextMenu::Kind, tr("Remove from Layer"), QStringLiteral("stRemoveFromLayer"));
+            QMenu *from = structure->addMenu(tr("Remove from Layer"));
+            from->setObjectName(QStringLiteral("stRemoveFromLayer"));
             for (quint32 g : own->target.groups)
             {
                 Target one;
@@ -8936,9 +8942,9 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
                 });
             }
         }
-        menu.add(ContextMenu::Kind, tr("Detach to Plain Scene"), [this, cueId, layerId]() {
+        structure->addAction(tr("Detach to Plain Scene"), this, [this, cueId, layerId]() {
             m_st->detachLayer(cueId, layerId);
-        }, QStringLiteral("stDetachLayer"));
+        })->setObjectName(QStringLiteral("stDetachLayer"));
         {
             // PWR-12: I meant it, taken back.
             QMenu *staging = new QMenu(menu.menu());
@@ -8959,26 +8965,24 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
             }, QStringLiteral("stMakeLayerReusable"));
 
         /* ---- 7. Clipboard, a copy, its name ---- */
+        QMenu *clip = menu.addMenu(ContextMenu::Edit, tr("Clipboard"), QStringLiteral("stClipboard"));
         if (place.cut)
-            menu.add(ContextMenu::Edit, tr("Cut"), place.cut, QStringLiteral("stCutLayer"))
-                ->setShortcut(QKeySequence::Cut);
+            clip->addAction(tr("Cut"), QKeySequence::Cut, this, place.cut)->setObjectName(QStringLiteral("stCutLayer"));
         if (place.copy)
-            menu.add(ContextMenu::Edit, tr("Copy"), place.copy, QStringLiteral("stCopyLayer"))
-                ->setShortcut(QKeySequence::Copy);
+            clip->addAction(tr("Copy"), QKeySequence::Copy, this, place.copy)->setObjectName(QStringLiteral("stCopyLayer"));
         if (place.paste)
         {
             const bool cueClip = !m_commander->clipboard.cues.isEmpty();
-            QAction *paste = menu.add(ContextMenu::Edit,
-                                      cueClip ? tr("Paste After This Cue")
-                                              : (m_commander->clipboard.cut ? tr("Move Here, After This Layer")
-                                                                            : tr("Paste After This Layer")),
-                                      place.paste, QStringLiteral("stPasteHere"));
-            paste->setShortcut(QKeySequence::Paste);
+            QAction *paste = clip->addAction(cueClip ? tr("Paste After This Cue")
+                                                     : (m_commander->clipboard.cut ? tr("Move Here, After This Layer")
+                                                                                   : tr("Paste After This Layer")),
+                                             QKeySequence::Paste, this, place.paste);
+            paste->setObjectName(QStringLiteral("stPasteHere"));
             paste->setEnabled(!m_commander->clipboard.isEmpty());
         }
         if (place.duplicate)
-            menu.add(ContextMenu::Edit, tr("Duplicate"), place.duplicate, QStringLiteral("stDuplicateLayer"))
-                ->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_D));
+            clip->addAction(tr("Duplicate"), QKeySequence(Qt::CTRL | Qt::Key_D), this, place.duplicate)
+                ->setObjectName(QStringLiteral("stDuplicateLayer"));
         const QString name = own->name;
         menu.add(ContextMenu::Edit, tr("Rename…"), [this, layerId, name]() {
             bool ok = false;
@@ -9022,20 +9026,32 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
     const quint32 id = item->data(0, IdRole).toUInt();
 
     /* ---- This place: what can be made here ---- */
-    menu.add(ContextMenu::Place, tr("+ Cue List…"), [this]() { slotNewCueList(); });
+    /* On a cue or layer all four creators apply: one New submenu (UX-80). */
+    const bool onCueOrLayer = (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks;
+    QMenu *newMenu = onCueOrLayer ? menu.addMenu(ContextMenu::Place, tr("New"), QStringLiteral("stNewMenu")) : nullptr;
+    auto addNew = [&](const QString &text, const std::function<void()> &fn, const QString &name = QString()) {
+        if (newMenu == nullptr)
+        {
+            menu.add(ContextMenu::Place, text, fn, name);
+            return;
+        }
+        QAction *a = newMenu->addAction(text, this, fn);
+        if (!name.isEmpty())
+            a->setObjectName(name);
+    };
+    addNew(tr("+ Cue List…"), [this]() { slotNewCueList(); });
     {
         // R3: busking hits, beside the cue lists; Q154: made where it is to
         // fire -- for this cue, this list, the production.
         const bool onCue = (kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks;
         const bool onList = (kind == ListNode || kind == SectionNode) && !inLooks;
-        menu.add(ContextMenu::Place, onCue ? tr("+ Hit for This Cue") : onList ? tr("+ Hit for This List")
-                                                                               : tr("+ Hit"),
-                 [this]() { newHit(); }, QStringLiteral("stNewLook"));
+        addNew(onCue ? tr("+ Hit for This Cue") : onList ? tr("+ Hit for This List") : tr("+ Hit"),
+               [this]() { newHit(); }, QStringLiteral("stNewLook"));
     }
     if (kind != ProductionNode && !inLooks)
-        menu.add(ContextMenu::Place, tr("+ Cue"), [this]() { slotNewCue(); });
+        addNew(tr("+ Cue"), [this]() { slotNewCue(); });
     if ((kind == CueNode || kind == LayerNode || kind == TrackedLayerNode) && !inLooks)
-        menu.add(ContextMenu::Place, tr("+ Sub-cue"), [this]() { newSubCue(); }, QStringLiteral("stNewSubCueMenu"));
+        addNew(tr("+ Sub-cue"), [this]() { newSubCue(); }, QStringLiteral("stNewSubCueMenu"));
     if (inLooks && kind != CueNode && kind != LayerNode)
     {
         const quint32 listId = currentListId();

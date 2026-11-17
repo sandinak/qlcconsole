@@ -10369,7 +10369,8 @@ void MonitorGraphicsView::populateOrganiseMenu(QMenu *menu,
     }
     // A layer of the plot, not of a cue: Selection ▸ New Layer from
     // Selection makes that.
-    menu->addAction(tr("New Map Layer from Selection…"), this, [this, objects]() {
+    moveMenu->addSeparator();
+    moveMenu->addAction(tr("New Map Layer from Selection…"), this, [this, objects]() {
         MonitorProperties *p = m_doc->monitorProperties();
         bool ok = false;
         const QString name = QInputDialog::getText(this, tr("New Map Layer"), tr("Layer name:"),
@@ -10680,9 +10681,14 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
        these: what only the plot does with it. */
     /* Where this one lands, on its own -- no need to select it first, and it
        stays drawn while you look at something else. */
+    /* What only the plot does with a fixture is one "Plot Setup" submenu, so
+       the menu stays short (UX-80): footprint, masking, mounting, height,
+       studio component. */
+    QMenu *plotSetup = menu->addMenu(tr("Plot Setup"));
+    plotSetup->setObjectName(QStringLiteral("plotSetupMenu"));
     {
         const bool fpOn = fixtureFootprintShown(fid);
-        QAction *fp = menu->addAction(tr("Show Light Footprint"), this, [this, fid]() {
+        QAction *fp = plotSetup->addAction(tr("Show Light Footprint"), this, [this, fid]() {
             setFixtureFootprintShown(fid, !fixtureFootprintShown(fid));
         });
         fp->setCheckable(true);
@@ -10690,7 +10696,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         fp->setToolTip(tr("Draw where this head's beam lands, in Top view"));
         /* Tape over the front of the light: opens its Fixture Properties,
            where the Masking row is. */
-        QAction *mask = menu->addAction(tr("Masking…"), this, [fid]() {
+        QAction *mask = plotSetup->addAction(tr("Masking…"), this, [fid]() {
             if (Monitor *mon = Monitor::instance())
                 mon->editFixturesProperties({ fid });
         });
@@ -10699,7 +10705,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         /* A free string is laid on the plan: click where it goes. */
         if (rp.pixelPath == PixelPath::FreeString)
         {
-            QAction *add = menu->addAction(tr("Add Anchor"), this, [this, fid]() { beginAddAnchors(fid); });
+            QAction *add = plotSetup->addAction(tr("Add Anchor"), this, [this, fid]() { beginAddAnchors(fid); });
             add->setObjectName(QStringLiteral("plotAddStringAnchor"));
             add->setToolTip(tr("Click on the plan for each anchor after the last: where the string "
                                "is tied or runs through"));
@@ -10708,8 +10714,8 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
     }
 
     // Mounting.
-    menu->addSeparator();
-    QMenu *mountMenu = menu->addMenu(tr("Mount on"));
+    plotSetup->addSeparator();
+    QMenu *mountMenu = plotSetup->addMenu(tr("Mount on"));
     {
         /* Every selected fixture when this one is among them ("selecting
            multiple fixtures and using attach to truss still only moves 1"),
@@ -10921,7 +10927,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
         }
     }
     // In the show's units, as the plot's other dialogs.
-    QAction *heightAct = menu->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
+    QAction *heightAct = plotSetup->addAction(MonitorFixtureItem::mountingHeightText(props, fid),
                     this, [this, fid]() {
         if (!MonitorFixtureItem::askMountingHeight(this, m_doc->monitorProperties(), fid))
             return;
@@ -10943,7 +10949,7 @@ void MonitorGraphicsView::populateItemMenu(QMenu *menu, ContextMenu &cm, const Q
             if (ng != 0)
                 openStudioGroupEditor(ng);
         });
-    menu->addAction(tr("Stamp Studio Component…"), this, [this, fid]() {
+    plotSetup->addAction(tr("Stamp Studio Component…"), this, [this, fid]() {
         if (selectedFixtureCount() == 0)
             selectMapItem(QStringLiteral("fixture"), fid);
         browseStudioComponents();

@@ -472,7 +472,7 @@ void SelectionSync_Test::plotMenu()
     QVERIFY2(texts.contains("Selection ▸ New Layer from Selection"), qPrintable(texts.join(" | ")));
     QVERIFY2(texts.contains("Selection ▸ Create Fixture Group from Selection…"), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.contains("Create Fixture Group from Selection…"), qPrintable(texts.join(" | ")));
-    QVERIFY2(texts.contains("New Map Layer from Selection…"), qPrintable(texts.join(" | ")));
+    QVERIFY2(texts.contains("Move to Layer ▸ New Map Layer from Selection…"), qPrintable(texts.join(" | ")));
     QVERIFY2(!texts.contains("New Layer from Selection…"), qPrintable(texts.join(" | ")));
 }
 

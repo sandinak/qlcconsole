@@ -122,17 +122,6 @@ static int realItems(const QMenu *m)
 
 static const int kMaxTopLevel = 14;
 
-/* Menus over the limit that are still to be split (CONTEXT_MENUS.md section 5):
-   a ceiling for each, so they cannot grow, and the list can only shrink. */
-static int ceilingFor(const char *where)
-{
-    static const QHash<QString, int> known = {
-        { QStringLiteral("aLayerHasOneMenuEverywhere"), 20 },      // the Show Tree's layer rows
-        { QStringLiteral("theRigViewFollowsTheCanon"), 19 },       // a fixture on the plot
-    };
-    return known.value(QLatin1String(where), kMaxTopLevel);
-}
-
 /* A picker lists the show's own things (folders, layers, uses, circuits):
    its length is the show's, and a one-choice picker keeps its place so the
    menu does not change shape. */
@@ -179,7 +168,7 @@ static void recordMenu(const QMenu *menu, const char *where)
         t << (a->isSeparator() ? QStringLiteral("---") : (a->menu() ? a->text() + " >" : a->text()));
     const QString line = QStringLiteral("%1 | %2 | %3").arg(QLatin1String(where)).arg(realItems(menu)).arg(t.join(" ; "));
     g_inventory << line;
-    for (const QString &p : lawProblems(menu, ceilingFor(where)))
+    for (const QString &p : lawProblems(menu, kMaxTopLevel))
         g_lawProblems << (p + "\n    in: " + line);
 }
 

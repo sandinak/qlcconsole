@@ -225,6 +225,7 @@ protected:
 protected:
     QMenu* m_customMenu;
     QMenu* m_editMenu;
+    QAction* m_editDeleteSeparator;   ///< a widget's own menu goes in before it
     QMenu* m_addMenu;
     // Submenus of m_editMenu that also belong in buildEmptyCanvasMenu() —
     // kept as members (rather than initMenuBar() locals) so both can use

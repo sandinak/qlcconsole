@@ -129,6 +129,7 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     , m_stackingLowerAction(NULL)
     , m_customMenu(NULL)
     , m_editMenu(NULL)
+    , m_editDeleteSeparator(NULL)
     , m_addMenu(NULL)
     , m_bgMenu(NULL)
     , m_fgMenu(NULL)
@@ -591,11 +592,8 @@ void VirtualConsole::initMenuBar()
     /* Edit menu */
     m_editMenu = new QMenu(this);
     m_editMenu->setTitle(tr("&Edit"));
-    m_editMenu->addAction(m_editCutAction);
-    m_editMenu->addAction(m_editCopyAction);
-    m_editMenu->addAction(m_editPasteAction);
-    m_editMenu->addAction(m_editDeleteAction);
-    m_editMenu->addSeparator();
+    // Open and edit first, the clipboard next, the widget's own, and Delete
+    // last (UX-79).
     m_editMenu->addAction(m_editPropertiesAction);
     m_editMenu->addAction(m_editRenameAction);
     m_editMenu->addAction(m_editSwapAction);
@@ -638,10 +636,15 @@ void VirtualConsole::initMenuBar()
     stackMenu->addAction(m_stackingRaiseAction);
     stackMenu->addAction(m_stackingLowerAction);
 
-    /* Add a separator that separates the common edit items from a custom
-       widget menu that gets appended to the edit menu when a selected
-       widget provides one. */
     m_editMenu->addSeparator();
+    m_editMenu->addAction(m_editCutAction);
+    m_editMenu->addAction(m_editCopyAction);
+    m_editMenu->addAction(m_editPasteAction);
+    /* A custom widget menu goes in before this separator, and Delete is the
+       last item. */
+    m_editMenu->addSeparator();
+    m_editDeleteSeparator = m_editMenu->actions().last();
+    m_editMenu->addAction(m_editDeleteAction);
 
     /* Toolbar */
     m_toolbar = new QToolBar(this);
@@ -731,7 +734,7 @@ void VirtualConsole::updateCustomMenu()
         VCWidget* latestWidget = m_selectedWidgets.last();
         m_customMenu = latestWidget->customMenu(m_editMenu);
         if (m_customMenu != NULL)
-            m_editMenu->addMenu(m_customMenu);
+            m_editMenu->insertMenu(m_editDeleteSeparator, m_customMenu);
     }
     else
     {
@@ -739,7 +742,7 @@ void VirtualConsole::updateCustomMenu()
         Q_ASSERT(contents() != NULL);
         m_customMenu = contents()->customMenu(m_editMenu);
         if (m_customMenu != NULL)
-            m_editMenu->addMenu(m_customMenu);
+            m_editMenu->insertMenu(m_editDeleteSeparator, m_customMenu);
     }
 }
 
