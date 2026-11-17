@@ -2873,7 +2873,7 @@ void ConnectionsTree_Test::theMapColoursChannelsByKindAndValue()
 
     // The legend under the grid: a bright red swatch below the last row.
     bool legend = false;
-    for (int y = high.height() - 24; y < high.height() && !legend; ++y)
+    for (int y = high.height() - 70; y < high.height() && !legend; ++y)
         for (int x = 0; x < high.width(); ++x)
             if (QColor(high.pixel(x, y)) == UniverseOutputView::fillFor(UniverseOutputView::Red, 255))
             {

@@ -2069,7 +2069,7 @@ void OutputRules_Test::testChannelsSitOnTopAndReleaseTogether()
     QVERIFY(t->setOn(false));
     frame(Stage);
     QCOMPARE(sent(Stage), 120);
-    QCOMPARE(sent(300), 0);
+    QCOMPARE(frame(300), 0);
     QCOMPARE(t->heldCount(), 0);
 }
 
