@@ -203,6 +203,8 @@ int FireSpreadPerf_Test::tickTo(qint64 ms, double *tickMs, double *applyMs)
 
 void FireSpreadPerf_Test::costsWhileTheFireSpreads()
 {
+    if (qEnvironmentVariableIsEmpty("FIRE_PERF") && qEnvironmentVariableIsEmpty("FIRE_PERF_SHOW"))
+        QSKIP("the full measurement runs by hand: FIRE_PERF=1 (or FIRE_PERF_SHOW=<show>)");
     Doc *doc = m_app->doc();
     const bool moveSpeed = StructureStudioView::moveSpeed();
     StructureStudioView::setMoveSpeed(false);
