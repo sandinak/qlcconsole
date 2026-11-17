@@ -43,6 +43,7 @@
 #include "showcontrol.h"
 #include "mastertimer.h"
 #include "padrun.h"
+#include "outputrulekeeper.h"
 #include "controllerjobs.h"
 #include "qlcfile.h"
 #include "qlcfixturedef.h"
