@@ -164,7 +164,7 @@ void MonitorInventoryPanel::reload()
     int total = 0, network = 0;
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx == NULL || fx->isPatched() || onPlot.contains(fx->id()))
+        if (fx == NULL || onPlot.contains(fx->id()))
             continue;
         // A curtain is on the plot as its drape, not as a fixture to place.
         if (Scenery::isCurtainFixture(fx))
@@ -231,8 +231,8 @@ void MonitorInventoryPanel::reload()
     }
 
     if (total == 0)
-        m_count->setText(tr("Nothing waiting. Fixtures staged with Add to inventory appear here "
-                            "until they are placed."));
+        m_count->setText(tr("Nothing waiting. Fixtures that are not on the plot yet, staged or patched, "
+                            "appear here until they are placed."));
     else
         m_count->setText(tr("%1 waiting to be placed (%2 network).").arg(total).arg(network));
 }

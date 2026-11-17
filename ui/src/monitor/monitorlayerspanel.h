@@ -35,6 +35,9 @@
 #include <QColor>
 #include <QTreeWidget>
 #include <QDropEvent>
+#include <QDrag>
+#include <QMimeData>
+#include <QDataStream>
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include "qlceventpos.h"
@@ -57,6 +60,9 @@ class LayersTreeWidget final : public QTreeWidget
     Q_OBJECT
 public:
     explicit LayersTreeWidget(QWidget *parent = nullptr) : QTreeWidget(parent) {}
+
+    /** The role a row carries when it is a fixture that is not on the plot yet. */
+    static constexpr int UnplacedFidRole = Qt::UserRole + 77;
 
 private:
     int m_scrollRoom = 0;           ///< how far the bar lies over the list
@@ -111,6 +117,25 @@ protected:
 
     void startDrag(Qt::DropActions supportedActions) override
     {
+        /* Fixtures not on the plot yet: dragged out as the plot's own fixture
+           drop (the Inventory's), onto the plot, a truss, a riser or a tower. */
+        QList<quint32> ids;
+        foreach (QTreeWidgetItem *it, selectedItems())
+            if (it->data(0, UnplacedFidRole).isValid())
+                ids << it->data(0, UnplacedFidRole).toUInt();
+        if (!ids.isEmpty())
+        {
+            QByteArray data;
+            QDataStream st(&data, QIODevice::WriteOnly);
+            foreach (quint32 fid, ids)
+                st << fid;
+            QMimeData *mime = new QMimeData;
+            mime->setData(QStringLiteral("application/x-qlc-fid"), data);
+            QDrag *drag = new QDrag(this);
+            drag->setMimeData(mime);
+            drag->exec(Qt::CopyAction, Qt::CopyAction);
+            return;
+        }
         emit dragStarted();
         QTreeWidget::startDrag(supportedActions);   // runs the nested drag loop + delivers the drop
         emit dragFinished();                        // loop has exited — safe to rebuild now

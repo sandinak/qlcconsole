@@ -439,7 +439,7 @@ private slots:
     void buildingARigStepByStepThroughRealUiStaysConsistent();
 
     /** The Studio's Inventory panel lists staged fixtures that are not on the plot yet. */
-    void inventoryPanelListsOnlyStagedFixturesNotOnThePlot();
+    void inventoryPanelListsEveryFixtureNotOnThePlot();
     /** Dragging a staged fixture onto the plot places it where it was dropped. */
     void droppingAnInventoryFixtureOnThePlotPlacesIt();
     /** ...and dropping it onto a truss mounts it there, as a dragged fixture would. */
@@ -1089,6 +1089,12 @@ private slots:
     void review_undoingARepatchLeavesTheTurnAlone();
     /** A first patch proposes; a rig put back over it, or Operate, never. */
     void aFirstPatchProposesAndPuttingItBackNever();
+    /** A WLED staff placed on the Props layer is drawn in the plot and the
+     *  Rig Overview, staged or patched. */
+    void aPlacedStaffIsDrawn_data();
+    void aPlacedStaffIsDrawn();
+    /** The side list names every fixture: placed, unplaced, staged, WLED. */
+    void theSideListNamesEveryFixture();
 
 private:
     Doc* m_doc;

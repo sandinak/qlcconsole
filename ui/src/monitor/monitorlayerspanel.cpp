@@ -90,7 +90,9 @@ static QIcon glyphIcon(const QString &glyph, const QColor &c)
 #include <QtMath>
 #include "stagetarget.h"
 #include "truss.h"
+#include <algorithm>
 #include "fixture.h"
+#include "scenery.h"
 #include "doc.h"
 #include "itemicons.h"
 #include "editkeys.h"
@@ -1743,6 +1745,43 @@ void MonitorLayersPanel::reload()
             QTreeWidgetItem *fgNode = addFixtureGroupNode(host, fg);
             foreach (const ItemDesc &d, members)
                 addItemLeaf(fgNode, d);
+        }
+    }
+
+    /* Every fixture that is not on the plot yet, staged or patched, listed by
+       name so it can be found and dragged on. (The rows above are the placed
+       ones: only what has a place could be listed, so a fixture waiting to be
+       placed was in no row of this list at all.) */
+    {
+        QList<Fixture *> waiting;
+        const QList<quint32> placed = m_props->fixtureItemsID();
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (fx != nullptr && !placed.contains(fx->id()) && !Scenery::isCurtainFixture(fx))
+                waiting << fx;
+        if (!waiting.isEmpty())
+        {
+            std::sort(waiting.begin(), waiting.end(), [](Fixture *a, Fixture *b) {
+                return a->name().compare(b->name(), Qt::CaseInsensitive) < 0;
+            });
+            QTreeWidgetItem *node = new QTreeWidgetItem(m_tree);
+            node->setText(0, tr("Not on the plot (%1)").arg(waiting.size()));
+            node->setToolTip(0, tr("Fixtures waiting to be placed, staged or patched: drag one onto the plot"));
+            node->setFirstColumnSpanned(true);
+            node->setFlags(Qt::ItemIsEnabled);
+            node->setData(0, NodeTypeRole, -1);
+            foreach (Fixture *fx, waiting)
+            {
+                QTreeWidgetItem *leaf = new QTreeWidgetItem(node);
+                leaf->setText(0, fx->name());
+                leaf->setIcon(0, ItemIcons::fixtureIcon(fx));
+                leaf->setFirstColumnSpanned(true);
+                leaf->setData(0, NodeTypeRole, -1);
+                leaf->setData(0, LayersTreeWidget::UnplacedFidRole, fx->id());
+                leaf->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable
+                               | (m_editable ? Qt::ItemIsDragEnabled : Qt::NoItemFlags));
+                leaf->setToolTip(0, tr("Drag onto the plot -- onto a truss, riser or tower to mount it"));
+            }
+            node->setExpanded(true);
         }
     }
 

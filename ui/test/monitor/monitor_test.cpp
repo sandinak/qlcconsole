@@ -2310,6 +2310,147 @@ void Monitor_Test::anObjectHeldByItsLayerVsItsOwnLock()
     delete doc;
 }
 
+/* "The staff is not appearing in the rig view if placed": a WLED Effect Mode
+   fixture with the Staff look, placed on a Props layer (no height), shows up
+   in the plot and in the Rig Overview whether it is patched or only staged.
+   Seen as pixels: the view painted with its layer shown differs from the
+   same view with the layer hidden. */
+void Monitor_Test::aPlacedStaffIsDrawn_data()
+{
+    QTest::addColumn<bool>("patched");
+    QTest::addColumn<bool>("overview");
+    QTest::newRow("staged, plot") << false << false;
+    QTest::newRow("patched, plot") << true << false;
+    QTest::newRow("staged, overview") << false << true;
+    QTest::newRow("patched, overview") << true << true;
+}
+
+void Monitor_Test::aPlacedStaffIsDrawn()
+{
+    QFETCH(bool, patched);
+    QFETCH(bool, overview);
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    Fixture *staff = new Fixture(doc.data());
+    staff->setName("Office Staff");
+    staff->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    staff->setConnection(Fixture::Network);
+    staff->setTransport(Fixture::WledTransport);
+    staff->setStageLook(Fixture::StaffLook);
+    staff->setPatched(patched);
+    QVERIFY(doc->addFixture(staff));
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 layer = props->addLayer("Props");
+    props->setFixturePosition(staff->id(), 0, 0, QVector3D(7955.28f, 4226.56f, 0.0f));
+    props->setFixtureLayer(staff->id(), layer);
+    props->setActiveLayerId(layer);
+
+    QWidget parent;
+    parent.resize(1200, 800);
+    QWidget *shown = nullptr;
+    Monitor *mon = nullptr;
+    StructureStudioView *view = nullptr;
+    if (overview)
+    {
+        view = new StructureStudioView(doc.data(), StructureStudioView::StageKind, 0, &parent);
+        view->setPlane(StructureStudioView::Angled);
+        view->resize(1200, 800);
+        shown = view;
+    }
+    else
+    {
+        mon = new Monitor(&parent, doc.data());
+        mon->resize(1200, 800);
+        shown = mon->m_graphicsView;
+        QVERIFY2(mon->m_graphicsView->m_fixtures.contains(staff->id()), "the plot has an item for it");
+    }
+    parent.show();
+    QApplication::processEvents();
+
+    auto paint = [&](bool layerVisible) {
+        props->setLayerVisible(layer, layerVisible);
+        if (view != nullptr)
+            view->reload();
+        else
+        {
+            mon->m_graphicsView->refreshAllItems();
+            mon->m_graphicsView->centerOn(mon->m_graphicsView->m_fixtures.value(staff->id()));
+        }
+        QApplication::processEvents();
+        return shown->grab().toImage().convertToFormat(QImage::Format_RGB32);
+    };
+    const QImage with = paint(true);
+    const QImage without = paint(false);
+    QCOMPARE(with.size(), without.size());
+    int differing = 0;
+    for (int y = 0; y < with.height(); ++y)
+        for (int x = 0; x < with.width(); ++x)
+            if (with.pixel(x, y) != without.pixel(x, y))
+                ++differing;
+    QVERIFY2(differing > 20, qPrintable(QStringLiteral("the staff paints %1 pixels").arg(differing)));
+}
+
+/* "No individual fixtures show up in the side bar": the rendered rows name a
+   placed fixture and every one that is not on the plot -- a staged WLED
+   staff, a patched one never placed -- and each unplaced row can be dragged
+   onto the plot. */
+void Monitor_Test::theSideListNamesEveryFixture()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    auto wled = [&](const char *name, bool patched, quint32 addr) {
+        Fixture *f = new Fixture(doc.data());
+        f->setName(name);
+        f->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+        f->setConnection(Fixture::Network);
+        f->setTransport(Fixture::WledTransport);
+        f->setStageLook(Fixture::StaffLook);
+        f->setPatched(patched);
+        f->setAddress(addr);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+    Fixture *staged = wled("Office Staff", false, 0);
+    Fixture *unplacedPatched = wled("OfficeStaff", true, 30);
+    Fixture *placed = wled("Placed Staff", true, 60);
+    QVERIFY(staged && unplacedPatched && placed);
+    doc->monitorProperties()->setFixturePosition(placed->id(), 0, 0, QVector3D(3000, 3000, 0));
+
+    QWidget parent;
+    Monitor mon(&parent, doc.data());
+    parent.show();
+    QApplication::processEvents();
+    MonitorLayersPanel *panel = mon.findChild<MonitorLayersPanel *>();
+    QVERIFY(panel != nullptr);
+    panel->reload();
+    QTreeWidget *tree = panel->findChild<QTreeWidget *>();
+    QVERIFY(tree != nullptr);
+
+    QMap<QString, QTreeWidgetItem *> rows;
+    for (QTreeWidgetItemIterator it(tree); *it != nullptr; ++it)
+        rows.insert((*it)->text(0), *it);
+    QVERIFY2(rows.contains("Placed Staff"), "the placed fixture has its row");
+    for (const char *n : { "Office Staff", "OfficeStaff" })
+    {
+        QVERIFY2(rows.contains(n), n);
+        QVERIFY(rows.value(n)->data(0, LayersTreeWidget::UnplacedFidRole).isValid());
+    }
+    QCOMPARE(rows.value("Office Staff")->data(0, LayersTreeWidget::UnplacedFidRole).toUInt(), staged->id());
+    QVERIFY(!rows.value("Placed Staff")->data(0, LayersTreeWidget::UnplacedFidRole).isValid());
+    // Findable by name.
+    QLineEdit *search = panel->m_search;
+    if (search != nullptr)
+    {
+        search->setText("Office");
+        QApplication::processEvents();
+        QVERIFY(!rows.value("Office Staff")->isHidden());
+        QVERIFY(rows.value("Placed Staff")->isHidden());
+    }
+}
+
 QTEST_MAIN(Monitor_Test)
 
 /****************************************************************************
@@ -15671,7 +15812,7 @@ bool dropFixtureAtCentre(MonitorGraphicsView *gv, quint32 fid)
 }
 } // namespace
 
-void Monitor_Test::inventoryPanelListsOnlyStagedFixturesNotOnThePlot()
+void Monitor_Test::inventoryPanelListsEveryFixtureNotOnThePlot()
 {
     FixtureCleanup cleanup(m_doc);
     Fixture *staged = stagedFixture(m_doc, "Staged Bar", &cleanup);
@@ -15688,13 +15829,29 @@ void Monitor_Test::inventoryPanelListsOnlyStagedFixturesNotOnThePlot()
     QVERIFY(panel != nullptr);
     panel->reload();
 
+    // Patched or staged, a fixture that is not on the plot is waiting to be placed.
     QStringList names;
-    QCOMPARE(inventoryLeaves(panel, &names), 1);
-    QCOMPARE(names.first(), QString("Staged Bar"));
+    QCOMPARE(inventoryLeaves(panel, &names), 2);
+    QVERIFY(names.contains(QStringLiteral("Staged Bar")));
+    QVERIFY(names.contains(QStringLiteral("Patched Bar")));
 
     // Once it is on the plot it has left the queue.
     rig.gv->addFixture(staged->id(), QPointF(0, 0));
+    rig.gv->addFixture(patched->id(), QPointF(0, 0));
     panel->reload();
+    QCOMPARE(inventoryLeaves(panel), 0);
+    // ...and a patched one dropped from the panel is placed and stays patched.
+    Fixture *again = new Fixture(m_doc);
+    again->setName("Patched Drop");
+    again->setChannels(3);
+    again->setAddress(300);
+    QVERIFY(m_doc->addFixture(again));
+    cleanup.ids << again->id();
+    panel->reload();
+    QCOMPARE(inventoryLeaves(panel), 1);
+    QVERIFY(dropFixtureAtCentre(rig.gv, again->id()));
+    QVERIFY(rig.gv->fixturesID().contains(again->id()));
+    QVERIFY(again->isPatched());
     QCOMPARE(inventoryLeaves(panel), 0);
 }
 
