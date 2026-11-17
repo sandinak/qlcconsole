@@ -548,12 +548,19 @@ void EffectInstance::runTick()
     // state.done (it can finish early). Then "release" stops driving now
     // (fixtures fall back to the base); "hold" keeps this final frame. Either
     // way the frozen flag makes the next tick a no-op (see the top of runTick).
+    /* A script that ends when it is done (effect.endsWhenDone: Fire Spread
+       once every head burns), run Once to Hold with its Length on auto:
+       then, and not at the cue's time. Release still ends on time. */
     if (!runs.loops() && !m_oneShotDone)
     {
         const qint64 el = nowMs();
+        const bool byScript = runs.runs == 1 && !runs.release && runs.lengthMs <= 0
+                              && m_script.endsWhenDone();
+        const bool done = (runs.runs == 1 && (m_script.isOneShot() || byScript))
+                          && m_state.property("done").toBool();
         if (m_cycleEnd >= 0.0 ? m_cycleDone
-            : m_runLenMs <= 0 || el >= qint64(m_runLenMs) * runs.runs
-            || (runs.runs == 1 && m_script.isOneShot() && m_state.property("done").toBool()))
+            : byScript ? done
+            : m_runLenMs <= 0 || el >= qint64(m_runLenMs) * runs.runs || done)
         {
             m_oneShotDone = true;
             if (runs.release)

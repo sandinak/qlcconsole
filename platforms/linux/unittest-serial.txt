@@ -61,3 +61,8 @@ plugins/hid/test
 # over the usual 10 s because the timing IS the input; the longest test, the
 # clone flip, runs ~5 s); next to other legs' tests a chord's timer can be late.
 engine/test/padtraces
+
+# fireSpreadHoldsAsItEndsUntilLetGo and fireSpreadCastsOverWhatIsThere run a
+# real scene through the effect runner, which ticks on its own wall-clock
+# timer: a held frame is checked over real time (Q259).
+engine/test/spreadeffects

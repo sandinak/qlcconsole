@@ -19,6 +19,7 @@
 
 #include <QtTest>
 #include <QBuffer>
+#include <QFormLayout>
 #include <QXmlStreamWriter>
 #include <QScrollArea>
 #include <QToolButton>
@@ -2047,6 +2048,92 @@ void LookEditor_Test::fireSpreadOffersFrontAndBehindColours()
     QCOMPARE(look->effectParamValues().value("frontWidth"), 3.0);
     flicker->setCurrentIndex(0);
     QCOMPARE(look->effectParamValues().value("flickerBehind"), 0.0);
+}
+
+void LookEditor_Test::fireSpreadShowsItsIntensity()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    {
+        LookEditor ed(&doc);
+        ed.setPalette(look->id());
+        QDoubleSpinBox *inten = ed.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
+        QVERIFY2(inten != nullptr, "no Intensity setting");
+        QCOMPARE(inten->value(), 100.0);
+        QCOMPARE(inten->minimum(), 0.0);
+        QCOMPARE(inten->maximum(), 100.0);
+        QCOMPARE(inten->suffix(), QString("%"));
+        QCOMPARE(inten->text(), QString("100%"));
+        // Its row is called Intensity, beside the other settings.
+        QWidget *row = inten->parentWidget();
+        QVERIFY(row != nullptr && row->parentWidget() != nullptr);
+        QFormLayout *form = nullptr;
+        for (QFormLayout *fl : row->parentWidget()->findChildren<QFormLayout *>())
+            if (fl->indexOf(row) >= 0)
+                form = fl;
+        QVERIFY2(form != nullptr, "the Intensity field is not in the settings form");
+        QLabel *name = qobject_cast<QLabel *>(form->labelForField(row));
+        QVERIFY(name != nullptr);
+        QCOMPARE(name->text(), QString("Intensity"));
+        QVERIFY(ed.findChild<QWidget *>("effectParam_flare") != nullptr);
+        // No second, unnamed brightness beside it.
+        QVERIFY(ed.findChild<QWidget *>("effectParam_intensity") == nullptr);
+
+        inten->setValue(50.0);
+        QCOMPARE(look->effectParamValues().value("fireIntensity"), 50.0);
+
+        QDoubleSpinBox *len = ed.findChild<QDoubleSpinBox *>("effectRunLength");
+        QVERIFY(len != nullptr);
+        QVERIFY2(len->toolTip().contains("reached every light"), qPrintable(len->toolTip()));
+    }
+
+    // Kept in the show file.
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    QXmlStreamWriter w(&buf);
+    QVERIFY(look->saveXML(&w));
+    buf.close();
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&buf);
+    r.readNextStartElement();
+    QLCPalette *back = new QLCPalette(QLCPalette::Effect, &doc);
+    QVERIFY(back->loadXML(r));
+    QCOMPARE(back->effectParamValues().value("fireIntensity"), 50.0);
+    delete back;
+
+    // The page opens on it again.
+    LookEditor again(&doc);
+    again.setPalette(look->id());
+    QDoubleSpinBox *inten = again.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
+    QVERIFY(inten != nullptr);
+    QCOMPARE(inten->text(), QString("50%"));
+
+    // A look saved with the old 0-1 "intensity" at 0.5 opens on 50%.
+    {
+        QLCPalette src(QLCPalette::Effect, &doc);
+        src.setID(look->id());
+        src.setScriptPath(look->scriptPath());
+        src.setEffectParamValue("intensity", 0.5);
+        QBuffer b2;
+        b2.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w2(&b2);
+        QVERIFY(src.saveXML(&w2));
+        b2.close();
+        b2.open(QIODevice::ReadOnly);
+        QXmlStreamReader r2(&b2);
+        r2.readNextStartElement();
+        look->clearEffectParamValues();
+        const QString path = look->scriptPath();
+        QVERIFY(look->loadXML(r2));
+        look->setScriptPath(path);              // saved by name; a show's load finds the file
+    }
+    LookEditor oldLook(&doc);
+    oldLook.setPalette(look->id());
+    QDoubleSpinBox *fromOld = oldLook.findChild<QDoubleSpinBox *>("effectParam_fireIntensity");
+    QVERIFY(fromOld != nullptr);
+    QCOMPARE(fromOld->text(), QString("50%"));
+    QVERIFY(oldLook.findChild<QWidget *>("effectParam_intensity") == nullptr);
 }
 
 /* Pictures of Fire Spread's settings at three window sizes, as it opens

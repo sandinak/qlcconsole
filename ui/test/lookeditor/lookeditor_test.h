@@ -104,6 +104,13 @@ private slots:
     void fireSpreadOffersFrontAndBehindColours();
     /** Fire Spread's settings pictured (QLC_SHOT_DIR only). */
     void fireSpreadSettingsShots();
+    /** Fire Spread's Intensity (board Q259): a row named Intensity with the
+     *  effect's other settings, 100% to start, 0 to 100 %; set to 50 % it is
+     *  kept on the look and in the show file, and the page opens on it
+     *  again; a look saved with the old 0-1 "intensity" at 0.5 opens on
+     *  50 %. Its run Length's tooltip says auto ends when the fire has
+     *  reached every light. */
+    void fireSpreadShowsItsIntensity();
     /** "if we go from Red to Dark Red .. we should auto update the title ..
      *  only update the color part .. the folder should stay consistent."
      *  The name field follows live; the value and the name are one Undo. */

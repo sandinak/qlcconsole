@@ -1896,6 +1896,16 @@ bool QLCPalette::loadXML(QXmlStreamReader &doc)
             else
                 doc.skipCurrentElement();
         }
+        /* Fire Spread's Intensity was an unnamed 0-1 "intensity" until
+           board Q259: a look saved with it becomes its Intensity (0.5 ->
+           50 %), shown and played as one setting. */
+        if (QFileInfo(m_scriptPath).completeBaseName() == QLatin1String("fire-spread")
+            && m_effectParamValues.contains(QStringLiteral("intensity")))
+        {
+            const double old = m_effectParamValues.take(QStringLiteral("intensity"));
+            if (!m_effectParamValues.contains(QStringLiteral("fireIntensity")))
+                m_effectParamValues[QStringLiteral("fireIntensity")] = qBound(0.0, old, 1.0) * 100.0;
+        }
         // readNextStartElement() has consumed </Palette> — reader is at EndElement.
     }
     else if (m_type == Gobo)

@@ -51,7 +51,7 @@ namespace
             case VCEffectControl::Rate: return { "rate", "density", "frequency", "freq" };
             case VCEffectControl::Spread: return { "spread", "phaseSpread", "offset" };
             case VCEffectControl::Direction: return { "direction", "reverse" };
-            case VCEffectControl::Intensity: return { "intensity", "level", "gain", "dimmer" };
+            case VCEffectControl::Intensity: return { "intensity", "fireIntensity", "level", "gain", "dimmer" };
             default: return {};
         }
     }
