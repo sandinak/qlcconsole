@@ -12074,3 +12074,85 @@ void ShowTree_Test::ownFadesAreReviewedAndShared()
     QCOMPARE(st->cue(c1)->layer(l1)->look(fx.key)->fadeIn, 6000);
     QCOMPARE(st->cue(c2)->layer(l2)->look(fx.key)->fadeIn, 6000);
 }
+
+/* A reusable cue in a show saved before effect fades were shared: use 2's
+   two Dimmer-effect layers, Front and Back, have fades of their own (4 s,
+   1 s). A layer inserted at the top of use 1, the layers reordered and one
+   deleted: every edit rebuilds use 2, and each of its layers keeps its own
+   fade -- matched by what it is, not by where it is. */
+void ShowTree_Test::reusableCueLayersKeepTheirOwnFadesWhenUseOneIsRearranged()
+{
+    FixtureGroup *front = group("Front", { m_fixtures[0] });
+    FixtureGroup *back = group("Back", { m_fixtures[1] });
+    FixtureGroup *side = group("Side", { m_fixtures[2] });
+    QLCPalette *pulse = new QLCPalette(QLCPalette::Effect, m_doc);
+    pulse->setName("Pulse");
+    m_doc->addPalette(pulse);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(listId, -1, "One");
+    const Look fx = st->lookForPalette(pulse->id());
+    const quint32 f1 = st->addLayer(c1, groupTarget(front->id()), "Front");
+    const quint32 b1 = st->addLayer(c1, groupTarget(back->id()), "Back");
+    QVERIFY(st->setLayerLook(c1, f1, fx));
+    QVERIFY(st->setLayerLook(c1, b1, fx));
+    const quint32 rid = st->makeCueReusable(c1, "RC");
+    QVERIFY(rid != invalidId());
+    const quint32 c2 = st->insertReusableCue(listId, 0, rid);
+    QVERIFY(c2 != invalidId());
+    auto layerOn = [st](quint32 cueId, quint32 groupId) -> const Layer * {
+        for (const Layer &l : st->cue(cueId)->layers)
+            if (l.target.groups == QList<quint32>({ groupId }))
+                return &l;
+        return nullptr;
+    };
+    QVERIFY(layerOn(c2, front->id()) != nullptr && layerOn(c2, back->id()) != nullptr);
+
+    // Saved, use 2's fades made its own: Front 4 s, Back 1 s.
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter w(&buffer);
+    st->saveXML(&w);
+    buffer.close();
+    QByteArray xml = buffer.data();
+    auto own = [&xml](quint32 layerId, const QByteArray &ms) {
+        const int at = xml.indexOf(QStringLiteral("<Layer ID=\"%1\"").arg(layerId).toUtf8());
+        const QByteArray was("FadeIn=\"cue\"");
+        const int fade = at < 0 ? -1 : xml.indexOf(was, at);
+        if (fade < 0 || fade > xml.indexOf("</Layer>", at))
+            return false;
+        xml.replace(fade, was.size(), "FadeIn=\"" + ms + "\"");
+        return true;
+    };
+    QVERIFY(own(layerOn(c2, front->id())->id, "4000"));
+    QVERIFY(own(layerOn(c2, back->id())->id, "1000"));
+    QXmlStreamReader rd(xml);
+    rd.readNextStartElement();
+    QVERIFY(st->loadXML(rd));
+    auto fadeOf = [&](quint32 groupId) {
+        const Layer *l = layerOn(c2, groupId);
+        const Look *look = l == nullptr ? nullptr : l->look(fx.key);
+        return look == nullptr ? -100 : look->fadeIn;
+    };
+    QCOMPARE(fadeOf(front->id()), 4000);
+    QCOMPARE(fadeOf(back->id()), 1000);
+
+    // A layer at the top of use 1: use 2 takes it, its own fades kept.
+    const quint32 s1 = st->addLayer(c1, groupTarget(side->id()), "Side");
+    QVERIFY(s1 != invalidId());
+    QVERIFY(!st->moveLayers({ qMakePair(c1, s1) }, c1, ShowTreeController::layerFirst).isEmpty());
+    QCOMPARE(st->cue(c1)->layers.first().id, s1);
+    QCOMPARE(st->cue(c2)->layers.count(), 3);
+    QCOMPARE(fadeOf(front->id()), 4000);
+    QCOMPARE(fadeOf(back->id()), 1000);
+    // Reordered: Back before Front.
+    const quint32 b1now = layerOn(c1, back->id())->id;
+    QVERIFY(!st->moveLayers({ qMakePair(c1, b1now) }, c1, ShowTreeController::layerFirst).isEmpty());
+    QCOMPARE(st->cue(c1)->layers.first().id, b1now);
+    QCOMPARE(fadeOf(front->id()), 4000);
+    QCOMPARE(fadeOf(back->id()), 1000);
+    // One deleted: the other keeps its own.
+    QVERIFY(st->removeLayer(c1, layerOn(c1, back->id())->id));
+    QVERIFY(layerOn(c2, back->id()) == nullptr);
+    QCOMPARE(fadeOf(front->id()), 4000);
+}

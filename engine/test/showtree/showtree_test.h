@@ -310,6 +310,9 @@ private slots:
     /** Show Review CUE-18 names such a reusable and its cues; its Fix
      *  makes the fades one, one undo step, shared from then on. */
     void ownFadesAreReviewedAndShared();
+    /** A reusable cue's use keeps each layer's own fades when another use
+     *  gets a layer inserted at the top, its layers reordered or deleted. */
+    void reusableCueLayersKeepTheirOwnFadesWhenUseOneIsRearranged();
 
 private:
     /** A reusable layer "Wash" in cues One (l1) and Two (l2), an effect
