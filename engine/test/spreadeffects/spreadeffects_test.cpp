@@ -607,6 +607,121 @@ void SpreadEffects_Test::fireSpreadOnTheShowsKinds()
     QVERIFY(barLit[39] > barLit[0]);
 }
 
+void SpreadEffects_Test::fireSpreadLeavesTheWashesDarkUntilItReachesThem()
+{
+    /* The show's washes, one from each place: an XL-450 on the centre
+       truss and one on the wide truss (RGB rows and white rows, no dimmer:
+       its 165ch mode), a wall washer on a step top (16 RGB pixels and 16
+       white, no dimmer: 64ch). A white emitter is no dimmer: told it had
+       one, Fire Spread left each pixel it hadn't reached to the look's
+       colour, so the washes were lit from the start. */
+    QLCFixtureDef *xlDef = loadDef(m_doc, kData + "Warmdance-XL-450.qxf");
+    QLCFixtureDef *washerDef = loadDef(m_doc, kFixtures + "Oppsk/Oppsk-Wall-Washer-Light-Bar.qxf");
+    QVERIFY(xlDef && washerDef);
+    // Where the show stands them (mm): the towers' trusses upstage, the
+    // step top downstage.
+    Fixture *trussC = place(m_doc, xlDef, "165ch", "T2-CW", 0, 0, QVector3D(4755.0f, 3463.0f, 1524.0f));
+    Fixture *trussW = place(m_doc, xlDef, "165ch", "T3-SW", 0, 170, QVector3D(7278.5f, 3640.1f, 1524.0f));
+    Fixture *stepTop = place(m_doc, washerDef, "64ch", "DS4t2", 0, 340, QVector3D(9844.8f, 7389.7f, 0));
+    QVERIFY(trussC && trussW && stepTop);
+    QCOMPARE(trussC->channels(), 165u);
+    QCOMPARE(stepTop->channels(), 64u);
+    QCOMPARE(trussC->masterIntensityChannel(), QLCChannel::invalid());
+    QCOMPARE(stepTop->masterIntensityChannel(), QLCChannel::invalid());
+    const QList<Fixture *> washes = { trussC, trussW, stepTop };
+
+    // The fire starts stage right of everything, downstage: the nearest
+    // wash is metres away.
+    QLCPalette *fire = effectPalette(m_doc, "fire-spread.js", { { "edge", 0.0 }, { "flare", 0.0 }, { "spreadTime", 10.0 } });
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    for (Fixture *f : washes)
+        scene->addFixture(f->id());
+    scene->addPalette(colourPalette(m_doc, QColor(0, 255, 0))->id());     // the look's colour
+    scene->addPalette(aimAt(m_doc, QVector3D(-6.0f, 9.0f, 0))->id());
+    scene->addPalette(fire->id());
+    EffectInstance inst(m_doc, scene->id(), fire->id());
+    QVERIFY2(inst.isValid(), qPrintable(inst.error()));
+
+    // No wash says it has a dimmer.
+    {
+        int cols = 0, rows = 0;
+        const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+        const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
+        QCOMPARE(cells.size(), 75 + 75 + 32);
+        for (int i = 0; i < cells.size(); ++i)
+            QVERIFY2(!arr.property(quint32(i)).property("hasDimmer").toBool(),
+                     qPrintable(QString("cell %1 (fixture %2 head %3) says it has a dimmer")
+                                .arg(i).arg(cells.at(i).fixtureId).arg(cells.at(i).head)));
+    }
+
+    // When each wash's nearest pixel catches.
+    QHash<quint32, qint64> catchesAt;
+    {
+        frameAt(inst, 0);
+        const double farthest = inst.buildInputsObject().property("_fromTargetFar").toNumber();
+        int cols = 0, rows = 0;
+        const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+        const QJSValue arr = inst.buildFixturesArray(cells, cols, rows);
+        for (int i = 0; i < cells.size(); ++i)
+        {
+            const qint64 ms = qint64(arr.property(quint32(i)).property("fromTarget").toNumber() / farthest * 10000.0);
+            const quint32 fid = cells.at(i).fixtureId;
+            catchesAt[fid] = catchesAt.contains(fid) ? qMin(catchesAt.value(fid), ms) : ms;
+        }
+        for (Fixture *f : washes)
+            QVERIFY2(catchesAt.value(f->id()) > 2000, qPrintable(QString("%1 catches at %2 ms").arg(f->name()).arg(catchesAt.value(f->id()))));
+    }
+
+    // What the effect writes: at the start and just before the fire reaches
+    // each wash, every channel of it 0 -- its RGB rows and its white rows;
+    // once the fire has passed it, it burns.
+    auto channelsLit = [](const QHash<quint64, int> &f, Fixture *fx) {
+        int lit = 0;
+        for (quint32 c = 0; c < fx->channels(); ++c)
+            if (f.value(key(fx->id(), c), 0) > 0)
+                ++lit;
+        return lit;
+    };
+    QHash<quint64, int> f = frameAt(inst, 0);
+    for (Fixture *fx : washes)
+    {
+        QCOMPARE(channelsLit(f, fx), 0);
+        for (quint32 c = 0; c < fx->channels(); ++c)
+            QVERIFY2(f.contains(key(fx->id(), c)),
+                     qPrintable(QString("%1 channel %2 left to the look's colour at the start").arg(fx->name()).arg(c)));
+    }
+    for (Fixture *fx : washes)
+    {
+        f = frameAt(inst, catchesAt.value(fx->id()) - 100);
+        QVERIFY2(channelsLit(f, fx) == 0, qPrintable(QString("%1 lit before the fire reached it").arg(fx->name())));
+    }
+    f = frameAt(inst, 10500);
+    for (Fixture *fx : washes)
+        QVERIFY2(channelsLit(f, fx) > 0, qPrintable(QString("%1 dark after the fire passed it").arg(fx->name())));
+
+    // And on the wire, the look's green under the effect: dark at the start.
+    MasterTimer *timer = m_doc->masterTimer();
+    fire->setEffectParamValue("spreadTime", 120.0);         // nothing reached while we look
+    scene->start(timer, FunctionParent::master());
+    for (int i = 0; i < 12; ++i)
+    {
+        timer->timerTick();
+        QTest::qWait(15);
+    }
+    QList<Universe *> unis = m_doc->inputOutputMap()->claimUniverses();
+    for (Universe *u : unis)
+        u->processFaders();
+    const QByteArray dmx = unis.first()->preGMValues();
+    m_doc->inputOutputMap()->releaseUniverses(false);
+    for (Fixture *fx : washes)
+        for (quint32 c = 0; c < fx->channels(); ++c)
+            QVERIFY2(uchar(dmx.at(int(fx->address() + c))) == 0,
+                     qPrintable(QString("%1 channel %2 at %3 before the fire").arg(fx->name()).arg(c)
+                                .arg(uchar(dmx.at(int(fx->address() + c))))));
+    /* Left playing (cleanup() keeps the Doc), as theCueUnderShowsUntilTheSpellArrives. */
+}
+
 void SpreadEffects_Test::spellSpreadOnTheShowsKinds()
 {
     QLCFixtureDef *lanternDef = loadDef(m_doc, kFixtures + "WLED/WLED-Lantern.qxf");

@@ -177,7 +177,7 @@ One object per (filtered) fixture in the scene. Fields:
 | `headRGB` | bool | **This head** has additive R, G and B. |
 | `headWhite` | bool | **This head** has a white emitter. A box of RGB rows and white rows (the Warmdance XL-450's 165ch mode) has heads that are one or the other: send a white head only `w`, an RGB head no `w` (on a head with no white, `w` is made of its R, G and B, and a `w` of 0 there blacks out its colour). |
 | `hasColorWheel` | bool | Has a colour wheel channel. |
-| `hasDimmer` | bool | Has a master/intensity dimmer. |
+| `hasDimmer` | bool | Has a master/intensity dimmer: a channel that sets the level, not a white, amber or UV emitter (an RGBW wash with no dimmer says no). |
 | `hasGobo` | bool | Has a gobo channel. |
 | `hasShutter` | bool | Has a shutter/strobe channel. |
 | `pos` | `{x,y,z}` | 3-D rig world position in **metres** (`{0,0,0}` if unplaced). |

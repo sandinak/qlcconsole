@@ -1843,10 +1843,15 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
             case QLCChannel::Intensity:
                 // IntensityRed/Green/Blue presets land in the Intensity group
                 // but carry a colour value — treat them as additive RGB channels.
+                // A white, amber or UV emitter is in the group too, and is no
+                // dimmer: a wash of RGB and white pixels with no dimmer was
+                // told it had one, so a spread left its pixels not yet reached
+                // to the look's colour ("a pixel of a bar whose one dimmer
+                // serves every pixel") and they were lit from the start.
                 if (ch->colour() == QLCChannel::Red)        hasR = true;
                 else if (ch->colour() == QLCChannel::Green)  hasG = true;
                 else if (ch->colour() == QLCChannel::Blue)   hasB = true;
-                else f.hasDimmer = true;
+                else if (ch->colour() == QLCChannel::NoColour) f.hasDimmer = true;
                 break;
             case QLCChannel::Beam:
                 if (ch->preset() == QLCChannel::BeamZoomSmallBig

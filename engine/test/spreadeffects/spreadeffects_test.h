@@ -49,6 +49,12 @@ private slots:
      *  the step bars and PL-4003s burn pixel by pixel and are dark, pixel
      *  by pixel, until the fire reaches them. */
     void fireSpreadOnTheShowsKinds();
+    /** The show's washes (an XL-450 on each truss, a step top's wall
+     *  washer: RGB and white pixels, no dimmer) are dark until the fire
+     *  reaches them, the look's colour under the effect and all: none says
+     *  it has a dimmer, every channel written 0 at the start and just
+     *  before its catch, burning after; 0 on the wire at the start. */
+    void fireSpreadLeavesTheWashesDarkUntilItReachesThem();
     /** Spell Spread on the same kinds: the lantern in the colour at the
      *  look's level, effect channels untouched; the relay is not its; a
      *  pixel not yet reached is not written. */
