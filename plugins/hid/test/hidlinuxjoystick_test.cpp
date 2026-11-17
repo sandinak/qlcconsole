@@ -158,8 +158,11 @@ void HIDLinuxJoystick_Test::aPadThatGoesIsWaitedForAndReadAgain()
 
     /* Gone again, and another DualSense takes its number (another
        Bluetooth address): not read on this pad's line. */
-    QVERIFY(goneNow(pad));
     QVERIFY(writeFile(dev + QStringLiteral("uniq"), "a0:b1:c2:d3:e4:99"));
+    QVERIFY(goneNow(pad));
+    /* A poll() the reader is in when the fd is swapped holds the old node
+       open until it returns (KPollTimeout): past that, nothing reads it. */
+    QTest::qWait(300);
     writer = writerWithin(node, 800);
     QVERIFY2(writer < 0, "another pad at its node was read as this one");
     /* Nor one whose address can't be read. */
