@@ -2411,6 +2411,7 @@ void Monitor_Test::aStaffWithNoHeightRestsOnWhatIsUnderIt()
         Fixture *fx = new Fixture(doc.data());
         fx->setFixtureDefinition(def, def->mode("Effect (15ch)"));
         fx->setStageLook(look);
+        fx->setAddress(quint32(doc->fixtures().size()) * 16);
         doc->addFixture(fx);
         props->setFixturePosition(fx->id(), 0, 0, QVector3D(xMm, 4226.0f, zM));
         return fx->id();

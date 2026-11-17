@@ -9323,34 +9323,34 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 p.drawRect(r.adjusted(-3, -3, 3, 3));
             }
             p.setPen(QPen(col.darker(150), 1.4));
-            if (slotCount > 1)
-            {
-                /* The staff shows the slots it is sent, in bands along it:
-                   Color 1, then 2, then 3 where it has light. */
+            /* The staff shows the slots it is sent, in bands along it: Color 1,
+               then 2, then 3 where it has light (the body, and its lens). */
+            auto slotBrush = [&](const QRectF &area, int lighter) {
+                if (slotCount < 2)
+                    return QBrush(col.lighter(lighter));
                 QList<QColor> bands;
                 bands << col;
                 for (int s = 1; s < 3; ++s)
                     if (slotCol[s].isValid())
                         bands << slotCol[s];
-                const bool tall = r.height() >= r.width();
-                QLinearGradient g(tall ? r.center().x() : r.left(), tall ? r.top() : r.center().y(),
-                                  tall ? r.center().x() : r.right(), tall ? r.bottom() : r.center().y());
+                const bool tall = area.height() >= area.width();
+                QLinearGradient g(tall ? area.center().x() : area.left(), tall ? area.top() : area.center().y(),
+                                  tall ? area.center().x() : area.right(), tall ? area.bottom() : area.center().y());
                 const double n = bands.size();
                 for (int i = 0; i < bands.size(); ++i)
                 {
-                    g.setColorAt(qMax(0.0, i / n + 0.02), bands.at(i));
-                    g.setColorAt(qMin(1.0, (i + 1) / n - 0.02), bands.at(i));
+                    g.setColorAt(qMax(0.0, i / n + 0.02), bands.at(i).lighter(lighter));
+                    g.setColorAt(qMin(1.0, (i + 1) / n - 0.02), bands.at(i).lighter(lighter));
                 }
-                p.setBrush(QBrush(g));
-            }
-            else
-                p.setBrush(col);
+                return QBrush(g);
+            };
+            p.setBrush(slotBrush(r, 100));
             p.drawPath(body);
             const QRectF lens = stageLookLensRect(traits.look, r, m_plane != Top);
             if (lens.isValid())
             {
                 p.setPen(QPen(col.darker(200), 1.0));
-                p.setBrush(col.lighter(130));
+                p.setBrush(slotBrush(lens, 130));
                 if (stageLookSquareLens(traits.look))
                     p.drawRect(lens);
                 else
