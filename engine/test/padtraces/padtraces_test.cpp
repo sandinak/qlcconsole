@@ -325,7 +325,7 @@ void PadTraces_Test::aShiftedLineIsNoSafety()
     QCOMPARE(q253Line(b), 0);
     InputOutputMap *iom = m_doc->inputOutputMap();
     QVERIFY2(iom->inputPatch(1) == nullptr || iom->inputPatch(1)->input() == QLCIOPlugin::invalidLine(),
-             qPrintable(QString("universe 1 took line %1").arg(iom->inputPatch(1)->input())));
+             "universe 1 took another pad's line");
     QCOMPARE(iom->inputPatch(2)->input(), quint32(0));
     QTRY_VERIFY2_WITH_TIMEOUT(!run->isArmed(), "the arm stayed with pad A gone", 2000);
     QCOMPARE(run->roleText(), QString("Pad: Run"));
