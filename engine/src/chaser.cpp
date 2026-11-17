@@ -186,6 +186,44 @@ bool Chaser::replaceStep(const ChaserStep& step, int index)
     }
 }
 
+void Chaser::setSteps(const QList<ChaserStep> &steps)
+{
+    // As addStep(): never a step that plays this chaser itself.
+    for (const ChaserStep &step : steps)
+        if (step.fid == this->id())
+            return;
+    bool moved = false;
+    int now = -1;
+    {
+        // The runner lock first (as write()), so the MasterTimer never sees
+        // the new steps with the old indices. Nothing here waits on a device.
+        QMutexLocker runnerLocker(&m_runnerMutex);
+        QList<ChaserStep> before;
+        {
+            QMutexLocker stepListLocker(&m_stepListMutex);
+            before = m_steps;
+            m_steps = steps;
+        }
+        if (m_runner != NULL)
+        {
+            moved = m_runner->remapSteps(before, steps);
+            now = m_runner->currentStepIndex();
+        }
+        if (m_startupAction.m_action == ChaserSetStepIndex && m_startupAction.m_stepIndex >= 0)
+        {
+            // A start asked for a cue (not running yet): the same cue.
+            const int to = ChaserRunner::followStep(before, steps, m_startupAction.m_stepIndex);
+            if (to >= 0)
+                m_startupAction.m_stepIndex = to;
+        }
+    }
+
+    emit changed(this->id());
+    emit stepsListChanged(this->id());
+    if (moved)
+        emit currentStepChanged(now);
+}
+
 bool Chaser::moveStep(int sourceIdx, int destIdx)
 {
     if (sourceIdx < 0 || sourceIdx >= m_steps.size())
@@ -295,6 +333,12 @@ quint32 Chaser::totalDuration()
 
 void Chaser::slotFunctionRemoved(quint32 fid)
 {
+    {
+        // A step held after its cue was deleted, playing @a fid: let go of.
+        QMutexLocker runnerLocker(&m_runnerMutex);
+        if (m_runner != NULL)
+            m_runner->functionRemoved(fid);
+    }
     int count;
     {
         QMutexLocker stepListLocker(&m_stepListMutex);
@@ -923,6 +967,12 @@ int Chaser::currentStepIndex() const
             ret = m_runner->currentStepIndex();
     }
     return ret;
+}
+
+bool Chaser::holdsRemovedStep() const
+{
+    QMutexLocker runnerLocker(const_cast<QRecursiveMutex*>(&m_runnerMutex));
+    return m_runner != NULL && m_runner->holdsRemovedStep();
 }
 
 int Chaser::computeNextStep(int currentStepIndex) const

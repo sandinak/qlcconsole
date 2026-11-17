@@ -21,6 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QSignalSpy>
 #include <QBuffer>
+#include <QColor>
 #include <QtTest>
 #include <QRandomGenerator>
 
@@ -48,6 +49,8 @@
 #include "resource_paths.h"
 #include "qlcfile.h"
 #include "fixture.h"
+#include "qlcfixturedef.h"
+#include "qlcchannel.h"
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
@@ -2267,6 +2270,483 @@ void ShowTreePlay_Test::aListHitDoesNothingWhileItsListIsntRunning()
     QVERIFY(st->isHitArmed(hit));
     QVERIFY(press());
     QCOMPARE(int(settle(5)[1]), 255);
+}
+
+/*****************************************************************************
+ * Found by the independent evaluation of 0.4.12
+ *****************************************************************************/
+
+void ShowTreePlay_Test::theRunningCueWithSubCuesIsFound()
+{
+    /* runningCue() matches the playing step's function to a cue's
+       Collection, but a cue with sub-cues bakes to a step that plays its
+       sub-cue chaser (step.fid = the sub-cues' chaser). While such a cue
+       plays nothing finds it: a hit scoped to it never arms (the pad's RT
+       says "No hit armed"), Record running refuses, the pad's walk in
+       Operate says nothing runs, Why is this on? and the calling script
+       miss it. */
+    const QList<quint32> ids = subCueShow();
+    ShowTreeController *st = m_doc->showTree();
+    Chaser *outer = qobject_cast<Chaser *>(m_doc->function(st->cueList(ids[0])->chaser));
+    QVERIFY(outer != nullptr);
+    go(outer);
+    settle();
+    QCOMPARE(st->runningCue(ids[0]), ids[1]);   // cue 1: found
+    go(outer);                                  // cue 2, with 2.1
+    settle();
+    QCOMPARE(outer->currentStepIndex(), 1);
+    QVERIFY2(st->runningCue(ids[0]) == ids[2], "cue 2 (it has sub-cues) is playing and runningCue() finds no cue");
+}
+
+quint32 ShowTreePlay_Test::levelsList(const QList<int> &levels, QList<quint32> *cues)
+{
+    // One list, cue i setting fixture 0 (group A) to levels[i]; current.
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Tech");
+    const quint32 listId = st->addCueList(prod, "Tech list");
+    for (int i = 0; i < levels.count(); ++i)
+    {
+        const quint32 c = st->addCue(listId, i - 1, QString("Cue %1").arg(i + 1));
+        st->setLayerLook(c, st->addLayer(c, groupTarget(a->id())),
+                         st->lookForPalette(dimmer(levels[i], QString("L%1").arg(levels[i]))));
+        *cues << c;
+    }
+    st->setCurrentProduction(prod);
+    return listId;
+}
+
+void ShowTreePlay_Test::anEarlierCueAddedOrDeletedMidRunKeepsTheCueOnStage()
+{
+    /* A cue added or deleted earlier in a list that is running: the bake
+       used to replace the chaser's steps in place, while the runner keeps a
+       step INDEX -- so it then stood on another cue than the one on stage.
+       runningCue() and the Run tab named the wrong cue and the next GO
+       skipped one (at the end of the list it stopped the list instead of
+       playing the last cue). The tracked state (the step started last, the
+       steps played) must follow too, or the next GO looks like a jump and
+       puts on what a cue that never played sets. */
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    QVERIFY(chaser() != nullptr);
+    QSignalSpy stepSaid(chaser(), &Chaser::currentStepChanged);
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser());
+        settle();
+    }
+    QCOMPARE(st->runningCue(listId), cues[2]);  // cue 3 on stage
+    QCOMPARE(int(settle(5)[0]), 120);
+
+    // A cue added at the top, with a look of its own on an RGB par that it
+    // releases: cue 3 stays on stage, and the new cue never played. (The
+    // tree's tracking sets the par in every later cue, so this can't show
+    // a stale restack; stepsSetMidRunCarryTheTrackedState() does.)
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Generic", "Generic RGB");
+    QVERIFY(def != nullptr);
+    Fixture *par = new Fixture(m_doc);
+    par->setName("Par");
+    par->setFixtureDefinition(def, def->mode("RGB Dimmer"));
+    par->setAddress(8);
+    par->setUniverse(0);
+    m_doc->addFixture(par);
+    FixtureGroup *b = group("B", { par->id() });
+    QLCPalette *redPalette = new QLCPalette(QLCPalette::Color, m_doc);
+    redPalette->setName("Red");
+    redPalette->setValue(QLCPalette::colorToString(QColor(Qt::red), QColor(Qt::black)));
+    m_doc->addPalette(redPalette);
+    auto red = [this]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(8));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    stepSaid.clear();
+    const quint32 top = st->addCue(listId, -1, "Top");
+    QVERIFY(top != ShowTree::invalidId());
+    const quint32 topLayer = st->addLayer(top, groupTarget(b->id()));
+    st->setLayerLook(top, topLayer, st->lookForPalette(redPalette->id()));
+    QVERIFY(st->setLayerRelease(top, topLayer, true));
+    QHash<quint32, uchar> out = settle(5);
+    QCOMPARE(int(out[0]), 120);
+    QCOMPARE(red(), 0);
+    QCOMPARE(st->runningCue(listId), cues[2]);
+    QCOMPARE(chaser()->currentStepIndex(), 3);
+    QVERIFY(!stepSaid.isEmpty());               // the Run tab hears it moved
+    QCOMPARE(stepSaid.last().at(0).toInt(), 3);
+
+    // The next GO plays cue 4 -- and nothing of the cue that never played.
+    go(chaser());
+    out = settle(5);
+    QCOMPARE(int(out[0]), 160);
+    QVERIFY2(red() == 0, qPrintable(QString("GO after a cue was added at the top put on its look "
+                                            "(the par's red at %1)").arg(red())));
+    QCOMPARE(st->runningCue(listId), cues[3]);
+
+    // Cue 1 deleted: cue 4 stays on stage, named as the one running.
+    QVERIFY(st->removeCue(cues[0]));
+    out = settle(5);
+    QCOMPARE(int(out[0]), 160);
+    QVERIFY2(st->runningCue(listId) == cues[3],
+             qPrintable(QString("cue 1 deleted while cue 4 plays: runningCue() now says %1")
+                            .arg(st->runningCue(listId) == cues[4] ? QStringLiteral("cue 5")
+                                                                   : QStringLiteral("no cue"))));
+    QVERIFY(chaser()->isRunning());
+
+    // The next GO plays cue 5, the last (it used to stop the list).
+    go(chaser());
+    out = settle(5);
+    QCOMPARE(int(out[0]), 200);
+    QCOMPARE(red(), 0);
+    QCOMPARE(st->runningCue(listId), cues[4]);
+}
+
+void ShowTreePlay_Test::stepsSetMidRunCarryTheTrackedState()
+{
+    /* Chaser::setSteps() on a running list (the bake's way): the runner's
+       tracked state -- the step started last, the steps played -- follows
+       the steps. Left on the old indices, the GO after a step added at the
+       top looked like a jump, and restack() put on what the new step sets
+       though it never played: a channel only it sets (a head's pan, LTP)
+       came up at that GO and stayed. Plain Collections: no Show Tree
+       tracking carries anything on. A moving head's pan: LTP (a par's
+       colour is intensity, HTP, which the restack leaves alone). */
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Clay Paky", "Sharpy");
+    QVERIFY(def != nullptr);
+    Fixture *head = new Fixture(m_doc);
+    head->setName("Spot");
+    head->setFixtureDefinition(def, def->mode("Standard"));
+    head->setAddress(8);
+    head->setUniverse(0);
+    m_doc->addFixture(head);
+    const quint32 pan = head->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    QVERIFY(pan != QLCChannel::invalid());
+    auto cue = [this](quint32 fixture, quint32 channel, uchar value) {
+        Scene *scene = new Scene(m_doc);
+        scene->setValue(fixture, channel, value);
+        m_doc->addFunction(scene);
+        Collection *coll = new Collection(m_doc);
+        coll->addFunction(scene->id());
+        m_doc->addFunction(coll);
+        return coll->id();
+    };
+    auto panNow = [this, pan]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(8 + pan)));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    QList<ChaserStep> steps;
+    for (int level : { 40, 80, 120, 160 })
+    {
+        ChaserStep step(cue(m_fixtures[0], 0, uchar(level)), 0, Function::infiniteSpeed(), 0);
+        step.duration = Function::infiniteSpeed();
+        steps << step;
+    }
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setRunOrder(Function::SingleShot);
+    // As the bake's lists: each step's own times, held until a GO.
+    chaser->setFadeInMode(Chaser::PerStep);
+    chaser->setFadeOutMode(Chaser::PerStep);
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    chaser->setSteps(steps);
+    QCOMPARE(chaser->stepsCount(), 4);
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser);
+        settle();
+    }
+    QCOMPARE(chaser->currentStepIndex(), 2);
+    QCOMPARE(int(settle(5)[0]), 120);
+
+    ChaserStep top(cue(head->id(), pan, 200), 0, Function::infiniteSpeed(), 0);
+    top.duration = Function::infiniteSpeed();
+    steps.prepend(top);
+    chaser->setSteps(steps);
+    QCOMPARE(chaser->currentStepIndex(), 3);
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(panNow(), 0);
+
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 160);
+    QCOMPARE(chaser->currentStepIndex(), 4);
+    QVERIFY2(panNow() == 0, qPrintable(QString("GO after a step was added at the top put on what it sets "
+                                               "(the head's pan at %1), though it never played").arg(panNow())));
+}
+
+void ShowTreePlay_Test::theCueOnStageDeletedHoldsUntilGoThenTheNextPlays()
+{
+    /* The cue on stage deleted from its running list. The runner kept its
+       old index, which now named the cue after it: the next GO skipped that
+       one (and restacked, putting on what a cue that never played set).
+       Now its light is held as it is -- no cue of the list named as
+       running -- and GO plays the cue that slid into its place. */
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    QVERIFY(chaser() != nullptr);
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser());
+        settle();
+    }
+    QCOMPARE(st->runningCue(listId), cues[2]);
+    QCOMPARE(int(settle(5)[0]), 120);
+
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(10)[0]), 120);          // held, not let go of, nothing else started
+    QVERIFY(chaser()->isRunning());
+    QCOMPARE(st->runningCue(listId), ShowTree::invalidId());
+    QCOMPARE(chaser()->currentStepIndex(), 1);  // just before its place
+    QCOMPARE(m_doc->showControl()->standbyStep(chaser()), 2);   // NEXT: cue 4
+
+    go(chaser());
+    QVERIFY2(int(settle(5)[0]) == 160,
+             qPrintable(QString("GO after the cue on stage was deleted played %1, not cue 4")
+                            .arg(int(settle(1)[0]))));
+    QCOMPARE(st->runningCue(listId), cues[3]);
+    go(chaser());
+    QCOMPARE(int(settle(5)[0]), 200);
+    QCOMPARE(st->runningCue(listId), cues[4]);
+}
+
+void ShowTreePlay_Test::backWhileADeletedCueIsHeldPlaysTheCueBeforeIt()
+{
+    /* A deleted cue held until GO: the list stands on the cue before it.
+       Back plays that one (it played the one before that); with the first
+       cue deleted there is none, and the held cue stays -- the list never
+       stops under it. */
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    for (int i = 0; i < 3; ++i)
+    {
+        QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+        settle();
+    }
+    QCOMPARE(st->runningCue(listId), cues[2]);
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(5)[0]), 120);           // held
+    QVERIFY(sc->execute({ ShowControl::Back, QString(), QString() }));
+    QVERIFY2(int(settle(5)[0]) == 80, qPrintable(QString("Back while cue 3 was held played %1, not cue 2")
+                                                      .arg(int(settle(1)[0]))));
+    QCOMPARE(st->runningCue(listId), cues[1]);
+    chaser()->stop(FunctionParent::master());
+    settle();
+
+    // The first cue deleted while on stage: Back keeps it, the list runs.
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 40);
+    QCOMPARE(st->runningCue(listId), cues[0]);
+    QVERIFY(st->removeCue(cues[0]));
+    QCOMPARE(int(settle(5)[0]), 40);
+    QSignalSpy said(sc, &ShowControl::commandHandled);
+    QVERIFY(sc->execute({ ShowControl::Back, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 40);
+    QVERIFY2(chaser()->isRunning(), "Back with the first cue deleted and held stopped the list");
+    QVERIFY(!said.isEmpty());
+    QVERIFY2(said.last().at(0).toString().contains(QStringLiteral("it stays until GO")),
+             qPrintable(said.last().at(0).toString()));
+    // A Back sent straight to the chaser: the same.
+    ChaserAction back;
+    back.m_action = ChaserPreviousStep;
+    back.m_stepIndex = -1;
+    back.m_masterIntensity = 1.0;
+    back.m_stepIntensity = 1.0;
+    back.m_fadeMode = Chaser::FromFunction;
+    chaser()->setAction(back);
+    QCOMPARE(int(settle(5)[0]), 40);
+    QVERIFY(chaser()->isRunning());
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 80);            // cue 2, now first
+    QCOMPARE(st->runningCue(listId), cues[1]);
+}
+
+void ShowTreePlay_Test::theFirstCueDeletedLeavesTheListsStartingState()
+{
+    /* The first cue deleted while on stage: the next GO is not the list
+       starting again -- it used to take the stage as it stood (the deleted
+       cue's held pan in it) as the list's starting state, so a later Back
+       brought back a ghost of the deleted cue. Plain Collections, a head's
+       pan (LTP). */
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Clay Paky", "Sharpy");
+    QVERIFY(def != nullptr);
+    Fixture *head = new Fixture(m_doc);
+    head->setName("Spot");
+    head->setFixtureDefinition(def, def->mode("Standard"));
+    head->setAddress(8);
+    head->setUniverse(0);
+    m_doc->addFixture(head);
+    const quint32 pan = head->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+    QVERIFY(pan != QLCChannel::invalid());
+    auto cue = [this](const QList<SceneValue> &values) {
+        Scene *scene = new Scene(m_doc);
+        for (const SceneValue &v : values)
+            scene->setValue(v.fxi, v.channel, v.value);
+        m_doc->addFunction(scene);
+        Collection *coll = new Collection(m_doc);
+        coll->addFunction(scene->id());
+        m_doc->addFunction(coll);
+        ChaserStep step(coll->id(), 0, Function::infiniteSpeed(), 0);
+        step.duration = Function::infiniteSpeed();
+        return step;
+    };
+    auto panNow = [this, pan]() {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int v = uchar(ua.first()->preGMValues().at(int(8 + pan)));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return v;
+    };
+    const quint32 dim = m_fixtures[0];
+    QList<ChaserStep> steps;
+    steps << cue({ SceneValue(dim, 0, 40), SceneValue(head->id(), pan, 200) })
+          << cue({ SceneValue(dim, 0, 80) })
+          << cue({ SceneValue(dim, 0, 120), SceneValue(head->id(), pan, 50) })
+          << cue({ SceneValue(dim, 0, 160) });
+    Chaser *chaser = new Chaser(m_doc);
+    chaser->setRunOrder(Function::SingleShot);
+    chaser->setFadeInMode(Chaser::PerStep);
+    chaser->setFadeOutMode(Chaser::PerStep);
+    chaser->setDurationMode(Chaser::PerStep);
+    m_doc->addFunction(chaser);
+    chaser->setSteps(steps);
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 40);
+    QCOMPARE(panNow(), 200);
+
+    steps.removeFirst();                        // cue 1 deleted on stage
+    chaser->setSteps(steps);
+    QCOMPARE(panNow(), 200);                    // held
+    go(chaser);                                 // the new first: no pan
+    QCOMPARE(int(settle(5)[0]), 80);
+    go(chaser);
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(panNow(), 50);
+
+    ChaserAction back;
+    back.m_action = ChaserPreviousStep;
+    back.m_stepIndex = -1;
+    back.m_masterIntensity = 1.0;
+    back.m_stepIntensity = 1.0;
+    back.m_fadeMode = Chaser::FromFunction;
+    chaser->setAction(back);
+    QCOMPARE(int(settle(5)[0]), 80);
+    QVERIFY2(panNow() == 0, qPrintable(QString("Back to the new cue 1 put the deleted cue's pan back "
+                                               "(%1), not the stage as the list found it").arg(panNow())));
+}
+
+void ShowTreePlay_Test::aHeldDeletedCuesFunctionDeletedLetsGo()
+{
+    /* A deleted cue held until GO plays a Collection no step names; if
+       that Collection is then deleted from the show (Function Manager, a
+       clear), the runner lets go of it -- it kept a dangling pointer, used
+       on the next write, GO or master change. */
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser());
+        settle();
+    }
+    const quint32 coll = st->cue(cues[2])->collection;
+    QVERIFY(m_doc->function(coll) != nullptr);
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(5)[0]), 120);           // held
+    QVERIFY(m_doc->deleteFunction(coll));
+    settle(5);
+    chaser()->adjustAttribute(0.5, Function::Intensity);
+    settle(2);
+    chaser()->adjustAttribute(1.0, Function::Intensity);
+    go(chaser());
+    QCOMPARE(int(settle(5)[0]), 160);           // cue 4
+    QCOMPARE(st->runningCue(listId), cues[3]);
+}
+
+void ShowTreePlay_Test::undoingTheDeleteOfTheHeldCueMakesItRunAgain()
+{
+    // Deleted while on stage, held, then the delete undone: the cue is the
+    // running one again, and GO plays the cue after it.
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    auto chaser = [&]() { return qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser)); };
+    for (int i = 0; i < 3; ++i)
+    {
+        go(chaser());
+        settle();
+    }
+    QVERIFY(st->removeCue(cues[2]));
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(st->runningCue(listId), ShowTree::invalidId());
+    QVERIFY(st->undo());
+    QCOMPARE(int(settle(5)[0]), 120);
+    QCOMPARE(st->runningCue(listId), cues[2]);
+    go(chaser());
+    QCOMPARE(int(settle(5)[0]), 160);
+    QCOMPARE(st->runningCue(listId), cues[3]);
+}
+
+void ShowTreePlay_Test::aLoadedCueStaysLoadedWhenACueIsAddedBeforeIt()
+{
+    /* LOAD keeps a step index on standby (ShowControl); a cue added before
+       it moved the loaded cue down one, and GO played the cue that slid
+       into its place. */
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    QList<quint32> cues;
+    const quint32 listId = levelsList({ 40, 80, 120, 160, 200 }, &cues);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    QCOMPARE(sc->mainCueList(), chaser->id());
+    QVERIFY(sc->execute({ ShowControl::Load, chaser->stepCue(4), QString() }));
+    QCOMPARE(sc->loadedStep(chaser->id()), 4);
+    QVERIFY(st->addCue(listId, -1, "Top") != ShowTree::invalidId());
+    QCOMPARE(sc->loadedStep(chaser->id()), 5);
+    QVERIFY(sc->execute({ ShowControl::Go, QString(), QString() }));
+    QCOMPARE(int(settle(5)[0]), 200);           // cue 5, as loaded
+    QCOMPARE(st->runningCue(listId), cues[4]);
+}
+
+void ShowTreePlay_Test::aMainListPickedElsewhereSurvivesAnUnrelatedUndo()
+{
+    /* The main cue list picked outside the tree (a chaser editor's "Main
+       cue list", an import) moves the production's main list with no undo
+       step ("the operator's choice ... not an undo step",
+       slotMainCueListChanged()). Every undo snapshot carries MainList, so
+       undoing any earlier tree edit restores the old main list, and the
+       bake's syncCurrentProduction() points GO back at it. */
+    FixtureGroup *a = group("A", { m_fixtures[0] });
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    quint32 pa = 0;
+    const quint32 first = oneListProduction("Dance", a->id(), 1, full, &pa);
+    const quint32 second = st->addCueList(pa, "Encore");
+    st->addCue(second, -1, "One");
+    QVERIFY(st->setCurrentProduction(pa));
+    QCOMPARE(sc->mainCueList(), st->cueList(first)->chaser);
+    st->addCue(first, 0, "Two");                // an ordinary tree edit: one undo step
+    sc->setMainCueList(st->cueList(second)->chaser);
+    QCOMPARE(st->mainList(pa), second);
+    QVERIFY(st->undo());                        // the edit goes...
+    QVERIFY2(sc->mainCueList() == st->cueList(second)->chaser,
+             "undoing an unrelated tree edit took the main cue list back: GO now plays the old list");
+    QCOMPARE(st->mainList(pa), second);
+    QVERIFY(st->redo());                        // ...and comes back: still the pick
+    QCOMPARE(sc->mainCueList(), st->cueList(second)->chaser);
+    // A main list set in the tree is an undo step as any edit.
+    QVERIFY(st->setMainList(first));
+    QCOMPARE(sc->mainCueList(), st->cueList(first)->chaser);
+    QVERIFY(st->undo());
+    QCOMPARE(sc->mainCueList(), st->cueList(second)->chaser);
 }
 
 QTEST_MAIN(ShowTreePlay_Test)

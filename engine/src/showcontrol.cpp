@@ -542,8 +542,12 @@ bool ShowControl::execute(const Request &request)
             sentStep = step >= 0 ? step : standbyStep(chaser);
             m_loaded.remove(chaser->id());
             if (sentStep >= 0)
-                emit cueTaken(Go, chaser->id(), chaser->isRunning() ? chaser->currentStepIndex() : -1,
-                              chaser->isRunning() ? chaser->currentSubCueIndex() : -1, sentStep, sub);
+            {
+                // From a deleted cue held until GO: from no cue of the list.
+                const bool fromCue = chaser->isRunning() && !chaser->holdsRemovedStep();
+                emit cueTaken(Go, chaser->id(), fromCue ? chaser->currentStepIndex() : -1,
+                              fromCue ? chaser->currentSubCueIndex() : -1, sentStep, sub);
+            }
             if (sub >= 0)
                 goSubCue(chaser, step, sub);
             else
@@ -598,12 +602,34 @@ bool ShowControl::execute(const Request &request)
             action.m_stepIntensity = 1.0;
             action.m_fadeMode = Chaser::FromFunction;
             {
-                // The step before, passing over the skipped ones.
+                // The step before, passing over the skipped ones (a
+                // Backward list's "before" is the step after).
                 const int from = chaser->currentStepIndex();
-                int to = from - 1;
-                while (to > 0 && chaser->isStepSkipped(to))
-                    --to;
-                emit cueTaken(Back, chaser->id(), from, chaser->currentSubCueIndex(),
+                const int count = chaser->stepsCount();
+                const int dir = chaser->direction() == Function::Backward ? 1 : -1;
+                auto playable = [&](int i) {
+                    while (i >= 0 && i < count && chaser->isStepSkipped(i))
+                        i += dir;
+                    return i >= 0 && i < count ? i : -1;
+                };
+                /* A deleted cue held until GO: the list stands on the cue
+                   before it (the runner plays that one); none, it stays. */
+                const bool held = chaser->holdsRemovedStep();
+                int to = held ? from : playable(from + dir);
+                if (held && to < 0)
+                    return finish(true, tr("the deleted cue was the first: it stays until GO"));
+                if (to < 0 && from >= 0 && chaser->runOrder() == Function::SingleShot)
+                {
+                    /* Back on the first cue played: there is none before it.
+                       The cue stays on stage and the list plays on (the
+                       runner does the same for every other route); nothing
+                       is taken, so nothing is logged as a cue change. */
+                    return finish(true, tr("cue %1 is the first: it stays")
+                                            .arg(cueName(chaser, from, -1)));
+                }
+                if (to < 0 && chaser->runOrder() == Function::Loop)
+                    to = playable(dir < 0 ? count - 1 : 0);   // round to the last
+                emit cueTaken(Back, chaser->id(), held ? -1 : from, held ? -1 : chaser->currentSubCueIndex(),
                               to < 0 ? from : to, -1);
             }
             chaser->setAction(action);
