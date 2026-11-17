@@ -817,7 +817,13 @@ void ConnectionsTree::updateTestBanner()
     m_output->setTestMode(t->isOn());
     if (t->isOn())
     {
-        m_testBanner->setText(t->statusText());
+        m_testBanner->setText(t->bannerText());
+        m_testBanner->show();
+    }
+    else if (!t->endedBecause().isEmpty())
+    {
+        // Ended by itself (the patch moved under it): said, until it is turned on again.
+        m_testBanner->setText(t->endedBecause());
         m_testBanner->show();
     }
     else

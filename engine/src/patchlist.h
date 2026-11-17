@@ -182,8 +182,10 @@ public:
     bool writeXlsx(const QString &path, GroupBy by = ByNone, QString *error = nullptr) const;
     /** The printable list, a table per section (what the PDF is made from). */
     QString toHtml(const QString &title, GroupBy by = ByUniverse) const;
-    /** Lay the printable list out on @p device (a printer or a PDF writer),
-     *  landscape Letter margins as the PDF has. What Print… and the PDF share. */
+    /** Lay the printable list out on @p device (a printer or a PDF writer) at
+     *  the page size, orientation and margins the device already has: the PDF
+     *  sets landscape Letter first, Print… leaves what the print dialog chose.
+     *  What Print… and the PDF share. */
     void paintTo(QPagedPaintDevice *device, const QString &title, GroupBy by = ByUniverse) const;
     /** Write the PDF to @p path (landscape Letter). False, with @p error, if
      *  the file can't be written. */

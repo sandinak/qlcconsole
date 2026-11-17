@@ -141,10 +141,11 @@ void FooterSave_Test::theTestChannelsChipSaysHowManyAreHeld()
     QVERIFY(!chip->isVisible());
     m_app->doc()->setMode(Doc::Design);
     QVERIFY(t->setOn(true));
+    QVERIFY(!chip->isVisible());                         // on, but none held: not "0 held"
     QVERIFY(t->setValue(0, 5, 99));
     QVERIFY(t->setValue(0, 6, 40));
     QVERIFY(chip->isVisible());
-    QCOMPARE(chip->text(), QString("Testing channels: 2 held"));
+    QCOMPARE(chip->text(), QString("Test: 2 held"));
     t->setOn(false);
     QVERIFY(!chip->isVisible());
 }

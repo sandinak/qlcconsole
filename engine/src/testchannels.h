@@ -47,8 +47,18 @@ public:
     bool holds(quint32 universe, quint32 address) const;
     uchar value(quint32 universe, quint32 address) const;
 
-    /** "Testing channels: N held" (the footer chip and the banner). */
-    QString statusText() const;
+    /** The banner: "TEST MODE: N channels held over the show. Click Test to
+     *  let them go." (with none held yet, how to hold one). */
+    QString bannerText() const;
+    /** The footer chip: "Test: N held"; shown only while some are held. */
+    QString chipText() const;
+    bool chipShown() const { return m_on && !m_values.isEmpty(); }
+    /** End Test mode because the patch moved under it (a fixture added,
+     *  removed or repatched, a universe added or removed): every value is
+     *  let go as when Test is turned off, and endedBecause() says why. */
+    void endBecause(const QString &why);
+    /** Why Test ended by itself last, or empty (cleared when it is turned on). */
+    QString endedBecause() const { return m_endedBecause; }
 
 signals:
     /** Test went on or off, or the held count changed. */
@@ -61,6 +71,8 @@ private:
     Doc *m_doc;
     bool m_on = false;
     QHash<quint32, uchar> m_values;
+    QHash<quint32, uchar> m_pre;   //!< each held channel as it was before the test touched it
+    QString m_endedBecause;
     QList<quint32> m_applied;   //!< the addresses the layer held last time
     OutputLayer m_layer;
 };

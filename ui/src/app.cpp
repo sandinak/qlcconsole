@@ -10102,14 +10102,14 @@ void App::updateTestChip()
     if (m_statusTestChip == nullptr || m_doc == nullptr || m_doc->testChannels() == nullptr)
         return;
     TestChannels *t = m_doc->testChannels();
-    if (!t->isOn())
+    if (!t->chipShown())
     {
         m_statusTestChip->hide();
         return;
     }
-    m_statusTestChip->setText(t->statusText());
-    m_statusTestChip->setToolTip(tr("Connections' Test mode is holding channels over the show. "
-                                    "Click to turn Test off and let them all go."));
+    m_statusTestChip->setText(t->chipText());
+    m_statusTestChip->setToolTip(tr("Test mode is holding channels over the show. "
+                                    "Click to stop Test and let them all go."));
     m_statusTestChip->show();
 }
 

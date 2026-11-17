@@ -188,6 +188,8 @@ private slots:
     void aShowOnlyFixtureMovedMidShowIsHeldAtOnce();
     void theHeldTextSaysEmergencyStop();
     void testChannelsSitOnTopAndReleaseTogether();
+    void aReleasedLtpChannelGoesBackToWhatItWas();
+    void aPatchChangeEndsTestMode();
     void theStopAndOperateEndTestMode();
     void aShowOnlyChannelStaysSafeInTestMode();
 

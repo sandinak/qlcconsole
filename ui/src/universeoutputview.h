@@ -36,8 +36,9 @@ class Doc;
 /**
  * What one universe is sending, live ("it would be nice to see what's being
  * sent out on a U if selected"): its 512 channels as a grid, each with its
- * value and a bar as high, each fixture's channels shaded together and named
- * where they start. Values are what goes out -- after the grand master -- as
+ * value, coloured by the kind of channel (red, green, blue ... a dimmer, pan
+ * and tilt arrows) and brighter the higher the value, with a legend under
+ * it; a fixture's name is on the hover, not in the blocks. Values are what goes out -- after the grand master -- as
  * the universe writes them; a hover says whose channel it is and what.
  */
 class UniverseOutputView final : public QWidget
@@ -123,6 +124,8 @@ private:
     int m_hovered = -1;
     bool m_testMode = false;
     int m_dragChannel = -1;
+    int m_pressY = 0;
+    bool m_pendingClick = false;
     void applyTest(int channel, int y);
 
     Doc *m_doc;

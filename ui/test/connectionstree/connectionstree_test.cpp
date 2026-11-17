@@ -2909,12 +2909,15 @@ void ConnectionsTree_Test::testModeSetsChannelsFromTheMap()
     tree.testButton()->click();
     QVERIFY(t->isOn());
     QVERIFY(tree.testBanner()->isVisible());
-    QCOMPARE(tree.testBanner()->text(), QString("Testing channels: 0 held"));
+    QVERIFY2(tree.testBanner()->text().startsWith("TEST MODE:"), qPrintable(tree.testBanner()->text()));
+    QVERIFY(!tree.testBanner()->text().contains("0 "));
     // A click at the top of a block: 255; dragged to its bottom: 0.
     const QRect cell = map->cellRect(20);
     QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.top()));
-    QCOMPARE(int(t->value(0, 20)), 255);
-    QCOMPARE(tree.testBanner()->text(), QString("Testing channels: 1 held"));
+    QCOMPARE(t->heldCount(), 0);              // a click waits out a possible double-click
+    QTRY_COMPARE(int(t->value(0, 20)), 255);
+    QCOMPARE(tree.testBanner()->text(),
+             QString("TEST MODE: 1 channel held over the show. Click Test to let them go."));
     QTest::mousePress(map, Qt::LeftButton, Qt::NoModifier, QPoint(cell.center().x(), cell.top()));
     QMouseEvent move(QEvent::MouseMove, QPointF(cell.center().x(), cell.bottom()),
                      map->mapToGlobal(QPointF(cell.center().x(), cell.bottom())),
@@ -2927,15 +2930,49 @@ void ConnectionsTree_Test::testModeSetsChannelsFromTheMap()
     QTest::mouseClick(map, Qt::RightButton, Qt::NoModifier, cell.center());
     QCOMPARE(t->heldCount(), 0);
 
+    // A double-click types a value and never sends the first click's value.
+    QTimer::singleShot(0, [&]() {
+        QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+        if (d != nullptr)
+        {
+            QCOMPARE(t->heldCount(), 0);      // nothing was sent before the dialog opened
+            d->setIntValue(77);
+            d->accept();
+        }
+    });
+    QTest::mousePress(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(40).center());
+    QTest::mouseRelease(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(40).center());
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(map->cellRect(40).center()),
+                    map->mapToGlobal(QPointF(map->cellRect(40).center())),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(map, &dbl);
+    QCOMPARE(int(t->value(0, 40)), 77);
+    QTest::qWait(QApplication::doubleClickInterval() + 100);
+    QCOMPARE(int(t->value(0, 40)), 77);       // the pending click did not land after it
+    t->release(0, 40);
+
     // Leaving the tab lets go of everything.
     QTest::mouseClick(map, Qt::LeftButton, Qt::NoModifier, map->cellRect(30).center());
-    QCOMPARE(t->heldCount(), 1);
+    QTRY_COMPARE(t->heldCount(), 1);
     tree.hide();
     QVERIFY(!t->isOn());
     QVERIFY(!tree.testButton()->isChecked());
     tree.show();
     QVERIFY(QTest::qWaitForWindowExposed(&tree));
     QVERIFY(!tree.testBanner()->isVisible());
+
+    // The patch moving under it ends it, and the banner says so.
+    tree.testButton()->click();
+    QVERIFY(t->isOn());
+    Fixture *late = new Fixture(m_doc);
+    late->setName("Late");
+    late->setChannels(1);
+    late->setAddress(200);
+    QVERIFY(m_doc->addFixture(late));
+    QVERIFY(!t->isOn());
+    QVERIFY(!tree.testButton()->isChecked());
+    QVERIFY(tree.testBanner()->isVisible());
+    QVERIFY2(tree.testBanner()->text().contains("patch"), qPrintable(tree.testBanner()->text()));
 
     // Operate refuses it, and says why.
     m_doc->setMode(Doc::Operate);

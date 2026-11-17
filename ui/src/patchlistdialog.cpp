@@ -419,6 +419,10 @@ void PatchListDialog::slotPrint()
 {
     QPrinter printer(QPrinter::HighResolution);
     printer.setDocName(m_title);
+    // The starting point (landscape Letter, as the PDF); the print dialog may change it.
+    printer.setPageSize(QPageSize(QPageSize::Letter));
+    printer.setPageOrientation(QPageLayout::Landscape);
+    printer.setPageMargins(QMarginsF(12, 12, 12, 12), QPageLayout::Millimeter);
     QPrintDialog dlg(&printer, this);
     dlg.setWindowTitle(tr("Print Patch List"));
     if (dlg.exec() != QDialog::Accepted)

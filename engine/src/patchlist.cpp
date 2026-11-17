@@ -700,16 +700,15 @@ bool PatchList::writePdf(const QString &path, const QString &title, QString *err
     QPdfWriter writer(path);
     writer.setTitle(title);
     writer.setCreator(QStringLiteral("qlcconsole"));
+    writer.setPageSize(QPageSize(QPageSize::Letter));
+    writer.setPageOrientation(QPageLayout::Landscape);
+    writer.setPageMargins(QMarginsF(12, 12, 12, 12), QPageLayout::Millimeter);
     paintTo(&writer, title, by);
     return true;
 }
 
 void PatchList::paintTo(QPagedPaintDevice *device, const QString &title, GroupBy by) const
 {
-    device->setPageSize(QPageSize(QPageSize::Letter));
-    device->setPageOrientation(QPageLayout::Landscape);
-    device->setPageMargins(QMarginsF(12, 12, 12, 12), QPageLayout::Millimeter);
-
     /* Lay the page out in points at the device's printable size. Without a
        page size of its own, QTextDocument::print() adds a 2 cm margin inside
        the device's, wasting a quarter of a landscape page. */

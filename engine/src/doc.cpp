@@ -192,6 +192,21 @@ Doc::Doc(QObject* parent, int universes)
     m_testChannels = new TestChannels(this);
     connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopStruck,
             m_testChannels, [this](quint32) { m_testChannels->setOn(false); });
+    /* The patch moving under Test (a fixture added, removed or repatched, a
+       universe added or removed) ends it, as turning it off does: a test value
+       must never land on a fixture that moved. */
+    {
+        auto ends = [this](const QString &why) {
+            return [this, why]() { m_testChannels->endBecause(why); };
+        };
+        const QString why = QObject::tr("Test mode ended: the patch changed.");
+        connect(this, &Doc::fixtureAdded, m_testChannels, ends(why));
+        connect(this, &Doc::fixtureRemoved, m_testChannels, ends(why));
+        connect(this, &Doc::fixtureChanged, m_testChannels, ends(why));
+        connect(this, &Doc::fixturesPatched, m_testChannels, ends(why));
+        connect(m_ioMap, &InputOutputMap::universeAdded, m_testChannels, ends(why));
+        connect(m_ioMap, &InputOutputMap::universeRemoved, m_testChannels, ends(why));
+    }
     // The pad's red ends when the stop does: one source with the footer.
     connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopEnded,
             m_programmer->padRun(), &PadRun::stopEnded);
@@ -1080,6 +1095,10 @@ void Doc::setMode(Doc::Mode mode)
     if (m_mode == mode)
         return;
 
+    // Test values never go live: Test ends before the mode becomes Operate.
+    if (mode == Operate && m_testChannels != NULL)
+        m_testChannels->setOn(false);
+
     m_mode = mode;
 
     // Leaving Operate (→ Design) drops any held last look: you're building
@@ -1087,9 +1106,6 @@ void Doc::setMode(Doc::Mode mode)
     if (mode == Design && m_lastLook != NULL)
         m_lastLook->clear();
 
-    // Test values never go live: Operate ends Test mode.
-    if (mode == Operate && m_testChannels != NULL)
-        m_testChannels->setOn(false);
 
     // Show-mode Lock is part of Operate (board Q80): programmer parameter
     // writes and timeline edits are locked while the show runs.

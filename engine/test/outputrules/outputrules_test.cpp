@@ -2060,7 +2060,8 @@ void OutputRules_Test::testChannelsSitOnTopAndReleaseTogether()
     frame(Stage);
     QCOMPARE(sent(Stage), 200);             // on the wire, over the cue
     QCOMPARE(sent(300), 50);
-    QCOMPARE(t->statusText(), QString("Testing channels: 2 held"));
+    QCOMPARE(t->bannerText(), QString("TEST MODE: 2 channels held over the show. Click Test to let them go."));
+    QCOMPARE(t->chipText(), QString("Test: 2 held"));
     // The cue moves on; the held value stays on top.
     put(Stage, 120);
     frame(Stage);
@@ -2071,6 +2072,52 @@ void OutputRules_Test::testChannelsSitOnTopAndReleaseTogether()
     QCOMPARE(sent(Stage), 120);
     QCOMPARE(frame(300), 0);
     QCOMPARE(t->heldCount(), 0);
+}
+
+/* Pan, a colour wheel, a gobo and a fog channel keep the last value written
+   when nothing else writes them: Test off must put them back. */
+void OutputRules_Test::aReleasedLtpChannelGoesBackToWhatItWas()
+{
+    addSpot("Spot", 20);                     // address 21 is its colour channel (LTP)
+    put(21, 100);                            // a cue gave it 100 ...
+    frame(21);
+    QCOMPARE(sent(21), 100);
+    m_uni->dismissFader(m_fader);            // ... and has stopped: the channel keeps it
+    m_fader.clear();
+    frame(21);
+    QCOMPARE(sent(21), 100);
+    TestChannels *t = m_doc->testChannels();
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, 21, 200));
+    frame(21);
+    QCOMPARE(sent(21), 200);
+    QVERIFY(t->setOn(false));
+    frame(21);
+    QCOMPARE(sent(21), 100);                 // not left at the test's 200
+    m_fader = m_uni->requestFader();
+}
+
+void OutputRules_Test::aPatchChangeEndsTestMode()
+{
+    TestChannels *t = m_doc->testChannels();
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, 300, 50));
+    addSpot("Late", 40);                     // a fixture added under it
+    QVERIFY(!t->isOn());
+    QCOMPARE(t->heldCount(), 0);
+    QVERIFY(t->endedBecause().contains("patch"));
+    QVERIFY(t->setValue(0, 300, 50) == false);
+    QVERIFY(t->setOn(true));                 // on again: the reason is cleared
+    QVERIFY(t->endedBecause().isEmpty());
+    QVERIFY(t->setValue(0, Stage, 255));
+    m_doc->inputOutputMap()->addUniverse();  // a universe added
+    QVERIFY(!t->isOn());
+    QVERIFY(t->setOn(true));
+    QVERIFY(t->setValue(0, Stage, 255));
+    QVERIFY(m_doc->deleteFixture(m_doc->fixtures().last()->id()));    // one removed
+    QVERIFY(!t->isOn());
+    frame(Stage);
+    QVERIFY(sent(Stage) != 255);
 }
 
 void OutputRules_Test::theStopAndOperateEndTestMode()

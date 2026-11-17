@@ -30,6 +30,7 @@
 #include "qlcfixturemode.h"
 #include <QMouseEvent>
 #include <QInputDialog>
+#include <QApplication>
 #include "testchannels.h"
 #include "universe.h"
 #include "fixture.h"
@@ -382,7 +383,7 @@ static const LegendEntry *legendEntries(int *n)
         { UniverseOutputView::Dimmer, QT_TRANSLATE_NOOP("UniverseOutputView", "Dimmer") },
         { UniverseOutputView::Pan, QT_TRANSLATE_NOOP("UniverseOutputView", "Pan") },
         { UniverseOutputView::Tilt, QT_TRANSLATE_NOOP("UniverseOutputView", "Tilt") },
-        { UniverseOutputView::Gobo, QT_TRANSLATE_NOOP("UniverseOutputView", "Other") },
+        { UniverseOutputView::Gobo, QT_TRANSLATE_NOOP("UniverseOutputView", "Other (gobo, mode…)") },
     };
     *n = int(sizeof(e) / sizeof(e[0]));
     return e;
@@ -404,7 +405,7 @@ int UniverseOutputView::legendHeight() const
         }
         x += w;
     }
-    return lines * LEGEND_ROW + 6;
+    return (lines + 1) * LEGEND_ROW + 6;          // + the note line
 }
 
 void UniverseOutputView::paintLegend(QPainter &p, int top)
@@ -440,6 +441,12 @@ void UniverseOutputView::paintLegend(QPainter &p, int top)
         p.drawText(QRect(x + 16, y, w - 16, LEGEND_ROW), Qt::AlignLeft | Qt::AlignVCenter, label);
         x += w;
     }
+    // What the shapes and shades mean.
+    p.setPen(QColor(120, 124, 134));
+    const QString note = fm.elidedText(tr("Arrows: pan (left-right) and tilt (up-down). The shade is the value."),
+                                       Qt::ElideRight, widthFor(m_cols) - LEFT - 8);
+    p.drawText(QRect(LEFT, y + LEGEND_ROW, widthFor(m_cols) - LEFT - 8, LEGEND_ROW),
+               Qt::AlignLeft | Qt::AlignVCenter, note);
 }
 
 QString UniverseOutputView::describe(int ch) const
@@ -523,8 +530,17 @@ void UniverseOutputView::mousePressEvent(QMouseEvent *e)
     const int ch = m_universe == Universe::invalid() ? -1 : channelAt(e->pos());
     if (m_testMode && ch >= 0 && e->button() == Qt::LeftButton)
     {
+        /* A click waits out the double-click interval before it sets the value:
+           a double-click (type a number) must not send its first click's value
+           to the rig first. A drag sets it at once. */
         m_dragChannel = ch;
-        applyTest(ch, e->pos().y());
+        m_pressY = e->pos().y();
+        m_pendingClick = true;
+        QTimer::singleShot(QApplication::doubleClickInterval(), this, [this, ch]() {
+            if (m_pendingClick && m_testMode)
+                applyTest(ch, m_pressY);
+            m_pendingClick = false;
+        });
         return;
     }
     if (m_testMode && ch >= 0 && e->button() == Qt::RightButton)
@@ -549,6 +565,7 @@ void UniverseOutputView::mouseDoubleClickEvent(QMouseEvent *e)
         QWidget::mouseDoubleClickEvent(e);
         return;
     }
+    m_pendingClick = false;                // the first click's value is never sent
     bool ok = false;
     const int now = uchar(ch < m_values.size() ? m_values.at(ch) : char(0));
     const int v = QInputDialog::getInt(this, tr("Test channel"),
@@ -561,6 +578,7 @@ void UniverseOutputView::mouseMoveEvent(QMouseEvent *e)
 {
     if (m_testMode && m_dragChannel >= 0 && (e->buttons() & Qt::LeftButton))
     {
+        m_pendingClick = false;
         applyTest(m_dragChannel, e->pos().y());
         return;
     }
@@ -664,7 +682,7 @@ void UniverseOutputView::paintEvent(QPaintEvent *)
             p.setBrush(Qt::NoBrush);
             p.drawRect(cell.adjusted(1, 1, -1, -1));
         }
-        // A fixture's first channel: a mark, and its name over the cells it spans.
+        // A fixture's first channel: a mark (its name is on the hover, not in the block).
         if (!startName.at(ch).isEmpty())
         {
             p.fillRect(QRect(cell.left(), cell.top(), 2, cell.height()), QColor(255, 190, 60));

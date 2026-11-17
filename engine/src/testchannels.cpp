@@ -49,6 +49,7 @@ bool TestChannels::setOn(bool on, QString *why)
             return false;
         }
         m_on = true;
+        m_endedBecause.clear();
         emit changed();
         return true;
     }
@@ -69,6 +70,19 @@ bool TestChannels::setValue(quint32 universe, quint32 address, uchar value, QStr
         return false;
     }
     const bool added = !m_values.contains(key(universe, address));
+    if (added)
+    {
+        // As it is now, to put it back on release: an LTP channel (pan, a
+        // colour wheel, a gobo, fog) keeps whatever it was last given.
+        uchar was = 0;
+        if (Universe *u = m_doc->inputOutputMap()->universe(universe))
+        {
+            const QByteArray pre = u->preGMValues();
+            if (int(address) < pre.size())
+                was = uchar(pre.at(int(address)));
+        }
+        m_pre.insert(key(universe, address), was);
+    }
     m_values.insert(key(universe, address), value);
     apply();
     if (added)
@@ -95,9 +109,27 @@ uchar TestChannels::value(quint32 universe, quint32 address) const
     return m_values.value(key(universe, address), 0);
 }
 
-QString TestChannels::statusText() const
+QString TestChannels::bannerText() const
 {
-    return tr("Testing channels: %1 held").arg(m_values.size());
+    if (m_values.isEmpty())
+        return tr("TEST MODE: click or drag a channel on the map to hold it over the show. "
+                  "Click Test to stop.");
+    return tr("TEST MODE: %1 held over the show. Click Test to let them go.")
+        .arg(m_values.size() == 1 ? tr("1 channel") : tr("%1 channels").arg(m_values.size()));
+}
+
+QString TestChannels::chipText() const
+{
+    return tr("Test: %1 held").arg(m_values.size());
+}
+
+void TestChannels::endBecause(const QString &why)
+{
+    if (!m_on)
+        return;
+    setOn(false);
+    m_endedBecause = why;
+    emit changed();
 }
 
 void TestChannels::apply()
@@ -117,14 +149,19 @@ void TestChannels::apply()
     }
     m_layer.set(levels);
 
-    /* An address no fixture owns has nothing that gives it a value once the
-       layer lets go, so it would keep the last test value: put it back to 0. */
+    /* Let go of a channel: it goes back to what it was before the test, or
+       the rest value of a Show-only one. Pan, colour wheel, gobo and fog
+       channels keep the last value written, so the layer letting go alone left
+       the test value. setChannelDefaultValue() takes the universe's frame
+       lock as a patch does: the value lands between two frames, never in
+       one, and nothing waits on a device. */
     for (quint32 abs : m_applied)
     {
-        if (m_values.contains(abs) || m_doc->fixtureForAddress(abs) != Fixture::invalidId())
+        if (m_values.contains(abs))
             continue;
+        const uchar was = m_pre.take(abs);
         if (Universe *u = m_doc->inputOutputMap()->universe(abs / 512))
-            u->reset(int(abs % 512), 1);
+            u->setChannelDefaultValue(ushort(abs % 512), was);
     }
     m_applied = m_values.keys();
 }
