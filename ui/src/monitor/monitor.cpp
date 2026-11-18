@@ -12513,6 +12513,17 @@ private:
         return false;
     }
 
+    /* The fixture under a plot position: its icon, or a part of it (a label,
+       a beam) drawn above. */
+    quint32 fixtureAt(const QPoint &pos) const
+    {
+        for (QGraphicsItem *gi : m_plan->items(pos))
+            for (QGraphicsItem *p = gi; p != nullptr; p = p->parentItem())
+                if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(p))
+                    return mfi->fixtureID();
+        return Fixture::invalidId();
+    }
+
     /* The 2D plot: wheel and scroll bars move the view; a click on a fixture
        is a pick; nothing is selected, dragged, dropped or opened. */
     bool planEvent(QWidget *w, QEvent *e)
@@ -12532,8 +12543,7 @@ private:
             auto *me = static_cast<QMouseEvent *>(e);
             m_pick = Fixture::invalidId();
             if (me->button() == Qt::LeftButton)
-                if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(m_plan->itemAt(me->position().toPoint())))
-                    m_pick = mfi->fixtureID();
+                m_pick = fixtureAt(me->position().toPoint());
             return true;
         }
         case QEvent::MouseButtonRelease:
@@ -12541,10 +12551,9 @@ private:
             auto *me = static_cast<QMouseEvent *>(e);
             const quint32 pick = m_pick;
             m_pick = Fixture::invalidId();
-            if (pick != Fixture::invalidId() && me->button() == Qt::LeftButton)
-                if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(m_plan->itemAt(me->position().toPoint())))
-                    if (mfi->fixtureID() == pick)
-                        m_picked(pick);
+            if (pick != Fixture::invalidId() && me->button() == Qt::LeftButton
+                && fixtureAt(me->position().toPoint()) == pick)
+                m_picked(pick);
             return true;
         }
         default:
