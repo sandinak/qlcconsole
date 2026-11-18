@@ -18,6 +18,7 @@
 */
 
 #include <QScopedPointer>
+#include "../common/fixtureeditor.h"
 #include <QtTest>
 #include <QDir>
 #include <QShortcut>
@@ -226,7 +227,7 @@ static QLineEdit *findRealLineEdit(QWidget *modal)
 static void driveDialog(const std::function<bool(QWidget *)> &fill, bool accept = true)
 {
     QTimer::singleShot(0, [fill, accept]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         /* Fixture Properties is no longer modal (the rig views stay usable
            beside it): find it among the open windows. */
         if (modal == nullptr)
@@ -254,7 +255,7 @@ static void driveDialog(const std::function<bool(QWidget *)> &fill, bool accept 
 static void driveMessageBox(const std::function<bool(QWidget *)> &fill, const QString &buttonText)
 {
     QTimer::singleShot(0, [fill, buttonText]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         const bool filled = (modal != nullptr) && fill(modal);
         QPushButton *btn = modal ? findButtonByText(modal, buttonText) : nullptr;
         if (btn != nullptr)
@@ -873,7 +874,7 @@ void Monitor_Test::theRigViewHidesWhatTheStudioHides()
 static void onNextDialog(std::function<void(QDialog *)> work)
 {
     QTimer::singleShot(0, [work]() {
-        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
         if (dlg == nullptr)
         {
             foreach (QWidget *w, QApplication::topLevelWidgets())
@@ -4681,7 +4682,7 @@ void Monitor_Test::studioEditorDialogDragDoesNotCrash()
         // docs/dev/WORKFLOW-SUBTLETIES.md #7.
         if (found != nullptr)
             found->reject();
-        else if (QWidget *modal = QApplication::activeModalWidget())
+        else if (QWidget *modal = modalOrFixtureEditor())
             modal->close();
         QVERIFY2(found != nullptr, "no StructureStudioView in any open dialog");
     });
@@ -16544,7 +16545,7 @@ namespace
 void inspectModal(const std::function<void(QWidget *)> &look)
 {
     QTimer::singleShot(0, [look]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         QVERIFY2(modal != nullptr, "no modal dialog opened");
         look(modal);
         if (QDialog *d = qobject_cast<QDialog *>(modal))
@@ -16558,7 +16559,7 @@ void inspectModal(const std::function<void(QWidget *)> &look)
 void answerMessageBox(QMessageBox::StandardButton answer, QString *text = nullptr)
 {
     QTimer::singleShot(0, [answer, text]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         QVERIFY2(box != nullptr, "no message box opened");
         if (text != nullptr)
             *text = box->text();
@@ -21888,7 +21889,7 @@ static void answerPopup(QStringList *seen, const QString &pick)
         auto later = std::make_shared<int>(0);
         auto closeModal = std::make_shared<std::function<void()> >();
         *closeModal = [later, closeModal]() {
-            if (QWidget *modal = QApplication::activeModalWidget())
+            if (QWidget *modal = modalOrFixtureEditor())
             {
                 if (QDialog *d = qobject_cast<QDialog *>(modal))
                     d->reject();
@@ -23480,7 +23481,7 @@ void Monitor_Test::enterRenamesAnyLayersRowFromItsBareName()
         QString note;
         QTimer watch;
         QObject::connect(&watch, &QTimer::timeout, [&note, &watch]() {
-            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
             {
                 note = box->text();
                 box->accept();
@@ -23581,7 +23582,7 @@ void Monitor_Test::aFixtureGroupRowStaysOpenAndCanBeDeleted()
                 del = a;
         QVERIFY(del != nullptr);
         QTimer::singleShot(0, [] {
-            if (QMessageBox *mb = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
                 mb->button(QMessageBox::Yes)->click();
         });
         del->trigger();
@@ -24271,7 +24272,7 @@ void Monitor_Test::editFixtureFromLayersEditsThatFixture()
         QString opened;
         QTimer watch;
         QObject::connect(&watch, &QTimer::timeout, [&opened, &watch]() {
-            if (QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+            if (QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor()))
             {
                 opened = d->windowTitle();
                 d->reject();
@@ -26113,7 +26114,7 @@ void Monitor_Test::theSplitWizardOffersAViewAndKeepsAnExistingGroup()
     // Answer the "already exist" question with the button labelled @p label.
     auto answer = [](const QString &label, QString *asked) {
         QTimer::singleShot(0, [label, asked]() {
-            QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
             if (box == nullptr) return;
             *asked = box->text();
             foreach (QAbstractButton *b, box->buttons())
@@ -27068,7 +27069,7 @@ void Monitor_Test::powerReadingsAreCopiedToEveryFixtureLikeIt()
         note = n->text();
         enabled = copy->isEnabled();
         QTimer::singleShot(0, []() {                 // the confirmation: Copy
-            if (QWidget *box = QApplication::activeModalWidget())
+            if (QWidget *box = modalOrFixtureEditor())
                 if (QPushButton *yes = box->findChild<QPushButton *>("copyPowerConfirm"))
                     yes->click();
         });
@@ -31744,7 +31745,7 @@ namespace
 void answerPlacement(const QString &button, int pick, QStringList *offered, QString *said, int *asked)
 {
     QTimer::singleShot(0, [=]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         if (modal == nullptr || modal->objectName() != QLatin1String("placementLayerChooser"))
         {
             if (modal != nullptr)
@@ -34225,7 +34226,7 @@ void Monitor_Test::aLiveHeadsTurnIsSaidFirst()
             a.found = true;
             const QString goText = btn->text();
             QTimer::singleShot(0, [&a, &shots, goText, yes, dlg, shot]() {
-                QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+                QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
                 if (box == nullptr || box->objectName() != QLatin1String("panTurnLiveConfirm"))
                     return;
                 a.text = box->text();

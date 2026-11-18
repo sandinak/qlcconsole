@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QDir>
 #include <QTreeWidgetItemIterator>
 #include <QMenu>
@@ -96,7 +97,7 @@
 static void driveDialog(const std::function<bool(QWidget *)> &fill)
 {
     QTimer::singleShot(0, [fill]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         const bool filled = (modal != nullptr) && fill(modal);
         QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
         QPushButton *btn = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
@@ -202,7 +203,7 @@ void FixtureManager_Test::theDeleteKeyDeletesTheSelectionAskingFirst()
         QTimer *poll = new QTimer;
         poll->setInterval(10);
         QObject::connect(poll, &QTimer::timeout, [poll, b, asked]() {
-            QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
             if (box == nullptr || box->button(b) == nullptr)
                 return;
             *asked = true;
@@ -962,7 +963,7 @@ void FixtureManager_Test::addFixtureWithInventorySelectedStagesIt()
     // Accept whatever dialog opens, and record which kind it was.
     bool sawInventoryDialog = false;
     QTimer::singleShot(0, [&sawInventoryDialog]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         if (modal == nullptr)
             return;
         sawInventoryDialog = modal->windowTitle().contains("Inventory");
@@ -1043,7 +1044,7 @@ void FixtureManager_Test::returningToInventoryReleasesTheAddress()
 
     FixtureManager mgr(nullptr, m_doc);
     QTimer::singleShot(0, []() {
-        if (QMessageBox *mb = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *mb = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
             mb->button(QMessageBox::Yes)->click();
     });
     mgr.returnToInventory(QList<quint32>() << real->id());
@@ -1095,7 +1096,7 @@ void whenModal(const std::function<void(T *)> &act)
 {
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [act, poll]() {
-        T *w = qobject_cast<T *>(QApplication::activeModalWidget());
+        T *w = qobject_cast<T *>(modalOrFixtureEditor());
         if (w == nullptr)
         {
             QTimer::singleShot(10, *poll);
@@ -2073,7 +2074,7 @@ void FixtureManager_Test::toolbarPropertiesEditsEverySelectedFixture()
     QString title;
     bool found = false;
     QTimer::singleShot(0, [&]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         if (modal == nullptr)
             return;
         title = modal->windowTitle();

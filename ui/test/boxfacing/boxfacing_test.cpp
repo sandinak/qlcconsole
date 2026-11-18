@@ -16,6 +16,7 @@
 */
 
 #include <QStandardItemModel>
+#include "../common/fixtureeditor.h"
 #include <QStyleOptionGraphicsItem>
 #include <QApplication>
 #include <QFormLayout>
@@ -214,7 +215,7 @@ void answerDialog(const std::function<void(T *)> &fn)
     QTimer *poll = new QTimer;
     poll->setInterval(10);
     QObject::connect(poll, &QTimer::timeout, poll, [poll, fn]() {
-        T *dlg = qobject_cast<T *>(QApplication::activeModalWidget());
+        T *dlg = qobject_cast<T *>(modalOrFixtureEditor());
         if (dlg == nullptr)
             return;
         poll->stop();

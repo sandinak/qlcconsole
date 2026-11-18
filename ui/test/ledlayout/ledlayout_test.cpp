@@ -16,6 +16,7 @@
 */
 
 #include <QDockWidget>
+#include "../common/fixtureeditor.h"
 #include <QtTest>
 #include <QTreeWidget>
 #include <QPushButton>
@@ -135,7 +136,7 @@ static void onNextModal(const std::function<void(QWidget *)> &act)
     auto poll = std::make_shared<std::function<void()>>();
     auto tries = std::make_shared<int>(0);
     *poll = [act, poll, tries]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         if (modal == nullptr && ++*tries < 200)
         {
             QTimer::singleShot(10, *poll);

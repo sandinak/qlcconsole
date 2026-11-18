@@ -18,6 +18,7 @@
 */
 
 #include <QAbstractButton>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDirIterator>
@@ -724,7 +725,7 @@ void Units_Test::dialogsFollowThePreference()
         poll->setInterval(5);
         int tries = 0;
         connect(poll.data(), &QTimer::timeout, this, [&]() {
-            QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
             if (dlg == nullptr)
             {
                 if (++tries > 200 && poll) poll->stop();
