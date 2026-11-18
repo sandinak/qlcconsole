@@ -227,6 +227,13 @@ static void driveDialog(const std::function<bool(QWidget *)> &fill, bool accept 
 {
     QTimer::singleShot(0, [fill, accept]() {
         QWidget *modal = QApplication::activeModalWidget();
+        /* Fixture Properties is no longer modal (the rig views stay usable
+           beside it): find it among the open windows. */
+        if (modal == nullptr)
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (w->isVisible() && qobject_cast<QDialog *>(w) != nullptr
+                    && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+                    modal = w;
         const bool filled = (modal != nullptr) && fill(modal);
         QDialogButtonBox *btns = modal ? modal->findChild<QDialogButtonBox *>() : nullptr;
         QPushButton *btn = btns ? btns->button(accept ? QDialogButtonBox::Ok : QDialogButtonBox::Cancel)
@@ -3271,6 +3278,45 @@ void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
     const FixtureRigProps rp = props->fixtureRigProps(rig.fxi->id());
     QVERIFY(rp.fixedAim);
     QCOMPARE(rp.aimDown, 40.0f);
+}
+
+/* "When I have rig view open and zoomed .. and open a fixture editor .. the
+   rig view zooms back out": picking the fixture (a selection change on the
+   plot) re-loaded the Rig Overview, and a reload re-frames. The zoom of both
+   views is what it was, while the editor is open and after it closes. */
+void Monitor_Test::openingAFixtureEditorKeepsTheRigViewsZoom()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    rig.mon->showStageOverview();
+    StructureStudioView *ov = rig.mon->m_overviewView;
+    QVERIFY(ov != nullptr);
+    rig.mon->m_overviewDlg->resize(900, 640);
+    QApplication::processEvents();
+    ov->zoomAt(QPointF(ov->width() / 2.0, ov->height() / 2.0), ov->m_scale * 3.0);
+    QVERIFY(ov->m_zoomed);
+    rig.gv->scale(2.0, 2.0);
+    const double ovScale = ov->m_scale;
+    const QPointF ovOrigin = ov->m_originPx;
+    const double planScale = rig.gv->viewScale();
+    double ovDuring = 0.0, planDuring = 0.0;
+    driveDialog([&](QWidget *) {
+        ovDuring = ov->m_scale;
+        planDuring = rig.gv->viewScale();
+        return true;
+    }, false);
+    const QPoint at = rig.gv->mapFromScene(rig.item->iconCentreScene());
+    QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QTest::mouseRelease(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+    QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(at), rig.gv->viewport()->mapToGlobal(QPointF(at)),
+                    Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(rig.gv->viewport(), &dbl);
+    QCOMPARE(ovDuring, ovScale);
+    QCOMPARE(planDuring, planScale);
+    QVERIFY(ov->m_zoomed);
+    QCOMPARE(ov->m_scale, ovScale);
+    QCOMPARE(ov->m_originPx, ovOrigin);
+    QCOMPARE(rig.gv->viewScale(), planScale);
 }
 
 void Monitor_Test::aFixedLightsFaceAimsItAndItsYokeTiltsUp()
