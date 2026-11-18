@@ -20,6 +20,13 @@ the double-GO guard and the e-stop rules. An audit and ranked plan is being
 written (docs/design, 2026-11-17); slices follow from it, each with a
 per-device hands-on checklist.
 
+**Scoped assignments** (Branson, 2026-11-17): a control can be assigned to
+a setting tied to a **layer, a cue, a song, a show**, etc. -- the mapping
+belongs to a scope and is live when that scope is (falling back to the
+wider one). The audit covers the model: where it is stored, how scopes
+resolve, LED feedback, fader pickup when the scope changes; GO and the
+e-stop can never be mapped away.
+
 ## Controller looks per pad type: Steam Deck first (0.5.x, planned 2026-11-17)
 
 Today the pad picture (`FocusControlMap`) has two looks: Xbox (also every
