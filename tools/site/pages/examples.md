@@ -15,7 +15,7 @@ of them: [Lighting a show choir with the Show Tree](https://sandinak.github.io/q
 
 ## The teaching stage
 
-![The teaching stage, dark](docs/course/images/lesson-1-1/rig-dark.png)
+![The teaching stage, dark](../../../docs/course/images/lesson-1-1/rig-dark.png)
 
 A show choir stage built from a real production and scaled down for class:
 risers, trusses, audience towers and a cyc, 68 lights grouped and ready, a
@@ -28,7 +28,7 @@ so it's the place to start your own. It's also built into the app as
 
 ## A first song in three cues
 
-![The verse cue on the teaching stage](docs/course/images/lesson-1-1/rig-verse.png)
+![The verse cue on the teaching stage](../../../docs/course/images/lesson-1-1/rig-verse.png)
 
 *Spring Show / Everybody Scream*: three cues (Pose, Verse, Chorus) written
 in the Show Tree with the mouse. Small enough to read end to end, and a good
@@ -38,7 +38,7 @@ first look at how cues track.
 
 ## Busking hits on the Virtual Console
 
-![Three hit buttons on a Virtual Console page](docs/course/images/lesson-2-6/vc-hits.png)
+![Three hit buttons on a Virtual Console page](../../../docs/course/images/lesson-2-6/vc-hits.png)
 
 The song grown into a full number, with effects, a fan of moving lights, and
 a *Hits* section (Red Stab, Glow, Faces) that fires from Virtual Console
@@ -48,7 +48,7 @@ buttons on top of whatever cue is running.
 
 ## Two songs, ready to run
 
-![The cue sheet for two songs](docs/course/images/lesson-3-8/cue-sheet.png)
+![The cue sheet for two songs](../../../docs/course/images/lesson-3-8/cue-sheet.png)
 
 The most complete example: two songs (*Everybody Scream* and *Slow Dance*)
 numbered Show.Part.Iteration, sub-cues, cue times that follow timecode, a
@@ -59,7 +59,7 @@ and press GO.
 
 ## Importing an Eos show
 
-![Special circuits found in an imported Eos show](docs/course/images/lesson-3-10/special-circuits.png)
+![Special circuits found in an imported Eos show](../../../docs/course/images/lesson-3-10/special-circuits.png)
 
 A small hand-written Eos show in USITT ASCII: ten dimmer channels, house,
 work and relay circuits (one labelled so the import guesses it wrong, on
@@ -70,7 +70,7 @@ to see how qlcconsole brings an Eos show over.
 
 ## The QLC+ sample
 
-![The Classic QLC+ view](docs/images/views-classic.png)
+![The Classic QLC+ view](../../../docs/images/views-classic.png)
 
 QLC+'s own sample workspace, as it ships with the app. It opens in the
 **Classic QLC+** view, so it's a quick way to check that a QLC+ 4 show

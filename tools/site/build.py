@@ -247,7 +247,7 @@ extra_pages = []
 for fn in sorted(os.listdir(os.path.join(HERE, "pages"))):
     if fn.endswith(".md"):
         meta, body = front_matter(read("tools/site/pages/" + fn))
-        html = md(body, "README.md").replace("<p><img", '<p class="qc-example"><img')
+        html = md(body, "tools/site/pages/" + fn).replace("<p><img", '<p class="qc-example"><img')
         extra_pages.append({"slug": meta["slug"], "title": meta["title"],
                             "menu_order": int(meta.get("menu_order", 50)), "parent": meta.get("parent", ""),
                             "content": wrap(STYLE + html)})
