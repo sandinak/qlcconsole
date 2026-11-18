@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QXmlStreamWriter>
@@ -220,7 +221,7 @@ void Autosave_Test::aMissingShowFileIsAnErrorNotAnEmptyShow()
 static void answerNextMessageBox(QMessageBox::StandardButton button)
 {
     QTimer::singleShot(0, [button]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         QVERIFY2(box != nullptr, "no message box came up");
         if (box != nullptr)
             box->button(button)->click();
@@ -489,7 +490,7 @@ static void onModal(std::function<bool(QWidget *)> act)
     auto clock = std::make_shared<QElapsedTimer>();
     clock->start();
     QObject::connect(t, &QTimer::timeout, t, [t, act, clock]() {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         // Not again from inside act() (a shot pumps events)
         t->stop();
         if (w != nullptr && act(w))
@@ -500,7 +501,7 @@ static void onModal(std::function<bool(QWidget *)> act)
         {
             // Never a hang: whatever is still up is closed, and the test
             // fails on what it then finds.
-            if (QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+            if (QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor()))
                 d->reject();
             t->deleteLater();
         }
@@ -744,7 +745,7 @@ void Autosave_Test::atStartUpItIsAskedInTheStartUpWindow()
         if (row == nullptr)
             return;
         poll.stop();
-        QVERIFY(qobject_cast<QMessageBox *>(QApplication::activeModalWidget()) == nullptr);
+        QVERIFY(qobject_cast<QMessageBox *>(modalOrFixtureEditor()) == nullptr);
         for (QPushButton *b : row->findChildren<QPushButton *>())
             offered << b->text();
         QLabel *label = row->findChild<QLabel *>();
@@ -819,7 +820,7 @@ void Autosave_Test::anOlderOrSameAutosaveIsNotOffered()
     QTimer watch;
     watch.setInterval(10);
     connect(&watch, &QTimer::timeout, this, [&boxed]() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
         {
             boxed = true;
             box->reject();

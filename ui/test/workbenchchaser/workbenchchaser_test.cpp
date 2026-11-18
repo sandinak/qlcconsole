@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QTreeWidgetItemIterator>
 #include <QXmlStreamReader>
 #include <QTemporaryDir>
@@ -1047,7 +1048,7 @@ static void whenItOpens(QStringList *seen, const std::function<void(QWidget *)> 
     QTimer::singleShot(0, qApp, [seen, onDialog]() {
         QWidget *w = QApplication::activePopupWidget();
         if (w == nullptr)
-            w = QApplication::activeModalWidget();
+            w = modalOrFixtureEditor();
         if (w == nullptr)
             return;
         seen->append(QString::fromLatin1(w->metaObject()->className()));

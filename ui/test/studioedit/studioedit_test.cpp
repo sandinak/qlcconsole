@@ -16,6 +16,7 @@
 */
 
 #include <QApplication>
+#include "../common/fixtureeditor.h"
 #include <QInputDialog>
 #include <QMouseEvent>
 #include <QLineEdit>
@@ -522,7 +523,7 @@ void StudioEdit_Test::groupMenuMakesAddsToAndRemovesFromGroupsOneUndoEach()
     // New Group makes it at once, named "Group N": no dialog, one undo.
     QSignalSpy created(rig.gv, SIGNAL(groupCreated(quint32)));
     made->trigger();
-    QVERIFY(QApplication::activeModalWidget() == nullptr);
+    QVERIFY(modalOrFixtureEditor() == nullptr);
     QCOMPARE(created.count(), 1);
     const quint32 gid = a->groupId();
     QVERIFY(gid != 0);
@@ -667,7 +668,7 @@ void StudioEdit_Test::ctrlGGroupsAtOnceAndPlotLayersSaysGroupNotFolder()
     QVERIFY(sc != nullptr);
     QSignalSpy created(rig.gv, SIGNAL(groupCreated(quint32)));
     emit sc->activated();
-    QVERIFY(QApplication::activeModalWidget() == nullptr);
+    QVERIFY(modalOrFixtureEditor() == nullptr);
     QCOMPARE(created.count(), 1);
     const quint32 gid = created.first().first().toUInt();
     MonitorProperties *props = rig.props();

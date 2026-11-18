@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QTreeWidget>
 #include <QRadioButton>
 #include <QCheckBox>
@@ -480,7 +481,7 @@ void HeadTypeGroups_Test::dialogPreviewsAndCreates()
 static void acceptNextDialog(bool *seen = nullptr)
 {
     QTimer::singleShot(0, [seen]() {
-        if (QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+        if (QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor()))
         {
             if (seen != nullptr)
                 *seen = true;
@@ -504,10 +505,10 @@ void HeadTypeGroups_Test::fixtureManagerCreatesFromSelectedGroups()
     // A group selected: one group of it, as a block, is offered first.
     bool seen = false;
     QTimer::singleShot(0, [&seen]() {
-        CreateGroupsDialog *dlg = qobject_cast<CreateGroupsDialog *>(QApplication::activeModalWidget());
+        CreateGroupsDialog *dlg = qobject_cast<CreateGroupsDialog *>(modalOrFixtureEditor());
         if (dlg == nullptr)
         {
-            if (QWidget *w = QApplication::activeModalWidget())
+            if (QWidget *w = modalOrFixtureEditor())
                 w->close();
             return;
         }
@@ -533,10 +534,10 @@ void HeadTypeGroups_Test::fixtureManagerCreatesFromSelectedGroups()
     // A group per type: its fixtures' heads.
     seen = false;
     QTimer::singleShot(0, [&seen]() {
-        CreateGroupsDialog *dlg = qobject_cast<CreateGroupsDialog *>(QApplication::activeModalWidget());
+        CreateGroupsDialog *dlg = qobject_cast<CreateGroupsDialog *>(modalOrFixtureEditor());
         if (dlg == nullptr)
         {
-            if (QWidget *w = QApplication::activeModalWidget())
+            if (QWidget *w = modalOrFixtureEditor())
                 w->close();
             return;
         }

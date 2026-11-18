@@ -18,6 +18,7 @@
 */
 
 #include <QPainter>
+#include "../common/fixtureeditor.h"
 #include <QtMath>
 #include <QApplication>
 #include <QInputDialog>
@@ -718,7 +719,7 @@ void ContextMenus_Test::theFixtureGroupItemsWork()
         QVERIFY(rename != nullptr);
         QCOMPARE(rename->text(), QString("Rename…"));
         QTimer::singleShot(0, []() {
-            if (QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget()))
+            if (QInputDialog *d = qobject_cast<QInputDialog *>(modalOrFixtureEditor()))
             {
                 d->setTextValue("Front Wash");
                 d->accept();
@@ -758,7 +759,7 @@ void ContextMenus_Test::theFixtureGroupItemsWork()
         QVERIFY(del != nullptr);
         QCOMPARE(del->text(), QString("Delete 2 Fixture Groups…"));
         QTimer::singleShot(0, []() {
-            if (QMessageBox *mb = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            if (QMessageBox *mb = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
                 mb->button(QMessageBox::Yes)->click();
         });
         del->trigger();
@@ -1090,7 +1091,7 @@ void ContextMenus_Test::aPaletteHasOneMenuEverywhere()
         QVERIFY(rename != nullptr);
         QCOMPARE(rename->text(), QString("Rename…"));
         QTimer::singleShot(0, []() {
-            if (QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget()))
+            if (QInputDialog *d = qobject_cast<QInputDialog *>(modalOrFixtureEditor()))
             {
                 d->setTextValue("Halfway");
                 d->accept();
@@ -1524,7 +1525,7 @@ void ContextMenus_Test::testFixtureNeverDoesNothing()
         QTimer watch;
         watch.setInterval(10);
         QObject::connect(&watch, &QTimer::timeout, [&]() {
-            if (QWidget *w = QApplication::activeModalWidget())
+            if (QWidget *w = modalOrFixtureEditor())
             {
                 opened = true;
                 watch.stop();

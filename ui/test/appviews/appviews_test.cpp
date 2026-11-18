@@ -18,6 +18,7 @@
 */
 
 #include <QDockWidget>
+#include "../common/fixtureeditor.h"
 #include <QToolTip>
 #include <QPainter>
 #include <QStatusBar>
@@ -996,7 +997,7 @@ static void answerNextBox(QMessageBox::StandardButton answer, QString *text)
         t.start();
         while (t.elapsed() < 5000)
         {
-            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
             {
                 if (text != nullptr)
                     *text = box->text();
@@ -3735,7 +3736,7 @@ void AppViews_Test::saveAsOffersTheQlcPlus4Format()
     QString startedOn;
     QStringList offered;
     QTimer::singleShot(0, [&]() {
-        QFileDialog *dlg = qobject_cast<QFileDialog *>(QApplication::activeModalWidget());
+        QFileDialog *dlg = qobject_cast<QFileDialog *>(modalOrFixtureEditor());
         if (dlg == nullptr)
             return;
         startedOn = dlg->selectedNameFilter();
@@ -3992,7 +3993,7 @@ void AppViews_Test::newFromTemplateOpensTheClassroomStageUntitled()
     // An edited show is asked about first: Cancel keeps it
     doc->setModified();
     QTimer::singleShot(0, this, []() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         if (box != nullptr)
             box->button(QMessageBox::Cancel)->click();
     });
@@ -4364,7 +4365,7 @@ void AppViews_Test::teachingOperateWarnsQuietlyThenAsksWhenItLooksReal()
     QTimer probe;
     probe.setInterval(10);
     connect(&probe, &QTimer::timeout, this, [&boxed]() {
-        if (qobject_cast<QMessageBox *>(QApplication::activeModalWidget()) != nullptr)
+        if (qobject_cast<QMessageBox *>(modalOrFixtureEditor()) != nullptr)
             boxed = true;
     });
     probe.start();
@@ -4823,7 +4824,7 @@ void AppViews_Test::aQxwSaveSaysWhatQlcPlus4Leaves()
     QCOMPARE(m_app->saveXML(show), QFile::NoError);
     QVERIFY(QFile::exists(show));
     QVERIFY(!doc->isModified());
-    QVERIFY(QApplication::activeModalWidget() == nullptr);
+    QVERIFY(modalOrFixtureEditor() == nullptr);
     const QStringList losses = m_app->lastStockLosses();
     QVERIFY2(losses.count() == 2, qPrintable(losses.join(" | ")));
     QVERIFY(losses.at(0).contains("Show Tree"));
@@ -4848,7 +4849,7 @@ void AppViews_Test::aQxwSaveSaysWhatQlcPlus4Leaves()
     QVERIFY(!m_app->m_viewNotice->isHidden());
     QString startedOn;
     QTimer::singleShot(0, [&]() {
-        if (QFileDialog *dlg = qobject_cast<QFileDialog *>(QApplication::activeModalWidget()))
+        if (QFileDialog *dlg = qobject_cast<QFileDialog *>(modalOrFixtureEditor()))
         {
             startedOn = dlg->selectedNameFilter();
             dlg->reject();
@@ -5337,7 +5338,7 @@ void AppViews_Test::aLoadedTeachingShowOpensInOperateWithoutAsking()
     QTimer probe;
     probe.setInterval(10);
     connect(&probe, &QTimer::timeout, this, [&boxed]() {
-        if (qobject_cast<QMessageBox *>(QApplication::activeModalWidget()) != nullptr)
+        if (qobject_cast<QMessageBox *>(modalOrFixtureEditor()) != nullptr)
             boxed = true;
     });
     probe.start();
@@ -5653,7 +5654,7 @@ struct DumpWatch
     explicit DumpWatch(App *app) : dumped(app->m_dumpDmxAction, &QAction::triggered)
     {
         QObject::connect(&closer, &QTimer::timeout, []() {
-            if (QWidget *modal = QApplication::activeModalWidget())
+            if (QWidget *modal = modalOrFixtureEditor())
                 modal->close();
         });
         closer.start(50);
@@ -6014,7 +6015,7 @@ void AppViews_Test::editKeysInPlotLayers()
     dump.closer.stop();
     QTimer yes;
     connect(&yes, &QTimer::timeout, [&]() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
         {
             for (QAbstractButton *btn : box->buttons())
                 if (box->buttonRole(btn) == QMessageBox::AcceptRole
@@ -6106,7 +6107,7 @@ void AppViews_Test::ctrlDOnThePlotDuplicates()
     QSignalSpy dumped(m_app->m_dumpDmxAction, &QAction::triggered);
     QTimer closer;
     connect(&closer, &QTimer::timeout, [&]() {
-        if (QWidget *modal = QApplication::activeModalWidget())
+        if (QWidget *modal = modalOrFixtureEditor())
             modal->close();
     });
     closer.start(50);

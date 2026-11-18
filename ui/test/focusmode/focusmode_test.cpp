@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QSignalSpy>
 #include <QPushButton>
 #include <QListWidget>
@@ -1707,7 +1708,7 @@ void FocusMode_Test::exitNamesTheUnsavedLights()
 
     QString asked;
     QTimer::singleShot(0, this, [&asked]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         if (box == nullptr)
             return;
         asked = box->text();

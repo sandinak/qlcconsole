@@ -18,6 +18,7 @@
 */
 
 #include <QDockWidget>
+#include "../common/fixtureeditor.h"
 #include <QMenuBar>
 #include <QTextBrowser>
 #include <QToolTip>
@@ -2861,7 +2862,7 @@ static void answerNextQuestion(QMessageBox::StandardButton answer, QString *text
         t.start();
         while (t.elapsed() < 5000)
         {
-            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
             {
                 if (text != nullptr)
                     *text = box->text();

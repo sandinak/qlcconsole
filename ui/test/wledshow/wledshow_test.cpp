@@ -10,6 +10,7 @@
 */
 
 #include <QAbstractButton>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDialog>
@@ -88,7 +89,7 @@ public:
     {
         m_timer.setInterval(20);
         QObject::connect(&m_timer, &QTimer::timeout, [this]() {
-            QWidget *modal = QApplication::activeModalWidget();
+            QWidget *modal = modalOrFixtureEditor();
             QMessageBox *box = qobject_cast<QMessageBox *>(modal);
             if (box == nullptr)
             {
@@ -126,7 +127,7 @@ void driveAddDialog(std::function<void(AddFixture *)> fill)
 {
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [fill, poll]() {
-        AddFixture *dlg = qobject_cast<AddFixture *>(QApplication::activeModalWidget());
+        AddFixture *dlg = qobject_cast<AddFixture *>(modalOrFixtureEditor());
         if (dlg == nullptr)
         {
             QTimer::singleShot(10, *poll);

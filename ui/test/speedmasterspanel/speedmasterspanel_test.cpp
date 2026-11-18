@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QElapsedTimer>
 #include <QSettings>
 #include <QDoubleSpinBox>
@@ -340,7 +341,7 @@ void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
 
     bool sawDialog = false;
     QTimer::singleShot(0, this, [&sawDialog]() {
-        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
         QVERIFY(dlg != nullptr);
         sawDialog = dlg->objectName() == QLatin1String("speedMasterInputsDialog");
         InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
@@ -368,7 +369,7 @@ void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
 
     // Cancel leaves them as they were.
     QTimer::singleShot(0, this, []() {
-        QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
         InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
         rate->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 99)));
         dlg->reject();

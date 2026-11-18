@@ -10,6 +10,7 @@
 */
 
 #include <QNetworkAccessManager>
+#include "../common/fixtureeditor.h"
 #include <QJsonDocument>
 #include <QTcpServer>
 #include <QTcpSocket>
@@ -477,7 +478,7 @@ namespace
 void answerBox(const QString &button, QString *text, const QString &shot = QString())
 {
     QTimer::singleShot(0, [button, text, shot]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         if (box == nullptr)
             return;
         if (text != nullptr)

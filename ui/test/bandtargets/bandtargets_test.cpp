@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
@@ -309,7 +310,7 @@ void BandTargets_Test::editTargetDialogShots()
     QWidget parent;
     Monitor mon(&parent, &doc);
     QTimer::singleShot(0, [&]() {
-        QWidget *modal = QApplication::activeModalWidget();
+        QWidget *modal = modalOrFixtureEditor();
         QVERIFY(modal != nullptr);
         QComboBox *kind = nullptr;
         foreach (QComboBox *c, modal->findChildren<QComboBox *>())

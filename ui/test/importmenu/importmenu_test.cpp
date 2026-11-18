@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QMenu>
 #include <QMenuBar>
 #include <QTemporaryDir>
@@ -419,7 +420,7 @@ void ImportMenu_Test::importedCopiesPointAtTheImportedObjects()
     QTimer answer;
     QStringList seen;
     connect(&answer, &QTimer::timeout, this, [&seen]() {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         if (w != nullptr)
             seen << QString::fromLatin1(w->metaObject()->className())
                         + (qobject_cast<QMessageBox *>(w) ? "|" + qobject_cast<QMessageBox *>(w)->text() : QString());

@@ -18,6 +18,7 @@
 */
 
 #include <QXmlStreamReader>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QMenu>
 #include <QTreeWidget>
@@ -340,7 +341,7 @@ void EffectDesigner_Test::saveAsPaletteAsksNoName()
     QStringList boxes;
     QTimer watch;
     connect(&watch, &QTimer::timeout, &watch, [&boxes]() {
-        if (QWidget *w = QApplication::activeModalWidget())
+        if (QWidget *w = modalOrFixtureEditor())
         {
             boxes << QString::fromLatin1(w->metaObject()->className());
             w->close();
@@ -548,7 +549,7 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
     bool triggered = false, designed = false;
     QTimer driver;
     connect(&driver, &QTimer::timeout, this, [&]() {
-        if (EffectLayerDialog *dlg = qobject_cast<EffectLayerDialog *>(QApplication::activeModalWidget()))
+        if (EffectLayerDialog *dlg = qobject_cast<EffectLayerDialog *>(modalOrFixtureEditor()))
         {
             if (!designed && dlg->designer()->pickEffect("Dimmer Phaser"))
             {
@@ -804,7 +805,7 @@ public:
     explicit ModalAnswerer(const QString &text = QString())
     {
         connect(&m_timer, &QTimer::timeout, this, [this, text]() {
-            QWidget *w = QApplication::activeModalWidget();
+            QWidget *w = modalOrFixtureEditor();
             if (w == nullptr)
                 return;
             if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))

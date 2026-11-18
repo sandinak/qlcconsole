@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QCryptographicHash>
 #include <QDialog>
@@ -83,7 +84,7 @@ static void closeModalsFor(int ms)
     t.start();
     while (t.elapsed() < ms)
     {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         // The load's own progress is not a question.
         if (w != nullptr && qobject_cast<QProgressDialog *>(w) == nullptr)
         {
@@ -109,7 +110,7 @@ public:
     {
         m_timer.setInterval(50);
         QObject::connect(&m_timer, &QTimer::timeout, []() {
-            QWidget *w = QApplication::activeModalWidget();
+            QWidget *w = modalOrFixtureEditor();
             if (w != nullptr && qobject_cast<QProgressDialog *>(w) == nullptr)
             {
                 QString what = w->metaObject()->className();
@@ -635,7 +636,7 @@ void ShowFiles_Test::collectForTransferTakesTheVenues()
     QTimer answer;
     answer.setInterval(30);
     connect(&answer, &QTimer::timeout, this, [&told, &answer, parent]() {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
         {
             // Opened on the folder, and Choose.
@@ -713,7 +714,7 @@ void ShowFiles_Test::saveAsToAnotherFolderTakesThePictures()
     QTimer answer;
     answer.setInterval(30);
     connect(&answer, &QTimer::timeout, this, [&answer, newShow]() {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
         {
             fd->selectFile(newShow);
@@ -781,7 +782,7 @@ static QString collectInto(App *app, const QString &parent)
     QTimer answer;
     answer.setInterval(30);
     QObject::connect(&answer, &QTimer::timeout, app, [&told, &answer, parent]() {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
         {
             fd->setDirectory(parent);

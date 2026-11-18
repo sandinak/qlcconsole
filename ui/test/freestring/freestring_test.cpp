@@ -16,6 +16,7 @@
 */
 
 #include <QStandardItemModel>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QFormLayout>
 #include <QPushButton>
@@ -188,7 +189,7 @@ void answerDialog(const std::function<void(T *)> &fn)
     QTimer *poll = new QTimer;
     poll->setInterval(10);
     QObject::connect(poll, &QTimer::timeout, poll, [poll, fn]() {
-        T *dlg = qobject_cast<T *>(QApplication::activeModalWidget());
+        T *dlg = qobject_cast<T *>(modalOrFixtureEditor());
         if (dlg == nullptr)
             return;
         poll->stop();
@@ -534,7 +535,7 @@ void FreeString_Test::writeSegmentsWritesASegmentPerSpanWithItsOwnReverse()
     {
         QWidget over;
         QTimer::singleShot(50, [&]() {
-            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
             {
                 QVERIFY(box->text().contains("from one anchor to the next"));
                 box->reject();

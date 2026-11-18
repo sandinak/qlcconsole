@@ -10,6 +10,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QMessageBox>
 #include <QPushButton>
@@ -140,7 +141,7 @@ void answerBox(const QString &button, QString *text, const QString &shot = QStri
     auto poll = std::make_shared<std::function<void()> >();
     auto left = std::make_shared<int>(300);
     *poll = [button, text, shot, poll, left]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         if (box == nullptr)
         {
             if (--*left > 0)
@@ -688,8 +689,8 @@ void WledDiscovery_Test::setUpAsksOnceWritesTheKeysAndReadsBack()
 
     // Again: nothing to change, nothing asked.
     bool asked = false;
-    QTimer::singleShot(400, [&asked]() { asked = QApplication::activeModalWidget() != nullptr;
-                                          if (asked) QApplication::activeModalWidget()->close(); });
+    QTimer::singleShot(400, [&asked]() { asked = modalOrFixtureEditor() != nullptr;
+                                          if (asked) modalOrFixtureEditor()->close(); });
     check.offerSetUp(&over, fx->id());
     QTest::qWait(600);
     QVERIFY(!asked);
@@ -730,7 +731,7 @@ void WledDiscovery_Test::aBatchIsSetUpWithoutAQuestion()
     auto poll = std::make_shared<std::function<void()> >();
     auto left_ = std::make_shared<int>(400);
     *poll = [&boxes, poll, left_]() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
         {
             ++boxes;
             box->reject();

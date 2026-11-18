@@ -18,6 +18,7 @@
 */
 
 #include <QTableWidget>
+#include "../common/fixtureeditor.h"
 #include <QListWidget>
 #include <QPushButton>
 #include <QComboBox>
@@ -241,7 +242,7 @@ void VenueRigUi_Test::aClashingVenueAsksBeforeItIsApplied()
         QTimer *t = new QTimer(&d);
         t->setInterval(20);
         connect(t, &QTimer::timeout, &d, [&asked, &otherBoxes, t, anyway]() {
-            QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+            QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
             if (box == nullptr)
                 return;
             if (box->objectName() != QLatin1String("vrClashConfirm"))

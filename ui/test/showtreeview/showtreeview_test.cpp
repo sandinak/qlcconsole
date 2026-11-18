@@ -18,6 +18,7 @@
 */
 
 #include <QScrollArea>
+#include "../common/fixtureeditor.h"
 #include <QPainter>
 #include <QDir>
 #include <QTreeWidgetItemIterator>
@@ -2874,7 +2875,7 @@ void ShowTreeView_Test::recordAsksWhenTheChoicesDiffer()
     QStringList seen;
     bool preRunning = false;
     QTimer::singleShot(0, [&]() {
-        QWidget *dlg = QApplication::activeModalWidget();
+        QWidget *dlg = modalOrFixtureEditor();
         if (dlg == nullptr || dlg->objectName() != "stRecordDialog")
             return;
         for (QRadioButton *rb : dlg->findChildren<QRadioButton *>())
@@ -3023,7 +3024,7 @@ public:
         : m_answer(answer)
     {
         connect(&m_timer, &QTimer::timeout, this, [this]() {
-            QWidget *w = QApplication::activeModalWidget();
+            QWidget *w = modalOrFixtureEditor();
             if (w == nullptr)
                 w = QApplication::activePopupWidget();
             if (w == nullptr)

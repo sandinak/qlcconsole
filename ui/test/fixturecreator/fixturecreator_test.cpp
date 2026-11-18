@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -72,7 +73,7 @@ void driveAddDialog(std::function<void(AddFixture *)> fill)
 {
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [fill, poll]() {
-        AddFixture *dlg = qobject_cast<AddFixture *>(QApplication::activeModalWidget());
+        AddFixture *dlg = qobject_cast<AddFixture *>(modalOrFixtureEditor());
         if (dlg == nullptr)
         {
             QTimer::singleShot(10, *poll);
@@ -182,7 +183,7 @@ void FixtureCreator_Test::addPastTheUniverseLimitSaysSo()
     QString text;
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [&text, poll]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         if (box == nullptr || box->objectName() != QLatin1String("fixtureLimitBox"))
         {
             QTimer::singleShot(10, *poll);
@@ -339,7 +340,7 @@ void FixtureCreator_Test::anInvalidAddressIsRefusedWithAMessage()
     bool sawMessage = false;
     auto closeBox = std::make_shared<std::function<void()>>();
     *closeBox = [&sawMessage, closeBox]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         if (box == nullptr)
         {
             QTimer::singleShot(10, *closeBox);
@@ -362,7 +363,7 @@ void FixtureCreator_Test::aCancelledDialogCreatesNothing()
 {
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [poll]() {
-        AddFixture *dlg = qobject_cast<AddFixture *>(QApplication::activeModalWidget());
+        AddFixture *dlg = qobject_cast<AddFixture *>(modalOrFixtureEditor());
         if (dlg == nullptr)
             QTimer::singleShot(10, *poll);
         else
@@ -482,7 +483,7 @@ void answerBoxes(QStringList *said)
     auto poll = std::make_shared<std::function<void()>>();
     auto left = std::make_shared<int>(200);
     *poll = [said, poll, left]() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
         {
             *said << box->text();
             box->accept();

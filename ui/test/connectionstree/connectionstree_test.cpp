@@ -16,6 +16,7 @@
 */
 
 #include <QTreeWidget>
+#include "../common/fixtureeditor.h"
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QLabel>
@@ -2004,7 +2005,7 @@ public:
 private:
     void step()
     {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         if (w == nullptr)
             return;
         if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
@@ -2375,7 +2376,7 @@ void ConnectionsTree_Test::offlinePatchesShowKeptNotUnpatched()
 static void answerNextMessageBox(QMessageBox::StandardButton button)
 {
     QTimer::singleShot(0, [button]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         QVERIFY2(box != nullptr, "no message box came up");
         if (box != nullptr)
             box->button(button)->click();
@@ -2474,7 +2475,7 @@ struct EditorSpy
     {
         timer.setInterval(10);
         QObject::connect(&timer, &QTimer::timeout, [this]() {
-            ConnectionEditor *ed = qobject_cast<ConnectionEditor *>(QApplication::activeModalWidget());
+            ConnectionEditor *ed = qobject_cast<ConnectionEditor *>(modalOrFixtureEditor());
             if (ed == NULL)
                 return;
             ++opened;
@@ -2932,7 +2933,7 @@ void ConnectionsTree_Test::testModeSetsChannelsFromTheMap()
 
     // A double-click types a value and never sends the first click's value.
     QTimer::singleShot(0, [&]() {
-        QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+        QInputDialog *d = qobject_cast<QInputDialog *>(modalOrFixtureEditor());
         if (d != nullptr)
         {
             QCOMPARE(t->heldCount(), 0);      // nothing was sent before the dialog opened
@@ -3041,7 +3042,7 @@ void ConnectionsTree_Test::aTargetsNameDoesNotOutliveIt()
     QTimer driver;
     driver.setInterval(5);
     QObject::connect(&driver, &QTimer::timeout, [&]() {
-        QInputDialog *d = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+        QInputDialog *d = qobject_cast<QInputDialog *>(modalOrFixtureEditor());
         if (d == nullptr || answers.isEmpty())
             return;
         openedOn << d->textValue();
@@ -4150,7 +4151,7 @@ bool editCellByHand(ConnectionsTree &tree, quint32 universe, int column, const Q
     QTimer answer;
     answer.setInterval(10);
     QObject::connect(&answer, &QTimer::timeout, [&message]() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
         {
             message = box->text();
             box->accept();

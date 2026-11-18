@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QPlainTextEdit>
 #include <QTemporaryDir>
 #include <QApplication>
@@ -46,7 +47,7 @@ void whenModal(const std::function<void(T *)> &act)
 {
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [act, poll]() {
-        T *w = qobject_cast<T *>(QApplication::activeModalWidget());
+        T *w = qobject_cast<T *>(modalOrFixtureEditor());
         if (w == nullptr)
         {
             QTimer::singleShot(10, *poll);

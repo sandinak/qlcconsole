@@ -18,6 +18,7 @@
 */
 
 #include <QLabel>
+#include "../common/fixtureeditor.h"
 #include <QLineEdit>
 #include <QDoubleSpinBox>
 #include <QApplication>
@@ -431,7 +432,7 @@ void MonitorFixtureItem_Test::mountingHeightIsInTheShowsUnits()
     bool lengthField = false;
     auto answerWith = [&](const QString &typed) {
         QTimer::singleShot(0, [&asked, &shown, &lengthField, typed]() {
-            QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
             if (d == nullptr)
                 return;
             QLabel *l = d->findChild<QLabel *>();

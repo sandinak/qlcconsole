@@ -18,6 +18,7 @@
 */
 
 #include <QSignalSpy>
+#include "../common/fixtureeditor.h"
 #include <QToolButton>
 #include <QListWidget>
 #include <QPushButton>
@@ -1787,7 +1788,7 @@ void FocusCallsUi_Test::lightsThatCannotBeAimedAreListed()
     QCOMPARE(d.options().fixtures, QList<quint32>({ m_spots.first() }));
     // Start: the warning, Exclude them the default.
     QTimer::singleShot(0, &d, []() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         QVERIFY(box != nullptr);
         QCOMPARE(box->objectName(), QString("focusExcludeBox"));
         QCOMPARE(box->defaultButton()->objectName(), QString("focusExclude"));
@@ -1795,7 +1796,7 @@ void FocusCallsUi_Test::lightsThatCannotBeAimedAreListed()
     });
     QVERIFY(d.confirmExclusions());
     QTimer::singleShot(0, &d, []() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
             box->button(QMessageBox::Cancel)->click();
     });
     QVERIFY(!d.confirmExclusions());

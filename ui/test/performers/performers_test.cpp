@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QGraphicsScene>
 #include <QElapsedTimer>
@@ -789,7 +790,7 @@ void Performers_Test::anyLineTakesPeopleInItsDialog()
     t->makeLine();
     plot.gv->updateTargets();
     QTimer::singleShot(0, [&]() {
-        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
         QVERIFY(d != nullptr);
         QSpinBox *n = d->findChild<QSpinBox *>(QStringLiteral("linePeople"));
         QVERIFY(n != nullptr && n->isEnabled());

@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QAbstractButton>
 #include <QAbstractScrollArea>
 #include <QAbstractSlider>
@@ -1493,7 +1494,7 @@ void LayoutSanity_Test::theStudioEditorsFitALaptop()
         poll.setInterval(5);
         int tries = 0;
         connect(&poll, &QTimer::timeout, this, [&]() {
-            QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+            QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
             if (dlg == nullptr)
             {
                 if (++tries > 400)

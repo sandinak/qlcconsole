@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QTreeWidgetItemIterator>
 #include <QInputDialog>
 #include <QMessageBox>
@@ -111,7 +112,7 @@ public:
 private:
     void step()
     {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         if (w == nullptr)
             return;
         if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
@@ -172,7 +173,7 @@ public:
     {
         m_timer.setInterval(5);
         connect(&m_timer, &QTimer::timeout, this, [this]() {
-            ConnectionEditor *ed = qobject_cast<ConnectionEditor *>(QApplication::activeModalWidget());
+            ConnectionEditor *ed = qobject_cast<ConnectionEditor *>(modalOrFixtureEditor());
             if (ed == nullptr)
                 return;
             ++opened;

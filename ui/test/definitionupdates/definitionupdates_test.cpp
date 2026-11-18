@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDialogButtonBox>
@@ -389,7 +390,7 @@ void DefinitionUpdates_Test::aLargeResultFitsTheScreenAndScrolls()
     QTimer watch;
     watch.setInterval(20);
     connect(&watch, &QTimer::timeout, this, [&seen]() {
-        BulkResultDialog *d = qobject_cast<BulkResultDialog *>(QApplication::activeModalWidget());
+        BulkResultDialog *d = qobject_cast<BulkResultDialog *>(modalOrFixtureEditor());
         if (d == nullptr || !d->isVisible())
             return;
         seen.opened = true;

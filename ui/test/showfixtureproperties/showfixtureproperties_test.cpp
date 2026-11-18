@@ -21,6 +21,7 @@
    Windows' five minutes a test program. */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QDialog>
 #include <QDir>
@@ -55,7 +56,7 @@ static void closeModalsFor(int ms)
     t.start();
     while (t.elapsed() < ms)
     {
-        QWidget *w = QApplication::activeModalWidget();
+        QWidget *w = modalOrFixtureEditor();
         if (w != nullptr && qobject_cast<QProgressDialog *>(w) == nullptr)
         {
             qWarning() << "closed a modal while a show opened:" << w->metaObject()->className();
@@ -75,7 +76,7 @@ public:
     {
         m_timer.setInterval(50);
         QObject::connect(&m_timer, &QTimer::timeout, []() {
-            QWidget *w = QApplication::activeModalWidget();
+            QWidget *w = modalOrFixtureEditor();
             if (w != nullptr && qobject_cast<QProgressDialog *>(w) == nullptr)
             {
                 qWarning() << "closed a modal while a show opened:" << w->metaObject()->className();
@@ -178,7 +179,7 @@ void ShowFixtureProperties_Test::fixturePropertiesOpensForEveryFixture()
     QTimer watch;
     watch.setInterval(5);
     QObject::connect(&watch, &QTimer::timeout, [&]() {
-        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
         if (d == nullptr)
             return;
         title = d->windowTitle();

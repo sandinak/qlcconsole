@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QTreeWidgetItemIterator>
 #include <QApplication>
 #include <QMessageBox>
@@ -460,7 +461,7 @@ void FixtureTreeWidget_Test::duplicateNamesAreListedAndARenameToATakenNameIsRefu
     QString note;
     QTimer watch;                       // the note is modal: answer it once it shows
     QObject::connect(&watch, &QTimer::timeout, [&note, &watch]() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
         {
             note = box->text();
             box->accept();

@@ -10,6 +10,7 @@
 */
 
 #include <QAbstractButton>
+#include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -112,7 +113,7 @@ void driveAddDialog(std::function<void(AddFixture *)> fill)
 {
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [fill, poll]() {
-        AddFixture *dlg = qobject_cast<AddFixture *>(QApplication::activeModalWidget());
+        AddFixture *dlg = qobject_cast<AddFixture *>(modalOrFixtureEditor());
         if (dlg == nullptr)
         {
             QTimer::singleShot(10, *poll);
@@ -134,7 +135,7 @@ struct BoxCloser
     {
         timer.setInterval(20);
         QObject::connect(&timer, &QTimer::timeout, [this]() {
-            if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+            if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
             {
                 said << box->text();
                 box->reject();
@@ -853,7 +854,7 @@ void WledPixels_Test::shotsOfAddFixtureAndFixOnDevice()
     QTimer grabber;
     grabber.setInterval(30);
     connect(&grabber, &QTimer::timeout, [&]() {
-        if (QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget()))
+        if (QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor()))
         {
             QTest::qWait(30);
             box->grab().save(QDir(dir).filePath(QString("fixondevice-pixels-%1.png").arg(++n)));

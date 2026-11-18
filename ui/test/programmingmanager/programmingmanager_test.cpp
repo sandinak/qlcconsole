@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QDir>
 #include <QStackedWidget>
 #include <QMenu>
@@ -2849,7 +2850,7 @@ public:
         : m_answer(answer)
     {
         connect(&m_timer, &QTimer::timeout, this, [this]() {
-            QWidget *w = QApplication::activeModalWidget();
+            QWidget *w = modalOrFixtureEditor();
             if (w == nullptr)
                 return;
             if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))

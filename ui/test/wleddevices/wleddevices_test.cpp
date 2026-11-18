@@ -10,6 +10,7 @@
 */
 
 #include <QXmlStreamWriter>
+#include "../common/fixtureeditor.h"
 #include <QXmlStreamReader>
 #include <QTableWidget>
 #include <QApplication>
@@ -285,7 +286,7 @@ void WledDevices_Test::editedOnThePatchAsOneUndoStep()
 
     QStringList seen;
     QTimer::singleShot(0, this, [&]() {
-        WledDevicesDialog *dlg = qobject_cast<WledDevicesDialog *>(QApplication::activeModalWidget());
+        WledDevicesDialog *dlg = qobject_cast<WledDevicesDialog *>(modalOrFixtureEditor());
         QVERIFY(dlg != nullptr);
         dlg->addDevice();
         dlg->setDeviceIP(1, C);
@@ -321,7 +322,7 @@ void WledDevices_Test::editedOnThePatchAsOneUndoStep()
     // Cancelled: nothing changes, nothing to undo.
     io->patchUndo()->clear();
     QTimer::singleShot(0, this, [&]() {
-        if (QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget()))
+        if (QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor()))
             dlg->reject();
     });
     QVERIFY(!WledDevicesDialog::edit(m_doc, 0, 0, nullptr));

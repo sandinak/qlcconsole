@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -122,7 +123,7 @@ void PerformerSets_Test::oneDialogChangesTheWholeSet()
 
     // Unticked (the default): this line only.
     QTimer::singleShot(0, [&]() {
-        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
         QVERIFY(d != nullptr);
         QCheckBox *whole = d->findChild<QCheckBox *>(QStringLiteral("lineWholeSet"));
         QVERIFY(whole != nullptr && !whole->isHidden() && !whole->isChecked());
@@ -137,7 +138,7 @@ void PerformerSets_Test::oneDialogChangesTheWholeSet()
 
     // Ticked: all three.
     QTimer::singleShot(0, [&]() {
-        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
         QVERIFY(d != nullptr);
         d->findChild<QCheckBox *>(QStringLiteral("lineWholeSet"))->setChecked(true);
         d->findChild<QDoubleSpinBox *>(QStringLiteral("personHeight"))->setValue(1.30);
@@ -152,7 +153,7 @@ void PerformerSets_Test::oneDialogChangesTheWholeSet()
     StageTarget *solo = PerformerFill::addLine(props, QVector3D(0, 6, 0), QVector3D(2, 6, 0), 3,
                                                PerformerFill::Options(), 0);
     QTimer::singleShot(0, [&]() {
-        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
         QVERIFY(d != nullptr);
         QVERIFY(d->findChild<QCheckBox *>(QStringLiteral("lineWholeSet"))->isHidden());
         d->reject();
@@ -221,7 +222,7 @@ void PerformerSets_Test::aPlainLineKeepsItsHeights()
     const QVector<QVector3D> before = t->linePoints();
 
     QTimer::singleShot(0, [&]() {
-        QDialog *d = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+        QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
         QVERIFY(d != nullptr);
         d->findChild<QSpinBox *>(QStringLiteral("linePeople"))->setValue(5);
         d->findChild<QDoubleSpinBox *>(QStringLiteral("personHeight"))->setValue(1.40);

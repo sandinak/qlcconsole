@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include "../common/fixtureeditor.h"
 #include <QStandardItemModel>
 #include <QComboBox>
 #include <QPushButton>
@@ -423,7 +424,7 @@ void PatchInventoryDialog_Test::problemsDuringApplyAreReported()
     QString shown;
     auto poll = std::make_shared<std::function<void()>>();
     *poll = [&shown, poll]() {
-        QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+        QMessageBox *box = qobject_cast<QMessageBox *>(modalOrFixtureEditor());
         if (box == nullptr)
         {
             QTimer::singleShot(10, *poll);
