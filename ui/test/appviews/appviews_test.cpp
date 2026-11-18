@@ -22,6 +22,8 @@
 #include <QPainter>
 #include <QStatusBar>
 #include <QListWidget>
+#include <QStyle>
+#include <QStyleOptionViewItem>
 #include <QShortcut>
 #include <QtTest>
 #include <QMenu>
@@ -3172,22 +3174,47 @@ void AppViews_Test::runAndConnectionsCantBeUnchecked()
         list = dlg->findChild<QListWidget *>("chooseTabsList");
         QVERIFY(list != nullptr);
         dlg->show();
-        for (int i = 0; i < list->count(); ++i)
+        QVERIFY(QTest::qWaitForWindowExposed(dlg));
+        auto row = [&](const QString &tab) -> QListWidgetItem * {
+            for (int i = 0; i < list->count(); ++i)
+                if (list->item(i)->data(Qt::UserRole).toString() == tab)
+                    return list->item(i);
+            return nullptr;
+        };
+        // Every box works or there is none: Run and Connections have no box
+        // (no tick that does nothing), can't be dragged, and sit at the ends.
+        QListWidgetItem *conn = row("Connections"), *run = row("Run");
+        QVERIFY(conn != nullptr && run != nullptr);
+        QCOMPARE(list->row(conn), 0);
+        QCOMPARE(list->row(run), list->count() - 1);
+        foreach (QListWidgetItem *it, QList<QListWidgetItem *>({ conn, run }))
         {
-            const QString t = list->item(i)->text();
-            if (t != "Run" && t != "Connections")
-                continue;
-            // A click on the box where it is drawn, as a person would.
-            const QRect r = list->visualItemRect(list->item(i));
-            QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier,
-                              QPoint(r.left() + 10, r.center().y()));
-            QCOMPARE(list->item(i)->checkState(), Qt::Checked);
+            QVERIFY(!it->data(Qt::CheckStateRole).isValid());
+            QVERIFY(!(it->flags() & Qt::ItemIsUserCheckable));
+            QVERIFY(!(it->flags() & Qt::ItemIsDragEnabled));
+            const QRect r = list->visualItemRect(it);
+            QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+            QVERIFY(!it->data(Qt::CheckStateRole).isValid());
             tried = true;
         }
-        // Fixtures can be: untick it and accept.
-        for (int i = 0; i < list->count(); ++i)
-            if (list->item(i)->text() == "Fixtures")
-                list->item(i)->setCheckState(Qt::Unchecked);
+        // Every other row toggles from a click on its name, as a person clicks...
+        QListWidgetItem *fixtures = row("Fixtures");
+        QVERIFY(fixtures != nullptr);
+        QCOMPARE(fixtures->checkState(), Qt::Checked);
+        QRect r = list->visualItemRect(fixtures);
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+        QCOMPARE(fixtures->checkState(), Qt::Unchecked);
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
+        QCOMPARE(fixtures->checkState(), Qt::Checked);
+        // ...and from a click on its box, once (not twice, back where it was).
+        QStyleOptionViewItem opt;
+        opt.initFrom(list->viewport());
+        opt.rect = r;
+        opt.features = QStyleOptionViewItem::HasCheckIndicator | QStyleOptionViewItem::HasDisplay;
+        const QRect box = list->style()->subElementRect(QStyle::SE_ItemViewItemCheckIndicator,
+                                                        &opt, list);
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, box.center());
+        QCOMPARE(fixtures->checkState(), Qt::Unchecked);
         dlg->accept();
     });
     act->trigger();

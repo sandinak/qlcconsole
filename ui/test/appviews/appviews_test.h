@@ -154,7 +154,7 @@ private slots:
     void aShowWithoutAViewOpensInItsDefault();
     void theTabBarDefaultsPerView();
     void aCustomTabSetRoundTripsThroughTheShow();
-    void runAndConnectionsCantBeUnchecked();
+    void runAndConnectionsCantBeUnchecked();   // and every other box works from a click
     void simpleDeskOpensAndClosesOnDemand();
     /** File ▸ Upgrade This Show… on a Classic show: offered (once) the
      *  qlcconsole view, as a quiet line with a button. */

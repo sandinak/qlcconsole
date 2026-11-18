@@ -5945,8 +5945,8 @@ void App::slotChooseTabs()
     dlg.setObjectName(QStringLiteral("chooseTabsDialog"));
     dlg.setWindowTitle(tr("Tabs"));
     QVBoxLayout *col = new QVBoxLayout(&dlg);
-    QLabel *hint = new QLabel(tr("Tick the tabs to show and drag them into order. Connections "
-                                 "and Run are always there. Saved with the show.\n"
+    QLabel *hint = new QLabel(tr("Click a tab to show or hide it, and drag it into order. "
+                                 "Connections and Run are always there. Saved with the show.\n"
                                  "Simple Desk opens from Window ▸ Simple Desk (⇧⌘D)."), &dlg);
     hint->setWordWrap(true);
     col->addWidget(hint);
@@ -5958,18 +5958,60 @@ void App::slotChooseTabs()
     QStringList rest = workspaceViewTabs(EverythingView);
     foreach (const QString &t, now)
         rest.removeAll(t);
+    /* Every box works, or there is none: Connections and Run can be neither
+       hidden nor moved (setCustomTabs() puts them first and last), so they are
+       plain rows pinned at the ends, not a tick that does nothing. */
     auto add = [&](const QString &t, bool on) {
         QListWidgetItem *it = new QListWidgetItem(tabDisplayLabel(t), list);
         it->setData(Qt::UserRole, t);
-        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
-        if (!tabIsRequired(t))
-            it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
-        it->setCheckState(on || tabIsRequired(t) ? Qt::Checked : Qt::Unchecked);
+        if (tabIsRequired(t))
+        {
+            it->setText(t == tr("Run") ? tr("%1 (always last)").arg(tabDisplayLabel(t))
+                                       : tr("%1 (always first)").arg(tabDisplayLabel(t)));
+            it->setFlags(Qt::ItemIsEnabled);
+            it->setToolTip(tr("Always shown: where a dead output is found, and the pad's status"));
+            return;
+        }
+        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled
+                     | Qt::ItemIsUserCheckable);
+        it->setCheckState(on ? Qt::Checked : Qt::Unchecked);
     };
+    add(tr("Connections"), true);
     foreach (const QString &t, now)
-        add(t, true);
+        if (!tabIsRequired(t))
+            add(t, true);
     foreach (const QString &t, rest)
-        add(t, false);
+        if (!tabIsRequired(t))
+            add(t, false);
+    add(tr("Run"), true);
+    // A click anywhere on a row toggles it, not only on its small box (a
+    // click on the box already did: then leave it).
+    auto pressedState = std::make_shared<int>(-1);
+    connect(list, &QListWidget::itemPressed, &dlg, [pressedState](QListWidgetItem *it) {
+        *pressedState = (it->flags() & Qt::ItemIsUserCheckable) ? int(it->checkState()) : -1;
+    });
+    connect(list, &QListWidget::itemClicked, &dlg, [pressedState](QListWidgetItem *it) {
+        if (*pressedState >= 0 && int(it->checkState()) == *pressedState)
+            it->setCheckState(it->checkState() == Qt::Checked ? Qt::Unchecked : Qt::Checked);
+        *pressedState = -1;
+    });
+    // A row dropped above Connections or below Run: the pinned rows go back.
+    auto pin = [list, this]() {
+        for (int i = 0; i < list->count(); ++i)
+        {
+            const QString t = list->item(i)->data(Qt::UserRole).toString();
+            if (t == tr("Connections") && i != 0)
+                list->insertItem(0, list->takeItem(i));
+            else if (t == tr("Run") && i != list->count() - 1)
+                list->addItem(list->takeItem(i));
+        }
+    };
+    connect(list->model(), &QAbstractItemModel::rowsMoved, &dlg, [list, pin]() {
+        QTimer::singleShot(0, list, pin);
+    });
+    connect(list->model(), &QAbstractItemModel::rowsInserted, &dlg, [list, pin]() {
+        QTimer::singleShot(0, list, pin);
+    });
     QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel
                                                  | QDialogButtonBox::RestoreDefaults, &dlg);
     box->setObjectName(QStringLiteral("chooseTabsButtons"));
@@ -5982,8 +6024,11 @@ void App::slotChooseTabs()
         return;
     QStringList chosen;
     for (int i = 0; i < list->count(); ++i)
-        if (list->item(i)->checkState() == Qt::Checked)
-            chosen << list->item(i)->data(Qt::UserRole).toString();
+    {
+        QListWidgetItem *it = list->item(i);
+        if (!(it->flags() & Qt::ItemIsUserCheckable) || it->checkState() == Qt::Checked)
+            chosen << it->data(Qt::UserRole).toString();
+    }
     setCustomTabs(chosen);
 }
 

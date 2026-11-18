@@ -233,9 +233,9 @@ Which of these you see depends on the view (below).
 - **Everything** — every tab (Shows reads Timeline here too).
 
 **View ▸ Workspace ▸ Tabs…** picks which tabs the qlcconsole and
-Everything views show and in what order: tick a tab, drag it into place.
-Connections (where a dead output shows) and Run (the pad's status) are
-always on. The choice is saved with the show and comes back when it
+Everything views show and in what order: click a tab to show or hide it,
+drag it into place. Connections (where a dead output shows) is always
+first and Run (the pad's status) always last; they have no box to untick. The choice is saved with the show and comes back when it
 opens; a show without one gets its view's tabs, and Restore Defaults puts
 them back. Classic QLC+ keeps QLC+'s own tabs.
 

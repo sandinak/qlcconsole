@@ -10,6 +10,15 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [0.5.1] - Unreleased
+
+### Fixed
+
+- **View ▸ Workspace ▸ Tabs…: every box works, or there is none.** A click
+  anywhere on a tab's row shows or hides it (on macOS only the small box
+  did). Connections and Run, which are always there, no longer show a tick
+  that can't be unticked; they sit first and last and can't be dragged.
+
 ## [0.5.0] - 2026-11-18
 
 The first public release since 0.4.3. It carries everything built in
