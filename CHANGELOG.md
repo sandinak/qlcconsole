@@ -95,6 +95,12 @@ their own; their detailed notes follow below this section.
 
 ### Known issues
 
+- **MIDI and OSC control surfaces don't follow the game-controller safety
+  rules yet.** A key bound in the Control Map fires whenever it is pressed
+  (no arm, Design or Operate), a surface has no emergency stop of its own,
+  and the PMJ overlay listens to MIDI channel 9 from any device. Use the
+  computer, a pad or the phone page to run a show; the safety floor for
+  surfaces comes first in 0.5.x (docs/design/CONTROL_SURFACES_AUDIT_2026-11-17.md).
 - **A no-height staff's effect positions still use Z = 0.** Its body and
   wand line rest on the riser under it, but an effect that spreads over
   fixture positions (the spread and aim maths) reads the stored height.
