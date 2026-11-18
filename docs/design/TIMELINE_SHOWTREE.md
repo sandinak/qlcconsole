@@ -363,6 +363,34 @@ OSCQuery; chasing reverse LTC (open TODO, separate).
    a missed cue fires itself after a grace time or waits; how a late GO
    that skips a cue is shown.
 
+### 2.4b Cue practice as a game (Branson, 2026-11-17)
+
+Make practice something a student plays: **the cue lane**. The song plays;
+each cue comes toward a hit line on a lane, early enough to read (its
+number, name and call; the section it opens drawn as a band; its look's
+colour on the marker). The student presses GO as it crosses the line.
+
+- **Timing windows** around the laid-out time, e.g. on time (within
+  ±100 ms), close (±250 ms), early or late (beyond), missed (no GO before
+  the next cue's window). Points per window, a streak for cues in a row on
+  time, a best score per song saved with the student's practice, not the
+  show.
+- **Catch the classic desk mistakes**, each named on screen and in the
+  end-of-song list: a **double tap** (a second GO inside the double-GO
+  guard, ShowControl::goGuardMs, Q233 -- held there as in the real show,
+  and counted), a GO with **no cue due** (a stray press), a **skipped cue**
+  (a late GO that lands after the next cue's time), a **held** GO where the
+  cue wants a tap.
+- **Difficulty:** Student level shows the standby and the countdown; a
+  harder level hides the countdown and leaves only the standby call, as a
+  real stage manager would give it; hardest: no lane, the call only.
+- **Its own look.** An original design built from the show's own data
+  (cue numbers, calls, look colours, sections), styled like the rest of
+  qlcconsole. Rhythm games are the genre reference only: no game's name,
+  art, layout, sounds or scoring terms are copied.
+- Same rules as 2.4a: the GO is the One GO path, so what the student fires
+  is what the show fires; outputs as the show has them (none at home).
+
 ### 2.5 One source of truth
 
 **Recommendation: the Show Tree's cue times (section starts + offsets +
