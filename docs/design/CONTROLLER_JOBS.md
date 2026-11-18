@@ -79,7 +79,7 @@ connects. (can change: a pad's serial over USB, when one says it.)
    from ANY connected controller, whatever its jobs, armed or not, a tool
    holding the pad or not, in FOCUS or not, a venue focus waiting or
    owned by another pad, the Controller Test open or not (Pad Run rule 5;
-   in the Run role, as before: the Tools role has no stop). It is read
+   in the Run role or the Tools role, on every platform). It is read
    first, before any owner, tool, job, role or test check
    (`PadRun::watchStop()` at the top of
    `ProgrammerController::slotControllerInputChanged()`), so nothing can

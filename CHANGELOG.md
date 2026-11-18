@@ -18,6 +18,8 @@ their own; their detailed notes follow below this section.
 
 ### Run the show from a game controller
 
+- **Every pad stops the show with all four shoulders and triggers, in any
+  role** (LB + RB + LT + RT, Run or Tools, armed or not).
 - **Pad Run is rebuilt on its rules.** Arming takes both bumpers; LT is the
   safety for GO, Back and sub-cues; RT fires the armed hit, and the pad says
   which hit before you pull. Each pad has jobs (Run cues, Follow spot,

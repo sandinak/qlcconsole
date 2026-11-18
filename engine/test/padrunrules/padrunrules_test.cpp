@@ -660,23 +660,26 @@ void PadRunRules_Test::windowsStillStopsFromThePad()
     QCOMPARE(run->state(), PadRun::Stopped);
 }
 
-void PadRunRules_Test::windowsToolsRolePadStillStops()
+void PadRunRules_Test::aToolsRolePadStillStops()
 {
-    // The default Tools role: the pad is not enabled for Run, and on Windows
-    // it still carries the emergency stop.
-    const PlatformGuard guard(PadRun::PlatformWindows);
-    PadRun *run = m_doc->programmer()->padRun();
-    run->setEnabled(false);
-    const int before = stops();
-    hold(kLB, true);
-    hold(kRB, true);
-    axis(kLT, 255);
-    axis(kRT, 255);
-    QCOMPARE(stops(), before + 1);
-    axis(kRT, 0);
-    axis(kLT, 0);
-    hold(kRB, false);
-    hold(kLB, false);
+    // The default Tools role: the pad is not enabled for Run, and it still
+    // carries the emergency stop, on every platform.
+    for (PadRun::Platform platform : { PadRun::PlatformWindows, PadRun::PlatformOther })
+    {
+        const PlatformGuard guard(platform);
+        PadRun *run = m_doc->programmer()->padRun();
+        run->setEnabled(false);
+        const int before = stops();
+        hold(kLB, true);
+        hold(kRB, true);
+        axis(kLT, 255);
+        axis(kRT, 255);
+        QCOMPARE(stops(), before + 1);
+        axis(kRT, 0);
+        axis(kLT, 0);
+        hold(kRB, false);
+        hold(kLB, false);
+    }
 }
 
 void PadRunRules_Test::windowsRefusesMscCuesButNotItsStop()
@@ -1224,7 +1227,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     PadRun *run = pc->padRun();
     RefineSession *r = pc->refineSession();
 
-    // The Tools role: the four are Focus this cue's, never a stop.
+    // The Tools role: the four stop the show too (every pad's stop).
     QVERIFY(r->start(m_cue1, 0xFFFFFFFF, nullptr));
     hold(kLB, true);
     hold(kRB, true);
@@ -1234,7 +1237,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 0);
+    QCOMPARE(stops(), 1);
     r->stop();
 
     // The Run role, a tool started on the laptop: the stop.
@@ -1245,12 +1248,12 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     hold(kRB, true);
     axis(kLT, 255);
     axis(kRT, 255);
-    QVERIFY2(stops() == 1, "the four while a tool had the pad were no emergency stop");
+    QVERIFY2(stops() == 2, "the four while a tool had the pad were no emergency stop");
     axis(kRT, 0);
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 1);
+    QCOMPARE(stops(), 2);
     QCOMPARE(run->state(), PadRun::Stopped);
     r->stop();
     QCOMPARE(run->state(), PadRun::Stopped);
@@ -1267,7 +1270,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 2);
+    QCOMPARE(stops(), 3);
     run->setTesting(false);
     r->stop();
 }

@@ -1216,12 +1216,9 @@ bool PadRun::noteHeld(quint32 universe, GamepadRole::Role role, uchar value)
 bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
 {
     m_noted.valid = false;
-    /* The Run role's stop (the Tools role has none, CONTROLLER_JOBS.md 4).
-       The Controller Test open too: it shows the presses, and the stop
-       still stops (review 0.4.10, M2). On Windows the pad does nothing
-       else, so the stop is read on every pad whatever its role. */
-    if (!m_enabled && padRunSupported())
-        return false;
+    /* The stop is every pad's, in every role (Run or Tools, enabled or
+       not) and on every platform. The Controller Test open too: it shows
+       the presses, and the stop still stops (review 0.4.10, M2). */
     if (role != GamepadRole::LB && role != GamepadRole::RB
         && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)
         return false;
@@ -1232,7 +1229,8 @@ bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
     m_noted.universe = universe;
     m_noted.role = int(role);
     m_noted.value = value;
-    m_noted.valid = true;
+    // handle() only reads this in the Run role; a Tools pad leaves nothing behind.
+    m_noted.valid = m_enabled;
     /* The pad's four: down on any of its lines. One pad listed twice
        sends the four on both: one stop a press (L1). */
     const QString pad = padId(universe);

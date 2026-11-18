@@ -154,8 +154,8 @@ them:
 4. **The right trigger is the hit.** Armed, pull **RT** (R2) on its own:
    with LT or a bumper down it is no hit (that is the emergency stop in
    the making).
-5. **The emergency stop is all four:** LB + RB + LT + RT, in the Run
-   role whatever the pad is doing: armed or not, walking, or with a tool
+5. **The emergency stop is all four:** LB + RB + LT + RT, on every pad in
+   either role (Run or Tools) whatever the pad is doing: armed or not, walking, or with a tool
    on the laptop holding it. Only the Controller Test window stops it
    (nothing pressed there runs the show).
 

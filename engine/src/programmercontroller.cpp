@@ -3411,7 +3411,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     const quint32 wasActing = m_actingUniverse;
     m_actingUniverse = universe;
     const auto acting = qScopeGuard([this, wasActing]() { m_actingUniverse = wasActing; });
-    if (m_padRun != nullptr && (m_padRun->isEnabled() || !PadRun::padRunSupported()))
+    if (m_padRun != nullptr)
     {
         role = controllerRole(universe, channel);
         if (m_padRun->watchStop(universe, GamepadRole::Role(role), value))
