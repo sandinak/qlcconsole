@@ -16,6 +16,7 @@
 #include <QVector3D>
 
 class Doc;
+class MonitorProperties;
 class Fixture;
 class QByteArray;
 struct FixtureRigProps;
