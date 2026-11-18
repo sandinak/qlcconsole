@@ -2475,6 +2475,9 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
     view->reload();
     QApplication::processEvents();
     const QImage img = view->grab().toImage().convertToFormat(QImage::Format_RGB32);
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+        img.save(QDir(shotDir).filePath("staff-colour-slots.png"));
     int red = 0, purple = 0, yellow = 0;
     for (int y = 0; y < img.height(); ++y)
         for (int x = 0; x < img.width(); ++x)
