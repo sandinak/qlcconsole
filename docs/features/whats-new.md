@@ -30,8 +30,10 @@ The first public release since 0.4.3: it carries 0.4.4 through 0.4.13
   out: no clash red and no selection edge until Dim.
 - **Every fixture not on the plot is listed** in the Inventory and the
   Plot layers panel, and can be dragged on.
-- **On Windows, Pad Run, MSC in and MIDI timecode in are refused for
-  now**; the emergency stop still works there.
+- **On Windows, Pad Run, the pad's focus, walk and follow spot, MSC in and
+  MIDI timecode in are off for now**; the emergency stop works on every
+  pad. Controls you bind yourself in the Control Map or Virtual Console
+  still work.
 
 ## 0.4.12 (November 2026)
 

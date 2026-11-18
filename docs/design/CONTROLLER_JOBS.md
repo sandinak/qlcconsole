@@ -79,7 +79,7 @@ connects. (can change: a pad's serial over USB, when one says it.)
    from ANY connected controller, whatever its jobs, armed or not, a tool
    holding the pad or not, in FOCUS or not, a venue focus waiting or
    owned by another pad, the Controller Test open or not (Pad Run rule 5;
-   in the Run role, as before: the Tools role has no stop). It is read
+   in the Run role or the Tools role, on every platform). It is read
    first, before any owner, tool, job, role or test check
    (`PadRun::watchStop()` at the top of
    `ProgrammerController::slotControllerInputChanged()`), so nothing can
@@ -188,6 +188,7 @@ runner, the focus owner (`controllerOwner()`) or a job (`hasJob`,
 | Where | Gate | Job | Needed another job? |
 |---|---|---|---|
 | `PadRun::watchStop()` (top of `slotControllerInputChanged()`) | the four, first | none (everyone's) | no |
+| `slotControllerInputChanged()`, before `routeFocusInput()` | Windows (`!PadRun::padRunSupported()`, Q257 follow-up): a pad's four go to `PadRun::handle()` (arm and hit refused there), every other control is swallowed and a press says `notSupportedText()` -- no focus, walk, Quiet Refine, follow spot, tool or profile action | none: the platform | no |
 | `PadRun::handle()`, the four | arm chord, the hit | Run cues | no |
 | `PadRun::handle()`, the map | Menu is Focus's, the rest Run cues' | both, apart | no |
 | `PadRun::handle()`, FOCUS | GO family, hit, RS, Menu while focusing | Run cues (RS, refusals), Focus (Menu) | **was**: the runner's presses never reached it once the calls ran (they were told "doesn't do focus"). Fixed: routed here, refused with the focus's pad named; a playing hit can be let go |

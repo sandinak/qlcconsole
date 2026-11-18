@@ -102,10 +102,15 @@ computer, not the show.
 
 ## GO from the game controller (Pad Run)
 
-> **Windows: not yet.** On Windows the controller does not arm, so it runs
-> no cue: the chip in the footer says *Running the show from a controller is
-> macOS/Linux for now.* The emergency stop from the pad (LB + RB + LT + RT)
-> still works there. A Windows check on the bench comes first.
+> **Windows: not yet.** On Windows Pad Run, the pad's focus, walk and
+> follow spot are off. The emergency stop (LB + RB + LT + RT) works on every
+> pad, in every state, whatever its role. The pad does not arm or run cues,
+> start the venue focus (LT + Menu), walk the show or Quiet Refine, or move
+> the follow spot: each press says *Running the show from a controller is
+> macOS/Linux for now.* on the footer's chip. Controls you bind yourself in
+> the Control Map or the Virtual Console still work from the pad. The focus,
+> walk and follow spot tools on the screen, by mouse and keyboard, work as
+> everywhere. A Windows check on the bench comes first.
 
 Stand anywhere with an Xbox, DualShock 4 or DualSense controller and run
 the show from it. The controller has two **roles**:
@@ -149,8 +154,8 @@ them:
 4. **The right trigger is the hit.** Armed, pull **RT** (R2) on its own:
    with LT or a bumper down it is no hit (that is the emergency stop in
    the making).
-5. **The emergency stop is all four:** LB + RB + LT + RT, in the Run
-   role whatever the pad is doing: armed or not, walking, or with a tool
+5. **The emergency stop is all four:** LB + RB + LT + RT, on every pad in
+   either role (Run or Tools) whatever the pad is doing: armed or not, walking, or with a tool
    on the laptop holding it. Only the Controller Test window stops it
    (nothing pressed there runs the show).
 

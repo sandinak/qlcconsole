@@ -660,6 +660,28 @@ void PadRunRules_Test::windowsStillStopsFromThePad()
     QCOMPARE(run->state(), PadRun::Stopped);
 }
 
+void PadRunRules_Test::aToolsRolePadStillStops()
+{
+    // The default Tools role: the pad is not enabled for Run, and it still
+    // carries the emergency stop, on every platform.
+    for (PadRun::Platform platform : { PadRun::PlatformWindows, PadRun::PlatformOther })
+    {
+        const PlatformGuard guard(platform);
+        PadRun *run = m_doc->programmer()->padRun();
+        run->setEnabled(false);
+        const int before = stops();
+        hold(kLB, true);
+        hold(kRB, true);
+        axis(kLT, 255);
+        axis(kRT, 255);
+        QCOMPARE(stops(), before + 1);
+        axis(kRT, 0);
+        axis(kLT, 0);
+        hold(kRB, false);
+        hold(kLB, false);
+    }
+}
+
 void PadRunRules_Test::windowsRefusesMscCuesButNotItsStop()
 {
     const PlatformGuard guard(PadRun::PlatformWindows);
@@ -680,6 +702,53 @@ void PadRunRules_Test::windowsRefusesMscCuesButNotItsStop()
     PadRun::setPlatformForTest(PadRun::PlatformOther);
     msc(0x01);
     QCOMPARE(goes(), 1);
+}
+
+void PadRunRules_Test::windowsAFocusPadStartsNoVenueFocus()
+{
+    makeShow();
+    makeFocusCue();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    FocusCallCue *fcc = pc->focusCallCue();
+    ControllerJobs *jobs = pc->controllerJobs();
+    // A pad with the Focus job and no Run cues: LT + Menu is its start.
+    jobs->setJob(jobs->identityOfUniverse(0), ControllerJobs::RunCues, false);
+    run->setEnabled(true);
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    ltMenu(0);
+    QVERIFY2(fcc->state() == FocusCallCue::Armed && !run->isFocusing(),
+             "LT + Menu started the venue focus from a pad on Windows");
+    QCOMPARE(run->notice(), PadRun::notSupportedText());
+}
+
+void PadRunRules_Test::windowsMenuWalksNothingAndTheStopStillStops()
+{
+    makeShow();
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        // Operate: the walk is Quiet Refine on the running cue.
+        m_doc->setMode(mode);
+        press(kMenu);
+        QVERIFY2(!run->isWalking() && !pc->refineSession()->isActive(),
+                 mode == Doc::Design ? "Menu walked the show from a pad on Windows"
+                                     : "Menu started Quiet Refine from a pad on Windows");
+        QCOMPARE(run->notice(), PadRun::notSupportedText());
+    }
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(stops(), 1);
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+    QCOMPARE(run->state(), PadRun::Stopped);
 }
 
 void PadRunRules_Test::theRealPlatformArmsOrRefusesAndAlwaysStops()
@@ -1158,7 +1227,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     PadRun *run = pc->padRun();
     RefineSession *r = pc->refineSession();
 
-    // The Tools role: the four are Focus this cue's, never a stop.
+    // The Tools role: the four stop the show too (every pad's stop).
     QVERIFY(r->start(m_cue1, 0xFFFFFFFF, nullptr));
     hold(kLB, true);
     hold(kRB, true);
@@ -1168,7 +1237,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 0);
+    QCOMPARE(stops(), 1);
     r->stop();
 
     // The Run role, a tool started on the laptop: the stop.
@@ -1179,12 +1248,12 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     hold(kRB, true);
     axis(kLT, 255);
     axis(kRT, 255);
-    QVERIFY2(stops() == 1, "the four while a tool had the pad were no emergency stop");
+    QVERIFY2(stops() == 2, "the four while a tool had the pad were no emergency stop");
     axis(kRT, 0);
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 1);
+    QCOMPARE(stops(), 2);
     QCOMPARE(run->state(), PadRun::Stopped);
     r->stop();
     QCOMPARE(run->state(), PadRun::Stopped);
@@ -1201,7 +1270,7 @@ void PadRunRules_Test::theStopWorksWhileAToolHasThePad()
     axis(kLT, 0);
     hold(kRB, false);
     hold(kLB, false);
-    QCOMPARE(stops(), 2);
+    QCOMPARE(stops(), 3);
     run->setTesting(false);
     r->stop();
 }

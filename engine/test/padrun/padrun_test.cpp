@@ -664,13 +664,16 @@ void PadRun_Test::theEmergencyStop()
     QCOMPARE(run->state(), PadRun::Run);
     QVERIFY(!pc->padLight().isValid());
 
-    // In the Tools role the four are not a stop.
+    // In the Tools role the four are a stop too (every pad's), straight
+    // after the last stop and its GO: ALL OFF is never held back.
     run->setEnabled(false);
     hold(kLB, true);
     hold(kRB, true);
     axis(kLT, 255);
     axis(kRT, 255);
-    QCOMPARE(m_runs.size(), 3);
+    QCOMPARE(m_runs.size(), 4);
+    QCOMPARE(m_runs.last().first.command, ShowControl::AllOff);
+    QCOMPARE(m_runs.last().second, ShowControl::RoutePad);
     axis(kRT, 0);
     axis(kLT, 0);
     hold(kRB, false);

@@ -18,6 +18,8 @@ their own; their detailed notes follow below this section.
 
 ### Run the show from a game controller
 
+- **Every pad stops the show with all four shoulders and triggers, in any
+  role** (LB + RB + LT + RT, Run or Tools, armed or not).
 - **Pad Run is rebuilt on its rules.** Arming takes both bumpers; LT is the
   safety for GO, Back and sub-cues; RT fires the armed hit, and the pad says
   which hit before you pull. Each pad has jobs (Run cues, Follow spot,
@@ -107,6 +109,12 @@ their own; their detailed notes follow below this section.
   Give such a staff an explicit height until this is fixed.
 - **Windows: Pad Run, MSC in and MIDI timecode in are refused for now.**
   The emergency stop still works there. A proper fix is planned for 0.5.x.
+- **Windows: a game controller runs no show tools for now.** Pad Run, the
+  pad's venue focus, walk, Quiet Refine and follow spot are off there (the
+  screen's own tools are not), as are MSC in and MIDI timecode in. The
+  emergency stop (LB + RB + LT + RT) works on every pad in every state.
+  Controls you bind yourself in the Control Map or the Virtual Console still
+  work from a pad. A proper fix is planned for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on
   first run (More info ▸ Run anyway).
 - **The Steam Deck as a web and focus remote is not yet tried on real

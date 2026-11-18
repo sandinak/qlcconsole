@@ -181,6 +181,20 @@ ProgrammerController::ProgrammerController(Doc *doc)
         emit axisBindingChanged();      // the follow spot's set-up says it
         refreshPadLight();
     });
+    /* The emergency stop is every pad's, in any role, with no tool or
+       follow spot on: until the full reader below is connected (it is
+       connected when anything needs the controller) this one watches the
+       four and nothing else. */
+    if (m_doc->inputOutputMap() != nullptr)
+        connect(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged, this,
+                [this](quint32 universe, quint32 channel, uchar value, const QString &) {
+            if (m_controllerInputConnected || m_padRun == nullptr)
+                return;
+            const quint32 wasActing = m_actingUniverse;
+            m_actingUniverse = universe;
+            const auto acting = qScopeGuard([this, wasActing]() { m_actingUniverse = wasActing; });
+            m_padRun->watchStop(universe, GamepadRole::Role(controllerRole(universe, channel)), value);
+        });
     // The Run role reads the controller even with no tool or follow spot on.
     connect(m_padRun, &PadRun::enabledChanged, this, [this](bool on) {
         if (on)
@@ -3411,7 +3425,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     const quint32 wasActing = m_actingUniverse;
     m_actingUniverse = universe;
     const auto acting = qScopeGuard([this, wasActing]() { m_actingUniverse = wasActing; });
-    if (m_padRun != nullptr && m_padRun->isEnabled())
+    if (m_padRun != nullptr)
     {
         role = controllerRole(universe, channel);
         if (m_padRun->watchStop(universe, GamepadRole::Role(role), value))
@@ -3425,6 +3439,8 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         m_panChannel  = channel;
         m_panBound    = true;
         m_capturingPan = false;
+        if (m_padRun != nullptr && !PadRun::padRunSupported() && isPadUniverse(universe))
+            m_padRun->tellRefused(PadRun::notSupportedText());   // bound, but a pad's stick does nothing on Windows
         updateFollowspotJsBindings();
         emit axisBindingChanged();
         return;
@@ -3436,6 +3452,8 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         m_tiltChannel  = channel;
         m_tiltBound    = true;
         m_capturingTilt = false;
+        if (m_padRun != nullptr && !PadRun::padRunSupported() && isPadUniverse(universe))
+            m_padRun->tellRefused(PadRun::notSupportedText());   // bound, but a pad's stick does nothing on Windows
         updateFollowspotJsBindings();
         emit axisBindingChanged();
         return;
@@ -3471,6 +3489,28 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
             m_seenDown[universe].insert(role);
         else if (!m_seenDown[universe].remove(role))
             return;
+    }
+
+    /* Windows (board Q257, its follow-up): a game controller does nothing
+       but the emergency stop -- no venue focus, no walk or Quiet Refine,
+       no follow spot, no tool, no profile action. Its bumpers and
+       triggers still go to the Run map, which refuses the arm and the hit
+       and keeps the stop (watchStop(), above); any other press is told
+       why. A MIDI or OSC input is no pad and is not touched; the screen's
+       own tools, by mouse or keyboard, are not either. */
+    if (!PadRun::padRunSupported()
+        && (role != GamepadRole::None || isPadUniverse(universe)))
+    {
+        const GamepadRole::Role r = GamepadRole::Role(role);
+        if (r == GamepadRole::LB || r == GamepadRole::RB
+            || r == GamepadRole::LeftTrigger || r == GamepadRole::RightTrigger)
+        {
+            if (m_padRun != nullptr)
+                m_padRun->handle(universe, r, value);
+        }
+        else if (value > 0 && !GamepadRole::isAxis(r) && !GamepadRole::isTouch(r) && m_padRun != nullptr)
+            m_padRun->tellRefused(PadRun::notSupportedText());
+        return;
     }
 
     if (routeFocusInput(universe, channel, value, role))
