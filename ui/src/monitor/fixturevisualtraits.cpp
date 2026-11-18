@@ -1015,10 +1015,22 @@ static QColor blendColour(const QColor &a, const QColor &b, double mix)
  *   - a colour wheel's current capability.
  * (Modelled on QLC+ 5's FixtureUtils::headColor(), which had all of this right
  * while this had five of the twelve.) */
+/* Which colour slot a channel feeds: a WLED Effect Mode fixture has Color 1
+   (plain Red/Green/Blue), "Secondary ..." (2) and "Tertiary ..." (3). Other
+   fixtures are all slot 0. */
+static int colourSlotOf(const QLCChannel *ch)
+{
+    if (ch->name().startsWith(QLatin1String("Secondary "), Qt::CaseInsensitive))
+        return 1;
+    if (ch->name().startsWith(QLatin1String("Tertiary "), Qt::CaseInsensitive))
+        return 2;
+    return 0;
+}
+
 static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
                                 const QList<quint32> &chans,
                                 QColor &colour, uchar &dimmer,
-                                bool valuesAreComplete = true)
+                                bool valuesAreComplete = true, int slot = -1)
 {
     int r = -1, g = -1, b = -1;          // additive
     int cy = -1, ma = -1, ye = -1;       // subtractive
@@ -1069,6 +1081,10 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
         }
 
         if (ch->group() != QLCChannel::Intensity && ch->group() != QLCChannel::Colour)
+            continue;
+        /* Only where a caller asks for one colour slot (the staff drawing);
+           the default, -1, counts every channel, as it always has. */
+        if (slot >= 0 && colourSlotOf(ch) != slot)
             continue;
 
         switch (ch->colour())
@@ -1209,6 +1225,39 @@ bool fixtureLiveState(Fixture *fx, const QByteArray &v, QColor &colour, uchar &d
         all << c;
 
     return channelSetLiveState(mode, v, all, colour, dimmer, valuesAreComplete);
+}
+
+int fixtureColourSlots(Fixture *fx, const QByteArray &v, QColor out[3])
+{
+    QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr || v.isEmpty())
+        return 0;
+    bool has[3] = { true, false, false };
+    for (quint32 c = 0; c < fx->channels(); ++c)
+        if (const QLCChannel *ch = mode->channel(c))
+            has[colourSlotOf(ch)] = true;
+    if (!has[1] && !has[2])
+    {
+        out[0] = out[1] = out[2] = QColor();
+        return 0;                           // one slot only: nothing to band (no list built per frame)
+    }
+    QList<quint32> all;
+    all.reserve(int(fx->channels()));
+    for (quint32 c = 0; c < fx->channels(); ++c)
+        all << c;
+    int n = 0;
+    for (int s = 0; s < 3; ++s)
+    {
+        QColor col;
+        uchar dim = 0;
+        if (has[s] && channelSetLiveState(mode, v, all, col, dim, true, s) && dim > 0 && col.isValid())
+            out[s] = col;
+        else
+            out[s] = QColor();
+        if (out[s].isValid() && s > 0)
+            n = s + 1;
+    }
+    return n;
 }
 
 bool fixtureHeadLiveState(Fixture *fx, int head, QColor &colour, uchar &dimmer)

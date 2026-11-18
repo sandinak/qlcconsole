@@ -84,7 +84,7 @@ bool StructureStudioView::drawPixelPath(QPainter &p, quint32 fid, Fixture *fx,
 
     // A wand: its staff, thin and dark, butt to tip.
     QVector3D b, t;
-    if (rp.pixelPath == PixelPath::Wand && PixelPath::wandEnds(props, fid, b, t))
+    if (rp.pixelPath == PixelPath::Wand && PixelPath::wandEnds(props, fid, b, t, m_doc))
     {
         const double af = 0.30 + 0.70 * m_ambient;
         const QColor staff(qRound(78 * af), qRound(70 * af), qRound(60 * af));

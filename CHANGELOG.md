@@ -52,6 +52,11 @@ their own; their detailed notes follow below this section.
 
 ### The rig and the stage
 
+- **A staff over a riser is no longer hidden, and shows its colours**: a
+  staff or lantern placed with no height rests on the deck, step or riser
+  under it (an explicit height still wins; saving doesn't freeze it), and a
+  WLED staff is drawn in the Color 1, 2 and 3 it is sent, in bands, not the
+  brightest of all of them (red and purple read yellow).
 - **The Rig Overview in a Blackout shows only the light the rig puts out**:
   no colour, no clash red and no selection edge until Dim, House or Work
   light.
@@ -90,6 +95,10 @@ their own; their detailed notes follow below this section.
 
 ### Known issues
 
+- **A no-height staff's effect positions still use Z = 0.** Its body and
+  wand line rest on the riser under it, but an effect that spreads over
+  fixture positions (the spread and aim maths) reads the stored height.
+  Give such a staff an explicit height until this is fixed.
 - **Windows: Pad Run, MSC in and MIDI timecode in are refused for now.**
   The emergency stop still works there. A proper fix is planned for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on

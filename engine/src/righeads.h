@@ -16,6 +16,7 @@
 #include <QVector3D>
 
 class Doc;
+class MonitorProperties;
 class Fixture;
 class QByteArray;
 struct FixtureRigProps;
@@ -89,6 +90,16 @@ namespace RigHeads
      *  stored XY is the TOP-LEFT of its plot icon, so it is moved by half its
      *  declared width and height. */
     QVector3D fixtureCentre(Doc *doc, quint32 fid);
+
+    /** The Z a free-placed fixture rests at. A staff or a lantern (looks that
+     *  stand on the ground) placed with no height (@p stored Z = 0) rests on
+     *  the surface under it: the deck, riser or step tread it is over, else
+     *  the floor. Derived, never stored, so saving doesn't freeze it. Any
+     *  other stored Z, and every other look, is returned unchanged. */
+    float restingZ(Doc *doc, quint32 fid, const QVector3D &stored);
+    /** The same for a caller that already holds the show's MonitorProperties
+     *  (PixelPath, which has no non-const Doc). */
+    float restingZ(const Doc *doc, MonitorProperties *props, quint32 fid, const QVector3D &stored);
 
     /** Each head's position, indexed by head: where the rig view paints that
      *  head on the fixture's face -- its cell in the declared pixel grid (or

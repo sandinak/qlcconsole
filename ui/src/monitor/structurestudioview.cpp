@@ -8441,6 +8441,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         showingOutput ? beamVisibility(fx, rp, traits, beamNow) : 1.0;
 
     bool emitting = false;
+    QColor slotCol[3];                      // a staff's Color 1/2/3 as shown
+    int slotCount = 0;
     if (showingOutput)
     {
         QColor live = col;
@@ -8449,6 +8451,14 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
         {
             col = shadeLive(live, dim, unlit, visibility);
             emitting = true;
+            if (traits.look == Fixture::StaffLook)
+            {
+                QColor raw[3];
+                slotCount = fixtureColourSlots(fx, vals, raw);
+                for (int s = 0; s < 3; ++s)
+                    if (raw[s].isValid())
+                        slotCol[s] = shadeLive(raw[s], dim, unlit, visibility);
+            }
         }
     }
     if (!emitting)
@@ -9313,13 +9323,34 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 p.drawRect(r.adjusted(-3, -3, 3, 3));
             }
             p.setPen(QPen(col.darker(150), 1.4));
-            p.setBrush(col);
+            /* The staff shows the slots it is sent, in bands along it: Color 1,
+               then 2, then 3 where it has light (the body, and its lens). */
+            auto slotBrush = [&](const QRectF &area, int lighter) {
+                if (slotCount < 2)
+                    return QBrush(col.lighter(lighter));
+                QList<QColor> bands;
+                bands << (slotCol[0].isValid() ? slotCol[0] : col);   // `col` counts every channel
+                for (int s = 1; s < 3; ++s)
+                    if (slotCol[s].isValid())
+                        bands << slotCol[s];
+                const bool tall = area.height() >= area.width();
+                QLinearGradient g(tall ? area.center().x() : area.left(), tall ? area.top() : area.center().y(),
+                                  tall ? area.center().x() : area.right(), tall ? area.bottom() : area.center().y());
+                const double n = bands.size();
+                for (int i = 0; i < bands.size(); ++i)
+                {
+                    g.setColorAt(qMax(0.0, i / n + 0.02), bands.at(i).lighter(lighter));
+                    g.setColorAt(qMin(1.0, (i + 1) / n - 0.02), bands.at(i).lighter(lighter));
+                }
+                return QBrush(g);
+            };
+            p.setBrush(slotBrush(r, 100));
             p.drawPath(body);
             const QRectF lens = stageLookLensRect(traits.look, r, m_plane != Top);
             if (lens.isValid())
             {
                 p.setPen(QPen(col.darker(200), 1.0));
-                p.setBrush(col.lighter(130));
+                p.setBrush(slotBrush(lens, 130));
                 if (stageLookSquareLens(traits.look))
                     p.drawRect(lens);
                 else

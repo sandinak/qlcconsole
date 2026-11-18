@@ -2392,6 +2392,152 @@ void Monitor_Test::aPlacedStaffIsDrawn()
     QVERIFY2(differing > 20, qPrintable(QStringLiteral("the staff paints %1 pixels").arg(differing)));
 }
 
+/* A staff placed with no height rests on what is under it. Branson's
+   Office Staff, over a step riser at Z = 0, was inside the riser and so
+   invisible in the Rig Overview. An explicit height wins; a hung look and a
+   staff off the riser keep Z = 0. */
+void Monitor_Test::aStaffWithNoHeightRestsOnWhatIsUnderIt()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    MonitorProperties *props = doc->monitorProperties();
+    StagePlatform *riser = props->addPlatform();
+    riser->setOriginX(7.0f); riser->setOriginY(3.0f);
+    riser->setWidth(2.0f); riser->setDepth(3.0f);
+    riser->setHeight(0.396f);
+
+    auto place = [&](Fixture::StageLook look, float xMm, float zM) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf");
+        Fixture *fx = new Fixture(doc.data());
+        fx->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+        fx->setStageLook(look);
+        fx->setAddress(quint32(doc->fixtures().size()) * 16);
+        doc->addFixture(fx);
+        props->setFixturePosition(fx->id(), 0, 0, QVector3D(xMm, 4226.0f, zM));
+        return fx->id();
+    };
+    StructureStudioView view(doc.data(), StructureStudioView::StageKind, 0);
+    const quint32 over = place(Fixture::StaffLook, 7955.0f, 0.0f);
+    const quint32 explicitZ = place(Fixture::StaffLook, 7955.0f, 1.5f);
+    const quint32 off = place(Fixture::StaffLook, 2000.0f, 0.0f);
+    const quint32 par = place(Fixture::ParCanLook, 7955.0f, 0.0f);
+    const float top = float(view.fixtureCentre(over).z());
+    QVERIFY2(top >= 0.396f - 1e-3f, qPrintable(QStringLiteral("a staff over the riser is at Z %1").arg(top)));
+    QCOMPARE(view.fixtureCentre(explicitZ).z(), 1.5f);
+    QCOMPARE(view.fixtureCentre(off).z(), 0.0f);
+    QCOMPARE(view.fixtureCentre(par).z(), 0.0f);
+    // The wand pixel path's line follows the body: its foot on the riser too.
+    QVector3D wb, wt;
+    QVERIFY(PixelPath::wandEnds(props, over, wb, wt, doc.data()));
+    QVERIFY2(wb.z() >= 0.396f - 1e-3f, qPrintable(QStringLiteral("wand foot at Z %1").arg(wb.z())));
+    QVERIFY(wt.z() > wb.z());
+    QVERIFY(PixelPath::wandEnds(props, off, wb, wt, doc.data()));
+    QCOMPARE(wb.z(), 0.0f);
+    // Derived, not stored: saving keeps the Z the user gave it, none.
+    QCOMPARE(props->fixturePosition(over, 0, 0).z(), 0.0f);
+}
+
+/* (Drawn in the plan view: the Angled view draws every fixture as one solid box.)
+/* The staff's colour in the Rig Overview is what its WLED colour slots are
+   sent: Color 1 red and Color 2 purple show red and purple, not the other
+   channels' maximum (a yellow). */
+void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    Fixture *staff = new Fixture(doc.data());
+    staff->setName("Office Staff");
+    staff->setFixtureDefinition(def, def->mode("Effect (15ch)"));
+    staff->setConnection(Fixture::Network);
+    staff->setTransport(Fixture::WledTransport);
+    staff->setStageLook(Fixture::StaffLook);
+    QVERIFY(doc->addFixture(staff));
+    MonitorProperties *props = doc->monitorProperties();
+    props->setFixturePosition(staff->id(), 0, 0, QVector3D(4000.0f, 3000.0f, 0.0f));
+    QByteArray v(15, 0);
+    v[0] = char(255);                                       // master
+    v[6] = char(255);                                       // Color 1: red
+    v[9] = char(150); v[11] = char(255);                    // Color 2: purple
+    v[13] = char(255);                                      // Color 3 green: a trap for a max-of-all mix
+                                                            // (red + purple + green would read yellow)
+    QVERIFY(staff->setOwnChannelValues(v));
+
+    QColor sl[3];
+    const int nSlots = fixtureColourSlots(staff, v, sl);
+    QVERIFY2(nSlots == 3 && sl[0].red() > 200 && sl[0].blue() < 60 && sl[1].blue() > 200
+                 && sl[2].green() > 200,
+             qPrintable(QStringLiteral("%1 slots: %2 %3 %4").arg(nSlots).arg(sl[0].name(), sl[1].name(), sl[2].name())));
+
+    QWidget parent;
+    parent.resize(1200, 800);
+    StructureStudioView *view = new StructureStudioView(doc.data(), StructureStudioView::StageKind, 0, &parent);
+    view->setPlane(StructureStudioView::Top);
+    view->setLocked(true);
+    view->setLiveValues(true);
+    view->setAmbient(0.0);
+    view->resize(1200, 800);
+    parent.show();
+    view->reload();
+    QApplication::processEvents();
+    const QImage img = view->grab().toImage().convertToFormat(QImage::Format_RGB32);
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+        img.save(QDir(shotDir).filePath("staff-colour-slots.png"));
+    int red = 0, purple = 0, yellow = 0, green = 0;
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+        {
+            const QColor c(img.pixel(x, y));
+            if (c.red() > 120 && c.green() < 60 && c.blue() < 60) ++red;
+            if (c.blue() > 100 && c.red() > 50 && c.green() < 45) ++purple;
+            if (c.red() > 120 && c.green() > 100 && c.blue() < 60) ++yellow;
+            if (c.green() > 150 && c.red() < 90 && c.blue() < 90) ++green;
+        }
+    // A small mark in the plan: each of its three bands is a few pixels tall.
+    const QString counts = QStringLiteral("%1 red, %2 purple, %3 green, %4 yellow pixels").arg(red).arg(purple).arg(green).arg(yellow);
+    QVERIFY2(red >= 6, qPrintable(counts));
+    QVERIFY2(purple >= 6, qPrintable(counts));
+    QVERIFY2(green >= 6, qPrintable(counts));
+    QCOMPARE(yellow, 0);
+}
+
+/* The default live colour counts EVERY channel: only a caller that asks for a
+   colour slot (the staff drawing) filters by slot. A real "Secondary" emitter
+   set (Eurolite ML-56 8 Channel Mode) and a WLED with only Color 2 up are lit,
+   not dark, in every view that reads fixtureLiveState(). */
+void Monitor_Test::secondaryChannelsStillReadLit()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT)
+                          + "fixtures/Eurolite/Eurolite-LED-ML-56-QCL-RGBW-RGBA-18x8W.qxf"),
+             QFile::NoError);
+    Fixture *ml = new Fixture(doc.data());
+    ml->setFixtureDefinition(def, def->mode("8 Channel Mode"));
+    QVERIFY(doc->addFixture(ml));
+    QByteArray v(8, 0);
+    v[4] = char(255);                                       // Secondary Red only
+    QColor c;
+    uchar dim = 0;
+    QVERIFY(fixtureLiveState(ml, v, c, dim));
+    QVERIFY2(dim > 0 && c.red() > 200 && c.green() < 60, qPrintable(c.name()));
+
+    QLCFixtureDef *wdef = new QLCFixtureDef();
+    QCOMPARE(wdef->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    Fixture *wled = new Fixture(doc.data());
+    wled->setFixtureDefinition(wdef, wdef->mode("Effect (15ch)"));
+    wled->setAddress(32);
+    QVERIFY(doc->addFixture(wled));
+    QByteArray w(15, 0);
+    w[0] = char(255);                                       // master
+    w[9] = char(150); w[11] = char(255);                    // Color 2 only: purple
+    QVERIFY(fixtureLiveState(wled, w, c, dim));
+    QVERIFY2(dim > 0 && c.blue() > 200, qPrintable(c.name()));
+}
+
 /* "No individual fixtures show up in the side bar": the rendered rows name a
    placed fixture and every one that is not on the plot -- a staged WLED
    staff, a patched one never placed -- and each unplaced row can be dragged
