@@ -527,8 +527,27 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
                 return false;
         return true;
     };
+    /* The burst running, unfrozen, on all four: a 0.6 s window, so it is
+       looked for in what the device took since the look started, not in
+       its state now (a slow CI runner polled past the window). */
+    auto ranSince = [&wled, starburst](int from) {
+        for (int i = from; i < wled.segHistory.size(); ++i)
+        {
+            const QJsonArray segs = wled.segHistory.at(i);
+            if (segs.size() != 4)
+                continue;
+            bool all = true;
+            for (const QJsonValue &v : segs)
+                if (v.toObject().value("fx").toInt() != starburst || v.toObject().value("frz").toBool())
+                    all = false;
+            if (all)
+                return true;
+        }
+        return false;
+    };
+    int mark = wled.segHistory.size();
     look->start(doc.masterTimer(), FunctionParent::master());
-    QTRY_VERIFY_WITH_TIMEOUT(every("fx", starburst) && every("frz", false), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(ranSince(mark), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 5000);
     QVERIFY(every("fx", starburst));                    // held: still the burst, stopped
     QCOMPARE(wled.state.value("on").toBool(), true);
@@ -537,8 +556,9 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     // Fired again: it runs again, unfrozen -- and freezes at the end again.
     look->stop(FunctionParent::master());
     QTRY_VERIFY(!look->isRunning());
+    mark = wled.segHistory.size();
     look->start(doc.masterTimer(), FunctionParent::master());
-    QTRY_VERIFY_WITH_TIMEOUT(every("fx", starburst) && every("frz", false), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(ranSince(mark), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 5000);
 
     // At the end: Release. After its run it lets go: the look's own red
@@ -547,8 +567,9 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     look->stop(FunctionParent::master());
     QTRY_VERIFY(!look->isRunning());
     burst->setEffectParamValue(EffectRuns::atEndKey(), 1);
+    mark = wled.segHistory.size();
     look->start(doc.masterTimer(), FunctionParent::master());
-    QTRY_VERIFY_WITH_TIMEOUT(every("fx", starburst) && every("frz", false), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(ranSince(mark), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(every("fx", 0), 5000);
     QVERIFY(every("frz", false));
     for (const QJsonValue &v : wled.segments())

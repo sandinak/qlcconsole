@@ -63,6 +63,10 @@ public:
     /** When each of them came (ms since the epoch), for a check of what
      *  the device showed when (the UX walker's Locate flash). */
     QList<qint64> postedAt;
+    /** Every segment list it took, in order: a check of a state the device
+     *  passed through (a 0.6 s burst before it freezes) reads this, not the
+     *  state now, which a slow machine may already have moved past. */
+    QList<QJsonArray> segHistory;
     /** A new LED count takes only on a reboot (an old WLED). */
     bool countNeedsReboot = false;
     int reboots = 0;
@@ -197,6 +201,7 @@ private:
         for (const QJsonObject &each : std::as_const(active))
             out << each;
         state["seg"] = out;
+        segHistory << out;
     }
 
     void serve(QTcpSocket *s)
