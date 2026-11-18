@@ -69,7 +69,7 @@ void PixelPathDecor::apply(const MonitorGraphicsView *view, Doc *doc, MonitorFix
         foreach (const QVector3D &w, PixelPath::positions(doc, props, fid, ledCount(doc, fid)))
             pixels << toItem(w);
         QVector3D b, t;
-        if (rp.pixelPath == PixelPath::Wand && PixelPath::wandEnds(props, fid, b, t))
+        if (rp.pixelPath == PixelPath::Wand && PixelPath::wandEnds(props, fid, b, t, doc))
             staff = QLineF(toItem(b), toItem(t));
     }
     if (Fountain::isFlame(fx))

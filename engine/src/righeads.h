@@ -96,6 +96,9 @@ namespace RigHeads
      *  the floor. Derived, never stored, so saving doesn't freeze it. Any
      *  other stored Z, and every other look, is returned unchanged. */
     float restingZ(Doc *doc, quint32 fid, const QVector3D &stored);
+    /** The same for a caller that already holds the show's MonitorProperties
+     *  (PixelPath, which has no non-const Doc). */
+    float restingZ(const Doc *doc, MonitorProperties *props, quint32 fid, const QVector3D &stored);
 
     /** Each head's position, indexed by head: where the rig view paints that
      *  head on the fixture's face -- its cell in the declared pixel grid (or

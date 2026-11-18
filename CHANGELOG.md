@@ -95,6 +95,10 @@ their own; their detailed notes follow below this section.
 
 ### Known issues
 
+- **A no-height staff's effect positions still use Z = 0.** Its body and
+  wand line rest on the riser under it, but an effect that spreads over
+  fixture positions (the spread and aim maths) reads the stored height.
+  Give such a staff an explicit height until this is fixed.
 - **Windows: Pad Run, MSC in and MIDI timecode in are refused for now.**
   The emergency stop still works there. A proper fix is planned for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on

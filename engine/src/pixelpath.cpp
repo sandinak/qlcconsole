@@ -31,6 +31,7 @@
 #include "fountain.h"
 #include "scenery.h"
 #include "truss.h"
+#include "righeads.h"
 #include "doc.h"
 
 QString PixelPath::name(int shape)
@@ -145,7 +146,8 @@ QVector3D PixelPath::heldCentre(const MonitorProperties *props, const StageTarge
     return QVector3D(at.x(), at.y() + 0.25f, at.z() + rp.holdHeight);
 }
 
-bool PixelPath::wandEnds(MonitorProperties *props, quint32 fid, QVector3D &bottom, QVector3D &top)
+bool PixelPath::wandEnds(MonitorProperties *props, quint32 fid, QVector3D &bottom, QVector3D &top,
+                         const Doc *doc)
 {
     if (props == nullptr)
         return false;
@@ -162,6 +164,7 @@ bool PixelPath::wandEnds(MonitorProperties *props, quint32 fid, QVector3D &botto
         return true;
     }
     bottom = props->fixtureRigPosition(fid);
+    bottom.setZ(RigHeads::restingZ(doc, props, fid, bottom));
     top = bottom + QVector3D(0.0f, 0.0f, len);
     return true;
 }
@@ -912,7 +915,7 @@ QVector<QVector3D> PixelPath::positions(const Doc *doc, MonitorProperties *props
     if (rp.pixelPath == Wand)
     {
         QVector3D b, t;
-        if (!wandEnds(props, fid, b, t))
+        if (!wandEnds(props, fid, b, t, doc))
             return out;
         // The strip from a hand's width above the butt to the tip.
         const QVector3D grip = b + (t - b) * kWandGrip;

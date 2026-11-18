@@ -93,8 +93,11 @@ namespace PixelPath
      *  above them, a hand's reach downstage. */
     QVector3D heldCentre(const MonitorProperties *props, const StageTarget *person, const FixtureRigProps &rp);
     /** A wand's two ends, as it is drawn: held (leaning holdTilt forward,
-     *  centred on heldCentre()) or standing where it was placed. */
-    bool wandEnds(MonitorProperties *props, quint32 fid, QVector3D &bottom, QVector3D &top);
+     *  centred on heldCentre()) or standing where it was placed. With @p doc,
+     *  a staff placed with no height stands on the surface under it
+     *  (RigHeads::restingZ), as its body is drawn. */
+    bool wandEnds(MonitorProperties *props, quint32 fid, QVector3D &bottom, QVector3D &top,
+                  const Doc *doc = nullptr);
 
     /** Sprinkle loops: the spans a string of @p n LEDs is hung in, in LED
      *  order -- its table (clamped to @p n, overlaps trimmed) or, with none,

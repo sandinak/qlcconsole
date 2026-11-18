@@ -1030,7 +1030,7 @@ static int colourSlotOf(const QLCChannel *ch)
 static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
                                 const QList<quint32> &chans,
                                 QColor &colour, uchar &dimmer,
-                                bool valuesAreComplete = true, int slot = 0)
+                                bool valuesAreComplete = true, int slot = -1)
 {
     int r = -1, g = -1, b = -1;          // additive
     int cy = -1, ma = -1, ye = -1;       // subtractive
@@ -1082,9 +1082,9 @@ static bool channelSetLiveState(QLCFixtureMode *mode, const QByteArray &v,
 
         if (ch->group() != QLCChannel::Intensity && ch->group() != QLCChannel::Colour)
             continue;
-        /* One colour slot at a time: the max of Color 1, 2 and 3 is a colour
-           that is not being sent (red + purple + green read yellow). */
-        if (colourSlotOf(ch) != slot)
+        /* Only where a caller asks for one colour slot (the staff drawing);
+           the default, -1, counts every channel, as it always has. */
+        if (slot >= 0 && colourSlotOf(ch) != slot)
             continue;
 
         switch (ch->colour())
@@ -1233,13 +1233,18 @@ int fixtureColourSlots(Fixture *fx, const QByteArray &v, QColor out[3])
     if (mode == nullptr || v.isEmpty())
         return 0;
     bool has[3] = { true, false, false };
-    QList<quint32> all;
     for (quint32 c = 0; c < fx->channels(); ++c)
-    {
-        all << c;
         if (const QLCChannel *ch = mode->channel(c))
             has[colourSlotOf(ch)] = true;
+    if (!has[1] && !has[2])
+    {
+        out[0] = out[1] = out[2] = QColor();
+        return 0;                           // one slot only: nothing to band (no list built per frame)
     }
+    QList<quint32> all;
+    all.reserve(int(fx->channels()));
+    for (quint32 c = 0; c < fx->channels(); ++c)
+        all << c;
     int n = 0;
     for (int s = 0; s < 3; ++s)
     {

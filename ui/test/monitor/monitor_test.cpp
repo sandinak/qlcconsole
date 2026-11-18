@@ -2426,6 +2426,13 @@ void Monitor_Test::aStaffWithNoHeightRestsOnWhatIsUnderIt()
     QCOMPARE(view.fixtureCentre(explicitZ).z(), 1.5f);
     QCOMPARE(view.fixtureCentre(off).z(), 0.0f);
     QCOMPARE(view.fixtureCentre(par).z(), 0.0f);
+    // The wand pixel path's line follows the body: its foot on the riser too.
+    QVector3D wb, wt;
+    QVERIFY(PixelPath::wandEnds(props, over, wb, wt, doc.data()));
+    QVERIFY2(wb.z() >= 0.396f - 1e-3f, qPrintable(QStringLiteral("wand foot at Z %1").arg(wb.z())));
+    QVERIFY(wt.z() > wb.z());
+    QVERIFY(PixelPath::wandEnds(props, off, wb, wt, doc.data()));
+    QCOMPARE(wb.z(), 0.0f);
     // Derived, not stored: saving keeps the Z the user gave it, none.
     QCOMPARE(props->fixturePosition(over, 0, 0).z(), 0.0f);
 }
@@ -2453,8 +2460,7 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
     v[6] = char(255);                                       // Color 1: red
     v[9] = char(150); v[11] = char(255);                    // Color 2: purple
     v[13] = char(255);                                      // Color 3 green: a trap for a max-of-all mix
-    // Color 3 left alone below: only slots 1 and 2 are asserted
-    v[13] = 0;
+                                                            // (red + purple + green would read yellow)
     QVERIFY(staff->setOwnChannelValues(v));
 
     QWidget parent;
@@ -2481,6 +2487,41 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
     QVERIFY2(red >= 15, qPrintable(QStringLiteral("%1 red pixels").arg(red)));
     QVERIFY2(purple >= 15, qPrintable(QStringLiteral("%1 purple pixels").arg(purple)));
     QCOMPARE(yellow, 0);
+}
+
+/* The default live colour counts EVERY channel: only a caller that asks for a
+   colour slot (the staff drawing) filters by slot. A real "Secondary" emitter
+   set (Eurolite ML-56 8 Channel Mode) and a WLED with only Color 2 up are lit,
+   not dark, in every view that reads fixtureLiveState(). */
+void Monitor_Test::secondaryChannelsStillReadLit()
+{
+    QScopedPointer<Doc> doc(new Doc(nullptr));
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT)
+                          + "fixtures/Eurolite/Eurolite-LED-ML-56-QCL-RGBW-RGBA-18x8W.qxf"),
+             QFile::NoError);
+    Fixture *ml = new Fixture(doc.data());
+    ml->setFixtureDefinition(def, def->mode("8 Channel Mode"));
+    QVERIFY(doc->addFixture(ml));
+    QByteArray v(8, 0);
+    v[4] = char(255);                                       // Secondary Red only
+    QColor c;
+    uchar dim = 0;
+    QVERIFY(fixtureLiveState(ml, v, c, dim));
+    QVERIFY2(dim > 0 && c.red() > 200 && c.green() < 60, qPrintable(c.name()));
+
+    QLCFixtureDef *wdef = new QLCFixtureDef();
+    QCOMPARE(wdef->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/WLED/WLED-Effect-Mode.qxf"),
+             QFile::NoError);
+    Fixture *wled = new Fixture(doc.data());
+    wled->setFixtureDefinition(wdef, wdef->mode("Effect (15ch)"));
+    wled->setAddress(32);
+    QVERIFY(doc->addFixture(wled));
+    QByteArray w(15, 0);
+    w[0] = char(255);                                       // master
+    w[9] = char(150); w[11] = char(255);                    // Color 2 only: purple
+    QVERIFY(fixtureLiveState(wled, w, c, dim));
+    QVERIFY2(dim > 0 && c.blue() > 200, qPrintable(c.name()));
 }
 
 /* "No individual fixtures show up in the side bar": the rendered rows name a

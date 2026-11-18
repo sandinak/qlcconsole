@@ -1095,6 +1095,7 @@ private slots:
     void aPlacedStaffIsDrawn();
     void aStaffWithNoHeightRestsOnWhatIsUnderIt();
     void aStaffShowsTheColourSlotsItIsSent();
+    void secondaryChannelsStillReadLit();
     /** The side list names every fixture: placed, unplaced, staged, WLED. */
     void theSideListNamesEveryFixture();
 
