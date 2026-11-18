@@ -10,7 +10,7 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-11-18
 
 The first public release since 0.4.3. It carries everything built in
 0.4.4 to 0.4.13, which were tested on our own rigs and never published on
@@ -113,6 +113,11 @@ their own; their detailed notes follow below this section.
   work from a pad. A proper fix is planned for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on
   first run (More info ▸ Run anyway).
+- **Windows: a very large show can take many minutes to open.** In the
+  overnight soak a stress show of 95 universes and 2,800 fixtures did
+  not finish loading on a 4-thread laptop, while the real 1.4 MB show opened
+  and ran clean. macOS, Linux and the Raspberry Pi open the same show in
+  one to two minutes. A fix is planned for 0.5.1.
 - **The Steam Deck as a web and focus remote is not yet tried on real
   hardware** (a checklist is in
   [gamepad-remote.md](docs/features/gamepad-remote.md#hardware-checklist)).

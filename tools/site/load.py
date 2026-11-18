@@ -113,6 +113,9 @@ try:
                [f"--post_date_gmt={p['date_gmt']}", f"--post_category={cats[c]}"])
         print("post", p["slug"])
 
+    # --- the site title: lower-case, as the product writes its name.
+    wp("option", "update", "blogname", "qlcconsole")
+
     # --- the logo: header (site logo beside the title) and browser-tab icon.
     # The header part overrides the theme's (twentytwentyfive's header
     # pattern with a site-logo block in front of the title); it is ours, so

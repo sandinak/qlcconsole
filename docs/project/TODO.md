@@ -10,6 +10,24 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Windows: a 95-universe show never finishes opening (0.5.1, found 2026-11-18)
+
+The 0.5.0 soak's stress show (`DH06-STRESS-soak-studio`, 95 universes,
+2,800 fixtures, 3.3 MB) never opened on the Windows box (4-thread
+i7-7567U): 11 tries, each over 10 min with one core at 100%, no answer.
+Linux opens it in ~1 min, the Pi in ~2. October's soak saw the same
+signature (the patch grid rebuilt once per universe, `da40149e5`), so a
+new per-universe rebuild on load is the likely cause. Next: a stack
+(procdump on the box, or the app with `-o` from a desktop session; an
+ssh-launched app never starts its web server there), then time the 0.4.3
+installer on the same show. Known issue in the 0.5.0 notes.
+
+Also from the 0.5.0 release: the perf guard's `scene_frame_170_ns` read
++19% on a loaded ender (+6% alone); re-check on a quiet machine. And
+`make dmg` gave up on a DMG notarization Apple left "In Progress" 90 min
+while a resubmission passed in 1 min: give `notarize-lib.sh` a resubmit
+after ~20 min.
+
 ## Control surfaces before 0.6.0 (asked 2026-11-17)
 
 Branson: control surfaces haven't had attention lately; they get it in
