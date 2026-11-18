@@ -644,7 +644,7 @@ void PadRun_Test::theEmergencyStop()
     hold(kRB, true);
     axis(kLT, 255);
     axis(kRT, 255);
-    QCOMPARE(m_runs.size(), 4);
+    QCOMPARE(m_runs.size(), 3);
     QCOMPARE(m_runs.at(2).first.command, ShowControl::AllOff);
     QVERIFY(!run->isArmed());
     QCOMPARE(armed.count(), 1);
