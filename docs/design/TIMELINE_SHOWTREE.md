@@ -391,6 +391,21 @@ colour on the marker). The student presses GO as it crosses the line.
 - Same rules as 2.4a: the GO is the One GO path, so what the student fires
   is what the show fires; outputs as the show has them (none at home).
 
+### 2.4c The double-GO guard and laid-out cues; where practice lives (2026-11-17)
+
+- The guard (Q233, ShowControl::run rules) holds only a *commanded* GO /
+  Back / Sub GO / Stop on the *same list* within goGuardMs (1.0 s default)
+  of the last one carried out. Follow cues, timecode GOs and other lists
+  are never held. **With clips:** where the laid-out time of the next cue
+  is closer than the window, the guard's window for that GO shrinks to the
+  gap (less a margin), so a designed quick GO plays and a double tap is
+  still caught everywhere else. Build with P1; tests in showcontrol_test.
+- **Practice lives in the tool** (Branson asked: unique or tied in): a mode
+  of the timeline / Run ("Practice this song"), the cue lane as its own
+  view, not a separate app and not a new top-level tab. Same GO path and
+  guard, same show file, same pads/keys/phone page. Scores per student,
+  outside the show file.
+
 ### 2.5 One source of truth
 
 **Recommendation: the Show Tree's cue times (section starts + offsets +
