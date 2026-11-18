@@ -10,6 +10,23 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Controller looks per pad type: Steam Deck first (0.5.x, planned 2026-11-17)
+
+Today the pad picture (`FocusControlMap`) has two looks: Xbox (also every
+unknown pad) and PlayStation (DualShock 4 / DualSense: names, symbols,
+touchpad, light bar). Asked: a look per controller type.
+
+- **Steam Deck** (first): draw its two trackpads and four back grips
+  (L4/R4/L5/R5), picked automatically. Plan the layout **at his Steam Deck
+  hardware test** (next time he has time; the Deck is the one pad not yet
+  tried, a 0.5.0 known issue): read what the HID plugin reports for each
+  control on the real Deck first, then lay it out.
+- DualSense Edge back paddles and Fn buttons (smaller).
+- Nintendo layout (Switch Pro: A/B and X/Y swapped against Xbox) so labels
+  never point at the wrong button; he owns none, risk is students' pads.
+
+ROI: findability for students on the pad they hold; no engine change.
+
 ## Pad Run, MSC and MTC in on Windows (board Q257, for 0.5.x)
 
 Refused on Windows for 0.5.0 (`PadRun::padRunSupported()`): arming, MSC cue
