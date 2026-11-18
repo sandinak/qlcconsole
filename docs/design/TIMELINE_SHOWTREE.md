@@ -338,6 +338,31 @@ LATER, with MTC out if ever.
 stock Audio function already on the timeline; Ableton Link / beat clock;
 OSCQuery; chasing reverse LTC (open TODO, separate).
 
+### 2.4a Two ways it is used (Branson, 2026-11-17)
+
+1. **Run to the music, or to the studio's timecode.** Cue lists laid out
+   by song as clips over the song's audio on the timeline. In rehearsal
+   the timeline's own clock runs them (P2). In the room, mute the song's
+   audio track and follow the timecode generator (Logic's MTC): outside
+   timecode wins (Q218), the clips still show where each cue sits, and
+   the same cue times fire. Needs: the Show follows outside timecode with
+   its audio track muted and nothing else changing; the clip's ticks
+   track the incoming time. Check that a muted audio track never seeks or
+   plays while chasing.
+2. **Cue practice for a student, at home.** The same laid-out show,
+   played back with the song, does **not** fire the cues itself: it shows
+   the student when to call each one -- the next cue's name and call, a
+   countdown into it, the standby before it -- and the student presses GO
+   (keyboard, pad, web remote). Each GO fires the cue as usual (seen in
+   the Rig Overview / virtual stage, outputs as the show has them; at
+   home, none) and is marked early or late against the laid-out time.
+   At the end of a song: each cue's early/late, no grade. Attaches to
+   Teaching / the Student level (Q249) and the course; no new playback
+   path -- the timeline's clock is read, the GO is the One GO path.
+   To decide when built: the countdown length and standby window; whether
+   a missed cue fires itself after a grace time or waits; how a late GO
+   that skips a cue is shown.
+
 ### 2.5 One source of truth
 
 **Recommendation: the Show Tree's cue times (section starts + offsets +

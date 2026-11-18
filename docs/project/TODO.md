@@ -263,6 +263,11 @@ playhead is a clock the Show Tree chases (GO by position).
   cue lists should be in the timeline's side panel ("Functions — drag onto
   a track", today functions only) and dragged onto a track as a tied-in
   cue-list clip (P1).
+- **Two uses (2026-11-17, design 2.4a):** (1) run to the song, or mute the
+  song track and follow Logic's timecode; (2) **cue practice**: the laid-out
+  show plays with the song and shows a student when to call each cue,
+  they press GO, each GO marked early/late -- practice at home. Build (2)
+  after P1+P2 (it reads the clip and the timeline clock).
 - **P1** (ROI 4): cue-list clip. It draws sections, cue ticks and anchors from
   the tree, and its edits are Q198 tree steps:
   - drag a tick to set that cue's time;
