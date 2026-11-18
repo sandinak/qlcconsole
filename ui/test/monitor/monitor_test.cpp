@@ -2484,7 +2484,7 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
             if (c.blue() > 100 && c.red() > 50 && c.green() < 45) ++purple;
             if (c.red() > 120 && c.green() > 100 && c.blue() < 60) ++yellow;
         }
-    QVERIFY2(red >= 15, qPrintable(QStringLiteral("%1 red pixels").arg(red)));
+    QVERIFY2(red >= 15, qPrintable(QStringLiteral("%1 red, %2 purple, %3 yellow pixels").arg(red).arg(purple).arg(yellow)));
     QVERIFY2(purple >= 15, qPrintable(QStringLiteral("%1 purple pixels").arg(purple)));
     QCOMPARE(yellow, 0);
 }
