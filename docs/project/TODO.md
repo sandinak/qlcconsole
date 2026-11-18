@@ -28,6 +28,35 @@ Also from the 0.5.0 release: the perf guard's `scene_frame_170_ns` read
 while a resubmission passed in 1 min: give `notarize-lib.sh` a resubmit
 after ~20 min.
 
+## Decided 2026-11-18 (board Q263–Q273, all the recommended answers)
+
+Workflow (docs/design/WORKFLOW_EVAL_2026-11-17.md):
+- **Q263** a cue layer's effect is designed in the docked Workbench pane
+  (Build's designer, on that layer's fixtures, In Context / Solo, Keep on
+  This Layer / Save in This Show, ↩); the modal Design Effect… window goes.
+- **Q264** in the qlcconsole view, Library + Palette ▸ Effect and Edit
+  Effect open that designer; the Look Editor keeps every other palette
+  type (changes Q228; course lesson 2.4 steps 5–7 rewritten).
+- **Q265** a Build scene dropped on a cue lands as layers (groups and looks
+  copied, palettes shared), ⌥ keeps it ▣; ▣ blocks get Make It Layers….
+- **Q266** keep "Show Tree"; add "cue lists, cues and hits" to its tooltip,
+  Window entry and help title.
+- **Q267** Build stays out of the qlcconsole view's default tabs.
+
+Surfaces (docs/design/CONTROL_SURFACES_AUDIT_2026-11-17.md):
+- **Q268** the safety floor (CS1, ~2 days) is the first 0.5.x item.
+- **Q269** a dedicated GO on a desk surface needs no arm; hits and
+  functions from a surface fire only in Operate at a live place.
+- **Q270** a surface e-stop: one learned button (a second press confirms
+  at learn time), ALL OFF through the one path, never held; Companion's key
+  needs a 1 s hold; never a fader or encoder.
+- **Q271** the PMJ overlay retires onto Control Map defaults + an
+  encoder-bank preset (APC40 and X-Touch the same).
+- **Q272** scoped controls: places, narrowest live wins, following the
+  show by itself (first slice: buttons).
+- **Q273** bench surfaces he has: PMJ, APC40 (mk1 and mk3, as written),
+  X-Touch MIDI, Stream Deck, Launchpad, APC mini, APC64.
+
 ## Control surfaces before 0.6.0 (asked 2026-11-17)
 
 Branson: control surfaces haven't had attention lately; they get it in
