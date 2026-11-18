@@ -8455,7 +8455,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             {
                 QColor raw[3];
                 slotCount = fixtureColourSlots(fx, vals, raw);
-                for (int s = 1; s < 3; ++s)
+                for (int s = 0; s < 3; ++s)
                     if (raw[s].isValid())
                         slotCol[s] = shadeLive(raw[s], dim, unlit, visibility);
             }
@@ -9329,7 +9329,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 if (slotCount < 2)
                     return QBrush(col.lighter(lighter));
                 QList<QColor> bands;
-                bands << col;
+                bands << (slotCol[0].isValid() ? slotCol[0] : col);   // `col` counts every channel
                 for (int s = 1; s < 3; ++s)
                     if (slotCol[s].isValid())
                         bands << slotCol[s];
