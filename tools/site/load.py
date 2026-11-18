@@ -113,6 +113,44 @@ try:
                [f"--post_date_gmt={p['date_gmt']}", f"--post_category={cats[c]}"])
         print("post", p["slug"])
 
+    # --- the logo: header (site logo beside the title) and browser-tab icon.
+    # The header part overrides the theme's (twentytwentyfive's header
+    # pattern with a site-logo block in front of the title); it is ours, so
+    # it is rewritten on every publish.
+    if site.get("logo"):
+        logo = att[site["logo"]]["id"]
+        wp("option", "update", "site_logo", str(logo))
+        wp("option", "update", "site_icon", str(logo))
+        header = (
+            '<!-- wp:group {"align":"full","layout":{"type":"default"}} -->\n'
+            '<div class="wp-block-group alignfull">'
+            '<!-- wp:group {"layout":{"type":"constrained"}} -->\n<div class="wp-block-group">'
+            '<!-- wp:group {"align":"wide","style":{"spacing":{"padding":{"top":"var:preset|spacing|30","bottom":"var:preset|spacing|30"}}},"layout":{"type":"flex","flexWrap":"nowrap","justifyContent":"space-between"}} -->\n'
+            '<div class="wp-block-group alignwide" style="padding-top:var(--wp--preset--spacing--30);padding-bottom:var(--wp--preset--spacing--30)">'
+            '<!-- wp:group {"style":{"spacing":{"blockGap":"var:preset|spacing|20"}},"layout":{"type":"flex","flexWrap":"nowrap","verticalAlignment":"center"}} -->\n<div class="wp-block-group">'
+            '<!-- wp:site-logo {"width":40,"shouldSyncIcon":true} /-->\n'
+            '<!-- wp:site-title {"level":0} /-->'
+            '</div>\n<!-- /wp:group -->\n'
+            '<!-- wp:group {"style":{"spacing":{"blockGap":"var:preset|spacing|10"}},"layout":{"type":"flex","flexWrap":"nowrap","justifyContent":"right"}} -->\n<div class="wp-block-group">'
+            '<!-- wp:navigation {"overlayBackgroundColor":"base","overlayTextColor":"contrast","layout":{"type":"flex","justifyContent":"right","flexWrap":"wrap"}} /-->'
+            '</div>\n<!-- /wp:group -->'
+            '</div>\n<!-- /wp:group -->'
+            '</div>\n<!-- /wp:group -->'
+            '</div>\n<!-- /wp:group -->')
+        php = ("$c = " + json.dumps(header) + ";"
+               "$q = get_posts(['post_type'=>'wp_template_part','name'=>'header','post_status'=>'any','numberposts'=>1,"
+               "'tax_query'=>[['taxonomy'=>'wp_theme','field'=>'name','terms'=>get_stylesheet()]]]);"
+               "$a = ['post_type'=>'wp_template_part','post_name'=>'header','post_title'=>'Header',"
+               "'post_status'=>'publish','post_content'=>$c,"
+               "'tax_input'=>['wp_theme'=>[get_stylesheet()],'wp_template_part_area'=>['header']]];"
+               "if ($q) { $a['ID'] = $q[0]->ID; }"
+               "$id = wp_insert_post(wp_slash($a), true);"
+               "if (is_wp_error($id)) { fwrite(STDERR, $id->get_error_message()); exit(1); }"
+               "wp_set_object_terms($id, get_stylesheet(), 'wp_theme');"
+               "wp_set_object_terms($id, 'header', 'wp_template_part_area');"
+               "echo $id;")
+        print("logo", logo, "header part", wp("eval", php))
+
     wp("option", "update", "show_on_front", "page")
     wp("option", "update", "page_on_front", page_ids["home"])
     wp("option", "update", "page_for_posts", page_ids["news"])

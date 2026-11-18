@@ -16,6 +16,12 @@ step with the README and the docs:
 The top bar keeps six tabs; the rest are dropdowns under them (a page's
 `parent` in build.py, or `parent:` in a page's front matter).
 
+The logo (`tools/site/assets/qlcconsole-logo.png`, rendered from
+`resources/icons/svg/qlcconsole.svg`; the command is in build.py) is the
+header's site logo, beside the title, and the browser-tab icon. The header
+is our own template part (the theme's, with the logo added), rewritten on
+every publish.
+
 Links to other docs go to the file on GitHub; pictures are uploaded to the
 site's media library.
 

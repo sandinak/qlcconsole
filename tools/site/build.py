@@ -300,13 +300,21 @@ missing = sorted(set(releases) - {m for m in (front_matter(read("tools/site/news
 if missing:
     print("note: releases with no post in tools/site/news/:", ", ".join(missing))
 
+# The logo: the header's site logo and the browser-tab icon (site icon).
+# Rendered from resources/icons/svg/qlcconsole.svg at 512 px (WordPress
+# asks for a square of at least 512 for the site icon):
+#   rsvg-convert -w 512 -h 512 resources/icons/svg/qlcconsole.svg -o tools/site/assets/qlcconsole-logo.png
+LOGO = "tools/site/assets/qlcconsole-logo.png"
+if LOGO not in images:
+    images.append(LOGO)
+
 missing_imgs = [i for i in images if not os.path.exists(os.path.join(REPO, i))]
 if missing_imgs:
     raise SystemExit("missing pictures: " + ", ".join(missing_imgs))
 
 os.makedirs(OUT, exist_ok=True)
 with open(os.path.join(OUT, "site.json"), "w") as f:
-    json.dump({"images": images, "pages": pages, "posts": posts}, f, indent=1)
+    json.dump({"images": images, "logo": LOGO, "pages": pages, "posts": posts}, f, indent=1)
 for p in pages:
     with open(os.path.join(OUT, p["slug"] + ".html"), "w") as f:
         f.write(p["content"])
