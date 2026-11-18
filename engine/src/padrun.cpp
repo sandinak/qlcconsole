@@ -1218,8 +1218,9 @@ bool PadRun::watchStop(quint32 universe, GamepadRole::Role role, uchar value)
     m_noted.valid = false;
     /* The Run role's stop (the Tools role has none, CONTROLLER_JOBS.md 4).
        The Controller Test open too: it shows the presses, and the stop
-       still stops (review 0.4.10, M2). */
-    if (!m_enabled)
+       still stops (review 0.4.10, M2). On Windows the pad does nothing
+       else, so the stop is read on every pad whatever its role. */
+    if (!m_enabled && padRunSupported())
         return false;
     if (role != GamepadRole::LB && role != GamepadRole::RB
         && role != GamepadRole::LeftTrigger && role != GamepadRole::RightTrigger)

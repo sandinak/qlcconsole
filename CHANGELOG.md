@@ -90,11 +90,12 @@ their own; their detailed notes follow below this section.
 
 ### Known issues
 
-- **Windows: a game controller does nothing but the emergency stop for
-  now.** Pad Run, the pad's venue focus, walk, Quiet Refine and follow spot
-  are refused there (the screen's own tools are not), as are MSC in and MIDI
-  timecode in. The emergency stop still works there. A proper fix is planned
-  for 0.5.x.
+- **Windows: a game controller runs no show tools for now.** Pad Run, the
+  pad's venue focus, walk, Quiet Refine and follow spot are off there (the
+  screen's own tools are not), as are MSC in and MIDI timecode in. The
+  emergency stop (LB + RB + LT + RT) works on every pad in every state.
+  Controls you bind yourself in the Control Map or the Virtual Console still
+  work from a pad. A proper fix is planned for 0.5.x.
 - **The Windows installer is not code-signed**, so SmartScreen warns on
   first run (More info ▸ Run anyway).
 - **Not yet tried on real hardware:** the Steam Deck's Blind / Solo

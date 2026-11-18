@@ -3411,7 +3411,7 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     const quint32 wasActing = m_actingUniverse;
     m_actingUniverse = universe;
     const auto acting = qScopeGuard([this, wasActing]() { m_actingUniverse = wasActing; });
-    if (m_padRun != nullptr && m_padRun->isEnabled())
+    if (m_padRun != nullptr && (m_padRun->isEnabled() || !PadRun::padRunSupported()))
     {
         role = controllerRole(universe, channel);
         if (m_padRun->watchStop(universe, GamepadRole::Role(role), value))
@@ -3425,6 +3425,8 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         m_panChannel  = channel;
         m_panBound    = true;
         m_capturingPan = false;
+        if (m_padRun != nullptr && !PadRun::padRunSupported() && isPadUniverse(universe))
+            m_padRun->tellRefused(PadRun::notSupportedText());   // bound, but a pad's stick does nothing on Windows
         updateFollowspotJsBindings();
         emit axisBindingChanged();
         return;
@@ -3436,6 +3438,8 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         m_tiltChannel  = channel;
         m_tiltBound    = true;
         m_capturingTilt = false;
+        if (m_padRun != nullptr && !PadRun::padRunSupported() && isPadUniverse(universe))
+            m_padRun->tellRefused(PadRun::notSupportedText());   // bound, but a pad's stick does nothing on Windows
         updateFollowspotJsBindings();
         emit axisBindingChanged();
         return;

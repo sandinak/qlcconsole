@@ -660,6 +660,25 @@ void PadRunRules_Test::windowsStillStopsFromThePad()
     QCOMPARE(run->state(), PadRun::Stopped);
 }
 
+void PadRunRules_Test::windowsToolsRolePadStillStops()
+{
+    // The default Tools role: the pad is not enabled for Run, and on Windows
+    // it still carries the emergency stop.
+    const PlatformGuard guard(PadRun::PlatformWindows);
+    PadRun *run = m_doc->programmer()->padRun();
+    run->setEnabled(false);
+    const int before = stops();
+    hold(kLB, true);
+    hold(kRB, true);
+    axis(kLT, 255);
+    axis(kRT, 255);
+    QCOMPARE(stops(), before + 1);
+    axis(kRT, 0);
+    axis(kLT, 0);
+    hold(kRB, false);
+    hold(kLB, false);
+}
+
 void PadRunRules_Test::windowsRefusesMscCuesButNotItsStop()
 {
     const PlatformGuard guard(PadRun::PlatformWindows);

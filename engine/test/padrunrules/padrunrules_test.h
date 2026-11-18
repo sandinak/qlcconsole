@@ -59,6 +59,9 @@ private slots:
     void windowsRefusesTheArmChordAndSaysSo();
     /** ... and still the stop: the four together reach ALL OFF there. */
     void windowsStillStopsFromThePad();
+    /** ... also a pad in the Tools role (not enabled): the stop is every
+     *  pad's on Windows. */
+    void windowsToolsRolePadStillStops();
     /** ... and MIDI Show Control: cues refused, ALL OFF and STOP not. */
     void windowsRefusesMscCuesButNotItsStop();
     /** Board Q257's follow-up: on Windows a Focus pad's LT + Menu starts
