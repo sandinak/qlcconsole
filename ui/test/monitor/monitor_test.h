@@ -133,6 +133,8 @@ private slots:
     /** Q100: a fixed light's editor aims it by Pan and Tilt. */
     void aFixedLightsEditorAimsItByPanAndTilt();
     void openingAFixtureEditorKeepsTheRigViewsZoom();
+    void theFixtureEditorLeavesThePlotForLookingAndAClickSwitchesIt();
+    void aClickOnTheRigOverviewSwitchesTheFixtureEditor();
     /** Fixture Properties' orientation diagram draws a fixed light where it
      *  throws: each of the six faces (Back upstage, Bottom down, Stage left
      *  SL), and a Pan/Tilt aim, following the aim as it is edited (RC5). */

@@ -415,6 +415,14 @@ protected:
      *  any workspace) and must never be used as the sentinel. */
     void showFixtureItemEditor(quint32 onlyFid = quint32(~0u));
     void showFixtureItemEditor(const QList<quint32> &fids);
+private:
+    /** One Fixture Properties editor for @p fids; @p next is set to the fixture
+     *  clicked in a rig view meanwhile (the editor closed as OK for it). */
+    void fixtureEditorOnce(const QList<quint32> &fids, quint32 &next);
+    /** Shows @p dlg beside the usable rig views (look, zoom, pan, pick) with the
+     *  rest of the app held still, and returns its result. */
+    int execFixtureEditor(class QDialog &dlg, const QList<quint32> &fids, quint32 &next);
+public:
 
 public:
     /** A read-only angled look at the whole rig (StructureStudioView's

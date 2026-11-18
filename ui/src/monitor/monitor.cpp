@@ -19,6 +19,9 @@
 */
 
 #include <QPointer>
+#include <QMenuBar>
+#include <QScrollBar>
+#include <QEventLoop>
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QLocale>
@@ -3925,8 +3928,15 @@ void Monitor::showStageOverview()
 
     /* Follow the rig while it is open: structures and fixtures move under it as
        the plot is edited, and a stale overview is worse than none. */
+    /* ...without taking the person's framing with it: a reload re-frames, and
+       a click on a light (or an editor closing) is a selection change, not a
+       new rig to look at. */
     connect(m_graphicsView, &MonitorGraphicsView::mapSelectionChanged, view,
-            [view]() { view->reload(); });
+            [view]() {
+        const StructureStudioView::Camera cam = view->camera();
+        view->reload();
+        view->setCamera(cam);
+    });
     // A layer hidden in the Studio is hidden here too.
     connect(m_graphicsView, &MonitorGraphicsView::layerStateChanged, view,
             &StructureStudioView::layersChanged);
@@ -12381,6 +12391,198 @@ void Monitor::editFixturesProperties(const QList<quint32> &fids)
 
 void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
 {
+    /* The editor is not modal: the rig views stay open to look at, and a click
+       on another fixture in one closes this editor as OK (its own undo step)
+       and opens that fixture's. */
+    QList<quint32> now = fidList;
+    for (int guard = 0; guard < 10000; ++guard)
+    {
+        quint32 next = Fixture::invalidId();
+        fixtureEditorOnce(now, next);
+        if (next == Fixture::invalidId() || m_doc->fixture(next) == nullptr)
+            return;
+        now = QList<quint32>() << next;
+    }
+}
+
+
+/* What holds the rest of the app still while Fixture Properties is open (it
+   is not modal, so the rig views stay usable). Looking is free: the wheel,
+   scrolling, hovering, and in the Rig Overview, swinging and panning. A click
+   on a fixture is reported, and nothing else reaches the rig: every other
+   press, key, shortcut, menu, drag and drop outside the editor is dropped, so
+   Cancel puts back exactly what the editor did. */
+namespace {
+class RigViewLock final : public QObject
+{
+public:
+    RigViewLock(Monitor *mon, QDialog *editor, MonitorGraphicsView *plan,
+                const std::function<void(quint32)> &picked)
+        : QObject(mon)
+        , m_editor(editor)
+        , m_plan(plan)
+        , m_picked(picked)
+        , m_modalAtOpen(QApplication::activeModalWidget())
+    {
+        for (QWidget *w : QApplication::allWidgets())
+            if (auto *v = qobject_cast<StructureStudioView *>(w))
+            {
+                m_views << v;
+                v->setLookOnly(true);
+                connect(v, &StructureStudioView::fixturePicked, this,
+                        [this](quint32 fid) { m_picked(fid); });
+            }
+        for (QWidget *w : QApplication::allWidgets())
+            if (auto *mb = qobject_cast<QMenuBar *>(w))
+                for (QAction *a : mb->actions())
+                    if (a->isEnabled())
+                    {
+                        m_menus << a;
+                        a->setEnabled(false);
+                    }
+        qApp->installEventFilter(this);
+    }
+
+    ~RigViewLock() override
+    {
+        qApp->removeEventFilter(this);
+        for (const QPointer<StructureStudioView> &v : m_views)
+            if (v != nullptr)
+                v->setLookOnly(false);
+        for (const QPointer<QAction> &a : m_menus)
+            if (a != nullptr)
+                a->setEnabled(true);
+    }
+
+    bool eventFilter(QObject *obj, QEvent *e) override
+    {
+        switch (e->type())
+        {
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
+        case QEvent::MouseButtonDblClick:
+        case QEvent::KeyPress:
+        case QEvent::KeyRelease:
+        case QEvent::Shortcut:
+        case QEvent::ContextMenu:
+        case QEvent::DragEnter:
+        case QEvent::DragMove:
+        case QEvent::Drop:
+        case QEvent::TabletPress:
+        case QEvent::TabletRelease:
+        case QEvent::Wheel:
+        case QEvent::MouseMove:
+            break;
+        default:
+            return false;
+        }
+        if (inEditor(obj))
+            return false;
+        // The editor's own children opened later (a colour picker, a message).
+        QWidget *modal = QApplication::activeModalWidget();
+        if (modal != nullptr && modal != m_modalAtOpen)
+            for (const QObject *o = obj; o != nullptr; o = o->parent())
+                if (o == modal)
+                    return false;
+        QWidget *w = qobject_cast<QWidget *>(obj);
+        // The Rig Overview (and any structure view): its own look-only mode.
+        if (w != nullptr)
+            for (QWidget *p = w; p != nullptr; p = p->parentWidget())
+                if (qobject_cast<StructureStudioView *>(p) != nullptr)
+                    return false;
+        if (w != nullptr && m_plan != nullptr && isUnder(w, m_plan))
+            return planEvent(w, e);
+        if (e->type() == QEvent::MouseMove)
+            return false;                  // hovering anywhere is harmless
+        return true;
+    }
+
+private:
+    bool inEditor(const QObject *obj) const
+    {
+        for (const QObject *o = obj; o != nullptr; o = o->parent())
+            if (o == m_editor)
+                return true;
+        return false;
+    }
+    static bool isUnder(const QWidget *w, const QWidget *top)
+    {
+        for (; w != nullptr; w = w->parentWidget())
+            if (w == top)
+                return true;
+        return false;
+    }
+
+    /* The 2D plot: wheel and scroll bars move the view; a click on a fixture
+       is a pick; nothing is selected, dragged, dropped or opened. */
+    bool planEvent(QWidget *w, QEvent *e)
+    {
+        if (e->type() == QEvent::Wheel)
+            return false;
+        if (qobject_cast<QScrollBar *>(w) != nullptr)
+            return false;
+        if (w != m_plan->viewport())
+            return e->type() != QEvent::MouseMove;
+        switch (e->type())
+        {
+        case QEvent::MouseMove:
+            return static_cast<QMouseEvent *>(e)->buttons() != Qt::NoButton;
+        case QEvent::MouseButtonPress:
+        {
+            auto *me = static_cast<QMouseEvent *>(e);
+            m_pick = Fixture::invalidId();
+            if (me->button() == Qt::LeftButton)
+                if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(m_plan->itemAt(me->position().toPoint())))
+                    m_pick = mfi->fixtureID();
+            return true;
+        }
+        case QEvent::MouseButtonRelease:
+        {
+            auto *me = static_cast<QMouseEvent *>(e);
+            const quint32 pick = m_pick;
+            m_pick = Fixture::invalidId();
+            if (pick != Fixture::invalidId() && me->button() == Qt::LeftButton)
+                if (auto *mfi = dynamic_cast<MonitorFixtureItem *>(m_plan->itemAt(me->position().toPoint())))
+                    if (mfi->fixtureID() == pick)
+                        m_picked(pick);
+            return true;
+        }
+        default:
+            return true;
+        }
+    }
+
+    QPointer<QDialog> m_editor;
+    QPointer<MonitorGraphicsView> m_plan;
+    std::function<void(quint32)> m_picked;
+    QPointer<QWidget> m_modalAtOpen;
+    QList<QPointer<StructureStudioView> > m_views;
+    QList<QPointer<QAction> > m_menus;
+    quint32 m_pick = Fixture::invalidId();
+};
+} // namespace
+
+int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32 &next)
+{
+    dlg.setModal(false);
+    QEventLoop loop;
+    connect(&dlg, &QDialog::finished, &loop, &QEventLoop::quit);
+    connect(this, &QObject::destroyed, &loop, &QEventLoop::quit);
+    RigViewLock lock(this, &dlg, m_graphicsView, [&dlg, &fids, &next](quint32 fid) {
+        if (fids.count() == 1 && fids.first() == fid)
+            return;                       // the one it is editing: nothing to switch
+        next = fid;
+        dlg.accept();                     // as OK: its edits are one undo step
+    });
+    dlg.show();
+    dlg.raise();
+    dlg.activateWindow();
+    loop.exec();
+    return dlg.result();
+}
+
+void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
+{
     /* Every fixture in the show, on the plot or not: a fixture not yet placed
        (a staged one, another venue's house light, one added from the Fixture
        Manager only) used to have no plot item, and Fixture Properties silently
@@ -12401,7 +12603,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     // ---- Several fixtures: the same rows, "mixed" where they differ ----
     if (fids.count() > 1)
     {
-        QDialog dlg(this);
+        QDialog dlg(QApplication::activeModalWidget() != nullptr ? QApplication::activeModalWidget() : static_cast<QWidget *>(this));
         dlg.setWindowTitle(tr("Fixture Properties — %n fixtures", "", fids.count()));
         dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#mounting-a-fixture"));
         QVBoxLayout *vl = new QVBoxLayout(&dlg);
@@ -12605,7 +12807,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
         connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
         vl->addWidget(btns);
 
-        if (dlg.exec() != QDialog::Accepted)
+        if (execFixtureEditor(dlg, fids, next) != QDialog::Accepted)
         {
             edit.cancel();
             return;
@@ -12621,7 +12823,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     MonitorFixtureItem *fxItem = m_graphicsView->fixtureItemForId(fxId);
     Fixture *fxi = m_doc->fixture(fxId);
 
-    QDialog dlg(this);
+    QDialog dlg(QApplication::activeModalWidget() != nullptr ? QApplication::activeModalWidget() : static_cast<QWidget *>(this));
     dlg.setWindowTitle(tr("Fixture Properties — %1").arg(fxi->name()));
     dlg.setProperty("helpTopic", QStringLiteral("lighting-studio.md#mounting-a-fixture"));
     QVBoxLayout *vl = new QVBoxLayout(&dlg);
@@ -13639,7 +13841,7 @@ void Monitor::showFixtureItemEditor(const QList<quint32> &fidList)
     }
     vl->addWidget(btns);
 
-    if (dlg.exec() != QDialog::Accepted)
+    if (execFixtureEditor(dlg, fids, next) != QDialog::Accepted)
     {
         testSrc.reset(); // ensure DMX source is stopped on cancel
         // Put back what live edits wrote (the plot items are rebuilt: fxItem

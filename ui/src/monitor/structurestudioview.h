@@ -275,6 +275,13 @@ public:
     void setLocked(bool on) { m_locked = on; setCursor(Qt::ArrowCursor); }
     bool locked() const { return m_locked; }
 
+    /** Look, don't touch: the view still zooms, pans, swings and hovers, but a
+     *  press moves, selects or clears nothing. A click on a fixture is only
+     *  reported (fixturePicked()). Held while Fixture Properties is open, so
+     *  its Cancel stays exact. */
+    void setLookOnly(bool on) { m_lookOnly = on; m_lookPick = UINT_MAX; }
+    bool lookOnly() const { return m_lookOnly; }
+
     /** Re-gather the structure + its fixtures and repaint (after external edits). */
     void reload();
 
@@ -345,6 +352,8 @@ signals:
 
     /** A fixture on the structure was double-clicked (id passed through). */
     void fixtureActivated(quint32 fid);
+    /** A click on a fixture while the view is look-only. */
+    void fixturePicked(quint32 fid);
     /** A fixture on the structure was single-clicked (selection). */
     void fixtureSelected(quint32 fid);
     /** The canvas selection is now @p fids -- after fixtureSelected(), so a
@@ -1551,6 +1560,8 @@ public:
 private:
     double   m_frameMs = 0.0;        ///< smoothed repaint cost, for the live rate
     mutable int m_lastOpCount = 0;   ///< primitives in the last angled frame
+    bool     m_lookOnly = false;     ///< see setLookOnly()
+    quint32  m_lookPick = UINT_MAX;  ///< the fixture a look-only press landed on
     bool     m_zoomed = false;       ///< zoomed or panned by hand: refit() must not stomp it
     bool     m_orbiting = false;     ///< dragging the empty canvas to swing the camera
     QPointF  m_orbitLast;

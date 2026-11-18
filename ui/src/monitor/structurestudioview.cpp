@@ -11371,6 +11371,30 @@ void StructureStudioView::mousePressEvent(QMouseEvent *e)
         m_panLast = e->pos();
         return;
     }
+    if (m_lookOnly)
+    {
+        // Camera only: a press on a fixture is a pick, anywhere else it swings
+        // or pans the view. Nothing is selected, dragged or cleared.
+        if (e->button() == Qt::LeftButton)
+        {
+            m_lookPick = hitTestFixture(e->pos());
+            if (m_lookPick != Fixture::invalidId())
+                return;
+            if (m_plane == Angled)
+            {
+                m_orbiting = true;
+                m_orbitLast = e->pos();
+                setCursor(AppUtil::nativeCursorShape(Qt::SizeAllCursor, true));
+            }
+            else
+            {
+                m_panning = true;
+                m_panLast = e->pos();
+                setCursor(Qt::ClosedHandCursor);
+            }
+        }
+        return;
+    }
     if (e->button() == Qt::LeftButton)
     {
         // A boom's top handle (stand view): drag it to resize — only when unlocked.
@@ -11667,9 +11691,19 @@ void StructureStudioView::leaveEvent(QEvent *)
     update();
 }
 
-void StructureStudioView::mouseReleaseEvent(QMouseEvent *)
+void StructureStudioView::mouseReleaseEvent(QMouseEvent *e)
 {
     rigMayHaveMoved();
+    if (m_lookOnly)
+    {
+        const quint32 pick = m_lookPick;
+        m_lookPick = UINT_MAX;
+        m_orbiting = m_panning = false;
+        setCursor(Qt::ArrowCursor);
+        if (pick != Fixture::invalidId() && pick != UINT_MAX && hitTestFixture(e->pos()) == pick)
+            emit fixturePicked(pick);
+        return;
+    }
     if (m_orbiting)
     {
         m_orbiting = false;

@@ -18,6 +18,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   anywhere on a tab's row shows or hides it (on macOS only the small box
   did). Connections and Run, which are always there, no longer show a tick
   that can't be unticked; they sit first and last and can't be dragged.
+- **A zoomed Rig Overview no longer zooms back out** when you open Fixture
+  Properties (picking the fixture reloaded the view and re-framed it; the
+  Overview now keeps its zoom, pan and angle through a selection change).
+
+### Changed
+
+- **Fixture Properties stays open beside the rig.** The plot and the Rig
+  Overview remain usable for looking (zoom, scroll, swing, pan, hover); a
+  click on another fixture switches the editor to it, keeping the edits so
+  far as their own undo step. Everything else that changes the rig waits
+  until the editor closes, so Cancel stays exact.
 
 ## [0.5.0] - 2026-11-18
 

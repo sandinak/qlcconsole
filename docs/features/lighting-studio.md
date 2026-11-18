@@ -1067,6 +1067,16 @@ a number or a choice; the field you have clicked into takes the wheel. The **sta
 on the preview move along their edge, clear of the **max** height and the
 dimensions drawn there.
 
+**Fixture Properties** (double-click a fixture) stays open beside the rig:
+the plot and the Rig Overview remain usable for looking. Zoom, scroll,
+swing and pan them as you like (opening the editor never changes the
+zoom), and click another fixture there to switch the editor to it. What you
+changed so far is kept as its own undo step, as **OK** would, and a fresh
+editor opens for the fixture you clicked (with several fixtures open, a
+click picks that one). Nothing in the view itself can be dragged, deleted
+or added, and no menu or other editor changes the rig, until the editor is
+closed, so **Cancel** puts back exactly what that editor did.
+
 ### Front, Back and Side
 
 ![The same truss's editor in the Back view: looking downstage, stage left on the left](../images/lighting-studio-truss-editor-back.png)

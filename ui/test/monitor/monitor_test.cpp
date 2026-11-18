@@ -3319,6 +3319,164 @@ void Monitor_Test::openingAFixtureEditorKeepsTheRigViewsZoom()
     QCOMPARE(rig.gv->viewScale(), planScale);
 }
 
+/* Fixture Properties is not modal (Look + select): the rig views stay usable
+   for looking, a click on another fixture switches the editor to it (the edits
+   so far are their own undo step), and nothing else may change the rig, so
+   Cancel stays exact. */
+void Monitor_Test::theFixtureEditorLeavesThePlotForLookingAndAClickSwitchesIt()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(9000, 6000, 0));
+    rig.gv->addFixture(other->id(), QPointF(9000, 6000));
+    MonitorFixtureItem *second = rig.gv->m_fixtures.value(other->id(), nullptr);
+    QVERIFY(second != nullptr);
+    rig.parent.resize(1230, 760);
+    rig.parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    const quint32 firstId = rig.fxi->id(), otherId = other->id();
+    const QPointF firstPos = rig.item->pos();
+    const int undoBefore = rig.gv->m_moveUndo.size();
+
+    auto editorTitle = []() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->isVisible() && qobject_cast<QDialog *>(w) != nullptr
+                && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+                return w;
+        return static_cast<QWidget *>(nullptr);
+    };
+    bool step1Ok = false, step2Ok = false;
+    QString title1, title2, why;
+    int undoAfterSwitch = -1;
+
+    // Step 2: the editor of the fixture that was clicked.
+    auto step2 = [&]() {
+        QWidget *dlg = editorTitle();
+        if (dlg == nullptr) { why = "no second editor"; return; }
+        title2 = dlg->windowTitle();
+        undoAfterSwitch = rig.gv->m_moveUndo.size();
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        if (down == nullptr) { why = "no tilt row"; return; }
+        down->setValue(20.0);
+        QDialogButtonBox *btns = dlg->findChild<QDialogButtonBox *>();
+        step2Ok = btns != nullptr && btns->button(QDialogButtonBox::Cancel) != nullptr;
+        if (step2Ok)
+            btns->button(QDialogButtonBox::Cancel)->click();
+    };
+    // Step 1: the first editor, while the plot is looked at and poked.
+    auto step1 = [&]() {
+        QWidget *dlg = editorTitle();
+        if (dlg == nullptr) { why = "no editor"; return; }
+        title1 = dlg->windowTitle();
+        if (QApplication::activeModalWidget() != nullptr) { why = "still modal"; return; }
+        QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
+        if (down == nullptr) { why = "no tilt row"; return; }
+        down->setValue(35.0);
+        // Looking: Shift + wheel zooms the plot.
+        const double z0 = rig.gv->viewScale();
+        QWheelEvent wheel(QPointF(200, 200), rig.gv->viewport()->mapToGlobal(QPointF(200, 200)), QPoint(),
+                          QPoint(0, 240), Qt::NoButton, Qt::ShiftModifier, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(rig.gv->viewport(), &wheel);
+        if (qFuzzyCompare(rig.gv->viewScale(), z0)) { why = "the plot did not zoom"; return; }
+        // Touching: a drag on the fixture, a Delete, a double click, move nothing.
+        const QPoint at = rig.gv->mapFromScene(rig.item->iconCentreScene());
+        QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
+        QTest::mouseMove(rig.gv->viewport(), at + QPoint(80, 40));
+        QTest::mouseRelease(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at + QPoint(80, 40));
+        rig.item->setSelected(true);
+        QTest::keyClick(rig.gv->viewport(), Qt::Key_Delete);
+        if (rig.item->pos() != firstPos) { why = "the fixture was dragged"; return; }
+        if (!rig.gv->m_fixtures.contains(firstId)) { why = "the fixture was deleted"; return; }
+        step1Ok = true;
+        QTimer::singleShot(200, step2);
+        const QPoint on2 = rig.gv->mapFromScene(second->iconCentreScene());
+        QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, on2);
+        QTest::mouseRelease(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, on2);
+    };
+    QTimer::singleShot(0, step1);
+    rig.mon->showFixtureItemEditor(firstId);
+    QVERIFY2(step1Ok, qPrintable(why));
+    QVERIFY2(step2Ok, qPrintable(why));
+    QVERIFY2(title1.contains("DropProbe") && !title1.contains("DropProbe2"), qPrintable(title1));
+    QVERIFY2(title2.contains("DropProbe2"), qPrintable(title2));
+    // The first editor's edits were kept as their own undo step; the second was cancelled.
+    QCOMPARE(undoAfterSwitch, undoBefore + 1);
+    QCOMPARE(rig.gv->m_moveUndo.size(), undoBefore + 1);
+    QCOMPARE(props->fixtureRigProps(firstId).aimDown, 35.0f);
+    QVERIFY(props->fixtureRigProps(firstId).fixedAim);
+    QVERIFY(!props->fixtureRigProps(otherId).fixedAim);
+    QVERIFY(QApplication::activeModalWidget() == nullptr);
+}
+
+/* The same in the Rig Overview: it swings and zooms while the editor is open,
+   does not move anything, and a click on a fixture there switches the editor. */
+void Monitor_Test::aClickOnTheRigOverviewSwitchesTheFixtureEditor()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    MonitorProperties *props = m_doc->monitorProperties();
+    Fixture *other = new Fixture(m_doc);
+    other->setName("DropProbe2");
+    other->setChannels(1);
+    other->setAddress(10);
+    QVERIFY(m_doc->addFixture(other));
+    auto cleanup = qScopeGuard([&]() { m_doc->deleteFixture(other->id()); });
+    props->setFixturePosition(other->id(), 0, 0, QVector3D(12000, 6000, 0));
+    rig.gv->addFixture(other->id(), QPointF(12000, 6000));
+    rig.mon->showStageOverview();
+    StructureStudioView *ov = rig.mon->m_overviewView;
+    QVERIFY(ov != nullptr);
+    rig.mon->m_overviewDlg->resize(900, 640);
+    QApplication::processEvents();
+    ov->setPlane(StructureStudioView::Top);
+    QApplication::processEvents();
+
+    bool ok = false;
+    QString why, title2;
+    auto step2 = [&]() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->isVisible() && qobject_cast<QDialog *>(w) != nullptr
+                && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+            {
+                title2 = w->windowTitle();
+                if (QDialogButtonBox *b = w->findChild<QDialogButtonBox *>())
+                    b->button(QDialogButtonBox::Cancel)->click();
+            }
+    };
+    auto step1 = [&]() {
+        if (!ov->lookOnly()) { why = "not look-only"; return; }
+        const double z0 = ov->m_scale;
+        QWheelEvent wheel(QPointF(ov->width() / 2.0, ov->height() / 2.0),
+                          ov->mapToGlobal(QPointF(ov->width() / 2.0, ov->height() / 2.0)), QPoint(),
+                          QPoint(0, 240), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(ov, &wheel);
+        if (qFuzzyCompare(ov->m_scale, z0)) { why = "the overview did not zoom"; return; }
+        const QPoint on2 = ov->w2s(ov->fixtureCentre(other->id())).toPoint();
+        if (ov->hitTestFixture(on2) != other->id()) { why = "the second fixture is not under the pointer"; return; }
+        const QPointF before = props->fixtureItem(other->id(), 0, 0).m_position.toPointF();
+        // A drag on it picks it and moves nothing.
+        QTest::mousePress(ov, Qt::LeftButton, Qt::NoModifier, on2);
+        QTest::mouseMove(ov, on2 + QPoint(30, 30));
+        QTest::mouseRelease(ov, Qt::LeftButton, Qt::NoModifier, on2 + QPoint(30, 30));
+        if (props->fixtureItem(other->id(), 0, 0).m_position.toPointF() != before) { why = "moved"; return; }
+        ok = true;
+        QTimer::singleShot(200, step2);
+        QTest::mouseClick(ov, Qt::LeftButton, Qt::NoModifier, on2);
+    };
+    QTimer::singleShot(0, step1);
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY2(ok, qPrintable(why));
+    QVERIFY2(title2.contains("DropProbe2"), qPrintable(title2));
+    QVERIFY(!ov->lookOnly());
+}
+
 void Monitor_Test::aFixedLightsFaceAimsItAndItsYokeTiltsUp()
 {
     DropRig rig;
