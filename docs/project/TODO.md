@@ -251,7 +251,7 @@ picker, Show Tree rows, picker preview, help + API docs.
 - [ ] RPM: no pan/tilt definition in the library gives rpm yet (gobo and
   prism ones do); the parser is there for those that will.
 
-## Cue lists on the timeline, the timeline on timecode (design, 2026-11-04) — waiting on Q216–Q221
+## Cue lists on the timeline, the timeline on timecode (design, 2026-11-04) — Q216–Q221 answered 2026-11-05 (all as recommended); P0 built, P1–P4 not started
 
 Design: [docs/design/TIMELINE_SHOWTREE.md](../design/TIMELINE_SHOWTREE.md).
 The cue times in the Show Tree are the one truth. A cue list on a Shows track
@@ -259,6 +259,10 @@ becomes a cue-list clip that draws and edits those times; the timeline's
 playhead is a clock the Show Tree chases (GO by position).
 - **P0** (ROI 30): a timeline edit to a cue list's generated chaser is refused,
   with the reason; stale shows.md lines fixed. **In progress** (tlguard).
+- **Asked 2026-11-17:** the Show Tree is missing from the timeline: its
+  cue lists should be in the timeline's side panel ("Functions — drag onto
+  a track", today functions only) and dragged onto a track as a tied-in
+  cue-list clip (P1).
 - **P1** (ROI 4): cue-list clip. It draws sections, cue ticks and anchors from
   the tree, and its edits are Q198 tree steps:
   - drag a tick to set that cue's time;
@@ -271,7 +275,7 @@ playhead is a clock the Show Tree chases (GO by position).
 - **P4** (ROI 8): a "Timeline 0 =" field and a timecode ruler. The offset
   mapping moves into the engine; the hour snap is announced and can be undone.
 - Not built: MTC out (LATER, ROI 1.6). LTC out (NO: needs an audio engine).
-- About 11.5 days in all. Starts after the board answers.
+- About 11.5 days in all.
 
 
 ## Release / Untrack wording and the tracking span (Q222, untrack, 2026-11-04) -- built
