@@ -2485,7 +2485,7 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
     const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
     if (!shotDir.isEmpty())
         img.save(QDir(shotDir).filePath("staff-colour-slots.png"));
-    int red = 0, purple = 0, yellow = 0;
+    int red = 0, purple = 0, yellow = 0, green = 0;
     for (int y = 0; y < img.height(); ++y)
         for (int x = 0; x < img.width(); ++x)
         {
@@ -2493,9 +2493,13 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
             if (c.red() > 120 && c.green() < 60 && c.blue() < 60) ++red;
             if (c.blue() > 100 && c.red() > 50 && c.green() < 45) ++purple;
             if (c.red() > 120 && c.green() > 100 && c.blue() < 60) ++yellow;
+            if (c.green() > 150 && c.red() < 90 && c.blue() < 90) ++green;
         }
-    QVERIFY2(red >= 15, qPrintable(QStringLiteral("%1 red, %2 purple, %3 yellow pixels").arg(red).arg(purple).arg(yellow)));
-    QVERIFY2(purple >= 15, qPrintable(QStringLiteral("%1 purple pixels").arg(purple)));
+    // A small mark in the plan: each of its three bands is a few pixels tall.
+    const QString counts = QStringLiteral("%1 red, %2 purple, %3 green, %4 yellow pixels").arg(red).arg(purple).arg(green).arg(yellow);
+    QVERIFY2(red >= 6, qPrintable(counts));
+    QVERIFY2(purple >= 6, qPrintable(counts));
+    QVERIFY2(green >= 6, qPrintable(counts));
     QCOMPARE(yellow, 0);
 }
 
