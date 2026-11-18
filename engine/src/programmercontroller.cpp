@@ -181,6 +181,20 @@ ProgrammerController::ProgrammerController(Doc *doc)
         emit axisBindingChanged();      // the follow spot's set-up says it
         refreshPadLight();
     });
+    /* The emergency stop is every pad's, in any role, with no tool or
+       follow spot on: until the full reader below is connected (it is
+       connected when anything needs the controller) this one watches the
+       four and nothing else. */
+    if (m_doc->inputOutputMap() != nullptr)
+        connect(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged, this,
+                [this](quint32 universe, quint32 channel, uchar value, const QString &) {
+            if (m_controllerInputConnected || m_padRun == nullptr)
+                return;
+            const quint32 wasActing = m_actingUniverse;
+            m_actingUniverse = universe;
+            const auto acting = qScopeGuard([this, wasActing]() { m_actingUniverse = wasActing; });
+            m_padRun->watchStop(universe, GamepadRole::Role(controllerRole(universe, channel)), value);
+        });
     // The Run role reads the controller even with no tool or follow spot on.
     connect(m_padRun, &PadRun::enabledChanged, this, [this](bool on) {
         if (on)
