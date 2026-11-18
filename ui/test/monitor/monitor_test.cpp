@@ -2463,6 +2463,12 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
                                                             // (red + purple + green would read yellow)
     QVERIFY(staff->setOwnChannelValues(v));
 
+    QColor slots[3];
+    const int nSlots = fixtureColourSlots(staff, v, slots);
+    QVERIFY2(nSlots == 3 && slots[0].red() > 200 && slots[0].blue() < 60 && slots[1].blue() > 200
+                 && slots[2].green() > 200,
+             qPrintable(QStringLiteral("%1 slots: %2 %3 %4").arg(nSlots).arg(slots[0].name(), slots[1].name(), slots[2].name())));
+
     QWidget parent;
     parent.resize(1200, 800);
     StructureStudioView *view = new StructureStudioView(doc.data(), StructureStudioView::StageKind, 0, &parent);
