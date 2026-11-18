@@ -2463,11 +2463,11 @@ void Monitor_Test::aStaffShowsTheColourSlotsItIsSent()
                                                             // (red + purple + green would read yellow)
     QVERIFY(staff->setOwnChannelValues(v));
 
-    QColor slots[3];
-    const int nSlots = fixtureColourSlots(staff, v, slots);
-    QVERIFY2(nSlots == 3 && slots[0].red() > 200 && slots[0].blue() < 60 && slots[1].blue() > 200
-                 && slots[2].green() > 200,
-             qPrintable(QStringLiteral("%1 slots: %2 %3 %4").arg(nSlots).arg(slots[0].name(), slots[1].name(), slots[2].name())));
+    QColor sl[3];
+    const int nSlots = fixtureColourSlots(staff, v, sl);
+    QVERIFY2(nSlots == 3 && sl[0].red() > 200 && sl[0].blue() < 60 && sl[1].blue() > 200
+                 && sl[2].green() > 200,
+             qPrintable(QStringLiteral("%1 slots: %2 %3 %4").arg(nSlots).arg(sl[0].name(), sl[1].name(), sl[2].name())));
 
     QWidget parent;
     parent.resize(1200, 800);
