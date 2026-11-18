@@ -18,8 +18,6 @@ their own; their detailed notes follow below this section.
 
 ### Run the show from a game controller
 
-- **Every pad stops the show with all four shoulders and triggers, in any
-  role** (LB + RB + LT + RT, Run or Tools, armed or not).
 - **Pad Run is rebuilt on its rules.** Arming takes both bumpers; LT is the
   safety for GO, Back and sub-cues; RT fires the armed hit, and the pad says
   which hit before you pull. Each pad has jobs (Run cues, Follow spot,
@@ -27,7 +25,7 @@ their own; their detailed notes follow below this section.
   status. A pad that is unplugged or replaced disarms and says so; a pad
   macOS lists twice acts once per press.
 - **LB + RB + LT + RT is the emergency stop, from every pad, in every
-  state.** It, the phone or Deck page's stop and an OSC or MSC ALL OFF now
+  state and any role** (Run or Tools, armed or not). It, the phone or Deck page's stop and an OSC or MSC ALL OFF now
   mean *Everything is off*: every cue stopped and every fixture at rest,
   foggers and WLED effects included. The show is then held until a GO. The
   phone's stop needs only the PIN; it says *STOP NOT SENT* and why when it
@@ -107,8 +105,6 @@ their own; their detailed notes follow below this section.
   wand line rest on the riser under it, but an effect that spreads over
   fixture positions (the spread and aim maths) reads the stored height.
   Give such a staff an explicit height until this is fixed.
-- **Windows: Pad Run, MSC in and MIDI timecode in are refused for now.**
-  The emergency stop still works there. A proper fix is planned for 0.5.x.
 - **Windows: a game controller runs no show tools for now.** Pad Run, the
   pad's venue focus, walk, Quiet Refine and follow spot are off there (the
   screen's own tools are not), as are MSC in and MIDI timecode in. The
