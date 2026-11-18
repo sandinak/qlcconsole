@@ -3380,6 +3380,22 @@ void Monitor_Test::theFixtureEditorLeavesThePlotForLookingAndAClickSwitchesIt()
         QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
         if (down == nullptr) { why = "no tilt row"; return; }
         down->setValue(35.0);
+        // UX shots (QLC_SHOT_DIR): the plot with the editor open beside it.
+        const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (!shots.isEmpty())
+        {
+            for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+            {
+                rig.parent.resize(sz);
+                QApplication::processEvents();
+                rig.parent.grab().save(QDir(shots).filePath(
+                    QStringLiteral("fixture-editor-open-%1x%2-plot.png").arg(sz.width()).arg(sz.height())));
+                dlg->grab().save(QDir(shots).filePath(
+                    QStringLiteral("fixture-editor-open-%1x%2-editor.png").arg(sz.width()).arg(sz.height())));
+            }
+            rig.parent.resize(1230, 760);
+            QApplication::processEvents();
+        }
         // Looking: Shift + wheel zooms the plot.
         const double z0 = rig.gv->viewScale();
         QWheelEvent wheel(QPointF(200, 200), rig.gv->viewport()->mapToGlobal(QPointF(200, 200)), QPoint(),
