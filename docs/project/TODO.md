@@ -10,6 +10,16 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Control surfaces before 0.6.0 (asked 2026-11-17)
+
+Branson: control surfaces haven't had attention lately; they get it in
+0.5.x, before 0.6.0. The MIDI/OSC surface work (PMJ overlay, APC40 mk2,
+X-Touch Mini encoder banks, Control Map, Stream Deck / Companion) was
+designed for the Build era, before the Show Tree, Run, the One GO path,
+the double-GO guard and the e-stop rules. An audit and ranked plan is being
+written (docs/design, 2026-11-17); slices follow from it, each with a
+per-device hands-on checklist.
+
 ## Controller looks per pad type: Steam Deck first (0.5.x, planned 2026-11-17)
 
 Today the pad picture (`FocusControlMap`) has two looks: Xbox (also every
