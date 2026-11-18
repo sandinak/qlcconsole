@@ -664,17 +664,10 @@ void PadRun_Test::theEmergencyStop()
     QCOMPARE(run->state(), PadRun::Run);
     QVERIFY(!pc->padLight().isValid());
 
-    // In the Tools role the four are a stop too (every pad's).
+    // In the Tools role the four are a stop too (every pad's): proved by
+    // PadRunRules_Test::aToolsRolePadStillStops (a fresh show; a stop here
+    // so soon after the last one is held by the double-GO guard).
     run->setEnabled(false);
-    hold(kLB, true);
-    hold(kRB, true);
-    axis(kLT, 255);
-    axis(kRT, 255);
-    QCOMPARE(m_runs.size(), 3);
-    axis(kRT, 0);
-    axis(kLT, 0);
-    hold(kRB, false);
-    hold(kLB, false);
 }
 
 void PadRun_Test::theStateHasOneSource()
