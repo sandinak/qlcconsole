@@ -3386,6 +3386,7 @@ void Monitor_Test::theFixtureEditorLeavesThePlotForLookingAndAClickSwitchesIt()
                           QPoint(0, 240), Qt::NoButton, Qt::ShiftModifier, Qt::NoScrollPhase, false);
         QApplication::sendEvent(rig.gv->viewport(), &wheel);
         if (qFuzzyCompare(rig.gv->viewScale(), z0)) { why = "the plot did not zoom"; return; }
+        rig.gv->resetViewZoom();            // and back, so the other fixture is in view
         // Touching: a drag on the fixture, a Delete, a double click, move nothing.
         const QPoint at = rig.gv->mapFromScene(rig.item->iconCentreScene());
         QTest::mousePress(rig.gv->viewport(), Qt::LeftButton, Qt::NoModifier, at);
