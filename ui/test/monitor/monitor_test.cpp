@@ -2437,7 +2437,7 @@ void Monitor_Test::aStaffWithNoHeightRestsOnWhatIsUnderIt()
     QCOMPARE(props->fixturePosition(over, 0, 0).z(), 0.0f);
 }
 
-/* (Drawn in the plan view: the Angled view draws every fixture as one solid box.)
+/* (Drawn in the plan view: the Angled view draws every fixture as one solid box.) */
 /* The staff's colour in the Rig Overview is what its WLED colour slots are
    sent: Color 1 red and Color 2 purple show red and purple, not the other
    channels' maximum (a yellow). */
