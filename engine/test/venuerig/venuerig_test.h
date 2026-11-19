@@ -127,6 +127,24 @@ private slots:
     void undoingAVenueFromAnotherShow();
     /** A file that isn't a show, or has no fixtures, is refused with a reason */
     void aVenueFromAFileThatIsNotAShow();
+    /* Lining up the room (docs/design/VENUE_ROLES_DATUM.md, phase 1) */
+    /** A room file with a cyc into a show on a smaller grid: a house light
+     *  lands at the show's centre line and upstage line plus its distances
+     *  from the room's; the tour and the show file unchanged */
+    void importedRoomLinesUpOnTheDrape();
+    /** Line Up the Room on a venue made before: every house fixture moves
+     *  by the offset, once; the tour, its trusses and targets do not; the
+     *  drape measured downstage of the cyc on site; a missing file said */
+    void lineUpMovesHouseNotTour();
+    /** A house light moved with the venue applied is kept less the offset;
+     *  applied again, it lands where it was dropped */
+    void houseDragSavesRoomCoordinates();
+    /** Moving the show's upstage line moves the house rig, not the tour;
+     *  an undo puts the plot back without moving it twice */
+    void upstageLineFollowsMovedShowLine();
+    /** A venue with no <Datum> applies as before; a newer build's datum is
+     *  kept whole */
+    void oldVenueAppliesWithoutOffset();
     /** A real touring show and a real room's show (QLC_VENUE_REAL_SHOW,
      *  QLC_VENUE_REAL_ROOM; skipped without them), copied into a temp dir:
      *  the import's counts into $QLC_SHOT_DIR/venue-import-report.txt */

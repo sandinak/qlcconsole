@@ -142,6 +142,15 @@ public:
     static Result build(const Source &src, const Doc *doc, const Options &opt,
                         const QSet<quint32> &reserved);
 
+    /** Where the room in @p src is lined up (docs/design/VENUE_ROLES_DATUM.md
+     *  section 2.4, board Q290): its own centre line (the middle of its
+     *  grid) and its upstage line -- its most upstage cloth across the
+     *  centre line (a cyc), else its back wall, its deck, its grid -- in its
+     *  own coordinates. Unset when the file has no plot. */
+    static VenueRig::Datum datum(const Source &src, const Doc *doc);
+    /** "Lined up: the centre line, and the drape at Cyclorama 2." */
+    static QString datumSummary(const VenueRig::Datum &datum);
+
     /** "69 fixtures on U4 1–315". */
     static QString summary(const Result &r, quint32 universe);
 };

@@ -391,6 +391,19 @@ public:
      *  fill the show's groups given: they become fills, on the rig at once
      *  when it is applied. How many were matched. */
     int matchRoomGroups(const QString &name, const QMap<int, quint32> &matches);
+    /** Line venue @p name's room up under the show by @p datum
+     *  (docs/design/VENUE_ROLES_DATUM.md section 2): kept in its file and, when
+     *  it is applied, its house rig moved at once; the show's rig never
+     *  moves and the show is not modified. */
+    bool setDatum(const QString &name, const VenueRig::Datum &datum, QString *why = nullptr);
+    /** Line Up the Room: read the room's show file again (@p path, else
+     *  roomFile()) and line the room up on its centre line and its upstage
+     *  line (its cyc), as New Venue from a Show does. False with @p why
+     *  when the file is not found or has no plot. */
+    bool lineUpRoom(const QString &name, const QString &path = QString(), QString *why = nullptr);
+    /** The room's show file of venue @p name where it still is (beside the
+     *  show); empty when it is not found. */
+    QString roomFile(const QString &name) const;
     /** Undo of New Venue from a Show: venue @p name off the rig and removed,
      *  and @p previous (the venue applied before it was made; empty: None)
      *  applied again. */

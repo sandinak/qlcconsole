@@ -107,6 +107,30 @@ StagePieceDialog::StagePieceDialog(MonitorProperties *props, int piece, QWidget 
                 sync();
             });
         break;
+        case MP::UpstagePiece:
+            m_value = addDistance(form, tr("Upstage of the curtain line:"), QStringLiteral("upstageLineY"),
+                                  tr("How far upstage of the curtain line the show's drape (its upstage "
+                                     "line) is: the tour rig is measured from it up and down stage, and a "
+                                     "venue's room is lined up on it. Auto: the most upstage cyclorama, "
+                                     "traveler or scrim across the centre line, else the back wall, else "
+                                     "the upstage edge of the deck."),
+                                  &m_auto, &m_words);
+            connect(m_auto, &QCheckBox::toggled, this, [this](bool on) {
+                if (m_syncing) return;
+                if (on)
+                    m_props->setUpstageLineAuto();
+                else
+                    m_props->setUpstageLineY(m_props->upstageLineY());
+                emit changed();
+                sync();
+            });
+            connect(m_value, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double v) {
+                if (m_syncing) return;
+                m_props->setUpstageLineUpstageOfCurtain(toMetres(v));
+                emit changed();
+                sync();
+            });
+        break;
         case MP::NumberPiece:
             m_value = addDistance(form, tr("Downstage of the curtain line:"), QStringLiteral("numberLineY"),
                                   tr("How far downstage of the curtain line the number line is. Negative "
@@ -261,6 +285,20 @@ void StagePieceDialog::sync()
                              : (up > 0.0f ? tr("%1 US of the front of the deck")
                                           : tr("%1 DS of the front of the deck"))
                                    .arg(MP::formatStageDistance(up)));
+        }
+        break;
+        case MP::UpstagePiece:
+        {
+            m_auto->setChecked(m_props->upstageLineIsAuto());
+            const float up = m_props->upstageLineUpstageOfCurtain();
+            m_value->setValue(toDisplay(up));
+            m_value->setEnabled(!m_props->upstageLineIsAuto());
+            const QString where = std::fabs(up) < 0.005f ? tr("on the curtain line")
+                                  : (up > 0.0f ? tr("%1 US of the curtain line")
+                                               : tr("%1 DS of the curtain line")).arg(MP::formatStageDistance(std::fabs(up)));
+            m_words->setText(m_props->upstageLineIsAuto()
+                                 ? tr("%1: %2").arg(m_props->upstageLineSource(), where)
+                                 : where);
         }
         break;
         case MP::NumberPiece:

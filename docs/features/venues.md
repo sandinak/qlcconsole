@@ -253,6 +253,50 @@ venue by itself: use this, or **Keep This Patch**),
 and the groups still waiting, with **Match Groups…** to match them once
 this show has a group for them.
 
+### Lining up the room
+
+The room's file has its own plot, measured from its own grid's corner,
+so its house rig would land wherever that corner happens to put it. A
+venue made from a show is **lined up** instead: the room is moved so
+that
+
+- **its centre line is on the show's** (left and right), and
+- **its drape is on the show's upstage line** (up and downstage).
+
+The tour rig, its trusses, its stage targets and its aims never move:
+the room is placed under them. Heights are not moved (both files measure
+from the stage floor), and nothing is turned. This show's file is not
+changed.
+
+- **The show's upstage line** is a stage piece (Lighting Studio, Plot
+  layers ▸ Stage ▸ **Upstage line**): on Auto, the show's own cyc.
+- **The room's drape** is taken from its file: its most upstage cyc,
+  traveler or scrim across its centre line, else its back wall, its deck,
+  its grid. **New Venue from a Show** lines the room up by itself; **What
+  comes in** says on what ("Lined up: the centre line, and the drape at
+  Cyclorama 2").
+
+The venue page (**Rig and Universes…**) has a **Room** box:
+
+- what the room is lined up on and how far it is moved, in Settings ▸
+  Units ("The room stands 10' 0" toward stage right and 6' 9" upstage
+  of where its file has it"); a venue made before this says **Not lined
+  up with this show**;
+- **Line Up the Room**: reads the room's file again (beside the show, or
+  one you choose) and lines it up. Use it for a venue made before this
+  version, or after the room's file changed;
+- **Drape downstage of Cyclorama 2 by**: when the show's drape hangs on a
+  pipe in front of the room's cyc, how far, measured on site. The house
+  rig moves with it.
+
+A house fixture moved on the plot while the venue is applied is kept in
+the room's own coordinates, so lining up again never adds one move to
+another. Moving the show's upstage line (the drape found a foot further
+upstage) moves every lined-up venue's house rig with it, never the tour.
+A venue made by hand (house fixtures placed at the venue) has no room
+file and needs no lining up: what is placed there is placed under the
+show already.
+
 **The clash check** adds two lines for such a venue:
 
 - **Output**: its universe has no output in this room yet, or still
@@ -292,7 +336,17 @@ room's DMX line:
    without choosing it again.
 10. Note any house fixture whose place on the plot is wrong; move it on
     the plot (the venue keeps it).
-11. A spare Art-Net node instead of USB: in step 4 choose **Art-Net
+11. Venue chip ▸ **Rig and Universes…** ▸ **Room**. **Expected:** it says
+    **Lined up** on the room's cyc (a venue made before this version:
+    **Line Up the Room** first). Measure where the show's drape hangs
+    against the room's cyc; type it in **Drape downstage of … by**.
+    **Expected:** on the plot the room's lights move up or downstage by
+    that much; the tour's trusses and lights stay put.
+12. Look from the house at a house light the plot says hangs on the
+    centre line and **Flash** it. **Expected:** the light that comes up is
+    on centre, and the plot draws it where it hangs against the tour's
+    trusses.
+13. A spare Art-Net node instead of USB: in step 4 choose **Art-Net
     node**, type its IP and Art-Net universe. **Expected:** as step 5,
     through the node.
 
@@ -314,4 +368,5 @@ room's DMX line:
 Nothing changes in a show that never uses owners: every fixture and
 group is Tour, every universe a Tour slot, and nothing extra is written.
 A venue with no house rig, no patch and nothing marked not ours applies
-exactly as before.
+exactly as before, and so does a venue that was never lined up: its house
+rig stands where it did until **Line Up the Room**.

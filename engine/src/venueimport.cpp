@@ -569,12 +569,39 @@ VenueImport::Result VenueImport::build(const Source &src, const Doc *doc, const 
         }
     }
 
+    // Lined up under the show by itself: the room's centre line and its cyc.
+    d.datum = datum(src, doc);
+
     // The room: its universe, where it came from, and its output.
     d.room.universe = opt.universe;
     d.room.from = src.fileName();
     d.room.imported = src.fixtureOutputs();
     d.patch.insert(opt.universe, opt.output);
     return res;
+}
+
+VenueRig::Datum VenueImport::datum(const Source &src, const Doc *doc)
+{
+    VenueRig::Datum dt;
+    if (src.monitorXml.isEmpty())
+        return dt;
+    MonitorProperties theirs;
+    QXmlStreamReader r(src.monitorXml);
+    if (!r.readNextStartElement() || !theirs.loadXML(r, doc))
+        return dt;
+    dt.set = true;
+    dt.centreX = qRound64(double(theirs.stageCentre().x()) * 1000.0);
+    dt.drape = qRound64(double(theirs.upstageLineY()) * 1000.0);
+    dt.piece = theirs.upstageLineSource();
+    return dt;
+}
+
+QString VenueImport::datumSummary(const VenueRig::Datum &datum)
+{
+    if (!datum.isSet())
+        return tr("Not lined up: the room's file has no plot to line it up by.");
+    return datum.piece.isEmpty() ? tr("Lined up: the centre line, and the drape line.")
+                                 : tr("Lined up: the centre line, and the drape at %1.").arg(datum.piece);
 }
 
 QString VenueImport::summary(const Result &r, quint32 universe)

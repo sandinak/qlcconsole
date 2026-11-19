@@ -21,7 +21,9 @@
 #include <QXmlStreamWriter>
 #include <QRegularExpression>
 #include <algorithm>
+#include <cmath>
 
+#include "measurementunits.h"
 #include "monitorproperties.h"
 #include "inputoutputmap.h"
 #include "fixturegroup.h"
@@ -43,6 +45,7 @@ const QString kNotOurs = QStringLiteral("NotOurs");
 const QString kRoom = QStringLiteral("Room");
 const QString kImported = QStringLiteral("Imported");
 const QString kGroup = QStringLiteral("Group");
+const QString kDatum = QStringLiteral("Datum");
 
 void writeHeads(QXmlStreamWriter &w, const QList<VenueRig::FillHead> &heads)
 {
@@ -170,10 +173,14 @@ VenueRig::VenueRig(Doc *doc, QObject *parent)
     connect(m_doc, &Doc::fixtureGroupRemoved, this, &VenueRig::sync);
     connect(m_doc, &Doc::fixtureGroupChanged, this, &VenueRig::sync);
     if (m_doc->monitorProperties() != nullptr)
+    {
         connect(m_doc->monitorProperties(), &MonitorProperties::rigPropsChanged, this, [this](quint32 fid) {
             if (m_applied && !m_writing && m_ids.contains(fid))
                 emit rigChanged(true);
         });
+        // The show's upstage line moved: a room lined up on it follows.
+        connect(m_doc->monitorProperties(), &MonitorProperties::stageLinesChanged, this, &VenueRig::followShowLines);
+    }
 }
 
 VenueRig::~VenueRig()
@@ -263,6 +270,18 @@ void VenueRig::writeXml(QXmlStreamWriter &w, const Data &d)
             writeHeads(w, g.heads);
             w.writeEndElement();
         }
+        w.writeEndElement();
+    }
+    if (d.datum.isSet())
+    {
+        w.writeStartElement(kDatum);
+        w.writeAttribute(QStringLiteral("CentreX"), QString::number(d.datum.centreX));
+        w.writeAttribute(QStringLiteral("Drape"), QString::number(d.datum.drape));
+        if (!d.datum.piece.isEmpty())
+            w.writeAttribute(QStringLiteral("Piece"), d.datum.piece);
+        if (d.datum.downstage != 0)
+            w.writeAttribute(QStringLiteral("Downstage"), QString::number(d.datum.downstage));
+        writeKept(w, d.datum.unknown);
         w.writeEndElement();
     }
 }
@@ -450,7 +469,101 @@ bool VenueRig::readXml(QXmlStreamReader &r, Data &d)
         }
         return true;
     }
+    if (r.name() == kDatum)
+    {
+        const QXmlStreamAttributes a = r.attributes();
+        bool okX = false, okY = false;
+        Datum dt;
+        dt.centreX = a.value(QStringLiteral("CentreX")).toLongLong(&okX);
+        dt.drape = a.value(QStringLiteral("Drape")).toLongLong(&okY);
+        dt.piece = a.value(QStringLiteral("Piece")).toString();
+        dt.downstage = a.value(QStringLiteral("Downstage")).toLongLong();
+        dt.set = okX && okY;
+        while (r.readNextStartElement())
+            dt.unknown << captureElement(r);    // a newer build's (the room's <Stage>): kept
+        if (dt.set)
+            d.datum = dt;
+        return true;
+    }
     return false;
+}
+
+/*****************************************************************************
+ * Lining up the room
+ *****************************************************************************/
+
+QPointF VenueRig::offsetFor(const Datum &datum, const MonitorProperties *show)
+{
+    if (!datum.isSet() || show == nullptr)
+        return QPointF();
+    const double cx = double(qRound64(double(show->stageCentre().x()) * 1000.0));
+    const double up = double(qRound64(double(show->upstageLineY()) * 1000.0));
+    return QPointF(cx - double(datum.centreX), up - double(datum.drape));
+}
+
+QString VenueRig::datumText(const Datum &datum, const MonitorProperties *show)
+{
+    if (!datum.isSet())
+        return tr("Not lined up with this show: its house rig stands where the room's own file has it.");
+    const QString drape = datum.piece.isEmpty() ? tr("its drape line") : tr("its drape (%1)").arg(datum.piece);
+    QString out = tr("Lined up: the room's centre line on the show's, %1 on the show's upstage line.").arg(drape);
+    if (show == nullptr)
+        return out;
+    const QPointF off = offsetFor(datum, show);
+    QStringList moves;
+    if (std::fabs(off.x()) >= 0.5)
+        moves << (off.x() > 0 ? tr("%1 toward stage left") : tr("%1 toward stage right"))
+                     .arg(MeasurementUnits::formatLength(std::fabs(off.x())));
+    if (std::fabs(off.y()) >= 0.5)
+        moves << (off.y() > 0 ? tr("%1 downstage") : tr("%1 upstage"))
+                     .arg(MeasurementUnits::formatLength(std::fabs(off.y())));
+    out += QLatin1Char(' ');
+    out += moves.isEmpty() ? tr("The room stands where its file has it.")
+                           : tr("The room stands %1 of where its file has it.").arg(moves.join(tr(" and ")));
+    return out;
+}
+
+void VenueRig::shiftHouse(const QPointF &delta)
+{
+    MonitorProperties *props = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    if (props == nullptr || delta.isNull())
+        return;
+    const bool was = m_writing;
+    m_writing = true;
+    for (quint32 id : m_ids)
+    {
+        if (!props->containsFixture(id))
+            continue;
+        FixturePreviewItem fp = props->fixtureProperties(id);
+        fp.m_baseItem.m_position += QVector3D(float(delta.x()), float(delta.y()), 0.0f);
+        props->setFixtureProperties(id, fp);
+    }
+    m_writing = was;
+    emit houseMoved();
+}
+
+void VenueRig::lineUp(const Datum &datum)
+{
+    m_datum = datum;
+    if (!m_applied || m_doc == nullptr)
+        return;
+    const QPointF now = offsetFor(datum, m_doc->monitorProperties());
+    const QPointF delta = now - m_offset;
+    m_offset = now;
+    shiftHouse(delta);
+}
+
+void VenueRig::followShowLines(bool moved)
+{
+    if (!m_applied || m_doc == nullptr)
+        return;
+    const QPointF now = offsetFor(m_datum, m_doc->monitorProperties());
+    const QPointF delta = now - m_offset;
+    m_offset = now;
+    /* A rig snapshot put back already has the house rig where that line
+       had it: only the offset is taken. */
+    if (moved)
+        shiftHouse(delta);
 }
 
 /*****************************************************************************
@@ -574,6 +687,13 @@ void VenueRig::apply(Data &d)
         m_ids.insert(id);
     }
 
+    /* Lined up (docs/design/VENUE_ROLES_DATUM.md section 2.3): the room
+       moved under the show's centre and upstage lines; heights, aims and
+       calibration are not moved. */
+    m_datum = d.datum;
+    m_offset = offsetFor(d.datum, props);
+    const QVector3D shift(float(m_offset.x()), float(m_offset.y()), 0.0f);
+
     // Their places, before they arrive, so a view drawing them finds them.
     MonitorProperties house;
     if (!d.monitorXml.isEmpty() && props != nullptr)
@@ -584,7 +704,11 @@ void VenueRig::apply(Data &d)
         for (auto it = remap.constBegin(); it != remap.constEnd(); ++it)
         {
             if (house.containsFixture(it.key()))
-                props->setFixtureProperties(it.value(), house.fixtureProperties(it.key()));
+            {
+                FixturePreviewItem fp = house.fixtureProperties(it.key());
+                fp.m_baseItem.m_position += shift;
+                props->setFixtureProperties(it.value(), fp);
+            }
             if (house.fixtureRigPropsMap().contains(it.key()))
                 props->setFixtureRigProps(it.value(), house.fixtureRigProps(it.key()));
         }
@@ -676,6 +800,8 @@ void VenueRig::unapply()
     applyNotOurs(QList<NotOurs>());
 
     m_applied = false;
+    m_offset = QPointF();
+    m_datum = Datum();
     m_writing = false;
     keepUnmodified(was);
 }
@@ -706,8 +832,15 @@ bool VenueRig::capture(Data &d) const
         n.fixtures << hf;
         if (props != nullptr)
         {
+            /* In the room's own coordinates: a house fixture moved on the
+               plot is kept less the offset, so lining up again never piles
+               one offset on another. */
             if (props->containsFixture(id))
-                house.setFixtureProperties(id, props->fixtureProperties(id));
+            {
+                FixturePreviewItem fp = props->fixtureProperties(id);
+                fp.m_baseItem.m_position -= QVector3D(float(m_offset.x()), float(m_offset.y()), 0.0f);
+                house.setFixtureProperties(id, fp);
+            }
             if (props->fixtureRigPropsMap().contains(id))
                 house.setFixtureRigProps(id, props->fixtureRigProps(id));
         }
@@ -795,6 +928,8 @@ void VenueRig::forget()
     m_ids.clear();
     m_unloaded.clear();
     m_applied = false;
+    m_offset = QPointF();
+    m_datum = Datum();
     if (m_doc == nullptr)
         return;
     for (Universe *u : m_doc->inputOutputMap()->universes())

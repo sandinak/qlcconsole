@@ -23,6 +23,7 @@
 #include <QDialog>
 
 class RoomOutputPicker;
+class LengthSpinBox;
 class QTableWidget;
 class QGroupBox;
 class QListWidget;
@@ -62,6 +63,16 @@ public:
     RoomOutputPicker *roomOutput() const { return m_roomOutput; }
     QPushButton *useRoomOutputButton() const { return m_useRoomOutput; }
     QPushButton *matchGroupsButton() const { return m_matchGroups; }
+    /** The Room box (docs/design/VENUE_ROLES_DATUM.md section 2.4): how the
+     *  room is lined up under the show, Line Up the Room, and how far
+     *  downstage of the room's piece the show's drape hangs. */
+    QGroupBox *lineUpBox() const { return m_lineUpBox; }
+    QLabel *lineUpText() const { return m_lineUpText; }
+    QPushButton *lineUpButton() const { return m_lineUp; }
+    LengthSpinBox *downstageField() const { return m_downstage; }
+    /** Line Up the Room: from @p path, else the room's file beside the
+     *  show, else one chosen (Browse). False, said, when it can't. */
+    bool lineUpRoom(const QString &path = QString());
     /** Match Groups...: the room's groups waiting for a match, against the
      *  show's (not modal). */
     QDialog *openMatchGroups();
@@ -95,6 +106,11 @@ private:
     QPushButton *m_useRoomOutput;
     QLabel *m_waiting;
     QPushButton *m_matchGroups;
+    QGroupBox *m_lineUpBox;
+    QLabel *m_lineUpText;
+    QLabel *m_downstageLabel;
+    LengthSpinBox *m_downstage;
+    QPushButton *m_lineUp;
 };
 
 /** @} */

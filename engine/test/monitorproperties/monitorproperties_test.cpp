@@ -3483,12 +3483,12 @@ void MonitorProperties_Test::stageMarksAreSavedWithTheShow()
     mp.setCurtainLineAuto();
     mp.setNumberLineY(-1.5f);
     mp.setStageMarks(0xFF);
-    QCOMPARE(mp.stageMarks(), 0x1F);
+    QCOMPARE(mp.stageMarks(), 0x3F);
     MonitorProperties again;
     loadStageMarksXml(again, stageMarksXml(mp));
     QVERIFY(again.curtainLineIsAuto());
     QCOMPARE(again.numberLineY(), -1.5f);
-    QCOMPARE(again.stageMarks(), 0x1F);
+    QCOMPARE(again.stageMarks(), 0x3F);
 }
 
 void MonitorProperties_Test::stageMarksFollowTheStage()
@@ -4106,12 +4106,130 @@ void MonitorProperties_Test::stageMarksMigrateToStagePieces()
     QVERIFY(!stageMarksXml(none).contains("StagePieces"));
 }
 
+void MonitorProperties_Test::upstageLineAuto()
+{
+    MonitorProperties mp;
+    mp.setGridUnits(MonitorProperties::Meters);
+    mp.setGridSize(QVector3D(10, 6, 8));
+    QSignalSpy moved(&mp, &MonitorProperties::stageLinesChanged);
+
+    // A bare floor: the grid's upstage edge.
+    QVERIFY(mp.upstageLineIsAuto());
+    QCOMPARE(mp.upstageLineY(), 0.0f);
+    QVERIFY(mp.upstageLineScenery() == nullptr);
+
+    // A deck across centre: its upstage edge.
+    StagePlatform *deck = mp.addPlatform();
+    deck->setOriginX(1.0f); deck->setOriginY(1.25f);
+    deck->setWidth(8.0f); deck->setDepth(5.0f);
+    QCOMPARE(mp.upstageLineY(), 1.25f);
+
+    // A back wall across centre: its downstage face.
+    Scenery *wall = mp.addScenery();
+    wall->setKind(Scenery::BackWall);
+    wall->setOriginX(5.0f); wall->setOriginY(0.5f); wall->setWidth(10.0f);
+    wall->setThickness(0.2f);
+    QCOMPARE(mp.upstageLineScenery(), wall);
+    QVERIFY(qAbs(mp.upstageLineY() - 0.6f) < 1e-5f);
+
+    // A cloth beats the wall: the most upstage cyc, traveler or scrim across centre.
+    Scenery *scrim = mp.addScenery();
+    scrim->setKind(Scenery::Scrim);
+    scrim->setOriginX(5.0f); scrim->setOriginY(2.5f); scrim->setWidth(8.0f);
+    QCOMPARE(mp.upstageLineScenery(), scrim);
+    QCOMPARE(mp.upstageLineY(), 2.5f);
+    Scenery *cyc = mp.addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setName(QStringLiteral("Cyclorama 1"));
+    cyc->setOriginX(5.0f); cyc->setOriginY(1.75f); cyc->setWidth(9.0f);
+    QCOMPARE(mp.upstageLineScenery(), cyc);
+    QCOMPARE(mp.upstageLineY(), 1.75f);
+    QCOMPARE(mp.upstageLineSource(), QStringLiteral("Cyclorama 1"));
+    // Not across the centre line, or not a cloth: not the line.
+    Scenery *offCentre = mp.addScenery();
+    offCentre->setKind(Scenery::Cyclorama);
+    offCentre->setOriginX(1.0f); offCentre->setOriginY(1.0f); offCentre->setWidth(1.0f);
+    Scenery *drape = mp.addScenery();
+    drape->setKind(Scenery::MainDrape);
+    drape->setOriginX(5.0f); drape->setOriginY(1.0f); drape->setWidth(9.0f);
+    QCOMPARE(mp.upstageLineScenery(), cyc);
+    QCOMPARE(moved.count(), 0);         // Auto follows the stage: nothing was moved
+
+    // Set, it stays put; Auto again, it follows.
+    mp.setUpstageLineY(1.2004f);
+    QVERIFY(!mp.upstageLineIsAuto());
+    QCOMPARE(mp.upstageLineY(), 1.2f);  // whole millimetres
+    QCOMPARE(moved.count(), 1);
+    QCOMPARE(moved.last().at(0).toBool(), true);
+    cyc->setOriginY(1.5f);
+    QCOMPARE(mp.upstageLineY(), 1.2f);
+    mp.setUpstageLineY(1.2f);           // where it is: nothing moved
+    QCOMPARE(moved.count(), 1);
+    QVERIFY(qAbs(mp.upstageLineUpstageOfCurtain() - (mp.curtainLineY() - 1.2f)) < 1e-5f);
+    mp.setUpstageLineUpstageOfCurtain(mp.curtainLineY() - 1.0f);
+    QVERIFY(qAbs(mp.upstageLineY() - 1.0f) < 1e-5f);
+    mp.setUpstageLineAuto();
+    QVERIFY(mp.upstageLineIsAuto());
+    QCOMPARE(mp.upstageLineY(), 1.5f);
+    QCOMPARE(moved.count(), 3);
+
+    // A piece of its own, shown, hidden and locked like the others.
+    QVERIFY(MonitorProperties::stagePieces().contains(MonitorProperties::UpstagePiece));
+    QVERIFY(!MonitorProperties::stagePieceName(MonitorProperties::UpstagePiece).isEmpty());
+    mp.setStagePieceVisible(MonitorProperties::UpstagePiece, true);
+    QVERIFY(mp.stageMarkVisible(MonitorProperties::UpstageLineFlag));
+    QVERIFY(mp.stagePieceMovable(MonitorProperties::UpstagePiece));
+    mp.setStagePieceLocked(MonitorProperties::UpstagePiece, true);
+    QVERIFY(!mp.stagePieceMovable(MonitorProperties::UpstagePiece));
+}
+
+void MonitorProperties_Test::upstageLineRoundTrip()
+{
+    MonitorProperties mp;
+    mp.setGridUnits(MonitorProperties::Meters);
+    mp.setGridSize(QVector3D(10, 6, 8));
+
+    // Never used: nothing written, as before.
+    QVERIFY(!stageMarksXml(mp).contains("Upstage"));
+    // The other pieces in use: still nothing of the upstage line.
+    mp.setStagePieceVisible(MonitorProperties::CurtainPiece, true);
+    mp.setCurtainLineY(5.0f);
+    const QByteArray withCurtain = stageMarksXml(mp);
+    QVERIFY(withCurtain.contains("Kind=\"Curtain\""));
+    QVERIFY(!withCurtain.contains("Upstage"));
+
+    // Set: whole millimetres.
+    mp.setUpstageLineY(1.2374f);
+    const QByteArray set = stageMarksXml(mp);
+    QVERIFY2(set.contains("Kind=\"Upstage\"") && set.contains("UpstageLine=\"1237\""), set.constData());
+    MonitorProperties back;
+    loadStageMarksXml(back, set);
+    QVERIFY(!back.upstageLineIsAuto());
+    QCOMPARE(back.upstageLineY(), 1.237f);
+    QCOMPARE(stageMarksXml(back), set);
+
+    // Shown on Auto: the piece, no position.
+    mp.setUpstageLineAuto();
+    mp.setStagePieceVisible(MonitorProperties::UpstagePiece, true);
+    const QByteArray shown = stageMarksXml(mp);
+    QVERIFY(shown.contains("Kind=\"Upstage\" Visible=\"1\""));
+    QVERIFY(!shown.contains("UpstageLine="));
+    MonitorProperties again;
+    loadStageMarksXml(again, shown);
+    QVERIFY(again.upstageLineIsAuto());
+    QVERIFY(again.stagePieceVisible(MonitorProperties::UpstagePiece));
+    // A reset forgets it.
+    again.reset();
+    QVERIFY(again.upstageLineIsAuto());
+    QVERIFY(!again.stagePieceVisible(MonitorProperties::UpstagePiece));
+}
+
 void MonitorProperties_Test::stagePiecesAreShownAndLockedOnTheirOwnAndByLayer()
 {
     typedef MonitorProperties MP;
     MonitorProperties mp;
     QVERIFY(!mp.hasStageLayer());
-    QCOMPARE(mp.stagePieces().size(), 4);
+    QCOMPARE(mp.stagePieces().size(), 5);
     foreach (MP::StagePiece piece, MP::stagePieces())
     {
         QVERIFY(!mp.stagePieceVisible(piece));

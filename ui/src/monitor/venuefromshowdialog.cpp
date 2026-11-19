@@ -373,7 +373,8 @@ void VenueFromShowDialog::refresh()
         const VenueImport::Result res = VenueImport::build(m_source, m_doc, opt, vc->reservedIds());
         m_summary->setText(tr("From %1: %2. Groups: %3 fill this show's, %4 kept for later.")
                                .arg(m_source.fileName(), VenueImport::summary(res, opt.universe))
-                               .arg(res.filled).arg(res.held));
+                               .arg(res.filled).arg(res.held)
+                           + QLatin1Char('\n') + VenueImport::datumSummary(res.data.datum));
         m_warnings->setText(res.warnings.join(QLatin1Char('\n')));
         m_warnings->setVisible(!res.warnings.isEmpty());
         // The clash check, before anything is applied.

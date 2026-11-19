@@ -24,8 +24,11 @@ namespace PmsLikeShow
    FOH: ids 51-53, 3 channels each at 101, 104, 107 (zero-based 100, 103,
    106), on truss 0 ("FOH": origin 4.96, 13.296, 6.002 m, along +X, 0.29 m
    wide) at 0.305, 1.219, 2.438 m, 0.391 m across, hung under it.
-   Groups: "FOH" (51-53), "Relays" (1-4), "1st Elect." (1, 2). */
-inline QByteArray xml(const QString &outputIp = QStringLiteral("172.18.2.10"))
+   Groups: "FOH" (51-53), "Relays" (1-4), "1st Elect." (1, 2).
+   Its grid is 70 ft wide (its centre line at 10.668 m). With @p cyc,
+   "Cyclorama 2" hangs across it 2 m from the grid's upstage edge (its
+   upstage line, docs/design/VENUE_ROLES_DATUM.md). */
+inline QByteArray xml(const QString &outputIp = QStringLiteral("172.18.2.10"), bool cyc = false)
 {
     QByteArray out;
     out += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE Workspace>\n"
@@ -76,6 +79,9 @@ inline QByteArray xml(const QString &outputIp = QStringLiteral("172.18.2.10"))
                    .arg(51 + i).arg(QLatin1String(offsets[i])).toUtf8();
     for (int i = 0; i < 3; ++i)
         out += QStringLiteral("   <FxItem ID=\"%1\" XPos=\"0\" YPos=\"0\" LayerId=\"3\"/>\n").arg(51 + i).toUtf8();
+    if (cyc)
+        out += "   <Scenery ID=\"0\" Name=\"Cyclorama 2\" Kind=\"0\" OriginX=\"10.668\" OriginY=\"2.000\" "
+               "Width=\"18.000\" Height=\"6.000\"/>\n";
     out += "  </Monitor>\n </Engine>\n</Workspace>\n";
     return out;
 }

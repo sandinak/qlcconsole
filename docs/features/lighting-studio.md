@@ -123,11 +123,19 @@ never put on it.
   otherwise on every number.
 - **Apron:** the stage downstage of the curtain line, as its own piece of
   deck. See [The apron](#the-apron) below.
+- **Upstage line:** the show's drape, labelled **Upstage line** (pale
+  green). The tour rig is measured from it up and down stage, as it is from
+  the centre line left and right, and a venue's room is lined up on it
+  (see Lining up the room in House rig and tour package). On **Auto** it
+  is the most upstage **Cyclorama**, **Traveler** or **Scrim** across the
+  centre line, else a **Back wall**'s downstage face, else the upstage edge
+  of the main deck, else the upstage edge of the grid. Moving it moves a
+  lined-up venue's house rig with it; the tour stays where it is.
 
 **Selecting and dragging them.** Click a line on the plot to select it
 (a rubber band never picks them up, so dragging a selection box across the
-stage leaves them alone). Drag the **curtain line** or the **number line**
-up or downstage to move it; drag the **apron's front edge** to make it
+stage leaves them alone). Drag the **curtain line**, the **upstage line**
+or the **number line** up or downstage to move it; drag the **apron's front edge** to make it
 deeper or shallower. Each drag is one undo step. A locked piece, or one on a
 locked Stage layer, stays where it is. The centre line doesn't move: it's
 always the middle of the stage grid.
@@ -138,6 +146,9 @@ the show's unit, with what it means written under it:
 
 - **Curtain line:** **Auto**, or how far upstage of the front of the deck it
   is. A negative distance puts it downstage of the front.
+- **Upstage line:** **Auto**, or how far upstage of the curtain line it is;
+  on Auto it says what it comes from (**Cyclorama 1: 18' 9" US of the
+  curtain line**).
 - **Number line:** **Auto** (at the front of the stage), or how far
   downstage of the curtain line it is (**4' 11" DS of curtain line**). A
   negative distance puts it upstage of the curtain line.

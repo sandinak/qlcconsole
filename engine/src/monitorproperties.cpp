@@ -334,6 +334,7 @@ bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainD
     foreach (quint32 fid, fids)
         emit rigPropsChanged(fid);
     emit stageTargetsChanged();
+    emit stageLinesChanged(false);      // the plot as it was, its lines with it
     return ok;
 }
 
@@ -366,7 +367,7 @@ MonitorProperties::GridUnits MonitorProperties::gridUnitsFor(MeasurementUnits::L
 
 void MonitorProperties::setStageMarks(int marks)
 {
-    m_stageMarks = marks & 0x1F;
+    m_stageMarks = marks & 0x3F;
     if (m_stageMarks & (CentreMarkFlag | CentreLineFlag))
         m_centreParts = m_stageMarks & (CentreMarkFlag | CentreLineFlag);
     if (m_stageMarks != NoStageMarks && !m_loadingXml)
@@ -386,7 +387,7 @@ bool MonitorProperties::stageMarkShown(StageMark mark) const
 
 QList<MonitorProperties::StagePiece> MonitorProperties::stagePieces()
 {
-    return QList<StagePiece>() << CentrePiece << CurtainPiece << NumberPiece << ApronPiece;
+    return QList<StagePiece>() << CentrePiece << CurtainPiece << NumberPiece << ApronPiece << UpstagePiece;
 }
 
 QString MonitorProperties::stagePieceName(StagePiece piece)
@@ -397,6 +398,7 @@ QString MonitorProperties::stagePieceName(StagePiece piece)
         case CurtainPiece: return tr("Curtain line");
         case NumberPiece:  return tr("Number line");
         case ApronPiece:   return tr("Apron");
+        case UpstagePiece: return tr("Upstage line");
     }
     return QString();
 }
@@ -412,6 +414,7 @@ namespace
             case MonitorProperties::CurtainPiece: return MonitorProperties::CurtainLineFlag;
             case MonitorProperties::NumberPiece:  return MonitorProperties::NumberLineFlag;
             case MonitorProperties::ApronPiece:   return MonitorProperties::ApronFlag;
+            case MonitorProperties::UpstagePiece: return MonitorProperties::UpstageLineFlag;
         }
         return 0;
     }
@@ -723,6 +726,7 @@ namespace
             case MonitorProperties::CurtainPiece: return "Curtain";
             case MonitorProperties::NumberPiece:  return "Number";
             case MonitorProperties::ApronPiece:   return "Apron";
+            case MonitorProperties::UpstagePiece: return "Upstage";
         }
         return "";
     }
@@ -733,7 +737,7 @@ void MonitorProperties::saveStagePieces(QXmlStreamWriter *doc) const
 {
     /* Only once used -- a piece shown, moved, set or locked -- so a show
        that never used them saves as it always has. */
-    const bool used = m_stageMarks != NoStageMarks || m_curtainLineSet || m_numberLineSet
+    const bool used = m_stageMarks != NoStageMarks || m_curtainLineSet || m_numberLineSet || m_upstageLineSet
                       || !m_apronAuto || m_apronHeightSet || m_stagePieceLocks != 0 || hasStageLayer();
     if (!used)
         return;
@@ -742,6 +746,10 @@ void MonitorProperties::saveStagePieces(QXmlStreamWriter *doc) const
         doc->writeAttribute(QStringLiteral("Layer"), QString::number(m_stageLayerId));
     foreach (StagePiece piece, stagePieces())
     {
+        /* The upstage line came later: written only once used, so a show
+           that has the other pieces saves as it did before it. */
+        if (piece == UpstagePiece && !stagePieceVisible(piece) && !stagePieceLocked(piece) && !m_upstageLineSet)
+            continue;
         doc->writeStartElement(KXMLQLCMonitorStagePiece);
         doc->writeAttribute(QStringLiteral("Kind"), QString::fromLatin1(stagePieceKind(piece)));
         doc->writeAttribute(QStringLiteral("Visible"), stagePieceVisible(piece) ? "1" : "0");
@@ -760,6 +768,12 @@ void MonitorProperties::saveStagePieces(QXmlStreamWriter *doc) const
             case CurtainPiece:
                 if (m_curtainLineSet)
                     doc->writeAttribute(QStringLiteral("Y"), metresText(m_curtainLineY));
+            break;
+            case UpstagePiece:
+                // Whole millimetres (docs/design/VENUE_ROLES_DATUM.md section 2.2).
+                if (m_upstageLineSet)
+                    doc->writeAttribute(QStringLiteral("UpstageLine"),
+                                        QString::number(qRound64(double(m_upstageLineY) * 1000.0)));
             break;
             case NumberPiece:
                 if (m_numberLineSet)
@@ -821,6 +835,14 @@ void MonitorProperties::loadStagePieces(QXmlStreamReader &root)
             if (visible) marks |= CurtainLineFlag;
             if (a.hasAttribute(QStringLiteral("Y"))) setCurtainLineY(number(a, QStringLiteral("Y")));
             else m_curtainLineSet = false;
+        }
+        else if (kind == QLatin1String("Upstage"))
+        {
+            piece = UpstagePiece;
+            if (visible) marks |= UpstageLineFlag;
+            m_upstageLineSet = a.hasAttribute(QStringLiteral("UpstageLine"));
+            m_upstageLineY = m_upstageLineSet ? float(a.value(QStringLiteral("UpstageLine")).toLongLong()) / 1000.0f
+                                              : 0.0f;
         }
         else if (kind == QLatin1String("Number"))
         {
@@ -902,6 +924,86 @@ void MonitorProperties::setCurtainLineAuto()
 {
     m_curtainLineSet = false;
     syncApron();
+}
+
+const Scenery *MonitorProperties::upstageLineScenery() const
+{
+    const float cx = stageCentre().x();
+    auto across = [cx](const Scenery *sc) {
+        return sc != nullptr && sc->outline() == Scenery::SheetOutline && acrossStage(sc->rotation())
+               && std::fabs(sc->originX() - cx) <= sc->width() / 2.0f;
+    };
+    /* The most upstage cloth across the centre line: a cyc, a traveler, a
+       scrim (+Y is downstage, so the smallest Y). */
+    const Scenery *best = nullptr;
+    foreach (const Scenery *sc, m_sceneries)
+    {
+        if (!across(sc) || (sc->kind() != Scenery::Cyclorama && sc->kind() != Scenery::Traveler
+                            && sc->kind() != Scenery::Scrim))
+            continue;
+        if (best == nullptr || sc->originY() < best->originY()
+            || (sc->originY() == best->originY() && sc->id() < best->id()))
+            best = sc;
+    }
+    if (best != nullptr)
+        return best;
+    // Else a back wall across it: the most downstage one (its face is the stage's end).
+    foreach (const Scenery *sc, m_sceneries)
+    {
+        if (!across(sc) || sc->kind() != Scenery::BackWall)
+            continue;
+        if (best == nullptr || sc->originY() > best->originY())
+            best = sc;
+    }
+    return best;
+}
+
+float MonitorProperties::autoUpstageLineY() const
+{
+    if (const Scenery *sc = upstageLineScenery())
+        return sc->kind() == Scenery::BackWall ? sc->originY() + sc->thickness() / 2.0f : sc->originY();
+    if (const StagePlatform *deck = mainDeck())
+        return deck->originY();
+    return 0.0f;
+}
+
+QString MonitorProperties::upstageLineSource() const
+{
+    if (!m_upstageLineSet)
+    {
+        if (const Scenery *sc = upstageLineScenery())
+            return sc->name().isEmpty() ? Scenery::kindName(sc->kind()) : sc->name();
+        if (mainDeck() != nullptr)
+            return tr("the main deck's upstage edge");
+        return tr("the stage grid's upstage edge");
+    }
+    return tr("the upstage line as set");
+}
+
+float MonitorProperties::upstageLineY() const
+{
+    return m_upstageLineSet ? m_upstageLineY : autoUpstageLineY();
+}
+
+void MonitorProperties::setUpstageLineY(float metres)
+{
+    if (!std::isfinite(metres))
+        return;
+    // Kept in whole millimetres, as it is saved.
+    const float mm = float(qRound64(double(metres) * 1000.0)) / 1000.0f;
+    if (m_upstageLineSet && mm == m_upstageLineY)
+        return;
+    m_upstageLineY = mm;
+    m_upstageLineSet = true;
+    emit stageLinesChanged(true);
+}
+
+void MonitorProperties::setUpstageLineAuto()
+{
+    if (!m_upstageLineSet)
+        return;
+    m_upstageLineSet = false;
+    emit stageLinesChanged(true);
 }
 
 float MonitorProperties::numberLineY() const
@@ -1060,6 +1162,8 @@ void MonitorProperties::reset()
     m_apronPlatformId = 0xFFFFFFFF;
     m_curtainLineSet = false;
     m_curtainLineY = 0.0f;
+    m_upstageLineSet = false;
+    m_upstageLineY = 0.0f;
     m_numberLineSet = false;
     m_numberLineY = 0.0f;
     m_targetPositionsVisible = true;
