@@ -389,8 +389,8 @@ void VenueFromShowDialog::refresh()
         else if (m_showOn.value(opt.universe) > 0 && !m_universeConfirm->isChecked())
             blocked = tr("Confirm the universe: it has the show's fixtures");
         else if (waiting > 0)
-            blocked = waiting == 1 ? tr("Confirm each match: 1 to go")
-                                   : tr("Confirm each match: %1 to go").arg(waiting);
+            blocked = waiting == 1 ? tr("Confirm Each Match: 1 Left")
+                                   : tr("Confirm Each Match: %1 Left").arg(waiting);
         else if (!m_output->isComplete())
             blocked = tr("Finish the room's output, or choose Not yet");
     }

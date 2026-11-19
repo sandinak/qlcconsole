@@ -428,8 +428,8 @@ QDialog *VenueRigDialog::openMatchGroups()
         for (const VenueImport::Match &x : m)
             chosen += x.confirmed ? 1 : 0;
         ok->setEnabled(waiting == 0 && chosen > 0);
-        ok->setText(waiting > 0 ? (waiting == 1 ? tr("Confirm each match: 1 to go")
-                                                : tr("Confirm each match: %1 to go").arg(waiting))
+        ok->setText(waiting > 0 ? (waiting == 1 ? tr("Confirm Each Match: 1 Left")
+                                                : tr("Confirm Each Match: %1 Left").arg(waiting))
                                 : tr("Fill These Groups"));
     };
     connect(table, &GroupMatchTable::matchesChanged, d, sync);
