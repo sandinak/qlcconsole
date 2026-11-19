@@ -30,6 +30,7 @@
 #include <QFileInfo>
 #include <QGroupBox>
 #include <QComboBox>
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QPointer>
 #include <QLabel>
@@ -214,6 +215,10 @@ VenueFromShowDialog::VenueFromShowDialog(Doc *doc, const QString &name, QWidget 
     m_universe->setToolTip(tr("The one universe this show keeps for the room's rig. Each fixture keeps its "
                               "address there."));
     form->addRow(tr("Its fixtures go on"), m_universe);
+    m_universeConfirm = new QCheckBox(this);
+    m_universeConfirm->setObjectName(QStringLiteral("vfsUniverseConfirm"));
+    m_universeConfirm->hide();
+    form->addRow(QString(), m_universeConfirm);
 
     m_output = new RoomOutputPicker(doc, this);
     form->addRow(tr("Output in this room"), m_output);
@@ -263,20 +268,25 @@ VenueFromShowDialog::VenueFromShowDialog(Doc *doc, const QString &name, QWidget 
         fd->open();
     });
     connect(m_name, &QLineEdit::textChanged, this, &VenueFromShowDialog::refresh);
-    connect(m_universe, &QComboBox::currentIndexChanged, this, &VenueFromShowDialog::refresh);
+    connect(m_universe, &QComboBox::currentIndexChanged, this, [this]() {
+        m_universeConfirm->setChecked(false);    // each universe confirmed for itself
+        refresh();
+    });
+    connect(m_universeConfirm, &QCheckBox::toggled, this, &VenueFromShowDialog::refresh);
     connect(m_output, &RoomOutputPicker::changed, this, &VenueFromShowDialog::refresh);
     connect(m_groups, &GroupMatchTable::matchesChanged, this, &VenueFromShowDialog::refresh);
 
     // The universes, the suggested one first chosen.
     InputOutputMap *iom = doc->inputOutputMap();
     const QSet<quint32> house = venuesOf(doc)->rig()->venueFixtures();
-    QHash<quint32, int> onIt;
     for (const Fixture *fx : doc->fixtures())
         if (!house.contains(fx->id()))
-            onIt[fx->universe()]++;
+            m_showOn[fx->universe()]++;
+    // No free universe, nothing chosen for him: a tour universe would go dark.
+    m_universe->addItem(tr("Choose a universe\342\200\246"), uint(UINT_MAX));
     for (quint32 u = 0; u < iom->universesCount(); ++u)
     {
-        const int n = onIt.value(u);
+        const int n = m_showOn.value(u);
         const QString what = n == 0 ? tr("nothing on it") : n == 1 ? tr("1 fixture of the show")
                                                                    : tr("%1 fixtures of the show").arg(n);
         m_universe->addItem(tr("U%1 %2 (%3)").arg(u + 1).arg(iom->getUniverseNameByIndex(int(u)), what), u);
@@ -330,6 +340,8 @@ VenueImport::Options VenueFromShowDialog::options() const
 {
     VenueImport::Options opt;
     opt.universe = m_universe->currentData().toUInt();
+    if (opt.universe == UINT_MAX)
+        return opt;
     opt.matches = m_groups->matches();
     opt.output = m_output->output();
     return opt;
@@ -347,6 +359,13 @@ void VenueFromShowDialog::refresh()
         if (m_file->text().isEmpty())
             m_summary->setText(tr("Choose the room's show file."));
         blocked = tr("Choose the room's show file first");
+    }
+    else if (m_universe->currentData().toUInt() == UINT_MAX)
+    {
+        m_summary->setText(tr("From %1: %2 fixtures. Choose the universe this show keeps for the room: every "
+                              "one has the show's fixtures on it now.").arg(m_source.fileName())
+                               .arg(m_source.fixtures.size()));
+        blocked = tr("Choose a universe");
     }
     else
     {
@@ -367,12 +386,20 @@ void VenueFromShowDialog::refresh()
             blocked = tr("Name the room");
         else if (vc->hasVenue(name))
             blocked = tr("\342\200\234%1\342\200\235 is already a venue").arg(name);
+        else if (m_showOn.value(opt.universe) > 0 && !m_universeConfirm->isChecked())
+            blocked = tr("Confirm the universe: it has the show's fixtures");
         else if (waiting > 0)
             blocked = waiting == 1 ? tr("Confirm each match: 1 to go")
                                    : tr("Confirm each match: %1 to go").arg(waiting);
         else if (!m_output->isComplete())
             blocked = tr("Finish the room's output, or choose Not yet");
     }
+    // A universe the show uses: said in words, and only on a tick.
+    const quint32 u = m_universe->currentData().toUInt();
+    const int onU = u == UINT_MAX ? 0 : m_showOn.value(u);
+    m_universeConfirm->setVisible(m_read && onU > 0);
+    m_universeConfirm->setText(tr("Use it anyway: it has %1 of the show's fixtures, and this replaces the "
+                                  "show's output for U%2 while the venue is applied").arg(onU).arg(u + 1));
     m_make->setEnabled(blocked.isEmpty());
     m_make->setToolTip(blocked.isEmpty() ? tr("Make %1 and apply it").arg(name) : blocked);
     m_make->setText(blocked.isEmpty() || !m_read ? tr("Make Venue") : tr("Make Venue (%1)").arg(blocked));
@@ -392,6 +419,7 @@ QString VenueFromShowDialog::makeVenue()
         QMessageBox::information(this, windowTitle(), why);
         return QString();
     }
+    const QString previous = vc->activeVenue();
     // Its clashes were on screen before Make Venue: applied now.
     const bool applied = !m_doc->programmer()->focusSession()->isActive() && vc->setActiveVenue(made);
 
@@ -409,15 +437,12 @@ QString VenueFromShowDialog::makeVenue()
     undo->setObjectName(QStringLiteral("vfsUndo"));
     undo->setToolTip(tr("Take %1 off the rig and remove it. The show was not changed.").arg(made));
     Doc *doc = m_doc;
-    connect(undo, &QPushButton::clicked, doc, [doc, made]() { undoImport(doc, made); });
+    connect(undo, &QPushButton::clicked, doc, [doc, made, previous]() { undoImport(doc, made, previous); });
     note->open();
     return made;
 }
 
-bool VenueFromShowDialog::undoImport(Doc *doc, const QString &venue)
+bool VenueFromShowDialog::undoImport(Doc *doc, const QString &venue, const QString &previous)
 {
-    VenueCorrections *vc = venuesOf(doc);
-    if (!vc->hasVenue(venue))
-        return false;
-    return vc->removeVenue(venue);
+    return venuesOf(doc)->undoVenueFromShow(venue, previous);
 }

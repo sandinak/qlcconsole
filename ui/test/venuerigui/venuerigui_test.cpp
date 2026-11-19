@@ -29,6 +29,7 @@
 #include <QApplication>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QCheckBox>
 #include <QDir>
 #include <QtTest>
 
@@ -506,7 +507,11 @@ void VenueRigUi_Test::theVenuePageChoosesTheRoomOutput()
     QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(1)->outputPatchDescriptions()),
              QStringLiteral("Art-Net to 10.0.0.20"));
     QVERIFY(items(page.clashList()).filter(QStringLiteral("Output")).isEmpty());
-    QVERIFY(text->text().endsWith(QStringLiteral("Its output here: Art-Net to 10.0.0.20.")));
+    QVERIFY(text->text().contains(QStringLiteral("Its output here: Art-Net to 10.0.0.20")));
+    // No Art-Net plugin here: chosen, and said to be waiting, not sending.
+    QVERIFY2(text->text().endsWith(QStringLiteral("Art-Net to 10.0.0.20, waiting: nothing on this computer reaches "
+                                                  "it yet.")), qPrintable(text->text()));
+    QCOMPARE(page.universeTable()->item(1, VenueRigDialog::PatchCol)->text(), QStringLiteral("Art-Net to 10.0.0.20"));
     QCOMPARE(VenueRig::outputText(v->venue(pms).rig.patch.value(1)), QStringLiteral("Art-Net to 10.0.0.20"));
     QVERIFY(!m_doc->isModified());
 
@@ -524,14 +529,57 @@ void VenueRigUi_Test::theVenuePageChoosesTheRoomOutput()
     ok->click();
     QTRY_VERIFY(match.isNull());
     QCOMPARE(wash->headList().size(), 3);
+    QVERIFY(!m_doc->isModified());          // the fill is the venue's, not an edit to the show
     QCOMPARE(waiting->text(), QStringLiteral("Waiting for a match: Relays (4), 1st Elect. (2)"));
     shoot(&page, QStringLiteral("venue-page-room-after"));
+
+    // Use the Show's Patch: the room universe goes out the show's own, and says so.
+    page.findChild<QPushButton *>(QStringLiteral("vrForgetPatch"))->click();
+    QVERIFY2(text->text().endsWith(QStringLiteral("Its output here: the show's own (none).")), qPrintable(text->text()));
 
     // A venue not made from a show: no such section.
     const QString plain = v->addVenue(QStringLiteral("Lincoln HS"));
     VenueRigDialog other(m_doc, plain, nullptr);
     other.show();
     QVERIFY(!other.findChild<QWidget *>(QStringLiteral("vrRoom"))->isVisible());
+}
+
+void VenueRigUi_Test::aVenueFromAShowWithEveryUniverseInUse()
+{
+    VenueCorrections *v = venues(m_doc);
+    for (quint32 u = 0; u < m_doc->inputOutputMap()->universesCount(); ++u)
+        dimmer(m_doc, QStringLiteral("Tour %1").arg(u + 1), u, 0);
+    m_doc->resetModified();
+    QWidget window;
+    VenueFromShowDialog d(m_doc, QStringLiteral("PMS Auditeria"), &window);
+    d.show();
+    QVERIFY(d.setFile(pmsFile(m_dir)));
+
+    // None free: nothing chosen for him, and nothing can be made.
+    QCOMPARE(d.universeBox()->currentData().toUInt(), uint(UINT_MAX));
+    QCOMPARE(d.universeBox()->currentText(), QString::fromUtf8("Choose a universe\342\200\246"));
+    QVERIFY(!d.makeButton()->isEnabled());
+    QCOMPARE(d.makeButton()->text(), QStringLiteral("Make Venue (Choose a universe)"));
+    QVERIFY(d.summaryLabel()->text().contains(QStringLiteral("every one has the show's fixtures on it now")));
+    QVERIFY(!d.universeConfirm()->isVisible());
+
+    // A universe with the show's fixtures: only on a tick that says what it does.
+    d.universeBox()->setCurrentIndex(d.universeBox()->findData(1u));
+    QVERIFY(d.universeConfirm()->isVisible());
+    QCOMPARE(d.universeConfirm()->text(),
+             QStringLiteral("Use it anyway: it has 1 of the show's fixtures, and this replaces the show's output "
+                            "for U2 while the venue is applied"));
+    QVERIFY(!d.makeButton()->isEnabled());
+    QCOMPARE(d.makeButton()->text(), QStringLiteral("Make Venue (Confirm the universe: it has the show's fixtures)"));
+    shoot(&d, QStringLiteral("venue-from-show-universe-in-use"));
+    d.universeConfirm()->setChecked(true);
+    d.groupTable()->setConfirmed(0, false);
+    QVERIFY(d.makeButton()->isEnabled());
+    // Another universe: confirmed again, for itself.
+    d.universeBox()->setCurrentIndex(d.universeBox()->findData(2u));
+    QVERIFY(!d.universeConfirm()->isChecked());
+    QVERIFY(!d.makeButton()->isEnabled());
+    QVERIFY(v->venueNames().isEmpty());
 }
 
 QTEST_MAIN(VenueRigUi_Test)

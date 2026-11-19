@@ -49,21 +49,6 @@ VenueCorrections *venuesOf(Doc *doc)
     return doc->programmer()->venueCorrections();
 }
 
-/* "ArtNet: 10.0.0.20 to 10.0.0.50", "none". */
-QString patchText(const QList<Universe::OfflinePatch> &patches)
-{
-    QStringList out;
-    for (const Universe::OfflinePatch &p : patches)
-    {
-        QString t = QStringLiteral("%1: %2").arg(p.plugin, p.uid);
-        const QString ip = p.params.value(QStringLiteral("outputIP")).toString();
-        if (!ip.isEmpty())
-            t += QObject::tr(" to %1").arg(ip);
-        out << t;
-    }
-    return out.isEmpty() ? QObject::tr("none") : out.join(QStringLiteral("; "));
-}
-
 /* "all", "401–512, 1–24" for universe @p u. */
 QString notOursCell(const QList<VenueRig::NotOurs> &list, quint32 u)
 {
@@ -223,6 +208,8 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
     VenueCorrections *vc = venuesOf(m_doc);
     connect(vc, &VenueCorrections::houseRigChanged, this, &VenueRigDialog::refresh);
     connect(vc, &VenueCorrections::activeVenueChanged, this, &VenueRigDialog::refresh);
+    // A room output waiting for its network shows when it gets there.
+    connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged, this, &VenueRigDialog::refresh);
     connect(vc, &VenueCorrections::venuesChanged, this, [this]() {
         if (!venuesOf(m_doc)->hasVenue(m_venue))
             close();        // renamed or deleted under it
@@ -343,8 +330,8 @@ void VenueRigDialog::refresh()
         slot->setCurrentIndex(slot->findData(int(unis.at(i)->slotOwner())));
 
         const QString patch = v.rig.patch.contains(quint32(i))
-                              ? patchText(v.rig.patch.value(quint32(i)))
-                              : tr("the show's: %1").arg(patchText(show.value(quint32(i))));
+                              ? VenueRig::outputText(v.rig.patch.value(quint32(i)))
+                              : tr("the show's: %1").arg(VenueRig::outputText(show.value(quint32(i))));
         QTableWidgetItem *out = new QTableWidgetItem(patch);
         out->setFlags(Qt::ItemIsEnabled);
         m_table->setItem(i, PatchCol, out);
@@ -374,11 +361,21 @@ void VenueRigDialog::refresh()
     if (room.isSet())
     {
         const QList<Universe::OfflinePatch> out = v.rig.patch.value(room.universe);
+        QString here;
+        if (!v.rig.patch.contains(room.universe))
+            here = tr("the show's own (%1)").arg(VenueRig::outputText(show.value(room.universe)));
+        else
+        {
+            here = VenueRig::outputText(out);
+            // What the universe does now, not only what was chosen.
+            if (applied && !out.isEmpty() && !vc->rig()->roomOutputLive(v.rig))
+                here += tr(", waiting: nothing on this computer reaches it yet");
+        }
         m_roomText->setText(tr("U%1 %2 is %3's own universe%4. Its output here: %5.")
                                 .arg(room.universe + 1)
                                 .arg(iom->getUniverseNameByIndex(int(room.universe)), m_venue,
                                      room.from.isEmpty() ? QString() : tr(" (its rig from %1)").arg(room.from),
-                                     VenueRig::outputText(out)));
+                                     here));
         m_roomOutput->setImported(room.imported, room.from);
         m_roomOutput->refreshInterfaces();
         m_roomOutput->setOutput(out);

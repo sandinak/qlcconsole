@@ -119,6 +119,10 @@ private slots:
     /** The venue's own universe: no output, the imported Art-Net left over,
      *  or the show's own output are clashes; a chosen one is not */
     void theRoomOutputAndItsClashes();
+    /** An Art-Net room output with no route yet is kept waiting and said
+     *  so; it goes out once the network is there; the venue keeps only its
+     *  own universe's patch through any patch signal */
+    void anArtNetRoomOutputWaitsForItsNetwork();
     /** Removing the venue leaves the show and its fixtures as they were */
     void undoingAVenueFromAnotherShow();
     /** A file that isn't a show, or has no fixtures, is refused with a reason */

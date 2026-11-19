@@ -29,6 +29,7 @@
 #include "qlcfile.h"
 #include "venuerig.h"
 #include "rigowner.h"
+#include "outputpatch.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -302,6 +303,20 @@ Universe::OfflinePatch VenueRig::readOutput(QXmlStreamReader &r)
         r.skipCurrentElement();
     }
     return p;
+}
+
+bool VenueRig::roomOutputLive(const Data &d) const
+{
+    if (m_doc == nullptr || !d.room.isSet() || d.room.universe >= m_doc->inputOutputMap()->universesCount())
+        return false;
+    const Universe *u = m_doc->inputOutputMap()->universes().at(int(d.room.universe));
+    for (int i = 0; i < u->outputPatchesCount(); ++i)
+    {
+        const OutputPatch *op = u->outputPatch(i);
+        if (op != nullptr && op->isPatched() && !op->isPending())
+            return true;
+    }
+    return false;
 }
 
 QString VenueRig::outputText(const QList<Universe::OfflinePatch> &patches)
@@ -893,6 +908,9 @@ bool VenueRig::patchChanged(const Data &d) const
     const QMap<quint32, QList<Universe::OfflinePatch>> show = showPatch();
     for (auto it = now.constBegin(); it != now.constEnd(); ++it)
     {
+        // A venue made from another show owns its own universe only.
+        if (d.room.isSet() && it.key() != d.room.universe)
+            continue;
         const QList<Universe::OfflinePatch> expected = d.patch.contains(it.key()) ? d.patch.value(it.key())
                                                                                   : show.value(it.key());
         if (!samePatch(it.value(), expected))
@@ -933,6 +951,30 @@ void VenueRig::putPatch(quint32 universe, const QList<Universe::OfflinePatch> &p
     keepUnmodified(modified);   // the venue's patch, not the show's
 }
 
+bool VenueRig::sameDestination(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b)
+{
+    if (a.size() != b.size())
+        return false;
+    const QString ip = QStringLiteral("outputIP"), uni = QStringLiteral("outputUni");
+    for (int i = 0; i < a.size(); ++i)
+    {
+        const Universe::OfflinePatch &x = a.at(i), &y = b.at(i);
+        if (x.plugin != y.plugin)
+            return false;
+        if (x.params.contains(ip) || y.params.contains(ip))
+        {
+            if (x.params.value(ip).toString() != y.params.value(ip).toString()
+                || x.params.value(uni, 0).toInt() != y.params.value(uni, 0).toInt())
+                return false;
+        }
+        else if (x.uid != y.uid)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool VenueRig::samePatch(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b)
 {
     if (a.size() != b.size())
@@ -940,6 +982,16 @@ bool VenueRig::samePatch(const QList<Universe::OfflinePatch> &a, const QList<Uni
     for (int i = 0; i < a.size(); ++i)
     {
         const Universe::OfflinePatch &x = a.at(i), &y = b.at(i);
+        /* Saved by where it goes, not by an interface (a venue's room
+           output): the same when it goes to the same place, whichever of
+           this computer's lines it resolved to. */
+        if ((x.uid.isEmpty() || y.uid.isEmpty()) && (x.params.contains(QStringLiteral("outputIP"))
+                                                     || y.params.contains(QStringLiteral("outputIP"))))
+        {
+            if (!sameDestination({ x }, { y }))
+                return false;
+            continue;
+        }
         if (x.plugin != y.plugin || x.uid != y.uid || x.line != y.line || x.network != y.network
             || paramsKey(x.params) != paramsKey(y.params))
             return false;
@@ -1147,13 +1199,16 @@ QList<VenueRig::Clash> VenueRig::clashes(const Data &d, bool applied) const
         else if (used.isEmpty())
             c.text = tr("%1: no output in this room yet. Choose the USB DMX interface or the Art-Net node "
                         "in Rig and Universes").arg(where);
-        else if (own && !d.room.imported.isEmpty() && samePatch(used, d.room.imported))
+        else if (own && !d.room.imported.isEmpty() && sameDestination(used, d.room.imported))
             c.text = tr("%1 still sends what %2 had: %3. Choose this room's output in Rig and Universes")
                          .arg(where, d.room.from.isEmpty() ? tr("the imported show") : d.room.from,
                               outputText(used));
         else if (!own)
             c.text = tr("%1 goes out the show's own output in this room (%2). Choose this room's output in "
                         "Rig and Universes").arg(where, outputText(used));
+        else if (applied && !roomOutputLive(d))
+            c.text = tr("%1: %2 is chosen, but nothing on this computer reaches it yet. Waiting for it (check "
+                        "the cable and the network)").arg(where, outputText(used));
         if (!c.text.isEmpty())
             out << c;
     }

@@ -22,6 +22,7 @@
 
 #include <QTableWidget>
 #include <QDialog>
+#include <QHash>
 
 #include "venueimport.h"
 
@@ -29,6 +30,7 @@ class RoomOutputPicker;
 class QDialogButtonBox;
 class QListWidget;
 class QPushButton;
+class QCheckBox;
 class QComboBox;
 class QLineEdit;
 class QLabel;
@@ -95,14 +97,18 @@ public:
 
     QLineEdit *nameEdit() const { return m_name; }
     QComboBox *universeBox() const { return m_universe; }
+    /** "Use it anyway": shown when the universe chosen has the show's own
+     *  fixtures on it (its output is replaced while the venue is applied). */
+    QCheckBox *universeConfirm() const { return m_universeConfirm; }
     RoomOutputPicker *outputPicker() const { return m_output; }
     GroupMatchTable *groupTable() const { return m_groups; }
     QLabel *summaryLabel() const { return m_summary; }
     QListWidget *clashList() const { return m_clashes; }
     QPushButton *makeButton() const { return m_make; }
 
-    /** The closing note's Undo: the venue made off the rig and removed. */
-    static bool undoImport(Doc *doc, const QString &venue);
+    /** The closing note's Undo: the venue made off the rig and removed,
+     *  @p previous (the venue applied before; empty: None) back on. */
+    static bool undoImport(Doc *doc, const QString &venue, const QString &previous);
 
 private:
     void refresh();
@@ -116,6 +122,8 @@ private:
     QLineEdit *m_file;
     QPushButton *m_browse;
     QComboBox *m_universe;
+    QCheckBox *m_universeConfirm;
+    QHash<quint32, int> m_showOn;       //!< universe -> the show's fixtures on it
     RoomOutputPicker *m_output;
     GroupMatchTable *m_groups;
     QLabel *m_summary;

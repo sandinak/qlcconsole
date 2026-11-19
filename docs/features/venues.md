@@ -207,6 +207,10 @@ The dialog:
 3. **Its fixtures go on**: the universe of this show kept for the room.
    It suggests the first House slot with no tour fixture on it, else the
    first universe with nothing on it. Each line says what is on it now.
+   When every universe has the show's fixtures, it says **Choose a
+   universe…** and chooses none. A universe with the show's fixtures on
+   it takes a tick, **Use it anyway**: while the venue is applied, that
+   universe goes to the room's output instead of the show's.
 4. **Output in this room**: where that universe goes in the room:
    - **USB DMX interface**: the room's DMX line through an interface
      plugged into this computer (only the ones plugged in now are
@@ -216,7 +220,11 @@ The dialog:
      you choose (the default when no USB DMX interface is plugged in);
    - **As the file had it**: what the other show sent its universe to.
      That is the network the file was made on, not the room's: the
-     clash check flags it.
+     clash check flags it. **It really sends there**: a file made at the
+     office sends the room's universe to the office's network (an
+     Art-Net node on 172.18.2.0/24, say), so with the venue applied on a
+     computer on that network the office rig gets the room's levels.
+     Choose it only to try the file as it was.
 5. **Groups**: each of its groups, with the group of this show it fills.
    A group with the same name (case aside), or a similar one
    ("1st Elect." and "1st elect"), is suggested, and waits for your tick
@@ -247,7 +255,9 @@ this show has a group for them.
 
 - **Output**: its universe has no output in this room yet, or still
   sends what the other show had, or goes out this show's own output for
-  that universe.
+  that universe, or its Art-Net node is chosen but nothing on this
+  computer reaches it yet (it is kept, and goes out by itself once the
+  network is there; the venue page says **waiting**).
 - **Slot**: a tour or rental fixture on the venue's universe.
 
 ### On site: checklist

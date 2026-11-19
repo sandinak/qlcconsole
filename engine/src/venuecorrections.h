@@ -391,6 +391,10 @@ public:
      *  fill the show's groups given: they become fills, on the rig at once
      *  when it is applied. How many were matched. */
     int matchRoomGroups(const QString &name, const QMap<int, quint32> &matches);
+    /** Undo of New Venue from a Show: venue @p name off the rig and removed,
+     *  and @p previous (the venue applied before it was made; empty: None)
+     *  applied again. */
+    bool undoVenueFromShow(const QString &name, const QString &previous);
 
     /** What @p name keeps for the room; applied at once if it is on. */
     bool setNotOurs(const QString &name, const QList<VenueRig::NotOurs> &notOurs, QString *why = nullptr);

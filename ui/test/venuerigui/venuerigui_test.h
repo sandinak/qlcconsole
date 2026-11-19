@@ -56,6 +56,9 @@ private slots:
     /** The venue page of a venue made from a show: its universe, the room's
      *  output chosen there (on the rig at once), Match Groups... */
     void theVenuePageChoosesTheRoomOutput();
+    /** Every universe in use: none is chosen for him, and one that has the
+     *  show's fixtures takes a tick that says its output is replaced */
+    void aVenueFromAShowWithEveryUniverseInUse();
 
 private:
     Doc *m_doc = nullptr;

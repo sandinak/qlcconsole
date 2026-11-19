@@ -30,6 +30,7 @@
 #define protected public
 #include "mastertimer.h"
 #include "universe.h"
+#include "ioplugincache.h"
 #undef protected
 #undef private
 #include "venuerig_test.h"
@@ -63,6 +64,8 @@
 #include "../common/pmslikeshow.h"
 #include "../common/resource_paths.h"
 #include "qlcfixturedefcache.h"
+#include "networkroute.h"
+#include "qlcioplugin.h"
 #include "showembedding.h"
 #include "rigowner.h"
 #include "fixture.h"
@@ -2310,6 +2313,52 @@ VenueImport::Source pmsSource(QTemporaryDir *dir)
     return src;
 }
 
+/* An Art-Net-like output whose lines are this computer's addresses, as the
+   real plugin's are; a test changes them (a cable plugged in). */
+class RoutedNetPlugin final : public QLCIOPlugin
+{
+public:
+    void init() override {}
+    QString name() const override { return QStringLiteral("ArtNet"); }
+    int capabilities() const override { return Output; }
+    QString pluginInfo() const override { return QStringLiteral("routed fake"); }
+    QStringList outputs() override { return m_lines; }
+    bool openOutput(quint32, quint32) override { return true; }
+    void closeOutput(quint32, quint32) override {}
+    void setParameter(quint32 universe, quint32, Capability, QString name, QVariant value) override
+    { m_params[universe][name] = value; }
+    void unSetParameter(quint32 universe, quint32, Capability, QString name) override
+    { m_params[universe].remove(name); }
+    QMap<QString, QVariant> getParameters(quint32 universe, quint32, Capability) const override
+    { return m_params.value(universe); }
+
+    QStringList m_lines;
+    QMap<quint32, QMap<QString, QVariant>> m_params;
+};
+
+/* This computer's addresses, for NetworkRoute: @p ips each a /24. */
+void localNetworks(const QStringList &ips)
+{
+    QList<NetworkRoute::LocalAddress> list;
+    for (const QString &ip : ips)
+        list << NetworkRoute::LocalAddress{ QStringLiteral("en%1").arg(list.size()), QHostAddress(ip), 24 };
+    NetworkRoute::setResolverForTest([list]() { return list; }, [list](const QHostAddress &to) {
+        for (const NetworkRoute::LocalAddress &a : list)
+            if (to.isInSubnet(a.ip, 24))
+                return a.ip;
+        return QHostAddress();
+    });
+}
+
+Universe::OfflinePatch artnetNode(const QString &ip)
+{
+    Universe::OfflinePatch p;
+    p.plugin = QStringLiteral("ArtNet");
+    p.line = 0;
+    p.params.insert(QStringLiteral("outputIP"), ip);
+    return p;
+}
+
 const Fixture *fixtureNamed(Doc *doc, const QString &name)
 {
     for (const Fixture *fx : doc->fixtures())
@@ -2429,6 +2478,7 @@ void VenueRig_Test::aVenueFromAnotherShowFillsOnlyConfirmedGroups()
     FixtureGroup *elect = makeGroup(m_doc, QStringLiteral("1st elect"), {});
     makeGroup(m_doc, QStringLiteral("Steps"), { tour + 1 });
 
+    m_doc->resetModified();
     const VenueImport::Source src = pmsSource(m_dir);
     QList<VenueImport::Match> m = VenueImport::suggest(src, m_doc);
     QCOMPARE(m.size(), 3);
@@ -2468,8 +2518,10 @@ void VenueRig_Test::aVenueFromAnotherShowFillsOnlyConfirmedGroups()
     QVERIFY(readFile(v->filePath()).contains("<Group Name=\"Relays\">"));
 
     // Matched later, from the venue page: on the rig at once, and kept.
+    QVERIFY(!m_doc->isModified());
     QCOMPARE(v->matchRoomGroups(pms, { { 1, elect->id() } }), 1);
     QCOMPARE(elect->headList().size(), 2);
+    QVERIFY(!m_doc->isModified());          // a venue's fill is not an edit to the show
     QCOMPARE(v->venue(pms).rig.room.groups.size(), 1);
     QCOMPARE(v->venue(pms).rig.room.groups.first().groupName, QStringLiteral("Relays"));
     QVERIFY(v->setActiveVenue(QString()));
@@ -2565,11 +2617,71 @@ void VenueRig_Test::theRoomOutputAndItsClashes()
         QVERIFY(c.kind != VenueRig::Clash::Output);
 }
 
+void VenueRig_Test::anArtNetRoomOutputWaitsForItsNetwork()
+{
+    VenueCorrections *v = venues(m_doc);
+    RoutedNetPlugin *artnet = new RoutedNetPlugin;
+    artnet->m_lines = { QStringLiteral("192.168.1.5") };
+    m_doc->ioPluginCache()->m_plugins.append(artnet);
+    localNetworks({ QStringLiteral("192.168.1.5") });
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // The tour's own Art-Net node on U1, open on the office network.
+    dimmers(4, 0, 0, QStringLiteral("Tour par"));
+    Universe::OfflinePatch tourOut = artnetNode(QStringLiteral("192.168.1.50"));
+    tourOut.uid = QStringLiteral("192.168.1.5");
+    iom->replaceOutputPatches(0, { tourOut });
+    QVERIFY(iom->universe(0)->outputPatchesCount() == 1 && !iom->universe(0)->outputPatch(0)->isPending());
+    m_doc->resetModified();
+
+    // The room's node, on a network this computer isn't on yet.
+    const VenueImport::Source src = pmsSource(m_dir);
+    VenueImport::Options opt;
+    opt.universe = 2;
+    opt.output = { artnetNode(QStringLiteral("10.0.0.20")) };
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"),
+                                            VenueImport::build(src, m_doc, opt, v->reservedIds()).data);
+    QVERIFY(v->setActiveVenue(pms));
+
+    // Kept, waiting, and said so: not dropped, not claimed as sending.
+    Universe *room = iom->universe(2);
+    QCOMPARE(VenueRig::outputText(room->outputPatchDescriptions()), QStringLiteral("Art-Net to 10.0.0.20"));
+    QVERIFY(!v->rig()->roomOutputLive(v->venue(pms).rig));
+    QStringList out;
+    for (const VenueRig::Clash &c : v->clashes(pms))
+        if (c.kind == VenueRig::Clash::Output)
+            out << c.text;
+    QCOMPARE(out, QStringList({ QStringLiteral("U3: Art-Net to 10.0.0.20 is chosen, but nothing on this computer "
+                                               "reaches it yet. Waiting for it (check the cable and the network)") }));
+    QCOMPARE(iom->retryOfflinePatches(), 0);           // still nothing reaches it
+    QCOMPARE(room->offlinePatches().size(), 1);
+
+    // The room's network comes up: it goes out there, by itself.
+    artnet->m_lines = { QStringLiteral("192.168.1.5"), QStringLiteral("10.0.0.5") };
+    localNetworks({ QStringLiteral("192.168.1.5"), QStringLiteral("10.0.0.5") });
+    QVERIFY(iom->retryOfflinePatches() >= 1);
+    QVERIFY(v->rig()->roomOutputLive(v->venue(pms).rig));
+    QCOMPARE(room->outputPatch(0)->outputName(), QStringLiteral("10.0.0.5"));
+    for (const VenueRig::Clash &c : v->clashes(pms))
+        QVERIFY2(c.kind != VenueRig::Clash::Output, qPrintable(c.text));
+
+    // Resolved, it is still the venue's choice: an unrelated patch signal
+    // keeps nothing new, and never the tour's universes.
+    QVERIFY(!v->rig()->patchChanged(v->venue(pms).rig));
+    emit iom->universe(0)->outputPatchChanged();
+    QCOMPARE(v->venue(pms).rig.patch.keys(), QList<quint32>({ 2 }));
+    QVERIFY(v->keepPatch());
+    QCOMPARE(v->venue(pms).rig.patch.keys(), QList<quint32>({ 2 }));
+    QVERIFY(VenueRig::sameDestination(v->venue(pms).rig.patch.value(2), { artnetNode(QStringLiteral("10.0.0.20")) }));
+    QVERIFY(!m_doc->isModified());
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
+}
+
 void VenueRig_Test::undoingAVenueFromAnotherShow()
 {
     VenueCorrections *v = venues(m_doc);
     dimmers(4, 0, 0, QStringLiteral("Tour par"));
     const QString kept = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(kept));       // the room he was in before
     m_doc->resetModified();
     const QByteArray before = engineXml(m_doc);
     auto section = [&kept](const QByteArray &xml) {
@@ -2592,9 +2704,10 @@ void VenueRig_Test::undoingAVenueFromAnotherShow()
     QCOMPARE(m_doc->fixtures().size(), 11);
     QVERIFY(!v->reservedIds().isEmpty());
 
-    // Undo: the venue off the rig and gone; the show and the other venue as they were.
-    QVERIFY(v->removeVenue(pms));
-    QVERIFY(!v->isActive());
+    // Undo: the venue off the rig and gone, the venue before it back on;
+    // the show and that venue as they were.
+    QVERIFY(v->undoVenueFromShow(pms, kept));
+    QCOMPARE(v->activeVenue(), kept);
     QCOMPARE(m_doc->fixtures().size(), 4);
     QVERIFY(v->reservedIds().isEmpty());
     QVERIFY(!m_doc->isModified());

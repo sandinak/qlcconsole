@@ -780,7 +780,18 @@ bool VenueCorrections::keepPatch(QString *why)
             *why = tr("No venue is applied.");
         return false;
     }
-    v->rig.patch = m_rig->currentPatch();
+    if (v->rig.room.isSet())
+    {
+        /* A venue made from another show owns its own universe only: the
+           tour's universes keep the show's patch (VENUE_FROM_SHOW.md section 6). */
+        const quint32 u = v->rig.room.universe;
+        v->rig.patch.clear();
+        v->rig.patch.insert(u, m_rig->currentPatch().value(u));
+    }
+    else
+    {
+        v->rig.patch = m_rig->currentPatch();
+    }
     v->modified = QDateTime::currentDateTime();
     emit houseRigChanged();
     return save(why);
@@ -1620,6 +1631,16 @@ bool VenueCorrections::setRoomOutput(const QString &name, const QList<Universe::
     return false;
 }
 
+bool VenueCorrections::undoVenueFromShow(const QString &name, const QString &previous)
+{
+    if (!hasVenue(name))
+        return false;
+    removeVenue(name);
+    if (!previous.isEmpty() && previous != name && hasVenue(previous))
+        setActiveVenue(previous);
+    return true;
+}
+
 int VenueCorrections::matchRoomGroups(const QString &name, const QMap<int, quint32> &matches)
 {
     Venue *v = nullptr;
@@ -1629,6 +1650,7 @@ int VenueCorrections::matchRoomGroups(const QString &name, const QMap<int, quint
     if (v == nullptr || matches.isEmpty())
         return 0;
     const bool applied = name == m_active && m_rig->isApplied();
+    const bool wasModified = m_doc != nullptr && m_doc->isModified();
     if (applied)
         recordRig();    // what is on the rig now, first
     QList<VenueRig::Fill> held;
@@ -1658,6 +1680,9 @@ int VenueCorrections::matchRoomGroups(const QString &name, const QMap<int, quint
         for (VenueRig::Fill &f : filled)
             m_rig->putFill(f);
         m_writing = was;
+        // A venue's fill is not an edit to the show (its file writes only the tour heads).
+        if (!wasModified && m_doc->isModified())
+            m_doc->resetModified();
         recordRig();    // the fills, as the groups now hold them
     }
     else

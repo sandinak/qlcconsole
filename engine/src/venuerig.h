@@ -225,6 +225,13 @@ public:
      *  room's output chosen), not taken for an edit of the patch. */
     void putPatch(quint32 universe, const QList<Universe::OfflinePatch> &patch);
     static bool samePatch(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b);
+    /** The same place: the plugin and, for a network output, its target
+     *  address and universe (whichever local interface it goes out of);
+     *  else the same device. */
+    static bool sameDestination(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b);
+    /** Venue @p d is applied and its own universe has an output open now
+     *  (not waiting for its interface or network). */
+    bool roomOutputLive(const Data &d) const;
 
     /** "Not ours" of @p d onto the universes (none for empty). */
     void applyNotOurs(const QList<NotOurs> &notOurs);
