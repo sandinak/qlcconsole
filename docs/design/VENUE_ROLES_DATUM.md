@@ -95,7 +95,7 @@ gives up and downstage.** The tour rig is measured from those two lines.
   Saved as `UpstageLine="1237"` (mm) only when set.
 
 **Venue**: a new `<Datum>` element inside `<Venue>`, beside `<Room>`. Not
-attributes on `<Room>`: a build that knows `<Room>` and drops attributes it
+attributes on `<Room>`: a build that knows `<Room>` drops attributes it
 doesn't know when it saves, but keeps an unknown element inside `<Venue>`
 whole (VENUES.md §7).
 
