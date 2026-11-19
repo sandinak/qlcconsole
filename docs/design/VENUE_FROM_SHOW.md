@@ -128,7 +128,7 @@ Each group of the other show is offered against this show's groups:
 | **No match** | neither |
 
 **Every suggestion waits for his tick**: a row with a group chosen and not
-confirmed holds **Make Venue** back ("Confirm each match: 2 to go").
+confirmed holds **Make Venue** back ("Confirm Each Match: 2 Left").
 Choosing a group by hand in a row counts as confirming it.
 
 - A confirmed match becomes a **fill** of that group: the house heads in

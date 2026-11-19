@@ -416,7 +416,7 @@ void VenueRigUi_Test::aVenueFromAShowEndToEnd()
     QCOMPARE(table->item(0, GroupMatchTable::ConfirmCol)->checkState(), Qt::Unchecked);
     QCOMPARE(table->groupBox(1)->currentText(), QStringLiteral("Not matched (kept for later)"));
     QVERIFY(!d->makeButton()->isEnabled());
-    QCOMPARE(d->makeButton()->text(), QStringLiteral("Make Venue (Confirm each match: 1 to go)"));
+    QCOMPARE(d->makeButton()->text(), QStringLiteral("Make Venue (Confirm Each Match: 1 Left)"));
     shoot(d, QStringLiteral("venue-from-show-confirm"));
     table->setConfirmed(0, true);
     QVERIFY(d->makeButton()->isEnabled());
