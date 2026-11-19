@@ -140,6 +140,9 @@ private slots:
     void r21_undoOfAReAimSendsTheClosingFrameToBroadcast();
     void r21_theLegLeftAfterItsSiblingIsRemovedSendsToItsOwnNode();
     void r21_siblingLegsNeverLeaveALineOpen();
+    /** Pending leg round-trip and per-line parameters (found in the review of c54477406) */
+    void r21r_undoKeepsAPendingLegAndTheOthersTarget();
+    void r21r_twoLegsOnTwoLinesEachKeepTheirTarget();
     /** Review of c54477406 (independent): red tests, see each */
     void r21r_venueSwitchSendsNoClosingFrameToTheDefault();
     void r21r_clearingTheFeedbackTargetKeepsTheOutputOnItsNode();
