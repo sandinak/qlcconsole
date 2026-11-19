@@ -118,6 +118,8 @@ private slots:
      *  Fixture Manager's and Build's menus, the row's tooltip. */
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();
+    /** A show read rebuilds each list once, not once per fixture (0.5.1). */
+    void aShowLoadBuildsEachListOnce();
     /** The group menu's actions are replaced, not piled up, on each
      *  refresh (TEST_MATRIX L4: 1,323 left per show open). */
     void theGroupMenuKeepsOneActionPerGroup();

@@ -21,6 +21,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **A zoomed Rig Overview no longer zooms back out** when you open Fixture
   Properties (picking the fixture reloaded the view and re-framed it; the
   Overview now keeps its zoom, pan and angle through a selection change).
+- **A big show opens again on Windows, and faster everywhere.** Opening a
+  show rebuilt Build's Groups & fixtures and the plot's Inventory once for
+  every fixture and group it read, and re-sorted the Fixture Manager's whole
+  list once per fixture: a 95-universe, 2,800-fixture show never finished
+  opening on Windows and took over a minute on a fast Mac. Each list is now
+  built once, after the show is read.
 
 ### Changed
 
