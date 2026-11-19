@@ -2570,9 +2570,11 @@ void VenueRig_Test::theRoomOutputAndItsClashes()
     QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(2)->outputPatchDescriptions()),
              QStringLiteral("Art-Net to 172.18.2.10 (from 172.18.2.219)"));
 
-    // The room's USB interface: on the universe at once, and no clash.
+    // The room's USB interface: on the universe at once; with no interface
+    // here (no plugin in this test) it is waiting, and said so.
     QVERIFY(v->setRoomOutput(pms, { usbOutput() }));
-    QVERIFY(outputClashes().isEmpty());
+    QCOMPARE(outputClashes(), QStringList({ QStringLiteral("U3: USB DMX: DMXking ultraDMX Micro (BG01) is chosen, "
+                                                           "but it isn't plugged in yet. Waiting for it") }));
     QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(2)->outputPatchDescriptions()),
              QStringLiteral("USB DMX: DMXking ultraDMX Micro (BG01)"));
     QVERIFY(!m_doc->isModified());
@@ -2666,7 +2668,17 @@ void VenueRig_Test::anArtNetRoomOutputWaitsForItsNetwork()
 
     // Resolved, it is still the venue's choice: an unrelated patch signal
     // keeps nothing new, and never the tour's universes.
-    QVERIFY(!v->rig()->patchChanged(v->venue(pms).rig));
+    {
+        QStringList live;
+        for (const Universe::OfflinePatch &p : room->outputPatchDescriptions())
+        {
+            QStringList ps;
+            for (auto it = p.params.constBegin(); it != p.params.constEnd(); ++it)
+                ps << it.key() + "=" + it.value().toString();
+            live << QStringLiteral("%1|%2|%3|%4|%5").arg(p.plugin, p.uid).arg(p.line).arg(p.network, ps.join(','));
+        }
+        QVERIFY2(!v->rig()->patchChanged(v->venue(pms).rig), qPrintable(live.join(" ; ")));
+    }
     emit iom->universe(0)->outputPatchChanged();
     QCOMPARE(v->venue(pms).rig.patch.keys(), QList<quint32>({ 2 }));
     QVERIFY(v->keepPatch());

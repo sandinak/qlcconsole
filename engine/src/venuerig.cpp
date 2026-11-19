@@ -1207,8 +1207,10 @@ QList<VenueRig::Clash> VenueRig::clashes(const Data &d, bool applied) const
             c.text = tr("%1 goes out the show's own output in this room (%2). Choose this room's output in "
                         "Rig and Universes").arg(where, outputText(used));
         else if (applied && !roomOutputLive(d))
-            c.text = tr("%1: %2 is chosen, but nothing on this computer reaches it yet. Waiting for it (check "
-                        "the cable and the network)").arg(where, outputText(used));
+            c.text = used.first().plugin == QLatin1String("DMX USB")
+                ? tr("%1: %2 is chosen, but it isn't plugged in yet. Waiting for it").arg(where, outputText(used))
+                : tr("%1: %2 is chosen, but nothing on this computer reaches it yet. Waiting for it (check "
+                     "the cable and the network)").arg(where, outputText(used));
         if (!c.text.isEmpty())
             out << c;
     }
