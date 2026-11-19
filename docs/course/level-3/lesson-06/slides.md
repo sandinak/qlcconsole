@@ -36,6 +36,8 @@ teacher says. It can be turned into a deck as it is.*
 - **Curtain line**: where the main curtain hangs.
 - **Number line**: feet out from **CL**, SR one way, SL the other.
 - **Apron**: the deck in front of the curtain line.
+- **Upstage line**: the show's drape. A new room's lights are lined up
+  under it and the centre line; the tour's rig never moves.
 - On the plot's **Stage** layer (Plot layers), each with its own eye.
 - Picture: the classroom plot with the marks. "SL 1 · DS 1."
 

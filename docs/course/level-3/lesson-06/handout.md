@@ -43,6 +43,7 @@ light back on its mark in each room.
 | **Curtain line** | Where the main curtain hangs: the line up- and downstage distances are measured from. |
 | **Number line** | A line across the front of the stage, numbered in feet out from centre (**CL**, the centre line), so a crew can say how far left or right something is. |
 | **Apron** | The part of the stage in front of the curtain line. |
+| **Upstage line** | The show's drape (usually its cyc): the tour's rig is measured from it up and downstage, as it is from the centre line left and right. A new room is lined up under it: the room's lights move, the tour's never do. |
 | **Focus report** | The record of a focus: every light, where it went, its correction, who checked it and when. |
 | **Scramble** | A practice: every moving light is knocked off its target by a random amount, and you focus them back. You are scored on how far off each light ends up, how long it takes and how many saves you make. Your real venues are never touched. |
 | **Focus this cue** | Changing a cue's own values from the stage with the controller. Venue focus fixes the rig for a room; Focus this cue changes what a cue does. |

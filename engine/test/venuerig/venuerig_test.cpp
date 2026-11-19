@@ -2633,7 +2633,6 @@ void VenueRig_Test::lineUpMovesHouseNotTour()
     QVERIFY(relay != nullptr);
     const quint32 rid = relay->id();
     QCOMPARE(props->fixturePosition(rid, 0, 0), kRelay3);
-    QCOMPARE(v->roomFile(pms), m_dir->filePath(QStringLiteral("PMS Stage.qlcc")));
     QSignalSpy moved(v, &VenueCorrections::houseRigChanged);
 
     // Line Up the Room: every house fixture by the offset, nothing of the tour's.
@@ -2642,6 +2641,7 @@ void VenueRig_Test::lineUpMovesHouseNotTour()
     QVERIFY2(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset),
              qPrintable(posText(props->fixturePosition(rid, 0, 0))));
     QVERIFY(moved.count() > 0);
+    QCOMPARE(v->roomFile(pms), m_dir->filePath(QStringLiteral("PMS Stage.qlcc")));   // found beside the show
     QVERIFY(tourUnmoved(m_doc, show));
     QVERIFY(!m_doc->isModified());
     QCOMPARE(engineXml(m_doc), before);
