@@ -2346,7 +2346,8 @@ void localNetworks(const QStringList &ips)
         for (const NetworkRoute::LocalAddress &a : list)
             if (to.isInSubnet(a.ip, 24))
                 return a.ip;
-        return QHostAddress();
+        // As the real resolver: anything else leaves by the default route.
+        return list.isEmpty() ? QHostAddress() : list.first().ip;
     });
 }
 
@@ -2656,6 +2657,9 @@ void VenueRig_Test::anArtNetRoomOutputWaitsForItsNetwork()
                                                "reaches it yet. Waiting for it (check the cable and the network)") }));
     QCOMPARE(iom->retryOfflinePatches(), 0);           // still nothing reaches it
     QCOMPARE(room->offlinePatches().size(), 1);
+    // Not taken out the default route (the office network) meanwhile.
+    QCOMPARE(room->outputPatchesCount(), 0);
+    QVERIFY(!v->rig()->roomOutputLive(v->venue(pms).rig));
 
     // The room's network comes up: it goes out there, by itself.
     artnet->m_lines = { QStringLiteral("192.168.1.5"), QStringLiteral("10.0.0.5") };
@@ -2678,6 +2682,18 @@ void VenueRig_Test::anArtNetRoomOutputWaitsForItsNetwork()
     QCOMPARE(v->venue(pms).rig.patch.keys(), QList<quint32>({ 2 }));
     QVERIFY(VenueRig::sameDestination(v->venue(pms).rig.patch.value(2), { artnetNode(QStringLiteral("10.0.0.20")) }));
     QVERIFY(!m_doc->isModified());
+
+    /* Pointed at the office's node on the Connections tab to try it, then
+       the show saved: the venue's output stays the room's. */
+    Universe::OfflinePatch office = artnetNode(QStringLiteral("192.168.1.60"));
+    office.uid = QStringLiteral("192.168.1.5");
+    iom->replaceOutputPatches(2, { office });
+    QCOMPARE(room->outputPatch(0)->outputName(), QStringLiteral("192.168.1.5"));
+    v->setShowFile(v->showFile(), false);
+    QCOMPARE(v->venue(pms).rig.patch.keys(), QList<quint32>({ 2 }));
+    QVERIFY(VenueRig::sameDestination(v->venue(pms).rig.patch.value(2), { artnetNode(QStringLiteral("10.0.0.20")) }));
+    QVERIFY(v->fromXml(readFile(v->filePath())));
+    QVERIFY(VenueRig::sameDestination(v->venue(pms).rig.patch.value(2), { artnetNode(QStringLiteral("10.0.0.20")) }));
     NetworkRoute::setResolverForTest(nullptr, nullptr);
 }
 

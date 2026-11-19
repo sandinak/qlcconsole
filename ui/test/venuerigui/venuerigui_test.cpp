@@ -514,8 +514,9 @@ void VenueRigUi_Test::theVenuePageChoosesTheRoomOutput()
                                                      "the network)")), qPrintable(outputs.first()));
     QVERIFY(text->text().contains(QStringLiteral("Its output here: Art-Net to 10.0.0.20")));
     // No Art-Net plugin here: chosen, and said to be waiting, not sending.
-    QVERIFY2(text->text().endsWith(QStringLiteral("Art-Net to 10.0.0.20, waiting: nothing on this computer reaches "
-                                                  "it yet.")), qPrintable(text->text()));
+    QVERIFY2(text->text().endsWith(QStringLiteral("Art-Net to 10.0.0.20 (waiting for it: see the clash check).")),
+             qPrintable(text->text()));
+    QVERIFY(!text->text().contains(QStringLiteral("nothing on this computer")));   // said once, in the clash list
     QCOMPARE(page.universeTable()->item(1, VenueRigDialog::PatchCol)->text(), QStringLiteral("Art-Net to 10.0.0.20"));
     QCOMPARE(VenueRig::outputText(v->venue(pms).rig.patch.value(1)), QStringLiteral("Art-Net to 10.0.0.20"));
     QVERIFY(!m_doc->isModified());

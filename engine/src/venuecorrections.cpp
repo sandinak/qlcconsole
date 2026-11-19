@@ -232,7 +232,10 @@ void VenueCorrections::setShowFile(const QString &showFile, bool opened)
     {
         m_rigTimer->stop();
         recordRig();
-        if (m_rig->patchChanged(activeVenueData()->rig))
+        /* Not for a venue made from another show: its universe's output is
+           chosen in Rig and Universes, never taken from the Connections tab
+           by a save (a node tried at the office would go to the room). */
+        if (!activeVenueData()->rig.room.isSet() && m_rig->patchChanged(activeVenueData()->rig))
             keepPatch();
     }
     if (showFile == m_showFile)

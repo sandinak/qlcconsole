@@ -369,7 +369,7 @@ void VenueRigDialog::refresh()
             here = VenueRig::outputText(out);
             // What the universe does now, not only what was chosen.
             if (applied && !out.isEmpty() && !vc->rig()->roomOutputLive(v.rig))
-                here += tr(", waiting: nothing on this computer reaches it yet");
+                here += tr(" (waiting for it: see the clash check)");
         }
         m_roomText->setText(tr("U%1 %2 is %3's own universe%4. Its output here: %5.")
                                 .arg(room.universe + 1)
