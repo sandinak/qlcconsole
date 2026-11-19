@@ -135,6 +135,8 @@ MonitorInventoryPanel::MonitorInventoryPanel(Doc *doc, MonitorGraphicsView *view
         connect(m_doc, &Doc::fixtureRemoved, this, [this](quint32) { reload(); });
         connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { reload(); });
         connect(m_doc, &Doc::stageLooksChanged, this, [this]() { reload(); });
+        // Once a show is read: reload() skips while it is (see there).
+        connect(m_doc, &Doc::loaded, this, [this]() { reload(); });
     }
 
     reload();
@@ -142,6 +144,12 @@ MonitorInventoryPanel::MonitorInventoryPanel(Doc *doc, MonitorGraphicsView *view
 
 void MonitorInventoryPanel::reload()
 {
+    /* A show being read adds its fixtures one by one: rebuilding the list
+       for each was O(n^2) (2,800 fixtures: minutes, never finished on
+       Windows). Doc::loaded rebuilds it once. */
+    if (m_doc != NULL && m_doc->loadStatus() == Doc::Loading)
+        return;
+
     const QString needle = m_filter->text().trimmed();
     const QList<quint32> onPlot = m_view != NULL ? m_view->fixturesID() : QList<quint32>();
 

@@ -1235,6 +1235,14 @@ void FixtureTreeWidget::restoreSelection(const Selection &sel)
 void FixtureTreeWidget::updateTree()
 {
     const Selection keep = currentSelection();
+    /* Sorted once, when the tree is built. With sorting on, every row added
+       arms Qt's pending sort, and the next child()/childCount() below (the
+       universe lookup for each fixture) runs it: a full, recursive sort of
+       the tree for each fixture. 2,800 fixtures: over half a minute on an
+       M4, minutes on a slow Windows PC. */
+    const bool sorting = isSortingEnabled();
+    if (sorting)
+        setSortingEnabled(false);
     clear();
     m_groupFolders.clear();
     m_universesCount = 0;
@@ -1627,6 +1635,9 @@ void FixtureTreeWidget::updateTree()
             dupRoot->setExpanded(true);
         }
     }
+
+    if (sorting)
+        setSortingEnabled(true);    // sorts by the header's column, once
 
     header()->resizeSections(QHeaderView::ResizeToContents);
 
