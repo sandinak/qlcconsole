@@ -967,7 +967,7 @@ bool going(Doc *doc, const ControlMap::Target &target)
             return doc->function(st->cueList(target.id)->chaser)->isRunning();
         case ControlMap::CueTarget:
             return doc->function(st->listOfCue(target.id)->chaser)->isRunning();
-        case ControlMap::EmergencyStopTarget:
+        default:
             break;
     }
     return false;

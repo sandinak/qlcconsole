@@ -316,14 +316,14 @@ private slots:
     /** Q236: Operate's Workbench is Blind; Play Live said in the footer. */
     void workbenchPlayLiveIsSaidInTheFooter();
 
+    /** CS1: the PMJ overlay hears only its own board, and edits nothing in Operate. */
+    void aPmjOverlayHearsOnlyItsOwnBoard();
+    void aPmjFaderOrEncoderInOperateEditsNothing();
+
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */
     void quittingWithTheShowTreeShowing();
-
-    /** CS1: the PMJ overlay hears only its own board, and edits nothing in Operate. */
-    void aPmjOverlayHearsOnlyItsOwnBoard();
-    void aPmjFaderOrEncoderInOperateEditsNothing();
 
 private:
     /** Two lasers on the plot, Show only; their ids */
