@@ -235,6 +235,7 @@ bool PMJOverlay::refuseInOperate(bool encoder)
 
 void PMJOverlay::findKnownUniverse()
 {
+    m_warnedSecond.clear();
     // The board is the universe whose input patch names the PMJ Black 1
     // profile, and only that one: input from any other universe is not
     // the PMJ's, whatever its channel numbers.
@@ -370,6 +371,20 @@ void PMJOverlay::slotInputValueChanged(quint32 universe, quint32 channel, uchar 
         findKnownUniverse();
         if (m_universe >= 0)
             m_engine->refreshDevice(deviceId);
+    }
+    if (m_universe >= 0 && int(universe) != m_universe && isPmjUniverse(universe))
+    {
+        // Two boards on the PMJ Black 1 profile: only the first is heard. Say
+        // so once for the second, not nothing.
+        if (!m_warnedSecond.contains(int(universe)))
+        {
+            m_warnedSecond.insert(int(universe));
+            m_lastRefusal = tr("A second PMJ Black 1 is patched on universe %1: only universe %2 is heard. "
+                               "Unpatch one.").arg(universe + 1).arg(m_universe + 1);
+            m_app->statusBar()->showMessage(m_lastRefusal, 10000);
+            emit refused(m_lastRefusal);
+        }
+        return;
     }
     if (m_universe < 0 || int(universe) != m_universe)
         return;

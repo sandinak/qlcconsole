@@ -42,6 +42,8 @@ class Doc;
 #define KXMLQLCControlMap QStringLiteral("ControlMap")
 /** This build has the emergency-stop target (the CS1 tests ask). */
 #define CONTROLMAP_HAS_EMERGENCY_STOP 1
+/** ... and the stop that says when it cannot work (stopIsDead()). */
+#define CONTROLMAP_STOP_REVIEWED 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -201,6 +203,10 @@ public:
      *  window in which repeats of the stop's press are one. */
     void setConfirmMs(int ms) { m_confirmMs = ms; }
     void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
+    /** The stop is bound to a control that cannot work it: the profile calls
+     *  it a fader or knob (set after it was learned), or it sent a fader's
+     *  values. Its presses are refused, in words (blocked()). */
+    bool stopIsDead() const;
 
     /*********************************************************************
      * Names
@@ -237,8 +243,9 @@ public:
     { return m_down.contains(key(KeyboardUniverse, channel)); }
     /** Lets go of every key held (the app lost the keyboard). */
     void releaseKeys();
-    /** A key may fire @a target now: in Operate always, in Design when
-     *  isArmed(). */
+    /** A key may fire @a target now (board Q277): the surface rule
+     *  (surfaceMayFire()) for a cue list, cue or hit; a scene or effect only
+     *  in Operate (a key is also typing). */
     bool keyMayFire(const Target &target) const;
     /** A MIDI or OSC press may start @a target now (CS1, board Q269): a
      *  function always (Build tries scenes and effects in Design; a
@@ -248,6 +255,8 @@ public:
      *  when isArmed(). What is running can always be let go or stopped, and
      *  the emergency stop always works. */
     bool surfaceMayFire(const Target &target) const;
+    /** Why @a target may not start now, in words (empty: it may). */
+    QString refusalFor(const Target &target) const;
     /** Armed for keys in Design: @a target is in the run list (the cue
      *  list the Run tab plays: that list, its cues and the hits living in
      *  it, its cues, its production or everywhere; and any hit whose place
@@ -328,7 +337,7 @@ private:
     bool press(const Binding &b);
     void release(const Binding &b);
     /** The emergency stop: ALL OFF through ShowControl::run() (never held). */
-    void emergencyStop(const Binding &b);
+    void emergencyStop(const Binding &b, uchar value);
     /** listenForButton(): one control heard while learning. */
     bool learnButtonHeard(quint32 universe, quint32 channel, uchar value);
     /** Starts, stops or toggles (start: 1, stop: 0, toggle: -1) a function. */
@@ -369,7 +378,20 @@ private:
     int m_confirmMs = 15000;
     /** repeats of the emergency stop's press inside this are one */
     int m_estopDebounceMs = 250;
-    QElapsedTimer m_estopAt;
+    /** The stop's controls held since a press (no release yet): the value
+     *  and when it last sent. A repeat of the same value inside the debounce
+     *  is one press; a different value inside a second is a fader. */
+    struct StopHold
+    {
+        uchar value = 0;
+        QElapsedTimer last;
+    };
+    QHash<quint64, StopHold> m_estopHeld;
+    /** controls bound as the stop that sent a fader's values (refused) */
+    QSet<quint64> m_estopFaders;
+    /** the binding each held control pressed: its release acts on it, not
+     *  on what the control is bound to by then */
+    QHash<quint64, Binding> m_pressed;
     Binding m_learning;
     /** key bindings in m_bindings */
     int m_keyBindings = 0;

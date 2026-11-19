@@ -127,13 +127,14 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
                            "controller in Connections ▸ Devices (or Inputs/Outputs), then learn."));
 
     connect(cm, &ControlMap::heard, this, &ControlLearnDialog::slotHeard);
+    // A control that is the emergency stop is refused, in words, by any learn.
+    connect(cm, &ControlMap::refused, this, [this](const QString &why) { m_note->setText(why); });
     if (estop)
     {
         connect(cm, &ControlMap::confirming, this, [this](quint32 u, quint32 c) {
             m_note->setText(tr("%1: release it and press it again to confirm.")
                                 .arg(m_doc->controlMap()->controlName(u, c)));
         });
-        connect(cm, &ControlMap::refused, this, [this](const QString &why) { m_note->setText(why); });
     }
     estop ? cm->listenForButton() : cm->listen();
     // Computer keys: every key pressed in the dialog, before its buttons

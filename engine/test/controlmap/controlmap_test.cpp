@@ -976,6 +976,19 @@ bool going(Doc *doc, const ControlMap::Target &target)
 
 void ControlMap_Test::aSurfacePressFollowsTheModeAndTheArming()
 {
+    sweepTargets(false);
+}
+
+void ControlMap_Test::aKeyFollowsTheSurfaceRule()
+{
+    // Board Q277: a computer key follows the same rule, so a hit on a key
+    // fires in Operate only where its place is live (a scene or an effect on a
+    // key stays Operate-only: a key is also typing).
+    sweepTargets(true);
+}
+
+void ControlMap_Test::sweepTargets(bool viaKey)
+{
     const SurfaceShow show = surfaceShow(m_doc);
     ShowTreeController *st = m_doc->showTree();
     ControlMap *cm = m_doc->controlMap();
@@ -1049,13 +1062,34 @@ void ControlMap_Test::aSurfacePressFollowsTheModeAndTheArming()
                 m_doc->setMode(mode);
                 tick();
 
-                cm->setBinding({ 0, 20, c.target, how });
-                send(20, 127);
+                const quint32 f5 = ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier);
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+                QSignalSpy blocked(cm, &ControlMap::blocked);
+#endif
+                if (viaKey)
+                    cm->setBinding({ ControlMap::KeyboardUniverse, f5, c.target, how });
+                else
+                    cm->setBinding({ 0, 20, c.target, how });
+                if (viaKey)
+                    cm->handleKey(f5, true);
+                else
+                    send(20, 127);
                 tick(2);
                 const bool did = going(m_doc, c.target);
-                const bool want = mode == Doc::Design ? c.design : c.operate;
+                bool want = mode == Doc::Design ? c.design : c.operate;
+                // A scene or an effect on a key: Operate only.
+                if (viaKey && c.target.type == ControlMap::FunctionTarget)
+                    want = mode == Doc::Operate;
                 QVERIFY2(did == want, qPrintable(QString("%1: fired %2, wanted %3").arg(label).arg(did).arg(want)));
-                send(20, 0);
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+                // A press held back says why, on a key too (the footer shows it).
+                if (!want && how != ControlMap::StopOnly)
+                    QVERIFY2(blocked.count() == 1, qPrintable(label + ": no reason given"));
+#endif
+                if (viaKey)
+                    cm->handleKey(f5, false);
+                else
+                    send(20, 0);
                 tick(3);
                 ++ran;
             }
@@ -1498,6 +1532,179 @@ void ControlMap_Test::theStopIsSavedWithTheShow()
 #else
     QFAIL("this build has no emergency stop on the Control Map");
 #endif
+}
+
+/*****************************************************************************
+ * CS1 review fixes
+ *****************************************************************************/
+
+namespace
+{
+/** Whether the stop is bound to a control that cannot work it. */
+bool stopDead(ControlMap *cm)
+{
+#ifdef CONTROLMAP_STOP_REVIEWED
+    return cm->stopIsDead();
+#else
+    const ControlMap::Binding *b = cm->binding(ControlMap::emergencyStop());
+    return b != nullptr && !cm->isButtonControl(b->universe, b->channel);
+#endif
+}
+}
+
+void ControlMap_Test::theStopWorksWhileALearnIsListening()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
+    cm->setStopDebounceMs(0);
+    // An Encoder learn left listening (its panel closed): the stop still stops.
+    cm->listen();
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    send(kStopNote, 127);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "a learn left listening ate the emergency stop");
+    QVERIFY(cm->isListening());                     // and it did not become a choice
+    send(kStopNote, 0);
+
+    // A Learn Trigger dialog open (it listens again after each press): the
+    // same, and the stop's own control is never offered as a choice.
+    QSignalSpy heard(cm, &ControlMap::heard);
+    cm->listen();
+    send(5, 127);
+    QCOMPARE(heard.count(), 1);
+    send(5, 0);
+    cm->listen();
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    send(kStopNote, 127);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "an open Learn Trigger dialog ate the emergency stop");
+    QCOMPARE(heard.count(), 1);
+    send(kStopNote, 0);
+}
+
+void ControlMap_Test::aRealSecondPressIsNotDebounced()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    // Stop, something else starts, stop again: all inside 250 ms.
+    for (int i = 0; i < 3; ++i)
+    {
+        a->start(m_doc->masterTimer(), FunctionParent::master());
+        tick(2);
+        send(kStopNote, 127);
+        tick(3);
+        QVERIFY2(!a->isRunning(), qPrintable(QString("press %1 did not stop").arg(i + 1)));
+        send(kStopNote, 0);
+    }
+    QCOMPARE(handled.count(), 3);
+}
+
+void ControlMap_Test::aStopThatCannotWorkSaysSo()
+{
+    // Learned on a CC with no profile; later a profile types the channel a
+    // knob: every press used to return in silence.
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QVERIFY(!stopDead(cm));
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("Fake");
+    prof->setModel("Late");
+    QLCInputChannel *knob = new QLCInputChannel();
+    knob->setType(QLCInputChannel::Knob);
+    prof->insertChannel(7, knob);
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+    QVERIFY(stopDead(cm));
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    send(7, 127);
+    QCOMPARE(blocked.count(), 1);
+    QVERIFY2(blocked.last().at(0).toString().contains("did not fire"), qPrintable(blocked.last().at(0).toString()));
+}
+
+void ControlMap_Test::aBoundFaderWithNoProfileFiresOnceThenIsRefused()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    // A show file put the stop on a CC fader the profile does not know.
+    sendAll(7, { 0, 10, 20, 40, 64, 100, 127, 100, 60, 0 });
+    QCOMPARE(handled.count(), 1);                   // the first move only
+    QVERIFY(blocked.count() >= 1);
+    QVERIFY(blocked.first().at(0).toString().contains("range of values"));
+    QVERIFY(stopDead(cm));
+    // And later moves are refused in words, not run.
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    sendAll(7, { 30, 50, 0 });
+    tick(3);
+    QVERIFY(a->isRunning());
+    QCOMPARE(handled.count(), 1);
+    // A real button (0/127, a repeat of the same value) is not a fader.
+    cm->setBinding({ 0, 8, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QVERIFY(!stopDead(cm));
+    cm->setStopDebounceMs(0);
+    sendAll(8, { 127, 127, 127, 0 });
+    tick(3);
+    QVERIFY(!a->isRunning());
+    QVERIFY(!stopDead(cm));
+}
+
+void ControlMap_Test::aReplugFreesThePressThatTaughtTheStop()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->learn(ControlMap::emergencyStop());
+    sendAll(kStopNote, { 127, 0, 127 });            // bound; this press is still held
+    QVERIFY(cm->binding(ControlMap::emergencyStop()) != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));   // its release never comes
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    cm->setStopDebounceMs(0);
+    send(kStopNote, 127);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "the first press after a replug was swallowed");
+}
+
+void ControlMap_Test::aReleaseActsOnWhatWasPressed()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->showControl()->setGoGuardMs(0);
+    // The mode changes while the button is held: the release still lets go.
+    cm->setBinding({ 0, 20, ControlMap::function(a->id()), ControlMap::Momentary });
+    send(20, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    cm->setMode(ControlMap::function(a->id()), ControlMap::StartOnly);
+    send(20, 0);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "a mode change while held left the scene on");
+
+    // The control is bound to something else while held: the release is the
+    // scene's, and a list that runs for another reason is not stopped.
+    const SurfaceShow show = surfaceShow(m_doc);
+    Function *act1 = m_doc->function(m_doc->showTree()->cueList(show.k.list)->chaser);
+    cm->setMode(ControlMap::function(a->id()), ControlMap::Momentary);
+    send(20, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    act1->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    cm->setBinding({ 0, 20, ControlMap::cueList(show.k.list), ControlMap::Momentary });
+    send(20, 0);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "the release did not let go of what the press started");
+    QVERIFY2(act1->isRunning(), "the release stopped a list the press never started");
 }
 
 QTEST_GUILESS_MAIN(ControlMap_Test)

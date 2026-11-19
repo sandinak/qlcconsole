@@ -319,6 +319,8 @@ private slots:
     /** CS1: the PMJ overlay hears only its own board, and edits nothing in Operate. */
     void aPmjOverlayHearsOnlyItsOwnBoard();
     void aPmjFaderOrEncoderInOperateEditsNothing();
+    void aSecondPmjBoardIsNamedNotIgnoredInSilence();
+    void aRefusedSurfacePressSaysSoOnTheFooter();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

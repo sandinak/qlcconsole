@@ -241,6 +241,50 @@ void ControlMapUi_Test::theEmergencyStopLearnsOneButtonWithASecondPress()
 #endif
 }
 
+void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
+{
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.resize(900, 400);
+    panel.show();
+    QPushButton *button = panel.findChild<QPushButton *>("controlMapEmergencyStop");
+    QVERIFY(button != nullptr);
+    // The stop sits on a CC that turns out to send a fader's values.
+    cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QVERIFY2(!button->text().contains("not a button"), qPrintable(button->text()));
+    for (int v : { 0, 10, 40, 90 })
+        cm->handleInput(0, 7, uchar(v));
+    QVERIFY2(button->text().contains("not a button"), qPrintable(button->text()));
+    // The user sees it: the button is red, not just worded.
+    const QImage shot = button->grab().toImage();
+    const QColor px = shot.pixelColor(shot.width() / 2, 2);
+    QVERIFY2(px.red() > 140 && px.green() < 60, qPrintable(px.name()));
+    QTableWidget *table = panel.table();
+    QCOMPARE(table->rowCount(), 1);
+    QVERIFY2(table->item(0, 0)->text().contains("the stop does not work"), qPrintable(table->item(0, 0)->text()));
+    // Learned again on a button: the flags go.
+    cm->setBinding({ 0, 188, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QVERIFY2(!button->text().contains("not a button"), qPrintable(button->text()));
+    QVERIFY(button->styleSheet().isEmpty());
+}
+
+void ControlMapUi_Test::anEncoderLearnStopsListeningWhenThePanelHides()
+{
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QComboBox *preset = panel.encoderBox()->findChildren<QComboBox *>().first();
+    preset->setCurrentIndex(1);
+    emit preset->activated(1);
+    QPushButton *learn = panel.encoderBox()->findChild<QPushButton *>("encoderLearn");
+    QVERIFY(learn != nullptr && learn->isEnabled());
+    learn->click();
+    QVERIFY(cm->isListening());
+    panel.hide();
+    QVERIFY2(!cm->isListening(), "a learn left waiting kept listening after the panel went");
+    QCOMPARE(learn->text(), QString("Learn Encoder 1…"));
+}
+
 void ControlMapUi_Test::theMenuActionSaysWhatIsBound()
 {
     Scene *a = scene("Warm");

@@ -70,6 +70,14 @@ private slots:
     void theStopSurvivesAReplugAndRepeats();
     void aBoundFaderNeverStops();
     void theStopIsSavedWithTheShow();
+    void aKeyFollowsTheSurfaceRule();
+    // the independent review's findings
+    void theStopWorksWhileALearnIsListening();
+    void aRealSecondPressIsNotDebounced();
+    void aStopThatCannotWorkSaysSo();
+    void aBoundFaderWithNoProfileFiresOnceThenIsRefused();
+    void aReplugFreesThePressThatTaughtTheStop();
+    void aReleaseActsOnWhatWasPressed();
 
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,
@@ -78,6 +86,7 @@ private:
     void tick(int n = 1);
     Scene *scene(const QString &name, int channel);
     /** A controller that misbehaves: values sent in order on one control. */
+    void sweepTargets(bool viaKey);
     void sendAll(quint32 channel, const QList<int> &values);
 
 private:

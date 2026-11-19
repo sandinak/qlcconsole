@@ -26,6 +26,7 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QHash>
 
 #include "controlsurface.h"
@@ -149,6 +150,7 @@ private:
      *  if that guess is wrong). -1 = not yet known, LED sends are skipped. */
     int m_universe = -1;
     QString m_lastRefusal;
+    QSet<int> m_warnedSecond;   // second boards already named
     QElapsedTimer m_refusedAt[2];   // faders, encoders: each said once a second
 };
 

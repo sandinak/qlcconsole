@@ -73,6 +73,7 @@ signals:
 
 protected:
     void showEvent(QShowEvent *ev) override;
+    void hideEvent(QHideEvent *ev) override;
 
 private slots:
     void slotRemove();

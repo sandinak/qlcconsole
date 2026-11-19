@@ -30,6 +30,7 @@
 #include <QHBoxLayout>
 #include <QComboBox>
 #include <QLabel>
+#include <QColor>
 
 #include "controlmappanel.h"
 #include "controllearndialog.h"
@@ -106,6 +107,9 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     connect(cm, &ControlMap::bindingsChanged, this, &ControlMapPanel::refresh);
     connect(cm, &ControlMap::fired, this, &ControlMapPanel::slotFired);
     connect(cm, &ControlMap::blocked, this, &ControlMapPanel::slotFired);
+    // A profile that now calls the stop's control a fader: the row says so.
+    connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged, this, [this]() { refresh(); });
+    connect(cm, &ControlMap::blocked, this, [this]() { refresh(); });
     // A key's "Armed" follows the mode, the Run tab and the Show Tree.
     connect(cm, &ControlMap::armingChanged, this, &ControlMapPanel::refreshArming);
     // Names follow renames.
@@ -133,7 +137,10 @@ void ControlMapPanel::refresh()
     for (int r = 0; r < bindings.count(); ++r)
     {
         const ControlMap::Binding &b = bindings.at(r);
-        QTableWidgetItem *c = new QTableWidgetItem(controlText(b));
+        QTableWidgetItem *c = new QTableWidgetItem(b.target.type == ControlMap::EmergencyStopTarget && cm->stopIsDead()
+            ? tr("%1 · not a button: the stop does not work").arg(controlText(b)) : controlText(b));
+        if (b.target.type == ControlMap::EmergencyStopTarget && cm->stopIsDead())
+            c->setForeground(QColor(0xb0, 0x00, 0x20));
         c->setData(TargetRole, b.target.id);
         c->setData(TypeRole, int(b.target.type));
         m_table->setItem(r, ControlCol, c);
@@ -164,8 +171,13 @@ void ControlMapPanel::refresh()
         m_table->setCellWidget(r, ModeCol, mode);
     }
     const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
+    const bool dead = cm->stopIsDead();
     m_estop->setText(stop == nullptr ? tr("Emergency stop…")
-                                     : tr("Emergency stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
+                                     : dead ? tr("Emergency stop: %1 is not a button — learn it again…")
+                                                  .arg(cm->controlName(stop->universe, stop->channel))
+                                            : tr("Emergency stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
+    m_estop->setStyleSheet(dead ? QStringLiteral("color: white; background: #b00020;") : QString());
+    m_estop->setProperty("stopDead", dead);
     const bool any = !bindings.isEmpty();
     m_empty->setVisible(!any);
     m_table->setVisible(any);
@@ -445,8 +457,18 @@ void ControlMapPanel::startEncoderLearn(int target)
     m_doc->controlMap()->listen();
 }
 
+void ControlMapPanel::hideEvent(QHideEvent *ev)
+{
+    // A learn left waiting when the panel goes away must not go on listening.
+    if (m_encLearning != LearnNone)
+        endEncoderLearn();
+    QWidget::hideEvent(ev);
+}
+
 void ControlMapPanel::endEncoderLearn()
 {
+    if (m_encLearning != LearnNone)
+        m_doc->controlMap()->stopListening();
     m_encLearning = LearnNone;
     m_encLearn->setText(tr("Learn Encoder 1…"));
     m_encLearnMore->setText(tr("Learn More…"));

@@ -2696,6 +2696,64 @@ void AppViews_Test::aPmjFaderOrEncoderInOperateEditsNothing()
     doc->inputOutputMap()->setGrandMasterValue(255);
 }
 
+void AppViews_Test::aSecondPmjBoardIsNamedNotIgnoredInSilence()
+{
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    QLCIOPlugin *plug = cache->plugin(QStringLiteral("ArtNet"));
+    if (plug == nullptr)
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    auto restore = qScopeGuard([this]() { m_app->clearDocument(); });
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    while (iom->universesCount() < 3)
+        iom->addUniverse();
+    QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+    if (pmj == nullptr)
+    {
+        pmj = new QLCInputProfile();
+        pmj->setManufacturer(QStringLiteral("PMJ"));
+        pmj->setModel(QStringLiteral("Black 1"));
+        QVERIFY(iom->addProfile(pmj));
+    }
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 0, pmj->name()));
+    QVERIFY(iom->setInputPatch(2, stub->name(), QString(), 1, pmj->name()));
+    QCoreApplication::processEvents();
+    m_app->statusBar()->clearMessage();
+    iom->setGrandMasterValue(200);
+    m_app->m_pmjOverlay->slotInputValueChanged(2, 32768, 40, QString());
+    QCOMPARE(int(iom->grandMasterValue()), 200);                 // the second board is not heard...
+    const QString said = m_app->statusBar()->currentMessage();   // ...and it says so
+    QVERIFY2(said.contains("second PMJ Black 1") && said.contains("universe 3") && said.contains("universe 2"),
+             qPrintable(said));
+    iom->setGrandMasterValue(255);
+}
+
+void AppViews_Test::aRefusedSurfacePressSaysSoOnTheFooter()
+{
+    /* The App's wiring of ControlMap::blocked to the footer, not only the signal. */
+    Doc *doc = m_app->doc();
+    auto restore = qScopeGuard([this, doc]() {
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    m_app->clearDocument();
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("Show"));
+    st->addCueList(prod, QStringLiteral("Act 1"));
+    const quint32 other = st->addCueList(prod, QStringLiteral("Act 2"));
+    ControlMap *cm = doc->controlMap();
+    cm->setBinding({ 0, 20, ControlMap::cueList(other), ControlMap::Toggle });
+    doc->setMode(Doc::Design);
+    m_app->statusBar()->clearMessage();
+    cm->handleInput(0, 20, 127);
+    QVERIFY2(m_app->statusBar()->currentMessage().startsWith("Not fired: Cue list: Act 2"),
+             qPrintable(m_app->statusBar()->currentMessage()));
+    QVERIFY(m_app->statusBar()->currentMessage().contains("armed"));
+    cm->handleInput(0, 20, 0);
+}
+
 QTEST_MAIN(AppViews_Test)
 
 /* WCAG relative luminance and contrast. */
