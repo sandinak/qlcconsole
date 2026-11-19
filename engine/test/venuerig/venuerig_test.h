@@ -109,6 +109,21 @@ private slots:
     /** A renumbered house fixture skips every venue's house ids */
     void aRenumberedIdSkipsOtherVenuesIds();
 
+    /* New Venue from a Show (docs/design/VENUE_FROM_SHOW.md) */
+    /** Another show's fixtures come in as House, on the venue's universe at
+     *  their own addresses, at their plot places; the show is unchanged */
+    void aVenueFromAnotherShow();
+    /** Its groups are suggested by name; only confirmed matches fill, the
+     *  rest wait in the venue and can be matched later */
+    void aVenueFromAnotherShowFillsOnlyConfirmedGroups();
+    /** The venue's own universe: no output, the imported Art-Net left over,
+     *  or the show's own output are clashes; a chosen one is not */
+    void theRoomOutputAndItsClashes();
+    /** Removing the venue leaves the show and its fixtures as they were */
+    void undoingAVenueFromAnotherShow();
+    /** A file that isn't a show, or has no fixtures, is refused with a reason */
+    void aVenueFromAFileThatIsNotAShow();
+
 private:
     QString showFile() const;
     quint32 dimmers(int count, quint32 universe, quint32 address, const QString &name);

@@ -39,6 +39,43 @@ const QString kFill = QStringLiteral("Fill");
 const QString kHead = QStringLiteral("Head");
 const QString kPatch = QStringLiteral("Patch");
 const QString kNotOurs = QStringLiteral("NotOurs");
+const QString kRoom = QStringLiteral("Room");
+const QString kImported = QStringLiteral("Imported");
+const QString kGroup = QStringLiteral("Group");
+
+void writeHeads(QXmlStreamWriter &w, const QList<VenueRig::FillHead> &heads)
+{
+    for (const VenueRig::FillHead &h : heads)
+    {
+        w.writeStartElement(kHead);
+        w.writeAttribute(QStringLiteral("Fixture"), QString::number(h.fixture));
+        w.writeAttribute(QStringLiteral("Head"), QString::number(h.head));
+        w.writeAttribute(QStringLiteral("X"), QString::number(h.x));
+        w.writeAttribute(QStringLiteral("Y"), QString::number(h.y));
+        w.writeEndElement();
+    }
+}
+
+/* The <Head>s inside the element the reader is at; left at its end. */
+QList<VenueRig::FillHead> readHeads(QXmlStreamReader &r)
+{
+    QList<VenueRig::FillHead> out;
+    while (r.readNextStartElement())
+    {
+        if (r.name() == kHead)
+        {
+            const QXmlStreamAttributes a = r.attributes();
+            VenueRig::FillHead h;
+            h.fixture = a.value(QStringLiteral("Fixture")).toUInt();
+            h.head = a.value(QStringLiteral("Head")).toInt();
+            h.x = a.value(QStringLiteral("X")).toInt();
+            h.y = a.value(QStringLiteral("Y")).toInt();
+            out << h;
+        }
+        r.skipCurrentElement();
+    }
+    return out;
+}
 
 /* The element the reader is at, whole, as its own little document; the
    reader is left at its end element. */
@@ -179,15 +216,7 @@ void VenueRig::writeXml(QXmlStreamWriter &w, const Data &d)
             w.writeStartElement(kFill);
             w.writeAttribute(QStringLiteral("Group"), QString::number(f.group));
             w.writeAttribute(QStringLiteral("Name"), f.groupName);
-            for (const FillHead &h : f.heads)
-            {
-                w.writeStartElement(kHead);
-                w.writeAttribute(QStringLiteral("Fixture"), QString::number(h.fixture));
-                w.writeAttribute(QStringLiteral("Head"), QString::number(h.head));
-                w.writeAttribute(QStringLiteral("X"), QString::number(h.x));
-                w.writeAttribute(QStringLiteral("Y"), QString::number(h.y));
-                w.writeEndElement();
-            }
+            writeHeads(w, f.heads);
             w.writeEndElement();
         }
         writeKept(w, d.houseUnknown);
@@ -198,22 +227,7 @@ void VenueRig::writeXml(QXmlStreamWriter &w, const Data &d)
         w.writeStartElement(kPatch);
         w.writeAttribute(QStringLiteral("Universe"), QString::number(it.key()));
         for (const Universe::OfflinePatch &p : it.value())
-        {
-            w.writeStartElement(KXMLQLCUniverseOutputPatch);
-            w.writeAttribute(KXMLQLCUniversePlugin, p.plugin);
-            w.writeAttribute(KXMLQLCUniverseLineUID, p.uid);
-            w.writeAttribute(KXMLQLCUniverseLine, QString::number(p.line));
-            if (!p.network.isEmpty())
-                w.writeAttribute(KXMLQLCUniverseNetwork, p.network);
-            if (!p.params.isEmpty())
-            {
-                w.writeStartElement(KXMLQLCUniversePluginParameters);
-                for (auto pit = p.params.constBegin(); pit != p.params.constEnd(); ++pit)
-                    w.writeAttribute(pit.key(), pit.value().toString());
-                w.writeEndElement();
-            }
-            w.writeEndElement();
-        }
+            writeOutput(w, p);
         w.writeEndElement();
     }
     for (const NotOurs &n : d.notOurs)
@@ -227,6 +241,95 @@ void VenueRig::writeXml(QXmlStreamWriter &w, const Data &d)
         }
         w.writeEndElement();
     }
+    if (d.room.isSet() || !d.room.groups.isEmpty())
+    {
+        w.writeStartElement(kRoom);
+        if (d.room.isSet())
+            w.writeAttribute(QStringLiteral("Universe"), QString::number(d.room.universe + 1));
+        if (!d.room.from.isEmpty())
+            w.writeAttribute(QStringLiteral("From"), d.room.from);
+        if (!d.room.imported.isEmpty())
+        {
+            w.writeStartElement(kImported);
+            for (const Universe::OfflinePatch &p : d.room.imported)
+                writeOutput(w, p);
+            w.writeEndElement();
+        }
+        for (const Fill &g : d.room.groups)
+        {
+            w.writeStartElement(kGroup);
+            w.writeAttribute(QStringLiteral("Name"), g.groupName);
+            writeHeads(w, g.heads);
+            w.writeEndElement();
+        }
+        w.writeEndElement();
+    }
+}
+
+void VenueRig::writeOutput(QXmlStreamWriter &w, const Universe::OfflinePatch &p)
+{
+    w.writeStartElement(KXMLQLCUniverseOutputPatch);
+    w.writeAttribute(KXMLQLCUniversePlugin, p.plugin);
+    w.writeAttribute(KXMLQLCUniverseLineUID, p.uid);
+    w.writeAttribute(KXMLQLCUniverseLine, QString::number(p.line));
+    if (!p.network.isEmpty())
+        w.writeAttribute(KXMLQLCUniverseNetwork, p.network);
+    if (!p.params.isEmpty())
+    {
+        w.writeStartElement(KXMLQLCUniversePluginParameters);
+        for (auto pit = p.params.constBegin(); pit != p.params.constEnd(); ++pit)
+            w.writeAttribute(pit.key(), pit.value().toString());
+        w.writeEndElement();
+    }
+    w.writeEndElement();
+}
+
+Universe::OfflinePatch VenueRig::readOutput(QXmlStreamReader &r)
+{
+    const QXmlStreamAttributes a = r.attributes();
+    Universe::OfflinePatch p;
+    p.tag = Universe::OutputPatchTag;
+    p.plugin = a.value(KXMLQLCUniversePlugin).toString();
+    p.uid = a.value(KXMLQLCUniverseLineUID).toString();
+    p.line = a.hasAttribute(KXMLQLCUniverseLine) ? a.value(KXMLQLCUniverseLine).toUInt() : UINT_MAX;
+    p.network = a.value(KXMLQLCUniverseNetwork).toString();
+    p.profile = QString();
+    while (r.readNextStartElement())
+    {
+        if (r.name() == KXMLQLCUniversePluginParameters)
+            for (const QXmlStreamAttribute &pa : r.attributes())
+                p.params.insert(pa.name().toString(), pa.value().toString());
+        r.skipCurrentElement();
+    }
+    return p;
+}
+
+QString VenueRig::outputText(const QList<Universe::OfflinePatch> &patches)
+{
+    QStringList out;
+    for (const Universe::OfflinePatch &p : patches)
+    {
+        const QString ip = p.params.value(QStringLiteral("outputIP")).toString();
+        if (p.plugin == QLatin1String("ArtNet"))
+        {
+            QString t = ip.isEmpty() ? tr("Art-Net") : tr("Art-Net to %1").arg(ip);
+            if (!p.uid.isEmpty())
+                t += tr(" (from %1)").arg(p.uid);
+            out << t;
+        }
+        else if (p.plugin == QLatin1String("DMX USB"))
+        {
+            out << (p.uid.isEmpty() ? tr("USB DMX interface") : tr("USB DMX: %1").arg(p.uid));
+        }
+        else
+        {
+            QString t = p.uid.isEmpty() ? p.plugin : QStringLiteral("%1: %2").arg(p.plugin, p.uid);
+            if (!ip.isEmpty())
+                t += tr(" to %1").arg(ip);
+            out << t;
+        }
+    }
+    return out.isEmpty() ? tr("none") : out.join(QStringLiteral("; "));
 }
 
 bool VenueRig::readXml(QXmlStreamReader &r, Data &d)
@@ -252,20 +355,7 @@ bool VenueRig::readXml(QXmlStreamReader &r, Data &d)
                 Fill f;
                 f.group = r.attributes().value(QStringLiteral("Group")).toUInt();
                 f.groupName = r.attributes().value(QStringLiteral("Name")).toString();
-                while (r.readNextStartElement())
-                {
-                    if (r.name() == kHead)
-                    {
-                        const QXmlStreamAttributes a = r.attributes();
-                        FillHead h;
-                        h.fixture = a.value(QStringLiteral("Fixture")).toUInt();
-                        h.head = a.value(QStringLiteral("Head")).toInt();
-                        h.x = a.value(QStringLiteral("X")).toInt();
-                        h.y = a.value(QStringLiteral("Y")).toInt();
-                        f.heads << h;
-                    }
-                    r.skipCurrentElement();
-                }
+                f.heads = readHeads(r);
                 d.fills << f;
             }
             else
@@ -287,22 +377,7 @@ bool VenueRig::readXml(QXmlStreamReader &r, Data &d)
                 r.skipCurrentElement();
                 continue;
             }
-            const QXmlStreamAttributes a = r.attributes();
-            Universe::OfflinePatch p;
-            p.tag = Universe::OutputPatchTag;
-            p.plugin = a.value(KXMLQLCUniversePlugin).toString();
-            p.uid = a.value(KXMLQLCUniverseLineUID).toString();
-            p.line = a.hasAttribute(KXMLQLCUniverseLine) ? a.value(KXMLQLCUniverseLine).toUInt() : UINT_MAX;
-            p.network = a.value(KXMLQLCUniverseNetwork).toString();
-            p.profile = QString();
-            while (r.readNextStartElement())
-            {
-                if (r.name() == KXMLQLCUniversePluginParameters)
-                    for (const QXmlStreamAttribute &pa : r.attributes())
-                        p.params.insert(pa.name().toString(), pa.value().toString());
-                r.skipCurrentElement();
-            }
-            list << p;
+            list << readOutput(r);
         }
         if (ok)
             d.patch.insert(uni, list);
@@ -325,6 +400,39 @@ bool VenueRig::readXml(QXmlStreamReader &r, Data &d)
             d.notOurs << n;
         }
         r.skipCurrentElement();
+        return true;
+    }
+    if (r.name() == kRoom)
+    {
+        const QXmlStreamAttributes a = r.attributes();
+        bool ok = false;
+        const int u = a.value(QStringLiteral("Universe")).toInt(&ok);
+        d.room.universe = ok && u >= 1 ? quint32(u - 1) : UINT_MAX;
+        d.room.from = a.value(QStringLiteral("From")).toString();
+        while (r.readNextStartElement())
+        {
+            if (r.name() == kImported)
+            {
+                while (r.readNextStartElement())
+                {
+                    if (r.name() == KXMLQLCUniverseOutputPatch)
+                        d.room.imported << readOutput(r);
+                    else
+                        r.skipCurrentElement();
+                }
+            }
+            else if (r.name() == kGroup)
+            {
+                Fill g;
+                g.groupName = r.attributes().value(QStringLiteral("Name")).toString();
+                g.heads = readHeads(r);
+                d.room.groups << g;
+            }
+            else
+            {
+                r.skipCurrentElement();
+            }
+        }
         return true;
     }
     return false;
@@ -471,35 +579,11 @@ void VenueRig::apply(Data &d)
 
     // The fills: its heads in the show's groups.
     for (Fill &f : d.fills)
-    {
-        FixtureGroup *grp = m_doc->fixtureGroup(f.group);
-        if (grp == nullptr)
-            for (FixtureGroup *g : m_doc->fixtureGroups())
-                if (g->name() == f.groupName)
-                {
-                    grp = g;
-                    f.group = g->id();
-                    break;
-                }
-        if (grp == nullptr)
-            continue;
-        bool any = false;
-        for (FillHead &h : f.heads)
-        {
+        putFill(f, remap);
+    // The room's groups wait for a match: their ids follow a renumber too.
+    for (Fill &g : d.room.groups)
+        for (FillHead &h : g.heads)
             h.fixture = remap.value(h.fixture, h.fixture);
-            if (!m_ids.contains(h.fixture) || m_doc->fixture(h.fixture) == nullptr)
-                continue;
-            QLCPoint pt(h.x, h.y);
-            const GroupHead gh(h.fixture, h.head);
-            if (grp->head(pt).isValid())
-                pt = QLCPoint();    // the show put a head there since: the next free cell
-            else if (h.x >= grp->size().width() || h.y >= grp->size().height())
-                grp->setSize(QSize(qMax(grp->size().width(), h.x + 1), qMax(grp->size().height(), h.y + 1)));
-            any = grp->assignHead(pt, gh) || any;
-        }
-        if (any)
-            grp->notifyChanged();   // a scene playing on the group follows
-    }
 
     // The room's network: the show's own patch held for the show file.
     InputOutputMap *iom = m_doc->inputOutputMap();
@@ -515,6 +599,38 @@ void VenueRig::apply(Data &d)
 
     m_writing = false;
     keepUnmodified(was);
+}
+
+bool VenueRig::putFill(Fill &f, const QMap<quint32, quint32> &remap)
+{
+    FixtureGroup *grp = m_doc->fixtureGroup(f.group);
+    if (grp == nullptr)
+        for (FixtureGroup *g : m_doc->fixtureGroups())
+            if (g->name() == f.groupName)
+            {
+                grp = g;
+                f.group = g->id();
+                break;
+            }
+    if (grp == nullptr)
+        return false;
+    bool any = false;
+    for (FillHead &h : f.heads)
+    {
+        h.fixture = remap.value(h.fixture, h.fixture);
+        if (!m_ids.contains(h.fixture) || m_doc->fixture(h.fixture) == nullptr)
+            continue;
+        QLCPoint pt(h.x, h.y);
+        const GroupHead gh(h.fixture, h.head);
+        if (grp->head(pt).isValid())
+            pt = QLCPoint();    // the show put a head there since: the next free cell
+        else if (h.x >= grp->size().width() || h.y >= grp->size().height())
+            grp->setSize(QSize(qMax(grp->size().width(), h.x + 1), qMax(grp->size().height(), h.y + 1)));
+        any = grp->assignHead(pt, gh) || any;
+    }
+    if (any)
+        grp->notifyChanged();   // a scene playing on the group follows
+    return true;
 }
 
 void VenueRig::unapply()
@@ -800,6 +916,21 @@ void VenueRig::restoreShowPatch()
     m_writing = was;
 }
 
+void VenueRig::putPatch(quint32 universe, const QList<Universe::OfflinePatch> &patch)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (universe >= iom->universesCount())
+        return;
+    Universe *u = iom->universes().at(int(universe));
+    if (!u->hasShowOutputBase())
+        u->setShowOutputBase(u->outputPatchDescriptions());
+    const bool was = m_writing;
+    m_writing = true;
+    if (!samePatch(u->outputPatchDescriptions(), patch))
+        iom->replaceOutputPatches(universe, patch);
+    m_writing = was;
+}
+
 bool VenueRig::samePatch(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b)
 {
     if (a.size() != b.size())
@@ -873,6 +1004,7 @@ QString VenueRig::kindName(Clash::Kind kind)
         case Clash::Overlap:     return tr("Overlap");
         case Clash::NotOursKind: return tr("Not ours");
         case Clash::Slot:        return tr("Slot");
+        case Clash::Output:      return tr("Output");
     }
     return QString();
 }
@@ -979,5 +1111,49 @@ QList<VenueRig::Clash> VenueRig::clashes(const Data &d, bool applied) const
                                                                             e.name);
             out << c;
         }
+
+    // A venue made from another show: its own universe (VENUE_FROM_SHOW.md section 7).
+    if (d.room.isSet())
+    {
+        const quint32 u = d.room.universe;
+        const bool listedAsSlot = anyHouseSlot && u < quint32(unis.size())
+                                  && unis.at(int(u))->slotOwner() == RigOwner::House;
+        if (!listedAsSlot)
+            for (const Entry &e : entries)
+            {
+                if (e.house || e.universe != u)
+                    continue;
+                Clash c;
+                c.kind = Clash::Slot;
+                c.universe = e.universe;
+                c.address = e.address;
+                c.channels = e.channels;
+                c.text = tr("%1: %2 (%3) is on the venue's own universe")
+                             .arg(range(e.universe, e.address, e.channels), e.name, ownerWord(e));
+                out << c;
+            }
+        Clash c;
+        c.kind = Clash::Output;
+        c.universe = u;
+        c.channels = 512;
+        const QString where = tr("U%1").arg(u + 1);
+        const bool own = d.patch.contains(u);
+        const QList<Universe::OfflinePatch> used = own ? d.patch.value(u) : showPatch().value(u);
+        if (u >= quint32(unis.size()))
+            c.text = tr("%1: the show has no universe %2, so the house rig goes nowhere: add it on the "
+                        "Connections tab").arg(where).arg(u + 1);
+        else if (used.isEmpty())
+            c.text = tr("%1: no output in this room yet. Choose the USB DMX interface or the Art-Net node "
+                        "in Rig and Universes").arg(where);
+        else if (own && !d.room.imported.isEmpty() && samePatch(used, d.room.imported))
+            c.text = tr("%1 still sends what %2 had: %3. Choose this room's output in Rig and Universes")
+                         .arg(where, d.room.from.isEmpty() ? tr("the imported show") : d.room.from,
+                              outputText(used));
+        else if (!own)
+            c.text = tr("%1 goes out the show's own output in this room (%2). Choose this room's output in "
+                        "Rig and Universes").arg(where, outputText(used));
+        if (!c.text.isEmpty())
+            out << c;
+    }
     return out;
 }

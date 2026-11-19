@@ -59,6 +59,8 @@
 #include "qlcfile.h"
 #include "universe.h"
 #include "venuerig.h"
+#include "venueimport.h"
+#include "../common/pmslikeshow.h"
 #include "rigowner.h"
 #include "fixture.h"
 #include "chaser.h"
@@ -2285,6 +2287,337 @@ void VenueRig_Test::aRenumberedIdSkipsOtherVenuesIds()
     QVERIFY(moved != hall);
     QVERIFY(!v->venue(b).rig.fixtureIds().contains(moved));
     QCOMPARE(m_doc->fixture(moved)->name(), QStringLiteral("Lincoln par"));
+}
+
+/****************************************************************************
+ * New Venue from a Show (docs/design/VENUE_FROM_SHOW.md)
+ ****************************************************************************/
+
+namespace
+{
+/* The trimmed PMS-like show written beside the show; read. */
+VenueImport::Source pmsSource(QTemporaryDir *dir)
+{
+    const QString file = dir->filePath(QStringLiteral("PMS Stage.qlcc"));
+    writeFile(file, PmsLikeShow::xml());
+    VenueImport::Source src;
+    QString why;
+    if (!VenueImport::read(file, src, &why))
+        qWarning() << why;
+    return src;
+}
+
+const Fixture *fixtureNamed(Doc *doc, const QString &name)
+{
+    for (const Fixture *fx : doc->fixtures())
+        if (fx->name() == name)
+            return fx;
+    return nullptr;
+}
+
+Universe::OfflinePatch usbOutput()
+{
+    Universe::OfflinePatch p;
+    p.plugin = QStringLiteral("DMX USB");
+    p.uid = QStringLiteral("DMXking ultraDMX Micro (BG01)");
+    p.line = 0;
+    return p;
+}
+}
+
+void VenueRig_Test::aVenueFromAnotherShow()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    // The touring show: lights on U1 and U2, a group of its own.
+    const quint32 tour = dimmers(10, 0, 0, QStringLiteral("Tour par"));
+    dimmers(4, 1, 0, QStringLiteral("Step"));
+    makeGroup(m_doc, QStringLiteral("Tour wash"), { tour, tour + 1 });
+    m_doc->resetModified();
+    const QByteArray before = engineXml(m_doc);
+    const int showFixtures = m_doc->fixtures().size();
+
+    const VenueImport::Source src = pmsSource(m_dir);
+    QCOMPARE(src.fixtures.size(), 7);
+    QCOMPARE(src.groups.size(), 3);
+    QCOMPARE(src.universes(), QList<quint32>({ 0 }));
+    QCOMPARE(VenueRig::outputText(src.fixtureOutputs()), QStringLiteral("Art-Net to 172.18.2.10 (from 172.18.2.219)"));
+
+    // The universe it suggests: the first with nothing on it.
+    QCOMPARE(VenueImport::suggestUniverse(m_doc), 2u);
+    VenueImport::Options opt;
+    opt.universe = 2;
+    opt.matches = VenueImport::suggest(src, m_doc);
+    opt.output = { usbOutput() };
+    const VenueImport::Result res = VenueImport::build(src, m_doc, opt, v->reservedIds());
+    QCOMPARE(res.fixtures, 7);
+    QCOMPARE(VenueImport::summary(res, 2), QStringLiteral("7 fixtures on U3 1\342\200\223109"));
+    QString why;
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data, &why);
+    QVERIFY2(!pms.isEmpty(), qPrintable(why));
+    QVERIFY(v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data, &why).isEmpty());   // taken
+    QVERIFY(!m_doc->isModified());
+    QVERIFY(v->setActiveVenue(pms));
+
+    // House, on U3, each at the address it had, ids clear of the show's.
+    QCOMPARE(v->rig()->venueFixtures().size(), 7);
+    QCOMPARE(m_doc->fixtures().size(), showFixtures + 7);
+    for (quint32 id : v->rig()->venueFixtures())
+    {
+        const Fixture *fx = m_doc->fixture(id);
+        QVERIFY(fx != nullptr);
+        QCOMPARE(fx->owner(), RigOwner::House);
+        QCOMPARE(fx->universe(), 2u);
+        QVERIFY(fx->isPatched());
+        QVERIFY(id >= quint32(showFixtures));
+    }
+    const Fixture *relay = fixtureNamed(m_doc, QStringLiteral("Ch 3 Relay"));
+    const Fixture *foh = fixtureNamed(m_doc, QStringLiteral("FOH 2"));
+    QVERIFY(relay != nullptr && foh != nullptr);
+    QCOMPARE(relay->address(), 2u);
+    QCOMPARE(foh->address(), 103u);
+    QCOMPARE(foh->channels(), 3u);
+    // A tour light's owner follow does not pull them back into the show.
+    m_doc->fixture(tour)->setName(QStringLiteral("Tour par renamed"));
+    QCOMPARE(v->rig()->venueFixtures().size(), 7);
+    m_doc->fixture(tour)->setName(QStringLiteral("Tour par 1"));
+    m_doc->resetModified();
+
+    // On the plot: a relay where it stood, on the Default layer (that show's
+    // layer 2 was its own); FOH 2 where it hung, free of any truss, aim kept.
+    QCOMPARE(props->fixturePosition(relay->id(), 0, 0), QVector3D(3800.0f, 760.0f, 0.0f));
+    QCOMPARE(props->fixtureProperties(relay->id()).m_baseItem.m_layerId, 0u);
+    const QVector3D at = props->fixturePosition(foh->id(), 0, 0);
+    QVERIFY2(qAbs(at.x() - PmsLikeShow::fohX(1)) < 1.0 && qAbs(at.y() - PmsLikeShow::fohY()) < 1.0
+             && qAbs(at.z() - PmsLikeShow::fohZ()) < 0.001,
+             qPrintable(QStringLiteral("%1 %2 %3").arg(at.x()).arg(at.y()).arg(at.z())));
+    const FixtureRigProps rp = props->fixtureRigProps(foh->id());
+    QCOMPARE(rp.trussId, Truss::invalidId());
+    QCOMPARE(rp.panZeroDir, 212.1f);
+    QCOMPARE(rp.lensDeg, 36.0f);
+    QVERIFY(qAbs(props->fixtureRigPosition(foh->id()).x() - at.x() / 1000.0f) < 0.0001f);
+
+    // The venue's own universe goes to the USB interface; the show's are as they were.
+    QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(2)->outputPatchDescriptions()),
+             QStringLiteral("USB DMX: DMXking ultraDMX Micro (BG01)"));
+
+    // The show file has none of it, applied or not.
+    QVERIFY(!m_doc->isModified());
+    QCOMPARE(engineXml(m_doc), before);
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(m_doc->fixtures().size(), showFixtures);
+    QCOMPARE(m_doc->inputOutputMap()->universe(2)->outputPatchDescriptions().size(), 0);
+
+    // The sidecar keeps the room: its universe, the file, what that file sent.
+    QVERIFY(v->fromXml(v->toXml()));
+    const VenueRig::Room room = v->venue(pms).rig.room;
+    QCOMPARE(room.universe, 2u);
+    QCOMPARE(room.from, QStringLiteral("PMS Stage.qlcc"));
+    QCOMPARE(VenueRig::outputText(room.imported), QStringLiteral("Art-Net to 172.18.2.10 (from 172.18.2.219)"));
+    QVERIFY(readFile(v->filePath()).contains("<Room Universe=\"3\" From=\"PMS Stage.qlcc\">"));
+    QCOMPARE(v->venue(pms).rig.fixtures.size(), 7);
+}
+
+void VenueRig_Test::aVenueFromAnotherShowFillsOnlyConfirmedGroups()
+{
+    VenueCorrections *v = venues(m_doc);
+    const quint32 tour = dimmers(2, 0, 0, QStringLiteral("Tour par"));
+    FixtureGroup *foh = makeGroup(m_doc, QStringLiteral("foh"), { tour });
+    FixtureGroup *elect = makeGroup(m_doc, QStringLiteral("1st elect"), {});
+    makeGroup(m_doc, QStringLiteral("Steps"), { tour + 1 });
+
+    const VenueImport::Source src = pmsSource(m_dir);
+    QList<VenueImport::Match> m = VenueImport::suggest(src, m_doc);
+    QCOMPARE(m.size(), 3);
+    QCOMPARE(m.at(0).group, foh->id());             // "FOH": the same name, case aside
+    QCOMPARE(m.at(0).kind, VenueImport::SameName);
+    QCOMPARE(m.at(1).group, UINT_MAX);              // "Relays": none
+    QCOMPARE(m.at(2).group, elect->id());           // "1st Elect.": similar
+    QCOMPARE(m.at(2).kind, VenueImport::SimilarName);
+    QCOMPARE(VenueImport::simplified(QStringLiteral(" House & Work ")), QStringLiteral("housework"));
+    QCOMPARE(VenueImport::simplified(QStringLiteral("House and work")), QStringLiteral("housework"));
+    // Each suggestion waits for his tick.
+    QCOMPARE(VenueImport::unconfirmed(m), 2);
+    m[0].confirmed = true;
+    QCOMPARE(VenueImport::unconfirmed(m), 1);
+
+    VenueImport::Options opt;
+    opt.universe = 2;
+    opt.matches = m;                                // "1st Elect." left unconfirmed
+    const VenueImport::Result res = VenueImport::build(src, m_doc, opt, v->reservedIds());
+    QCOMPARE(res.filled, 1);
+    QCOMPARE(res.held, 2);
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data);
+    QVERIFY(v->setActiveVenue(pms));
+
+    // FOH holds its tour head and the three house FOH lights; 1st elect none.
+    QCOMPARE(foh->headList().size(), 4);
+    QStringList names;
+    for (const GroupHead &h : foh->headList())
+        names << m_doc->fixture(h.fxi)->name();
+    names.sort();
+    QCOMPARE(names, QStringList({ "FOH 1", "FOH 2", "FOH 3", "Tour par 1" }));
+    QCOMPARE(elect->headList().size(), 0);
+    QStringList held;
+    for (const VenueRig::Fill &g : v->venue(pms).rig.room.groups)
+        held << QStringLiteral("%1 (%2)").arg(g.groupName).arg(g.heads.size());
+    QCOMPARE(held, QStringList({ "Relays (4)", "1st Elect. (2)" }));
+    QVERIFY(readFile(v->filePath()).contains("<Group Name=\"Relays\">"));
+
+    // Matched later, from the venue page: on the rig at once, and kept.
+    QCOMPARE(v->matchRoomGroups(pms, { { 1, elect->id() } }), 1);
+    QCOMPARE(elect->headList().size(), 2);
+    QCOMPARE(v->venue(pms).rig.room.groups.size(), 1);
+    QCOMPARE(v->venue(pms).rig.room.groups.first().groupName, QStringLiteral("Relays"));
+    QVERIFY(v->setActiveVenue(QString()));
+    QCOMPARE(elect->headList().size(), 0);
+    QCOMPARE(foh->headList().size(), 1);
+    QVERIFY(v->setActiveVenue(pms));
+    QCOMPARE(elect->headList().size(), 2);
+    QCOMPARE(foh->headList().size(), 4);
+    // The show's groups never took a house head into the show file.
+    QVERIFY(!engineXml(m_doc).contains("Relay"));
+}
+
+void VenueRig_Test::theRoomOutputAndItsClashes()
+{
+    VenueCorrections *v = venues(m_doc);
+    dimmers(4, 0, 0, QStringLiteral("Tour par"));
+    const VenueImport::Source src = pmsSource(m_dir);
+    VenueImport::Options opt;
+    opt.universe = 2;
+    opt.matches = VenueImport::suggest(src, m_doc);
+    const VenueImport::Result res = VenueImport::build(src, m_doc, opt, v->reservedIds());   // no output yet
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data);
+    auto outputClashes = [&]() {
+        QStringList out;
+        for (const VenueRig::Clash &c : v->clashes(pms))
+            if (c.kind == VenueRig::Clash::Output)
+                out << c.text;
+        return out;
+    };
+    QCOMPARE(VenueRig::kindName(VenueRig::Clash::Output), QStringLiteral("Output"));
+
+    // None yet: said, before it is applied (the dry run) and after.
+    QStringList out = outputClashes();
+    QCOMPARE(out.size(), 1);
+    QVERIFY2(out.first().startsWith(QStringLiteral("U3: no output in this room yet")), qPrintable(out.first()));
+    QVERIFY(v->setActiveVenue(pms));
+    QCOMPARE(outputClashes(), out);
+
+    // The Art-Net the file had, left over: flagged, by the file and the address.
+    QVERIFY(v->setRoomOutput(pms, src.fixtureOutputs()));
+    out = outputClashes();
+    QCOMPARE(out.size(), 1);
+    QVERIFY2(out.first().contains(QStringLiteral("U3 still sends what PMS Stage.qlcc had: Art-Net to 172.18.2.10")),
+             qPrintable(out.first()));
+    QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(2)->outputPatchDescriptions()),
+             QStringLiteral("Art-Net to 172.18.2.10 (from 172.18.2.219)"));
+
+    // The room's USB interface: on the universe at once, and no clash.
+    QVERIFY(v->setRoomOutput(pms, { usbOutput() }));
+    QVERIFY(outputClashes().isEmpty());
+    QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(2)->outputPatchDescriptions()),
+             QStringLiteral("USB DMX: DMXking ultraDMX Micro (BG01)"));
+    QVERIFY(!m_doc->isModified());
+    QVERIFY(!engineXml(m_doc).contains("DMXking"));     // the show keeps its own (none)
+    QVERIFY(v->fromXml(v->toXml()));
+    QCOMPARE(VenueRig::outputText(v->venue(pms).rig.patch.value(2)), QStringLiteral("USB DMX: DMXking ultraDMX Micro (BG01)"));
+
+    // A setRoomOutput() for a venue with no universe of its own is refused.
+    const QString plain = v->addVenue(QStringLiteral("Lincoln HS"));
+    QString why;
+    QVERIFY(!v->setRoomOutput(plain, { usbOutput() }, &why));
+    QVERIFY(why.contains(QStringLiteral("no universe of its own")));
+
+    // A tour fixture put on the venue's universe: said.
+    Fixture *stray = addFixture(m_doc, QStringLiteral("Stray spot"), 2, 400, 2);
+    QVERIFY(stray != nullptr);
+    bool slot = false;
+    for (const VenueRig::Clash &c : v->clashes(pms))
+        slot = slot || (c.kind == VenueRig::Clash::Slot
+                        && c.text == QStringLiteral("U3 401\342\200\223402: Stray spot (tour) is on the venue's own universe"));
+    QVERIFY(slot);
+
+    // No venue patch for it, and the show sends that universe somewhere: said.
+    VenueRig::Data d = v->venue(pms).rig;
+    d.patch.remove(2);
+    QVERIFY(v->setActiveVenue(QString()));
+    Universe::OfflinePatch showOut;
+    showOut.plugin = QStringLiteral("ArtNet");
+    showOut.uid = QStringLiteral("10.0.0.5");
+    showOut.line = 0;
+    showOut.params.insert(QStringLiteral("outputIP"), QStringLiteral("10.0.0.50"));
+    m_doc->inputOutputMap()->replaceOutputPatches(2, { showOut });
+    bool shows = false;
+    for (const VenueRig::Clash &c : v->rig()->clashes(d, false))
+        shows = shows || (c.kind == VenueRig::Clash::Output
+                          && c.text.startsWith(QStringLiteral("U3 goes out the show's own output in this room "
+                                                              "(Art-Net to 10.0.0.50")));
+    QVERIFY(shows);
+
+    // A venue without a room has none of these (every venue before).
+    for (const VenueRig::Clash &c : v->clashes(plain))
+        QVERIFY(c.kind != VenueRig::Clash::Output);
+}
+
+void VenueRig_Test::undoingAVenueFromAnotherShow()
+{
+    VenueCorrections *v = venues(m_doc);
+    dimmers(4, 0, 0, QStringLiteral("Tour par"));
+    const QString kept = v->addVenue(QStringLiteral("Lincoln HS"));
+    m_doc->resetModified();
+    const QByteArray before = engineXml(m_doc);
+    const QByteArray sidecar = venueSection(readFile(v->filePath()), kept);
+    QVERIFY(!sidecar.isEmpty());
+
+    const VenueImport::Source src = pmsSource(m_dir);
+    VenueImport::Options opt;
+    opt.universe = 1;
+    opt.matches = VenueImport::suggest(src, m_doc);
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"),
+                                            VenueImport::build(src, m_doc, opt, v->reservedIds()).data);
+    QVERIFY(v->setActiveVenue(pms));
+    QCOMPARE(m_doc->fixtures().size(), 11);
+    QVERIFY(!v->reservedIds().isEmpty());
+
+    // Undo: the venue off the rig and gone; the show and the other venue as they were.
+    QVERIFY(v->removeVenue(pms));
+    QVERIFY(!v->isActive());
+    QCOMPARE(m_doc->fixtures().size(), 4);
+    QVERIFY(v->reservedIds().isEmpty());
+    QVERIFY(!m_doc->isModified());
+    QCOMPARE(engineXml(m_doc), before);
+    const QByteArray after = readFile(v->filePath());
+    QVERIFY(!after.contains("PMS Auditeria"));
+    QCOMPARE(venueSection(after, kept), sidecar);
+}
+
+void VenueRig_Test::aVenueFromAFileThatIsNotAShow()
+{
+    VenueImport::Source src;
+    QString why;
+    QVERIFY(!VenueImport::read(m_dir->filePath(QStringLiteral("missing.qlcc")), src, &why));
+    QVERIFY(why.contains(QStringLiteral("missing.qlcc")));
+    QVERIFY(!VenueImport::readXml("<QlcVenues/>", src, &why));
+    QVERIFY(why.contains(QStringLiteral("not a show file")));
+    QVERIFY(!VenueImport::readXml("<Workspace><Engine><InputOutputMap/></Engine></Workspace>", src, &why));
+    QVERIFY(why.contains(QStringLiteral("no fixtures")));
+    QVERIFY(!VenueImport::readXml("<Workspace><Engine><Fixture><ID>1</ID>", src, &why));
+    QVERIFY(why.contains(QStringLiteral("can't be read")));
+    // A show with fixtures in two universes: all on the venue's, with a warning.
+    QByteArray two = PmsLikeShow::xml();
+    two.replace("<ID>53</ID><Name>FOH 3</Name><Universe>0</Universe>", "<ID>53</ID><Name>FOH 3</Name><Universe>1</Universe>");
+    QVERIFY(VenueImport::readXml(two, src, &why));
+    QCOMPARE(src.universes(), QList<quint32>({ 0, 1 }));
+    VenueImport::Options opt;
+    opt.universe = 3;
+    const VenueImport::Result res = VenueImport::build(src, m_doc, opt, QSet<quint32>());
+    QVERIFY2(res.warnings.filter(QStringLiteral("The other show has fixtures in 2 universes (U1, U2)")).size() == 1,
+             qPrintable(res.warnings.join(QLatin1Char('\n'))));
+    QCOMPARE(res.warnings.filter(QStringLiteral("3 fixtures hung on the other show's structure")).size(), 1);
+    for (const VenueRig::HouseFixture &hf : res.data.fixtures)
+        QCOMPARE(hf.universe, 3u);
 }
 
 QTEST_GUILESS_MAIN(VenueRig_Test)

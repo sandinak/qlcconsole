@@ -183,6 +183,7 @@ add_library(${module_name} SHARED
     focuscallcue.cpp focuscallcue.h
     venuecorrections.cpp venuecorrections.h
     venuerig.cpp venuerig.h
+    venueimport.cpp venueimport.h
     rigowner.cpp rigowner.h
     focusreport.cpp focusreport.h
     controllerscheme.cpp controllerscheme.h

@@ -36,6 +36,7 @@
 #include "stagetarget.h"
 #include "teachingsettings.h"
 #include "inputoutputmap.h"
+#include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
 
@@ -704,12 +705,17 @@ bool VenueCorrections::houseByRig(quint32 fid) const
     return m_rig->isVenueFixture(fid) && !isPracticeActive();
 }
 
-void VenueCorrections::updateReserved()
+QSet<quint32> VenueCorrections::reservedIds() const
 {
     QSet<quint32> ids;
     for (const Venue &v : m_venues)
         ids += v.rig.fixtureIds();
-    m_rig->setReservedIds(ids);
+    return ids;
+}
+
+void VenueCorrections::updateReserved()
+{
+    m_rig->setReservedIds(reservedIds());
 }
 
 VenueCorrections::Venue *VenueCorrections::activeVenueData()
@@ -1554,6 +1560,113 @@ QString VenueCorrections::addVenueFrom(const QString &name, const QString &from)
     save();
     emit venuesChanged();
     return n;
+}
+
+/*****************************************************************************
+ * A new venue from another show (docs/design/VENUE_FROM_SHOW.md)
+ *****************************************************************************/
+
+QString VenueCorrections::addVenueFromShow(const QString &name, const VenueRig::Data &rig, QString *why)
+{
+    const QString n = name.trimmed();
+    if (n.isEmpty() || hasVenue(n))
+    {
+        if (why != nullptr)
+            *why = n.isEmpty() ? tr("The venue needs a name.")
+                               : tr("\342\200\234%1\342\200\235 is already a venue.").arg(n);
+        return QString();
+    }
+    Venue v;
+    v.name = n;
+    v.created = v.modified = QDateTime::currentDateTime();
+    v.rig = rig;
+    m_venues << v;
+    updateReserved();
+    if (!save(why))
+        return QString();
+    emit venuesChanged();
+    return n;
+}
+
+bool VenueCorrections::setRoomOutput(const QString &name, const QList<Universe::OfflinePatch> &output,
+                                     QString *why)
+{
+    for (Venue &v : m_venues)
+    {
+        if (v.name != name)
+            continue;
+        if (!v.rig.room.isSet())
+        {
+            if (why != nullptr)
+                *why = tr("%1 has no universe of its own.").arg(name);
+            return false;
+        }
+        const quint32 u = v.rig.room.universe;
+        v.rig.patch.insert(u, output);
+        v.modified = QDateTime::currentDateTime();
+        if (name == m_active && m_rig->isApplied())
+        {
+            const bool was = m_writing;
+            m_writing = true;
+            m_rig->putPatch(u, output);
+            m_writing = was;
+        }
+        emit houseRigChanged();
+        emit correctionsChanged();
+        return save(why);
+    }
+    if (why != nullptr)
+        *why = tr("There is no venue called %1.").arg(name);
+    return false;
+}
+
+int VenueCorrections::matchRoomGroups(const QString &name, const QMap<int, quint32> &matches)
+{
+    Venue *v = nullptr;
+    for (Venue &each : m_venues)
+        if (each.name == name)
+            v = &each;
+    if (v == nullptr || matches.isEmpty())
+        return 0;
+    const bool applied = name == m_active && m_rig->isApplied();
+    if (applied)
+        recordRig();    // what is on the rig now, first
+    QList<VenueRig::Fill> held;
+    QList<VenueRig::Fill> filled;
+    for (int i = 0; i < v->rig.room.groups.size(); ++i)
+    {
+        VenueRig::Fill f = v->rig.room.groups.at(i);
+        const FixtureGroup *g = matches.contains(i) && m_doc != nullptr ? m_doc->fixtureGroup(matches.value(i))
+                                                                        : nullptr;
+        if (g == nullptr)
+        {
+            held << f;
+            continue;
+        }
+        f.group = g->id();
+        f.groupName = g->name();
+        filled << f;
+    }
+    if (filled.isEmpty())
+        return 0;
+    v->rig.room.groups = held;
+    v->modified = QDateTime::currentDateTime();
+    if (applied)
+    {
+        const bool was = m_writing;
+        m_writing = true;
+        for (VenueRig::Fill &f : filled)
+            m_rig->putFill(f);
+        m_writing = was;
+        recordRig();    // the fills, as the groups now hold them
+    }
+    else
+    {
+        v->rig.fills += filled;
+    }
+    save();
+    emit houseRigChanged();
+    return int(filled.size());
 }
 
 QString VenueCorrections::lastVenue() const
