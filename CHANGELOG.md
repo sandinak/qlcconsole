@@ -35,6 +35,56 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   built once, after the show is read.
 
 - **Release tooling (dev-facing).** Notarization resubmits a DMG Apple leaves "In Progress" for 20 minutes (`NZ_RESUBMIT_AFTER`) and takes whichever submission is Accepted first; the Homebrew-Qt bundler (`UNIVERSAL=0`) now copies every framework a bundled plugin links to (QtSvg for the svg plugins) and fails on any reference outside the app. Both have self-tests (`notarize-lib.sh --self-test`, `bundlefix-selftest.sh`).
+- **A MIDI or OSC press follows the mode and the hit's place.** A hit bound
+  to a pad fired anywhere, in Design or Operate, with no regard to its place.
+  Now a hit fires from a surface only in Operate where its place is live (in
+  Design only when armed, as a computer key); a cue list or cue only in
+  Operate, or in Design when armed; a scene or effect as before. A press held
+  back says why in the footer and the Control Map's last-fired line, and
+  letting go of a refused press stops nothing. What runs can still be let go.
+- **Computer keys follow the same place rule.** A key bound to a hit fires in
+  Operate only where the hit's place is live, and a cue list or cue as a pad
+  does (in Design only what is armed). A scene or effect on a key stays
+  Operate-only. A key held back says why on the footer.
+- **The emergency stop is never lost for more than one press.** Nothing marks
+  it dead for the session: a press is a value above 0 after a 0, the first
+  value after a load or replug, or a value after a second of quiet (a lost
+  release). A fader or encoder bound as the stop is one press per run, not one
+  per step, and is flagged loudly (red button and row, one footer line) until
+  learned again on a button. A release that was lost at learn time no longer
+  swallows the first press, a stop bound to a computer key says it does
+  nothing, a scene held by a button still lets go when its binding is removed,
+  and a refused press or key says why once per hold, not on every message.
+- **The emergency stop can't be eaten or go dead in silence.** It works while
+  a learn is listening (an Encoder learn left waiting, an open Learn Trigger
+  dialog), a second press right after a GO is not dropped, a replug cannot
+  swallow it, and a stop on a control that turns out to be a fader or knob
+  says so on the footer and in red on the Control Map. A release lets go of
+  what its press did, whatever was changed while it was held. A second PMJ
+  Black 1 universe is named on the footer.
+- **A controller that is unplugged lets go of what it held.** A Momentary
+  button held when the desk went away stayed on, and its next press after
+  the replug was swallowed.
+- **The PMJ overlay hears only the PMJ.** It took MIDI channel 9 notes and
+  CCs (the Grand Master, faders, buttons) from any controller and moved its
+  lights to that universe. It now listens only on the universe patched with
+  the PMJ Black 1 profile and never moves to another. Its faders, Reset
+  buttons and encoders no longer edit in Operate: they say *Encoders are off
+  in Operate -- switch to Design to edit.* on the footer, as the Encoder
+  bank does.
+
+### Added
+
+- **An emergency stop on a control surface.** **Connections ▸ Devices ▸ Show
+  control & sync ▸ Control Map ▸ Emergency Stop…** learns one button (press,
+  release, press again to confirm; a fader, knob, encoder or computer key is
+  refused) that is ALL OFF through the one path: in Design or Operate, every
+  press, never toggled or held by the double-GO guard. In Companion the new
+  **ALL OFF (hold 1 s)** preset sends `alloff` after a one-second hold and
+  works with remote GO off.
+- **Help: Control surfaces.** One page for what hears a control, the rules
+  a desk follows, the emergency stop, the PMJ, the APC40, the X-Touch Mini
+  and Companion, with a numbered hardware checklist.
 
 ### Changed
 

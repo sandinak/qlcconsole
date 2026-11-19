@@ -45,6 +45,9 @@ private slots:
     void aKeyFiresInOperateNotInATextField();
     void aKeyIsArmedFromTheShowTreeAndTheRunTab();
     void thePanelAndMenuListKeys();
+    void theEmergencyStopLearnsOneButtonWithASecondPress();
+    void aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow();
+    void anEncoderLearnStopsListeningWhenThePanelHides();
     void learnKeyShots();
 
 private:

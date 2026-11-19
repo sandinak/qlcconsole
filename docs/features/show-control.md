@@ -796,8 +796,8 @@ apply.
    `companion-module` directory (run `npm install` in it once). Add a
    connection of type **qlcconsole**, enter the computer's address and the
    port (9999).
-4. Presets: **Run the show** (GO showing the next cue, Back, Stop, Sub GO,
-   Hold, Blackout, now/mode displays), **Hits** and **Dials**. Drag them onto
+4. Presets: **Run the show** (GO showing the next cue, Back, Stop, **ALL OFF
+   (hold 1 s)**, Sub GO, Hold, Blackout, now/mode displays), **Hits** and **Dials**. Drag them onto
    keys or dials.
 
 It is for the show network: web access is plain http, so keep it off a
@@ -815,6 +815,10 @@ module (decided: can change); use it with the show's PIN instead.
   press again to let it go. There are 32 numbered hit keys and one that
   fires "the armed hit". A key lights red while its hit is on and blue
   while it is armed.
+- **ALL OFF** (the **ALL OFF (hold 1 s)** key) stops everything, in any mode,
+  even with Allow GO off (the PIN still applies when the show has one). It
+  needs the key held for one second so a brush does not stop the show, and it
+  is on no dial. See [Control surfaces](control-surfaces.md#the-emergency-stop).
 - **Blackout** toggles, and shows red while it is on.
 - **Dials.** Turn a **group master** dial to move it (5 percent a click, set
   in the connection), press it to go to full, press again to go to 0. The

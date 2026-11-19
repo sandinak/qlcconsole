@@ -23,8 +23,10 @@
 #ifndef PMJOVERLAY_H
 #define PMJOVERLAY_H
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QHash>
 
 #include "controlsurface.h"
@@ -49,6 +51,14 @@ public:
     PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject *parent = nullptr);
     ~PMJOverlay() override;
 
+signals:
+    /** A fader or an encoder was refused (Operate): the words, as the footer shows them. */
+    void refused(const QString &why);
+
+public:
+    /** The last refusal's words (empty: none yet). */
+    QString lastRefusal() const { return m_lastRefusal; }
+
 private slots:
     /** Doc::inputOutputMap()'s raw per-line input feed. Filtered to just the
      *  channel numbers this overlay knows (the PMJ's, from its profile) so it
@@ -67,6 +77,11 @@ private slots:
 
 private:
     void registerDevice();
+    /** Whether @a universe's input is patched with the PMJ Black 1 profile. */
+    bool isPmjUniverse(quint32 universe) const;
+    /** In Operate a fader or an encoder edits nothing (as the Encoder bank):
+     *  true when refused, with the words in the footer. */
+    bool refuseInOperate(bool encoder);
     /** Scan every universe's input patch for one whose profile matches
      *  deviceId, so LEDs can light up on connect without waiting for the
      *  user to press something first. Sets m_universe if found. */
@@ -134,6 +149,9 @@ private:
      *  (and guessing a fixed one, e.g. 0, silently sends LED feedback nowhere
      *  if that guess is wrong). -1 = not yet known, LED sends are skipped. */
     int m_universe = -1;
+    QString m_lastRefusal;
+    QSet<int> m_warnedSecond;   // second boards already named
+    QElapsedTimer m_refusedAt[2];   // faders, encoders: each said once a second
 };
 
 #endif // PMJOVERLAY_H

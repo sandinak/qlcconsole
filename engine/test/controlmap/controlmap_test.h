@@ -56,12 +56,48 @@ private slots:
     void aKeyIsArmedInDesignByTheSelection();
     void keysAreSavedWithTheShow();
 
+    // CS1: the surface safety floor (docs/design/CONTROL_SURFACES_AUDIT_2026-11-17.md)
+    void aSurfacePressFollowsTheModeAndTheArming();
+    void aRefusedPressHasNothingToRelease();
+    void aRefusedPressSaysSo();
+    void whatRunsCanAlwaysBeLetGo();
+    void aControllerGoneLetsGoOfWhatItHeld();
+    void theStopIsLearnedOnAButtonWithASecondPress();
+    void theStopRefusesAFaderWhateverItSends();
+    void theStopRefusesAControlTheProfileCallsAFader();
+    void everyPressOfTheStopIsAllOff();
+    void theStopIsNotHeldByTheDoubleGoGuard();
+    void theStopSurvivesAReplugAndRepeats();
+    void aBoundFaderNeverStops();
+    void theStopIsSavedWithTheShow();
+    void aKeyFollowsTheSurfaceRule();
+    // the independent review's findings
+    void theStopWorksWhileALearnIsListening();
+    void aRealSecondPressIsNotDebounced();
+    void aStopThatCannotWorkSaysSo();
+    void aBoundFaderIsFlaggedLoudlyAndStillStops();
+    void theStopFiresPerThePressRule();
+    void aLostReleaseAtLearnTimeDoesNotSwallowTheStop();
+    void aDeviceThatDropsItsZerosStillStops();
+    void aStopWithAnotherIdLoadsAsTheOneStop();
+    void aSecondValueAfterTheLearnPressEndsTheSwallow();
+    void aLearnTakesAHeldControlAndLetsGoOfIt();
+    void aResetLetsGoOfTheInput();
+    void aBindingRemovedWhileHeldStillLetsGo();
+    void aStopOnAKeyDoesNothingAndSaysSo();
+    void aHeldRefusedPressSaysItOnce();
+    void aReplugFreesThePressThatTaughtTheStop();
+    void aReleaseActsOnWhatWasPressed();
+
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,
      *  through the stub plugin and the input patch, as a controller sends. */
     void send(quint32 channel, uchar value);
     void tick(int n = 1);
     Scene *scene(const QString &name, int channel);
+    /** A controller that misbehaves: values sent in order on one control. */
+    void sweepTargets(bool viaKey);
+    void sendAll(quint32 channel, const QList<int> &values);
 
 private:
     Doc *m_doc = nullptr;

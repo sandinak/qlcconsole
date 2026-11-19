@@ -236,3 +236,11 @@ profile chosen. Then an OSC sender (TouchOSC, QLab) on the OSC plugin.
    the file. Nothing should silently move, disappear, or reinterpret channel
    values (ties to the fixture-mode-change data-corruption risk already
    flagged elsewhere).
+
+## S · Control surfaces: the safety floor (CS1)
+
+Run on the real desk after any build that changes a surface; the numbered
+steps, with what to expect, are in
+[Control surfaces ▸ Check it on the real device](../features/control-surfaces.md#check-it-on-the-real-device)
+(PMJ Black 1 steps 1-9, APC40 mk2 1-5, X-Touch Mini 1-3, Stream Deck with
+Companion 1-4). Record the build and the desk.

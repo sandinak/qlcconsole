@@ -40,6 +40,7 @@
 #include "virtualconsole/vcbutton.h"
 #include "virtualconsole/vcframe.h"
 #include "controlmappanel.h"
+#include <QGroupBox>
 #include "showtreeview.h"
 #include "keytriggers.h"
 #include "cuerunner.h"
@@ -169,6 +170,137 @@ void ControlMapUi_Test::theLearnDialogShowsAndRemovesABinding()
     d2.findChild<QPushButton *>("learnRemove")->click();
     QVERIFY(cm->isEmpty());
     QVERIFY(!cm->isListening());
+}
+
+void ControlMapUi_Test::theEmergencyStopLearnsOneButtonWithASecondPress()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.resize(700, 400);
+    panel.show();
+    QPushButton *button = panel.findChild<QPushButton *>("controlMapEmergencyStop");
+    QVERIFY(button != nullptr);
+    QVERIFY(button->isVisibleTo(&panel));
+    QCOMPARE(button->text(), QString("Emergency Stop…"));
+
+    ControlLearnDialog d(m_doc, ControlMap::emergencyStop());
+    d.show();
+    QVERIFY(d.findChild<QLabel *>("learnTarget")->text().contains("Emergency stop (ALL OFF)"));
+    QComboBox *mode = d.findChild<QComboBox *>("learnMode");
+    QCOMPARE(mode->count(), 1);                     // one way to act
+    QVERIFY(!mode->isEnabled());
+    QPushButton *ok = d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok);
+    QLabel *note = d.findChild<QLabel *>("learnNote");
+
+    // A computer key is refused, in words.
+    QVERIFY(d.learnKey(Qt::Key_F5, Qt::NoModifier));
+    QVERIFY(!d.hasControl());
+    QLabel *keyNote = d.findChild<QLabel *>("learnKeyNote");
+    QVERIFY(keyNote->isVisibleTo(&d));
+    QVERIFY2(keyNote->text().contains("cannot be the emergency stop"), qPrintable(keyNote->text()));
+
+    // A fader: refused, the dialog says why and keeps listening.
+    for (int v : { 3, 20, 80, 127 })
+        cm->handleInput(0, 20, uchar(v));
+    QVERIFY(!d.hasControl());
+    QVERIFY(note->isVisibleTo(&d));
+    QVERIFY2(note->text().contains("fader"), qPrintable(note->text()));
+    QVERIFY(cm->isListening());
+
+    // A button: the first press asks for a second, OK stays off.
+    cm->handleInput(0, 188, 127);
+    QVERIFY(!d.hasControl());
+    QVERIFY(!ok->isEnabled());
+    QVERIFY2(note->text().contains("press it again"), qPrintable(note->text()));
+    cm->handleInput(0, 188, 0);
+    cm->handleInput(0, 188, 127);
+    QVERIFY(d.hasControl());
+    QCOMPARE(d.channel(), 188u);
+    QVERIFY(ok->isEnabled());
+    ok->click();
+    const ControlMap::Binding *b = cm->binding(ControlMap::emergencyStop());
+    QVERIFY(b != nullptr);
+    QCOMPARE(b->channel, 188u);
+
+    // The panel lists it, with no choice of how it acts, and names the control.
+    QVERIFY2(button->text().startsWith("Emergency Stop: ") && button->text().contains("Channel 189"),
+             qPrintable(button->text()));
+    QTableWidget *table = panel.table();
+    QCOMPARE(table->rowCount(), 1);
+    QCOMPARE(table->item(0, 1)->text(), QString("Emergency stop (ALL OFF)"));
+    QComboBox *how = qobject_cast<QComboBox *>(table->cellWidget(0, 2));
+    QVERIFY(how != nullptr && !how->isEnabled() && how->count() == 1);
+
+    // Learning again from the dialog shows the control it has.
+    ControlLearnDialog again(m_doc, ControlMap::emergencyStop());
+    QVERIFY(again.hasControl());
+    again.findChild<QPushButton *>("learnRemove")->click();
+    QVERIFY(cm->binding(ControlMap::emergencyStop()) == nullptr);
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
+{
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.resize(900, 400);
+    panel.show();
+    QPushButton *button = panel.findChild<QPushButton *>("controlMapEmergencyStop");
+    QVERIFY(button != nullptr);
+    // The stop sits on a CC that turns out to move like a fader.
+    cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QVERIFY2(!button->text().contains("fader"), qPrintable(button->text()));
+    QVERIFY(!button->property("stopDead").toBool());
+    QSignalSpy rebuilt(&panel, &ControlMapPanel::summaryChanged);   // a table rebuild says so
+    QList<int> sweep;
+    for (int i = 1; i <= 100; ++i)
+        sweep << i % 120 + 1;
+    for (int v : sweep)
+        cm->handleInput(0, 7, uchar(v));
+    // Said on the button and the row, without rebuilding the table for each message.
+    QVERIFY2(button->text().contains("moves like a fader"), qPrintable(button->text()));
+    QVERIFY(button->property("stopDead").toBool());
+    QCOMPARE(rebuilt.count(), 0);
+    // A visible mark: the red style, which the button wears.
+    QVERIFY(button->styleSheet().contains("b00020"));
+    QTableWidget *table = panel.table();
+    QCOMPARE(table->rowCount(), 1);
+    QVERIFY2(table->item(0, 0)->text().contains("moves like a fader"), qPrintable(table->item(0, 0)->text()));
+    // ALL OFF in the Last line does not hide the flag the next instant.
+    cm->handleInput(0, 7, 0);
+    cm->handleInput(0, 7, 50);
+    QLabel *last = panel.findChild<QLabel *>("controlMapLast");
+    QVERIFY(last != nullptr);
+    QVERIFY2(last->text().contains("ALL OFF") && last->text().contains("moves like a fader"), qPrintable(last->text()));
+    // An unrelated learn and removal keep it.
+    Scene *a = scene("Warm");
+    cm->setBinding({ 0, 9, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->removeBinding(ControlMap::function(a->id()));
+    QVERIFY2(button->text().contains("moves like a fader"), qPrintable(button->text()));
+    // Learned again on a button: the flags go.
+    cm->setBinding({ 0, 188, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QVERIFY2(!button->text().contains("fader"), qPrintable(button->text()));
+    QVERIFY(button->styleSheet().isEmpty());
+}
+
+void ControlMapUi_Test::anEncoderLearnStopsListeningWhenThePanelHides()
+{
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QComboBox *preset = panel.encoderBox()->findChildren<QComboBox *>().first();
+    preset->setCurrentIndex(1);
+    emit preset->activated(1);
+    QPushButton *learn = panel.encoderBox()->findChild<QPushButton *>("encoderLearn");
+    QVERIFY(learn != nullptr && learn->isEnabled());
+    learn->click();
+    QVERIFY(cm->isListening());
+    panel.hide();
+    QVERIFY2(!cm->isListening(), "a learn left waiting kept listening after the panel went");
+    QCOMPARE(learn->text(), QString("Learn Encoder 1…"));
 }
 
 void ControlMapUi_Test::theMenuActionSaysWhatIsBound()

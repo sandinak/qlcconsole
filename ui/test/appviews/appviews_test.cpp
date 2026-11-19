@@ -114,6 +114,8 @@
 #include "inputoutputmanager.h"
 #include "timecodesource.h"
 #include "pmjoverlay.h"
+#include "controlmap.h"
+#include "qlcinputprofile.h"
 #undef protected
 #undef private
 #include "helpbrowser.h"
@@ -2579,6 +2581,178 @@ void AppViews_Test::aControlSurfaceBlindFollowsTheConsolesRule()
     QVERIFY(doc->inputOutputMap()->outputInhibited());           // Design: a mute
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, blind, 255);
     QVERIFY(doc->inputOutputMap()->outputInhibited() == false);
+}
+
+void AppViews_Test::aPmjOverlayHearsOnlyItsOwnBoard()
+{
+    /* CS1 / F4: the PMJ overlay used to take any universe's MIDI ch 9 CC 0
+       (the Grand Master) and every other PMJ channel, and then move its LEDs
+       to that universe. Now only the universe whose input is patched with the
+       PMJ Black 1 profile is the board. */
+    // An earlier test may have loaded the stub already, under the name it gave it.
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    QLCIOPlugin *plug = cache->plugin(QStringLiteral("ArtNet"));
+    if (plug == nullptr)
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    if (plug == nullptr)
+    {
+        QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+        stubDir.setFilter(QDir::Files);
+        stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+        cache->load(stubDir);
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    }
+    IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    auto restore = qScopeGuard([this]() { m_app->clearDocument(); });
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    while (iom->universesCount() < 3)
+        iom->addUniverse();
+
+    // Universe 1: some other controller (no PMJ profile), sending ch 9 CC 0.
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    const quint32 gmChannel = 32768;            // PMJ Master: MIDI ch 9, CC 0
+    iom->setGrandMasterValue(200);
+    m_app->m_pmjOverlay->slotInputValueChanged(0, gmChannel, 40, QString());
+    QCoreApplication::processEvents();
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+
+    // No universe is the PMJ yet: nowhere to hear it from either.
+    m_app->m_pmjOverlay->slotInputValueChanged(1, gmChannel, 40, QString());
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+
+    // Universe 2 is patched with the PMJ Black 1 profile: it is the board.
+    QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+    if (pmj == nullptr)
+    {
+        pmj = new QLCInputProfile();
+        pmj->setManufacturer(QStringLiteral("PMJ"));
+        pmj->setModel(QStringLiteral("Black 1"));
+        QVERIFY(iom->addProfile(pmj));
+    }
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1, pmj->name()));
+    QCoreApplication::processEvents();
+    m_app->m_pmjOverlay->slotInputValueChanged(1, gmChannel, 80, QString());
+    QVERIFY2(int(iom->grandMasterValue()) != 200, "the PMJ's own master fader did not move the Grand Master");
+
+    // And it never moves to the other controller on its traffic.
+    iom->setGrandMasterValue(200);
+    m_app->m_pmjOverlay->slotInputValueChanged(0, gmChannel, 10, QString());
+    m_app->m_pmjOverlay->slotInputValueChanged(2, gmChannel, 10, QString());
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+    iom->setGrandMasterValue(255);
+}
+
+void AppViews_Test::aPmjFaderOrEncoderInOperateEditsNothing()
+{
+    /* CS1 / F5: the PMJ's faders and encoders edited palettes and live
+       channels in Operate with no undo; the Encoder bank refuses there. Now
+       they refuse too, in the same words, on the footer. */
+    Doc *doc = m_app->doc();
+    auto restore = qScopeGuard([this, doc]() {
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    m_app->clearDocument();
+    Fixture *f = new Fixture(doc);
+    f->setName(QStringLiteral("Dim"));
+    f->setChannels(1);
+    f->setUniverse(0);
+    f->setAddress(0);
+    QVERIFY(doc->addFixture(f));
+    doc->programmer()->setProgrammerSelection({ f->id() });
+    const ControlSurface::Role level1(ControlSurface::RoleType::Level, 1);
+    const ControlSurface::Role enc1(ControlSurface::RoleType::Param, 1);
+    auto value = [doc, f]() { return int(doc->programmerValues().value(f->id()).value(0, 255)); };
+
+    // Design: fader 1 sets the selected fixture's intensity (the control case).
+    doc->setMode(Doc::Design);
+    m_app->statusBar()->clearMessage();
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, level1, 100);
+    QCOMPARE(value(), 100);
+    QVERIFY(!m_app->statusBar()->currentMessage().contains("Operate"));
+
+    // Operate: nothing moves, and the footer says why, as the Encoder bank does.
+    doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, level1, 30);
+    QCOMPARE(value(), 100);
+    QVERIFY2(m_app->statusBar()->currentMessage().contains("off in Operate -- switch to Design to edit"),
+             qPrintable(m_app->statusBar()->currentMessage()));
+    m_app->statusBar()->clearMessage();
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, enc1, 2);
+    QVERIFY2(m_app->statusBar()->currentMessage().startsWith("Encoders are off in Operate -- switch to Design to edit"),
+             qPrintable(m_app->statusBar()->currentMessage()));
+    // Its Reset (the "N-Up" button) is an edit too.
+    const ControlSurface::Role up1(ControlSurface::RoleType::Reset, 1);
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, up1, 127);
+    QCOMPARE(value(), 100);
+
+    // The Grand Master is a master, not an edit: it works in Operate.
+    doc->inputOutputMap()->setGrandMasterValue(255);
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId,
+        ControlSurface::Role(ControlSurface::RoleType::Level, -1), 90);
+    QCOMPARE(int(doc->inputOutputMap()->grandMasterValue()), 90);
+    doc->inputOutputMap()->setGrandMasterValue(255);
+}
+
+void AppViews_Test::aSecondPmjBoardIsNamedNotIgnoredInSilence()
+{
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    QLCIOPlugin *plug = cache->plugin(QStringLiteral("ArtNet"));
+    if (plug == nullptr)
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    auto restore = qScopeGuard([this]() { m_app->clearDocument(); });
+    m_app->clearDocument();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    while (iom->universesCount() < 3)
+        iom->addUniverse();
+    QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+    if (pmj == nullptr)
+    {
+        pmj = new QLCInputProfile();
+        pmj->setManufacturer(QStringLiteral("PMJ"));
+        pmj->setModel(QStringLiteral("Black 1"));
+        QVERIFY(iom->addProfile(pmj));
+    }
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 0, pmj->name()));
+    QVERIFY(iom->setInputPatch(2, stub->name(), QString(), 1, pmj->name()));
+    QCoreApplication::processEvents();
+    m_app->statusBar()->clearMessage();
+    iom->setGrandMasterValue(200);
+    m_app->m_pmjOverlay->slotInputValueChanged(2, 32768, 40, QString());
+    QCOMPARE(int(iom->grandMasterValue()), 200);                 // the second board is not heard...
+    const QString said = m_app->statusBar()->currentMessage();   // ...and it says so
+    QVERIFY2(said.contains("second PMJ Black 1") && said.contains("universe 3") && said.contains("universe 2"),
+             qPrintable(said));
+    iom->setGrandMasterValue(255);
+}
+
+void AppViews_Test::aRefusedSurfacePressSaysSoOnTheFooter()
+{
+    /* The App's wiring of ControlMap::blocked to the footer, not only the signal. */
+    Doc *doc = m_app->doc();
+    auto restore = qScopeGuard([this, doc]() {
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    m_app->clearDocument();
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("Show"));
+    st->addCueList(prod, QStringLiteral("Act 1"));
+    const quint32 other = st->addCueList(prod, QStringLiteral("Act 2"));
+    ControlMap *cm = doc->controlMap();
+    cm->setBinding({ 0, 20, ControlMap::cueList(other), ControlMap::Toggle });
+    doc->setMode(Doc::Design);
+    m_app->statusBar()->clearMessage();
+    cm->handleInput(0, 20, 127);
+    QVERIFY2(m_app->statusBar()->currentMessage().startsWith("Not fired: Cue list: Act 2"),
+             qPrintable(m_app->statusBar()->currentMessage()));
+    QVERIFY(m_app->statusBar()->currentMessage().contains("armed"));
+    cm->handleInput(0, 20, 0);
 }
 
 QTEST_MAIN(AppViews_Test)

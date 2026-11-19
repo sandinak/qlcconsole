@@ -5,6 +5,8 @@
   Licensed under the Apache License, Version 2.0 (the "License");
 */
 
+#include <QStatusBar>
+
 #include "pmjoverlay.h"
 #include "doc.h"
 #include "inputoutputmap.h"
@@ -173,6 +175,14 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
     connect(m_engine, &ControlSurfaceEngine::roleActivated,
             this, &PMJOverlay::slotRoleActivated);
 
+    // The board is found by its patch: follow a (re)patch and a profile change.
+    auto rescan = [this]() {
+        findKnownUniverse();
+        m_engine->refreshDevice(deviceId);
+    };
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputPatchChanged, this, rescan);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged, this, rescan);
+
     connect(m_doc->inputOutputMap(), &InputOutputMap::blackoutChanged,
             this, &PMJOverlay::slotBlackoutChanged);
     connect(m_doc->inputOutputMap(), &InputOutputMap::outputInhibitedChanged,
@@ -197,25 +207,48 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
     m_engine->refreshDevice(deviceId);
 }
 
+bool PMJOverlay::isPmjUniverse(quint32 universe) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Universe *u = iom == nullptr ? nullptr : iom->universe(universe);
+    InputPatch *patch = u == nullptr ? nullptr : u->inputPatch();
+    return patch != nullptr && patch->profileName().compare(deviceId, Qt::CaseInsensitive) == 0;
+}
+
+bool PMJOverlay::refuseInOperate(bool encoder)
+{
+    // The Encoder bank's rule (EncoderBank::operateRefuses()): in Operate the
+    // controls do not edit a palette, and say so, not more than once a second.
+    if (m_doc->mode() != Doc::Operate)
+        return false;
+    QElapsedTimer &at = m_refusedAt[encoder ? 1 : 0];
+    if (!at.isValid() || at.elapsed() >= 1000)
+    {
+        at.start();
+        m_lastRefusal = encoder ? tr("Encoders are off in Operate -- switch to Design to edit.")
+                                : tr("Faders are off in Operate -- switch to Design to edit.");
+        m_app->statusBar()->showMessage(m_lastRefusal, 6000);
+        emit refused(m_lastRefusal);
+    }
+    return true;
+}
+
 void PMJOverlay::findKnownUniverse()
 {
-    // So the board lights up on connect/launch instead of staying dark until
-    // the user presses something first (slotInputValueChanged() also learns
-    // this from real traffic, as a fallback for patching the board AFTER
-    // startup, or a re-patch to a different universe mid-session).
+    m_warnedSecond.clear();
+    // The board is the universe whose input patch names the PMJ Black 1
+    // profile, and only that one: input from any other universe is not
+    // the PMJ's, whatever its channel numbers.
     InputOutputMap *iom = m_doc->inputOutputMap();
     for (quint32 u = 0; u < iom->universesCount(); u++)
     {
-        Universe *universe = iom->universe(u);
-        if (universe == nullptr)
-            continue;
-        InputPatch *patch = universe->inputPatch();
-        if (patch != nullptr && patch->profileName().compare(deviceId, Qt::CaseInsensitive) == 0)
+        if (isPmjUniverse(u))
         {
             m_universe = int(u);
             return;
         }
     }
+    m_universe = -1;
 }
 
 PMJOverlay::~PMJOverlay()
@@ -330,27 +363,41 @@ void PMJOverlay::sendLed(const ControlSurface::Control &control, int level)
 void PMJOverlay::slotInputValueChanged(quint32 universe, quint32 channel, uchar value, const QString &key)
 {
     Q_UNUSED(key)
+    // Only the universe patched with the PMJ Black 1 profile is the board.
+    // Any other controller sending ch 9 CC 0 (or any note) is not it, and
+    // this never moves to another universe on traffic (CS1, F4).
+    if (m_universe < 0 || !isPmjUniverse(quint32(m_universe)))
+    {
+        findKnownUniverse();
+        if (m_universe >= 0)
+            m_engine->refreshDevice(deviceId);
+    }
+    if (m_universe >= 0 && int(universe) != m_universe && isPmjUniverse(universe))
+    {
+        // Two boards on the PMJ Black 1 profile: only the first is heard. Say
+        // so once for the second, not nothing.
+        if (!m_warnedSecond.contains(int(universe)))
+        {
+            m_warnedSecond.insert(int(universe));
+            m_lastRefusal = tr("A second PMJ Black 1 is patched on universe %1: only universe %2 is heard. "
+                               "Unpatch one.").arg(universe + 1).arg(m_universe + 1);
+            m_app->statusBar()->showMessage(m_lastRefusal, 10000);
+            emit refused(m_lastRefusal);
+        }
+        return;
+    }
+    if (m_universe < 0 || int(universe) != m_universe)
+        return;
+
     // Strip any embedded MIDI-channel bits (see midiprotocol.cpp,
     // feedbackToMidi's `channel & 0x0FFF`) before matching against the
-    // PMJ's own channel numbers, in case the input line isn't set to "any"
-    // yet and something upstream still tagged it.
+    // PMJ's own channel numbers.
     quint32 baseChannel = channel & 0x0FFF;
     auto it = m_channelToIndex.constFind(baseChannel);
     if (it == m_channelToIndex.constEnd())
         it = m_channelToIndex.constFind(channel);
     if (it == m_channelToIndex.constEnd())
         return;   // not a PMJ control
-
-    // Learn which universe the board is actually patched to from real
-    // traffic, rather than assuming one — LED feedback couldn't go anywhere
-    // correct without this (see sendLed()). Re-learn on every event rather
-    // than latching once, so re-patching the board to a different universe
-    // mid-session self-corrects instead of sending feedback into the void.
-    if (int(universe) != m_universe)
-    {
-        m_universe = int(universe);
-        m_engine->refreshDevice(deviceId);   // catch the board up on LEDs now that we can reach it
-    }
 
     m_engine->inputReceived(deviceId, it.value(), value);
 }
@@ -388,6 +435,9 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // selection (Select/Load below) — a control that does nothing
         // observable stays inert either way, per the "only act on what's
         // real" rule applied elsewhere in this overlay.
+        // A fader edits a palette or a fixture live: not in Operate (CS1, F5).
+        if (refuseInOperate(false))
+            break;
         if (role.index >= 1 && role.index <= 10 && faderInUse(role.index) && m_doc->programmer())
         {
             ProgrammingManager *pm = programmingManager();
@@ -418,7 +468,8 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // in-use gate as the Level write path above, so a press on a fader
         // that isn't doing anything right now is a no-op, not a surprise
         // reset of an unrelated channel.
-        if (value > 0 && role.index >= 1 && role.index <= 10 && faderInUse(role.index) && m_doc->programmer())
+        if (value > 0 && role.index >= 1 && role.index <= 10 && faderInUse(role.index) && m_doc->programmer()
+            && !refuseInOperate(false))
         {
             ProgrammingManager *pm = programmingManager();
             quint32 pid = pm->currentPaletteId();
@@ -450,7 +501,7 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // space (MIDI2DMX, ~x<<1 with 127->255 special-cased) — confirmed
         // via live debug logging: a raw MIDI 1 arrived here as 2, a raw 127
         // arrived as 255. So the decode threshold is 128/256, not 64/128.
-        if (role.index == 1 || role.index == 2)
+        if ((role.index == 1 || role.index == 2) && !refuseInOperate(true))
         {
             int delta = (value < 128) ? int(value) : int(value) - 256;
             const float degreesPerClick = 5.0f;

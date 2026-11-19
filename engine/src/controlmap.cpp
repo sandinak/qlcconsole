@@ -117,6 +117,8 @@ void ControlMap::setBinding(const Binding &b)
             m_bindings.removeAt(i);
         }
     }
+    if (b.target.type == EmergencyStopTarget)
+        m_estopFlagged.clear();
     m_bindings.append(b);
     changed(true);
     const quint32 fid = feedbackFunction(b);
@@ -131,7 +133,9 @@ bool ControlMap::removeBinding(const Target &target)
         if (m_bindings.at(i).target != target)
             continue;
         sendFeedback(m_bindings.at(i), false);
-        m_down.remove(key(m_bindings.at(i).universe, m_bindings.at(i).channel));
+        // A control held down keeps what it pressed: its release still lets go.
+        if (target.type == EmergencyStopTarget)
+            m_estopFlagged.clear();
         m_bindings.removeAt(i);
         changed(true);
         return true;
@@ -162,21 +166,30 @@ void ControlMap::removeAll()
     for (const Binding &b : std::as_const(m_bindings))
         sendFeedback(b, false);
     m_bindings.clear();
-    m_down.clear();
-    m_heldStarted.clear();
+    m_estopFlagged.clear();
+    // Controls held keep what they pressed: their releases still let go.
     changed(true);
 }
 
 void ControlMap::reset()
 {
     m_encoderBank->reset();
-    const bool had = !m_bindings.isEmpty() || m_listening;
+    const bool had = !m_bindings.isEmpty() || m_listening || !m_down.isEmpty();
     m_bindings.clear();
     m_down.clear();
+    m_fired.clear();
+    m_pressed.clear();
     m_swallow.clear();
+    m_swallowAt.clear();
+    m_swallowSeen.clear();
+    m_estopHeld.clear();
+    m_estopFlagged.clear();
+    m_blockedHeld.clear();
     m_heldStarted.clear();
     m_listening = false;
     m_learnBind = false;
+    m_learnButton = false;
+    m_pending = false;
     const bool hadList = m_runTabList != 0xFFFFFFFF;
     m_runTabList = 0xFFFFFFFF;
     m_selected.clear();
@@ -214,7 +227,8 @@ void ControlMap::updateConnections()
         return;
 
     // Input: only while there is something to hear it for.
-    const bool wantInput = m_listening || !m_bindings.isEmpty();
+    // A control still held (its binding removed meanwhile) keeps its release coming.
+    const bool wantInput = m_listening || !m_bindings.isEmpty() || !m_down.isEmpty();
     if (wantInput != m_inputConnected)
     {
         if (wantInput)
@@ -222,12 +236,16 @@ void ControlMap::updateConnections()
             connect(iom, &InputOutputMap::inputValueChanged, this, &ControlMap::handleInput);
             connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceConnected);
             connect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
+            connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
+            connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
         }
         else
         {
             disconnect(iom, &InputOutputMap::inputValueChanged, this, &ControlMap::handleInput);
             disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceConnected);
             disconnect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
+            disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
+            disconnect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
         }
         m_inputConnected = wantInput;
     }
@@ -261,13 +279,101 @@ void ControlMap::listen()
 {
     m_listening = true;
     m_learnBind = false;
+    m_learnButton = false;
+    m_pending = false;
+    m_notButtons.clear();
     updateConnections();
+}
+
+void ControlMap::listenForButton()
+{
+    m_listening = true;
+    m_learnBind = false;
+    m_learnButton = true;
+    m_pending = false;
+    m_notButtons.clear();
+    updateConnections();
+}
+
+bool ControlMap::isButtonControl(quint32 universe, quint32 channel) const
+{
+    if (universe == KeyboardUniverse)
+        return false;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom == nullptr ? nullptr : iom->inputPatch(universe);
+    if (ip == nullptr)
+        return true;
+    if (ip->profile() != nullptr)
+    {
+        const QLCInputChannel *ich = ip->profile()->channel(channel);
+        if (ich != nullptr)
+        {
+            switch (ich->type())
+            {
+                case QLCInputChannel::Slider:
+                case QLCInputChannel::Knob:
+                case QLCInputChannel::Encoder:
+                    return false;
+                default:
+                    return true;
+            }
+        }
+    }
+    if (ip->pluginName() == QLatin1String("MIDI"))
+    {
+        // CCs and notes; a program change. Not aftertouch or pitch bend.
+        const quint32 c = channel % kMidiChannelSpan;
+        return c < kNoteAftertouch || (c >= kProgramChange && c < kProgramChange + 128);
+    }
+    return true;
+}
+
+bool ControlMap::learnButtonHeard(quint32 universe, quint32 channel, uchar value)
+{
+    const quint64 k = key(universe, channel);
+    if (m_notButtons.contains(k) || !isButtonControl(universe, channel))
+    {
+        m_notButtons.insert(k);
+        m_pending = false;
+        emit refused(tr("%1 is a fader, knob or encoder. The emergency stop takes a button.")
+                         .arg(controlName(universe, channel)));
+        return false;
+    }
+    const bool fresh = !m_pending || m_pendingKey != k || m_pendingAt.elapsed() > m_confirmMs;
+    if (fresh)
+    {
+        m_pending = true;
+        m_pendingKey = k;
+        m_pendingValue = value;
+        m_pendingReleased = false;
+        m_pendingAt.start();
+        emit confirming(universe, channel);
+        return false;
+    }
+    if (!m_pendingReleased)
+    {
+        // No release between two presses: a held button repeating says the
+        // same value, a fader moving does not.
+        if (value != m_pendingValue)
+        {
+            m_pending = false;
+            m_notButtons.insert(k);
+            emit refused(tr("%1 sends a range of values: it is a fader or knob, not a button. "
+                            "The emergency stop takes a button.").arg(controlName(universe, channel)));
+        }
+        return false;
+    }
+    m_pending = false;
+    return true;
 }
 
 void ControlMap::learn(const Target &target, Mode mode)
 {
     m_listening = true;
     m_learnBind = true;
+    m_learnButton = target.type == EmergencyStopTarget;
+    m_pending = false;
+    m_notButtons.clear();
     m_learning = Binding();
     m_learning.target = target;
     m_learning.mode = mode;
@@ -280,6 +386,9 @@ void ControlMap::stopListening()
         return;
     m_listening = false;
     m_learnBind = false;
+    m_learnButton = false;
+    m_pending = false;
+    m_notButtons.clear();
     updateConnections();
 }
 
@@ -370,6 +479,8 @@ bool ControlMap::targetExists(const Target &target) const
         case CueTarget:
         case HitTarget:
             return m_doc->showTree()->cue(target.id) != nullptr;
+        case EmergencyStopTarget:
+            return true;
     }
     return false;
 }
@@ -410,6 +521,8 @@ QString ControlMap::targetName(const Target &target) const
                 break;
             return tr("Hit: %1").arg(c->name);
         }
+        case EmergencyStopTarget:
+            return tr("Emergency stop (ALL OFF)");
     }
     return tr("(gone)");
 }
@@ -417,6 +530,8 @@ QString ControlMap::targetName(const Target &target) const
 QString ControlMap::modeName(Mode mode, TargetType type)
 {
     const bool list = type == CueListTarget || type == CueTarget;
+    if (type == EmergencyStopTarget)
+        return tr("ALL OFF (each press; never held)");
     switch (mode)
     {
         case Toggle:    return list ? tr("GO") : tr("Toggle");
@@ -435,13 +550,15 @@ QString ControlMap::typeToString(TargetType type)
         case CueListTarget:  return QStringLiteral("CueList");
         case CueTarget:      return QStringLiteral("Cue");
         case HitTarget:      return QStringLiteral("Hit");
+        case EmergencyStopTarget: return QStringLiteral("EmergencyStop");
     }
     return QString();
 }
 
 bool ControlMap::stringToType(const QString &str, TargetType *type)
 {
-    static const TargetType all[] = { FunctionTarget, CueListTarget, CueTarget, HitTarget };
+    static const TargetType all[] = { FunctionTarget, CueListTarget, CueTarget, HitTarget,
+                                      EmergencyStopTarget };
     for (TargetType t : all)
     {
         if (typeToString(t) == str)
@@ -485,21 +602,82 @@ bool ControlMap::stringToMode(const QString &str, Mode *mode)
 
 void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
 {
+    const quint64 k = key(universe, channel);
+    if (value == 0)
+    {
+        // A release: the stop's next non-zero is a new press, and what was
+        // said about a held press can be said again.
+        auto h = m_estopHeld.find(k);
+        if (h != m_estopHeld.end())
+            h->released = true;
+        m_blockedHeld.remove(k);
+    }
+
+    // The emergency stop comes before anything else, learning included: a
+    // learn that is left listening (a panel closed, a dialog open) must never
+    // eat the press that stops the show. Only the press that taught it, still
+    // held, is swallowed below.
+    if (value > 0 && universe != KeyboardUniverse)
+    {
+        const int si = m_byControl.value(k, -1);
+        const bool isStop = si >= 0 && m_bindings.at(si).target.type == EmergencyStopTarget;
+        // The press that taught the stop is swallowed until its release; a
+        // release that was lost must not swallow the first real press for long.
+        if (isStop && m_swallow.contains(k))
+        {
+            // The first value after it may be the held press repeating; a
+            // second one, or a second of quiet, is a real press.
+            if (m_swallowSeen.contains(k) || (m_swallowAt.contains(k) && m_swallowAt.value(k).elapsed() > 1000))
+                endSwallow(k);
+            else
+                m_swallowSeen.insert(k);
+        }
+        if (isStop && !m_swallow.contains(k))
+        {
+            emergencyStop(m_bindings.at(si), value);
+            return;
+        }
+    }
+
     // A computer key is learned by the dialog itself, never from here.
+    if (m_listening && m_learnButton && m_pending && value == 0 && k == m_pendingKey)
+        m_pendingReleased = true;
     if (m_listening && value > 0 && universe != KeyboardUniverse)
     {
+        const int bi = m_byControl.value(k, -1);
+        if (bi >= 0 && m_bindings.at(bi).target.type == EmergencyStopTarget)
+        {
+            // Its held learn press (swallowed above): not a new choice.
+            emit refused(tr("%1 is the emergency stop. Choose another control.")
+                             .arg(controlName(universe, channel)));
+            return;
+        }
+        // The emergency stop learns a button, and a second press says so.
+        if (m_learnButton && !learnButtonHeard(universe, channel, value))
+            return;
         const bool bind = m_learnBind;
         m_listening = false;
         m_learnBind = false;
+        m_learnButton = false;
         // The press that taught it is held: it doesn't fire what it was
         // bound to, and its release isn't a release of the binding.
-        m_swallow.insert(key(universe, channel));
+        // A control still held from before (its press never let go) is let
+        // go first, so the new binding's first press is a press.
+        if (m_down.remove(k))
+        {
+            const Binding held = m_pressed.take(k);
+            if (m_fired.remove(k) && held.target.isValid())
+                release(held);
+        }
+        m_swallow.insert(k);
+        m_swallowAt[k].start();
+        m_swallowSeen.remove(k);
         if (bind)
         {
-            Binding b = m_learning;
-            b.universe = universe;
-            b.channel = channel;
-            setBinding(b);
+            Binding nb = m_learning;
+            nb.universe = universe;
+            nb.channel = channel;
+            setBinding(nb);
         }
         else
         {
@@ -509,40 +687,147 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         return;
     }
 
-    const quint64 k = key(universe, channel);
     if (!m_swallow.isEmpty() && m_swallow.contains(k))
     {
         if (value == 0)
-            m_swallow.remove(k);
+            endSwallow(k);
+        return;
+    }
+    if (value == 0)
+    {
+        // A release lets go of what its press fired, as it was bound then.
+        if (!m_down.remove(k))
+            return;
+        const Binding pressed = m_pressed.take(k);
+        if (m_fired.remove(k) && pressed.target.isValid())
+            release(pressed);
+        if (m_bindings.isEmpty())
+            updateConnections();        // nothing held, nothing bound: stop listening
         return;
     }
     const int i = m_byControl.value(k, -1);
     if (i < 0)
+        return;
+    const Binding b = m_bindings.at(i);
+    // A press is the edge from 0: a fader or an aftertouch going on
+    // sending values is still the one press.
+    if (m_down.contains(k))
+        return;
+    m_down.insert(k);
+    m_pressed.insert(k, b);
+    if (press(b))
+        m_fired.insert(k);
+}
+
+QString ControlMap::stopProblem() const
+{
+    const Binding *b = binding(emergencyStop());
+    if (b == nullptr)
+        return QString();
+    if (isKey(*b))
+        return tr("a computer key cannot be the stop");
+    if (!isButtonControl(b->universe, b->channel))
+        return tr("not a button");
+    if (m_estopFlagged.contains(key(b->universe, b->channel)))
+        return tr("moves like a fader");
+    return QString();
+}
+
+void ControlMap::say(quint64 k, const QString &why)
+{
+    auto it = m_blockedHeld.find(k);
+    if (it != m_blockedHeld.end() && it->elapsed() < 1000)
+        return;
+    m_blockedHeld[k].start();
+    emit blocked(why);
+}
+
+void ControlMap::slotInputDeviceChanged(quint32 universe)
+{
+    // The controller went away or came back: whatever it held is let go (its
+    // release never comes), and a first press waiting for its second is dropped.
+    m_pending = false;
+    for (const quint64 k : m_swallow.values())
+        if (quint32(k >> 32) == universe)
+            endSwallow(k);
+    for (const quint64 k : m_estopHeld.keys())
+        if (quint32(k >> 32) == universe)
+            m_estopHeld.remove(k);
+    for (const quint64 k : m_swallowAt.keys())
+        if (quint32(k >> 32) == universe)
+            m_swallowAt.remove(k);
+    QList<quint32> held;
+    for (quint64 k : std::as_const(m_down))
+        if (quint32(k >> 32) == universe)
+            held << quint32(k & 0xFFFFFFFF);
+    for (quint32 ch : held)
+        handleInput(universe, ch, 0);
+}
+
+void ControlMap::emergencyStop(const Binding &b, uchar value)
+{
+    // The rule (Branson, 2026-11-19): a bound stop is never lost for more than
+    // one press, and an extra ALL OFF is better than a missed one. Two
+    // clauses. (a) A value above 0 that follows a 0 (or the first one after a
+    // load or a replug) fires. (b) Otherwise it fires when a second has
+    // passed since the last ALL OFF this control sent: a held button that
+    // keeps resending, or a fader moving, stops the show about once a second.
+    // Different values with no 0 inside a second are a run that moves like a
+    // fader: flagged loudly, never disarmed.
+    const quint64 k = key(b.universe, b.channel);
+    if (!isButtonControl(b.universe, b.channel))
     {
-        if (value == 0)
-            m_down.remove(k);
+        // The profile says fader or knob: said, once per hold.
+        say(k, tr("The emergency stop did not fire: %1 is a fader or knob, not a button. "
+                  "Learn the stop on a button again.").arg(controlName(b.universe, b.channel)));
         return;
     }
-    const Binding b = m_bindings.at(i);
-    if (value > 0)
+    bool press = true;
+    bool differs = false;
+    auto it = m_estopHeld.find(k);
+    if (it == m_estopHeld.end())
     {
-        // A press is the edge from 0: a fader or an aftertouch going on
-        // sending values is still the one press.
-        if (m_down.contains(k))
-            return;
-        m_down.insert(k);
-        press(b);
+        StopHold h;
+        h.value = value;
+        h.last.start();
+        it = m_estopHeld.insert(k, h);
     }
     else
     {
-        if (!m_down.remove(k))
-            return;
-        release(b);
+        const bool run = !it->released && it->last.elapsed() < m_estopDebounceMs;
+        differs = run && value != it->value;
+        press = it->released || !it->lastFired.isValid() || it->lastFired.elapsed() >= m_estopDebounceMs;
+        it->value = value;
+        it->last.start();
+        it->released = false;
     }
+    if (press)
+        it->lastFired.start();
+    // Different values with no 0 between and under a second apart: a fader.
+    if (differs && !m_estopFlagged.contains(k))
+    {
+        m_estopFlagged.insert(k);
+        emit blocked(tr("The emergency stop is bound to %1, which moves like a fader: learn it again on "
+                        "a button. It still stops the show, but not on every move.")
+                         .arg(controlName(b.universe, b.channel)));
+        emit stopStateChanged();
+    }
+    if (!press)
+        return;
+    ShowControl::Request r;
+    r.command = ShowControl::AllOff;
+    // The one path; ALL OFF is not one of the guarded commands.
+    if (m_doc->showControl()->run(r, ShowControl::RouteControlMap))
+        emit fired(tr("ALL OFF"));
 }
 
-void ControlMap::press(const Binding &b)
+bool ControlMap::press(const Binding &b)
 {
+    // A computer key was checked where it is pressed (keyMayFire()).
+    const bool may = isKey(b) || surfaceMayFire(b.target);
+    auto notFired = [this, &b]() {
+        say(key(b.universe, b.channel), tr("Not fired: %1. %2").arg(targetName(b.target), refusalFor(b.target)));
+    };
     switch (b.target.type)
     {
         case FunctionTarget:
@@ -550,29 +835,56 @@ void ControlMap::press(const Binding &b)
         {
             const quint32 fid = b.target.type == FunctionTarget ? b.target.id : feedbackFunction(b);
             const QString what = targetName(b.target);
+            Function *f = fid == 0xFFFFFFFF ? nullptr : m_doc->function(fid);
+            // What is running can always be let go; only a start is held back.
+            const bool running = f != nullptr && f->isRunning();
             switch (b.mode)
             {
-                case Toggle:    actOnFunction(fid, -1, what); break;
-                case StartOnly: actOnFunction(fid, 1, what); break;
+                case Toggle:
+                    if (may || running)
+                        actOnFunction(fid, -1, what);
+                    else
+                        notFired();
+                    break;
+                case StartOnly:
+                    if (may)
+                        actOnFunction(fid, 1, what);
+                    else
+                        notFired();
+                    break;
                 case StopOnly:  actOnFunction(fid, 0, what); break;
                 case Momentary:
-                {
-                    Function *f = m_doc->function(fid);
-                    if (f != nullptr && !f->isRunning())
+                    if (!may)
+                    {
+                        notFired();
+                    }
+                    else if (f != nullptr && !f->isRunning())
                     {
                         m_heldStarted.insert(fid);
                         actOnFunction(fid, 1, what);
                     }
                     break;
-                }
             }
-            break;
+            return may;
         }
         case CueListTarget:
         case CueTarget:
-            goList(b, b.mode == StopOnly);
+            if (b.mode == StopOnly)
+            {
+                goList(b, true);
+                return false;
+            }
+            if (!may)
+            {
+                notFired();
+                return false;
+            }
+            goList(b, false);
+            return true;
+        case EmergencyStopTarget:
             break;
     }
+    return false;
 }
 
 void ControlMap::release(const Binding &b)
@@ -592,6 +904,8 @@ void ControlMap::release(const Binding &b)
         case CueListTarget:
         case CueTarget:
             goList(b, true);
+            break;
+        case EmergencyStopTarget:
             break;
     }
 }
@@ -677,6 +991,7 @@ bool ControlMap::handleKey(quint32 channel, bool pressed)
     {
         // A release lets go of what its press fired, whatever the mode or
         // the arming is now: nothing stays held.
+        m_blockedHeld.remove(k);
         if (!m_down.contains(k))
             return false;
         handleInput(KeyboardUniverse, channel, 0);
@@ -685,8 +1000,22 @@ bool ControlMap::handleKey(quint32 channel, bool pressed)
     if (m_down.contains(k))
         return true;    // held: one press
     const Binding *b = bindingOn(KeyboardUniverse, channel);
-    if (b == nullptr || !keyMayFire(b->target))
+    if (b == nullptr)
         return false;
+    if (b->target.type == EmergencyStopTarget)
+    {
+        // A show file put the stop on a key: it does nothing, and says so.
+        say(k, tr("The emergency stop is bound to a computer key, which cannot be the stop: a key works "
+                  "only in Operate. Learn it on a MIDI or OSC button."));
+        return false;
+    }
+    if (!keyMayFire(b->target))
+    {
+        // The key goes on to whatever has the keyboard; the footer says why
+        // it fired nothing.
+        say(key(KeyboardUniverse, channel), tr("Not fired: %1. %2").arg(targetName(b->target), refusalFor(b->target)));
+        return false;
+    }
     handleInput(KeyboardUniverse, channel, UCHAR_MAX);
     return true;
 }
@@ -703,7 +1032,22 @@ void ControlMap::releaseKeys()
 
 bool ControlMap::keyMayFire(const Target &target) const
 {
-    return m_doc->mode() == Doc::Operate || isArmed(target);
+    // One rule with a surface's (Q277); a key is also typing, so a scene or an
+    // effect stays Operate-only on it.
+    if (target.type == FunctionTarget)
+        return m_doc->mode() == Doc::Operate;
+    return surfaceMayFire(target);
+}
+
+QString ControlMap::refusalFor(const Target &target) const
+{
+    if (target.type == FunctionTarget)
+        return tr("A key fires a scene or an effect in Operate.");
+    if (target.type == HitTarget && m_doc->mode() == Doc::Operate)
+        return tr("Its place is not live.");
+    if (m_doc->mode() == Doc::Operate)
+        return tr("Not now.");
+    return tr("In Design a control fires only what is armed: the Run tab's list, or selected in the Show Tree.");
 }
 
 quint32 ControlMap::runList() const
@@ -789,7 +1133,28 @@ bool ControlMap::isArmed(const Target &target) const
             return false;
         }
         case FunctionTarget:
+        case EmergencyStopTarget:
             break;
+    }
+    return false;
+}
+
+bool ControlMap::surfaceMayFire(const Target &target) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    const bool operate = m_doc->mode() == Doc::Operate;
+    switch (target.type)
+    {
+        case FunctionTarget:
+        case EmergencyStopTarget:
+            return true;
+        case CueListTarget:
+        case CueTarget:
+            return operate || isArmed(target);
+        case HitTarget:
+            // Its place is live: the narrowest-place rule a VC button and
+            // the phone page follow. In Design, armed as a key is.
+            return operate ? st != nullptr && st->isHitArmed(target.id) : isArmed(target);
     }
     return false;
 }
@@ -816,6 +1181,8 @@ quint32 ControlMap::feedbackFunction(const Binding &b) const
             const ShowTree::Cue *c = st->cue(b.target.id);
             return c == nullptr ? 0xFFFFFFFF : c->collection;
         }
+        case EmergencyStopTarget:
+            return 0xFFFFFFFF;
     }
     return 0xFFFFFFFF;
 }
@@ -926,6 +1293,14 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     }
     m_bindings.clear();
     m_down.clear();
+    m_fired.clear();
+    m_pressed.clear();
+    m_estopHeld.clear();
+    m_estopFlagged.clear();
+    m_swallow.clear();
+    m_swallowAt.clear();
+    m_swallowSeen.clear();
+    m_blockedHeld.clear();
     m_heldStarted.clear();
     m_encoderBank->reset();
     bool okList = false;
@@ -966,6 +1341,8 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
         if (attrs.hasAttribute(KXMLMode) && !stringToMode(attrs.value(KXMLMode).toString(), &b.mode))
             b.mode = Toggle;
         root.skipCurrentElement();
+        if (b.target.type == EmergencyStopTarget)
+            b.target.id = 0;            // one stop: whatever id a file gave it
         // A target a newer build knows and this one doesn't: left out.
         if (!okU || !okC || !okI || !okT)
             continue;

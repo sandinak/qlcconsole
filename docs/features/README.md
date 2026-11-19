@@ -36,6 +36,7 @@ In the app, **F1** opens the guide for whatever you're looking at, and
 | [Other improvements](other-improvements.md) | Connections/patch overhaul, the WLED output, the readiness footer and its fixes, cloud-storage safety and the show cache, Plot layers panel, Studio groups, Blind/Park/Highlight, and more |
 | [Shows (the timeline)](shows.md) | Tracks, items, sequences and cues, the show end, track flags, following timecode |
 | [Show control (QLab)](show-control.md) | Cue numbers and cue lists; running the show from a game controller (Pad Run: arm, safety, hit, emergency stop, venue focus from the pad); QLab (or anything else) firing cues over MIDI Show Control or OSC |
+| [Control surfaces](control-surfaces.md) | MIDI desks, OSC and Stream Deck: what hears a control, the rules a surface follows (modes, arming, hits and their place), the one emergency stop, the PMJ, per-device setup and a hardware checklist |
 | [Effects](effects.md) | Every built-in effect, by what it does, and writing your own |
 | [Keyboard and mouse](shortcuts.md) | Every shortcut, by view |
 | [Before the house opens](dress-rehearsal.md) | One page before a show (Show Review's blockers, every universe reaching its node, Local Network, the controllers, power, the screen, autosave), the channel check from the pad, and the dress-rehearsal checklist for the room |

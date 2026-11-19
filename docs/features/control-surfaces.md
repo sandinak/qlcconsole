@@ -1,0 +1,267 @@
+# Control surfaces
+
+A control surface is anything with buttons, faders or encoders that is not
+the mouse: a MIDI desk (an APC, a Launchpad, an X-Touch Mini, the PMJ), an
+OSC app on a tablet, a Stream Deck through Companion, a game pad. This page
+says what can hear a control, how to set each kind up, and the rules that
+keep a brushed button from changing the show. Everything here is saved with
+the show except what is said to be the computer's.
+
+## What hears a control
+
+One control (a MIDI note or CC, an OSC message) can be heard by several
+parts of the program at once. Nothing warns you yet when two of them take
+the same control, so give each control one job.
+
+| What | Where you set it | What it does |
+|---|---|---|
+| **Control Map** | Right-click a scene, effect, cue list, cue or hit ▸ **Learn Trigger…**; the table is **Connections ▸ Devices ▸ Show control &amp; sync ▸ Control Map** | One button fires one thing. See [Control Map](other-improvements.md#control-map-midi-and-osc-triggers). |
+| **Emergency stop** | The **Emergency Stop…** button under the Control Map table | One button is ALL OFF (below). |
+| **Encoder bank** | The section under the Control Map table | Endless encoders turn the Workbench selection in Design. See [Build](build.md#encoder-banks-a-midi-controller-turns-the-selection). |
+| **Virtual Console input** | A widget's **External Input** | A button, a slider (the one to use for a fader that sets a level) or a cue list, as in QLC+. |
+| **Speed master and Grand Master inputs** | The master's **Inputs…** | A fader or button for a master. |
+| **PMJ overlay** | Automatic, for the PMJ Black 1 only | The PMJ's faders, encoders and buttons (below). |
+| **Companion** | The qlcconsole module in Bitfocus Companion | A Stream Deck over the web access socket. See [Stream Deck](show-control.md#stream-deck-companion). |
+| **Game pads** | **Connections**, right-click the pad | Pad Run and the focus tools. See [Show control](show-control.md#go-from-the-game-controller-pad-run). |
+
+## The rules for a surface
+
+These are the same rules the pad and the phone page follow, written so you
+can check a desk against them.
+
+1. **A press that starts a scene or an effect works in Design and in
+   Operate.** Build tries them in Design.
+2. **A cue list or a cue** is started by a press in Operate. In Design it is
+   started only when it is **armed**: the list the Run tab plays, or what is
+   selected in the Show Tree.
+3. **A hit** is fired by a press only in Operate and only where its place is
+   **live** (the narrowest live place, as a Virtual Console button and the
+   phone page do). In Design a hit fires only when it is armed, as above.
+   **A computer key follows the same rule** as a pad: a key bound to a hit
+   fires in Operate only where the place is live, and a cue list or cue as in
+   rule 2. A scene or an effect on a key fires in Operate only (a key is
+   also typing). A key held back says why on the footer, as a pad does.
+4. **Letting go is always allowed.** A press that stops something, or the
+   release of a button held down, is never refused, even when the place
+   has ended since.
+5. **A refused press says so.** The footer reads *Not fired: Hit: Stab. Its
+   place is not live.* (or *In Design a control fires only what is armed…*),
+   and the Control Map's last-fired line shows it. A refused press has
+   nothing to release: letting go of it stops nothing.
+6. **A dedicated GO button needs no arm.** A GO on a desk is a button you
+   mean to press, and the double-GO guard holds a second GO that comes too
+   soon ([Two GOs at once](show-control.md#two-gos-at-once)). The pad has its
+   two-control arm because a pad is held in the hand.
+7. **A controller that goes away lets go.** Unplug a desk with a Momentary
+   button held and what it held stops; plug it back and the same button
+   works at the first press.
+8. **Editing never happens in Operate from a surface.** The Encoder bank and
+   the PMJ's encoders say *Encoders are off in Operate -- switch to Design to
+   edit.*; the PMJ's faders say *Faders are off in Operate -- switch to Design
+   to edit.* A master (the Grand Master) is not an edit and works.
+9. **A release lets go of what its press did**, as the control was bound
+   when it was pressed. Changing the mode or binding the control to something
+   else while it is held does not turn the release into a Stop of something
+   else.
+
+After an emergency stop, one press of a GO button on a desk starts the list
+again. That is by design (rule 6); the pad needs two controls to come back,
+a desk does not.
+
+## The emergency stop
+
+A control surface can have **one emergency stop**: **Emergency Stop…**, the
+button under the Control Map table.
+
+- It is **ALL OFF** through the same path as the pad's four-together stop,
+  the phone page's STOP and QLab's ALL OFF: every function stops, every
+  Show-only fixture is cut.
+- It works in **Design and Operate**, at any moment, on Windows too, and
+  needs no arm and no PIN (from the Control Map). It is never held by the double-GO guard.
+- **Every press is ALL OFF.** It does not toggle, and holding it down does
+  nothing more. The release does nothing.
+- It is **learned on a button**, with a second press to confirm: press the
+  button, release it, press it again. The dialog says so while you do. It
+  refuses a control its input profile calls a fader, knob or encoder, and a
+  control that sends two different values with no release between (a fader
+  moving); a CC fader with **no profile** that only ever sends 0 and 127
+  cannot be told from a button. A computer key is refused (a key works only
+  in Operate).
+- **It beats any learn.** A learn left waiting (an Encoder learn whose panel
+  was closed) or a Learn Trigger dialog that is open never eats a press of
+  the stop. Learn dialogs refuse the stop's own control.
+- **A stop is never lost for more than one press.** An extra ALL OFF is
+  better than a missed one, so nothing marks a bound stop dead for good. Two
+  rules: **(a)** a value above 0 that follows a 0, or the first value after
+  the show loads or the controller is plugged in, is a press and fires;
+  **(b)** any other value above 0 fires when a second has passed since the
+  last ALL OFF that control sent. So a held button that keeps resending, or a
+  fader that keeps moving, sends ALL OFF about once a second.
+
+  | The control sends | The stop does |
+  |---|---|
+  | 127 held, repeating at once | one ALL OFF |
+  | 127 every 0.6 s for 3 s, never a 0 | one about every second (3 or more) |
+  | 127, 0, 90, 0, 60, 0 (a velocity pad) | three |
+  | 100, then 80 a moment later (the release was lost), then 0, then 100 | one, then one (the 80 is the same hold); flagged |
+  | 100, then 80 five seconds later | two; not flagged |
+  | 100, then 100 after a second | two |
+  | 1, 1, 1, 127, 1 (a relative encoder, never 0) | one in the first second, flagged |
+  | a fader swept quickly | one, then about one a second while it moves; flagged |
+  | a fader moved once a second or slower | one for each move, **not** flagged |
+  | a fader that reaches 0 between moves | one for each press after the 0; flagged |
+
+- **A stop on the wrong kind of control is flagged loudly, not disarmed.**
+  When different values arrive with no 0 between and less than a second apart, the footer says once
+  *The emergency stop is bound to …, which moves like a fader: learn it again
+  on a button.*, and the Emergency Stop… button and the Control Map row go red
+  and say *moves like a fader*. The flag stays until the stop is learned
+  again (an unrelated learn or removal keeps it) and the stop still fires as
+  the table shows. A fader moved slowly enough (a step a second or slower) is
+  never recognised, because it looks like a button pressed again; it stops
+  the show on each move, which is the safe side. If the input profile calls the control a fader or knob, or
+  it is a computer key (a show file can put it there), the press is **refused**
+  in words on the footer (once per hold) and the button and row say *not a
+  button* or *a computer key cannot be the stop*; learn it on a button.
+- **A lost release at learn time** does not hold the first real press: the
+  press that taught the stop is ignored until its release, until a second value arrives, or for one second.
+- It is saved with the show. A QLC+ 4 build opens the show and skips it.
+
+On **Companion**, the **ALL OFF** preset needs the key **held for one
+second**, so a brush on the Stream Deck does not stop the show. It is not on
+any dial, and it works with *Allow GO from the phone Run page* off (it needs
+the PIN when the show has one).
+
+## The Control Map
+
+How to learn a control and how a press acts is in [Control
+Map](other-improvements.md#control-map-midi-and-osc-triggers). Two things
+that matter to a desk:
+
+- **Momentary** (on while held) lets go at the release, even if you changed
+  mode or armed something else in between.
+- A fader or a CC that goes on sending values is **one press** until it goes
+  back to 0. Use a Virtual Console slider for a fader that sets a level.
+
+## The PMJ Black 1
+
+The PMJ's faders, encoders and buttons work only on an input patched with
+the **PMJ Black 1** input profile, and only there. Patch it as an input on
+**any MIDI channel**, with the feedback line, and the profile **PMJ Black 1**.
+Any other controller that happens to send the same MIDI channel 9 notes or
+CCs does nothing to it, and the PMJ's lights are sent only to the universe
+the profile is patched on.
+
+- **Master** is the Grand Master. **O** is Blackout (a toggle, not a stop),
+  **Set** is Blind.
+- **Ch 1-10** edit the open palette (Colour: R G B White Amber UV; Dimmer:
+  intensity) or, with fixtures selected, their intensity. **1-Up…10-Up**
+  zero that fader's target. **Enc 1 and 2** nudge pan and tilt. These are
+  **Design only**: in Operate they are refused with the sentence above.
+- **Select 1-10** and **Load 1-10** change the selection and work in either
+  mode.
+- **Two boards.** Only the first universe patched with the PMJ Black 1
+  profile is heard. If a second is patched, the footer says *A second PMJ
+  Black 1 is patched on universe N: only universe M is heard. Unpatch one.*
+- Go, Back, Left, Right and the page buttons light nothing and do nothing
+  here. Bind **Go** and **Back** in the Control Map to GO and Back the list
+  (rule 6).
+
+## Other surfaces
+
+- **Akai APC40 mk2**: the input profile **Akai-APC40-mkII** gives the pads
+  their LED feedback. Learn a clip pad on a cue, a hit or a scene; the
+  encoder bank has an **APC40 (knobs)** preset.
+- **Behringer X-Touch Mini**: no input profile yet. Set the unit to
+  *Standard* mode, layer A, encoders *Relative 1*; patch it as an input; the
+  encoder bank has an **X-Touch Mini** preset.
+- **OSC** (TouchOSC, QLab): the QLab listener is off until you switch it on;
+  `/go` and `/alloff` work when it is on. A sender on an OSC port patched
+  into the Control Map is heard by anyone who can reach that port.
+- **Windows**: a Control Map press, the encoder bank and Virtual Console
+  inputs work on Windows. A pad's arm and MIDI timecode in are refused there
+  (decided for the pad). Control surfaces on Windows are **not yet checked
+  on a real Windows machine**.
+
+## Check it on the real device
+
+These steps need the hardware. Do them once on the desk you will use,
+after any build that changes a surface, and say which build.
+
+**PMJ Black 1**
+
+1. Patch the PMJ as an input on any MIDI channel with the feedback line and
+   the profile PMJ Black 1, then restart. *Expect:* **O** and **Set** glow
+   dim; the other buttons stay dark.
+2. In Design, open a Colour look in Build and move the faders. *Expect:* the
+   palette changes (the faders in use are lit).
+3. Switch to **Operate** and move the same faders and turn Enc 1.
+   *Expect:* nothing changes, and the footer says *Faders are off in
+   Operate -- switch to Design to edit.* or *Encoders are off in
+   Operate…* once a second at most.
+4. In Operate move the **Master** fader. *Expect:* the Grand Master follows.
+5. Patch a second MIDI controller that can send channel 9 (or send CC 0 on
+   channel 9 from a MIDI tool) on another universe. *Expect:* the Grand
+   Master does not move.
+6. Learn **Go** on the main cue list (Control Map). Press it. *Expect:* the
+   list GOes; press twice within a second and the second is held (*Second
+   GO held*).
+7. Learn **Emergency Stop…** on a PMJ button: press, release, press. *Expect:*
+   the dialog asks you to press it again, then shows the control. Start the
+   list and a scene, press the button in Design and then in Operate.
+   *Expect:* everything stops each time, with *ALL OFF* in the Control
+   Map's last-fired line.
+8. Try to learn the stop on a PMJ **fader**. *Expect:* refused, saying a
+   fader cannot be the stop; learning goes on.
+9. Unplug the PMJ with a Momentary button held, then plug it back.
+   *Expect:* what it held stopped; the lights come back; the next press of
+   that button works.
+10. Patch a second input on the PMJ Black 1 profile and move a PMJ control on
+    it. *Expect:* the footer names the second universe and says only the
+    first is heard.
+
+**Akai APC40 mk2**
+
+1. Patch with the **Akai-APC40-mkII** profile and the feedback line.
+   *Expect:* the pads light when idle.
+2. Learn a clip pad on a **hit** whose place is idle. Press it in Operate.
+   *Expect:* nothing starts and the footer says *Its place is not live.*
+   Start the list that is its place and press again: *Expect:* it fires.
+3. In Design press a pad learned on a cue in a list that is not the Run
+   tab's. *Expect:* *Not fired…armed.* Select that list in the Show Tree and
+   press again: *Expect:* it fires.
+4. Learn **Emergency Stop…** on a pad (press, release, press) and press it
+   while a scene runs, in Design and in Operate. *Expect:* ALL OFF each
+   time. Try the track fader: *Expect:* refused.
+5. Unplug and replug with a pad held. *Expect:* the lights come back and the
+   next press fires.
+
+**Behringer X-Touch Mini**
+
+1. Patch it, set the encoder bank to the **X-Touch Mini** preset, select a
+   layer in Build and turn an encoder in Design. *Expect:* the value moves.
+2. Switch to Operate and turn an encoder. *Expect:* *Encoders are off in
+   Operate -- switch to Design to edit.*
+3. Learn **Emergency Stop…** on a bottom-row button. Try an encoder or the
+   fader instead. *Expect:* the button learns after the second press; the
+   fader and the encoder are refused.
+
+**Stream Deck with Companion**
+
+1. Add the **ALL OFF (hold 1 s)** preset from **Run the show** to a key.
+2. With *Allow GO from the phone Run page* **off** and a scene running, tap
+   the key quickly. *Expect:* nothing stops.
+3. Hold the key for one second. *Expect:* everything stops, even with Allow
+   GO off. With a PIN set in the show, give it in the connection and expect
+   the same.
+4. Fire a hit key in Design, then in Operate with the hit's place live and
+   not live. *Expect:* it fires only in Operate with the place live.
+
+## See also
+
+- [Control Map](other-improvements.md#control-map-midi-and-osc-triggers),
+  [Keys on the computer keyboard](other-improvements.md#keys-on-the-computer-keyboard)
+- [Encoder banks](build.md#encoder-banks-a-midi-controller-turns-the-selection)
+- [Show control (QLab)](show-control.md): Pad Run, the emergency stop on the
+  pad, Two GOs at once, MIDI Show Control and OSC
+- [Steam Deck and gamepad remote](gamepad-remote.md)
