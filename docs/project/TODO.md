@@ -12,15 +12,15 @@ under `~/.claude/.../memory/`.
 
 ## Windows: a 95-universe show never finishes opening (0.5.1, found 2026-11-18)
 
-The 0.5.0 soak's stress show (`DH06-STRESS-soak-studio`, 95 universes,
-2,800 fixtures, 3.3 MB) never opened on the Windows box (4-thread
-i7-7567U): 11 tries, each over 10 min with one core at 100%, no answer.
-Linux opens it in ~1 min, the Pi in ~2. October's soak saw the same
-signature (the patch grid rebuilt once per universe, `da40149e5`), so a
-new per-universe rebuild on load is the likely cause. Next: a stack
-(procdump on the box, or the app with `-o` from a desktop session; an
-ssh-launched app never starts its web server there), then time the 0.4.3
-installer on the same show. Known issue in the 0.5.0 notes.
+Fixed on `fix/051-win-bigshow-load`: three lists rebuilt themselves once
+per fixture (or group) a load adds -- Build's Groups & fixtures
+(`FixtureGroupSource::reload()`), the plot's Inventory
+(`MonitorInventoryPanel::reload()`) and the Fixture Manager's tree (a full
+re-sort per fixture row in `FixtureTreeWidget::updateTree()`). Headless
+(`-platform offscreen`) on the Windows box, `DH06-STRESS-soak-studio`:
+0.5.0 276.8 s, the fix 18.5 / 17.9 s; ender (M4 Max) 0.5.0 ~90 s.
+Left: open it once in a desktop session on the Windows box (the 10-min
+reports were GUI runs; a headless run can't show what painting adds).
 
 Also from the 0.5.0 release: the perf guard's `scene_frame_170_ns` read
 +19% on a loaded ender (+6% alone); re-check on a quiet machine. And
