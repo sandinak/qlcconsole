@@ -274,7 +274,10 @@ void ControlMapPanel::slotEmergencyStop()
 
 void ControlMapPanel::slotFired(const QString &what)
 {
-    m_last->setText(tr("Last: %1").arg(what));
+    // A flagged stop stays in the line, so "ALL OFF" does not hide it.
+    const QString problem = m_doc->controlMap()->stopProblem();
+    m_last->setText(problem.isEmpty() ? tr("Last: %1").arg(what)
+                                      : tr("Last: %1 · Emergency stop %2").arg(what, problem));
 }
 
 /*****************************************************************************

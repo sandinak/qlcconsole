@@ -78,6 +78,11 @@ private slots:
     void aBoundFaderIsFlaggedLoudlyAndStillStops();
     void theStopFiresPerThePressRule();
     void aLostReleaseAtLearnTimeDoesNotSwallowTheStop();
+    void aDeviceThatDropsItsZerosStillStops();
+    void aStopWithAnotherIdLoadsAsTheOneStop();
+    void aSecondValueAfterTheLearnPressEndsTheSwallow();
+    void aLearnTakesAHeldControlAndLetsGoOfIt();
+    void aResetLetsGoOfTheInput();
     void aBindingRemovedWhileHeldStillLetsGo();
     void aStopOnAKeyDoesNothingAndSaysSo();
     void aHeldRefusedPressSaysItOnce();

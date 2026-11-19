@@ -46,6 +46,8 @@ class Doc;
 #define CONTROLMAP_STOP_REVIEWED 1
 /** ... and the press rule (stopProblem(), stopStateChanged()). */
 #define CONTROLMAP_STOP_FLAGS 1
+/** ... and isInputConnected(), for the tests. */
+#define CONTROLMAP_HAS_INPUT_PROBE 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -204,6 +206,7 @@ public:
     /** Test hooks: how long a first press waits for its second, and the gap
      *  after which a non-zero on the stop is a new press, not the same run. */
     void setConfirmMs(int ms) { m_confirmMs = ms; }
+    bool isInputConnected() const { return m_inputConnected; }
     void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
     /** What is wrong with the stop's control, in words (empty: nothing):
      *  its profile calls it a fader or knob (refused, said), it is a computer
@@ -395,7 +398,7 @@ private:
         uchar value = 0;
         QElapsedTimer last;
         bool released = false;
-        bool moving = false;
+        QElapsedTimer lastFired;    //!< the last ALL OFF this control sent (invalid: none)
     };
     QHash<quint64, StopHold> m_estopHeld;
     /** stop controls seen moving like a fader: shown loudly (the panel, one
@@ -403,8 +406,11 @@ private:
     QSet<quint64> m_estopFlagged;
     /** a refused press said once per hold (and once a second) */
     QHash<quint64, QElapsedTimer> m_blockedHeld;
-    /** when a press that taught a control was swallowed */
+    /** when a press that taught a control was swallowed, and the controls
+     *  that have sent a value since (a second one ends the swallow) */
     QHash<quint64, QElapsedTimer> m_swallowAt;
+    QSet<quint64> m_swallowSeen;
+    void endSwallow(quint64 k) { m_swallow.remove(k); m_swallowAt.remove(k); m_swallowSeen.remove(k); }
     /** the binding each held control pressed: its release acts on it, not
      *  on what the control is bound to by then */
     QHash<quint64, Binding> m_pressed;

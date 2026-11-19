@@ -174,14 +174,14 @@ void ControlMap::removeAll()
 void ControlMap::reset()
 {
     m_encoderBank->reset();
-    const bool had = !m_bindings.isEmpty() || m_listening;
+    const bool had = !m_bindings.isEmpty() || m_listening || !m_down.isEmpty();
     m_bindings.clear();
     m_down.clear();
     m_fired.clear();
     m_pressed.clear();
-    m_estopHeld.clear();
     m_swallow.clear();
     m_swallowAt.clear();
+    m_swallowSeen.clear();
     m_estopHeld.clear();
     m_estopFlagged.clear();
     m_blockedHeld.clear();
@@ -626,10 +626,14 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         const bool isStop = si >= 0 && m_bindings.at(si).target.type == EmergencyStopTarget;
         // The press that taught the stop is swallowed until its release; a
         // release that was lost must not swallow the first real press for long.
-        if (isStop && m_swallow.contains(k) && m_swallowAt.contains(k) && m_swallowAt.value(k).elapsed() > 1000)
+        if (isStop && m_swallow.contains(k))
         {
-            m_swallow.remove(k);
-            m_swallowAt.remove(k);
+            // The first value after it may be the held press repeating; a
+            // second one, or a second of quiet, is a real press.
+            if (m_swallowSeen.contains(k) || (m_swallowAt.contains(k) && m_swallowAt.value(k).elapsed() > 1000))
+                endSwallow(k);
+            else
+                m_swallowSeen.insert(k);
         }
         if (isStop && !m_swallow.contains(k))
         {
@@ -660,8 +664,17 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         m_learnButton = false;
         // The press that taught it is held: it doesn't fire what it was
         // bound to, and its release isn't a release of the binding.
+        // A control still held from before (its press never let go) is let
+        // go first, so the new binding's first press is a press.
+        if (m_down.remove(k))
+        {
+            const Binding held = m_pressed.take(k);
+            if (m_fired.remove(k) && held.target.isValid())
+                release(held);
+        }
         m_swallow.insert(k);
         m_swallowAt[k].start();
+        m_swallowSeen.remove(k);
         if (bind)
         {
             Binding nb = m_learning;
@@ -680,7 +693,7 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
     if (!m_swallow.isEmpty() && m_swallow.contains(k))
     {
         if (value == 0)
-            m_swallow.remove(k);
+            endSwallow(k);
         return;
     }
     if (value == 0)
@@ -739,7 +752,7 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
     m_pending = false;
     for (const quint64 k : m_swallow.values())
         if (quint32(k >> 32) == universe)
-            m_swallow.remove(k);
+            endSwallow(k);
     for (const quint64 k : m_estopHeld.keys())
         if (quint32(k >> 32) == universe)
             m_estopHeld.remove(k);
@@ -757,11 +770,13 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
 void ControlMap::emergencyStop(const Binding &b, uchar value)
 {
     // The rule (Branson, 2026-11-19): a bound stop is never lost for more than
-    // one press, and an extra ALL OFF is better than a missed one. A press is
-    // a non-zero after a 0, the first non-zero (after a load or a replug), or
-    // a non-zero after a second of quiet (a release that was lost). A run of
-    // different non-zero values with no 0 and no gap moves like a fader: it
-    // fires once, not on every step, and is flagged -- loudly, not disarmed.
+    // one press, and an extra ALL OFF is better than a missed one. Two
+    // clauses. (a) A value above 0 that follows a 0 (or the first one after a
+    // load or a replug) fires. (b) Otherwise it fires when a second has
+    // passed since the last ALL OFF this control sent: a held button that
+    // keeps resending, or a fader moving, stops the show about once a second.
+    // Different values with no 0 inside a second are a run that moves like a
+    // fader: flagged loudly, never disarmed.
     const quint64 k = key(b.universe, b.channel);
     if (!isButtonControl(b.universe, b.channel))
     {
@@ -778,19 +793,20 @@ void ControlMap::emergencyStop(const Binding &b, uchar value)
         StopHold h;
         h.value = value;
         h.last.start();
-        m_estopHeld.insert(k, h);
+        it = m_estopHeld.insert(k, h);
     }
     else
     {
         const bool run = !it->released && it->last.elapsed() < m_estopDebounceMs;
-        differs = !it->released && value != it->value;
-        press = !run;
+        differs = run && value != it->value;
+        press = it->released || !it->lastFired.isValid() || it->lastFired.elapsed() >= m_estopDebounceMs;
         it->value = value;
         it->last.start();
         it->released = false;
-        it->moving = run && differs;
     }
-    // Different values with no 0 between, in a run or after a rest: a fader.
+    if (press)
+        it->lastFired.start();
+    // Different values with no 0 between and under a second apart: a fader.
     if (differs && !m_estopFlagged.contains(k))
     {
         m_estopFlagged.insert(k);
@@ -1286,6 +1302,7 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_estopFlagged.clear();
     m_swallow.clear();
     m_swallowAt.clear();
+    m_swallowSeen.clear();
     m_blockedHeld.clear();
     m_heldStarted.clear();
     m_encoderBank->reset();
@@ -1327,6 +1344,8 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
         if (attrs.hasAttribute(KXMLMode) && !stringToMode(attrs.value(KXMLMode).toString(), &b.mode))
             b.mode = Toggle;
         root.skipCurrentElement();
+        if (b.target.type == EmergencyStopTarget)
+            b.target.id = 0;            // one stop: whatever id a file gave it
         // A target a newer build knows and this one doesn't: left out.
         if (!okU || !okC || !okI || !okT)
             continue;

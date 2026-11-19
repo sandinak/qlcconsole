@@ -1683,18 +1683,20 @@ void ControlMap_Test::theStopFiresPerThePressRule()
         const char *what;
         QList<int> values;
         int gapMs;          // 1000: the default; 0: every message is "after a rest"
+        int delayMs;        // real time between the messages
         int fires;
         bool flagged;
     };
     const QList<Row> rows = {
-        { "a button, held and repeating", { 127, 127, 127, 127, 127, 0 }, 1000, 1, false },
-        { "a velocity pad", { 127, 0, 90, 0, 60, 0 }, 1000, 3, false },
-        { "a lost release then a softer press, quickly", { 100, 80, 0, 100 }, 1000, 2, true },
-        { "a lost release, the same value after a rest", { 100, 100 }, 0, 2, false },
-        { "a relative encoder ticking, never 0", { 1, 1, 1, 127, 1, 127 }, 1000, 1, true },
-        { "a slow fader, each step after a rest", { 10, 11, 12 }, 0, 3, true },
-        { "a fast fader run", { 5, 20, 60, 127, 60, 5 }, 1000, 1, true },
-        { "a fader that rests at 0 between moves", { 0, 10, 20, 0, 0, 10, 0 }, 1000, 2, true },
+        { "a button, held and repeating", { 127, 127, 127, 127, 127, 0 }, 1000, 0, 1, false },
+        { "a velocity pad", { 127, 0, 90, 0, 60, 0 }, 1000, 0, 3, false },
+        { "a lost release then a softer press, quickly", { 100, 80, 0, 100 }, 1000, 0, 2, true },
+        { "a lost release, a softer press after a rest", { 100, 80 }, 150, 200, 2, false },
+        { "a lost release, the same value after a rest", { 100, 100 }, 0, 0, 2, false },
+        { "a relative encoder ticking, never 0", { 1, 1, 1, 127, 1, 127 }, 1000, 0, 1, true },
+        { "a slow fader, each step after a rest", { 10, 11, 12 }, 150, 200, 3, false },
+        { "a fast fader run", { 5, 20, 60, 127, 60, 5 }, 1000, 0, 1, true },
+        { "a fader that rests at 0 between moves", { 0, 10, 20, 0, 0, 10, 0 }, 1000, 0, 2, true },
     };
     for (const Row &r : rows)
     {
@@ -1704,7 +1706,12 @@ void ControlMap_Test::theStopFiresPerThePressRule()
         emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));          // first message after a replug
         cm->setStopDebounceMs(r.gapMs);
         const int before = handled.count();
-        sendAll(7, r.values);
+        for (int v : r.values)
+        {
+            send(7, uchar(v));
+            if (r.delayMs > 0)
+                QTest::qWait(r.delayMs);
+        }
         QVERIFY2(handled.count() - before == r.fires,
                  qPrintable(QString("%1: %2 fires, wanted %3").arg(r.what).arg(handled.count() - before).arg(r.fires)));
         QVERIFY2(cm->stopIsDead() == r.flagged, qPrintable(QString("%1: flagged %2").arg(r.what).arg(cm->stopIsDead())));
@@ -1716,6 +1723,105 @@ void ControlMap_Test::theStopFiresPerThePressRule()
         send(7, 0);
         cm->removeBinding(ControlMap::emergencyStop());
     }
+}
+
+void ControlMap_Test::aDeviceThatDropsItsZerosStillStops()
+{
+    // 127 every 0.6 s for 3 s and no 0 ever: the stop is sent about once a
+    // second, never once and then dead.
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    for (int i = 0; i < 6; ++i)
+    {
+        a->start(m_doc->masterTimer(), FunctionParent::master());
+        tick(2);
+        send(7, 127);
+        tick(2);
+        if (i < 5)
+            QTest::qWait(600);
+    }
+    QVERIFY2(handled.count() >= 3, qPrintable(QString("only %1 ALL OFF in 3 s").arg(handled.count())));
+    QVERIFY(!cm->stopIsDead());                     // the same value: not a fader
+}
+
+void ControlMap_Test::aStopWithAnotherIdLoadsAsTheOneStop()
+{
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QByteArray xml = saveShow(m_doc);
+    QVERIFY2(xml.contains("Target=\"EmergencyStop\""), xml.constData());
+    // A file with the id 5, and a second stop with id 6 on another control.
+    QByteArray odd = xml;
+    odd.replace("Target=\"EmergencyStop\" ID=\"0\"", "Target=\"EmergencyStop\" ID=\"5\"");
+    QVERIFY(odd != xml);
+    Doc *other = new Doc(this);
+    QVERIFY(loadShow(other, odd));
+    QCOMPARE(other->controlMap()->count(), 1);
+    const ControlMap::Binding *b = other->controlMap()->binding(ControlMap::emergencyStop());
+    QVERIFY2(b != nullptr, "a stop with another id was loaded as a second stop the panel cannot see");
+    QCOMPARE(b->channel, 9u);
+    delete other;
+    QByteArray two = odd;
+    two.replace("</ControlMap>", "<Trigger Universe=\"0\" Channel=\"11\" Target=\"EmergencyStop\" ID=\"6\"/></ControlMap>");
+    Doc *third = new Doc(this);
+    QVERIFY(loadShow(third, two));
+    QCOMPARE(third->controlMap()->count(), 1);      // one stop
+    delete third;
+}
+
+void ControlMap_Test::aSecondValueAfterTheLearnPressEndsTheSwallow()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->learn(ControlMap::emergencyStop());
+    sendAll(kStopNote, { 127, 0, 127 });            // bound; the release of this press is lost
+    QVERIFY(cm->binding(ControlMap::emergencyStop()) != nullptr);
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    send(kStopNote, 127);                           // may be the hold repeating
+    send(kStopNote, 127);                           // a second value: a real press
+    tick(3);
+    QVERIFY2(!a->isRunning(), "real presses in the first second were swallowed");
+}
+
+void ControlMap_Test::aLearnTakesAHeldControlAndLetsGoOfIt()
+{
+    Scene *a = scene("Warm", 0);
+    Scene *b = scene("Cool", 1);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 20, ControlMap::function(a->id()), ControlMap::Momentary });
+    send(20, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    cm->learn(ControlMap::function(b->id()));
+    send(20, 127);                                  // the held control is the one learned
+    tick(3);
+    QVERIFY2(!a->isRunning(), "the learn left what the control held running");
+    send(20, 0);
+    tick(2);
+    QVERIFY(!a->isRunning());
+    send(20, 127);                                  // B's first press is a press
+    tick(2);
+    QVERIFY2(b->isRunning(), "the first press after the learn was eaten");
+    send(20, 0);
+}
+
+void ControlMap_Test::aResetLetsGoOfTheInput()
+{
+#ifdef CONTROLMAP_HAS_INPUT_PROBE
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 20, ControlMap::function(a->id()), ControlMap::Momentary });
+    send(20, 127);
+    cm->removeBinding(ControlMap::function(a->id()));
+    QVERIFY(cm->isInputConnected());                // held: its release is still coming
+    cm->reset();                                    // a new show
+    QVERIFY2(!cm->isInputConnected(), "input stayed connected after reset with nothing bound");
+#else
+    QFAIL("this build cannot say whether input is connected");
+#endif
 }
 
 void ControlMap_Test::aLostReleaseAtLearnTimeDoesNotSwallowTheStop()

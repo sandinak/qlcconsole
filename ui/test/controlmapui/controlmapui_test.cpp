@@ -264,15 +264,17 @@ void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
     QVERIFY2(button->text().contains("moves like a fader"), qPrintable(button->text()));
     QVERIFY(button->property("stopDead").toBool());
     QCOMPARE(rebuilt.count(), 0);
-    // A visible mark: red at the centre, by hue (the style differs per platform).
-    const QImage shot = button->grab().toImage();
-    const QColor px = shot.pixelColor(shot.width() / 2, shot.height() / 2);
-    QVERIFY2(px.red() > px.green() + 80 && px.red() > px.blue() + 80 || !button->styleSheet().isEmpty(),
-             qPrintable(px.name()));
+    // A visible mark: the red style, which the button wears.
     QVERIFY(button->styleSheet().contains("b00020"));
     QTableWidget *table = panel.table();
     QCOMPARE(table->rowCount(), 1);
     QVERIFY2(table->item(0, 0)->text().contains("moves like a fader"), qPrintable(table->item(0, 0)->text()));
+    // ALL OFF in the Last line does not hide the flag the next instant.
+    cm->handleInput(0, 7, 0);
+    cm->handleInput(0, 7, 50);
+    QLabel *last = panel.findChild<QLabel *>("controlMapLast");
+    QVERIFY(last != nullptr);
+    QVERIFY2(last->text().contains("ALL OFF") && last->text().contains("moves like a fader"), qPrintable(last->text()));
     // An unrelated learn and removal keep it.
     Scene *a = scene("Warm");
     cm->setBinding({ 0, 9, ControlMap::function(a->id()), ControlMap::Toggle });
