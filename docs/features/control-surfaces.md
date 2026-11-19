@@ -96,7 +96,8 @@ button under the Control Map table.
   the show loads or the controller is plugged in, is a press and fires;
   **(b)** any other value above 0 fires when a second has passed since the
   last ALL OFF that control sent. So a held button that keeps resending, or a
-  fader that keeps moving, sends ALL OFF about once a second.
+  fader that keeps moving, sends ALL OFF about once a second. The second's
+  wait starts only when an ALL OFF actually ran.
 
   | The control sends | The stop does |
   |---|---|
@@ -119,10 +120,15 @@ button under the Control Map table.
   again (an unrelated learn or removal keeps it) and the stop still fires as
   the table shows. A fader moved slowly enough (a step a second or slower) is
   never recognised, because it looks like a button pressed again; it stops
-  the show on each move, which is the safe side. If the input profile calls the control a fader or knob, or
-  it is a computer key (a show file can put it there), the press is **refused**
-  in words on the footer (once per hold) and the button and row say *not a
-  button* or *a computer key cannot be the stop*; learn it on a button.
+  the show on each move, which is the safe side. If the input profile calls the control a fader or knob, the stop
+  **still fires** under the same press rule, and is flagged the same way: the
+  footer says once per hold that it is a fader or knob, and the button and row
+  say *is a fader or knob*; learn it on a button. A computer key (a show file
+  can put it there) cannot be the stop: the press is refused in words on the
+  footer and the button and row say *a computer key cannot be the stop*.
+- **A button that keeps resending its value while held** fires one ALL OFF at
+  the moment you learn it. That is deliberate: an extra ALL OFF beats a
+  missed one.
 - **A lost release at learn time** does not hold the first real press: the
   press that taught the stop is ignored until its release, until a second value arrives, or for one second.
 - It is saved with the show. A QLC+ 4 build opens the show and skips it.

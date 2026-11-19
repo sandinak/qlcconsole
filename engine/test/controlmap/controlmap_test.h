@@ -68,13 +68,15 @@ private slots:
     void everyPressOfTheStopIsAllOff();
     void theStopIsNotHeldByTheDoubleGoGuard();
     void theStopSurvivesAReplugAndRepeats();
-    void aBoundFaderNeverStops();
+    void aStopOnAProfileFaderStillFires();
+    void aRefusedAllOffDoesNotHoldBackTheNext();
+    void aStopWithNoIdLoadsAsTheStop();
     void theStopIsSavedWithTheShow();
     void aKeyFollowsTheSurfaceRule();
     // the independent review's findings
     void theStopWorksWhileALearnIsListening();
     void aRealSecondPressIsNotDebounced();
-    void aStopThatCannotWorkSaysSo();
+    void aStopOnAProfileKnobFiresAndSaysSo();
     void aBoundFaderIsFlaggedLoudlyAndStillStops();
     void theStopFiresPerThePressRule();
     void aLostReleaseAtLearnTimeDoesNotSwallowTheStop();
