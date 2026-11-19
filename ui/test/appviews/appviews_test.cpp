@@ -2588,14 +2588,23 @@ void AppViews_Test::aPmjOverlayHearsOnlyItsOwnBoard()
        (the Grand Master) and every other PMJ channel, and then move its LEDs
        to that universe. Now only the universe whose input is patched with the
        PMJ Black 1 profile is the board. */
-    QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
-    stubDir.setFilter(QDir::Files);
-    stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    // The working directory is not where the build put it by now (a test
+    // before this one moved it): find the stub from the program's own place too.
     IOPluginCache *cache = m_app->doc()->ioPluginCache();
-    if (cache->plugin(QStringLiteral("I/O Plugin Stub")) == nullptr)
+    for (const QString &where : { QStringLiteral("../../../engine/test/iopluginstub"),
+                                  QCoreApplication::applicationDirPath() + QStringLiteral("/../../../engine/test/iopluginstub"),
+                                  QCoreApplication::applicationDirPath() + QStringLiteral("/../../../../../../engine/test/iopluginstub") })
+    {
+        if (cache->plugin(QStringLiteral("I/O Plugin Stub")) != nullptr)
+            break;
+        QDir stubDir(where);
+        stubDir.setFilter(QDir::Files);
+        stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
         cache->load(stubDir);
+    }
     IOPluginStub *stub = static_cast<IOPluginStub *>(cache->plugin(QStringLiteral("I/O Plugin Stub")));
-    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    QVERIFY2(stub != nullptr, qPrintable(QStringLiteral("the I/O plugin stub did not load (cwd %1, app %2)")
+                                             .arg(QDir::currentPath(), QCoreApplication::applicationDirPath())));
     auto restore = qScopeGuard([this]() { m_app->clearDocument(); });
     m_app->clearDocument();
     InputOutputMap *iom = m_app->doc()->inputOutputMap();
