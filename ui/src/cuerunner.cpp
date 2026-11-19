@@ -2148,7 +2148,7 @@ void CueRunner::refreshHitStrip()
             if (Function *f = m_doc->function(st->lookFunction(h)))
             {
                 connect(f, &Function::running, b, showOn);
-                connect(f, &Function::stopped, b, showOn);
+                connect(f, qOverload<quint32>(&Function::stopped), b, showOn);
             }
         }
         showOn();
