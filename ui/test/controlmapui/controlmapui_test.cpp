@@ -40,6 +40,7 @@
 #include "virtualconsole/vcbutton.h"
 #include "virtualconsole/vcframe.h"
 #include "controlmappanel.h"
+#include <QGroupBox>
 #include "showtreeview.h"
 #include "keytriggers.h"
 #include "cuerunner.h"

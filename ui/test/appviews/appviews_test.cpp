@@ -114,6 +114,7 @@
 #include "inputoutputmanager.h"
 #include "timecodesource.h"
 #include "pmjoverlay.h"
+#include "controlmap.h"
 #include "qlcinputprofile.h"
 #undef protected
 #undef private
