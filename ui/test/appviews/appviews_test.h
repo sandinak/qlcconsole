@@ -42,8 +42,6 @@ private slots:
     /** A control surface's Blind is the console's Blind button: in
      *  Operate never a mute of the live show */
     void aControlSurfaceBlindFollowsTheConsolesRule();
-    void aPmjOverlayHearsOnlyItsOwnBoard();
-    void aPmjFaderOrEncoderInOperateEditsNothing();
 
     /** Picking a view from the View menu switches to it even when an earlier
      *  tab has been detached and every index after it has shifted. */
@@ -322,6 +320,10 @@ private slots:
      *  tab goes before the Doc, so its hide event (which stops its preview)
      *  doesn't land on a freed Doc. Last: it deletes the app. */
     void quittingWithTheShowTreeShowing();
+
+    /** CS1: the PMJ overlay hears only its own board, and edits nothing in Operate. */
+    void aPmjOverlayHearsOnlyItsOwnBoard();
+    void aPmjFaderOrEncoderInOperateEditsNothing();
 
 private:
     /** Two lasers on the plot, Show only; their ids */

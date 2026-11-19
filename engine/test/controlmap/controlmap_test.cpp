@@ -420,7 +420,10 @@ void ControlMap_Test::aCueListGoesAndACueJumps()
     tick(3);
     QVERIFY(!chaser->isRunning());
 
-    QCOMPARE(routes.count(), 7);   // every GO and Stop the controls above sent
+    // Every GO and Stop the controls above sent. (Not a seventh: the release
+    // of the Stop-only press, once the mode was changed to Momentary, used to
+    // send a Stop of its own; a press that started nothing has no release.)
+    QCOMPARE(routes.count(), 6);
     for (ShowControl::Route r : routes)
         QCOMPARE(r, ShowControl::RouteControlMap);
 }
