@@ -89,6 +89,9 @@ public:
     /** The numeric line and network ("172.18.2.0/24", may be empty) this
      *  pending patch was loaded with, written back unchanged by saveXML()
      *  so a show saved while offline is byte-for-byte what it was. */
+    /** The interface name this pending patch waits for (empty when it
+     *  waits on a line number only, F3: pendingByNumber()). PatchUndo. */
+    QString pendingUid() const { return isPending() && m_pendingByNumber == false ? m_pendingUID : QString(); }
     quint32 pendingLine() const { return m_pendingLine; }
     QString pendingNetwork() const { return m_pendingNetwork; }
 
@@ -337,6 +340,9 @@ private:
     bool m_fromShowOnlyHold = false;
     bool m_sharedLine = false;
     quint32 m_loadedLine = UINT_MAX;
+    /** The parameters the plugin has for this open line, or this patch's
+     *  own when the plugin's entry for the universe is another line's */
+    QMap<QString, QVariant> lineParameters() const;
     /** The patch parameters cache */
     QMap<QString, QVariant>m_parametersCache;
     /** See setClosingFrame() */

@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Undoing a patch change keeps a leg whose interface is away, and two legs
+  of one universe on two interfaces each keep their node.** Undo used to
+  delete a waiting (pending) output leg and shift its neighbour's target onto
+  the wrong one; and the second leg's node was lost on save and undo because
+  the plugin keeps one target per universe. Each leg now reads and saves its
+  own; old shows load and save the same.
 - **View ▸ Workspace ▸ Tabs…: every box works, or there is none.** A click
   anywhere on a tab's row shows or hides it (on macOS only the small box
   did). Connections and Run, which are always there, no longer show a tick

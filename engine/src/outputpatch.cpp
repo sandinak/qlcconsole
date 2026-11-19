@@ -490,8 +490,7 @@ void OutputPatch::setPluginParameters(const QMap<QString, QVariant> &values, con
        Never a feedback patch: the plugin keeps one entry per universe, the
        output's (review 21, V2) -- it clears only what it cached itself. */
     const bool byPlugin = open && m_isFeedback == false;
-    const QMap<QString, QVariant> stored = byPlugin
-        ? m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Output) : QMap<QString, QVariant>();
+    const QMap<QString, QVariant> stored = byPlugin ? lineParameters() : QMap<QString, QVariant>();
     bool retarget = false;
     for (auto it = values.constBegin(); it != values.constEnd(); ++it)
         if (isTargetParameter(it.key())
@@ -535,7 +534,7 @@ void OutputPatch::replacePluginParameters(const QMap<QString, QVariant> &values)
     /* What the line has now: the plugin's when open (a default is absent);
        a feedback patch only its own (the plugin's entry is the output's). */
     const QMap<QString, QVariant> now = open && m_isFeedback == false
-        ? m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Output) : m_parametersCache;
+        ? lineParameters() : m_parametersCache;
     QStringList unset;
     for (auto it = now.constBegin(); it != now.constEnd(); ++it)
         if (values.contains(it.key()) == false)
@@ -627,6 +626,20 @@ void OutputPatch::unSetPluginParameter(QString prop)
     setPluginParameters(QMap<QString, QVariant>(), QStringList() << prop);
 }
 
+QMap<QString, QVariant> OutputPatch::lineParameters() const
+{
+    /* What the plugin has for this patch's open line. The plugin keeps one
+       entry per universe, its output line's: a second leg of the universe
+       on another line reads {} there, so it reads its own cache -- every
+       parameter it set went through this patch. No work on the frame path:
+       only the callers below (undo, save, a parameter change) read it. */
+    QMap<QString, QVariant> p = m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Output);
+    if (p.isEmpty() && m_parametersCache.isEmpty() == false
+        && m_plugin->ownsOutputParameters(m_universe, m_pluginLine) == false)
+        return m_parametersCache;
+    return p;
+}
+
 QMap<QString, QVariant> OutputPatch::getPluginParameters()
 {
     /* A pending patch (see setPending()) has no real line yet, so there is
@@ -638,7 +651,7 @@ QMap<QString, QVariant> OutputPatch::getPluginParameters()
        to say yet, is what keeps a pending ArtNet patch's target IP and port
        visible instead of reading back as broadcast/untargeted. */
     if (m_plugin != NULL && m_pluginLine != QLCIOPlugin::invalidLine())
-        return m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Output);
+        return lineParameters();
 
     return m_parametersCache;
 }

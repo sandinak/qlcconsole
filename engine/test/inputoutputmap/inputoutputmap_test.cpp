@@ -3879,6 +3879,39 @@ void InputOutputMap_Test::r21r_twoLegsOnTwoLinesEachKeepTheirTarget()
                         + "': the show saves it, and undo restores it, without its node"));
 }
 
+/* A show saved before the per-line fix (two Art-Net legs of one universe on
+   two interfaces, each with its node) loads with each leg on its node, and
+   saves the same two Output elements, the first with its PluginParameters. */
+void InputOutputMap_Test::r21r_anOldShowWithTwoLegsLoadsAndSavesTheSame()
+{
+    const QString xml = QStringLiteral(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Fog\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.12.7\" Line=\"0\">\n"
+        "   <PluginParameters outputIP=\"10.4.12.50\" outputUni=\"3\"/>\n"
+        "  </Output>\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.13.7\" Line=\"1\">\n"
+        "   <PluginParameters outputIP=\"10.4.13.60\" outputUni=\"4\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n");
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "10.4.12.7", 24)
+                    << localAddr("en1", "10.4.13.7", 24),
+                QMap<QString, QString>{ { "10.4.12.", "10.4.12.7" }, { "10.4.13.", "10.4.13.7" } });
+    namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7" << "10.4.13.7");
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, xml));
+    QCOMPARE(iom.outputPatchesCount(0), 2);
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(0, 1)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString(), QString("10.4.12.50"));
+    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputUni").toInt(), 3);
+    QCOMPARE(iom.outputPatch(0, 1)->getPluginParameters().value("outputIP").toString(), QString("10.4.13.60"));
+    QCOMPARE(iom.outputPatch(0, 1)->getPluginParameters().value("outputUni").toInt(), 4);
+    const QString saved = saveIOMap(iom);
+    QCOMPARE(patchElements(saved), patchElements(xml));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();

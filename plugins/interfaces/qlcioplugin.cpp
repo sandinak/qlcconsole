@@ -193,6 +193,11 @@ QMap<QString, QVariant> QLCIOPlugin::getParameters(quint32 universe, quint32 lin
     return QMap<QString, QVariant>();
 }
 
+bool QLCIOPlugin::ownsOutputParameters(quint32 universe, quint32 line) const
+{
+    return m_universesMap.contains(universe) && m_universesMap[universe].outputLine == line;
+}
+
 void QLCIOPlugin::addToMap(quint32 universe, quint32 line,
                            QLCIOPlugin::Capability type)
 {

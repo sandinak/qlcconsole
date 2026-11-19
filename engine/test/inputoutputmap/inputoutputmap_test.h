@@ -143,6 +143,7 @@ private slots:
     /** Pending leg round-trip and per-line parameters (found in the review of c54477406) */
     void r21r_undoKeepsAPendingLegAndTheOthersTarget();
     void r21r_twoLegsOnTwoLinesEachKeepTheirTarget();
+    void r21r_anOldShowWithTwoLegsLoadsAndSavesTheSame();
     /** Review of c54477406 (independent): red tests, see each */
     void r21r_venueSwitchSendsNoClosingFrameToTheDefault();
     void r21r_clearingTheFeedbackTargetKeepsTheOutputOnItsNode();

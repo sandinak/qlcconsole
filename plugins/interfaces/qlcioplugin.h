@@ -805,6 +805,13 @@ public:
      */
     virtual QMap<QString, QVariant> getParameters(quint32 universe, quint32 line, Capability type) const;
 
+    /** True when the plugin's one output parameter entry for @p universe
+     *  is @p line's. The plugin keeps ONE output line and one parameter
+     *  map per universe (PluginUniverseDescriptor): a second leg of the
+     *  universe on another line is not the owner and getParameters() reads
+     *  {} for it, so its patch (OutputPatch) keeps and reads its own. */
+    bool ownsOutputParameters(quint32 universe, quint32 line) const;
+
 signals:
     /**
      * Tells that the plugin's configuration has changed. Usually this means
