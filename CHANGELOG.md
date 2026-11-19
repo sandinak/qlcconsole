@@ -58,10 +58,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   does (in Design only what is armed). A scene or effect on a key stays
   Operate-only. A key held back says why on the footer.
 - **The emergency stop is never lost for more than one press.** Nothing marks
-  it dead for the session: a press is a value above 0 after a 0, the first
-  value after a load or replug, or a value after a second of quiet (a lost
-  release). A fader or encoder bound as the stop is one press per run, not one
-  per step, and is flagged loudly (red button and row, one footer line) until
+  it dead for the session: a value above 0 after a 0, or the first value
+  after a load or replug, fires; any other value fires once a second has
+  passed since its last ALL OFF (so a lost release costs at most a second). A
+  fader or encoder bound as the stop fires about once a second while it
+  moves, not on every step, and is flagged loudly (red button and row, one footer line) until
   learned again on a button. A release that was lost at learn time no longer
   swallows the first press, a stop bound to a computer key says it does
   nothing, a scene held by a button still lets go when its binding is removed,
