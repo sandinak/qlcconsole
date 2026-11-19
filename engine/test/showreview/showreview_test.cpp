@@ -2288,6 +2288,7 @@ void ShowReview_Test::ven11()
     front->setOwner(RigOwner::House);
     QVERIFY(HouseRole::fillRoles(m_doc, hall, { { HouseRole::Front, { front->id() } } }));
     // Stage up has a light (Front); the house cues have none here.
+    QVERIFY(fires("VEN-11"));
     const QList<ReviewFinding> f = findings("VEN-11");
     QStringList said;
     for (const ReviewFinding &x : f)
