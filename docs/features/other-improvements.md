@@ -1318,7 +1318,7 @@ list (GO), one cue of a list (a jump to it) or a hit.
 - **Where it fires.** A MIDI or OSC press follows the mode: a scene or
   effect in Design or Operate; a cue list or cue in Operate, in Design only
   when armed; a hit in Operate only where its place is live. A press held
-  back says why in the footer. The rules, the **Emergency stop…** button
+  back says why in the footer. The rules, the **Emergency Stop…** button
   and the checklist for each desk are in [Control surfaces](control-surfaces.md).
 - **Or the QLC+ way.** A Virtual Console button, slider or cue list with
   an external input works as in QLC+, and is what you want for a fader

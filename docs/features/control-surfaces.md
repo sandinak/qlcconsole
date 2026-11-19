@@ -16,7 +16,7 @@ the same control, so give each control one job.
 | What | Where you set it | What it does |
 |---|---|---|
 | **Control Map** | Right-click a scene, effect, cue list, cue or hit ▸ **Learn Trigger…**; the table is **Connections ▸ Devices ▸ Show control &amp; sync ▸ Control Map** | One button fires one thing. See [Control Map](other-improvements.md#control-map-midi-and-osc-triggers). |
-| **Emergency stop** | The **Emergency stop…** button under the Control Map table | One button is ALL OFF (below). |
+| **Emergency stop** | The **Emergency Stop…** button under the Control Map table | One button is ALL OFF (below). |
 | **Encoder bank** | The section under the Control Map table | Endless encoders turn the Workbench selection in Design. See [Build](build.md#encoder-banks-a-midi-controller-turns-the-selection). |
 | **Virtual Console input** | A widget's **External Input** | A button, a slider (the one to use for a fader that sets a level) or a cue list, as in QLC+. |
 | **Speed master and Grand Master inputs** | The master's **Inputs…** | A fader or button for a master. |
@@ -70,7 +70,7 @@ a desk does not.
 
 ## The emergency stop
 
-A control surface can have **one emergency stop**: **Emergency stop…**, the
+A control surface can have **one emergency stop**: **Emergency Stop…**, the
 button under the Control Map table.
 
 - It is **ALL OFF** through the same path as the pad's four-together stop,
@@ -114,7 +114,7 @@ button under the Control Map table.
 - **A stop on the wrong kind of control is flagged loudly, not disarmed.**
   When different values arrive with no 0 between and less than a second apart, the footer says once
   *The emergency stop is bound to …, which moves like a fader: learn it again
-  on a button.*, and the Emergency stop… button and the Control Map row go red
+  on a button.*, and the Emergency Stop… button and the Control Map row go red
   and say *moves like a fader*. The flag stays until the stop is learned
   again (an unrelated learn or removal keeps it) and the stop still fires as
   the table shows. A fader moved slowly enough (a step a second or slower) is
@@ -206,7 +206,7 @@ after any build that changes a surface, and say which build.
 6. Learn **Go** on the main cue list (Control Map). Press it. *Expect:* the
    list GOes; press twice within a second and the second is held (*Second
    GO held*).
-7. Learn **Emergency stop…** on a PMJ button: press, release, press. *Expect:*
+7. Learn **Emergency Stop…** on a PMJ button: press, release, press. *Expect:*
    the dialog asks you to press it again, then shows the control. Start the
    list and a scene, press the button in Design and then in Operate.
    *Expect:* everything stops each time, with *ALL OFF* in the Control
@@ -230,7 +230,7 @@ after any build that changes a surface, and say which build.
 3. In Design press a pad learned on a cue in a list that is not the Run
    tab's. *Expect:* *Not fired…armed.* Select that list in the Show Tree and
    press again: *Expect:* it fires.
-4. Learn **Emergency stop…** on a pad (press, release, press) and press it
+4. Learn **Emergency Stop…** on a pad (press, release, press) and press it
    while a scene runs, in Design and in Operate. *Expect:* ALL OFF each
    time. Try the track fader: *Expect:* refused.
 5. Unplug and replug with a pad held. *Expect:* the lights come back and the
@@ -242,7 +242,7 @@ after any build that changes a surface, and say which build.
    layer in Build and turn an encoder in Design. *Expect:* the value moves.
 2. Switch to Operate and turn an encoder. *Expect:* *Encoders are off in
    Operate -- switch to Design to edit.*
-3. Learn **Emergency stop…** on a bottom-row button. Try an encoder or the
+3. Learn **Emergency Stop…** on a bottom-row button. Try an encoder or the
    fader instead. *Expect:* the button learns after the second press; the
    fader and the encoder are refused.
 

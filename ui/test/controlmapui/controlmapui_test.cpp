@@ -182,7 +182,7 @@ void ControlMapUi_Test::theEmergencyStopLearnsOneButtonWithASecondPress()
     QPushButton *button = panel.findChild<QPushButton *>("controlMapEmergencyStop");
     QVERIFY(button != nullptr);
     QVERIFY(button->isVisibleTo(&panel));
-    QCOMPARE(button->text(), QString("Emergency stop…"));
+    QCOMPARE(button->text(), QString("Emergency Stop…"));
 
     ControlLearnDialog d(m_doc, ControlMap::emergencyStop());
     d.show();
@@ -224,7 +224,7 @@ void ControlMapUi_Test::theEmergencyStopLearnsOneButtonWithASecondPress()
     QCOMPARE(b->channel, 188u);
 
     // The panel lists it, with no choice of how it acts, and names the control.
-    QVERIFY2(button->text().startsWith("Emergency stop: ") && button->text().contains("Channel 189"),
+    QVERIFY2(button->text().startsWith("Emergency Stop: ") && button->text().contains("Channel 189"),
              qPrintable(button->text()));
     QTableWidget *table = panel.table();
     QCOMPARE(table->rowCount(), 1);

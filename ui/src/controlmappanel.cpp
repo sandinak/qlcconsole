@@ -249,10 +249,10 @@ void ControlMapPanel::refreshStop()
     const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
     const QString problem = cm->stopProblem();
     const bool dead = !problem.isEmpty();
-    m_estop->setText(stop == nullptr ? tr("Emergency stop…")
-                                     : dead ? tr("Emergency stop: %1 %2 — learn it on a button…")
+    m_estop->setText(stop == nullptr ? tr("Emergency Stop…")
+                                     : dead ? tr("Emergency Stop: %1 %2 — learn it on a button…")
                                                   .arg(cm->controlName(stop->universe, stop->channel), problem)
-                                            : tr("Emergency stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
+                                            : tr("Emergency Stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
     m_estop->setStyleSheet(dead ? QStringLiteral("color: white; background: #b00020;") : QString());
     m_estop->setProperty("stopDead", dead);
     m_estop->setProperty("stopProblem", problem);

@@ -62,7 +62,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 ### Added
 
 - **An emergency stop on a control surface.** **Connections ▸ Devices ▸ Show
-  control & sync ▸ Control Map ▸ Emergency stop…** learns one button (press,
+  control & sync ▸ Control Map ▸ Emergency Stop…** learns one button (press,
   release, press again to confirm; a fader, knob, encoder or computer key is
   refused) that is ALL OFF through the one path: in Design or Operate, every
   press, never toggled or held by the double-GO guard. In Companion the new
