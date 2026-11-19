@@ -102,6 +102,16 @@ lift the refusal and drop the "Windows: not yet" notes in docs/features/show-con
 
 ---
 
+## Two legs of one universe on two lines of one plugin: one live target
+
+Undo and save now keep each leg's own target (fix/051-patch-legs:
+`OutputPatch::lineParameters()` reads the leg's cache when the plugin's one
+store belongs to the other line). What is *sent* is unchanged: QLCIOPlugin
+still keeps one output line and one parameter map per universe
+(`PluginUniverseDescriptor`), so the second leg has no live target of its own
+inside the plugin. The full fix is a per-(universe, line) store in the
+plugin interface. Pre-existing (stock).
+
 ## Watch: WledConfigCheck_Test::aFixtureAtAnOldAddressFollowsItsDeviceByMac
 
 Counted 2 HTTP posts instead of 1 once on dink under load (feat/046-candle-safety's
