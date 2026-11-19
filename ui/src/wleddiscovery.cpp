@@ -141,6 +141,7 @@ WledDiscovery::WledDiscovery(Doc *doc, QObject *parent)
     connect(m_doc, &Doc::fixtureAdded, this, &WledDiscovery::reconcile);
     connect(m_doc, &Doc::fixtureRemoved, this, &WledDiscovery::reconcile);
     connect(m_doc, &Doc::fixtureChanged, this, &WledDiscovery::reconcile);
+    connect(m_doc, &Doc::loaded, this, &WledDiscovery::reconcile);
 }
 
 WledDiscovery::~WledDiscovery()
@@ -516,6 +517,10 @@ QList<WledDiscovery::Move> WledDiscovery::moves() const
 
 void WledDiscovery::reconcile()
 {
+    // Once per show read (Doc::loaded), not once per fixture it adds.
+    if (m_doc->loadStatus() == Doc::Loading)
+        return;
+
     // Gone quiet: not answered for three rounds.
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const qint64 quiet = 3LL * m_timer->interval() + 10000;

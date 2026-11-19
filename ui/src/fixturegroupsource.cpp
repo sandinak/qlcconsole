@@ -170,6 +170,12 @@ void FixtureGroupSource::reload()
 {
     if (m_clearing)
         return; // doc is tearing down; its fixture list cache holds freed ptrs
+    /* A show being read adds its fixtures and groups one by one, each a
+       signal here: rebuilding the whole tree for each was O(n^2) (2,800
+       fixtures: minutes, never finished on Windows). Doc::loaded rebuilds
+       it once, below the load. */
+    if (m_doc->loadStatus() == Doc::Loading)
+        return;
 
     clear();
     m_folderMap.clear();

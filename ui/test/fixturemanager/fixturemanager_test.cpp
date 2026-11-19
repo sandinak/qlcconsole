@@ -65,6 +65,7 @@
 #include "addfixture.h"
 #include "creategroupsdialog.h"
 #include "fixturegroupsource.h"
+#include "monitorinventorypanel.h"
 #include "outputrulesdialog.h"
 #include "doc.h"
 #undef private
@@ -1894,6 +1895,91 @@ void FixtureManager_Test::outputRulesForFixturesAndGroups()
     });
     src.slotContextMenu(src.visualItemRect(grp).center());
     QVERIFY2(texts.contains("Output Rules…"), qPrintable(texts.join(" | ")));
+}
+
+/* 0.5.1: a 95-universe, 2,800-fixture show never finished opening on
+   Windows. Each list that follows the show rebuilt itself once per fixture
+   (or group) the load added -- Build's Groups & fixtures and the plot's
+   Inventory on every fixtureAdded, the Fixture Manager's tree re-sorting the
+   whole tree for every fixture row -- O(n^2). Counted, not timed: a show
+   read rebuilds each of them a bounded number of times, however big. */
+void FixtureManager_Test::aShowLoadBuildsEachListOnce()
+{
+    const int universes = 4;
+    const int perUniverse = 40;
+    const int fixtures = universes * perUniverse;
+
+    QByteArray xml;
+    {
+        Doc src(this);
+        for (int u = 0; u < universes; u++)
+            QVERIFY(src.inputOutputMap()->addUniverse());
+        QList<quint32> ids;
+        for (int i = 0; i < fixtures; i++)
+        {
+            Fixture *fxi = new Fixture(&src);
+            fxi->setName(QString("Par %1").arg(i + 1, 3, 10, QChar('0')));
+            fxi->setChannels(4);
+            fxi->setUniverse(quint32(i / perUniverse));
+            // Patched back to front: the list's order is its sort, not the file's.
+            fxi->setAddress(quint32((perUniverse - 1 - i % perUniverse) * 4));
+            QVERIFY(src.addFixture(fxi));
+            ids << fxi->id();
+        }
+        for (int g = 0; g < 8; g++)
+        {
+            FixtureGroup *grp = new FixtureGroup(&src);
+            grp->setName(QString("Group %1").arg(g));
+            QVERIFY(src.addFixtureGroup(grp));
+            for (int i = g; i < fixtures; i += 8)
+                grp->assignFixture(ids.at(i));
+        }
+        QXmlStreamWriter w(&xml);
+        w.writeStartDocument();
+        QVERIFY(src.saveXML(&w));
+        w.writeEndDocument();
+    }
+
+    FixtureManager mgr(nullptr, m_doc);
+    FixtureGroupSource groups(m_doc);
+    MonitorInventoryPanel inventory(m_doc, nullptr);
+
+    int groupRebuilds = 0, inventoryRebuilds = 0, managerSorts = 0;
+    connect(groups.model(), &QAbstractItemModel::modelReset, this, [&]() { groupRebuilds++; });
+    connect(inventory.m_tree->model(), &QAbstractItemModel::modelReset,
+            this, [&]() { inventoryRebuilds++; });
+    connect(mgr.m_fixtures_tree->model(), &QAbstractItemModel::layoutChanged,
+            this, [&]() { managerSorts++; });
+
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(m_doc->loadXML(r));
+    QCoreApplication::processEvents();
+
+    QCOMPARE(m_doc->fixtures().size(), fixtures);
+    QCOMPARE(m_doc->fixtureGroups().size(), 8);
+    // Old code: one each per fixture (and per group): 160+.
+    QVERIFY2(groupRebuilds <= 2, qPrintable(QString::number(groupRebuilds)));
+    QVERIFY2(inventoryRebuilds <= 2, qPrintable(QString::number(inventoryRebuilds)));
+    QVERIFY2(managerSorts <= 4, qPrintable(QString::number(managerSorts)));
+
+    // And each list shows the whole show once it is read.
+    int groupRows = 0;
+    for (QTreeWidgetItemIterator it(&groups); *it; ++it)
+        if ((*it)->data(0, FixtureGroupSource::KindRole).toInt() == FixtureGroupSource::GroupNode)
+            groupRows++;
+    QCOMPARE(groupRows, 8);
+    QCOMPARE(mgr.m_fixtures_tree->fixturesCount(), fixtures);
+    // Sorted by address, as before: universe 1's rows run Par 040 .. Par 001.
+    QTreeWidgetItem *uni1 = nullptr;
+    for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it; ++it)
+        if ((*it)->data(KColumnName, PROP_UNIVERSE).isValid()
+            && (*it)->data(KColumnName, PROP_UNIVERSE).toUInt() == 0)
+            uni1 = *it;
+    QVERIFY(uni1 != nullptr);
+    QCOMPARE(uni1->childCount(), perUniverse);
+    QCOMPARE(uni1->child(0)->text(KColumnName), QString("Par 040"));
+    QCOMPARE(uni1->child(perUniverse - 1)->text(KColumnName), QString("Par 001"));
 }
 
 void FixtureManager_Test::theGroupMenuKeepsOneActionPerGroup()
