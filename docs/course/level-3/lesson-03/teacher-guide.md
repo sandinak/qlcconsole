@@ -68,7 +68,7 @@ meetings, so each symbol has to say what the light *is*.
    its definition: the spots with a yoke, the step lights as bars.
 3. "Which guesses are wrong?" Lead them to the **AT-W-ALL** washes (drawn
    as spots) and the **Lanterns** (drawn as LED PARs).
-4. **Fixtures** tab, right-click the **AT-W-ALL** group → **Plot Symbol ▸**.
+4. **Fixtures** tab, right-click the **AT-W-ALL** group → **Fixture Setup ▸ Plot Symbol ▸**.
    The first item, **Auto (Moving head spot)**, is the guess. Pick
    **Moving head round wash**, then show the plot again.
 

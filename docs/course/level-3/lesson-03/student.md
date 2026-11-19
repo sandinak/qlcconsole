@@ -41,11 +41,11 @@ Switch after each correction.
    Their Closest Plot Symbol**.
 4. With the Designer, write down two guesses that are wrong for our rig.
 5. Click the **Fixtures** tab (⇧⌘2). Right-click the group **AT-W-ALL**
-   (folder **AT**) → **Plot Symbol ▸**. The first item, **Auto (Moving
+   (folder **AT**) → **Fixture Setup ▸ Plot Symbol ▸**. The first item, **Auto (Moving
    head spot)**, is the app's guess.
 6. Choose **Moving head round wash**. Back in the **Lighting Studio**, the
    four tower washes have a round base and lens.
-7. In **Fixtures**, right-click the **Lanterns** group → **Plot Symbol ▸**
+7. In **Fixtures**, right-click the **Lanterns** group → **Fixture Setup ▸ Plot Symbol ▸**
    → under **Practicals**, **Lantern**. The six lanterns are drawn as
    lanterns.
 

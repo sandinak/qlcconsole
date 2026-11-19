@@ -64,7 +64,7 @@ is arithmetic from the plot's numbers.
 2. Right-click the wing → **Add Here ▸ Boom**. "Place on which layer?":
    the active layer is locked. Pick **Towers**.
 3. Name it, **Pipe height** `14'`, OK. Add the par (**Add Here ▸
-   Fixture…**), then right-click it → **Mount on ▸ Boom ▸ SR Boom**.
+   Fixture…**), then right-click it → **Mounting & Masking ▸ Mount on ▸ Boom ▸ SR Boom**.
 4. Double-click the par: **Face ▸ Stage left**, then **Aim & Mount**:
    **Points (° from DS)** reads 270; type `20 down` in **Tilt in yoke**.
 5. Right-click the boom → **Lock Layer “Towers”**; drag it: the status line
@@ -83,7 +83,7 @@ is arithmetic from the plot's numbers.
 |---|---|---|
 | "Place on which layer?" | The active layer (House) is locked | "That's on purpose: pick **Towers**." |
 | Nothing happens on **Add Here** | The plot is locked (**Plot Locked**) | "Click **Edit Plot**." |
-| **Mount on ▸ Boom** is greyed | No boom yet | "Add the boom first." |
+| **Mounting & Masking ▸ Mount on ▸ Boom** is greyed | No boom yet | "Add the boom first." |
 | The par points the wrong way | Face is the side of the mount, not the target | "Face says which way it throws: Stage left throws toward stage left." |
 | They can't drag the boom | A lock | "Read the status line: layer, or the object's own?" |
 | A length reads in metres | Settings ▸ Units | "The fields follow Settings ▸ Units: set feet and inches." |

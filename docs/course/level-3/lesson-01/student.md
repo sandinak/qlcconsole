@@ -73,6 +73,38 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 **Stuck?** **Add ▾** greyed out: click **Design**. Red error stays: pick the
 next free address. **Apply** greyed: read the summary line.
 
+## Seeing the channels: the DMX map
+
+The patch list says where a light *should* be. On site, before you trust
+it, you want to see what the console is actually sending, and to move one
+channel by hand to find out which light answers. The Connections tab does
+both.
+
+1. Click the **Connections** tab, then **Spots, washes, beams, lanterns**
+   (Universe 1). To the right of its settings is the **DMX map**: all 512
+   channels as blocks, each patched fixture's channels shaded together.
+2. Point at a block in the **SR Truss Spot 1** run (214 to 225). The line
+   above the map names the address, the fixture, its range and the
+   channel, and the value it sends.
+3. Read the colours. Red, green, blue, amber, white and UV blocks are a dull
+   shade at 0 and bright at 255; a dimmer is a grey ramp; a **pan** block
+   carries a left-right arrow and a **tilt** block an up-down one, placed
+   by the value. A channel with nothing patched to it stays plain. The
+   legend under the map explains the rest.
+4. Click **Test**, then click or drag in a block to set that channel. The
+   top of the block is 255, the bottom 0; double-click to type a value,
+   right-click to let that channel go. The banner and the footer read
+   **Testing channels: N held**.
+5. Click **Test** again: every held channel goes back to what the show
+   gives it.
+
+Test works in Design and is refused in Operate, so you can't disturb a
+running show. The values sit on top of the show and are never saved; the
+emergency stop turns Test off too. A light set to Show only (a house light,
+say) keeps its output rules while you test it.
+
+**Stuck?** **Test** won't stay on: you are in Operate; click **Design**.
+
 ## Exit ticket
 
 1. What is a universe, and what is an address?

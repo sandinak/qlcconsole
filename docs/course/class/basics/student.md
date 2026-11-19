@@ -51,6 +51,23 @@ app: true
   aren't connected to real lights.
 - The other numbers belong to [Lesson 1.1](../1-1/).
 
+## Choosing your tabs
+
+A crew rarely needs every tab. A board op on the Run tab wants few; a
+programmer wants the Show Tree and Lighting Studio close together. The set
+and its order are yours to choose, and they are saved **with the show**, so
+the next person who opens it sees the same tabs.
+
+1. **View ▸ Workspace ▸ Tabs…**
+2. Click a tab's row to show or hide it. Drag a row to put it where you
+   want it.
+3. **OK**.
+
+**Connections** is always first, so a dead output is the first thing you
+see, and **Run** is always last. Their rows say *always first* and *always
+last*, and you can't drag them. **Restore Defaults** puts the view's own tabs back. A tab you hid is
+still in the **Window** menu.
+
 ## Opening a show
 
 1. Put the lesson's file in **Documents → qlcconsole** first. A browser

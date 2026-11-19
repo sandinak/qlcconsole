@@ -108,7 +108,8 @@ brackets.
 | **Right-click menu** | Two parts. On top, what only that spot offers (on a look row: **Set to ▸**, **None (off here)**, **Clear (inherit)**); under a line, the thing's own menu, the same everywhere you meet it: its editor first, **Delete…** last. A palette right-clicked on a cue's row has the same **Edit Palette**, **Used By ▸** and **Rename** as in the Library. [2.2] |
 | **Look Editor** | Opens under the Show Tree's page (**✎** on a layer's row, or **Edit Palette** on its right-click) to change a palette's value and name; it says *Used by* and that a shared palette changes everywhere. [2.2] |
 | **Group set** | One name for several groups, used as one layer: *Truss Sides* = Trusses SR + Trusses SL (Library: select the groups, right-click → **Make Set…**; All → Group sets). A set's layer is one layer: it can't be split, but its parts can have child layers. [2.3] |
-| **Child layer** | A layer on part of its parent (one member of its set, or a group inside it), shown **↳** under it: it sets only what it sets, and the parent lights the rest. ⇧ as you drop, or right-click the layer → **Add Child Layer**. [2.3] |
+| **Loose fixture** | A fixture in no group. **Ungrouped** in the Library lists them; New Layer from Selection gives the loose ones in a selection one layer together. [2.3, 3.4] |
+| **Child layer** | A layer on part of its parent (one member of its set, or a group inside it), shown **↳** under it: it sets only what it sets, and the parent lights the rest. ⇧ as you drop, or right-click the layer → **Layer Tools ▸ Add Child Layer**. [2.3] |
 | **Split / Merge** | Split: a layer on several groups becomes a layer per group, same looks. Merge (**More ▾ → Merge**): several layers of one cue become one. [2.3] |
 | **Symmetry** | Both sides of the stage lit the same: balanced. Breaking it draws the eye. [2.3] |
 | **Palette folder** | A folder in the Library's Palettes; a folder per song (*01-Everybody Scream*) keeps the song's own palettes together. **Duplicate** copies a palette into one. [2.2] |
@@ -139,6 +140,7 @@ brackets.
 | **Base cue** | The cue a list's released layers go back to (tick *The list's base cue* on its page; **base** in the **F** column). [2.1] |
 | **Line target** | A stage target that is a line, not a point: each light aimed at it gets its own point along it, in the order they hang (*Riser Line*). [2.5] |
 | **Spread** | How lights aimed at a line share it: +5 end to end (a fan), 0 all on the centre, below 0 crossed (−5 fully). Grouping moves them in pairs, threes…; the order strip and plan view under Position show where each lands. [2.5] |
+| **Fire Spread** | An effect that starts at the look's Aim point: the nearest head catches first and the fire runs outward at an even speed, flaring and then flickering. It burns over what is under it. [2.5] |
 | **Colour wheel / colour ring** | A spot's colour from named slots (filters on a wheel, LEDs round the lens), not mixed: a colour picks the nearest slot. [2.5] |
 | **Sub-cue** | A cue inside a cue (1.0.2.1, 1.0.2.2…) for stomps, claps and stings within a section. The first plays with GO; what they change doesn't pass on to the next cue. [2.7] |
 | **Sub GO / auto-follow** | Sub GO (⌥⌘↩, the Run tab's button) steps to the next sub-cue of the cue playing; GO still goes to the next main cue. A sub-cue set to **Auto-follow after** a wait goes on by itself (*auto 0.5s*). [2.7] |
@@ -159,12 +161,14 @@ brackets.
 |---|---|
 | **DMX** | The signal that tells real lights what to do: 512 channels per **universe**. [3.1] |
 | **Universe** | One DMX line of 512 channels. [3.1] |
+| **Pan turn** | For a head with more than a turn of pan: which of the two pans a turn apart it answers with, and so where its seam is. A beam moved across the seam swings the long way round. [3.4] |
 | **Address** | Where a light's channels start in its universe. [3.1] |
 | **Footprint** | How many channels a light takes in the mode it is set to. [3.1] |
 | **DIP switches** | Small switches on a light that set its address in binary; the Fixtures tab shows the pattern. [3.1] |
 | **Node** | A box that turns network universes into DMX cable ports. [3.1] |
 | **Patch list** | Every light, its patch, where it hangs and where its universe goes: the crew's paperwork (Fixtures → Patch List…). [3.1] |
 | **Patch** | Which address each light is at. [3.1] |
+| **DMX map** | Connections' view of a universe's 512 channels as blocks, coloured by kind and value. **Test** sets single channels by hand on top of the show, in Design only, and lets them go when switched off. [3.1] |
 | **Art-Net / sACN** | DMX sent over a network cable. [3.1] |
 | **Fixture definition** | The file that tells the app what each channel of a light does. [3.2] |
 | **Mode** | One way a light can be set up: a list of its channels in order. It decides how many channels the light takes. [3.2] |

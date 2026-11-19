@@ -69,7 +69,7 @@ our rig). Switch roles after each correction.
 ### Correct the guesses
 
 5. Click the **Fixtures** tab (⇧⌘2). Find the group **AT-W-ALL** (in the
-   folder **AT**), right-click it and open **Plot Symbol ▸**.
+   folder **AT**), right-click it and open **Fixture Setup ▸ Plot Symbol ▸**.
    - *You should see:* the first item reads **Auto (Moving head spot)**:
      that's the app's guess. The rest of the menu is in six sections:
      **Moving**, **Fixed conventional**, **Fixed LED**, **Effects**,
@@ -79,7 +79,7 @@ our rig). Switch roles after each correction.
    - *You should see:* the four audience-tower washes drawn with a round
      base and lens instead of a spot's.
 7. In the **Fixtures** tab, right-click the **Lanterns** group →
-   **Plot Symbol ▸** → under **Practicals**, **Lantern**.
+   **Fixture Setup ▸ Plot Symbol ▸** → under **Practicals**, **Lantern**.
    - *You should see:* on the plot, the six lanterns drawn as lanterns
      (from above, their base). A lantern throws no beam: when it is lit,
      its glow spreads round it. Their icons in the Fixtures tab changed

@@ -97,12 +97,19 @@ tab and Plot layers. Select a row, then:
 
 | Key | Does |
 |---|---|
-| **F2** | Renames it |
+| **F2**, **Return** | Renames it in the list |
 | **⌘C**, **⌘V** | Copy it, paste it (Ctrl+C, Ctrl+V) |
 | **⌘D** | Duplicates it |
-| **Delete** | Deletes it (**⌘Z** brings it back) |
+| **Delete** (⌫) | Deletes it (**⌘Z** brings it back) |
+| **⌘F** | Goes to the list's search box: type part of a name |
+| **Esc** | Backs out of an editor to what was showing; with nothing to back out of, lets go of the selection |
 
 Select **1.0.3 Scream**, press **⌘D**, then **Delete** on the copy.
+
+In the Show Tree, **⌘X** cuts layers (nothing goes until you paste, and **⌘V** then moves them), and
+**⌘C** with several cues selected (⌘-click) copies them all: **⌘V** puts them
+after the selected cue, in order, even in another cue list. A whole cue
+list copies the same way (Lesson 3.8).
 
 ## What did I change?
 

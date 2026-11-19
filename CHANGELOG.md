@@ -30,6 +30,19 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   far as their own undo step. Everything else that changes the rig waits
   until the editor closes, so Cancel stays exact.
 
+### Docs
+
+- **The student course catches up with 0.4.6 to 0.5.1.** Lesson 3.1 teaches
+  Connections' DMX map and its Test mode; 3.4 the pan turn, Fixture
+  Properties staying open beside the rig and loose fixtures; 3.5 the
+  emergency stop from every pad; 2.5 Fire Spread; 2.3 loose fixtures in New
+  Layer from Selection; 1.1 New here beyond the Show Tree; 1.2 the rest of
+  the edit keys and copying several cues; the class Using the app page
+  Choosing your tabs. Right-click steps that named items 0.4.13 moved now
+  give the path: Layer Tools ▸ Add Child Layer (2.3), New ▸ + Hit for This
+  Cue (2.6), Fixture Setup ▸ Definition & Mode… and Plot Symbol (3.2, 3.3),
+  Mounting & Masking ▸ Mount on (3.4). The glossary has four new terms.
+
 ## [0.5.0] - 2026-11-18
 
 The first public release since 0.4.3. It carries everything built in

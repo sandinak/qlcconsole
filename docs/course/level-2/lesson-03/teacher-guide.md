@@ -78,8 +78,8 @@ On the projector:
 2. Library → **All → Groups → Trusses**: click **Trusses SR**, ⌘-click
    **Trusses SL**, right-click → **Make Set…** → `Truss Sides`. Drag it
    onto the dashed box; **Blue**, **Full**.
-3. Right-click the layer in the tree: point at **Split** greyed out (a set
-   is one layer). **Add Child Layer → Trusses SR**, then **Amber** on it.
+3. Right-click the layer in the tree: point at **Layer Tools ▸ Split Layer** greyed out (a set
+   is one layer). **Layer Tools ▸ Add Child Layer ▸ Trusses SR**, then **Amber** on it.
 4. Leave the Steps and the top row for the students.
 
 ## 3. Hands-on (20 min)
@@ -151,8 +151,8 @@ Extension, Solo: the course test (`lessonTwoThreeSolo`) solos the Truss Sides la
 Every step of the handout is run by the course test (`ui/test/courseshow`,
 `levelTwoWithTheMouse`, `lessonTwoThreeExtension`) on the real app,
 offscreen: the Library's **Make Set…** on two selected groups, the set's
-drop and its hint, the tree's right-click menu (**Add Child Layer →
-Trusses SR**; **Split** greyed on a set's layer), the ⇧-drop of US onto
+drop and its hint, the tree's right-click menu (**Layer Tools ▸ Add Child Layer ▸
+Trusses SR**; **Split Layer** greyed on a set's layer), the ⇧-drop of US onto
 the Steps row and its hint, and what the rig sends (both sides blue; SR
 amber and SL blue; the top row white at full, the others dim blue). The
 extension (a layer on two groups, Split, Merge) and the at-home cue

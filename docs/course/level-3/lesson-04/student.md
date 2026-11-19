@@ -51,7 +51,7 @@ Roles: Driver, Navigator, Designer. Switch after each part.
    **OK**.
 5. Right-click beside the boom → **Add Here ▸ Fixture…**: **Chauvet**,
    **COREpar 40 USB**, **Mode** **8-Channel**, **Name** `SR Boom Par`, **OK**.
-6. Right-click **SR Boom Par** → **Mount on ▸ Boom ▸ SR Boom**. In Plot
+6. Right-click **SR Boom Par** → **Mounting & Masking ▸ Mount on ▸ Boom ▸ SR Boom**. In Plot
    layers it hangs under **SR Boom**.
 
    ![The plot: the boom, the par, and what hangs on what](../../images/lesson-3-4/plot-boom.png)
@@ -68,8 +68,43 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 9. **File → Save As** → `Lesson3-4-yourname.qlcc`.
 
 **Stuck?** Nothing on **Add Here**: click **Edit Plot** to unlock the plot.
-**Mount on ▸ Boom** greyed: there is no boom yet. Something moved:
+**Mounting & Masking ▸ Mount on ▸ Boom** greyed: there is no boom yet. Something moved:
 **Undo** (⌘Z).
+
+## Look while you edit
+
+**Fixture Properties** stays open beside the rig. With it open on **SR Boom
+Par**, zoom and swing the plot or the Rig Overview (**⇧⌘R**) and the view
+stays where you put it: you can check the par's **Points** and **Tilt in
+yoke** against the beam while you type, instead of closing the editor to
+look. Click another fixture in either view and the editor switches to it,
+keeping what you changed so far as its own undo step. Nothing in the view
+can be dragged, deleted or added until the editor closes, so **Cancel**
+still puts back exactly what that editor did.
+
+## A head that turns more than once: the pan turn
+
+A moving head with more than a full turn of pan (540°, say) can reach most
+places two ways: at one pan, or a turn further along the channel. Somewhere
+around the head is a **seam**, the one bearing where its answer jumps a
+whole turn. A follow spot walked across the seam, or a fade between two
+looks either side of it, swings round the long way: the head spins a full
+turn and the audience sees the beam sweep the whole stage. Which turn the
+head works in is its **pan turn**, kept with the head in the show.
+
+The default puts the seam straight behind the head, which is right for a
+head over the stage or facing it. A head hung out front with its pan zero
+facing away from the stage has the seam in the middle of the stage.
+
+In Fixture Properties, **Aim & Mount ▸ Pan works around** shows the turn,
+where the seam is and how clear of it the stage is. **Centre on Stage**
+picks the turn that keeps the seam off the stage with the most room;
+**Earlier Turn** and **Later Turn** move the seam a turn either way. Each
+is live, and **OK** keeps it as one undo step. If the head is live its beam
+moves now, so the app asks first.
+
+Show Review (Lesson 3.9) names a head whose stage sits on or near its seam
+and offers the same fix.
 
 ## Group it, and find the loose light
 
@@ -79,8 +114,8 @@ they are one group at once, named "Group" and a number, with the name open
 to type over in **Plot Layers**. **⇧⌘G** ungroups it. Right-click ▸ **Group**
 also adds a selection to a group already on that layer.
 
-A fixture you just added is in no group, so nothing in the show can reach
-it by name yet. In the Show Tree, the Library's **All ▸ Ungrouped** lists
+A fixture you just added is in no group, a **loose fixture**, so nothing in the
+show can reach it by name yet. In the Show Tree, the Library's **All ▸ Ungrouped** lists
 the patched lights that are in no group: **SR Boom Par** is there. Drag
 one onto a cue for a layer on just that light, or give it a group and it
 leaves the list.

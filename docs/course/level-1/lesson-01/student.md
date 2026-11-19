@@ -120,7 +120,9 @@ Once you know where things go, the buttons are the slow part. **⇧⌘N**
 (Ctrl+Shift+N) makes the next thing for where you are: with a cue selected,
 the next cue after it; with a cue list selected, a cue at its end. The new
 row opens with its name ready to type. The **Edit** menu names what it
-will make before you press it.
+will make before you press it. It follows you to the other tabs: on
+the Fixtures tab it makes a group in the folder, and in Build a scene or
+a palette in the folder you are on.
 
 Click **1.0.2 Chorus**, press **⇧⌘N**, type `Button`, **Return**. Then
 **⌘Z** twice: the name goes, then the cue.

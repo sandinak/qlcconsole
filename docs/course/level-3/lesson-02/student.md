@@ -49,7 +49,7 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
 3. Click **SR Truss Spot 1**: a Moving Head, 12 Channel. Which channel dims
    it? What dims the cyc box instead?
-4. Right-click **SR Truss Cyc 1** → **Definition & Mode…**. Pick each **Mode**
+4. Right-click **SR Truss Cyc 1** → **Fixture Setup ▸ Definition & Mode…**. Pick each **Mode**
    and read **Channels**: 165, 135, 30. **Cancel**.
 
    ![The modes of the XL-450](../../images/lesson-3-2/definition-modes.png)
@@ -61,7 +61,7 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
    ![The cyc boxes' colour heads](../../images/lesson-3-2/group-heads.png)
 
-7. Right-click **SR Truss Cyc 1** → **Edit Fixture Definition…**. In the Fixture
+7. Right-click **SR Truss Cyc 1** → **Fixture Setup ▸ Edit Fixture Definition…**. In the Fixture
    Editor click **Modes**: **Name**, **Channels**, **Heads** (75, 45 and 30
    heads). Close it **without saving**.
 8. **File → Show Definitions…**: the five definitions this show carries.
