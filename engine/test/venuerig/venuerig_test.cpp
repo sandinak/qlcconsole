@@ -3260,6 +3260,7 @@ void VenueRig_Test::rolesMadeOnFirstUseOnly()
     QCOMPARE(names, QStringList({ QStringLiteral("House up"), QStringLiteral("House to half"),
                                   QStringLiteral("House out"), QStringLiteral("Stage up"),
                                   QStringLiteral("Work lights"), QStringLiteral("Work lights off") }));
+    QVERIFY(standardHit(m_doc, QStringLiteral("House to half")) != ShowTree::invalidId());
     const ShowTree::ReusableCue *half = st->reusableCue(st->cue(standardHit(m_doc, QStringLiteral("House to half")))->reusable);
     QVERIFY(half != nullptr);
     QCOMPARE(half->fadeIn, 5000u);
@@ -3309,6 +3310,7 @@ void VenueRig_Test::standardCuesNotOverwritten()
 
     // He slows House to half and deletes the Work lights hit.
     const quint32 halfHit = standardHit(m_doc, QStringLiteral("House to half"));
+    QVERIFY(halfHit != ShowTree::invalidId());
     ShowTree::Cue c = *st->cue(halfHit);
     c.fadeIn = 12000;
     QVERIFY(st->setCue(c));
@@ -3438,6 +3440,7 @@ void VenueRig_Test::stageUpLightsRgbOnlyHead()
     QMap<HouseRole::Role, QList<quint32>> rows = row(HouseRole::Front, { cs });
     rows.insert(HouseRole::HouseLights, { house });
     QVERIFY2(HouseRole::fillRoles(m_doc, a, rows, {}, nullptr, &why), qPrintable(why));
+    QVERIFY(HouseRole::group(m_doc, HouseRole::Front) != nullptr);
     QCOMPARE(HouseRole::group(m_doc, HouseRole::Front)->fixtureList(), QList<quint32>({ cs }));
 
     // Stage up on a 3-channel RGB light (no dimmer): white, at full.
@@ -3505,9 +3508,11 @@ void VenueRig_Test::emptyRoleLayerSendsNothingAndSaysSo()
     // Stage up plays Front; Side and Back are empty here, and say so.
     const FixtureGroup *front = HouseRole::group(m_doc, HouseRole::Front);
     const FixtureGroup *side = HouseRole::group(m_doc, HouseRole::Side);
+    QVERIFY(front != nullptr && side != nullptr);
     QCOMPARE(HouseRole::emptyText(m_doc, { front->id() }), QString());
     QCOMPARE(HouseRole::emptyText(m_doc, { side->id() }), QStringLiteral("none in PMS Auditeria"));
     Function *up = hitFunction(m_doc, QStringLiteral("Stage up"));
+    QVERIFY(up != nullptr);
     up->start(m_doc->masterTimer(), FunctionParent::master());
     tick(200);
     QCOMPARE(int(dmx(0, 50)), 255);
