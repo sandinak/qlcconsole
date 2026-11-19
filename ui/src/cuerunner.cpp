@@ -2125,7 +2125,8 @@ void CueRunner::refreshHitStrip()
                                             "QToolButton:disabled { color: gray; }")
                                  .arg(col.name(), qGray(col.rgb()) > 140 ? QStringLiteral("black") : QStringLiteral("white")));
         else
-            b->setStyleSheet(QStringLiteral("QToolButton { border: 3px solid transparent; padding: 2px 10px; }"
+            b->setStyleSheet(QStringLiteral("QToolButton { background: palette(button); border: 3px solid palette(midlight); "
+                                            "border-radius: 4px; padding: 2px 10px; }"
                                             "QToolButton[hitOn=\"true\"] { border-color: palette(highlight); font-weight: bold; }"));
         b->setEnabled(operate && !proxy.isNull());
         b->setToolTip(operate ? tr("%1, %2: %3").arg(c->name, st->hitPlace(h),
