@@ -118,7 +118,12 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
     // A patch changed while a venue is applied is that room's (Q138).
     connect(m_rig, &VenueRig::patchEdited, this, [this]() {
         // Only a real change (a kept patch reconnecting is not one).
-        if (!m_writing && activeVenueData() != nullptr && m_rig->patchChanged(activeVenueData()->rig))
+        /* A venue made from another show: its universe's output is chosen
+           in Rig and Universes (or Keep This Patch), never taken from a patch
+           signal -- one fires mid-reconnect, before the patch has its target
+           back, and would keep an interface in place of the room's node. */
+        if (!m_writing && activeVenueData() != nullptr && !activeVenueData()->rig.room.isSet()
+            && m_rig->patchChanged(activeVenueData()->rig))
             keepPatch();
     });
 

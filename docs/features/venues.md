@@ -247,7 +247,9 @@ fixture if the room's rig differs.
 **The venue's universe on the venue page.** **Rig and Universes…** for a
 venue made this way has a **This venue's universe** box: which universe
 it is and what it was made from, the **Output in this room** choice
-again with **Use This Output** (on at once while the venue is applied),
+again with **Use This Output** (on at once while the venue is applied;
+a change to that universe on the Connections tab is not kept for the
+venue by itself: use this, or **Keep This Patch**),
 and the groups still waiting, with **Match Groups…** to match them once
 this show has a group for them.
 

@@ -2668,25 +2668,10 @@ void VenueRig_Test::anArtNetRoomOutputWaitsForItsNetwork()
 
     // Resolved, it is still the venue's choice: an unrelated patch signal
     // keeps nothing new, and never the tour's universes.
-    {
-        QStringList live;
-        for (const Universe::OfflinePatch &p : room->outputPatchDescriptions())
-        {
-            QStringList ps;
-            for (auto it = p.params.constBegin(); it != p.params.constEnd(); ++it)
-                ps << it.key() + "=" + it.value().toString();
-            live << QStringLiteral("%1|%2|%3|%4|%5").arg(p.plugin, p.uid).arg(p.line).arg(p.network, ps.join(','));
-        }
-        for (const Universe::OfflinePatch &p : v->venue(pms).rig.patch.value(2))
-        {
-            QStringList ps;
-            for (auto it = p.params.constBegin(); it != p.params.constEnd(); ++it)
-                ps << it.key() + "=" + it.value().toString();
-            live << QStringLiteral("saved %1|%2|%3|%4|%5").arg(p.plugin, p.uid).arg(p.line).arg(p.network, ps.join(','));
-        }
-        live << QStringLiteral("keys %1").arg(v->venue(pms).rig.patch.keys().size());
-        QVERIFY2(!v->rig()->patchChanged(v->venue(pms).rig), qPrintable(live.join(" ; ")));
-    }
+    // The reconnect kept the venue's choice: where it goes, not an interface.
+    QVERIFY(VenueRig::sameDestination(v->venue(pms).rig.patch.value(2), { artnetNode(QStringLiteral("10.0.0.20")) }));
+    QVERIFY(v->venue(pms).rig.patch.value(2).first().uid.isEmpty());
+    QVERIFY(!v->rig()->patchChanged(v->venue(pms).rig));
     emit iom->universe(0)->outputPatchChanged();
     QCOMPARE(v->venue(pms).rig.patch.keys(), QList<quint32>({ 2 }));
     QVERIFY(v->keepPatch());
