@@ -507,10 +507,11 @@ void VenueRigUi_Test::theVenuePageChoosesTheRoomOutput()
     QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(1)->outputPatchDescriptions()),
              QStringLiteral("Art-Net to 10.0.0.20"));
     // Chosen; with no Art-Net here it waits, and the list says that, not "no output".
-    QCOMPARE(items(page.clashList()).filter(QStringLiteral("Output")),
-             QStringList({ QString::fromUtf8("Output â U2: Art-Net to 10.0.0.20 is chosen, but nothing on "
-                                             "this computer reaches it yet. Waiting for it (check the cable and the "
-                                             "network)") }));
+    const QStringList outputs = items(page.clashList()).filter(QStringLiteral("Output"));
+    QCOMPARE(outputs.size(), 1);
+    QVERIFY2(outputs.first().endsWith(QStringLiteral("U2: Art-Net to 10.0.0.20 is chosen, but nothing on this "
+                                                     "computer reaches it yet. Waiting for it (check the cable and "
+                                                     "the network)")), qPrintable(outputs.first()));
     QVERIFY(text->text().contains(QStringLiteral("Its output here: Art-Net to 10.0.0.20")));
     // No Art-Net plugin here: chosen, and said to be waiting, not sending.
     QVERIFY2(text->text().endsWith(QStringLiteral("Art-Net to 10.0.0.20, waiting: nothing on this computer reaches "
