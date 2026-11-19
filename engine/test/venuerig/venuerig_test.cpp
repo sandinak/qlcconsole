@@ -2677,6 +2677,14 @@ void VenueRig_Test::anArtNetRoomOutputWaitsForItsNetwork()
                 ps << it.key() + "=" + it.value().toString();
             live << QStringLiteral("%1|%2|%3|%4|%5").arg(p.plugin, p.uid).arg(p.line).arg(p.network, ps.join(','));
         }
+        for (const Universe::OfflinePatch &p : v->venue(pms).rig.patch.value(2))
+        {
+            QStringList ps;
+            for (auto it = p.params.constBegin(); it != p.params.constEnd(); ++it)
+                ps << it.key() + "=" + it.value().toString();
+            live << QStringLiteral("saved %1|%2|%3|%4|%5").arg(p.plugin, p.uid).arg(p.line).arg(p.network, ps.join(','));
+        }
+        live << QStringLiteral("keys %1").arg(v->venue(pms).rig.patch.keys().size());
         QVERIFY2(!v->rig()->patchChanged(v->venue(pms).rig), qPrintable(live.join(" ; ")));
     }
     emit iom->universe(0)->outputPatchChanged();
