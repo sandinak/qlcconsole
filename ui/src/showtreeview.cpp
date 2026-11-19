@@ -103,6 +103,8 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "venuecorrections.h"
+#include "houserole.h"
 #include "programmerstrip.h"
 #include "previewkeep.h"
 #include "editkeys.h"
@@ -2705,6 +2707,13 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             buildTree();
             updateInspector();
         });
+    // "none in <venue>" on a role's layer follows the room (VENUE_ROLES_DATUM.md 3.4).
+    if (ProgrammerController *pc = m_doc->programmer())
+        if (VenueCorrections *vc = pc->venueCorrections())
+        {
+            connect(vc, &VenueCorrections::activeVenueChanged, this, [this]() { buildTree(); });
+            connect(vc, &VenueCorrections::houseRigChanged, this, [this]() { buildTree(); });
+        }
     connect(m_st, &ShowTreeController::previewChanged, this, &ShowTreeView::slotPreviewChanged);
     connect(m_doc, &Doc::modeChanged, this, &ShowTreeView::updatePageRig);
     if (m_doc->inputOutputMap() != nullptr)
@@ -3704,6 +3713,17 @@ void ShowTreeView::buildTree()
                     }
                     for (int c = SetsCol; c < FlagsCol; ++c)
                         yi->setTextAlignment(c, Qt::AlignCenter);
+                    /* A house role the room lacks (docs/design/VENUE_ROLES_DATUM.md
+                       section 3.4): the layer sends nothing here, and says so. */
+                    const QString emptyRole = layer.target.fixtures.isEmpty() && layer.target.sets.isEmpty()
+                                              ? HouseRole::emptyText(m_doc, layer.target.groups) : QString();
+                    if (!emptyRole.isEmpty())
+                    {
+                        yi->setText(InfoCol, emptyRole);
+                        yi->setForeground(InfoCol, palette().color(QPalette::Disabled, QPalette::Text));
+                        yi->setToolTip(InfoCol, tr("No light in this room fills this role: the layer sends "
+                                                   "nothing here. Fill Roles on the venue page."));
+                    }
                     QString tip = QStringLiteral("%1\n%2").arg(m_st->targetContents(layer.target),
                                                                looks.join(QStringLiteral(", "))).trimmed();
                     if (layer.reusable != invalidId())

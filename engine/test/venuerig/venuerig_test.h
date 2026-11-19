@@ -145,6 +145,32 @@ private slots:
     /** A venue with no <Datum> applies as before; a newer build's datum is
      *  kept whole */
     void oldVenueAppliesWithoutOffset();
+    /* House roles (docs/design/VENUE_ROLES_DATUM.md, phase 2) */
+    /** A role is a tag on a group: saved only when set, read back, kept
+     *  through a rename; a role group refuses an owner; a copy has none */
+    void roleTagRoundTrip();
+    /** The first Fill Roles makes the eight groups, the palettes, six
+     *  standard cues and their override Global hits; never again; his own
+     *  group of a role's name is kept, or used when he says */
+    void rolesMadeOnFirstUseOnly();
+    /** A standard cue he edited is not overwritten; a hit he deleted is
+     *  made again */
+    void standardCuesNotOverwritten();
+    /** The suggestions for a PMS-like room: words, the mover, the CYC
+     *  model, the place over the stage (section 4's table, trimmed) */
+    void suggestPmsLike();
+    /** Not ours never suggested; a mover with no word left for him */
+    void notOursAndMoversNeverSuggested();
+    /** Stage up on a 3-channel RGB light reads 255/255/255, House to half
+     *  128/128/128 (a Dimmer look alone writes nothing there) */
+    void stageUpLightsRgbOnlyHead();
+    /** House to half on a relay (the Switch rule) is on; on a dimmer, half */
+    void houseToHalfOnRelayIsOn();
+    /** A role the room lacks sends nothing and says "none in <venue>" (the
+     *  house desk when the room keeps channels); Show Review VEN-11 */
+    void emptyRoleLayerSendsNothingAndSaysSo();
+    /** One standard cue, two venues: each room's lights */
+    void roleCueFollowsVenueSwitch();
     /** A real touring show and a real room's show (QLC_VENUE_REAL_SHOW,
      *  QLC_VENUE_REAL_ROOM; skipped without them), copied into a temp dir:
      *  the import's counts into $QLC_SHOT_DIR/venue-import-report.txt */

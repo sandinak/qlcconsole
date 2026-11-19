@@ -61,6 +61,11 @@ private slots:
      *  under the show's lines, said in Settings > Units; the drape measured
      *  downstage of the room's cyc; none for a venue of the show's own rig */
     void theVenuePageLinesUpTheRoom();
+    /** The venue page's Roles box and Fill Roles (docs/design/
+     *  VENUE_ROLES_DATUM.md section 3.5): the rows suggested with why, a
+     *  role the room lacks says "none in this room" with Flash off, one
+     *  click fills them and makes the standard cues; not applied: off */
+    void theRolesBoxFillsTheRoles();
     /** Every universe in use: none is chosen for him, and one that has the
      *  show's fixtures takes a tick that says its output is replaced */
     void aVenueFromAShowWithEveryUniverseInUse();

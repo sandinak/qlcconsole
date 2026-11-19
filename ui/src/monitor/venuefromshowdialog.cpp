@@ -38,6 +38,7 @@
 
 #include "programmercontroller.h"
 #include "venuefromshowdialog.h"
+#include "rolefilldialog.h"
 #include "venuecorrections.h"
 #include "roomoutputpicker.h"
 #include "inputoutputmap.h"
@@ -439,6 +440,16 @@ QString VenueFromShowDialog::makeVenue()
     undo->setToolTip(tr("Take %1 off the rig and remove it. The show was not changed.").arg(made));
     Doc *doc = m_doc;
     connect(undo, &QPushButton::clicked, doc, [doc, made, previous]() { undoImport(doc, made, previous); });
+    /* The last step (docs/design/VENUE_ROLES_DATUM.md section 3.5): which
+       of the room's lights are its house lights, front wash, work lights. */
+    if (applied)
+    {
+        QPushButton *roles = note->addButton(tr("Fill Roles\342\200\246"), QMessageBox::ActionRole);
+        roles->setObjectName(QStringLiteral("vfsFillRoles"));
+        roles->setToolTip(tr("Which of %1's lights are its house lights, front wash, work lights...: "
+                             "suggested, Flash to check, one click to fill").arg(made));
+        connect(roles, &QPushButton::clicked, doc, [doc, made, over]() { RoleFillDialog::open(doc, over, made); });
+    }
     note->open();
     return made;
 }

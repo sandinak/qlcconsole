@@ -185,6 +185,7 @@ add_library(${module_name} SHARED
     venuerig.cpp venuerig.h
     venueimport.cpp venueimport.h
     rigowner.cpp rigowner.h
+    houserole.cpp houserole.h
     focusreport.cpp focusreport.h
     controllerscheme.cpp controllerscheme.h
     refinesession.cpp refinesession.h

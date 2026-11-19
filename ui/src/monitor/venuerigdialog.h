@@ -70,6 +70,13 @@ public:
     QLabel *lineUpText() const { return m_lineUpText; }
     QPushButton *lineUpButton() const { return m_lineUp; }
     LengthSpinBox *downstageField() const { return m_downstage; }
+    /** The Roles box (docs/design/VENUE_ROLES_DATUM.md section 3.5): which
+     *  house roles this venue's lights fill, and Fill Roles... */
+    QGroupBox *rolesBox() const { return m_rolesBox; }
+    QLabel *rolesText() const { return m_rolesText; }
+    QPushButton *fillRolesButton() const { return m_fillRoles; }
+    /** Fill Roles...: the suggestions for this venue's lights (not modal). */
+    QDialog *openFillRoles();
     /** Line Up the Room: from @p path, else the room's file beside the
      *  show, else one chosen (Browse). False, said, when it can't. */
     bool lineUpRoom(const QString &path = QString());
@@ -111,6 +118,9 @@ private:
     QLabel *m_downstageLabel;
     LengthSpinBox *m_downstage;
     QPushButton *m_lineUp;
+    QGroupBox *m_rolesBox;
+    QLabel *m_rolesText;
+    QPushButton *m_fillRoles;
 };
 
 /** @} */

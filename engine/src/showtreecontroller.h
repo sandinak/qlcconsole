@@ -1018,6 +1018,10 @@ public:
      *  its first use. Number, timing, note and includes stay each use's
      *  own. One undo step. */
     quint32 makeCueReusable(quint32 cueId, const QString &name = QString(), QString *why = nullptr);
+    /** A reusable cue made as @a def says, with no use yet (the standard
+     *  house cues, docs/design/VENUE_ROLES_DATUM.md section 3.3): its id and
+     *  its layers' ids are new. One undo step; invalid for an empty name. */
+    quint32 addReusableCue(const ShowTree::ReusableCue &def);
     /** A use of reusable layer @a reusableId in cue @a cueId (a new layer,
      *  linked). One undo step. Invalid: no such cue or reusable. */
     quint32 insertReusableLayer(quint32 cueId, quint32 reusableId);

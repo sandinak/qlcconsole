@@ -30,6 +30,7 @@
 #include "qlcpoint.h"
 #include "fixture.h"
 #include "rigowner.h"
+#include "houserole.h"
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
@@ -103,6 +104,14 @@ public:
     void setOwner(RigOwner::Owner owner);
     RigOwner::Owner owner() const { return m_owner; }
 
+    /** The house role this group is (docs/design/VENUE_ROLES_DATUM.md
+     *  section 3): None for an ordinary group. A role group refuses an
+     *  owner -- it may hold tour heads too, and House would move them into
+     *  the venue -- so setting a role clears it and setOwner() is then
+     *  refused. Saved as <Role> only when set; a duplicate has none. */
+    void setRole(HouseRole::Role role);
+    HouseRole::Role role() const { return m_role; }
+
 signals:
     void nameChanged();
 
@@ -110,6 +119,7 @@ private:
     QString m_name;
     QString m_path;
     RigOwner::Owner m_owner = RigOwner::Unset;
+    HouseRole::Role m_role = HouseRole::None;
 
     /************************************************************************
      * Fixtures

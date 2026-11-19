@@ -537,6 +537,21 @@ quint32 ShowTreeController::makeCueReusable(quint32 cueId, const QString &name, 
     return ok ? id : invalidId();
 }
 
+quint32 ShowTreeController::addReusableCue(const ReusableCue &def)
+{
+    if (def.name.trimmed().isEmpty())
+        return invalidId();
+    ReusableCue r = def;
+    r.id = newId();
+    r.name = def.name.trimmed();
+    r.layers = renumbered(def.layers, QList<Layer>(), [this] { return newId(); }, false);
+    const bool ok = edit(tr("New reusable cue %1").arg(r.name), [&](QList<Production> &) {
+        m_reusableCues << r;
+        return true;
+    });
+    return ok ? r.id : invalidId();
+}
+
 quint32 ShowTreeController::insertReusableLayer(quint32 cueId, quint32 reusableId)
 {
     const ReusableLayer *r = reusableLayer(reusableId);

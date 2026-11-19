@@ -332,9 +332,11 @@ private:
     QList<quint32> m_copiedFixtures;
     QList<quint32> m_copiedGroups;
 
-private:
-    /** Select a fixture group */
+public:
+    /** Select fixture group @a id in the tree, in whichever folder it is
+     *  (a role's Edit..., the venue page). */
     void selectGroup(quint32 id);
+private:
 
     /** Get a CSS style sheet & HTML header for fixture info */
     QString fixtureInfoStyleSheetHeader();

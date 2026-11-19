@@ -33,6 +33,7 @@
 #define KXMLQLCFixtureGroupName QStringLiteral("Name")
 #define KXMLQLCFixtureGroupPath QStringLiteral("Path")
 #define KXMLQLCFixtureGroupOwner QStringLiteral("Owner")
+#define KXMLQLCFixtureGroupRole QStringLiteral("Role")
 #define KXMLQLCFixtureGroupMaster QStringLiteral("Master")
 #define KXMLQLCFixtureGroupMasterLevel QStringLiteral("Level")
 
@@ -119,9 +120,19 @@ void FixtureGroup::setPath(const QString& path)
 
 void FixtureGroup::setOwner(RigOwner::Owner owner)
 {
-    if (m_owner == owner)
+    if (m_owner == owner || (m_role != HouseRole::None && owner != RigOwner::Unset))
         return;
     m_owner = owner;
+    emit changed(this->id());
+}
+
+void FixtureGroup::setRole(HouseRole::Role role)
+{
+    if (m_role == role)
+        return;
+    m_role = role;
+    if (role != HouseRole::None)
+        m_owner = RigOwner::Unset;
     emit changed(this->id());
 }
 
@@ -463,6 +474,10 @@ bool FixtureGroup::loadXML(QXmlStreamReader &xmlDoc)
         {
             m_owner = RigOwner::fromXmlName(xmlDoc.readElementText());
         }
+        else if (xmlDoc.name() == KXMLQLCFixtureGroupRole)
+        {
+            m_role = HouseRole::fromXmlName(xmlDoc.readElementText());
+        }
         else if (xmlDoc.name() == KXMLQLCFixtureGroupMaster)
         {
             m_master = true;
@@ -498,6 +513,8 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
     // Only when set: a show that never says is byte-identical.
     if (m_owner != RigOwner::Unset)
         doc->writeTextElement(KXMLQLCFixtureGroupOwner, RigOwner::xmlName(m_owner));
+    if (m_role != HouseRole::None)
+        doc->writeTextElement(KXMLQLCFixtureGroupRole, HouseRole::xmlName(m_role));
 
     /* Group master: only when there is one (QLC+ 4 skips the tag) */
     if (m_master)
