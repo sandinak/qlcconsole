@@ -42,7 +42,7 @@ class Doc;
 #define KXMLQLCControlMap QStringLiteral("ControlMap")
 /** This build has the emergency-stop target (the CS1 tests ask). */
 #define CONTROLMAP_HAS_EMERGENCY_STOP 1
-/** ... and the stop that says when it cannot work (stopIsDead()). */
+/** ... and the stop that says when it cannot work (stopHasProblem()). */
 #define CONTROLMAP_STOP_REVIEWED 1
 /** ... and the press rule (stopProblem(), stopStateChanged()). */
 #define CONTROLMAP_STOP_FLAGS 1
@@ -209,11 +209,11 @@ public:
     bool isInputConnected() const { return m_inputConnected; }
     void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
     /** What is wrong with the stop's control, in words (empty: nothing):
-     *  its profile calls it a fader or knob (refused, said), it is a computer
+     *  its profile calls it a fader or knob (it still fires; said), it is a computer
      *  key (never works), or it has been seen moving like a fader (it still
      *  fires; shown loudly: the panel, one footer line). */
     QString stopProblem() const;
-    bool stopIsDead() const { return !stopProblem().isEmpty(); }
+    bool stopHasProblem() const { return !stopProblem().isEmpty(); }
 
     /*********************************************************************
      * Names

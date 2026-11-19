@@ -44,6 +44,13 @@
 #include "showtreeview.h"
 #include "keytriggers.h"
 #include "cuerunner.h"
+#include "inputoutputmap.h"
+#include "iopluginstub.h"
+#include "qlcioplugin.h"
+#include "qlcfile.h"
+#include <QDir>
+#include "qlcinputprofile.h"
+#include "qlcinputchannel.h"
 #include "controlmap.h"
 #include "scene.h"
 #include "doc.h"
@@ -253,7 +260,7 @@ void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
     // The stop sits on a CC that turns out to move like a fader.
     cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::StartOnly });
     QVERIFY2(!button->text().contains("fader"), qPrintable(button->text()));
-    QVERIFY(!button->property("stopDead").toBool());
+    QVERIFY(!button->property("stopFlagged").toBool());
     QSignalSpy rebuilt(&panel, &ControlMapPanel::summaryChanged);   // a table rebuild says so
     QList<int> sweep;
     for (int i = 1; i <= 100; ++i)
@@ -262,7 +269,7 @@ void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
         cm->handleInput(0, 7, uchar(v));
     // Said on the button and the row, without rebuilding the table for each message.
     QVERIFY2(button->text().contains("moves like a fader"), qPrintable(button->text()));
-    QVERIFY(button->property("stopDead").toBool());
+    QVERIFY(button->property("stopFlagged").toBool());
     QCOMPARE(rebuilt.count(), 0);
     // A visible mark: the red style, which the button wears.
     QVERIFY(button->styleSheet().contains("b00020"));
@@ -275,6 +282,7 @@ void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
     QLabel *last = panel.findChild<QLabel *>("controlMapLast");
     QVERIFY(last != nullptr);
     QVERIFY2(last->text().contains("ALL OFF") && last->text().contains("moves like a fader"), qPrintable(last->text()));
+    QVERIFY2(last->text().contains("Emergency stop: moves like a fader"), qPrintable(last->text()));
     // An unrelated learn and removal keep it.
     Scene *a = scene("Warm");
     cm->setBinding({ 0, 9, ControlMap::function(a->id()), ControlMap::Toggle });
@@ -284,6 +292,48 @@ void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
     cm->setBinding({ 0, 188, ControlMap::emergencyStop(), ControlMap::StartOnly });
     QVERIFY2(!button->text().contains("fader"), qPrintable(button->text()));
     QVERIFY(button->styleSheet().isEmpty());
+}
+
+void ControlMapUi_Test::aStopOnAProfileFaderIsWarnedOnceAndOnlyOnItsOwnLine()
+{
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    QLCIOPlugin *stub = m_doc->ioPluginCache()->plugins().at(0);
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("Fake");
+    prof->setModel("Faders");
+    QLCInputChannel *fader = new QLCInputChannel();
+    fader->setType(QLCInputChannel::Slider);
+    prof->insertChannel(5, fader);
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+    ControlMapPanel panel(m_doc);
+    panel.resize(900, 400);
+    panel.show();
+    Scene *a = scene("Warm");
+    cm->setBinding({ 0, 9, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 5, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QPushButton *button = panel.findChild<QPushButton *>("controlMapEmergencyStop");
+    QLabel *last = panel.findChild<QLabel *>("controlMapLast");
+    QVERIFY(button != nullptr && last != nullptr);
+    // Red, saying it is a fader, and not "dead".
+    QVERIFY2(button->text().contains("fader"), qPrintable(button->text()));
+    QVERIFY(button->property("stopFlagged").toBool());
+    QVERIFY(button->styleSheet().contains("b00020"));
+    // It fires; the Last line names the problem once, in the stop's words.
+    cm->handleInput(0, 5, 100);
+    QVERIFY2(last->text().contains("ALL OFF"), qPrintable(last->text()));
+    QCOMPARE(last->text().count("fader or knob"), 1);
+    QVERIFY2(last->text().contains("Emergency stop: is a fader or knob"), qPrintable(last->text()));
+    // A line about another control does not carry the stop's warning.
+    cm->handleInput(0, 9, 127);
+    QVERIFY2(last->text().contains("Warm") && !last->text().contains("fader"), qPrintable(last->text()));
 }
 
 void ControlMapUi_Test::anEncoderLearnStopsListeningWhenThePanelHides()

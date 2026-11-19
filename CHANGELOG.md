@@ -61,9 +61,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   it dead for the session: a value above 0 after a 0, or the first value
   after a load or replug, fires; any other value fires once a second has
   passed since its last ALL OFF (so a lost release costs at most a second). A
-  fader or encoder bound as the stop fires about once a second while it
-  moves, not on every step, and is flagged loudly (red button and row, one footer line) until
-  learned again on a button. A release that was lost at learn time no longer
+  fader or encoder bound as the stop, even one its input profile calls a
+  fader or knob, fires about once a second while it moves, not on every step,
+  and is flagged loudly (red button and row, one footer line) until learned
+  again on a button; the second's wait starts only when ALL OFF ran, and a
+  stop in a file with no ID loads as the stop. The Control Map's Last line
+  says *Emergency stop: <problem>* once, on the stop's own line only. A release that was lost at learn time no longer
   swallows the first press, a stop bound to a computer key says it does
   nothing, a scene held by a button still lets go when its binding is removed,
   and a refused press or key says why once per hold, not on every message.
@@ -71,7 +74,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   a learn is listening (an Encoder learn left waiting, an open Learn Trigger
   dialog), a second press right after a GO is not dropped, a replug cannot
   swallow it, and a stop on a control that turns out to be a fader or knob
-  says so on the footer and in red on the Control Map. A release lets go of
+  fires and says so on the footer and in red on the Control Map. A release lets go of
   what its press did, whatever was changed while it was held. A second PMJ
   Black 1 universe is named on the footer.
 - **A controller that is unplugged lets go of what it held.** A Momentary

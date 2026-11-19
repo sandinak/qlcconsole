@@ -727,7 +727,7 @@ QString ControlMap::stopProblem() const
     if (isKey(*b))
         return tr("a computer key cannot be the stop");
     if (!isButtonControl(b->universe, b->channel))
-        return tr("not a button");
+        return tr("is a fader or knob");
     if (m_estopFlagged.contains(key(b->universe, b->channel)))
         return tr("moves like a fader");
     return QString();
@@ -777,10 +777,11 @@ void ControlMap::emergencyStop(const Binding &b, uchar value)
     const quint64 k = key(b.universe, b.channel);
     if (!isButtonControl(b.universe, b.channel))
     {
-        // The profile says fader or knob: said, once per hold.
-        say(k, tr("The emergency stop did not fire: %1 is a fader or knob, not a button. "
-                  "Learn the stop on a button again.").arg(controlName(b.universe, b.channel)));
-        return;
+        // The profile says fader or knob: said, once per hold. It still
+        // fires (an extra ALL OFF beats a missed one), under the same rule.
+        say(k, tr("The emergency stop is bound to %1, which is a fader or knob: learn it again on a "
+                  "button. It still stops the show, but not on every move.")
+                   .arg(controlName(b.universe, b.channel)));
     }
     bool press = true;
     bool differs = false;
@@ -801,8 +802,6 @@ void ControlMap::emergencyStop(const Binding &b, uchar value)
         it->last.start();
         it->released = false;
     }
-    if (press)
-        it->lastFired.start();
     // Different values with no 0 between and under a second apart: a fader.
     if (differs && !m_estopFlagged.contains(k))
     {
@@ -818,7 +817,12 @@ void ControlMap::emergencyStop(const Binding &b, uchar value)
     r.command = ShowControl::AllOff;
     // The one path; ALL OFF is not one of the guarded commands.
     if (m_doc->showControl()->run(r, ShowControl::RouteControlMap))
+    {
+        // The second's wait starts only when ALL OFF ran: a refused one
+        // must not hold back the next.
+        it->lastFired.start();
         emit fired(tr("ALL OFF"));
+    }
 }
 
 bool ControlMap::press(const Binding &b)
@@ -1338,6 +1342,8 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
         }
         b.target.id = attrs.value(KXMLID).toUInt(&okI);
         const bool okT = stringToType(attrs.value(KXMLTarget).toString(), &b.target.type);
+        if (okT && b.target.type == EmergencyStopTarget)
+            okI = true;                 // the stop has no id: missing or bad is fine
         if (attrs.hasAttribute(KXMLMode) && !stringToMode(attrs.value(KXMLMode).toString(), &b.mode))
             b.mode = Toggle;
         root.skipCurrentElement();

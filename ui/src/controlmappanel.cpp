@@ -138,7 +138,7 @@ void ControlMapPanel::refresh()
     {
         const ControlMap::Binding &b = bindings.at(r);
         QTableWidgetItem *c = new QTableWidgetItem(controlText(b));
-        if (b.target.type == ControlMap::EmergencyStopTarget && cm->stopIsDead())
+        if (b.target.type == ControlMap::EmergencyStopTarget && cm->stopHasProblem())
         {
             c->setText(stopRowText(b));
             c->setForeground(QColor(0xb0, 0x00, 0x20));
@@ -254,7 +254,7 @@ void ControlMapPanel::refreshStop()
                                                   .arg(cm->controlName(stop->universe, stop->channel), problem)
                                             : tr("Emergency Stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
     m_estop->setStyleSheet(dead ? QStringLiteral("color: white; background: #b00020;") : QString());
-    m_estop->setProperty("stopDead", dead);
+    m_estop->setProperty("stopFlagged", dead);
     m_estop->setProperty("stopProblem", problem);
     for (int r = 0; stop != nullptr && r < m_table->rowCount(); ++r)
     {
@@ -274,10 +274,14 @@ void ControlMapPanel::slotEmergencyStop()
 
 void ControlMapPanel::slotFired(const QString &what)
 {
-    // A flagged stop stays in the line, so "ALL OFF" does not hide it.
+    // A flagged stop stays in the stop's own line ("ALL OFF"), so firing does
+    // not hide it; lines about other controls say nothing of it, and a line
+    // that already says it is not told twice.
     const QString problem = m_doc->controlMap()->stopProblem();
-    m_last->setText(problem.isEmpty() ? tr("Last: %1").arg(what)
-                                      : tr("Last: %1 · Emergency stop %2").arg(what, problem));
+    const bool stopsOwn = what == tr("ALL OFF");
+    m_last->setText(problem.isEmpty() || !stopsOwn || what.contains(problem)
+                        ? tr("Last: %1").arg(what)
+                        : tr("Last: %1 · Emergency stop: %2").arg(what, problem));
 }
 
 /*****************************************************************************

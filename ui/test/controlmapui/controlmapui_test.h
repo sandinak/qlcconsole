@@ -47,6 +47,7 @@ private slots:
     void thePanelAndMenuListKeys();
     void theEmergencyStopLearnsOneButtonWithASecondPress();
     void aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow();
+    void aStopOnAProfileFaderIsWarnedOnceAndOnlyOnItsOwnLine();
     void anEncoderLearnStopsListeningWhenThePanelHides();
     void learnKeyShots();
 
