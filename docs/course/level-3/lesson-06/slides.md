@@ -38,6 +38,9 @@ teacher says. It can be turned into a deck as it is.*
 - **Apron**: the deck in front of the curtain line.
 - **Upstage line**: the show's drape. A new room's lights are lined up
   under it and the centre line; the tour's rig never moves.
+- **Roles**: House to half works in any room because it is written on
+  **House Lights**, not on the room's lights. Each venue fills the role
+  with its own (venue page ▸ Fill Roles, Flash to check).
 - On the plot's **Stage** layer (Plot layers), each with its own eye.
 - Picture: the classroom plot with the marks. "SL 1 · DS 1."
 

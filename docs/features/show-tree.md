@@ -2668,6 +2668,15 @@ called them looks; they open as they were.)
     *Decided (can change).*
   - Saved with the show as `Override="1"`; an older build opens it as a
     plain hit.
+- **The standard house cues.** The first **Fill Roles** on a venue page
+  makes six reusable cues in the Library (House up, House to half, House
+  out, Stage up, Work lights, Work lights off) on the show's house roles,
+  and one override Global hit for each in a **House** folder: put one in
+  a cue list from the Library like any reusable cue (the preshow list's
+  "House to half", "House out"), or fire its hit any time. They play on
+  whichever of the room's lights fill each role; a layer on a role the
+  room lacks shows **none in** and the venue's name. See
+  [Roles](venues.md#roles-house-lights-and-stage-light-in-any-room).
 - **Seeing it.** Selected in Design, a hit plays on the rig alone, as a
   cue does: what it puts on stage and nothing else — an empty hit is a
   dark rig, and a list running for real goes on unseen. To see it on top

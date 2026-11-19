@@ -349,6 +349,109 @@ room's DMX line:
 13. A spare Art-Net node instead of USB: in step 4 choose **Art-Net
     node**, type its IP and Art-Net universe. **Expected:** as step 5,
     through the node.
+14. Venue chip ▸ **Rig and Universes…** ▸ **Roles** ▸ **Fill Roles…**.
+    **Expected:** one row per role; House Lights lists the room's house
+    circuits, Front Wash its FOH lights, each with why; Side Light and
+    Back Light say **none in this room** if the room has none.
+15. **Flash** each row that has lights. **Expected:** the lights that come
+    up are that role's (the house lights, the FOH...); untick a row that
+    is wrong.
+16. **Fill Roles**. **Expected:** the note says what it filled and, the
+    first time, that it made the role groups, the standard cues and the
+    House hits.
+17. Fire the **House to half** hit. **Expected:** the house lights go to
+    half over 5 s (a relay circuit just stays on); nothing on stage
+    changes. **House out**: the house goes out, aisle lights stay.
+18. Fire **Stage up**. **Expected:** the front and top light come up to
+    full white over 3 s, the room's ColorSources included.
+19. **Work lights**, then **Work lights off**. **Expected:** the work
+    lights snap on and off.
+
+## Roles: house lights and stage light in any room
+
+"House to half", "Stage up" and "Work lights" mean the same thing in
+every room, on whichever lights the room has. A **role** is the job a
+light does there; the show has eight:
+
+| Role | What it is |
+|---|---|
+| **House Lights** | the audience's light |
+| **Aisle Lights** | aisle and step lights; House out leaves them on |
+| **Front Wash** | light on the stage from the house side: FOH, box booms, balcony rail |
+| **Top Wash** | down light from the overhead electrics |
+| **Side Light** | booms, ladders, shins in the wings |
+| **Back Light** | from upstage, toward the house |
+| **Cyc** | lights on the cyc or backdrop |
+| **Work Lights** | the crew's light |
+
+Each role is an ordinary fixture group of the show, in a **Roles**
+folder, that each venue fills with its own lights, as any group is
+filled (above). A cue written on the role plays on whoever fills it in
+the room applied. Power relays, running lights and blues get no role:
+their output rules already keep them on or leave them alone.
+
+**Fill Roles.** With the venue applied, venue page ▸ **Roles** ▸
+**Fill Roles…** (also on the note New Venue from a Show closes with).
+Each role's row lists the room's lights suggested for it and why:
+
+1. a word in the light's name, else its groups' names: House, Aisle,
+   Work; FOH, Front, Box Boom; Top, Down; Side, Boom, Shin, Ladder;
+   Back; Cyc. Relay, Hall, Blue, Backstage and Spare are no role;
+2. a moving light is left for you to add by hand;
+3. a CYC (its model) is Cyc;
+4. otherwise where it hangs, with the room lined up: more than 3 ft (in
+   your **Settings ▸ Units**) downstage of the curtain line is Front
+   Wash; over the stage and above 10 ft is Top Wash; lower is Side
+   Light.
+
+A light on channels the room keeps (**Not ours**), an unpatched one and
+one you already put in a role are never moved. **Flash** lights a row's
+fixtures in the room for a moment, so you check a suggestion by looking.
+Untick a row that is wrong, then **Fill Roles**: every ticked row
+becomes that role's lights in this venue. **Edit…** opens the selected
+role's group in the Fixture Manager to add or take out lights by hand.
+**Not used** lists the room's lights in no role, each with its reason.
+
+The first Fill Roles also makes what plays on them:
+
+- the eight role groups (a group of yours already called "Cyc" is used
+  if you say so, else the role is made beside it as "Cyc (role)"; yours
+  is never renamed);
+- the palettes **Full**, **50%**, **Out** and **Open White** in a
+  **Roles** folder (an existing palette with exactly that value is used
+  instead);
+- six **standard cues**, reusable cues in the Show Tree's Library:
+
+  | Cue | What it does | Fade |
+  |---|---|---|
+  | **House up** | House Lights and Aisle Lights full | 5 s |
+  | **House to half** | House Lights at 50% | 5 s |
+  | **House out** | House Lights out (aisle lights stay) | 5 s |
+  | **Stage up** | Front, Top, Side and Back light full | 3 s |
+  | **Work lights** | Work Lights full | 0 s |
+  | **Work lights off** | Work Lights out | 0 s |
+
+- one **Global hit** per standard cue, an **override** hit in a
+  **House** folder, so it can be fired any time from the Run tab, a VC
+  button (Make VC Page) or the pad, and wins over what the show plays
+  there (see [Show Tree hits](show-tree.md)).
+
+Each layer sets the dimmer **and Open White**, so a light with no
+dimmer channel (a ColorSource patched in 3-channel RGB) comes up white
+at the level; a relay is on at 50% and over, so House to half leaves it
+on. Positions are never set. The cues' levels and fades are yours to
+change; a later Fill Roles only adds back a standard cue or hit you
+deleted, never changes one you edited.
+
+**A role the room lacks** is empty and its layer sends nothing. Its row
+in the Show Tree says **none in PMS Auditeria**; when the venue keeps
+channels for the room's own desk (**Not ours**), the House Lights row
+says **call the house desk**. Show Review (VEN-11) only speaks up about
+a standard cue that lights nothing at all in the room.
+
+Only the room's lights are suggested. Your show's own lights can be put
+in a role by hand (Edit…); the standard cues never touch the looks you
+programmed.
 
 ## Seeing who owns what
 

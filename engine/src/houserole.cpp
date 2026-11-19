@@ -256,7 +256,7 @@ QList<Suggestion> HouseRole::suggest(const Doc *doc)
     const VenueCorrections::Venue v = vc->venue(vc->activeVenue());
     QList<quint32> ids = vc->rig()->venueFixtures().values();
     std::sort(ids.begin(), ids.end());
-    const MonitorProperties *props = doc->monitorProperties();
+    const MonitorProperties *props = const_cast<Doc *>(doc)->monitorProperties();
     const float curtain = props != nullptr ? props->curtainLineY() : 0.0f;
     static const double kFrontBeyond = 914.4;   // 3 ft downstage of the curtain line
     static const double kOverhead = 3048.0;     // 10 ft up
