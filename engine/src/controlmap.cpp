@@ -227,7 +227,8 @@ void ControlMap::updateConnections()
         return;
 
     // Input: only while there is something to hear it for.
-    const bool wantInput = m_listening || !m_bindings.isEmpty();
+    // A control still held (its binding removed meanwhile) keeps its release coming.
+    const bool wantInput = m_listening || !m_bindings.isEmpty() || !m_down.isEmpty();
     if (wantInput != m_inputConnected)
     {
         if (wantInput)
@@ -690,6 +691,8 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         const Binding pressed = m_pressed.take(k);
         if (m_fired.remove(k) && pressed.target.isValid())
             release(pressed);
+        if (m_bindings.isEmpty())
+            updateConnections();        // nothing held, nothing bound: stop listening
         return;
     }
     const int i = m_byControl.value(k, -1);
