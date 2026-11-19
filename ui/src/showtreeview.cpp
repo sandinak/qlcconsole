@@ -11915,22 +11915,15 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
         return false;
     }
     const Production *prod = m_st->production(prodId);
-    const QList<ResolvedCue> resolved = m_st->resolved(*list);
 
     const int size = 80, gap = 6, header = 36;
-    auto colourOf = [&](VCButton *b, int at) {
+    auto colourOf = [&](VCButton *b, quint32 lookId) {
         // Its colour: the look's first Colour (as it plays).
-        for (const ResolvedLayer &rl : resolved.value(at).layers)
-        {
-            const ResolvedValue v = rl.values.value(KeyColour);
-            const QLCPalette *p = v.look.palettes.isEmpty() ? nullptr : m_doc->palette(v.look.palettes.first());
-            if (p == nullptr)
-                continue;
-            const QColor c = p->rgbValue();
-            b->setBackgroundColor(c);
-            b->setForegroundColor(qGray(c.rgb()) > 140 ? QColor(Qt::black) : QColor(Qt::white));
-            break;
-        }
+        const QColor c = m_st->hitColour(lookId);
+        if (!c.isValid())
+            return;
+        b->setBackgroundColor(c);
+        b->setForegroundColor(qGray(c.rgb()) > 140 ? QColor(Qt::black) : QColor(Qt::white));
     };
     auto makeButton = [&](VCFrame *frame, quint32 lookId, const QPoint &at) -> VCButton * {
         const int i = list->indexOf(lookId);
@@ -11944,7 +11937,7 @@ bool ShowTreeView::makeVcPage(quint32 listId, const QString &folder, QString *me
         b->setAction(VCButton::Toggle);
         b->move(at);
         b->resize(QSize(size, size));
-        colourOf(b, i);
+        colourOf(b, lookId);
         b->show();
         return b;
     };

@@ -493,3 +493,32 @@ void ShowTreeController::slotListStepChanged()
 {
     emit hitArmingChanged();
 }
+
+QColor ShowTreeController::hitColour(quint32 hitId) const
+{
+    const CueList *list = listOfCue(hitId);
+    if (list == nullptr)
+        return QColor();
+    const int at = list->indexOf(hitId);
+    const QList<ResolvedCue> resolved = this->resolved(*list);
+    if (at < 0 || at >= resolved.count())
+        return QColor();
+    for (const ResolvedLayer &rl : resolved.at(at).layers)
+    {
+        const ResolvedValue v = rl.values.value(KeyColour);
+        const QLCPalette *p = v.look.palettes.isEmpty() ? nullptr : m_doc->palette(v.look.palettes.first());
+        if (p != nullptr)
+            return p->rgbValue();
+    }
+    return QColor();
+}
+
+QList<quint32> ShowTreeController::armedHitsNarrowFirst() const
+{
+    QList<quint32> out;
+    for (HitScope s : { HitScope::Cue, HitScope::List, HitScope::Production, HitScope::Global })
+        for (quint32 h : allHits())
+            if (hitScope(h) == s && isHitArmed(h))
+                out << h;
+    return out;
+}

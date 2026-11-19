@@ -1172,6 +1172,13 @@ public:
      *  @a wide's list, a cue or list of its production, anything for a
      *  global hit -- so where @a narrow is armed it fires instead. */
     bool hitOverrides(quint32 narrow, quint32 wide) const;
+    /** Hit @a hitId's colour: its look's first Colour palette as it plays
+     *  (what Make VC Page paints a button with, and the Run tab's hit
+     *  strip). Invalid when the hit has no colour. */
+    QColor hitColour(quint32 hitId) const;
+    /** The armed hits, narrowest place first: cue, list, production,
+     *  everywhere (tree order within a place). The Run tab's hit strip. */
+    QList<quint32> armedHitsNarrowFirst() const;
 
     /** Make hits @a hitIds override hits (or plain ones again): an
      *  override wins over everything the show plays on its channels,
