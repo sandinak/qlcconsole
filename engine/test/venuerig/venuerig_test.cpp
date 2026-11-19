@@ -2354,7 +2354,7 @@ void VenueRig_Test::aVenueFromAnotherShow()
     opt.output = { usbOutput() };
     const VenueImport::Result res = VenueImport::build(src, m_doc, opt, v->reservedIds());
     QCOMPARE(res.fixtures, 7);
-    QCOMPARE(VenueImport::summary(res, 2), QStringLiteral("7 fixtures on U3 1\342\200\223109"));
+    QCOMPARE(VenueImport::summary(res, 2), QString::fromUtf8("7 fixtures on U3 1\342\200\223109"));
     QString why;
     const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data, &why);
     QVERIFY2(!pms.isEmpty(), qPrintable(why));
@@ -2539,7 +2539,7 @@ void VenueRig_Test::theRoomOutputAndItsClashes()
     bool slot = false;
     for (const VenueRig::Clash &c : v->clashes(pms))
         slot = slot || (c.kind == VenueRig::Clash::Slot
-                        && c.text == QStringLiteral("U3 401\342\200\223402: Stray spot (tour) is on the venue's own universe"));
+                        && c.text == QString::fromUtf8("U3 401\342\200\223402: Stray spot (tour) is on the venue's own universe"));
     QVERIFY(slot);
 
     // No venue patch for it, and the show sends that universe somewhere: said.
@@ -2571,7 +2571,14 @@ void VenueRig_Test::undoingAVenueFromAnotherShow()
     const QString kept = v->addVenue(QStringLiteral("Lincoln HS"));
     m_doc->resetModified();
     const QByteArray before = engineXml(m_doc);
-    const QByteArray sidecar = venueSection(readFile(v->filePath()), kept);
+    auto section = [&kept](const QByteArray &xml) {
+        // An empty venue is written as <Venue .../>.
+        const QRegularExpression re(QStringLiteral("<Venue Name=\"%1\"[^>]*?(/>|>.*?</Venue>)")
+                                        .arg(QRegularExpression::escape(kept)),
+                                    QRegularExpression::DotMatchesEverythingOption);
+        return re.match(QString::fromUtf8(xml)).captured(0).toUtf8();
+    };
+    const QByteArray sidecar = section(readFile(v->filePath()));
     QVERIFY(!sidecar.isEmpty());
 
     const VenueImport::Source src = pmsSource(m_dir);
@@ -2593,7 +2600,7 @@ void VenueRig_Test::undoingAVenueFromAnotherShow()
     QCOMPARE(engineXml(m_doc), before);
     const QByteArray after = readFile(v->filePath());
     QVERIFY(!after.contains("PMS Auditeria"));
-    QCOMPARE(venueSection(after, kept), sidecar);
+    QCOMPARE(section(after), sidecar);
 }
 
 void VenueRig_Test::aVenueFromAFileThatIsNotAShow()

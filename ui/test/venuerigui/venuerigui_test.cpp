@@ -400,11 +400,11 @@ void VenueRigUi_Test::aVenueFromAShowEndToEnd()
     QCOMPARE(d->universeBox()->currentData().toUInt(), 1u);
     QVERIFY(d->universeBox()->currentText().startsWith(QStringLiteral("U2 ")));
     QCOMPARE(d->summaryLabel()->text(),
-             QStringLiteral("From PMS Stage.qlcc: 7 fixtures on U2 1\342\200\223109. Groups: 0 fill this "
+             QString::fromUtf8("From PMS Stage.qlcc: 7 fixtures on U2 1\342\200\223109. Groups: 0 fill this "
                             "show's, 3 kept for later."));
     // No USB interface on this computer: Not yet, and the clash check says so.
     QCOMPARE(d->outputPicker()->kind(), RoomOutputPicker::NotYet);
-    QVERIFY2(items(d->clashList()).filter(QStringLiteral("Output \342\200\224 U2: no output in this room yet")).size() == 1,
+    QVERIFY2(items(d->clashList()).filter(QString::fromUtf8("Output \342\200\224 U2: no output in this room yet")).size() == 1,
              qPrintable(items(d->clashList()).join('\n')));
 
     // FOH is suggested by its name and waits for the tick.

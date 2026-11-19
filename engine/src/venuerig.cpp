@@ -925,10 +925,12 @@ void VenueRig::putPatch(quint32 universe, const QList<Universe::OfflinePatch> &p
     if (!u->hasShowOutputBase())
         u->setShowOutputBase(u->outputPatchDescriptions());
     const bool was = m_writing;
+    const bool modified = m_doc->isModified();
     m_writing = true;
     if (!samePatch(u->outputPatchDescriptions(), patch))
         iom->replaceOutputPatches(universe, patch);
     m_writing = was;
+    keepUnmodified(modified);   // the venue's patch, not the show's
 }
 
 bool VenueRig::samePatch(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b)

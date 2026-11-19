@@ -359,7 +359,7 @@ void VenueFromShowDialog::refresh()
         m_warnings->setVisible(!res.warnings.isEmpty());
         // The clash check, before anything is applied.
         for (const VenueRig::Clash &c : vc->rig()->clashes(res.data, false))
-            new QListWidgetItem(QStringLiteral("%1 \342\200\224 %2").arg(VenueRig::kindName(c.kind), c.text), m_clashes);
+            new QListWidgetItem(QString::fromUtf8("%1 \342\200\224 %2").arg(VenueRig::kindName(c.kind), c.text), m_clashes);
         if (m_clashes->count() == 0)
             new QListWidgetItem(tr("No clashes."), m_clashes);
         const int waiting = VenueImport::unconfirmed(opt.matches);

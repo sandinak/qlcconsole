@@ -144,6 +144,7 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
     m_matchGroups->setToolTip(tr("Choose which of this show's groups the room's groups fill"));
     wl->addWidget(m_matchGroups, 0, Qt::AlignTop);
     rl->addLayout(wl);
+    m_room->hide();     // only for a venue made from another show
     vl->addWidget(m_room);
     connect(m_roomOutput, &RoomOutputPicker::changed, this, [this]() {
         m_useRoomOutput->setEnabled(m_roomOutput->isComplete());
