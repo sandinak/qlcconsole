@@ -17,7 +17,9 @@
   limitations under the License.
 */
 
+#include <QDialogButtonBox>
 #include <QActionGroup>
+#include <QPushButton>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QListWidget>
@@ -31,6 +33,7 @@
 #include "venuecorrections.h"
 #include "focuscallsdialog.h"
 #include "venuerigdialog.h"
+#include "venuefromshowdialog.h"
 #include "focussession.h"
 #include "focusmenu.h"
 #include "venuemenu.h"
@@ -173,10 +176,11 @@ bool VenueMenu::switchTo(Doc *doc, QWidget *parent, const QString &name)
 QInputDialog *VenueMenu::askNewVenue(Doc *doc, QWidget *parent)
 {
     VenueCorrections *vc = venuesOf(doc);
-    return askName(parent, QStringLiteral("venueNewName"), tr("New venue"),
+    const QString suggested = VenueCorrections::defaultVenueName();
+    QInputDialog *d = askName(parent, QStringLiteral("venueNewName"), tr("New venue"),
                    tr("The room's name (its corrections start from %1):")
                        .arg(vc->lastVenue().isEmpty() ? tr("the show's own") : vc->lastVenue()),
-                   VenueCorrections::defaultVenueName(), [doc, parent](const QString &name) {
+                   suggested, [doc, parent](const QString &name) {
         VenueCorrections *v = venuesOf(doc);
         if (v->hasVenue(name))
         {
@@ -192,6 +196,22 @@ QInputDialog *VenueMenu::askNewVenue(Doc *doc, QWidget *parent)
             v->setActiveVenue(made);
         }
     });
+    /* New Venue from a Show (docs/design/VENUE_FROM_SHOW.md): the room's
+       house rig from another show file, offered here rather than as a menu
+       item of its own. */
+    if (QDialogButtonBox *bb = d->findChild<QDialogButtonBox *>())
+    {
+        QPushButton *from = bb->addButton(tr("From a Show\342\200\246"), QDialogButtonBox::ActionRole);
+        from->setObjectName(QStringLiteral("venueNewFromShow"));
+        from->setToolTip(tr("Take the room's house rig from another show file (a .qlcc made from the room's "
+                            "desk): its fixtures, their plot places and its groups"));
+        QObject::connect(from, &QPushButton::clicked, d, [doc, parent, d, suggested]() {
+            const QString name = d->textValue().trimmed();
+            d->close();
+            VenueFromShowDialog::open(doc, parent, name == suggested ? QString() : name);
+        });
+    }
+    return d;
 }
 
 QInputDialog *VenueMenu::askRename(Doc *doc, QWidget *parent)

@@ -150,6 +150,7 @@
 #include "universeoutputview.h"
 #include "venuemenu.h"
 #include "venuerigdialog.h"
+#include "venuefromshowdialog.h"
 #include "whyonpanel.h"
 #include "gobowheelsdialog.h"
 #include "workbench.h"
@@ -1058,6 +1059,9 @@ QList<Screen> screens()
             })
          << screen(QStringLiteral("Venue rig"), [](App *app) -> QWidget * {
                 return new VenueRigDialog(docOf(app), QStringLiteral("Layout Hall"));
+            })
+         << screen(QStringLiteral("New venue from a show"), [](App *app) -> QWidget * {
+                return new VenueFromShowDialog(docOf(app), QStringLiteral("Layout Hall"));
             })
          << screen(QStringLiteral("Power distribution"), [](App *app) -> QWidget * {
                 return new PowerDistributionDialog(docOf(app));

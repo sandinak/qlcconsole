@@ -27,6 +27,9 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QApplication>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QDir>
 #include <QtTest>
 
 #include "venuerigui_test.h"
@@ -37,6 +40,12 @@
 #include "inputoutputmanager.h"
 #include "inputoutputmap.h"
 #include "venuerigdialog.h"
+#include "venuefromshowdialog.h"
+#include "roomoutputpicker.h"
+#include "venuemenu.h"
+#include "venueimport.h"
+#include "../common/shotdark.h"
+#include "../../../engine/test/common/pmslikeshow.h"
 #include "fixturegroup.h"
 #include "rigowner.h"
 #include "fixture.h"
@@ -63,11 +72,49 @@ VenueCorrections *venues(Doc *doc)
 {
     return doc->programmer()->venueCorrections();
 }
+
+/* @p w grabbed at the three review sizes into $QLC_SHOT_DIR (nothing when
+   it is unset), named @p name-WxH.png. */
+void shoot(QWidget *w, const QString &name)
+{
+    const QString dir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+    if (dir.isEmpty())
+        return;
+    QDir().mkpath(dir);
+    const QSize was = w->size();
+    for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        w->resize(sz);
+        QApplication::processEvents();
+        w->grab().save(QStringLiteral("%1/%2-%3x%4.png").arg(dir, name).arg(sz.width()).arg(sz.height()));
+    }
+    w->resize(was);
+    QApplication::processEvents();
+}
+
+QString pmsFile(QTemporaryDir *dir)
+{
+    const QString path = dir->filePath(QStringLiteral("PMS Stage.qlcc"));
+    QFile f(path);
+    if (f.open(QIODevice::WriteOnly))
+        f.write(PmsLikeShow::xml());
+    return path;
+}
+
+QStringList items(const QListWidget *list)
+{
+    QStringList out;
+    for (int i = 0; i < list->count(); ++i)
+        out << list->item(i)->text();
+    return out;
+}
 }
 
 void VenueRigUi_Test::init()
 {
     qputenv("QLC_NO_VOICE", "1");
+    if (!qEnvironmentVariableIsEmpty("QLC_SHOT_DIR"))
+        shotUseDarkTheme();
     m_dir = new QTemporaryDir();
     m_doc = new Doc(this);
     venues(m_doc)->setShowFile(m_dir->filePath(QStringLiteral("Tour.qlcc")), false);
@@ -302,6 +349,188 @@ void VenueRigUi_Test::aClashingVenueAsksBeforeItIsApplied()
     QCOMPARE(m_doc->fixture(par)->address(), 50u);
     QVERIFY(m_doc->fixture(tour)->isPatched());
     QCOMPARE(m_doc->fixture(tour)->address(), 50u);
+}
+
+/****************************************************************************
+ * New Venue from a Show (docs/design/VENUE_FROM_SHOW.md)
+ ****************************************************************************/
+
+void VenueRigUi_Test::aVenueFromAShowEndToEnd()
+{
+    VenueCorrections *v = venues(m_doc);
+    // The touring show: lights on U1, a group named as the room's is.
+    const quint32 tour = dimmer(m_doc, QStringLiteral("Tour par"), 0, 0);
+    FixtureGroup *foh = new FixtureGroup(m_doc);
+    foh->setName(QStringLiteral("FOH"));
+    m_doc->addFixtureGroup(foh);
+    foh->assignFixture(tour);
+    m_doc->resetModified();
+    const QString file = pmsFile(m_dir);
+
+    // New Venue... offers From a Show..., the name typed carried over.
+    QWidget window;
+    window.resize(1024, 640);
+    QPointer<QInputDialog> ask = VenueMenu::askNewVenue(m_doc, &window);
+    QVERIFY(ask != nullptr);
+    QPushButton *fromShow = ask->findChild<QPushButton *>(QStringLiteral("venueNewFromShow"));
+    QVERIFY(fromShow != nullptr);
+    QVERIFY(fromShow->isVisible());
+    ask->setTextValue(QStringLiteral("PMS Auditeria"));
+    fromShow->click();
+    QTRY_VERIFY(ask.isNull());
+    QPointer<VenueFromShowDialog> d = window.findChild<VenueFromShowDialog *>();
+    QVERIFY(d != nullptr);
+    QCOMPARE(d->nameEdit()->text(), QStringLiteral("PMS Auditeria"));
+    QVERIFY(v->venueNames().isEmpty());                  // nothing made yet
+    QVERIFY(!d->makeButton()->isEnabled());
+    QCOMPARE(d->summaryLabel()->text(), QStringLiteral("Choose the room's show file."));
+
+    // A file that is not a show: said on screen.
+    const QString bad = m_dir->filePath(QStringLiteral("notes.qlcc"));
+    QFile nf(bad);
+    QVERIFY(nf.open(QIODevice::WriteOnly));
+    nf.write("<QlcVenues/>");
+    nf.close();
+    QVERIFY(!d->setFile(bad));
+    QVERIFY(d->summaryLabel()->text().contains(QStringLiteral("not a show file")));
+    QVERIFY(!d->makeButton()->isEnabled());
+
+    // The room's file: read, its universe suggested (U2, nothing on it).
+    QVERIFY(d->setFile(file));
+    QCOMPARE(d->universeBox()->currentData().toUInt(), 1u);
+    QVERIFY(d->universeBox()->currentText().startsWith(QStringLiteral("U2 ")));
+    QCOMPARE(d->summaryLabel()->text(),
+             QStringLiteral("From PMS Stage.qlcc: 7 fixtures on U2 1\342\200\223109. Groups: 0 fill this "
+                            "show's, 3 kept for later."));
+    // No USB interface on this computer: Not yet, and the clash check says so.
+    QCOMPARE(d->outputPicker()->kind(), RoomOutputPicker::NotYet);
+    QVERIFY2(items(d->clashList()).filter(QStringLiteral("Output \342\200\224 U2: no output in this room yet")).size() == 1,
+             qPrintable(items(d->clashList()).join('\n')));
+
+    // FOH is suggested by its name and waits for the tick.
+    GroupMatchTable *table = d->groupTable();
+    QCOMPARE(table->rowCount(), 3);
+    QCOMPARE(table->item(0, GroupMatchTable::NameCol)->text(), QStringLiteral("FOH"));
+    QCOMPARE(table->groupBox(0)->currentText(), QStringLiteral("FOH (same name)"));
+    QCOMPARE(table->item(0, GroupMatchTable::ConfirmCol)->checkState(), Qt::Unchecked);
+    QCOMPARE(table->groupBox(1)->currentText(), QStringLiteral("Not matched (kept for later)"));
+    QVERIFY(!d->makeButton()->isEnabled());
+    QCOMPARE(d->makeButton()->text(), QStringLiteral("Make Venue (Confirm each match: 1 to go)"));
+    shoot(d, QStringLiteral("venue-from-show-confirm"));
+    table->setConfirmed(0, true);
+    QVERIFY(d->makeButton()->isEnabled());
+    QCOMPARE(d->makeButton()->text(), QStringLiteral("Make Venue"));
+    QVERIFY(d->summaryLabel()->text().endsWith(QStringLiteral("Groups: 1 fill this show's, 2 kept for later.")));
+
+    // An Art-Net node for the room: the address must read; then no Output clash.
+    QComboBox *kind = d->outputPicker()->findChild<QComboBox *>(QStringLiteral("roomOutputKind"));
+    QLineEdit *ip = d->outputPicker()->findChild<QLineEdit *>(QStringLiteral("roomOutputIp"));
+    QVERIFY(kind != nullptr && ip != nullptr);
+    // What the file had is offered, never chosen by itself, and flagged.
+    QCOMPARE(kind->itemText(3), QStringLiteral("As PMS Stage.qlcc had it: Art-Net to 172.18.2.10 (from 172.18.2.219)"));
+    kind->setCurrentIndex(3);
+    QVERIFY(items(d->clashList()).filter(QStringLiteral("U2 still sends what PMS Stage.qlcc had")).size() == 1);
+    kind->setCurrentIndex(kind->findData(int(RoomOutputPicker::ArtNet)));
+    ip->setText(QStringLiteral("10.0.0"));
+    QVERIFY(!d->makeButton()->isEnabled());
+    ip->setText(QStringLiteral("10.0.0.20"));
+    QVERIFY(d->makeButton()->isEnabled());
+    QVERIFY(items(d->clashList()).filter(QStringLiteral("Output")).isEmpty());
+    QCOMPARE(items(d->clashList()), QStringList({ QStringLiteral("No clashes.") }));
+    shoot(d, QStringLiteral("venue-from-show-ready"));
+
+    // Make Venue: made, applied; the show not changed; the note offers Undo.
+    d->makeButton()->click();
+    QTRY_VERIFY(d.isNull());
+    QCOMPARE(v->activeVenue(), QStringLiteral("PMS Auditeria"));
+    QCOMPARE(v->rig()->venueFixtures().size(), 7);
+    QCOMPARE(foh->headList().size(), 4);
+    QVERIFY(!m_doc->isModified());
+    QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(1)->outputPatchDescriptions()),
+             QStringLiteral("Art-Net to 10.0.0.20"));
+    QPointer<QMessageBox> note = window.findChild<QMessageBox *>(QStringLiteral("vfsDone"));
+    QVERIFY(note != nullptr);
+    QVERIFY2(note->text().startsWith(QStringLiteral("PMS Auditeria made from PMS Stage.qlcc: 7 fixtures on U2")),
+             qPrintable(note->text()));
+    shoot(note, QStringLiteral("venue-from-show-done"));
+    QPushButton *undo = note->findChild<QPushButton *>(QStringLiteral("vfsUndo"));
+    QVERIFY(undo != nullptr);
+    undo->click();
+    QTRY_VERIFY(note.isNull());
+    QVERIFY(!v->hasVenue(QStringLiteral("PMS Auditeria")));
+    QVERIFY(!v->isActive());
+    QCOMPARE(m_doc->fixtures().size(), 1);
+    QCOMPARE(foh->headList().size(), 1);
+    QVERIFY(!m_doc->isModified());
+}
+
+void VenueRigUi_Test::theVenuePageChoosesTheRoomOutput()
+{
+    VenueCorrections *v = venues(m_doc);
+    dimmer(m_doc, QStringLiteral("Tour par"), 0, 0);
+    FixtureGroup *wash = new FixtureGroup(m_doc);
+    wash->setName(QStringLiteral("House wash"));
+    m_doc->addFixtureGroup(wash);
+    VenueImport::Source src;
+    QVERIFY(VenueImport::read(pmsFile(m_dir), src));
+    VenueImport::Options opt;
+    opt.universe = 1;
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"),
+                                            VenueImport::build(src, m_doc, opt, v->reservedIds()).data);
+    QVERIFY(!pms.isEmpty());
+    QVERIFY(v->setActiveVenue(pms));
+
+    VenueRigDialog page(m_doc, pms, nullptr);
+    page.resize(1024, 640);
+    page.show();
+    QWidget *room = page.findChild<QWidget *>(QStringLiteral("vrRoom"));
+    QLabel *text = page.findChild<QLabel *>(QStringLiteral("vrRoomText"));
+    QLabel *waiting = page.findChild<QLabel *>(QStringLiteral("vrWaiting"));
+    QVERIFY(room != nullptr && text != nullptr && waiting != nullptr);
+    QVERIFY(room->isVisible());
+    QVERIFY2(text->text().contains(QStringLiteral("is PMS Auditeria's own universe (its rig from PMS Stage.qlcc). "
+                                                  "Its output here: none.")), qPrintable(text->text()));
+    QCOMPARE(waiting->text(), QStringLiteral("Waiting for a match: FOH (3), Relays (4), 1st Elect. (2)"));
+    QVERIFY(items(page.clashList()).filter(QStringLiteral("U2: no output in this room yet")).size() == 1);
+    shoot(&page, QStringLiteral("venue-page-room-before"));
+
+    // Chosen here: on the universe at once, the clash gone, kept in the venue.
+    QComboBox *kind = page.roomOutput()->findChild<QComboBox *>(QStringLiteral("roomOutputKind"));
+    QLineEdit *ip = page.roomOutput()->findChild<QLineEdit *>(QStringLiteral("roomOutputIp"));
+    kind->setCurrentIndex(kind->findData(int(RoomOutputPicker::ArtNet)));
+    QVERIFY(!page.useRoomOutputButton()->isEnabled());
+    ip->setText(QStringLiteral("10.0.0.20"));
+    QVERIFY(page.useRoomOutputButton()->isEnabled());
+    page.useRoomOutputButton()->click();
+    QCOMPARE(VenueRig::outputText(m_doc->inputOutputMap()->universe(1)->outputPatchDescriptions()),
+             QStringLiteral("Art-Net to 10.0.0.20"));
+    QVERIFY(items(page.clashList()).filter(QStringLiteral("Output")).isEmpty());
+    QVERIFY(text->text().endsWith(QStringLiteral("Its output here: Art-Net to 10.0.0.20.")));
+    QCOMPARE(VenueRig::outputText(v->venue(pms).rig.patch.value(1)), QStringLiteral("Art-Net to 10.0.0.20"));
+    QVERIFY(!m_doc->isModified());
+
+    // Match Groups...: FOH chosen by hand into House wash (his choice: confirmed).
+    QPointer<QDialog> match = page.openMatchGroups();
+    QVERIFY(match != nullptr);
+    GroupMatchTable *table = match->findChild<GroupMatchTable *>();
+    QPushButton *ok = match->findChild<QPushButton *>(QStringLiteral("vrMatchGroupsOk"));
+    QVERIFY(table != nullptr && ok != nullptr);
+    QVERIFY(!ok->isEnabled());                           // nothing chosen yet
+    table->groupBox(0)->setCurrentIndex(table->groupBox(0)->findData(wash->id()));
+    QCOMPARE(table->item(0, GroupMatchTable::ConfirmCol)->checkState(), Qt::Checked);
+    QVERIFY(ok->isEnabled());
+    shoot(match, QStringLiteral("venue-page-match-groups"));
+    ok->click();
+    QTRY_VERIFY(match.isNull());
+    QCOMPARE(wash->headList().size(), 3);
+    QCOMPARE(waiting->text(), QStringLiteral("Waiting for a match: Relays (4), 1st Elect. (2)"));
+    shoot(&page, QStringLiteral("venue-page-room-after"));
+
+    // A venue not made from a show: no such section.
+    const QString plain = v->addVenue(QStringLiteral("Lincoln HS"));
+    VenueRigDialog other(m_doc, plain, nullptr);
+    other.show();
+    QVERIFY(!other.findChild<QWidget *>(QStringLiteral("vrRoom"))->isVisible());
 }
 
 QTEST_MAIN(VenueRigUi_Test)

@@ -173,11 +173,11 @@ VenueImport::Group readGroup(QXmlStreamReader &r)
     VenueImport::Group g;
     while (r.readNextStartElement())
     {
-        if (r.name() == KXMLQLCFixtureGroupName)
+        if (r.name() == QLatin1String("Name"))
         {
             g.name = r.readElementText();
         }
-        else if (r.name() == KXMLQLCFixtureGroupHead)
+        else if (r.name() == QLatin1String("Head"))
         {
             const QXmlStreamAttributes a = r.attributes();
             bool xok = false, yok = false, fok = false, hok = false;

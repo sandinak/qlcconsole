@@ -115,6 +115,8 @@ add_library(${module_name}
     monitor/focusmenu.cpp monitor/focusmenu.h
     monitor/venuemenu.cpp monitor/venuemenu.h
     monitor/venuerigdialog.cpp monitor/venuerigdialog.h
+    monitor/venuefromshowdialog.cpp monitor/venuefromshowdialog.h
+    monitor/roomoutputpicker.cpp monitor/roomoutputpicker.h
     monitor/monitorbackgroundselection.cpp monitor/monitorbackgroundselection.h monitor/monitorbackgroundselection.ui
     monitor/monitorfixture.cpp monitor/monitorfixture.h
     monitor/monitorfixtureitem.cpp monitor/monitorfixtureitem.h

@@ -47,6 +47,16 @@ private slots:
      *  and the patch alone; Apply anyway goes live, the clash unpatched. */
     void aClashingVenueAsksBeforeItIsApplied();
 
+    /* New Venue from a Show (docs/design/VENUE_FROM_SHOW.md) */
+    /** From the New Venue dialog's From a Show... to the venue applied: the
+     *  file read, the universe suggested, each match confirmed before Make
+     *  Venue, the output chosen, the clash list before it is made, the
+     *  closing note's Undo; the show never changed */
+    void aVenueFromAShowEndToEnd();
+    /** The venue page of a venue made from a show: its universe, the room's
+     *  output chosen there (on the rig at once), Match Groups... */
+    void theVenuePageChoosesTheRoomOutput();
+
 private:
     Doc *m_doc = nullptr;
     QTemporaryDir *m_dir = nullptr;
