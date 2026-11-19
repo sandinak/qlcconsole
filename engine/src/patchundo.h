@@ -24,8 +24,10 @@
 #include <QVariant>
 #include <QList>
 #include <QMap>
+#include <climits>
 
 class InputOutputMap;
+class QLCIOPlugin;
 
 /**
  * One step of undo for patching.
@@ -85,6 +87,18 @@ public:
         /** False means "there was no patch here", which restores as a clear
             rather than as a patch to an empty plugin. */
         bool present;
+        /** An output leg that was pending (its interface away or held): its
+            identity, so undo puts it back pending, never as a deleted leg
+            (line is invalid then). */
+        bool pending = false;
+        QLCIOPlugin *pendingPlugin = nullptr;
+        QString pendingUid;
+        quint32 pendingLine = UINT_MAX;
+        QString pendingNetwork;
+        bool pendingByNumber = false;
+        int holdKind = 0;                   //!< OutputPatch::HoldKind
+        QString heldReason;
+        QString reconnectHeld;
     };
 
     /** Everything about one universe that patching can change. */
@@ -135,6 +149,7 @@ signals:
 private:
     State captureOne(quint32 universe) const;
     void restoreOne(const State &state);
+    void restorePending(quint32 universe, int index, const Patch &p);
     /** Make the universe list match what was held, from the end inwards. */
     void restoreUniverseList();
 

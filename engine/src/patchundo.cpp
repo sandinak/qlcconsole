@@ -72,6 +72,18 @@ PatchUndo::State PatchUndo::captureOne(quint32 universe) const
         p.plugin = op->pluginName();
         p.line = op->output();
         p.parameters = op->getPluginParameters();
+        if (op->isPending())
+        {
+            p.pending = true;
+            p.pendingPlugin = op->plugin();
+            p.pendingUid = op->pendingUid();
+            p.pendingLine = op->pendingLine();
+            p.pendingNetwork = op->pendingNetwork();
+            p.pendingByNumber = op->pendingByNumber();
+            p.holdKind = int(op->holdKind());
+            p.heldReason = op->heldReason();
+            p.reconnectHeld = op->reconnectHeld();
+        }
         st.outputs << p;
     }
 
@@ -161,6 +173,11 @@ void PatchUndo::restoreOne(const State &st)
     {
         const Patch &p = st.outputs.at(i);
         OutputPatch *op = m_ioMap->outputPatch(st.id, i);
+        if (p.pending)
+        {
+            restorePending(st.id, i, p);
+            continue;
+        }
         const bool sameLine = op != NULL && op->isPatched() && op->pluginName() == p.plugin
                               && op->output() == p.line;
         if (sameLine == false
@@ -216,6 +233,30 @@ void PatchUndo::restoreOne(const State &st)
     {
         m_ioMap->setOutputPatch(st.id, QString(), QString(), 0, true, 0);
     }
+}
+
+/** A leg that was pending goes back pending, with its identity -- not through
+ *  setOutputPatch() on an invalid line, which deletes it. */
+void PatchUndo::restorePending(quint32 universe, int index, const Patch &p)
+{
+    Universe *uni = m_ioMap->universe(universe);
+    if (uni == NULL || p.pendingPlugin == NULL)
+        return;
+    OutputPatch *op = m_ioMap->outputPatch(universe, index);
+    const bool same = op != NULL && op->isPending() && op->plugin() == p.pendingPlugin
+                      && op->pendingUid() == p.pendingUid && op->pendingLine() == p.pendingLine
+                      && op->pendingNetwork() == p.pendingNetwork
+                      && op->pendingByNumber() == p.pendingByNumber;
+    if (same == false
+        && uni->setOutputPatchPending(p.pendingPlugin, p.pendingUid, index, p.pendingLine,
+                                      p.pendingNetwork, p.pendingByNumber) == false)
+        return;
+    op = m_ioMap->outputPatch(universe, index);
+    if (op == NULL)
+        return;
+    op->markHold(OutputPatch::HoldKind(p.holdKind), p.reconnectHeld);
+    op->setHeldReason(p.heldReason);
+    op->replacePluginParameters(p.parameters);
 }
 
 /** Make the universe list match what was held.

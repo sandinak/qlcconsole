@@ -3826,6 +3826,98 @@ void InputOutputMap_Test::r21r_removingFeedbackOnTheOutputsLineKeepsTheOutputOpe
              "removing the feedback patch closed (line 1, universe 1) under the open output leg");
 }
 
+/* Review of c54477406 (independent), V4: PatchUndo does not round-trip a
+   pending leg. captureOne() records it as (plugin, invalid line, its
+   cached target); restoreOne() calls setOutputPatch(..., invalid line) --
+   which DELETES the leg -- then applies the pending leg's target to the
+   leg that shifted into its index (another node's leg, on another line),
+   and appends a new leg for that one. */
+void InputOutputMap_Test::r21r_undoKeepsAPendingLegAndTheOthersTarget()
+{
+    namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7" << "10.4.13.7");
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
+    InputOutputMap iom(m_doc, 1);
+    QMap<QString, QVariant> a, b;
+    a.insert("outputIP", "10.4.12.50");
+    b.insert("outputIP", "10.4.13.60");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, false, 0, a));
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1, b));
+    // Leg 1's interface goes away (another computer, a NIC unplugged): pending.
+    QVERIFY(iom.universe(0)->setOutputPatchPending(stub, "10.4.12.7", 0, 0));
+    QVERIFY(iom.outputPatch(0, 0)->isPending());
+    iom.patchUndo()->capture(QList<quint32>() << 0, QStringLiteral("edit"));
+    QVERIFY(iom.patchUndo()->undo());
+    QCOMPARE(iom.outputPatchesCount(0), 2);
+    QVERIFY2(iom.outputPatch(0, 0)->isPending(),
+             qPrintable(QString("undo: the pending leg is now %1 on line %2")
+                        .arg(iom.outputPatch(0, 0)->isPatched() ? "open" : "gone")
+                        .arg(iom.outputPatch(0, 0)->output())));
+    QCOMPARE(iom.outputPatch(0, 1)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(0, 1)->getPluginParameters().value("outputIP").toString(), QString("10.4.13.60"));
+}
+
+/* Review of c54477406 (independent), V6 (pre-existing; what undo and the
+   save read): QLCIOPlugin keeps ONE output line and one parameter map per
+   universe. A universe with two Art-Net legs on two interfaces (show VLAN
+   and a second NIC) reads the first leg's parameters as {} -- the map is
+   the second line's -- so the show saves the first leg without its target,
+   and PatchUndo captures {} for it and, on undo, clears its cached target
+   (Art-Net's unSetParameter() now puts that line on broadcast at once). */
+void InputOutputMap_Test::r21r_twoLegsOnTwoLinesEachKeepTheirTarget()
+{
+    namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7" << "10.4.13.7");
+    InputOutputMap iom(m_doc, 1);
+    QMap<QString, QVariant> a, b;
+    a.insert("outputIP", "10.4.12.50");
+    b.insert("outputIP", "10.4.13.60");
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 0, false, 0, a));
+    QVERIFY(iom.setOutputPatch(0, "ArtNet", QString(), 1, false, 1, b));
+    QCOMPARE(iom.outputPatch(0, 1)->getPluginParameters().value("outputIP").toString(), QString("10.4.13.60"));
+    QVERIFY2(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString() == QString("10.4.12.50"),
+             qPrintable("leg 1 (line 1) reads outputIP '"
+                        + iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString()
+                        + "': the show saves it, and undo restores it, without its node"));
+}
+
+/* A show saved before the per-line fix (two Art-Net legs of one universe on
+   two interfaces, each with its node) loads with each leg on its node, and
+   saves the same two Output elements, the first with its PluginParameters. */
+void InputOutputMap_Test::r21r_anOldShowWithTwoLegsLoadsAndSavesTheSame()
+{
+    const QString xml = QStringLiteral(
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Fog\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.12.7\" Line=\"0\">\n"
+        "   <PluginParameters outputIP=\"10.4.12.50\" outputUni=\"3\"/>\n"
+        "  </Output>\n"
+        "  <Output Plugin=\"ArtNet\" UID=\"10.4.13.7\" Line=\"1\">\n"
+        "   <PluginParameters outputIP=\"10.4.13.60\" outputUni=\"4\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n");
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "10.4.12.7", 24)
+                    << localAddr("en1", "10.4.13.7", 24),
+                QMap<QString, QString>{ { "10.4.12.", "10.4.12.7" }, { "10.4.13.", "10.4.13.7" } });
+    namedStub(m_doc, "ArtNet", QStringList() << "10.4.12.7" << "10.4.13.7");
+    InputOutputMap iom(m_doc, 1);
+    QVERIFY(loadIOMap(iom, xml));
+    QCOMPARE(iom.outputPatchesCount(0), 2);
+    QCOMPARE(iom.outputPatch(0, 0)->output(), quint32(0));
+    QCOMPARE(iom.outputPatch(0, 1)->output(), quint32(1));
+    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputIP").toString(), QString("10.4.12.50"));
+    QCOMPARE(iom.outputPatch(0, 0)->getPluginParameters().value("outputUni").toInt(), 3);
+    QCOMPARE(iom.outputPatch(0, 1)->getPluginParameters().value("outputIP").toString(), QString("10.4.13.60"));
+    QCOMPARE(iom.outputPatch(0, 1)->getPluginParameters().value("outputUni").toInt(), 4);
+    const QString saved = saveIOMap(iom);
+    /* The save adds the interface's Network to a leg that had none (as it
+       always did); everything else is the old file's. */
+    QStringList got = patchElements(saved);
+    QCOMPARE(got.count(), 2);
+    for (QString &leg : got)
+        leg.remove(QRegularExpression(QStringLiteral(" Network=\"[^\"]*\"")));
+    QCOMPARE(got, patchElements(xml));
+}
+
 void InputOutputMap_Test::rigNetworkNoneSetBehavesAsBefore()
 {
     schoolLaptop();
