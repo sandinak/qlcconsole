@@ -1918,10 +1918,11 @@ void FixtureManager_Test::aShowLoadBuildsEachListOnce()
         for (int i = 0; i < fixtures; i++)
         {
             Fixture *fxi = new Fixture(&src);
-            fxi->setName(QString("Par %1").arg(fixtures - i, 3, 10, QChar('0')));
+            fxi->setName(QString("Par %1").arg(i + 1, 3, 10, QChar('0')));
             fxi->setChannels(4);
             fxi->setUniverse(quint32(i / perUniverse));
-            fxi->setAddress(quint32((i % perUniverse) * 4));
+            // Patched back to front: the list's order is its sort, not the file's.
+            fxi->setAddress(quint32((perUniverse - 1 - i % perUniverse) * 4));
             QVERIFY(src.addFixture(fxi));
             ids << fxi->id();
         }
@@ -1969,7 +1970,7 @@ void FixtureManager_Test::aShowLoadBuildsEachListOnce()
             groupRows++;
     QCOMPARE(groupRows, 8);
     QCOMPARE(mgr.m_fixtures_tree->fixturesCount(), fixtures);
-    // Sorted by name, as before: universe 1's rows run Par 121 .. Par 160.
+    // Sorted by address, as before: universe 1's rows run Par 040 .. Par 001.
     QTreeWidgetItem *uni1 = nullptr;
     for (QTreeWidgetItemIterator it(mgr.m_fixtures_tree); *it; ++it)
         if ((*it)->data(KColumnName, PROP_UNIVERSE).isValid()
@@ -1977,8 +1978,8 @@ void FixtureManager_Test::aShowLoadBuildsEachListOnce()
             uni1 = *it;
     QVERIFY(uni1 != nullptr);
     QCOMPARE(uni1->childCount(), perUniverse);
-    QCOMPARE(uni1->child(0)->text(KColumnName), QString("Par 121"));
-    QCOMPARE(uni1->child(perUniverse - 1)->text(KColumnName), QString("Par 160"));
+    QCOMPARE(uni1->child(0)->text(KColumnName), QString("Par 040"));
+    QCOMPARE(uni1->child(perUniverse - 1)->text(KColumnName), QString("Par 001"));
 }
 
 void FixtureManager_Test::theGroupMenuKeepsOneActionPerGroup()
