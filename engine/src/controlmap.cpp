@@ -609,10 +609,7 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         // said about a held press can be said again.
         auto h = m_estopHeld.find(k);
         if (h != m_estopHeld.end())
-        {
             h->released = true;
-            h->moving = false;
-        }
         m_blockedHeld.remove(k);
     }
 
