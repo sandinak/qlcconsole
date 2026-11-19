@@ -1788,4 +1788,54 @@ void ControlMap_Test::aHeldRefusedPressSaysItOnce()
     QCOMPARE(blocked.count(), 2);                   // a new press says it again
 }
 
+void ControlMap_Test::aReplugFreesThePressThatTaughtTheStop()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->learn(ControlMap::emergencyStop());
+    sendAll(kStopNote, { 127, 0, 127 });            // bound; this press is still held
+    QVERIFY(cm->binding(ControlMap::emergencyStop()) != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));   // its release never comes
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    cm->setStopDebounceMs(0);
+    send(kStopNote, 127);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "the first press after a replug was swallowed");
+}
+
+void ControlMap_Test::aReleaseActsOnWhatWasPressed()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->showControl()->setGoGuardMs(0);
+    // The mode changes while the button is held: the release still lets go.
+    cm->setBinding({ 0, 20, ControlMap::function(a->id()), ControlMap::Momentary });
+    send(20, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    cm->setMode(ControlMap::function(a->id()), ControlMap::StartOnly);
+    send(20, 0);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "a mode change while held left the scene on");
+
+    // The control is bound to something else while held: the release is the
+    // scene's, and a list that runs for another reason is not stopped.
+    const SurfaceShow show = surfaceShow(m_doc);
+    Function *act1 = m_doc->function(m_doc->showTree()->cueList(show.k.list)->chaser);
+    cm->setMode(ControlMap::function(a->id()), ControlMap::Momentary);
+    send(20, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    act1->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    cm->setBinding({ 0, 20, ControlMap::cueList(show.k.list), ControlMap::Momentary });
+    send(20, 0);
+    tick(3);
+    QVERIFY2(!a->isRunning(), "the release did not let go of what the press started");
+    QVERIFY2(act1->isRunning(), "the release stopped a list the press never started");
+}
+
 QTEST_GUILESS_MAIN(ControlMap_Test)
