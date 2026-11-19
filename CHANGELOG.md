@@ -22,6 +22,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Properties (picking the fixture reloaded the view and re-framed it; the
   Overview now keeps its zoom, pan and angle through a selection change).
 
+- **Release tooling (dev-facing).** Notarization resubmits a DMG Apple leaves "In Progress" for 20 minutes (`NZ_RESUBMIT_AFTER`) and takes whichever submission is Accepted first; the Homebrew-Qt bundler (`UNIVERSAL=0`) now copies every framework a bundled plugin links to (QtSvg for the svg plugins) and fails on any reference outside the app. Both have self-tests (`notarize-lib.sh --self-test`, `bundlefix-selftest.sh`).
+
 ### Changed
 
 - **Fixture Properties stays open beside the rig.** The plot and the Rig
