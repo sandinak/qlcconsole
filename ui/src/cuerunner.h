@@ -347,6 +347,10 @@ private:
     QWidget *m_hitStrip = nullptr;
     QString m_hitStripKey;
     QHash<quint32, QPointer<VCButton>> m_hitProxies;
+    /** The proxies' home: parentless and never shown, so a rebuild or a
+     *  resize of the layout does not take an on hit's VCButton with it. */
+    QWidget *m_hitHome = nullptr;
+    void letGoProxy(VCButton *proxy);
     void refreshGoHeld();
     QLabel *m_goHeld = nullptr;
     QToolButton *m_focusStart = nullptr;

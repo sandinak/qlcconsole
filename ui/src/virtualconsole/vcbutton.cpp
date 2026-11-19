@@ -1885,6 +1885,23 @@ void VCButton::releaseFunction()
     }
 }
 
+void VCButton::letGo()
+{
+    if (state() != Active || (m_action != Flash && m_action != Toggle))
+        return;
+    Function *f = m_doc->function(m_function);
+    if (f == NULL)
+        return;
+    if (m_action == Flash)
+        f->unFlash(m_doc->masterTimer());
+    else
+        f->stop(functionParent());
+    together(m_action == Flash ? 3 : 0);
+    resetIntensityOverrideAttribute();
+    if (m_action == Flash)
+        setState(Inactive);
+}
+
 void VCButton::slotFunctionRunning(quint32 fid)
 {
     if (fid == m_function && m_action == Toggle)

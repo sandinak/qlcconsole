@@ -180,6 +180,18 @@ CueRunner::CueRunner(Doc *doc, Size size, QWidget *parent)
 
 CueRunner::~CueRunner()
 {
+    // What a hit button holds on does not outlive the Run tab.
+    for (const QPointer<VCButton> &proxy : std::as_const(m_hitProxies))
+        letGoProxy(proxy);
+    delete m_hitHome;
+}
+
+void CueRunner::letGoProxy(VCButton *proxy)
+{
+    if (proxy == nullptr)
+        return;
+    proxy->setProperty("stripHeld", false);
+    proxy->letGo();
 }
 
 QString CueRunner::sizeToString(Size size)
@@ -862,9 +874,11 @@ void CueRunner::buildFullLayout()
     m_hitScroll->setWidget(m_hitStrip);
     m_hitScroll->hide();
     v->addWidget(m_hitScroll, 0);
-    connect(m_doc->showTree(), &ShowTreeController::hitArmingChanged, this, &CueRunner::refreshHitStrip);
-    connect(m_doc->showTree(), &ShowTreeController::changed, this, &CueRunner::refreshHitStrip);
-    connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshHitStrip);
+    connect(m_doc->showTree(), &ShowTreeController::hitArmingChanged, this, &CueRunner::refreshHitStrip,
+            Qt::UniqueConnection);
+    connect(m_doc->showTree(), &ShowTreeController::changed, this, &CueRunner::refreshHitStrip,
+            Qt::UniqueConnection);
+    connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshHitStrip, Qt::UniqueConnection);
     refreshHitStrip();
 
     // Keyboard GO in the Run tab, as QLab's: Space.
@@ -1258,8 +1272,6 @@ void CueRunner::setRunnerSize(Size size)
     m_hitScroll = nullptr;
     m_hitStrip = nullptr;
     m_hitStripKey.clear();
-    qDeleteAll(m_hitProxies);
-    m_hitProxies.clear();
     m_padHit = nullptr;
     m_goHeld = nullptr;
     m_focusStart = nullptr;
@@ -2057,20 +2069,37 @@ void CueRunner::refreshHitStrip()
     const QList<quint32> armed = st->armedHitsNarrowFirst();
 
     // Only a changed strip is rebuilt: a button under the finger stays.
+    // The button mode of a Virtual Console button holding hit @a h, else Toggle.
+    auto actionOf = [](quint32 h) {
+        for (const VCButton *b : UsedBy::allVcButtons())
+            if (b->hits().contains(h))
+                return b->action() == VCButton::Flash ? VCButton::Flash : VCButton::Toggle;
+        return VCButton::Toggle;
+    };
     QString key = operate ? QStringLiteral("O") : QStringLiteral("D");
     for (quint32 h : armed)
-        key += QStringLiteral("|%1:%2:%3").arg(h).arg(st->cue(h) != nullptr ? st->cue(h)->name : QString(),
-                                                     st->hitColour(h).name());
+        key += QStringLiteral("|%1:%2:%3:%4").arg(h).arg(st->cue(h) != nullptr ? st->cue(h)->name : QString(),
+                                                        st->hitColour(h).name())
+                   .arg(int(actionOf(h)));
     if (key == m_hitStripKey && !m_hitStripKey.isEmpty())
         return;
     m_hitStripKey = key;
 
-    // A proxy whose hit is gone is dropped; one whose place ended stays, to
-    // let go of what it holds (VCButton::slotShowTreeChanged()).
+    // Out of Operate nothing is held by this strip: a Flash still down lets go.
+    if (!operate)
+        for (const QPointer<VCButton> &proxy : std::as_const(m_hitProxies))
+            if (!proxy.isNull() && proxy->property("stripHeld").toBool())
+                letGoProxy(proxy);
+
+    // A proxy whose hit is gone is dropped, letting go first; one whose
+    // place ended stays, to let go of what it holds
+    // (VCButton::slotShowTreeChanged()). The proxies outlive a rebuild of the
+    // strip, so a hit that is on stays on.
     for (auto it = m_hitProxies.begin(); it != m_hitProxies.end();)
     {
         if (it.value().isNull() || st->cue(it.key()) == nullptr)
         {
+            letGoProxy(it.value());
             delete it.value();
             it = m_hitProxies.erase(it);
         }
@@ -2090,25 +2119,20 @@ void CueRunner::refreshHitStrip()
         const ShowTree::Cue *c = st->cue(h);
         if (c == nullptr)
             continue;
-        // The button mode of a Virtual Console button holding this hit, else Toggle.
-        VCButton::Action action = VCButton::Toggle;
-        for (const VCButton *b : UsedBy::allVcButtons())
-            if (b->hits().contains(h))
-            {
-                if (b->action() == VCButton::Flash)
-                    action = VCButton::Flash;
-                break;
-            }
+        const VCButton::Action action = actionOf(h);
         QPointer<VCButton> proxy = m_hitProxies.value(h);
         if (proxy.isNull() && vc != nullptr)
         {
-            proxy = new VCButton(m_hitStrip, m_doc);
+            if (m_hitHome == nullptr)
+            {
+                m_hitHome = new QWidget();
+                m_hitHome->setObjectName(QStringLiteral("crHitHome"));
+            }
+            proxy = new VCButton(m_hitHome, m_doc);
             proxy->hide();
             proxy->setHit(h);
             m_hitProxies.insert(h, proxy);
         }
-        if (!proxy.isNull())
-            proxy->setAction(action);
 
         QToolButton *b = new QToolButton(m_hitStrip);
         b->setObjectName(QStringLiteral("crHit"));
@@ -2142,9 +2166,32 @@ void CueRunner::refreshHitStrip()
         };
         if (!proxy.isNull())
         {
-            connect(b, &QToolButton::pressed, proxy, &VCButton::pressFunction);
-            if (action == VCButton::Flash)
-                connect(b, &QToolButton::released, proxy, &VCButton::releaseFunction);
+            /* The mode is read at the press (a VC button changed since is
+               followed), and a Flash is let go of however the press ends:
+               the release, the strip rebuilt under it, Design. */
+            connect(b, &QToolButton::pressed, proxy, [proxy, actionOf, h]() {
+                if (proxy->state() != VCButton::Active)
+                    proxy->setAction(actionOf(h));
+                // On from elsewhere (the pad, a VC button): the press turns it off.
+                if (proxy->action() == VCButton::Toggle && proxy->state() == VCButton::Monitoring)
+                    proxy->setState(VCButton::Active);
+                proxy->setProperty("stripHeld", proxy->action() == VCButton::Flash);
+                proxy->pressFunction();
+            });
+            connect(b, &QToolButton::released, proxy, [proxy]() {
+                if (proxy->property("stripHeld").toBool())
+                {
+                    proxy->setProperty("stripHeld", false);
+                    proxy->letGo();
+                }
+            });
+            connect(b, &QObject::destroyed, proxy, [proxy]() {
+                if (proxy->property("stripHeld").toBool())
+                {
+                    proxy->setProperty("stripHeld", false);
+                    proxy->letGo();
+                }
+            });
             connect(proxy, &VCButton::stateChanged, b, showOn);
             if (Function *f = m_doc->function(st->lookFunction(h)))
             {

@@ -41,6 +41,11 @@ private slots:
     void theHitStripShowsTheArmedHitsNarrowestFirst();
     void theHitStripFiresInOperateOnly();
     void theHitStripStaysNarrowAndOffTheKeyboard();
+    void aFlashHitPlaysWhilePressedAndLetsGo();
+    void aFlashHitHeldLetsGoWhenTheStripRebuildsOrDesignComes();
+    void anOnHitStaysOnThroughARebuildAndOnePressTurnsItOff();
+    void anOnHitLetsGoWhenItsPlaceEndsOrItIsDeleted();
+    void theStripsButtonsAreNotVcWidgetsAndAreNotSaved();
     void theHitStripShots();
     /** Teaching: each GO and Back is written in crew words, tracked layers named */
     void theTeachingLogSaysWhatEachGoDid();

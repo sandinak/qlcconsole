@@ -51,6 +51,7 @@
 #include "inputoutputmap.h"
 #include "virtualconsole.h"
 #include "vcbutton.h"
+#include "usedby.h"
 #include "vcframe.h"
 #include "fixturegroup.h"
 #include "showcontrol.h"
@@ -511,6 +512,217 @@ void CueRunner_Test::theHitStripStaysNarrowAndOffTheKeyboard()
     QVERIFY(scroll->height() <= 2 * 46 + 8 + 2);
     // GO still answers Space with a hit button clicked.
     QVERIFY(plain.findChild<QToolButton *>("crGo") != nullptr);
+}
+
+namespace
+{
+/* A global hit that lights group A at Full (it runs, and shows on the stage). */
+quint32 lightingHit(Doc *doc, quint32 group, const QString &name, ShowTree::HitScope scope, quint32 placeId)
+{
+    ShowTreeController *st = doc->showTree();
+    const quint32 hit = st->addHit(scope, placeId, name);
+    const quint32 layer = st->addLayer(hit, groupTarget(group), "Fronts");
+    QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, doc);
+    p->setName(name + " Level");
+    p->setValue(255);
+    doc->addPalette(p);
+    st->setLayerLook(hit, layer, st->lookForPalette(p->id()));
+    return hit;
+}
+QToolButton *theHitButton(CueRunner &runner, const QString &name)
+{
+    for (QToolButton *b : hitButtons(runner))
+        if (b->text() == name)
+            return b;
+    return nullptr;
+}
+void pressDown(QToolButton *b)
+{
+    QTest::mousePress(b, Qt::LeftButton);
+}
+} // namespace
+
+void CueRunner_Test::aFlashHitPlaysWhilePressedAndLetsGo()
+{
+    const QList<quint32> ids = show();
+    ScopedVc vc(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    st->cueList(ids[0], &prod);
+    const quint32 hit = lightingHit(m_doc, m_doc->fixtureGroups().first()->id(), "Stab", ShowTree::HitScope::Global, prod);
+    VCButton *vcb = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    vcb->setHit(hit);
+    vcb->setAction(VCButton::Flash);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(1200, 700);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    QToolButton *b = theHitButton(runner, "Stab");
+    QVERIFY(b != nullptr);
+    const Function *f = m_doc->function(st->lookFunction(hit));
+    pressDown(b);
+    settle();
+    QVERIFY(f->isRunning());
+    QCOMPARE(settle()[0], uchar(255));
+    QTest::mouseRelease(b, Qt::LeftButton);
+    settle(40);
+    QVERIFY(!f->isRunning());
+    // The mode is read at the press: the VC button turned to Toggle since.
+    vcb->setAction(VCButton::Toggle);
+    b = theHitButton(runner, "Stab");
+    QTest::mouseClick(b, Qt::LeftButton);
+    settle();
+    QVERIFY(f->isRunning());
+    QTest::mouseClick(theHitButton(runner, "Stab"), Qt::LeftButton);
+    settle(40);
+    QVERIFY(!f->isRunning());
+    delete vcb;
+}
+
+void CueRunner_Test::aFlashHitHeldLetsGoWhenTheStripRebuildsOrDesignComes()
+{
+    const QList<quint32> ids = show();
+    ScopedVc vc(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    st->cueList(ids[0], &prod);
+    const quint32 hit = lightingHit(m_doc, m_doc->fixtureGroups().first()->id(), "Stab", ShowTree::HitScope::Global, prod);
+    VCButton *vcb = new VCButton(VirtualConsole::instance()->contents(), m_doc);
+    vcb->setHit(hit);
+    vcb->setAction(VCButton::Flash);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(1200, 700);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    const Function *f = m_doc->function(st->lookFunction(hit));
+    // Held, then the hit is renamed: the button is rebuilt under the finger.
+    pressDown(theHitButton(runner, "Stab"));
+    settle();
+    QVERIFY(f->isRunning());
+    {
+        ShowTree::Cue c = *st->cue(hit);
+        c.name = "Stab Two";
+        QVERIFY(st->setCue(c));
+    }
+    QCoreApplication::processEvents();
+    QVERIFY(theHitButton(runner, "Stab Two") != nullptr);
+    settle(40);
+    QVERIFY2(!f->isRunning(), "a held Flash outlived its button");
+    // Held, then Design comes.
+    pressDown(theHitButton(runner, "Stab Two"));
+    settle();
+    QVERIFY(f->isRunning());
+    m_doc->setMode(Doc::Design);
+    QCoreApplication::processEvents();
+    settle(40);
+    QVERIFY2(!f->isRunning(), "a held Flash outlived Operate");
+    delete vcb;
+}
+
+void CueRunner_Test::anOnHitStaysOnThroughARebuildAndOnePressTurnsItOff()
+{
+    const QList<quint32> ids = show();
+    ScopedVc vc(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    st->cueList(ids[0], &prod);
+    const quint32 hit = lightingHit(m_doc, m_doc->fixtureGroups().first()->id(), "Stab", ShowTree::HitScope::Global, prod);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(1200, 700);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    const Function *f = m_doc->function(st->lookFunction(hit));
+    QTest::mouseClick(theHitButton(runner, "Stab"), Qt::LeftButton);
+    settle();
+    QVERIFY(f->isRunning());
+    // A resize of the runner's layout, then a rename: both rebuild the strip.
+    runner.setRunnerSize(CueRunner::Compact);
+    runner.setRunnerSize(CueRunner::Full);
+    {
+        ShowTree::Cue c = *st->cue(hit);
+        c.name = "Stab Again";
+        QVERIFY(st->setCue(c));
+    }
+    QCoreApplication::processEvents();
+    QToolButton *b = theHitButton(runner, "Stab Again");
+    QVERIFY(b != nullptr);
+    QVERIFY(f->isRunning());
+    QCOMPARE(b->property("hitOn").toBool(), true);
+    QTest::mouseClick(b, Qt::LeftButton);
+    settle(40);
+    QVERIFY2(!f->isRunning(), "one press must turn it off");
+}
+
+void CueRunner_Test::anOnHitLetsGoWhenItsPlaceEndsOrItIsDeleted()
+{
+    const QList<quint32> ids = show();
+    ScopedVc vc(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    st->cueList(ids[0], &prod);
+    const quint32 onCue = lightingHit(m_doc, m_doc->fixtureGroups().first()->id(), "Cue Stab", ShowTree::HitScope::Cue, ids[1]);
+    const quint32 everywhere = lightingHit(m_doc, m_doc->fixtureGroups().first()->id(), "Wash", ShowTree::HitScope::Global, prod);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(1200, 700);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    runner.go();
+    settle();
+    QCoreApplication::processEvents();
+    QToolButton *b = theHitButton(runner, "Cue Stab");
+    QVERIFY(b != nullptr);
+    const Function *f = m_doc->function(st->lookFunction(onCue));
+    QTest::mouseClick(b, Qt::LeftButton);
+    settle();
+    QVERIFY(f->isRunning());
+    // GO moves on: the hit's place ends and it lets go.
+    runner.go();
+    settle(60);
+    QCoreApplication::processEvents();
+    settle(60);
+    QVERIFY2(!f->isRunning(), "an on hit must let go when its place ends");
+    QVERIFY(theHitButton(runner, "Cue Stab") == nullptr);
+    // A hit deleted while on: it is let go, and nothing is left running.
+    QTest::mouseClick(theHitButton(runner, "Wash"), Qt::LeftButton);
+    settle();
+    const quint32 fid = st->lookFunction(everywhere);
+    QVERIFY(m_doc->function(fid)->isRunning());
+    QVERIFY(st->removeCue(everywhere));
+    QCoreApplication::processEvents();
+    settle(60);
+    const Function *gone = m_doc->function(fid);
+    QVERIFY(gone == nullptr || !gone->isRunning());
+    QVERIFY(theHitButton(runner, "Wash") == nullptr);
+}
+
+void CueRunner_Test::theStripsButtonsAreNotVcWidgetsAndAreNotSaved()
+{
+    const QList<quint32> ids = show();
+    ScopedVc vc(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = 0;
+    st->cueList(ids[0], &prod);
+    lightingHit(m_doc, m_doc->fixtureGroups().first()->id(), "Stab", ShowTree::HitScope::Global, prod);
+    m_doc->setMode(Doc::Operate);
+    CueRunner runner(m_doc, CueRunner::Full);
+    runner.resize(1200, 700);
+    runner.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&runner));
+    QTest::mouseClick(theHitButton(runner, "Stab"), Qt::LeftButton);
+    settle();
+    QVERIFY(UsedBy::allVcButtons().isEmpty());
+    QByteArray xml;
+    QBuffer buf(&xml);
+    QVERIFY(buf.open(QIODevice::WriteOnly));
+    QXmlStreamWriter w(&buf);
+    w.writeStartDocument();
+    QVERIFY(VirtualConsole::instance()->saveXML(&w));
+    w.writeEndDocument();
+    QVERIFY2(!xml.contains("<Button"), xml.constData());
 }
 
 void CueRunner_Test::theHitStripShots()
