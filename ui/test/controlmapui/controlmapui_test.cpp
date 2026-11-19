@@ -47,6 +47,7 @@
 #include "inputoutputmap.h"
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
+#include "qlcfile.h"
 #include <QDir>
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
