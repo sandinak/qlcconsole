@@ -109,6 +109,29 @@ private slots:
     /** A renumbered house fixture skips every venue's house ids */
     void aRenumberedIdSkipsOtherVenuesIds();
 
+    /* New Venue from a Show (docs/design/VENUE_FROM_SHOW.md) */
+    /** Another show's fixtures come in as House, on the venue's universe at
+     *  their own addresses, at their plot places; the show is unchanged */
+    void aVenueFromAnotherShow();
+    /** Its groups are suggested by name; only confirmed matches fill, the
+     *  rest wait in the venue and can be matched later */
+    void aVenueFromAnotherShowFillsOnlyConfirmedGroups();
+    /** The venue's own universe: no output, the imported Art-Net left over,
+     *  or the show's own output are clashes; a chosen one is not */
+    void theRoomOutputAndItsClashes();
+    /** An Art-Net room output with no route yet is kept waiting and said
+     *  so; it goes out once the network is there; the venue keeps only its
+     *  own universe's patch through any patch signal */
+    void anArtNetRoomOutputWaitsForItsNetwork();
+    /** Removing the venue leaves the show and its fixtures as they were */
+    void undoingAVenueFromAnotherShow();
+    /** A file that isn't a show, or has no fixtures, is refused with a reason */
+    void aVenueFromAFileThatIsNotAShow();
+    /** A real touring show and a real room's show (QLC_VENUE_REAL_SHOW,
+     *  QLC_VENUE_REAL_ROOM; skipped without them), copied into a temp dir:
+     *  the import's counts into $QLC_SHOT_DIR/venue-import-report.txt */
+    void aRealShowIntoAVenue();
+
 private:
     QString showFile() const;
     quint32 dimmers(int count, quint32 universe, quint32 address, const QString &name);

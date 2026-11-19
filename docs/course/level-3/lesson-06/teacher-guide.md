@@ -183,6 +183,12 @@ Universes…** page. For the last, ask what a house fixture is and where
 it is saved (*the room's own light; saved in that venue's file, not the
 show*).
 
+A room whose rig is already a show file (made from its own desk) can
+become a venue in one step: **New Venue…** ▸ **From a Show…**. Ask why
+its fixtures go into the venue and not the show (*they are the room's;
+the show travels without them*), and why each group match is confirmed
+by hand (*a cue on that group will play on those lights*).
+
 ## Part 3 — On the real rig (with Branson)
 
 On the theatre's rig, with the real movers patched:

@@ -12,6 +12,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [0.5.1] - Unreleased
 
+### Added
+
+- **New Venue from a Show.** New Venue… ▸ From a Show… makes a venue from
+  the room's own show file (one made from its desk's export): its
+  fixtures come in as House, at their plot places, on the one universe the
+  show keeps for the room (each at its own address), its groups matched to
+  the show's by name with each match confirmed, and the room's output
+  chosen there or on the venue page (a USB DMX interface or an Art-Net
+  node). The clash check flags an output left over from the file. The
+  show file is not changed. See House rig and tour package (F1).
+
 ### Fixed
 
 - **Undoing a patch change keeps a leg whose interface is away, and two legs

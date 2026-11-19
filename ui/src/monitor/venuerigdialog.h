@@ -22,7 +22,9 @@
 
 #include <QDialog>
 
+class RoomOutputPicker;
 class QTableWidget;
+class QGroupBox;
 class QListWidget;
 class QPushButton;
 class QLabel;
@@ -56,6 +58,13 @@ public:
     QString venue() const { return m_venue; }
     QTableWidget *universeTable() const { return m_table; }
     QListWidget *clashList() const { return m_clashes; }
+    /** A venue made from another show: its universe's output in this room. */
+    RoomOutputPicker *roomOutput() const { return m_roomOutput; }
+    QPushButton *useRoomOutputButton() const { return m_useRoomOutput; }
+    QPushButton *matchGroupsButton() const { return m_matchGroups; }
+    /** Match Groups...: the room's groups waiting for a match, against the
+     *  show's (not modal). */
+    QDialog *openMatchGroups();
 
     /** Columns of universeTable(). */
     enum Column { UniverseCol = 0, SlotCol, PatchCol, NotOursCol };
@@ -80,6 +89,12 @@ private:
     QPushButton *m_forgetPatch;
     QListWidget *m_clashes;
     QLabel *m_noClashes;
+    QGroupBox *m_room;
+    QLabel *m_roomText;
+    RoomOutputPicker *m_roomOutput;
+    QPushButton *m_useRoomOutput;
+    QLabel *m_waiting;
+    QPushButton *m_matchGroups;
 };
 
 /** @} */

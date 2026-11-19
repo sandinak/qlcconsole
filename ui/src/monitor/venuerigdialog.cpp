@@ -34,6 +34,8 @@
 #include "venuecorrections.h"
 #include "inputoutputmap.h"
 #include "venuerigdialog.h"
+#include "venuefromshowdialog.h"
+#include "roomoutputpicker.h"
 #include "fixturegroup.h"
 #include "venuerig.h"
 #include "rigowner.h"
@@ -45,21 +47,6 @@ namespace
 VenueCorrections *venuesOf(Doc *doc)
 {
     return doc->programmer()->venueCorrections();
-}
-
-/* "ArtNet: 10.0.0.20 to 10.0.0.50", "none". */
-QString patchText(const QList<Universe::OfflinePatch> &patches)
-{
-    QStringList out;
-    for (const Universe::OfflinePatch &p : patches)
-    {
-        QString t = QStringLiteral("%1: %2").arg(p.plugin, p.uid);
-        const QString ip = p.params.value(QStringLiteral("outputIP")).toString();
-        if (!ip.isEmpty())
-            t += QObject::tr(" to %1").arg(ip);
-        out << t;
-    }
-    return out.isEmpty() ? QObject::tr("none") : out.join(QStringLiteral("; "));
 }
 
 /* "all", "401–512, 1–24" for universe @p u. */
@@ -112,6 +99,48 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
         refresh();
     });
     vl->addWidget(house);
+
+    /* A venue made from another show (docs/design/VENUE_FROM_SHOW.md): its
+       own universe, where that goes in this room, and its groups still
+       waiting for a match. */
+    m_room = new QGroupBox(tr("This venue's universe"), this);
+    m_room->setObjectName(QStringLiteral("vrRoom"));
+    QVBoxLayout *rl = new QVBoxLayout(m_room);
+    m_roomText = new QLabel(m_room);
+    m_roomText->setObjectName(QStringLiteral("vrRoomText"));
+    m_roomText->setWordWrap(true);
+    rl->addWidget(m_roomText);
+    QHBoxLayout *ol = new QHBoxLayout;
+    m_roomOutput = new RoomOutputPicker(doc, m_room);
+    ol->addWidget(m_roomOutput, 1);
+    m_useRoomOutput = new QPushButton(tr("Use This Output"), m_room);
+    m_useRoomOutput->setObjectName(QStringLiteral("vrUseRoomOutput"));
+    m_useRoomOutput->setToolTip(tr("This room's output for the venue's universe; on at once while the venue "
+                                   "is applied"));
+    ol->addWidget(m_useRoomOutput, 0, Qt::AlignTop);
+    rl->addLayout(ol);
+    QHBoxLayout *wl = new QHBoxLayout;
+    m_waiting = new QLabel(m_room);
+    m_waiting->setObjectName(QStringLiteral("vrWaiting"));
+    m_waiting->setWordWrap(true);
+    wl->addWidget(m_waiting, 1);
+    m_matchGroups = new QPushButton(tr("Match Groups\342\200\246"), m_room);
+    m_matchGroups->setObjectName(QStringLiteral("vrMatchGroups"));
+    m_matchGroups->setToolTip(tr("Choose which of this show's groups the room's groups fill"));
+    wl->addWidget(m_matchGroups, 0, Qt::AlignTop);
+    rl->addLayout(wl);
+    m_room->hide();     // only for a venue made from another show
+    vl->addWidget(m_room);
+    connect(m_roomOutput, &RoomOutputPicker::changed, this, [this]() {
+        m_useRoomOutput->setEnabled(m_roomOutput->isComplete());
+    });
+    connect(m_useRoomOutput, &QPushButton::clicked, this, [this]() {
+        QString why;
+        if (!venuesOf(m_doc)->setRoomOutput(m_venue, m_roomOutput->output(), &why))
+            QMessageBox::information(this, windowTitle(), why);
+        refresh();
+    });
+    connect(m_matchGroups, &QPushButton::clicked, this, [this]() { openMatchGroups(); });
 
     // The slots: the show's universes, with this room's patch and what it keeps.
     QGroupBox *unis = new QGroupBox(tr("Universes"), this);
@@ -179,6 +208,8 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
     VenueCorrections *vc = venuesOf(m_doc);
     connect(vc, &VenueCorrections::houseRigChanged, this, &VenueRigDialog::refresh);
     connect(vc, &VenueCorrections::activeVenueChanged, this, &VenueRigDialog::refresh);
+    // A room output waiting for its network shows when it gets there.
+    connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged, this, &VenueRigDialog::refresh);
     connect(vc, &VenueCorrections::venuesChanged, this, [this]() {
         if (!venuesOf(m_doc)->hasVenue(m_venue))
             close();        // renamed or deleted under it
@@ -299,8 +330,8 @@ void VenueRigDialog::refresh()
         slot->setCurrentIndex(slot->findData(int(unis.at(i)->slotOwner())));
 
         const QString patch = v.rig.patch.contains(quint32(i))
-                              ? patchText(v.rig.patch.value(quint32(i)))
-                              : tr("the show's: %1").arg(patchText(show.value(quint32(i))));
+                              ? VenueRig::outputText(v.rig.patch.value(quint32(i)))
+                              : tr("the show's: %1").arg(VenueRig::outputText(show.value(quint32(i))));
         QTableWidgetItem *out = new QTableWidgetItem(patch);
         out->setFlags(Qt::ItemIsEnabled);
         m_table->setItem(i, PatchCol, out);
@@ -323,7 +354,101 @@ void VenueRigDialog::refresh()
     }
     m_noClashes->setVisible(m_clashes->count() == 0);
     m_clashes->setVisible(m_clashes->count() > 0);
+
+    // The room's own universe.
+    const VenueRig::Room &room = v.rig.room;
+    m_room->setVisible(room.isSet());
+    if (room.isSet())
+    {
+        const QList<Universe::OfflinePatch> out = v.rig.patch.value(room.universe);
+        QString here;
+        if (!v.rig.patch.contains(room.universe))
+            here = tr("the show's own (%1)").arg(VenueRig::outputText(show.value(room.universe)));
+        else
+        {
+            here = VenueRig::outputText(out);
+            // What the universe does now, not only what was chosen.
+            if (applied && !out.isEmpty() && !vc->rig()->roomOutputLive(v.rig))
+                here += tr(" (waiting for it: see the clash check)");
+        }
+        m_roomText->setText(tr("U%1 %2 is %3's own universe%4. Its output here: %5.")
+                                .arg(room.universe + 1)
+                                .arg(iom->getUniverseNameByIndex(int(room.universe)), m_venue,
+                                     room.from.isEmpty() ? QString() : tr(" (its rig from %1)").arg(room.from),
+                                     here));
+        m_roomOutput->setImported(room.imported, room.from);
+        m_roomOutput->refreshInterfaces();
+        m_roomOutput->setOutput(out);
+        m_useRoomOutput->setEnabled(m_roomOutput->isComplete());
+        QStringList waiting;
+        for (const VenueRig::Fill &g : room.groups)
+            waiting << tr("%1 (%2)").arg(g.groupName).arg(g.heads.size());
+        m_waiting->setText(waiting.isEmpty() ? tr("Every group of the room fills one of the show's.")
+                                             : tr("Waiting for a match: %1").arg(waiting.join(QStringLiteral(", "))));
+        m_matchGroups->setVisible(!waiting.isEmpty());
+    }
     m_loading = false;
+}
+
+QDialog *VenueRigDialog::openMatchGroups()
+{
+    VenueCorrections *vc = venuesOf(m_doc);
+    const VenueRig::Room room = vc->venue(m_venue).rig.room;
+    if (room.groups.isEmpty())
+        return nullptr;
+    QDialog *d = new QDialog(this);
+    d->setObjectName(QStringLiteral("vrMatchGroupsDialog"));
+    d->setAttribute(Qt::WA_DeleteOnClose);
+    d->setWindowTitle(tr("%1: match the room's groups").arg(m_venue));
+    d->setProperty("helpTopic", QStringLiteral("venues.md"));
+    QVBoxLayout *l = new QVBoxLayout(d);
+    QLabel *intro = new QLabel(tr("Choose the group of this show each of the room's groups fills. A cue on "
+                                  "that group then plays on the room's lights in it."), d);
+    intro->setWordWrap(true);
+    l->addWidget(intro);
+    GroupMatchTable *table = new GroupMatchTable(m_doc, d);
+    QStringList names;
+    QList<int> heads;
+    QList<VenueImport::Match> matches;
+    for (const VenueRig::Fill &g : room.groups)
+    {
+        names << g.groupName;
+        heads << int(g.heads.size());
+        matches << VenueImport::suggest(g.groupName, m_doc);
+    }
+    table->setRows(names, heads, matches);
+    l->addWidget(table, 1);
+    QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Cancel, d);
+    QPushButton *ok = bb->addButton(tr("Fill These Groups"), QDialogButtonBox::AcceptRole);
+    ok->setObjectName(QStringLiteral("vrMatchGroupsOk"));
+    auto sync = [table, ok]() {
+        const QList<VenueImport::Match> m = table->matches();
+        const int waiting = VenueImport::unconfirmed(m);
+        int chosen = 0;
+        for (const VenueImport::Match &x : m)
+            chosen += x.confirmed ? 1 : 0;
+        ok->setEnabled(waiting == 0 && chosen > 0);
+        ok->setText(waiting > 0 ? (waiting == 1 ? tr("Confirm each match: 1 to go")
+                                                : tr("Confirm each match: %1 to go").arg(waiting))
+                                : tr("Fill These Groups"));
+    };
+    connect(table, &GroupMatchTable::matchesChanged, d, sync);
+    sync();
+    connect(bb, &QDialogButtonBox::rejected, d, &QDialog::reject);
+    connect(ok, &QPushButton::clicked, d, [this, d, table]() {
+        QMap<int, quint32> chosen;
+        const QList<VenueImport::Match> m = table->matches();
+        for (int i = 0; i < m.size(); ++i)
+            if (m.at(i).confirmed)
+                chosen.insert(i, m.at(i).group);
+        venuesOf(m_doc)->matchRoomGroups(m_venue, chosen);
+        d->accept();
+        refresh();
+    });
+    l->addWidget(bb);
+    d->resize(560, 360);
+    d->show();
+    return d;
 }
 
 bool VenueRigDialog::commitNotOurs(int row)

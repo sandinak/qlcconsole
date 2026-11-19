@@ -1114,6 +1114,20 @@ void InputOutputMap::loadPatch(quint32 universe, const Universe::OfflinePatch &p
             line = (target.isEmpty() && patch.network.isEmpty())
                  ? -1 : NetworkRoute::resolve(lines, QString(), patch.network, target).line;
         }
+        /* A patch kept by where it goes, not by this computer's interface (a
+           venue's room output, "Art-Net node 10.0.0.20",
+           docs/design/VENUE_FROM_SHOW.md): with nothing here reaching it now
+           (no cable yet, a late address) it is kept offline and tried again
+           by retryOfflinePatches(), never dropped. */
+        if (patch.tag == Universe::OutputPatchTag
+            && NetworkRoute::targetFromParameters(patch.params).isEmpty() == false
+            && (line < 0 || line >= lines.count()))
+        {
+            qDebug() << "[IOMAP] universe" << universe + 1 << patch.plugin << "to"
+                     << NetworkRoute::targetFromParameters(patch.params) << "- nothing here reaches it: kept offline";
+            uni->addOfflinePatch(patch);
+            return;
+        }
     }
     /* N1/N3 on load (outputpatch.h), as far as the Show-only fixtures are
        known by now (recheckPatchesAfterLoad() does the rest): never an
@@ -1404,6 +1418,17 @@ int InputOutputMap::retryOfflinePatches()
                                            rec.network, NetworkRoute::targetFromParameters(rec.params),
                                            rec.line)
                         : int(rec.line);
+                /* Kept by where it goes (loadPatch()): back only once a line
+                   here reaches it. */
+                const QString target = NetworkRoute::targetFromParameters(rec.params);
+                if (hasIdentity == false && rec.tag == Universe::OutputPatchTag && target.isEmpty() == false)
+                {
+                    const QStringList outs = plugin->outputs();
+                    if (line >= 0 && line < outs.count() && NetworkRoute::isAddressIdentity(outs.at(line)))
+                        line = NetworkRoute::resolve(outs, QString(), rec.network, target).line;
+                    if (line >= outs.count())
+                        line = -1;
+                }
                 /* An input back by its name: never onto a device another
                    patch follows (two pads of one name: that pad stays its
                    universe's); the next line of the name, if one is free

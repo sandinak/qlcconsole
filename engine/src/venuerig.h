@@ -103,6 +103,21 @@ public:
         { return universe == o.universe && from == o.from && to == o.to; }
     };
 
+    /** A venue made from another show (docs/design/VENUE_FROM_SHOW.md): the
+     *  one universe its house rig is on, the file it came from, what that
+     *  file sent its fixtures' universe to, and its groups not matched to
+     *  one of the show's yet. Unset for every other venue. */
+    struct Room
+    {
+        quint32 universe = UINT_MAX;    //!< zero-based; UINT_MAX: none
+        QString from;                   //!< the file's name
+        QList<Universe::OfflinePatch> imported;
+        /** The other show's groups, held by their own name (group stays
+         *  UINT_MAX): they fill nothing until matched. */
+        QList<Fill> groups;
+        bool isSet() const { return universe != UINT_MAX; }
+    };
+
     /** Everything one venue owns. Empty: the venue behaves as before. */
     struct Data
     {
@@ -114,13 +129,14 @@ public:
          *  recorded); empty: the show's patch. */
         QMap<quint32, QList<Universe::OfflinePatch>> patch;
         QList<NotOurs> notOurs;
+        Room room;
         /** Elements inside <House> this build doesn't know (a newer build's),
          *  kept whole and written back. */
         QList<QByteArray> houseUnknown;
 
         bool hasHouse() const { return !fixtures.isEmpty(); }
         bool isEmpty() const { return fixtures.isEmpty() && fills.isEmpty() && patch.isEmpty()
-                                      && notOurs.isEmpty(); }
+                                      && notOurs.isEmpty() && !room.isSet() && room.groups.isEmpty(); }
         QSet<quint32> fixtureIds() const;
     };
 
@@ -134,6 +150,13 @@ public:
      *  <House>, <Patch> or <NotOurs>) into @p d. False: not one of them
      *  (the reader is not moved). */
     static bool readXml(QXmlStreamReader &r, Data &d);
+
+    /** One <Output> element (the reader on its start; left at its end). */
+    static Universe::OfflinePatch readOutput(QXmlStreamReader &r);
+    static void writeOutput(QXmlStreamWriter &w, const Universe::OfflinePatch &p);
+    /** "Art-Net to 172.18.2.10 (from 172.18.2.219)", "DMX USB: Enttec Pro",
+     *  "none": one line, for people. */
+    static QString outputText(const QList<Universe::OfflinePatch> &patches);
 
     /** The element the reader is at, whole, as bytes; the reader is left
      *  at its end. For keeping what a newer build wrote. */
@@ -178,6 +201,11 @@ public:
     /** Take them into the venue applied; how many moved. */
     int moveShowHouseIn();
 
+    /** @p fill's heads into its group in the show (found again by name when
+     *  the id has gone), each at its cell or the next free one; ids through
+     *  @p remap. False when the show has no such group. */
+    bool putFill(Fill &fill, const QMap<quint32, quint32> &remap = QMap<quint32, quint32>());
+
     /*********************************************************************
      * The venue's patch
      *********************************************************************/
@@ -193,7 +221,17 @@ public:
     /** Put the show's own patch back on every universe (a venue's patch
      *  forgotten), holding it again as the base. */
     void restoreShowPatch();
+    /** Put @p patch on universe @p universe now (a venue applied: its
+     *  room's output chosen), not taken for an edit of the patch. */
+    void putPatch(quint32 universe, const QList<Universe::OfflinePatch> &patch);
     static bool samePatch(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b);
+    /** The same place: the plugin and, for a network output, its target
+     *  address and universe (whichever local interface it goes out of);
+     *  else the same device. */
+    static bool sameDestination(const QList<Universe::OfflinePatch> &a, const QList<Universe::OfflinePatch> &b);
+    /** Venue @p d is applied and its own universe has an output open now
+     *  (not waiting for its interface or network). */
+    bool roomOutputLive(const Data &d) const;
 
     /** "Not ours" of @p d onto the universes (none for empty). */
     void applyNotOurs(const QList<NotOurs> &notOurs);
@@ -208,7 +246,7 @@ public:
 public:
     struct Clash
     {
-        enum Kind { Overlap, NotOursKind, Slot };
+        enum Kind { Overlap, NotOursKind, Slot, Output };
         Kind kind = Overlap;
         quint32 universe = 0;       //!< zero-based
         quint32 address = 0;        //!< zero-based, where it starts

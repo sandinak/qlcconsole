@@ -361,6 +361,8 @@ public:
     bool isVenueFixture(quint32 id) const { return m_rig->isVenueFixture(id); }
     /** A house fixture of some venue uses @p id: a new show fixture skips it. */
     bool isReservedFixtureId(quint32 id) const { return m_rig->isReservedId(id); }
+    /** Every venue's house fixture ids (new show fixtures skip them). */
+    QSet<quint32> reservedIds() const;
     /** @p address (zero-based) in @p universe is kept by the venue applied. */
     bool isNotOurs(quint32 universe, quint32 address) const;
 
@@ -377,6 +379,22 @@ public:
     /** The venue applied forgets its patch: the show's own goes back on. */
     bool forgetPatch(QString *why = nullptr);
     bool hasPatch(const QString &name) const { return !venue(name).rig.patch.isEmpty(); }
+
+    /** New Venue from a Show (docs/design/VENUE_FROM_SHOW.md): venue @p name
+     *  made with @p rig (VenueImport::build()), not applied. Empty, with
+     *  @p why, when the name is taken or empty. */
+    QString addVenueFromShow(const QString &name, const VenueRig::Data &rig, QString *why = nullptr);
+    /** The output of venue @p name's own universe in that room (empty: none
+     *  yet); put on at once when it is applied. */
+    bool setRoomOutput(const QString &name, const QList<Universe::OfflinePatch> &output, QString *why = nullptr);
+    /** Venue @p name's room groups (VenueRig::Room::groups, by index) to
+     *  fill the show's groups given: they become fills, on the rig at once
+     *  when it is applied. How many were matched. */
+    int matchRoomGroups(const QString &name, const QMap<int, quint32> &matches);
+    /** Undo of New Venue from a Show: venue @p name off the rig and removed,
+     *  and @p previous (the venue applied before it was made; empty: None)
+     *  applied again. */
+    bool undoVenueFromShow(const QString &name, const QString &previous);
 
     /** What @p name keeps for the room; applied at once if it is on. */
     bool setNotOurs(const QString &name, const QList<VenueRig::NotOurs> &notOurs, QString *why = nullptr);

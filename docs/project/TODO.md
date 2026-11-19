@@ -10,6 +10,18 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## New Venue from a Show: two known lows (review of feat/052-venue-from-show)
+
+Found by the review of the PMS venue import (docs/design/VENUE_FROM_SHOW.md),
+left for after the train:
+- **PatchUndo doesn't capture a kept-offline output.** A room output kept
+  offline while its network is missing (an Art-Net node with no route yet)
+  is not in what the patch undo snapshot holds, so undoing a patch change
+  around it does not bring it back.
+- **A 10.x node resolves over a VPN that routes 10.x.** An Art-Net room
+  output on 10.0.0.0/8 counts as reached when a VPN carries 10.x, so it
+  goes out the tunnel instead of waiting for the room's network.
+
 ## Windows: a 95-universe show never finishes opening (0.5.1, found 2026-11-18)
 
 Fixed on `fix/051-win-bigshow-load`: three lists rebuilt themselves once
