@@ -153,6 +153,9 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
     m_lineUpText = new QLabel(m_lineUpBox);
     m_lineUpText->setObjectName(QStringLiteral("vrLineUpText"));
     m_lineUpText->setWordWrap(true);
+    /* Two lines kept for it: a squeezed page must not clip what the room
+       is lined up on (the table above the clash check gives way instead). */
+    m_lineUpText->setMinimumHeight(m_lineUpText->fontMetrics().lineSpacing() * 2 + 4);
     ll->addWidget(m_lineUpText);
     QHBoxLayout *dl = new QHBoxLayout;
     m_downstageLabel = new QLabel(m_lineUpBox);
