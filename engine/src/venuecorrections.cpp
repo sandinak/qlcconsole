@@ -31,6 +31,7 @@
 
 #include "venuecorrections.h"
 #include "monitorproperties.h"
+#include "venueimport.h"
 #include "qlcfixturemode.h"
 #include "qlcfixturedef.h"
 #include "stagetarget.h"
@@ -115,6 +116,8 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
         else
             recordRig();
     });
+    // The house rig moved as a whole (lined up again): the views follow.
+    connect(m_rig, &VenueRig::houseMoved, this, &VenueCorrections::houseRigChanged);
     // A patch changed while a venue is applied is that room's (Q138).
     connect(m_rig, &VenueRig::patchEdited, this, [this]() {
         // Only a real change (a kept patch reconnecting is not one).
@@ -1637,6 +1640,95 @@ bool VenueCorrections::setRoomOutput(const QString &name, const QList<Universe::
     if (why != nullptr)
         *why = tr("There is no venue called %1.").arg(name);
     return false;
+}
+
+bool VenueCorrections::setDatum(const QString &name, const VenueRig::Datum &datum, QString *why)
+{
+    Venue *v = nullptr;
+    for (Venue &each : m_venues)
+        if (each.name == name)
+            v = &each;
+    if (v == nullptr)
+    {
+        if (why != nullptr)
+            *why = tr("There is no venue called %1.").arg(name);
+        return false;
+    }
+    if (v->rig.datum == datum)
+        return true;
+    const bool applied = name == m_active && m_rig->isApplied();
+    if (applied)
+        recordRig();    // the house rig as it is, in the room's own coordinates, first
+    v->rig.datum = datum;
+    v->modified = QDateTime::currentDateTime();
+    if (applied)
+    {
+        const bool wasModified = m_doc != nullptr && m_doc->isModified();
+        const bool was = m_writing;
+        m_writing = true;
+        m_rig->lineUp(datum);
+        m_writing = was;
+        // Lining up a room is the venue's, never an edit to the show.
+        if (!wasModified && m_doc->isModified())
+            m_doc->resetModified();
+    }
+    emit houseRigChanged();
+    emit correctionsChanged();
+    return save(why);
+}
+
+QString VenueCorrections::roomFile(const QString &name) const
+{
+    const QString from = venue(name).rig.room.from;
+    if (from.isEmpty())
+        return QString();
+    QStringList where;
+    if (QFileInfo(from).isAbsolute())
+        where << from;
+    if (!m_showFile.isEmpty())
+        where << QFileInfo(m_showFile).absoluteDir().filePath(QFileInfo(from).fileName());
+    for (const QString &path : where)
+        if (QFileInfo::exists(path))
+            return path;
+    return QString();
+}
+
+bool VenueCorrections::lineUpRoom(const QString &name, const QString &path, QString *why)
+{
+    if (!hasVenue(name))
+    {
+        if (why != nullptr)
+            *why = tr("There is no venue called %1.").arg(name);
+        return false;
+    }
+    const QString file = path.isEmpty() ? roomFile(name) : path;
+    if (file.isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("The room's show file (%1) is not beside this show: choose it.")
+                       .arg(venue(name).rig.room.from);
+        return false;
+    }
+    VenueImport::Source src;
+    if (!VenueImport::read(file, src, why))
+        return false;
+    VenueRig::Datum dt = VenueImport::datum(src, m_doc);
+    if (!dt.isSet())
+    {
+        if (why != nullptr)
+            *why = tr("%1 has no plot to line the room up by.").arg(QFileInfo(file).fileName());
+        return false;
+    }
+    // What a newer build kept inside the datum stays, and so does a drape
+    // measured on site in front of the same piece.
+    const VenueRig::Datum was = venue(name).rig.datum;
+    dt.unknown = was.unknown;
+    if (was.isSet() && was.piece == dt.piece)
+    {
+        dt.downstage = was.downstage;
+        dt.drape += was.downstage;
+    }
+    return setDatum(name, dt, why);
 }
 
 bool VenueCorrections::undoVenueFromShow(const QString &name, const QString &previous)

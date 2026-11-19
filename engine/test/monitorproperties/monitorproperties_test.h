@@ -202,6 +202,14 @@ private slots:
     /** Q147: each piece is shown and locked on its own and with the Stage
      *  layer, which is made when one is shown and can't be removed. */
     void stagePiecesAreShownAndLockedOnTheirOwnAndByLayer();
+    /** The upstage line (docs/design/VENUE_ROLES_DATUM.md section 2.2): Auto
+     *  is the most upstage cyc, traveler or scrim across the centre line,
+     *  else a back wall's downstage face, else the deck's upstage edge, else
+     *  the grid's (0); set, it stays put and says so. */
+    void upstageLineAuto();
+    /** Saved in whole millimetres only when set (or shown or locked): a show
+     *  with the other stage pieces saves as it did; back after a load. */
+    void upstageLineRoundTrip();
     /** The number line's numbering: CL at centre, a stride that leaves
      *  room, long ticks only on numbered places, mirrored about centre. */
     void theNumberLineReadsFromCentre();

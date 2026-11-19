@@ -56,6 +56,11 @@ private slots:
     /** The venue page of a venue made from a show: its universe, the room's
      *  output chosen there (on the rig at once), Match Groups... */
     void theVenuePageChoosesTheRoomOutput();
+    /** The venue page's Room box (docs/design/VENUE_ROLES_DATUM.md): a venue
+     *  made before says Not lined up; Line Up the Room moves the house rig
+     *  under the show's lines, said in Settings > Units; the drape measured
+     *  downstage of the room's cyc; none for a venue of the show's own rig */
+    void theVenuePageLinesUpTheRoom();
     /** Every universe in use: none is chosen for him, and one that has the
      *  show's fixtures takes a tick that says its output is replaced */
     void aVenueFromAShowWithEveryUniverseInUse();

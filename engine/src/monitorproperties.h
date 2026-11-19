@@ -249,7 +249,8 @@ public:
         CentreLineFlag  = (1 << 1),   ///< the whole centre line, dashed, running upstage
         CurtainLineFlag = (1 << 2),   ///< where the main curtain / proscenium sits
         NumberLineFlag  = (1 << 3),   ///< distances left and right of centre
-        ApronFlag       = (1 << 4)    ///< the apron, its own deck from the curtain line
+        ApronFlag       = (1 << 4),   ///< the apron, its own deck from the curtain line
+        UpstageLineFlag = (1 << 5)    ///< the show's upstage line (its drape): what a room lines up on
     };
     inline int stageMarks() const { return m_stageMarks; }
     void setStageMarks(int marks);
@@ -261,7 +262,7 @@ public:
     /** The stage pieces as the plot and Plot layers list them. The centre
      *  piece is the DSC mark and the full centre line together (either or
      *  both, CentreMarkFlag / CentreLineFlag). */
-    enum StagePiece { CentrePiece = 0, CurtainPiece = 1, NumberPiece = 2, ApronPiece = 3 };
+    enum StagePiece { CentrePiece = 0, CurtainPiece = 1, NumberPiece = 2, ApronPiece = 3, UpstagePiece = 4 };
     static QList<StagePiece> stagePieces();
     static QString stagePieceName(StagePiece piece);
     /** Shown or hidden on its own (the layer's eye aside). Showing the
@@ -311,6 +312,27 @@ public:
     inline bool curtainLineIsAuto() const { return !m_curtainLineSet; }
     void setCurtainLineY(float metres);
     void setCurtainLineAuto();
+
+    /** The upstage line (docs/design/VENUE_ROLES_DATUM.md section 2.2): the
+     *  show's drape, what the tour rig is measured from up and down stage
+     *  and what a venue's room is lined up on. Automatic until moved: the
+     *  most upstage cloth across the centre line (a cyclorama, a traveler,
+     *  a scrim), else a back wall's downstage face, else the upstage edge of
+     *  the main deck, else the upstage edge of the stage grid (0). */
+    float upstageLineY() const;
+    float autoUpstageLineY() const;
+    /** The scenery the automatic upstage line comes from, if any. */
+    const Scenery *upstageLineScenery() const;
+    /** What the automatic upstage line is: the scenery's name ("Cyclorama
+     *  2"), else "the main deck's upstage edge" or "the stage grid's
+     *  upstage edge". */
+    QString upstageLineSource() const;
+    inline bool upstageLineIsAuto() const { return !m_upstageLineSet; }
+    void setUpstageLineY(float metres);
+    void setUpstageLineAuto();
+    /** How far upstage of the curtain line it is (negative downstage). */
+    inline float upstageLineUpstageOfCurtain() const { return curtainLineY() - upstageLineY(); }
+    inline void setUpstageLineUpstageOfCurtain(float metres) { setUpstageLineY(curtainLineY() - metres); }
 
     /** The number line: at the downstage edge until moved. */
     float numberLineY() const;
@@ -482,6 +504,8 @@ private:
     void saveStagePieces(QXmlStreamWriter *doc) const;
     bool m_curtainLineSet = false;
     float m_curtainLineY = 0.0f;
+    bool m_upstageLineSet = false;
+    float m_upstageLineY = 0.0f;
     bool m_numberLineSet = false;
     float m_numberLineY = 0.0f;
     bool m_targetPositionsVisible = true;
@@ -1297,6 +1321,10 @@ signals:
      *  written from the DMX thread), so the UI that edits them calls
      *  notifyStageTargetsChanged(). */
     void stageTargetsChanged();
+    /** The upstage line moved (@p moved: set or put on Auto) or a snapshot
+     *  of the rig was put back (@p moved false: what is on the plot already
+     *  agrees with it). A venue's room lined up on it follows. */
+    void stageLinesChanged(bool moved);
     /** A blocking set was added, renamed or removed. */
     void blockingSetsChanged();
     /** liveBlocking() changed (emitted on the thread that changed it). */

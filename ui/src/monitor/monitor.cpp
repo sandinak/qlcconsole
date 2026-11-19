@@ -709,8 +709,19 @@ void Monitor::initGraphicsView()
             }
             applyMapView(m_mapView);
         });
-        connect(pc->venueCorrections(), &VenueCorrections::houseRigChanged, this, [this]() {
-            if (m_graphicsView != NULL && m_mapView == ViewOwner)
+        connect(pc->venueCorrections(), &VenueCorrections::houseRigChanged, this, [this, pc]() {
+            if (m_graphicsView == NULL)
+                return;
+            /* The room lined up again, or the show's upstage line moved
+               (docs/design/VENUE_ROLES_DATUM.md): the house rig where it is now. */
+            foreach (quint32 fid, pc->venueCorrections()->rig()->venueFixtures())
+            {
+                if (m_graphicsView->fixtureItemForId(fid) == NULL || !m_props->containsFixture(fid))
+                    continue;
+                const QVector3D at = m_props->fixtureProperties(fid).m_baseItem.m_position;
+                m_graphicsView->moveFixtureTo(fid, QPointF(at.x(), at.y()));
+            }
+            if (m_mapView == ViewOwner)
                 applyMapView(m_mapView);
         });
     }
@@ -3297,7 +3308,7 @@ void Monitor::editStagePiece(int piece)
     /* Its properties, live on the plot as they change: OK keeps them as one
        undo step, Cancel puts the stage back. In Settings > Units
        as it is now (Q147: the positions read "1.00 m" on a feet show). */
-    if (m_props == NULL || piece < MonitorProperties::CentrePiece || piece > MonitorProperties::ApronPiece)
+    if (m_props == NULL || piece < MonitorProperties::CentrePiece || piece > MonitorProperties::UpstagePiece)
         return;
     RigEditSession edit(this);
     StagePieceDialog dlg(m_props, piece, this);

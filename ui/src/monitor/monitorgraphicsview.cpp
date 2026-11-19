@@ -8563,6 +8563,7 @@ void MonitorGraphicsView::updateStageMarks()
     const QColor centreColour(170, 215, 255);      // pale blue
     const QColor curtainColour(240, 130, 130);     // house-curtain red, lightened
     const QColor numberColour(240, 210, 110);      // spike-tape yellow
+    const QColor upstageColour(150, 210, 160);     // a pale green, unlike the others
 
     /* Everything is drawn ON the stage -- upstage of the front edge, which
        is often the very edge of the plot -- and clear of the orientation
@@ -8635,6 +8636,15 @@ void MonitorGraphicsView::updateStageMarks()
         foreach (const Pipe *pp, props->pipes())
             if (pp != nullptr && !pp->isVertical())
                 overhang(pp->name(), pp->positionAt(0.0f), pp->positionAt(pp->length()));
+    }
+    if (props->stageMarkShown(MonitorProperties::UpstageLineFlag))
+    {
+        /* The show's drape: what the tour is measured from up and down
+           stage, and what a venue's room is lined up on. */
+        const qreal y = sy(props->upstageLineY());
+        line(x0, y, x1, y, pen(upstageColour, 1.4, Qt::DashDotDotLine), "upstageLine");
+        label(tr("Upstage line"), QPointF(x0, y), upstageColour,
+              Qt::AlignLeft | Qt::AlignTop, "upstageLine");
     }
     if (props->stageMarkShown(MonitorProperties::NumberLineFlag))
     {
@@ -8733,8 +8743,10 @@ void MonitorGraphicsView::updateStagePieceItems()
             }
             break;
             case MonitorProperties::CurtainPiece:
+            case MonitorProperties::UpstagePiece:
             {
-                const qreal y = sy(props->curtainLineY());
+                const qreal y = sy(piece == MonitorProperties::CurtainPiece ? props->curtainLineY()
+                                                                           : props->upstageLineY());
                 hit.addRect(QRectF(QPointF(x0, y - band), QPointF(x1, y + band)));
                 drag = hit;
                 item->setZValue(-0.6);
@@ -8800,6 +8812,7 @@ namespace
         switch (MonitorProperties::StagePiece(piece))
         {
             case MonitorProperties::CurtainPiece: return props->curtainLineY();
+            case MonitorProperties::UpstagePiece: return props->upstageLineY();
             case MonitorProperties::NumberPiece:  return props->numberLineY();
             case MonitorProperties::ApronPiece:   return props->curtainLineY() + props->apronDepth();
             default: break;
@@ -8832,6 +8845,9 @@ void MonitorGraphicsView::stagePieceDragMoved(int piece, const QPointF &scenePos
     {
         case MonitorProperties::CurtainPiece:
             props->setCurtainLineY(float(y));
+        break;
+        case MonitorProperties::UpstagePiece:
+            props->setUpstageLineY(float(y));
         break;
         case MonitorProperties::NumberPiece:
             props->setNumberLineY(float(y));
@@ -9849,6 +9865,7 @@ void MonitorGraphicsView::buildStagePieceMenu(QMenu *menu, int piece, bool inLis
     if (sp != MP::CentrePiece)
     {
         const bool isAuto = (sp == MP::CurtainPiece) ? props->curtainLineIsAuto()
+                          : (sp == MP::UpstagePiece) ? props->upstageLineIsAuto()
                           : (sp == MP::NumberPiece) ? props->numberLineIsAuto() : props->apronAuto();
         QAction *autoAct = menu->addAction(sp == MP::ApronPiece ? tr("Auto Depth (to the Deck's Front)")
                                                                : tr("Auto Position"));
@@ -9861,6 +9878,10 @@ void MonitorGraphicsView::buildStagePieceMenu(QMenu *menu, int piece, bool inLis
             if (sp == MP::CurtainPiece)
             {
                 if (on) props->setCurtainLineAuto(); else props->setCurtainLineY(props->curtainLineY());
+            }
+            else if (sp == MP::UpstagePiece)
+            {
+                if (on) props->setUpstageLineAuto(); else props->setUpstageLineY(props->upstageLineY());
             }
             else if (sp == MP::NumberPiece)
             {

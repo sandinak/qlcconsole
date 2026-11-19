@@ -22,6 +22,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   chosen there or on the venue page (a USB DMX interface or an Art-Net
   node). The clash check flags an output left over from the file. The
   show file is not changed. See House rig and tour package (F1).
+- **Lining up the room.** A venue made from a room's show file is lined up
+  under the tour: the room's centre line on the show's and its cyc on the
+  show's new **Upstage line** stage piece (Auto: the show's own cyc). The
+  tour rig, its trusses and targets never move; the room's house rig does.
+  The venue page's **Room** box says how far, with **Line Up the Room** for
+  a venue made before and the drape's distance in front of the room's cyc
+  as measured on site. The show file is not changed.
 
 ### Fixed
 

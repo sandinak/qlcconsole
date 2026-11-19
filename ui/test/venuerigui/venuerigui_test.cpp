@@ -25,6 +25,7 @@
 #include <QPointer>
 #include <QTimer>
 #include <QLabel>
+#include <QGroupBox>
 #include <QMessageBox>
 #include <QApplication>
 #include <QInputDialog>
@@ -45,6 +46,10 @@
 #include "roomoutputpicker.h"
 #include "venuemenu.h"
 #include "venueimport.h"
+#include "monitorproperties.h"
+#include "measurementunits.h"
+#include "lengthspinbox.h"
+#include "scenery.h"
 #include "../common/shotdark.h"
 #include "../../../engine/test/common/pmslikeshow.h"
 #include "fixturegroup.h"
@@ -402,7 +407,8 @@ void VenueRigUi_Test::aVenueFromAShowEndToEnd()
     QVERIFY(d->universeBox()->currentText().startsWith(QStringLiteral("U2 ")));
     QCOMPARE(d->summaryLabel()->text(),
              QString::fromUtf8("From PMS Stage.qlcc: 7 fixtures on U2 1\342\200\223109. Groups: 0 fill this "
-                            "show's, 3 kept for later."));
+                            "show's, 3 kept for later.\nLined up: the centre line, and the drape at the stage "
+                            "grid's upstage edge."));
     // No USB interface on this computer: Not yet, and the clash check says so.
     QCOMPARE(d->outputPicker()->kind(), RoomOutputPicker::NotYet);
     QVERIFY2(items(d->clashList()).filter(QString::fromUtf8("Output \342\200\224 U2: no output in this room yet")).size() == 1,
@@ -421,7 +427,7 @@ void VenueRigUi_Test::aVenueFromAShowEndToEnd()
     table->setConfirmed(0, true);
     QVERIFY(d->makeButton()->isEnabled());
     QCOMPARE(d->makeButton()->text(), QStringLiteral("Make Venue"));
-    QVERIFY(d->summaryLabel()->text().endsWith(QStringLiteral("Groups: 1 fill this show's, 2 kept for later.")));
+    QVERIFY(d->summaryLabel()->text().contains(QStringLiteral("Groups: 1 fill this show's, 2 kept for later.")));
 
     // An Art-Net node for the room: the address must read; then no Output clash.
     QComboBox *kind = d->outputPicker()->findChild<QComboBox *>(QStringLiteral("roomOutputKind"));
@@ -548,6 +554,84 @@ void VenueRigUi_Test::theVenuePageChoosesTheRoomOutput()
     VenueRigDialog other(m_doc, plain, nullptr);
     other.show();
     QVERIFY(!other.findChild<QWidget *>(QStringLiteral("vrRoom"))->isVisible());
+}
+
+void VenueRigUi_Test::theVenuePageLinesUpTheRoom()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    // The show: a 50 ft stage, its cyc 1.5 m from the upstage edge.
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setGridSize(QVector3D(50.0f, 20.0f, 30.0f));
+    Scenery *cyc = props->addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setName(QStringLiteral("Cyclorama 1"));
+    cyc->setOriginX(7.62f);
+    cyc->setOriginY(1.5f);
+    cyc->setWidth(12.0f);
+    const quint32 tour = dimmer(m_doc, QStringLiteral("Tour par"), 0, 0);
+    props->setFixturePosition(tour, 0, 0, QVector3D(4000.0f, 5000.0f, 6.0f));
+    m_doc->resetModified();
+
+    // A venue made before lining up, its room file beside the show (with its cyc).
+    const QString file = m_dir->filePath(QStringLiteral("PMS Stage.qlcc"));
+    {
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(PmsLikeShow::xml(QStringLiteral("172.18.2.10"), true));
+    }
+    VenueImport::Source src;
+    QVERIFY(VenueImport::read(file, src));
+    VenueImport::Options opt;
+    opt.universe = 1;
+    VenueRig::Data data = VenueImport::build(src, m_doc, opt, v->reservedIds()).data;
+    data.datum = VenueRig::Datum();
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), data);
+    QVERIFY(!pms.isEmpty());
+    QVERIFY(v->setActiveVenue(pms));
+    quint32 relay = Fixture::invalidId();
+    for (const Fixture *fx : m_doc->fixtures())
+        if (fx->name() == QStringLiteral("Ch 3 Relay"))
+            relay = fx->id();
+    QCOMPARE(props->fixturePosition(relay, 0, 0), QVector3D(3800.0f, 760.0f, 0.0f));
+
+    VenueRigDialog page(m_doc, pms, nullptr);
+    page.resize(1024, 640);
+    page.show();
+    QVERIFY(page.lineUpBox() != nullptr && page.lineUpBox()->isVisible());
+    QVERIFY2(page.lineUpText()->text().startsWith(QStringLiteral("Not lined up with this show")),
+             qPrintable(page.lineUpText()->text()));
+    QCOMPARE(page.lineUpButton()->text(), QStringLiteral("Line Up the Room"));
+    QVERIFY(page.lineUpButton()->isEnabled());
+    QVERIFY(!page.downstageField()->isEnabled());           // nothing to measure from yet
+    shoot(&page, QStringLiteral("venue-page-lineup-before"));
+
+    // One click: the room under the show, said in Settings > Units; the tour where it was.
+    page.lineUpButton()->click();
+    const QString said = page.lineUpText()->text();
+    QVERIFY2(said.startsWith(QStringLiteral("Lined up: the room's centre line on the show's, its drape "
+                                            "(Cyclorama 2) on the show's upstage line.")), qPrintable(said));
+    QVERIFY2(said.contains(QStringLiteral("%1 toward stage right").arg(MeasurementUnits::formatLength(3048.0)))
+             && said.contains(QStringLiteral("%1 upstage").arg(MeasurementUnits::formatLength(500.0))),
+             qPrintable(said));
+    QCOMPARE(props->fixturePosition(relay, 0, 0), QVector3D(3800.0f - 3048.0f, 760.0f - 500.0f, 0.0f));
+    QCOMPARE(props->fixturePosition(tour, 0, 0), QVector3D(4000.0f, 5000.0f, 6.0f));
+    QVERIFY(!m_doc->isModified());
+    QVERIFY(page.downstageField()->isEnabled());
+    QCOMPARE(page.downstageField()->text(), MeasurementUnits::formatLength(0.0));
+
+    // The show's drape hangs a foot in front of the room's cyc here: typed in Settings > Units.
+    page.downstageField()->setValue(304.8);
+    QCOMPARE(v->venue(pms).rig.datum.downstage, qint64(305));
+    QCOMPARE(props->fixturePosition(relay, 0, 0), QVector3D(3800.0f - 3048.0f, 760.0f - 805.0f, 0.0f));
+    QCOMPARE(page.downstageField()->text(), MeasurementUnits::formatLength(305.0));
+    shoot(&page, QStringLiteral("venue-page-lineup-after"));
+
+    // A venue of the show's own rig has no room to line up.
+    const QString plain = v->addVenue(QStringLiteral("Lincoln HS"));
+    VenueRigDialog other(m_doc, plain, nullptr);
+    other.show();
+    QVERIFY(!other.lineUpBox()->isVisible());
 }
 
 void VenueRigUi_Test::aVenueFromAShowWithEveryUniverseInUse()

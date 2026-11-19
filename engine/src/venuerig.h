@@ -27,6 +27,7 @@
 #include <QList>
 #include <QMap>
 #include <QSet>
+#include <QPointF>
 
 #include "qlcengine_export.h"
 #include "universe.h"
@@ -35,6 +36,7 @@ class QXmlStreamReader;
 class QXmlStreamWriter;
 class QTimer;
 class Doc;
+class MonitorProperties;
 
 /** @addtogroup engine Engine
  * @{
@@ -118,6 +120,34 @@ public:
         bool isSet() const { return universe != UINT_MAX; }
     };
 
+    /** Where a room made from another show is lined up under the show
+     *  (docs/design/VENUE_ROLES_DATUM.md section 2): its centre line and its
+     *  drape line, in the room file's own plot coordinates (millimetres,
+     *  the ones its house rig's places are kept in). Applied, the room is
+     *  moved so its centre line is on the show's and its drape on the show's
+     *  upstage line; the show's rig never moves. Unset: not lined up (the
+     *  house rig stands where the room file had it, as before). */
+    struct Datum
+    {
+        bool set = false;
+        qint64 centreX = 0;         //!< mm, across (+ stage left)
+        qint64 drape = 0;           //!< mm, up/down stage (+ downstage)
+        /** What the drape line was taken from ("Cyclorama 2"): said on the
+         *  venue page. Empty: not known. */
+        QString piece;
+        /** How far downstage of that piece the drape is (mm): the tour's
+         *  drape on a pipe in front of the room's cyc. */
+        qint64 downstage = 0;
+        /** Elements inside <Datum> this build doesn't know, kept. */
+        QList<QByteArray> unknown;
+
+        bool isSet() const { return set; }
+        bool operator==(const Datum &o) const
+        { return set == o.set && centreX == o.centreX && drape == o.drape && piece == o.piece
+                 && downstage == o.downstage && unknown == o.unknown; }
+        bool operator!=(const Datum &o) const { return !(*this == o); }
+    };
+
     /** Everything one venue owns. Empty: the venue behaves as before. */
     struct Data
     {
@@ -130,13 +160,15 @@ public:
         QMap<quint32, QList<Universe::OfflinePatch>> patch;
         QList<NotOurs> notOurs;
         Room room;
+        Datum datum;
         /** Elements inside <House> this build doesn't know (a newer build's),
          *  kept whole and written back. */
         QList<QByteArray> houseUnknown;
 
         bool hasHouse() const { return !fixtures.isEmpty(); }
         bool isEmpty() const { return fixtures.isEmpty() && fills.isEmpty() && patch.isEmpty()
-                                      && notOurs.isEmpty() && !room.isSet() && room.groups.isEmpty(); }
+                                      && notOurs.isEmpty() && !room.isSet() && room.groups.isEmpty()
+                                      && !datum.isSet(); }
         QSet<quint32> fixtureIds() const;
     };
 
@@ -144,6 +176,25 @@ public:
      * The sidecar
      *********************************************************************/
 public:
+    /*********************************************************************
+     * Lining up the room (docs/design/VENUE_ROLES_DATUM.md section 2)
+     *********************************************************************/
+public:
+    /** How far the room is moved to stand under the show (mm, x across,
+     *  + toward stage left; y + downstage): the show's centre line and
+     *  upstage line less the room's. Zero when @p datum is not set. */
+    static QPointF offsetFor(const Datum &datum, const MonitorProperties *show);
+    /** The offset the house rig on the rig now is placed by (mm). */
+    QPointF offset() const { return m_offset; }
+    /** With the venue applied: line its room up by @p datum now -- every
+     *  house fixture moved by the change of offset, nothing of the show's. */
+    void lineUp(const Datum &datum);
+    /** "Lined up: the room's centre line on the show's, its drape
+     *  (Cyclorama 2) on the show's upstage line. The room stands 10' 0"
+     *  toward stage right and 6' 9" upstage of where its file has it." --
+     *  in Settings > Units; "Not lined up with this show" when unset. */
+    static QString datumText(const Datum &datum, const MonitorProperties *show);
+
     /** Write @p d inside the current <Venue> element; nothing for empty. */
     static void writeXml(QXmlStreamWriter &w, const Data &d);
     /** Read one of writeXml()'s elements (the reader is at its start:
@@ -266,9 +317,15 @@ signals:
     void rigChanged(bool soon);
     /** The output patch changed while a venue is applied. */
     void patchEdited();
+    /** The house rig on the plot moved as a whole (lined up again, or the
+     *  show's upstage line moved): the views put it where it is now. */
+    void houseMoved();
 
 private:
     void sync();
+    /** Every house fixture on the plot moved by @p delta (mm). */
+    void shiftHouse(const QPointF &delta);
+    void followShowLines(bool moved);
     void watchUniverses();
     quint32 freeId(const QSet<quint32> &taken) const;
     void putFixture(HouseFixture &hf, QMap<quint32, quint32> &remap, const Data &d);
@@ -288,6 +345,8 @@ private:
     QSet<quint32> m_unloaded;
     QSet<quint32> m_reserved;
     QSet<Universe *> m_watched;
+    Datum m_datum;
+    QPointF m_offset;
 };
 
 /** @} */

@@ -26,6 +26,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QGroupBox>
+#include <QFileDialog>
 #include <QComboBox>
 #include <QLabel>
 #include <algorithm>
@@ -36,6 +37,7 @@
 #include "venuerigdialog.h"
 #include "venuefromshowdialog.h"
 #include "roomoutputpicker.h"
+#include "lengthspinbox.h"
 #include "fixturegroup.h"
 #include "venuerig.h"
 #include "rigowner.h"
@@ -141,6 +143,57 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
         refresh();
     });
     connect(m_matchGroups, &QPushButton::clicked, this, [this]() { openMatchGroups(); });
+
+    /* Lining up the room (docs/design/VENUE_ROLES_DATUM.md section 2): the
+       room's centre line on the show's, its drape on the show's upstage
+       line; the tour never moves. */
+    m_lineUpBox = new QGroupBox(tr("Room"), this);
+    m_lineUpBox->setObjectName(QStringLiteral("vrLineUpBox"));
+    QVBoxLayout *ll = new QVBoxLayout(m_lineUpBox);
+    m_lineUpText = new QLabel(m_lineUpBox);
+    m_lineUpText->setObjectName(QStringLiteral("vrLineUpText"));
+    m_lineUpText->setWordWrap(true);
+    /* Two lines kept for it: a squeezed page must not clip what the room
+       is lined up on (the table above the clash check gives way instead). */
+    m_lineUpText->setMinimumHeight(m_lineUpText->fontMetrics().lineSpacing() * 2 + 4);
+    ll->addWidget(m_lineUpText);
+    QHBoxLayout *dl = new QHBoxLayout;
+    m_downstageLabel = new QLabel(m_lineUpBox);
+    dl->addWidget(m_downstageLabel);
+    m_downstage = new LengthSpinBox(1.0, m_lineUpBox);     // millimetres
+    m_downstage->setObjectName(QStringLiteral("vrDownstage"));
+    m_downstage->setRange(-15000.0, 15000.0);
+    m_downstage->setKeyboardTracking(false);
+    m_downstage->setToolTip(tr("Where the show's drape hangs in this room, measured on site: how far "
+                               "downstage of the room's piece (its cyc) it is. 0: on it."));
+    m_downstageLabel->setBuddy(m_downstage);
+    dl->addWidget(m_downstage);
+    dl->addStretch(1);
+    m_lineUp = new QPushButton(tr("Line Up the Room"), m_lineUpBox);
+    m_lineUp->setObjectName(QStringLiteral("vrLineUp"));
+    m_lineUp->setToolTip(tr("Read the room's show file again and line the room up under this show: its "
+                            "centre line on the show's, its cyc on the show's upstage line. The show's own "
+                            "rig never moves."));
+    dl->addWidget(m_lineUp);
+    ll->addLayout(dl);
+    m_lineUpBox->hide();    // only for a venue with a room of its own
+    vl->addWidget(m_lineUpBox);
+    connect(m_lineUp, &QPushButton::clicked, this, [this]() { lineUpRoom(); });
+    connect(m_downstage, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double mm) {
+        if (m_loading)
+            return;
+        VenueCorrections *vc = venuesOf(m_doc);
+        VenueRig::Datum dt = vc->venue(m_venue).rig.datum;
+        if (!dt.isSet())
+            return;
+        const qint64 now = qRound64(mm);
+        dt.drape += now - dt.downstage;     // the piece stays where it is; the drape moves off it
+        dt.downstage = now;
+        QString why;
+        if (!vc->setDatum(m_venue, dt, &why))
+            QMessageBox::information(this, windowTitle(), why);
+        refresh();
+    });
 
     // The slots: the show's universes, with this room's patch and what it keeps.
     QGroupBox *unis = new QGroupBox(tr("Universes"), this);
@@ -387,7 +440,43 @@ void VenueRigDialog::refresh()
                                              : tr("Waiting for a match: %1").arg(waiting.join(QStringLiteral(", "))));
         m_matchGroups->setVisible(!waiting.isEmpty());
     }
+
+    // How the room is lined up under the show.
+    const VenueRig::Datum &datum = v.rig.datum;
+    const bool lineUpShown = room.isSet() || datum.isSet();
+    m_lineUpBox->setVisible(lineUpShown);
+    if (lineUpShown)
+    {
+        m_lineUpText->setText(VenueRig::datumText(datum, m_doc->monitorProperties()));
+        m_downstageLabel->setText(datum.piece.isEmpty() ? tr("Drape downstage of the room's by:")
+                                                        : tr("Drape downstage of %1 by:").arg(datum.piece));
+        m_downstage->setValue(double(datum.downstage));
+        m_downstage->setEnabled(datum.isSet());
+        m_downstageLabel->setEnabled(datum.isSet());
+        m_lineUp->setEnabled(!room.from.isEmpty());
+    }
     m_loading = false;
+}
+
+bool VenueRigDialog::lineUpRoom(const QString &path)
+{
+    VenueCorrections *vc = venuesOf(m_doc);
+    QString file = path.isEmpty() ? vc->roomFile(m_venue) : path;
+    if (file.isEmpty())
+    {
+        const QString from = vc->venue(m_venue).rig.room.from;
+        file = QFileDialog::getOpenFileName(this, tr("Where is %1?").arg(from.isEmpty() ? tr("the room's show")
+                                                                                        : from),
+                                            QString(), tr("Shows (*.qlcc *.qxw)"));
+        if (file.isEmpty())
+            return false;
+    }
+    QString why;
+    const bool ok = vc->lineUpRoom(m_venue, file, &why);
+    if (!ok)
+        QMessageBox::information(this, windowTitle(), why);
+    refresh();
+    return ok;
 }
 
 QDialog *VenueRigDialog::openMatchGroups()

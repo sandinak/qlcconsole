@@ -40,6 +40,8 @@
 #include "outputrulekeeper.h"
 #include "focussession.h"
 #include "stagetarget.h"
+#include "scenery.h"
+#include "truss.h"
 #include "scene.h"
 #include "venuecorrections.h"
 #include "inputoutputmap.h"
@@ -2436,12 +2438,16 @@ void VenueRig_Test::aVenueFromAnotherShow()
     m_doc->fixture(tour)->setName(QStringLiteral("Tour par 1"));
     m_doc->resetModified();
 
-    // On the plot: a relay where it stood, on the Default layer (that show's
-    // layer 2 was its own); FOH 2 where it hung, free of any truss, aim kept.
-    QCOMPARE(props->fixturePosition(relay->id(), 0, 0), QVector3D(3800.0f, 760.0f, 0.0f));
+    /* On the plot: a relay where it stood, on the Default layer (that show's
+       layer 2 was its own); FOH 2 where it hung, free of any truss, aim kept.
+       Lined up (docs/design/VENUE_ROLES_DATUM.md): the room's centre line (the
+       middle of its 70 ft grid, 10.668 m) on the show's (2.5 m); neither has a
+       cyc, deck or wall, so the grids' upstage edges meet. */
+    const float dx = 2500.0f - 10668.0f;
+    QCOMPARE(props->fixturePosition(relay->id(), 0, 0), QVector3D(3800.0f + dx, 760.0f, 0.0f));
     QCOMPARE(props->fixtureProperties(relay->id()).m_baseItem.m_layerId, 0u);
     const QVector3D at = props->fixturePosition(foh->id(), 0, 0);
-    QVERIFY2(qAbs(at.x() - PmsLikeShow::fohX(1)) < 1.0 && qAbs(at.y() - PmsLikeShow::fohY()) < 1.0
+    QVERIFY2(qAbs(at.x() - (PmsLikeShow::fohX(1) + dx)) < 1.0 && qAbs(at.y() - PmsLikeShow::fohY()) < 1.0
              && qAbs(at.z() - PmsLikeShow::fohZ()) < 0.001,
              qPrintable(QStringLiteral("%1 %2 %3").arg(at.x()).arg(at.y()).arg(at.z())));
     const FixtureRigProps rp = props->fixtureRigProps(foh->id());
@@ -2469,6 +2475,303 @@ void VenueRig_Test::aVenueFromAnotherShow()
     QCOMPARE(VenueRig::outputText(room.imported), QStringLiteral("Art-Net to 172.18.2.10 (from 172.18.2.219)"));
     QVERIFY(readFile(v->filePath()).contains("<Room Universe=\"3\" From=\"PMS Stage.qlcc\">"));
     QCOMPARE(v->venue(pms).rig.fixtures.size(), 7);
+}
+
+/*****************************************************************************
+ * Lining up the room (docs/design/VENUE_ROLES_DATUM.md, phase 1: the datum)
+ *****************************************************************************/
+
+namespace
+{
+/* The touring show for the datum tests: a 50 ft stage (its centre line at
+   7.62 m) with its own cyc 1.5 m from the grid's upstage edge (its upstage
+   line), a tour par placed free, a truss and a stage target. */
+struct DatumShow
+{
+    quint32 tour = UINT_MAX;
+    QVector3D tourAt = QVector3D(4000.0f, 5000.0f, 6.0f);
+    quint32 truss = UINT_MAX;
+    QVector3D trussAt = QVector3D(2.0f, 6.0f, 6.5f);
+    quint32 target = UINT_MAX;
+    QVector3D targetAt = QVector3D(7.62f, 4.0f, 0.0f);
+};
+
+DatumShow makeDatumShow(Doc *doc)
+{
+    DatumShow s;
+    MonitorProperties *props = doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setGridSize(QVector3D(50.0f, 20.0f, 30.0f));
+    Scenery *cyc = props->addScenery();
+    cyc->setKind(Scenery::Cyclorama);
+    cyc->setName(QStringLiteral("Cyclorama 1"));
+    cyc->setOriginX(7.62f);
+    cyc->setOriginY(1.5f);
+    cyc->setWidth(12.0f);
+    Fixture *fx = addFixture(doc, QStringLiteral("Tour par"), 0, 0, 1);
+    s.tour = fx->id();
+    props->setFixturePosition(s.tour, 0, 0, s.tourAt);
+    Truss *t = props->addTruss();
+    t->setOrigin(s.trussAt);
+    s.truss = t->id();
+    StageTarget *tg = props->addStageTarget();
+    tg->setPosition(s.targetAt);
+    s.target = tg->id();
+    return s;
+}
+
+/* The tour as it is: still where makeDatumShow() put it. */
+bool tourUnmoved(Doc *doc, const DatumShow &s)
+{
+    MonitorProperties *props = doc->monitorProperties();
+    return props->fixturePosition(s.tour, 0, 0) == s.tourAt && props->truss(s.truss) != nullptr
+           && props->truss(s.truss)->origin() == s.trussAt && props->stageTarget(s.target) != nullptr
+           && props->stageTarget(s.target)->position() == s.targetAt;
+}
+
+/* PMS-like with its cyc, written beside the show (where Line Up the Room
+   looks for it). */
+VenueImport::Source pmsSourceWithCyc(QTemporaryDir *dir)
+{
+    const QString file = dir->filePath(QStringLiteral("PMS Stage.qlcc"));
+    writeFile(file, PmsLikeShow::xml(QStringLiteral("172.18.2.10"), true));
+    VenueImport::Source src;
+    QString why;
+    if (!VenueImport::read(file, src, &why))
+        qWarning() << why;
+    return src;
+}
+
+/* The show's centre line less the room's (7.62 m - 10.668 m), and its
+   upstage line less the room's cyc (1.5 m - 2.0 m), in mm. */
+const QVector3D kPmsOffset(7620.0f - 10668.0f, 1500.0f - 2000.0f, 0.0f);
+const QVector3D kRelay3(3800.0f, 760.0f, 0.0f);     // "Ch 3 Relay" in the room's file
+
+/* Where venue @p name keeps house fixture @p fid on the plot (its file). */
+QVector3D keptAt(VenueCorrections *v, const QString &name, quint32 fid, Doc *doc)
+{
+    MonitorProperties house;
+    QXmlStreamReader r(v->venue(name).rig.monitorXml);
+    if (r.readNextStartElement())
+        house.loadXML(r, doc);
+    return house.fixturePosition(fid, 0, 0);
+}
+
+bool closeTo(const QVector3D &a, const QVector3D &b)
+{
+    return (a - b).length() < 0.5f;
+}
+
+QString posText(const QVector3D &p)
+{
+    return QStringLiteral("(%1, %2, %3)").arg(p.x()).arg(p.y()).arg(p.z());
+}
+} // namespace
+
+void VenueRig_Test::importedRoomLinesUpOnTheDrape()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const DatumShow show = makeDatumShow(m_doc);
+    m_doc->resetModified();
+    const QByteArray before = engineXml(m_doc);
+
+    VenueImport::Options opt;
+    opt.universe = 2;
+    const VenueImport::Result res = VenueImport::build(pmsSourceWithCyc(m_dir), m_doc, opt, v->reservedIds());
+    QString why;
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data, &why);
+    QVERIFY2(!pms.isEmpty(), qPrintable(why));
+    QVERIFY(v->setActiveVenue(pms));
+
+    /* A house light lands where it was from the room's centre line and its
+       cyc, now measured from the show's centre line and upstage line. */
+    const Fixture *relay = fixtureNamed(m_doc, QStringLiteral("Ch 3 Relay"));
+    QVERIFY(relay != nullptr);
+    const QVector3D at = props->fixturePosition(relay->id(), 0, 0);
+    QVERIFY2(closeTo(at, kRelay3 + kPmsOffset), qPrintable(posText(at)));
+    QVERIFY(qAbs((at.x() - 7620.0f) - (kRelay3.x() - 10668.0f)) < 0.5f);   // stage right of centre by the same
+    QVERIFY(qAbs((at.y() - 1500.0f) - (kRelay3.y() - 2000.0f)) < 0.5f);   // from the drape by the same
+    QCOMPARE(at.z(), kRelay3.z());                                         // heights are not moved
+    // FOH 2: hung where it hung, measured the same way.
+    const Fixture *foh = fixtureNamed(m_doc, QStringLiteral("FOH 2"));
+    QVERIFY(foh != nullptr);
+    const QVector3D fohAt = props->fixturePosition(foh->id(), 0, 0);
+    QVERIFY2(qAbs(fohAt.x() - (PmsLikeShow::fohX(1) + kPmsOffset.x())) < 1.0f
+             && qAbs(fohAt.y() - (PmsLikeShow::fohY() + kPmsOffset.y())) < 1.0f, qPrintable(posText(fohAt)));
+    QVERIFY(qAbs(fohAt.z() - PmsLikeShow::fohZ()) < 0.001f);
+
+    // The tour never moves; the show is not changed.
+    QVERIFY(tourUnmoved(m_doc, show));
+    QVERIFY(!m_doc->isModified());
+    QCOMPARE(engineXml(m_doc), before);
+
+    // Kept in the venue's file in the room's own coordinates, with its datum.
+    QVERIFY2(closeTo(keptAt(v, pms, relay->id(), m_doc), kRelay3), qPrintable(posText(keptAt(v, pms, relay->id(), m_doc))));
+    const QByteArray sidecar = venueSection(readFile(v->filePath()), pms);
+    QVERIFY2(sidecar.contains("<Datum CentreX=\"10668\" Drape=\"2000\" Piece=\"Cyclorama 2\"/>"),
+             sidecar.constData());
+}
+
+void VenueRig_Test::lineUpMovesHouseNotTour()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const DatumShow show = makeDatumShow(m_doc);
+    m_doc->resetModified();
+    const QByteArray before = engineXml(m_doc);
+
+    // A venue made before lining up: no datum, the house rig where its file had it.
+    VenueImport::Options opt;
+    opt.universe = 2;
+    VenueImport::Result res = VenueImport::build(pmsSourceWithCyc(m_dir), m_doc, opt, v->reservedIds());
+    res.data.datum = VenueRig::Datum();
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data);
+    QVERIFY(!pms.isEmpty());
+    QVERIFY(v->setActiveVenue(pms));
+    const Fixture *relay = fixtureNamed(m_doc, QStringLiteral("Ch 3 Relay"));
+    QVERIFY(relay != nullptr);
+    const quint32 rid = relay->id();
+    QCOMPARE(props->fixturePosition(rid, 0, 0), kRelay3);
+    QSignalSpy moved(v, &VenueCorrections::houseRigChanged);
+
+    // Line Up the Room: every house fixture by the offset, nothing of the tour's.
+    QString why;
+    QVERIFY2(v->lineUpRoom(pms, QString(), &why), qPrintable(why));
+    QVERIFY2(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset),
+             qPrintable(posText(props->fixturePosition(rid, 0, 0))));
+    QVERIFY(moved.count() > 0);
+    QCOMPARE(v->roomFile(pms), m_dir->filePath(QStringLiteral("PMS Stage.qlcc")));   // found beside the show
+    QVERIFY(tourUnmoved(m_doc, show));
+    QVERIFY(!m_doc->isModified());
+    QCOMPARE(engineXml(m_doc), before);
+    const VenueRig::Datum dt = v->venue(pms).rig.datum;
+    QVERIFY(dt.isSet());
+    QCOMPARE(dt.centreX, qint64(10668));
+    QCOMPARE(dt.drape, qint64(2000));
+    QCOMPARE(dt.piece, QStringLiteral("Cyclorama 2"));
+    QVERIFY(VenueRig::datumText(dt, props).startsWith(QStringLiteral("Lined up")));
+
+    // Again: one offset, never two.
+    QVERIFY(v->lineUpRoom(pms));
+    QVERIFY(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset));
+    QVERIFY(closeTo(keptAt(v, pms, rid, m_doc), kRelay3));
+
+    // Off and on again: where it was lined up.
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(v->setActiveVenue(pms));
+    QVERIFY(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset));
+
+    // The tour's drape a foot in front of the room's cyc (measured on site).
+    VenueRig::Datum onSite = v->venue(pms).rig.datum;
+    onSite.downstage = 305;
+    onSite.drape += 305;
+    QVERIFY(v->setDatum(pms, onSite));
+    QVERIFY2(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset - QVector3D(0.0f, 305.0f, 0.0f)),
+             qPrintable(posText(props->fixturePosition(rid, 0, 0))));
+    QVERIFY(tourUnmoved(m_doc, show));
+
+    // Not lined up again: back where the file has it.
+    QVERIFY(v->setDatum(pms, VenueRig::Datum()));
+    QCOMPARE(props->fixturePosition(rid, 0, 0), kRelay3);
+    QVERIFY(VenueRig::datumText(v->venue(pms).rig.datum, props).startsWith(QStringLiteral("Not lined up")));
+
+    // A room file that is not where it was: said, nothing moved.
+    QVERIFY(QFile::remove(m_dir->filePath(QStringLiteral("PMS Stage.qlcc"))));
+    QVERIFY(v->roomFile(pms).isEmpty());
+    QVERIFY(!v->lineUpRoom(pms, QString(), &why));
+    QVERIFY(why.contains(QStringLiteral("PMS Stage.qlcc")));
+    QCOMPARE(props->fixturePosition(rid, 0, 0), kRelay3);
+}
+
+void VenueRig_Test::houseDragSavesRoomCoordinates()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const DatumShow show = makeDatumShow(m_doc);
+    VenueImport::Options opt;
+    opt.universe = 2;
+    const VenueImport::Result res = VenueImport::build(pmsSourceWithCyc(m_dir), m_doc, opt, v->reservedIds());
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data);
+    QVERIFY(v->setActiveVenue(pms));
+    const quint32 rid = fixtureNamed(m_doc, QStringLiteral("Ch 3 Relay"))->id();
+
+    // Moved on the plot with the venue applied: kept less the offset.
+    const QVector3D dropped(1000.0f, 3000.0f, 0.0f);
+    props->setFixturePosition(rid, 0, 0, dropped);
+    QVERIFY(v->recordRig());
+    QVERIFY2(closeTo(keptAt(v, pms, rid, m_doc), dropped - kPmsOffset), qPrintable(posText(keptAt(v, pms, rid, m_doc))));
+
+    // Applied again, it lands where it was dropped.
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(v->setActiveVenue(pms));
+    QVERIFY2(closeTo(props->fixturePosition(rid, 0, 0), dropped), qPrintable(posText(props->fixturePosition(rid, 0, 0))));
+    QVERIFY(tourUnmoved(m_doc, show));
+}
+
+void VenueRig_Test::upstageLineFollowsMovedShowLine()
+{
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    const DatumShow show = makeDatumShow(m_doc);
+    VenueImport::Options opt;
+    opt.universe = 2;
+    const VenueImport::Result res = VenueImport::build(pmsSourceWithCyc(m_dir), m_doc, opt, v->reservedIds());
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data);
+    QVERIFY(v->setActiveVenue(pms));
+    const quint32 rid = fixtureNamed(m_doc, QStringLiteral("Ch 3 Relay"))->id();
+    QVERIFY(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset));
+    const QByteArray snap = props->snapshot(m_doc);
+
+    // The show's drape found to hang a foot further upstage: the house rig follows, the tour stays.
+    props->setUpstageLineY(1.5f - 0.3048f);
+    QVERIFY2(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset - QVector3D(0.0f, 304.8f, 0.0f)),
+             qPrintable(posText(props->fixturePosition(rid, 0, 0))));
+    QVERIFY(tourUnmoved(m_doc, show));
+    // The venue's file is the room's as before.
+    QVERIFY(v->recordRig());
+    QVERIFY(closeTo(keptAt(v, pms, rid, m_doc), kRelay3));
+
+    // Back on Auto (the show's cyc): back where it was.
+    props->setUpstageLineAuto();
+    QVERIFY(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset));
+
+    // An undo of a line drag puts the plot back as it was: nothing moves twice.
+    props->setUpstageLineY(1.0f);
+    QVERIFY(props->restoreSnapshot(snap, m_doc));
+    QVERIFY(props->upstageLineIsAuto());
+    QVERIFY2(closeTo(props->fixturePosition(rid, 0, 0), kRelay3 + kPmsOffset),
+             qPrintable(posText(props->fixturePosition(rid, 0, 0))));
+    QVERIFY(v->recordRig());
+    QVERIFY(closeTo(keptAt(v, pms, rid, m_doc), kRelay3));
+}
+
+void VenueRig_Test::oldVenueAppliesWithoutOffset()
+{
+    // A venue from before (no <Datum>) applies exactly as it did, and its file stays as it was.
+    VenueCorrections *v = venues(m_doc);
+    MonitorProperties *props = m_doc->monitorProperties();
+    makeDatumShow(m_doc);
+    VenueImport::Options opt;
+    opt.universe = 2;
+    VenueImport::Result res = VenueImport::build(pmsSourceWithCyc(m_dir), m_doc, opt, v->reservedIds());
+    res.data.datum = VenueRig::Datum();
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"), res.data);
+    const QByteArray written = venueSection(readFile(v->filePath()), pms);
+    QVERIFY(!written.contains("Datum"));
+    QVERIFY(v->setActiveVenue(pms));
+    const quint32 rid = fixtureNamed(m_doc, QStringLiteral("Ch 3 Relay"))->id();
+    QCOMPARE(props->fixturePosition(rid, 0, 0), kRelay3);
+    QVERIFY(v->setActiveVenue(QString()));
+    QVERIFY(!venueSection(readFile(v->filePath()), pms).contains("Datum"));
+
+    // A newer build's datum (a <Stage> inside it) is kept whole and written back.
+    QByteArray xml = v->toXml();
+    xml.replace("</Room>", "</Room><Datum CentreX=\"10668\" Drape=\"2000\"><Stage Curtain=\"5708\"/></Datum>");
+    QVERIFY(v->fromXml(xml));
+    QVERIFY(v->venue(pms).rig.datum.isSet());
+    QCOMPARE(v->venue(pms).rig.datum.unknown.size(), 1);
+    QVERIFY(v->toXml().contains("<Stage Curtain=\"5708\"/>"));
 }
 
 void VenueRig_Test::aVenueFromAnotherShowFillsOnlyConfirmedGroups()
