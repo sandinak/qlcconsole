@@ -877,7 +877,12 @@ void ControlMap_Test::aKeyIsArmedInDesignByTheSelection()
     // hit2, whose place is idle here, may not even in Operate.
     m_doc->setMode(Doc::Operate);
     QVERIFY(cm->keyMayFire(ControlMap::cue(show.cue1)));
-    QVERIFY(!m_doc->showTree()->isHitArmed(hit2) == !cm->keyMayFire(ControlMap::hit(hit2)));
+    QVERIFY(!m_doc->showTree()->isHitArmed(hit2));
+    QVERIFY(!cm->keyMayFire(ControlMap::hit(hit2)));
+    // Its place goes live (its production becomes the current one): it may.
+    QVERIFY(m_doc->showTree()->setCurrentProduction(prod2));
+    QVERIFY(m_doc->showTree()->isHitArmed(hit2));
+    QVERIFY(cm->keyMayFire(ControlMap::hit(hit2)));
 }
 
 /* Saved as Key="…" (no Universe: a build without keys skips it), loaded back. */
@@ -1544,12 +1549,7 @@ namespace
 /** Whether the stop is bound to a control that cannot work it. */
 bool stopDead(ControlMap *cm)
 {
-#ifdef CONTROLMAP_STOP_REVIEWED
     return cm->stopIsDead();
-#else
-    const ControlMap::Binding *b = cm->binding(ControlMap::emergencyStop());
-    return b != nullptr && !cm->isButtonControl(b->universe, b->channel);
-#endif
 }
 }
 
@@ -1623,89 +1623,169 @@ void ControlMap_Test::aStopThatCannotWorkSaysSo()
     QVERIFY(iom->setInputProfile(0, prof->name()));
     QVERIFY(stopDead(cm));
     QSignalSpy blocked(cm, &ControlMap::blocked);
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
     send(7, 127);
     QCOMPARE(blocked.count(), 1);
+    QCOMPARE(handled.count(), 0);                   // and ALL OFF did not run
     QVERIFY2(blocked.last().at(0).toString().contains("did not fire"), qPrintable(blocked.last().at(0).toString()));
 }
 
-void ControlMap_Test::aBoundFaderWithNoProfileFiresOnceThenIsRefused()
+void ControlMap_Test::aBoundFaderIsFlaggedLoudlyAndStillStops()
 {
     Scene *a = scene("Warm", 0);
     ControlMap *cm = m_doc->controlMap();
     cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::Toggle });
     QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
     QSignalSpy blocked(cm, &ControlMap::blocked);
-    // A show file put the stop on a CC fader the profile does not know.
-    sendAll(7, { 0, 10, 20, 40, 64, 100, 127, 100, 60, 0 });
-    QCOMPARE(handled.count(), 1);                   // the first move only
-    QVERIFY(blocked.count() >= 1);
-    QVERIFY(blocked.first().at(0).toString().contains("range of values"));
-    QVERIFY(stopDead(cm));
-    // And later moves are refused in words, not run.
+#ifdef CONTROLMAP_STOP_FLAGS
+    QSignalSpy state(cm, &ControlMap::stopStateChanged);
+#endif
+    // A show file put the stop on a CC fader the profile does not know: a
+    // fast sweep, 100 messages, is one press and one footer line.
+    QList<int> sweep;
+    for (int i = 0; i < 100; ++i)
+        sweep << (i < 50 ? i * 2 + 1 : 200 - i * 2 + 1) % 127 + 1;
+    sendAll(7, sweep);
+    QCOMPARE(handled.count(), 1);
+    QCOMPARE(blocked.count(), 1);
+    QVERIFY2(blocked.first().at(0).toString().contains("moves like a fader"), qPrintable(blocked.first().at(0).toString()));
+    QVERIFY(cm->stopIsDead());
+#ifdef CONTROLMAP_STOP_FLAGS
+    QCOMPARE(state.count(), 1);
+    QCOMPARE(cm->stopProblem(), QString("moves like a fader"));
+#endif
+    // The flag outlives an unrelated learn and removal (the panel keeps it red).
+    Scene *b = scene("Cool", 1);
+    cm->setBinding({ 0, 9, ControlMap::function(b->id()), ControlMap::Toggle });
+    cm->removeBinding(ControlMap::function(b->id()));
+    QVERIFY(cm->stopIsDead());
+    // The fader at rest (a 0), then moved: it stops the show again, never lost.
+    send(7, 0);
     a->start(m_doc->masterTimer(), FunctionParent::master());
     tick(2);
-    sendAll(7, { 30, 50, 0 });
-    tick(3);
-    QVERIFY(a->isRunning());
-    QCOMPARE(handled.count(), 1);
-    // A real button (0/127, a repeat of the same value) is not a fader.
-    cm->setBinding({ 0, 8, ControlMap::emergencyStop(), ControlMap::Toggle });
-    QVERIFY(!stopDead(cm));
-    cm->setStopDebounceMs(0);
-    sendAll(8, { 127, 127, 127, 0 });
+    send(7, 30);
     tick(3);
     QVERIFY(!a->isRunning());
-    QVERIFY(!stopDead(cm));
+    QCOMPARE(handled.count(), 2);
+    QCOMPARE(blocked.count(), 1);                   // said once, not on every move
+    // Bound again (on a button): the flag goes.
+    cm->setBinding({ 0, 8, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QVERIFY(!cm->stopIsDead());
 }
 
-void ControlMap_Test::aReplugFreesThePressThatTaughtTheStop()
+void ControlMap_Test::theStopFiresPerThePressRule()
+{
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    struct Row
+    {
+        const char *what;
+        QList<int> values;
+        int gapMs;          // 1000: the default; 0: every message is "after a rest"
+        int fires;
+        bool flagged;
+    };
+    const QList<Row> rows = {
+        { "a button, held and repeating", { 127, 127, 127, 127, 127, 0 }, 1000, 1, false },
+        { "a velocity pad", { 127, 0, 90, 0, 60, 0 }, 1000, 3, false },
+        { "a lost release then a softer press, quickly", { 100, 80, 0, 100 }, 1000, 2, true },
+        { "a lost release, the same value after a rest", { 100, 100 }, 0, 2, false },
+        { "a relative encoder ticking, never 0", { 1, 1, 1, 127, 1, 127 }, 1000, 1, true },
+        { "a slow fader, each step after a rest", { 10, 11, 12 }, 0, 3, true },
+        { "a fast fader run", { 5, 20, 60, 127, 60, 5 }, 1000, 1, true },
+        { "a fader that rests at 0 between moves", { 0, 10, 20, 0, 0, 10, 0 }, 1000, 2, true },
+    };
+    for (const Row &r : rows)
+    {
+        cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::Toggle });   // a fresh start
+        cm->handleInput(0, 7, 0);
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));          // first message after a replug
+        cm->setStopDebounceMs(r.gapMs);
+        const int before = handled.count();
+        sendAll(7, r.values);
+        QVERIFY2(handled.count() - before == r.fires,
+                 qPrintable(QString("%1: %2 fires, wanted %3").arg(r.what).arg(handled.count() - before).arg(r.fires)));
+        QVERIFY2(cm->stopIsDead() == r.flagged, qPrintable(QString("%1: flagged %2").arg(r.what).arg(cm->stopIsDead())));
+        // Never dead: after a 0 the next press fires.
+        send(7, 0);
+        const int mid = handled.count();
+        send(7, 100);
+        QVERIFY2(handled.count() == mid + 1, qPrintable(QString("%1: the next press was lost").arg(r.what)));
+        send(7, 0);
+        cm->removeBinding(ControlMap::emergencyStop());
+    }
+}
+
+void ControlMap_Test::aLostReleaseAtLearnTimeDoesNotSwallowTheStop()
 {
     Scene *a = scene("Warm", 0);
     ControlMap *cm = m_doc->controlMap();
     cm->learn(ControlMap::emergencyStop());
-    sendAll(kStopNote, { 127, 0, 127 });            // bound; this press is still held
+    sendAll(kStopNote, { 127, 0, 127 });            // bound; the release of this press is lost
     QVERIFY(cm->binding(ControlMap::emergencyStop()) != nullptr);
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));   // its release never comes
-    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    QTest::qWait(1100);
     a->start(m_doc->masterTimer(), FunctionParent::master());
     tick(2);
-    cm->setStopDebounceMs(0);
-    send(kStopNote, 127);
+    send(kStopNote, 127);                           // the first real press, no replug
     tick(3);
-    QVERIFY2(!a->isRunning(), "the first press after a replug was swallowed");
+    QVERIFY2(!a->isRunning(), "a lost release at learn time swallowed the first real stop press");
 }
 
-void ControlMap_Test::aReleaseActsOnWhatWasPressed()
+void ControlMap_Test::aBindingRemovedWhileHeldStillLetsGo()
 {
     Scene *a = scene("Warm", 0);
     ControlMap *cm = m_doc->controlMap();
-    m_doc->showControl()->setGoGuardMs(0);
-    // The mode changes while the button is held: the release still lets go.
     cm->setBinding({ 0, 20, ControlMap::function(a->id()), ControlMap::Momentary });
     send(20, 127);
     tick(2);
     QVERIFY(a->isRunning());
-    cm->setMode(ControlMap::function(a->id()), ControlMap::StartOnly);
+    cm->removeBinding(ControlMap::function(a->id()));
     send(20, 0);
     tick(3);
-    QVERIFY2(!a->isRunning(), "a mode change while held left the scene on");
-
-    // The control is bound to something else while held: the release is the
-    // scene's, and a list that runs for another reason is not stopped.
-    const SurfaceShow show = surfaceShow(m_doc);
-    Function *act1 = m_doc->function(m_doc->showTree()->cueList(show.k.list)->chaser);
-    cm->setMode(ControlMap::function(a->id()), ControlMap::Momentary);
+    QVERIFY2(!a->isRunning(), "a scene held by a button stayed on after its binding was removed");
+    // Remove All the same.
+    cm->setBinding({ 0, 20, ControlMap::function(a->id()), ControlMap::Momentary });
     send(20, 127);
     tick(2);
-    QVERIFY(a->isRunning());
-    act1->start(m_doc->masterTimer(), FunctionParent::master());
-    tick(2);
-    cm->setBinding({ 0, 20, ControlMap::cueList(show.k.list), ControlMap::Momentary });
+    cm->removeAll();
     send(20, 0);
     tick(3);
-    QVERIFY2(!a->isRunning(), "the release did not let go of what the press started");
-    QVERIFY2(act1->isRunning(), "the release stopped a list the press never started");
+    QVERIFY(!a->isRunning());
+}
+
+void ControlMap_Test::aStopOnAKeyDoesNothingAndSaysSo()
+{
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f9 = ControlMap::keyChannel(Qt::Key_F9, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f9, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QVERIFY(cm->stopIsDead());
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    for (int i = 0; i < 20; ++i)                    // held: auto-repeat
+        QVERIFY(!cm->handleKey(f9, true));
+    QCOMPARE(blocked.count(), 1);
+    QVERIFY(blocked.last().at(0).toString().contains("computer key"));
+    QCOMPARE(handled.count(), 0);
+    cm->handleKey(f9, false);
+    cm->handleKey(f9, true);
+    QCOMPARE(blocked.count(), 2);                   // a new press says it again
+}
+
+void ControlMap_Test::aHeldRefusedPressSaysItOnce()
+{
+    const SurfaceShow show = surfaceShow(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 key = ControlMap::keyChannel(Qt::Key_F7, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, key, ControlMap::cueList(show.other), ControlMap::Toggle });
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    for (int i = 0; i < 30; ++i)                    // a key held: auto-repeat
+        QVERIFY(!cm->handleKey(key, true));
+    QCOMPARE(blocked.count(), 1);
+    cm->handleKey(key, false);
+    cm->handleKey(key, true);
+    QCOMPARE(blocked.count(), 2);                   // a new press says it again
 }
 
 QTEST_GUILESS_MAIN(ControlMap_Test)

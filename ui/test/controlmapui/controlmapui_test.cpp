@@ -250,22 +250,37 @@ void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
     panel.show();
     QPushButton *button = panel.findChild<QPushButton *>("controlMapEmergencyStop");
     QVERIFY(button != nullptr);
-    // The stop sits on a CC that turns out to send a fader's values.
+    // The stop sits on a CC that turns out to move like a fader.
     cm->setBinding({ 0, 7, ControlMap::emergencyStop(), ControlMap::StartOnly });
-    QVERIFY2(!button->text().contains("not a button"), qPrintable(button->text()));
-    for (int v : { 0, 10, 40, 90 })
+    QVERIFY2(!button->text().contains("fader"), qPrintable(button->text()));
+    QVERIFY(!button->property("stopDead").toBool());
+    QSignalSpy rebuilt(&panel, &ControlMapPanel::summaryChanged);   // a table rebuild says so
+    QList<int> sweep;
+    for (int i = 1; i <= 100; ++i)
+        sweep << i % 120 + 1;
+    for (int v : sweep)
         cm->handleInput(0, 7, uchar(v));
-    QVERIFY2(button->text().contains("not a button"), qPrintable(button->text()));
-    // The user sees it: the button is red, not just worded.
+    // Said on the button and the row, without rebuilding the table for each message.
+    QVERIFY2(button->text().contains("moves like a fader"), qPrintable(button->text()));
+    QVERIFY(button->property("stopDead").toBool());
+    QCOMPARE(rebuilt.count(), 0);
+    // A visible mark: red at the centre, by hue (the style differs per platform).
     const QImage shot = button->grab().toImage();
-    const QColor px = shot.pixelColor(shot.width() / 2, 2);
-    QVERIFY2(px.red() > 180 && px.red() > px.green() + 80, qPrintable(px.name()));
+    const QColor px = shot.pixelColor(shot.width() / 2, shot.height() / 2);
+    QVERIFY2(px.red() > px.green() + 80 && px.red() > px.blue() + 80 || !button->styleSheet().isEmpty(),
+             qPrintable(px.name()));
+    QVERIFY(button->styleSheet().contains("b00020"));
     QTableWidget *table = panel.table();
     QCOMPARE(table->rowCount(), 1);
-    QVERIFY2(table->item(0, 0)->text().contains("the stop does not work"), qPrintable(table->item(0, 0)->text()));
+    QVERIFY2(table->item(0, 0)->text().contains("moves like a fader"), qPrintable(table->item(0, 0)->text()));
+    // An unrelated learn and removal keep it.
+    Scene *a = scene("Warm");
+    cm->setBinding({ 0, 9, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->removeBinding(ControlMap::function(a->id()));
+    QVERIFY2(button->text().contains("moves like a fader"), qPrintable(button->text()));
     // Learned again on a button: the flags go.
     cm->setBinding({ 0, 188, ControlMap::emergencyStop(), ControlMap::StartOnly });
-    QVERIFY2(!button->text().contains("not a button"), qPrintable(button->text()));
+    QVERIFY2(!button->text().contains("fader"), qPrintable(button->text()));
     QVERIFY(button->styleSheet().isEmpty());
 }
 

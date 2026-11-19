@@ -79,6 +79,7 @@ private slots:
     void slotRemove();
     void slotRemoveAll();
     void slotEmergencyStop();
+    void refreshStop();
     void slotFired(const QString &what);
     void slotEncoderPreset(int index);
     void slotEncoderEdited();
@@ -88,6 +89,7 @@ private slots:
 
 private:
     QString controlText(const ControlMap::Binding &b) const;
+    QString stopRowText(const ControlMap::Binding &b) const;
 
 private:
     Doc *m_doc;

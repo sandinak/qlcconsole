@@ -117,6 +117,8 @@ void ControlMap::setBinding(const Binding &b)
             m_bindings.removeAt(i);
         }
     }
+    if (b.target.type == EmergencyStopTarget)
+        m_estopFlagged.clear();
     m_bindings.append(b);
     changed(true);
     const quint32 fid = feedbackFunction(b);
@@ -131,9 +133,9 @@ bool ControlMap::removeBinding(const Target &target)
         if (m_bindings.at(i).target != target)
             continue;
         sendFeedback(m_bindings.at(i), false);
-        m_down.remove(key(m_bindings.at(i).universe, m_bindings.at(i).channel));
-        m_fired.remove(key(m_bindings.at(i).universe, m_bindings.at(i).channel));
-        m_pressed.remove(key(m_bindings.at(i).universe, m_bindings.at(i).channel));
+        // A control held down keeps what it pressed: its release still lets go.
+        if (target.type == EmergencyStopTarget)
+            m_estopFlagged.clear();
         m_bindings.removeAt(i);
         changed(true);
         return true;
@@ -164,11 +166,8 @@ void ControlMap::removeAll()
     for (const Binding &b : std::as_const(m_bindings))
         sendFeedback(b, false);
     m_bindings.clear();
-    m_down.clear();
-    m_fired.clear();
-    m_pressed.clear();
-    m_estopHeld.clear();
-    m_heldStarted.clear();
+    m_estopFlagged.clear();
+    // Controls held keep what they pressed: their releases still let go.
     changed(true);
 }
 
@@ -182,6 +181,10 @@ void ControlMap::reset()
     m_pressed.clear();
     m_estopHeld.clear();
     m_swallow.clear();
+    m_swallowAt.clear();
+    m_estopHeld.clear();
+    m_estopFlagged.clear();
+    m_blockedHeld.clear();
     m_heldStarted.clear();
     m_listening = false;
     m_learnBind = false;
@@ -208,7 +211,6 @@ void ControlMap::changed(bool modified)
 void ControlMap::rebuild()
 {
     m_byControl.clear();
-    m_estopFaders.clear();
     m_keyBindings = 0;
     for (int i = 0; i < m_bindings.count(); ++i)
     {
@@ -601,16 +603,34 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
 {
     const quint64 k = key(universe, channel);
     if (value == 0)
-        m_estopHeld.remove(k);
+    {
+        // A release: the stop's next non-zero is a new press, and what was
+        // said about a held press can be said again.
+        auto h = m_estopHeld.find(k);
+        if (h != m_estopHeld.end())
+        {
+            h->released = true;
+            h->moving = false;
+        }
+        m_blockedHeld.remove(k);
+    }
 
     // The emergency stop comes before anything else, learning included: a
     // learn that is left listening (a panel closed, a dialog open) must never
     // eat the press that stops the show. Only the press that taught it, still
     // held, is swallowed below.
-    if (value > 0 && universe != KeyboardUniverse && !m_swallow.contains(k))
+    if (value > 0 && universe != KeyboardUniverse)
     {
         const int si = m_byControl.value(k, -1);
-        if (si >= 0 && m_bindings.at(si).target.type == EmergencyStopTarget)
+        const bool isStop = si >= 0 && m_bindings.at(si).target.type == EmergencyStopTarget;
+        // The press that taught the stop is swallowed until its release; a
+        // release that was lost must not swallow the first real press for long.
+        if (isStop && m_swallow.contains(k) && m_swallowAt.contains(k) && m_swallowAt.value(k).elapsed() > 1000)
+        {
+            m_swallow.remove(k);
+            m_swallowAt.remove(k);
+        }
+        if (isStop && !m_swallow.contains(k))
         {
             emergencyStop(m_bindings.at(si), value);
             return;
@@ -640,6 +660,7 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         // The press that taught it is held: it doesn't fire what it was
         // bound to, and its release isn't a release of the binding.
         m_swallow.insert(k);
+        m_swallowAt[k].start();
         if (bind)
         {
             Binding nb = m_learning;
@@ -685,12 +706,27 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         m_fired.insert(k);
 }
 
-bool ControlMap::stopIsDead() const
+QString ControlMap::stopProblem() const
 {
     const Binding *b = binding(emergencyStop());
     if (b == nullptr)
-        return false;
-    return m_estopFaders.contains(key(b->universe, b->channel)) || !isButtonControl(b->universe, b->channel);
+        return QString();
+    if (isKey(*b))
+        return tr("a computer key cannot be the stop");
+    if (!isButtonControl(b->universe, b->channel))
+        return tr("not a button");
+    if (m_estopFlagged.contains(key(b->universe, b->channel)))
+        return tr("moves like a fader");
+    return QString();
+}
+
+void ControlMap::say(quint64 k, const QString &why)
+{
+    auto it = m_blockedHeld.find(k);
+    if (it != m_blockedHeld.end() && it->elapsed() < 1000)
+        return;
+    m_blockedHeld[k].start();
+    emit blocked(why);
 }
 
 void ControlMap::slotInputDeviceChanged(quint32 universe)
@@ -704,6 +740,9 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
     for (const quint64 k : m_estopHeld.keys())
         if (quint32(k >> 32) == universe)
             m_estopHeld.remove(k);
+    for (const quint64 k : m_swallowAt.keys())
+        if (quint32(k >> 32) == universe)
+            m_swallowAt.remove(k);
     QList<quint32> held;
     for (quint64 k : std::as_const(m_down))
         if (quint32(k >> 32) == universe)
@@ -714,41 +753,51 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
 
 void ControlMap::emergencyStop(const Binding &b, uchar value)
 {
+    // The rule (Branson, 2026-11-19): a bound stop is never lost for more than
+    // one press, and an extra ALL OFF is better than a missed one. A press is
+    // a non-zero after a 0, the first non-zero (after a load or a replug), or
+    // a non-zero after a second of quiet (a release that was lost). A run of
+    // different non-zero values with no 0 and no gap moves like a fader: it
+    // fires once, not on every step, and is flagged -- loudly, not disarmed.
     const quint64 k = key(b.universe, b.channel);
-    if (m_estopFaders.contains(k) || !isButtonControl(b.universe, b.channel))
+    if (!isButtonControl(b.universe, b.channel))
     {
-        // Said, not dropped: this control cannot be the stop.
-        emit blocked(tr("The emergency stop did not fire: %1 is a fader or knob, not a button. "
-                        "Learn the stop on a button again.").arg(controlName(b.universe, b.channel)));
+        // The profile says fader or knob: said, once per hold.
+        say(k, tr("The emergency stop did not fire: %1 is a fader or knob, not a button. "
+                  "Learn the stop on a button again.").arg(controlName(b.universe, b.channel)));
         return;
     }
-    auto held = m_estopHeld.find(k);
-    if (held != m_estopHeld.end())
-    {
-        // Pressed already and not let go. The same value again is a held
-        // button repeating; a different one a moment later is a fader moving.
-        const bool recent = held->last.elapsed() < 1000;
-        if (value != held->value && recent)
-        {
-            m_estopFaders.insert(k);
-            emit blocked(tr("The emergency stop did not fire again: %1 sends a range of values, so it is "
-                            "a fader or knob, not a button. Learn the stop on a button again.")
-                             .arg(controlName(b.universe, b.channel)));
-            return;
-        }
-        const bool repeat = held->last.elapsed() < m_estopDebounceMs;
-        held->value = value;
-        held->last.start();
-        if (repeat)
-            return;
-    }
-    else
+    bool press = true;
+    bool differs = false;
+    auto it = m_estopHeld.find(k);
+    if (it == m_estopHeld.end())
     {
         StopHold h;
         h.value = value;
         h.last.start();
         m_estopHeld.insert(k, h);
     }
+    else
+    {
+        const bool run = !it->released && it->last.elapsed() < m_estopDebounceMs;
+        differs = !it->released && value != it->value;
+        press = !run;
+        it->value = value;
+        it->last.start();
+        it->released = false;
+        it->moving = run && differs;
+    }
+    // Different values with no 0 between, in a run or after a rest: a fader.
+    if (differs && !m_estopFlagged.contains(k))
+    {
+        m_estopFlagged.insert(k);
+        emit blocked(tr("The emergency stop is bound to %1, which moves like a fader: learn it again on "
+                        "a button. It still stops the show, but not on every move.")
+                         .arg(controlName(b.universe, b.channel)));
+        emit stopStateChanged();
+    }
+    if (!press)
+        return;
     ShowControl::Request r;
     r.command = ShowControl::AllOff;
     // The one path; ALL OFF is not one of the guarded commands.
@@ -761,7 +810,7 @@ bool ControlMap::press(const Binding &b)
     // A computer key was checked where it is pressed (keyMayFire()).
     const bool may = isKey(b) || surfaceMayFire(b.target);
     auto notFired = [this, &b]() {
-        emit blocked(tr("Not fired: %1. %2").arg(targetName(b.target), refusalFor(b.target)));
+        say(key(b.universe, b.channel), tr("Not fired: %1. %2").arg(targetName(b.target), refusalFor(b.target)));
     };
     switch (b.target.type)
     {
@@ -926,6 +975,7 @@ bool ControlMap::handleKey(quint32 channel, bool pressed)
     {
         // A release lets go of what its press fired, whatever the mode or
         // the arming is now: nothing stays held.
+        m_blockedHeld.remove(k);
         if (!m_down.contains(k))
             return false;
         handleInput(KeyboardUniverse, channel, 0);
@@ -936,11 +986,18 @@ bool ControlMap::handleKey(quint32 channel, bool pressed)
     const Binding *b = bindingOn(KeyboardUniverse, channel);
     if (b == nullptr)
         return false;
+    if (b->target.type == EmergencyStopTarget)
+    {
+        // A show file put the stop on a key: it does nothing, and says so.
+        say(k, tr("The emergency stop is bound to a computer key, which cannot be the stop: a key works "
+                  "only in Operate. Learn it on a MIDI or OSC button."));
+        return false;
+    }
     if (!keyMayFire(b->target))
     {
         // The key goes on to whatever has the keyboard; the footer says why
         // it fired nothing.
-        emit blocked(tr("Not fired: %1. %2").arg(targetName(b->target), refusalFor(b->target)));
+        say(key(KeyboardUniverse, channel), tr("Not fired: %1. %2").arg(targetName(b->target), refusalFor(b->target)));
         return false;
     }
     handleInput(KeyboardUniverse, channel, UCHAR_MAX);
@@ -1223,6 +1280,10 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_fired.clear();
     m_pressed.clear();
     m_estopHeld.clear();
+    m_estopFlagged.clear();
+    m_swallow.clear();
+    m_swallowAt.clear();
+    m_blockedHeld.clear();
     m_heldStarted.clear();
     m_encoderBank->reset();
     bool okList = false;

@@ -32,6 +32,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Operate only where the hit's place is live, and a cue list or cue as a pad
   does (in Design only what is armed). A scene or effect on a key stays
   Operate-only. A key held back says why on the footer.
+- **The emergency stop is never lost for more than one press.** Nothing marks
+  it dead for the session: a press is a value above 0 after a 0, the first
+  value after a load or replug, or a value after a second of quiet (a lost
+  release). A fader or encoder bound as the stop is one press per run, not one
+  per step, and is flagged loudly (red button and row, one footer line) until
+  learned again on a button. A release that was lost at learn time no longer
+  swallows the first press, a stop bound to a computer key says it does
+  nothing, a scene held by a button still lets go when its binding is removed,
+  and a refused press or key says why once per hold, not on every message.
 - **The emergency stop can't be eaten or go dead in silence.** It works while
   a learn is listening (an Encoder learn left waiting, an open Learn Trigger
   dialog), a second press right after a GO is not dropped, a replug cannot

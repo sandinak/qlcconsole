@@ -75,7 +75,12 @@ private slots:
     void theStopWorksWhileALearnIsListening();
     void aRealSecondPressIsNotDebounced();
     void aStopThatCannotWorkSaysSo();
-    void aBoundFaderWithNoProfileFiresOnceThenIsRefused();
+    void aBoundFaderIsFlaggedLoudlyAndStillStops();
+    void theStopFiresPerThePressRule();
+    void aLostReleaseAtLearnTimeDoesNotSwallowTheStop();
+    void aBindingRemovedWhileHeldStillLetsGo();
+    void aStopOnAKeyDoesNothingAndSaysSo();
+    void aHeldRefusedPressSaysItOnce();
     void aReplugFreesThePressThatTaughtTheStop();
     void aReleaseActsOnWhatWasPressed();
 

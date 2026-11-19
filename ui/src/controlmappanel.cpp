@@ -109,7 +109,7 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     connect(cm, &ControlMap::blocked, this, &ControlMapPanel::slotFired);
     // A profile that now calls the stop's control a fader: the row says so.
     connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged, this, [this]() { refresh(); });
-    connect(cm, &ControlMap::blocked, this, [this]() { refresh(); });
+    connect(cm, &ControlMap::stopStateChanged, this, &ControlMapPanel::refreshStop);
     // A key's "Armed" follows the mode, the Run tab and the Show Tree.
     connect(cm, &ControlMap::armingChanged, this, &ControlMapPanel::refreshArming);
     // Names follow renames.
@@ -137,10 +137,12 @@ void ControlMapPanel::refresh()
     for (int r = 0; r < bindings.count(); ++r)
     {
         const ControlMap::Binding &b = bindings.at(r);
-        QTableWidgetItem *c = new QTableWidgetItem(b.target.type == ControlMap::EmergencyStopTarget && cm->stopIsDead()
-            ? tr("%1 · not a button: the stop does not work").arg(controlText(b)) : controlText(b));
+        QTableWidgetItem *c = new QTableWidgetItem(controlText(b));
         if (b.target.type == ControlMap::EmergencyStopTarget && cm->stopIsDead())
+        {
+            c->setText(stopRowText(b));
             c->setForeground(QColor(0xb0, 0x00, 0x20));
+        }
         c->setData(TargetRole, b.target.id);
         c->setData(TypeRole, int(b.target.type));
         m_table->setItem(r, ControlCol, c);
@@ -170,14 +172,7 @@ void ControlMapPanel::refresh()
         });
         m_table->setCellWidget(r, ModeCol, mode);
     }
-    const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
-    const bool dead = cm->stopIsDead();
-    m_estop->setText(stop == nullptr ? tr("Emergency stop…")
-                                     : dead ? tr("Emergency stop: %1 is not a button — learn it again…")
-                                                  .arg(cm->controlName(stop->universe, stop->channel))
-                                            : tr("Emergency stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
-    m_estop->setStyleSheet(dead ? QStringLiteral("color: white; background: #b00020;") : QString());
-    m_estop->setProperty("stopDead", dead);
+    refreshStop();
     const bool any = !bindings.isEmpty();
     m_empty->setVisible(!any);
     m_table->setVisible(any);
@@ -239,6 +234,36 @@ void ControlMapPanel::slotRemoveAll()
                                        : tr("Remove all %1 triggers? Their controls will fire nothing.").arg(n))
                == QMessageBox::Yes)
         m_doc->controlMap()->removeAll();
+}
+
+QString ControlMapPanel::stopRowText(const ControlMap::Binding &b) const
+{
+    return tr("%1 · %2: learn it on a button").arg(controlText(b), m_doc->controlMap()->stopProblem());
+}
+
+void ControlMapPanel::refreshStop()
+{
+    // Only the stop's button and its row: a flagged stop is shown without
+    // rebuilding the table for every message.
+    ControlMap *cm = m_doc->controlMap();
+    const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
+    const QString problem = cm->stopProblem();
+    const bool dead = !problem.isEmpty();
+    m_estop->setText(stop == nullptr ? tr("Emergency stop…")
+                                     : dead ? tr("Emergency stop: %1 %2 — learn it on a button…")
+                                                  .arg(cm->controlName(stop->universe, stop->channel), problem)
+                                            : tr("Emergency stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
+    m_estop->setStyleSheet(dead ? QStringLiteral("color: white; background: #b00020;") : QString());
+    m_estop->setProperty("stopDead", dead);
+    m_estop->setProperty("stopProblem", problem);
+    for (int r = 0; stop != nullptr && r < m_table->rowCount(); ++r)
+    {
+        QTableWidgetItem *c = m_table->item(r, ControlCol);
+        if (c == nullptr || ControlMap::TargetType(c->data(TypeRole).toInt()) != ControlMap::EmergencyStopTarget)
+            continue;
+        c->setText(dead ? stopRowText(*stop) : controlText(*stop));
+        c->setForeground(dead ? QBrush(QColor(0xb0, 0x00, 0x20)) : QBrush());
+    }
 }
 
 void ControlMapPanel::slotEmergencyStop()

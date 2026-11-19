@@ -44,6 +44,8 @@ class Doc;
 #define CONTROLMAP_HAS_EMERGENCY_STOP 1
 /** ... and the stop that says when it cannot work (stopIsDead()). */
 #define CONTROLMAP_STOP_REVIEWED 1
+/** ... and the press rule (stopProblem(), stopStateChanged()). */
+#define CONTROLMAP_STOP_FLAGS 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -199,14 +201,16 @@ public:
      *  aftertouch, by its input profile, else by what a MIDI channel number
      *  is. OSC, programs and unknown lines are buttons. */
     bool isButtonControl(quint32 universe, quint32 channel) const;
-    /** Test hooks: how long a first press waits for its second, and the
-     *  window in which repeats of the stop's press are one. */
+    /** Test hooks: how long a first press waits for its second, and the gap
+     *  after which a non-zero on the stop is a new press, not the same run. */
     void setConfirmMs(int ms) { m_confirmMs = ms; }
     void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
-    /** The stop is bound to a control that cannot work it: the profile calls
-     *  it a fader or knob (set after it was learned), or it sent a fader's
-     *  values. Its presses are refused, in words (blocked()). */
-    bool stopIsDead() const;
+    /** What is wrong with the stop's control, in words (empty: nothing):
+     *  its profile calls it a fader or knob (refused, said), it is a computer
+     *  key (never works), or it has been seen moving like a fader (it still
+     *  fires; shown loudly: the panel, one footer line). */
+    QString stopProblem() const;
+    bool stopIsDead() const { return !stopProblem().isEmpty(); }
 
     /*********************************************************************
      * Names
@@ -305,6 +309,9 @@ signals:
     void refused(const QString &why);
     /** A control fired its target: what it did, in words. */
     void fired(const QString &what);
+    /** The stop's control was seen moving like a fader (or its state
+     *  changed): the panel shows it. */
+    void stopStateChanged();
     /** What isArmed() says may have changed (the mode, the Run tab's
      *  list, the Show Tree's selection, a cue list moving on). */
     void armingChanged();
@@ -338,6 +345,8 @@ private:
     void release(const Binding &b);
     /** The emergency stop: ALL OFF through ShowControl::run() (never held). */
     void emergencyStop(const Binding &b, uchar value);
+    /** blocked(), said once per hold of control @a k */
+    void say(quint64 k, const QString &why);
     /** listenForButton(): one control heard while learning. */
     bool learnButtonHeard(quint32 universe, quint32 channel, uchar value);
     /** Starts, stops or toggles (start: 1, stop: 0, toggle: -1) a function. */
@@ -377,18 +386,25 @@ private:
     /** how long a first press waits for its second */
     int m_confirmMs = 15000;
     /** repeats of the emergency stop's press inside this are one */
-    int m_estopDebounceMs = 250;
-    /** The stop's controls held since a press (no release yet): the value
-     *  and when it last sent. A repeat of the same value inside the debounce
-     *  is one press; a different value inside a second is a fader. */
+    int m_estopDebounceMs = 1000;
+    /** What a stop's control last sent: the value, when, whether a 0 (a
+     *  release) came since, and whether this run of values moves like a
+     *  fader. See emergencyStop(). */
     struct StopHold
     {
         uchar value = 0;
         QElapsedTimer last;
+        bool released = false;
+        bool moving = false;
     };
     QHash<quint64, StopHold> m_estopHeld;
-    /** controls bound as the stop that sent a fader's values (refused) */
-    QSet<quint64> m_estopFaders;
+    /** stop controls seen moving like a fader: shown loudly (the panel, one
+     *  footer line) until the stop is bound again; never stops them firing */
+    QSet<quint64> m_estopFlagged;
+    /** a refused press said once per hold (and once a second) */
+    QHash<quint64, QElapsedTimer> m_blockedHeld;
+    /** when a press that taught a control was swallowed */
+    QHash<quint64, QElapsedTimer> m_swallowAt;
     /** the binding each held control pressed: its release acts on it, not
      *  on what the control is bound to by then */
     QHash<quint64, Binding> m_pressed;

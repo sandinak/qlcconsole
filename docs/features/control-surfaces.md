@@ -90,16 +90,36 @@ button under the Control Map table.
 - **It beats any learn.** A learn left waiting (an Encoder learn whose panel
   was closed) or a Learn Trigger dialog that is open never eats a press of
   the stop. Learn dialogs refuse the stop's own control.
-- **A stop that cannot work says so.** If the control later turns out not to
-  be a button (a profile now calls it a fader or knob, or a show file put the
-  stop on a CC fader and it sends a range of values) the footer says *The
-  emergency stop did not fire…*, and the Emergency stop… button and the Control
-  Map row go red and say *not a button*. Learn it again on a button. On a CC
-  fader with no profile that was bound by a show file, the first move can fire
-  ALL OFF once before it is recognised; every move after is refused in words.
-- **Every press is ALL OFF**, including a second press a moment after a GO
-  from another route. Only a repeat of one held press (the same value, no
-  release between, inside a quarter of a second) is one.
+- **A stop is never lost for more than one press.** An extra ALL OFF is
+  better than a missed one, so nothing marks a bound stop dead for good. A
+  press is a value above 0 after a 0, the first value after the show loads or
+  the controller is plugged in, or a value after a second of quiet (a
+  release that was lost). A run of different values with no 0 between (a
+  fader or an encoder moving) is one press, not one per step.
+
+  | The control sends | The stop does |
+  |---|---|
+  | 127 held, repeating | one ALL OFF |
+  | 127, 0, 90, 0, 60, 0 (a velocity pad) | three |
+  | 100, then 80 a moment later (the release was lost), then 0, then 100 | one, then one: the 80 is the same hold; the next press after the 0 is never lost |
+  | 100, then 100 after a second of quiet | two |
+  | 1, 1, 1, 127, 1 (a relative encoder, never 0) | one, and flagged |
+  | a fader swept quickly | one, and flagged |
+  | a fader moved, rested a second, moved again | one for each move after a rest, flagged |
+  | a fader that reaches 0 between moves | one for each press after the 0, flagged |
+
+- **A stop on the wrong kind of control is flagged loudly, not disarmed.**
+  When different values arrive with no 0 between, the footer says once
+  *The emergency stop is bound to …, which moves like a fader: learn it again
+  on a button.*, and the Emergency stop… button and the Control Map row go red
+  and say *moves like a fader*. The flag stays until the stop is learned
+  again (an unrelated learn or removal keeps it) and the stop still fires as
+  the table shows. If the input profile calls the control a fader or knob, or
+  it is a computer key (a show file can put it there), the press is **refused**
+  in words on the footer (once per hold) and the button and row say *not a
+  button* or *a computer key cannot be the stop*; learn it on a button.
+- **A lost release at learn time** does not hold the first real press: the
+  press that taught the stop is ignored until its release, or for one second.
 - It is saved with the show. A QLC+ 4 build opens the show and skips it.
 
 On **Companion**, the **ALL OFF** preset needs the key **held for one
