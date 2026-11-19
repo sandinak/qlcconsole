@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A strip of hit buttons on the Run tab.** Under GO, a button for each
+  hit armed right now: the live cue's first, then the list's, the
+  production's, and the hits for everywhere last. Each fires the hit as
+  a Virtual Console button does (Toggle, or Flash when a VC button holds
+  it that way; its fades; Teaching narrates it), in Operate only; a hit
+  that is on shows it and turns off from the strip. It wraps and scrolls
+  at small sizes and never takes the keyboard from GO.
 - **New Venue from a Show.** New Venue… ▸ From a Show… makes a venue from
   the room's own show file (one made from its desk's export): its
   fixtures come in as House, at their plot places, on the one universe the

@@ -2576,6 +2576,18 @@ called them looks; they open as they were.)
   is still playing turns the hit off. To end the hit after its breath has
   finished, press again during the next breath. Flash and hits without a
   one-shot are unchanged (see [Effects](effects.md)).
+- **Fire it from the Run tab.** Under GO, the Run tab shows a button for
+  each hit **armed right now**, the narrowest place first: the live
+  cue's hits, then the list's, the production's, and hits for
+  *everywhere* last. A button is captioned with the hit's name and coloured by
+  its first colour, as **Make VC Page** does. It fires the hit exactly as
+  a VC button does: a **Toggle** turns it on and off (an *on* hit has a
+  bold outline and the button turns it off), a **Flash** (when a VC button holds the
+  hit as Flash) plays while pressed and lets go on release; the hit's **Fade in** and
+  **Fade out** apply. Like every surface, the buttons work in **Operate**
+  only; in Design they are dimmed. With the Teaching show on, a press is
+  written to *What just happened*, as a VC button's is. The strip wraps
+  (two rows, then it scrolls) and never takes the keyboard from GO.
 - **Folders.** **New Folder…** on Hits or a folder; drag hits onto a
   folder (or onto *Hits* for none), or **Move to Folder**. **F2** renames
   a folder; **Delete** moves what is in it up.
