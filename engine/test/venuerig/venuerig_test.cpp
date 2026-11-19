@@ -61,6 +61,9 @@
 #include "venuerig.h"
 #include "venueimport.h"
 #include "../common/pmslikeshow.h"
+#include "../common/resource_paths.h"
+#include "qlcfixturedefcache.h"
+#include "showembedding.h"
 #include "rigowner.h"
 #include "fixture.h"
 #include "chaser.h"
@@ -2618,6 +2621,122 @@ void VenueRig_Test::aVenueFromAFileThatIsNotAShow()
     QCOMPARE(res.warnings.filter(QStringLiteral("3 fixtures hung on the other show's structure")).size(), 1);
     for (const VenueRig::HouseFixture &hf : res.data.fixtures)
         QCOMPARE(hf.universe, 3u);
+}
+
+void VenueRig_Test::aRealShowIntoAVenue()
+{
+    const QString showPath = qEnvironmentVariable("QLC_VENUE_REAL_SHOW");
+    const QString roomPath = qEnvironmentVariable("QLC_VENUE_REAL_ROOM");
+    if (showPath.isEmpty() || roomPath.isEmpty())
+        QSKIP("QLC_VENUE_REAL_SHOW and QLC_VENUE_REAL_ROOM name a show and a room's show to try");
+    // Copies only: the real files are never opened for writing.
+    const QString show = m_dir->filePath(QStringLiteral("show-copy.qlcc"));
+    const QString room = m_dir->filePath(QFileInfo(roomPath).fileName());
+    QVERIFY(QFile::copy(showPath, show));
+    QVERIFY(QFile::copy(roomPath, room));
+
+    QDir defs(INTERNAL_FIXTUREDIR);
+    QVERIFY(m_doc->fixtureDefCache()->loadMap(defs));
+    if (m_doc->showEmbedding()->readWorkspace(show))
+        m_doc->showEmbedding()->apply(m_dir->path());
+    {
+        QFile f(show);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QXmlStreamReader r(&f);
+        QVERIFY(r.readNextStartElement());
+        bool loaded = false;
+        while (r.readNextStartElement())
+        {
+            if (r.name() == QLatin1String("Engine"))
+                loaded = m_doc->loadXML(r);
+            else
+                r.skipCurrentElement();
+        }
+        QVERIFY(loaded);
+    }
+    venues(m_doc)->setShowFile(show, true);
+    VenueCorrections *v = venues(m_doc);
+    m_doc->resetModified();
+    const QByteArray before = engineXml(m_doc);
+    const int showFixtures = m_doc->fixtures().size();
+
+    VenueImport::Source src;
+    QString why;
+    QVERIFY2(VenueImport::read(room, src, &why), qPrintable(why));
+    VenueImport::Options opt;
+    opt.universe = VenueImport::suggestUniverse(m_doc);
+    QVERIFY(opt.universe != UINT_MAX);
+    opt.matches = VenueImport::suggest(src, m_doc);
+    int same = 0, similar = 0;
+    QStringList matched;
+    for (int i = 0; i < opt.matches.size(); ++i)
+    {
+        VenueImport::Match &m = opt.matches[i];
+        if (m.kind == VenueImport::SameName)
+            ++same;
+        else if (m.kind == VenueImport::SimilarName)
+            ++similar;
+        if (m.group != UINT_MAX)
+        {
+            m.confirmed = true;     // as if he ticked every suggestion
+            matched << QStringLiteral("%1 -> %2").arg(src.groups.at(i).name, m_doc->fixtureGroup(m.group)->name());
+        }
+    }
+    const VenueImport::Result res = VenueImport::build(src, m_doc, opt, v->reservedIds());
+    const QList<VenueRig::Clash> dry = v->rig()->clashes(res.data, false);
+    const QString made = v->addVenueFromShow(QStringLiteral("Room from a show"), res.data, &why);
+    QVERIFY2(!made.isEmpty(), qPrintable(why));
+    QVERIFY(v->setActiveVenue(made));
+    int patched = 0, unpatched = 0;
+    for (quint32 id : v->rig()->venueFixtures())
+        (m_doc->fixture(id)->isPatched() ? patched : unpatched)++;
+    const QList<VenueRig::Clash> live = v->clashes(made);
+    QMap<QString, int> kinds;
+    for (const VenueRig::Clash &c : live)
+        kinds[VenueRig::kindName(c.kind)]++;
+    QStringList heldNames;
+    for (const VenueRig::Fill &g : v->venue(made).rig.room.groups)
+        heldNames << QStringLiteral("%1 (%2)").arg(g.groupName).arg(g.heads.size());
+
+    QStringList lines;
+    lines << QStringLiteral("show fixtures: %1, groups: %2, universes: %3").arg(showFixtures)
+                 .arg(m_doc->fixtureGroups().size()).arg(m_doc->inputOutputMap()->universesCount());
+    lines << QStringLiteral("room file: %1 fixtures, %2 groups, universes used: %3, its outputs: %4")
+                 .arg(src.fixtures.size()).arg(src.groups.size()).arg(src.universes().size())
+                 .arg(VenueRig::outputText(src.fixtureOutputs()));
+    lines << QStringLiteral("suggested universe: U%1 (%2)").arg(opt.universe + 1)
+                 .arg(m_doc->inputOutputMap()->getUniverseNameByIndex(int(opt.universe)));
+    lines << QStringLiteral("summary: %1").arg(VenueImport::summary(res, opt.universe));
+    lines << QStringLiteral("groups: %1 same name, %2 similar, %3 filled, %4 held").arg(same).arg(similar)
+                 .arg(res.filled).arg(res.held);
+    lines << QStringLiteral("matched: %1").arg(matched.isEmpty() ? QStringLiteral("none") : matched.join(QStringLiteral("; ")));
+    lines << QStringLiteral("held: %1").arg(heldNames.join(QStringLiteral(", ")));
+    lines << QStringLiteral("applied: %1 house fixtures on the rig (%2 patched, %3 unpatched); %4 kept unloaded")
+                 .arg(v->rig()->venueFixtures().size()).arg(patched).arg(unpatched)
+                 .arg(res.fixtures - int(v->rig()->venueFixtures().size()));
+    lines << QStringLiteral("clashes before apply: %1; applied: %2").arg(dry.size()).arg(live.size());
+    for (auto it = kinds.constBegin(); it != kinds.constEnd(); ++it)
+        lines << QStringLiteral("  %1: %2").arg(it.key()).arg(it.value());
+    for (int i = 0; i < live.size() && i < 12; ++i)
+        lines << QStringLiteral("  - %1").arg(live.at(i).text);
+    lines << QStringLiteral("warnings: %1").arg(res.warnings.size());
+    for (const QString &w : res.warnings)
+        lines << QStringLiteral("  - %1").arg(w);
+    lines << QStringLiteral("show modified: %1; show file unchanged: %2")
+                 .arg(m_doc->isModified() ? "yes" : "no", engineXml(m_doc) == before ? "yes" : "NO");
+    const QString report = lines.join(QLatin1Char('\n'));
+    qInfo().noquote() << report;
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        QVERIFY(writeFile(dir + QStringLiteral("/venue-import-report.txt"), report.toUtf8() + '\n'));
+    }
+    QVERIFY(!m_doc->isModified());
+    QCOMPARE(engineXml(m_doc), before);
+    // The real files are as they were.
+    QCOMPARE(readFile(show), readFile(showPath));
+    QCOMPARE(readFile(room), readFile(roomPath));
 }
 
 QTEST_GUILESS_MAIN(VenueRig_Test)

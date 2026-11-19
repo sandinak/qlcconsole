@@ -34,7 +34,9 @@ Venues** in the Lighting Studio open the same menu.
    calibration, rig and patch). Clashes are listed first, as with Apply
    now (see [The clash check](#the-clash-check)).
 2. **New Venue…**: name the room you are in; its corrections start from
-   the venue changed last. It is applied at once.
+   the venue changed last. It is applied at once. **From a Show…** in
+   the same dialog takes the room's house rig from another show file (see
+   [A venue from another show](#a-venue-from-another-show)).
 3. **Rename…** the venue applied. Its corrections, house rig and patch
    go with the name.
 4. **Rig and Universes…**: [the venue page](#the-venue-page).
@@ -180,6 +182,107 @@ A house fixture on a tour fixture's addresses goes in **unpatched**,
 keeping the address it wants, so it never drives the tour fixture's
 channels. Opening a show whose venue has clashes says so, and the Patch
 dialog lists the venue's clashes under its table.
+
+## A venue from another show
+
+A room's house rig is often already a show file: one made from the
+room's own desk (an Eos export, say), with its fixtures patched, placed
+on a plot and grouped. **New Venue…** ▸ **From a Show…** makes the venue
+from it in one go:
+
+- its fixtures come in as **House**, at their places on its plot, into
+  this venue only;
+- they go on **one universe** of this show, the one you keep for the
+  room, each at the address it had there;
+- its groups are matched to this show's by name, and you confirm each
+  match;
+- **this show's file is not changed** (not marked modified either).
+
+The dialog:
+
+1. **Name**: the room ("PMS Auditeria"). Whatever you typed in New
+   Venue… is carried over.
+2. **Show file**: **Browse…** to the room's .qlcc. Nothing changes yet;
+   the rest of the dialog fills in.
+3. **Its fixtures go on**: the universe of this show kept for the room.
+   It suggests the first House slot with no tour fixture on it, else the
+   first universe with nothing on it. Each line says what is on it now.
+4. **Output in this room**: where that universe goes in the room:
+   - **USB DMX interface**: the room's DMX line through an interface
+     plugged into this computer (only the ones plugged in now are
+     listed);
+   - **Art-Net node**: a spare node's IP address and Art-Net universe;
+   - **Not yet**: nothing goes out for that universe in this room until
+     you choose (the default when no USB DMX interface is plugged in);
+   - **As the file had it**: what the other show sent its universe to.
+     That is the network the file was made on, not the room's: the
+     clash check flags it.
+5. **Groups**: each of its groups, with the group of this show it fills.
+   A group with the same name (case aside), or a similar one
+   ("1st Elect." and "1st elect"), is suggested, and waits for your tick
+   in **Confirmed**; choosing a group yourself confirms it. **Make
+   Venue** says how many are still to confirm. A group left **Not
+   matched** fills nothing: it waits in the venue under its own name.
+6. **What comes in**: how many fixtures, on which addresses ("69
+   fixtures on U4 1–315"), how many groups fill and wait, anything to
+   know (a fixture with no definition on this computer, fixtures from
+   more than one universe, fixtures that hung on the other show's
+   trusses), and **the clash check** of the venue as it would be.
+7. **Make Venue** makes it and applies it. The note that follows says
+   what came in, with **Undo** (the venue off the rig and removed).
+
+A fixture that hung on one of the other show's trusses is placed where
+it hung, free of any truss, with its aim and lens: this show's structure
+is the one house fixtures hang on. Move it on the plot as any house
+fixture if the room's rig differs.
+
+**The venue's universe on the venue page.** **Rig and Universes…** for a
+venue made this way has a **This venue's universe** box: which universe
+it is and what it was made from, the **Output in this room** choice
+again with **Use This Output** (on at once while the venue is applied),
+and the groups still waiting, with **Match Groups…** to match them once
+this show has a group for them.
+
+**The clash check** adds two lines for such a venue:
+
+- **Output**: its universe has no output in this room yet, or still
+  sends what the other show had, or goes out this show's own output for
+  that universe.
+- **Slot**: a tour or rental fixture on the venue's universe.
+
+### On site: checklist
+
+Take the show with its venue file beside it (the venue is in
+`<show>.venues.xml`). In the room, with the USB DMX interface and the
+room's DMX line:
+
+1. Plug the USB DMX interface into the laptop and the room's DMX line
+   (5-pin) into it. **Expected:** nothing on stage changes yet.
+2. Open the show. **Expected:** the footer says **Venue:** and the room's name, amber
+   with "· 1 clash" if the output was left at Not yet.
+3. Venue chip ▸ **Rig and Universes…**. **Expected:** the **This venue's
+   universe** box names the universe and says **Its output here: none**
+   (or the one chosen at home).
+4. **Output in this room** ▸ **USB DMX interface**, pick the interface
+   in the list, **Use This Output**. **Expected:** the Output clash
+   leaves the list; the chip loses its amber (if nothing else clashes);
+   the Connections tab shows the interface on that universe.
+5. Raise one house fixture (Simple Desk or a house group at full).
+   **Expected:** that light comes up in the room, and only that one.
+6. Raise one tour fixture. **Expected:** it comes up through the show's
+   own Art-Net nodes, as at home; the room's lights don't move.
+7. Run a cue written on a group the room's lights fill. **Expected:** the
+   room's lights in that group play it.
+8. **Blackout**, then the **GM** down and up. **Expected:** the room's
+   lights follow both, as every light does.
+9. Unplug the USB interface for five seconds and plug it back.
+   **Expected:** the house lights stop while it is out and come back
+   without choosing it again.
+10. Note any house fixture whose place on the plot is wrong; move it on
+    the plot (the venue keeps it).
+11. A spare Art-Net node instead of USB: in step 4 choose **Art-Net
+    node**, type its IP and Art-Net universe. **Expected:** as step 5,
+    through the node.
 
 ## Seeing who owns what
 

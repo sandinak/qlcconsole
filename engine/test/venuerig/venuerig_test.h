@@ -123,6 +123,10 @@ private slots:
     void undoingAVenueFromAnotherShow();
     /** A file that isn't a show, or has no fixtures, is refused with a reason */
     void aVenueFromAFileThatIsNotAShow();
+    /** A real touring show and a real room's show (QLC_VENUE_REAL_SHOW,
+     *  QLC_VENUE_REAL_ROOM; skipped without them), copied into a temp dir:
+     *  the import's counts into $QLC_SHOT_DIR/venue-import-report.txt */
+    void aRealShowIntoAVenue();
 
 private:
     QString showFile() const;
