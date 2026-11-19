@@ -471,6 +471,7 @@ void VenueRigUi_Test::theVenuePageChoosesTheRoomOutput()
     FixtureGroup *wash = new FixtureGroup(m_doc);
     wash->setName(QStringLiteral("House wash"));
     m_doc->addFixtureGroup(wash);
+    m_doc->resetModified();
     VenueImport::Source src;
     QVERIFY(VenueImport::read(pmsFile(m_dir), src));
     VenueImport::Options opt;

@@ -170,8 +170,11 @@ bool RoomOutputPicker::isComplete() const
         case Usb: return m_usb->currentIndex() >= 0;
         case ArtNet:
         {
+            // All four parts: QHostAddress alone takes "10.0.0" as 10.0.0.0.
+            static const QRegularExpression dotted(QStringLiteral("^\\d{1,3}(\\.\\d{1,3}){3}$"));
+            const QString t = m_ip->text().trimmed();
             QHostAddress a;
-            return a.setAddress(m_ip->text().trimmed()) && a.protocol() == QAbstractSocket::IPv4Protocol;
+            return dotted.match(t).hasMatch() && a.setAddress(t) && a.protocol() == QAbstractSocket::IPv4Protocol;
         }
         default: return true;
     }

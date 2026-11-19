@@ -2486,6 +2486,7 @@ void VenueRig_Test::theRoomOutputAndItsClashes()
 {
     VenueCorrections *v = venues(m_doc);
     dimmers(4, 0, 0, QStringLiteral("Tour par"));
+    m_doc->resetModified();
     const VenueImport::Source src = pmsSource(m_dir);
     VenueImport::Options opt;
     opt.universe = 2;
