@@ -323,12 +323,12 @@ bool RoleFillDialog::fillRoles()
     if (made.cues > 0)
         madeText << tr("%n standard cue(s)", "", made.cues);
     if (made.hits > 0)
-        madeText << tr("%n House hit(s)", "", made.hits);
+        madeText << tr("%n Global hit(s)", "", made.hits);
     QString text = tr("Filled %n role(s) in %1.", "", int(rows.size())).arg(m_venue);
     if (!madeText.isEmpty())
         text += QLatin1Char(' ') + tr("Made %1.").arg(madeText.join(QStringLiteral(", ")));
     if (m_doc->showTree() != nullptr && m_doc->showTree()->productions().isEmpty())
-        text += QLatin1Char(' ') + tr("The House hits are made the next time, once the show has a production.");
+        text += QLatin1Char(' ') + tr("The Global hits are made the next time, once the show has a production.");
     m_status->setText(text);
     m_status->show();
     refresh();

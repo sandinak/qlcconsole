@@ -746,7 +746,7 @@ void VenueRigUi_Test::theRolesBoxFillsTheRoles()
     d->useBox(d->rowOf(HouseRole::Top))->setChecked(false);
     QVERIFY(d->fillRoles());
     QVERIFY2(d->statusLabel()->text().startsWith(QStringLiteral("Filled 4 role(s) in PMS Auditeria. Made 8 role "
-                                                                "group(s), 4 palette(s), 6 standard cue(s), 6 House hit(s).")),
+                                                                "group(s), 4 palette(s), 6 standard cue(s), 6 Global hit(s).")),
              qPrintable(d->statusLabel()->text()));
     QCOMPARE(HouseRole::group(m_doc, HouseRole::Front)->fixtureList().size(), 3);
     QVERIFY(HouseRole::group(m_doc, HouseRole::Top)->fixtureList().isEmpty());

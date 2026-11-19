@@ -139,6 +139,9 @@ private slots:
     void ven05();
     void ven09();
     void ven10();
+    /** VEN-11: a standard house cue whose every role is empty in the
+     *  venue applied; one with a light is not said */
+    void ven11();
     void blk01();
     /** CUE-12's Virtual Console button */
     void cue12Vc();

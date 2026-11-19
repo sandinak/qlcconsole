@@ -415,11 +415,6 @@ QList<StandardCue> HouseRole::standardCues()
     };
 }
 
-QString HouseRole::hitFolder()
-{
-    return tr("House");
-}
-
 namespace
 {
 /* A Dimmer palette at @p level, or Colour Open White (@p level < 0): an
@@ -559,8 +554,7 @@ Made HouseRole::ensure(Doc *doc, const QSet<Role> &useExisting)
         const quint32 hit = st->insertReusableCue(section, int(hits->cues.count()) - 1, rid);
         if (hit == ShowTree::invalidId())
             continue;
-        st->setLookFolder({ hit }, hitFolder());       // filed: a production hit...
-        st->setHitScope({ hit }, ShowTree::HitScope::Global, prod);    // ...then everywhere
+        st->setHitScope({ hit }, ShowTree::HitScope::Global, prod);    // everywhere
         st->setHitsOverride({ hit }, true);
         ++made.hits;
     }
@@ -611,6 +605,10 @@ bool HouseRole::fillRoles(Doc *doc, const QString &venue, const QMap<Role, QList
                 if (wanted.contains(fid))
                     g->resignFixture(fid);
     }
+    /* A cue baked while a role was empty planned nothing for it: plan
+       again on the rig as filled now. */
+    if (ShowTreeController *st = doc->showTree())
+        st->bake();
     return vc->recordRig(why);
 }
 

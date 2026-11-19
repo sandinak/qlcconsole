@@ -121,8 +121,6 @@ namespace HouseRole
     /** House up, House to half, House out, Stage up, Work lights, Work
      *  lights off. */
     QLC_ENGINE_EXPORT QList<StandardCue> standardCues();
-    /** The folder their Global hits are filed in ("House"). */
-    QLC_ENGINE_EXPORT QString hitFolder();
 
     /** What the first Fill Roles made (and every later one added back). */
     struct Made
@@ -139,8 +137,8 @@ namespace HouseRole
      *  it), the palettes (Dimmer full, 50%, out and Colour Open White, an
      *  existing one with exactly those values reused), the standard
      *  reusable cues (Dimmer + Open White on each role) and, when the show
-     *  has a production, one override Global hit per standard cue in the
-     *  House folder. A cue or hit he edited is left as it is; one he
+     *  has a production, one override Global hit per standard cue (at the
+     *  top of the tree: a Global hit keeps no folder). A cue or hit he edited is left as it is; one he
      *  deleted is made again. */
     QLC_ENGINE_EXPORT Made ensure(Doc *doc, const QSet<Role> &useExisting = QSet<Role>());
 

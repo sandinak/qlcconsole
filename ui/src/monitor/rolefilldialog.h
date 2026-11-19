@@ -42,7 +42,7 @@ class Doc;
  * per house role with the venue's lights suggested for it and why, a Use
  * tick and a Flash button to find them in the room; one Fill Roles click
  * makes them the roles' fills (and, the first time, the role groups, the
- * standard cues and their House hits).
+ * standard cues and their Global hits).
  */
 class RoleFillDialog final : public QDialog
 {

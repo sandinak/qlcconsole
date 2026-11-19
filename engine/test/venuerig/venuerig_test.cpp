@@ -3236,7 +3236,7 @@ void VenueRig_Test::rolesMadeOnFirstUseOnly()
     QCOMPARE(HouseRole::nameClashes(m_doc), QList<HouseRole::Role>({ HouseRole::Cyc }));
 
     // The first time: eight groups in Roles, the palettes, six standard
-    // cues and six override Global hits in House. His "Cyc" is kept.
+    // cues and six override Global hits. His "Cyc" is kept.
     const HouseRole::Made made = HouseRole::ensure(m_doc);
     QCOMPARE(made.groups, 8);
     QCOMPARE(made.palettes, 4);         // Full, 50%, Out, Open White
@@ -3279,7 +3279,6 @@ void VenueRig_Test::rolesMadeOnFirstUseOnly()
         QVERIFY2(hit != ShowTree::invalidId(), qPrintable(c.name));
         QCOMPARE(st->hitScope(hit), ShowTree::HitScope::Global);
         QVERIFY(st->isOverrideHit(hit));
-        QCOMPARE(st->cue(hit)->folder, QStringLiteral("House"));
         QVERIFY(hitFunction(m_doc, c.name) != nullptr);
     }
 

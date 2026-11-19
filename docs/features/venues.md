@@ -358,7 +358,7 @@ room's DMX line:
     is wrong.
 16. **Fill Roles**. **Expected:** the note says what it filled and, the
     first time, that it made the role groups, the standard cues and the
-    House hits.
+    Global hits.
 17. Fire the **House to half** hit. **Expected:** the house lights go to
     half over 5 s (a relay circuit just stays on); nothing on stage
     changes. **House out**: the house goes out, aisle lights stay.
@@ -431,9 +431,10 @@ The first Fill Roles also makes what plays on them:
   | **Work lights** | Work Lights full | 0 s |
   | **Work lights off** | Work Lights out | 0 s |
 
-- one **Global hit** per standard cue, an **override** hit in a
-  **House** folder, so it can be fired any time from the Run tab, a VC
-  button (Make VC Page) or the pad, and wins over what the show plays
+- one **Global hit** per standard cue, an **override** hit at the top
+  of the Show Tree, so it can be fired any time the ways any hit is: a
+  VC button (Make VC Page), the pad, a key, the Control Map or the
+  phone's Run page; it wins over what the show plays
   there (see [Show Tree hits](show-tree.md)).
 
 Each layer sets the dimmer **and Open White**, so a light with no

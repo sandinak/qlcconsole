@@ -30,6 +30,8 @@
 #include <cmath>
 
 #include "venuecorrections.h"
+#include "showtreecontroller.h"
+#include "houserole.h"
 #include "monitorproperties.h"
 #include "venueimport.h"
 #include "qlcfixturemode.h"
@@ -980,6 +982,11 @@ bool VenueCorrections::setActiveVenue(const QString &name)
                 m_turnChanges << TurnChange{ it.key(), it.value(), now };
         }
     save();
+    /* The house roles (docs/design/VENUE_ROLES_DATUM.md section 3) are
+       filled by another room now: a standard cue baked while one was
+       empty here plans its layer on this room's lights. */
+    if (HouseRole::hasRoles(m_doc) && m_doc->showTree() != nullptr)
+        m_doc->showTree()->bake();
     emit activeVenueChanged(m_active);
     emit correctionsChanged();
     return true;
