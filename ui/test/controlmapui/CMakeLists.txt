@@ -8,7 +8,9 @@ add_executable(${module_name} WIN32 MACOSX_BUNDLE
 
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src
+    ../../../plugins/interfaces
     ../../src
+    ../../../engine/test/iopluginstub
 )
 
 include_ui_header(${module_name})
@@ -19,6 +21,7 @@ target_link_libraries(${module_name} PRIVATE
     Qt6::Test
     Qt6::Widgets
     qlcplusengine
+    iopluginstub   # a patched input line, for a profile's fader
     qlcplusui
 )
 

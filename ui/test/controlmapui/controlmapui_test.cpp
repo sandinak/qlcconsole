@@ -45,6 +45,9 @@
 #include "keytriggers.h"
 #include "cuerunner.h"
 #include "inputoutputmap.h"
+#include "iopluginstub.h"
+#include "qlcioplugin.h"
+#include <QDir>
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
 #include "controlmap.h"
@@ -294,6 +297,13 @@ void ControlMapUi_Test::aStopOnAProfileFaderIsWarnedOnceAndOnlyOnItsOwnLine()
 {
     ControlMap *cm = m_doc->controlMap();
     InputOutputMap *iom = m_doc->inputOutputMap();
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(), "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    QLCIOPlugin *stub = m_doc->ioPluginCache()->plugins().at(0);
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
     QLCInputProfile *prof = new QLCInputProfile();
     prof->setManufacturer("Fake");
     prof->setModel("Faders");
