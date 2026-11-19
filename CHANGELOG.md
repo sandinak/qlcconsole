@@ -28,6 +28,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   opening on Windows and took over a minute on a fast Mac. Each list is now
   built once, after the show is read.
 
+- **Release tooling (dev-facing).** Notarization resubmits a DMG Apple leaves "In Progress" for 20 minutes (`NZ_RESUBMIT_AFTER`) and takes whichever submission is Accepted first; the Homebrew-Qt bundler (`UNIVERSAL=0`) now copies every framework a bundled plugin links to (QtSvg for the svg plugins) and fails on any reference outside the app. Both have self-tests (`notarize-lib.sh --self-test`, `bundlefix-selftest.sh`).
+
 ### Changed
 
 - **Fixture Properties stays open beside the rig.** The plot and the Rig

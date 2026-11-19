@@ -17,13 +17,20 @@
 # rides out a crash or a network blip: NZ_MAX_ERRORS errors in a row
 # before it gives up, and then it prints the command to finish by hand.
 #
+# Resubmit: a submission still "In Progress" after NZ_RESUBMIT_AFTER seconds
+# (Apple left one 90 min on 2026-11-18; the same DMG submitted again passed in
+# 1 min) is submitted again and both are polled. The first Accepted wins;
+# Invalid on either stops with that one's log. A resumed submission
+# (below) counts its 20 minutes from the resume.
+#
 # A submission already made (the script was stopped while it waited):
 # NZ_SUBMISSION_<LABEL>=<id> (label upper-cased, e.g. NZ_SUBMISSION_APP)
 # waits on that one instead of submitting again.
 #
 # Env: NOTARY_PROFILE (qlc-notary), NOTARYTOOL (default "xcrun notarytool";
 # the self-test puts a fake here), NZ_POLL (30 s), NZ_TIMEOUT (5400 s),
-# NZ_MAX_ERRORS (10), NZ_SUBMIT_TRIES (3), SCRATCH.
+# NZ_MAX_ERRORS (10), NZ_SUBMIT_TRIES (3), NZ_RESUBMIT_AFTER (1200 s; 0 = never),
+# NZ_RESUBMITS (1), SCRATCH.
 
 NOTARY_PROFILE="${NOTARY_PROFILE:-qlc-notary}"
 NOTARYTOOL="${NOTARYTOOL:-xcrun notarytool}"
@@ -31,6 +38,8 @@ NZ_POLL="${NZ_POLL:-30}"
 NZ_TIMEOUT="${NZ_TIMEOUT:-5400}"
 NZ_MAX_ERRORS="${NZ_MAX_ERRORS:-10}"
 NZ_SUBMIT_TRIES="${NZ_SUBMIT_TRIES:-3}"
+NZ_RESUBMIT_AFTER="${NZ_RESUBMIT_AFTER:-1200}"   # 0 = never
+NZ_RESUBMITS="${NZ_RESUBMITS:-1}"
 
 # The profile has gone from the keychain three times (twice it came back by
 # itself once ender was docked again): say so in words, before an upload.
@@ -53,7 +62,7 @@ nz_check_profile() {
 nz_id_of() { awk '$1 == "id:" { print $2; exit }'; }
 
 nz_notarize() { # <file> <label>
-    local file=$1 label=$2 var sid="" out try=0 st errs=0 waited=0 rec
+    local file=$1 label=$2 var sid="" out try=0 st errs=0 waited=0 rec last=""
     rec="${SCRATCH:-${TMPDIR:-/tmp}}/$label.submission"
     var="NZ_SUBMISSION_$(printf '%s' "$label" | tr '[:lower:]-' '[:upper:]_')"
     sid="${!var:-}"
@@ -74,27 +83,52 @@ nz_notarize() { # <file> <label>
     fi
     echo "$sid" > "$rec"
     echo "  submission $sid (kept in $rec; if this stops, rerun with $var=$sid)"
+    local ids=("$sid") i n_ok since=0 resubs=0 failed=0
     while :; do
-        if out=$($NOTARYTOOL info "$sid" --keychain-profile "$NOTARY_PROFILE" 2>&1); then
-            errs=0
-            st=$(printf '%s\n' "$out" | awk -F': *' '$1 ~ /^ *status$/ { print $2; exit }')
-            case "$st" in
-                Accepted) echo "  $label: Accepted"; return 0 ;;
-                "In Progress"|"") ;;
-                *) echo "ERROR: $label notarization: $st. Apple's log:"
-                   $NOTARYTOOL log "$sid" --keychain-profile "$NOTARY_PROFILE" 2>&1 | tail -n 40
-                   return 1 ;;
-            esac
-        else
+        n_ok=0
+        for i in "${ids[@]}"; do
+            if out=$($NOTARYTOOL info "$i" --keychain-profile "$NOTARY_PROFILE" 2>&1); then
+                n_ok=$((n_ok + 1))
+                st=$(printf '%s\n' "$out" | awk -F': *' '$1 ~ /^ *status$/ { print $2; exit }')
+                case "$st" in
+                    Accepted) echo "  $label: Accepted ($i)"; return 0 ;;
+                    "In Progress"|"") ;;
+                    *) echo "ERROR: $label notarization of $i: $st. Apple's log:"
+                       $NOTARYTOOL log "$i" --keychain-profile "$NOTARY_PROFILE" 2>&1 | tail -n 40
+                       return 1 ;;
+                esac
+            else
+                last=$(printf '%s\n' "$out" | tail -n 1)
+            fi
+        done
+        if [ "$n_ok" -eq 0 ]; then
             errs=$((errs + 1))
-            echo "  notarytool info failed ($errs in a row): $(printf '%s\n' "$out" | tail -n 1)"
+            echo "  notarytool info failed ($errs in a row): $last"
             if [ "$errs" -ge "$NZ_MAX_ERRORS" ]; then
-                echo "ERROR: lost track of $sid. It may still be accepted: finish with"
-                echo "  $var=$sid $0"
+                echo "ERROR: lost track of ${ids[*]}. One may still be accepted: finish with"
+                echo "  $var=${ids[0]} $0"
                 return 1
             fi
+        else
+            errs=0
         fi
-        [ "$waited" -ge "$NZ_TIMEOUT" ] && { echo "ERROR: $sid not done after ${waited}s; rerun with $var=$sid"; return 1; }
+        [ "$waited" -ge "$NZ_TIMEOUT" ] && { echo "ERROR: ${ids[*]} not done after ${waited}s; rerun with $var=${ids[0]}"; return 1; }
+        # Apple has left a submission "In Progress" for 90 min while the same
+        # file, submitted again, passed in 1 min: submit it again, wait on both.
+        if [ "$resubs" -lt "$NZ_RESUBMITS" ] && [ "$NZ_RESUBMIT_AFTER" -gt 0 ] \
+           && [ $((waited - since)) -ge "$NZ_RESUBMIT_AFTER" ]; then
+            resubs=$((resubs + 1)); since=$waited
+            echo "  $label still ${st:-In Progress} after ${waited}s: submitting $file again ($resubs of $NZ_RESUBMITS)"
+            out=$($NOTARYTOOL submit "$file" --keychain-profile "$NOTARY_PROFILE" 2>&1) || true
+            printf '%s\n' "$out" | sed 's/^/  /'
+            sid=$(printf '%s\n' "$out" | nz_id_of)
+            if [ -n "$sid" ]; then
+                ids+=("$sid"); echo "$sid" >> "$rec"
+                echo "  now waiting on ${ids[*]}; the first one to be Accepted wins"
+            else
+                echo "  the resubmit gave no id; still waiting on ${ids[*]}"
+            fi
+        fi
         [ $((waited % 300)) -lt "$NZ_POLL" ] && echo "  $(date +%H:%M:%S) $label: ${st:-?} (${waited}s)"
         sleep "$NZ_POLL"
         waited=$((waited + NZ_POLL))
@@ -116,8 +150,13 @@ n=$(( $(cat "$d/$v" 2>/dev/null || echo 0) + 1 )); echo $n > "$d/$v"
 case "$v" in
   history) [ -e "$d/noprofile" ] && { echo 'Error: No Keychain password item found for profile: qlc-notary'; exit 1; }; echo ok ;;
   submit) [ "$n" = 1 ] && [ -e "$d/crash" ] && { echo 'Bus error: 10'; exit 138; }
-          echo "Conducting pre-submission checks..."; echo "  id: 11111111-2222-3333-4444-555555555555"; echo "  name: x" ;;
-  info) [ "$n" = 1 ] && { echo 'Bus error: 10'; exit 138; }
+          echo "Conducting pre-submission checks..."
+          if [ "$n" -ge 2 ] && [ -e "$d/resub" ]; then echo "  id: 99999999-2222-3333-4444-555555555555"
+          else echo "  id: 11111111-2222-3333-4444-555555555555"; fi; echo "  name: x" ;;
+  info) if [ -e "$d/resub" ]; then   # first id stays In Progress, second is $FAKE_SECOND
+          if [ "$2" = 11111111-2222-3333-4444-555555555555 ]; then echo "  status: In Progress"
+          else echo "  status: $(cat "$d/resub")"; fi; exit 0; fi
+        [ "$n" = 1 ] && { echo 'Bus error: 10'; exit 138; }
         if [ -e "$d/reject" ]; then echo "  status: Invalid"
         elif [ "$n" -lt 3 ]; then echo "  status: In Progress"; else echo "  status: Accepted"; fi ;;
   log) echo "the log" ;;
@@ -141,6 +180,16 @@ FAKE
     export FAKE_DIR="$tmp/s5"; mkdir -p "$FAKE_DIR"
     out=$(NOTARYTOOL="$tmp/fake" NZ_POLL=0 NZ_MAX_ERRORS=1 SCRATCH="$tmp" nz_notarize /dev/null app 2>&1)
     [ $? -ne 0 ] && printf '%s' "$out" | grep -q "NZ_SUBMISSION_APP=1111" && ok "giving up names the id to finish with" || no "giving up names the id to finish with: $out"
+    export FAKE_DIR="$tmp/s6"; mkdir -p "$FAKE_DIR"; echo Accepted > "$FAKE_DIR/resub"
+    out=$(NOTARYTOOL="$tmp/fake" NZ_POLL=1 NZ_RESUBMIT_AFTER=2 NZ_TIMEOUT=20 SCRATCH="$tmp" nz_notarize /dev/null app 2>&1)
+    [ $? -eq 0 ] && [ "$(cat "$FAKE_DIR/submit")" = 2 ] && printf '%s' "$out" | grep -q "Accepted (99999999" \
+        && ok "a stuck submission is resubmitted and the second one's Accepted wins" || no "resubmit: $out"
+    export FAKE_DIR="$tmp/s7"; mkdir -p "$FAKE_DIR"; echo Invalid > "$FAKE_DIR/resub"
+    out=$(NOTARYTOOL="$tmp/fake" NZ_POLL=1 NZ_RESUBMIT_AFTER=2 NZ_TIMEOUT=20 SCRATCH="$tmp" nz_notarize /dev/null app 2>&1)
+    [ $? -ne 0 ] && printf '%s' "$out" | grep -q "the log" && ok "Invalid on the resubmission stops with its log" || no "resubmit invalid: $out"
+    export FAKE_DIR="$tmp/s8"; mkdir -p "$FAKE_DIR"; echo Accepted > "$FAKE_DIR/resub"
+    out=$(NOTARYTOOL="$tmp/fake" NZ_POLL=1 NZ_RESUBMIT_AFTER=0 NZ_TIMEOUT=3 SCRATCH="$tmp" nz_notarize /dev/null app 2>&1)
+    [ $? -ne 0 ] && [ "$(cat "$FAKE_DIR/submit")" = 1 ] && ok "NZ_RESUBMIT_AFTER=0 never resubmits" || no "resubmit off: $out"
     rm -rf "$tmp"
     if [ "$fails" -eq 0 ]; then echo "notarize-lib.sh self-test: ok"; return 0; fi
     echo "notarize-lib.sh self-test: $fails failed"; return 1
@@ -149,6 +198,6 @@ FAKE
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     case "${1:-}" in
         --self-test) nz_selftest; exit $? ;;
-        *) sed -n '2,27p' "$0"; exit 0 ;;
+        *) sed -n '2,34p' "$0"; exit 0 ;;
     esac
 fi

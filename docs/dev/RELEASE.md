@@ -83,7 +83,14 @@ this Mac; **`make beta`, `make release` and `make attach` are public**.
   failed poll is retried (10 in a row before it gives up), and the
   submission id is printed and kept in `/private/tmp/qlc-notarize/app.submission`:
   after a stop, `NZ_SUBMISSION_APP=<id> make dmg` waits on that submission
-  instead of uploading again. The `qlc-notary` profile is checked before
+  instead of uploading again. **Resubmit:** a submission still "In
+  Progress" after `NZ_RESUBMIT_AFTER` seconds (default 1200; 0 = never;
+  `NZ_RESUBMITS`, default 1, how many times) is submitted again and both ids
+  are polled (2026-11-18: Apple left one DMG 90 min while a resubmission
+  passed in 1 min). The first to be Accepted wins; Invalid on either stops
+  with its log. `platforms/macos/notarize-lib.sh --self-test` runs it all on a
+  fake `notarytool` (not part of the gate: run it after touching the file).
+  The `qlc-notary` profile is checked before
   anything is signed or uploaded, and its loss is explained (it has come
   back by itself once the Mac was docked; otherwise `xcrun notarytool
   store-credentials`, which needs Branson's app-specific password).
@@ -179,7 +186,13 @@ Manage Certificates, and `xcrun notarytool store-credentials qlc-notary
     universal into `~/unideps`: `platforms/macos/universal-deps.sh`.
 
   `UNIVERSAL=0 platforms/macos/package-local.sh` is the old Homebrew build,
-  for this Mac's arch only. The universal build has no OLA plugin
+  for this Mac's arch only. `bundlefix.py` copies every framework or library
+  a bundled plugin links to, including an `@rpath/QtSvg.framework` that
+  Homebrew Qt 6.12's svg plugins name but nothing else in the app does
+  (it is looked up in the plugin's rpaths and `$QTDIR/lib`), and fails the
+  build if any reference still points outside the bundle.
+  `platforms/macos/bundlefix-selftest.sh` checks that on a fake tree (needs
+  clang; not part of the gate). The universal build has no OLA plugin
   (Homebrew's OLA is single-arch).
 
 Steps:

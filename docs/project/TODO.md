@@ -23,10 +23,10 @@ Left: open it once in a desktop session on the Windows box (the 10-min
 reports were GUI runs; a headless run can't show what painting adds).
 
 Also from the 0.5.0 release: the perf guard's `scene_frame_170_ns` read
-+19% on a loaded ender (+6% alone); re-check on a quiet machine. And
-`make dmg` gave up on a DMG notarization Apple left "In Progress" 90 min
-while a resubmission passed in 1 min: give `notarize-lib.sh` a resubmit
-after ~20 min.
++19% on a loaded ender (+6% alone); re-check on a quiet machine. (The
+notarization resubmit and the Homebrew-Qt bundler's QtSvg copy are done on
+`fix/051-release-tooling`; the bundler is unverified on a real Homebrew
+Qt 6.12 build.)
 
 ## Decided 2026-11-18 (board Q263–Q273, all the recommended answers)
 

@@ -56,6 +56,32 @@ def needs_fix(dep):
     # absolute path that is not a system lib and not already bundle-relative
     return dep.startswith("/") and not is_system(dep)
 
+def rpaths(p):
+    """The LC_RPATH entries of a Mach-O file (loader/executable-relative ones
+    resolved against the file or the bundle's MacOS dir)."""
+    out, res = sh("otool", "-l", p).stdout.splitlines(), []
+    for i, ln in enumerate(out):
+        if ln.strip() == "cmd LC_RPATH" and i + 2 < len(out):
+            r = out[i + 2].strip()
+            if r.startswith("path "):
+                r = r[5:].split(" (offset")[0]
+                r = r.replace("@loader_path", os.path.dirname(p))
+                r = r.replace("@executable_path", os.path.join(APP, "Contents", "MacOS"))
+                res.append(os.path.normpath(r))
+    return res
+
+def find_rpath_dep(dep, path):
+    """An '@rpath/X' reference that is not in the bundle (Homebrew Qt 6.12's
+    plugins name QtSvg.framework that way): the real file in one of the
+    file's rpaths or $QTDIR/lib, else None."""
+    rel = dep[len("@rpath/"):]
+    qt = os.environ.get("QTDIR", "")
+    for d in rpaths(path) + [os.path.join(qt, "lib")]:
+        c = os.path.join(d, rel)
+        if os.path.exists(c) and not c.startswith(FW + os.sep):
+            return os.path.realpath(c) if framework_split(c) is None else c
+    return None
+
 def make_writable(path):
     for root, dirs, files in os.walk(path):
         for name in dirs + files:
@@ -142,6 +168,16 @@ def process(path, seen):
         sh("install_name_tool", "-id", rpath_ref(myid), path)
     # fix each dependency edge
     for dep in deps(path):
+        if dep.startswith("@rpath/") and dep != myid and \
+                not os.path.exists(os.path.join(FW, dep[len("@rpath/"):])):
+            # Every framework a bundled plugin links to comes along, not only
+            # the app's own (the reference already says @rpath: copy, keep it).
+            src = find_rpath_dep(dep, path)
+            if src:
+                _, dest = ensure_copied(src)
+                if dest and os.path.exists(dest):
+                    process(dest, seen)
+            continue
         if dep == myid or not needs_fix(dep):
             continue
         newref, dest = ensure_copied(dep)
@@ -242,8 +278,11 @@ def main():
                 continue
             if needs_fix(dep):
                 bad.append((p, dep))
+            elif dep.startswith("@rpath/") and not os.path.exists(
+                    os.path.join(FW, dep[len("@rpath/"):])):
+                bad.append((p, dep + "  (not in the bundle)"))
     if bad:
-        print("FAIL: %d absolute references remain:" % len(bad))
+        print("FAIL: %d references point outside the bundle:" % len(bad))
         for p, dep in bad[:40]:
             print("  %s -> %s" % (p.replace(APP + "/", ""), dep))
         return 1
