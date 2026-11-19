@@ -118,6 +118,30 @@ Why it matters on the real rig: the focus you did in Lesson 3.6 is for
 Default, and a blocking is an offset from it, so a venue's correction
 carries into every set.
 
+## An effect that starts at a point: Fire Spread
+
+Everything above aimed light at a place. **Fire Spread** uses a place the
+other way round: as the point where something starts. The head nearest the
+point catches first, and the fire runs outward at an even speed, so a
+head twice as far away catches twice as late. Each head flares, brighter
+and whiter, then settles into a flicker. It is a cue for a song about
+heat, and a good test of whether the rig is placed correctly on the plot,
+because the timing comes from where each light, and each pixel of a pixel
+bar, stands in the 2D plan. Heads that aren't placed catch together.
+
+1. In a Block cue, put the group that holds the whole rig on a layer and
+   pick **Fire Spread** as its effect.
+2. Drag a target onto the layer for its **Aim** look: that is where the
+   fire starts. With no Aim look it starts at centre stage.
+
+Fire Spread burns *over* what is already there. Until the fire reaches a
+head, the head shows whatever is under the effect, and over black it stays
+dark, so give the layer no Colour or Dimmer of its own above the effect if
+you want the stage dark before the fire. The spread happens once, when the
+cue starts, then the fire burns for as long as the look plays. To spread
+once and leave the stage as it ends, set **Runs** to **Once** and **At the
+end** to **Hold**.
+
 ## Props in a hand: a staff in one cue, gone in a later one
 
 A **Staff** or a **Candle** target can be carried. Who holds it is part of

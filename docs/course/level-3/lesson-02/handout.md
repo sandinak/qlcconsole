@@ -84,7 +84,7 @@ Switch roles after each part.
 
 ### Compare the modes
 
-5. Right-click **SR Truss Cyc 1** → **Definition & Mode…**. Open the **Mode**
+5. Right-click **SR Truss Cyc 1** → **Fixture Setup ▸ Definition & Mode…**. Open the **Mode**
    list and pick each mode in turn, reading **Channels**.
    - *You should see:* **165ch** with 165 channels, **135ch RGB** with 135 and
      **30ch White** with 30.
@@ -122,7 +122,7 @@ Switch roles after each part.
 
 ### Open the definition
 
-9. Right-click **SR Truss Cyc 1** → **Edit Fixture Definition…**.
+9. Right-click **SR Truss Cyc 1** → **Fixture Setup ▸ Edit Fixture Definition…**.
    - *You should see:* the Fixture Editor, with tabs **General**, **Physical**,
      **Channels**, **Modes** and **Aliases**.
 10. Click **Modes**.

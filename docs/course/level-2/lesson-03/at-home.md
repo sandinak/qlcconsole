@@ -17,8 +17,8 @@ Do **one** of these.
    `Response`: **1.0.6 Response**. Set its **Mode** to **Block**.
 3. Drag **Truss Sides** (All → Group sets) onto the dashed box, then
    **Blue** and **Full** onto its row.
-4. Right-click its layer in the tree → **Add Child Layer** → **Trusses
-   SL**, and drop **Amber** on the child: the mirror of the bridge.
+4. Right-click its layer in the tree → **Layer Tools ▸ Add Child Layer** →
+   **Trusses SL**, and drop **Amber** on the child: the mirror of the bridge.
 5. Drag **Steps** onto the dashed box with **Blue** and **25%**, then hold
    **⇧** and drag **DS** onto the Steps row; drop **White** and **Full**
    on the child. The front row answers the top row.

@@ -30,7 +30,7 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 4. Mount a light
 
-- Right-click a light ▸ Mount on ▸ Boom ▸ the boom.
+- Right-click a light ▸ Mounting & Masking ▸ Mount on ▸ Boom ▸ the boom.
 - Plot layers shows what hangs on what.
 
 ## 5. Point a fixed light

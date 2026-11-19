@@ -100,8 +100,8 @@ has its own switch, and its own PIN.
 - **The pad.** Hold **LB + RB** (L1 + R1) for half a second to arm it; it
   stays armed until you hold them again. Armed, hold **LT** (L2, the
   safety) and press **A** (Cross): GO. B is Back, X and Y the sub-cue
-  GO and Back, and **RT** fires the armed hit, named on the Run tab before you pull it (**Hit ▸** and its name; the same with **off** when the next pull lets it go). All four held at once is
-  the emergency stop. A press without LT does nothing, so a pad knocked
+  GO and Back, and **RT** fires the armed hit, named on the Run tab before you pull it (**Hit ▸** and its name; the same with **off** when the next pull lets it go). All four held at once (**LB + RB + LT + RT**) is the emergency stop. It works from every connected pad, whatever jobs that pad has and
+  whatever it is doing: a second pad running a focus can stop the show too. A press without LT does nothing, so a pad knocked
   off a stool moves no cue. The pad never picks the list: the Run tab does.
 - **The phone page.** It shows the cues and GO, Back and Stop. Stop takes
   two taps.

@@ -62,11 +62,11 @@ touches the light is wrong.
 
 1. **Fixtures** tab, **SR Truss Cyc 1**: Manufacturer, Model, **Mode**
    165ch, **Type**, **Definition** Local, and the channel table.
-2. Right-click → **Definition & Mode…**, open **Mode**, step through the
+2. Right-click → **Fixture Setup ▸ Definition & Mode…**, open **Mode**, step through the
    three modes, then **Cancel**.
 3. **Fixture Groups ▸ Trusses ▸ TrussC-RGB** then **TrussC-W**: a cell's
    tooltip, tagged **[RGB]** and **[W]**.
-4. Right-click **SR Truss Cyc 1** → **Edit Fixture Definition…**: **Modes**
+4. Right-click **SR Truss Cyc 1** → **Fixture Setup ▸ Edit Fixture Definition…**: **Modes**
    tab, then close.
 
 ## 3. Hands-on (20 min)

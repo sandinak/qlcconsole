@@ -36,7 +36,7 @@ teacher says. It can be turned into a deck as it is.*
 ## 5. In qlcconsole
 
 - Fixtures tab: Manufacturer, Model, Mode, Type, Definition.
-- Right-click → Definition & Mode…; Edit Fixture Definition….
+- Right-click → Fixture Setup ▸ Definition & Mode…; Edit Fixture Definition….
 - File → Show Definitions…: what the show carries.
 
 ## 6. Your turn

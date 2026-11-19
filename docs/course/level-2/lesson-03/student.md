@@ -50,8 +50,8 @@ Where will the audience look first?
 
 5. Drag **Truss Sides** (All → Group sets) onto the dashed box.
 6. Drag **Blue** and **Full** onto its row: both sides blue.
-7. In the tree, right-click the **Truss Sides** layer → **Add child
-   layer** → **Trusses SR**.
+7. In the tree, right-click the **Truss Sides** layer → **Layer Tools ▸
+   Add Child Layer ▸ Trusses SR**.
 8. Drag **Amber** onto the **↳ Trusses SR** row: SR amber, SL blue.
 
    ![The SR side picked out](../../images/lesson-2-3/rig-bridge-split.png)
@@ -76,8 +76,9 @@ calls "the ones by the piano". A group you make for one cue is a group
 you have to name and keep. Pick the lights instead. On the plot or in the
 Fixtures tab (⇧⌘2), ⌘-click the fixtures, right-click, **Selection ▸ New
 Layer from Selection**. With a cue selected in the Show Tree, that cue gets a layer on exactly those
-lights, selected and ready to edit; whole groups in the selection get a
-layer each. **⌘Z** takes it back.
+lights, selected and ready to edit. Whole groups in the selection get a
+layer each, on the group itself, so the layer follows the group; the lights
+left over, in no group (**loose fixtures**), share one more. **⌘Z** takes it back.
 
 ## Exit ticket
 

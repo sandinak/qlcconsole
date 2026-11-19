@@ -97,7 +97,7 @@ the room). Switch roles after each part.
    **Fixture Model**, open **Chauvet**, pick **COREpar 40 USB**, **Mode**
    **8-Channel**, **Name** `SR Boom Par`, **OK**. (The app picks a free
    address, as in Lesson 3.1.)
-7. Right-click **SR Boom Par** on the plot → **Mount on ▸ Boom ▸ SR Boom**.
+7. Right-click **SR Boom Par** on the plot → **Mounting & Masking ▸ Mount on ▸ Boom ▸ SR Boom**.
    - *You should see:* in **Plot layers**, **SR Boom Par** under **SR Boom**,
      marked as hung on a boom. Click the funnel (**Selected only**) to list
      just what is selected and what holds it.
@@ -146,7 +146,7 @@ Measure the room and correct the plot.
 | Problem | Try |
 |---|---|
 | Nothing happens on **Add Here** | The plot is locked: click **Edit Plot** on the bar, then right-click again. |
-| **Mount on ▸ Boom** is greyed out | There's no boom yet: do step 3. |
+| **Mounting & Masking ▸ Mount on ▸ Boom** is greyed out | There's no boom yet: do step 3. |
 | **Stage left** is not in **Face** | Click the par itself, not the boom. |
 | The par is on the floor | It wasn't mounted: do step 7. |
 | Something moved that shouldn't | **Undo** (⌘Z) on the Lighting Studio takes back the last edit. |
