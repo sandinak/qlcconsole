@@ -62,6 +62,8 @@ private slots:
     void aNetworkPatchWithOnlyALineNumberIsNotGuessed();
     void offlinePatchIsInertAndListed();
     void wledBackupsKeptOfflineUnchanged();
+    void aRoomOutputIsNotReachedOverAVpn();
+    void tunnelInterfacesAreRecognised();
     void followsNetworkToAnotherMachine();
     void followsRoutedPath();
     void defaultRouteIsNotTheShowNetwork();

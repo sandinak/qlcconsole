@@ -71,7 +71,17 @@ namespace NetworkRoute
         QString iface;          //!< human readable interface name ("en5")
         QHostAddress ip;
         int prefix;             //!< netmask length, -1 when unknown
+        /** A point-to-point tunnel (VPN: utun/ppp/ipsec/tun/tap): never a
+         *  route to "the room's network" -- see isTunnelInterface(). */
+        bool tunnel = false;
     };
+
+    /** Is this interface a VPN or other point-to-point tunnel rather than a
+     *  real local one? By the point-to-point flag, a PPP type, or the OS's
+     *  tunnel names (macOS utun, ppp, ipsec; Linux/Windows tun, tap). A VPN
+     *  that carries 10.0.0.0/8 must not make a 10.x Art-Net node "reached":
+     *  its frames would leave through the tunnel, not on the room's network. */
+    bool isTunnelInterface(const QString &name, bool pointToPoint, bool ppp);
 
     struct Resolution
     {
@@ -115,7 +125,7 @@ namespace NetworkRoute
      *  when the show network isn't connected), only the DEFAULT route does
      *  (DefaultRoute: the show NIC is down and output would leave by the
      *  house or Wi-Fi network), or a connected or specific route does
-     *  (Reached). Used by the configuration import's warnings (AI_ASSIST.md
+     *  (Reached); a route out a tunnel (LocalAddress::tunnel) is NoRoute. Used by the configuration import's warnings (AI_ASSIST.md
      *  section 5b); never a reason to refuse anything. */
     enum RouteKind { NoRoute, DefaultRoute, Reached };
     struct RouteCheck

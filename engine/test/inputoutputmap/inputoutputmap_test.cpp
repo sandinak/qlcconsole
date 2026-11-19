@@ -681,6 +681,65 @@ void InputOutputMap_Test::wledBackupsKeptOfflineUnchanged()
     QCOMPARE(after, before);
 }
 
+void InputOutputMap_Test::aRoomOutputIsNotReachedOverAVpn()
+{
+    /* An Art-Net node on 10.0.0.20 and a VPN that carries 10.x: the OS would
+       route it out the tunnel (utun3), which is not the room's network. The
+       output waits, kept offline, until a real interface reaches it. */
+    NetworkRoute::LocalAddress vpn = localAddr("utun3", "10.8.0.2", 32);
+    vpn.tunnel = true;
+    const QString room =
+        "<InputOutputMap>\n"
+        " <Universe Name=\"Room\" ID=\"0\">\n"
+        "  <Output Plugin=\"ArtNet\" Line=\"1\">\n"
+        "   <PluginParameters outputIP=\"10.0.0.20\" outputUni=\"0\"/>\n"
+        "  </Output>\n"
+        " </Universe>\n"
+        "</InputOutputMap>\n";
+    {
+        mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24) << vpn,
+                    QMap<QString, QString>{ { "10.", "10.8.0.2" }, { "*", "192.168.1.5" } });
+        IOPluginStub *stub = namedStub(m_doc, "ArtNet", QStringList() << "192.168.1.5" << "10.8.0.2");
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(loadIOMap(iom, room));
+        QVERIFY(iom.hasOfflinePatches());
+        QCOMPARE(iom.universe(0)->offlinePatches().count(), 1);
+        QVERIFY(iom.outputPatch(0, 0) == NULL || iom.outputPatch(0, 0)->isPatched() == false);
+        QVERIFY(stub->m_openOutputs.isEmpty());
+    }
+    {
+        // The room's own network shows up on a real interface: reached.
+        mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24)
+                        << vpn << localAddr("en5", "10.0.0.9", 24),
+                    QMap<QString, QString>{ { "10.0.0.", "10.0.0.9" }, { "10.", "10.8.0.2" },
+                                            { "*", "192.168.1.5" } });
+        IOPluginStub *stub = namedStub(m_doc, "ArtNet",
+                                       QStringList() << "192.168.1.5" << "10.8.0.2" << "10.0.0.9");
+        InputOutputMap iom(m_doc, 1);
+        QVERIFY(loadIOMap(iom, room));
+        QCOMPARE(iom.universe(0)->offlinePatches().count(), 0);
+        QCOMPARE(stub->m_openOutputs, QList<quint32>() << 2);
+    }
+
+    // The route check agrees: out a tunnel is no route.
+    mockMachine(QList<NetworkRoute::LocalAddress>() << localAddr("en0", "192.168.1.5", 24) << vpn,
+                QMap<QString, QString>{ { "10.", "10.8.0.2" }, { "*", "192.168.1.5" } });
+    QCOMPARE(int(NetworkRoute::checkRoute("10.0.0.20").kind), int(NetworkRoute::NoRoute));
+}
+
+void InputOutputMap_Test::tunnelInterfacesAreRecognised()
+{
+    QVERIFY(NetworkRoute::isTunnelInterface("utun3", false, false));
+    QVERIFY(NetworkRoute::isTunnelInterface("ppp0", false, false));
+    QVERIFY(NetworkRoute::isTunnelInterface("ipsec0", false, false));
+    QVERIFY(NetworkRoute::isTunnelInterface("tun0", false, false));
+    QVERIFY(NetworkRoute::isTunnelInterface("tap1", false, false));
+    QVERIFY(NetworkRoute::isTunnelInterface("Corp VPN", true, false));   // point-to-point flag
+    QVERIFY(NetworkRoute::isTunnelInterface("Dial-up", false, true));    // PPP type
+    QVERIFY(!NetworkRoute::isTunnelInterface("en5", false, false));
+    QVERIFY(!NetworkRoute::isTunnelInterface("Ethernet", false, false));
+}
+
 void InputOutputMap_Test::followsNetworkToAnotherMachine()
 {
     /* Same show opened on kronk: 172.18.2.197 on the show VLAN, not .219. */

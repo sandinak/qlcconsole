@@ -50,6 +50,9 @@ PatchUndo::State PatchUndo::captureOne(quint32 universe) const
     {
         st.name = uni->name();
         st.passthrough = uni->passthrough();
+        foreach (const Universe::OfflinePatch &kept, uni->offlinePatches())
+            if (kept.tag == Universe::OutputPatchTag)
+                st.offlineOutputs << kept;
     }
 
     InputPatch *ip = m_ioMap->inputPatch(universe);
@@ -192,6 +195,16 @@ void PatchUndo::restoreOne(const State &st)
         op = m_ioMap->outputPatch(st.id, i);
         if (op != NULL && op->plugin() != NULL && op->pluginName() == p.plugin)
             op->replacePluginParameters(p.parameters);
+    }
+
+    /* --- Outputs kept offline: exactly as held. Putting a live leg back
+       (above) never touches them, and the change undone may have dropped or
+       added some. */
+    if (Universe *uni = m_ioMap->universe(st.id))
+    {
+        uni->clearOfflinePatches(Universe::OutputPatchTag);
+        foreach (const Universe::OfflinePatch &kept, st.offlineOutputs)
+            uni->addOfflinePatch(kept);
     }
 
     /* --- Input patch ------------------------------------------------------ */
