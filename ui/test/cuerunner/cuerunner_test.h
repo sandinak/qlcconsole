@@ -38,6 +38,10 @@ private slots:
 
     void theRunnerShowsTheListAndItsSubCues();
     void theRunTabShowsHitsThatOverride();
+    void theHitStripShowsTheArmedHitsNarrowestFirst();
+    void theHitStripFiresInOperateOnly();
+    void theHitStripStaysNarrowAndOffTheKeyboard();
+    void theHitStripShots();
     /** Teaching: each GO and Back is written in crew words, tracked layers named */
     void theTeachingLogSaysWhatEachGoDid();
     /** Not a Teaching show: no log pane, no lines kept, plain tooltips */
