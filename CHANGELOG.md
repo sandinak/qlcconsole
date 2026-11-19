@@ -28,6 +28,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Operate, or in Design when armed; a scene or effect as before. A press held
   back says why in the footer and the Control Map's last-fired line, and
   letting go of a refused press stops nothing. What runs can still be let go.
+- **Computer keys follow the same place rule.** A key bound to a hit fires in
+  Operate only where the hit's place is live, and a cue list or cue as a pad
+  does (in Design only what is armed). A scene or effect on a key stays
+  Operate-only. A key held back says why on the footer.
+- **The emergency stop can't be eaten or go dead in silence.** It works while
+  a learn is listening (an Encoder learn left waiting, an open Learn Trigger
+  dialog), a second press right after a GO is not dropped, a replug cannot
+  swallow it, and a stop on a control that turns out to be a fader or knob
+  says so on the footer and in red on the Control Map. A release lets go of
+  what its press did, whatever was changed while it was held. A second PMJ
+  Black 1 universe is named on the footer.
 - **A controller that is unplugged lets go of what it held.** A Momentary
   button held when the desk went away stayed on, and its next press after
   the replug was swallowed.

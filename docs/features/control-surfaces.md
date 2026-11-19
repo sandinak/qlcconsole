@@ -37,6 +37,10 @@ can check a desk against them.
 3. **A hit** is fired by a press only in Operate and only where its place is
    **live** (the narrowest live place, as a Virtual Console button and the
    phone page do). In Design a hit fires only when it is armed, as above.
+   **A computer key follows the same rule** as a pad: a key bound to a hit
+   fires in Operate only where the place is live, and a cue list or cue as in
+   rule 2. A scene or an effect on a key fires in Operate only (a key is
+   also typing). A key held back says why on the footer, as a pad does.
 4. **Letting go is always allowed.** A press that stops something, or the
    release of a button held down, is never refused, even when the place
    has ended since.
@@ -51,9 +55,14 @@ can check a desk against them.
 7. **A controller that goes away lets go.** Unplug a desk with a Momentary
    button held and what it held stops; plug it back and the same button
    works at the first press.
-8. **Editing never happens in Operate from a surface.** Encoders and the
-   PMJ's faders and encoders say *Encoders are off in Operate -- switch to
-   Design to edit.* A master (the Grand Master) is not an edit and works.
+8. **Editing never happens in Operate from a surface.** The Encoder bank and
+   the PMJ's encoders say *Encoders are off in Operate -- switch to Design to
+   edit.*; the PMJ's faders say *Faders are off in Operate -- switch to Design
+   to edit.* A master (the Grand Master) is not an edit and works.
+9. **A release lets go of what its press did**, as the control was bound
+   when it was pressed. Changing the mode or binding the control to something
+   else while it is held does not turn the release into a Stop of something
+   else.
 
 After an emergency stop, one press of a GO button on a desk starts the list
 again. That is by design (rule 6); the pad needs two controls to come back,
@@ -72,11 +81,25 @@ button under the Control Map table.
 - **Every press is ALL OFF.** It does not toggle, and holding it down does
   nothing more. The release does nothing.
 - It is **learned on a button**, with a second press to confirm: press the
-  button, release it, press it again. The dialog says so while you do. A
-  fader, a knob or an encoder is refused, whatever its input profile says,
-  and so is a control that sends a range of values; a computer key is
-  refused too (a key works only in Operate). A fader that has been bound by
-  a show file does nothing.
+  button, release it, press it again. The dialog says so while you do. It
+  refuses a control its input profile calls a fader, knob or encoder, and a
+  control that sends two different values with no release between (a fader
+  moving); a CC fader with **no profile** that only ever sends 0 and 127
+  cannot be told from a button. A computer key is refused (a key works only
+  in Operate).
+- **It beats any learn.** A learn left waiting (an Encoder learn whose panel
+  was closed) or a Learn Trigger dialog that is open never eats a press of
+  the stop. Learn dialogs refuse the stop's own control.
+- **A stop that cannot work says so.** If the control later turns out not to
+  be a button (a profile now calls it a fader or knob, or a show file put the
+  stop on a CC fader and it sends a range of values) the footer says *The
+  emergency stop did not fire…*, and the Emergency stop… button and the Control
+  Map row go red and say *not a button*. Learn it again on a button. On a CC
+  fader with no profile that was bound by a show file, the first move can fire
+  ALL OFF once before it is recognised; every move after is refused in words.
+- **Every press is ALL OFF**, including a second press a moment after a GO
+  from another route. Only a repeat of one held press (the same value, no
+  release between, inside a quarter of a second) is one.
 - It is saved with the show. A QLC+ 4 build opens the show and skips it.
 
 On **Companion**, the **ALL OFF** preset needs the key **held for one
@@ -112,6 +135,9 @@ the profile is patched on.
   **Design only**: in Operate they are refused with the sentence above.
 - **Select 1-10** and **Load 1-10** change the selection and work in either
   mode.
+- **Two boards.** Only the first universe patched with the PMJ Black 1
+  profile is heard. If a second is patched, the footer says *A second PMJ
+  Black 1 is patched on universe N: only universe M is heard. Unpatch one.*
 - Go, Back, Left, Right and the page buttons light nothing and do nothing
   here. Bind **Go** and **Back** in the Control Map to GO and Back the list
   (rule 6).
@@ -165,6 +191,9 @@ after any build that changes a surface, and say which build.
 9. Unplug the PMJ with a Momentary button held, then plug it back.
    *Expect:* what it held stopped; the lights come back; the next press of
    that button works.
+10. Patch a second input on the PMJ Black 1 profile and move a PMJ control on
+    it. *Expect:* the footer names the second universe and says only the
+    first is heard.
 
 **Akai APC40 mk2**
 
