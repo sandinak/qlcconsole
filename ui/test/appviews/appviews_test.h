@@ -42,6 +42,8 @@ private slots:
     /** A control surface's Blind is the console's Blind button: in
      *  Operate never a mute of the live show */
     void aControlSurfaceBlindFollowsTheConsolesRule();
+    void aPmjOverlayHearsOnlyItsOwnBoard();
+    void aPmjFaderOrEncoderInOperateEditsNothing();
 
     /** Picking a view from the View menu switches to it even when an earlier
      *  tab has been detached and every index after it has shifted. */

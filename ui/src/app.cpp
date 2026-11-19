@@ -40,6 +40,7 @@
   #include <unistd.h>
 #endif
 
+#include "controlmap.h"
 #include "placementcheck.h"
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
@@ -1983,6 +1984,9 @@ void App::initDoc()
         m_startupWindow->beginStep(tr("Initializing control surfaces"));
     m_controlSurfaceEngine = new ControlSurfaceEngine(this);
     m_pmjOverlay = new PMJOverlay(m_doc, m_controlSurfaceEngine, this, this);
+    // A MIDI/OSC press that was held back (CS1) says so on screen.
+    connect(m_doc->controlMap(), &ControlMap::blocked, this,
+            [this](const QString &why) { statusBar()->showMessage(why, 8000); });
 }
 
 void App::watchDefinitionFolder()

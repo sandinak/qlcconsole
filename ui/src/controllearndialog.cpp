@@ -64,7 +64,15 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     m_mode = new QComboBox(this);
     m_mode->setObjectName(QStringLiteral("learnMode"));
     const bool list = target.type == ControlMap::CueListTarget || target.type == ControlMap::CueTarget;
-    const QList<ControlMap::Mode> modes = list
+    const bool estop = target.type == ControlMap::EmergencyStopTarget;
+    if (estop)
+        how->setText(tr("Press the button on your MIDI controller (or send the OSC message) that should be "
+                        "the emergency stop, then release it and press it again to confirm. It is one "
+                        "button: a fader, knob or encoder is refused, and so is a computer key. Every "
+                        "press is ALL OFF, from any mode, at any moment."));
+    const QList<ControlMap::Mode> modes = estop
+        ? QList<ControlMap::Mode>{ ControlMap::StartOnly }
+        : list
         ? QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StopOnly }
         : QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StartOnly,
                                    ControlMap::StopOnly };
@@ -75,6 +83,7 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
                             : tr("Toggle: a press starts it, the next stops it. Momentary: on while "
                                  "held. Start only / Stop only: a press only starts, or only stops, it."));
     form->addRow(tr("When pressed"), m_mode);
+    m_mode->setEnabled(!estop);
     lay->addLayout(form);
 
     m_note = new QLabel(this);
@@ -118,7 +127,15 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
                            "controller in Connections ▸ Devices (or Inputs/Outputs), then learn."));
 
     connect(cm, &ControlMap::heard, this, &ControlLearnDialog::slotHeard);
-    cm->listen();
+    if (estop)
+    {
+        connect(cm, &ControlMap::confirming, this, [this](quint32 u, quint32 c) {
+            m_note->setText(tr("%1: release it and press it again to confirm.")
+                                .arg(m_doc->controlMap()->controlName(u, c)));
+        });
+        connect(cm, &ControlMap::refused, this, [this](const QString &why) { m_note->setText(why); });
+    }
+    estop ? cm->listenForButton() : cm->listen();
     // Computer keys: every key pressed in the dialog, before its buttons
     // and the mode box see it.
     qApp->installEventFilter(this);
@@ -175,9 +192,13 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
     m_universe = universe;
     m_channel = channel;
     m_keyNote->hide();
+    m_note->clear();
     updateText();
     // Still listening: another press takes its place.
-    m_doc->controlMap()->listen();
+    if (m_target.type == ControlMap::EmergencyStopTarget)
+        m_doc->controlMap()->listenForButton();
+    else
+        m_doc->controlMap()->listen();
 }
 
 bool ControlLearnDialog::eventFilter(QObject *watched, QEvent *event)
@@ -199,6 +220,17 @@ bool ControlLearnDialog::learnKey(int key, Qt::KeyboardModifiers modifiers)
     const quint32 channel = ControlMap::keyChannel(key, modifiers);
     if (channel == 0)
         return false;       // a modifier on its own: wait for the key
+    if (m_target.type == ControlMap::EmergencyStopTarget)
+    {
+        bool dialogKey = false;
+        KeyTriggers::refusal(channel, &dialogKey);
+        if (dialogKey)
+            return false;   // Esc, Tab, Return: they work the dialog
+        m_keyNote->setText(tr("A computer key cannot be the emergency stop: it fires only in Operate. "
+                              "Use a button on a MIDI or OSC controller."));
+        m_keyNote->show();
+        return true;
+    }
     bool dialogKey = false;
     const QString why = KeyTriggers::refusal(channel, &dialogKey);
     if (!why.isEmpty())

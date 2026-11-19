@@ -1315,6 +1315,11 @@ list (GO), one cue of a list (a jump to it) or a hit.
   keyboard, with any modifiers: *"Key · F5"*, *"Key · ⇧1"*. It is learned
   and works as a MIDI press does ([Keys on the computer
   keyboard](#keys-on-the-computer-keyboard)).
+- **Where it fires.** A MIDI or OSC press follows the mode: a scene or
+  effect in Design or Operate; a cue list or cue in Operate, in Design only
+  when armed; a hit in Operate only where its place is live. A press held
+  back says why in the footer. The rules, the **Emergency stop…** button
+  and the checklist for each desk are in [Control surfaces](control-surfaces.md).
 - **Or the QLC+ way.** A Virtual Console button, slider or cue list with
   an external input works as in QLC+, and is what you want for a fader
   that sets a level. Game pads have their own map in the focus tools

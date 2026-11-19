@@ -21,6 +21,36 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **A zoomed Rig Overview no longer zooms back out** when you open Fixture
   Properties (picking the fixture reloaded the view and re-framed it; the
   Overview now keeps its zoom, pan and angle through a selection change).
+- **A MIDI or OSC press follows the mode and the hit's place.** A hit bound
+  to a pad fired anywhere, in Design or Operate, with no regard to its place.
+  Now a hit fires from a surface only in Operate where its place is live (in
+  Design only when armed, as a computer key); a cue list or cue only in
+  Operate, or in Design when armed; a scene or effect as before. A press held
+  back says why in the footer and the Control Map's last-fired line, and
+  letting go of a refused press stops nothing. What runs can still be let go.
+- **A controller that is unplugged lets go of what it held.** A Momentary
+  button held when the desk went away stayed on, and its next press after
+  the replug was swallowed.
+- **The PMJ overlay hears only the PMJ.** It took MIDI channel 9 notes and
+  CCs (the Grand Master, faders, buttons) from any controller and moved its
+  lights to that universe. It now listens only on the universe patched with
+  the PMJ Black 1 profile and never moves to another. Its faders, Reset
+  buttons and encoders no longer edit in Operate: they say *Encoders are off
+  in Operate -- switch to Design to edit.* on the footer, as the Encoder
+  bank does.
+
+### Added
+
+- **An emergency stop on a control surface.** **Connections ▸ Devices ▸ Show
+  control & sync ▸ Control Map ▸ Emergency stop…** learns one button (press,
+  release, press again to confirm; a fader, knob, encoder or computer key is
+  refused) that is ALL OFF through the one path: in Design or Operate, every
+  press, never toggled or held by the double-GO guard. In Companion the new
+  **ALL OFF (hold 1 s)** preset sends `alloff` after a one-second hold and
+  works with remote GO off.
+- **Help: Control surfaces.** One page for what hears a control, the rules
+  a desk follows, the emergency stop, the PMJ, the APC40, the X-Touch Mini
+  and Companion, with a numbered hardware checklist.
 
 ### Changed
 

@@ -38,6 +38,18 @@ export function buildPresets(step = 5) {
 		[fb('next_ready', {}, { bgcolor: 0x006633 }), fb('remote_allowed', {}, { bgcolor: 0x550000 }, true)], DARK, '14'), run)
 	add('back', button('Back', 'BACK', [act('back')]), run)
 	add('stop', button('Stop', 'STOP', [act('stop')], [], 0x550000), run)
+	// The emergency stop: held for 1 second (it runs when the key crosses the
+	// second, while still held), so a brush on the deck does not stop the show.
+	// Nothing on a short press, and never on a dial.
+	presets.alloff = {
+		type: 'simple',
+		name: 'ALL OFF (hold 1 s)',
+		notes: 'Hold for 1 second to stop everything. Works with remote GO off; needs the PIN when the show has one.',
+		style: { text: 'ALL\nOFF\nhold 1 s', size: '14', color: WHITE, bgcolor: 0x990000 },
+		steps: [{ down: [], up: [], 1000: { options: { runWhileHeld: true }, actions: [act('alloff')] } }],
+		feedbacks: [],
+	}
+	run.push('alloff')
 	add('subgo', button('Sub GO', 'SUB\nGO', [act('subgo')]), run)
 	add('hold', button('Hold', 'HOLD', [act('hold')], [fb('hold', {}, { bgcolor: 0xcc8800, color: BLACK })]), run)
 	add('resume', button('Resume', 'RESUME', [act('resume')]), run)

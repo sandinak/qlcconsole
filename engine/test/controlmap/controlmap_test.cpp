@@ -39,6 +39,8 @@
 #include "fixturegroup.h"
 #include "controlmap.h"
 #include "inputpatch.h"
+#include "qlcinputprofile.h"
+#include "qlcinputchannel.h"
 #include "qlcpalette.h"
 #include "universe.h"
 #include "fixture.h"
@@ -697,7 +699,7 @@ namespace
  *  full) and a hit of the production. */
 struct KeyShow
 {
-    quint32 prod, list, cue1, cue2, hit;
+    quint32 prod, list, cue1, cue2, hit, group, palette;
 };
 
 KeyShow keyShow(Doc *doc)
@@ -712,6 +714,8 @@ KeyShow keyShow(Doc *doc)
     full->setValue(255);
     doc->addPalette(full);
     KeyShow s;
+    s.group = g->id();
+    s.palette = full->id();
     s.prod = st->addProduction("Show");
     s.list = st->addCueList(s.prod, "Act 1");
     ShowTree::Target t;
@@ -898,6 +902,599 @@ void ControlMap_Test::keysAreSavedWithTheShow()
     QVERIFY(loadShow(third, junk));
     QCOMPARE(third->controlMap()->count(), 1);
     delete third;
+}
+
+/*****************************************************************************
+ * CS1: the surface safety floor
+ *
+ * The invariant (board Q269): a MIDI or OSC press starts a function in any
+ * mode; a cue list or cue in Operate, and in Design only what is armed; a hit
+ * only where its place is live in Operate, and in Design only what is armed
+ * (as a computer key). What runs can always be let go. Then every target x
+ * mode x state is swept against it, never an example.
+ *****************************************************************************/
+
+void ControlMap_Test::sendAll(quint32 channel, const QList<int> &values)
+{
+    for (int v : values)
+        send(channel, uchar(v));
+}
+
+namespace
+{
+struct SurfaceShow
+{
+    KeyShow k;
+    quint32 other = 0, otherCue = 0;    // Act 2 and its cue: not the Run tab's list
+    quint32 hitList = 0, hitCue = 0;    // hits placed at Act 2, and at its cue
+};
+
+SurfaceShow surfaceShow(Doc *doc)
+{
+    SurfaceShow s;
+    s.k = keyShow(doc);
+    ShowTreeController *st = doc->showTree();
+    s.other = st->addCueList(s.k.prod, "Act 2");
+    s.otherCue = st->addCue(s.other, -1, "Elsewhere");
+    ShowTree::Target t;
+    t.groups << s.k.group;
+    const quint32 full = s.k.palette;
+    auto hitAt = [&](ShowTree::HitScope scope, quint32 place, const char *name) {
+        const quint32 h = st->addLook(s.k.prod, name);
+        st->setLayerLook(h, st->addLayer(h, t), st->lookForPalette(full));
+        st->setHitScope({ h }, scope, place);
+        return h;
+    };
+    s.hitList = hitAt(ShowTree::HitScope::List, s.other, "At Act 2");
+    s.hitCue = hitAt(ShowTree::HitScope::Cue, s.otherCue, "At its cue");
+    return s;
+}
+
+/** Whether @a target is doing its thing now (a function runs, a list plays). */
+bool going(Doc *doc, const ControlMap::Target &target)
+{
+    ShowTreeController *st = doc->showTree();
+    switch (target.type)
+    {
+        case ControlMap::FunctionTarget:
+            return doc->function(target.id)->isRunning();
+        case ControlMap::HitTarget:
+            return doc->function(st->cue(target.id)->collection)->isRunning();
+        case ControlMap::CueListTarget:
+            return doc->function(st->cueList(target.id)->chaser)->isRunning();
+        case ControlMap::CueTarget:
+            return doc->function(st->listOfCue(target.id)->chaser)->isRunning();
+        case ControlMap::EmergencyStopTarget:
+            break;
+    }
+    return false;
+}
+}
+
+void ControlMap_Test::aSurfacePressFollowsTheModeAndTheArming()
+{
+    const SurfaceShow show = surfaceShow(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->showControl()->setGoGuardMs(0);      // not under test here
+    Scene *scn = scene("Warm", 0);
+    QCOMPARE(cm->runList(), show.k.list);       // Act 1 is the Run tab's
+
+    enum State { Plain, SelectedSelf, SelectedList, PlaceLive };
+    struct Case
+    {
+        const char *name;
+        ControlMap::Target target;
+        State state;
+        bool design, operate;
+    };
+    const ControlMap::Target act2 = ControlMap::cueList(show.other);
+    const QList<Case> cases = {
+        // A scene or an effect: Build tries them in Design, Operate runs them.
+        { "scene", ControlMap::function(scn->id()), Plain, true, true },
+        // The Run tab's list and its cue: armed by the run list.
+        { "run list", ControlMap::cueList(show.k.list), Plain, true, true },
+        { "run list cue", ControlMap::cue(show.k.cue2), Plain, true, true },
+        // Another list: Operate GOes it; Design only when it is selected.
+        { "other list", act2, Plain, false, true },
+        { "other list selected", act2, SelectedSelf, true, true },
+        { "other cue", ControlMap::cue(show.otherCue), Plain, false, true },
+        { "other cue selected", ControlMap::cue(show.otherCue), SelectedSelf, true, true },
+        { "other cue, its list selected", ControlMap::cue(show.otherCue), SelectedList, true, true },
+        // A hit whose place is the production: live while it is current.
+        { "production hit", ControlMap::hit(show.k.hit), Plain, true, true },
+        // A hit at Act 2 / at its cue: Act 2 is not playing, so not live.
+        // Operate fires only a live place, even a hit that is selected.
+        { "list hit, place idle", ControlMap::hit(show.hitList), Plain, false, false },
+        { "list hit, selected", ControlMap::hit(show.hitList), SelectedSelf, true, false },
+        { "list hit, its list selected", ControlMap::hit(show.hitList), SelectedList, true, false },
+        { "list hit, place live", ControlMap::hit(show.hitList), PlaceLive, true, true },
+        { "cue hit, place idle", ControlMap::hit(show.hitCue), Plain, false, false },
+        { "cue hit, selected", ControlMap::hit(show.hitCue), SelectedSelf, true, false },
+        { "cue hit, place live", ControlMap::hit(show.hitCue), PlaceLive, true, true },
+    };
+
+    int ran = 0;
+    for (const Case &c : cases)
+    {
+        for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+        {
+            for (ControlMap::Mode how : { ControlMap::Toggle, ControlMap::StartOnly, ControlMap::Momentary })
+            {
+                const QString label = QString("%1, %2, %3").arg(c.name)
+                    .arg(mode == Doc::Design ? "Design" : "Operate").arg(ControlMap::modeToString(how));
+                // A clean stage.
+                cm->removeAll();
+                for (Function *f : m_doc->functions())
+                    f->stop(FunctionParent::master());
+                tick(3);
+                m_doc->setMode(Doc::Design);
+                cm->setRunTabList(ShowTree::invalidId());
+                cm->setSelectedTargets({});
+                if (c.state == SelectedSelf)
+                    cm->setSelectedTargets({ c.target });
+                if (c.state == SelectedList)
+                    cm->setSelectedTargets({ ControlMap::cueList(show.other) });
+                if (c.state == PlaceLive)
+                {
+                    // Act 2 plays; a cue hit is live while its cue is on.
+                    m_doc->function(st->cueList(show.other)->chaser)->start(m_doc->masterTimer(),
+                                                                          FunctionParent::master());
+                    tick(3);
+                    QVERIFY2(st->isHitArmed(c.target.id), qPrintable(label));
+                }
+                m_doc->setMode(mode);
+                tick();
+
+                cm->setBinding({ 0, 20, c.target, how });
+                send(20, 127);
+                tick(2);
+                const bool did = going(m_doc, c.target);
+                const bool want = mode == Doc::Design ? c.design : c.operate;
+                QVERIFY2(did == want, qPrintable(QString("%1: fired %2, wanted %3").arg(label).arg(did).arg(want)));
+                send(20, 0);
+                tick(3);
+                ++ran;
+            }
+        }
+    }
+    QCOMPARE(ran, int(cases.size()) * 2 * 3);
+}
+
+void ControlMap_Test::aRefusedPressHasNothingToRelease()
+{
+    const SurfaceShow show = surfaceShow(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->showControl()->setGoGuardMs(0);
+    Chaser *act2 = qobject_cast<Chaser *>(m_doc->function(st->cueList(show.other)->chaser));
+    QVERIFY(act2 != nullptr);
+
+    // Design, Act 2 not armed: a "GO while held" is refused, and its release
+    // must not stop the list that something else is playing.
+    cm->setBinding({ 0, 20, ControlMap::cueList(show.other), ControlMap::Momentary });
+    act2->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    QVERIFY(act2->isRunning());
+    send(20, 127);
+    tick();
+    send(20, 0);
+    tick(3);
+    QVERIFY2(act2->isRunning(), "the release of a refused press stopped the list");
+}
+
+void ControlMap_Test::aRefusedPressSaysSo()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    const SurfaceShow show = surfaceShow(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->showControl()->setGoGuardMs(0);
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+
+    cm->setBinding({ 0, 20, ControlMap::cueList(show.other), ControlMap::Toggle });
+    send(20, 127);
+    tick();
+    QCOMPARE(blocked.count(), 1);
+    const QString why = blocked.last().at(0).toString();
+    QVERIFY2(why.contains("Not fired: Cue list: Act 2") && why.contains("armed"), qPrintable(why));
+    send(20, 0);
+
+    // Operate, a hit whose place is idle: says its place is not live.
+    m_doc->setMode(Doc::Operate);
+    cm->setBinding({ 0, 21, ControlMap::hit(show.hitList), ControlMap::Toggle });
+    send(21, 127);
+    tick(2);
+    QCOMPARE(blocked.count(), 2);
+    QVERIFY2(blocked.last().at(0).toString().contains("place is not live"),
+             qPrintable(blocked.last().at(0).toString()));
+    QVERIFY(!going(m_doc, ControlMap::hit(show.hitList)));
+    send(21, 0);
+#else
+    QFAIL("this build does not say why a press was refused");
+#endif
+}
+
+void ControlMap_Test::whatRunsCanAlwaysBeLetGo()
+{
+    const SurfaceShow show = surfaceShow(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->showControl()->setGoGuardMs(0);
+    const ControlMap::Target hit = ControlMap::hit(show.hitList);
+    Function *act2 = m_doc->function(st->cueList(show.other)->chaser);
+    Function *coll = m_doc->function(st->cue(show.hitList)->collection);
+
+    // Live place, Operate: the hit plays. Its place then ends (Act 2 stops):
+    // a Toggle press still lets the hit go, and a Stop-only press stops it.
+    m_doc->setMode(Doc::Operate);
+    act2->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    cm->setBinding({ 0, 20, hit, ControlMap::Toggle });
+    send(20, 127);
+    tick(2);
+    QVERIFY(coll->isRunning());
+    send(20, 0);
+    act2->stop(FunctionParent::master());
+    tick(3);
+    QVERIFY(!st->isHitArmed(hit.id));
+    QVERIFY(coll->isRunning());                  // a hit completes on its own
+    send(20, 127);
+    tick(3);
+    QVERIFY2(!coll->isRunning(), "a press could not let go of a hit whose place ended");
+    send(20, 0);
+
+    coll->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    cm->setBinding({ 0, 20, hit, ControlMap::StopOnly });
+    send(20, 127);
+    tick(3);
+    QVERIFY(!coll->isRunning());
+    send(20, 0);
+}
+
+void ControlMap_Test::aControllerGoneLetsGoOfWhatItHeld()
+{
+    // A held "on while held" button, then the controller is unplugged: its
+    // release never comes. Whatever it held is let go, and the next press on
+    // that control is a press (not swallowed as "still down").
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Momentary });
+    send(kNote, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+    tick(3);
+    QVERIFY2(!a->isRunning(), "a controller that went away left its held button on");
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    send(kNote, 127);                           // the replugged button, pressed again
+    tick(2);
+    QVERIFY2(a->isRunning(), "the press after a replug was swallowed");
+    send(kNote, 0);
+    tick(3);
+    QVERIFY(!a->isRunning());
+}
+
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+namespace
+{
+const quint32 kStopNote = 128 + 61;
+const quint32 kCC = 20;             // a CC: could be a fader, or a pad that sends CC
+
+bool stopBound(ControlMap *cm)
+{
+    return cm->binding(ControlMap::emergencyStop()) != nullptr;
+}
+}
+#endif
+
+void ControlMap_Test::theStopIsLearnedOnAButtonWithASecondPress()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    ControlMap *cm = m_doc->controlMap();
+    QSignalSpy heard(cm, &ControlMap::heard);
+    QSignalSpy confirming(cm, &ControlMap::confirming);
+    QSignalSpy refused(cm, &ControlMap::refused);
+
+    cm->learn(ControlMap::emergencyStop());
+    send(kStopNote, 0);                             // a release alone: nothing
+    QCOMPARE(confirming.count(), 0);
+    send(kStopNote, 127);                           // the first press asks for a second
+    QCOMPARE(confirming.count(), 1);
+    QCOMPARE(heard.count(), 0);
+    QVERIFY(!stopBound(cm));
+    // A held button repeating itself is still the first press.
+    sendAll(kStopNote, { 127, 127, 127 });
+    QCOMPARE(heard.count(), 0);
+    QVERIFY(!stopBound(cm));
+    // Another control in between starts over.
+    send(kStopNote + 1, 127);
+    QCOMPARE(confirming.count(), 2);
+    send(kStopNote + 1, 0);
+    send(kStopNote, 127);                           // back to the first: fresh again
+    QCOMPARE(confirming.count(), 3);
+    QVERIFY(!stopBound(cm));
+    // Released and pressed again: bound, once.
+    send(kStopNote, 0);
+    send(kStopNote, 127);
+    QCOMPARE(heard.count(), 1);
+    QCOMPARE(refused.count(), 0);
+    const ControlMap::Binding *b = cm->binding(ControlMap::emergencyStop());
+    QVERIFY(b != nullptr);
+    QCOMPARE(b->channel, kStopNote);
+    QVERIFY(!cm->isListening());
+    // The held second press and its release fire nothing.
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    send(kStopNote, 127);                           // still held
+    send(kStopNote, 0);
+    tick();
+    QCOMPARE(handled.count(), 0);
+    QCOMPARE(cm->targetName(ControlMap::emergencyStop()), QString("Emergency stop (ALL OFF)"));
+    // listen() (the plain one) still hears on one press.
+    cm->listen();
+    send(kStopNote + 2, 127);
+    QCOMPARE(heard.count(), 2);
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMap_Test::theStopRefusesAFaderWhateverItSends()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    ControlMap *cm = m_doc->controlMap();
+    QSignalSpy heard(cm, &ControlMap::heard);
+    QSignalSpy refused(cm, &ControlMap::refused);
+    cm->learn(ControlMap::emergencyStop());
+
+    // A fader moved up, down and up again, through every value: it is never
+    // a button, even when the sweep passes through 0 and starts over.
+    QList<int> sweep;
+    for (int v = 0; v <= 127; v += 3)
+        sweep << v;
+    for (int v = 127; v >= 0; v -= 3)
+        sweep << v;
+    sweep << 0 << 0 << 5 << 9 << 127 << 0 << 127;
+    sendAll(kCC, sweep);
+    QCOMPARE(heard.count(), 0);
+    QVERIFY(!stopBound(cm));
+    QVERIFY(refused.count() >= 1);
+    QVERIFY2(refused.first().at(0).toString().contains("fader"), qPrintable(refused.first().at(0).toString()));
+    QVERIFY(cm->isListening());                     // learning goes on for a real button
+
+    // A fader parked at the top that only ever sends 127: no release, so no
+    // confirm however many times it repeats.
+    cm->learn(ControlMap::emergencyStop());
+    sendAll(kCC + 1, { 127, 127, 127, 127 });
+    QVERIFY(!stopBound(cm));
+    // And a button after all that still learns.
+    send(kStopNote, 127);
+    send(kStopNote, 0);
+    send(kStopNote, 127);
+    QVERIFY(stopBound(cm));
+    QCOMPARE(heard.count(), 1);
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMap_Test::theStopRefusesAControlTheProfileCallsAFader()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("Fake");
+    prof->setModel("Desk");
+    QLCInputChannel *fader = new QLCInputChannel();
+    fader->setType(QLCInputChannel::Slider);
+    fader->setName("Fader 1");
+    prof->insertChannel(5, fader);
+    QLCInputChannel *knob = new QLCInputChannel();
+    knob->setType(QLCInputChannel::Encoder);
+    prof->insertChannel(6, knob);
+    QLCInputChannel *pad = new QLCInputChannel();
+    pad->setType(QLCInputChannel::Button);
+    prof->insertChannel(7, pad);
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+
+    ControlMap *cm = m_doc->controlMap();
+    QVERIFY(!cm->isButtonControl(0, 5));
+    QVERIFY(!cm->isButtonControl(0, 6));
+    QVERIFY(cm->isButtonControl(0, 7));
+    QVERIFY(cm->isButtonControl(0, 99));            // not in the profile: a button until told otherwise
+    QSignalSpy refused(cm, &ControlMap::refused);
+    cm->learn(ControlMap::emergencyStop());
+    sendAll(5, { 127, 0, 127 });                    // 0/127 only, but the profile says fader
+    sendAll(6, { 127, 0, 127 });
+    QCOMPARE(refused.count(), 4);               // each press of each, refused
+    QVERIFY(!stopBound(cm));
+    sendAll(7, { 127, 0, 127 });
+    QVERIFY(stopBound(cm));
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMap_Test::everyPressOfTheStopIsAllOff()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    const SurfaceShow show = surfaceShow(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    ControlMap *cm = m_doc->controlMap();
+    cm->setStopDebounceMs(0);                       // each press below is its own
+    Scene *a = scene("Warm", 0);
+    Function *act1 = m_doc->function(st->cueList(show.k.list)->chaser);
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    QSignalSpy stopped(m_doc->showControl(), &ShowControl::cueListStopped);
+
+    for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        m_doc->setMode(mode);
+        // Not a toggle: the 1st, 2nd and 3rd press are each ALL OFF, never "resume".
+        for (int i = 0; i < 3; ++i)
+        {
+            a->start(m_doc->masterTimer(), FunctionParent::master());
+            act1->start(m_doc->masterTimer(), FunctionParent::master());
+            tick(2);
+            QVERIFY(a->isRunning() && act1->isRunning());
+            const int before = handled.count();
+            send(kStopNote, 127);
+            tick(3);
+            QVERIFY2(!a->isRunning() && !act1->isRunning(), "ALL OFF left something running");
+            QCOMPARE(handled.count(), before + 1);
+            QVERIFY(handled.last().at(0).toString().contains("ALL OFF"));
+            QVERIFY(handled.last().at(1).toBool());
+            // The release does nothing: nothing started, nothing more handled.
+            send(kStopNote, 0);
+            tick();
+            QCOMPARE(handled.count(), before + 1);
+            QVERIFY(!a->isRunning() && !act1->isRunning());
+        }
+    }
+    QVERIFY(stopped.count() >= 6);
+    // Any mode the binding says: the stop has one way to act.
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Momentary });
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    send(kStopNote, 127);
+    tick(3);
+    QVERIFY(!a->isRunning());
+    send(kStopNote, 0);
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMap_Test::theStopIsNotHeldByTheDoubleGoGuard()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    const SurfaceShow show = surfaceShow(m_doc);
+    ShowTreeController *st = m_doc->showTree();
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->showControl()->setGoGuardMs(1000);
+    Function *act1 = m_doc->function(st->cueList(show.k.list)->chaser);
+    cm->setBinding({ 0, 30, ControlMap::cueList(show.k.list), ControlMap::Toggle });
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+    m_doc->setMode(Doc::Operate);
+
+    // A GO, and within the guard's second the stop. A Stop of the list would
+    // be held ("Second GO held"); ALL OFF must not be.
+    send(30, 127);
+    send(30, 0);
+    tick(2);
+    QVERIFY(act1->isRunning());
+    send(kStopNote, 127);
+    tick(3);
+    QVERIFY2(!act1->isRunning(), "the stop was held by the double-GO guard");
+    QVERIFY(handled.last().at(0).toString().contains("ALL OFF"));
+    QVERIFY(handled.last().at(1).toBool());
+    send(kStopNote, 0);
+    // And a GO right after the stop is a fresh start, not held by the stop.
+    send(30, 127);
+    send(30, 0);
+    tick(2);
+    QVERIFY(act1->isRunning());
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMap_Test::theStopSurvivesAReplugAndRepeats()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    ControlMap *cm = m_doc->controlMap();
+    Scene *a = scene("Warm", 0);
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy handled(m_doc->showControl(), &ShowControl::commandHandled);
+
+    // A held button repeating itself (some controllers resend a held note):
+    // one ALL OFF, not a stream.
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    sendAll(kStopNote, { 127, 127, 127, 127, 127 });
+    tick(3);
+    QCOMPARE(handled.count(), 1);
+    QVERIFY(!a->isRunning());
+
+    // Unplugged while held: the release never arrives. Replugged, the next
+    // press is a press -- it is not "still down".
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    cm->setStopDebounceMs(0);
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    send(kStopNote, 127);
+    tick(3);
+    QCOMPARE(handled.count(), 2);
+    QVERIFY2(!a->isRunning(), "the press after a replug did not stop the show");
+
+    // Stuck down with no event at all (a silent USB reset): still a press.
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    send(kStopNote, 127);
+    tick(3);
+    QCOMPARE(handled.count(), 3);
+    QVERIFY(!a->isRunning());
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMap_Test::aBoundFaderNeverStops()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    // A show file (or a profile edited later) that puts the stop on a control
+    // the profile calls a fader: its sweep stops nothing.
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("Fake");
+    prof->setModel("Faders");
+    QLCInputChannel *fader = new QLCInputChannel();
+    fader->setType(QLCInputChannel::Slider);
+    prof->insertChannel(5, fader);
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 5, ControlMap::emergencyStop(), ControlMap::Toggle });
+    Scene *a = scene("Warm", 0);
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    sendAll(5, { 0, 10, 40, 127, 127, 0, 127 });
+    tick(3);
+    QVERIFY2(a->isRunning(), "a fader stopped the show");
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
+void ControlMap_Test::theStopIsSavedWithTheShow()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
+    cm->setBinding({ 0, 9, ControlMap::function(scene("Warm", 0)->id()), ControlMap::Toggle });
+    const QList<ControlMap::Binding> before = cm->bindings();
+    const QByteArray xml = saveShow(m_doc);
+    QVERIFY2(xml.contains("Target=\"EmergencyStop\""), xml.constData());
+    Doc *other = new Doc(this);
+    QVERIFY(loadShow(other, xml));
+    QCOMPARE(other->controlMap()->bindings(), before);
+    QVERIFY(other->controlMap()->binding(ControlMap::emergencyStop()) != nullptr);
+    delete other;
+    // One stop: binding it again elsewhere moves it.
+    cm->setBinding({ 0, kStopNote + 5, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QCOMPARE(cm->count(), 2);
+    QCOMPARE(cm->binding(ControlMap::emergencyStop())->channel, kStopNote + 5);
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
 }
 
 QTEST_GUILESS_MAIN(ControlMap_Test)

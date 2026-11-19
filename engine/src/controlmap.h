@@ -21,6 +21,7 @@
 #define CONTROLMAP_H
 
 #include <QMultiHash>
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QList>
@@ -39,6 +40,8 @@ class Doc;
  */
 
 #define KXMLQLCControlMap QStringLiteral("ControlMap")
+/** This build has the emergency-stop target (the CS1 tests ask). */
+#define CONTROLMAP_HAS_EMERGENCY_STOP 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -78,7 +81,8 @@ public:
         FunctionTarget, //!< a function, by its id
         CueListTarget,  //!< a Show Tree cue list, by its id: GO
         CueTarget,      //!< a Show Tree cue, by its id: GO that cue
-        HitTarget       //!< a Show Tree hit (a Looks section's cue), by its id
+        HitTarget,      //!< a Show Tree hit (a Looks section's cue), by its id
+        EmergencyStopTarget //!< ALL OFF (id 0): the surface's emergency stop, one button
     };
 
     /** How a press acts. On a cue list or a cue, Toggle and Start only GO,
@@ -117,6 +121,9 @@ public:
     static Target cueList(quint32 id) { return Target{ CueListTarget, id }; }
     static Target cue(quint32 id) { return Target{ CueTarget, id }; }
     static Target hit(quint32 id) { return Target{ HitTarget, id }; }
+    /** The emergency stop (ALL OFF through ShowControl::run(), the one path).
+     *  Only one binding of it can exist. */
+    static Target emergencyStop() { return Target{ EmergencyStopTarget, 0 }; }
 
     /** The universe of a computer-keyboard key's binding (its channel:
      *  keyChannel()). No input universe has this number. */
@@ -177,8 +184,23 @@ public:
     void listen();
     /** listen(), then bind what is heard to @a target with @a mode. */
     void learn(const Target &target, Mode mode = Toggle);
+    /** listen() for a button, and only a button (the emergency stop):
+     *  the first press is not heard yet, it asks for a second one on the
+     *  same control (confirming(), after a release), and heard() comes only
+     *  then. A control the profile calls a fader, knob or encoder, aftertouch,
+     *  or one whose values are not a button's (anything between the press
+     *  and its repeat) is refused (refused() says why) and learning goes on. */
+    void listenForButton();
     void stopListening();
     bool isListening() const { return m_listening; }
+    /** Whether a control is a button: not a fader, a knob, an encoder or
+     *  aftertouch, by its input profile, else by what a MIDI channel number
+     *  is. OSC, programs and unknown lines are buttons. */
+    bool isButtonControl(quint32 universe, quint32 channel) const;
+    /** Test hooks: how long a first press waits for its second, and the
+     *  window in which repeats of the stop's press are one. */
+    void setConfirmMs(int ms) { m_confirmMs = ms; }
+    void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
 
     /*********************************************************************
      * Names
@@ -218,6 +240,14 @@ public:
     /** A key may fire @a target now: in Operate always, in Design when
      *  isArmed(). */
     bool keyMayFire(const Target &target) const;
+    /** A MIDI or OSC press may start @a target now (CS1, board Q269): a
+     *  function always (Build tries scenes and effects in Design; a
+     *  Show-only fixture is held in Design anyway); a cue list or a cue in
+     *  Operate, and in Design when isArmed(); a hit only where its place is
+     *  live in Operate (ShowTreeController::isHitArmed()), and in Design
+     *  when isArmed(). What is running can always be let go or stopped, and
+     *  the emergency stop always works. */
+    bool surfaceMayFire(const Target &target) const;
     /** Armed for keys in Design: @a target is in the run list (the cue
      *  list the Run tab plays: that list, its cues and the hits living in
      *  it, its cues, its production or everywhere; and any hit whose place
@@ -257,6 +287,13 @@ signals:
     void bindingsChanged();
     /** listen(): the control pressed. */
     void heard(quint32 universe, quint32 channel);
+    /** listenForButton(): the first press was heard; press it again. */
+    void confirming(quint32 universe, quint32 channel);
+    /** A MIDI or OSC press was not carried out (not armed in Design, a hit's
+     *  place not live), in words: the footer and the Control Map say so. */
+    void blocked(const QString &why);
+    /** listenForButton(): that control is not a button, in words. */
+    void refused(const QString &why);
     /** A control fired its target: what it did, in words. */
     void fired(const QString &what);
     /** What isArmed() says may have changed (the mode, the Run tab's
@@ -277,6 +314,8 @@ private slots:
     void slotFunctionStopped(quint32 id);
     void slotFunctionRemoved(quint32 id);
     void slotInputDeviceConnected();
+    /** A controller went away or came back: a press it held is let go. */
+    void slotInputDeviceChanged(quint32 universe);
 
 private:
     static quint64 key(quint32 universe, quint32 channel)
@@ -285,8 +324,13 @@ private:
     void changed(bool modified);
     void rebuild();
     void updateConnections();
-    void press(const Binding &b);
+    /** @return whether the press may start things (its release acts) */
+    bool press(const Binding &b);
     void release(const Binding &b);
+    /** The emergency stop: ALL OFF through ShowControl::run() (never held). */
+    void emergencyStop(const Binding &b);
+    /** listenForButton(): one control heard while learning. */
+    bool learnButtonHeard(quint32 universe, quint32 channel, uchar value);
     /** Starts, stops or toggles (start: 1, stop: 0, toggle: -1) a function. */
     void actOnFunction(quint32 fid, int how, const QString &what);
     void goList(const Binding &b, bool stop);
@@ -305,8 +349,27 @@ private:
     QSet<quint64> m_swallow;
     /** Momentary functions a press started (the release stops only those) */
     QSet<quint32> m_heldStarted;
+    /** presses that started something (their release lets go; a refused
+     *  press has nothing to let go) */
+    QSet<quint64> m_fired;
     bool m_listening = false;
     bool m_learnBind = false;
+    bool m_learnButton = false;
+    /** listenForButton(): the control pressed once, the value it sent, and
+     *  whether it was let go since */
+    quint64 m_pendingKey = 0;
+    bool m_pending = false;
+    bool m_pendingReleased = false;
+    uchar m_pendingValue = 0;
+    QElapsedTimer m_pendingAt;
+    /** controls heard while learning a button that sent more than a button
+     *  does: a fader stays refused even when its sweep passes through 0 */
+    QSet<quint64> m_notButtons;
+    /** how long a first press waits for its second */
+    int m_confirmMs = 15000;
+    /** repeats of the emergency stop's press inside this are one */
+    int m_estopDebounceMs = 250;
+    QElapsedTimer m_estopAt;
     Binding m_learning;
     /** key bindings in m_bindings */
     int m_keyBindings = 0;

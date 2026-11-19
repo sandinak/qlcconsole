@@ -182,7 +182,9 @@ test('presets only name actions, feedbacks and variables that exist', () => {
 		for (const step of p.steps) {
 			for (const key of ['down', 'up', 'rotate_left', 'rotate_right']) {
 				for (const a of step[key] ?? []) assert.ok(actions[a.actionId], `${id}: action ${a.actionId}`)
-			}
+			}			for (const [k, g] of Object.entries(step))
+				if (/^\d+$/.test(k))
+					for (const a of g.actions ?? g) assert.ok(actions[a.actionId], `${id}: action ${a.actionId} at ${k} ms`)
 		}
 		for (const f of p.feedbacks) assert.ok(feedbacks[f.feedbackId], `${id}: feedback ${f.feedbackId}`)
 		for (const m of p.style.text.matchAll(/\$\(qlcconsole:(\w+)\)/g)) assert.ok(vars[m[1]], `${id}: variable ${m[1]}`)
@@ -214,4 +216,31 @@ test('the manifest is complete', async () => {
 	assert.equal(m.id, 'qlcconsole')
 	const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)))
 	assert.equal(pkg.version, m.version)
+})
+
+test('ALL OFF: the Run word alloff, only on a 1 s hold, never on a dial or a short press', async () => {
+	const c = fake()
+	const actions = actionDefinitions(ctxOf(c))
+	assert.ok(actions.alloff)
+	await actions.alloff.callback({ options: {} })
+	assert.equal(c.sent.at(-1), 'alloff')
+
+	const { presets } = buildPresets(5)
+	const p = presets.alloff
+	assert.ok(p, 'an ALL OFF preset')
+	const step = p.steps[0]
+	assert.deepEqual(step.down, [], 'nothing on the press')
+	assert.deepEqual(step.up, [], 'nothing on a short press')
+	assert.deepEqual(step.rotate_left ?? [], [])
+	assert.deepEqual(step.rotate_right ?? [], [])
+	assert.deepEqual(Object.keys(step).filter((k) => /^\d+$/.test(k)), ['1000'], 'one long-press group, at 1 s')
+	assert.equal(step[1000].options.runWhileHeld, true)
+	assert.deepEqual(step[1000].actions.map((a) => a.actionId), ['alloff'])
+	// no other preset carries it: a dial, a hit or GO never stops the show
+	for (const [id, q] of Object.entries(presets)) {
+		if (id === 'alloff') continue
+		for (const st of q.steps)
+			for (const list of Object.values(st).filter(Array.isArray))
+				for (const a of list) assert.notEqual(a.actionId, 'alloff', id)
+	}
 })

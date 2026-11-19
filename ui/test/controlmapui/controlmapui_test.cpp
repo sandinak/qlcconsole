@@ -171,6 +171,76 @@ void ControlMapUi_Test::theLearnDialogShowsAndRemovesABinding()
     QVERIFY(!cm->isListening());
 }
 
+void ControlMapUi_Test::theEmergencyStopLearnsOneButtonWithASecondPress()
+{
+#ifdef CONTROLMAP_HAS_EMERGENCY_STOP
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.resize(700, 400);
+    panel.show();
+    QPushButton *button = panel.findChild<QPushButton *>("controlMapEmergencyStop");
+    QVERIFY(button != nullptr);
+    QVERIFY(button->isVisibleTo(&panel));
+    QCOMPARE(button->text(), QString("Emergency stop…"));
+
+    ControlLearnDialog d(m_doc, ControlMap::emergencyStop());
+    d.show();
+    QVERIFY(d.findChild<QLabel *>("learnTarget")->text().contains("Emergency stop (ALL OFF)"));
+    QComboBox *mode = d.findChild<QComboBox *>("learnMode");
+    QCOMPARE(mode->count(), 1);                     // one way to act
+    QVERIFY(!mode->isEnabled());
+    QPushButton *ok = d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok);
+    QLabel *note = d.findChild<QLabel *>("learnNote");
+
+    // A computer key is refused, in words.
+    QVERIFY(d.learnKey(Qt::Key_F5, Qt::NoModifier));
+    QVERIFY(!d.hasControl());
+    QLabel *keyNote = d.findChild<QLabel *>("learnKeyNote");
+    QVERIFY(keyNote->isVisibleTo(&d));
+    QVERIFY2(keyNote->text().contains("cannot be the emergency stop"), qPrintable(keyNote->text()));
+
+    // A fader: refused, the dialog says why and keeps listening.
+    for (int v : { 3, 20, 80, 127 })
+        cm->handleInput(0, 20, uchar(v));
+    QVERIFY(!d.hasControl());
+    QVERIFY(note->isVisibleTo(&d));
+    QVERIFY2(note->text().contains("fader"), qPrintable(note->text()));
+    QVERIFY(cm->isListening());
+
+    // A button: the first press asks for a second, OK stays off.
+    cm->handleInput(0, 188, 127);
+    QVERIFY(!d.hasControl());
+    QVERIFY(!ok->isEnabled());
+    QVERIFY2(note->text().contains("press it again"), qPrintable(note->text()));
+    cm->handleInput(0, 188, 0);
+    cm->handleInput(0, 188, 127);
+    QVERIFY(d.hasControl());
+    QCOMPARE(d.channel(), 188u);
+    QVERIFY(ok->isEnabled());
+    ok->click();
+    const ControlMap::Binding *b = cm->binding(ControlMap::emergencyStop());
+    QVERIFY(b != nullptr);
+    QCOMPARE(b->channel, 188u);
+
+    // The panel lists it, with no choice of how it acts, and names the control.
+    QVERIFY2(button->text().startsWith("Emergency stop: ") && button->text().contains("Channel 189"),
+             qPrintable(button->text()));
+    QTableWidget *table = panel.table();
+    QCOMPARE(table->rowCount(), 1);
+    QCOMPARE(table->item(0, 1)->text(), QString("Emergency stop (ALL OFF)"));
+    QComboBox *how = qobject_cast<QComboBox *>(table->cellWidget(0, 2));
+    QVERIFY(how != nullptr && !how->isEnabled() && how->count() == 1);
+
+    // Learning again from the dialog shows the control it has.
+    ControlLearnDialog again(m_doc, ControlMap::emergencyStop());
+    QVERIFY(again.hasControl());
+    again.findChild<QPushButton *>("learnRemove")->click();
+    QVERIFY(cm->binding(ControlMap::emergencyStop()) == nullptr);
+#else
+    QFAIL("this build has no emergency stop on the Control Map");
+#endif
+}
+
 void ControlMapUi_Test::theMenuActionSaysWhatIsBound()
 {
     Scene *a = scene("Warm");

@@ -77,6 +77,7 @@ protected:
 private slots:
     void slotRemove();
     void slotRemoveAll();
+    void slotEmergencyStop();
     void slotFired(const QString &what);
     void slotEncoderPreset(int index);
     void slotEncoderEdited();
@@ -92,6 +93,7 @@ private:
     QTableWidget *m_table;
     QPushButton *m_remove;
     QPushButton *m_removeAll;
+    QPushButton *m_estop;
     QLabel *m_empty;
     QLabel *m_last;
 

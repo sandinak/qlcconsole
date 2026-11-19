@@ -32,6 +32,7 @@
 #include <QLabel>
 
 #include "controlmappanel.h"
+#include "controllearndialog.h"
 #include "inputoutputmap.h"
 #include "encoderbank.h"
 #include "controlmap.h"
@@ -80,23 +81,31 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_remove->setToolTip(tr("The selected triggers: their controls fire nothing (their lights go off)"));
     m_removeAll = new QPushButton(tr("Remove All…"), this);
     m_removeAll->setObjectName(QStringLiteral("controlMapRemoveAll"));
+    m_estop = new QPushButton(this);
+    m_estop->setObjectName(QStringLiteral("controlMapEmergencyStop"));
+    m_estop->setToolTip(tr("One button on a MIDI or OSC controller that is ALL OFF: every press stops "
+                           "everything, from Design or Operate, at any moment. It is learned with a second "
+                           "press to confirm, and never on a fader, knob or encoder."));
     m_last = new QLabel(this);
     m_last->setObjectName(QStringLiteral("controlMapLast"));
     m_last->setStyleSheet(QStringLiteral("color: gray;"));
     row->addWidget(m_remove);
     row->addWidget(m_removeAll);
+    row->addWidget(m_estop);
     row->addWidget(m_last, 1);
     lay->addLayout(row);
     buildEncoderBox(lay);
 
     connect(m_remove, &QPushButton::clicked, this, &ControlMapPanel::slotRemove);
     connect(m_removeAll, &QPushButton::clicked, this, &ControlMapPanel::slotRemoveAll);
+    connect(m_estop, &QPushButton::clicked, this, &ControlMapPanel::slotEmergencyStop);
     connect(m_table, &QTableWidget::itemSelectionChanged, this, [this]() {
         m_remove->setEnabled(!m_table->selectionModel()->selectedRows().isEmpty());
     });
     ControlMap *cm = m_doc->controlMap();
     connect(cm, &ControlMap::bindingsChanged, this, &ControlMapPanel::refresh);
     connect(cm, &ControlMap::fired, this, &ControlMapPanel::slotFired);
+    connect(cm, &ControlMap::blocked, this, &ControlMapPanel::slotFired);
     // A key's "Armed" follows the mode, the Run tab and the Show Tree.
     connect(cm, &ControlMap::armingChanged, this, &ControlMapPanel::refreshArming);
     // Names follow renames.
@@ -136,7 +145,10 @@ void ControlMapPanel::refresh()
         QComboBox *mode = new QComboBox(m_table);
         mode->setObjectName(QStringLiteral("controlMapMode"));
         const bool list = b.target.type == ControlMap::CueListTarget || b.target.type == ControlMap::CueTarget;
-        const QList<ControlMap::Mode> modes = list
+        const bool estop = b.target.type == ControlMap::EmergencyStopTarget;
+        const QList<ControlMap::Mode> modes = estop
+            ? QList<ControlMap::Mode>{ ControlMap::StartOnly }
+            : list
             ? QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StopOnly }
             : QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StartOnly,
                                        ControlMap::StopOnly };
@@ -144,12 +156,16 @@ void ControlMapPanel::refresh()
             mode->addItem(ControlMap::modeName(m, b.target.type), int(m));
         int at = mode->findData(int(b.mode));
         mode->setCurrentIndex(at < 0 ? 0 : at);
+        mode->setEnabled(!estop);       // the stop has one way to act
         const ControlMap::Target target = b.target;
         connect(mode, QOverload<int>::of(&QComboBox::activated), this, [this, mode, target](int) {
             m_doc->controlMap()->setMode(target, ControlMap::Mode(mode->currentData().toInt()));
         });
         m_table->setCellWidget(r, ModeCol, mode);
     }
+    const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
+    m_estop->setText(stop == nullptr ? tr("Emergency stop…")
+                                     : tr("Emergency stop: %1…").arg(cm->controlName(stop->universe, stop->channel)));
     const bool any = !bindings.isEmpty();
     m_empty->setVisible(!any);
     m_table->setVisible(any);
@@ -211,6 +227,12 @@ void ControlMapPanel::slotRemoveAll()
                                        : tr("Remove all %1 triggers? Their controls will fire nothing.").arg(n))
                == QMessageBox::Yes)
         m_doc->controlMap()->removeAll();
+}
+
+void ControlMapPanel::slotEmergencyStop()
+{
+    ControlLearnDialog d(m_doc, ControlMap::emergencyStop(), this);
+    d.exec();
 }
 
 void ControlMapPanel::slotFired(const QString &what)
