@@ -259,7 +259,7 @@ void ControlMapUi_Test::aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow()
     // The user sees it: the button is red, not just worded.
     const QImage shot = button->grab().toImage();
     const QColor px = shot.pixelColor(shot.width() / 2, 2);
-    QVERIFY2(px.red() > 140 && px.green() < 60, qPrintable(px.name()));
+    QVERIFY2(px.red() > 180 && px.red() > px.green() + 80, qPrintable(px.name()));
     QTableWidget *table = panel.table();
     QCOMPARE(table->rowCount(), 1);
     QVERIFY2(table->item(0, 0)->text().contains("the stop does not work"), qPrintable(table->item(0, 0)->text()));

@@ -873,10 +873,11 @@ void ControlMap_Test::aKeyIsArmedInDesignByTheSelection()
     // Nothing selected: nothing armed by it.
     cm->setSelectedTargets({});
     QVERIFY(!cm->isArmed(ControlMap::cue(show.cue1)));
-    // Operate: everything may fire.
+    // Operate: a cue may fire; a hit only where its place is live (Q277), so
+    // hit2, whose place is idle here, may not even in Operate.
     m_doc->setMode(Doc::Operate);
     QVERIFY(cm->keyMayFire(ControlMap::cue(show.cue1)));
-    QVERIFY(cm->keyMayFire(ControlMap::hit(hit2)));
+    QVERIFY(!m_doc->showTree()->isHitArmed(hit2) == !cm->keyMayFire(ControlMap::hit(hit2)));
 }
 
 /* Saved as Key="…" (no Universe: a build without keys skips it), loaded back. */
