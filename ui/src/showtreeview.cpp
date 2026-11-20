@@ -252,9 +252,10 @@ public:
         if (row.isEmpty())
             return QRect();
         const int h = levelButtonHeight(), w = levelButtonWidth();
-        if (row.width() < indentation() + 2 * w + 80)
+        const int nameLeft = columnViewportPosition(0), nameWidth = columnWidth(0);
+        if (nameWidth < indentation() + 2 * w + 80)
             return QRect();
-        const int right = qMin(row.right(), viewport()->width()) - 4;
+        const int right = qMin(nameLeft + nameWidth, viewport()->width()) - 4;
         return QRect(right - (2 - which) * (w + 2) + 2, row.top() + (row.height() - h) / 2, w, h);
     }
 
