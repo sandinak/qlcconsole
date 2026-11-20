@@ -121,6 +121,11 @@ public:
      *  toolbar build and live from App when the preference changes. */
     void applyToolbarLabelMode();
 
+    /** The show's features (ShowFeatures, board Q293) on the plot: the Power
+     *  overlay only with the Power estimate on; the Rig Overview's operator
+     *  views only once the show has a follow spot. Follows them by itself. */
+    void applyShowFeatures();
+
     /** Normal public destructor */
     ~Monitor();
 
@@ -778,6 +783,9 @@ protected:
     int m_mapView = 0;       ///< current 2D-map overlay (0=Normal/1=Power/2=Stage; was m_viewCombo)
     QComboBox *m_povCombo;   ///< Top / Front / Side point of view
     QComboBox *m_overlayCombo = nullptr;   ///< Normal / Power / DMX / Network / Stage
+    /** The Rig Overview's View list: its Operator views come and go with the
+     *  show's follow spot (applyShowFeatures()). */
+    QPointer<QComboBox> m_overviewPlaneCombo;
     QComboBox *m_dmxViewCombo = nullptr;   ///< View selector shown in the DMX-grid toolbar
     /** Blocking (docs/design/BLOCKING.md): the footer's picker -- which
      *  blocking the plot shows and a drag edits -- and the banner over the

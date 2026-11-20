@@ -18,6 +18,7 @@
 #include <QDialogButtonBox>
 #include <QTreeWidget>
 #include <QPushButton>
+#include "showfeatures.h"
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QSet>
@@ -65,7 +66,7 @@ ShowStatusDialog::ShowStatusDialog(QWidget *parent)
     connect(m_box, &QDialogButtonBox::rejected, this, &QDialog::reject);
     // The design problems are Show Review's too (folded in by catalog id):
     // the whole review, with acceptance, is one click away.
-    if (ShowReviewPanel::canOpenShared())
+    if (ShowReviewPanel::canOpenShared() && ShowFeatures::isOn(ShowFeatures::Review))   // Q293
     {
         QPushButton *review = m_box->addButton(tr("Show Review…"), QDialogButtonBox::ActionRole);
         review->setObjectName(QStringLiteral("showStatusReview"));

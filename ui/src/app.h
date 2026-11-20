@@ -303,7 +303,13 @@ private:
     /** Run and Connections can't be hidden (Q262). */
     static bool tabIsRequired(const QString &label);
     void closeOpenedTab(int index);
+    /** View ▸ Workspace ▸ Tabs & Features… (Q262, Q293). */
     void slotChooseTabs();
+    /** The show's features (ShowFeatures) put on the window: chips, menu
+     *  items, and the tabs' own surfaces told to look again. */
+    void applyShowFeatures();
+    /** The four optional chips shown or hidden by footerChipWanted(). */
+    void applyFooterChips();
     /** Put the tab bar in step with the view: its tabs in its order, the
      *  rest put away (or left in their own windows). */
     void applyWorkspaceTabs();
@@ -377,11 +383,21 @@ public:
     /** Every theme and its name, in the order Settings ▸ Appearance lists them. */
     static QList<QPair<int, QString> > themeChoices();
 
-    /** The footer's optional chips (Settings ▸ Appearance), each shown or
-     *  hidden for this computer (QSettings workspace/showFooter*). */
+    /** The footer's optional chips, each shown or hidden for this computer
+     *  (QSettings workspace/showFooter*): set by a right-click on the footer
+     *  (footerChipMenu()) or in Settings ▸ Appearance -- one setting, so the
+     *  two never disagree. */
     enum FooterChip { FooterLoad, FooterPower, FooterGrandMaster, FooterSpeedMasters };
     bool footerChipShown(FooterChip chip) const;
     void setFooterChipShown(FooterChip chip, bool on);
+    /** The show's feature behind a chip (board Q293): off, the chip is not
+     *  shown whatever this computer's setting. */
+    static int footerChipFeature(FooterChip chip);
+    /** Shown on this computer and its feature on for the open show. */
+    bool footerChipWanted(FooterChip chip) const;
+    /** The footer's right-click: a tick for each chip, and Tabs &
+     *  Features…. Opened at @p globalPos when @p exec. */
+    class QMenu *footerChipMenu(const QPoint &globalPos, bool exec = true);
     /** The speed masters' beat (SpeedMastersFooter's settings) read again. */
     void reloadFooterBeatOptions();
 
@@ -859,6 +875,7 @@ private:
     QStringList m_customTabs;               ///< View ▸ Tabs…: the show's own set (empty: the view's)
     QStringList m_openTabs;                 ///< opened on demand, closable (Simple Desk)
     QAction *m_chooseTabsAction = nullptr;
+    QAction *m_venueAction = nullptr;       ///< View ▸ Venue… (hidden with Venues off)
 public slots:
     void slotReattachContext();
 

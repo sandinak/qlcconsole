@@ -10,6 +10,11 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Added
+- **Turn features off per show** (board Q293): **View ▸ Workspace ▸ Tabs & Features…** puts away Venues, the power estimate, the Grand Master, speed masters, engine load, Show Review, control surfaces or focus calls for one show (saved with it; everything on for older shows; the emergency stop is never hidden), the follow spot's views appear once the show has one, and a right-click on the footer shows or hides its chips (the same setting as Settings ▸ Appearance). See [Features](docs/features/getting-started.md#features).
+
 ## [0.5.1] - 2026-11-20
 
 0.5.1 is a stability and room-setup release. If you only read one line: a

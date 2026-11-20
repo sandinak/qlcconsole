@@ -102,7 +102,7 @@ the source by itself (or you pick one), follows locates and seeks, and
 freezes the look when the timecode stops. "Timeline 0 = current timecode"
 lines the show's zero up with wherever the clock is now. The footer's
 **MTC** chip says what's being followed and how healthy it is (rate,
-jitter, latency); **Load**, if you turn it on in Settings ▸ Appearance,
+jitter, latency); **Load**, if you turn it on (right-click the footer, **Engine Load**),
 says how much of each DMX tick the show uses.
 **Connections → Devices → Show control &amp; sync** shows the same source and health
 with the other outside links, and can pick the source too. The source

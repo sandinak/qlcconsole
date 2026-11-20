@@ -44,6 +44,7 @@
 #include <QPushButton>
 #include <QComboBox>
 #include <QLineEdit>
+#include "showfeatures.h"
 #include "treekeepview.h"
 #include "timecodecues.h"
 #include "timecodesource.h"
@@ -6556,6 +6557,9 @@ void ShowTreeView::fillCueFocusMenu(QMenu *m)
     self->setObjectName("stCueFocusThis");
     FocusMenu::setAvailable(self, cue == nullptr ? tr("Choose a cue first.") : FocusMenu::focusCueBlocked(m_doc),
                             FocusMenu::focusCueTip(m_doc));
+    // Focus calls off for the show (Q293): no venue focus here.
+    if (!ShowFeatures::isOn(ShowFeatures::FocusCalls))
+        return;
     // A look list's looks are fired from the VC, never GO'd onto: no venue focus cue.
     if (list != nullptr && !list->looks)
     {

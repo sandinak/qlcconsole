@@ -21,6 +21,7 @@
 #include <QAction>
 #include <QMenu>
 
+#include "showfeatures.h"
 #include "programmercontroller.h"
 #include "venuecorrections.h"
 #include "teachingsettings.h"
@@ -164,6 +165,11 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
         FocusCallsDialog::startVenueFocus(doc, parent);
     });
     venue->setObjectName(QStringLiteral("focusVenue"));
+    /* Focus calls and Venues each switched off for the show (Q293): their
+       items are not offered; Quick focus always is. */
+    const bool calls = ShowFeatures::isOn(ShowFeatures::FocusCalls);
+    const bool venuesOn = ShowFeatures::isOn(ShowFeatures::Venues);
+    venue->setVisible(calls);
     setAvailable(venue, venueFocusBlocked(doc),
                  venues->isActive() ? tr("Run the focus calls for %1, group by group to each point; "
                                          "corrections are saved for this venue, not the show")
@@ -175,20 +181,24 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
         FocusCallsDialog::run(doc, parent);
     });
     edit->setObjectName(QStringLiteral("focusEditCalls"));
+    edit->setVisible(calls);
     edit->setToolTip(tr("The show's focus calls, in the order they are run: groups, the point they "
                         "focus to, a note for the crew; and the venue"));
 
-    menu->addSeparator();
     /* The venue menu (Q150): the same one the app's venue chip and View ▸
        Venue… open, filled by the same code. */
-    QMenu *venuesMenu = menu->addMenu(tr("Venues"));
-    venuesMenu->setObjectName(QStringLiteral("focusVenuesMenu"));
-    venuesMenu->menuAction()->setObjectName(QStringLiteral("focusVenues"));
-    VenueMenu::fill(venuesMenu, doc, parent);
+    if (venuesOn)
+    {
+        menu->addSeparator();
+        QMenu *venuesMenu = menu->addMenu(tr("Venues"));
+        venuesMenu->setObjectName(QStringLiteral("focusVenuesMenu"));
+        venuesMenu->menuAction()->setObjectName(QStringLiteral("focusVenues"));
+        VenueMenu::fill(venuesMenu, doc, parent);
+    }
 
     /* Teaching mode (File, Show Settings) shows the scramble practice; a
        show that is not a teaching show doesn't list it. */
-    if (doc->teachingSettings()->enabled())
+    if (doc->teachingSettings()->enabled() && calls)
     {
         menu->addSeparator();
         QAction *practice = menu->addAction(tr("Practice (scramble)\342\200\246"), parent, [doc, parent]() {
@@ -205,6 +215,7 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
         FocusCallsDialog::exportAppliedReport(doc, parent);
     });
     report->setObjectName(QStringLiteral("focusReport"));
+    report->setVisible(venuesOn);       // a venue's focus
     setAvailable(report, reportBlocked(doc),
                  tr("A venue's focus, light by light: a PDF or web page to print, or a CSV for Lightwright"));
 }

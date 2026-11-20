@@ -232,12 +232,46 @@ Which of these you see depends on the view (below).
   the Grand Master and Ready.
 - **Everything** — every tab (Shows reads Timeline here too).
 
-**View ▸ Workspace ▸ Tabs…** picks which tabs the qlcconsole and
+**View ▸ Workspace ▸ Tabs & Features…** picks which tabs the qlcconsole and
 Everything views show and in what order: click a tab to show or hide it,
 drag it into place. Connections (where a dead output shows) is always
 first and Run (the pad's status) always last; they have no box to untick. The choice is saved with the show and comes back when it
 opens; a show without one gets its view's tabs, and Restore Defaults puts
-them back. Classic QLC+ keeps QLC+'s own tabs.
+them back (and turns every feature back on). Classic QLC+ keeps QLC+'s own tabs.
+
+### Features
+
+The same page turns **features** off and on for the show. A show that
+never tours needs no venue chip; a class that doesn't use a desk needs no
+Control Map. A feature turned off is **put away, not stopped**: its footer
+chip, its menu items and its pages go, the show keeps everything it had
+for it, and ticking it again brings it all back as it was. A show starts
+with every feature on, and an older show opens with every feature on. The
+choice is saved with the show, as the tabs are.
+
+| Feature | Off, it puts away |
+|---|---|
+| **Venues** | The venue chip, **View ▸ Venue…**, and **Focus ▸ Venues** and **Focus Report…** in the Lighting Studio |
+| **Power estimate** | The footer's power chip, the Fixtures tab's **Power** folder and right-click **Power** menu, and the plot's **Power** overlay |
+| **Grand Master** | The footer's Grand Master fader (the Grand Master still applies) |
+| **Speed masters** | The footer's speed masters (what follows them still does) |
+| **Engine load** | The footer's Load chip |
+| **Show Review** | The Review chip, its marks on Show Tree cues, the re-check after each change, and the readiness list's **Show Review…** button |
+| **Control surfaces** | The Control Map's triggers and encoder bank, **Learn Trigger…**, and the Run tab's **Pad** button while the pad isn't running the show |
+| **Focus calls** | **Venue Focus…** and **Edit Focus Calls…** (the Lighting Studio's Focus menu, the Run tab, the Show Tree's cue Focus menu) and **Make This a Venue Focus Cue** |
+
+Some things have no switch:
+
+- **The emergency stop is never hidden.** With Control surfaces off, the
+  **Emergency Stop…** button stays under the Control Map, a learned stop
+  still fires ALL OFF, and so does Control ▸ Panic. What a live control
+  does is never put away: a learned trigger still fires, and the Pad
+  button and footer chip stay while a pad runs the show.
+- **WLED** is always on.
+- **The follow spot** appears by itself: the Rig Overview's **Operator**
+  and **Operator plan** views and a target's **Follow-spot aim height**
+  are offered once a scene in the show has a Followspot effect, and not in
+  a show without one.
 
 ![The Classic QLC+ view](../images/views-classic.png)
 
@@ -354,7 +388,15 @@ the footer.
 Others appear when they have something to say: **Overrides** (amber)
 while something holds the rig, **MTC** once a timecode source is picked,
 the **power estimate** for a show with its power set up, and **Load** if
-you turn it on in Settings ▸ Appearance.
+you turn it on.
+
+**Right-click the footer** to show or hide its chips: **Grand Master**,
+**Speed Masters**, **Power Estimate** and **Engine Load** (off at first).
+This is this computer's choice, the same one as **Settings ▸ Appearance ▸
+Footer**, so the two always agree. A chip whose feature is off for the show
+is greyed there, with where to turn it back on; **Tabs & Features…** at
+the foot of the menu opens that page ([Features](#features)). Chips with a
+menu of their own (Review, the venue) keep it.
 
 **The footer** says whether the show is ready to run: **Ready**, or **Not
 ready (N)** in red — click it for the list (unpatched or clashing
@@ -604,8 +646,7 @@ says, whatever this is set to.
   times slower, and the screen lags behind.
 - In the Rig Overview, **Quality: Fast** draws a frame in about half the
   time of **Smooth**, and hiding layers you don't need leaves less to draw.
-- The footer's **Load** (turn it on in Settings ▸ Appearance ▸ **Show the
-  engine load**) shows how much of each 20 ms DMX tick the show uses; as
+- The footer's **Load** (right-click the footer and tick **Engine Load**) shows how much of each 20 ms DMX tick the show uses; as
   it nears the whole tick, the output can't keep time and starts to
   stutter.
 

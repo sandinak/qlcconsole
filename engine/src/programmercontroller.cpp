@@ -5615,6 +5615,14 @@ bool ProgrammerController::endLiveFollow(quint32 next)
     return false;
 }
 
+bool ProgrammerController::showHasFollowSpot() const
+{
+    for (Function *f : m_doc->functionsByType(Function::SceneType))
+        if (hasFollowSpotLook(f->id()))
+            return true;
+    return false;
+}
+
 bool ProgrammerController::hasFollowSpotLook(quint32 sceneId) const
 {
     const Scene *scene = qobject_cast<const Scene *>(m_doc->function(sceneId));

@@ -37,6 +37,7 @@
 #include "focussession.h"
 #include "focusmenu.h"
 #include "venuemenu.h"
+#include "showfeatures.h"
 #include "doc.h"
 
 namespace
@@ -396,6 +397,8 @@ void VenueChip::setAlwaysShown(bool on)
 
 bool VenueChip::wanted() const
 {
+    if (!ShowFeatures::isOn(ShowFeatures::Venues))      // off for the show (Q293)
+        return false;
     VenueCorrections *vc = venuesOf(m_doc);
     return m_alwaysShown || vc->isActive() || !vc->venueNames().isEmpty();
 }

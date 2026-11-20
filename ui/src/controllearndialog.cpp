@@ -28,6 +28,7 @@
 #include <QLabel>
 #include <QMenu>
 
+#include "showfeatures.h"
 #include "controllearndialog.h"
 #include "inputoutputmap.h"
 #include "keytriggers.h"
@@ -153,6 +154,11 @@ ControlLearnDialog::~ControlLearnDialog()
 QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Target &target, QWidget *parent)
 {
     if (menu == nullptr || doc == nullptr || !target.isValid())
+        return nullptr;
+    /* Control surfaces off for the show (Q293): not offered. The emergency
+       stop is learned from its own button, never from here, and stays. */
+    if (!ShowFeatures::isOn(ShowFeatures::ControlSurfaces)
+        && target.type != ControlMap::EmergencyStopTarget)
         return nullptr;
     const ControlMap::Binding *b = doc->controlMap()->binding(target);
     QString text = tr("Learn Trigger…");

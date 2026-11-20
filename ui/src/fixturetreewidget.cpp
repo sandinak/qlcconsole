@@ -30,6 +30,7 @@
 
 #include <QMap>
 #include <QFont>
+#include "showfeatures.h"
 #include "patchlist.h"
 #include "treekeepview.h"
 #include "fixturetreewidget.h"
@@ -1333,7 +1334,8 @@ void FixtureTreeWidget::updateTree()
     // Universes folder below. A source with 0 or 1 circuits feeds fixtures
     // directly (mirrors the "(direct)" case in FixtureManager's right-click
     // circuit menu); a source with 2+ circuits fans out into circuit nodes.
-    if (m_showPower == true)
+    // Power estimate off for the show (Q293): no Power folder; its sources stay.
+    if (m_showPower == true && ShowFeatures::isOn(ShowFeatures::Power))
     {
         const QList<PowerSource>& sources = m_doc->powerDistribution()->sources();
 

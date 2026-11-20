@@ -109,7 +109,7 @@ Windows computer.
 
 ## How to tell it worked
 
-The footer's **Engine Load** chip (Settings ▸ Appearance) shows how long
+The footer's **Engine Load** chip (right-click the footer to turn it on) shows how long
 each frame takes to compute. Late frames, when the computer held the timer
 up, are what this page reduces. The measurements behind it are in
 `docs/performance.md` in the source.

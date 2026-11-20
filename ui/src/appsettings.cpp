@@ -35,6 +35,7 @@
 #include <QFormLayout>
 #include <QTabWidget>
 
+#include "showfeatures.h"
 #include "appsettings.h"
 #include "controllertestdialog.h"
 #include "showtreeview.h"
@@ -149,11 +150,27 @@ AppSettings::AppSettings(App *app, QWidget *parent)
             { App::FooterPower,        "settingsFooterPower",        QT_TR_NOOP("Show the power estimate") },
             { App::FooterGrandMaster,  "settingsFooterGrandMaster",  QT_TR_NOOP("Show the grand master") },
             { App::FooterSpeedMasters, "settingsFooterSpeedMasters", QT_TR_NOOP("Show the speed masters") } };
+        /* The same setting as the footer's right-click (Q293): it is named
+           first, as the quicker way. */
+        QLabel *footHint = new QLabel(tr("Right-click the footer to show or hide a chip; the same "
+                                         "choice as here."), footGroup);
+        footHint->setObjectName(QStringLiteral("settingsFooterHint"));
+        footHint->setWordWrap(true);
+        footHint->setStyleSheet(QStringLiteral("color: gray;"));
+        footLayout->addWidget(footHint);
         for (const auto &c : chips)
         {
             QCheckBox *box = new QCheckBox(tr(c.label), footGroup);
             box->setObjectName(QString::fromLatin1(c.name));
             box->setChecked(m_app->footerChipShown(c.chip));
+            const ShowFeatures::Feature f = ShowFeatures::Feature(App::footerChipFeature(c.chip));
+            if (!ShowFeatures::isOn(f))
+            {
+                // Off for the show: its switch is the one that brings it back.
+                box->setEnabled(false);
+                box->setToolTip(tr("%1 is off for this show: View ▸ Workspace ▸ Tabs & Features…")
+                                    .arg(ShowFeatures::label(f)));
+            }
             footLayout->addWidget(box);
             m_footerChecks.insert(int(c.chip), box);
         }
