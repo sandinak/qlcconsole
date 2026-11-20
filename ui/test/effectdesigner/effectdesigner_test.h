@@ -39,6 +39,10 @@ private slots:
      *  its own Colour looks: the colour line and the swatches work there too
      *  (no Build scene), and the designer hands back both. */
     void theDesignerHasFrontAndBehindSwatches();
+    /** Front and Behind set on an effect layer in a Show Tree cue are kept,
+     *  saved with the show, loaded, found again when the layer is reopened
+     *  (both in the designer's Its own row), and play front then backfill. */
+    void frontAndBehindSurviveSaveAndLoad();
 
     /** The bench: a new effect is a hidden draft played by a hidden scene
      *  on the Try on groups; Save as palette names and files it, and the

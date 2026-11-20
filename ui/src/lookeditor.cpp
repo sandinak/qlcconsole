@@ -994,7 +994,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QHBoxLayout *pickedRow = new QHBoxLayout();
     m_effectPickedLabel = new QLabel(effectPage);
     m_effectPickedLabel->setObjectName(QStringLiteral("effectPicked"));
-    m_effectPickedLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    { QFont bf = m_effectPickedLabel->font(); bf.setBold(true); m_effectPickedLabel->setFont(bf); }
     pickedRow->addWidget(m_effectPickedLabel);
     // What it is and how to program it: on hover, and a window on a click
     // ("we can have a [?] button to mouse over or pop a window").
@@ -3636,7 +3636,7 @@ void LookEditor::rebuildEffectDynWidget()
     if (!paldefs.isEmpty())
     {
         QLabel *hdrP = new QLabel(tr("Palette Bindings"), m_effectDynWidget);
-        hdrP->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdrP->font(); bf.setBold(true); hdrP->setFont(bf); }
         dv->addWidget(hdrP);
 
         // Explain the fallthrough behaviour so the programmer knows what unbound slots do.
@@ -3826,7 +3826,7 @@ void LookEditor::rebuildEffectDynWidget()
     {
         const MonitorProperties *mp = m_doc->monitorProperties();
         QLabel *hdrT = new QLabel(tr("Target Bindings"), m_effectDynWidget);
-        hdrT->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdrT->font(); bf.setBold(true); hdrT->setFont(bf); }
         dv->addWidget(hdrT);
 
         QFormLayout *tform = new QFormLayout();
@@ -3885,7 +3885,7 @@ void LookEditor::rebuildEffectDynWidget()
     if (!pdefs.isEmpty())
     {
         QLabel *hdr = new QLabel(tr("Parameters"), m_effectDynWidget);
-        hdr->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdr->font(); bf.setBold(true); hdr->setFont(bf); }
         dv->addWidget(hdr);
 
         QFormLayout *form = new QFormLayout();
@@ -4340,7 +4340,7 @@ void LookEditor::rebuildEffectDynWidget()
     if (tmpScript.takesHostSpread())
     {
         QLabel *hdr = new QLabel(tr("Spread"), m_effectDynWidget);
-        hdr->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdr->font(); bf.setBold(true); hdr->setFont(bf); }
         dv->addWidget(hdr);
         QWidget *row = new QWidget(m_effectDynWidget);
         row->setObjectName(QStringLiteral("effectSpread"));
@@ -4684,7 +4684,7 @@ void LookEditor::rebuildEffectDynWidget()
     if (!idefs.isEmpty() && !systemBound)
     {
         QLabel *hdr2 = new QLabel(tr("Input bindings"), m_effectDynWidget);
-        hdr2->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdr2->font(); bf.setBold(true); hdr2->setFont(bf); }
         dv->addWidget(hdr2);
         dv->addWidget(new QLabel(
             tr("Connect a MIDI/OSC/HID input channel to each slot.\n"

@@ -218,13 +218,21 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_ownDimmerCombo->setObjectName(QStringLiteral("edOwnDimmer"));
     own->addWidget(new QLabel(tr("Colour"), right));
     own->addWidget(m_ownColourCombo, 1);
+    // The second own colour (the Behind of Front and Behind), once there is a first.
+    m_ownColour2Combo = new QComboBox(right);
+    m_ownColour2Combo->setObjectName(QStringLiteral("edOwnColour2"));
+    m_ownColour2Combo->setToolTip(tr("The second colour of the effect (Front and Behind's Behind)"));
+    m_ownColour2Label = new QLabel(tr("then"), right);
+    own->addWidget(m_ownColour2Label);
+    own->addWidget(m_ownColour2Combo, 1);
     own->addWidget(new QLabel(tr("Dimmer"), right));
     own->addWidget(m_ownDimmerCombo, 1);
     rv->addLayout(own);
     auto ownPicked = [this]() {
-        const quint32 before = m_ownColour;
         m_ownColour = m_ownColourCombo->currentData().toUInt();
-        if (m_ownColour != before && m_ownColour2 == m_ownColour)
+        m_ownColour2 = m_ownColour == QLCPalette::invalidId() ? QLCPalette::invalidId()
+                       : m_ownColour2Combo->currentData().toUInt();
+        if (m_ownColour2 == m_ownColour)
             m_ownColour2 = QLCPalette::invalidId();
         m_ownDimmer = m_ownDimmerCombo->currentData().toUInt();
         QList<QColor> colours;
@@ -235,6 +243,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
         refreshPreview(false);
     };
     connect(m_ownColourCombo, QOverload<int>::of(&QComboBox::activated), this, ownPicked);
+    connect(m_ownColour2Combo, QOverload<int>::of(&QComboBox::activated), this, ownPicked);
     connect(m_ownDimmerCombo, QOverload<int>::of(&QComboBox::activated), this, ownPicked);
 
     split->addWidget(m_browser);
@@ -774,6 +783,10 @@ void EffectDesigner::fillOwnCombos()
         combo->setCurrentIndex(at < 0 ? 0 : at);
     };
     fill(m_ownColourCombo, QLCPalette::Color, m_ownColour);
+    fill(m_ownColour2Combo, QLCPalette::Color, m_ownColour2);
+    m_ownColour2Combo->setItemText(0, tr("none"));
+    m_ownColour2Combo->setVisible(m_ownColour != QLCPalette::invalidId());
+    m_ownColour2Label->setVisible(m_ownColour != QLCPalette::invalidId());
     fill(m_ownDimmerCombo, QLCPalette::Dimmer, m_ownDimmer);
 }
 

@@ -327,7 +327,8 @@ private:
     EffectBrowser *m_browser;
     QComboBox *m_effectCombo;   ///< the Look Editor's, which the browser mirrors
     LookEditor *m_look;
-    QComboBox *m_ownColourCombo, *m_ownDimmerCombo;
+    QComboBox *m_ownColourCombo, *m_ownColour2Combo = nullptr, *m_ownDimmerCombo;
+    QLabel *m_ownColour2Label = nullptr;
     QPushButton *m_cancelBtn, *m_updateBtn, *m_savePalBtn, *m_keepBtn;
     QToolButton *m_makeLayerBtn = nullptr;
     QLabel *m_hint;

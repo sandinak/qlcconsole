@@ -21,7 +21,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   block of settings has a slightly tinted background, alternating from one
   effect to the next, so you see where one ends and the next begins. An
   effect that takes colours now says which it plays: the Colour looks under
-  it, the look's own, or its own.
+  it, the look's own, or its own. In the Show Tree's effect page the same
+  swatches set the layer's two own colours. The settings' headings take the
+  theme's text colour (they were near-black on a dark theme).
 
 ## [0.5.1] - 2026-11-20
 
