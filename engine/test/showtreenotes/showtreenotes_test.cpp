@@ -475,7 +475,7 @@ void ShowTreeNotes_Test::editingASongsNumberCarriesItsSectionToTheNewKey()
     for (quint32 id : { song, verse })
     {
         Cue c = *st->cue(id);
-        c.number = fin.key + c.number.mid(c.number.indexOf('.'));
+        c.number = fin.key + (id == song ? ".5.1" : ".5.2");
         QVERIFY(st->setCue(c));
     }
     st->endBatch(true);
