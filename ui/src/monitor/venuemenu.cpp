@@ -397,10 +397,14 @@ void VenueChip::setAlwaysShown(bool on)
 
 bool VenueChip::wanted() const
 {
-    if (!ShowFeatures::isOn(ShowFeatures::Venues))      // off for the show (Q293)
-        return false;
     VenueCorrections *vc = venuesOf(m_doc);
-    return m_alwaysShown || vc->isActive() || !vc->venueNames().isEmpty();
+    /* A venue applied is on the rig: said whatever the switch (Q293), so a
+       room's corrections are never live unseen. */
+    if (vc->isActive())
+        return true;
+    if (!ShowFeatures::isOn(ShowFeatures::Venues))      // off for the show
+        return false;
+    return m_alwaysShown || !vc->venueNames().isEmpty();
 }
 
 void VenueChip::refreshSoon()

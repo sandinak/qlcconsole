@@ -237,7 +237,8 @@ Everything views show and in what order: click a tab to show or hide it,
 drag it into place. Connections (where a dead output shows) is always
 first and Run (the pad's status) always last; they have no box to untick. The choice is saved with the show and comes back when it
 opens; a show without one gets its view's tabs, and Restore Defaults puts
-them back (and turns every feature back on). Classic QLC+ keeps QLC+'s own tabs.
+them back (and turns every feature back on). Classic QLC+ keeps QLC+'s own
+tabs: there the tab list is greyed, and the features below still switch.
 
 ### Features
 
@@ -251,22 +252,27 @@ choice is saved with the show, as the tabs are.
 
 | Feature | Off, it puts away |
 |---|---|
-| **Venues** | The venue chip, **View ▸ Venue…**, and **Focus ▸ Venues** and **Focus Report…** in the Lighting Studio |
-| **Power estimate** | The footer's power chip, the Fixtures tab's **Power** folder and right-click **Power** menu, and the plot's **Power** overlay |
+| **Venues** | The venue chip (while no venue is applied), **View ▸ Venue…**, and **Focus ▸ Venues** and **Focus Report…** in the Lighting Studio |
+| **Power Estimate** | The footer's power chip, the **Power** folder in the Fixtures tab's tree and the fixtures' right-click **Power** menu, and the plot's **Power** overlay |
 | **Grand Master** | The footer's Grand Master fader (the Grand Master still applies) |
-| **Speed masters** | The footer's speed masters (what follows them still does) |
-| **Engine load** | The footer's Load chip |
+| **Speed Masters** | The footer's speed masters (what follows them still does) |
+| **Engine Load** | The footer's Load chip |
 | **Show Review** | The Review chip, its marks on Show Tree cues, the re-check after each change, and the readiness list's **Show Review…** button |
-| **Control surfaces** | The Control Map's triggers and encoder bank, **Learn Trigger…**, and the Run tab's **Pad** button while the pad isn't running the show |
-| **Focus calls** | **Venue Focus…** and **Edit Focus Calls…** (the Lighting Studio's Focus menu, the Run tab, the Show Tree's cue Focus menu) and **Make This a Venue Focus Cue** |
+| **Control Surfaces** | The Control Map's triggers and encoder bank, **Learn Trigger…**, and the Run tab's **Pad** button while the pad has nothing to say |
+| **Focus Calls** | **Venue Focus…** and **Edit Focus Calls…** (the Lighting Studio's Focus menu, the Run tab, the Show Tree's cue Focus menu) and **Make This a Venue Focus Cue** |
 
 Some things have no switch:
 
-- **The emergency stop is never hidden.** With Control surfaces off, the
+- **A live state is never hidden.** The Grand Master below full, or a
+  speed master away from its tempo, is said in the footer (**GM 30%**,
+  **Speed 1 ×0.50**) while its own chip is put away, by the feature or by
+  the footer's right-click. A venue applied keeps its chip with Venues off.
+  The Run tab's **Pad** button stays while the pad has a state to say
+  (running the show, **Stopped** after the emergency stop).
+- **The emergency stop is never hidden.** With Control Surfaces off, the
   **Emergency Stop…** button stays under the Control Map, a learned stop
-  still fires ALL OFF, and so does Control ▸ Panic. What a live control
-  does is never put away: a learned trigger still fires, and the Pad
-  button and footer chip stay while a pad runs the show.
+  still fires ALL OFF. What a live control does is never put away: a
+  learned trigger still fires.
 - **WLED** is always on.
 - **The follow spot** appears by itself: the Rig Overview's **Operator**
   and **Operator plan** views and a target's **Follow-spot aim height**
@@ -396,7 +402,8 @@ This is this computer's choice, the same one as **Settings ▸ Appearance ▸
 Footer**, so the two always agree. A chip whose feature is off for the show
 is greyed there, with where to turn it back on; **Tabs & Features…** at
 the foot of the menu opens that page ([Features](#features)). Chips with a
-menu of their own (Review, the venue) keep it.
+menu of their own (Review, the venue) keep it. In Classic QLC+ it offers
+only the Grand Master, the one of the four Classic's footer shows.
 
 **The footer** says whether the show is ready to run: **Ready**, or **Not
 ready (N)** in red — click it for the list (unpatched or clashing

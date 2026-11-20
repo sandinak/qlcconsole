@@ -121,6 +121,7 @@
 #include "testchannels.h"
 #include "fixturerest.h"
 #include "showfeatures.h"
+#include "speedmasters.h"
 #include "shutterautoopen.h"
 #include "fixture.h"
 #include "qlcchannel.h"
@@ -5327,7 +5328,7 @@ QList<QWidget *> App::statusChipsByPriority() const
         goHeld ? m_statusStandby : nullptr,
         m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusShowOnlyLabel,
         m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
-        m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
+        m_statusGrandMasterBox, m_statusMastersHeldLabel, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
         goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
         m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
@@ -5449,6 +5450,7 @@ void App::slotFooterGrandMasterValueChanged(uchar value)
     if (m_statusGrandMasterValueLabel != NULL)
         m_statusGrandMasterValueLabel->setText(
             QString("%1%").arg(qRound(double(value) * 100.0 / 255.0)));
+    updateMastersHeldChip();
 }
 
 void App::slotControlPanic()
@@ -5956,8 +5958,9 @@ void App::closeOpenedTab(int index)
 
 void App::slotChooseTabs()
 {
-    if (m_workspaceView == ClassicView)
-        return;
+    /* Classic keeps QLC+'s own tabs (its list is greyed), but a show's
+       features can always be turned back on from here (Q293). */
+    const bool classic = m_workspaceView == ClassicView;
     QDialog dlg(this);
     dlg.setObjectName(QStringLiteral("chooseTabsDialog"));
     dlg.setWindowTitle(tr("Tabs & Features"));
@@ -5966,9 +5969,13 @@ void App::slotChooseTabs()
                                  "Connections and Run are always there. Saved with the show.\n"
                                  "Simple Desk opens from Window ▸ Simple Desk (⇧⌘D)."), &dlg);
     hint->setWordWrap(true);
+    if (classic)
+        hint->setText(tr("Classic QLC+ keeps QLC+'s own tabs: switch to the qlcconsole or Everything "
+                         "view (View ▸ Workspace) to choose them. The features below work in every view."));
     col->addWidget(hint);
     QListWidget *list = new QListWidget(&dlg);
     list->setObjectName(QStringLiteral("chooseTabsList"));
+    list->setEnabled(!classic);
     list->setDragDropMode(QAbstractItemView::InternalMove);
     col->addWidget(list);
     const QStringList now = effectiveViewTabs();
@@ -6064,8 +6071,9 @@ void App::slotChooseTabs()
     connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     connect(box->button(QDialogButtonBox::RestoreDefaults), &QPushButton::clicked, &dlg,
-            [this, &dlg]() {
-        setCustomTabs(QStringList());
+            [this, &dlg, classic]() {
+        if (!classic)
+            setCustomTabs(QStringList());
         if (!ShowFeatures::instance()->offSet().isEmpty())
         {
             ShowFeatures::instance()->reset();
@@ -6086,6 +6094,8 @@ void App::slotChooseTabs()
         if (m_doc != NULL)
             m_doc->setModified();
     }
+    if (classic)
+        return;
     QStringList chosen;
     for (int i = 0; i < list->count(); ++i)
     {
@@ -6305,11 +6315,11 @@ void App::updateWorkspaceViewActions()
 {
     foreach (QAction *a, m_workspaceViewActions)
         a->setChecked(a->data().toInt() == int(m_workspaceView));
-    if (m_chooseTabsAction != nullptr)      // Classic stays stock QLC+
+    if (m_chooseTabsAction != nullptr)      // Classic keeps QLC+'s tabs; its features still switch
     {
-        m_chooseTabsAction->setEnabled(m_workspaceView != ClassicView);
+        m_chooseTabsAction->setEnabled(true);
         m_chooseTabsAction->setToolTip(m_workspaceView == ClassicView
-            ? tr("Classic keeps QLC+'s own tabs; switch view to choose")
+            ? tr("Turn features on or off for this show (Classic keeps QLC+'s own tabs)")
             : tr("Choose and order the tabs along the bottom, and turn features on or off; saved "
                  "with the show"));
     }
@@ -7325,8 +7335,10 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     // The view it was saved in (absent: an older show; see below).
     const QString viewKey = doc.attributes().value(KXMLQLCWorkspaceView).toString();
     const QString tabsAttr = doc.attributes().value(QStringLiteral("Tabs")).toString();
-    // The features turned off (Q293); none named, every one is on.
-    const QString featuresOffAttr = doc.attributes().value(QStringLiteral("FeaturesOff")).toString();
+    /* The features turned off (Q293); none named, every one is on. Set now,
+       before the show's parts are read, so nothing reads the last show's. */
+    ShowFeatures::instance()->setFromOffAttribute(
+        doc.attributes().value(QStringLiteral("FeaturesOff")).toString());
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
     m_showTreeNoticeDismissed = false;      // P45: back each time the show opens
@@ -7461,7 +7473,6 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
         if (!known)
             view = defaultViewForLoadedShow();
         m_customTabs.clear();
-        ShowFeatures::instance()->setFromOffAttribute(featuresOffAttr);
         const QStringList all = workspaceViewTabs(EverythingView), keys = tabKeys();
         foreach (const QString &k, tabsAttr.split(QLatin1Char('|'), Qt::SkipEmptyParts))
             if (keys.contains(k))
@@ -8073,12 +8084,68 @@ void App::applyFooterChips()
     // powerEstimateChanged repopulates it (Design mode only).
     if (m_statusPowerLabel != NULL && (!footerChipWanted(FooterPower) || m_classicChrome))
         m_statusPowerLabel->hide();
+    else if (m_statusPowerLabel != NULL && m_statusPowerLabel->isHidden()
+             && !m_statusPowerLabel->text().isEmpty() && m_doc != NULL && m_doc->mode() == Doc::Design
+             && m_doc->powerDistribution() != NULL && !m_doc->powerDistribution()->sources().isEmpty())
+        m_statusPowerLabel->show();     // back on: the last estimate at once, not at the next one
     if (m_statusGrandMasterBox != NULL)
         m_statusGrandMasterBox->setVisible(footerChipWanted(FooterGrandMaster));
     if (m_statusSpeedMasters != NULL)
         m_statusSpeedMasters->setVisible(footerChipWanted(FooterSpeedMasters) && !m_classicChrome);
+    updateMastersHeldChip();
     if (m_statusFitTimer != nullptr)
         m_statusFitTimer->start();
+}
+
+void App::updateMastersHeldChip()
+{
+    if (m_statusMastersHeldLabel == nullptr || m_doc == NULL)
+        return;
+    QStringList parts, tip;
+    const bool gmShown = m_statusGrandMasterBox != nullptr && !m_statusGrandMasterBox->isHidden();
+    const uchar gm = m_doc->inputOutputMap()->grandMasterValue();
+    if (!gmShown && gm < 255)
+    {
+        parts << tr("GM %1%").arg(qRound(double(gm) * 100.0 / 255.0));
+        tip << tr("The Grand Master is at %1%, below full: everything sent is scaled by it.")
+                   .arg(qRound(double(gm) * 100.0 / 255.0));
+    }
+    const bool speedShown = m_statusSpeedMasters != nullptr && !m_statusSpeedMasters->isHidden();
+    if (!speedShown && m_doc->speedMasters() != nullptr)
+    {
+        SpeedMasters *sm = m_doc->speedMasters();
+        for (int i = 0; i < sm->count(); ++i)
+        {
+            const QString name = sm->name(i).isEmpty() ? tr("Speed %1").arg(i + 1) : sm->name(i);
+            if (sm->isPaused(i))
+                parts << tr("%1 Paused").arg(name);
+            else if (!qFuzzyCompare(sm->rate(i), 1.0))
+                parts << tr("%1 ×%2").arg(name).arg(sm->rate(i), 0, 'f', 2);
+            else
+                continue;
+            tip << tr("Speed master %1 is away from its set tempo.").arg(name);
+        }
+    }
+    if (parts.isEmpty())
+    {
+        if (!m_statusMastersHeldLabel->isHidden())
+        {
+            m_statusMastersHeldLabel->hide();
+            if (m_statusFitTimer != nullptr)
+                m_statusFitTimer->start();
+        }
+        return;
+    }
+    m_statusMastersHeldLabel->setText(parts.join(QStringLiteral(" · ")));
+    m_statusMastersHeldLabel->setToolTip(tip.join(QLatin1Char('\n')) + QStringLiteral("\n\n")
+        + tr("Its own footer chip is put away (right-click the footer, or View ▸ Workspace ▸ Tabs & "
+             "Features…); this stays while it is held, so a live master is never hidden."));
+    if (m_statusMastersHeldLabel->isHidden())
+    {
+        m_statusMastersHeldLabel->show();
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+    }
 }
 
 QMenu *App::footerChipMenu(const QPoint &globalPos, bool exec)
@@ -8094,6 +8161,10 @@ QMenu *App::footerChipMenu(const QPoint &globalPos, bool exec)
         { FooterLoad,         "footerChipLoad",         QT_TR_NOOP("Engine Load") } };
     for (const auto &c : chips)
     {
+        // Classic QLC+'s footer shows only the Grand Master (Q78): no tick
+        // for a chip it never shows.
+        if (m_classicChrome && c.chip != FooterGrandMaster)
+            continue;
         QAction *a = menu->addAction(tr(c.label));
         a->setObjectName(QString::fromLatin1(c.name));
         a->setCheckable(true);
@@ -9027,6 +9098,13 @@ void App::initStatusBar()
         gmBox->setVisible(footerChipWanted(FooterGrandMaster));   // the footer's right-click, Settings ▸ Appearance
         sb->addWidget(gmBox, 0);
     }
+    m_statusMastersHeldLabel = new QLabel(this);
+    m_statusMastersHeldLabel->setObjectName(QStringLiteral("footerMastersHeld"));
+    m_statusMastersHeldLabel->setStyleSheet(QStringLiteral("QLabel { color: #b9770e; font-weight: bold; }"));
+    m_statusMastersHeldLabel->hide();
+    sb->addWidget(m_statusMastersHeldLabel, 0);
+    if (m_doc != NULL)
+        connect(m_doc->speedMasters(), &SpeedMasters::changed, this, [this](int) { updateMastersHeldChip(); });
 
     // The speed masters beside the GM: each master's tempo, lit on its beat;
     // a click opens the Speed Masters window at it.

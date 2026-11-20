@@ -92,13 +92,13 @@ QString ShowFeatures::label(Feature f)
     switch (f)
     {
     case Venues:          return tr("Venues");
-    case Power:           return tr("Power estimate");
+    case Power:           return tr("Power Estimate");
     case GrandMaster:     return tr("Grand Master");
-    case SpeedMasters:    return tr("Speed masters");
-    case EngineLoad:      return tr("Engine load");
+    case SpeedMasters:    return tr("Speed Masters");
+    case EngineLoad:      return tr("Engine Load");
     case Review:          return tr("Show Review");
-    case ControlSurfaces: return tr("Control surfaces");
-    case FocusCalls:      return tr("Focus calls");
+    case ControlSurfaces: return tr("Control Surfaces");
+    case FocusCalls:      return tr("Focus Calls");
     default:              return QString();
     }
 }
@@ -109,14 +109,16 @@ QString ShowFeatures::description(Feature f)
     {
     case Venues:
         return tr("The venue chip, View ▸ Venue…, and the Lighting Studio's Focus ▸ Venues and "
-                  "Focus Report…");
+                  "Focus Report…. A venue applied is still said in the footer");
     case Power:
-        return tr("The footer's power estimate, the Fixtures tab's Power pane and Power menu, and "
-                  "the plot's Power overlay");
+        return tr("The footer's power estimate, the Fixtures tab's Power folder and its right-click "
+                  "Power menu, and the plot's Power overlay");
     case GrandMaster:
-        return tr("The footer's Grand Master fader (the Grand Master itself still works)");
+        return tr("The footer's Grand Master fader. The Grand Master still works, and while it is below "
+                  "full the footer still says so");
     case SpeedMasters:
-        return tr("The footer's speed masters (what follows them still does)");
+        return tr("The footer's speed masters. What follows them still does, and a master away from "
+                  "its tempo is still said in the footer");
     case EngineLoad:
         return tr("The footer's engine load");
     case Review:
@@ -124,7 +126,7 @@ QString ShowFeatures::description(Feature f)
                   "and the readiness dialog's Show Review… button");
     case ControlSurfaces:
         return tr("The Control Map's triggers and encoder bank, Learn Trigger…, and the Run tab's "
-                  "Pad button while the pad is not running. The emergency stop always stays");
+                  "Pad button while the pad has nothing to say. The emergency stop always stays");
     case FocusCalls:
         return tr("Venue Focus…, Edit Focus Calls… and a venue focus cue, in the Lighting Studio, "
                   "the Show Tree and the Run tab");

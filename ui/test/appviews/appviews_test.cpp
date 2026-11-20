@@ -135,6 +135,8 @@
 #include "showstatus.h"
 #include "inputdevicenotices.h"
 #include "speedmastersfooter.h"
+#include "speedmasters.h"
+#include "padrun.h"
 #include "fixturetreewidget.h"
 #include "outputrulekeeper.h"
 #include "outputrulesdialog.h"
@@ -3403,11 +3405,11 @@ void AppViews_Test::runAndConnectionsCantBeUnchecked()
     m_app->setCustomTabs({ "Fixtures" });
     QVERIFY(barTexts(m_app).contains("Run") && barTexts(m_app).contains("Connections"));
 
-    // Classic: the dialog isn't offered.
+    // Classic: offered for the features (Q293); its tab list is greyed.
     m_app->setCustomTabs(QStringList());
     m_app->setWorkspaceView(App::ClassicView);
-    QVERIFY(!act->isEnabled());
-    QCOMPARE(act->toolTip(), QString("Classic keeps QLC+'s own tabs; switch view to choose"));
+    QVERIFY(act->isEnabled());
+    QCOMPARE(act->toolTip(), QString("Turn features on or off for this show (Classic keeps QLC+'s own tabs)"));
     m_app->setWorkspaceView(App::ConsoleView);
     m_app->setTabLabelMode(App::TabIconAndText);
     m_app->doc()->resetModified();
@@ -3416,6 +3418,8 @@ void AppViews_Test::runAndConnectionsCantBeUnchecked()
 /* View ▸ Workspace ▸ Tabs & Features…, as a person uses it: tick or untick
    the features named (by their row), then OK. False when the page has no
    features list. */
+static QMenu *rightClickFooter(App *app);
+
 static bool chooseFeatures(App *app, const QMap<QString, bool> &want)
 {
     QAction *act = app->menuBar()->findChild<QAction *>("viewTabsAction");
@@ -3445,8 +3449,8 @@ static bool chooseFeatures(App *app, const QMap<QString, bool> &want)
     return found;
 }
 
-static const QStringList kFeatureRows = { "Venues", "Power estimate", "Grand Master", "Speed masters",
-                                          "Engine load", "Show Review", "Control surfaces", "Focus calls" };
+static const QStringList kFeatureRows = { "Venues", "Power Estimate", "Grand Master", "Speed Masters",
+                                          "Engine Load", "Show Review", "Control Surfaces", "Focus Calls" };
 
 static QMap<QString, bool> allFeatures(bool on)
 {
@@ -3514,7 +3518,17 @@ void AppViews_Test::eachFeatureSwitchHidesWhatItOwns()
         QCOMPARE(m_app->m_statusSpeedMasters->isHidden(), !on);
         QCOMPARE(m_app->m_statusLoadLabel->isHidden(), !on);
         // Power: the plot's overlay (the footer chip waits for an estimate)
+        // and the Fixtures tab's Power folder.
         QCOMPARE(overlay->findText("Power") >= 0, on);
+        {
+            bool folder = false;
+            FixtureManager *fm = FixtureManager::instance();
+            QVERIFY(fm != nullptr);
+            for (FixtureTreeWidget *t : fm->findChildren<FixtureTreeWidget *>())
+                for (int i = 0; i < t->topLevelItemCount(); ++i)
+                    folder = folder || t->topLevelItem(i)->text(0) == QStringLiteral("Power");
+            QCOMPARE(folder, on);
+        }
         // Show Review: its chip after a run
         doc->showReview()->run();
         QCOMPARE(review->isHidden(), !on);
@@ -3607,8 +3621,6 @@ void AppViews_Test::theEmergencyStopSurvivesEverySwitchOff()
         cm->removeBinding(ControlMap::emergencyStop());
         m_app->clearDocument();
     });
-    // Control ▸ Panic as it was (QLC+ enables it while something runs).
-    const bool panicEnabled = m_app->m_controlPanicAction->isEnabled();
     QVERIFY(chooseFeatures(m_app, allFeatures(false)));
     // The button under the Control Map, shown and working.
     ControlMapPanel panel(doc);
@@ -3618,16 +3630,159 @@ void AppViews_Test::theEmergencyStopSurvivesEverySwitchOff()
     QVERIFY(stop != nullptr);
     QVERIFY(stop->isVisibleTo(&panel));
     QVERIFY(stop->isEnabled());
-    // Control ▸ Panic.
-    QVERIFY(m_app->m_controlPanicAction->isVisible());
-    QCOMPARE(m_app->m_controlPanicAction->isEnabled(), panicEnabled);
-    // A learned stop still fires ALL OFF.
+    // A learned stop still fires ALL OFF: what plays stops.
+    Scene *look = new Scene(doc);
+    look->setName("Playing");
+    QVERIFY(doc->addFunction(look));
+    look->start(doc->masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(look->isRunning(), 3000);
     cm->setBinding({ 0, 188, ControlMap::emergencyStop(), ControlMap::StartOnly });
     QSignalSpy fired(cm, &ControlMap::fired);
     cm->handleInput(0, 188, 127);
     QCOMPARE(fired.count(), 1);
     QCOMPARE(fired.first().first().toString(), QString("ALL OFF"));
+    QTRY_VERIFY_WITH_TIMEOUT(!look->isRunning(), 3000);
     QVERIFY2(stop->text().startsWith("Emergency Stop: "), qPrintable(stop->text()));
+}
+
+void AppViews_Test::aHeldMasterIsSaidWithItsChipPutAway()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    SpeedMasters *sm = doc->speedMasters();
+    const bool wasGM = m_app->footerChipShown(App::FooterGrandMaster);
+    const bool wasSpeed = m_app->footerChipShown(App::FooterSpeedMasters);
+    auto back = qScopeGuard([=]() {
+        iom->setGrandMasterValue(255);
+        if (sm->count() > 0)
+            sm->setRate(0, 1.0);
+        m_app->setFooterChipShown(App::FooterGrandMaster, wasGM);
+        m_app->setFooterChipShown(App::FooterSpeedMasters, wasSpeed);
+        m_app->clearDocument();
+    });
+    m_app->setFooterChipShown(App::FooterGrandMaster, true);
+    m_app->setFooterChipShown(App::FooterSpeedMasters, true);
+    QLabel *held = m_app->findChild<QLabel *>("footerMastersHeld");
+    QVERIFY(held != nullptr);
+    QVERIFY(held->isHidden());
+
+    // The Grand Master at 30% with its feature off: said, with the value.
+    iom->setGrandMasterValue(77);
+    QTRY_COMPARE(m_app->m_statusGrandMasterSlider->value(), 77);
+    QVERIFY(held->isHidden());                          // its own chip says it
+    QVERIFY(chooseFeatures(m_app, { { "Grand Master", false }, { "Speed Masters", false } }));
+    QVERIFY(m_app->m_statusGrandMasterBox->isHidden());
+    QVERIFY(!held->isHidden());
+    QVERIFY2(held->text().contains("GM 30%"), qPrintable(held->text()));
+    iom->setGrandMasterValue(255);
+    QTRY_VERIFY(held->isHidden());
+    // The footer setting off says it the same.
+    QVERIFY(chooseFeatures(m_app, allFeatures(true)));
+    m_app->setFooterChipShown(App::FooterGrandMaster, false);
+    iom->setGrandMasterValue(77);
+    QTRY_VERIFY(!held->isHidden());
+    QVERIFY(held->text().contains("GM 30%"));
+    iom->setGrandMasterValue(255);
+    QTRY_VERIFY(held->isHidden());
+
+    // A speed master off its tempo, its chip put away.
+    if (sm->count() < 1)
+        sm->setCount(1);
+    QVERIFY(chooseFeatures(m_app, { { "Speed Masters", false } }));
+    sm->setRate(0, 0.5);
+    QTRY_VERIFY(!held->isHidden());
+    QVERIFY2(held->text().contains(QString::fromUtf8("\u00d70.50")), qPrintable(held->text()));
+    sm->setRate(0, 1.0);
+    QTRY_VERIFY(held->isHidden());
+}
+
+void AppViews_Test::anAppliedVenueIsSaidWithVenuesOff()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    VenueCorrections *vc = m_app->m_doc->programmer()->venueCorrections();
+    QTemporaryDir dir;
+    auto back = qScopeGuard([this, vc]() {
+        vc->reset();
+        m_app->clearDocument();
+    });
+    VenueChip *chip = m_app->m_venueChip;
+    QVERIFY(chip != nullptr);
+    QVERIFY(chooseFeatures(m_app, { { "Venues", false } }));
+    QVERIFY(chip->isHidden());                          // no venue: put away
+    vc->setShowFile(dir.filePath("Tour.qlcc"), false);
+    QVERIFY(vc->setActiveVenue(vc->addVenue("Lincoln HS")));
+    // On the rig: said whatever the switch.
+    QTRY_VERIFY(!chip->isHidden());
+    QCOMPARE(m_app->venueFooterText(), QString("Venue: Lincoln HS"));
+    QVERIFY(vc->setActiveVenue(QString()));
+    QTRY_VERIFY(chip->isHidden());
+}
+
+void AppViews_Test::thePadButtonStaysWhileThePadHasAState()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    PadRun *pad = m_app->doc()->programmer()->padRun();
+    auto back = qScopeGuard([this, pad]() {
+        pad->stopEnded();
+        m_app->clearDocument();
+    });
+    CueRunner *run = m_app->findChild<CueRunner *>("runTab");
+    QVERIFY(run != nullptr);
+    QToolButton *btn = run->findChild<QToolButton *>("crPadRun");
+    QVERIFY(btn != nullptr);
+    QVERIFY(chooseFeatures(m_app, { { "Control Surfaces", false } }));
+    QCOMPARE(pad->state(), PadRun::Tools);
+    QVERIFY(btn->isHidden());
+    // The emergency stop struck: Stopped, said on the button.
+    pad->stopStruck();
+    QCOMPARE(pad->state(), PadRun::Stopped);
+    QVERIFY(!btn->isHidden());
+    pad->stopEnded();
+    QTRY_VERIFY(btn->isHidden());
+}
+
+void AppViews_Test::classicCanStillTurnFeaturesBackOn()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    auto back = qScopeGuard([this]() {
+        m_app->setWorkspaceView(App::ConsoleView);
+        m_app->clearDocument();
+        m_app->setTabLabelMode(App::TabIconAndText);
+    });
+    QVERIFY(chooseFeatures(m_app, { { "Venues", false } }));
+    m_app->setWorkspaceView(App::ClassicView);
+    QAction *act = m_app->menuBar()->findChild<QAction *>("viewTabsAction");
+    QVERIFY(act != nullptr && act->isEnabled());
+    // The page opens: the tabs greyed, the features usable.
+    bool tabsGreyed = false;
+    QTimer::singleShot(300, m_app, [&]() {
+        QDialog *dlg = m_app->findChild<QDialog *>("chooseTabsDialog");
+        if (dlg == nullptr)
+            return;
+        QListWidget *tabs = dlg->findChild<QListWidget *>("chooseTabsList");
+        tabsGreyed = tabs != nullptr && !tabs->isEnabled();
+        dlg->reject();
+    });
+    act->trigger();
+    QVERIFY(tabsGreyed);
+    QVERIFY(chooseFeatures(m_app, { { "Venues", true } }));
+    QVERIFY(m_app->findChild<QAction *>(QStringLiteral("viewVenueAction"))->isVisible());
+    QCOMPARE(barTexts(m_app), QStringList({ "Fixtures", "Functions", "Shows", "Virtual Console",
+                                            "Simple Desk", "Inputs/Outputs" }));
+    // The footer's right-click: only what Classic's footer shows.
+    QMenu *menu = rightClickFooter(m_app);
+    QVERIFY(menu != nullptr);
+    QStringList names;
+    for (QAction *a : menu->actions())
+        if (a->objectName().startsWith("footerChip") && a->objectName() != "footerChipFeatures")
+            names << a->objectName();
+    menu->close();
+    QCOMPARE(names, QStringList({ "footerChipGrandMaster" }));
 }
 
 void AppViews_Test::theFollowSpotAppearsOnceTheShowHasOne()
@@ -3656,18 +3811,19 @@ void AppViews_Test::theFollowSpotAppearsOnceTheShowHasOne()
     follow->setScriptPath(QStringLiteral("effectscripts/followspot.js"));
     QVERIFY(doc->addPalette(follow));
     // A palette alone is not a follow spot the show uses.
+    QTest::qWait(400);
     QCOMPARE(view->findText("Operator"), -1);
     Scene *scene = new Scene(doc);
     scene->setName("Spot");
     scene->addPalette(follow->id());
     QVERIFY(doc->addFunction(scene));
-    QVERIFY(view->findText("Operator") >= 0);
+    QTRY_VERIFY(view->findText("Operator") >= 0);       // once the burst of edits is over
     QVERIFY(view->findText("Operator plan") >= 0);
     view->setCurrentIndex(view->findText("Operator plan"));
 
     // Taken away: gone, and the view goes back to a plane.
     QVERIFY(doc->deleteFunction(scene->id()));
-    QCOMPARE(view->findText("Operator"), -1);
+    QTRY_COMPARE(view->findText("Operator"), -1);
     QCOMPARE(view->findText("Operator plan"), -1);
     QVERIFY(view->currentText() != QStringLiteral("Operator plan"));
 }
@@ -3780,12 +3936,32 @@ void AppViews_Test::tabsAndFeaturesShots()
         settle();
         const QString tag = QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
         // The page over the window, as it is seen.
-        QPixmap page;
+        QPixmap page, hover;
         QTimer::singleShot(200, m_app, [&]() {
             if (QDialog *dlg = m_app->findChild<QDialog *>("chooseTabsDialog"))
             {
                 settle();
                 page = dlg->grab();
+                // A feature row's hover: what turning it off puts away.
+                if (QListWidget *features = dlg->findChild<QListWidget *>("chooseFeaturesList"))
+                {
+                    QListWidgetItem *it = features->item(qMin(1, features->count() - 1));
+                    const QRect r = features->visualItemRect(it);
+                    const QPoint at = features->viewport()->mapToGlobal(r.center());
+                    QToolTip::showText(at, it->toolTip(), features->viewport(), r);
+                    settle();
+                    QPixmap shot = dlg->grab();
+                    for (QWidget *w : QApplication::topLevelWidgets())
+                        if (w->inherits("QTipLabel") && w->isVisible())
+                        {
+                            QPainter p(&shot);
+                            const QPoint in = features->viewport()->mapTo(dlg, r.center());
+                            p.drawPixmap(qMax(0, qMin(in.x(), shot.width() - w->width())),
+                                         qMin(in.y() + 12, shot.height() - w->height()), w->grab());
+                        }
+                    hover = shot;
+                    QToolTip::hideText();
+                }
                 dlg->reject();
             }
         });
@@ -3797,6 +3973,8 @@ void AppViews_Test::tabsAndFeaturesShots()
             p.drawPixmap((w.width() - page.width()) / 2, qMax(0, (w.height() - page.height()) / 2), page);
         }
         QVERIFY(w.save(QStringLiteral("%1/tabs-features-%2.png").arg(dir, tag)));
+        if (!hover.isNull())
+            QVERIFY(hover.save(QStringLiteral("%1/tabs-features-hover-%2.png").arg(dir, tag)));
         // The footer's right-click, over the window's foot.
         QPixmap foot = m_app->grab();
         if (QMenu *menu = rightClickFooter(m_app))

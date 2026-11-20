@@ -132,7 +132,7 @@ button under the Control Map table.
 - **A lost release at learn time** does not hold the first real press: the
   press that taught the stop is ignored until its release, until a second value arrives, or for one second.
 - It is saved with the show. A QLC+ 4 build opens the show and skips it.
-- **No switch hides it.** With **Control surfaces** turned off for the show
+- **No switch hides it.** With **Control Surfaces** turned off for the show
   (View ▸ Workspace ▸ Tabs & Features…, see
   [Features](getting-started.md#features)) the triggers and the encoder bank
   are put away, but the **Emergency Stop…** button stays and the stop still

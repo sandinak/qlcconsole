@@ -1670,6 +1670,8 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
         && event->type() == QEvent::MouseButtonPress)
     {
         QComboBox *cb = static_cast<QComboBox *>(watched);
+        if (cb == m_overviewPlaneCombo.data())
+            applyShowFeatures();        // the follow spot's views, as the show is now
         QMouseEvent *me = static_cast<QMouseEvent *>(event);
         QStyleOptionComboBox opt;
         opt.initFrom(cb);
@@ -3662,11 +3664,21 @@ void Monitor::showStageOverview()
         }
         view->setPlane(StructureStudioView::Plane(d));
     });
-    // The Operator views with the show's follow spot: a look added or taken away.
+    /* The Operator views with the show's follow spot: a look added or taken
+       away. Looked at once a burst of edits is over, not on each (a joystick
+       bake changes a scene 50 times a second); and again whenever the list
+       is pressed, which also catches a look's script changed in place. */
+    if (m_featuresSoon == nullptr)
+    {
+        m_featuresSoon = new QTimer(this);
+        m_featuresSoon->setSingleShot(true);
+        m_featuresSoon->setInterval(250);
+        connect(m_featuresSoon, &QTimer::timeout, this, &Monitor::applyShowFeatures);
+    }
     for (auto sig : { &Doc::functionAdded, &Doc::functionRemoved, &Doc::functionChanged,
                       &Doc::paletteAdded, &Doc::paletteRemoved })
-        connect(m_doc, sig, planeCombo, [this]() { applyShowFeatures(); });
-    connect(m_doc, &Doc::loaded, planeCombo, [this]() { applyShowFeatures(); });
+        connect(m_doc, sig, planeCombo, [this]() { m_featuresSoon->start(); });
+    connect(m_doc, &Doc::loaded, planeCombo, [this]() { m_featuresSoon->start(); });
     applyShowFeatures();
 
     /* How much light is in the ROOM. Without it the rendered colours are as

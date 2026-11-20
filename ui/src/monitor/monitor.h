@@ -787,6 +787,9 @@ protected:
     /** The Rig Overview's View list: its Operator views come and go with the
      *  show's follow spot (applyShowFeatures()). */
     QPointer<QComboBox> m_overviewPlaneCombo;
+    /** applyShowFeatures() once after a burst of show edits (a joystick bake
+     *  changes a scene 50 times a second): not on every one. */
+    class QTimer *m_featuresSoon = nullptr;
     QComboBox *m_dmxViewCombo = nullptr;   ///< View selector shown in the DMX-grid toolbar
     /** Blocking (docs/design/BLOCKING.md): the footer's picker -- which
      *  blocking the plot shows and a drag edits -- and the banner over the

@@ -1394,8 +1394,11 @@ void CueRunner::refreshPadRun()
         m_padRunBtn->setChecked(run->isEnabled());
     }
     /* Control surfaces off for the show (Q293): no Pad button -- but never
-       while the pad runs the show: what a live control does is always said. */
-    m_padRunBtn->setVisible(ShowFeatures::isOn(ShowFeatures::ControlSurfaces) || run->isEnabled());
+       while the pad runs the show or has a state to say (Stopped after the
+       emergency stop, a tool or a focus holding it): a live control's state
+       is always said. */
+    m_padRunBtn->setVisible(ShowFeatures::isOn(ShowFeatures::ControlSurfaces) || run->isEnabled()
+                            || run->state() != PadRun::Tools);
     /* PadRun's one state, in its words and its colour: the button, and a
        frame round the whole tab while it has one (armed; red after the
        emergency stop) -- the same as the footer's chip and the pad's

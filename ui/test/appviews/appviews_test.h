@@ -165,6 +165,17 @@ private slots:
     /** Q293: with every feature off the emergency stop is still there and
      *  still fires ALL OFF; Control ▸ Panic too. */
     void theEmergencyStopSurvivesEverySwitchOff();
+    /** Q293 review: the GM below full or a speed master off its tempo is
+     *  said in the footer while its chip is put away. */
+    void aHeldMasterIsSaidWithItsChipPutAway();
+    /** Q293 review: a venue applied shows its chip with Venues off. */
+    void anAppliedVenueIsSaidWithVenuesOff();
+    /** Q293 review: with Control Surfaces off the Run tab's Pad button stays
+     *  while the pad has a state (Stopped after the emergency stop). */
+    void thePadButtonStaysWhileThePadHasAState();
+    /** Q293 review: Classic opens Tabs & Features (tabs greyed, features
+     *  usable); its footer right-click offers only the Grand Master. */
+    void classicCanStillTurnFeaturesBackOn();
     /** Q293: no switch for the follow spot -- the Rig Overview's Operator
      *  views appear once a scene has a Followspot look, and go with it. */
     void theFollowSpotAppearsOnceTheShowHasOne();

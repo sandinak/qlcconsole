@@ -1357,6 +1357,11 @@ private:
     /** The GM label+slider+value's shared container — toggled as one unit
      *  by m_showFooterGM, same pattern as Load/Power below. */
     QWidget* m_statusGrandMasterBox = nullptr;
+    /** "GM 30%", "Speed 1 ×0.50": a master held away from neutral while its
+     *  chip is put away (the show's feature off, or the footer setting) --
+     *  a live state is never hidden (Q293). */
+    QLabel* m_statusMastersHeldLabel = nullptr;
+    void updateMastersHeldChip();
     /** The Pad chip leaves out what RT fires (the Run tab still says it):
      *  with it, a narrow footer squeezed the Grand Master out. */
     bool m_padChipShort = false;
