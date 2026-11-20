@@ -522,6 +522,11 @@ public:
     /** Handler for button releases (mouse/key)button up, not click */
     void releaseFunction();
 
+    /** Let go of what this button holds on, whatever the mode: a Flash
+     *  still held is unflashed, a Toggle it turned on is stopped. For a
+     *  button that goes away (or a mode that ends) while it is on. */
+    void letGo();
+
     /** Blink the button for $ms milliseconds */
     void blink(int ms);
 

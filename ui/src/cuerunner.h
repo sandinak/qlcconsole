@@ -21,6 +21,7 @@
 #define CUERUNNER_H
 
 #include <QPointer>
+#include <QHash>
 #include <QWidget>
 
 #include "showcontrol.h"
@@ -36,6 +37,8 @@ class QPushButton;
 class QAction;
 class QComboBox;
 class QLabel;
+class QScrollArea;
+class VCButton;
 class QTimer;
 class Chaser;
 class Doc;
@@ -335,6 +338,19 @@ private:
      *  2)": PadRun::armedHitText(), its hitChanged() (rule 2). */
     void refreshPadHit();
     QLabel *m_padHit = nullptr;
+    /** The hit strip under GO: a button for each hit armed now, narrowest
+     *  place first. Each fires through a VCButton that holds the hit (the
+     *  one path a Virtual Console button takes), in Operate only. */
+    void refreshHitStrip();
+    void fitHitStrip();
+    QScrollArea *m_hitScroll = nullptr;
+    QWidget *m_hitStrip = nullptr;
+    QString m_hitStripKey;
+    QHash<quint32, QPointer<VCButton>> m_hitProxies;
+    /** The proxies' home: parentless and never shown, so a rebuild or a
+     *  resize of the layout does not take an on hit's VCButton with it. */
+    QWidget *m_hitHome = nullptr;
+    void letGoProxy(VCButton *proxy);
     void refreshGoHeld();
     QLabel *m_goHeld = nullptr;
     QToolButton *m_focusStart = nullptr;

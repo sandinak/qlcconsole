@@ -31,6 +31,7 @@
 #include <QTextLayout>
 #include <QPainter>
 #include <QPointer>
+#include <QScrollArea>
 #include <QPushButton>
 #include <QFrame>
 #include <QPlainTextEdit>
@@ -60,6 +61,8 @@
 #include "teachingsettings.h"
 #include "teachingtips.h"
 #include "teachinglog.h"
+#include "flowlayout.h"
+#include "virtualconsole.h"
 #include "vcbutton.h"
 #include "usedby.h"
 #include "cueresume.h"
@@ -177,6 +180,18 @@ CueRunner::CueRunner(Doc *doc, Size size, QWidget *parent)
 
 CueRunner::~CueRunner()
 {
+    // What a hit button holds on does not outlive the Run tab.
+    for (const QPointer<VCButton> &proxy : std::as_const(m_hitProxies))
+        letGoProxy(proxy);
+    delete m_hitHome;
+}
+
+void CueRunner::letGoProxy(VCButton *proxy)
+{
+    if (proxy == nullptr)
+        return;
+    proxy->setProperty("stripHeld", false);
+    proxy->letGo();
 }
 
 QString CueRunner::sizeToString(Size size)
@@ -845,6 +860,27 @@ void CueRunner::buildFullLayout()
     bar->addWidget(m_stop, 1);
     v->addLayout(bar, 0);
 
+    /* The hits armed now, under GO (feat/052-run-hits). */
+    m_hitScroll = new QScrollArea(this);
+    m_hitScroll->setObjectName(QStringLiteral("crHitScroll"));
+    m_hitScroll->setFrameShape(QFrame::NoFrame);
+    m_hitScroll->setWidgetResizable(true);
+    m_hitScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_hitScroll->setFocusPolicy(Qt::NoFocus);
+    m_hitScroll->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Maximum);
+    m_hitStrip = new QWidget();
+    m_hitStrip->setObjectName(QStringLiteral("crHitStrip"));
+    new FlowLayout(m_hitStrip, 0, 6, 6);
+    m_hitScroll->setWidget(m_hitStrip);
+    m_hitScroll->hide();
+    v->addWidget(m_hitScroll, 0);
+    connect(m_doc->showTree(), &ShowTreeController::hitArmingChanged, this, &CueRunner::refreshHitStrip,
+            Qt::UniqueConnection);
+    connect(m_doc->showTree(), &ShowTreeController::changed, this, &CueRunner::refreshHitStrip,
+            Qt::UniqueConnection);
+    connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshHitStrip, Qt::UniqueConnection);
+    refreshHitStrip();
+
     // Keyboard GO in the Run tab, as QLab's: Space.
     QShortcut *space = new QShortcut(QKeySequence(Qt::Key_Space), this, nullptr, nullptr,
                                      Qt::WidgetWithChildrenShortcut);
@@ -1190,6 +1226,7 @@ void CueRunner::resizeEvent(QResizeEvent *ev)
             m_padFrame->raise();
     }
     layoutPanel();
+    fitHitStrip();
 }
 
 void CueRunner::setRunnerSize(Size size)
@@ -1232,6 +1269,9 @@ void CueRunner::setRunnerSize(Size size)
     m_focusArmed = nullptr;
     m_focusArmedLabel = nullptr;
     m_hitsNow = nullptr;
+    m_hitScroll = nullptr;
+    m_hitStrip = nullptr;
+    m_hitStripKey.clear();
     m_padHit = nullptr;
     m_goHeld = nullptr;
     m_focusStart = nullptr;
@@ -2018,6 +2058,163 @@ QColor CueRunner::textColour(const QString &part) const
                       : part.startsWith(QLatin1String("upcoming")) ? m_upcoming.value(part.mid(8).toInt())
                       : nullptr;
     return l == nullptr ? QColor() : l->palette().color(QPalette::Active, QPalette::WindowText);
+}
+
+void CueRunner::refreshHitStrip()
+{
+    if (m_hitStrip == nullptr)
+        return;
+    const ShowTreeController *st = m_doc->showTree();
+    const bool operate = m_doc->mode() == Doc::Operate;
+    const QList<quint32> armed = st->armedHitsNarrowFirst();
+
+    // Only a changed strip is rebuilt: a button under the finger stays.
+    // The button mode of a Virtual Console button holding hit @a h, else Toggle.
+    auto actionOf = [](quint32 h) {
+        for (const VCButton *b : UsedBy::allVcButtons())
+            if (b->hits().contains(h))
+                return b->action() == VCButton::Flash ? VCButton::Flash : VCButton::Toggle;
+        return VCButton::Toggle;
+    };
+    QString key = operate ? QStringLiteral("O") : QStringLiteral("D");
+    for (quint32 h : armed)
+        key += QStringLiteral("|%1:%2:%3:%4").arg(h).arg(st->cue(h) != nullptr ? st->cue(h)->name : QString(),
+                                                        st->hitColour(h).name())
+                   .arg(int(actionOf(h)));
+    if (key == m_hitStripKey && !m_hitStripKey.isEmpty())
+        return;
+    m_hitStripKey = key;
+
+    // Out of Operate nothing is held by this strip: a Flash still down lets go.
+    if (!operate)
+        for (const QPointer<VCButton> &proxy : std::as_const(m_hitProxies))
+            if (!proxy.isNull() && proxy->property("stripHeld").toBool())
+                letGoProxy(proxy);
+
+    // A proxy whose hit is gone is dropped, letting go first; one whose
+    // place ended stays, to let go of what it holds
+    // (VCButton::slotShowTreeChanged()). The proxies outlive a rebuild of the
+    // strip, so a hit that is on stays on.
+    for (auto it = m_hitProxies.begin(); it != m_hitProxies.end();)
+    {
+        if (it.value().isNull() || st->cue(it.key()) == nullptr)
+        {
+            letGoProxy(it.value());
+            delete it.value();
+            it = m_hitProxies.erase(it);
+        }
+        else
+            ++it;
+    }
+
+    QLayout *lay = m_hitStrip->layout();
+    while (QLayoutItem *item = lay->takeAt(0))
+    {
+        delete item->widget();
+        delete item;
+    }
+    VirtualConsole *vc = VirtualConsole::instance();
+    for (quint32 h : armed)
+    {
+        const ShowTree::Cue *c = st->cue(h);
+        if (c == nullptr)
+            continue;
+        const VCButton::Action action = actionOf(h);
+        QPointer<VCButton> proxy = m_hitProxies.value(h);
+        if (proxy.isNull() && vc != nullptr)
+        {
+            if (m_hitHome == nullptr)
+            {
+                m_hitHome = new QWidget();
+                m_hitHome->setObjectName(QStringLiteral("crHitHome"));
+            }
+            proxy = new VCButton(m_hitHome, m_doc);
+            proxy->hide();
+            proxy->setHit(h);
+            m_hitProxies.insert(h, proxy);
+        }
+
+        QToolButton *b = new QToolButton(m_hitStrip);
+        b->setObjectName(QStringLiteral("crHit"));
+        b->setProperty("hitId", h);
+        b->setText(c->name);
+        b->setFocusPolicy(Qt::NoFocus);
+        b->setMinimumHeight(40);
+        b->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+        const QColor col = st->hitColour(h);
+        if (col.isValid())
+            b->setStyleSheet(QStringLiteral("QToolButton { background: %1; color: %2; border: 3px solid transparent; "
+                                            "border-radius: 4px; padding: 2px 10px; }"
+                                            "QToolButton[hitOn=\"true\"] { border-color: palette(highlight); font-weight: bold; }"
+                                            "QToolButton:disabled { color: gray; }")
+                                 .arg(col.name(), qGray(col.rgb()) > 140 ? QStringLiteral("black") : QStringLiteral("white")));
+        else
+            b->setStyleSheet(QStringLiteral("QToolButton { background: palette(button); border: 3px solid palette(midlight); "
+                                            "border-radius: 4px; padding: 2px 10px; }"
+                                            "QToolButton[hitOn=\"true\"] { border-color: palette(highlight); font-weight: bold; }"));
+        b->setEnabled(operate && !proxy.isNull());
+        b->setToolTip(operate ? tr("%1, %2: %3").arg(c->name, st->hitPlace(h),
+                                                      action == VCButton::Flash ? tr("held down, plays while pressed")
+                                                                                : tr("press to start, press again to turn off"))
+                              : tr("Hits fire in Operate."));
+        auto showOn = [b, st, h, this]() {
+            const Function *f = m_doc->function(st->lookFunction(h));
+            const bool on = f != nullptr && f->isRunning();
+            b->setProperty("hitOn", on);
+            b->style()->unpolish(b);
+            b->style()->polish(b);
+        };
+        if (!proxy.isNull())
+        {
+            /* The mode is read at the press (a VC button changed since is
+               followed), and a Flash is let go of however the press ends:
+               the release, the strip rebuilt under it, Design. */
+            connect(b, &QToolButton::pressed, proxy, [proxy, actionOf, h]() {
+                if (proxy->state() != VCButton::Active)
+                    proxy->setAction(actionOf(h));
+                // On from elsewhere (the pad, a VC button): the press turns it off.
+                if (proxy->action() == VCButton::Toggle && proxy->state() == VCButton::Monitoring)
+                    proxy->setState(VCButton::Active);
+                proxy->setProperty("stripHeld", proxy->action() == VCButton::Flash);
+                proxy->pressFunction();
+            });
+            connect(b, &QToolButton::released, proxy, [proxy]() {
+                if (proxy->property("stripHeld").toBool())
+                {
+                    proxy->setProperty("stripHeld", false);
+                    proxy->letGo();
+                }
+            });
+            connect(b, &QObject::destroyed, proxy, [proxy]() {
+                if (proxy->property("stripHeld").toBool())
+                {
+                    proxy->setProperty("stripHeld", false);
+                    proxy->letGo();
+                }
+            });
+            connect(proxy, &VCButton::stateChanged, b, showOn);
+            if (Function *f = m_doc->function(st->lookFunction(h)))
+            {
+                connect(f, &Function::running, b, showOn);
+                connect(f, qOverload<quint32>(&Function::stopped), b, showOn);
+            }
+        }
+        showOn();
+        lay->addWidget(b);
+    }
+    m_hitScroll->setVisible(!armed.isEmpty());
+    fitHitStrip();
+}
+
+/* The strip is as tall as its rows at this width, two rows at most; more
+   scroll. (A scroll area does not ask its widget for the height.) */
+void CueRunner::fitHitStrip()
+{
+    if (m_hitScroll == nullptr || m_hitStrip == nullptr)
+        return;
+    const int w = qMax(1, m_hitScroll->viewport()->width());
+    const int h = m_hitStrip->layout()->heightForWidth(w);
+    m_hitScroll->setFixedHeight(qMin(h > 0 ? h : 46, 2 * 46 + 6) + 2);
 }
 
 void CueRunner::refreshHitsNow()

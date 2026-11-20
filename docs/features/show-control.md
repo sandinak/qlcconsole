@@ -53,6 +53,8 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
   now in its place is **NEXT**, and GO plays it. **Back** plays the cue
   before it (the deleted cue was the first: it stays until GO). **Undo**
   brings the cue back as the one running.
+- Hits armed right now are buttons under GO: see
+  [Fire it from the Run tab](show-tree.md).
 - From a game controller: [Pad Run](#go-from-the-game-controller-pad-run).
 - A **Virtual Console cue list** shows a **Cue** column beside the step
   number and a **Next:** line under its list — the cue, its name and its
