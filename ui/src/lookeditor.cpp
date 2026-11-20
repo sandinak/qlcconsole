@@ -2035,7 +2035,8 @@ QString LookEditor::colourSourceText() const
     const QList<quint32> pals = m_contextScene->palettes();
     const int own = effectColourLooks().size();
     if (own > 0)
-        return tr("Colours: the %n Colour look(s) under this effect.", "", own);
+        return own == 1 ? tr("Colours: the 1 Colour look under this effect.")
+                        : tr("Colours: the %1 Colour looks under this effect.").arg(own);
     int base = 0;
     for (quint32 pid : pals)
     {
@@ -2044,7 +2045,8 @@ QString LookEditor::colourSourceText() const
             ++base;
     }
     if (base > 0)
-        return tr("Colours: the look's own %n colour(s) (no Colour look under this effect).", "", base);
+        return base == 1 ? tr("Colours: the look's own 1 colour (no Colour look under this effect).")
+                         : tr("Colours: the look's own %1 colours (no Colour look under this effect).").arg(base);
     return frontBehind ? tr("Colours: none set (no Colour look under this effect or in the look), so plain Fire.")
                        : tr("Colours: its own (no Colour look under this effect or in the look).");
 }
