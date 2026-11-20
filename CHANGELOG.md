@@ -10,6 +10,15 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Docs
+
+- **Security and conduct on GitHub.** SECURITY.md says how to report a
+  vulnerability privately (the repository's private report form, now on)
+  and what counts, the emergency stop included; CODE_OF_CONDUCT.md is the
+  Contributor Covenant 2.1.
+
 ## [0.5.1] - 2026-11-20
 
 0.5.1 is a stability and room-setup release. If you only read one line: a
