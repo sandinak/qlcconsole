@@ -3607,6 +3607,8 @@ void AppViews_Test::theEmergencyStopSurvivesEverySwitchOff()
         cm->removeBinding(ControlMap::emergencyStop());
         m_app->clearDocument();
     });
+    // Control ▸ Panic as it was (QLC+ enables it while something runs).
+    const bool panicEnabled = m_app->m_controlPanicAction->isEnabled();
     QVERIFY(chooseFeatures(m_app, allFeatures(false)));
     // The button under the Control Map, shown and working.
     ControlMapPanel panel(doc);
@@ -3618,7 +3620,7 @@ void AppViews_Test::theEmergencyStopSurvivesEverySwitchOff()
     QVERIFY(stop->isEnabled());
     // Control ▸ Panic.
     QVERIFY(m_app->m_controlPanicAction->isVisible());
-    QVERIFY(m_app->m_controlPanicAction->isEnabled());
+    QCOMPARE(m_app->m_controlPanicAction->isEnabled(), panicEnabled);
     // A learned stop still fires ALL OFF.
     cm->setBinding({ 0, 188, ControlMap::emergencyStop(), ControlMap::StartOnly });
     QSignalSpy fired(cm, &ControlMap::fired);
