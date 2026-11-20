@@ -3947,7 +3947,8 @@ void AppViews_Test::tabsAndFeaturesShots()
         settle();
         const QString tag = QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
         // The page over the window, as it is seen.
-        QPixmap page, hover;
+        QPixmap page, tip;
+        QPoint tipAt;
         QTimer::singleShot(200, m_app, [&]() {
             if (QDialog *dlg = m_app->findChild<QDialog *>("chooseTabsDialog"))
             {
@@ -3961,16 +3962,12 @@ void AppViews_Test::tabsAndFeaturesShots()
                     const QPoint at = features->viewport()->mapToGlobal(r.center());
                     QToolTip::showText(at, it->toolTip(), features->viewport(), r);
                     settle();
-                    QPixmap shot = dlg->grab();
                     for (QWidget *w : QApplication::topLevelWidgets())
                         if (w->inherits("QTipLabel") && w->isVisible())
                         {
-                            QPainter p(&shot);
-                            const QPoint in = features->viewport()->mapTo(dlg, r.center());
-                            p.drawPixmap(qMax(0, qMin(in.x(), shot.width() - w->width())),
-                                         qMin(in.y() + 12, shot.height() - w->height()), w->grab());
+                            tip = w->grab();
+                            tipAt = features->viewport()->mapTo(dlg, r.center()) + QPoint(0, 12);
                         }
-                    hover = shot;
                     QToolTip::hideText();
                 }
                 dlg->reject();
@@ -3978,14 +3975,23 @@ void AppViews_Test::tabsAndFeaturesShots()
         });
         m_app->menuBar()->findChild<QAction *>("viewTabsAction")->trigger();
         QPixmap w = m_app->grab();
+        const QPoint pageAt((w.width() - page.width()) / 2, qMax(0, (w.height() - page.height()) / 2));
         if (!page.isNull())
         {
             QPainter p(&w);
-            p.drawPixmap((w.width() - page.width()) / 2, qMax(0, (w.height() - page.height()) / 2), page);
+            p.drawPixmap(pageAt, page);
         }
         QVERIFY(w.save(QStringLiteral("%1/tabs-features-%2.png").arg(dir, tag)));
-        if (!hover.isNull())
-            QVERIFY(hover.save(QStringLiteral("%1/tabs-features-hover-%2.png").arg(dir, tag)));
+        // ...and a feature row's hover over it, whole, as it is seen.
+        if (!tip.isNull())
+        {
+            QPainter p(&w);
+            const QPoint at = pageAt + tipAt;
+            p.drawPixmap(qMax(0, qMin(at.x(), w.width() - tip.width())),
+                         qMin(at.y(), w.height() - tip.height()), tip);
+            p.end();
+            QVERIFY(w.save(QStringLiteral("%1/tabs-features-hover-%2.png").arg(dir, tag)));
+        }
         // The footer's right-click, over the window's foot.
         QPixmap foot = m_app->grab();
         if (QMenu *menu = rightClickFooter(m_app))
