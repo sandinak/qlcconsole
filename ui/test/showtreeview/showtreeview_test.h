@@ -42,6 +42,8 @@ private slots:
     void inspectorCheckBoxesExplainThemselves();
     /** A form label's tooltip follows its field's when that changes. */
     void formLabelsFollowTheirFieldsTooltip();
+    /** At 1024x640 nothing in the cue inspector is cut off: it never scrolls sideways. */
+    void cueInspectorNeverScrollsSideways();
     /** The level buttons sit clear of the flag columns on a hovered row. */
     void levelButtonsNeverCoverTheFlags();
     void shotsHoveredShowRowAndTooltip();

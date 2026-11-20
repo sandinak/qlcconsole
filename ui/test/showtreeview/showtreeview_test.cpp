@@ -377,6 +377,26 @@ void ShowTreeView_Test::inspectorCheckBoxesExplainThemselves()
     QVERIFY(base->toolTip().contains("release", Qt::CaseInsensitive));
 }
 
+void ShowTreeView_Test::cueInspectorNeverScrollsSideways()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Opening", ListMode::Tracking);
+    const quint32 cue = st->addCue(list, -1, "Entrance");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(cue));
+    QApplication::processEvents();
+    QScrollArea *scroll = qobject_cast<QScrollArea *>(view.m_cuePage);
+    QVERIFY(scroll != nullptr);
+    QVERIFY2(scroll->widget()->minimumSizeHint().width() <= scroll->viewport()->width(),
+             qPrintable(QString("the cue page needs %1 px, has %2")
+                        .arg(scroll->widget()->minimumSizeHint().width()).arg(scroll->viewport()->width())));
+    QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+}
+
 void ShowTreeView_Test::formLabelsFollowTheirFieldsTooltip()
 {
     ShowTreeView view(nullptr, m_doc);
@@ -467,6 +487,22 @@ void ShowTreeView_Test::shotsHoveredShowRowAndTooltip()
         QTest::mouseMove(tree->viewport(), tree->visualItemRect(show).center());
         QApplication::processEvents();
         view.grab().save(shotDir + "/show-row-hover-" + tag + ".png");
+        {
+            // A button's tooltip showing.
+            const QRect songs = view.levelButtonRect(show, 0);
+            if (!songs.isEmpty())
+            {
+                const QPoint at = songs.center();
+                QHelpEvent help(QEvent::ToolTip, at, tree->viewport()->mapToGlobal(at));
+                QApplication::sendEvent(tree->viewport(), &help);
+                QApplication::processEvents();
+                view.grab().save(shotDir + "/show-row-button-tooltip-" + tag + ".png");
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (w->isVisible() && QLatin1String(w->metaObject()->className()) == QLatin1String("QTipLabel"))
+                        w->grab().save(shotDir + "/show-row-button-tip-" + tag + ".png");
+                QToolTip::hideText();
+            }
+        }
         tree->setCurrentItem(cue);
         QApplication::processEvents();
         QCheckBox *base = view.findChild<QCheckBox *>("stCueBase");
