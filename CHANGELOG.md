@@ -10,7 +10,34 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [0.5.1] - Unreleased
+## [0.5.1] - 2026-11-20
+
+0.5.1 is a stability and room-setup release. If you only read one line: a
+big show now opens on Windows, and the control surfaces have an emergency
+stop.
+
+- **A big show opens on Windows.** A 95-universe, 2,800-fixture show took
+  230 s to open in a desktop session and now takes 18 s; it is faster on
+  every machine.
+- **Control surfaces are safer.** An emergency stop you learn once from a
+  pad, presses that follow Design/Operate and the hit's place, an unplugged
+  controller lets go of what it held, and the PMJ overlay hears only the PMJ.
+- **New Venue from a Show,** and the room lined up under the tour show.
+- **House roles and six standard cues** (House to half, House out, House
+  full, Stage up, Stage out, Work lights), filled by Fill Roles, which no
+  longer draws doubled Use/Flash cells.
+- **Run tab hit row:** a button under GO for each hit armed right now.
+- **Venue fixes:** a room output kept offline comes back on Undo, and a VPN
+  no longer stands in for the room's network.
+- Fixture library: 0 definitions from QLC+ upstream this release (1,792
+  checked, base 29929e877). Translation catalogues refreshed.
+
+### Known issues
+
+- Why-on names a Run tab hit only as "a Virtual Console widget".
+- There is no Undo for the groups and palettes Fill Roles makes.
+- The 3D view does not draw the Upstage line.
+
 
 ### Added
 
