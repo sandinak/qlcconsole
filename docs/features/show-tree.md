@@ -45,6 +45,14 @@ is changed only in the tree: elsewhere it is locked. See
 
 ## The tab
 
+- **Folding a level.** A Production or Show row shows two small buttons at
+  its right edge when the mouse is over it or it is selected: **fold to
+  songs** closes everything under the row except its songs and sections, and
+  **open all** opens every song and cue under it. The row you have selected
+  stays in view. Cue rows have no buttons.
+- **Tick boxes explain themselves.** Hover a tick box or its label in the cue
+  or list page for a short note on what it does and when to use it; this page
+  has the long version.
 - **Header.** It has + Cue List, + Cue (**+ Hit** in a Hits section),
   + Layer, Record, ✎ Workbench, **More ▾** (**+ Production**, **+ Sub-cue**
   and **Merge**), Delete, Undo and Redo; **Upgrade This Show…** while the

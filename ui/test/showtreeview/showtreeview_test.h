@@ -34,6 +34,12 @@ private slots:
     void cleanup();
 
     void theTreeShowsProductionsListsCuesAndLayers();
+    /** The level buttons on a Production / Show row fold it to its songs
+     *  or open it all; the selected row stays in view; cue rows wear none. */
+    void levelButtonsFoldAShowToItsSongs();
+    /** Every tick box of the cue and list inspectors says on hover what it
+     *  does, briefly; the base cue's names the released layers. */
+    void inspectorCheckBoxesExplainThemselves();
     /** ⇧⌘N, New (here): nothing -- a production; a production -- a cue
      *  list; a list -- a cue at its end; a cue -- the next cue after it
      *  (D23 numbering; a sub-cue: the next main cue); groups in the

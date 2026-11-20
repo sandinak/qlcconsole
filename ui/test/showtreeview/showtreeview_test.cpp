@@ -281,6 +281,114 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
     QCOMPARE(view.currentCueId(), c1);
 }
 
+void ShowTreeView_Test::levelButtonsFoldAShowToItsSongs()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Show", ListMode::Tracking);
+    QVERIFY(st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration));
+    st->addSection(list, "Entrance");
+    const quint32 a = st->addCue(list, 1, "A");
+    st->addSection(list, "Finale");
+    const quint32 b = st->addCue(list, 3, "B");
+    Target t;
+    st->addLayer(a, t);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(900, 600);
+    view.show();
+    QTreeWidget *tree = view.tree();
+    auto find = [tree](int kind, const QString &name) -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == kind && (*it)->text(0).contains(name))
+                return *it;
+        return nullptr;
+    };
+    QTreeWidgetItem *show = find(ShowTreeView::ListNode, "Show");
+    QTreeWidgetItem *prodRow = find(ShowTreeView::ProductionNode, "Dance");
+    QTreeWidgetItem *song = find(ShowTreeView::SectionNode, "Entrance");
+    QTreeWidgetItem *cueA = find(ShowTreeView::CueNode, "A");
+    QTreeWidgetItem *cueB = find(ShowTreeView::CueNode, "B");
+    QVERIFY(show && prodRow && song && cueA && cueB);
+    auto shown = [](QTreeWidgetItem *item) {
+        for (QTreeWidgetItem *p = item->parent(); p != nullptr; p = p->parent())
+            if (!p->isExpanded())
+                return false;
+        return true;
+    };
+    // The buttons are on Production and Show rows only, never a cue's.
+    tree->setCurrentItem(show);
+    QVERIFY(!view.levelButtonRect(show, 0).isEmpty() && !view.levelButtonRect(show, 1).isEmpty());
+    QVERIFY(!view.levelButtonRect(prodRow, 0).isEmpty());
+    QVERIFY(view.levelButtonRect(cueA, 0).isEmpty() && view.levelButtonRect(cueA, 1).isEmpty());
+    QVERIFY(view.levelButtonRect(song, 0).isEmpty());
+    // A click on the button folds it, as the mouse would.
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, view.levelButtonRect(show, 0).center());
+    QVERIFY(shown(song) && !shown(cueA));
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, view.levelButtonRect(show, 1).center());
+    QVERIFY(shown(cueA));
+    {
+        const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+        if (!shotDir.isEmpty())
+            view.grab().save(shotDir + "/level-buttons.png");
+    }
+
+    view.foldLevel(show, false);
+    QVERIFY(shown(song));
+    QVERIFY(!shown(cueA) && !shown(cueB));
+    view.foldLevel(show, true);
+    QVERIFY(shown(cueA) && shown(cueB));
+    // The Production fold: its Show stays open, the songs show, cues fold.
+    view.foldLevel(prodRow, false);
+    QVERIFY(prodRow->isExpanded() && show->isExpanded() && shown(song) && !shown(cueA));
+
+    // The selected cue stays reachable after a fold.
+    view.foldLevel(prodRow, true);
+    tree->setCurrentItem(cueA);
+    view.foldLevel(show, false);
+    QVERIFY(shown(cueA));
+    QVERIFY(!shown(cueB));
+    QVERIFY(tree->visualItemRect(cueA).isValid());
+
+    view.foldLevel(show, true);
+    QVERIFY(shown(cueB));
+    Q_UNUSED(b);
+}
+
+void ShowTreeView_Test::inspectorCheckBoxesExplainThemselves()
+{
+    ShowTreeView view(nullptr, m_doc);
+    QList<QCheckBox *> boxes;
+    for (const char *name : { "stCueBase", "stCueMix", "stCueSkip", "stCueNoMib", "stCueFocusCall",
+                              "stCueNeedsWork", "stHitOverride", "stListFollowTimecode", "stLayerRelease" })
+    {
+        QCheckBox *box = view.findChild<QCheckBox *>(name);
+        QVERIFY2(box != nullptr, name);
+        boxes << box;
+    }
+    for (QCheckBox *box : boxes)
+    {
+        QVERIFY2(!box->toolTip().isEmpty(), qPrintable(box->objectName()));
+        QVERIFY2(box->toolTip().length() < 200, qPrintable(box->objectName()));
+    }
+    QVERIFY(view.findChild<QCheckBox *>("stCueBase")->toolTip().contains("release", Qt::CaseInsensitive));
+    // The form label answers too (a separate widget from the box).
+    QFormLayout *form = view.m_cueForm;
+    bool labelled = false;
+    for (int r = 0; r < form->rowCount(); ++r)
+    {
+        QLayoutItem *lab = form->itemAt(r, QFormLayout::LabelRole);
+        QLayoutItem *fld = form->itemAt(r, QFormLayout::FieldRole);
+        if (lab && lab->widget() && fld && fld->widget() && !fld->widget()->toolTip().isEmpty()
+            && !qobject_cast<QCheckBox *>(fld->widget()))
+        {
+            QCOMPARE(lab->widget()->toolTip(), fld->widget()->toolTip());
+            labelled = true;
+        }
+    }
+    QVERIFY(labelled);
+}
+
 void ShowTreeView_Test::newHereMakesTheNextThing()
 {
     FixtureGroup *towers = group("Towers", 0, 2);

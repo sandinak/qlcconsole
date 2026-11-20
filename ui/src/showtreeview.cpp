@@ -49,6 +49,9 @@
 #include "timecodesource.h"
 #include <QRegularExpression>
 #include <QCheckBox>
+#include <QHelpEvent>
+#include <QMouseEvent>
+#include <QToolTip>
 #include <QSplitter>
 #include <QBoxLayout>
 #include <QShortcut>
@@ -228,6 +231,26 @@ public:
         // page, the preview and every single-item action follow the
         // current row, the one last clicked.
         setSelectionMode(QAbstractItemView::ExtendedSelection);
+        // The level buttons show on the row under the mouse.
+        setMouseTracking(true);
+    }
+
+    /** The two level buttons at the right edge of a Production / Show row:
+     *  which 0 folds everything under it to its songs / sections, 1 opens it
+     *  all. Empty for any other row. */
+    QRect levelButton(const QTreeWidgetItem *item, int which) const
+    {
+        if (item == nullptr)
+            return QRect();
+        const int kind = item->data(0, ShowTreeView::KindRole).toInt();
+        if ((kind != ShowTreeView::ProductionNode && kind != ShowTreeView::ListNode) || item->childCount() == 0)
+            return QRect();
+        const QRect row = visualItemRect(item);
+        if (row.isEmpty())
+            return QRect();
+        const int h = qMax(12, row.height() - 6), w = h + 14;
+        const int right = viewport()->width() - 4;
+        return QRect(right - (2 - which) * (w + 2) + 2, row.top() + (row.height() - h) / 2, w, h);
     }
 
     QMimeData *dragMime(const QList<QTreeWidgetItem *> &items) const { return mimeData(items); }
@@ -435,9 +458,87 @@ protected:
         QTreeWidget::dragLeaveEvent(e);
     }
 
+    void mouseMoveEvent(QMouseEvent *e) override
+    {
+        QTreeWidgetItem *over = itemAt(e->position().toPoint());
+        const QPersistentModelIndex now = over != nullptr ? QPersistentModelIndex(indexFromItem(over))
+                                                          : QPersistentModelIndex();
+        if (now != m_hover)
+        {
+            m_hover = now;
+            viewport()->update();
+        }
+        QTreeWidget::mouseMoveEvent(e);
+    }
+
+    void leaveEvent(QEvent *e) override
+    {
+        m_hover = QPersistentModelIndex();
+        viewport()->update();
+        QTreeWidget::leaveEvent(e);
+    }
+
+    void mousePressEvent(QMouseEvent *e) override
+    {
+        if (e->button() == Qt::LeftButton)
+        {
+            QTreeWidgetItem *item = itemAt(e->position().toPoint());
+            for (int which = 0; which < 2 && item != nullptr; ++which)
+                if (levelButton(item, which).contains(e->position().toPoint()) && buttonsShown(item))
+                {
+                    m_view->foldLevel(item, which == 1);
+                    e->accept();
+                    return;
+                }
+        }
+        QTreeWidget::mousePressEvent(e);
+    }
+
+    bool viewportEvent(QEvent *e) override
+    {
+        if (e->type() == QEvent::ToolTip)
+        {
+            QHelpEvent *he = static_cast<QHelpEvent *>(e);
+            QTreeWidgetItem *item = itemAt(he->pos());
+            for (int which = 0; which < 2 && item != nullptr; ++which)
+                if (levelButton(item, which).contains(he->pos()) && buttonsShown(item))
+                {
+                    QToolTip::showText(he->globalPos(),
+                                       which == 0 ? tr("Fold to songs: everything under this row closes, its songs "
+                                                       "and sections stay in view.")
+                                                  : tr("Open all: every song and cue under this row opens."),
+                                       viewport());
+                    return true;
+                }
+        }
+        return QTreeWidget::viewportEvent(e);
+    }
+
     void paintEvent(QPaintEvent *e) override
     {
         QTreeWidget::paintEvent(e);
+        if (QTreeWidgetItem *row = rowWithButtons())
+        {
+            QPainter b(viewport());
+            b.setRenderHint(QPainter::Antialiasing);
+            const QColor text = palette().color(QPalette::Text);
+            QFont f = font();
+            f.setPointSizeF(qMax(7.0, f.pointSizeF() - 2));
+            b.setFont(f);
+            for (int which = 0; which < 2; ++which)
+            {
+                const QRect r = levelButton(row, which);
+                QColor fill = palette().color(QPalette::Button);
+                fill.setAlpha(230);
+                b.setBrush(fill);
+                QColor edge = text;
+                edge.setAlpha(110);
+                b.setPen(edge);
+                b.drawRoundedRect(r, 3, 3);
+                b.setPen(text);
+                b.drawText(r, Qt::AlignCenter, which == 0 ? QStringLiteral("\u25B8\u00A7") : QStringLiteral("\u25BE\u2026"));
+            }
+        }
         if (m_mark.isNull())
             return;
         QPainter p(viewport());
@@ -557,6 +658,26 @@ protected:
     }
 
 private:
+    bool buttonsShown(const QTreeWidgetItem *item) const
+    {
+        return item != nullptr && !levelButton(item, 0).isNull()
+               && (item == currentItem() || item->isSelected()
+                   || (m_hover.isValid() && itemFromIndex(m_hover) == item));
+    }
+
+    /** The Production / Show row that wears the buttons: the one under the
+     *  mouse, else the selected one. */
+    QTreeWidgetItem *rowWithButtons() const
+    {
+        QTreeWidgetItem *hovered = m_hover.isValid() ? itemFromIndex(m_hover) : nullptr;
+        if (buttonsShown(hovered))
+            return hovered;
+        QTreeWidgetItem *cur = currentItem();
+        return buttonsShown(cur) ? cur : nullptr;
+    }
+
+    QPersistentModelIndex m_hover;
+
     void clearMark()
     {
         if (m_mark.isNull())
@@ -1158,14 +1279,28 @@ public:
     }
 };
 
+/* A form row's label is its own widget: it wears its field's tip, so the
+   words answer on hover as well as the box. */
+void mirrorFormTips(QFormLayout *form)
+{
+    if (form == nullptr)
+        return;
+    for (int r = 0; r < form->rowCount(); ++r)
+    {
+        QLayoutItem *lab = form->itemAt(r, QFormLayout::LabelRole);
+        QLayoutItem *fld = form->itemAt(r, QFormLayout::FieldRole);
+        if (lab == nullptr || fld == nullptr || lab->widget() == nullptr || fld->widget() == nullptr)
+            continue;
+        if (lab->widget()->toolTip().isEmpty())
+            lab->widget()->setToolTip(fld->widget()->toolTip());
+    }
+}
+
 /* What a venue focus cue does, said on its tick box and menu entry. */
 QString venueFocusCueTip()
 {
-    return ShowTreeView::tr("Pre-show: GO onto this cue plays its looks as a preset and waits; the "
-                            "voice says \"Venue focus ready\". On the controller, hold LT and press "
-                            "Menu (or press \u2318\u21a9) to begin the show's focus calls; a pad "
-                            "that also runs cues is armed first, a Focus-only pad needs no arm. LT + "
-                            "Menu again ends the focus. The list stays on the focus cue until LT + A.");
+    return ShowTreeView::tr("Pre-show: GO onto this cue plays its looks and waits while the venue focus calls "
+                            "run (LT + Menu on the controller). Use it to focus before doors.");
 }
 } // namespace
 
@@ -1834,10 +1969,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         connect(m_listMib, QOverload<int>::of(&QComboBox::activated), this, &ShowTreeView::slotListMibChanged);
         m_listFollowTc = new QCheckBox(tr("Follow timecode"), m_listPage);
         m_listFollowTc->setObjectName("stListFollowTimecode");
-        m_listFollowTc->setToolTip(tr("Its cues that have a time (a cue's \"At timecode\") go on by themselves as "
-                                      "the incoming timecode reaches them. A jump forward plays only the latest "
-                                      "cue passed; a jump back re-arms; if timecode stops, the list holds. GO "
-                                      "by hand still works."));
+        m_listFollowTc->setToolTip(tr("Cues with a time go on by themselves as the incoming timecode reaches "
+                                      "them. GO by hand still works."));
         f->addRow(QString(), m_listFollowTc);
         connect(m_listFollowTc, &QCheckBox::toggled, this, &ShowTreeView::slotListFollowTimecodeToggled);
         m_listInfo = new QLabel(m_listPage);
@@ -2111,31 +2244,26 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         f->addRow(tr("Blocking"), m_cueBlockingRow);
         m_cueBase = new QCheckBox(tr("The list's base cue (released layers go back to it)"), inner);
         m_cueBase->setObjectName("stCueBase");
+        m_cueBase->setToolTip(tr("Makes this the list's base cue: a layer set to release goes back to what this "
+                                 "cue holds instead of to dark."));
         f->addRow(QString(), m_cueBase);
         connect(m_cueBase, &QCheckBox::toggled, this, &ShowTreeView::slotCueBaseToggled);
         m_cueMix = new QCheckBox(tr("Overlapping layers mix (as a chaser)"), inner);
         m_cueMix->setObjectName("stCueMix");
-        m_cueMix->setToolTip(tr("Off (the one rule, as everywhere in the tree): where layers share fixtures, "
-                                "the most specific source wins what both set -- a layer's own over a cue look, "
-                                "a child over its parent, then the lower layer -- and the other isn't lit there "
-                                "for it. On: they both play, highest intensity wins -- how an imported chaser "
-                                "played. Convert to tracking turns it off wherever that plays the same."));
+        m_cueMix->setToolTip(tr("Off: where layers share fixtures, the most specific one wins. On: they all play "
+                                "and the highest level wins, as an imported chaser did."));
         f->addRow(QString(), m_cueMix);
         connect(m_cueMix, &QCheckBox::toggled, this, &ShowTreeView::slotCueMixToggled);
         m_cueSkip = new QCheckBox(tr("Skip: GO passes over it"), inner);
         m_cueSkip->setObjectName("stCueSkip");
-        m_cueSkip->setToolTip(tr("Skipped: GO, auto-follow and Back pass over it, and it tracks as if it "
-                                 "weren't in the list (the next cue starts from the cue before it). A jump "
-                                 "straight to it still plays it. Right-click its row \u25b8 Skip cue, or "
-                                 "\u2318/, does the same."));
+        m_cueSkip->setToolTip(tr("GO, auto-follow and Back pass over this cue. A jump straight to it still plays "
+                                 "it. Use it for a cue you might cut."));
         f->addRow(QString(), m_cueSkip);
         connect(m_cueSkip, &QCheckBox::toggled, this, &ShowTreeView::slotCueSkipToggled);
         m_cueNoMib = new QCheckBox(tr("Don't move in black into this cue"), inner);
         m_cueNoMib->setObjectName("stCueNoMib");
-        m_cueNoMib->setToolTip(tr("No head is pre-positioned in black for this cue, whatever its list and the "
-                                  "show say -- for a cue whose heads must be seen moving, or that follows too "
-                                  "closely to move them unseen. Right-click a cue, or nomib 0.0.3, does the "
-                                  "same."));
+        m_cueNoMib->setToolTip(tr("No head moves in black into this cue, whatever the list and show say. Use it "
+                                  "when the move itself must be seen."));
         f->addRow(QString(), m_cueNoMib);
         /* A focus-call cue (docs/design/FOCUS_REFINE_DESIGN.md section 7): GO arms the
            show's focus calls; the controller's Start begins them. */
@@ -2152,9 +2280,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
            while walking the show with the pad (hold Y). */
         m_cueNeedsWork = new QCheckBox(tr("Needs work"), inner);
         m_cueNeedsWork->setObjectName("stCueNeedsWork");
-        m_cueNeedsWork->setToolTip(tr("A mark for later work: nothing plays differently. Set from the stage "
-                                      "while walking the show with the game controller (hold Y), or here. "
-                                      "Say what needs doing in the cue's note."));
+        m_cueNeedsWork->setToolTip(tr("A mark for later; nothing plays differently. Say what is wrong in the "
+                                      "cue's note."));
         f->addRow(QString(), m_cueNeedsWork);
         connect(m_cueNeedsWork, &QCheckBox::toggled, this, [this](bool on) {
             if (m_inspectorUpdating || m_pageCue == invalidId())
@@ -2263,11 +2390,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         // 0.4: an override hit wins over the show, intensity too.
         m_hitOverride = new QCheckBox(tr("Override: wins over everything the show plays"), inner);
         m_hitOverride->setObjectName("stHitOverride");
-        m_hitOverride->setToolTip(tr("On the channels it sets, this hit wins over every cue and effect the show "
-                                     "is playing, intensity too: a blackout pulls lights down, house lights "
-                                     "to full pull them up. The last override fired is on top. Let go, those "
-                                     "channels fade back over its Fade out to what the show plays then. Stop "
-                                     "all lets go of it."));
+        m_hitOverride->setToolTip(tr("This hit wins over everything the show plays on its channels, intensity "
+                                     "too. Use it for a blackout or house lights."));
         f->addRow(QString(), m_hitOverride);
         connect(m_hitOverride, &QCheckBox::toggled, this, [this](bool on) {
             if (m_inspectorUpdating || m_pageCue == invalidId())
@@ -2507,6 +2631,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                         all &= l->release;
             setReleaseOnSelected(!all);
         });
+        m_layerRelease->setToolTip(tr("After this cue the layer lets go and falls back to the base cue, else "
+                                      "to dark. Use it for a look that should not carry on."));
         v->addWidget(m_layerRelease);
         QScrollArea *scroll = new QScrollArea(m_layerPage);
         scroll->setWidgetResizable(true);
@@ -2809,6 +2935,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             updateUsedBy(editedPalette());
     });
 
+    mirrorFormTips(m_listForm);
+    mirrorFormTips(m_cueForm);
     reload();
 }
 
@@ -3209,6 +3337,51 @@ void ShowTreeView::reload()
     updateInspector();
     updateButtons();
     updateBridgeBanner();
+}
+
+QRect ShowTreeView::levelButtonRect(QTreeWidgetItem *item, int which) const
+{
+    return static_cast<ShowTreeWidget *>(m_tree)->levelButton(item, which);
+}
+
+void ShowTreeView::foldLevel(QTreeWidgetItem *item, bool openAll)
+{
+    if (item == nullptr)
+        return;
+    const int kind = item->data(0, KindRole).toInt();
+    if (kind != ProductionNode && kind != ListNode)
+        return;
+    // The row on the way to the selected row stays open, so what is selected
+    // never folds out of sight.
+    QSet<QTreeWidgetItem *> keep;
+    for (QTreeWidgetItem *p = m_tree->currentItem(); p != nullptr; p = p->parent())
+        keep.insert(p);
+    // Everything under it: all open, or folded to its songs/sections. A
+    // Production keeps its shows open (their songs show); a Show is the level
+    // asked about, so it opens and its songs, sections and cues fold.
+    QList<QTreeWidgetItem *> todo;
+    todo << item;
+    item->setExpanded(true);
+    while (!todo.isEmpty())
+    {
+        QTreeWidgetItem *at = todo.takeLast();
+        for (int i = 0; i < at->childCount(); ++i)
+        {
+            QTreeWidgetItem *c = at->child(i);
+            todo << c;
+            const int ck = c->data(0, KindRole).toInt();
+            if (c->childCount() == 0)
+                continue;
+            if (openAll)
+                c->setExpanded(ck != TrackedLayerNode);
+            else
+                c->setExpanded(ck == ListNode || keep.contains(c));
+        }
+    }
+    saveExpanded();
+    if (QTreeWidgetItem *cur = m_tree->currentItem())
+        m_tree->scrollToItem(cur);
+    m_tree->viewport()->update();
 }
 
 void ShowTreeView::saveExpanded()

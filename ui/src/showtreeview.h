@@ -169,6 +169,13 @@ public:
                        LibReusable, LibPaletteFolder, LibBlocking };
 
     QTreeWidget *tree() const { return m_tree; }
+    /** The level buttons of a Production / Show row: fold everything under
+     *  @a item to its songs / sections, or (@a openAll) open it all. The
+     *  selected row stays in view. */
+    void foldLevel(QTreeWidgetItem *item, bool openAll);
+    /** Where a level button sits (0 fold to songs, 1 open all) in the tree's
+     *  viewport; empty on any row but a Production / Show. */
+    QRect levelButtonRect(QTreeWidgetItem *item, int which) const;
     QTreeWidget *library() const { return m_library; }
     /** The programmer's tools under the header (Build has the same). */
     class ProgrammerStrip *programmerStrip() const { return m_programmerStrip; }

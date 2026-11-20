@@ -10,6 +10,17 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Changed
+
+- **Show Tree: fold a level in one click.** A Production or Show row wears two
+  small buttons at its right edge (on hover and on the selected row): fold to
+  songs (the songs and sections stay, their cues close) and open all. The
+  selected row stays in view.
+- **Show Tree: every cue and list tick box says what it does on hover**, in a
+  sentence or two, on the label as well as the box; the base cue's had none.
+
 ## [0.5.1] - 2026-11-20
 
 0.5.1 is a stability and room-setup release. If you only read one line: a
