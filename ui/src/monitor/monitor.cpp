@@ -65,6 +65,7 @@
 #include <QInputDialog>
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
+#include "showfeatures.h"
 #include "showstatus.h"
 #include "studiotemplate.h"
 #include "showsettingsdialog.h"
@@ -1432,6 +1433,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     // ---- Overlay + View, RIGHT-justified ----  the single source of state.
     fl->addWidget(new QLabel(tr("Overlay:")));
     m_overlayCombo = new QComboBox(footer);
+    m_overlayCombo->setObjectName(QStringLiteral("studioOverlay"));
     m_overlayCombo->addItem(tr("Normal"),     ViewNormal);
     m_overlayCombo->addItem(tr("Power"),      ViewPower);
     m_overlayCombo->addItem(tr("DMX"),        ViewDMX);
@@ -1448,6 +1450,10 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
         m_mapView = m_overlayCombo->currentData().toInt();
         applyMapView(m_mapView);
     });
+    // The Power overlay with the Power estimate on for the show (Q293).
+    connect(ShowFeatures::instance(), &ShowFeatures::changed, m_overlayCombo,
+            [this]() { applyShowFeatures(); });
+    applyShowFeatures();
     addSep();
     fl->addWidget(new QLabel(tr("View:")));
     m_povCombo->setToolTip(tr("Point of view — click to cycle, arrow for the full list"));
@@ -1664,6 +1670,8 @@ bool Monitor::eventFilter(QObject *watched, QEvent *event)
         && event->type() == QEvent::MouseButtonPress)
     {
         QComboBox *cb = static_cast<QComboBox *>(watched);
+        if (cb == m_overviewPlaneCombo.data())
+            applyShowFeatures();        // the follow spot's views, as the show is now
         QMouseEvent *me = static_cast<QMouseEvent *>(event);
         QStyleOptionComboBox opt;
         opt.initFrom(cb);
@@ -2794,6 +2802,56 @@ void Monitor::initGraphicsToolbar()
     applyToolbarLabelMode();
 }
 
+void Monitor::applyShowFeatures()
+{
+    /* The Power overlay, with the Power estimate on for the show (Q293). */
+    if (m_overlayCombo != nullptr)
+    {
+        const bool power = ShowFeatures::isOn(ShowFeatures::Power);
+        const int at = m_overlayCombo->findData(int(ViewPower));
+        if (!power && at >= 0)
+        {
+            if (m_overlayCombo->currentIndex() == at)
+                m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(int(ViewNormal))));
+            m_overlayCombo->removeItem(at);
+        }
+        else if (power && at < 0)
+            m_overlayCombo->insertItem(m_overlayCombo->findData(int(ViewNormal)) + 1, tr("Power"),
+                                       int(ViewPower));
+    }
+
+    /* The follow-spot operator's own views (where they stand is set on the
+       follow-spot look): the rig from their eye, looking the way they face,
+       and the plan turned so they are at its bottom edge -- the stick pushed
+       up then goes up the screen. Offered once the show has a follow spot,
+       with no switch (Q293). */
+    QComboBox *planes = m_overviewPlaneCombo.data();
+    if (planes != nullptr)
+    {
+        const bool follow = m_doc->programmer() != nullptr && m_doc->programmer()->showHasFollowSpot();
+        const int at = planes->findData(kOperatorView);
+        if (follow && at < 0)
+        {
+            planes->addItem(tr("Operator"), kOperatorView);
+            planes->setItemData(planes->count() - 1,
+                                tr("From where the follow-spot operator stands, at their eye height, looking "
+                                   "the way they face (set on the follow-spot look)."), Qt::ToolTipRole);
+            planes->addItem(tr("Operator plan"), kOperatorPlan);
+            planes->setItemData(planes->count() - 1,
+                                tr("The plan turned so the follow-spot operator is at the bottom: the stick "
+                                   "pushed up goes up the screen."), Qt::ToolTipRole);
+        }
+        else if (!follow && at >= 0)
+        {
+            const int d = planes->currentData().toInt();
+            if (d == kOperatorView || d == kOperatorPlan)
+                planes->setCurrentIndex(qMax(0, planes->findData(int(StructureStudioView::Angled))));
+            planes->removeItem(planes->findData(kOperatorPlan));
+            planes->removeItem(planes->findData(kOperatorView));
+        }
+    }
+}
+
 void Monitor::applyToolbarLabelMode()
 {
     // Mirror App::TabLabelMode: 0 = Icon+Text (→ text under icon),
@@ -3503,18 +3561,9 @@ void Monitor::showStageOverview()
     QComboBox *planeCombo = new QComboBox(footer);
     planeCombo->setObjectName(QStringLiteral("rigView"));
     fillStudioPlanes(planeCombo, false);
-    /* The follow-spot operator's own views (where they stand is set on the
-       follow-spot look): the rig from their eye, looking the way they face,
-       and the plan turned so they are at its bottom edge -- the stick pushed
-       up then goes up the screen. */
-    planeCombo->addItem(tr("Operator"), kOperatorView);
-    planeCombo->setItemData(planeCombo->count() - 1,
-                            tr("From where the follow-spot operator stands, at their eye height, looking "
-                               "the way they face (set on the follow-spot look)."), Qt::ToolTipRole);
-    planeCombo->addItem(tr("Operator plan"), kOperatorPlan);
-    planeCombo->setItemData(planeCombo->count() - 1,
-                            tr("The plan turned so the follow-spot operator is at the bottom: the stick "
-                               "pushed up goes up the screen."), Qt::ToolTipRole);
+    /* The follow-spot operator's own views come at the end of the list once
+       the show has a follow spot (applyShowFeatures()). */
+    m_overviewPlaneCombo = planeCombo;
     planeCombo->setCurrentIndex(planeCombo->findData(int(StructureStudioView::Angled)));
     planeCombo->setProperty("cycleOnClick", true);   // same as the plot's View
     planeCombo->installEventFilter(this);
@@ -3615,6 +3664,22 @@ void Monitor::showStageOverview()
         }
         view->setPlane(StructureStudioView::Plane(d));
     });
+    /* The Operator views with the show's follow spot: a look added or taken
+       away. Looked at once a burst of edits is over, not on each (a joystick
+       bake changes a scene 50 times a second); and again whenever the list
+       is pressed, which also catches a look's script changed in place. */
+    if (m_featuresSoon == nullptr)
+    {
+        m_featuresSoon = new QTimer(this);
+        m_featuresSoon->setSingleShot(true);
+        m_featuresSoon->setInterval(250);
+        connect(m_featuresSoon, &QTimer::timeout, this, &Monitor::applyShowFeatures);
+    }
+    for (auto sig : { &Doc::functionAdded, &Doc::functionRemoved, &Doc::functionChanged,
+                      &Doc::paletteAdded, &Doc::paletteRemoved })
+        connect(m_doc, sig, planeCombo, [this]() { m_featuresSoon->start(); });
+    connect(m_doc, &Doc::loaded, planeCombo, [this]() { m_featuresSoon->start(); });
+    applyShowFeatures();
 
     /* How much light is in the ROOM. Without it the rendered colours are as
        vivid as a test card whatever the rig is doing, and a blackout still
@@ -7875,6 +7940,10 @@ void Monitor::slotEditTarget(quint32 tid)
                             "chest. A Person is aimed at 80% of its own Height "
                             "instead.").arg(MonitorProperties::formatStageDistance(1.4f)));
     form->addRow(tr("Follow-spot aim height (chest):"), subjSpin);
+    subjSpin->setObjectName(QStringLiteral("targetFollowHeight"));
+    // Only once the show has a follow spot (Q293); the value is kept either way.
+    form->setRowVisible(subjSpin, m_doc->programmer() != nullptr
+                                  && m_doc->programmer()->showHasFollowSpot());
 
     /* WHAT this target is. A kind changes where light is aimed and what is
        drawn at the point -- a drum kit is not a vocalist, and neither is a

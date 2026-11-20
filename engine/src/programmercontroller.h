@@ -667,6 +667,10 @@ public:
     QString followSpotStatusText() const;
     /** True if @p palette is a follow-spot effect look. */
     static bool isFollowSpotPalette(const QLCPalette *palette);
+    /** True when a scene of the show carries a follow-spot effect look: the
+     *  follow spot's own views and fields are offered only then (board Q293,
+     *  no switch: it appears once the show uses one). */
+    bool showHasFollowSpot() const;
     /** The newest scene playing right now (on its own, a chaser's step or a
      *  collection's member -- a Show Tree cue) that carries a follow-spot
      *  effect look; invalid if none. What the stick drives when nothing is

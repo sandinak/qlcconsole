@@ -120,6 +120,8 @@
 #include "doc.h"
 #include "testchannels.h"
 #include "fixturerest.h"
+#include "showfeatures.h"
+#include "speedmasters.h"
 #include "shutterautoopen.h"
 #include "fixture.h"
 #include "qlcchannel.h"
@@ -802,8 +804,11 @@ void App::init()
                 m_statusPowerLabel->hide();
                 return;
             }
-            if (m_showFooterPower == false || m_classicChrome)   // chip off, or Classic QLC+ (Q78)
+            if (!footerChipWanted(FooterPower) || m_classicChrome)   // chip or feature off, or Classic QLC+ (Q78)
+            {
+                m_statusPowerLabel->hide();
                 return;
+            }
             // Only for a show with its power set up (Q89): an estimate against
             // no supply is noise.
             if (m_doc->powerDistribution() == NULL || m_doc->powerDistribution()->sources().isEmpty())
@@ -936,6 +941,11 @@ void App::init()
        no tab in it (board Q32): Window → Functions switches to a view that
        has the stock Functions tab (Q73). */
     m_customTabs.clear();
+    /* The show's features (Q293): all on for a new show; a switch puts its
+       chips, menu items and pages away or back at once. */
+    ShowFeatures::instance()->reset();
+    connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &App::applyShowFeatures,
+            Qt::UniqueConnection);
     setWorkspaceView(newShowView(), false);
     // Load and apply the tab label mode preference.
     {
@@ -1422,6 +1432,7 @@ void App::clearDocument()
     if (m_inputNotices != nullptr)
         m_inputNotices->reset();
     m_customTabs.clear();
+    ShowFeatures::instance()->reset();
     setWorkspaceView(newShowView(), false);
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
@@ -3459,9 +3470,10 @@ void App::initMenuBar()
             m_workspaceViewActions << a;
         }
         workspace->addSeparator();
-        m_chooseTabsAction = workspace->addAction(tr("Tabs…"));
+        m_chooseTabsAction = workspace->addAction(tr("Tabs && Features…"));
         m_chooseTabsAction->setObjectName(QStringLiteral("viewTabsAction"));
-        m_chooseTabsAction->setToolTip(tr("Choose and order the tabs along the bottom; saved with the show"));
+        m_chooseTabsAction->setToolTip(tr("Choose and order the tabs along the bottom, and turn features "
+                                          "on or off; saved with the show"));
         connect(m_chooseTabsAction, &QAction::triggered, this, &App::slotChooseTabs);
         updateWorkspaceViewActions();
         viewMenu->addSeparator();
@@ -3499,7 +3511,9 @@ void App::initMenuBar()
     QAction *venueAct = viewMenu->addAction(tr("Venue…"));
     venueAct->setObjectName(QStringLiteral("viewVenueAction"));
     venueAct->setToolTip(tr("Switch, make, rename or check the venue: the room the show is in"));
+    venueAct->setVisible(ShowFeatures::isOn(ShowFeatures::Venues));
     connect(venueAct, &QAction::triggered, this, [this]() { openVenueMenu(); });
+    m_venueAction = venueAct;
 
     viewMenu->addSeparator();
     // Blind: what the screens show against the stage -- Design mutes the
@@ -5314,7 +5328,7 @@ QList<QWidget *> App::statusChipsByPriority() const
         goHeld ? m_statusStandby : nullptr,
         m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusShowOnlyLabel,
         m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
-        m_statusGrandMasterBox, m_statusReviewLabel, m_venueChip,
+        m_statusGrandMasterBox, m_statusMastersHeldLabel, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
         goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
         m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
@@ -5436,6 +5450,7 @@ void App::slotFooterGrandMasterValueChanged(uchar value)
     if (m_statusGrandMasterValueLabel != NULL)
         m_statusGrandMasterValueLabel->setText(
             QString("%1%").arg(qRound(double(value) * 100.0 / 255.0)));
+    updateMastersHeldChip();
 }
 
 void App::slotControlPanic()
@@ -5943,19 +5958,24 @@ void App::closeOpenedTab(int index)
 
 void App::slotChooseTabs()
 {
-    if (m_workspaceView == ClassicView)
-        return;
+    /* Classic keeps QLC+'s own tabs (its list is greyed), but a show's
+       features can always be turned back on from here (Q293). */
+    const bool classic = m_workspaceView == ClassicView;
     QDialog dlg(this);
     dlg.setObjectName(QStringLiteral("chooseTabsDialog"));
-    dlg.setWindowTitle(tr("Tabs"));
+    dlg.setWindowTitle(tr("Tabs & Features"));
     QVBoxLayout *col = new QVBoxLayout(&dlg);
     QLabel *hint = new QLabel(tr("Click a tab to show or hide it, and drag it into order. "
                                  "Connections and Run are always there. Saved with the show.\n"
                                  "Simple Desk opens from Window ▸ Simple Desk (⇧⌘D)."), &dlg);
     hint->setWordWrap(true);
+    if (classic)
+        hint->setText(tr("Classic QLC+ keeps QLC+'s own tabs: switch to the qlcconsole or Everything "
+                         "view (View ▸ Workspace) to choose them. The features below work in every view."));
     col->addWidget(hint);
     QListWidget *list = new QListWidget(&dlg);
     list->setObjectName(QStringLiteral("chooseTabsList"));
+    list->setEnabled(!classic);
     list->setDragDropMode(QAbstractItemView::InternalMove);
     col->addWidget(list);
     const QStringList now = effectiveViewTabs();
@@ -5990,15 +6010,18 @@ void App::slotChooseTabs()
     add(tr("Run"), true);
     // A click anywhere on a row toggles it, not only on its small box (a
     // click on the box already did: then leave it).
-    auto pressedState = std::make_shared<int>(-1);
-    connect(list, &QListWidget::itemPressed, &dlg, [pressedState](QListWidgetItem *it) {
-        *pressedState = (it->flags() & Qt::ItemIsUserCheckable) ? int(it->checkState()) : -1;
-    });
-    connect(list, &QListWidget::itemClicked, &dlg, [pressedState](QListWidgetItem *it) {
-        if (*pressedState >= 0 && int(it->checkState()) == *pressedState)
-            it->setCheckState(it->checkState() == Qt::Checked ? Qt::Unchecked : Qt::Checked);
-        *pressedState = -1;
-    });
+    auto clickToggles = [&dlg](QListWidget *l) {
+        auto pressedState = std::make_shared<int>(-1);
+        connect(l, &QListWidget::itemPressed, &dlg, [pressedState](QListWidgetItem *it) {
+            *pressedState = (it->flags() & Qt::ItemIsUserCheckable) ? int(it->checkState()) : -1;
+        });
+        connect(l, &QListWidget::itemClicked, &dlg, [pressedState](QListWidgetItem *it) {
+            if (*pressedState >= 0 && int(it->checkState()) == *pressedState)
+                it->setCheckState(it->checkState() == Qt::Checked ? Qt::Unchecked : Qt::Checked);
+            *pressedState = -1;
+        });
+    };
+    clickToggles(list);
     // A row dropped above Connections or below Run: the pinned rows go back.
     auto pin = [list, this]() {
         for (int i = 0; i < list->count(); ++i)
@@ -6016,6 +6039,31 @@ void App::slotChooseTabs()
     connect(list->model(), &QAbstractItemModel::rowsInserted, &dlg, [list, pin]() {
         QTimer::singleShot(0, list, pin);
     });
+    /* Features (board Q293), for this show: one off is put away -- its chip,
+       menu items and pages -- and its data kept; on again, back as it was. */
+    QLabel *featuresHint = new QLabel(tr("<b>Features</b>, for this show: one turned off is put away "
+                                         "(its footer chip, menu items and pages); its settings are "
+                                         "kept. WLED is always on, and the follow spot's views appear "
+                                         "once the show has a follow spot. The emergency stop is "
+                                         "never hidden."), &dlg);
+    featuresHint->setObjectName(QStringLiteral("chooseFeaturesHint"));
+    featuresHint->setWordWrap(true);
+    col->addWidget(featuresHint);
+    QListWidget *features = new QListWidget(&dlg);
+    features->setObjectName(QStringLiteral("chooseFeaturesList"));
+    ShowFeatures *sf = ShowFeatures::instance();
+    for (int f = 0; f < ShowFeatures::FeatureCount; ++f)
+    {
+        const ShowFeatures::Feature feat = ShowFeatures::Feature(f);
+        QListWidgetItem *it = new QListWidgetItem(ShowFeatures::label(feat), features);
+        it->setData(Qt::UserRole, f);
+        it->setToolTip(ShowFeatures::description(feat));
+        it->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsUserCheckable);
+        it->setCheckState(sf->on(feat) ? Qt::Checked : Qt::Unchecked);
+    }
+    clickToggles(features);
+    col->addWidget(features);
+
     QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel
                                                  | QDialogButtonBox::RestoreDefaults, &dlg);
     box->setObjectName(QStringLiteral("chooseTabsButtons"));
@@ -6023,8 +6071,30 @@ void App::slotChooseTabs()
     connect(box, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(box, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
     connect(box->button(QDialogButtonBox::RestoreDefaults), &QPushButton::clicked, &dlg,
-            [this, &dlg]() { setCustomTabs(QStringList()); dlg.reject(); });
+            [this, &dlg, classic]() {
+        if (!classic)
+            setCustomTabs(QStringList());
+        if (!ShowFeatures::instance()->offSet().isEmpty())
+        {
+            ShowFeatures::instance()->reset();
+            if (m_doc != NULL)
+                m_doc->setModified();
+        }
+        dlg.reject();
+    });
     if (dlg.exec() != QDialog::Accepted)
+        return;
+    QSet<int> off;
+    for (int i = 0; i < features->count(); ++i)
+        if (features->item(i)->checkState() != Qt::Checked)
+            off.insert(features->item(i)->data(Qt::UserRole).toInt());
+    if (off != sf->offSet())
+    {
+        sf->setOffSet(off);
+        if (m_doc != NULL)
+            m_doc->setModified();
+    }
+    if (classic)
         return;
     QStringList chosen;
     for (int i = 0; i < list->count(); ++i)
@@ -6222,13 +6292,8 @@ void App::applyClassicChrome()
     // The footer: the mode, the Grand Master and Ready only -- and the
     // venue chip once the show has venues (Q150).
     updateVenueFooter();
-    if (m_statusLoadLabel != NULL)
-        m_statusLoadLabel->setVisible(m_showFooterLoad && !classic);
-    if (m_statusPowerLabel != NULL && classic)
-        m_statusPowerLabel->hide();
+    applyFooterChips();
     slotTimecodeStatusChanged();        // shown only outside Classic, once there's a source
-    if (m_statusSpeedMasters != NULL)
-        m_statusSpeedMasters->setVisible(m_showFooterSpeed && !classic);
     if (m_statusStandby != NULL && classic)
         m_statusStandby->hide();
     else
@@ -6250,12 +6315,13 @@ void App::updateWorkspaceViewActions()
 {
     foreach (QAction *a, m_workspaceViewActions)
         a->setChecked(a->data().toInt() == int(m_workspaceView));
-    if (m_chooseTabsAction != nullptr)      // Classic stays stock QLC+
+    if (m_chooseTabsAction != nullptr)      // Classic keeps QLC+'s tabs; its features still switch
     {
-        m_chooseTabsAction->setEnabled(m_workspaceView != ClassicView);
+        m_chooseTabsAction->setEnabled(true);
         m_chooseTabsAction->setToolTip(m_workspaceView == ClassicView
-            ? tr("Classic keeps QLC+'s own tabs; switch view to choose")
-            : tr("Choose and order the tabs along the bottom; saved with the show"));
+            ? tr("Turn features on or off for this show (Classic keeps QLC+'s own tabs)")
+            : tr("Choose and order the tabs along the bottom, and turn features on or off; saved "
+                 "with the show"));
     }
 }
 
@@ -7269,6 +7335,10 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
     // The view it was saved in (absent: an older show; see below).
     const QString viewKey = doc.attributes().value(KXMLQLCWorkspaceView).toString();
     const QString tabsAttr = doc.attributes().value(QStringLiteral("Tabs")).toString();
+    /* The features turned off (Q293); none named, every one is on. Set now,
+       before the show's parts are read, so nothing reads the last show's. */
+    ShowFeatures::instance()->setFromOffAttribute(
+        doc.attributes().value(QStringLiteral("FeaturesOff")).toString());
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
     m_showTreeNoticeDismissed = false;      // P45: back each time the show opens
@@ -7501,6 +7571,10 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
             out << keys.value(all.indexOf(t));
         doc.writeAttribute(QStringLiteral("Tabs"), out.join(QLatin1Char('|')));
     }
+    /* Tabs & Features…: the features turned off, by key; an older reader
+       (and this one, for a feature it doesn't know) skips it. */
+    if (!ShowFeatures::instance()->offAttribute().isEmpty())
+        doc.writeAttribute(QStringLiteral("FeaturesOff"), ShowFeatures::instance()->offAttribute());
 
     doc.writeStartElement(KXMLQLCCreator);
     doc.writeTextElement(KXMLQLCCreatorName, APPNAME);
@@ -7968,30 +8042,155 @@ void App::setFooterChipShown(FooterChip chip, bool on)
     case FooterLoad:
         m_showFooterLoad = on;
         settings.setValue(SETTINGS_SHOW_FOOTER_LOAD, on);
-        if (m_statusLoadLabel != NULL)
-            m_statusLoadLabel->setVisible(on && !m_classicChrome);
         break;
     case FooterPower:
         m_showFooterPower = on;
         settings.setValue(SETTINGS_SHOW_FOOTER_POWER, on);
-        // Turned back on, the chip stays hidden until the next
-        // powerEstimateChanged repopulates it (Design mode only).
-        if (m_statusPowerLabel != NULL && on == false)
-            m_statusPowerLabel->hide();
         break;
     case FooterGrandMaster:
         m_showFooterGM = on;
         settings.setValue(SETTINGS_SHOW_FOOTER_GM, on);
-        if (m_statusGrandMasterBox != NULL)
-            m_statusGrandMasterBox->setVisible(on);
         break;
     case FooterSpeedMasters:
         m_showFooterSpeed = on;
         settings.setValue(SETTINGS_SHOW_FOOTER_SPEED, on);
-        if (m_statusSpeedMasters != NULL)
-            m_statusSpeedMasters->setVisible(on && !m_classicChrome);
         break;
     }
+    applyFooterChips();
+}
+
+int App::footerChipFeature(FooterChip chip)
+{
+    switch (chip)
+    {
+    case FooterLoad:         return ShowFeatures::EngineLoad;
+    case FooterPower:        return ShowFeatures::Power;
+    case FooterGrandMaster:  return ShowFeatures::GrandMaster;
+    case FooterSpeedMasters:
+    default:                 return ShowFeatures::SpeedMasters;
+    }
+}
+
+bool App::footerChipWanted(FooterChip chip) const
+{
+    return footerChipShown(chip) && ShowFeatures::isOn(ShowFeatures::Feature(footerChipFeature(chip)));
+}
+
+void App::applyFooterChips()
+{
+    if (m_statusLoadLabel != NULL)
+        m_statusLoadLabel->setVisible(footerChipWanted(FooterLoad) && !m_classicChrome);
+    // Turned back on, the power chip stays hidden until the next
+    // powerEstimateChanged repopulates it (Design mode only).
+    if (m_statusPowerLabel != NULL && (!footerChipWanted(FooterPower) || m_classicChrome))
+        m_statusPowerLabel->hide();
+    else if (m_statusPowerLabel != NULL && m_statusPowerLabel->isHidden()
+             && !m_statusPowerLabel->text().isEmpty() && m_doc != NULL && m_doc->mode() == Doc::Design
+             && m_doc->powerDistribution() != NULL && !m_doc->powerDistribution()->sources().isEmpty())
+        m_statusPowerLabel->show();     // back on: the last estimate at once, not at the next one
+    if (m_statusGrandMasterBox != NULL)
+        m_statusGrandMasterBox->setVisible(footerChipWanted(FooterGrandMaster));
+    if (m_statusSpeedMasters != NULL)
+        m_statusSpeedMasters->setVisible(footerChipWanted(FooterSpeedMasters) && !m_classicChrome);
+    updateMastersHeldChip();
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
+}
+
+void App::updateMastersHeldChip()
+{
+    if (m_statusMastersHeldLabel == nullptr || m_doc == NULL)
+        return;
+    QStringList parts, tip;
+    const bool gmShown = m_statusGrandMasterBox != nullptr && !m_statusGrandMasterBox->isHidden();
+    const uchar gm = m_doc->inputOutputMap()->grandMasterValue();
+    if (!gmShown && gm < 255)
+    {
+        parts << tr("GM %1%").arg(qRound(double(gm) * 100.0 / 255.0));
+        tip << tr("The Grand Master is at %1%, below full: everything sent is scaled by it.")
+                   .arg(qRound(double(gm) * 100.0 / 255.0));
+    }
+    const bool speedShown = m_statusSpeedMasters != nullptr && !m_statusSpeedMasters->isHidden();
+    if (!speedShown && m_doc->speedMasters() != nullptr)
+    {
+        SpeedMasters *sm = m_doc->speedMasters();
+        for (int i = 0; i < sm->count(); ++i)
+        {
+            const QString name = sm->name(i).isEmpty() ? tr("Speed %1").arg(i + 1) : sm->name(i);
+            if (sm->isPaused(i))
+                parts << tr("%1 Paused").arg(name);
+            else if (!qFuzzyCompare(sm->rate(i), 1.0))
+                parts << tr("%1 ×%2").arg(name).arg(sm->rate(i), 0, 'f', 2);
+            else
+                continue;
+            tip << tr("Speed master %1 is away from its set tempo.").arg(name);
+        }
+    }
+    if (parts.isEmpty())
+    {
+        if (!m_statusMastersHeldLabel->isHidden())
+        {
+            m_statusMastersHeldLabel->hide();
+            if (m_statusFitTimer != nullptr)
+                m_statusFitTimer->start();
+        }
+        return;
+    }
+    m_statusMastersHeldLabel->setText(parts.join(QStringLiteral(" · ")));
+    m_statusMastersHeldLabel->setToolTip(tip.join(QLatin1Char('\n')) + QStringLiteral("\n\n")
+        + tr("Its own footer chip is put away (right-click the footer, or View ▸ Workspace ▸ Tabs & "
+             "Features…); this stays while it is held, so a live master is never hidden."));
+    if (m_statusMastersHeldLabel->isHidden())
+    {
+        m_statusMastersHeldLabel->show();
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+    }
+}
+
+QMenu *App::footerChipMenu(const QPoint &globalPos, bool exec)
+{
+    QMenu *menu = new QMenu(this);
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->setObjectName(QStringLiteral("footerChipMenu"));
+    menu->setToolTipsVisible(true);
+    const struct { FooterChip chip; const char *name; const char *label; } chips[] = {
+        { FooterGrandMaster,  "footerChipGrandMaster",  QT_TR_NOOP("Grand Master") },
+        { FooterSpeedMasters, "footerChipSpeedMasters", QT_TR_NOOP("Speed Masters") },
+        { FooterPower,        "footerChipPower",        QT_TR_NOOP("Power Estimate") },
+        { FooterLoad,         "footerChipLoad",         QT_TR_NOOP("Engine Load") } };
+    for (const auto &c : chips)
+    {
+        // Classic QLC+'s footer shows only the Grand Master (Q78): no tick
+        // for a chip it never shows.
+        if (m_classicChrome && c.chip != FooterGrandMaster)
+            continue;
+        QAction *a = menu->addAction(tr(c.label));
+        a->setObjectName(QString::fromLatin1(c.name));
+        a->setCheckable(true);
+        a->setChecked(footerChipShown(c.chip));
+        const ShowFeatures::Feature f = ShowFeatures::Feature(footerChipFeature(c.chip));
+        if (!ShowFeatures::isOn(f))
+        {
+            // Off for this show: the show's switch is the one to use.
+            a->setEnabled(false);
+            a->setToolTip(tr("%1 is off for this show: View ▸ Workspace ▸ Tabs & Features…")
+                              .arg(ShowFeatures::label(f)));
+        }
+        else
+            a->setToolTip(tr("Show or hide this chip on this computer (also Settings ▸ Appearance ▸ Footer)"));
+        const FooterChip chip = c.chip;
+        connect(a, &QAction::toggled, this, [this, chip](bool on) { setFooterChipShown(chip, on); });
+    }
+    menu->addSeparator();
+    QAction *features = menu->addAction(tr("Tabs && Features…"));
+    features->setObjectName(QStringLiteral("footerChipFeatures"));
+    features->setEnabled(m_chooseTabsAction != nullptr && m_chooseTabsAction->isEnabled());
+    features->setToolTip(tr("Turn a feature off or on for this show: its chip, menus and pages"));
+    connect(features, &QAction::triggered, this, &App::slotChooseTabs, Qt::QueuedConnection);
+    if (exec)
+        menu->popup(globalPos);
+    return menu;
 }
 
 void App::reloadFooterBeatOptions()
@@ -8619,7 +8818,26 @@ void App::updateVenueFooter()
     {
         return;
     }
+    // Hidden with Venues off for the show (VenueChip::wanted()).
     m_venueChip->setAlwaysShown(m_workspaceView != ClassicView);
+}
+
+void App::applyShowFeatures()
+{
+    ShowFeatures *sf = ShowFeatures::instance();
+    // The footer: the four optional chips, the venue chip and Show Review's.
+    applyFooterChips();
+    updateVenueFooter();
+    if (m_venueAction != nullptr)
+        m_venueAction->setVisible(sf->on(ShowFeatures::Venues));
+    updateReviewStatus();
+    if (!sf->on(ShowFeatures::Review) && m_reviewTimer != nullptr)
+        m_reviewTimer->stop();
+    // The tabs' own surfaces look again.
+    if (FixtureManager *fm = FixtureManager::instance())
+        fm->updateView();
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
 }
 
 QString App::venueFooterText() const
@@ -8718,7 +8936,8 @@ void App::initStatusBar()
         m_reviewTimer->setSingleShot(true);
         m_reviewTimer->setInterval(2000);
         connect(m_reviewTimer, &QTimer::timeout, this, [this]() {
-            if (m_doc == NULL || m_doc->mode() != Doc::Design)
+            if (m_doc == NULL || m_doc->mode() != Doc::Design
+                || !ShowFeatures::isOn(ShowFeatures::Review))   // off for the show: Re-check only
                 return;
             const ShowReview::Result &last = m_doc->showReview()->lastResult();
             if (last.ran && last.ms > 500)
@@ -8876,16 +9095,23 @@ void App::initStatusBar()
         }
         connect(m_statusGrandMasterSlider, &QSlider::valueChanged,
                 this, &App::slotFooterGrandMasterMoved);
-        gmBox->setVisible(m_showFooterGM);   // Settings ▸ Appearance
+        gmBox->setVisible(footerChipWanted(FooterGrandMaster));   // the footer's right-click, Settings ▸ Appearance
         sb->addWidget(gmBox, 0);
     }
+    m_statusMastersHeldLabel = new QLabel(this);
+    m_statusMastersHeldLabel->setObjectName(QStringLiteral("footerMastersHeld"));
+    m_statusMastersHeldLabel->setStyleSheet(QStringLiteral("QLabel { color: #b9770e; font-weight: bold; }"));
+    m_statusMastersHeldLabel->hide();
+    sb->addWidget(m_statusMastersHeldLabel, 0);
+    if (m_doc != NULL)
+        connect(m_doc->speedMasters(), &SpeedMasters::changed, this, [this](int) { updateMastersHeldChip(); });
 
     // The speed masters beside the GM: each master's tempo, lit on its beat;
     // a click opens the Speed Masters window at it.
     if (m_doc != NULL)
     {
         m_statusSpeedMasters = new SpeedMastersFooter(m_doc, this);
-        m_statusSpeedMasters->setVisible(m_showFooterSpeed);   // Settings ▸ Appearance
+        m_statusSpeedMasters->setVisible(footerChipWanted(FooterSpeedMasters));   // the footer's right-click, Settings ▸ Appearance
         sb->addWidget(m_statusSpeedMasters, 0);
     }
 
@@ -8944,7 +9170,7 @@ void App::initStatusBar()
         QFontMetrics(chipFont).horizontalAdvance(QStringLiteral("Load: 00.00 / 00 ms (000%)  stall 000 ms")) + 14);
     m_statusLoadLabel->setToolTip(tr("Engine tick compute time vs the per-tick "
         "budget. Amber above 60%, red at/over budget (dropped frames likely)."));
-    m_statusLoadLabel->setVisible(m_showFooterLoad);   // Settings ▸ Appearance
+    m_statusLoadLabel->setVisible(footerChipWanted(FooterLoad));   // the footer's right-click, Settings ▸ Appearance
     sb->addWidget(m_statusLoadLabel, 0);
 
     // Estimated electrical load (Design mode) — the designed peak draw across the
@@ -9306,6 +9532,14 @@ bool App::eventFilter(QObject *watched, QEvent *event)
             updatePadRoleChip();
         }
         m_statusFitTimer->start();
+    }
+    /* Right-click the footer (Q293): a tick for each optional chip, the one
+       setting Settings ▸ Appearance ▸ Footer shows too. A chip with a menu
+       of its own (Review, the venue) keeps its own. */
+    if (watched == statusBar() && event->type() == QEvent::ContextMenu)
+    {
+        footerChipMenu(static_cast<QContextMenuEvent *>(event)->globalPos());
+        return true;
     }
     /* The footer's "Unsaved changes": hover says how many, a click lists them. */
     if (watched == m_statusDirtyLabel && m_statusDirtyLabel != NULL && m_doc != NULL && m_doc->isModified())
@@ -10144,7 +10378,7 @@ void App::slotTimecodeStatusChanged()
 
 void App::slotUpdateHealthFooter()
 {
-    if (m_statusLoadLabel != NULL && m_showFooterLoad && m_doc != NULL && m_doc->masterTimer() != NULL)
+    if (m_statusLoadLabel != NULL && footerChipWanted(FooterLoad) && m_doc != NULL && m_doc->masterTimer() != NULL)
     {
         // Peak tick over the poll window — far more informative than the last
         // tick, which is tiny/noisy on a light show.
@@ -10823,7 +11057,7 @@ void App::updateReviewStatus()
     if (m_statusReviewLabel == nullptr || m_doc == NULL)
         return;
     const ShowReview::Result &r = m_doc->showReview()->lastResult();
-    if (!r.ran)
+    if (!r.ran || !ShowFeatures::isOn(ShowFeatures::Review))   // or off for the show (Q293)
     {
         m_statusReviewLabel->hide();
         return;

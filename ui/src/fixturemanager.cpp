@@ -47,6 +47,7 @@
 #include <QtGui>
 #include <climits>
 
+#include "showfeatures.h"
 #include "mainbar.h"
 #include "patchlistdialog.h"
 #include "qlcfixturemode.h"
@@ -3663,8 +3664,9 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             }
         }
 
-        // Power circuits live in the power-distribution pane on the right.
-        if (selFixtures.isEmpty() == false)
+        // Power circuits live in the power-distribution pane on the right
+        // (put away with the Power estimate off for the show, Q293).
+        if (selFixtures.isEmpty() == false && ShowFeatures::isOn(ShowFeatures::Power))
         {
             QMenu *powerMenu = setupMenu->addMenu(tr("Power"));
             PowerDistribution *pd = m_doc->powerDistribution();

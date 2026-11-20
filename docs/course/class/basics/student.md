@@ -45,7 +45,7 @@ app: true
 
 - **The tabs** are along the bottom (**7**): Connections, Fixtures, Lighting Studio, Show Tree,
   Timeline, Virtual Console and Run. Click one, or use **Window** and its shortcut.
-  Simple Desk opens from **Window** when you need it; **View ▸ Workspace ▸ Tabs…** changes the set.
+  Simple Desk opens from **Window** when you need it; **View ▸ Workspace ▸ Tabs & Features…** changes the set.
 - **The footer**, under the tabs, says whether your work is saved (bottom
   right) and reads *No outputs: preview only* in class: the course shows
   aren't connected to real lights.
@@ -58,7 +58,7 @@ programmer wants the Show Tree and Lighting Studio close together. The set
 and its order are yours to choose, and they are saved **with the show**, so
 the next person who opens it sees the same tabs.
 
-1. **View ▸ Workspace ▸ Tabs…**
+1. **View ▸ Workspace ▸ Tabs & Features…**
 2. Click a tab's row to show or hide it. Drag a row to put it where you
    want it.
 3. **OK**.

@@ -50,6 +50,7 @@
 #include "doc.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
+#include "showfeatures.h"
 
 using namespace ShowTree;
 
@@ -157,6 +158,8 @@ void ShowTreeView::setupBackwashMarks()
     connect(m_doc->showReview(), &ShowReview::reviewed, this, &ShowTreeView::applyBackwashMarks);
     // Not a Problem / Reopen: the badge follows at once, not at the next run.
     connect(m_doc->showReview(), &ShowReview::acceptancesChanged, this, &ShowTreeView::applyBackwashMarks);
+    // Show Review off for the show (Q293): no marks; back on, they come back.
+    connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &ShowTreeView::applyBackwashMarks);
     connect(m_tree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item, int column) {
         if (item == nullptr || column != FlagsCol || item->data(0, KindRole).toInt() != CueNode)
             return;
@@ -173,7 +176,8 @@ void ShowTreeView::applyBackwashMarks()
     // open ones (the amber mark) and ones marked meant (the green one). One
     // not a problem is neither: no badge.
     QHash<quint32, QList<int>> byCue, meantByCue;
-    const QList<ReviewFinding> &found = m_doc->showReview()->lastResult().findings;
+    const QList<ReviewFinding> found = ShowFeatures::isOn(ShowFeatures::Review)
+                                       ? m_doc->showReview()->lastResult().findings : QList<ReviewFinding>();
     for (int i = 0; i < found.count(); ++i)
     {
         const ReviewFinding &f = found.at(i);

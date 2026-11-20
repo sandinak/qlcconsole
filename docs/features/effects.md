@@ -778,8 +778,8 @@ beat** chooses how the beat shows: a **Blink**, a **Bar across each beat**
 beat**, and **Show the beat** chooses when: **Only while something on it
 plays** (the default: a look, chase or effect on that master, or on one
 following it, is running), or **Always**. Click one to open this window at
-that master. **Settings ▸ Appearance ▸ Show the speed masters** turns them
-off. With more than eight in use the names are
+that master. Right-click the footer and untick **Speed Masters** to put
+them away (the same as **Settings ▸ Appearance ▸ Show the speed masters**). With more than eight in use the names are
 shortened (an unnamed one shows its number, "S9"); the tooltip has it all.
 
 **What runs on a master** — choose **Speed** in any of these; the

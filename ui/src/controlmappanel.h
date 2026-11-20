@@ -99,6 +99,9 @@ private:
     QPushButton *m_estop;
     QLabel *m_empty;
     QLabel *m_last;
+    /** "Control surfaces are off for this show": the triggers and the encoder
+     *  bank put away (Q293); the emergency stop stays. */
+    QLabel *m_featureOff = nullptr;
 
     /** What the next control heard is set as. */
     enum LearnTarget { LearnNone = 0, LearnEncoders, LearnPushes, LearnNext, LearnPrevious, LearnDirect,

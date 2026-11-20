@@ -24,6 +24,7 @@
 
 #include "showreviewmarker.h"
 #include "showreviewpanel.h"
+#include "showfeatures.h"
 #include "showtreecontroller.h"
 #include "contextmenus.h"
 #include "doc.h"
@@ -70,7 +71,8 @@ QString shortTitle(const ReviewFinding &f)
 QList<ReviewFinding> ShowReviewMarker::openFindings(Doc *doc)
 {
     QList<ReviewFinding> out;
-    if (doc == nullptr || doc->showReview() == nullptr)
+    if (doc == nullptr || doc->showReview() == nullptr
+        || !ShowFeatures::isOn(ShowFeatures::Review))       // off for the show (Q293)
         return out;
     for (const ReviewFinding &f : doc->showReview()->lastResult().findings)
         if (f.isOpen() && f.severity >= ReviewFinding::Warning)
@@ -84,7 +86,8 @@ QList<ReviewFinding> ShowReviewMarker::openFindings(Doc *doc)
 QList<ReviewFinding> ShowReviewMarker::cueMeant(Doc *doc, quint32 cueId)
 {
     QList<ReviewFinding> out;
-    if (doc == nullptr || doc->showReview() == nullptr)
+    if (doc == nullptr || doc->showReview() == nullptr
+        || !ShowFeatures::isOn(ShowFeatures::Review))       // off for the show (Q293)
         return out;
     for (const ReviewFinding &f : doc->showReview()->lastResult().findings)
         if (f.intended && ShowReview::findingCues(f).contains(cueId))
@@ -117,7 +120,8 @@ QString ShowReviewMarker::stateSummary(Doc *doc)
 QList<ReviewFinding> ShowReviewMarker::cueFindings(Doc *doc, quint32 cueId)
 {
     QList<ReviewFinding> out;
-    if (doc == nullptr || doc->showReview() == nullptr)
+    if (doc == nullptr || doc->showReview() == nullptr
+        || !ShowFeatures::isOn(ShowFeatures::Review))       // off for the show (Q293)
         return out;
     for (const ReviewFinding &f : doc->showReview()->lastResult().findings)
         if (f.isOpen() && ShowReview::findingCues(f).contains(cueId))

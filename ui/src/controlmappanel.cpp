@@ -32,6 +32,7 @@
 #include <QLabel>
 #include <QColor>
 
+#include "showfeatures.h"
 #include "controlmappanel.h"
 #include "controllearndialog.h"
 #include "inputoutputmap.h"
@@ -63,6 +64,14 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_empty->setWordWrap(true);
     m_empty->setStyleSheet(QStringLiteral("color: gray;"));
     lay->addWidget(m_empty);
+    m_featureOff = new QLabel(tr("Control surfaces are off for this show (View ▸ Workspace ▸ Tabs & "
+                                 "Features…): the triggers and the encoder bank are put away, and a "
+                                 "learned control still fires. The emergency stop is always here."), this);
+    m_featureOff->setObjectName(QStringLiteral("controlMapFeatureOff"));
+    m_featureOff->setWordWrap(true);
+    m_featureOff->setStyleSheet(QStringLiteral("color: gray;"));
+    m_featureOff->hide();
+    lay->addWidget(m_featureOff);
 
     m_table = new QTableWidget(0, 3, this);
     m_table->setObjectName(QStringLiteral("controlMapTable"));
@@ -115,6 +124,7 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     // Names follow renames.
     connect(m_doc, &Doc::functionChanged, this, [this]() { if (isVisible()) refresh(); });
     connect(m_doc, &Doc::functionNameChanged, this, [this]() { if (isVisible()) refresh(); });
+    connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &ControlMapPanel::refresh);
     refresh();
 }
 
@@ -174,8 +184,17 @@ void ControlMapPanel::refresh()
     }
     refreshStop();
     const bool any = !bindings.isEmpty();
-    m_empty->setVisible(!any);
-    m_table->setVisible(any);
+    /* Control surfaces off for the show (Q293): the triggers and the encoder
+       bank are put away; the Emergency Stop button never is. */
+    const bool surfaces = ShowFeatures::isOn(ShowFeatures::ControlSurfaces);
+    m_empty->setVisible(surfaces && !any);
+    m_table->setVisible(surfaces && any);
+    m_remove->setVisible(surfaces);
+    m_removeAll->setVisible(surfaces);
+    m_featureOff->setVisible(!surfaces);
+    if (m_encoderBox != nullptr)
+        m_encoderBox->setVisible(surfaces);
+    m_estop->setVisible(true);
     m_removeAll->setEnabled(any);
     m_remove->setEnabled(any && !m_table->selectionModel()->selectedRows().isEmpty());
     refreshEncoder();

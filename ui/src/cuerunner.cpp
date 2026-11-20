@@ -43,6 +43,7 @@
 
 #include <functional>
 
+#include "showfeatures.h"
 #include "showtreecontroller.h"
 #include "timecodesource.h"
 #include "timecodecues.h"
@@ -607,6 +608,7 @@ void CueRunner::buildFullLayout()
     });
     head->addWidget(m_focusCallsBtn);
     connect(m_doc->programmer()->focusCalls(), &FocusCalls::changed, this, &CueRunner::refreshFocusCalls);
+    connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &CueRunner::refreshFocusCalls);
     connect(m_doc->programmer()->venueCorrections(), &VenueCorrections::activeVenueChanged,
             this, &CueRunner::refreshFocusCalls);
     refreshFocusCalls();
@@ -621,6 +623,7 @@ void CueRunner::buildFullLayout()
         m_doc->programmer()->padRun()->setEnabled(on);
     });
     connect(m_doc->programmer()->padRun(), &PadRun::stateChanged, this, &CueRunner::refreshPadRun);
+    connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &CueRunner::refreshPadRun);
     connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
             this, &CueRunner::refreshPadRun);
     head->addWidget(m_padRunBtn);
@@ -1374,6 +1377,7 @@ void CueRunner::refreshFocusCalls()
 {
     if (m_focusCallsBtn == nullptr)
         return;
+    m_focusCallsBtn->setVisible(ShowFeatures::isOn(ShowFeatures::FocusCalls));   // Q293
     FocusMenu::setAvailable(m_focusCallsBtn, FocusMenu::venueFocusBlocked(m_doc),
                             tr("Pre-show: focus the rig for this venue, call by call, on the controller "
                                "(Design mode)"));
@@ -1389,6 +1393,12 @@ void CueRunner::refreshPadRun()
         const QSignalBlocker block(m_padRunBtn);
         m_padRunBtn->setChecked(run->isEnabled());
     }
+    /* Control surfaces off for the show (Q293): no Pad button -- but never
+       while the pad runs the show or has a state to say (Stopped after the
+       emergency stop, a tool or a focus holding it): a live control's state
+       is always said. */
+    m_padRunBtn->setVisible(ShowFeatures::isOn(ShowFeatures::ControlSurfaces) || run->isEnabled()
+                            || run->state() != PadRun::Tools);
     /* PadRun's one state, in its words and its colour: the button, and a
        frame round the whole tab while it has one (armed; red after the
        emergency stop) -- the same as the footer's chip and the pad's

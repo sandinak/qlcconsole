@@ -283,6 +283,7 @@ add_library(${module_name}
     systemtuning.cpp systemtuninghost.cpp systemtuning.h
     systemtuningpage.cpp systemtuningpage.h
     showstatusdialog.cpp showstatusdialog.h
+    showfeatures.cpp showfeatures.h
     showreviewpanel.cpp showreviewpanel.h showreviewmarker.cpp showreviewmarker.h
     preshowcheck.cpp preshowcheck.h
     showdifferencesdialog.cpp showdifferencesdialog.h
