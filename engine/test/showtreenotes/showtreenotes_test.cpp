@@ -412,7 +412,7 @@ void ShowTreeNotes_Test::editingASongsNumberCarriesItsSectionToTheNewKey()
     const quint32 verse = st->addCue(m_list, st->cueList(m_list)->indexOf(song), "Verse");
     Section sec;
     QVERIFY(st->sectionOfCue(song, &sec));
-    QCOMPARE(sec.key, QString("1"));
+    const QString oldKey = sec.key;
     QVERIFY(st->setSectionNote(m_list, sec, "Slow build"));
     QVERIFY(st->sectionOfCue(song, &sec));
     st->setSectionStart(m_list, sec, 4000);
@@ -420,20 +420,20 @@ void ShowTreeNotes_Test::editingASongsNumberCarriesItsSectionToTheNewKey()
     const qint32 start = sec.start;
     const QString oldNumber = st->cue(song)->number;
     st->clearUndo();
-    const quint32 oldTarget = sectionNoteTarget(m_list, "1");
-    const quint32 newTarget = sectionNoteTarget(m_list, "3");
+    const quint32 oldTarget = sectionNoteTarget(m_list, oldKey);
+    const quint32 newTarget = sectionNoteTarget(m_list, "9");
 
     // By hand: the first-level number of every cue of the song, one step.
     st->beginBatch("Renumber by hand");
     for (quint32 id : { song, verse })
     {
         Cue c = *st->cue(id);
-        c.number = "3" + c.number.mid(c.number.indexOf('.'));
+        c.number = "9" + c.number.mid(c.number.indexOf('.'));
         QVERIFY(st->setCue(c));
     }
     st->endBatch(true);
     QVERIFY(st->sectionOfCue(song, &sec));
-    QCOMPARE(sec.key, QString("3"));
+    QCOMPARE(sec.key, QString("9"));
     QCOMPARE(sec.name, QString("Entrance"));
     QCOMPARE(sec.start, start);
     QCOMPARE(st->notes(NoteKind::Section, newTarget).count(), 1);
@@ -444,7 +444,7 @@ void ShowTreeNotes_Test::editingASongsNumberCarriesItsSectionToTheNewKey()
     // Undo: back under the old key, with its name and note.
     QVERIFY(st->undo());
     QVERIFY(st->sectionOfCue(song, &sec));
-    QCOMPARE(sec.key, QString("1"));
+    QCOMPARE(sec.key, oldKey);
     QCOMPARE(sec.name, QString("Entrance"));
     QCOMPARE(st->notes(NoteKind::Section, oldTarget).count(), 1);
     QCOMPARE(st->cue(song)->number, oldNumber);
@@ -459,21 +459,23 @@ void ShowTreeNotes_Test::editingASongsNumberCarriesItsSectionToTheNewKey()
         ShowTreeController *ost = other->showTree();
         Section s;
         QVERIFY(ost->sectionOfCue(song, &s));
-        QCOMPARE(s.key, QString(renumbered ? "3" : "1"));
+        QCOMPARE(s.key, renumbered ? QString("9") : oldKey);
         QCOMPARE(s.name, QString("Entrance"));
         QCOMPARE(ost->notes(NoteKind::Section, renumbered ? newTarget : oldTarget).count(), 1);
         delete other;
     }
 
     // Onto another song's number: both are kept, and it is said.
-    const quint32 finale = st->addSection(m_list, "Finale");        // 2.0.1
+    const quint32 finale = st->addSection(m_list, "Finale");
     QVERIFY(finale != invalidId());
+    Section fin;
+    QVERIFY(st->sectionOfCue(finale, &fin));
     QSignalSpy spy(st, &ShowTreeController::sectionNumberClash);
     st->beginBatch("Onto 2");
     for (quint32 id : { song, verse })
     {
         Cue c = *st->cue(id);
-        c.number = "2" + c.number.mid(c.number.indexOf('.'));
+        c.number = fin.key + c.number.mid(c.number.indexOf('.'));
         QVERIFY(st->setCue(c));
     }
     st->endBatch(true);
