@@ -37,6 +37,9 @@ private slots:
     void cueNoteIsTheFirstEntry();
     void openNoteIsNeedsWork();
     void saveLoadKeepsNotesAndSnapshot();
+    /** A show's and a song section's plain-text note is its first Notes
+     *  entry, edited both ways, saved and loaded. */
+    void showAndSectionNotesAreTheFirstEntry();
     void anOlderShowsCueNotesMigrate();
     void deletedItemsNotesKeptForUndoNotSaved();
     void picturesStayOutOfUndoSteps();

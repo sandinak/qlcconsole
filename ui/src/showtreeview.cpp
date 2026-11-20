@@ -243,10 +243,7 @@ public:
      *  all. Empty for any other row. */
     QRect levelButton(const QTreeWidgetItem *item, int which) const
     {
-        if (item == nullptr)
-            return QRect();
-        const int kind = item->data(0, ShowTreeView::KindRole).toInt();
-        if ((kind != ShowTreeView::ProductionNode && kind != ShowTreeView::ListNode) || item->childCount() == 0)
+        if (!levelEligible(item))
             return QRect();
         // In the name column's right end, over what the name would not use
         // (the delegate below elides the name short of them): the flags and
@@ -254,7 +251,7 @@ public:
         const QRect row = visualItemRect(item);
         if (row.isEmpty())
             return QRect();
-        const int h = qMax(12, row.height() - 6), w = h + 14;
+        const int h = levelButtonHeight(), w = levelButtonWidth();
         if (row.width() < indentation() + 2 * w + 80)
             return QRect();
         const int right = qMin(row.right(), viewport()->width()) - 4;
@@ -262,15 +259,16 @@ public:
     }
 
     /** The width the name's cell gives up to the buttons on the row at
-     *  @a index (hovered or selected), else 0. */
+     *  @a index (hovered or selected), else 0. No geometry is asked for
+     *  here: the delegate calls it while the rows are being measured. */
     int levelReserve(const QModelIndex &index) const
     {
-        QTreeWidgetItem *item = itemFromIndex(index);
-        if (index.column() != 0 || !buttonsShown(item))
+        if (index.column() != 0)
             return 0;
-        const QRect a = levelButton(item, 0), b = levelButton(item, 1);
-        Q_UNUSED(b);
-        return a.isNull() ? 0 : visualItemRect(item).right() - a.left() + 6;
+        QTreeWidgetItem *item = itemFromIndex(index);
+        if (!buttonsShown(item) || header()->sectionSize(0) < indentation() + 2 * levelButtonWidth() + 80)
+            return 0;
+        return 2 * levelButtonWidth() + 10;
     }
 
     QMimeData *dragMime(const QList<QTreeWidgetItem *> &items) const { return mimeData(items); }
@@ -678,9 +676,19 @@ protected:
     }
 
 private:
+    bool levelEligible(const QTreeWidgetItem *item) const
+    {
+        if (item == nullptr || item->childCount() == 0)
+            return false;
+        const int kind = item->data(0, ShowTreeView::KindRole).toInt();
+        return kind == ShowTreeView::ProductionNode || kind == ShowTreeView::ListNode;
+    }
+    int levelButtonHeight() const { return qMax(12, fontMetrics().height() + 2); }
+    int levelButtonWidth() const { return levelButtonHeight() + 14; }
+
     bool buttonsShown(const QTreeWidgetItem *item) const
     {
-        return item != nullptr && !levelButton(item, 0).isNull()
+        return levelEligible(item)
                && (item == currentItem() || item->isSelected()
                    || (m_hover.isValid() && itemFromIndex(m_hover) == item));
     }
@@ -2034,6 +2042,17 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                       "them. GO by hand still works."));
         f->addRow(QString(), m_listFollowTc);
         connect(m_listFollowTc, &QCheckBox::toggled, this, &ShowTreeView::slotListFollowTimecodeToggled);
+        m_listNote = new NoteEdit(m_listPage);
+        m_listNote->setObjectName("stListNote");
+        m_listNote->setHelpTip(tr("Your thoughts on this show: how to arrange its looks, what you want to try. "
+                                  "It is the first note in the Notes pane."));
+        m_listNote->setToolTip(tr("Plain-text notes on this show, for you, a colleague or the AI later. "
+                                  "Return applies it."));
+        f->addRow(tr("Notes"), m_listNote);
+        connect(m_listNote, &NoteEdit::editingFinished, this, [this]() {
+            if (!m_inspectorUpdating && currentKind() == ListNode)
+                m_st->setListNote(currentId(), m_listNote->text());
+        });
         m_listInfo = new QLabel(m_listPage);
         m_listInfo->setWordWrap(true);
         f->addRow(m_listInfo);
@@ -4677,6 +4696,8 @@ void ShowTreeView::updateInspector()
             showColourButton(m_listColour, list->colour, QString());
             m_listForm->setRowVisible(m_listMib, true);
             m_listForm->setRowVisible(m_listFollowTc, !list->isSubCues());
+            m_listForm->setRowVisible(m_listNote, true);
+            m_listNote->setText(list->note);
             {
                 QSignalBlocker block(m_listFollowTc);
                 m_listFollowTc->setChecked(list->followTimecode);
@@ -8931,7 +8952,7 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
     const bool one = place.count <= 1;
     if (!one)
     {
-        const int n = place.count;
+        const int n = place.ownRefs.isEmpty() ? place.count : place.ownRefs.count();
         if (place.open)
             menu.add(ContextMenu::Open, tr("Open in Workbench"), place.open, QStringLiteral("ctxOpenLayer"))
                 ->setToolTip(tr("The cue in the Workbench, on this layer"));
@@ -8959,6 +8980,68 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         if (place.remove)
             menu.add(ContextMenu::Remove, tr("Delete %1 Layers").arg(n), place.remove, QStringLiteral("stDeleteLayer"))
                 ->setToolTip(tr("Take them out of their cues (one undo step)"));
+        // Release and Untrack on the whole selection: the same two items as
+        // for one layer. Release says when only some are released; Untrack
+        // is for carried-in rows only, so a mix with a layer set in its
+        // cue turns it off with the reason.
+        if (list != nullptr && !list->looks && (!place.ownRefs.isEmpty() || !place.carried.isEmpty()))
+        {
+            const QList<QPair<quint32, quint32>> own = place.ownRefs;
+            const QList<QPair<quint32, Target>> carried = place.carried;
+            const int total = own.count() + carried.count();
+            int released = 0;
+            for (const QPair<quint32, quint32> &ref : own)
+                if (const Cue *oc = m_st->cue(ref.first))
+                    if (const Layer *ol = oc->layer(ref.second))
+                        released += ol->release ? 1 : 0;
+            const bool allOn = carried.isEmpty() && released == own.count();
+            QString text = tr("Release After This Cue (%1 Layers)").arg(total);
+            if (released > 0 && !allOn)
+                text += tr(" — %1 of %2 released").arg(released).arg(total);
+            QAction *rel = menu.add(ContextMenu::Place, text, std::function<void()>(),
+                                    QStringLiteral("stLayerReleaseMenu"));
+            rel->setCheckable(true);
+            rel->setChecked(allOn);
+            rel->setToolTip(tr("Each layer plays in its cue, then lets go. Ticked when all are released: "
+                               "choose it again to carry them on."));
+            connect(rel, &QAction::triggered, this, [this, own, carried, allOn, total]() {
+                const bool want = !allOn;
+                m_st->beginBatch(want ? tr("Release %1 layers").arg(total) : tr("Carry %1 layers").arg(total));
+                bool any = false;
+                for (const QPair<quint32, quint32> &ref : own)
+                    any |= m_st->setLayerRelease(ref.first, ref.second, want);
+                for (const QPair<quint32, Target> &c : carried)
+                    any |= m_st->setTargetRelease(c.first, c.second, want);
+                m_st->endBatch(any);
+            });
+            if (!carried.isEmpty() || !own.isEmpty())
+            {
+                QAction *un = menu.add(ContextMenu::Place, tr("Untrack From This Cue (%1 Layers)").arg(total),
+                                       [this, carried]() {
+                    QString why;
+                    if (!m_st->untrackLayers(carried, &why))
+                        QMessageBox::information(this, tr("Untrack from this cue"), why);
+                }, QStringLiteral("stUntrackLayer"));
+                bool ok = own.isEmpty();
+                QString why = tr("%1 of the selected layers are set in their own cue: Untrack is for layers "
+                                 "carried in from an earlier cue (grey rows).").arg(own.count());
+                if (ok)
+                    for (const QPair<quint32, Target> &c : carried)
+                    {
+                        const ShowTreeController::UntrackPlan plan = m_st->untrackPlan(c.first, c.second);
+                        if (!plan.ok)
+                        {
+                            ok = false;
+                            why = plan.why;
+                            break;
+                        }
+                    }
+                un->setEnabled(ok);
+                un->setToolTip(ok ? tr("None of them reaches its cue: the cue each comes from gets the Release "
+                                       "(one undo step)")
+                                  : why);
+            }
+        }
         return;
     }
 
@@ -9396,19 +9479,11 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                                ? carriedTarget(cueId, item->data(0, TargetRole).toString()) : Target();
         LayerMenuPlace place;
         place.open = [this]() { openSelectionInWorkbench(); };
-        if (kind == LayerNode)
+        if (item->isSelected())
         {
-            place.cut = [this]() { cutSelection(); };
-            place.copy = [this]() { copySelection(); };
-            place.paste = [this]() { pasteClipboard(); };
-            place.duplicate = [this]() { duplicateSelection(); };
-            place.remove = [this]() { slotDelete(); };
-            if (item->isSelected())
-                place.count = qMax(1, int(selectedLayerRefs().count()));
-        }
-        else if (item->isSelected())
-        {
-            // Several grey rows selected: Release / Untrack on all of them.
+            // Everything selected: own layers and grey (carried-in) rows,
+            // across cues. Release and Untrack act on all of them.
+            place.ownRefs = selectedLayerRefs();
             for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
                 if ((*it)->isSelected() && (*it)->data(0, KindRole).toInt() == TrackedLayerNode)
                 {
@@ -9417,6 +9492,17 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
                     if (!ct.isEmpty())
                         place.carried << qMakePair(c, ct);
                 }
+            const int total = place.ownRefs.count() + place.carried.count();
+            if (kind == LayerNode || !place.ownRefs.isEmpty())
+                place.count = qMax(1, total);
+        }
+        if (kind == LayerNode)
+        {
+            place.cut = [this]() { cutSelection(); };
+            place.copy = [this]() { copySelection(); };
+            place.paste = [this]() { pasteClipboard(); };
+            place.duplicate = [this]() { duplicateSelection(); };
+            place.remove = [this]() { slotDelete(); };
         }
         fillLayerMenu(menu, cueId, kind == LayerNode ? id : invalidId(), tracked, place);
         return;
@@ -12350,6 +12436,7 @@ void ShowTreeView::showLooksPage(quint32 listId, const QString &folder)
     m_listForm->setRowVisible(m_listColour, false);
     m_listForm->setRowVisible(m_listMib, false);
     m_listForm->setRowVisible(m_listFollowTc, false);
+    m_listForm->setRowVisible(m_listNote, false);
     if (m_listAddSection != nullptr)
         m_listForm->setRowVisible(m_listAddSection, false);
     if (m_listSectionHint != nullptr)

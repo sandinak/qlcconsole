@@ -2125,6 +2125,11 @@ public:
     /** Whether a note's item is still there (a deleted cue's notes are kept
      *  for its undo, and not saved). */
     bool noteTargetExists(const ShowTree::Note &note) const;
+    /** Plain-text notes on a show (list) or one of its song sections: the
+     *  first entry of the Notes pane, kept in step both ways, one undo
+     *  step. Empty text clears it. */
+    bool setListNote(quint32 listId, const QString &text);
+    bool setSectionNote(quint32 listId, const ShowTree::Section &section, const QString &text);
     /** What a person reads for a note's item: "Cue 1.0.2 Opener", "Layer
      *  Towers (cue 1.0.2)", "List Main", "Palette Blue". */
     QString noteTargetLabel(const ShowTree::Note &note) const;
@@ -2173,6 +2178,8 @@ private:
     void loadNotes(QXmlStreamReader &root);
     void loadNoteImage(QXmlStreamReader &root);
     QList<ShowTree::Note> m_notes;
+    void writeOwnNote(QList<ShowTree::Production> &ps, const ShowTree::Note &n, const QString &text);
+    int sectionOfNote(const ShowTree::Note &n) const;
     QList<ShowTree::Note> m_batchNotes;
     QHash<QString, QByteArray> m_noteImages;
 

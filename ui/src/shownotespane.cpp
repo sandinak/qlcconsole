@@ -57,10 +57,11 @@ StructureStudioView *ShowNotesPane::rigView(bool open)
     return nullptr;
 }
 
-QString ShowNotesPane::whenText(const QString &iso)
+QString ShowNotesPane::whenText(const QString &iso, ShowTree::NoteKind kind)
 {
     if (iso.isEmpty())
-        return tr("cue note");
+        return kind == ShowTree::NoteKind::List ? tr("show note")
+               : kind == ShowTree::NoteKind::Section ? tr("section note") : tr("cue note");
     const QDateTime dt = QDateTime::fromString(iso, Qt::ISODate);
     if (!dt.isValid())
         return iso;
@@ -176,7 +177,7 @@ void ShowNotesPane::setItem(NoteKind kind, quint32 target, quint32 layerCue)
         return;
     m_kind = kind;
     m_target = target;
-    m_layerCue = kind == NoteKind::Layer ? layerCue : 0xFFFFFFFF;
+    m_layerCue = kind == NoteKind::Layer || kind == NoteKind::Section ? layerCue : 0xFFFFFFFF;
     refresh();
 }
 
@@ -218,7 +219,7 @@ void ShowNotesPane::refresh()
     if (!have)
     {
         m_title->setText(tr("Notes"));
-        m_empty->setText(tr("Select a cue, a layer, a list or a palette to see its notes and add one."));
+        m_empty->setText(tr("Select a cue, a layer, a list, a section or a palette to see its notes and add one."));
         m_empty->show();
     }
     else
@@ -273,7 +274,7 @@ QWidget *ShowNotesPane::entryWidget(const Note &n)
             st->setNoteDone(id, on);
     });
     top->addWidget(done);
-    QStringList meta { whenText(n.when) };
+    QStringList meta { whenText(n.when, n.kind) };
     if (!n.author.isEmpty())
         meta << n.author;
     QLabel *metaLabel = new QLabel(meta.join(QStringLiteral(" · ")), box);

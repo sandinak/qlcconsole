@@ -1569,6 +1569,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             doc->writeAttribute(QStringLiteral("Mode"), list.mode == ListMode::Tracking
                                                         ? QStringLiteral("Tracking")
                                                         : QStringLiteral("NonTracking"));
+            if (!list.note.isEmpty())
+                doc->writeAttribute(QStringLiteral("Note"), list.note);
             writeId(doc, QStringLiteral("Base"), list.baseCue);
             writeId(doc, QStringLiteral("Chaser"), list.chaser);
             // W5: the chaser it came from, and what Import in place filed.
@@ -1591,6 +1593,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
                 doc->writeAttribute(QStringLiteral("Key"), h.key);
             writeId(doc, QStringLiteral("Cue"), h.cue);
             doc->writeAttribute(QStringLiteral("Name"), h.name);
+            if (!h.note.isEmpty())
+                doc->writeAttribute(QStringLiteral("Note"), h.note);
             if (h.start >= 0)
                 doc->writeAttribute(QStringLiteral("Start"), QString::number(h.start));    // Q198
             doc->writeEndElement();
@@ -1832,6 +1836,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                     ? ListMode::Tracking : ListMode::NonTracking;
         list.baseCue = readId(a, QStringLiteral("Base"));
         list.chaser = readId(a, QStringLiteral("Chaser"));
+        list.note = a.value(QStringLiteral("Note")).toString();
         if (!looks && !subs)
         {
             const QString mib = a.value(QStringLiteral("MoveInBlack")).toString();
@@ -1871,6 +1876,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
                 h.key = sa.value(QStringLiteral("Key")).toString();
                 h.cue = readId(sa, QStringLiteral("Cue"));
                 h.name = sa.value(QStringLiteral("Name")).toString();
+                h.note = sa.value(QStringLiteral("Note")).toString();
                 if (sa.hasAttribute(QStringLiteral("Start")))
                 {
                     bool ok = false;

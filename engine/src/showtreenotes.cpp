@@ -61,14 +61,21 @@ QString ShowTree::noteKindToString(NoteKind kind)
         case NoteKind::Cue: return QStringLiteral("Cue");
         case NoteKind::Layer: return QStringLiteral("Layer");
         case NoteKind::Palette: return QStringLiteral("Palette");
+        case NoteKind::Section: return QStringLiteral("Section");
     }
     return QStringLiteral("Cue");
+}
+
+quint32 ShowTree::sectionNoteTarget(quint32 listId, const QString &sectionId)
+{
+    const quint32 h = quint32(qHash(QStringLiteral("%1:%2").arg(listId).arg(sectionId)));
+    return h == 0xFFFFFFFFu ? 0xFFFFFFFEu : h;
 }
 
 NoteKind ShowTree::stringToNoteKind(const QString &str, bool *ok)
 {
     static const NoteKind all[] = { NoteKind::Production, NoteKind::List, NoteKind::Cue,
-                                    NoteKind::Layer, NoteKind::Palette };
+                                    NoteKind::Layer, NoteKind::Palette, NoteKind::Section };
     for (NoteKind k : all)
         if (noteKindToString(k) == str)
         {
@@ -110,8 +117,8 @@ void ShowTree::saveXML(QXmlStreamWriter *doc, const Note &note)
     doc->writeAttribute(QStringLiteral("ID"), QString::number(note.id));
     doc->writeAttribute(QStringLiteral("Kind"), noteKindToString(note.kind));
     doc->writeAttribute(QStringLiteral("Target"), QString::number(note.target));
-    if (note.kind == NoteKind::Layer)
-        doc->writeAttribute(QStringLiteral("Cue"), QString::number(note.cue));
+    if (note.kind == NoteKind::Layer || note.kind == NoteKind::Section)
+        doc->writeAttribute(QStringLiteral("Cue"), QString::number(note.cue));    // a section's: its list
     if (!note.author.isEmpty())
         doc->writeAttribute(QStringLiteral("By"), note.author);
     if (!note.when.isEmpty())
@@ -284,6 +291,7 @@ bool ShowTreeController::noteTargetExists(const Note &n) const
             return c != nullptr && c->layer(n.target) != nullptr;
         }
         case NoteKind::Palette: return m_doc != nullptr && m_doc->palette(n.target) != nullptr;
+        case NoteKind::Section: return sectionOfNote(n) >= 0;
     }
     return false;
 }
@@ -317,6 +325,15 @@ QString ShowTreeController::noteTargetLabel(const Note &n) const
         case NoteKind::Palette:
             if (const QLCPalette *p = m_doc != nullptr ? m_doc->palette(n.target) : nullptr)
                 return tr("Palette %1").arg(p->name());
+        break;
+        case NoteKind::Section:
+        {
+            const int at = sectionOfNote(n);
+            if (const CueList *l = cueList(n.cue))
+                if (at >= 0)
+                    return tr("Section %1 (%2)").arg(sectionTitle(sectionsOf(*l, listNumbering(l->id)).at(at)),
+                                                     l->name);
+        }
         break;
     }
     return tr("(deleted)");
@@ -449,6 +466,51 @@ void ShowTreeController::syncCueNotes(QList<Production> &ps)
                     c.needsWork = true;
                 }
             }
+    // A show's and a song section's own notes: the same, one entry each.
+    {
+        QSet<int> matched;
+        auto own = [&](NoteKind kind, quint32 target, quint32 listId, const QString &text) {
+            if (text.isEmpty())
+                return;
+            int at = -1;
+            for (int i = 0; i < m_notes.count() && at < 0; ++i)
+            {
+                const Note &n = m_notes.at(i);
+                if (n.cueNote && n.kind == kind && n.target == target && (kind != NoteKind::Section || n.cue == listId))
+                    at = i;
+            }
+            if (at >= 0)
+            {
+                matched.insert(at);
+                m_notes[at].text = text;
+                return;
+            }
+            Note n;
+            n.id = m_nextId++;
+            n.kind = kind;
+            n.target = target;
+            n.cue = kind == NoteKind::Section ? listId : invalidId();
+            n.text = text;
+            n.cueNote = true;
+            n.done = true;
+            added << n;
+        };
+        for (Production &p : ps)
+            for (CueList &l : p.lists)
+            {
+                own(NoteKind::List, l.id, l.id, l.note);
+                for (const SectionHead &h : l.sections)
+                    own(NoteKind::Section,
+                        sectionNoteTarget(l.id, h.key.isEmpty() ? QStringLiteral("#%1").arg(h.cue) : h.key),
+                        l.id, h.note);
+            }
+        for (int i = 0; i < m_notes.count(); ++i)
+        {
+            const Note &n = m_notes.at(i);
+            if (n.cueNote && (n.kind == NoteKind::List || n.kind == NoteKind::Section) && !matched.contains(i))
+                drop.insert(i);
+        }
+    }
     if (!drop.isEmpty())
     {
         QList<Note> kept;
@@ -469,7 +531,7 @@ quint32 ShowTreeController::addNote(NoteKind kind, quint32 target, const QString
     Note n;
     n.kind = kind;
     n.target = target;
-    n.cue = kind == NoteKind::Layer ? layerCue : invalidId();
+    n.cue = kind == NoteKind::Layer || kind == NoteKind::Section ? layerCue : invalidId();
     n.text = text;
     n.view = view;
     if (!noteTargetExists(n))
@@ -483,6 +545,41 @@ quint32 ShowTreeController::addNote(NoteKind kind, quint32 target, const QString
         return true;
     });
     return ok ? n.id : invalidId();
+}
+
+/* An own note's text goes back to what it is the note of: a cue's, a show's
+   or a song section's. */
+void ShowTreeController::writeOwnNote(QList<Production> &ps, const Note &n, const QString &text)
+{
+    for (Production &p : ps)
+        for (CueList &l : p.lists)
+        {
+            if (n.kind == NoteKind::Cue)
+            {
+                for (Cue &c : l.cues)
+                    if (c.id == n.target)
+                        c.note = text;
+            }
+            else if (n.kind == NoteKind::List && l.id == n.target)
+                l.note = text;
+            else if (n.kind == NoteKind::Section && l.id == n.cue)
+                for (SectionHead &h : l.sections)
+                    if (sectionNoteTarget(l.id, h.key.isEmpty() ? QStringLiteral("#%1").arg(h.cue) : h.key)
+                        == n.target)
+                        h.note = text;
+        }
+}
+
+int ShowTreeController::sectionOfNote(const Note &n) const
+{
+    const CueList *l = cueList(n.cue);
+    if (l == nullptr)
+        return -1;
+    const QList<Section> secs = sectionsOf(*l, listNumbering(l->id));
+    for (int i = 0; i < secs.count(); ++i)
+        if (sectionNoteTarget(l->id, sectionId(secs.at(i))) == n.target)
+            return i;
+    return -1;
 }
 
 bool ShowTreeController::setNoteText(quint32 noteId, const QString &textIn)
@@ -501,11 +598,7 @@ bool ShowTreeController::setNoteText(quint32 noteId, const QString &textIn)
             {
                 n.text = text;
                 if (n.cueNote)
-                    for (Production &p : ps)
-                        for (CueList &l : p.lists)
-                            for (Cue &c : l.cues)
-                                if (c.id == n.target)
-                                    c.note = text;
+                    writeOwnNote(ps, n, text);
                 return true;
             }
         return false;
@@ -555,11 +648,7 @@ bool ShowTreeController::removeNote(quint32 noteId)
             {
                 const Note n = notes.takeAt(i);
                 if (n.cueNote)
-                    for (Production &p : ps)
-                        for (CueList &l : p.lists)
-                            for (Cue &c : l.cues)
-                                if (c.id == n.target)
-                                    c.note.clear();
+                    writeOwnNote(ps, n, QString());
                 return true;
             }
         return false;

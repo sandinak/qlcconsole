@@ -11863,6 +11863,98 @@ void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()
     QCOMPARE(st->reusableCues().count(), 1);
 }
 
+/* Several layers selected -- grey rows across cues, or a mix with a layer
+   set in its own cue -- take Release and Untrack as one undo step; a mix
+   turns Untrack off and says why, and Release says how many already are. */
+void ShowTreeView_Test::severalLayersReleaseAndUntrackTogether()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Verse");
+    const quint32 c2 = st->addCue(list, 0, "Chorus");
+    const quint32 c3 = st->addCue(list, 1, "Bridge");
+    const quint32 c4 = st->addCue(list, 2, "Out");
+    Target tt;
+    tt.groups << towers->id();
+    Target tu;
+    tu.groups << usts->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    const quint32 lu = st->addLayer(c1, tu);
+    QVERIFY(st->setLayerLook(c1, lu, st->lookForPalette(full)));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    auto greyRow = [&](quint32 cue, const Target &t) -> QTreeWidgetItem * {
+        tree->expandAll();
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::TrackedLayerNode
+                && (*it)->data(0, ShowTreeView::CueRole).toUInt() == cue
+                && (*it)->data(0, ShowTreeView::TargetRole).toString() == t.signature())
+                return *it;
+        return nullptr;
+    };
+
+    // Three grey rows, two cues: Untrack takes them all, one undo step.
+    tree->clearSelection();
+    QTreeWidgetItem *a = greyRow(c3, tt), *b = greyRow(c3, tu), *d = greyRow(c4, tt);
+    QVERIFY(a && b && d);
+    a->setSelected(true);
+    b->setSelected(true);
+    d->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, b);
+        QAction *un = menu.findChild<QAction *>("stUntrackLayer");
+        QVERIFY(un != nullptr && un->isEnabled());
+        QCOMPARE(un->text(), QString("Untrack From This Cue (3 Layers)"));
+        un->trigger();
+    }
+    QVERIFY(greyRow(c3, tt) == nullptr && greyRow(c3, tu) == nullptr && greyRow(c4, tt) == nullptr);
+    QVERIFY(st->undo());
+    QVERIFY(!st->canUndo());
+    QVERIFY(greyRow(c3, tt) != nullptr && greyRow(c3, tu) != nullptr && greyRow(c4, tt) != nullptr);
+
+    // A mix: a grey row and a layer set in its own cue. Release acts on
+    // both; Untrack is off, and says why.
+    const quint32 own = st->addLayer(c4, tu);
+    QVERIFY(st->setLayerLook(c4, own, st->lookForPalette(full)));
+    st->clearUndo();
+    tree->clearSelection();
+    QTreeWidgetItem *grey = greyRow(c3, tt);
+    QTreeWidgetItem *ownRow = rowOf(tree, ShowTreeView::LayerNode, own, c4);
+    QVERIFY(grey && ownRow);
+    grey->setSelected(true);
+    ownRow->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, grey);
+        QAction *un = menu.findChild<QAction *>("stUntrackLayer");
+        QVERIFY(un != nullptr);
+        QVERIFY(!un->isEnabled());
+        QVERIFY2(un->toolTip().contains("set in their own cue"), qPrintable(un->toolTip()));
+        QAction *rel = menu.findChild<QAction *>("stLayerReleaseMenu");
+        QVERIFY(rel != nullptr);
+        QVERIFY2(rel->text().contains("(2 Layers)"), qPrintable(rel->text()));
+        QVERIFY(!rel->isChecked());
+        rel->trigger();
+    }
+    QVERIFY(st->cue(c4)->layer(own)->release);
+    QVERIFY(greyRow(c3, tt) == nullptr);                    // 3 holds it itself now, released
+    QVERIFY(st->undo());
+    QVERIFY(!st->canUndo());
+    QVERIFY(!st->cue(c4)->layer(own)->release);
+    Q_UNUSED(c2);
+    view.hide();
+}
+
 /* Q222: a grey row's menu ends the layer two ways -- Release After This Cue
    (it plays here, then lets go) and Untrack From This Cue (the cue it comes
    from gets the Release) -- with Go to its cue; T says how long it has

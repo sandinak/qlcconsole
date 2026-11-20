@@ -622,6 +622,11 @@ several — and the page edits them **together**:
 - whatever you set there — a palette dropped on the page, **⋯ → Set to**,
   **Level…**, **Colour…**, **None**, **Clear**, Spread / Grouping / Cross —
   goes on **every** selected layer, in one undo step;
+- right-click: **Release After This Cue** and **Untrack From This Cue** act
+  on every selected layer, grey (carried-in) rows from other cues included,
+  in one undo step. When some are released already the item says *"2 of 3
+  released"*; Untrack is for grey rows only, so with a layer set in its own
+  cue in the selection it is off and says why;
 - right-click one of them → **N selected layers** → Release on / off, Set
   look, Clear look, Split each; **Merge** and **Delete** take the selection
   as before;
@@ -1870,7 +1875,7 @@ line under the window counts the ones still to cue.
 ## Notes
 
 Tech notes beside the tree: what you were thinking about a cue, a layer, a
-list, a production or a palette, with the date, who wrote it and, if you
+show, a song section, a production or a palette, with the date, who wrote it and, if you
 like, a snapshot of what you were looking at.
 
 - **The notes pane** is under the cue page. It follows the selection: the
@@ -1878,6 +1883,11 @@ like, a snapshot of what you were looking at.
   first, each note says when, who (**Your name** in Show Review, else the
   computer's account) and what. A cue's own note (the **Note** field on its
   page) is its first entry, marked "cue note".
+- **Notes on a show or a song.** The Show page and the Section page have a
+  **Notes** field too: plain text, for your thoughts on how to arrange its
+  looks and the like. It is the first entry of the pane, marked "show note"
+  or "section note", and it is in **All notes…** and the Markdown export, so a
+  person or an AI can read it later. Clearing the field removes the entry.
 - **Add one.** Type in the box at the bottom and press **Return** (Shift+Return
   for a new line), or **Add**. A new note is open.
 - **Snapshot the View.** **Snapshot the View** adds the note with the Rig

@@ -18,6 +18,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   small buttons at its right edge (on hover and on the selected row): fold to
   songs (the songs and sections stay, their cues close) and open all. The
   selected row stays in view.
+- **Notes on a Show and on a song section.** The Show page and the Section
+  page have a **Notes** field, plain text like a cue's Note: your thoughts on
+  how to arrange its looks. It is the first entry in the Notes pane, saved
+  with the show (older shows open as before) and in the Markdown export.
+- **Several layers, one change.** Select layers in the tree, grey rows from
+  different cues included, and right-click: **Release After This Cue** and
+  **Untrack From This Cue** act on all of them in one undo step. A mix says
+  how many are released already, and Untrack turns itself off, with the
+  reason, when a selected layer is set in its own cue.
 - **Show Tree: every cue and list tick box says what it does on hover**, in a
   sentence or two, on the label as well as the box; the base cue's had none.
 

@@ -764,7 +764,7 @@ bool ShowTreeController::setSectionName(quint32 listId, const Section &section, 
         if (at >= 0)
         {
             // A scheme's section with no name needs no entry.
-            if (n.isEmpty() && !section.key.isEmpty() && l->sections.at(at).start < 0)
+            if (n.isEmpty() && !section.key.isEmpty() && l->sections.at(at).start < 0 && l->sections.at(at).note.isEmpty())
                 l->sections.removeAt(at);
             else
                 l->sections[at].name = n;
@@ -774,6 +774,52 @@ bool ShowTreeController::setSectionName(quint32 listId, const Section &section, 
         h.key = section.key;
         h.cue = section.key.isEmpty() ? section.headCue : invalidId();
         h.name = n;
+        l->sections << h;
+        return true;
+    });
+}
+
+bool ShowTreeController::setListNote(quint32 listId, const QString &text)
+{
+    const CueList *have = cueList(listId);
+    const QString t = text.trimmed();
+    if (have == nullptr || have->note == t)
+        return false;
+    return edit(tr("Show notes"), [&](QList<Production> &ps) {
+        Production *p = productionOfList(ps, listId);
+        CueList *l = p == nullptr ? nullptr : p->list(listId);
+        if (l == nullptr)
+            return false;
+        l->note = t;
+        return true;
+    });
+}
+
+bool ShowTreeController::setSectionNote(quint32 listId, const Section &section, const QString &text)
+{
+    const QString t = text.trimmed();
+    const CueList *have = cueList(listId);
+    if (have == nullptr)
+        return false;
+    const int at = headOf(*have, section);
+    if ((at >= 0 ? have->sections.at(at).note : QString()) == t)
+        return false;
+    return edit(tr("Section notes"), [&](QList<Production> &ps) {
+        Production *p = productionOfList(ps, listId);
+        CueList *l = p == nullptr ? nullptr : p->list(listId);
+        if (l == nullptr)
+            return false;
+        const int i = headOf(*l, section);
+        if (i >= 0)
+        {
+            l->sections[i].note = t;
+            return true;
+        }
+        SectionHead h;
+        h.key = section.key;
+        h.cue = section.key.isEmpty() ? section.headCue : invalidId();
+        h.name = section.name;
+        h.note = t;
         l->sections << h;
         return true;
     });

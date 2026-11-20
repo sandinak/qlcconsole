@@ -315,6 +315,57 @@ void ShowTreeNotes_Test::saveLoadKeepsNotesAndSnapshot()
     QVERIFY(!showXml(m_doc).contains("<NoteImage"));
 }
 
+void ShowTreeNotes_Test::showAndSectionNotesAreTheFirstEntry()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setNumbering(m_prod, Numbering::ShowPartIteration));
+    st->addSection(m_list, "Opener");                       // 0.0.1
+    const quint32 song = st->addSection(m_list, "Entrance");        // 1.0.1
+    QVERIFY(song != invalidId());
+    Section sec;
+    QVERIFY(st->sectionOfCue(song, &sec));
+    st->clearUndo();
+
+    // The show's own note and a song's: each one entry, marked as its own.
+    QVERIFY(st->setListNote(m_list, "Warm washes, cool the chorus"));
+    QVERIFY(st->setSectionNote(m_list, sec, "Slow build; moving heads late"));
+    QCOMPARE(st->notes(NoteKind::List, m_list).count(), 1);
+    QVERIFY(st->notes(NoteKind::List, m_list).first().cueNote);
+    const quint32 target = sectionNoteTarget(m_list, sectionId(sec));
+    QCOMPARE(st->notes(NoteKind::Section, target).count(), 1);
+    QCOMPARE(st->notes(NoteKind::Section, target).first().text, QString("Slow build; moving heads late"));
+    QVERIFY(st->noteTargetLabel(st->notes(NoteKind::Section, target).first()).contains("Entrance"));
+
+    // The pane edits it back into the section's own field.
+    QVERIFY(st->setNoteText(st->notes(NoteKind::Section, target).first().id, "Edited in the pane"));
+    QCOMPARE(st->cueList(m_list)->sections.last().note, QString("Edited in the pane"));
+
+    // Saved with the show, and it loads again.
+    const QByteArray xml = showXml(m_doc);
+    Doc *other = loadShow(this, xml);
+    QVERIFY(other != nullptr);
+    ShowTreeController *ost = other->showTree();
+    QCOMPARE(ost->cueList(m_list)->note, QString("Warm washes, cool the chorus"));
+    QCOMPARE(ost->notes(NoteKind::List, m_list).count(), 1);
+    QCOMPARE(ost->notes(NoteKind::Section, target).count(), 1);
+    QCOMPARE(ost->notes(NoteKind::Section, target).first().text, QString("Edited in the pane"));
+    delete other;
+
+    // One undo step; clearing removes the entry.
+    QVERIFY(st->setListNote(m_list, QString()));
+    QCOMPARE(st->notes(NoteKind::List, m_list).count(), 0);
+    st->undo();
+    QCOMPARE(st->notes(NoteKind::List, m_list).count(), 1);
+
+    // An older show (no Note attribute) loads with none.
+    QByteArray old = xml;
+    old.replace(" Note=\"Warm washes, cool the chorus\"", "");
+    Doc *older = loadShow(this, old);
+    QVERIFY(older != nullptr);
+    QVERIFY(older->showTree()->cueList(m_list)->note.isEmpty());
+    delete older;
+}
+
 void ShowTreeNotes_Test::anOlderShowsCueNotesMigrate()
 {
     ShowTreeController *st = m_doc->showTree();

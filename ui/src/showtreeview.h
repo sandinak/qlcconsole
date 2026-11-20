@@ -247,6 +247,10 @@ public:
         /** Several carried-in (grey) rows selected, (cue, target): Release
          *  After This Cue and Untrack From This Cue act on all of them. */
         QList<QPair<quint32, ShowTree::Target>> carried;
+        /** Own layers selected, (cue, layer): with @a carried they are a
+         *  mixed selection when both are there. Cut, copy, duplicate and
+         *  delete act on these only. */
+        QList<QPair<quint32, quint32>> ownRefs;
     };
     /** A layer's own menu (the canon's kind block), the same in the tree and
      *  on the Workbench's layer row; @p layerId invalid: carried in, @p
@@ -1494,6 +1498,8 @@ private:
     QWidget *m_sectionPage = nullptr;
     QLabel *m_sectionTitle = nullptr;
     QLineEdit *m_sectionName = nullptr;
+    NoteEdit *m_sectionNote = nullptr;
+    NoteEdit *m_listNote = nullptr;
     QCheckBox *m_sectionBlock = nullptr;
     QLabel *m_sectionInfo = nullptr;
     QPushButton *m_sectionRemove = nullptr;

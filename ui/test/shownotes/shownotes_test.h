@@ -41,6 +41,9 @@ private slots:
     void showMeInOperateOnlyMovesTheCamera();
     void theNotesListFiltersAndJumps();
     void exportMakesMarkdownAndPdf();
+    /** The Show and Section pages have a Notes field: the first pane entry,
+     *  followed by the pane, in the export. */
+    void theShowAndSectionPagesTakeNotesThatFollowAndExport();
     void shots();
 
 private:

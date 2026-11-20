@@ -88,6 +88,9 @@ private slots:
     void aCarriedInLayerCanBeReleased();
     void aCarriedInLayerCanBeBroughInOrStartHere();
     void releaseAndUntrackOnTheGreyRow();
+    /** Several selected layers (grey rows across cues, or a mix with a
+     *  layer set in its cue) take Release / Untrack as one undo step. */
+    void severalLayersReleaseAndUntrackTogether();
     void updateCueWhereATrackedValueWasSet();
     void recordAsNewCueFromTheHeader();
     void theLibraryShowsWhatTheListUses();

@@ -36,6 +36,7 @@
 #include "structurestudioview.h"
 #include "shownotespane.h"
 #include "shownoteslist.h"
+#include "noteedit.h"
 #include "showtreeview.h"
 #include "fixturegroup.h"
 #include "qlcpalette.h"
@@ -414,6 +415,56 @@ void ShowNotes_Test::theNotesListFiltersAndJumps()
     // A new note shows up at once.
     st->addNote(NoteKind::List, m_list, "New");
     QCOMPARE(list->listedNotes().count(), 5);
+    list->close();
+}
+
+void ShowNotes_Test::theShowAndSectionPagesTakeNotesThatFollowAndExport()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setNumbering(m_prod, ShowTree::Numbering::ShowPartIteration));
+    const quint32 song = st->addSection(m_list, "Entrance");
+    QVERIFY(song != invalidId());
+    ShowTreeView view(nullptr, m_doc);
+    ShowNotesPane *pane = view.notesPane();
+
+    // The Show page's Notes field is the first pane entry.
+    QVERIFY(view.selectNode(m_list));
+    NoteEdit *listNote = view.findChild<NoteEdit *>("stListNote");
+    QVERIFY(listNote != nullptr);
+    listNote->setText("Washes for the verses");
+    emit listNote->editingFinished();
+    QCOMPARE(st->cueList(m_list)->note, QString("Washes for the verses"));
+    QCOMPARE(int(pane->itemKind()), int(NoteKind::List));
+    QCOMPARE(pane->shownNotes().count(), 1);
+
+    // A Section row: the pane follows it; its field is the entry.
+    QTreeWidgetItem *row = nullptr;
+    for (QTreeWidgetItemIterator it(view.tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::SectionNode
+            && (*it)->text(0).contains("Entrance"))
+            row = *it;
+    QVERIFY(row != nullptr);
+    view.tree()->setCurrentItem(row);
+    QCOMPARE(int(pane->itemKind()), int(NoteKind::Section));
+    QCOMPARE(pane->shownNotes().count(), 0);
+    NoteEdit *secNote = view.findChild<NoteEdit *>("stSectionNote");
+    QVERIFY(secNote != nullptr);
+    secNote->setText("Slow build, then the movers");
+    emit secNote->editingFinished();
+    QCOMPARE(pane->shownNotes().count(), 1);
+    QVERIFY(st->note(pane->shownNotes().first())->cueNote);
+
+    // The notes Markdown export has both.
+    ShowNotesList *list = view.showAllNotes();
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString md = dir.filePath("notes.md");
+    QVERIFY(list->exportTo(md));
+    QFile f(md);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QString text = QString::fromUtf8(f.readAll());
+    QVERIFY(text.contains("Slow build, then the movers"));
+    QVERIFY(text.contains("Washes for the verses"));
     list->close();
 }
 
