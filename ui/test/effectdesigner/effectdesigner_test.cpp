@@ -32,6 +32,7 @@
 #include <QTreeWidgetItemIterator>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QColorDialog>
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
@@ -133,28 +134,38 @@ void EffectDesigner_Test::theDesignerHasFrontAndBehindSwatches()
     QComboBox *colours = le->findChild<QComboBox *>("effectParam_colours");
     QVERIFY2(colours != nullptr, "no Colours setting in the designer");
     colours->setCurrentIndex(1);
-    QVERIFY(le->colourSourceLabel() != nullptr);
-    QVERIFY2(le->colourSourceLabel()->text().contains("none set"), qPrintable(le->colourSourceLabel()->text()));
-    QColor asked;
-    le->setColourAsker([&asked](const QColor &, const QString &) { return asked; });
+    auto line = [le]() {
+        QLabel *l = le->findChild<QLabel *>("effectColourSource");
+        return l != nullptr && !l->isHidden() ? l->text() : QString();
+    };
+    QVERIFY2(line().contains("none set"), qPrintable(line()));
+    auto pick = [](QAbstractButton *b, const QColor &c) {
+        QTimer::singleShot(0, [c]() {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (QColorDialog *d = qobject_cast<QColorDialog *>(w))
+                {
+                    d->setCurrentColor(c);
+                    d->accept();
+                }
+        });
+        b->click();
+    };
     auto swatch = [le](const char *name) { return le->findChild<QPushButton *>(name); };
     QVERIFY(swatch("effectColourFront") != nullptr && swatch("effectColourBehind") != nullptr);
     QVERIFY(swatch("effectColourFront")->text().startsWith("+"));
 
-    asked = QColor("#00ff00");
-    swatch("effectColourFront")->click();
+    pick(swatch("effectColourFront"), QColor("#00ff00"));
     QCOMPARE(ed.ownLooks().size(), 1);
     QCOMPARE(m_doc->palette(ed.ownLooks().at(0))->colorValue(), QColor("#00ff00"));
-    QVERIFY2(le->colourSourceLabel()->text().contains("the 1 Colour look under this effect"),
-             qPrintable(le->colourSourceLabel()->text()));
+    QVERIFY2(line().contains("the 1 Colour look under this effect"),
+             qPrintable(line()));
     QVERIFY(!swatch("effectColourFront")->text().startsWith("+"));
 
-    asked = QColor("#ff0000");
-    swatch("effectColourBehind")->click();
+    pick(swatch("effectColourBehind"), QColor("#ff0000"));
     QCOMPARE(ed.ownLooks().size(), 2);
     QCOMPARE(m_doc->palette(ed.ownLooks().at(1))->colorValue(), QColor("#ff0000"));
-    QVERIFY2(le->colourSourceLabel()->text().contains("the 2 Colour looks under this effect"),
-             qPrintable(le->colourSourceLabel()->text()));
+    QVERIFY2(line().contains("the 2 Colour looks under this effect"),
+             qPrintable(line()));
     // What the designer hands back to the cue.
     QCOMPARE(ed.ownLooks().size(), 2);
 }
