@@ -590,12 +590,12 @@ void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
         QList<EffectInstance::EffectCell> cells;
         dumpFrame(3000, answersAt(in, 3000, cells), cells);
     }
-    const Likeness l = neighboursAlike(in, 12000, dumpFrame);
+    const Likeness like = neighboursAlike(in, 12000, dumpFrame);
     dump.close();
-    const double pixelR = l.pixelR, fixtureR = l.fixtureR;
+    const double pixelR = like.pixelR, fixtureR = like.fixtureR;
     REPORT("burning, neighbours alike: pixels %.2f (%d pairs), fixtures %.2f (%d pairs)",
-           pixelR, l.pixelPairs, fixtureR, l.fixturePairs);
-    QVERIFY(l.pixelPairs > 1000);
+           pixelR, like.pixelPairs, fixtureR, like.fixturePairs);
+    QVERIFY(like.pixelPairs > 1000);
 
     // The Rig Overview, looked at from the front at 45° and from above.
     if (!dir.isEmpty())
@@ -674,14 +674,14 @@ void FireSpreadPerf_Test::flameEffectsFlickerHeadByHead()
     look->addPalette(flame->id());
     EffectInstance in(doc, look->id(), flame->id());
     QVERIFY2(in.isValid(), qPrintable(in.error()));
-    const Likeness l = neighboursAlike(&in, 2000);
+    const Likeness like = neighboursAlike(&in, 2000);
     REPORT("%s, neighbours alike: pixels %.2f (%d pairs), fixtures %.2f (%d pairs)", qPrintable(script),
-           l.pixelR, l.pixelPairs, l.fixtureR, l.fixturePairs);
-    QVERIFY(l.pixelPairs > 1000);
-    QVERIFY2(std::abs(l.pixelR) < 0.3,
-             qPrintable(QString("neighbouring pixels flicker alike (%1): stripes, not flames").arg(l.pixelR)));
-    QVERIFY2(std::abs(l.fixtureR) < 0.3,
-             qPrintable(QString("neighbouring fixtures flicker alike (%1): stripes, not flames").arg(l.fixtureR)));
+           like.pixelR, like.pixelPairs, like.fixtureR, like.fixturePairs);
+    QVERIFY(like.pixelPairs > 1000);
+    QVERIFY2(std::abs(like.pixelR) < 0.3,
+             qPrintable(QString("neighbouring pixels flicker alike (%1): stripes, not flames").arg(like.pixelR)));
+    QVERIFY2(std::abs(like.fixtureR) < 0.3,
+             qPrintable(QString("neighbouring fixtures flicker alike (%1): stripes, not flames").arg(like.fixtureR)));
 }
 
 int main(int argc, char **argv)
