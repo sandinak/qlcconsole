@@ -22,6 +22,7 @@
 
 #include <QWidget>
 #include <QSet>
+#include <QPointer>
 #include "performerfill.h"
 #include <functional>
 #include <QHash>
