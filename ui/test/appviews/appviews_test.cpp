@@ -3631,8 +3631,14 @@ void AppViews_Test::theEmergencyStopSurvivesEverySwitchOff()
     QVERIFY(stop->isVisibleTo(&panel));
     QVERIFY(stop->isEnabled());
     // A learned stop still fires ALL OFF: what plays stops.
+    Fixture *lamp = new Fixture(doc);
+    lamp->setName("Lamp");
+    lamp->setChannels(1);
+    lamp->setAddress(0);
+    QVERIFY(doc->addFixture(lamp));
     Scene *look = new Scene(doc);
     look->setName("Playing");
+    look->setValue(lamp->id(), 0, 255);
     QVERIFY(doc->addFunction(look));
     look->start(doc->masterTimer(), FunctionParent::master());
     QTRY_VERIFY_WITH_TIMEOUT(look->isRunning(), 3000);
@@ -3738,8 +3744,8 @@ void AppViews_Test::thePadButtonStaysWhileThePadHasAState()
     QCOMPARE(pad->state(), PadRun::Tools);
     QVERIFY(btn->isHidden());
     // The emergency stop struck: Stopped, said on the button.
-    pad->stopStruck();
-    QCOMPARE(pad->state(), PadRun::Stopped);
+    pad->emergencyStop();
+    QTRY_COMPARE(pad->state(), PadRun::Stopped);
     QVERIFY(!btn->isHidden());
     pad->stopEnded();
     QTRY_VERIFY(btn->isHidden());
