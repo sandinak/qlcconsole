@@ -301,10 +301,10 @@ colour. Once the look has stopped, starting it again spreads it again.
 
 | Effect | What it does |
 |---|---|
-| **Candle Flicker** | Organic per-fixture brightness flicker around the look's own level |
+| **Candle Flicker** | Organic brightness flicker around the look's own level, each fixture and each pixel of a bar on its own |
 | **Crackle** | Fixtures pulse up at random in their own colour and fade back to a rest level |
 | **Dimmer Phaser** | A waveform intensity chase with phase spread |
-| **Firelight** | Warm flickering fire colours, each fixture on its own |
+| **Firelight** | Warm flickering fire colours, each fixture and each pixel of a bar on its own |
 | **Fire Spread** | The stage catches fire from the look's Aim target and the fire spreads out until everything burns |
 | **Lightning** | Random storm flashes across the rig |
 | **Sparkle** | Random fixtures flash and fade like stars |

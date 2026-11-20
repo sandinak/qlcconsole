@@ -33,6 +33,11 @@
         { name: "level", description: "Peak level (× the look's base)", type: "float", min: 0, max: 1, defaultValue: 1.0 }
     ];
 
+    function flameSeed(i) {
+        var h = Math.sin((i + 1) * 127.1 + 77.925) * 43758.5453;
+        return 997 * (h - Math.floor(h));
+    }
+
     effect.tick = function(fixtures, inputs, palettes, params, state) {
         var rate  = params.rate  !== undefined ? params.rate  : 1.4;
         var depth = params.depth !== undefined ? params.depth : 0.55;
@@ -40,9 +45,11 @@
         var t     = inputs._time !== undefined ? inputs._time : 0;
 
         return fixtures.map(function(f, i) {
-            // Per-fixture seed decorrelates each flame (irrational offsets so no
-            // two heads share a phase and the pattern never repeats).
-            var s = i * 0.6180339887;   // golden-ratio spacing
+            // Per-fixture seed decorrelates each flame: a hash of the head, so
+            // no two heads share a phase. Golden-ratio spacing (i * 0.618, as
+            // it was) stepped the phase evenly from head to head: neighbours
+            // flickered against each other, stripes along a bar, not flames.
+            var s = flameSeed(i);
             var p = 2 * Math.PI * (t * rate);
             var flame = 0.5
                 + 0.32 * Math.sin(p          + s * 6.283)

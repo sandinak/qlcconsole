@@ -17,6 +17,7 @@
 
 #include <QtTest>
 #include <cmath>
+#include <functional>
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QScopeGuard>
@@ -453,94 +454,67 @@ void FireSpreadPerf_Test::anUnreachedHeadCostsNothingToRead()
                             .arg(darkMs).arg(burningMs)));
 }
 
-/* Burning, Fire Spread is a fire: each head -- each pixel of a bar -- with
-   its own flicker. Old code gave head i the flame seed i * 1.618, so every
-   head's flicker was the one before it a fixed phase on: travelling waves
-   along the heads' order, read on the Rig Overview as bands and diagonal
-   stripes across the bars and the rig, never fire. Measured: how alike two
-   neighbouring heads' flicker is over 20 s of burning (old code about 0.65
-   for every pair; independent flames average about 0). The frames, and
-   each head's values, go to QLC_SHOT_DIR when it is set. */
-void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
+namespace
 {
-    EffectInstance *in = m_fire;
-    QList<EffectInstance::EffectCell> cells;
-    auto answersAt = [&](qint64 ms) {
-        in->setOffStageClock(ms);
-        int cols = 1, rows = 1;
-        cells = in->effectiveCells(cols, rows);
-        QJSValue fixtures = in->buildFixturesArray(cells, cols, rows);
-        return in->m_script.callTick(fixtures, in->buildInputsObject(), in->buildPalettesObject(),
-                                     in->buildParamsObject(), in->m_state, in->buildDataChannelsObject());
-    };
-    // A head's brightness: its colour's sum (the fire's colour rises with
-    // its flame) times its dimmer; a head of level only, its dimmer.
-    auto brightness = [](const QJSValue &o) {
-        const QJSValue d = o.property("dimmer");
-        double sum = 0;
-        bool colour = false;
-        for (const char *k : { "r", "g", "b", "w" })
-        {
-            const QJSValue v = o.property(k);
-            if (!v.isUndefined())
-            {
-                colour = true;
-                sum += v.toNumber();
-            }
-        }
-        const double dim = d.isUndefined() ? 1.0 : d.toNumber();
-        return colour ? sum * dim : dim * 255.0;
-    };
+/* The answers @p in gives at @p ms: one intent a cell (@p cells). */
+QJSValue answersAt(EffectInstance *in, qint64 ms, QList<EffectInstance::EffectCell> &cells)
+{
+    in->setOffStageClock(ms);
+    int cols = 1, rows = 1;
+    cells = in->effectiveCells(cols, rows);
+    QJSValue fixtures = in->buildFixturesArray(cells, cols, rows);
+    return in->m_script.callTick(fixtures, in->buildInputsObject(), in->buildPalettesObject(),
+                                 in->buildParamsObject(), in->m_state, in->buildDataChannelsObject());
+}
 
-    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
-    QFile dump;
-    if (!dir.isEmpty())
+/* A head's brightness: its colour's sum (the fire's colour rises with its
+   flame) times its dimmer; a head of level only, its dimmer. */
+double brightness(const QJSValue &o)
+{
+    const QJSValue d = o.property("dimmer");
+    double sum = 0;
+    bool colour = false;
+    for (const char *k : { "r", "g", "b", "w" })
     {
-        QDir().mkpath(dir);
-        dump.setFileName(QDir(dir).filePath(QStringLiteral("firespread-heads.csv")));
-        QVERIFY(dump.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        dump.write("t,fixture,model,head,r,g,b,w,dimmer\n");
+        const QJSValue v = o.property(k);
+        if (!v.isUndefined())
+        {
+            colour = true;
+            sum += v.toNumber();
+        }
     }
-    auto dumpFrame = [&](qint64 ms, const QJSValue &result) {
-        if (!dump.isOpen())
-            return;
-        for (int i = 0; i < cells.size(); ++i)
-        {
-            const QJSValue o = result.property(quint32(i));
-            const Fixture *fx = m_app->doc()->fixture(cells.at(i).fixtureId);
-            auto v = [&](const char *k) {
-                const QJSValue x = o.property(k);
-                return x.isUndefined() ? QString() : QString::number(x.toNumber());
-            };
-            dump.write(QStringLiteral("%1,%2,%3,%4,%5,%6,%7,%8,%9\n")
-                           .arg(ms / 1000.0).arg(cells.at(i).fixtureId)
-                           .arg(fx && fx->fixtureDef() ? fx->fixtureDef()->model() : QString())
-                           .arg(cells.at(i).head).arg(v("r"), v("g"), v("b"), v("w"), v("dimmer"))
-                           .toUtf8());
-        }
-    };
+    const double dim = d.isUndefined() ? 1.0 : d.toNumber();
+    return colour ? sum * dim : dim * 255.0;
+}
 
-    // 20 s of the rig fully burning, 5 frames a second.
+/* How alike neighbouring heads' flicker is, from @p fromMs for 20 s at 5
+   frames a second: the mean correlation of their brightness over time,
+   each pixel with the next of the same fixture (@p pixelR) and each
+   fixture's last head with the next fixture's first (@p fixtureR).
+   Independent flames average about 0; a flicker whose phase steps evenly
+   with the head (a wave along the heads' order) is far from it. @p frame,
+   when given, is called with each frame's answers. */
+struct Likeness { double pixelR = 0, fixtureR = 0; int pixelPairs = 0, fixturePairs = 0; };
+Likeness neighboursAlike(EffectInstance *in, qint64 fromMs,
+                         const std::function<void(qint64, const QJSValue &,
+                                                  const QList<EffectInstance::EffectCell> &)> &frame = {})
+{
+    QList<EffectInstance::EffectCell> cells;
     QList<QVector<double>> frames;
-    for (qint64 ms = 12000; ms < 32000; ms += 200)
+    for (qint64 ms = fromMs; ms < fromMs + 20000; ms += 200)
     {
-        const QJSValue result = answersAt(ms);
+        const QJSValue result = answersAt(in, ms, cells);
         QVector<double> f(cells.size());
         for (int i = 0; i < cells.size(); ++i)
             f[i] = brightness(result.property(quint32(i)));
         frames << f;
-        if (ms == 12000 || ms == 12400)
-            dumpFrame(ms, result);
+        if (frame)
+            frame(ms, result, cells);
     }
-    dumpFrame(3000, answersAt(3000));          // mid-spread
-    dump.close();
-
-    // Neighbouring heads, each pixel and the next of the same fixture, and
-    // each fixture and the next: how alike their flicker is.
+    Likeness l;
     const int n = int(cells.size());
     const int T = int(frames.size());
     double pixelSum = 0, fixtureSum = 0;
-    int pixelPairs = 0, fixturePairs = 0;
     for (int i = 0; i + 1 < n; ++i)
     {
         double ma = 0, mb = 0;
@@ -558,19 +532,70 @@ void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
         if (cells.at(i).fixtureId == cells.at(i + 1).fixtureId)
         {
             pixelSum += r;
-            ++pixelPairs;
+            ++l.pixelPairs;
         }
         else
         {
             fixtureSum += r;
-            ++fixturePairs;
+            ++l.fixturePairs;
         }
     }
-    const double pixelR = pixelPairs ? pixelSum / pixelPairs : 0;
-    const double fixtureR = fixturePairs ? fixtureSum / fixturePairs : 0;
+    l.pixelR = l.pixelPairs ? pixelSum / l.pixelPairs : 0;
+    l.fixtureR = l.fixturePairs ? fixtureSum / l.fixturePairs : 0;
+    return l;
+}
+}
+
+/* Burning, Fire Spread is a fire: each head -- each pixel of a bar -- with
+   its own flicker. Old code gave head i the flame seed i * 1.618, so every
+   head's flicker was the one before it a fixed phase on: travelling waves
+   along the heads' order, read on the Rig Overview as bands and diagonal
+   stripes across the bars and the rig, never fire. Measured: how alike two
+   neighbouring heads' flicker is over 20 s of burning (old code about 0.65
+   for every pair; independent flames average about 0). The frames, and
+   each head's values, go to QLC_SHOT_DIR when it is set. */
+void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
+{
+    EffectInstance *in = m_fire;
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    QFile dump;
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        dump.setFileName(QDir(dir).filePath(QStringLiteral("firespread-heads.csv")));
+        QVERIFY(dump.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        dump.write("t,fixture,model,head,r,g,b,w,dimmer\n");
+    }
+    auto dumpFrame = [&](qint64 ms, const QJSValue &result, const QList<EffectInstance::EffectCell> &cells) {
+        if (!dump.isOpen() || (ms != 3000 && ms != 12000 && ms != 12400))
+            return;
+        for (int i = 0; i < cells.size(); ++i)
+        {
+            const QJSValue o = result.property(quint32(i));
+            const Fixture *fx = m_app->doc()->fixture(cells.at(i).fixtureId);
+            auto v = [&](const char *k) {
+                const QJSValue x = o.property(k);
+                return x.isUndefined() ? QString() : QString::number(x.toNumber());
+            };
+            dump.write(QStringLiteral("%1,%2,%3,%4,%5,%6,%7,%8,%9\n")
+                           .arg(ms / 1000.0).arg(cells.at(i).fixtureId)
+                           .arg(fx && fx->fixtureDef() ? fx->fixtureDef()->model() : QString())
+                           .arg(cells.at(i).head).arg(v("r"), v("g"), v("b"), v("w"), v("dimmer"))
+                           .toUtf8());
+        }
+    };
+
+    // Mid-spread, for the dump; then 20 s of the rig fully burning.
+    {
+        QList<EffectInstance::EffectCell> cells;
+        dumpFrame(3000, answersAt(in, 3000, cells), cells);
+    }
+    const Likeness l = neighboursAlike(in, 12000, dumpFrame);
+    dump.close();
+    const double pixelR = l.pixelR, fixtureR = l.fixtureR;
     REPORT("burning, neighbours alike: pixels %.2f (%d pairs), fixtures %.2f (%d pairs)",
-           pixelR, pixelPairs, fixtureR, fixturePairs);
-    QVERIFY(pixelPairs > 1000);
+           pixelR, l.pixelPairs, fixtureR, l.fixturePairs);
+    QVERIFY(l.pixelPairs > 1000);
 
     // The Rig Overview, looked at from the front at 45° and from above.
     if (!dir.isEmpty())
@@ -618,8 +643,45 @@ void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
         shot(QStringLiteral("45-close-nobeams"));
     }
 
-    QVERIFY2(pixelR < 0.3, qPrintable(QString("neighbouring pixels flicker alike (%1): bands, not fire").arg(pixelR)));
-    QVERIFY2(fixtureR < 0.3, qPrintable(QString("neighbouring fixtures flicker alike (%1): bands, not fire").arg(fixtureR)));
+    QVERIFY2(std::abs(pixelR) < 0.3, qPrintable(QString("neighbouring pixels flicker alike (%1): bands, not fire").arg(pixelR)));
+    QVERIFY2(std::abs(fixtureR) < 0.3, qPrintable(QString("neighbouring fixtures flicker alike (%1): bands, not fire").arg(fixtureR)));
+}
+
+/* Firelight and Candle Flicker over the same rig: each head its own flame
+   too. Old code seeded head i's flicker i * 1.618 (Firelight) or
+   i * 0.618 (Candle Flicker): Firelight's neighbours flickered alike
+   (about 0.65), Candle Flicker's against each other (about -0.5) -- waves
+   and alternating stripes along the heads' order either way, not flames. */
+void FireSpreadPerf_Test::flameEffectsFlickerHeadByHead_data()
+{
+    QTest::addColumn<QString>("script");
+    QTest::newRow("Firelight") << QStringLiteral("fire.js");
+    QTest::newRow("Candle Flicker") << QStringLiteral("candle-flicker.js");
+}
+
+void FireSpreadPerf_Test::flameEffectsFlickerHeadByHead()
+{
+    QFETCH(QString, script);
+    Doc *doc = m_app->doc();
+    QLCPalette *flame = new QLCPalette(QLCPalette::Effect, doc);
+    flame->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/" + script);
+    flame->setEffectParamValue(EffectRuns::runsKey(), 0);
+    QVERIFY(doc->addPalette(flame));
+    Scene *look = new Scene(doc);
+    QVERIFY(doc->addFunction(look));
+    for (quint32 fid : std::as_const(m_lookFixtures))
+        look->addFixture(fid);
+    look->addPalette(flame->id());
+    EffectInstance in(doc, look->id(), flame->id());
+    QVERIFY2(in.isValid(), qPrintable(in.error()));
+    const Likeness l = neighboursAlike(&in, 2000);
+    REPORT("%s, neighbours alike: pixels %.2f (%d pairs), fixtures %.2f (%d pairs)", qPrintable(script),
+           l.pixelR, l.pixelPairs, l.fixtureR, l.fixturePairs);
+    QVERIFY(l.pixelPairs > 1000);
+    QVERIFY2(std::abs(l.pixelR) < 0.3,
+             qPrintable(QString("neighbouring pixels flicker alike (%1): stripes, not flames").arg(l.pixelR)));
+    QVERIFY2(std::abs(l.fixtureR) < 0.3,
+             qPrintable(QString("neighbouring fixtures flicker alike (%1): stripes, not flames").arg(l.fixtureR)));
 }
 
 int main(int argc, char **argv)

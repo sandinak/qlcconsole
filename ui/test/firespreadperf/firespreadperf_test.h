@@ -51,6 +51,11 @@ private slots:
      *  dump of each head's values to QLC_SHOT_DIR) */
     void theBurningRigFlickersHeadByHead();
 
+    /** Firelight and Candle Flicker over the same rig: each head its own
+     *  flame, no waves or stripes along the heads' order */
+    void flameEffectsFlickerHeadByHead_data();
+    void flameEffectsFlickerHeadByHead();
+
 private:
     /** Runs the effect at @a ms and puts what it writes on the fixtures;
      *  returns the fixtures whose values changed */

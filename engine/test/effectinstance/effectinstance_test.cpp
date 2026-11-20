@@ -4505,11 +4505,13 @@ void EffectInstance_Test::crackleRestsPulsesUpAndFadesBack()
 }
 
 /* Firelight before its flame moved to lib/fire.js, written out: what it
-   gave fixture @p i at time @p t. */
+   gave fixture @p i at time @p t. Since 0.5.3 each head's seed is a hash
+   of the head (it was i * 1.618: waves along the heads, not flames). */
 static void firelightAsItWas(double t, int i, double speed, double inten, double cool,
                              int &r, int &g, int &b, double &flame)
 {
-    const double seed = i * 1.618;
+    const double h = std::sin((i + 1) * 127.1 + 77.925) * 43758.5453;
+    const double seed = 997 * (h - std::floor(h));
     flame = 0.5 + 0.25 * std::sin(t * speed * 1.0 + seed * 7.3)
                 + 0.15 * std::sin(t * speed * 2.3 + seed * 3.1)
                 + 0.10 * std::sin(t * speed * 5.7 + seed * 11.9);

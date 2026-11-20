@@ -14,7 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
-- **Fire Spread burns like a fire.** Once burning, every head and every pixel of a bar flickers on its own; before, each head's flicker was the last one's a step on, and the rig showed bands and diagonal stripes running across the bars instead of flames.
+- **Fire Spread, Firelight and Candle Flicker look like flames.** Every head and every pixel of a bar now flickers on its own; before, each head's flicker was the last one's a step on, and the rig showed bands and diagonal stripes running across the bars instead of fire.
 
 ## [0.5.1] - 2026-11-20
 
