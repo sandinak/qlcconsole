@@ -114,6 +114,10 @@ public:
     /** The effect's own Colour and Dimmer palettes, as chosen. */
     QList<quint32> ownLooks() const;
     void setOwnLooks(const QList<quint32> &own);
+    /** The Front (0) or Behind (1) colour of Colours: Front and Behind, from
+     *  the settings' swatches: the effect's first / second own Colour look,
+     *  made (a new Colour look) or changed. Behind needs a front. */
+    bool setOwnColour(int slot, const QColor &colour);
 
     /** Pick an effect, preset or generator by its name in the browser
      *  ("Color Chase", "Matrix Fire"); false if there is none. */
@@ -295,6 +299,7 @@ private:
     quint32 m_draftId;
     quint32 m_sceneId;
     quint32 m_ownColour;
+    quint32 m_ownColour2 = 0xFFFFFFFF;  ///< the second own Colour: the Behind of Front and Behind
     quint32 m_ownDimmer;
     QStringList m_lastSignature;
     /** The draft as opened or last kept (hasUnkeptChanges()). */

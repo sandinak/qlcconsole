@@ -35,6 +35,7 @@
 #include "programmingmanager.h"
 #include "functionselection.h"
 #include "paletteops.h"
+#include "palettenaming.h"
 #include "programmingoutline.h"
 #include "effectbrowser.h"
 #include "lookeditor.h"
@@ -182,6 +183,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     split->setChildrenCollapsible(false);
 
     m_look = new LookEditor(doc, split);
+    m_look->setColourSetter([this](int slot, const QColor &c) { return setOwnColour(slot, c); });
     m_look->setObjectName(QStringLiteral("edSettings"));
     m_effectCombo = m_look->findChild<QComboBox *>(QStringLiteral("effectScriptCombo"));
     Q_ASSERT(m_effectCombo != nullptr);
@@ -220,7 +222,10 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     own->addWidget(m_ownDimmerCombo, 1);
     rv->addLayout(own);
     auto ownPicked = [this]() {
+        const quint32 before = m_ownColour;
         m_ownColour = m_ownColourCombo->currentData().toUInt();
+        if (m_ownColour != before && m_ownColour2 == m_ownColour)
+            m_ownColour2 = QLCPalette::invalidId();
         m_ownDimmer = m_ownDimmerCombo->currentData().toUInt();
         QList<QColor> colours;
         if (const QLCPalette *c = m_doc ? m_doc->palette(m_ownColour) : nullptr)
@@ -362,7 +367,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
             m_tryOn.clear();
             m_base.clear();
             m_cleanAtStart = false;
-            m_ownColour = m_ownDimmer = QLCPalette::invalidId();
+            m_ownColour = m_ownColour2 = m_ownDimmer = QLCPalette::invalidId();
             m_fromCue = ShowTree::invalidId();
             m_fromScene = Function::invalidId();
             m_look->setContextScene(nullptr);
@@ -627,12 +632,14 @@ void EffectDesigner::setEffect(quint32 paletteId, const QList<quint32> &own)
             d->setName(tr("New Effect"));      // the Look Editor names it after the effect
         }
     });
-    m_ownColour = m_ownDimmer = QLCPalette::invalidId();
+    m_ownColour = m_ownColour2 = m_ownDimmer = QLCPalette::invalidId();
     for (quint32 p : own)
         if (const QLCPalette *op = m_doc->palette(p))
         {
             if (op->type() == QLCPalette::Color && m_ownColour == QLCPalette::invalidId())
                 m_ownColour = p;
+            else if (op->type() == QLCPalette::Color && m_ownColour2 == QLCPalette::invalidId())
+                m_ownColour2 = p;
             else if (op->type() == QLCPalette::Dimmer && m_ownDimmer == QLCPalette::invalidId())
                 m_ownDimmer = p;
         }
@@ -659,7 +666,7 @@ QString EffectDesigner::draftSignature() const
         d->saveXML(&w);
     }
     // Its own colour and dimmer are part of what was designed.
-    out += QStringLiteral("|%1|%2").arg(m_ownColour).arg(m_ownDimmer);
+    out += QStringLiteral("|%1|%2|%3").arg(m_ownColour).arg(m_ownDimmer).arg(m_ownColour2);
     return out;
 }
 
@@ -679,7 +686,11 @@ QList<quint32> EffectDesigner::ownLooks() const
     if (m_doc == nullptr)
         return out;
     if (m_doc->palette(m_ownColour) != nullptr)
+    {
         out << m_ownColour;
+        if (m_doc->palette(m_ownColour2) != nullptr)
+            out << m_ownColour2;
+    }
     if (m_doc->palette(m_ownDimmer) != nullptr)
         out << m_ownDimmer;
     return out;
@@ -687,18 +698,46 @@ QList<quint32> EffectDesigner::ownLooks() const
 
 void EffectDesigner::setOwnLooks(const QList<quint32> &own)
 {
-    m_ownColour = m_ownDimmer = QLCPalette::invalidId();
+    m_ownColour = m_ownColour2 = m_ownDimmer = QLCPalette::invalidId();
     for (quint32 p : own)
         if (const QLCPalette *op = m_doc ? m_doc->palette(p) : nullptr)
         {
-            if (op->type() == QLCPalette::Color)
+            if (op->type() == QLCPalette::Color && m_ownColour == QLCPalette::invalidId())
                 m_ownColour = p;
+            else if (op->type() == QLCPalette::Color)
+                m_ownColour2 = p;
             else if (op->type() == QLCPalette::Dimmer)
                 m_ownDimmer = p;
         }
     fillOwnCombos();
     rebuildScene();
     refreshPreview(false);
+}
+
+bool EffectDesigner::setOwnColour(int slot, const QColor &colour)
+{
+    if (m_doc == nullptr || m_doc->paletteOps() == nullptr || !colour.isValid() || slot < 0 || slot > 1
+        || (slot == 1 && m_doc->palette(m_ownColour) == nullptr))
+        return false;
+    quint32 &mine = slot == 0 ? m_ownColour : m_ownColour2;
+    const QVariantList value = { QLCPalette::colorToString(colour, QColor(Qt::black)) };
+    if (QLCPalette *p = m_doc->palette(mine))
+    {
+        m_doc->paletteOps()->valueStep(tr("set the %1 colour of the effect").arg(slot == 0 ? tr("front") : tr("behind")),
+                                       mine, [&]() { p->setValues(value); });
+    }
+    else
+    {
+        const quint32 id = m_doc->paletteOps()->create(QLCPalette::Color, QString(), PaletteNaming::colourName(colour), value);
+        if (m_doc->palette(id) == nullptr)
+            return false;
+        mine = id;
+    }
+    fillOwnCombos();
+    rebuildScene();
+    refreshPreview(false);
+    updateButtons();
+    return true;
 }
 
 void EffectDesigner::fillOwnCombos()

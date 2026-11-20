@@ -35,6 +35,11 @@ private slots:
     void init();
     void cleanup();
 
+    /** In the Show Tree's designer an effect's Front and Behind colours are
+     *  its own Colour looks: the colour line and the swatches work there too
+     *  (no Build scene), and the designer hands back both. */
+    void theDesignerHasFrontAndBehindSwatches();
+
     /** The bench: a new effect is a hidden draft played by a hidden scene
      *  on the Try on groups; Save as palette names and files it, and the
      *  preview goes. */

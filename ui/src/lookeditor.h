@@ -298,6 +298,7 @@ private:
     QPointer<QWidget> m_colourField;              ///< the Front / Behind swatches
     QPointer<QPushButton> m_colourSwatch[2];
     std::function<QColor(const QColor &, const QString &)> m_colourAsker;
+    std::function<bool(int, const QColor &)> m_colourSetter;
     void refreshColourSwatches();
     QPointer<QLabel> m_colourSource;              ///< "Colours: ..." which ones play
     void refreshColourSource();
@@ -331,6 +332,12 @@ public:
     /** In place of the colour dialog (tests): false/invalid cancels. */
     typedef std::function<QColor(const QColor &initial, const QString &title)> ColourAsker;
     void setColourAsker(const ColourAsker &asker) { m_colourAsker = asker; }
+    /** A host that owns the effect's colours itself (the Show Tree's effect
+     *  designer, whose own colours are its draft's, not a scene's): the
+     *  swatches hand it the colour for slot 0 (front) / 1 (behind) to make
+     *  or change. Returns false if it refused. */
+    typedef std::function<bool(int slot, const QColor &colour)> ColourSetter;
+    void setColourSetter(const ColourSetter &setter) { m_colourSetter = setter; }
 private:
 
     QLineEdit *m_nameEdit;   //!< editable palette name

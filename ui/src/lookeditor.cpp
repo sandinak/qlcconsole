@@ -1959,6 +1959,25 @@ bool LookEditor::pickEffectColour(int slot, const QColor &colour)
     if (m_contextScene == nullptr || slot < 0 || slot > 1 || m_doc->paletteOps() == nullptr
         || !m_contextScene->palettes().contains(m_paletteId))
         return false;
+    if (m_colourSetter)
+    {
+        const QList<quint32> had = effectColourLooks();
+        if (slot > had.size())
+            return false;
+        QColor pick = colour;
+        if (!pick.isValid())
+        {
+            const QColor initial = slot < had.size() && m_doc->palette(had.at(slot)) != nullptr
+                                   ? m_doc->palette(had.at(slot))->colorValue() : QColor(Qt::white);
+            const QString title = slot == 0 ? tr("Front colour") : tr("Behind colour");
+            pick = m_colourAsker ? m_colourAsker(initial, title)
+                                 : QColorDialog::getColor(initial, this, title, QColorDialog::DontUseNativeDialog);
+        }
+        if (!pick.isValid() || !m_colourSetter(slot, pick))
+            return false;
+        refreshColourSwatches();
+        return true;
+    }
     const QList<quint32> have = effectColourLooks();
     if (slot > have.size())
         return false;                       // behind needs a front first
@@ -2074,8 +2093,20 @@ void LookEditor::refreshColourSwatches()
             continue;
         const QLCPalette *p = i < have.size() ? m_doc->palette(have.at(i)) : nullptr;
         const QColor c = p != nullptr ? p->colorValue() : QColor();
-        const QString where = tr("It is the %1 Colour look under this effect in the look's list.")
-                              .arg(i == 0 ? tr("first") : tr("second"));
+        QString where = tr("It is the %1 Colour look under this effect in the look's list.")
+                        .arg(i == 0 ? tr("first") : tr("second"));
+        if (p != nullptr && m_doc->paletteOps() != nullptr)
+        {
+            // Changing it changes every place that plays it: said before it is.
+            QList<PaletteOps::Use> others;
+            for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(p->id()))
+                if (!(u.kind == PaletteOps::Use::Scene && m_contextScene != nullptr
+                      && u.owner == m_contextScene->id()))
+                    others << u;
+            if (!others.isEmpty())
+                where += QLatin1Char(' ') + tr("Also used in %1: changing it changes those too.")
+                                                .arg(PaletteOps::usageSummary(others));
+        }
         b->setEnabled(i <= have.size() && m_contextScene != nullptr);
         if (c.isValid())
         {
@@ -2100,6 +2131,7 @@ void LookEditor::refreshColourSwatches()
 void LookEditor::setContextScene(Scene *scene)
 {
     m_contextScene = scene;
+    refreshColourSwatches();
     // Re-evaluate the applicability warning for the current look.
     if (m_paletteId != QLCPalette::invalidId())
         setPalette(m_paletteId);

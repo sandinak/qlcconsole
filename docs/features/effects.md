@@ -411,7 +411,10 @@ To play a fire in two colours:
 2. Click the **Front** swatch under the setting and pick the front's
    colour, then the **Behind** swatch for the backfill's. Each is a Colour
    look under the effect in the list (the swatch makes it, or changes it),
-   one undo step; an empty swatch shows **+**. You can also add the Colour
+   one undo step; an empty swatch shows **+**. The swatch's tooltip says when
+   other scenes or cues play the same Colour look ("Also used in 3 cues"),
+   since changing it changes them too. In the Show Tree's effect page the
+   same swatches set the layer's own colours. You can also add the Colour
    looks yourself, front first.
 3. Set **Front Width** to how long each head holds the front's colour.
 
