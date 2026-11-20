@@ -307,6 +307,7 @@ colour. Once the look has stopped, starting it again spreads it again.
 | **Firelight** | Warm flickering fire colours, each fixture and each pixel of a bar on its own |
 | **Fire Spread** | The stage catches fire from the look's Aim target and the fire spreads out until everything burns |
 | **Lightning** | Random storm flashes across the rig |
+| **Lightning Spread** | Lightning from the look's Aim target: one blast out in every direction that flickers out, or a static generator's arcs crawling out from the centre |
 | **Sparkle** | Random fixtures flash and fade like stars |
 | **Spotlight Chase** | A hot spot chases across the rig, with a dimmer trail |
 | **Wave** | A travelling sine wave across the fixtures |
@@ -465,6 +466,70 @@ instead.
 | **Intensity** | How bright the fire is, 0 to 100%; scales only the fire's own light (100%) |
 | **Coolness** | Shifts the fire toward blue-white: 0 fire, 1 ice (0) |
 | **Seed** | The same seed gives the same fire every run (1) |
+
+### Lightning Spread
+
+**Lightning Spread** is lightning from one point, the look's **Aim
+target** (centre stage with no Aim look), the same point
+[Fire Spread](#fire-spread) starts from. **Mode** picks one of two ways
+to play it.
+
+**One Burst** is a single blast. A front races out from the point in
+every direction at once, so a head twice as far away is hit twice as
+late, but the whole rig is hit in a fraction of a second (**Burst
+Time**). Each head flashes to full the moment it is hit, then flickers
+out the way lightning does: the strike dies away, the head strikes again
+once or twice at uneven gaps, weaker each time, and goes out. The
+flicker is different on every head and the same on every run, because the
+**Seed** sets it. When the last head is out the effect is at rest: it
+leaves each head to what is under it, which is dark over black.
+
+**Static Generator** keeps going, like the arcs of a static generator.
+The heads nearest the point never go dark; they glow, jagged, at the
+**Core Glow**. Every so often, at uneven gaps (**Rate** a second on
+average), an arc crawls out from the centre through a random few heads,
+flickering on each as it passes and weaker the further it goes. No arc
+goes past the **Reach**, measured from the nearest head to the farthest:
+at 50%, the far half of the rig is never touched.
+
+To blast the stage with lightning from one point:
+
+1. Put the group that holds the whole rig on a layer.
+2. Pick **Lightning Spread** as its effect.
+3. Add an **Aim** look at the point the lightning comes from.
+4. For one blast that ends, set **Runs** to **Once**. For arcs that keep
+   crawling, set **Mode** to **Static Generator**.
+
+The colour is the effect's own Colour look (put it under the effect in
+the look's list), else the look's colour, else a cold, slightly blue
+white. Each kind of head shows it its own way. A dimmer flickers in
+level. An RGB par flickers in the colour. A moving head takes colour and
+dimmer only and never moves. On a colour wheel it holds the nearest slot
+and flickers on its dimmer. A pixel bar is hit pixel by pixel. A relay,
+such as a silk flame's, is left alone, because a flicker would chatter
+it. The distances come from where the rig stands in the 2D plan; heads
+that aren't placed stand in one spot and are hit together.
+
+**How it ends.** A burst on **Runs: Once** (At the end: Hold, Length on
+auto) ends when the last head has flickered out, and holds that rest
+until the cue is released. On **Runs: Loop** (the
+default) it bursts once when the cue starts and then stays at rest;
+start the cue again for another blast. A Static Generator plays until the
+cue lets it go.
+
+| Setting | Does |
+|---|---|
+| **Mode** | **One Burst**, a single blast that flickers out (the default); or **Static Generator**, arcs crawling out from the centre again and again |
+| **Burst Time** | One Burst: seconds for the blast to reach the farthest head (0.3) |
+| **Edge** | One Burst: how jagged the blast's front is; 0 is a clean ring, up to 1 heads are hit a little early or late at random (0.4) |
+| **Flicker Out** | One Burst: seconds each head flickers before it is out (1.5) |
+| **Strikes** | One Burst: the most strikes a head flickers with, the first and its re-strikes; some heads get fewer (3) |
+| **Rate** | Static Generator: arcs a second, on average, at uneven gaps (4) |
+| **Reach** | Static Generator: how far out the arcs go, of the way from the nearest head to the farthest (60%) |
+| **Crawl Time** | Static Generator: seconds an arc takes to crawl out to the Reach (0.3) |
+| **Core Glow** | Static Generator: how bright the heads at the centre glow between arcs; they never go dark (25%) |
+| **Intensity** | How bright the lightning is, 0 to 100%; a Dimmer look under the effect scales it too (100%) |
+| **Seed** | The same seed gives the same lightning every run (1) |
 
 ## Position (moving heads)
 

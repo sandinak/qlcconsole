@@ -65,6 +65,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Fire Spread, Firelight and Candle Flicker look like flames.** Every head and every pixel of a bar now flickers on its own; before, each head's flicker was the last one's a step on, and the rig showed bands and diagonal stripes running across the bars instead of fire.
 
+- **Lightning Spread**: lightning from the look's Aim target. **One
+  Burst** blasts out in every direction in a fraction of a second, each
+  light flashing to full and flickering out with a re-strike or two;
+  **Static Generator** keeps the centre glowing and sends arcs crawling
+  out from it at uneven gaps, never past its Reach. Colour from the
+  effect's own Colour, else the look's, else a cold white; dimmers flicker
+  in level, moving heads never move.
+
 ## [0.5.1] - 2026-11-20
 
 0.5.1 is a stability and room-setup release. If you only read one line: a

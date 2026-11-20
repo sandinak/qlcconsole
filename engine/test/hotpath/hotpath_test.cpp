@@ -1288,7 +1288,7 @@ void HotPath_Test::aSpreadWorksOutWhereItsHeadsStandOnce()
     aim->setStageTargetId(witch->id());
     QVERIFY(doc->addPalette(aim));
 
-    for (const char *script : { "fire-spread.js", "spell-spread.js" })
+    for (const char *script : { "fire-spread.js", "spell-spread.js", "lightning-spread.js" })
     {
         witch->setPosition(QVector3D(1.0f, 2.0f, 0));
         QLCPalette *fx = new QLCPalette(QLCPalette::Effect, doc);

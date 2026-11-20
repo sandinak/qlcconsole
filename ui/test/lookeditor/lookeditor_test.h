@@ -120,6 +120,11 @@ private slots:
     void effectColourAndTintShots();
     /** Fire Spread's settings pictured (QLC_SHOT_DIR only). */
     void fireSpreadSettingsShots();
+    /** Lightning Spread's settings: Mode (One Burst, Static Generator), the
+     *  burst's settings live and the generator's greyed, the other way round
+     *  once Static Generator is chosen (kept on the look); pictured with
+     *  QLC_SHOT_DIR in both modes. */
+    void lightningSpreadOffersItsTwoModes();
     /** Fire Spread's Intensity (board Q259): a row named Intensity with the
      *  effect's other settings, 100% to start, 0 to 100 %; set to 50 % it is
      *  kept on the look and in the show file, and the page opens on it
