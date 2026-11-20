@@ -49,6 +49,7 @@
 #include "timecodesource.h"
 #include <QRegularExpression>
 #include <QCheckBox>
+#include <QStyledItemDelegate>
 #include <QHelpEvent>
 #include <QMouseEvent>
 #include <QToolTip>
@@ -214,6 +215,8 @@ static QList<quint32> idsFromMime(const QMimeData *mime, const char *type)
 namespace
 {
 
+class ShowTreeWidget;
+
 class ShowTreeWidget final : public QTreeWidget
 {
 public:
@@ -245,12 +248,29 @@ public:
         const int kind = item->data(0, ShowTreeView::KindRole).toInt();
         if ((kind != ShowTreeView::ProductionNode && kind != ShowTreeView::ListNode) || item->childCount() == 0)
             return QRect();
+        // In the name column's right end, over what the name would not use
+        // (the delegate below elides the name short of them): the flags and
+        // badges in the columns beside it are never covered.
         const QRect row = visualItemRect(item);
         if (row.isEmpty())
             return QRect();
         const int h = qMax(12, row.height() - 6), w = h + 14;
-        const int right = viewport()->width() - 4;
+        if (row.width() < indentation() + 2 * w + 80)
+            return QRect();
+        const int right = qMin(row.right(), viewport()->width()) - 4;
         return QRect(right - (2 - which) * (w + 2) + 2, row.top() + (row.height() - h) / 2, w, h);
+    }
+
+    /** The width the name's cell gives up to the buttons on the row at
+     *  @a index (hovered or selected), else 0. */
+    int levelReserve(const QModelIndex &index) const
+    {
+        QTreeWidgetItem *item = itemFromIndex(index);
+        if (index.column() != 0 || !buttonsShown(item))
+            return 0;
+        const QRect a = levelButton(item, 0), b = levelButton(item, 1);
+        Q_UNUSED(b);
+        return a.isNull() ? 0 : visualItemRect(item).right() - a.left() + 6;
     }
 
     QMimeData *dragMime(const QList<QTreeWidgetItem *> &items) const { return mimeData(items); }
@@ -779,6 +799,26 @@ private:
     QLabel *m_hint = nullptr;
 };
 
+/* The tree's rows: a Production / Show row wearing the level buttons elides
+   its name short of them. */
+class ShowTreeDelegate final : public QStyledItemDelegate
+{
+public:
+    ShowTreeDelegate(ShowTreeWidget *tree) : QStyledItemDelegate(tree), m_tree(tree) {}
+
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override
+    {
+        QStyledItemDelegate::initStyleOption(option, index);
+        const int reserve = m_tree->levelReserve(index);
+        if (reserve > 0)
+            option->text = option->fontMetrics.elidedText(option->text, Qt::ElideRight,
+                                                          qMax(10, option->rect.width() - reserve - 8));
+    }
+
+private:
+    ShowTreeWidget *m_tree;
+};
+
 /* The Library: drags out what it holds in the same formats the Programming
    tab's trees use, so the Look Editor and scenes take them too. */
 class LibraryWidget final : public QTreeWidget
@@ -1281,6 +1321,25 @@ public:
 
 /* A form row's label is its own widget: it wears its field's tip, so the
    words answer on hover as well as the box. */
+class TipFollower final : public QObject
+{
+public:
+    TipFollower(QWidget *field, QWidget *label) : QObject(label), m_field(field), m_label(label)
+    {
+        field->installEventFilter(this);
+    }
+    bool eventFilter(QObject *watched, QEvent *e) override
+    {
+        if (watched == m_field && e->type() == QEvent::ToolTipChange)
+            m_label->setToolTip(m_field->toolTip());
+        return false;
+    }
+
+private:
+    QWidget *m_field;
+    QWidget *m_label;
+};
+
 void mirrorFormTips(QFormLayout *form)
 {
     if (form == nullptr)
@@ -1293,6 +1352,7 @@ void mirrorFormTips(QFormLayout *form)
             continue;
         if (lab->widget()->toolTip().isEmpty())
             lab->widget()->setToolTip(fld->widget()->toolTip());
+        new TipFollower(fld->widget(), lab->widget());
     }
 }
 
@@ -1739,6 +1799,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     ShowTreeWidget *tree = new ShowTreeWidget(this, split);
     tree->setHint(m_hint);
     m_tree = tree;
+    tree->setItemDelegate(new ShowTreeDelegate(tree));
     m_tree->installEventFilter(this);
     // ⌘C / ⌘V / ⌘D: cues and layers, in the tree only -- the command line
     // and the page's fields keep their own copy and paste.

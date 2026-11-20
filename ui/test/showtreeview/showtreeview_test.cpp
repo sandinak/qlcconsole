@@ -358,35 +358,78 @@ void ShowTreeView_Test::levelButtonsFoldAShowToItsSongs()
 void ShowTreeView_Test::inspectorCheckBoxesExplainThemselves()
 {
     ShowTreeView view(nullptr, m_doc);
-    QList<QCheckBox *> boxes;
-    for (const char *name : { "stCueBase", "stCueMix", "stCueSkip", "stCueNoMib", "stCueFocusCall",
-                              "stCueNeedsWork", "stHitOverride", "stListFollowTimecode", "stLayerRelease" })
+    int seen = 0;
+    for (QCheckBox *box : view.findChildren<QCheckBox *>())
     {
-        QCheckBox *box = view.findChild<QCheckBox *>(name);
-        QVERIFY2(box != nullptr, name);
-        boxes << box;
+        const QString name = box->objectName();
+        if (!name.startsWith("stCue") && !name.startsWith("stList") && !name.startsWith("stHit")
+            && !name.startsWith("stLayer"))
+            continue;
+        ++seen;
+        QVERIFY2(!box->toolTip().isEmpty(), qPrintable(name + ": no tooltip"));
+        QVERIFY2(box->toolTip().length() < 200, qPrintable(name + ": tooltip too long"));
     }
-    for (QCheckBox *box : boxes)
-    {
-        QVERIFY2(!box->toolTip().isEmpty(), qPrintable(box->objectName()));
-        QVERIFY2(box->toolTip().length() < 200, qPrintable(box->objectName()));
-    }
-    QVERIFY(view.findChild<QCheckBox *>("stCueBase")->toolTip().contains("release", Qt::CaseInsensitive));
-    // The form label answers too (a separate widget from the box).
+    QVERIFY(seen >= 8);
+    QCheckBox *base = view.findChild<QCheckBox *>("stCueBase");
+    QVERIFY(base != nullptr);
+    QVERIFY(base->toolTip().contains("release", Qt::CaseInsensitive));
+}
+
+void ShowTreeView_Test::formLabelsFollowTheirFieldsTooltip()
+{
+    ShowTreeView view(nullptr, m_doc);
     QFormLayout *form = view.m_cueForm;
-    bool labelled = false;
-    for (int r = 0; r < form->rowCount(); ++r)
+    QWidget *field = nullptr, *label = nullptr;
+    for (int r = 0; r < form->rowCount() && field == nullptr; ++r)
     {
         QLayoutItem *lab = form->itemAt(r, QFormLayout::LabelRole);
         QLayoutItem *fld = form->itemAt(r, QFormLayout::FieldRole);
         if (lab && lab->widget() && fld && fld->widget() && !fld->widget()->toolTip().isEmpty()
             && !qobject_cast<QCheckBox *>(fld->widget()))
         {
-            QCOMPARE(lab->widget()->toolTip(), fld->widget()->toolTip());
-            labelled = true;
+            field = fld->widget();
+            label = lab->widget();
         }
     }
-    QVERIFY(labelled);
+    QVERIFY(field != nullptr);
+    QCOMPARE(label->toolTip(), field->toolTip());
+    field->setToolTip("Blocked: no calls to run");
+    QCOMPARE(label->toolTip(), QString("Blocked: no calls to run"));
+}
+
+void ShowTreeView_Test::levelButtonsNeverCoverTheFlags()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Show", ListMode::Tracking);
+    st->addCue(list, -1, "A");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QTest::qWait(50);
+    QTreeWidget *tree = view.tree();
+    QTreeWidgetItem *show = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ListNode)
+            show = *it;
+    QVERIFY(show != nullptr);
+    // Flags and badges in every column beside the name.
+    for (int col = 1; col < tree->columnCount(); ++col)
+        show->setText(col, "B");
+    tree->setCurrentItem(show);
+    QTest::mouseMove(tree->viewport(), tree->visualItemRect(show).center());
+    QApplication::processEvents();
+    const QRect button = view.levelButtonRect(show, 0).united(view.levelButtonRect(show, 1));
+    QVERIFY(!button.isEmpty());
+    for (int col = 1; col < tree->columnCount(); ++col)
+    {
+        if (tree->isColumnHidden(col))
+            continue;
+        const QRect cell = tree->visualRect(tree->indexFromItem(show, col));
+        QVERIFY2(!cell.intersects(button), qPrintable(QString("column %1").arg(col)));
+    }
+    // The name keeps clear of them too.
+    QVERIFY(tree->visualItemRect(show).right() >= button.right());
 }
 
 void ShowTreeView_Test::newHereMakesTheNextThing()

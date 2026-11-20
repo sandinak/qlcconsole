@@ -40,6 +40,10 @@ private slots:
     /** Every tick box of the cue and list inspectors says on hover what it
      *  does, briefly; the base cue's names the released layers. */
     void inspectorCheckBoxesExplainThemselves();
+    /** A form label's tooltip follows its field's when that changes. */
+    void formLabelsFollowTheirFieldsTooltip();
+    /** The level buttons sit clear of the flag columns on a hovered row. */
+    void levelButtonsNeverCoverTheFlags();
     /** ⇧⌘N, New (here): nothing -- a production; a production -- a cue
      *  list; a list -- a cue at its end; a cue -- the next cue after it
      *  (D23 numbering; a sub-cue: the next main cue); groups in the
