@@ -1135,6 +1135,51 @@ bool PaletteOps::sceneStep(const QString &label, const QList<quint32> &sceneIds,
     return true;
 }
 
+bool PaletteOps::sceneStepMaking(const QString &label, const QList<quint32> &sceneIds,
+                                 const std::function<bool(QList<quint32> &made)> &change)
+{
+    QList<QPair<quint32, QSharedPointer<Scene>>> scenesBefore;
+    for (quint32 id : sceneIds)
+    {
+        QSharedPointer<Scene> s = sceneSnapshot(id);
+        if (!s.isNull())
+            scenesBefore << qMakePair(id, s);
+    }
+    QList<quint32> made;
+    if (!change(made))
+        return false;
+
+    Step st;
+    st.label = label;
+    for (const QPair<quint32, QSharedPointer<Scene>> &b : scenesBefore)
+    {
+        QSharedPointer<Scene> after = sceneSnapshot(b.first);
+        if (after.isNull())
+            continue;
+        st.scenesBefore << b;
+        st.scenesAfter << qMakePair(b.first, after);
+    }
+    for (quint32 id : made)
+    {
+        State none;
+        none.id = id;
+        st.before << none;
+        st.after << capture(id);
+    }
+    if (st.scenesBefore.isEmpty())
+        return false;
+    st.foldersBefore = st.foldersAfter = m_emptyFolders;
+    st.mergeAt = QDateTime::currentMSecsSinceEpoch();
+    st.stamp = nextUndoStamp();
+    m_undo << st;
+    while (m_undo.count() > kUndoLimit)
+        m_undo.removeFirst();
+    m_redo.clear();
+    m_doc->setModified();
+    emit changed();
+    return true;
+}
+
 void PaletteOps::applyScenes(const QList<QPair<quint32, QSharedPointer<Scene>>> &states,
                              const QList<QPair<quint32, QSharedPointer<Scene>>> &other)
 {

@@ -294,10 +294,33 @@ private:
     QList<EffectScript::ParamDef> m_shownParamDefs;
     QHash<QString, QPointer<QWidget>> m_paramFields;
     QPointer<QFormLayout> m_paramForm;
+    QPointer<QWidget> m_colourField;              ///< the Front / Behind swatches
+    QPointer<QPushButton> m_colourSwatch[2];
+    ColourAsker m_colourAsker;
+    void refreshColourSwatches();
 public:
     /** Grey the parameter rows that don't count with the look's values
      *  now, each saying why ("Set by Framing: Waist Up"). */
     void updateEffectParamActivity();
+
+    /** The faint tint behind one effect's block of settings: the window
+     *  colour a few percent toward the highlight (@a alternate: a little
+     *  more, for the next effect's block). Every theme's own colours. */
+    static QColor settingsTint(const QPalette &pal, bool alternate);
+    /** For tests: the tint the settings block paints now, and its pane. */
+    QColor effectSettingsTint() const;
+    QWidget *effectSettingsPane() const { return m_effectDynWidget; }
+
+    /** The Colour looks under the edited effect in the context scene, in
+     *  order (front first): what Colours "Front and Behind" plays. */
+    QList<quint32> effectColourLooks() const;
+    /** Pick the colour of the @a slot-th (0 front, 1 behind) Colour look
+     *  under the effect: edits it, or adds it under the effect, as one
+     *  undo step. @a colour invalid: asks with the colour picker. */
+    bool pickEffectColour(int slot, const QColor &colour = QColor());
+    /** In place of the colour dialog (tests): false/invalid cancels. */
+    typedef std::function<QColor(const QColor &initial, const QString &title)> ColourAsker;
+    void setColourAsker(const ColourAsker &asker) { m_colourAsker = asker; }
 private:
 
     QLineEdit *m_nameEdit;   //!< editable palette name

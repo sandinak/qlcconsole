@@ -408,8 +408,11 @@ To play a fire in two colours:
 
 1. Pick **Fire Spread** as the layer's effect, and set **Colours** to
    **Front and Behind**.
-2. Under the effect, add a Colour look for the front, then one for the
-   backfill.
+2. Click the **Front** swatch under the setting and pick the front's
+   colour, then the **Behind** swatch for the backfill's. Each is a Colour
+   look under the effect in the list (the swatch makes it, or changes it),
+   one undo step; an empty swatch shows **+**. You can also add the Colour
+   looks yourself, front first.
 3. Set **Front Width** to how long each head holds the front's colour.
 
 Change **Colours** or **Front Width** while the effect is playing and it
@@ -887,7 +890,9 @@ so neither covers the other.
   look's row to change the order (lower wins where two set the same
   channel; ⌥ copies).
 - **An effect's own colour or dimmer** sits under it in the list and stays
-  with it.
+  with it. Each effect's block of settings has a faint tint behind it, a
+  shade different from the next effect's, so you can see where one begins
+  and ends.
 - **Moving a look to another layer**: drag its row onto the layer in the
   Workbench (⌥ copies), one undo step. Within one layer of a cue the
   looks play in their kind's order.

@@ -102,6 +102,13 @@ private slots:
     /** Fire Spread's Colours: Fire, its Front and Behind settings greyed
      *  until Front and Behind is chosen. */
     void fireSpreadOffersFrontAndBehindColours();
+    /** Colours: Front and Behind shows a Front and a Behind swatch for the
+     *  Colour looks under the effect: empty "+" with none, picking makes the
+     *  look under the effect (front first), undo removes it. */
+    void frontAndBehindSwatchesEditTheColourLooksUnder();
+    /** One effect's block of settings has a faint tint of its own, in light
+     *  and dark themes, alternating from one effect to the next. */
+    void anEffectsSettingsHaveATintOfTheirOwn();
     /** Fire Spread's settings pictured (QLC_SHOT_DIR only). */
     void fireSpreadSettingsShots();
     /** Fire Spread's Intensity (board Q259): a row named Intensity with the

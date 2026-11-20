@@ -2012,6 +2012,122 @@ static QLCPalette *aFireSpread(Doc &doc)
     return doc.addPalette(look) ? look : nullptr;
 }
 
+/* The swatches beside Colours: Front and Behind are the first and second
+   Colour looks under the effect in the look's list. */
+void LookEditor_Test::frontAndBehindSwatchesEditTheColourLooksUnder()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+    scene->addPalette(look->id());
+    LookEditor ed(&doc);
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    QColor asked;
+    ed.setColourAsker([&asked](const QColor &, const QString &) { return asked; });
+
+    QPushButton *front = ed.findChild<QPushButton *>("effectColourFront");
+    QPushButton *behind = ed.findChild<QPushButton *>("effectColourBehind");
+    QVERIFY2(front != nullptr && behind != nullptr, "no Front / Behind swatches");
+    QComboBox *colours = ed.findChild<QComboBox *>("effectParam_colours");
+    QVERIFY(colours != nullptr);
+    QVERIFY2(!front->isVisibleTo(&ed), "swatches shown with Colours: Fire");
+    colours->setCurrentIndex(1);
+    QVERIFY(front->isVisibleTo(&ed) && behind->isVisibleTo(&ed));
+
+    // None yet: both empty, the second waits for the first.
+    QVERIFY(front->text().startsWith("+"));
+    QVERIFY(behind->text().startsWith("+"));
+    QVERIFY(front->property("colour").toString().isEmpty());
+    QVERIFY(!behind->isEnabled());
+    QVERIFY(front->toolTip().contains("Colour look under this effect"));
+
+    // Front: the first Colour look under the effect, and the fire uses it.
+    asked = QColor("#00ff00");
+    front->click();
+    QList<quint32> under = ed.effectColourLooks();
+    QCOMPARE(under.size(), 1);
+    QCOMPARE(doc.palette(under.at(0))->colorValue(), QColor("#00ff00"));
+    QCOMPARE(scene->palettes().indexOf(under.at(0)), scene->palettes().indexOf(look->id()) + 1);
+    QList<QColor> use;
+    double dim = 1.0;
+    EffectInstance::sceneLookColours(&doc, scene->id(), look->id(), use, dim);
+    QCOMPARE(use.size(), 1);
+    QCOMPARE(use.at(0), QColor("#00ff00"));
+    QCOMPARE(front->property("colour").toString(), QString("#00ff00"));
+    QVERIFY(!front->text().startsWith("+"));
+    QVERIFY(behind->isEnabled());
+
+    // Behind with only a front: the second.
+    asked = QColor("#ff0000");
+    behind->click();
+    under = ed.effectColourLooks();
+    QCOMPARE(under.size(), 2);
+    QCOMPARE(doc.palette(under.at(1))->colorValue(), QColor("#ff0000"));
+    EffectInstance::sceneLookColours(&doc, scene->id(), look->id(), use, dim);
+    QCOMPARE(use.value(1), QColor("#ff0000"));
+    QCOMPARE(behind->property("colour").toString(), QString("#ff0000"));
+
+    // Picking Front again edits that look, not a new one.
+    asked = QColor("#0000ff");
+    front->click();
+    QCOMPARE(ed.effectColourLooks().size(), 2);
+    QCOMPARE(doc.palette(under.at(0))->colorValue(), QColor("#0000ff"));
+
+    // One undo step each: the edit, then Behind, then Front.
+    QVERIFY(doc.paletteOps()->undo());
+    QCOMPARE(doc.palette(under.at(0))->colorValue(), QColor("#00ff00"));
+    QVERIFY(doc.paletteOps()->undo());
+    QCOMPARE(ed.effectColourLooks().size(), 1);
+    QVERIFY(doc.palette(under.at(1)) == nullptr);
+    QVERIFY(behind->text().startsWith("+"));
+    QVERIFY(doc.paletteOps()->undo());
+    QCOMPARE(ed.effectColourLooks().size(), 0);
+    QVERIFY(doc.palette(under.at(0)) == nullptr);
+    QVERIFY(front->text().startsWith("+"));
+    QVERIFY(doc.paletteOps()->redo());
+    QCOMPARE(ed.effectColourLooks().size(), 1);
+    QCOMPARE(doc.palette(ed.effectColourLooks().at(0))->colorValue(), QColor("#00ff00"));
+}
+
+/* The block of one effect's settings is a shade off its surroundings. */
+void LookEditor_Test::anEffectsSettingsHaveATintOfTheirOwn()
+{
+    Doc doc(this);
+    QLCPalette *a = aFireSpread(doc);
+    QLCPalette *b = aFireSpread(doc);
+    QVERIFY(a != nullptr && b != nullptr);
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+    scene->addPalette(a->id());
+    scene->addPalette(b->id());
+    LookEditor ed(&doc);
+    ed.setContextScene(scene);
+
+    for (const bool dark : { false, true })
+    {
+        QPalette pal;
+        pal.setColor(QPalette::Window, dark ? QColor(45, 45, 48) : QColor(240, 240, 240));
+        pal.setColor(QPalette::Highlight, dark ? QColor(60, 120, 220) : QColor(40, 110, 210));
+        ed.QWidget::setPalette(pal);
+        ed.setPalette(a->id());
+        QWidget *pane = ed.effectSettingsPane();
+        QVERIFY(pane != nullptr);
+        QCOMPARE(pane->objectName(), QString("effectSettings"));
+        QVERIFY(pane->layout() != nullptr && pane->layout()->contentsMargins().left() > 0);
+        const QColor first = ed.effectSettingsTint();
+        QVERIFY2(first != pal.color(QPalette::Window), qPrintable(first.name()));
+        // A few per cent: faint, never a frame.
+        QVERIFY(qAbs(first.red() - pal.color(QPalette::Window).red()) < 25);
+        // The next effect's block alternates.
+        ed.setPalette(b->id());
+        QVERIFY(ed.effectSettingsTint() != first);
+        QVERIFY(ed.effectSettingsTint() != pal.color(QPalette::Window));
+    }
+}
+
 /* Fire Spread's Colours: Fire by default, with Front Width and Flicker
    Behind greyed (they are Front and Behind's); choosing Front and Behind
    brings them back, Front Width 1.5 s in 0.1 to 20, Flicker Behind on. */
