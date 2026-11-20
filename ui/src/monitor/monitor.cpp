@@ -1452,7 +1452,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     });
     // The Power overlay with the Power estimate on for the show (Q293).
     connect(ShowFeatures::instance(), &ShowFeatures::changed, m_overlayCombo,
-            [this]() { applyShowFeatures(); }, Qt::UniqueConnection);
+            [this]() { applyShowFeatures(); });
     applyShowFeatures();
     addSep();
     fl->addWidget(new QLabel(tr("View:")));
