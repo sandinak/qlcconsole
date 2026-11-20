@@ -407,6 +407,7 @@ void ShowTreeNotes_Test::editingASongsNumberCarriesItsSectionToTheNewKey()
 {
     ShowTreeController *st = m_doc->showTree();
     QVERIFY(st->setNumbering(m_prod, Numbering::ShowPartIteration));
+    st->addSection(m_list, "Opener");                               // 0.0.1
     const quint32 song = st->addSection(m_list, "Entrance");        // 1.0.1
     const quint32 verse = st->addCue(m_list, st->cueList(m_list)->indexOf(song), "Verse");
     Section sec;
