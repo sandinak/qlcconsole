@@ -243,10 +243,7 @@ public:
      *  all. Empty for any other row. */
     QRect levelButton(const QTreeWidgetItem *item, int which) const
     {
-        if (item == nullptr)
-            return QRect();
-        const int kind = item->data(0, ShowTreeView::KindRole).toInt();
-        if ((kind != ShowTreeView::ProductionNode && kind != ShowTreeView::ListNode) || item->childCount() == 0)
+        if (!levelEligible(item))
             return QRect();
         // In the name column's right end, over what the name would not use
         // (the delegate below elides the name short of them): the flags and
@@ -254,7 +251,7 @@ public:
         const QRect row = visualItemRect(item);
         if (row.isEmpty())
             return QRect();
-        const int h = qMax(12, row.height() - 6), w = h + 14;
+        const int h = levelButtonHeight(), w = levelButtonWidth();
         if (row.width() < indentation() + 2 * w + 80)
             return QRect();
         const int right = qMin(row.right(), viewport()->width()) - 4;
@@ -262,15 +259,16 @@ public:
     }
 
     /** The width the name's cell gives up to the buttons on the row at
-     *  @a index (hovered or selected), else 0. */
+     *  @a index (hovered or selected), else 0. No geometry is asked for
+     *  here: the delegate calls it while the rows are being measured. */
     int levelReserve(const QModelIndex &index) const
     {
-        QTreeWidgetItem *item = itemFromIndex(index);
-        if (index.column() != 0 || !buttonsShown(item))
+        if (index.column() != 0)
             return 0;
-        const QRect a = levelButton(item, 0), b = levelButton(item, 1);
-        Q_UNUSED(b);
-        return a.isNull() ? 0 : visualItemRect(item).right() - a.left() + 6;
+        QTreeWidgetItem *item = itemFromIndex(index);
+        if (!buttonsShown(item) || header()->sectionSize(0) < indentation() + 2 * levelButtonWidth() + 80)
+            return 0;
+        return 2 * levelButtonWidth() + 10;
     }
 
     QMimeData *dragMime(const QList<QTreeWidgetItem *> &items) const { return mimeData(items); }
@@ -678,9 +676,19 @@ protected:
     }
 
 private:
+    bool levelEligible(const QTreeWidgetItem *item) const
+    {
+        if (item == nullptr || item->childCount() == 0)
+            return false;
+        const int kind = item->data(0, ShowTreeView::KindRole).toInt();
+        return kind == ShowTreeView::ProductionNode || kind == ShowTreeView::ListNode;
+    }
+    int levelButtonHeight() const { return qMax(12, fontMetrics().height() + 2); }
+    int levelButtonWidth() const { return levelButtonHeight() + 14; }
+
     bool buttonsShown(const QTreeWidgetItem *item) const
     {
-        return item != nullptr && !levelButton(item, 0).isNull()
+        return levelEligible(item)
                && (item == currentItem() || item->isSelected()
                    || (m_hover.isValid() && itemFromIndex(m_hover) == item));
     }
