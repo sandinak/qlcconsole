@@ -224,7 +224,7 @@ void ShowNotesList::refresh()
     {
         QTreeWidgetItem *item = new QTreeWidgetItem(m_table);
         item->setText(ItemCol, st->noteTargetLabel(n));
-        item->setText(WhenCol, ShowNotesPane::whenText(n.when));
+        item->setText(WhenCol, ShowNotesPane::whenText(n.when, n.kind));
         item->setText(ByCol, n.author);
         QString text = n.text;
         if (n.view.valid)
@@ -285,7 +285,7 @@ QString ShowNotesList::toMarkdown() const
             lastItem = item;
         }
         QString line = QStringLiteral("- [%1] ").arg(n.done ? QStringLiteral("x") : QStringLiteral(" "));
-        QStringList meta { ShowNotesPane::whenText(n.when) };
+        QStringList meta { ShowNotesPane::whenText(n.when, n.kind) };
         if (!n.author.isEmpty())
             meta << n.author;
         line += QStringLiteral("*%1* — ").arg(meta.join(QStringLiteral(", ")));
@@ -326,7 +326,7 @@ QString ShowNotesList::toHtml() const
         }
         html += QStringLiteral("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td></tr>")
                 .arg(n.done ? QStringLiteral("&#x2713;") : QString(), st->noteTargetLabel(n).toHtmlEscaped(),
-                     ShowNotesPane::whenText(n.when).toHtmlEscaped(), n.author.toHtmlEscaped(), text);
+                     ShowNotesPane::whenText(n.when, n.kind).toHtmlEscaped(), n.author.toHtmlEscaped(), text);
     }
     html += QStringLiteral("</table></body></html>");
     return html;

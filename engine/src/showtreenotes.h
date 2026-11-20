@@ -43,7 +43,14 @@ class QXmlStreamWriter;
 namespace ShowTree
 {
     /** What a note is on. */
-    enum class NoteKind { Production, List, Cue, Layer, Palette };
+    enum class NoteKind { Production, List, Cue, Layer, Palette, Section };
+    /** The target of a Section note: its list's id and its sectionId() (a
+     *  key, or "#" and its head cue) made one number; the note's cue is the
+     *  list. Never invalid. */
+    QLC_ENGINE_EXPORT quint32 sectionNoteTarget(quint32 listId, const QString &sectionId);
+    /** What the first build (qHash, not stable between Qt builds) called it:
+     *  shows saved with it are matched on load. */
+    QLC_ENGINE_EXPORT quint32 legacySectionNoteTarget(quint32 listId, const QString &sectionId);
     QLC_ENGINE_EXPORT QString noteKindToString(NoteKind kind);
     QLC_ENGINE_EXPORT NoteKind stringToNoteKind(const QString &str, bool *ok = nullptr);
 

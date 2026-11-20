@@ -94,7 +94,7 @@ public:
 
     /** "3 Nov 14:02" (with the year when it isn't this one); "cue note"
      *  for the undated entry from before notes. */
-    static QString whenText(const QString &iso);
+    static QString whenText(const QString &iso, ShowTree::NoteKind kind = ShowTree::NoteKind::Cue);
 
     QSize sizeHint() const override;
 

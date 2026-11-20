@@ -207,6 +207,10 @@ namespace ShowTree
          *  follow when it moves. -1: none. Saved as Start=, which an older
          *  build ignores (it reads every cue's own time). */
         qint32 start = -1;
+        /** Plain-text notes on the section ("how to arrange its looks"):
+         *  its first Notes-pane entry. Saved as Note=, which an older
+         *  build ignores. */
+        QString note;
     };
 
     QLC_ENGINE_EXPORT QString cueModeToString(CueMode mode);
@@ -447,6 +451,9 @@ namespace ShowTree
          *  begins (Q190). Saved as <Section> children, which an older build
          *  skips. */
         QList<SectionHead> sections;
+        /** Plain-text notes on the show (list): its first Notes-pane entry.
+         *  Saved as Note=, which an older build ignores. */
+        QString note;
 
         int indexOf(quint32 cueId) const;
         Cue *cue(quint32 id);

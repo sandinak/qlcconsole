@@ -34,6 +34,19 @@ private slots:
     void cleanup();
 
     void theTreeShowsProductionsListsCuesAndLayers();
+    /** The level buttons on a Production / Show row fold it to its songs
+     *  or open it all; the selected row stays in view; cue rows wear none. */
+    void levelButtonsFoldAShowToItsSongs();
+    /** Every tick box of the cue and list inspectors says on hover what it
+     *  does, briefly; the base cue's names the released layers. */
+    void inspectorCheckBoxesExplainThemselves();
+    /** A form label's tooltip follows its field's when that changes. */
+    void formLabelsFollowTheirFieldsTooltip();
+    /** At 1024x640 nothing in the cue inspector is cut off: it never scrolls sideways. */
+    void cueInspectorNeverScrollsSideways();
+    /** The level buttons sit clear of the flag columns on a hovered row. */
+    void levelButtonsNeverCoverTheFlags();
+    void shotsHoveredShowRowAndTooltip();
     /** ⇧⌘N, New (here): nothing -- a production; a production -- a cue
      *  list; a list -- a cue at its end; a cue -- the next cue after it
      *  (D23 numbering; a sub-cue: the next main cue); groups in the
@@ -77,6 +90,11 @@ private slots:
     void aCarriedInLayerCanBeReleased();
     void aCarriedInLayerCanBeBroughInOrStartHere();
     void releaseAndUntrackOnTheGreyRow();
+    /** Several selected layers (grey rows across cues, or a mix with a
+     *  layer set in its cue) take Release / Untrack as one undo step. */
+    void severalLayersReleaseAndUntrackTogether();
+    /** Release on a layer of a reusable cue says it also changes its other uses. */
+    void releaseSaysWhenItAlsoChangesOtherUses();
     void updateCueWhereATrackedValueWasSet();
     void recordAsNewCueFromTheHeader();
     void theLibraryShowsWhatTheListUses();

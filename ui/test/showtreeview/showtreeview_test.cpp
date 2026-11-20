@@ -38,6 +38,8 @@
 #include <QShortcut>
 #include <QLabel>
 #include <QCheckBox>
+#include <QToolTip>
+#include <QHelpEvent>
 #include <QToolButton>
 #include <QToolBar>
 #include <QSplitter>
@@ -279,6 +281,241 @@ void ShowTreeView_Test::theTreeShowsProductionsListsCuesAndLayers()
     QVERIFY(view.selectNode(c1));
     QCOMPARE(view.currentKind(), ShowTreeView::CueNode);
     QCOMPARE(view.currentCueId(), c1);
+}
+
+void ShowTreeView_Test::levelButtonsFoldAShowToItsSongs()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Show", ListMode::Tracking);
+    QVERIFY(st->setNumbering(prod, ShowTree::Numbering::ShowPartIteration));
+    st->addSection(list, "Entrance");
+    const quint32 a = st->addCue(list, 1, "A");
+    st->addSection(list, "Finale");
+    const quint32 b = st->addCue(list, 3, "B");
+    Target t;
+    st->addLayer(a, t);
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(900, 600);
+    view.show();
+    QTreeWidget *tree = view.tree();
+    auto find = [tree](int kind, const QString &name) -> QTreeWidgetItem * {
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == kind && (*it)->text(0).contains(name))
+                return *it;
+        return nullptr;
+    };
+    QTreeWidgetItem *show = find(ShowTreeView::ListNode, "Show");
+    QTreeWidgetItem *prodRow = find(ShowTreeView::ProductionNode, "Dance");
+    QTreeWidgetItem *song = find(ShowTreeView::SectionNode, "Entrance");
+    QTreeWidgetItem *cueA = find(ShowTreeView::CueNode, "A");
+    QTreeWidgetItem *cueB = find(ShowTreeView::CueNode, "B");
+    QVERIFY(show && prodRow && song && cueA && cueB);
+    auto shown = [](QTreeWidgetItem *item) {
+        for (QTreeWidgetItem *p = item->parent(); p != nullptr; p = p->parent())
+            if (!p->isExpanded())
+                return false;
+        return true;
+    };
+    // The buttons are on Production and Show rows only, never a cue's.
+    tree->setCurrentItem(show);
+    QVERIFY(!view.levelButtonRect(show, 0).isEmpty() && !view.levelButtonRect(show, 1).isEmpty());
+    QVERIFY(!view.levelButtonRect(prodRow, 0).isEmpty());
+    QVERIFY(view.levelButtonRect(cueA, 0).isEmpty() && view.levelButtonRect(cueA, 1).isEmpty());
+    QVERIFY(view.levelButtonRect(song, 0).isEmpty());
+    // A click on the button folds it, as the mouse would.
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, view.levelButtonRect(show, 0).center());
+    QVERIFY(shown(song) && !shown(cueA));
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, view.levelButtonRect(show, 1).center());
+    QVERIFY(shown(cueA));
+    {
+        const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+        if (!shotDir.isEmpty())
+            view.grab().save(shotDir + "/level-buttons.png");
+    }
+
+    view.foldLevel(show, false);
+    QVERIFY(shown(song));
+    QVERIFY(!shown(cueA) && !shown(cueB));
+    view.foldLevel(show, true);
+    QVERIFY(shown(cueA) && shown(cueB));
+    // The Production fold: its Show stays open, the songs show, cues fold.
+    view.foldLevel(prodRow, false);
+    QVERIFY(prodRow->isExpanded() && show->isExpanded() && shown(song) && !shown(cueA));
+
+    // The selected cue stays reachable after a fold.
+    view.foldLevel(prodRow, true);
+    tree->setCurrentItem(cueA);
+    view.foldLevel(show, false);
+    QVERIFY(shown(cueA));
+    QVERIFY(!shown(cueB));
+    QVERIFY(tree->visualItemRect(cueA).isValid());
+
+    view.foldLevel(show, true);
+    QVERIFY(shown(cueB));
+    Q_UNUSED(b);
+}
+
+void ShowTreeView_Test::inspectorCheckBoxesExplainThemselves()
+{
+    ShowTreeView view(nullptr, m_doc);
+    int seen = 0;
+    for (QCheckBox *box : view.findChildren<QCheckBox *>())
+    {
+        const QString name = box->objectName();
+        if (!name.startsWith("stCue") && !name.startsWith("stList") && !name.startsWith("stHit")
+            && !name.startsWith("stLayer"))
+            continue;
+        ++seen;
+        QVERIFY2(!box->toolTip().isEmpty(), qPrintable(name + ": no tooltip"));
+        QVERIFY2(box->toolTip().length() < 200, qPrintable(name + ": tooltip too long"));
+    }
+    QVERIFY(seen >= 8);
+    QCheckBox *base = view.findChild<QCheckBox *>("stCueBase");
+    QVERIFY(base != nullptr);
+    QVERIFY(base->toolTip().contains("release", Qt::CaseInsensitive));
+}
+
+void ShowTreeView_Test::cueInspectorNeverScrollsSideways()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Opening", ListMode::Tracking);
+    const quint32 cue = st->addCue(list, -1, "Entrance");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(cue));
+    QApplication::processEvents();
+    QScrollArea *scroll = qobject_cast<QScrollArea *>(view.m_cuePage);
+    QVERIFY(scroll != nullptr);
+    QVERIFY2(scroll->widget()->minimumSizeHint().width() <= scroll->viewport()->width(),
+             qPrintable(QString("the cue page needs %1 px, has %2")
+                        .arg(scroll->widget()->minimumSizeHint().width()).arg(scroll->viewport()->width())));
+    QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+}
+
+void ShowTreeView_Test::formLabelsFollowTheirFieldsTooltip()
+{
+    ShowTreeView view(nullptr, m_doc);
+    QFormLayout *form = view.m_cueForm;
+    QWidget *field = nullptr, *label = nullptr;
+    for (int r = 0; r < form->rowCount() && field == nullptr; ++r)
+    {
+        QLayoutItem *lab = form->itemAt(r, QFormLayout::LabelRole);
+        QLayoutItem *fld = form->itemAt(r, QFormLayout::FieldRole);
+        if (lab && lab->widget() && fld && fld->widget() && !fld->widget()->toolTip().isEmpty()
+            && !qobject_cast<QCheckBox *>(fld->widget()))
+        {
+            field = fld->widget();
+            label = lab->widget();
+        }
+    }
+    QVERIFY(field != nullptr);
+    QCOMPARE(label->toolTip(), field->toolTip());
+    field->setToolTip("Blocked: no calls to run");
+    QCOMPARE(label->toolTip(), QString("Blocked: no calls to run"));
+}
+
+void ShowTreeView_Test::levelButtonsNeverCoverTheFlags()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "Show", ListMode::Tracking);
+    st->addCue(list, -1, "A");
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QTest::qWait(50);
+    QTreeWidget *tree = view.tree();
+    QTreeWidgetItem *show = nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::ListNode)
+            show = *it;
+    QVERIFY(show != nullptr);
+    // Flags and badges in every column beside the name.
+    for (int col = 1; col < tree->columnCount(); ++col)
+        show->setText(col, "B");
+    tree->setCurrentItem(show);
+    QTest::mouseMove(tree->viewport(), tree->visualItemRect(show).center());
+    QApplication::processEvents();
+    const QRect button = view.levelButtonRect(show, 0).united(view.levelButtonRect(show, 1));
+    QVERIFY(!button.isEmpty());
+    for (int col = 1; col < tree->columnCount(); ++col)
+    {
+        if (tree->isColumnHidden(col))
+            continue;
+        const QRect cell = tree->visualRect(tree->indexFromItem(show, col));
+        QVERIFY2(!cell.intersects(button), qPrintable(QString("column %1").arg(col)));
+    }
+    // The name keeps clear of them too.
+    QVERIFY(tree->visualItemRect(show).right() >= button.right());
+}
+
+void ShowTreeView_Test::shotsHoveredShowRowAndTooltip()
+{
+    const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+    if (shotDir.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "01-Opening Number", ListMode::Tracking);
+    st->addCue(list, -1, "Curtain");
+    st->addCue(list, -1, "Entrance");
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &size : sizes)
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(size);
+        view.show();
+        QTest::qWait(50);
+        QTreeWidget *tree = view.tree();
+        QTreeWidgetItem *show = nullptr, *cue = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        {
+            const int kind = (*it)->data(0, ShowTreeView::KindRole).toInt();
+            if (kind == ShowTreeView::ListNode)
+                show = *it;
+            else if (kind == ShowTreeView::CueNode && cue == nullptr)
+                cue = *it;
+        }
+        QVERIFY(show && cue);
+        const QString tag = QString("%1x%2").arg(size.width()).arg(size.height());
+        tree->setCurrentItem(show);
+        QTest::mouseMove(tree->viewport(), tree->visualItemRect(show).center());
+        QApplication::processEvents();
+        view.grab().save(shotDir + "/show-row-hover-" + tag + ".png");
+        {
+            // A button's tooltip showing.
+            const QRect songs = view.levelButtonRect(show, 0);
+            if (!songs.isEmpty())
+            {
+                const QPoint at = songs.center();
+                QHelpEvent help(QEvent::ToolTip, at, tree->viewport()->mapToGlobal(at));
+                QApplication::sendEvent(tree->viewport(), &help);
+                QApplication::processEvents();
+                view.grab().save(shotDir + "/show-row-button-tooltip-" + tag + ".png");
+                for (QWidget *w : QApplication::topLevelWidgets())
+                    if (w->isVisible() && QLatin1String(w->metaObject()->className()) == QLatin1String("QTipLabel"))
+                        w->grab().save(shotDir + "/show-row-button-tip-" + tag + ".png");
+                QToolTip::hideText();
+            }
+        }
+        tree->setCurrentItem(cue);
+        QApplication::processEvents();
+        QCheckBox *base = view.findChild<QCheckBox *>("stCueBase");
+        QVERIFY(base != nullptr);
+        QHelpEvent help(QEvent::ToolTip, QPoint(10, base->height() / 2), base->mapToGlobal(QPoint(10, base->height() / 2)));
+        QApplication::sendEvent(base, &help);
+        QApplication::processEvents();
+        view.grab().save(shotDir + "/cue-inspector-" + tag + ".png");
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->isVisible() && QLatin1String(w->metaObject()->className()) == QLatin1String("QTipLabel"))
+                w->grab().save(shotDir + "/base-cue-tooltip-" + tag + ".png");
+        QToolTip::hideText();
+    }
 }
 
 void ShowTreeView_Test::newHereMakesTheNextThing()
@@ -11660,6 +11897,156 @@ void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()
     QVERIFY(st->undo());
     QVERIFY(st->undo());
     QCOMPARE(st->reusableCues().count(), 1);
+}
+
+void ShowTreeView_Test::releaseSaysWhenItAlsoChangesOtherUses()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target tt;
+    tt.groups << towers->id();
+    Target tu;
+    tu.groups << usts->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    const quint32 l2 = st->addLayer(c1, tu);
+    QVERIFY(st->setLayerLook(c1, l2, st->lookForPalette(full)));
+    const quint32 rc = st->makeCueReusable(c1, "State");
+    QVERIFY(rc != invalidId());
+    QVERIFY(st->insertReusableCue(list, 0, rc) != invalidId());
+    st->clearUndo();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    QTreeWidgetItem *r1 = rowOf(tree, ShowTreeView::LayerNode, l1, c1);
+    QTreeWidgetItem *r2 = rowOf(tree, ShowTreeView::LayerNode, l2, c1);
+    QVERIFY(r1 && r2);
+    // One layer.
+    tree->clearSelection();
+    r1->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, r1);
+        QAction *rel = menu.findChild<QAction *>("stLayerReleaseMenu");
+        QVERIFY(rel != nullptr);
+        QVERIFY2(rel->text().contains("other use"), qPrintable(rel->text()));
+    }
+    // Several.
+    r2->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, r1);
+        QAction *rel = menu.findChild<QAction *>("stLayerReleaseMenu");
+        QVERIFY(rel != nullptr);
+        QVERIFY2(rel->text().contains("other use"), qPrintable(rel->text()));
+    }
+    view.hide();
+}
+
+/* Several layers selected -- grey rows across cues, or a mix with a layer
+   set in its own cue -- take Release and Untrack as one undo step; a mix
+   turns Untrack off and says why, and Release says how many already are. */
+void ShowTreeView_Test::severalLayersReleaseAndUntrackTogether()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Verse");
+    const quint32 c2 = st->addCue(list, 0, "Chorus");
+    const quint32 c3 = st->addCue(list, 1, "Bridge");
+    const quint32 c4 = st->addCue(list, 2, "Out");
+    Target tt;
+    tt.groups << towers->id();
+    Target tu;
+    tu.groups << usts->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    const quint32 lu = st->addLayer(c1, tu);
+    QVERIFY(st->setLayerLook(c1, lu, st->lookForPalette(full)));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    auto greyRow = [&](quint32 cue, const Target &t) -> QTreeWidgetItem * {
+        tree->expandAll();
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::TrackedLayerNode
+                && (*it)->data(0, ShowTreeView::CueRole).toUInt() == cue
+                && (*it)->data(0, ShowTreeView::TargetRole).toString() == t.signature())
+                return *it;
+        return nullptr;
+    };
+
+    // Three grey rows, two cues: Untrack takes them all, one undo step.
+    tree->clearSelection();
+    QTreeWidgetItem *a = greyRow(c3, tt), *b = greyRow(c3, tu), *d = greyRow(c4, tt);
+    QVERIFY(a && b && d);
+    a->setSelected(true);
+    b->setSelected(true);
+    d->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, b);
+        QAction *un = menu.findChild<QAction *>("stUntrackLayer");
+        QVERIFY(un != nullptr && un->isEnabled());
+        QCOMPARE(un->text(), QString("Untrack From This Cue (3 Layers)"));
+        un->trigger();
+    }
+    QVERIFY(greyRow(c3, tt) == nullptr && greyRow(c3, tu) == nullptr && greyRow(c4, tt) == nullptr);
+    QVERIFY(st->undo());
+    QVERIFY(!st->canUndo());
+    QVERIFY(greyRow(c3, tt) != nullptr && greyRow(c3, tu) != nullptr && greyRow(c4, tt) != nullptr);
+
+    // A mix: a grey row and a layer set in its own cue. Release acts on
+    // both; Untrack is off, and says why.
+    const quint32 own = st->addLayer(c4, tu);
+    QVERIFY(st->setLayerLook(c4, own, st->lookForPalette(full)));
+    st->clearUndo();
+    tree->clearSelection();
+    QTreeWidgetItem *grey = greyRow(c3, tt);
+    QTreeWidgetItem *ownRow = rowOf(tree, ShowTreeView::LayerNode, own, c4);
+    QVERIFY(grey && ownRow);
+    grey->setSelected(true);
+    ownRow->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, grey);
+        QAction *un = menu.findChild<QAction *>("stUntrackLayer");
+        QVERIFY(un != nullptr);
+        QVERIFY(!un->isEnabled());
+        QVERIFY2(un->toolTip().contains("set in their own cue"), qPrintable(un->toolTip()));
+        QAction *rel = menu.findChild<QAction *>("stLayerReleaseMenu");
+        QVERIFY(rel != nullptr);
+        QVERIFY2(rel->text().contains("(2 Layers)"), qPrintable(rel->text()));
+        QVERIFY(!rel->isChecked());
+        const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+        if (!shotDir.isEmpty())
+        {
+            menu.ensurePolished();
+            menu.adjustSize();
+            menu.grab().save(shotDir + "/several-layers-mixed-menu.png");
+        }
+        rel->trigger();
+    }
+    QVERIFY(st->cue(c4)->layer(own)->release);
+    QVERIFY(greyRow(c3, tt) == nullptr);                    // 3 holds it itself now, released
+    QVERIFY(st->undo());
+    QVERIFY(!st->canUndo());
+    QVERIFY(!st->cue(c4)->layer(own)->release);
+    Q_UNUSED(c2);
+    view.hide();
 }
 
 /* Q222: a grey row's menu ends the layer two ways -- Release After This Cue

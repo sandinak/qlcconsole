@@ -28,6 +28,27 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   vulnerability privately (the repository's private report form, now on)
   and what counts, the emergency stop included; CODE_OF_CONDUCT.md is the
   Contributor Covenant 2.1.
+### Changed
+
+- **Show Tree: fold a level in one click.** A Production or Show row wears two
+  small buttons at its right edge (on hover and on the selected row): fold to
+  songs (the songs and sections stay, their cues close) and open all. The
+  selected row stays in view.
+- **Notes on a Show and on a song section.** The Show page and the Section
+  page have a **Notes** field, plain text like a cue's Note: your thoughts on
+  how to arrange its looks. It is the first entry in the Notes pane, saved
+  with the show (older shows open as before) and in the Markdown export.
+- **A song keeps its name, start and note when its number is edited.** Change
+  the first-level number of a song's cues and its section follows to the new
+  number, in the same undo step. If another song already has that number,
+  both sections are kept and the footer says so.
+- **Several layers, one change.** Select layers in the tree, grey rows from
+  different cues included, and right-click: **Release After This Cue** and
+  **Untrack From This Cue** act on all of them in one undo step. A mix says
+  how many are released already, and Untrack turns itself off, with the
+  reason, when a selected layer is set in its own cue.
+- **Show Tree: every cue and list tick box says what it does on hover**, in a
+  sentence or two, on the label as well as the box; the base cue's had none.
 
 ## [0.5.1] - 2026-11-20
 

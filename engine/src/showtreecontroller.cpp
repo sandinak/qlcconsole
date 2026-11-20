@@ -692,6 +692,7 @@ bool ShowTreeController::edit(const QString &label,
         if (!change(work))
             return false;
         normalizeLooks(work);
+        m_clashKeys << rekeySections(m_productions, work);
         resolveAllTimecodes(work);
         syncReusables(m_productions, work);
         ownOneOffs(work, &m_productions, &layersBefore, &cuesBefore);
@@ -710,6 +711,7 @@ bool ShowTreeController::edit(const QString &label,
     if (!change(work))
         return false;
     normalizeLooks(work);
+    m_clashKeys << rekeySections(m_productions, work);   // a song's number edited: its name, start and note follow
     resolveAllTimecodes(work);          // Q198: cues timed from a section follow it
 
     // A reusable's use edited: every use (P4).
@@ -729,7 +731,20 @@ bool ShowTreeController::edit(const QString &label,
     emit changed();
     if (notesBefore != m_notes.count())
         emit notesChanged();
+    flushClashes();
     return true;
+}
+
+void ShowTreeController::flushClashes()
+{
+    if (m_clashKeys.isEmpty())
+        return;
+    QStringList keys;
+    for (const QString &k : m_clashKeys)
+        if (!keys.contains(k))
+            keys << k;
+    m_clashKeys.clear();
+    emit sectionNumberClash(keys);
 }
 
 void ShowTreeController::pushUndo(const QString &label, const QByteArray &before)
@@ -795,6 +810,7 @@ void ShowTreeController::endBatch(bool keep)
         m_reusableLayers = m_batchReusableLayers;
         m_reusableCues = m_batchReusableCues;
         m_notes = m_batchNotes;
+        m_clashKeys.clear();
         bake();
         emit changed();
         emit notesChanged();
@@ -805,6 +821,7 @@ void ShowTreeController::endBatch(bool keep)
     m_doc->setModified();
     emit changed();
     emit notesChanged();
+    flushClashes();
 }
 
 quint32 ShowTreeController::addProduction(const QString &name)
@@ -6980,6 +6997,7 @@ bool ShowTreeController::loadXML(QXmlStreamReader &root)
     }
     reset();
     loadState(root, false);
+    remapLegacySectionNotes();          // a show saved with the first Section note targets
     // Q212: an older show's cue notes (and Needs work) become entries.
     syncCueNotes(m_productions);
     if (production(m_current) == nullptr)

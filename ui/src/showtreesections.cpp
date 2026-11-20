@@ -40,6 +40,7 @@
 #include <QSet>
 #include <QLabel>
 
+#include "noteedit.h"
 #include "showtreeview.h"
 #include "showcontrollistener.h"
 #include "importsheet.h"
@@ -59,6 +60,15 @@ static QString numberingName(Numbering n)
         case Numbering::None: break;
     }
     return ShowTreeView::tr("None: no sections");
+}
+
+/* The plain-text note kept on the section's head (empty: none). */
+static QString sectionNoteText(const CueList &list, const Section &s)
+{
+    for (const SectionHead &h : list.sections)
+        if (s.key.isEmpty() ? h.cue == s.headCue : h.key == s.key)
+            return h.note;
+    return QString();
 }
 
 QString ShowTreeView::sectionRole(const Section &s)
@@ -165,6 +175,18 @@ void ShowTreeView::buildSectionPages()
         Section s;
         if (currentKind() == SectionNode && currentSection(&s))
             m_st->setSectionName(currentId(), s, m_sectionName->text());
+    });
+    m_sectionNote = new NoteEdit(m_sectionPage);
+    m_sectionNote->setObjectName("stSectionNote");
+    m_sectionNote->setHelpTip(tr("Your thoughts on this song: how to arrange its looks, what you want to try. "
+                                 "It is the first note in the Notes pane."));
+    m_sectionNote->setToolTip(tr("Plain-text notes on this section, for you, a colleague or the AI later. "
+                                 "Return applies it."));
+    f->addRow(tr("Notes"), m_sectionNote);
+    connect(m_sectionNote, &NoteEdit::editingFinished, this, [this]() {
+        Section s;
+        if (!m_inspectorUpdating && currentKind() == SectionNode && currentSection(&s))
+            m_st->setSectionNote(currentId(), s, m_sectionNote->text());
     });
     m_sectionBlock = new QCheckBox(tr("Block at section start"), m_sectionPage);
     m_sectionBlock->setObjectName("stSectionBlock");
@@ -295,6 +317,7 @@ void ShowTreeView::showSectionPage(quint32 listId, const Section &section)
         return;
     m_sectionTitle->setText(sectionTitle(section));
     m_sectionName->setText(section.name);
+    m_sectionNote->setText(sectionNoteText(*list, section));
     const bool tracking = list->mode == ListMode::Tracking;
     m_sectionBlock->setChecked(m_st->sectionBlocks(listId, section));
     m_sectionBlock->setEnabled(tracking);

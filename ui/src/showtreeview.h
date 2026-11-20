@@ -169,6 +169,13 @@ public:
                        LibReusable, LibPaletteFolder, LibBlocking };
 
     QTreeWidget *tree() const { return m_tree; }
+    /** The level buttons of a Production / Show row: fold everything under
+     *  @a item to its songs / sections, or (@a openAll) open it all. The
+     *  selected row stays in view. */
+    void foldLevel(QTreeWidgetItem *item, bool openAll);
+    /** Where a level button sits (0 fold to songs, 1 open all) in the tree's
+     *  viewport; empty on any row but a Production / Show. */
+    QRect levelButtonRect(QTreeWidgetItem *item, int which) const;
     QTreeWidget *library() const { return m_library; }
     /** The programmer's tools under the header (Build has the same). */
     class ProgrammerStrip *programmerStrip() const { return m_programmerStrip; }
@@ -240,10 +247,15 @@ public:
         /** Several carried-in (grey) rows selected, (cue, target): Release
          *  After This Cue and Untrack From This Cue act on all of them. */
         QList<QPair<quint32, ShowTree::Target>> carried;
+        /** Own layers selected, (cue, layer): with @a carried they are a
+         *  mixed selection when both are there. Cut, copy, duplicate and
+         *  delete act on these only. */
+        QList<QPair<quint32, quint32>> ownRefs;
     };
     /** A layer's own menu (the canon's kind block), the same in the tree and
      *  on the Workbench's layer row; @p layerId invalid: carried in, @p
      *  tracked its target */
+    int otherUsesOfReusableCues(const QList<quint32> &cueIds) const;
     void fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layerId, const ShowTree::Target &tracked,
                        const LayerMenuPlace &place);
     /** The Show Tree's hooks for the canon's palette menu (ContextMenus::palette) */
@@ -1487,6 +1499,8 @@ private:
     QWidget *m_sectionPage = nullptr;
     QLabel *m_sectionTitle = nullptr;
     QLineEdit *m_sectionName = nullptr;
+    NoteEdit *m_sectionNote = nullptr;
+    NoteEdit *m_listNote = nullptr;
     QCheckBox *m_sectionBlock = nullptr;
     QLabel *m_sectionInfo = nullptr;
     QPushButton *m_sectionRemove = nullptr;

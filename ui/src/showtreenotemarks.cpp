@@ -53,6 +53,11 @@ bool rowNoteItem(const QTreeWidgetItem *item, NoteKind *kind, quint32 *target, q
         case ShowTreeView::ProductionNode: *kind = NoteKind::Production; return true;
         case ShowTreeView::ListNode: *kind = NoteKind::List; return true;
         case ShowTreeView::CueNode: *kind = NoteKind::Cue; return true;
+        case ShowTreeView::SectionNode:
+            *kind = NoteKind::Section;
+            *cue = *target;         // its list
+            *target = sectionNoteTarget(*cue, item->data(0, ShowTreeView::SectionRole).toString());
+            return true;
         case ShowTreeView::LayerNode:
             *kind = NoteKind::Layer;
             *cue = item->data(0, ShowTreeView::CueRole).toUInt();
@@ -155,7 +160,7 @@ void ShowTreeView::applyNoteMarks()
                             : QStringLiteral("✎");
                 if (const Note *n = m_st->latestNote(kind, target))
                 {
-                    QStringList meta { ShowNotesPane::whenText(n->when) };
+                    QStringList meta { ShowNotesPane::whenText(n->when, n->kind) };
                     if (!n->author.isEmpty())
                         meta << n->author;
                     meta << (n->done ? tr("done") : tr("open"));
@@ -191,6 +196,16 @@ ShowNotesList *ShowTreeView::showAllNotes()
             switch (n.kind)
             {
                 case NoteKind::Layer: selectNode(n.target, n.cue); break;
+                case NoteKind::Section:
+                    selectNode(n.cue);
+                    for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
+                        if ((*it)->data(0, KindRole).toInt() == SectionNode && (*it)->data(0, IdRole).toUInt() == n.cue
+                            && sectionNoteTarget(n.cue, (*it)->data(0, SectionRole).toString()) == n.target)
+                        {
+                            m_tree->setCurrentItem(*it);
+                            break;
+                        }
+                    break;
                 case NoteKind::Palette: editPalette(n.target); m_notesPane->setItem(NoteKind::Palette, n.target); break;
                 default: selectNode(n.target); break;
             }
