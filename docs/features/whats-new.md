@@ -1252,8 +1252,8 @@ their house lights, relays and subs.
 
 ### Software updates
 
-- **Update check and install.** qlcconsole checks GitHub Releases once a day
-  in the background, and from **Help → Check for Updates…**. A newer
+- **Update check and install.** qlcconsole checks GitHub Releases at every launch
+  and every 4 hours after, in the background, and from **Help → Check for Updates…**. A newer
   version shows as a footer chip, **Update available: 0.2.0**, never as a
   pop-up. Its window shows the release notes, with **Install**, **Later**
   and **Skip This Version**. On macOS and Windows, Install downloads the

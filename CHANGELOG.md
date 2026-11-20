@@ -10,6 +10,15 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Changed
+
+- **Updates are found sooner.** qlcconsole checks for a new version at every
+  launch (not at most once a day) and every 4 hours while it runs. The
+  conditional request, rate-limit back-off and skipped-version rule are
+  unchanged.
+
 ## [0.5.1] - 2026-11-20
 
 0.5.1 is a stability and room-setup release. If you only read one line: a

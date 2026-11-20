@@ -42,8 +42,8 @@ class Doc;
  * The app's side of updating: when to check, what the footer chip says,
  * the dialog, and the hand-off to the installer at quit.
  *
- * Checks a few seconds after the window is up and then at most once a day
- * (UpdateChecker::isCheckDue()), in the background; Help → Check for
+ * Checks a few seconds after the window is up and then at most every 4 hours
+ * (UpdateChecker::isLaunchCheckDue() at launch, isCheckDue() after), in the background; Help → Check for
  * Updates… checks now. An update shows as a footer chip, never a pop-up.
  * Install (or "Install updates automatically", which starts this on its
  * own) downloads and verifies in the background and, on macOS, stages the
@@ -89,7 +89,7 @@ public:
     QString footerText() const;
 
     /** Background checks: the first after @p firstDelayMs, then hourly
-     *  looking whether one is due. Not when disabled, or on a headless
+     *  looking whether one is due (4 hours since the last). Not when disabled, or on a headless
      *  (offscreen/minimal) platform -- tests and the help's screenshots
      *  never reach GitHub. */
     void scheduleChecks(int firstDelayMs = 8000);
@@ -137,6 +137,7 @@ private slots:
     void slotDownloadFinished(bool ok, const QString &error);
     void slotPrepared(bool ok, const QString &error);
     void slotPeriodic();
+    void slotLaunchCheck();
 
 private:
     bool eventFilter(QObject *watched, QEvent *event) override;
