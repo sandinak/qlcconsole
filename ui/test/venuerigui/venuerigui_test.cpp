@@ -745,6 +745,19 @@ void VenueRigUi_Test::theRolesBoxFillsTheRoles()
     // He unticks Stage Wash Top; one click fills the rest and makes the cues.
     d->useBox(d->rowOf(HouseRole::Top))->setChecked(false);
     QVERIFY(d->fillRoles());
+    // The rows rebuilt after the fill leave no old Use tick or Flash button
+    // drawn over the Why column (the 1440/1920 shots showed two sets).
+    {
+        int flashes = 0, ticks = 0;
+        for (const QPushButton *b : t->findChildren<QPushButton *>())
+            if (b->objectName().startsWith(QStringLiteral("rfFlash")) && b->isVisibleTo(t))
+                ++flashes;
+        for (const QCheckBox *c : t->findChildren<QCheckBox *>())
+            if (c->objectName().startsWith(QStringLiteral("rfUse")) && c->isVisibleTo(t))
+                ++ticks;
+        QCOMPARE(flashes, int(HouseRole::roles().size()));
+        QCOMPARE(ticks, int(HouseRole::roles().size()));
+    }
     QVERIFY2(d->statusLabel()->text().startsWith(QStringLiteral("Filled 4 role(s) in PMS Auditeria. Made 8 role "
                                                                 "group(s), 4 palette(s), 6 standard cue(s), 6 Global hit(s).")),
              qPrintable(d->statusLabel()->text()));
