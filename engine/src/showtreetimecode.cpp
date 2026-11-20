@@ -105,7 +105,7 @@ void writeStarts(CueList &list, const QList<Section> &secs, const QVector<qint32
     for (int i = 0; i < list.sections.count(); ++i)
     {
         const SectionHead &h = list.sections.at(i);
-        if (!h.key.isEmpty() && h.name.isEmpty() && h.start < 0)
+        if (!h.key.isEmpty() && h.name.isEmpty() && h.start < 0 && h.note.isEmpty())
             list.sections.removeAt(i--);
     }
 }

@@ -46,6 +46,14 @@ private slots:
      *  note) to the new key in the same step; undo, save and load; a clash
      *  keeps both. */
     void editingASongsNumberCarriesItsSectionToTheNewKey();
+    /** A head with only a note is not pruned when a start is set or cleared. */
+    void aNoteOnlySectionHeadIsNeverPruned();
+    /** The Target is a stable hash; a show saved with the first (qHash) one
+     *  still loads; an unknown note kind is skipped. */
+    void sectionNoteTargetsAreStableAndOldOnesStillLoad();
+    /** Every note on a song (the user's too) follows it; all songs move
+     *  together; a true clash keeps both heads and names every key. */
+    void everySectionNoteFollowsItsSongAndSongsMoveTogether();
     void anOlderShowsCueNotesMigrate();
     void deletedItemsNotesKeptForUndoNotSaved();
     void picturesStayOutOfUndoSteps();

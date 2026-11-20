@@ -93,6 +93,8 @@ private slots:
     /** Several selected layers (grey rows across cues, or a mix with a
      *  layer set in its cue) take Release / Untrack as one undo step. */
     void severalLayersReleaseAndUntrackTogether();
+    /** Release on a layer of a reusable cue says it also changes its other uses. */
+    void releaseSaysWhenItAlsoChangesOtherUses();
     void updateCueWhereATrackedValueWasSet();
     void recordAsNewCueFromTheHeader();
     void theLibraryShowsWhatTheListUses();

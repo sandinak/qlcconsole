@@ -481,6 +481,25 @@ void ShowNotes_Test::theShowAndSectionPagesTakeNotesThatFollowAndExport()
     }
 }
 
+void ShowNotes_Test::aClashHintSurvivesTheBatchAndNamesEveryKey()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setNumbering(m_prod, ShowTree::Numbering::ShowPartIteration));
+    const quint32 a = st->addSection(m_list, "A");
+    const quint32 b = st->addSection(m_list, "B");
+    ShowTree::Section sb;
+    QVERIFY(st->sectionOfCue(b, &sb));
+    ShowTreeView view(nullptr, m_doc);
+    st->beginBatch("A onto B");
+    Cue c = *st->cue(a);
+    c.number = sb.key + ".5.1";
+    QVERIFY(st->setCue(c));
+    st->endBatch(true);
+    QLabel *hint = view.findChild<QLabel *>("stDropHint");
+    QVERIFY(hint != nullptr);
+    QVERIFY2(hint->text().contains(sb.key) && hint->text().contains("hidden"), qPrintable(hint->text()));
+}
+
 void ShowNotes_Test::exportMakesMarkdownAndPdf()
 {
     ShowTreeController *st = m_doc->showTree();

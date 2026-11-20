@@ -2924,9 +2924,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     }
 
     connect(m_st, &ShowTreeController::changed, this, &ShowTreeView::slotTreeChanged);
-    connect(m_st, &ShowTreeController::sectionNumberClash, this, [this](const QString &key) {
-        m_hint->setText(tr("Two songs now share the number %1: both sections are kept. Renumber one song's "
-                           "cues to tell them apart.").arg(key));
+    connect(m_st, &ShowTreeController::sectionNumberClash, this, [this](const QStringList &keys) {
+        m_hint->setText(tr("Two songs now share the number %1: one song's section is hidden until you renumber "
+                           "it (nothing is lost). Renumber one song's cues to tell them apart.")
+                        .arg(keys.join(QStringLiteral(", "))));
     });
     // Q38: the badges and "Use show's (On)" follow the show's move in black.
     if (ProgrammerController *pc = m_doc->programmer())
@@ -8957,6 +8958,23 @@ void ShowTreeView::slotTreeContextMenu(const QPoint &pos)
 /* A layer's own menu (the canon's kind block, docs/design/CONTEXT_MENUS.md):
    the same in the tree and on the Workbench's layer row. @a layerId invalid:
    a layer carried into the cue (@a tracked its target). */
+/* How many other uses of a reusable cue a layer edit in these cues also
+   changes (a reusable cue's layers are shared by every use). */
+int ShowTreeView::otherUsesOfReusableCues(const QList<quint32> &cueIds) const
+{
+    QSet<quint32> seen;
+    int others = 0;
+    for (quint32 cueId : cueIds)
+    {
+        const Cue *c = m_st->cue(cueId);
+        if (c == nullptr || c->reusable == invalidId() || seen.contains(c->reusable))
+            continue;
+        seen.insert(c->reusable);
+        others += qMax(0, int(m_st->reusableUses(c->reusable).count()) - 1);
+    }
+    return others;
+}
+
 void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layerId, const Target &tracked,
                                  const LayerMenuPlace &place)
 {
@@ -9005,11 +9023,24 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         // for one layer. Release says when only some are released; Untrack
         // is for carried-in rows only, so a mix with a layer set in its
         // cue turns it off with the reason.
-        if (list != nullptr && !list->looks && (!place.ownRefs.isEmpty() || !place.carried.isEmpty()))
+        if (!place.ownRefs.isEmpty() || !place.carried.isEmpty())
         {
             const QList<QPair<quint32, quint32>> own = place.ownRefs;
             const QList<QPair<quint32, Target>> carried = place.carried;
             const int total = own.count() + carried.count();
+            // Each layer's own list: a hit's has no Release or Untrack.
+            bool lists = true;
+            QList<quint32> cueIds;
+            for (const QPair<quint32, quint32> &ref : own)
+                cueIds << ref.first;
+            for (const QPair<quint32, Target> &c : carried)
+                cueIds << c.first;
+            for (quint32 cid : cueIds)
+            {
+                const CueList *cl = m_st->listOfCue(cid);
+                lists = lists && cl != nullptr && !cl->looks;
+            }
+            const int others = otherUsesOfReusableCues(cueIds);
             int released = 0;
             for (const QPair<quint32, quint32> &ref : own)
                 if (const Cue *oc = m_st->cue(ref.first))
@@ -9019,8 +9050,11 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
             QString text = tr("Release After This Cue (%1 Layers)").arg(total);
             if (released > 0 && !allOn)
                 text += tr(" — %1 of %2 released").arg(released).arg(total);
+            if (others > 0)
+                text += tr(" — also changes %n other use(s)", "", others);
             QAction *rel = menu.add(ContextMenu::Place, text, std::function<void()>(),
                                     QStringLiteral("stLayerReleaseMenu"));
+            rel->setEnabled(lists);
             rel->setCheckable(true);
             rel->setChecked(allOn);
             rel->setToolTip(tr("Each layer plays in its cue, then lets go. Ticked when all are released: "
@@ -9043,9 +9077,10 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
                     if (!m_st->untrackLayers(carried, &why))
                         QMessageBox::information(this, tr("Untrack from this cue"), why);
                 }, QStringLiteral("stUntrackLayer"));
-                bool ok = own.isEmpty();
-                QString why = tr("%1 of the selected layers are set in their own cue: Untrack is for layers "
-                                 "carried in from an earlier cue (grey rows).").arg(own.count());
+                bool ok = own.isEmpty() && lists;
+                QString why = !lists ? tr("A hit has no Release or Untrack.")
+                                     : tr("%1 of the selected layers are set in their own cue: Untrack is for layers "
+                                          "carried in from an earlier cue (grey rows).").arg(own.count());
                 if (ok)
                     for (const QPair<quint32, Target> &c : carried)
                     {
@@ -9075,8 +9110,11 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         const QList<QPair<quint32, Target>> carried = own == nullptr && place.carried.count() > 1
                                                       ? place.carried : QList<QPair<quint32, Target>>();
         const QString what = carried.isEmpty() ? QString() : tr(" (%1 Layers)").arg(carried.count());
-        QAction *rel = menu.add(ContextMenu::Place, tr("Release After This Cue") + what, std::function<void()>(),
-                                QStringLiteral("stLayerReleaseMenu"));
+        const int others = otherUsesOfReusableCues({ cueId });
+        QAction *rel = menu.add(ContextMenu::Place,
+                                tr("Release After This Cue") + what
+                                    + (others > 0 ? tr(" — also changes %n other use(s)", "", others) : QString()),
+                                std::function<void()>(), QStringLiteral("stLayerReleaseMenu"));
         rel->setToolTip(tr("The layer plays in this cue, then lets go: the next cue starts without it "
                            "(back to the base cue, else dark)"));
         if (own != nullptr)

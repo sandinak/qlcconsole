@@ -255,6 +255,7 @@ public:
     /** A layer's own menu (the canon's kind block), the same in the tree and
      *  on the Workbench's layer row; @p layerId invalid: carried in, @p
      *  tracked its target */
+    int otherUsesOfReusableCues(const QList<quint32> &cueIds) const;
     void fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layerId, const ShowTree::Target &tracked,
                        const LayerMenuPlace &place);
     /** The Show Tree's hooks for the canon's palette menu (ContextMenus::palette) */

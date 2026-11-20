@@ -166,7 +166,7 @@ public:
 signals:
     /** A song's number was edited onto another song's: both sections are
      *  kept, and this says so (key of the number). */
-    void sectionNumberClash(const QString &key);
+    void sectionNumberClash(const QStringList &keys);
     /** The current production (or its main list) changed. */
     void currentProductionChanged();
 
@@ -2184,7 +2184,11 @@ private:
     /** After an edit: a section whose cues' first-level number changed takes
      *  its name, start and note to the new key (same undo step). Returns the
      *  keys that already had a head: both kept. */
-    static QStringList rekeySections(const QList<ShowTree::Production> &old, QList<ShowTree::Production> &work);
+    QStringList rekeySections(const QList<ShowTree::Production> &old, QList<ShowTree::Production> &work);
+    void remapLegacySectionNotes();
+    /** Clashing keys of edits not yet announced (a batch tells at its end). */
+    QStringList m_clashKeys;
+    void flushClashes();
     void writeOwnNote(QList<ShowTree::Production> &ps, const ShowTree::Note &n, const QString &text);
     int sectionOfNote(const ShowTree::Note &n) const;
     QList<ShowTree::Note> m_batchNotes;

@@ -68,8 +68,63 @@ QString ShowTree::noteKindToString(NoteKind kind)
 
 quint32 ShowTree::sectionNoteTarget(quint32 listId, const QString &sectionId)
 {
+    // FNV-1a over the UTF-8 text: the same on every Qt build, CPU and
+    // platform, so a saved Target means the same section on another host.
+    const QByteArray text = QStringLiteral("%1:%2").arg(listId).arg(sectionId).toUtf8();
+    quint32 h = 2166136261u;
+    for (char c : text)
+    {
+        h ^= quint8(c);
+        h *= 16777619u;
+    }
+    return h == 0xFFFFFFFFu ? 0xFFFFFFFEu : h;
+}
+
+quint32 ShowTree::legacySectionNoteTarget(quint32 listId, const QString &sectionId)
+{
+    // The first build kept qHash(QString), which is not stable between Qt
+    // builds: a show saved with it is matched again on load.
     const quint32 h = quint32(qHash(QStringLiteral("%1:%2").arg(listId).arg(sectionId)));
     return h == 0xFFFFFFFFu ? 0xFFFFFFFEu : h;
+}
+
+/* A show saved with the first (qHash) Section note targets: each such note
+   takes the stable target of the section it was on. Load only. */
+void ShowTreeController::remapLegacySectionNotes()
+{
+    QHash<quint32, quint32> remap;
+    for (const Production &p : m_productions)
+        for (const CueList &l : p.lists)
+        {
+            QStringList ids;
+            for (const SectionHead &h : l.sections)
+                ids << (h.key.isEmpty() ? QStringLiteral("#%1").arg(h.cue) : h.key);
+            if (p.numbering != Numbering::None)
+                for (const Section &s : sectionsOf(l, p.numbering))
+                    ids << sectionId(s);
+            for (const QString &id : ids)
+            {
+                const quint32 now = sectionNoteTarget(l.id, id), old = legacySectionNoteTarget(l.id, id);
+                if (old != now)
+                    remap.insert(old, now);
+            }
+        }
+    for (Note &n : m_notes)
+        if (n.kind == NoteKind::Section && remap.contains(n.target)
+            && sectionNoteTarget(n.cue, QString()) != n.target)
+        {
+            // Only a Target that is not already a stable one of this list.
+            bool stable = false;
+            for (const Production &p : m_productions)
+                if (const CueList *l = p.list(n.cue))
+                {
+                    for (const SectionHead &h : l->sections)
+                        stable |= sectionNoteTarget(l->id, h.key.isEmpty() ? QStringLiteral("#%1").arg(h.cue) : h.key)
+                                  == n.target;
+                }
+            if (!stable)
+                n.target = remap.value(n.target);
+        }
 }
 
 NoteKind ShowTree::stringToNoteKind(const QString &str, bool *ok)

@@ -782,6 +782,8 @@ bool ShowTreeController::setSectionName(quint32 listId, const Section &section, 
 QStringList ShowTreeController::rekeySections(const QList<Production> &old, QList<Production> &work)
 {
     QStringList clashes;
+    QHash<quint32, quint32> noteMoves;         // old note target -> new, every list at once
+    QSet<quint32> noteDrops;                   // the notes of a head that made room
     for (Production &np : work)
     {
         const Production *op = nullptr;
@@ -794,40 +796,100 @@ QStringList ShowTreeController::rekeySections(const QList<Production> &old, QLis
         for (CueList &nl : np.lists)
         {
             const CueList *ol = op->list(nl.id);
-            if (ol == nullptr || ol->sections.isEmpty())
+            if (ol == nullptr || nl.sections.isEmpty())
                 continue;
             const QList<Section> oldSecs = sectionsOf(*ol, op->numbering);
             const QList<Section> newSecs = sectionsOf(nl, np.numbering);
-            QSet<QString> newKeys;
-            for (const Section &s : newSecs)
-                newKeys.insert(s.key);
-            for (const Section &os : oldSecs)
+            // Each head follows its section's first cue: the key it had, the
+            // key that cue's section has now. All heads move as one.
+            const int n = nl.sections.count();
+            QVector<QString> landing(n);
+            QVector<bool> dead(n, false);
+            bool any = false;
+            for (int i = 0; i < n; ++i)
             {
-                if (os.key.isEmpty() || newKeys.contains(os.key) || os.first < 0 || os.first >= ol->cues.count())
+                const QString k = nl.sections.at(i).key;
+                landing[i] = k;
+                if (k.isEmpty())
                     continue;
-                int head = -1;
-                for (int i = 0; i < nl.sections.count(); ++i)
-                    if (nl.sections.at(i).key == os.key)
-                        head = i;
-                if (head < 0)
+                const Section *os = nullptr;
+                for (const Section &s : oldSecs)
+                    if (s.key == k)
+                        os = &s;
+                if (os == nullptr || os->first < 0 || os->first >= ol->cues.count())
                     continue;
-                // Where its first cue is now.
-                const int at = nl.indexOf(ol->cues.at(os.first).id);
-                const int si = at < 0 ? -1 : sectionOfIndex(newSecs, at);
-                if (si < 0 || newSecs.at(si).key == os.key)
-                    continue;
-                const QString to = newSecs.at(si).key;
-                bool taken = false;
-                for (const SectionHead &h : nl.sections)
-                    taken |= h.key == to;
-                if (taken)
+                const int at = nl.indexOf(ol->cues.at(os->first).id);
+                if (at < 0)
                 {
-                    clashes << to;
+                    dead[i] = true;                 // its song is gone
                     continue;
                 }
-                nl.sections[head].key = to;
+                const int si = sectionOfIndex(newSecs, at);
+                if (si >= 0 && newSecs.at(si).key != k)
+                {
+                    landing[i] = newSecs.at(si).key;
+                    any = true;
+                }
             }
+            if (!any)
+                continue;
+            // A gone song's head makes room for a head moving onto its key.
+            for (int i = 0; i < n; ++i)
+                if (dead[i])
+                    for (int j = 0; j < n; ++j)
+                        if (j != i && landing[j] != nl.sections.at(j).key && landing[j] == nl.sections.at(i).key)
+                        {
+                            noteDrops.insert(sectionNoteTarget(nl.id, nl.sections.at(i).key));
+                            nl.sections[i].key = QStringLiteral("\x01gone");
+                        }
+            // Two heads landing on one key: both kept, one parked at its old
+            // key (hidden until renumbered).
+            QHash<QString, QList<int>> byKey;
+            for (int i = 0; i < n; ++i)
+                if (nl.sections.at(i).key != QLatin1String("\x01gone"))
+                    byKey[landing[i]] << i;
+            for (auto it = byKey.begin(); it != byKey.end(); ++it)
+            {
+                if (it.value().count() < 2)
+                    continue;
+                clashes << it.key();
+                int keep = it.value().first();
+                for (int i : it.value())
+                    if (nl.sections.at(i).key == it.key())
+                        keep = i;                   // the one already there stays
+                for (int i : it.value())
+                    if (i != keep)
+                        landing[i] = nl.sections.at(i).key;
+            }
+            for (int i = 0; i < n; ++i)
+            {
+                if (nl.sections.at(i).key == QLatin1String("\x01gone"))
+                    continue;
+                const QString from = nl.sections.at(i).key;
+                if (landing[i] != from)
+                {
+                    noteMoves.insert(sectionNoteTarget(nl.id, from), sectionNoteTarget(nl.id, landing[i]));
+                    nl.sections[i].key = landing[i];
+                }
+            }
+            for (int i = 0; i < nl.sections.count(); ++i)
+                if (nl.sections.at(i).key == QLatin1String("\x01gone"))
+                    nl.sections.removeAt(i--);
         }
+    }
+    // Every note on a moved section goes with it, ids and done flags kept.
+    if (!noteDrops.isEmpty())
+        for (int i = 0; i < m_notes.count(); ++i)
+            if (m_notes.at(i).kind == NoteKind::Section && noteDrops.contains(m_notes.at(i).target))
+                m_notes.removeAt(i--);
+    if (!noteMoves.isEmpty())
+    {
+        QHash<quint32, quint32> map;
+        for (auto it = noteMoves.constBegin(); it != noteMoves.constEnd(); ++it)
+            map.insert(it.key(), it.value());
+        for (Note &nt : m_notes)
+            if (nt.kind == NoteKind::Section && map.contains(nt.target))
+                nt.target = map.value(nt.target);
     }
     return clashes;
 }
@@ -915,9 +977,17 @@ quint32 ShowTreeController::addSection(quint32 listId, const QString &name, quin
         {
             for (int i = 0; i < l->sections.count(); ++i)
                 if (l->sections.at(i).key == h.key)
+                {
+                    // A head that carries a note is not dropped: the new
+                    // section takes its note (and start).
+                    if (h.note.isEmpty())
+                        h.note = l->sections.at(i).note;
+                    if (h.start < 0)
+                        h.start = l->sections.at(i).start;
                     l->sections.removeAt(i--);
+                }
         }
-        if (scheme == Numbering::Manual || !h.name.isEmpty())
+        if (scheme == Numbering::Manual || !h.name.isEmpty() || !h.note.isEmpty())
             l->sections << h;
         return true;
     });

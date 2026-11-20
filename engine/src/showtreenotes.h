@@ -48,6 +48,9 @@ namespace ShowTree
      *  key, or "#" and its head cue) made one number; the note's cue is the
      *  list. Never invalid. */
     QLC_ENGINE_EXPORT quint32 sectionNoteTarget(quint32 listId, const QString &sectionId);
+    /** What the first build (qHash, not stable between Qt builds) called it:
+     *  shows saved with it are matched on load. */
+    QLC_ENGINE_EXPORT quint32 legacySectionNoteTarget(quint32 listId, const QString &sectionId);
     QLC_ENGINE_EXPORT QString noteKindToString(NoteKind kind);
     QLC_ENGINE_EXPORT NoteKind stringToNoteKind(const QString &str, bool *ok = nullptr);
 

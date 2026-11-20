@@ -11899,6 +11899,57 @@ void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()
     QCOMPARE(st->reusableCues().count(), 1);
 }
 
+void ShowTreeView_Test::releaseSaysWhenItAlsoChangesOtherUses()
+{
+    FixtureGroup *towers = group("Towers", 0, 2);
+    FixtureGroup *usts = group("USTs", 2, 2);
+    const quint32 full = dimmer(255, "Full");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target tt;
+    tt.groups << towers->id();
+    Target tu;
+    tu.groups << usts->id();
+    const quint32 l1 = st->addLayer(c1, tt);
+    QVERIFY(st->setLayerLook(c1, l1, st->lookForPalette(full)));
+    const quint32 l2 = st->addLayer(c1, tu);
+    QVERIFY(st->setLayerLook(c1, l2, st->lookForPalette(full)));
+    const quint32 rc = st->makeCueReusable(c1, "State");
+    QVERIFY(rc != invalidId());
+    QVERIFY(st->insertReusableCue(list, 0, rc) != invalidId());
+    st->clearUndo();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1280, 700);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTreeWidget *tree = view.tree();
+    tree->expandAll();
+    QTreeWidgetItem *r1 = rowOf(tree, ShowTreeView::LayerNode, l1, c1);
+    QTreeWidgetItem *r2 = rowOf(tree, ShowTreeView::LayerNode, l2, c1);
+    QVERIFY(r1 && r2);
+    // One layer.
+    tree->clearSelection();
+    r1->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, r1);
+        QAction *rel = menu.findChild<QAction *>("stLayerReleaseMenu");
+        QVERIFY(rel != nullptr);
+        QVERIFY2(rel->text().contains("other use"), qPrintable(rel->text()));
+    }
+    // Several.
+    r2->setSelected(true);
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, r1);
+        QAction *rel = menu.findChild<QAction *>("stLayerReleaseMenu");
+        QVERIFY(rel != nullptr);
+        QVERIFY2(rel->text().contains("other use"), qPrintable(rel->text()));
+    }
+    view.hide();
+}
+
 /* Several layers selected -- grey rows across cues, or a mix with a layer
    set in its own cue -- take Release and Untrack as one undo step; a mix
    turns Untrack off and says why, and Release says how many already are. */
