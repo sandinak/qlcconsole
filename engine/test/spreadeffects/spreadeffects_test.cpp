@@ -211,6 +211,81 @@ QList<QVariantMap> scriptFrame(EffectScript &script, const QList<QVariantMap> &h
                               look.isValid() ? QList<QColor>{ look } : QList<QColor>());
 }
 
+/* @p script ticked again and again on one state, as the host does: @p
+   heads (each a map of the descriptor's fields), @p inputs (with _time set
+   each tick), @p set over the defaults, the look's colours @p looks. */
+class ScriptRun
+{
+public:
+    ScriptRun(EffectScript &script, const QList<QVariantMap> &heads, const QVariantMap &inputs,
+              const QVariantMap &set, const QList<QColor> &looks = QList<QColor>())
+        : m_script(script), m_n(heads.size())
+    {
+        QJSEngine *eng = script.engine();
+        m_fixtures = eng->newArray(uint(heads.size()));
+        for (int i = 0; i < heads.size(); ++i)
+        {
+            QJSValue o = eng->newObject();
+            o.setProperty("heads", 1);
+            for (auto it = heads.at(i).constBegin(); it != heads.at(i).constEnd(); ++it)
+                o.setProperty(it.key(), eng->toScriptValue(it.value()));
+            m_fixtures.setProperty(quint32(i), o);
+        }
+        m_inputs = eng->newObject();
+        for (auto it = inputs.constBegin(); it != inputs.constEnd(); ++it)
+            m_inputs.setProperty(it.key(), eng->toScriptValue(it.value()));
+        m_params = eng->newObject();
+        for (const EffectScript::ParamDef &d : script.paramDefs())
+            m_params.setProperty(d.name, double(d.defaultValue));
+        for (auto it = set.constBegin(); it != set.constEnd(); ++it)
+            m_params.setProperty(it.key(), it.value().toDouble());
+        m_palettes = eng->newObject();
+        QJSValue lookObj = eng->newObject();
+        QJSValue colours = eng->newArray(uint(looks.size()));
+        for (int i = 0; i < looks.size(); ++i)
+        {
+            QJSValue c = eng->newObject();
+            c.setProperty("r", looks.at(i).red());
+            c.setProperty("g", looks.at(i).green());
+            c.setProperty("b", looks.at(i).blue());
+            colours.setProperty(quint32(i), c);
+        }
+        lookObj.setProperty("colors", colours);
+        lookObj.setProperty("dimmer", 1.0);
+        m_palettes.setProperty("look", lookObj);
+        m_state = script.newState();
+    }
+
+    QList<QVariantMap> at(double seconds)
+    {
+        m_inputs.setProperty("_time", seconds);
+        const QJSValue out = m_script.callTick(m_fixtures, m_inputs, m_palettes, m_params, m_state,
+                                               m_script.engine()->newObject());
+        QList<QVariantMap> frame;
+        for (int i = 0; i < m_n; ++i)
+            frame << out.property(quint32(i)).toVariant().toMap();
+        return frame;
+    }
+
+    bool done() const { return m_state.property("done").toBool(); }
+
+private:
+    EffectScript &m_script;
+    int m_n;
+    QJSValue m_fixtures, m_inputs, m_params, m_palettes, m_state;
+};
+
+/* A head's level in a script's answer: its dimmer, else its brightest
+   colour; -1 when nothing is said (left to what is under it). */
+double levelOf(const QVariantMap &o)
+{
+    if (o.isEmpty())
+        return -1.0;
+    if (o.contains("dimmer"))
+        return o.value("dimmer").toDouble();
+    return qMax(o.value("r").toInt(), qMax(o.value("g").toInt(), o.value("b").toInt())) / 255.0;
+}
+
 bool lit(const QVariantMap &o)
 {
     if (o.contains("dimmer") && o.value("dimmer").toDouble() <= 0)
@@ -1265,6 +1340,251 @@ void SpreadEffects_Test::fireSpreadBackfillIsRaggedBySeed()
     QVERIFY(filled2 != filled);
 }
 
+void SpreadEffects_Test::lightningSpreadBurstsOutAndFlickersOut()
+{
+    EffectScript ls;
+    QVERIFY(ls.load(kScripts + "lightning-spread.js"));
+    QCOMPARE(ls.name(), QString("Lightning Spread"));
+    QVERIFY(ls.wantsTargetDistance());
+    QVERIFY(ls.endsWhenDone());
+    QVERIFY(ls.fixtureTypes().contains("dimmer"));
+    QVERIFY(ls.fixtureTypes().contains("moving"));
+
+    // Six pars with a dimmer, 0 to 5 m from the point; the blast takes a
+    // second to reach the farthest, a clean ring (Edge 0); each head
+    // flickers out over 1.5 s.
+    QList<QVariantMap> rig;
+    for (int i = 0; i < 6; ++i)
+        rig << QVariantMap{ { "hasRGB", true }, { "hasDimmer", true }, { "fromTarget", double(i) } };
+    const QVariantMap inputs = { { "_fromTargetFar", 5.0 } };
+    const QVariantMap set = { { "mode", 0 }, { "spreadTime", 1.0 }, { "edge", 0.0 }, { "decay", 1.5 },
+                              { "strikes", 3 }, { "seed", 7 } };
+    const double step = 0.01;
+    auto trace = [&](const QVariantMap &with) {
+        ScriptRun run(ls, rig, inputs, with);
+        QList<QList<double>> levels;            // [tick][head]
+        bool doneEarly = false;
+        for (int k = 0; k <= 300; ++k)
+        {
+            const QList<QVariantMap> f = run.at(k * step);
+            QList<double> row;
+            for (const QVariantMap &o : f)
+                row << levelOf(o);
+            levels << row;
+            if (k * step < 1.0 + 1.5 - 0.02 && run.done())
+                doneEarly = true;
+        }
+        return qMakePair(levels, doneEarly || !run.done());
+    };
+    const auto burst = trace(set);
+    QVERIFY2(!burst.second, "done before the last head flickered out, or never done");
+    const QList<QList<double>> &lv = burst.first;
+
+    // Hit in order of distance: head i at i/5 of the second, at full the
+    // tick it is hit (a sharp attack), nothing said before.
+    QVector<int> hit(6, -1);
+    for (int k = 0; k < lv.size(); ++k)
+        for (int h = 0; h < 6; ++h)
+            if (hit[h] < 0 && lv[k][h] >= 0)
+                hit[h] = k;
+    for (int h = 0; h < 6; ++h)
+    {
+        QVERIFY2(hit[h] >= 0, qPrintable(QString("head %1 never hit").arg(h)));
+        QVERIFY2(qAbs(hit[h] * step - h * 0.2) <= 0.011,
+                 qPrintable(QString("head %1 hit at %2 s, not %3").arg(h).arg(hit[h] * step).arg(h * 0.2)));
+        QCOMPARE(lv[hit[h]][h], 1.0);
+        if (h > 0)
+            QVERIFY(hit[h] > hit[h - 1]);
+    }
+
+    // Lightning, not a sine: on each head the strike dies away, then it
+    // strikes again at least once -- a jump up in one tick -- after
+    // falling well below full.
+    for (int h = 0; h < 6; ++h)
+    {
+        int restrikes = 0;
+        double lowest = 1.0;
+        for (int k = hit[h] + 1; k < lv.size() && lv[k][h] >= 0; ++k)
+        {
+            if (lv[k][h] - lv[k - 1][h] > 0.15)
+                ++restrikes;
+            if (restrikes == 0)
+                lowest = qMin(lowest, lv[k][h]);
+        }
+        QVERIFY2(restrikes >= 1, qPrintable(QString("head %1 flickered with no re-strike").arg(h)));
+        QVERIFY2(lowest < 0.3, qPrintable(QString("head %1 only fell to %2 before its re-strike").arg(h).arg(lowest)));
+    }
+
+    // At rest after its Flicker Out: nothing written, every head.
+    for (int k = 0; k < lv.size(); ++k)
+        for (int h = 0; h < 6; ++h)
+            if (k * step >= h * 0.2 + 1.5 + 0.005)
+                QVERIFY2(lv[k][h] < 0, qPrintable(QString("head %1 still lit at %2 s").arg(h).arg(k * step)));
+
+    // Repeatable: the same seed is the same burst; another seed another.
+    QCOMPARE(trace(set).first, lv);
+    QVariantMap other = set;
+    other.insert("seed", 8);
+    QVERIFY(trace(other).first != lv);
+
+    // No colour: a cold white; a colour of the look's: that colour.
+    {
+        ScriptRun run(ls, rig, inputs, set);
+        const QVariantMap o = run.at(0.0).first();
+        QVERIFY(o.value("b").toInt() >= o.value("r").toInt());
+        QVERIFY(o.value("r").toInt() > 150);
+        ScriptRun red(ls, rig, inputs, set, { QColor(255, 0, 0) });
+        const QVariantMap r = red.at(0.0).first();
+        QCOMPARE(r.value("r").toInt(), 255);
+        QCOMPARE(r.value("g").toInt(), 0);
+        QCOMPARE(r.value("dimmer").toDouble(), 1.0);
+    }
+}
+
+void SpreadEffects_Test::lightningSpreadOneBurstEndsAtRest()
+{
+    QLCFixtureDef *rgbDef = loadDef(m_doc, kFixtures + "Generic/Generic-Generic-RGB.qxf");
+    QVERIFY(rgbDef != nullptr);
+    Fixture *nearWash = place(m_doc, rgbDef, "RGB", "Near", 0, 0, QVector3D(1000, 2000, 0));
+    Fixture *farWash = place(m_doc, rgbDef, "RGB", "Far", 0, 3, QVector3D(9000, 2000, 0));
+    QVERIFY(nearWash && farWash);
+    QLCPalette *aim = aimAt(m_doc, QVector3D(1.0f, 2.0f, 0));
+    auto lit = [](const QHash<quint64, int> &f, Fixture *fx) {
+        return f.value(key(fx->id(), 0), 0) + f.value(key(fx->id(), 1), 0) + f.value(key(fx->id(), 2), 0) > 0;
+    };
+    auto look = [&](QLCPalette *fx) {
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        scene->addFixture(nearWash->id());
+        scene->addFixture(farWash->id());
+        scene->addPalette(aim->id());
+        scene->addPalette(fx->id());
+        return scene;
+    };
+    const QVariantMap set = { { "edge", 0.0 }, { "spreadTime", 1.0 }, { "decay", 1.0 } };
+
+    // Once, Hold, Length auto: the near wash flashes at once, the far one
+    // a second later; both out by 2 s, and the run is over then -- held at
+    // rest, nothing written, frame for frame.
+    {
+        QLCPalette *fx = effectPalette(m_doc, "lightning-spread.js", set);
+        fx->setEffectParamValue(EffectRuns::runsKey(), 1);         // Once
+        fx->setEffectParamValue(EffectRuns::atEndKey(), 0);        // Hold
+        EffectInstance inst(m_doc, look(fx)->id(), fx->id());
+        QVERIFY2(inst.isValid(), qPrintable(inst.error()));
+        QHash<quint64, int> f = frameAt(inst, 0);
+        QVERIFY(lit(f, nearWash));
+        QVERIFY(!lit(f, farWash));
+        f = frameAt(inst, 1020);
+        QVERIFY(lit(f, farWash));
+        QVERIFY(!inst.runDone());
+        f = frameAt(inst, 2100);
+        QVERIFY2(f.isEmpty(), "not at rest once both have flickered out");
+        QVERIFY(inst.runDone());
+        for (qint64 ms : { 3000, 10000, 60000 })
+            QVERIFY2(frameAt(inst, ms).isEmpty(), qPrintable(QString("not held at rest at %1 ms").arg(ms)));
+    }
+
+    // Loop (the default): one burst, then at rest; it never bursts again
+    // and never says it is done.
+    {
+        QLCPalette *fx = effectPalette(m_doc, "lightning-spread.js", set);
+        EffectInstance inst(m_doc, look(fx)->id(), fx->id());
+        QVERIFY(inst.isValid());
+        QVERIFY(lit(frameAt(inst, 0), nearWash));
+        for (qint64 ms = 2100; ms <= 20000; ms += 300)
+            QVERIFY2(frameAt(inst, ms).isEmpty(), qPrintable(QString("lit again at %1 ms").arg(ms)));
+        QVERIFY(!inst.runDone());
+    }
+}
+
+void SpreadEffects_Test::lightningSpreadStaticGeneratorStaysInItsReach()
+{
+    EffectScript ls;
+    QVERIFY(ls.load(kScripts + "lightning-spread.js"));
+    // Eleven heads 0 to 10 m out; the arcs reach half way.
+    QList<QVariantMap> rig;
+    for (int i = 0; i <= 10; ++i)
+        rig << QVariantMap{ { "hasRGB", true }, { "hasDimmer", true }, { "fromTarget", double(i) } };
+    const QVariantMap set = { { "mode", 1 }, { "reach", 50 }, { "rate", 4 }, { "crawl", 0.3 },
+                              { "core", 25 }, { "seed", 3 } };
+    ScriptRun run(ls, rig, { { "_fromTargetFar", 10.0 } }, set);
+    QVector<int> lit(11, 0), changes(11, 0);
+    QVector<double> last(11, -2.0);
+    for (int k = 0; k <= 1000; ++k)                 // 10 s at 10 ms
+    {
+        const QList<QVariantMap> f = run.at(k * 0.01);
+        QVERIFY(!run.done());
+        // The centre: never dark.
+        QVERIFY2(levelOf(f.at(0)) > 0, qPrintable(QString("the centre dark at %1 s").arg(k * 0.01)));
+        for (int h = 0; h <= 10; ++h)
+        {
+            const double l = levelOf(f.at(h));
+            if (l > 0)
+                ++lit[h];
+            if (l != last[h])
+                ++changes[h];
+            last[h] = l;
+            // Beyond the Reach (half way): never written.
+            if (h > 5)
+                QVERIFY2(l < 0, qPrintable(QString("head %1 (beyond the reach) at %2 s").arg(h).arg(k * 0.01)));
+        }
+    }
+    // The arcs reach out: the heads inside the reach flicker now and then.
+    for (int h = 1; h <= 4; ++h)
+        QVERIFY2(lit[h] > 0 && lit[h] < 1000, qPrintable(QString("head %1 lit %2 ticks").arg(h).arg(lit[h])));
+    // The centre's glow is jagged, not steady.
+    QVERIFY2(changes[0] > 100, qPrintable(QString("the centre changed %1 times").arg(changes[0])));
+}
+
+void SpreadEffects_Test::lightningSpreadOnDimmersAndMovers()
+{
+    // A plain dimmer on the point (one channel, no definition), a moving
+    // wash 2 m out (pan, tilt, colour, master dimmer), a silk flame's relay.
+    Fixture *dim = new Fixture(m_doc);
+    dim->setName("Dimmer");
+    dim->setUniverse(0);
+    dim->setAddress(0);
+    dim->setChannels(1);
+    QVERIFY(m_doc->addFixture(dim));
+    m_doc->monitorProperties()->setFixturePosition(dim->id(), 0, 0, QVector3D(1000, 2000, 0));
+    QLCFixtureDef *moverDef = loadDef(m_doc, kFixtures + "Eurolite/Eurolite-TMH-11-Moving-Head-Wash.qxf");
+    QLCFixtureDef *flameDef = loadDef(m_doc, kFixtures + "Generic/Generic-Silk-Flame.qxf");
+    QVERIFY(moverDef && flameDef);
+    Fixture *mover = place(m_doc, moverDef, "Standard", "Mover", 0, 10, QVector3D(3000, 2000, 0));
+    Fixture *flame = place(m_doc, flameDef, "Relay", "Flame", 0, 30, QVector3D(2000, 2000, 0));
+    QVERIFY(mover && flame);
+
+    QLCPalette *fx = effectPalette(m_doc, "lightning-spread.js",
+                                   { { "edge", 0.0 }, { "spreadTime", 0.5 }, { "decay", 1.5 } });
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    for (Fixture *f : { dim, mover, flame })
+        scene->addFixture(f->id());
+    scene->addPalette(aimAt(m_doc, QVector3D(1.0f, 2.0f, 0))->id());
+    scene->addPalette(fx->id());
+    EffectInstance inst(m_doc, scene->id(), fx->id());
+    QVERIFY2(inst.isValid(), qPrintable(inst.error()));
+
+    QSet<int> dimmerLevels, moverLevels;
+    for (qint64 ms = 0; ms <= 2500; ms += 20)
+    {
+        const QHash<quint64, int> f = frameAt(inst, ms);
+        if (f.contains(key(dim->id(), 0)))
+            dimmerLevels << f.value(key(dim->id(), 0));
+        if (f.contains(key(mover->id(), 8)))
+            moverLevels << f.value(key(mover->id(), 8));
+        // Never moved: pan, tilt and their fine channels left alone.
+        for (quint32 c : { 0u, 1u, 10u, 11u })
+            QVERIFY2(!f.contains(key(mover->id(), c)), qPrintable(QString("mover channel %1 written at %2 ms").arg(c).arg(ms)));
+        QVERIFY2(!f.contains(key(flame->id(), 0)), "the relay was switched");
+    }
+    // The dimmer flickers in level: up to full, down, and between.
+    QVERIFY2(dimmerLevels.contains(255), "the dimmer never flashed to full");
+    QVERIFY2(dimmerLevels.size() >= 5, qPrintable(QString("the dimmer took %1 levels").arg(dimmerLevels.size())));
+    QVERIFY2(moverLevels.contains(255) && moverLevels.size() >= 5, "the mover's dimmer did not flicker");
+}
+
 void SpreadEffects_Test::spellSpreadOnTheShowsKinds()
 {
     QLCFixtureDef *lanternDef = loadDef(m_doc, kFixtures + "WLED/WLED-Lantern.qxf");
@@ -1515,6 +1835,11 @@ void SpreadEffects_Test::theStepBarsTickCost()
     QVERIFY(measure("Fire Spread, all burning", kScripts + "fire-spread.js", fireSet, 20000, false));
     QVERIFY(measure("Spell Spread, spreading", kScripts + "spell-spread.js", spellSet, 4000, true));
     QVERIFY(measure("Spell Spread, all reached", kScripts + "spell-spread.js", spellSet, 20000, true));
+    const QVariantMap boltSet = { { "edge", 0.4 }, { "spreadTime", 8.0 }, { "decay", 8.0 } };
+    const QVariantMap genSet = { { "mode", 1 }, { "reach", 100 }, { "rate", 8 } };
+    QVERIFY(measure("Lightning Spread, bursting", kScripts + "lightning-spread.js", boltSet, 4000, false));
+    QVERIFY(measure("Lightning Spread, at rest", kScripts + "lightning-spread.js", boltSet, 20000, false));
+    QVERIFY(measure("Lightning Spread, generator", kScripts + "lightning-spread.js", genSet, 4000, false));
 
 #ifdef QT_NO_DEBUG
     const QString build = QStringLiteral("release");
@@ -1527,6 +1852,23 @@ void SpreadEffects_Test::theStepBarsTickCost()
                      .arg(build, c.what).arg(c.tickMs, 0, 'f', 2).arg(c.scriptMs, 0, 'f', 2);
     for (const QString &l : lines)
         qInfo().noquote() << l;
+    // Lightning Spread costs no more than twice what Fire Spread does as it
+    // spreads, its script or the whole tick, bursting or generating.
+    auto costOf = [&costs](const QString &what) {
+        for (const Cost &c : costs)
+            if (c.what == what)
+                return c;
+        return Cost();
+    };
+    const Cost fireCost = costOf("Fire Spread, spreading");
+    for (const char *what : { "Lightning Spread, bursting", "Lightning Spread, generator" })
+    {
+        const Cost c = costOf(what);
+        QVERIFY2(c.scriptMs <= 2.0 * fireCost.scriptMs + 0.5,
+                 qPrintable(QString("%1: script %2 ms, Fire Spread's %3 ms").arg(what).arg(c.scriptMs).arg(fireCost.scriptMs)));
+        QVERIFY2(c.tickMs <= 2.0 * fireCost.tickMs + 0.5,
+                 qPrintable(QString("%1: tick %2 ms, Fire Spread's %3 ms").arg(what).arg(c.tickMs).arg(fireCost.tickMs)));
+    }
     // The numbers, brought back from the pool (check-all.sh --shots).
     const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
     if (!shots.isEmpty())

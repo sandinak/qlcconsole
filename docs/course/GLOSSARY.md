@@ -141,6 +141,7 @@ brackets.
 | **Line target** | A stage target that is a line, not a point: each light aimed at it gets its own point along it, in the order they hang (*Riser Line*). [2.5] |
 | **Spread** | How lights aimed at a line share it: +5 end to end (a fan), 0 all on the centre, below 0 crossed (−5 fully). Grouping moves them in pairs, threes…; the order strip and plan view under Position show where each lands. [2.5] |
 | **Fire Spread** | An effect that starts at the look's Aim point: the nearest head catches first and the fire runs outward at an even speed, flaring and then flickering. It burns over what is under it. [2.5] |
+| **Lightning Spread** | An effect from the look's Aim point: one blast that reaches every head at once and flickers out (One Burst), or arcs that crawl out from a glowing centre again and again (Static Generator). [2.5] |
 | **Colour wheel / colour ring** | A spot's colour from named slots (filters on a wheel, LEDs round the lens), not mixed: a colour picks the nearest slot. [2.5] |
 | **Sub-cue** | A cue inside a cue (1.0.2.1, 1.0.2.2…) for stomps, claps and stings within a section. The first plays with GO; what they change doesn't pass on to the next cue. [2.7] |
 | **Sub GO / auto-follow** | Sub GO (⌥⌘↩, the Run tab's button) steps to the next sub-cue of the cue playing; GO still goes to the next main cue. A sub-cue set to **Auto-follow after** a wait goes on by itself (*auto 0.5s*). [2.7] |

@@ -83,13 +83,31 @@ private slots:
      *  its own seeded way, never ahead of the front, the same seed the
      *  same. */
     void fireSpreadBackfillIsRaggedBySeed();
+    /** Lightning Spread, One Burst (the script, a fixed seed): heads nearer
+     *  the Aim target are hit first, each flashes to full the tick it is
+     *  hit and flickers out in two or more strikes (dark between them),
+     *  then every head is at rest (nothing written) and state.done; the
+     *  same seed gives the same burst, another seed another. */
+    void lightningSpreadBurstsOutAndFlickersOut();
+    /** Run Once (At the end: Hold, Length auto) a burst ends when the last
+     *  head has flickered out and holds that rest; on Loop it bursts once
+     *  and stays at rest. */
+    void lightningSpreadOneBurstEndsAtRest();
+    /** Static Generator: the head at the centre is never dark, arcs reach
+     *  heads out to the Reach and flicker there, never beyond it; it never
+     *  says it is done. */
+    void lightningSpreadStaticGeneratorStaysInItsReach();
+    /** A dimmer flickers in level; a moving head gets its dimmer and is
+     *  never moved (no pan or tilt written); a relay is not lightning's. */
+    void lightningSpreadOnDimmersAndMovers();
     /** Spell Spread on the same kinds: the lantern in the colour at the
      *  look's level, effect channels untouched; the relay is not its; a
      *  pixel not yet reached is not written. */
     void spellSpreadOnTheShowsKinds();
-    /** Both effects over 96 step bars (6,144 heads): what a tick costs,
+    /** The spreads over 96 step bars (6,144 heads): what a tick costs,
      *  host and script, reported (QLC_SHOT_DIR gets the numbers); the
-     *  places are worked out once at that size. */
+     *  places are worked out once at that size. Lightning Spread's script
+     *  costs no more than twice Fire Spread's, spreading. */
     void theStepBarsTickCost();
     /** Through the scene, the effect runner and the faders to DMX: a cue
      *  under the step bars plays blue; the spell's red reaches the pixels
