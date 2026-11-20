@@ -13,7 +13,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 ## [Unreleased]
 
 ### Added
+
 - **Turn features off per show** (board Q293): **View ▸ Workspace ▸ Tabs & Features…** puts away Venues, the power estimate, the Grand Master, speed masters, engine load, Show Review, control surfaces or focus calls for one show (saved with it; everything on for older shows; the emergency stop is never hidden), the follow spot's views appear once the show has one, and a right-click on the footer shows or hides its chips (the same setting as Settings ▸ Appearance). See [Features](docs/features/getting-started.md#features).
+- **Lightning Spread**: lightning from the look's Aim target. **One
+  Burst** blasts out in every direction in a fraction of a second, each
+  light flashing to full and flickering out with a re-strike or two;
+  **Static Generator** keeps the centre glowing and sends arcs crawling
+  out from it at uneven gaps, never past its Reach. Colour from the
+  effect's own Colour, else the look's, else a cold white; dimmers flicker
+  in level, moving heads never move.
 
 ### Changed
 
@@ -21,15 +29,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   launch (not at most once a day) and every 4 hours while it runs. The
   conditional request, rate-limit back-off and skipped-version rule are
   unchanged.
-
-### Docs
-
-- **Security and conduct on GitHub.** SECURITY.md says how to report a
-  vulnerability privately (the repository's private report form, now on)
-  and what counts, the emergency stop included; CODE_OF_CONDUCT.md is the
-  Contributor Covenant 2.1.
-### Changed
-
 - **Show Tree: fold a level in one click.** A Production or Show row wears two
   small buttons at its right edge (on hover and on the selected row): fold to
   songs (the songs and sections stay, their cues close) and open all. The
@@ -49,8 +48,6 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   reason, when a selected layer is set in its own cue.
 - **Show Tree: every cue and list tick box says what it does on hover**, in a
   sentence or two, on the label as well as the box; the base cue's had none.
-### Changed
-
 - **Fire Spread's two colours are findable, and an effect's settings sit
   on a faint tint.** With Colours: Front and Behind, a Front and a Behind
   swatch sit under the setting; click one to pick the colour, which is the
@@ -61,17 +58,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   it, the look's own, or its own. In the Show Tree's effect page the same
   swatches set the layer's two own colours. The settings' headings take the
   theme's text colour (they were near-black on a dark theme).
+
 ### Fixed
 
 - **Fire Spread, Firelight and Candle Flicker look like flames.** Every head and every pixel of a bar now flickers on its own; before, each head's flicker was the last one's a step on, and the rig showed bands and diagonal stripes running across the bars instead of fire.
 
-- **Lightning Spread**: lightning from the look's Aim target. **One
-  Burst** blasts out in every direction in a fraction of a second, each
-  light flashing to full and flickering out with a re-strike or two;
-  **Static Generator** keeps the centre glowing and sends arcs crawling
-  out from it at uneven gaps, never past its Reach. Colour from the
-  effect's own Colour, else the look's, else a cold white; dimmers flicker
-  in level, moving heads never move.
+### Docs
+
+- **Security and conduct on GitHub.** SECURITY.md says how to report a
+  vulnerability privately (the repository's private report form, now on)
+  and what counts, the emergency stop included; CODE_OF_CONDUCT.md is the
+  Contributor Covenant 2.1.
 
 ## [0.5.1] - 2026-11-20
 
