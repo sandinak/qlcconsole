@@ -187,9 +187,15 @@ public:
     QUrl apiUrl() const;
     void setTimeout(int msec);
 
-    /** Due: enabled, not disabled by policy, not rate limited, and the
-     *  last check over a day ago. */
+    /** Due while running: enabled, not disabled by policy, not rate
+     *  limited, and the last check over 4 hours ago. */
     bool isCheckDue(const QDateTime &now = QDateTime::currentDateTimeUtc()) const;
+
+    /** Due at launch: as isCheckDue(), but the last check only needs to be
+     *  over 10 minutes old, so every launch asks (a release published since
+     *  yesterday shows up) while a crash loop or a run of test launches
+     *  does not repeat the request. */
+    bool isLaunchCheckDue(const QDateTime &now = QDateTime::currentDateTimeUtc()) const;
 
     /** Ask GitHub. @p manual (Help → Check for Updates): also when not
      *  due, and the skipped version is offered again. */

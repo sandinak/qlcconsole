@@ -163,7 +163,7 @@ void UpdateManager::scheduleChecks(int firstDelayMs)
 
     if (backgroundChecksAllowed() == false)
         return;
-    QTimer::singleShot(firstDelayMs, this, &UpdateManager::slotPeriodic);
+    QTimer::singleShot(firstDelayMs, this, &UpdateManager::slotLaunchCheck);
     m_periodic = new QTimer(this);
     m_periodic->setInterval(3600 * 1000);
     connect(m_periodic, &QTimer::timeout, this, &UpdateManager::slotPeriodic);
@@ -176,6 +176,14 @@ void UpdateManager::slotPeriodic()
     if (m_state != NoUpdate && m_state != Failed)
         return;
     if (m_checker->isCheckDue())
+        m_checker->check(false);
+}
+
+void UpdateManager::slotLaunchCheck()
+{
+    if (m_state != NoUpdate && m_state != Failed)
+        return;
+    if (m_checker->isLaunchCheckDue())
         m_checker->check(false);
 }
 

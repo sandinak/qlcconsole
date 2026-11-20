@@ -476,7 +476,18 @@ bool UpdateChecker::isCheckDue(const QDateTime &now) const
     if (retry.isValid() && now < retry)
         return false;
     const QDateTime last = lastCheck();
-    return last.isValid() == false || last.secsTo(now) >= 24 * 3600 || last > now;
+    return last.isValid() == false || last.secsTo(now) >= 4 * 3600 || last > now;
+}
+
+bool UpdateChecker::isLaunchCheckDue(const QDateTime &now) const
+{
+    if (isDisabledByPolicy() || checkEnabled() == false)
+        return false;
+    const QDateTime retry = retryAfter();
+    if (retry.isValid() && now < retry)
+        return false;
+    const QDateTime last = lastCheck();
+    return last.isValid() == false || last.secsTo(now) >= 10 * 60 || last > now;
 }
 
 QString UpdateChecker::cacheFile()

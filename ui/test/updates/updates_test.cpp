@@ -715,14 +715,41 @@ void Updates_Test::checkDue()
     const QDateTime now = QDateTime::currentDateTimeUtc();
     QVERIFY(c.isCheckDue(now));                         // never checked
     QSettings().setValue("updates/lastCheck", now.addSecs(-3600));
-    QVERIFY(c.isCheckDue(now) == false);                // within the day
-    QSettings().setValue("updates/lastCheck", now.addSecs(-25 * 3600));
+    QVERIFY(c.isCheckDue(now) == false);                // within 4 h
+    QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 3600));
     QVERIFY(c.isCheckDue(now));
     UpdateChecker::setCheckEnabled(false);
     QVERIFY(c.isCheckDue(now) == false);
     UpdateChecker::setCheckEnabled(true);
     QSettings().setValue("updates/retryAfter", now.addSecs(60));
     QVERIFY(c.isCheckDue(now) == false);
+}
+
+void Updates_Test::launchCheckDue()
+{
+    UpdateChecker c;
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    // Checked 5 h ago: due at launch, and again while running.
+    QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 3600));
+    QVERIFY(c.isLaunchCheckDue(now));
+    // Checked 5 min ago (relaunch, crash loop): not due, either way.
+    QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 60));
+    QVERIFY(c.isLaunchCheckDue(now) == false);
+    QVERIFY(c.isCheckDue(now) == false);
+    // Checked 1 h ago: a launch asks, a running app waits for 4 h.
+    QSettings().setValue("updates/lastCheck", now.addSecs(-3600));
+    QVERIFY(c.isLaunchCheckDue(now));
+    QVERIFY(c.isCheckDue(now) == false);
+    QVERIFY(c.isCheckDue(now.addSecs(3 * 3600 + 60)));  // 4 h after the check
+    // retryAfter and disabled still win.
+    QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 3600));
+    QSettings().setValue("updates/retryAfter", now.addSecs(60));
+    QVERIFY(c.isLaunchCheckDue(now) == false);
+    QSettings().remove("updates/retryAfter");
+    UpdateChecker::setCheckEnabled(false);
+    QVERIFY(c.isLaunchCheckDue(now) == false);
+    UpdateChecker::setCheckEnabled(true);
+    QVERIFY(c.isLaunchCheckDue(now));
 }
 
 void Updates_Test::policyDisablesEverything()
