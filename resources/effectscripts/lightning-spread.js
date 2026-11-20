@@ -123,8 +123,9 @@
     }
 
     /* Each head's kind, and the heads' shares of the way from the nearest
-       to the farthest (the generator's Reach is of that), kept until the
-       heads' places (A) change. */
+       to the farthest (the generator's Reach is of that), in the heads'
+       order and nearest first (order, sorted), kept until the heads'
+       places (A) change. */
     function heads(fixtures, A, seed, state) {
         var h = state ? state._heads : undefined;
         if (h !== undefined && h.places === A && h.seed === seed)
@@ -139,12 +140,19 @@
             if (A.at[i] < lo) lo = A.at[i];
             if (A.at[i] > hi) hi = A.at[i];
         }
-        var span = hi - lo;
+        var span = hi - lo, ids = [];
         for (var j = 0; j < n; j++) {
             out[j] = span > 1e-9 ? (A.at[j] - lo) / span : 0;
             u[j] = hash(j + 1, seed + 0.9);
+            ids.push(j);
         }
-        h = { places: A, seed: seed, kind: kind, rep: rep, out: out, u: u };
+        ids.sort(function(a, b) { return out[a] - out[b] || a - b; });
+        var order = new Int32Array(n), sorted = new Float64Array(n);
+        for (var k = 0; k < n; k++) {
+            order[k] = ids[k];
+            sorted[k] = out[ids[k]];
+        }
+        h = { places: A, seed: seed, kind: kind, rep: rep, out: out, u: u, order: order, sorted: sorted };
         if (state)
             state._heads = h;
         return h;
@@ -272,6 +280,19 @@
         return m;
     }
 
+    /* The first of the nearest-first @p sorted shares above @p d. */
+    function firstAbove(sorted, d) {
+        var lo = 0, hi = sorted.length;
+        while (lo < hi) {
+            var mid = (lo + hi) >> 1;
+            if (sorted[mid] <= d)
+                lo = mid + 1;
+            else
+                hi = mid;
+        }
+        return lo;
+    }
+
     function generator(fixtures, t, params, inputs, state, seed, c, inten) {
         var rate  = clamp(num(params.rate, 4), 0.2, 20);
         var reach = clamp(num(params.reach, 60), 5, 100) / 100;
@@ -280,61 +301,76 @@
         var A = SPREAD.arrivals(fixtures, inputs, 0, seed, 1, 0, state);
         var H = heads(fixtures, A, seed, state);
         var L = looks(H, c, state);
+        var n = fixtures.length, kind = H.kind, d = H.out, u = H.u, order = H.order, sorted = H.sorted;
         if (state)
             state.done = false;
         var G = state ? state._gen : undefined;
-        if (G === undefined) {
-            G = { arcs: new Float64Array(MAX_ARCS * ARC_FIELDS) };
+        if (G === undefined || G.lv.length !== n) {
+            G = { arcs: new Float64Array(MAX_ARCS * ARC_FIELDS), lv: new Float64Array(n) };
             if (state)
                 state._gen = G;
         }
+        var lv = G.lv;
+        lv.fill(0);
+
+        // The centre: never dark, its glow jumping CORE_STEP by CORE_STEP.
+        var coreW = Math.max(0.05, CORE_SHARE * reach);
+        var g = hash(Math.floor(t / CORE_STEP) + 1, seed + 0.4);
+        for (var k = 0; k < n && sorted[k] < coreW; k++) {
+            var ic = order[k], x = u[ic] * 7.13 + g;
+            x -= Math.floor(x);
+            lv[ic] = core * (1 - sorted[k] / coreW) * (0.55 + 0.45 * x);
+        }
+
+        // Each arc alive: only the heads it is crossing now (a ring of
+        // shares, nearest first), and of those its own.
         var m = arcsAt(G, t, rate, reach, crawl, seed);
-        var arcs = G.arcs;
-        var n = fixtures.length, kind = H.kind, d = H.out, u = H.u;
+        var arcs = G.arcs, kk = crawl / reach;
+        for (var a = 0; a < m; a++) {
+            var j = a * ARC_FIELDS;
+            var base = t - arcs[j], r = arcs[j + 1];
+            var dHi = Math.min(r, base / kk), dLo = (base - ARC_LIFE) / kk;
+            if (dHi < 0 || dLo > r)
+                continue;
+            var pick = arcs[j + 2], share = arcs[j + 3], s2 = arcs[j + 4], a2 = arcs[j + 5];
+            for (var q = dLo < 0 ? 0 : firstAbove(sorted, dLo); q < n; q++) {
+                var di = sorted[q];
+                if (di > dHi)
+                    break;
+                var i = order[q];
+                var w = u[i] - pick;
+                if (w < 0)
+                    w += 1;
+                if (w >= share && di > 1e-9)
+                    continue;                   // not one of its heads (the nearest always are)
+                var age = base - di * kk;
+                var v = Math.exp(-age / ARC_TAU);
+                var since = age - s2;
+                if (since >= 0) {
+                    var v2 = a2 * Math.exp(-since / ARC_TAU);
+                    if (v2 > v)
+                        v = v2;
+                }
+                v *= 1 - 0.5 * di / r;
+                if (v > lv[i])
+                    lv[i] = v;
+            }
+        }
+
         var none = state && state._none ? state._none : {};
         if (state)
             state._none = none;
-        var coreW = Math.max(0.05, CORE_SHARE * reach);
-        var step = Math.floor(t / CORE_STEP);
         var out = new Array(n);
-        for (var i = 0; i < n; i++) {
-            var kd = kind[i];
-            if (kd < 0) {
-                out[i] = none;
+        for (var h = 0; h < n; h++) {
+            var kd = kind[h], l = lv[h], isCore = d[h] < coreW;
+            if (kd < 0 || (l <= 0 && !isCore)) {
+                out[h] = none;
                 continue;
             }
-            var di = d[i], lv = 0, isCore = di < coreW;
-            if (isCore)                         // the centre: never dark, jagged
-                lv = core * (1 - di / coreW) * (0.55 + 0.45 * hash(step + 1, i * 0.37 + seed));
-            for (var a = 0; a < m; a++) {
-                var j = a * ARC_FIELDS;
-                var r = arcs[j + 1];
-                if (di > r)
-                    continue;                   // beyond this arc's reach
-                var w = u[i] - arcs[j + 2];
-                if (w < 0)
-                    w += 1;
-                if (w >= arcs[j + 3] && di > 1e-9)
-                    continue;                   // not one of its heads (the nearest always are)
-                var age = t - (arcs[j] + di / reach * crawl);
-                if (age < 0 || age >= ARC_LIFE)
-                    continue;
-                var v = Math.exp(-age / ARC_TAU);
-                var since = age - arcs[j + 4];
-                if (since >= 0)
-                    v = Math.max(v, arcs[j + 5] * Math.exp(-since / ARC_TAU));
-                v *= 1 - 0.5 * di / r;
-                if (v > lv)
-                    lv = v;
-            }
-            if (lv <= 0 && !isCore) {
-                out[i] = none;
-                continue;
-            }
-            var q = (clamp(lv, 0, 1) * inten * 255 + 0.5) | 0;
-            if (isCore && q < 1 && inten > 0)
-                q = 1;
-            out[i] = shown(L, H, c, kd, q);
+            var lq = ((l > 1 ? 1 : l) * inten * 255 + 0.5) | 0;
+            if (isCore && lq < 1 && inten > 0)
+                lq = 1;
+            out[h] = shown(L, H, c, kd, lq);
         }
         return out;
     }
