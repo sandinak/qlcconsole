@@ -598,6 +598,24 @@ void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
                         .arg(ms)));
             }
         }
+        // Burning, 45°: without the light it casts, and close in (a bar's pixels resolved).
+        v.setPlane(StructureStudioView::Angled);
+        auto shot = [&](const QString &name) {
+            tickTo(12000);
+            v.m_liveDirty = true;
+            settle(150);
+            v.grab().toImage().save(QDir(dir).filePath(QStringLiteral("firespread-%1-12000ms.png").arg(name)));
+        };
+        v.setBeams(false);
+        shot(QStringLiteral("45-nobeams"));
+        v.setBeams(true);
+        StructureStudioView::Camera cam = v.camera();
+        cam.zoomed = true;
+        cam.scale *= 4.0;
+        v.setCamera(cam);
+        shot(QStringLiteral("45-close"));
+        v.setBeams(false);
+        shot(QStringLiteral("45-close-nobeams"));
     }
 
     QVERIFY2(pixelR < 0.3, qPrintable(QString("neighbouring pixels flicker alike (%1): bands, not fire").arg(pixelR)));
