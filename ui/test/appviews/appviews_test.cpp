@@ -3734,6 +3734,7 @@ void AppViews_Test::thePadButtonStaysWhileThePadHasAState()
     PadRun *pad = m_app->doc()->programmer()->padRun();
     auto back = qScopeGuard([this, pad]() {
         pad->stopEnded();
+        pad->setEnabled(false);
         m_app->clearDocument();
     });
     CueRunner *run = m_app->findChild<CueRunner *>("runTab");
@@ -3743,11 +3744,15 @@ void AppViews_Test::thePadButtonStaysWhileThePadHasAState()
     QVERIFY(chooseFeatures(m_app, { { "Control Surfaces", false } }));
     QCOMPARE(pad->state(), PadRun::Tools);
     QVERIFY(btn->isHidden());
-    // The emergency stop struck: Stopped, said on the button.
+    // The pad running the show, then the emergency stop: Stopped, said on the button.
+    pad->setEnabled(true);
+    QVERIFY(!btn->isHidden());
     pad->emergencyStop();
     QTRY_COMPARE(pad->state(), PadRun::Stopped);
     QVERIFY(!btn->isHidden());
+    QVERIFY2(btn->text().contains("STOP", Qt::CaseInsensitive), qPrintable(btn->text()));
     pad->stopEnded();
+    pad->setEnabled(false);
     QTRY_VERIFY(btn->isHidden());
 }
 
