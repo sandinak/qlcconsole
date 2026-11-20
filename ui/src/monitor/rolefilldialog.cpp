@@ -173,6 +173,12 @@ void RoleFillDialog::refresh()
     m_table->setRowCount(int(m_rowRoles.size()));
     for (int row = 0; row < m_rowRoles.size(); ++row)
     {
+        /* setCellWidget() only deleteLater()s the widget it replaces, which
+           keeps drawing at its old place until then: hide it now. */
+        for (int col : { int(UseCol), int(FlashCol) })
+            if (QWidget *old = m_table->cellWidget(row, col))
+                old->hide();
+
         const HouseRole::Role r = m_rowRoles.at(row);
         const QList<quint32> ids = m_suggested.value(r);
         const FixtureGroup *g = HouseRole::group(m_doc, r);
