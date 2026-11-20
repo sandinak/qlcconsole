@@ -44,6 +44,7 @@ private slots:
     void formLabelsFollowTheirFieldsTooltip();
     /** The level buttons sit clear of the flag columns on a hovered row. */
     void levelButtonsNeverCoverTheFlags();
+    void shotsHoveredShowRowAndTooltip();
     /** ⇧⌘N, New (here): nothing -- a production; a production -- a cue
      *  list; a list -- a cue at its end; a cue -- the next cue after it
      *  (D23 numbering; a sub-cue: the next main cue); groups in the

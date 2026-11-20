@@ -432,6 +432,54 @@ void ShowTreeView_Test::levelButtonsNeverCoverTheFlags()
     QVERIFY(tree->visualItemRect(show).right() >= button.right());
 }
 
+void ShowTreeView_Test::shotsHoveredShowRowAndTooltip()
+{
+    const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+    if (shotDir.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Dance");
+    const quint32 list = st->addCueList(prod, "01-Opening Number", ListMode::Tracking);
+    st->addCue(list, -1, "Curtain");
+    st->addCue(list, -1, "Entrance");
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &size : sizes)
+    {
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(size);
+        view.show();
+        QTest::qWait(50);
+        QTreeWidget *tree = view.tree();
+        QTreeWidgetItem *show = nullptr, *cue = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+        {
+            const int kind = (*it)->data(0, ShowTreeView::KindRole).toInt();
+            if (kind == ShowTreeView::ListNode)
+                show = *it;
+            else if (kind == ShowTreeView::CueNode && cue == nullptr)
+                cue = *it;
+        }
+        QVERIFY(show && cue);
+        const QString tag = QString("%1x%2").arg(size.width()).arg(size.height());
+        tree->setCurrentItem(show);
+        QTest::mouseMove(tree->viewport(), tree->visualItemRect(show).center());
+        QApplication::processEvents();
+        view.grab().save(shotDir + "/show-row-hover-" + tag + ".png");
+        tree->setCurrentItem(cue);
+        QApplication::processEvents();
+        QCheckBox *base = view.findChild<QCheckBox *>("stCueBase");
+        QVERIFY(base != nullptr);
+        QHelpEvent help(QEvent::ToolTip, QPoint(10, base->height() / 2), base->mapToGlobal(QPoint(10, base->height() / 2)));
+        QApplication::sendEvent(base, &help);
+        QApplication::processEvents();
+        view.grab().save(shotDir + "/cue-inspector-" + tag + ".png");
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->isVisible() && QLatin1String(w->metaObject()->className()) == QLatin1String("QTipLabel"))
+                w->grab().save(shotDir + "/base-cue-tooltip-" + tag + ".png");
+        QToolTip::hideText();
+    }
+}
+
 void ShowTreeView_Test::newHereMakesTheNextThing()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
