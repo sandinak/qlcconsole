@@ -779,6 +779,59 @@ bool ShowTreeController::setSectionName(quint32 listId, const Section &section, 
     });
 }
 
+QStringList ShowTreeController::rekeySections(const QList<Production> &old, QList<Production> &work)
+{
+    QStringList clashes;
+    for (Production &np : work)
+    {
+        const Production *op = nullptr;
+        for (const Production &p : old)
+            if (p.id == np.id)
+                op = &p;
+        if (op == nullptr || op->numbering != np.numbering || np.numbering == Numbering::None
+            || np.numbering == Numbering::Manual)
+            continue;
+        for (CueList &nl : np.lists)
+        {
+            const CueList *ol = op->list(nl.id);
+            if (ol == nullptr || ol->sections.isEmpty())
+                continue;
+            const QList<Section> oldSecs = sectionsOf(*ol, op->numbering);
+            const QList<Section> newSecs = sectionsOf(nl, np.numbering);
+            QSet<QString> newKeys;
+            for (const Section &s : newSecs)
+                newKeys.insert(s.key);
+            for (const Section &os : oldSecs)
+            {
+                if (os.key.isEmpty() || newKeys.contains(os.key) || os.first < 0 || os.first >= ol->cues.count())
+                    continue;
+                int head = -1;
+                for (int i = 0; i < nl.sections.count(); ++i)
+                    if (nl.sections.at(i).key == os.key)
+                        head = i;
+                if (head < 0)
+                    continue;
+                // Where its first cue is now.
+                const int at = nl.indexOf(ol->cues.at(os.first).id);
+                const int si = at < 0 ? -1 : sectionOfIndex(newSecs, at);
+                if (si < 0 || newSecs.at(si).key == os.key)
+                    continue;
+                const QString to = newSecs.at(si).key;
+                bool taken = false;
+                for (const SectionHead &h : nl.sections)
+                    taken |= h.key == to;
+                if (taken)
+                {
+                    clashes << to;
+                    continue;
+                }
+                nl.sections[head].key = to;
+            }
+        }
+    }
+    return clashes;
+}
+
 bool ShowTreeController::setListNote(quint32 listId, const QString &text)
 {
     const CueList *have = cueList(listId);

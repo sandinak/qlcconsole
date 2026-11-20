@@ -2924,6 +2924,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
     }
 
     connect(m_st, &ShowTreeController::changed, this, &ShowTreeView::slotTreeChanged);
+    connect(m_st, &ShowTreeController::sectionNumberClash, this, [this](const QString &key) {
+        m_hint->setText(tr("Two songs now share the number %1: both sections are kept. Renumber one song's "
+                           "cues to tell them apart.").arg(key));
+    });
     // Q38: the badges and "Use show's (On)" follow the show's move in black.
     if (ProgrammerController *pc = m_doc->programmer())
         connect(pc, &ProgrammerController::autoMoveInBlackChanged, this, [this]() {

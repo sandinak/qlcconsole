@@ -683,6 +683,17 @@ static void normalizeLooks(QList<Production> &ps)
 bool ShowTreeController::edit(const QString &label,
                               const std::function<bool(QList<Production> &)> &change)
 {
+    QStringList clashed;
+    struct Say
+    {
+        ShowTreeController *self;
+        QStringList *keys;
+        ~Say()
+        {
+            if (!keys->isEmpty())
+                emit self->sectionNumberClash(keys->first());
+        }
+    } say{ this, &clashed };
     if (m_batchDepth > 0)
     {
         // Part of a command: applied now, baked and recorded once at the end.
@@ -692,6 +703,7 @@ bool ShowTreeController::edit(const QString &label,
         if (!change(work))
             return false;
         normalizeLooks(work);
+        clashed = rekeySections(m_productions, work);
         resolveAllTimecodes(work);
         syncReusables(m_productions, work);
         ownOneOffs(work, &m_productions, &layersBefore, &cuesBefore);
@@ -710,6 +722,7 @@ bool ShowTreeController::edit(const QString &label,
     if (!change(work))
         return false;
     normalizeLooks(work);
+    clashed = rekeySections(m_productions, work);   // a song's number edited: its name, start and note follow
     resolveAllTimecodes(work);          // Q198: cues timed from a section follow it
 
     // A reusable's use edited: every use (P4).

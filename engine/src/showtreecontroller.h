@@ -164,6 +164,9 @@ public:
     QList<quint32> playableLists(quint32 productionId) const;
 
 signals:
+    /** A song's number was edited onto another song's: both sections are
+     *  kept, and this says so (key of the number). */
+    void sectionNumberClash(const QString &key);
     /** The current production (or its main list) changed. */
     void currentProductionChanged();
 
@@ -2178,6 +2181,10 @@ private:
     void loadNotes(QXmlStreamReader &root);
     void loadNoteImage(QXmlStreamReader &root);
     QList<ShowTree::Note> m_notes;
+    /** After an edit: a section whose cues' first-level number changed takes
+     *  its name, start and note to the new key (same undo step). Returns the
+     *  keys that already had a head: both kept. */
+    static QStringList rekeySections(const QList<ShowTree::Production> &old, QList<ShowTree::Production> &work);
     void writeOwnNote(QList<ShowTree::Production> &ps, const ShowTree::Note &n, const QString &text);
     int sectionOfNote(const ShowTree::Note &n) const;
     QList<ShowTree::Note> m_batchNotes;

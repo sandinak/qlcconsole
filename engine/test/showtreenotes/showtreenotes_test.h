@@ -42,6 +42,10 @@ private slots:
     void showAndSectionNotesAreTheFirstEntry();
     /** Renaming a section or renumbering its song keeps its note; saved after. */
     void aSectionNoteSurvivesRenameAndRenumber();
+    /** A hand-edited first-level number carries the section (name, start,
+     *  note) to the new key in the same step; undo, save and load; a clash
+     *  keeps both. */
+    void editingASongsNumberCarriesItsSectionToTheNewKey();
     void anOlderShowsCueNotesMigrate();
     void deletedItemsNotesKeptForUndoNotSaved();
     void picturesStayOutOfUndoSteps();
