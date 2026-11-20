@@ -11944,6 +11944,13 @@ void ShowTreeView_Test::severalLayersReleaseAndUntrackTogether()
         QVERIFY(rel != nullptr);
         QVERIFY2(rel->text().contains("(2 Layers)"), qPrintable(rel->text()));
         QVERIFY(!rel->isChecked());
+        const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+        if (!shotDir.isEmpty())
+        {
+            menu.ensurePolished();
+            menu.adjustSize();
+            menu.grab().save(shotDir + "/several-layers-mixed-menu.png");
+        }
         rel->trigger();
     }
     QVERIFY(st->cue(c4)->layer(own)->release);

@@ -466,6 +466,19 @@ void ShowNotes_Test::theShowAndSectionPagesTakeNotesThatFollowAndExport()
     QVERIFY(text.contains("Slow build, then the movers"));
     QVERIFY(text.contains("Washes for the verses"));
     list->close();
+
+    const QString shotDir = QString::fromLocal8Bit(qgetenv("QLC_SHOT_DIR"));
+    if (!shotDir.isEmpty())
+    {
+        view.show();
+        for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            view.resize(size);
+            view.tree()->setCurrentItem(row);
+            QApplication::processEvents();
+            view.grab().save(QString("%1/section-notes-%2x%3.png").arg(shotDir).arg(size.width()).arg(size.height()));
+        }
+    }
 }
 
 void ShowNotes_Test::exportMakesMarkdownAndPdf()
