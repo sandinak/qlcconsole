@@ -2029,8 +2029,9 @@ void LookEditor_Test::anEffectSaysWhichColoursItPlays()
     LookEditor ed(&doc);
     ed.setContextScene(scene);
     ed.setPalette(look->id());
-    QLabel *line = ed.colourSourceLabel();
-    QVERIFY(line != nullptr);
+    QVERIFY(ed.colourSourceLabel() != nullptr);
+    // The label is rebuilt with the settings: always asked for again.
+#define line ed.colourSourceLabel()
     QComboBox *colours = ed.findChild<QComboBox *>("effectParam_colours");
     QVERIFY(colours != nullptr);
 
@@ -2065,6 +2066,7 @@ void LookEditor_Test::anEffectSaysWhichColoursItPlays()
         QVERIFY2(ed.colourSourceText().isEmpty() == !QLCPalette::effectUsesLookColours(plain),
                  qPrintable(ed.colourSourceText()));
     }
+#undef line
 }
 
 /* The swatches beside Colours: Front and Behind are the first and second
