@@ -5965,13 +5965,14 @@ void App::slotChooseTabs()
     dlg.setObjectName(QStringLiteral("chooseTabsDialog"));
     dlg.setWindowTitle(tr("Tabs & Features"));
     QVBoxLayout *col = new QVBoxLayout(&dlg);
-    QLabel *hint = new QLabel(tr("Click a tab to show or hide it, and drag it into order. "
-                                 "Connections and Run are always there. Saved with the show.\n"
-                                 "Simple Desk opens from Window ▸ Simple Desk (⇧⌘D)."), &dlg);
+    const QString hintText = classic
+        ? tr("Classic QLC+ keeps QLC+'s own tabs: switch to the qlcconsole or Everything "
+             "view (View ▸ Workspace) to choose them. The features below work in every view.")
+        : tr("Click a tab to show or hide it, and drag it into order. "
+             "Connections and Run are always there. Saved with the show.\n"
+             "Simple Desk opens from Window ▸ Simple Desk (⇧⌘D).");
+    QLabel *hint = new QLabel(hintText, &dlg);
     hint->setWordWrap(true);
-    if (classic)
-        hint->setText(tr("Classic QLC+ keeps QLC+'s own tabs: switch to the qlcconsole or Everything "
-                         "view (View ▸ Workspace) to choose them. The features below work in every view."));
     col->addWidget(hint);
     QListWidget *list = new QListWidget(&dlg);
     list->setObjectName(QStringLiteral("chooseTabsList"));

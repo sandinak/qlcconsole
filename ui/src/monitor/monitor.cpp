@@ -3675,9 +3675,14 @@ void Monitor::showStageOverview()
         m_featuresSoon->setInterval(250);
         connect(m_featuresSoon, &QTimer::timeout, this, &Monitor::applyShowFeatures);
     }
-    for (auto sig : { &Doc::functionAdded, &Doc::functionRemoved, &Doc::functionChanged,
-                      &Doc::paletteAdded, &Doc::paletteRemoved })
-        connect(m_doc, sig, planeCombo, [this]() { m_featuresSoon->start(); });
+    /* One connect() per signal: a braced list of another DLL's signals
+       connects none of them on Windows (dllsignals_test). */
+    auto soon = [this]() { m_featuresSoon->start(); };
+    connect(m_doc, &Doc::functionAdded, planeCombo, soon);
+    connect(m_doc, &Doc::functionRemoved, planeCombo, soon);
+    connect(m_doc, &Doc::functionChanged, planeCombo, soon);
+    connect(m_doc, &Doc::paletteAdded, planeCombo, soon);
+    connect(m_doc, &Doc::paletteRemoved, planeCombo, soon);
     connect(m_doc, &Doc::loaded, planeCombo, [this]() { m_featuresSoon->start(); });
     applyShowFeatures();
 
