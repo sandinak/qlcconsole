@@ -2177,6 +2177,64 @@ void LookEditor_Test::fireSpreadSettingsShots()
     }
 }
 
+void LookEditor_Test::lightningSpreadOffersItsTwoModes()
+{
+    Doc doc(this);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Lightning Spread");
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/lightning-spread.js");
+    QVERIFY(doc.addPalette(look));
+    LookEditor ed(&doc);
+    ed.show();
+    ed.setPalette(look->id());
+
+    QComboBox *mode = ed.findChild<QComboBox *>("effectParam_mode");
+    QVERIFY2(mode != nullptr, "no Mode setting");
+    QCOMPARE(mode->count(), 2);
+    QCOMPARE(mode->itemText(0), QString("One Burst"));
+    QCOMPARE(mode->itemText(1), QString("Static Generator"));
+    QCOMPARE(mode->currentIndex(), 0);
+    const QStringList burst = { "spreadTime", "edge", "decay", "strikes" };
+    const QStringList generator = { "rate", "reach", "crawl", "core" };
+    auto row = [&ed](const QString &name) {
+        return ed.findChild<QWidget *>(QStringLiteral("effectParam_") + name);
+    };
+    for (const QString &n : burst + generator + QStringList{ "lightningIntensity", "seed" })
+        QVERIFY2(row(n) != nullptr, qPrintable(QString("no %1 setting").arg(n)));
+    for (const QString &n : burst)
+        QVERIFY2(row(n)->isEnabled(), qPrintable(n));
+    for (const QString &n : generator)
+        QVERIFY2(!row(n)->isEnabled(), qPrintable(n));
+
+    auto shoot = [&](const QString &name) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            ed.resize(sz);
+            QApplication::processEvents();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            for (QScrollArea *sa : ed.findChildren<QScrollArea *>())
+                if (sa->widget() != nullptr && sa->widget()->isAncestorOf(mode))
+                    sa->ensureWidgetVisible(mode, 0, 40);
+            QApplication::processEvents();
+            QVERIFY(ed.grab().save(dir + QStringLiteral("/%1-%2x%3.png")
+                                       .arg(name).arg(sz.width()).arg(sz.height())));
+        }
+    };
+    shoot(QStringLiteral("lightning-spread-one-burst"));
+
+    mode->setCurrentIndex(1);
+    QCOMPARE(look->effectParamValues().value("mode"), 1.0);
+    for (const QString &n : generator)
+        QVERIFY2(row(n)->isEnabled(), qPrintable(n));
+    for (const QString &n : burst)
+        QVERIFY2(!row(n)->isEnabled(), qPrintable(n));
+    shoot(QStringLiteral("lightning-spread-static-generator"));
+}
+
 void LookEditor_Test::theBrowsersListsAreAToZ()
 {
     Doc doc(this);
