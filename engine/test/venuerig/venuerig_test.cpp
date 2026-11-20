@@ -3252,14 +3252,14 @@ void VenueRig_Test::rolesMadeOnFirstUseOnly()
     QCOMPARE(mine->role(), HouseRole::None);
     QCOMPARE(mine->name(), QStringLiteral("Cyc"));
     QCOMPARE(HouseRole::group(m_doc, HouseRole::Cyc)->name(), QStringLiteral("Cyc (role)"));
-    QCOMPARE(HouseRole::group(m_doc, HouseRole::Front)->name(), QStringLiteral("Front Wash"));
+    QCOMPARE(HouseRole::group(m_doc, HouseRole::Front)->name(), QStringLiteral("Stage Wash Front"));
 
     QStringList names;
     for (const ShowTree::ReusableCue &r : st->reusableCues())
         names << r.name;
-    QCOMPARE(names, QStringList({ QStringLiteral("House up"), QStringLiteral("House to half"),
-                                  QStringLiteral("House out"), QStringLiteral("Stage up"),
-                                  QStringLiteral("Work lights"), QStringLiteral("Work lights off") }));
+    QCOMPARE(names, QStringList({ QStringLiteral("House to half"), QStringLiteral("House out"),
+                                  QStringLiteral("House full"), QStringLiteral("Stage up"),
+                                  QStringLiteral("Stage out"), QStringLiteral("Work lights") }));
     QVERIFY(standardHit(m_doc, QStringLiteral("House to half")) != ShowTree::invalidId());
     const ShowTree::ReusableCue *half = st->reusableCue(st->cue(standardHit(m_doc, QStringLiteral("House to half")))->reusable);
     QVERIFY(half != nullptr);
@@ -3274,6 +3274,20 @@ void VenueRig_Test::rolesMadeOnFirstUseOnly()
     QCOMPARE(m_doc->palette(colour->palettes.first())->rgbValue(), QColor(Qt::white));
     QCOMPARE(m_doc->palette(colour->palettes.first())->name(), QStringLiteral("Open White"));
     QCOMPARE(st->reusableCue(st->cue(standardHit(m_doc, QStringLiteral("Stage up")))->reusable)->layers.size(), 4);
+    // Stage out: every stage role to 0 (the cyc too), the house and work untouched.
+    QVERIFY(standardHit(m_doc, QStringLiteral("Stage out")) != ShowTree::invalidId());
+    const ShowTree::ReusableCue *out = st->reusableCue(st->cue(standardHit(m_doc, QStringLiteral("Stage out")))->reusable);
+    QSet<HouseRole::Role> outRoles;
+    for (const ShowTree::Layer &l : out->layers)
+    {
+        outRoles.insert(HouseRole::roleOf(m_doc, l.target.groups.value(0)));
+        QCOMPARE(m_doc->palette(l.look(ShowTree::KeyDimmer)->palettes.first())->value().toInt(), 0);
+    }
+    QCOMPARE(outRoles, QSet<HouseRole::Role>({ HouseRole::Front, HouseRole::Top, HouseRole::Side,
+                                               HouseRole::Back, HouseRole::Cyc }));
+    QCOMPARE(HouseRole::group(m_doc, HouseRole::Aisle)->name(), QStringLiteral("Aisle"));
+    QCOMPARE(HouseRole::group(m_doc, HouseRole::Top)->name(), QStringLiteral("Stage Wash Top"));
+    QCOMPARE(HouseRole::group(m_doc, HouseRole::Work)->name(), QStringLiteral("Work"));
     for (const HouseRole::StandardCue &c : HouseRole::standardCues())
     {
         const quint32 hit = standardHit(m_doc, c.name);

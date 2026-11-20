@@ -31,11 +31,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   as measured on site. The show file is not changed.
 - **Roles: house lights and stage light in any room.** Venue page ▸
   **Roles** ▸ **Fill Roles…** suggests which of the room's lights are its
-  House Lights, Aisle Lights, Front Wash, Top Wash, Side Light, Back
-  Light, Cyc and Work Lights (by name, model and where they hang), with
+  House Lights, Aisle, Stage Wash Front, Stage Wash Top, Side, Back, Cyc
+  and Work (by name, model and where they hang), with
   **Flash** to check each row and one click to fill them. The first time
-  it makes the role groups and six standard cues (House up, House to half,
-  House out, Stage up, Work lights, Work lights off) with an override
+  it makes the role groups and six standard cues (House to half, House out,
+  House full, Stage up, Stage out, Work lights) with an override
   Global hit each, which play on whichever lights fill the roles in the
   room applied (white light, so RGB-only lights come up too). A role the
   room lacks says **none in** the venue.

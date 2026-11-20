@@ -2669,8 +2669,8 @@ called them looks; they open as they were.)
   - Saved with the show as `Override="1"`; an older build opens it as a
     plain hit.
 - **The standard house cues.** The first **Fill Roles** on a venue page
-  makes six reusable cues in the Library (House up, House to half, House
-  out, Stage up, Work lights, Work lights off) on the show's house roles,
+  makes six reusable cues in the Library (House to half, House out, House
+  full, Stage up, Stage out, Work lights) on the show's house roles,
   and one override Global hit for each (at the top of the tree): put one in
   a cue list from the Library like any reusable cue (the preshow list's
   "House to half", "House out"), or fire its hit any time. They play on

@@ -723,7 +723,7 @@ void VenueRigUi_Test::theRolesBoxFillsTheRoles()
     QTableWidget *t = d->table();
     QCOMPARE(t->rowCount(), 8);
     const int front = d->rowOf(HouseRole::Front);
-    QCOMPARE(t->item(front, RoleFillDialog::RoleCol)->text(), QStringLiteral("Front Wash"));
+    QCOMPARE(t->item(front, RoleFillDialog::RoleCol)->text(), QStringLiteral("Stage Wash Front"));
     QCOMPARE(t->item(front, RoleFillDialog::LightsCol)->text(), QStringLiteral("3  FOH 1, FOH 2, FOH 3"));
     QCOMPARE(t->item(front, RoleFillDialog::WhyCol)->text(), QStringLiteral("\"FOH\" in its name"));
     QVERIFY(d->useBox(front)->isChecked() && d->useBox(front)->isEnabled());
@@ -742,7 +742,7 @@ void VenueRigUi_Test::theRolesBoxFillsTheRoles()
     d->resize(1024, 640);
     shoot(d, QStringLiteral("role-fill-before"));
 
-    // He unticks Top Wash; one click fills the rest and makes the cues.
+    // He unticks Stage Wash Top; one click fills the rest and makes the cues.
     d->useBox(d->rowOf(HouseRole::Top))->setChecked(false);
     QVERIFY(d->fillRoles());
     QVERIFY2(d->statusLabel()->text().startsWith(QStringLiteral("Filled 4 role(s) in PMS Auditeria. Made 8 role "
@@ -752,10 +752,10 @@ void VenueRigUi_Test::theRolesBoxFillsTheRoles()
     QVERIFY(HouseRole::group(m_doc, HouseRole::Top)->fixtureList().isEmpty());
     QCOMPARE(m_doc->showTree()->reusableCues().size(), 6);
     QApplication::processEvents();
-    QVERIFY2(page.rolesText()->text().startsWith(QStringLiteral("Lights in PMS Auditeria: House Lights 2, Front Wash 3,")),
+    QVERIFY2(page.rolesText()->text().startsWith(QStringLiteral("Lights in PMS Auditeria: House Lights 2, Stage Wash Front 3,")),
              qPrintable(page.rolesText()->text()));
     // The rows now say where each light is.
-    QCOMPARE(t->item(front, RoleFillDialog::WhyCol)->text(), QStringLiteral("in Front Wash already"));
+    QCOMPARE(t->item(front, RoleFillDialog::WhyCol)->text(), QStringLiteral("in Stage Wash Front already"));
     t->setCurrentCell(front, 0);
     QVERIFY(d->editButton()->isEnabled());
     shoot(d, QStringLiteral("role-fill-after"));

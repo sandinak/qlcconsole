@@ -351,8 +351,8 @@ room's DMX line:
     through the node.
 14. Venue chip ▸ **Rig and Universes…** ▸ **Roles** ▸ **Fill Roles…**.
     **Expected:** one row per role; House Lights lists the room's house
-    circuits, Front Wash its FOH lights, each with why; Side Light and
-    Back Light say **none in this room** if the room has none.
+    circuits, Stage Wash Front its FOH lights, each with why; Side and
+    Back say **none in this room** if the room has none.
 15. **Flash** each row that has lights. **Expected:** the lights that come
     up are that role's (the house lights, the FOH...); untick a row that
     is wrong.
@@ -363,9 +363,11 @@ room's DMX line:
     half over 5 s (a relay circuit just stays on); nothing on stage
     changes. **House out**: the house goes out, aisle lights stay.
 18. Fire **Stage up**. **Expected:** the front and top light come up to
-    full white over 3 s, the room's ColorSources included.
-19. **Work lights**, then **Work lights off**. **Expected:** the work
-    lights snap on and off.
+    full white over 3 s, the room's ColorSources included. Fire **Stage
+    out**. **Expected:** the stage light and the cyc go out over 3 s; the
+    house and work lights don't change.
+19. Fire **Work lights**, then let it go. **Expected:** the work lights
+    snap on, and off again when it is let go.
 
 ## Roles: house lights and stage light in any room
 
@@ -376,13 +378,13 @@ light does there; the show has eight:
 | Role | What it is |
 |---|---|
 | **House Lights** | the audience's light |
-| **Aisle Lights** | aisle and step lights; House out leaves them on |
-| **Front Wash** | light on the stage from the house side: FOH, box booms, balcony rail |
-| **Top Wash** | down light from the overhead electrics |
-| **Side Light** | booms, ladders, shins in the wings |
-| **Back Light** | from upstage, toward the house |
+| **Aisle** | aisle and step lights; House out leaves them on |
+| **Stage Wash Front** | light on the stage from the house side: FOH, box booms, balcony rail |
+| **Stage Wash Top** | down light from the overhead electrics |
+| **Side** | booms, ladders, shins in the wings |
+| **Back** | from upstage, toward the house |
 | **Cyc** | lights on the cyc or backdrop |
-| **Work Lights** | the crew's light |
+| **Work** | the crew's light |
 
 Each role is an ordinary fixture group of the show, in a **Roles**
 folder, that each venue fills with its own lights, as any group is
@@ -400,9 +402,9 @@ Each role's row lists the room's lights suggested for it and why:
 2. a moving light is left for you to add by hand;
 3. a CYC (its model) is Cyc;
 4. otherwise where it hangs, with the room lined up: more than 3 ft (in
-   your **Settings ▸ Units**) downstage of the curtain line is Front
-   Wash; over the stage and above 10 ft is Top Wash; lower is Side
-   Light.
+   your **Settings ▸ Units**) downstage of the curtain line is Stage
+   Wash Front; over the stage and above 10 ft is Stage Wash Top; lower
+   is Side.
 
 A light on channels the room keeps (**Not ours**), an unpatched one and
 one you already put in a role are never moved. **Flash** lights a row's
@@ -424,12 +426,12 @@ The first Fill Roles also makes what plays on them:
 
   | Cue | What it does | Fade |
   |---|---|---|
-  | **House up** | House Lights and Aisle Lights full | 5 s |
   | **House to half** | House Lights at 50% | 5 s |
-  | **House out** | House Lights out (aisle lights stay) | 5 s |
-  | **Stage up** | Front, Top, Side and Back light full | 3 s |
-  | **Work lights** | Work Lights full | 0 s |
-  | **Work lights off** | Work Lights out | 0 s |
+  | **House out** | House Lights out (Aisle stays) | 5 s |
+  | **House full** | House Lights and Aisle full | 5 s |
+  | **Stage up** | Stage Wash Front, Stage Wash Top, Side and Back full | 3 s |
+  | **Stage out** | Stage Wash Front, Stage Wash Top, Side, Back and Cyc out; house and work untouched | 3 s |
+  | **Work lights** | Work full (let go: back to what the show plays) | 0 s |
 
 - one **Global hit** per standard cue, an **override** hit at the top
   of the Show Tree, so it can be fired any time the ways any hit is: a

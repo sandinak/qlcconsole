@@ -200,13 +200,13 @@ QString HouseRole::groupName(Role role)
     switch (role)
     {
     case HouseLights: return tr("House Lights");
-    case Aisle:       return tr("Aisle Lights");
-    case Front:       return tr("Front Wash");
-    case Top:         return tr("Top Wash");
-    case Side:        return tr("Side Light");
-    case Back:        return tr("Back Light");
+    case Aisle:       return tr("Aisle");
+    case Front:       return tr("Stage Wash Front");
+    case Top:         return tr("Stage Wash Top");
+    case Side:        return tr("Side");
+    case Back:        return tr("Back");
     case Cyc:         return tr("Cyc");
-    case Work:        return tr("Work Lights");
+    case Work:        return tr("Work");
     case None:        break;
     }
     return QString();
@@ -406,12 +406,12 @@ QList<Role> HouseRole::nameClashes(const Doc *doc)
 QList<StandardCue> HouseRole::standardCues()
 {
     return {
-        { tr("House up"), { { HouseLights, 255 }, { Aisle, 255 } }, 5000 },
         { tr("House to half"), { { HouseLights, 128 } }, 5000 },
         { tr("House out"), { { HouseLights, 0 } }, 5000 },
+        { tr("House full"), { { HouseLights, 255 }, { Aisle, 255 } }, 5000 },
         { tr("Stage up"), { { Front, 255 }, { Top, 255 }, { Side, 255 }, { Back, 255 } }, 3000 },
+        { tr("Stage out"), { { Front, 0 }, { Top, 0 }, { Side, 0 }, { Back, 0 }, { Cyc, 0 } }, 3000 },
         { tr("Work lights"), { { Work, 255 } }, 0 },
-        { tr("Work lights off"), { { Work, 0 } }, 0 },
     };
 }
 

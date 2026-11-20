@@ -67,7 +67,7 @@ namespace HouseRole
     QLC_ENGINE_EXPORT QString xmlName(Role role);
     /** The other way; anything else is None. */
     QLC_ENGINE_EXPORT Role fromXmlName(const QString &text);
-    /** The role group's name, as made: "House Lights", "Front Wash" ... */
+    /** The role group's name, as made: "House Lights", "Stage Wash Front" ... */
     QLC_ENGINE_EXPORT QString groupName(Role role);
     /** The folder the role groups are made in ("Roles"). */
     QLC_ENGINE_EXPORT QString folder();
@@ -118,8 +118,8 @@ namespace HouseRole
         QList<Layer> layers;
         uint fade = 0;          //!< ms, in and out
     };
-    /** House up, House to half, House out, Stage up, Work lights, Work
-     *  lights off. */
+    /** House to half, House out, House full, Stage up, Stage out, Work
+     *  lights (board Q288). */
     QLC_ENGINE_EXPORT QList<StandardCue> standardCues();
 
     /** What the first Fill Roles made (and every later one added back). */
