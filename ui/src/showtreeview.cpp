@@ -541,9 +541,7 @@ protected:
             QPainter b(viewport());
             b.setRenderHint(QPainter::Antialiasing);
             const QColor text = palette().color(QPalette::Text);
-            QFont f = font();
-            f.setPointSizeF(qMax(7.0, f.pointSizeF() - 2));
-            b.setFont(f);
+            b.setFont(levelFont());
             for (int which = 0; which < 2; ++which)
             {
                 const QRect r = levelButton(row, which);
@@ -555,7 +553,7 @@ protected:
                 b.setPen(edge);
                 b.drawRoundedRect(r, 3, 3);
                 b.setPen(text);
-                b.drawText(r, Qt::AlignCenter, which == 0 ? QStringLiteral("\u25B8\u00A7") : QStringLiteral("\u25BE\u2026"));
+                b.drawText(r, Qt::AlignCenter, which == 0 ? tr("Songs") : tr("Open"));
             }
         }
         if (m_mark.isNull())
@@ -684,8 +682,18 @@ private:
         const int kind = item->data(0, ShowTreeView::KindRole).toInt();
         return kind == ShowTreeView::ProductionNode || kind == ShowTreeView::ListNode;
     }
-    int levelButtonHeight() const { return qMax(12, fontMetrics().height() + 2); }
-    int levelButtonWidth() const { return levelButtonHeight() + 14; }
+    QFont levelFont() const
+    {
+        QFont f = font();
+        f.setPointSizeF(qMax(7.0, f.pointSizeF() - 2));
+        return f;
+    }
+    int levelButtonHeight() const { return qMax(12, QFontMetrics(levelFont()).height() + 6); }
+    int levelButtonWidth() const
+    {
+        const QFontMetrics fm(levelFont());
+        return qMax(fm.horizontalAdvance(tr("Songs")), fm.horizontalAdvance(tr("Open"))) + 14;
+    }
 
     bool buttonsShown(const QTreeWidgetItem *item) const
     {
@@ -2256,8 +2264,11 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
            them on the apron in the apron number. Tracks like a value. */
         m_cueBlockingRow = new QWidget(inner);
         {
-            QHBoxLayout *bl = new QHBoxLayout(m_cueBlockingRow);
+            // Two short rows, not one wide one: the page never scrolls sideways.
+            QVBoxLayout *bl = new QVBoxLayout(m_cueBlockingRow);
             bl->setContentsMargins(0, 0, 0, 0);
+            QHBoxLayout *top = new QHBoxLayout();
+            top->setContentsMargins(0, 0, 0, 0);
             m_cueBlocking = new QComboBox(m_cueBlockingRow);
             m_cueBlocking->setObjectName("stCueBlocking");
             m_cueBlocking->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -2265,16 +2276,21 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             m_cueBlocking->setToolTip(tr("Where the stage targets stand from this cue on. Unset, it keeps the "
                                          "cue before's (it tracks); the first cue starts from Default. Move the "
                                          "targets of a blocking in the Lighting Studio."));
-            bl->addWidget(m_cueBlocking, 1);
+            top->addWidget(m_cueBlocking, 1);
+            bl->addLayout(top);
             QPushButton *nb = new QPushButton(BlockingView::saveActionText(), m_cueBlockingRow);
             nb->setObjectName("stCueBlockingNew");
             nb->setToolTip(tr("Store where the stage targets stand in this cue now as a new blocking, "
                               "used from this cue on. Move them for it in the Lighting Studio."));
-            bl->addWidget(nb);
+            QHBoxLayout *below = new QHBoxLayout();
+            below->setContentsMargins(0, 0, 0, 0);
+            below->addWidget(nb);
+            below->addStretch(1);
+            bl->addLayout(below);
             m_cueBlockingRename = new QPushButton(tr("Rename\u2026"), m_cueBlockingRow);
             m_cueBlockingRename->setObjectName("stCueBlockingRename");
             m_cueBlockingRename->setToolTip(tr("Rename the blocking this cue uses. Greyed while the cue has none of its own (it plays Default)."));
-            bl->addWidget(m_cueBlockingRename);
+            top->addWidget(m_cueBlockingRename);
             connect(m_cueBlocking, QOverload<int>::of(&QComboBox::activated), this, [this](int i) {
                 if (m_inspectorUpdating || m_pageCue == invalidId())
                     return;
@@ -2312,7 +2328,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                     this, &ShowTreeView::fillCueBlocking);
         }
         f->addRow(tr("Blocking"), m_cueBlockingRow);
-        m_cueBase = new QCheckBox(tr("The list's base cue (released layers go back to it)"), inner);
+        m_cueBase = new QCheckBox(tr("Base cue: released layers return here"), inner);
         m_cueBase->setObjectName("stCueBase");
         m_cueBase->setToolTip(tr("Makes this the list's base cue: a layer set to release goes back to what this "
                                  "cue holds instead of to dark."));
