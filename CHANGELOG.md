@@ -20,6 +20,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   launch (not at most once a day) and every 4 hours while it runs. The
   conditional request, rate-limit back-off and skipped-version rule are
   unchanged.
+### Docs
+
+- **Security and conduct on GitHub.** SECURITY.md says how to report a
+  vulnerability privately (the repository's private report form, now on)
+  and what counts, the emergency stop included; CODE_OF_CONDUCT.md is the
+  Contributor Covenant 2.1.
 
 ## [0.5.1] - 2026-11-20
 
