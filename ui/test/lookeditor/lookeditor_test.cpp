@@ -2012,6 +2012,61 @@ static QLCPalette *aFireSpread(Doc &doc)
     return doc.addPalette(look) ? look : nullptr;
 }
 
+/* Every effect that takes colours says which ones it plays now. */
+void LookEditor_Test::anEffectSaysWhichColoursItPlays()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+    // The look's own colour, above the effect.
+    QLCPalette *base = new QLCPalette(QLCPalette::Color, &doc);
+    base->setValues({ QLCPalette::colorToString(QColor("#123456"), QColor(Qt::black)) });
+    base->setName("Base");
+    QVERIFY(doc.addPalette(base));
+    scene->addPalette(look->id());
+    LookEditor ed(&doc);
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    QLabel *line = ed.colourSourceLabel();
+    QVERIFY(line != nullptr);
+    QComboBox *colours = ed.findChild<QComboBox *>("effectParam_colours");
+    QVERIFY(colours != nullptr);
+
+    // Fire: its own, whatever is set.
+    QVERIFY2(line->text().contains("its own (Firelight's fire colours)"), qPrintable(line->text()));
+    colours->setCurrentIndex(1);
+    // Front and Behind, nothing under the effect, nothing in the look: Fire.
+    QVERIFY2(line->text().contains("none set") && line->text().contains("plain Fire"), qPrintable(line->text()));
+
+    // A colour above the effect is the look's own.
+    scene->addPalette(base->id());
+    scene->reorderPalettes({ base->id(), look->id() });
+    ed.setPalette(look->id());
+    QVERIFY2(line->text().contains("the look's own 1 colour"), qPrintable(line->text()));
+
+    // A Colour look under the effect wins, and the line follows live.
+    QVERIFY(ed.pickEffectColour(0, QColor("#00ff00")));
+    QVERIFY2(line->text().contains("the 1 Colour look under this effect"), qPrintable(line->text()));
+    QVERIFY(ed.pickEffectColour(1, QColor("#ff0000")));
+    QVERIFY2(line->text().contains("the 2 Colour looks under this effect"), qPrintable(line->text()));
+    QVERIFY(doc.paletteOps()->undo());
+    QVERIFY2(line->text().contains("the 1 Colour look under this effect"), qPrintable(line->text()));
+
+    // An effect that takes no colours says nothing.
+    QLCPalette *plain = new QLCPalette(QLCPalette::Effect, &doc);
+    plain->setName("Plain");
+    plain->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/ballyhoo.js");
+    if (doc.addPalette(plain) && QFile::exists(plain->scriptPath()))
+    {
+        scene->addPalette(plain->id());
+        ed.setPalette(plain->id());
+        QVERIFY2(ed.colourSourceText().isEmpty() == !QLCPalette::effectUsesLookColours(plain),
+                 qPrintable(ed.colourSourceText()));
+    }
+}
+
 /* The swatches beside Colours: Front and Behind are the first and second
    Colour looks under the effect in the look's list. */
 void LookEditor_Test::frontAndBehindSwatchesEditTheColourLooksUnder()

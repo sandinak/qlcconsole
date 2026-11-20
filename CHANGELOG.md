@@ -19,7 +19,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   swatch sit under the setting; click one to pick the colour, which is the
   first or second Colour look under the effect (one undo step). Each effect's
   block of settings has a slightly tinted background, alternating from one
-  effect to the next, so you see where one ends and the next begins.
+  effect to the next, so you see where one ends and the next begins. An
+  effect that takes colours now says which it plays: the Colour looks under
+  it, the look's own, or its own.
 
 ## [0.5.1] - 2026-11-20
 

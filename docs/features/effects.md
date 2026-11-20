@@ -889,6 +889,11 @@ so neither covers the other.
   drop them in, or **+ Effect ▾ ▸ Effect Palette…** in the Workbench. Drag a
   look's row to change the order (lower wins where two set the same
   channel; ⌥ copies).
+- **Which colours an effect plays** is said in one line at the top of its
+  settings: *the Colour looks under this effect*, else *the look's own
+  colour* (no Colour look under the effect), else *its own* colours. It
+  changes as you add or remove a Colour look. An effect that takes no
+  colours has no line.
 - **An effect's own colour or dimmer** sits under it in the list and stays
   with it. Each effect's block of settings has a faint tint behind it, a
   shade different from the next effect's, so you can see where one begins

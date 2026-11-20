@@ -298,6 +298,15 @@ private:
     QPointer<QPushButton> m_colourSwatch[2];
     ColourAsker m_colourAsker;
     void refreshColourSwatches();
+    QPointer<QLabel> m_colourSource;              ///< "Colours: ..." which ones play
+    void refreshColourSource();
+public:
+    /** One line: which colours the edited effect plays now -- the Colour
+     *  looks under it, else the look's, else its own (the rule
+     *  EffectInstance::sceneLookColours() reads by). Empty: it takes none. */
+    QString colourSourceText() const;
+    QLabel *colourSourceLabel() const { return m_colourSource; }
+private:
 public:
     /** Grey the parameter rows that don't count with the look's values
      *  now, each saying why ("Set by Framing: Waist Up"). */

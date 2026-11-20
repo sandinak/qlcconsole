@@ -109,6 +109,9 @@ private slots:
     /** One effect's block of settings has a faint tint of its own, in light
      *  and dark themes, alternating from one effect to the next. */
     void anEffectsSettingsHaveATintOfTheirOwn();
+    /** The settings say which colours the effect plays: the Colour looks
+     *  under it, else the look's, else its own; live. */
+    void anEffectSaysWhichColoursItPlays();
     /** Fire Spread's settings pictured (QLC_SHOT_DIR only). */
     void fireSpreadSettingsShots();
     /** Fire Spread's Intensity (board Q259): a row named Intensity with the

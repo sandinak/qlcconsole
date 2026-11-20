@@ -995,7 +995,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efv->addWidget(m_effectBasedOnLabel);
     connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateBasedOn(); });
     // A param that another one decides (activeWhen) greys or comes back.
-    connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateEffectParamActivity(); });
+    connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateEffectParamActivity(); refreshColourSource(); });
     if (m_doc->paletteOps() != nullptr)
         connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() { refreshColourSwatches(); });
 
@@ -2020,8 +2020,46 @@ bool LookEditor::pickEffectColour(int slot, const QColor &colour)
     return true;
 }
 
+QString LookEditor::colourSourceText() const
+{
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == nullptr || p->type() != QLCPalette::Effect || m_contextScene == nullptr
+        || !QLCPalette::effectUsesLookColours(p))
+        return QString();
+    const QMap<QString, double> v = p->effectParamValues();
+    const bool frontBehind = m_colourField != nullptr;
+    // Fire Spread's Fire mode ignores every colour look: Firelight's own.
+    if (frontBehind && v.value(QStringLiteral("colours"), 0.0) < 0.5)
+        return tr("Colours: its own (Firelight's fire colours). Colour looks are not used.");
+    const QList<quint32> pals = m_contextScene->palettes();
+    const int own = effectColourLooks().size();
+    if (own > 0)
+        return tr("Colours: the %n Colour look(s) under this effect.", "", own);
+    int base = 0;
+    for (quint32 pid : pals)
+    {
+        const QLCPalette *c = m_doc->palette(pid);
+        if (c != nullptr && c->type() == QLCPalette::Color && !QLCPalette::isEffectScoped(m_doc, pals, pid))
+            ++base;
+    }
+    if (base > 0)
+        return tr("Colours: the look's own %n colour(s) (no Colour look under this effect).", "", base);
+    return frontBehind ? tr("Colours: none set (no Colour look under this effect or in the look), so plain Fire.")
+                       : tr("Colours: its own (no Colour look under this effect or in the look).");
+}
+
+void LookEditor::refreshColourSource()
+{
+    if (m_colourSource.isNull())
+        return;
+    const QString t = colourSourceText();
+    m_colourSource->setText(t);
+    m_colourSource->setVisible(!t.isEmpty());
+}
+
 void LookEditor::refreshColourSwatches()
 {
+    refreshColourSource();
     if (m_colourField.isNull())
         return;
     const QList<quint32> have = effectColourLooks();
@@ -3800,6 +3838,13 @@ void LookEditor::rebuildEffectDynWidget()
     const QStringList supersededBySpread = tmpScript.takesHostSpread() && hostSpread.isActive()
                                            ? tmpScript.hostSpreadParams() : QStringList();
 
+    m_colourSource = new QLabel(m_effectDynWidget);
+    m_colourSource->setObjectName(QStringLiteral("effectColourSource"));
+    m_colourSource->setWordWrap(true);
+    m_colourSource->setToolTip(tr("Which colours this effect plays: the Colour looks under it, else the look's own, else its own."));
+    dv->addWidget(m_colourSource);
+    refreshColourSource();
+
     // --- Parameters ---
     const QList<EffectScript::ParamDef> &pdefs = tmpScript.paramDefs();
     if (!pdefs.isEmpty())
@@ -4213,6 +4258,7 @@ void LookEditor::rebuildEffectDynWidget()
                 m_paramFields.insert(name.mid(12), field);
         }
         updateEffectParamActivity();
+        refreshColourSource();
 
         // "Learn range" — offered when the script has both note-range params.
         // Plays live: click, play your lowest & highest key, click again to lock.
