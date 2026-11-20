@@ -42,6 +42,14 @@
 #include "inputoutputmanager.h"
 #include "inputoutputmap.h"
 #include "venuerigdialog.h"
+#include "rolefilldialog.h"
+#include "showtreecontroller.h"
+#include "houserole.h"
+#include "qlcfixturedefcache.h"
+#include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturehead.h"
+#include "qlcchannel.h"
 #include "venuefromshowdialog.h"
 #include "roomoutputpicker.h"
 #include "venuemenu.h"
@@ -632,6 +640,127 @@ void VenueRigUi_Test::theVenuePageLinesUpTheRoom()
     VenueRigDialog other(m_doc, plain, nullptr);
     other.show();
     QVERIFY(!other.lineUpBox()->isVisible());
+}
+
+/* The two definitions PmsLikeShow's role lights need (Test "Focus Spot
+   Three Z" 3ch, Test "ColorSource CYC" 3ch RGB). */
+static void addRoleDefs(Doc *doc)
+{
+    const struct { const char *model, *mode; QLCChannel::Group g[3]; QLCChannel::PrimaryColour c[3]; } defs[] = {
+        { "Focus Spot Three Z", "3ch", { QLCChannel::Pan, QLCChannel::Tilt, QLCChannel::Intensity },
+          { QLCChannel::NoColour, QLCChannel::NoColour, QLCChannel::NoColour } },
+        { "ColorSource CYC", "3ch RGB", { QLCChannel::Intensity, QLCChannel::Intensity, QLCChannel::Intensity },
+          { QLCChannel::Red, QLCChannel::Green, QLCChannel::Blue } } };
+    for (const auto &d : defs)
+    {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer(QStringLiteral("Test"));
+        def->setModel(QString::fromLatin1(d.model));
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName(QString::fromLatin1(d.mode));
+        QLCFixtureHead head;
+        for (int k = 0; k < 3; ++k)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QStringLiteral("Ch %1").arg(k));
+            ch->setGroup(d.g[k]);
+            ch->setColour(d.c[k]);
+            def->addChannel(ch);
+            mode->insertChannel(ch, quint32(k));
+            head.addChannel(quint32(k));
+        }
+        mode->insertHead(-1, head);
+        def->addMode(mode);
+        if (!doc->fixtureDefCache()->addFixtureDef(def))
+            delete def;
+    }
+}
+
+void VenueRigUi_Test::theRolesBoxFillsTheRoles()
+{
+    VenueCorrections *v = venues(m_doc);
+    addRoleDefs(m_doc);
+    m_doc->showTree()->addProduction(QStringLiteral("Dance Hysteria"));
+    MonitorProperties *props = m_doc->monitorProperties();
+    props->setGridUnits(MonitorProperties::Feet);
+    props->setGridSize(QVector3D(50.0f, 20.0f, 30.0f));
+    const QString file = m_dir->filePath(QStringLiteral("PMS Stage.qlcc"));
+    {
+        QFile f(file);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(PmsLikeShow::xml(QStringLiteral("172.18.2.10"), false, true));
+    }
+    VenueImport::Source src;
+    QVERIFY(VenueImport::read(file, src));
+    VenueImport::Options opt;
+    opt.universe = 1;
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"),
+                                            VenueImport::build(src, m_doc, opt, v->reservedIds()).data);
+    QVERIFY(!pms.isEmpty());
+
+    // Not applied: the box says so and Fill Roles waits.
+    {
+        VenueRigDialog page(m_doc, pms, nullptr);
+        page.show();
+        QVERIFY(page.rolesBox()->isVisible());
+        QVERIFY(!page.fillRolesButton()->isEnabled());
+        QVERIFY2(page.fillRolesButton()->toolTip().startsWith(QStringLiteral("Apply PMS Auditeria first")),
+                 qPrintable(page.fillRolesButton()->toolTip()));
+    }
+    QVERIFY(v->setActiveVenue(pms));
+
+    VenueRigDialog page(m_doc, pms, nullptr);
+    page.resize(1024, 640);
+    page.show();
+    QCOMPARE(page.rolesBox()->title(), QStringLiteral("Roles"));
+    QVERIFY2(page.rolesText()->text().startsWith(QStringLiteral("No roles yet.")), qPrintable(page.rolesText()->text()));
+    QCOMPARE(page.fillRolesButton()->text(), QStringLiteral("Fill Roles\u2026"));
+    QVERIFY(page.fillRolesButton()->isEnabled());
+    shoot(&page, QStringLiteral("venue-page-roles-before"));
+
+    QPointer<RoleFillDialog> d = qobject_cast<RoleFillDialog *>(page.openFillRoles());
+    QVERIFY(d != nullptr);
+    QTableWidget *t = d->table();
+    QCOMPARE(t->rowCount(), 8);
+    const int front = d->rowOf(HouseRole::Front);
+    QCOMPARE(t->item(front, RoleFillDialog::RoleCol)->text(), QStringLiteral("Stage Wash Front"));
+    QCOMPARE(t->item(front, RoleFillDialog::LightsCol)->text(), QStringLiteral("3  FOH 1, FOH 2, FOH 3"));
+    QCOMPARE(t->item(front, RoleFillDialog::WhyCol)->text(), QStringLiteral("\"FOH\" in its name"));
+    QVERIFY(d->useBox(front)->isChecked() && d->useBox(front)->isEnabled());
+    QVERIFY(d->flashButton(front)->isEnabled());
+    QCOMPARE(t->item(d->rowOf(HouseRole::Top), RoleFillDialog::WhyCol)->text(),
+             QStringLiteral("over the stage, %1 up").arg(MeasurementUnits::formatLength(6000.0)));
+    // A role the room lacks: said, nothing to tick or flash.
+    const int side = d->rowOf(HouseRole::Side);
+    QCOMPARE(t->item(side, RoleFillDialog::LightsCol)->text(), QStringLiteral("none in this room"));
+    QVERIFY(!d->useBox(side)->isChecked() && !d->useBox(side)->isEnabled());
+    QVERIFY(!d->flashButton(side)->isEnabled());
+    QVERIFY2(d->notUsedLabel()->text().startsWith(QStringLiteral("Not used (6): Ch 1 Relay (a power relay")),
+             qPrintable(d->notUsedLabel()->text()));
+    QVERIFY(!d->editButton()->isEnabled());            // no role group yet
+    d->flashButton(front)->click();
+    d->resize(1024, 640);
+    shoot(d, QStringLiteral("role-fill-before"));
+
+    // He unticks Stage Wash Top; one click fills the rest and makes the cues.
+    d->useBox(d->rowOf(HouseRole::Top))->setChecked(false);
+    QVERIFY(d->fillRoles());
+    QVERIFY2(d->statusLabel()->text().startsWith(QStringLiteral("Filled 4 role(s) in PMS Auditeria. Made 8 role "
+                                                                "group(s), 4 palette(s), 6 standard cue(s), 6 Global hit(s).")),
+             qPrintable(d->statusLabel()->text()));
+    QCOMPARE(HouseRole::group(m_doc, HouseRole::Front)->fixtureList().size(), 3);
+    QVERIFY(HouseRole::group(m_doc, HouseRole::Top)->fixtureList().isEmpty());
+    QCOMPARE(m_doc->showTree()->reusableCues().size(), 6);
+    QApplication::processEvents();
+    QVERIFY2(page.rolesText()->text().startsWith(QStringLiteral("Lights in PMS Auditeria: House Lights 2, Stage Wash Front 3,")),
+             qPrintable(page.rolesText()->text()));
+    // The rows now say where each light is.
+    QCOMPARE(t->item(front, RoleFillDialog::WhyCol)->text(), QStringLiteral("in Stage Wash Front already"));
+    t->setCurrentCell(front, 0);
+    QVERIFY(d->editButton()->isEnabled());
+    shoot(d, QStringLiteral("role-fill-after"));
+    shoot(&page, QStringLiteral("venue-page-roles-after"));
+    delete d;
 }
 
 void VenueRigUi_Test::aVenueFromAShowWithEveryUniverseInUse()

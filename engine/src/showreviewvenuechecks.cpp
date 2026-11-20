@@ -19,6 +19,9 @@
 #include "inputoutputmap.h"
 #include "focussession.h"
 #include "focuscalls.h"
+#include "showtreecontroller.h"
+#include "fixturegroup.h"
+#include "houserole.h"
 #include "stagetarget.h"
 #include "scene.h"
 #include "fixture.h"
@@ -251,6 +254,62 @@ static void ven10(ReviewContext &ctx, QList<ReviewFinding> &out)
 }
 
 /****************************************************************************
+ * VEN-11 A standard house cue that lights nothing in this room
+ ****************************************************************************/
+
+static void ven11(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    /* A role the room lacks is empty and its layer simply skipped (not a
+       mistake, section 3.4 of docs/design/VENUE_ROLES_DATUM.md); a standard
+       cue whose every role is empty does nothing at all here. */
+    Doc *doc = ctx.doc();
+    ShowTreeController *st = doc->showTree();
+    if (st == nullptr || !HouseRole::hasRoles(doc))
+        return;
+    VenueCorrections *vc = venues(ctx);
+    const QString venue = vc != nullptr ? vc->activeVenue() : QString();
+    for (const HouseRole::StandardCue &std : HouseRole::standardCues())
+    {
+        const ShowTree::ReusableCue *cue = nullptr;
+        for (const ShowTree::ReusableCue &r : st->reusableCues())
+            if (r.name.compare(std.name, Qt::CaseInsensitive) == 0)
+                cue = &r;
+        if (cue == nullptr || cue->layers.isEmpty())
+            continue;
+        bool lights = false, roles = true;
+        QStringList empty;
+        for (const ShowTree::Layer &l : cue->layers)
+        {
+            if (!l.target.fixtures.isEmpty() || !l.target.sets.isEmpty() || l.target.isOpaque())
+                lights = true;
+            for (quint32 gid : l.target.groups)
+            {
+                const FixtureGroup *g = doc->fixtureGroup(gid);
+                if (g == nullptr)
+                    continue;
+                if (g->role() == HouseRole::None)
+                    roles = false;
+                if (!g->fixtureList().isEmpty())
+                    lights = true;
+                else
+                    empty << g->name();
+            }
+        }
+        if (lights || !roles || empty.isEmpty())
+            continue;
+        out << ReviewContext::make(QStringLiteral("VEN-11"), ReviewFinding::Note,
+            (venue.isEmpty()
+                ? tr("The standard cue '%1' lights nothing in this show: %2 have no lights.")
+                      .arg(cue->name, empty.join(QStringLiteral(", ")))
+                : tr("The standard cue '%1' lights nothing in %3: %2 have no lights there. Fill Roles on "
+                     "the venue page, or add lights to them by hand.")
+                      .arg(cue->name, empty.join(QStringLiteral(", ")), venue)),
+            { venue.isEmpty() ? QStringLiteral("roles") : venueKey(venue) },
+            (venue + QLatin1Char('|') + cue->name).toUtf8(), QStringLiteral("fixtures"));
+    }
+}
+
+/****************************************************************************
  * The list
  ****************************************************************************/
 
@@ -274,5 +333,9 @@ QList<ShowReview::Check> ShowReviewChecks::venueChecks()
         { QStringLiteral("VEN-10"), tr("Practice venue left on"), S::Venues,
           tr("A scramble-practice venue puts the lights off on purpose. Left applied, or left as "
              "the only venue, the real show would be focused wrong."), ven10 },
+        { QStringLiteral("VEN-11"), tr("Standard cue lights nothing here"), S::Venues,
+          tr("House to half, Stage up and the other standard cues play on the house roles, filled "
+             "by each room's own lights. A role the room lacks is skipped; a standard cue whose "
+             "every role is empty does nothing at all in this room."), ven11 },
     };
 }

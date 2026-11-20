@@ -37,6 +37,8 @@
 #include "venuerigdialog.h"
 #include "venuefromshowdialog.h"
 #include "roomoutputpicker.h"
+#include "rolefilldialog.h"
+#include "houserole.h"
 #include "lengthspinbox.h"
 #include "fixturegroup.h"
 #include "venuerig.h"
@@ -194,6 +196,22 @@ VenueRigDialog::VenueRigDialog(Doc *doc, const QString &venue, QWidget *parent)
             QMessageBox::information(this, windowTitle(), why);
         refresh();
     });
+
+    /* House roles (docs/design/VENUE_ROLES_DATUM.md section 3): which of
+       the show's role groups this room's lights fill. */
+    m_rolesBox = new QGroupBox(tr("Roles"), this);
+    m_rolesBox->setObjectName(QStringLiteral("vrRolesBox"));
+    QHBoxLayout *rol = new QHBoxLayout(m_rolesBox);
+    m_rolesText = new QLabel(m_rolesBox);
+    m_rolesText->setObjectName(QStringLiteral("vrRolesText"));
+    m_rolesText->setWordWrap(true);
+    m_rolesText->setMinimumHeight(m_rolesText->fontMetrics().lineSpacing() * 2 + 4);
+    rol->addWidget(m_rolesText, 1);
+    m_fillRoles = new QPushButton(tr("Fill Roles\342\200\246"), m_rolesBox);
+    m_fillRoles->setObjectName(QStringLiteral("vrFillRoles"));
+    rol->addWidget(m_fillRoles, 0, Qt::AlignTop);
+    vl->addWidget(m_rolesBox);
+    connect(m_fillRoles, &QPushButton::clicked, this, [this]() { openFillRoles(); });
 
     // The slots: the show's universes, with this room's patch and what it keeps.
     QGroupBox *unis = new QGroupBox(tr("Universes"), this);
@@ -455,7 +473,58 @@ void VenueRigDialog::refresh()
         m_downstageLabel->setEnabled(datum.isSet());
         m_lineUp->setEnabled(!room.from.isEmpty());
     }
+    // The roles this room's lights fill.
+    QStringList filled;
+    int empty = 0;
+    const QSet<quint32> house = applied ? vc->rig()->venueFixtures() : QSet<quint32>();
+    for (HouseRole::Role r : HouseRole::roles())
+    {
+        const FixtureGroup *g = HouseRole::group(m_doc, r);
+        if (g == nullptr)
+            continue;
+        QSet<quint32> lights;
+        if (applied)
+        {
+            for (quint32 fid : g->fixtureList())
+                if (house.contains(fid))
+                    lights.insert(fid);
+        }
+        else
+        {
+            for (const VenueRig::Fill &f : v.rig.fills)
+                if (f.group == g->id())
+                    for (const VenueRig::FillHead &h : f.heads)
+                        lights.insert(h.fixture);
+        }
+        if (lights.isEmpty())
+            ++empty;
+        else
+            filled << QStringLiteral("%1 %2").arg(g->name()).arg(lights.size());
+    }
+    if (!HouseRole::hasRoles(m_doc))
+        m_rolesText->setText(tr("No roles yet. Fill Roles suggests which of this room's lights are its house "
+                                "lights, front wash, work lights..., and makes the standard cues (House to half, "
+                                "Stage up) that play on them in any room."));
+    else if (filled.isEmpty())
+        m_rolesText->setText(tr("No role has lights in %1 yet.").arg(m_venue));
+    else
+        m_rolesText->setText(tr("Lights in %1: %2.").arg(m_venue, filled.join(QStringLiteral(", ")))
+                             + (empty > 0 ? QLatin1Char(' ') + tr("%n role(s) with none here.", "", empty)
+                                          : QString()));
+    m_fillRoles->setEnabled(applied && v.rig.hasHouse());
+    m_fillRoles->setToolTip(!applied ? tr("Apply %1 first: its lights fill the roles while it is applied.").arg(m_venue)
+                            : !v.rig.hasHouse() ? tr("%1 has no house fixtures to fill the roles with").arg(m_venue)
+                            : tr("Which of %1's lights fill each role, suggested; Flash to check, one click to fill")
+                                  .arg(m_venue));
     m_loading = false;
+}
+
+QDialog *VenueRigDialog::openFillRoles()
+{
+    RoleFillDialog *d = RoleFillDialog::open(m_doc, this, m_venue);
+    connect(d, &QDialog::finished, this, &VenueRigDialog::refresh);
+    connect(d->fillButton(), &QPushButton::clicked, this, &VenueRigDialog::refresh, Qt::QueuedConnection);
+    return d;
 }
 
 bool VenueRigDialog::lineUpRoom(const QString &path)

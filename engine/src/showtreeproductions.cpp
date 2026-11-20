@@ -375,6 +375,7 @@ quint32 ShowTreeController::duplicateReusableCue(quint32 reusableId)
     if (src == nullptr)
         return invalidId();
     ReusableCue copy = *src;
+    copy.standard.clear();          // a copy is his own, not the standard cue
     copy.id = newId();
     freshLayers(copy.layers, [this] { return newId(); });
     QStringList taken;

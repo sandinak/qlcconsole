@@ -33,6 +33,7 @@
 #define KXMLQLCFixtureGroupName QStringLiteral("Name")
 #define KXMLQLCFixtureGroupPath QStringLiteral("Path")
 #define KXMLQLCFixtureGroupOwner QStringLiteral("Owner")
+#define KXMLQLCFixtureGroupRole QStringLiteral("Role")
 #define KXMLQLCFixtureGroupMaster QStringLiteral("Master")
 #define KXMLQLCFixtureGroupMasterLevel QStringLiteral("Level")
 
@@ -125,6 +126,15 @@ void FixtureGroup::setOwner(RigOwner::Owner owner)
     emit changed(this->id());
 }
 
+void FixtureGroup::setRole(HouseRole::Role role)
+{
+    if (m_role == role)
+        return;
+    m_role = role;
+    m_unknownRole.clear();
+    emit changed(this->id());
+}
+
 QString FixtureGroup::path() const
 {
     return m_path;
@@ -168,6 +178,12 @@ bool FixtureGroup::assignFixture(quint32 id, const QLCPoint& pt)
 bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
 {
     if (m_heads.values().contains(head) == true)
+        return false;
+
+    /* A house role holds the venue's lights only (board Q289): a standard
+       cue on it must never drive a tour or rental light. */
+    if (m_role != HouseRole::None && doc() != nullptr
+        && RigOwner::effective(doc(), head.fxi) != RigOwner::House)
         return false;
 
     if (size().isValid() == false)
@@ -463,6 +479,13 @@ bool FixtureGroup::loadXML(QXmlStreamReader &xmlDoc)
         {
             m_owner = RigOwner::fromXmlName(xmlDoc.readElementText());
         }
+        else if (xmlDoc.name() == KXMLQLCFixtureGroupRole)
+        {
+            const QString text = xmlDoc.readElementText();
+            m_role = HouseRole::fromXmlName(text);
+            // A newer build's role: kept, written back.
+            m_unknownRole = m_role == HouseRole::None ? text.trimmed() : QString();
+        }
         else if (xmlDoc.name() == KXMLQLCFixtureGroupMaster)
         {
             m_master = true;
@@ -498,6 +521,10 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
     // Only when set: a show that never says is byte-identical.
     if (m_owner != RigOwner::Unset)
         doc->writeTextElement(KXMLQLCFixtureGroupOwner, RigOwner::xmlName(m_owner));
+    if (m_role != HouseRole::None)
+        doc->writeTextElement(KXMLQLCFixtureGroupRole, HouseRole::xmlName(m_role));
+    else if (!m_unknownRole.isEmpty())
+        doc->writeTextElement(KXMLQLCFixtureGroupRole, m_unknownRole);
 
     /* Group master: only when there is one (QLC+ 4 skips the tag) */
     if (m_master)

@@ -53,6 +53,7 @@
 #include "focuscalls.h"
 #include "collection.h"
 #include "venuerig.h"
+#include "houserole.h"
 #include "fixture.h"
 #include "qlcfile.h"
 #include "scene.h"
@@ -2272,6 +2273,30 @@ void ShowReview_Test::ven10()
     QVERIFY(v->removeVenue(QStringLiteral("Lincoln HS")));
     QVERIFY(fires("VEN-10"));               // a practice left, and no real venue
     QCOMPARE(findings("VEN-10").first().severity, ReviewFinding::Note);
+}
+
+void ShowReview_Test::ven11()
+{
+    VenueCorrections *v = m_doc->programmer()->venueCorrections();
+    QVERIFY(m_dir.isValid());
+    v->setShowFile(QDir(m_dir.path()).filePath("Tour.qlcc"), false);
+    QVERIFY(quiet("VEN-11"));                   // no roles: nothing to say
+    m_doc->showTree()->addProduction(QStringLiteral("Tour"));
+    const QString hall = v->addVenue(QStringLiteral("Grand Hall"));
+    QVERIFY(v->setActiveVenue(hall));
+    Fixture *front = par("Front 1", 0);
+    front->setOwner(RigOwner::House);
+    QVERIFY(HouseRole::fillRoles(m_doc, hall, { { HouseRole::Front, { front->id() } } }));
+    // Stage up has a light (Front); the house cues have none here.
+    QVERIFY(fires("VEN-11"));
+    const QList<ReviewFinding> f = findings("VEN-11");
+    QStringList said;
+    for (const ReviewFinding &x : f)
+        said << x.message;
+    QVERIFY2(said.filter(QStringLiteral("'Stage up'")).isEmpty(), qPrintable(said.join(QLatin1Char('\n'))));
+    QVERIFY2(said.filter(QStringLiteral("'House to half' lights nothing in Grand Hall")).size() == 1,
+             qPrintable(said.join(QLatin1Char('\n'))));
+    QCOMPARE(f.first().severity, ReviewFinding::Note);
 }
 
 void ShowReview_Test::cue12Vc()

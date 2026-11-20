@@ -27,8 +27,22 @@ namespace PmsLikeShow
    Groups: "FOH" (51-53), "Relays" (1-4), "1st Elect." (1, 2).
    Its grid is 70 ft wide (its centre line at 10.668 m). With @p cyc,
    "Cyclorama 2" hangs across it 2 m from the grid's upstage edge (its
-   upstage line, docs/design/VENUE_ROLES_DATUM.md). */
-inline QByteArray xml(const QString &outputIp = QStringLiteral("172.18.2.10"), bool cyc = false)
+   upstage line, docs/design/VENUE_ROLES_DATUM.md).
+   With @p roles, the lights house roles are suggested for
+   (VENUE_ROLES_DATUM.md section 4), each 1 channel unless said, free on
+   the plot on layer 0:
+     15 "Ch 15 Linear" at 15, 24 "Ch 24 Down" at 24: group "House" (both)
+       and "House & Work" (with 17);
+     17 "Ch 17 Stage Work Lights" at 17;
+     22 "Ch 22 Hallway" at 22: a running light;
+     101 "Ch 101" at 201, in group "2nd Elect", over the stage: 2 m from
+       the grid's upstage edge, 6 m up;
+     114 "Ch 114", Test "Focus Spot Three Z" (3ch: pan, tilt, dimmer) at 210;
+     301 "Ch 301", Test "ColorSource CYC" (3ch RGB) at 301, in group
+       "3rd Elect" (the test adds those two definitions).
+   (Addresses 1-based here; the file's are zero-based.) */
+inline QByteArray xml(const QString &outputIp = QStringLiteral("172.18.2.10"), bool cyc = false,
+                      bool roles = false)
 {
     QByteArray out;
     out += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE Workspace>\n"
@@ -53,6 +67,32 @@ inline QByteArray xml(const QString &outputIp = QStringLiteral("172.18.2.10"), b
                               "<Mode>3 Channel</Mode><ID>%1</ID><Name>FOH %2</Name><Universe>0</Universe>"
                               "<Address>%3</Address><Channels>3</Channels></Fixture>\n")
                    .arg(51 + i).arg(i + 1).arg(100 + 3 * i).toUtf8();
+    if (roles)
+    {
+        const struct { int id; const char *name; int address; } dimmers[] = {
+            { 15, "Ch 15 Linear", 15 }, { 24, "Ch 24 Down", 24 }, { 17, "Ch 17 Stage Work Lights", 17 },
+            { 22, "Ch 22 Hallway", 22 }, { 101, "Ch 101", 201 } };
+        for (const auto &d : dimmers)
+            out += QStringLiteral("  <Fixture><Manufacturer>Generic</Manufacturer><Model>Generic</Model>"
+                                  "<Mode>1 Channel</Mode><ID>%1</ID><Name>%2</Name><Universe>0</Universe>"
+                                  "<Address>%3</Address><Channels>1</Channels></Fixture>\n")
+                       .arg(d.id).arg(QLatin1String(d.name)).arg(d.address - 1).toUtf8();
+        out += "  <Fixture><Manufacturer>Test</Manufacturer><Model>Focus Spot Three Z</Model><Mode>3ch</Mode>"
+               "<ID>114</ID><Name>Ch 114</Name><Universe>0</Universe><Address>209</Address>"
+               "<Channels>3</Channels></Fixture>\n"
+               "  <Fixture><Manufacturer>Test</Manufacturer><Model>ColorSource CYC</Model><Mode>3ch RGB</Mode>"
+               "<ID>301</ID><Name>Ch 301</Name><Universe>0</Universe><Address>300</Address>"
+               "<Channels>3</Channels></Fixture>\n"
+               "  <FixtureGroup ID=\"3\"><Name>House</Name><Path>Eos</Path><Size X=\"2\" Y=\"1\"/>"
+               "<Head X=\"0\" Y=\"0\" Fixture=\"15\">0</Head><Head X=\"1\" Y=\"0\" Fixture=\"24\">0</Head></FixtureGroup>\n"
+               "  <FixtureGroup ID=\"4\"><Name>House &amp; Work</Name><Path>Eos</Path><Size X=\"3\" Y=\"1\"/>"
+               "<Head X=\"0\" Y=\"0\" Fixture=\"15\">0</Head><Head X=\"1\" Y=\"0\" Fixture=\"24\">0</Head>"
+               "<Head X=\"2\" Y=\"0\" Fixture=\"17\">0</Head></FixtureGroup>\n"
+               "  <FixtureGroup ID=\"5\"><Name>2nd Elect</Name><Path>Eos</Path><Size X=\"1\" Y=\"1\"/>"
+               "<Head X=\"0\" Y=\"0\" Fixture=\"101\">0</Head></FixtureGroup>\n"
+               "  <FixtureGroup ID=\"6\"><Name>3rd Elect</Name><Path>Eos</Path><Size X=\"1\" Y=\"1\"/>"
+               "<Head X=\"0\" Y=\"0\" Fixture=\"301\">0</Head></FixtureGroup>\n";
+    }
     out += "  <FixtureGroup ID=\"0\"><Name>FOH</Name><Path>Eos</Path><Size X=\"1\" Y=\"3\"/>"
            "<Head X=\"0\" Y=\"0\" Fixture=\"51\">0</Head><Head X=\"0\" Y=\"1\" Fixture=\"52\">0</Head>"
            "<Head X=\"0\" Y=\"2\" Fixture=\"53\">0</Head></FixtureGroup>\n"
@@ -79,6 +119,14 @@ inline QByteArray xml(const QString &outputIp = QStringLiteral("172.18.2.10"), b
                    .arg(51 + i).arg(QLatin1String(offsets[i])).toUtf8();
     for (int i = 0; i < 3; ++i)
         out += QStringLiteral("   <FxItem ID=\"%1\" XPos=\"0\" YPos=\"0\" LayerId=\"3\"/>\n").arg(51 + i).toUtf8();
+    if (roles)
+    {
+        const int placed[] = { 15, 24, 17, 22, 114, 301 };
+        for (int i = 0; i < 6; ++i)
+            out += QStringLiteral("   <FxItem ID=\"%1\" XPos=\"%2\" YPos=\"20000\" ZPos=\"3\" LayerId=\"0\"/>\n")
+                       .arg(placed[i]).arg(4000 + 1000 * i).toUtf8();
+        out += "   <FxItem ID=\"101\" XPos=\"10668\" YPos=\"2000\" ZPos=\"6\" LayerId=\"0\"/>\n";
+    }
     if (cyc)
         out += "   <Scenery ID=\"0\" Name=\"Cyclorama 2\" Kind=\"0\" OriginX=\"10.668\" OriginY=\"2.000\" "
                "Width=\"18.000\" Height=\"6.000\"/>\n";

@@ -555,7 +555,7 @@ public:
     quint16 fixtureLinkedIndex(quint32 mapID) const;
 
     /** Returns true if the Fixture with ID $fid is present in the monitor map */
-    inline bool containsFixture(quint32 fid) { return m_fixtureItems.contains(fid); }
+    inline bool containsFixture(quint32 fid) const { return m_fixtureItems.contains(fid); }
 
     /** Returns true if the provided Fixture ID, head index and linked index are in the map */
     bool containsItem(quint32 fid, quint16 head, quint16 linked);

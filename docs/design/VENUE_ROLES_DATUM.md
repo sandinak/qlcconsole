@@ -212,10 +212,11 @@ groups with a role tag**. Nothing new plays them:
 - **Any group can take a role.** When the show already has a group by that
   name ("Cyc"), Fill Roles asks once: **Use your group "Cyc"** or **Make
   "Cyc (role)"**. His own groups are never renamed or changed otherwise.
-- **Owner stays Not set.** A role group can hold tour heads too (DH's own
-  front light in Front Wash, if he wants Stage up to use it); setting the
-  group's owner to House would move those into the venue (VENUES.md §2),
-  so a role group refuses an owner.
+- **House lights only (Q289).** A role group holds the venue's House
+  lights only: a tour or rental fixture is refused, and a group of his
+  holding tour lights is never adopted (the role is made beside it). The
+  role tag never changes a group's owner, so adopting his House group
+  keeps its lights in the venue.
 - **Renaming** keeps the role. **Deleting** says which standard cues use it;
   the next Fill Roles makes it again.
 - `PROGRAMMING_ROLE_DESIGN.md` is about the Build tab's job, not lighting
@@ -229,13 +230,15 @@ The proposal, refined by PMS's rig and by practice:
 | Role (group name) | What it is | Change |
 |---|---|---|
 | **House Lights** | the audience's light | as proposed |
-| **Aisle Lights** | aisle and step lights | kept separate: House out leaves them on, for getting people in and out in the dark |
-| **Front Wash** | light on the stage from the house side: FOH, box booms, balcony rail | "Stage Wash Front" shortened |
-| **Top Wash** | down light from the overhead electrics | "Stage Wash Top" shortened |
-| **Side Light** | booms, ladders, shins in the wings | as proposed |
-| **Back Light** | from upstage, aimed toward the house | as proposed |
+| **Aisle** | aisle and step lights | kept separate: House out leaves them on, for getting people in and out in the dark |
+| **Stage Wash Front** | light on the stage from the house side: FOH, box booms, balcony rail | as proposed |
+| **Stage Wash Top** | down light from the overhead electrics | as proposed |
+| **Side** | booms, ladders, shins in the wings | as proposed |
+| **Back** | from upstage, aimed toward the house | as proposed |
 | **Cyc** | lights on the cyc or backdrop | **new**: PMS's 3rd Electric is five ColorSource CYCs; a cyc is lit for colour, not as stage wash |
-| **Work Lights** | the crew's light | as proposed |
+| **Work** | the crew's light | as proposed |
+
+The names are the ones board Q288 approved (2026-11-19).
 
 Not roles: **power relays** (PMS's "Relay FOH" and the rest: Switch + On
 when not in use already keep them on), **backstage running lights and
@@ -249,16 +252,16 @@ one is an edit to all.
 
 | Cue | Layers (Dimmer + Open White, 3.4) | Fade |
 |---|---|---|
-| **House up** | House Lights full, Aisle Lights full | 5 s |
 | **House to half** | House Lights 50% | 5 s |
-| **House out** | House Lights out (Aisle Lights not in the cue: they stay) | 5 s |
-| **Stage up** | Front, Top, Side, Back Light full | 3 s |
-| **Work lights** | Work Lights full | 0 s |
-| **Work lights off** | Work Lights out | 0 s |
+| **House out** | House Lights out (Aisle not in the cue: it stays) | 5 s |
+| **House full** | House Lights full, Aisle full | 5 s |
+| **Stage up** | Stage Wash Front, Stage Wash Top, Side, Back full | 3 s |
+| **Stage out** | Stage Wash Front, Stage Wash Top, Side, Back and Cyc out; house and work untouched | 3 s |
+| **Work lights** | Work full | 0 s |
 
-House up and Work lights off are added to Branson's four: a list has to be
-able to bring the house back for intermission and bows, and to put work
-lights out.
+Board Q288 approved these six (2026-11-19). House full brings the house
+back for intermission and bows; letting the Work lights hit go puts them
+out.
 
 - **In a cue list**: dragged in from the Library as any reusable cue
   (`insertReusableCue()`), numbered by the list's scheme; the preshow list
@@ -270,9 +273,11 @@ lights out.
   pad and the Run tab fire them as any hit. If a Hits list does not take a
   reusable use today, phase 2 makes it (a hit is a cue of its production's
   Hits list).
-- **Levels and fades are his to change**; the cues stay the standard ones
-  by name. Fill Roles adds back any he deleted, never overwrites one he
-  edited.
+- **Levels, fades and names are his to change**; each standard cue is
+  found by a stable key (`Standard=` on the reusable cue), never its name.
+  Fill Roles adds back a cue he deleted, with its hit; a hit he deleted
+  from a cue still there stays deleted; one he edited is never
+  overwritten.
 - **The palettes**: Dimmer full / 50% / out and a Colour "Open White"
   (R = G = B = full, white channel full), filed in a **Roles** folder;
   an existing palette with exactly those values is reused (as Capture does,
@@ -354,9 +359,9 @@ from a Show shows the same table as its last step):
 ```
 Role           Lights from PMS Auditeria           Why                       Use
 House Lights   2  Ch 15, Ch 24 (relays: half=on)   "House" in its name       [x]  Flash
-Front Wash     12 Ch 51–62                         FOH, 14' 1" DS of curtain [x]  Flash
-Top Wash       25 Ch 101–113, 201–212              over the stage, aimed down[x]  Flash
-Side Light     none in this room                                                  
+Stage Wash Front 12 Ch 51–62                       FOH, 14' 1" DS of curtain [x]  Flash
+Stage Wash Top 25 Ch 101–113, 201–212              over the stage, aimed down[x]  Flash
+Side           none in this room                                                  
 …
                               [ Fill Roles ]   Edit…   (3 not used: Ch 114, …)
 ```
@@ -388,18 +393,18 @@ moves by it, nothing of DH's moves.
 
 | PMS group | Lights | Role suggested | Rule |
 |---|---|---|---|
-| FOH (DSR, DSC, DSL are parts of it) | Ch 51–62, ColorSource Spot | **Front Wash** | word FOH; 14' 1" DS of the curtain line |
-| 1st Elect, Top Lights | Ch 101–113: Spot jr and PAR, 1' 6" US of the curtain line | **Top Wash** ("Top Lights" by word; the Spot jrs by place, unless their aims tip them) | word / place |
-| 2nd Elect | Ch 201–212: Spot jr and PAR, 10' 3" DS of the drape | **Top Wash** | place |
+| FOH (DSR, DSC, DSL are parts of it) | Ch 51–62, ColorSource Spot | **Stage Wash Front** | word FOH; 14' 1" DS of the curtain line |
+| 1st Elect, Top Lights | Ch 101–113: Spot jr and PAR, 1' 6" US of the curtain line | **Stage Wash Top** ("Top Lights" by word; the Spot jrs by place, unless their aims tip them) | word / place |
+| 2nd Elect | Ch 201–212: Spot jr and PAR, 10' 3" DS of the drape | **Stage Wash Top** | place |
 | 3rd Elect | Ch 301–305, ColorSource CYC, 3' 9" DS of the cyc | **Cyc** | model |
 | (no group) | Ch 114, Focus Spot Three Z | none: moving light | |
 | House | Ch 15 Linear, Ch 24 Down (relays) | **House Lights** | word |
-| House & Work | Ch 15, 24; Ch 17 Stage Work Lights | **House Lights**; Ch 17 **Work Lights** | word, per fixture |
+| House & Work | Ch 15, 24; Ch 17 Stage Work Lights | **House Lights**; Ch 17 **Work** | word, per fixture |
 | Relays, Power relays | Ch 1–14, 16, 18–21, 23 | none: power and spares | word Relay / Spare |
 | Backstage, Hallway, Blue Dome | Ch 22, 25, 26 | none: running lights | word Hall / Blue |
 | Group 100 | 47 of the above | none of its own | (each fixture by its own row) |
 
-Side Light, Back Light and Aisle Lights are empty at PMS: Stage up plays
+Side, Back and Aisle are empty at PMS: Stage up plays
 Front and Top, and its row says **Side, Back: none in PMS Auditeria**.
 PMS's DSR / DSC / DSL stay as room groups for phase 3's area fills (DH has
 area groups of its own: DS1f, DS1t …).
@@ -477,11 +482,11 @@ playing" rule, and are dark when nothing set a colour).
 and it is the only way PMS's ColorSources light at all.
 
 **Q-2. The set: eight roles and six cues?** Cyc added, Aisle kept apart
-from House, House up and Work lights off added.
+from House, House full and Stage out added (Q288).
 **Recommendation: yes**, as section 3.2 and 3.3.
 
 **Q-3. Do DH's own lights belong in roles?** Stage up in a room with no
-front light does nothing unless DH's front light is in Front Wash.
+front light does nothing unless DH's front light is in Stage Wash Front.
 (a) Roles start with house lights only; he adds tour lights by hand.
 (b) Fill Roles suggests tour lights too, by the same rules.
 **Recommendation: (a)** for December (DH's rig is a dance rig, not a

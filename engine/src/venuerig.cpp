@@ -939,10 +939,31 @@ void VenueRig::forget()
     }
 }
 
+void VenueRig::hold(bool on)
+{
+    if (on)
+    {
+        ++m_hold;
+        return;
+    }
+    if (m_hold == 0 || --m_hold > 0)
+        return;
+    if (m_heldChange)
+    {
+        m_heldChange = false;
+        sync();
+    }
+}
+
 void VenueRig::sync()
 {
     if (!m_applied || m_writing || m_doc == nullptr)
         return;
+    if (m_hold > 0)
+    {
+        m_heldChange = true;
+        return;
+    }
     const QHash<quint32, RigOwner::Owner> owners = RigOwner::effectiveAll(m_doc);
     for (quint32 id : m_ids.values())
         if (m_doc->fixture(id) == nullptr)

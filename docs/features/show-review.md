@@ -338,6 +338,10 @@ both give the same answer.
   file is read, never applied.
 - **VEN-10** A scramble-practice venue still applied (a warning: the lights
   are off on purpose), or practice venues and no real one (a note).
+- **VEN-11** A standard house cue (House to half, Stage up...) whose every
+  role has no light in the venue applied, so it does nothing in this room
+  (a note). A single empty role is not reported: its layer just sends
+  nothing ([Roles](venues.md#roles-house-lights-and-stage-light-in-any-room)).
 - **BLK-01** A [blocking](stage-targets.md#blocking) puts a target where a
   light aimed at it reaches in Default but can't reach there.
 

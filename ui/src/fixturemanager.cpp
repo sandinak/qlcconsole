@@ -1430,19 +1430,23 @@ void FixtureManager::slotFixturesSearchChanged(const QString &text)
 
 void FixtureManager::selectGroup(quint32 id)
 {
+    // Groups may sit in folders: look through the whole tree.
+    QList<QTreeWidgetItem *> todo;
     for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
+        todo << m_fixtures_tree->topLevelItem(i);
+    while (!todo.isEmpty())
     {
-        QTreeWidgetItem* item = m_fixtures_tree->topLevelItem(i);
+        QTreeWidgetItem *item = todo.takeFirst();
         QVariant var = item->data(KColumnName, PROP_GROUP);
-        if (var.isValid() == false)
-            continue;
-
-        if (var.toUInt() == id)
+        if (var.isValid() && var.toUInt() == id)
         {
             m_fixtures_tree->setCurrentItem(item);
+            m_fixtures_tree->scrollToItem(item);
             slotSelectionChanged();
-            break;
+            return;
         }
+        for (int c = 0; c < item->childCount(); c++)
+            todo << item->child(c);
     }
 }
 

@@ -544,6 +544,11 @@ namespace ShowTree
         uint fadeIn = 0;
         uint fadeOut = 0;
         uint hold = 0xFFFFFFFE;
+        /** A standard house cue (docs/design/VENUE_ROLES_DATUM.md section
+         *  3.3): its stable key ("house-half"), found by it whatever it is
+         *  called or translated. Empty: his own. Saved as Standard=, which
+         *  an older build ignores; a duplicate has none. */
+        QString standard;
     };
 
     /** What makes two uses of a reusable the same (P4): a layer's name,

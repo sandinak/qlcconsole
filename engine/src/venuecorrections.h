@@ -474,6 +474,9 @@ private:
     class QTimer *m_rigTimer = nullptr;
     QList<TurnChange> m_turnChanges;
     QHash<quint32, int> m_deferredTurns;
+    /** A venue switched in Operate: the standard cues' plan waits for
+       Design (a role empty when they were planned plays nothing till then). */
+    bool m_roleBakeWaits = false;
     /** The live turn each waiting head had when its turn was put off: a
      *  head found on another is one turned by hand since (M-B). */
     QHash<quint32, int> m_deferredLive;
