@@ -300,6 +300,8 @@ NetworkRoute::RouteCheck NetworkRoute::checkRoute(const QString &destination)
     if (src.isNull())
         return out;
     const LocalAddress *la = findLocal(locals, src);
+    if (la != NULL && la->tunnel)
+        return out;     // out a VPN: not the room's network, so NoRoute
     out.via = la != NULL ? describe(*la) : src.toString();
     out.kind = (sourceFor(kDefaultRouteProbe) == src) ? DefaultRoute : Reached;
     return out;
