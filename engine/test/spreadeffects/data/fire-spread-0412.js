@@ -117,11 +117,11 @@
             var seeds = new Float64Array(n), kind = new Int8Array(n);
             for (var s = 0; s < n; s++) {
                 var fs = fixtures[s];
-                seeds[s] = s * 1.618 + fseed;
+                seeds[s] = fseed + 997 * SPREAD.hash(s + 1, fseed + 0.25);   // 0.5.3: each head its own flame
                 kind[s] = fs.switches ? RELAY
                         : (fs.heads > 1 && fs.headRGB !== false && !fs.hasDimmer) ? PIXEL : OTHER;
             }
-            bank = { n: n, fseed: fseed, places: A, ph: FIRE.phases(seeds), kind: kind };
+            bank = { n: n, fseed: fseed, places: A, seeds: seeds, ph: FIRE.phases(seeds), kind: kind };
             if (state)
                 state._flames = bank;
         }
@@ -150,7 +150,7 @@
                     continue;
                 }
                 var kk = 1 + age / kindle;                      // 0..1 up to the catch
-                var glow = 0.3 * kk * FIRE.flame(t * 3, i * 1.618 + fseed + 5, speed);
+                var glow = 0.3 * kk * FIRE.flame(t * 3, bank.seeds[i] + 5, speed);
                 out[i] = burn(fixtures[i], ember, glow * inten, false);
                 continue;
             }

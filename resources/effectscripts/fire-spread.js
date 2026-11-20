@@ -123,6 +123,15 @@
     // OTHER in Fire; only Front and Behind tells them apart.
     var OTHER = 0, PIXEL = 1, RELAY = 2, LEVEL = 3, WHEEL = 4;
 
+    /* Head @p i's own flame seed: a seeded hash of the head, so each head
+       (each pixel of a bar) flickers on its own. A seed that steps evenly
+       with the head (i * 1.618, as it was) put every head a fixed phase on
+       from the one before: waves running along the heads' order, read on
+       the rig as bands and diagonal stripes across the bars, not fire. */
+    function flameSeed(i, fseed) {
+        return fseed + 997 * SPREAD.hash(i + 1, fseed + 0.25);
+    }
+
     function colourAt(L, i) {
         var c = L[i];
         return (c && c.r !== undefined) ? c : null;
@@ -226,7 +235,7 @@
                     continue;
                 }
                 var kk = 1 + age / o.kindle;
-                var glow = 0.3 * kk * FIRE.flame(t * 3, i * 1.618 + o.fseed + 5, o.speed);
+                var glow = 0.3 * kk * FIRE.flame(t * 3, bank.seeds[i] + 5, o.speed);
                 out[i] = kd === LEVEL ? burn(f, FIRE.colour(0.1, o.cool, inten), glow * inten, false)
                                       : SPREAD.light(f, c1, glow * inten, false, c1);
                 continue;
@@ -309,13 +318,13 @@
             var seeds = new Float64Array(n), kind = new Int8Array(n);
             for (var s = 0; s < n; s++) {
                 var fs = fixtures[s];
-                seeds[s] = s * 1.618 + fseed;
+                seeds[s] = flameSeed(s, fseed);
                 kind[s] = fs.switches ? RELAY
                         : fs.heads > 1 ? (fs.headRGB === false ? LEVEL : (!fs.hasDimmer ? PIXEL : OTHER))
                         : (fs.hasColorWheel && !fs.hasRGB) ? WHEEL
                         : !fs.hasRGB ? LEVEL : OTHER;
             }
-            bank = { n: n, fseed: fseed, places: A, ph: FIRE.phases(seeds), kind: kind };
+            bank = { n: n, fseed: fseed, places: A, seeds: seeds, ph: FIRE.phases(seeds), kind: kind };
             if (state)
                 state._flames = bank;
         }
@@ -364,7 +373,7 @@
                     continue;
                 }
                 var kk = 1 + age / kindle;                      // 0..1 up to the catch
-                var glow = 0.3 * kk * FIRE.flame(t * 3, i * 1.618 + fseed + 5, speed);
+                var glow = 0.3 * kk * FIRE.flame(t * 3, bank.seeds[i] + 5, speed);
                 out[i] = burn(fixtures[i], ember, glow * inten, false);
                 continue;
             }

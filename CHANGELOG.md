@@ -61,6 +61,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   it, the look's own, or its own. In the Show Tree's effect page the same
   swatches set the layer's two own colours. The settings' headings take the
   theme's text colour (they were near-black on a dark theme).
+### Fixed
+
+- **Fire Spread, Firelight and Candle Flicker look like flames.** Every head and every pixel of a bar now flickers on its own; before, each head's flicker was the last one's a step on, and the rig showed bands and diagonal stripes running across the bars instead of fire.
 
 ## [0.5.1] - 2026-11-20
 

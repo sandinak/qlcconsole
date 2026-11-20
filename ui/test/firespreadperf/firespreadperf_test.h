@@ -46,6 +46,16 @@ private slots:
     /** A head the front has not reached costs next to nothing to read */
     void anUnreachedHeadCostsNothingToRead();
 
+    /** Burning, every head and every pixel flickers on its own: no bands
+     *  or diagonal stripes across a bar or the rig (the Rig Overview and a
+     *  dump of each head's values to QLC_SHOT_DIR) */
+    void theBurningRigFlickersHeadByHead();
+
+    /** Firelight and Candle Flicker over the same rig: each head its own
+     *  flame, no waves or stripes along the heads' order */
+    void flameEffectsFlickerHeadByHead_data();
+    void flameEffectsFlickerHeadByHead();
+
 private:
     /** Runs the effect at @a ms and puts what it writes on the fixtures;
      *  returns the fixtures whose values changed */
