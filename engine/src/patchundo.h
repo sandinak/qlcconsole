@@ -19,6 +19,7 @@
 #define PATCHUNDO_H
 
 #include <QObject>
+#include "universe.h"
 #include "qlcengine_export.h"
 #include <QString>
 #include <QVariant>
@@ -111,6 +112,10 @@ public:
         Patch input;
         QList<Patch> outputs;
         Patch feedback;
+        /** Output patches kept offline (a room output whose network is not
+            here yet, Universe::offlinePatches()): they are in no live or
+            pending leg, so they are held whole and put back exactly. */
+        QList<Universe::OfflinePatch> offlineOutputs;
     };
 
     /**

@@ -49,6 +49,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A room output kept offline comes back on Undo, and a VPN no longer
+  stands in for the room's network.** Undoing a patch change now restores an
+  Art-Net node kept offline while its network was missing (it was not in the
+  step). And a node on 10.x is no longer counted as reached because a VPN
+  carries 10.x: only a real local interface counts (not a utun, ppp, ipsec,
+  tun or tap tunnel), and until one does the output waits, offline.
+
 - **Undoing a patch change keeps a leg whose interface is away, and two legs
   of one universe on two interfaces each keep their node.** Undo used to
   delete a waiting (pending) output leg and shift its neighbour's target onto

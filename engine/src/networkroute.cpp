@@ -69,6 +69,18 @@ namespace
     }
 }
 
+bool NetworkRoute::isTunnelInterface(const QString &name, bool pointToPoint, bool ppp)
+{
+    if (pointToPoint || ppp)
+        return true;
+    static const char *prefixes[] = { "utun", "ppp", "ipsec", "tun", "tap" };
+    const QString lower = name.toLower();
+    for (const char *prefix : prefixes)
+        if (lower.startsWith(QLatin1String(prefix)))
+            return true;
+    return false;
+}
+
 QList<NetworkRoute::LocalAddress> NetworkRoute::localAddresses()
 {
     if (s_addressesOverride)
@@ -89,6 +101,9 @@ QList<NetworkRoute::LocalAddress> NetworkRoute::localAddresses()
     {
         if ((iface.flags() & QNetworkInterface::IsUp) == 0)
             continue;
+        const bool tunnel = isTunnelInterface(iface.name(),
+                                              iface.flags().testFlag(QNetworkInterface::IsPointToPoint),
+                                              iface.type() == QNetworkInterface::Ppp);
         foreach (const QNetworkAddressEntry &entry, iface.addressEntries())
         {
             if (entry.ip().protocol() != QAbstractSocket::IPv4Protocol)
@@ -97,6 +112,7 @@ QList<NetworkRoute::LocalAddress> NetworkRoute::localAddresses()
             la.iface = iface.humanReadableName();
             la.ip = entry.ip();
             la.prefix = entry.prefixLength();
+            la.tunnel = tunnel;
             list << la;
         }
     }
@@ -204,7 +220,7 @@ NetworkRoute::Resolution NetworkRoute::resolve(const QStringList &lines, const Q
         for (int c = 0; src.isNull() == false && c < candidates.count(); c++)
         {
             const LocalAddress &la = candidates.at(c).second;
-            if (la.ip != src)
+            if (la.ip != src || la.tunnel)
                 continue;
             const bool attached = targetIp.isInSubnet(la.ip, effectivePrefix(la));
             const bool justDefault = (sourceFor(kDefaultRouteProbe) == src);
@@ -224,21 +240,24 @@ NetworkRoute::Resolution NetworkRoute::resolve(const QStringList &lines, const Q
     if (net.first.isNull() == false && net.first.protocol() == QAbstractSocket::IPv4Protocol)
     {
         for (int c = 0; c < candidates.count(); c++)
-            if (candidates.at(c).second.ip.isInSubnet(net))
+            if (candidates.at(c).second.tunnel == false
+                && candidates.at(c).second.ip.isInSubnet(net))
                 return pick(c, "network");
     }
     else if (saved.isNull() == false)
     {
         for (int c = 0; c < candidates.count(); c++)
-            if (saved.isInSubnet(candidates.at(c).second.ip,
-                                 effectivePrefix(candidates.at(c).second)))
+            if (candidates.at(c).second.tunnel == false
+                && saved.isInSubnet(candidates.at(c).second.ip,
+                                    effectivePrefix(candidates.at(c).second)))
                 return pick(c, "network");
     }
 
     /* 4. A broadcast (or unrouted unicast) target on a local subnet. */
     for (int c = 0; targetIp.isNull() == false && c < candidates.count(); c++)
-        if (targetIp.isInSubnet(candidates.at(c).second.ip,
-                                effectivePrefix(candidates.at(c).second)))
+        if (candidates.at(c).second.tunnel == false
+            && targetIp.isInSubnet(candidates.at(c).second.ip,
+                                   effectivePrefix(candidates.at(c).second)))
             return pick(c, "target");
 
     return res;
@@ -257,7 +276,7 @@ NetworkRoute::RouteCheck NetworkRoute::checkRoute(const QString &destination)
         // ask about its first host.
         const QList<LocalAddress> locals = localAddresses();
         for (const LocalAddress &la : locals)
-            if (la.ip.isInSubnet(net))
+            if (la.tunnel == false && la.ip.isInSubnet(net))
             {
                 out.kind = Reached;
                 out.via = describe(la);
@@ -271,7 +290,7 @@ NetworkRoute::RouteCheck NetworkRoute::checkRoute(const QString &destination)
         return out;
     const QList<LocalAddress> locals = localAddresses();
     for (const LocalAddress &la : locals)
-        if (target.isInSubnet(la.ip, effectivePrefix(la)))
+        if (la.tunnel == false && target.isInSubnet(la.ip, effectivePrefix(la)))
         {
             out.kind = Reached;
             out.via = describe(la);
@@ -281,6 +300,8 @@ NetworkRoute::RouteCheck NetworkRoute::checkRoute(const QString &destination)
     if (src.isNull())
         return out;
     const LocalAddress *la = findLocal(locals, src);
+    if (la != NULL && la->tunnel)
+        return out;     // out a VPN: not the room's network, so NoRoute
     out.via = la != NULL ? describe(*la) : src.toString();
     out.kind = (sourceFor(kDefaultRouteProbe) == src) ? DefaultRoute : Reached;
     return out;

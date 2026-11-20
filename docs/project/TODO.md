@@ -10,35 +10,12 @@ under `~/.claude/.../memory/`.
 
 ---
 
-## New Venue from a Show: two known lows (review of feat/052-venue-from-show)
+## Perf re-check (from the 0.5.0 release)
 
-Found by the review of the PMS venue import (docs/design/VENUE_FROM_SHOW.md),
-left for after the train:
-- **PatchUndo doesn't capture a kept-offline output.** A room output kept
-  offline while its network is missing (an Art-Net node with no route yet)
-  is not in what the patch undo snapshot holds, so undoing a patch change
-  around it does not bring it back.
-- **A 10.x node resolves over a VPN that routes 10.x.** An Art-Net room
-  output on 10.0.0.0/8 counts as reached when a VPN carries 10.x, so it
-  goes out the tunnel instead of waiting for the room's network.
-
-## Windows: a 95-universe show never finishes opening (0.5.1, found 2026-11-18)
-
-Fixed on `fix/051-win-bigshow-load`: three lists rebuilt themselves once
-per fixture (or group) a load adds -- Build's Groups & fixtures
-(`FixtureGroupSource::reload()`), the plot's Inventory
-(`MonitorInventoryPanel::reload()`) and the Fixture Manager's tree (a full
-re-sort per fixture row in `FixtureTreeWidget::updateTree()`). Headless
-(`-platform offscreen`) on the Windows box, `DH06-STRESS-soak-studio`:
-0.5.0 276.8 s, the fix 18.5 / 17.9 s; ender (M4 Max) 0.5.0 ~90 s.
-Left: open it once in a desktop session on the Windows box (the 10-min
-reports were GUI runs; a headless run can't show what painting adds).
-
-Also from the 0.5.0 release: the perf guard's `scene_frame_170_ns` read
-+19% on a loaded ender (+6% alone); re-check on a quiet machine. (The
-notarization resubmit and the Homebrew-Qt bundler's QtSvg copy are done on
-`fix/051-release-tooling`; the bundler is unverified on a real Homebrew
-Qt 6.12 build.)
+The perf guard's `scene_frame_170_ns` read +19% on a loaded ender (+6%
+alone); re-check on a quiet machine. (The notarization resubmit and the
+Homebrew-Qt bundler's QtSvg copy are done on `fix/051-release-tooling`; the
+bundler is unverified on a real Homebrew Qt 6.12 build.)
 
 ## Decided 2026-11-18 (board Q263–Q273, all the recommended answers)
 

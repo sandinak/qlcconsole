@@ -394,6 +394,34 @@ void PatchUndo_Test::undoRestoresTheFeedbackPatch()
     QVERIFY(iom.feedbackPatch(2) == NULL || iom.feedbackPatch(2)->plugin() == NULL);
 }
 
+void PatchUndo_Test::undoRestoresAKeptOfflineOutput()
+{
+    InputOutputMap iom(m_doc, 2);
+    Universe *uni = iom.universe(0);
+
+    Universe::OfflinePatch room;
+    room.plugin = "ArtNet";
+    room.line = 0;
+    room.params.insert("outputIP", "10.0.0.20");
+    room.params.insert("outputUni", 3);
+    uni->addOfflinePatch(room);
+
+    iom.patchUndo()->capture(QList<quint32>() << 0, "re-patch");
+
+    // The change drops it (a re-patch of the universe) and adds another.
+    uni->clearOfflinePatches(Universe::OutputPatchTag);
+    Universe::OfflinePatch other = room;
+    other.params.insert("outputIP", "10.0.0.99");
+    uni->addOfflinePatch(other);
+
+    QVERIFY(iom.patchUndo()->undo());
+    const QList<Universe::OfflinePatch> back = uni->offlinePatches();
+    QCOMPARE(back.count(), 1);
+    QCOMPARE(back.first().plugin, QString("ArtNet"));
+    QCOMPARE(back.first().params.value("outputIP").toString(), QString("10.0.0.20"));
+    QCOMPARE(back.first().params.value("outputUni").toInt(), 3);
+}
+
 void PatchUndo_Test::clearForgetsTheHeldStep()
 {
     InputOutputMap iom(m_doc, 4);

@@ -51,6 +51,8 @@ private slots:
     /** The feedback patch goes back with its line and parameters, and one
      *  that did not exist is cleared (coverage campaign) */
     void undoRestoresTheFeedbackPatch();
+    /** A room output kept offline (no route yet) is in the snapshot */
+    void undoRestoresAKeptOfflineOutput();
     void clearForgetsTheHeldStep();
     void changedSignalTracksAvailability();
 
