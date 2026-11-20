@@ -40,6 +40,8 @@ private slots:
     /** A show's and a song section's plain-text note is its first Notes
      *  entry, edited both ways, saved and loaded. */
     void showAndSectionNotesAreTheFirstEntry();
+    /** Renaming a section or renumbering its song keeps its note; saved after. */
+    void aSectionNoteSurvivesRenameAndRenumber();
     void anOlderShowsCueNotesMigrate();
     void deletedItemsNotesKeptForUndoNotSaved();
     void picturesStayOutOfUndoSteps();

@@ -366,6 +366,43 @@ void ShowTreeNotes_Test::showAndSectionNotesAreTheFirstEntry()
     delete older;
 }
 
+void ShowTreeNotes_Test::aSectionNoteSurvivesRenameAndRenumber()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setNumbering(m_prod, Numbering::ShowPartIteration));
+    const quint32 song = st->addSection(m_list, "Entrance");
+    QVERIFY(song != invalidId());
+    st->addCue(m_list, st->cueList(m_list)->indexOf(song), "Verse");
+    Section sec;
+    QVERIFY(st->sectionOfCue(song, &sec));
+    QVERIFY(st->setSectionNote(m_list, sec, "Slow build"));
+    const quint32 target = sectionNoteTarget(m_list, sectionId(sec));
+    auto haveNote = [&](ShowTreeController *s) {
+        const QList<Note> n = s->notes(NoteKind::Section, target);
+        return n.count() == 1 && n.first().text == "Slow build" && s->noteTargetExists(n.first());
+    };
+    QVERIFY(haveNote(st));
+
+    // Rename: the head's name changes, its note stays.
+    QVERIFY(st->sectionOfCue(song, &sec));
+    QVERIFY(st->setSectionName(m_list, sec, "Grand Entrance"));
+    QVERIFY(haveNote(st));
+    // Renumber the song (its cues, not its place in the show): same section.
+    QVERIFY(st->sectionOfCue(song, &sec));
+    QString why;
+    QVERIFY2(st->renumberSong(m_list, sec, 1, 2, true, &why), qPrintable(why));
+    QVERIFY(st->sectionOfCue(song, &sec));
+    QCOMPARE(sectionNoteTarget(m_list, sectionId(sec)), target);
+    QVERIFY(haveNote(st));
+    // Saved and loaded after the renumber.
+    Doc *other = loadShow(this, showXml(m_doc));
+    QVERIFY(other != nullptr);
+    QVERIFY(haveNote(other->showTree()));
+    QCOMPARE(other->showTree()->noteTargetLabel(other->showTree()->notes(NoteKind::Section, target).first())
+                 .contains("Grand Entrance"), true);
+    delete other;
+}
+
 void ShowTreeNotes_Test::anOlderShowsCueNotesMigrate()
 {
     ShowTreeController *st = m_doc->showTree();
