@@ -38,6 +38,8 @@
 #include <QShortcut>
 #include <QLabel>
 #include <QCheckBox>
+#include <QToolTip>
+#include <QHelpEvent>
 #include <QToolButton>
 #include <QToolBar>
 #include <QSplitter>
