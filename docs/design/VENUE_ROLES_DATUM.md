@@ -212,10 +212,11 @@ groups with a role tag**. Nothing new plays them:
 - **Any group can take a role.** When the show already has a group by that
   name ("Cyc"), Fill Roles asks once: **Use your group "Cyc"** or **Make
   "Cyc (role)"**. His own groups are never renamed or changed otherwise.
-- **Owner stays Not set.** A role group can hold tour heads too (DH's own
-  front light in Stage Wash Front, if he wants Stage up to use it); setting the
-  group's owner to House would move those into the venue (VENUES.md §2),
-  so a role group refuses an owner.
+- **House lights only (Q289).** A role group holds the venue's House
+  lights only: a tour or rental fixture is refused, and a group of his
+  holding tour lights is never adopted (the role is made beside it). The
+  role tag never changes a group's owner, so adopting his House group
+  keeps its lights in the venue.
 - **Renaming** keeps the role. **Deleting** says which standard cues use it;
   the next Fill Roles makes it again.
 - `PROGRAMMING_ROLE_DESIGN.md` is about the Build tab's job, not lighting
@@ -272,9 +273,11 @@ out.
   pad and the Run tab fire them as any hit. If a Hits list does not take a
   reusable use today, phase 2 makes it (a hit is a cue of its production's
   Hits list).
-- **Levels and fades are his to change**; the cues stay the standard ones
-  by name. Fill Roles adds back any he deleted, never overwrites one he
-  edited.
+- **Levels, fades and names are his to change**; each standard cue is
+  found by a stable key (`Standard=` on the reusable cue), never its name.
+  Fill Roles adds back a cue he deleted, with its hit; a hit he deleted
+  from a cue still there stays deleted; one he edited is never
+  overwritten.
 - **The palettes**: Dimmer full / 50% / out and a Colour "Open White"
   (R = G = B = full, white channel full), filed in a **Roles** folder;
   an existing palette with exactly those values is reused (as Capture does,

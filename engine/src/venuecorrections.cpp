@@ -152,10 +152,19 @@ VenueCorrections::VenueCorrections(Doc *doc, QObject *parent)
     {
         connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
             if (mode == Doc::Design)
+            {
                 applyDeferredTurns();
+                if (m_roleBakeWaits)
+                {
+                    m_roleBakeWaits = false;
+                    if (m_doc->showTree() != nullptr)
+                        m_doc->showTree()->bake();
+                }
+            }
         });
         // Another show: nothing of this one's waits.
         connect(m_doc, &Doc::clearing, this, [this]() {
+            m_roleBakeWaits = false;
             m_deferredTurns.clear();
             m_deferredLive.clear();
         });
@@ -985,8 +994,18 @@ bool VenueCorrections::setActiveVenue(const QString &name)
     /* The house roles (docs/design/VENUE_ROLES_DATUM.md section 3) are
        filled by another room now: a standard cue baked while one was
        empty here plans its layer on this room's lights. */
+    /* Never re-planned under a running show: in Operate it waits for
+       Design, as a venue's turns do (the layers already on the rig play on
+       whoever fills their role now; only a role that was empty when the
+       cue was planned waits). */
     if (HouseRole::hasRoles(m_doc) && m_doc->showTree() != nullptr)
-        m_doc->showTree()->bake();
+    {
+        HouseRole::keepHouseOnly(m_doc);
+        if (m_doc->mode() == Doc::Operate)
+            m_roleBakeWaits = true;
+        else
+            m_doc->showTree()->bake();
+    }
     emit activeVenueChanged(m_active);
     emit correctionsChanged();
     return true;

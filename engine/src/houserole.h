@@ -114,6 +114,7 @@ namespace HouseRole
     };
     struct StandardCue
     {
+        QString key;            //!< stable, never translated: ReusableCue::standard
         QString name;
         QList<Layer> layers;
         uint fade = 0;          //!< ms, in and out
@@ -121,6 +122,9 @@ namespace HouseRole
     /** House to half, House out, House full, Stage up, Stage out, Work
      *  lights (board Q288). */
     QLC_ENGINE_EXPORT QList<StandardCue> standardCues();
+    /** The reusable cue of standard cue @p key ("house-half"), whatever
+     *  it is called now; invalid when there is none. */
+    QLC_ENGINE_EXPORT quint32 standardCue(const Doc *doc, const QString &key);
 
     /** What the first Fill Roles made (and every later one added back). */
     struct Made
@@ -129,6 +133,11 @@ namespace HouseRole
         int palettes = 0;
         int cues = 0;
         int hits = 0;
+        /** His groups of a role's name not used for it because they hold
+         *  tour lights: the role was made beside each. */
+        QStringList besides;
+        /** No production yet: the standard cues and hits wait for one. */
+        bool waiting = false;
     };
 
     /** Make what is missing, never changing what is there: the role groups
@@ -141,6 +150,12 @@ namespace HouseRole
      *  top of the tree: a Global hit keeps no folder). A cue or hit he edited is left as it is; one he
      *  deleted is made again. */
     QLC_ENGINE_EXPORT Made ensure(Doc *doc, const QSet<Role> &useExisting = QSet<Role>());
+
+    /** Every role group's lights that are not House (a group from an old
+     *  file, an owner changed since) taken out: a standard cue never drives
+     *  a tour light (board Q289). The groups changed; with @p tell each
+     *  says so (else the caller does). */
+    QLC_ENGINE_EXPORT QSet<FixtureGroup *> keepHouseOnly(Doc *doc, bool tell = true);
 
     /** Fill Roles (section 3.5): with venue @p venue applied, each role in
      *  @p rows becomes filled by exactly those of its house fixtures (the

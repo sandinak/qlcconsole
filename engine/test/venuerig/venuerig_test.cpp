@@ -3208,14 +3208,25 @@ void VenueRig_Test::roleTagRoundTrip()
     back->setName(QStringLiteral("Front of House"));
     QCOMPARE(HouseRole::group(&reopened, HouseRole::Front), back);
 
-    // A role group refuses an owner (House would move its tour heads into
-    // the venue); taking a role clears one it had.
-    front->setOwner(RigOwner::House);
-    QCOMPARE(front->owner(), RigOwner::Unset);
+    // Taking a role never changes who owns the group's lights.
     plain->setOwner(RigOwner::House);
-    QCOMPARE(plain->owner(), RigOwner::House);
     plain->setRole(HouseRole::Cyc);
-    QCOMPARE(plain->owner(), RigOwner::Unset);
+    QCOMPARE(plain->owner(), RigOwner::House);
+    // A role a newer build knows and this one doesn't: kept, written back.
+    {
+        const QByteArray in = "<FixtureGroup ID=\"7\"><Name>Balcony</Name><Role>Balcony Rail</Role>"
+                              "<Size X=\"1\" Y=\"1\"/></FixtureGroup>";
+        QXmlStreamReader r(in);
+        r.readNextStartElement();
+        QVERIFY(FixtureGroup::loader(r, m_doc));
+        FixtureGroup *newer = m_doc->fixtureGroup(7);
+        QVERIFY(newer != nullptr);
+        QCOMPARE(newer->role(), HouseRole::None);
+        QByteArray out;
+        QXmlStreamWriter w(&out);
+        QVERIFY(newer->saveXML(&w));
+        QVERIFY2(out.contains("<Role>Balcony Rail</Role>"), out.constData());
+    }
     // A copy is no role: one group per role.
     FixtureGroup copy(m_doc);
     copy.copyFrom(front);
@@ -3322,25 +3333,183 @@ void VenueRig_Test::standardCuesNotOverwritten()
     st->addProduction(QStringLiteral("Tour"));
     HouseRole::ensure(m_doc);
 
-    // He slows House to half and deletes the Work lights hit.
+    // He renames House to half (the cue is found by its key, not its name),
+    // slows it, and deletes the Work lights hit.
+    const quint32 halfCue = HouseRole::standardCue(m_doc, QStringLiteral("house-half"));
+    QVERIFY(halfCue != ShowTree::invalidId());
     const quint32 halfHit = standardHit(m_doc, QStringLiteral("House to half"));
     QVERIFY(halfHit != ShowTree::invalidId());
     ShowTree::Cue c = *st->cue(halfHit);
     c.fadeIn = 12000;
     QVERIFY(st->setCue(c));
+    QVERIFY(st->renameReusable(halfCue, QStringLiteral("Preshow half")));
     const quint32 work = standardHit(m_doc, QStringLiteral("Work lights"));
     QVERIFY(work != ShowTree::invalidId());
     QVERIFY(st->removeCue(work));
     QCOMPARE(standardHit(m_doc, QStringLiteral("Work lights")), ShowTree::invalidId());
 
-    // Fill Roles again: his edit stays, the deleted hit comes back, nothing doubles.
+    // He deletes Stage out, hit and cue.
+    const quint32 stageOut = HouseRole::standardCue(m_doc, QStringLiteral("stage-out"));
+    QVERIFY(st->removeCue(standardHit(m_doc, QStringLiteral("Stage out"))));
+    QVERIFY(st->removeReusable(stageOut));
+
+    // Fill Roles again: his edits stay, the renamed cue is not doubled, the
+    // hit he deleted stays deleted; the cue he deleted comes back, with its hit.
     const HouseRole::Made made = HouseRole::ensure(m_doc);
-    QCOMPARE(made.cues, 0);
+    QCOMPARE(made.cues, 1);
     QCOMPARE(made.hits, 1);
-    QCOMPARE(st->cue(standardHit(m_doc, QStringLiteral("House to half")))->fadeIn, 12000u);
-    QVERIFY(standardHit(m_doc, QStringLiteral("Work lights")) != ShowTree::invalidId());
+    QCOMPARE(st->reusableCue(halfCue)->name, QStringLiteral("Preshow half"));
+    QCOMPARE(st->cue(standardHit(m_doc, QStringLiteral("Preshow half")))->fadeIn, 12000u);
+    QCOMPARE(standardHit(m_doc, QStringLiteral("House to half")), ShowTree::invalidId());
+    QCOMPARE(standardHit(m_doc, QStringLiteral("Work lights")), ShowTree::invalidId());
+    QVERIFY(standardHit(m_doc, QStringLiteral("Stage out")) != ShowTree::invalidId());
     QCOMPARE(st->reusableCues().size(), 6);
-    QCOMPARE(st->hitsAt(ShowTree::HitScope::Global, ShowTree::invalidId()).size(), 6);
+    QCOMPARE(st->hitsAt(ShowTree::HitScope::Global, ShowTree::invalidId()).size(), 5);
+
+    // No production yet: nothing made in the tree, it waits for one.
+    Doc bare(this);
+    const HouseRole::Made waiting = HouseRole::ensure(&bare);
+    QVERIFY(waiting.waiting);
+    QCOMPARE(waiting.cues + waiting.hits, 0);
+    QCOMPARE(waiting.groups, 8);
+}
+
+void VenueRig_Test::adoptedHouseGroupStaysHouse()
+{
+    VenueCorrections *v = venues(m_doc);
+    m_doc->showTree()->addProduction(QStringLiteral("Tour"));
+    // His "House Lights" group is House: a light put in it is the venue's.
+    FixtureGroup *mine = makeGroup(m_doc, QStringLiteral("House Lights"), {}, RigOwner::House);
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 h = dimmers(1, 0, 40, QStringLiteral("Lincoln house"));
+    QVERIFY(mine->assignFixture(h));
+    QVERIFY(v->isVenueFixture(h));
+
+    // Use My Groups: it becomes the role and stays House, its light the venue's.
+    QVERIFY(HouseRole::fillRoles(m_doc, a, row(HouseRole::HouseLights, { h }), { HouseRole::HouseLights }));
+    QCOMPARE(mine->role(), HouseRole::HouseLights);
+    QCOMPARE(mine->owner(), RigOwner::House);
+    QCOMPARE(RigOwner::effective(m_doc, h), RigOwner::House);
+    QVERIFY(v->isVenueFixture(h));
+    QVERIFY(m_doc->fixture(h) != nullptr);
+    QVERIFY(engineXml(m_doc).indexOf("Lincoln house") < 0);       // not in the show file
+    Function *half = hitFunction(m_doc, QStringLiteral("House to half"));
+    QVERIFY(half != nullptr);
+    half->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(300);
+    QCOMPARE(int(dmx(0, 40)), 128);
+    half->stop(FunctionParent::master());
+    tick(4);
+}
+
+void VenueRig_Test::tourLightsNeverInARole()
+{
+    VenueCorrections *v = venues(m_doc);
+    m_doc->showTree()->addProduction(QStringLiteral("Tour"));
+    // His "Work" group holds a tour light.
+    const quint32 tour = dimmers(1, 0, 10, QStringLiteral("Tour work"));
+    FixtureGroup *mine = makeGroup(m_doc, QStringLiteral("Work"), { tour });
+    const QString a = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(a));
+    const quint32 house = dimmers(1, 0, 20, QStringLiteral("Lincoln work"));
+    m_doc->fixture(house)->setOwner(RigOwner::House);
+
+    // Use My Groups: his group holds a tour light, so the role goes beside it.
+    HouseRole::Made made;
+    QVERIFY(HouseRole::fillRoles(m_doc, a, row(HouseRole::Work, { house, tour }), { HouseRole::Work }, &made));
+    QCOMPARE(made.besides, QStringList({ QStringLiteral("Work") }));
+    QCOMPARE(mine->role(), HouseRole::None);
+    QCOMPARE(mine->fixtureList(), QList<quint32>({ tour }));        // his group untouched
+    FixtureGroup *work = HouseRole::group(m_doc, HouseRole::Work);
+    QVERIFY(work != nullptr && work != mine);
+    QCOMPARE(work->fixtureList(), QList<quint32>({ house }));
+    // By hand: a tour light is refused.
+    QVERIFY(!work->assignFixture(tour));
+    QVERIFY(!work->fixtureList().contains(tour));
+    QCOMPARE(RigOwner::effective(m_doc, tour), RigOwner::Tour);
+
+    // The Work lights hit drives the house light only.
+    Function *w = hitFunction(m_doc, QStringLiteral("Work lights"));
+    QVERIFY(w != nullptr);
+    w->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(10);
+    QCOMPARE(int(dmx(0, 20)), 255);
+    QCOMPARE(int(dmx(0, 10)), 0);
+    w->stop(FunctionParent::master());
+    tick(4);
+}
+
+void VenueRig_Test::fillRolesIsOnePass()
+{
+    VenueCorrections *v = venues(m_doc);
+    rgbDef(m_doc);
+    moverDef(m_doc);
+    m_doc->showTree()->addProduction(QStringLiteral("Tour"));
+    const QString file = m_dir->filePath(QStringLiteral("PMS Stage.qlcc"));
+    QVERIFY(writeFile(file, PmsLikeShow::xml(QStringLiteral("172.18.2.10"), false, true)));
+    VenueImport::Source src;
+    QVERIFY(VenueImport::read(file, src));
+    VenueImport::Options opt;
+    opt.universe = 1;
+    const QString pms = v->addVenueFromShow(QStringLiteral("PMS Auditeria"),
+                                            VenueImport::build(src, m_doc, opt, v->reservedIds()).data);
+    QVERIFY(v->setActiveVenue(pms));
+    QMap<HouseRole::Role, QList<quint32>> rows;
+    for (const HouseRole::Suggestion &s : HouseRole::suggest(m_doc))
+        if (s.role != HouseRole::None)
+            rows[s.role] << s.fixture;
+    QCOMPARE(rows.size(), 5);
+
+    // Eight lights into five roles: the rig followed once, its file written once.
+    QSignalSpy followed(v->rig(), &VenueRig::rigChanged);
+    QSignalSpy written(v, &VenueCorrections::houseRigChanged);
+    QVERIFY(HouseRole::fillRoles(m_doc, pms, rows));
+    QCOMPARE(followed.count(), 1);
+    QCOMPARE(written.count(), 1);
+    QCOMPARE(HouseRole::group(m_doc, HouseRole::Front)->fixtureList().size(), 3);
+    // Kept in the venue's file.
+    int filled = 0;
+    for (const VenueRig::Fill &f : v->venue(pms).rig.fills)
+        if (HouseRole::roleOf(m_doc, f.group) != HouseRole::None)
+            ++filled;
+    QCOMPARE(filled, 5);
+}
+
+void VenueRig_Test::roleBakeWaitsForDesign()
+{
+    VenueCorrections *v = venues(m_doc);
+    m_doc->showTree()->addProduction(QStringLiteral("Tour"));
+    const QString hall = v->addVenue(QStringLiteral("Grand Hall"));
+    const QString lincoln = v->addVenue(QStringLiteral("Lincoln HS"));
+    QVERIFY(v->setActiveVenue(hall));
+    const quint32 pb = dimmers(1, 0, 200, QStringLiteral("Hall front"));
+    m_doc->fixture(pb)->setOwner(RigOwner::House);
+    QVERIFY(HouseRole::fillRoles(m_doc, hall, row(HouseRole::Front, { pb })));
+    // Lincoln has no front light: Stage up is planned with none.
+    QVERIFY(v->setActiveVenue(lincoln));
+    const int planned = m_doc->showTree()->lastBakePlanned();
+
+    // Back to the Hall during the show: nothing is planned again under it.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(v->setActiveVenue(hall));
+    QCOMPARE(m_doc->showTree()->lastBakePlanned(), planned);
+    Function *up = hitFunction(m_doc, QStringLiteral("Stage up"));
+    QVERIFY(up != nullptr);
+    up->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(200);
+    QCOMPARE(int(dmx(0, 200)), 0);          // waits for Design
+    up->stop(FunctionParent::master());
+    tick(4);
+
+    // In Design it is planned on the Hall's light.
+    m_doc->setMode(Doc::Design);
+    up = hitFunction(m_doc, QStringLiteral("Stage up"));
+    up->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(200);
+    QCOMPARE(int(dmx(0, 200)), 255);
+    up->stop(FunctionParent::master());
+    tick(4);
 }
 
 void VenueRig_Test::suggestPmsLike()

@@ -156,6 +156,16 @@ private slots:
     /** A standard cue he edited is not overwritten; a hit he deleted is
      *  made again */
     void standardCuesNotOverwritten();
+    /** Use My Groups on a House group: it stays House, its light the
+     *  venue's, and the house cue plays it (review finding 1) */
+    void adoptedHouseGroupStaysHouse();
+    /** A group of a role's name holding a tour light is not used; a tour
+     *  light is refused by a role group; a house hit never drives it */
+    void tourLightsNeverInARole();
+    /** Fill Roles on the PMS-like room: one rig pass, one write (finding 2) */
+    void fillRolesIsOnePass();
+    /** A venue switched in Operate re-plans nothing until Design (finding 3) */
+    void roleBakeWaitsForDesign();
     /** The suggestions for a PMS-like room: words, the mover, the CYC
      *  model, the place over the stage (section 4's table, trimmed) */
     void suggestPmsLike();

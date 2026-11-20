@@ -120,7 +120,7 @@ void FixtureGroup::setPath(const QString& path)
 
 void FixtureGroup::setOwner(RigOwner::Owner owner)
 {
-    if (m_owner == owner || (m_role != HouseRole::None && owner != RigOwner::Unset))
+    if (m_owner == owner)
         return;
     m_owner = owner;
     emit changed(this->id());
@@ -131,8 +131,7 @@ void FixtureGroup::setRole(HouseRole::Role role)
     if (m_role == role)
         return;
     m_role = role;
-    if (role != HouseRole::None)
-        m_owner = RigOwner::Unset;
+    m_unknownRole.clear();
     emit changed(this->id());
 }
 
@@ -179,6 +178,12 @@ bool FixtureGroup::assignFixture(quint32 id, const QLCPoint& pt)
 bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
 {
     if (m_heads.values().contains(head) == true)
+        return false;
+
+    /* A house role holds the venue's lights only (board Q289): a standard
+       cue on it must never drive a tour or rental light. */
+    if (m_role != HouseRole::None && doc() != nullptr
+        && RigOwner::effective(doc(), head.fxi) != RigOwner::House)
         return false;
 
     if (size().isValid() == false)
@@ -476,7 +481,10 @@ bool FixtureGroup::loadXML(QXmlStreamReader &xmlDoc)
         }
         else if (xmlDoc.name() == KXMLQLCFixtureGroupRole)
         {
-            m_role = HouseRole::fromXmlName(xmlDoc.readElementText());
+            const QString text = xmlDoc.readElementText();
+            m_role = HouseRole::fromXmlName(text);
+            // A newer build's role: kept, written back.
+            m_unknownRole = m_role == HouseRole::None ? text.trimmed() : QString();
         }
         else if (xmlDoc.name() == KXMLQLCFixtureGroupMaster)
         {
@@ -515,6 +523,8 @@ bool FixtureGroup::saveXML(QXmlStreamWriter *doc)
         doc->writeTextElement(KXMLQLCFixtureGroupOwner, RigOwner::xmlName(m_owner));
     if (m_role != HouseRole::None)
         doc->writeTextElement(KXMLQLCFixtureGroupRole, HouseRole::xmlName(m_role));
+    else if (!m_unknownRole.isEmpty())
+        doc->writeTextElement(KXMLQLCFixtureGroupRole, m_unknownRole);
 
     /* Group master: only when there is one (QLC+ 4 skips the tag) */
     if (m_master)

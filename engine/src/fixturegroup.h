@@ -105,10 +105,11 @@ public:
     RigOwner::Owner owner() const { return m_owner; }
 
     /** The house role this group is (docs/design/VENUE_ROLES_DATUM.md
-     *  section 3): None for an ordinary group. A role group refuses an
-     *  owner -- it may hold tour heads too, and House would move them into
-     *  the venue -- so setting a role clears it and setOwner() is then
-     *  refused. Saved as <Role> only when set; a duplicate has none. */
+     *  section 3): None for an ordinary group. Never changes the group's
+     *  owner. A role group holds only House lights (board Q289): a tour
+     *  or rental fixture is refused (assignFixture(), assignHead()).
+     *  Saved as <Role> only when set (a word this build doesn't know is
+     *  kept and written back); a duplicate has none. */
     void setRole(HouseRole::Role role);
     HouseRole::Role role() const { return m_role; }
 
@@ -120,6 +121,7 @@ private:
     QString m_path;
     RigOwner::Owner m_owner = RigOwner::Unset;
     HouseRole::Role m_role = HouseRole::None;
+    QString m_unknownRole;
 
     /************************************************************************
      * Fixtures

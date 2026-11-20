@@ -35,6 +35,8 @@
 #include "qlcchannel.h"
 #include "venuerig.h"
 #include "fixture.h"
+#include "rigowner.h"
+#include <QSignalBlocker>
 #include "doc.h"
 
 using namespace HouseRole;
@@ -406,12 +408,14 @@ QList<Role> HouseRole::nameClashes(const Doc *doc)
 QList<StandardCue> HouseRole::standardCues()
 {
     return {
-        { tr("House to half"), { { HouseLights, 128 } }, 5000 },
-        { tr("House out"), { { HouseLights, 0 } }, 5000 },
-        { tr("House full"), { { HouseLights, 255 }, { Aisle, 255 } }, 5000 },
-        { tr("Stage up"), { { Front, 255 }, { Top, 255 }, { Side, 255 }, { Back, 255 } }, 3000 },
-        { tr("Stage out"), { { Front, 0 }, { Top, 0 }, { Side, 0 }, { Back, 0 }, { Cyc, 0 } }, 3000 },
-        { tr("Work lights"), { { Work, 255 } }, 0 },
+        { QStringLiteral("house-half"), tr("House to half"), { { HouseLights, 128 } }, 5000 },
+        { QStringLiteral("house-out"), tr("House out"), { { HouseLights, 0 } }, 5000 },
+        { QStringLiteral("house-full"), tr("House full"), { { HouseLights, 255 }, { Aisle, 255 } }, 5000 },
+        { QStringLiteral("stage-up"), tr("Stage up"),
+          { { Front, 255 }, { Top, 255 }, { Side, 255 }, { Back, 255 } }, 3000 },
+        { QStringLiteral("stage-out"), tr("Stage out"),
+          { { Front, 0 }, { Top, 0 }, { Side, 0 }, { Back, 0 }, { Cyc, 0 } }, 3000 },
+        { QStringLiteral("work"), tr("Work lights"), { { Work, 255 } }, 0 },
     };
 }
 
@@ -453,12 +457,15 @@ quint32 rolePalette(Doc *doc, int level, int *made)
     return p->id();
 }
 
-const ShowTree::ReusableCue *reusableNamed(const ShowTreeController *st, const QString &name)
+/* The fixtures in @p g that are not House (a tour or rental light). */
+QList<quint32> notHouse(const Doc *doc, const FixtureGroup *g)
 {
-    for (const ShowTree::ReusableCue &r : st->reusableCues())
-        if (r.name.compare(name, Qt::CaseInsensitive) == 0)
-            return &r;
-    return nullptr;
+    QList<quint32> out;
+    const QHash<quint32, RigOwner::Owner> owners = RigOwner::effectiveAll(doc);
+    for (quint32 fid : g->fixtureList())
+        if (owners.value(fid, RigOwner::Tour) != RigOwner::House)
+            out << fid;
+    return out;
 }
 } // namespace
 
@@ -477,11 +484,17 @@ Made HouseRole::ensure(Doc *doc, const QSet<Role> &useExisting)
         for (FixtureGroup *g : doc->fixtureGroups())
             if (g->role() == None && g->name().compare(groupName(r), Qt::CaseInsensitive) == 0)
                 existing = g;
+        // His group is used only when it holds the venue's lights alone: a
+        // role never drives a tour light (Q289). Else the role goes beside it.
         if (existing != nullptr && useExisting.contains(r))
         {
-            existing->setRole(r);
-            ++made.groups;
-            continue;
+            if (notHouse(doc, existing).isEmpty())
+            {
+                existing->setRole(r);       // its owner, name and lights as they were
+                ++made.groups;
+                continue;
+            }
+            made.besides << existing->name();
         }
         FixtureGroup *g = new FixtureGroup(doc);
         g->setName(existing != nullptr ? tr("%1 (role)").arg(groupName(r)) : groupName(r));
@@ -503,20 +516,32 @@ Made HouseRole::ensure(Doc *doc, const QSet<Role> &useExisting)
                 dimmers.insert(l.level, rolePalette(doc, l.level, &made.palettes));
     const quint32 white = rolePalette(doc, -1, &made.palettes);
 
-    // The standard cues and their Global hits: one undo step in the tree.
+    /* The standard cues and their Global hits, one undo step in the tree.
+       A cue is found by its key, whatever he calls it; one he deleted is
+       made again with its hit. A hit he deleted from a cue still there
+       stays deleted. They wait for the show's first production (a hit
+       lives in one). */
     ShowTreeController *st = doc->showTree();
     if (st == nullptr)
         return made;
+    quint32 prod = st->currentProduction();
+    if (st->production(prod) == nullptr)
+        prod = st->productions().isEmpty() ? ShowTree::invalidId() : st->productions().first().id;
+    if (prod == ShowTree::invalidId())
+    {
+        made.waiting = true;
+        return made;
+    }
     st->beginBatch(tr("Fill Roles"));
     for (const StandardCue &c : standardCues())
     {
+        if (standardCue(doc, c.key) != ShowTree::invalidId())
+            continue;
         quint32 rid = ShowTree::invalidId();
-        if (const ShowTree::ReusableCue *have = reusableNamed(st, c.name))
-            rid = have->id;
-        else
         {
             ShowTree::ReusableCue def;
             def.name = c.name;
+            def.standard = c.key;
             def.fadeIn = c.fade;
             def.fadeOut = c.fade;
             for (const Layer &l : c.layers)
@@ -536,17 +561,7 @@ Made HouseRole::ensure(Doc *doc, const QSet<Role> &useExisting)
             ++made.cues;
         }
 
-        // Its hit, unless it has one (anywhere) already.
-        bool hasHit = false;
-        for (const ShowTreeController::ReusableUse &u : st->reusableUses(rid))
-            hasHit = hasHit || st->isLooks(u.list);
-        if (hasHit)
-            continue;
-        quint32 prod = st->currentProduction();
-        if (st->production(prod) == nullptr)
-            prod = st->productions().isEmpty() ? ShowTree::invalidId() : st->productions().first().id;
-        if (prod == ShowTree::invalidId())
-            continue;       // no production yet: the next Fill Roles makes them
+        // Its hit, made with it.
         const quint32 section = st->addLooksSection(prod);
         const ShowTree::CueList *hits = st->cueList(section);
         if (hits == nullptr)
@@ -572,9 +587,13 @@ bool HouseRole::fillRoles(Doc *doc, const QString &venue, const QMap<Role, QList
             *why = tr("Apply %1 first: its lights fill the roles while it is applied.").arg(venue);
         return false;
     }
+    /* One pass: the house rig followed once, its file written once, the
+       views told once -- not once per light (review of 0.5.2 phase 2). */
+    vc->rig()->hold(true);
     const Made m = ensure(doc, useExisting);
     if (made != nullptr)
         *made = m;
+    QSet<FixtureGroup *> touched;
 
     const QSet<quint32> house = vc->rig()->venueFixtures();
     QHash<quint32, Role> wanted;
@@ -587,13 +606,17 @@ bool HouseRole::fillRoles(Doc *doc, const QString &venue, const QMap<Role, QList
         FixtureGroup *g = group(doc, it.key());
         if (g == nullptr)
             continue;
-        // This venue's lights in it become exactly the row's; tour heads stay.
-        for (quint32 fid : g->fixtureList())
+        const QSignalBlocker quiet(g);
+        const QList<quint32> before = g->fixtureList();
+        // This venue's lights in it become exactly the row's.
+        for (quint32 fid : before)
             if (house.contains(fid) && wanted.value(fid, None) != it.key())
                 g->resignFixture(fid);
         for (quint32 fid : it.value())
             if (wanted.value(fid, None) == it.key() && !g->fixtureList().contains(fid))
                 g->assignFixture(fid);
+        if (g->fixtureList() != before)
+            touched.insert(g);
     }
     // A light moved to another row leaves the role it was in.
     for (Role r : roles())
@@ -601,15 +624,61 @@ bool HouseRole::fillRoles(Doc *doc, const QString &venue, const QMap<Role, QList
         if (rows.contains(r))
             continue;
         if (FixtureGroup *g = group(doc, r))
+        {
+            const QSignalBlocker quiet(g);
             for (quint32 fid : g->fixtureList())
                 if (wanted.contains(fid))
+                {
                     g->resignFixture(fid);
+                    touched.insert(g);
+                }
+        }
     }
+    touched.unite(keepHouseOnly(doc, false));
+    // Said once per group changed, the rig followed once at the end.
+    for (FixtureGroup *g : touched)
+        emit g->changed(g->id());
+    vc->rig()->hold(false);
     /* A cue baked while a role was empty planned nothing for it: plan
        again on the rig as filled now. */
     if (ShowTreeController *st = doc->showTree())
         st->bake();
     return vc->recordRig(why);
+}
+
+QSet<FixtureGroup *> HouseRole::keepHouseOnly(Doc *doc, bool tell)
+{
+    QSet<FixtureGroup *> out;
+    if (doc == nullptr)
+        return out;
+    for (FixtureGroup *g : doc->fixtureGroups())
+    {
+        if (g->role() == None)
+            continue;
+        const QList<quint32> tour = notHouse(doc, g);
+        if (tour.isEmpty())
+            continue;
+        {
+            const QSignalBlocker quiet(g);
+            for (quint32 fid : tour)
+                g->resignFixture(fid);
+        }
+        out.insert(g);
+        if (tell)
+            emit g->changed(g->id());
+    }
+    return out;
+}
+
+quint32 HouseRole::standardCue(const Doc *doc, const QString &key)
+{
+    const ShowTreeController *st = doc != nullptr ? doc->showTree() : nullptr;
+    if (st == nullptr)
+        return ShowTree::invalidId();
+    for (const ShowTree::ReusableCue &r : st->reusableCues())
+        if (r.standard == key)
+            return r.id;
+    return ShowTree::invalidId();
 }
 
 /****************************************************************************

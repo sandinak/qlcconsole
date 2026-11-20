@@ -235,6 +235,11 @@ public:
     /** The doc was cleared: forget, without touching the rig. */
     void forget();
 
+    /** Hold the house rig's bookkeeping through a batch of changes (Fill
+     *  Roles: many lights into many groups): while held, a change is only
+     *  noted; let go, it is followed once (one rigChanged()). Nests. */
+    void hold(bool on);
+
     /** A venue is applied (its house rig is on, owners are followed). */
     bool isApplied() const { return m_applied; }
 
@@ -347,6 +352,8 @@ private:
     QSet<Universe *> m_watched;
     Datum m_datum;
     QPointF m_offset;
+    int m_hold = 0;
+    bool m_heldChange = false;
 };
 
 /** @} */

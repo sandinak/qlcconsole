@@ -2024,6 +2024,8 @@ void saveXML(QXmlStreamWriter *doc, const ReusableCue &reusable)
     doc->writeAttribute(QStringLiteral("FadeIn"), QString::number(reusable.fadeIn));
     doc->writeAttribute(QStringLiteral("FadeOut"), QString::number(reusable.fadeOut));
     doc->writeAttribute(QStringLiteral("Hold"), QString::number(reusable.hold));
+    if (!reusable.standard.isEmpty())
+        doc->writeAttribute(QStringLiteral("Standard"), reusable.standard);
     saveLooks(doc, reusable.looks);
     for (const Layer &l : reusable.layers)
         saveLayer(doc, l);
@@ -2045,6 +2047,7 @@ bool loadXML(QXmlStreamReader &root, ReusableCue &reusable)
     reusable.fadeOut = a.value(QStringLiteral("FadeOut")).toString().toUInt();
     if (a.hasAttribute(QStringLiteral("Hold")))
         reusable.hold = a.value(QStringLiteral("Hold")).toString().toUInt();
+    reusable.standard = a.value(QStringLiteral("Standard")).toString();
     while (root.readNextStartElement())
     {
         if (root.name() == KXMLShowTreeLook)

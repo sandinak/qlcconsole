@@ -417,12 +417,14 @@ role's group in the Fixture Manager to add or take out lights by hand.
 The first Fill Roles also makes what plays on them:
 
 - the eight role groups (a group of yours already called "Cyc" is used
-  if you say so, else the role is made beside it as "Cyc (role)"; yours
-  is never renamed);
+  if you say so, keeping its owner; else, or when it holds tour lights,
+  the role is made beside it as "Cyc (role)" and the note says why; yours
+  is never renamed or changed);
 - the palettes **Full**, **50%**, **Out** and **Open White** in a
   **Roles** folder (an existing palette with exactly that value is used
   instead);
-- six **standard cues**, reusable cues in the Show Tree's Library:
+- six **standard cues**, reusable cues in the Show Tree's Library (they
+  and their hits wait until the show has a production):
 
   | Cue | What it does | Fade |
   |---|---|---|
@@ -443,8 +445,15 @@ Each layer sets the dimmer **and Open White**, so a light with no
 dimmer channel (a ColorSource patched in 3-channel RGB) comes up white
 at the level; a relay is on at 50% and over, so House to half leaves it
 on. Positions are never set. The cues' levels and fades are yours to
-change; a later Fill Roles only adds back a standard cue or hit you
-deleted, never changes one you edited.
+change, and so are their names: each is found by what it is, not what
+it is called. A later Fill Roles adds back a standard cue you deleted,
+with its hit; a hit you deleted from a cue that is still there stays
+deleted, and a cue you edited is never changed.
+
+Switching venues re-plans the standard cues for the new room's lights.
+During the show (Operate) that waits for Design, as a venue's head turns
+do: the cues go on playing on whoever fills each role, but a role that
+was empty in the last room stays dark until the show is back in Design.
 
 **A role the room lacks** is empty and its layer sends nothing. Its row
 in the Show Tree says **none in PMS Auditeria**; when the venue keeps
@@ -452,9 +461,9 @@ channels for the room's own desk (**Not ours**), the House Lights row
 says **call the house desk**. Show Review (VEN-11) only speaks up about
 a standard cue that lights nothing at all in the room.
 
-Only the room's lights are suggested. Your show's own lights can be put
-in a role by hand (Edit…); the standard cues never touch the looks you
-programmed.
+A role holds the room's lights only: a tour or rental light can't be
+put in one, by Fill Roles or by hand, so House to half or Stage out never
+touch your show's own lights or the looks you programmed.
 
 ## Seeing who owns what
 

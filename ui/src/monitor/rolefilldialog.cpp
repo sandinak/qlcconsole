@@ -291,7 +291,8 @@ bool RoleFillDialog::fillRoles()
         {
             QMessageBox box(QMessageBox::Question, windowTitle(),
                             tr("This show already has groups named %1. Use them as the roles, or make new "
-                               "role groups beside them? Your groups are never renamed.")
+                               "role groups beside them? Your groups are never renamed, and one that holds "
+                               "tour lights is never used: a role holds the room's lights only.")
                                 .arg(names.join(QStringLiteral(", "))),
                             QMessageBox::Cancel, this);
             box.setObjectName(QStringLiteral("rfUseExisting"));
@@ -327,8 +328,12 @@ bool RoleFillDialog::fillRoles()
     QString text = tr("Filled %n role(s) in %1.", "", int(rows.size())).arg(m_venue);
     if (!madeText.isEmpty())
         text += QLatin1Char(' ') + tr("Made %1.").arg(madeText.join(QStringLiteral(", ")));
-    if (m_doc->showTree() != nullptr && m_doc->showTree()->productions().isEmpty())
-        text += QLatin1Char(' ') + tr("The Global hits are made the next time, once the show has a production.");
+    for (const QString &g : made.besides)
+        text += QLatin1Char(' ') + tr("Your group \"%1\" holds tour lights, so its role was made beside it: "
+                                      "a house cue never drives a tour light.").arg(g);
+    if (made.waiting)
+        text += QLatin1Char(' ') + tr("The standard cues and their hits are made the first time you fill the "
+                                      "roles after the show has a production.");
     m_status->setText(text);
     m_status->show();
     refresh();
