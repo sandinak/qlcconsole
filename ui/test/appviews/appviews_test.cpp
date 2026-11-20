@@ -3480,7 +3480,8 @@ void AppViews_Test::eachFeatureSwitchHidesWhatItOwns()
     m_app->showContext(QStringLiteral("Lighting Studio"));
     Monitor *mon = Monitor::instance();
     QVERIFY(mon != nullptr);
-    QTRY_VERIFY(mon->m_overlayCombo != nullptr);
+    QComboBox *overlay = nullptr;
+    QTRY_VERIFY((overlay = mon->findChild<QComboBox *>("studioOverlay")) != nullptr);
     Scene *scene = new Scene(doc);
     scene->setName("Look");
     QVERIFY(doc->addFunction(scene));
@@ -3513,7 +3514,7 @@ void AppViews_Test::eachFeatureSwitchHidesWhatItOwns()
         QCOMPARE(m_app->m_statusSpeedMasters->isHidden(), !on);
         QCOMPARE(m_app->m_statusLoadLabel->isHidden(), !on);
         // Power: the plot's overlay (the footer chip waits for an estimate)
-        QCOMPARE(mon->m_overlayCombo->findText("Power") >= 0, on);
+        QCOMPARE(overlay->findText("Power") >= 0, on);
         // Show Review: its chip after a run
         doc->showReview()->run();
         QCOMPARE(review->isHidden(), !on);

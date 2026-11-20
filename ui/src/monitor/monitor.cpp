@@ -1433,6 +1433,7 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     // ---- Overlay + View, RIGHT-justified ----  the single source of state.
     fl->addWidget(new QLabel(tr("Overlay:")));
     m_overlayCombo = new QComboBox(footer);
+    m_overlayCombo->setObjectName(QStringLiteral("studioOverlay"));
     m_overlayCombo->addItem(tr("Normal"),     ViewNormal);
     m_overlayCombo->addItem(tr("Power"),      ViewPower);
     m_overlayCombo->addItem(tr("DMX"),        ViewDMX);
