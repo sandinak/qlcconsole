@@ -2043,7 +2043,7 @@ void LookEditor_Test::anEffectSaysWhichColoursItPlays()
     // A colour above the effect is the look's own.
     scene->addPalette(base->id());
     scene->reorderPalettes({ base->id(), look->id() });
-    ed.setPalette(look->id());
+    ed.refreshEffectParams();
     QVERIFY2(line->text().contains("the look's own 1 colour"), qPrintable(line->text()));
 
     // A Colour look under the effect wins, and the line follows live.
