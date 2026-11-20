@@ -584,7 +584,6 @@ void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
         v.reload();
         v.show();
         QVERIFY(QTest::qWaitForWindowExposed(&v));
-        v.setLiveValues(false);
         for (StructureStudioView::Plane plane : { StructureStudioView::Angled, StructureStudioView::Top })
         {
             v.setPlane(plane);
@@ -592,9 +591,7 @@ void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
             {
                 tickTo(ms);
                 v.m_liveDirty = true;
-                v.m_valueFrame = true;
-                v.m_lastFrameAt.start();
-                v.repaint();
+                settle(150);                    // the live frame, drawn as it is on screen
                 v.grab().toImage().save(QDir(dir).filePath(
                     QStringLiteral("firespread-%1-%2ms.png")
                         .arg(plane == StructureStudioView::Top ? QStringLiteral("top") : QStringLiteral("45"))
