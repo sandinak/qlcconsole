@@ -296,7 +296,7 @@ private:
     QPointer<QFormLayout> m_paramForm;
     QPointer<QWidget> m_colourField;              ///< the Front / Behind swatches
     QPointer<QPushButton> m_colourSwatch[2];
-    ColourAsker m_colourAsker;
+    std::function<QColor(const QColor &, const QString &)> m_colourAsker;
     void refreshColourSwatches();
     QPointer<QLabel> m_colourSource;              ///< "Colours: ..." which ones play
     void refreshColourSource();
