@@ -2012,6 +2012,283 @@ static QLCPalette *aFireSpread(Doc &doc)
     return doc.addPalette(look) ? look : nullptr;
 }
 
+/* Helpers that find what the user sees by object name and text only, so the
+   same tests run on code that has none of it (and fail there). */
+static QLabel *colourLine(QWidget &ed) { return ed.findChild<QLabel *>("effectColourSource"); }
+static QString colourLineText(QWidget &ed)
+{
+    QLabel *l = colourLine(ed);
+    return l != nullptr && !l->isHidden() ? l->text() : QString();
+}
+/* The Colour looks under @a effect in @a scene, in order. */
+static QList<quint32> colourLooksUnder(Doc &doc, const Scene *scene, quint32 effect)
+{
+    QList<quint32> out;
+    bool under = false;
+    for (quint32 pid : scene->palettes())
+    {
+        const QLCPalette *p = doc.palette(pid);
+        if (p == nullptr)
+            continue;
+        if (p->type() == QLCPalette::Effect)
+            under = (pid == effect);
+        else if (under && p->type() == QLCPalette::Color)
+            out << pid;
+    }
+    return out;
+}
+/* Click a swatch and pick @a c in the colour dialog it opens. */
+static void clickAndPick(QAbstractButton *b, const QColor &c)
+{
+    QTimer::singleShot(0, [c]() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (QColorDialog *d = qobject_cast<QColorDialog *>(w))
+            {
+                d->setCurrentColor(c);
+                d->accept();
+            }
+    });
+    b->click();
+}
+/* A pixel inside the padding of the effect's settings block: its tint. */
+static QColor tintOf(QWidget &ed, QWidget **paneOut = nullptr)
+{
+    QWidget *pane = ed.findChild<QWidget *>("effectSettings");
+    if (paneOut != nullptr)
+        *paneOut = pane;
+    if (pane == nullptr || pane->width() < 20 || pane->height() < 20)
+        return QColor();
+    return QColor(pane->grab().toImage().pixel(5, pane->height() / 2));
+}
+
+/* Every effect that takes colours says which ones it plays now. */
+void LookEditor_Test::anEffectSaysWhichColoursItPlays()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+    // The look's own colour, above the effect.
+    QLCPalette *base = new QLCPalette(QLCPalette::Color, &doc);
+    base->setValues({ QLCPalette::colorToString(QColor("#123456"), QColor(Qt::black)) });
+    base->setName("Base");
+    QVERIFY(doc.addPalette(base));
+    scene->addPalette(look->id());
+    LookEditor ed(&doc);
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    QVERIFY2(colourLine(ed) != nullptr, "no line saying which colours it plays");
+    QComboBox *colours = ed.findChild<QComboBox *>("effectParam_colours");
+    QVERIFY(colours != nullptr);
+
+    // Fire: its own, whatever is set.
+    QVERIFY2(colourLineText(ed).contains("its own (Firelight's fire colours)"), qPrintable(colourLineText(ed)));
+    colours->setCurrentIndex(1);
+    // Front and Behind, nothing under the effect, nothing in the look: Fire.
+    QVERIFY2(colourLineText(ed).contains("none set") && colourLineText(ed).contains("plain Fire"), qPrintable(colourLineText(ed)));
+
+    // A colour above the effect is the look's own.
+    scene->addPalette(base->id());
+    scene->reorderPalettes({ base->id(), look->id() });
+    ed.refreshEffectParams();
+    QVERIFY2(colourLineText(ed).contains("the look's own 1 colour"), qPrintable(colourLineText(ed)));
+
+    // A Colour look under the effect wins, and the line follows live.
+    QVERIFY((clickAndPick(ed.findChild<QPushButton *>("effectColourFront"), QColor("#00ff00")), true));
+    QVERIFY2(colourLineText(ed).contains("the 1 Colour look under this effect"), qPrintable(colourLineText(ed)));
+    QVERIFY((clickAndPick(ed.findChild<QPushButton *>("effectColourBehind"), QColor("#ff0000")), true));
+    QVERIFY2(colourLineText(ed).contains("the 2 Colour looks under this effect"), qPrintable(colourLineText(ed)));
+    QVERIFY(doc.paletteOps()->undo());
+    QVERIFY2(colourLineText(ed).contains("the 1 Colour look under this effect"), qPrintable(colourLineText(ed)));
+
+    // An effect that takes no colours says nothing.
+    QLCPalette *plain = new QLCPalette(QLCPalette::Effect, &doc);
+    plain->setName("Plain");
+    plain->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/ballyhoo.js");
+    if (doc.addPalette(plain) && QFile::exists(plain->scriptPath()))
+    {
+        scene->addPalette(plain->id());
+        ed.setPalette(plain->id());
+        QVERIFY2(colourLineText(ed).isEmpty() == !QLCPalette::effectUsesLookColours(plain),
+                 qPrintable(colourLineText(ed)));
+    }
+}
+
+/* An effect that takes the look's colours but has no Colours setting says
+   "its own" when nothing gives it a colour, and follows a Colour look. */
+void LookEditor_Test::anEffectWithoutAColoursSettingSaysItsOwn()
+{
+    Doc doc(this);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, &doc);
+    look->setName("Alternate");
+    look->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/color-alternate.js");
+    QVERIFY(doc.addPalette(look));
+    QVERIFY(QLCPalette::effectUsesLookColours(look));
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+    scene->addPalette(look->id());
+    LookEditor ed(&doc);
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    QVERIFY2(colourLine(ed) != nullptr, "no line saying which colours it plays");
+    QVERIFY2(colourLineText(ed).contains("its own (no Colour look under this effect or in the look)"),
+             qPrintable(colourLineText(ed)));
+    QVERIFY(ed.findChild<QPushButton *>("effectColourFront") == nullptr);   // no Front and Behind here
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, &doc);
+    red->setName("Red");
+    red->setValues({ QLCPalette::colorToString(QColor("#ff0000"), QColor(Qt::black)) });
+    QVERIFY(doc.addPalette(red));
+    scene->addPalette(red->id());
+    doc.paletteOps()->create(QLCPalette::Dimmer, QString());     // any step: the editor re-reads
+    QVERIFY2(colourLineText(ed).contains("the 1 Colour look under this effect"),
+             qPrintable(colourLineText(ed)));
+}
+
+/* A colour look the swatch edits that other scenes play says so. */
+void LookEditor_Test::aSharedColourLookSaysWhereElseItIsUsed()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    look->setEffectParamValue("colours", 1);
+    QLCPalette *red = new QLCPalette(QLCPalette::Color, &doc);
+    red->setName("Red");
+    red->setValues({ QLCPalette::colorToString(QColor("#ff0000"), QColor(Qt::black)) });
+    QVERIFY(doc.addPalette(red));
+    Scene *mine = new Scene(&doc), *other = new Scene(&doc);
+    QVERIFY(doc.addFunction(mine) && doc.addFunction(other));
+    other->setName("Elsewhere");
+    mine->addPalette(look->id());
+    mine->addPalette(red->id());
+    LookEditor ed(&doc);
+    ed.setContextScene(mine);
+    ed.setPalette(look->id());
+    QPushButton *front = ed.findChild<QPushButton *>("effectColourFront");
+    QVERIFY(front != nullptr);
+    QVERIFY2(!front->toolTip().contains("Also used in"), qPrintable(front->toolTip()));
+    other->addPalette(red->id());
+    ed.setContextScene(mine);
+    QVERIFY2(front->toolTip().contains("Also used in 1 scene"), qPrintable(front->toolTip()));
+}
+
+/* The swatches beside Colours: Front and Behind are the first and second
+   Colour looks under the effect in the look's list. */
+void LookEditor_Test::frontAndBehindSwatchesEditTheColourLooksUnder()
+{
+    Doc doc(this);
+    QLCPalette *look = aFireSpread(doc);
+    QVERIFY(look != nullptr);
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+    scene->addPalette(look->id());
+    LookEditor ed(&doc);
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+
+    QPushButton *front = ed.findChild<QPushButton *>("effectColourFront");
+    QPushButton *behind = ed.findChild<QPushButton *>("effectColourBehind");
+    QVERIFY2(front != nullptr && behind != nullptr, "no Front / Behind swatches");
+    QComboBox *colours = ed.findChild<QComboBox *>("effectParam_colours");
+    QVERIFY(colours != nullptr);
+    QVERIFY2(!front->isVisibleTo(&ed), "swatches shown with Colours: Fire");
+    colours->setCurrentIndex(1);
+    QVERIFY(front->isVisibleTo(&ed) && behind->isVisibleTo(&ed));
+
+    // None yet: both empty, the second waits for the first.
+    QVERIFY(front->text().startsWith("+"));
+    QVERIFY(behind->text().startsWith("+"));
+    QVERIFY(front->property("colour").toString().isEmpty());
+    QVERIFY(!behind->isEnabled());
+    QVERIFY(front->toolTip().contains("Colour look under this effect"));
+
+    // Front: the first Colour look under the effect, and the fire uses it.
+    clickAndPick(front, QColor("#00ff00"));
+    QList<quint32> under = colourLooksUnder(doc, scene, look->id());
+    QCOMPARE(under.size(), 1);
+    QCOMPARE(doc.palette(under.at(0))->colorValue(), QColor("#00ff00"));
+    QCOMPARE(scene->palettes().indexOf(under.at(0)), scene->palettes().indexOf(look->id()) + 1);
+    QList<QColor> use;
+    double dim = 1.0;
+    EffectInstance::sceneLookColours(&doc, scene->id(), look->id(), use, dim);
+    QCOMPARE(use.size(), 1);
+    QCOMPARE(use.at(0), QColor("#00ff00"));
+    QCOMPARE(front->property("colour").toString(), QString("#00ff00"));
+    QVERIFY(!front->text().startsWith("+"));
+    QVERIFY(behind->isEnabled());
+
+    // Behind with only a front: the second.
+    clickAndPick(behind, QColor("#ff0000"));
+    under = colourLooksUnder(doc, scene, look->id());
+    QCOMPARE(under.size(), 2);
+    QCOMPARE(doc.palette(under.at(1))->colorValue(), QColor("#ff0000"));
+    EffectInstance::sceneLookColours(&doc, scene->id(), look->id(), use, dim);
+    QCOMPARE(use.value(1), QColor("#ff0000"));
+    QCOMPARE(behind->property("colour").toString(), QString("#ff0000"));
+
+    // Picking Front again edits that look, not a new one.
+    clickAndPick(front, QColor("#0000ff"));
+    QCOMPARE(colourLooksUnder(doc, scene, look->id()).size(), 2);
+    QCOMPARE(doc.palette(under.at(0))->colorValue(), QColor("#0000ff"));
+
+    // One undo step each: the edit, then Behind, then Front.
+    QVERIFY(doc.paletteOps()->undo());
+    QCOMPARE(doc.palette(under.at(0))->colorValue(), QColor("#00ff00"));
+    QVERIFY(doc.paletteOps()->undo());
+    QCOMPARE(colourLooksUnder(doc, scene, look->id()).size(), 1);
+    QVERIFY(doc.palette(under.at(1)) == nullptr);
+    QVERIFY(behind->text().startsWith("+"));
+    QVERIFY(doc.paletteOps()->undo());
+    QCOMPARE(colourLooksUnder(doc, scene, look->id()).size(), 0);
+    QVERIFY(doc.palette(under.at(0)) == nullptr);
+    QVERIFY(front->text().startsWith("+"));
+    QVERIFY(doc.paletteOps()->redo());
+    QCOMPARE(colourLooksUnder(doc, scene, look->id()).size(), 1);
+    QCOMPARE(doc.palette(colourLooksUnder(doc, scene, look->id()).at(0))->colorValue(), QColor("#00ff00"));
+}
+
+/* The block of one effect's settings is a shade off its surroundings. */
+void LookEditor_Test::anEffectsSettingsHaveATintOfTheirOwn()
+{
+    Doc doc(this);
+    QLCPalette *a = aFireSpread(doc);
+    QLCPalette *b = aFireSpread(doc);
+    QVERIFY(a != nullptr && b != nullptr);
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+    scene->addPalette(a->id());
+    scene->addPalette(b->id());
+    LookEditor ed(&doc);
+    ed.resize(900, 700);
+    ed.setContextScene(scene);
+
+    for (const bool dark : { false, true })
+    {
+        QPalette pal;
+        pal.setColor(QPalette::Window, dark ? QColor(45, 45, 48) : QColor(240, 240, 240));
+        pal.setColor(QPalette::Highlight, dark ? QColor(60, 120, 220) : QColor(40, 110, 210));
+        ed.QWidget::setPalette(pal);
+        ed.setPalette(a->id());
+        ed.show();
+        QApplication::processEvents();
+        QWidget *pane = nullptr;
+        const QColor first = tintOf(ed, &pane);
+        QVERIFY2(pane != nullptr, "no block for the effect's settings");
+        QVERIFY2(first.isValid(), "the settings block is too small to see");
+        // A shade off its surroundings, but a few per cent, not a frame.
+        QVERIFY2(first != pal.color(QPalette::Window), qPrintable(first.name()));
+        QVERIFY(qAbs(first.red() - pal.color(QPalette::Window).red()) < 25);
+        QVERIFY(qAbs(first.green() - pal.color(QPalette::Window).green()) < 25);
+        QVERIFY(qAbs(first.blue() - pal.color(QPalette::Window).blue()) < 25);
+        // The next effect's block alternates.
+        ed.setPalette(b->id());
+        QApplication::processEvents();
+        const QColor second = tintOf(ed);
+        QVERIFY2(second.isValid() && second != first && second != pal.color(QPalette::Window),
+                 qPrintable(second.name()));
+    }
+}
+
 /* Fire Spread's Colours: Fire by default, with Front Width and Flicker
    Behind greyed (they are Front and Behind's); choosing Front and Behind
    brings them back, Front Width 1.5 s in 0.1 to 20, Flicker Behind on. */
@@ -2174,6 +2451,92 @@ void LookEditor_Test::fireSpreadSettingsShots()
     {
         colours->setCurrentIndex(1);
         shoot(QStringLiteral("fire-spread-front-and-behind"));
+    }
+}
+
+/* What the colour swatches, the colour line and the tint look like: Fire
+   Spread in Front and Behind with no Colour looks, with both, and two effects
+   stacked; three sizes, a light and a dark theme (QLC_SHOT_DIR only). Uses
+   nothing new, so the same test pictures main as it was. */
+void LookEditor_Test::effectColourAndTintShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("pictures only with QLC_SHOT_DIR");
+    QDir().mkpath(dir);
+    QApplication::setStyle("Fusion");
+    Doc doc(this);
+    auto colour = [&doc](const QString &name, const QColor &c) {
+        QLCPalette *p = new QLCPalette(QLCPalette::Color, &doc);
+        p->setName(name);
+        p->setValues({ QLCPalette::colorToString(c, QColor(Qt::black)) });
+        doc.addPalette(p);
+        return p->id();
+    };
+    QLCPalette *a = aFireSpread(doc);
+    QLCPalette *b = aFireSpread(doc);
+    QVERIFY(a != nullptr && b != nullptr);
+    b->setName("Fire Spread 2");
+    a->setEffectParamValue("colours", 1);
+    b->setEffectParamValue("colours", 1);
+    const quint32 red = colour("Red", QColor("#ff2010"));
+    const quint32 blue = colour("Blue", QColor("#2040ff"));
+    const quint32 green = colour("Green", QColor("#20c040"));
+    Scene *scene = new Scene(&doc);
+    QVERIFY(doc.addFunction(scene));
+
+    QPalette light;
+    light.setColor(QPalette::Window, QColor(236, 236, 236));
+    light.setColor(QPalette::WindowText, Qt::black);
+    light.setColor(QPalette::Base, Qt::white);
+    light.setColor(QPalette::Text, Qt::black);
+    light.setColor(QPalette::Button, QColor(225, 225, 225));
+    light.setColor(QPalette::ButtonText, Qt::black);
+    light.setColor(QPalette::Highlight, QColor(40, 110, 210));
+    QPalette dark;
+    dark.setColor(QPalette::Window, QColor(45, 45, 48));
+    dark.setColor(QPalette::WindowText, QColor(225, 225, 225));
+    dark.setColor(QPalette::Base, QColor(30, 30, 32));
+    dark.setColor(QPalette::Text, QColor(225, 225, 225));
+    dark.setColor(QPalette::Button, QColor(62, 62, 66));
+    dark.setColor(QPalette::ButtonText, QColor(225, 225, 225));
+    dark.setColor(QPalette::Highlight, QColor(60, 120, 220));
+    dark.setColor(QPalette::PlaceholderText, QColor(140, 140, 140));
+
+    LookEditor ed(&doc);
+    ed.show();
+    auto shoot = [&](const QString &name, const QString &theme, quint32 effect) {
+        ed.setContextScene(scene);
+        ed.setPalette(effect);
+        ed.refreshEffectParams();
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            ed.resize(sz);
+            QApplication::processEvents();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            QWidget *row = ed.findChild<QWidget *>("effectParam_colours");
+            for (QScrollArea *sa : ed.findChildren<QScrollArea *>())
+                if (row != nullptr && sa->widget() != nullptr && sa->widget()->isAncestorOf(row))
+                    sa->ensureWidgetVisible(row, 0, 160);
+            QApplication::processEvents();
+            QVERIFY(ed.grab().save(dir + QStringLiteral("/%1-%2-%3x%4.png")
+                                       .arg(name, theme).arg(sz.width()).arg(sz.height())));
+        }
+    };
+    for (const QString &theme : { QStringLiteral("light"), QStringLiteral("dark") })
+    {
+        ed.QWidget::setPalette(theme == "light" ? light : dark);
+        for (quint32 p : scene->palettes())
+            scene->removePalette(p);
+        scene->addPalette(a->id());
+        shoot("colours-none", theme, a->id());
+        scene->addPalette(red);
+        scene->addPalette(blue);
+        shoot("colours-both", theme, a->id());
+        scene->addPalette(b->id());
+        scene->addPalette(green);
+        shoot("stacked-first", theme, a->id());
+        shoot("stacked-second", theme, b->id());
     }
 }
 

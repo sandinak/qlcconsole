@@ -32,6 +32,8 @@
 #include <QTreeWidgetItemIterator>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QColorDialog>
+#include <QBuffer>
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
@@ -120,11 +122,161 @@ static QLCPalette *effectPalette(Doc *doc, const QString &name, const QString &s
     return p;
 }
 
+void EffectDesigner_Test::theDesignerHasFrontAndBehindSwatches()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *fs = effectPalette(m_doc, "Fire Spread", "Fire Spread");
+    QVERIFY(fs != nullptr);
+    EffectDesigner ed(m_doc);
+    ed.setTryOnGroups({ towers->id() });
+    ed.setEffect(fs->id());
+    LookEditor *le = ed.lookEditor();
+    QVERIFY(le != nullptr);
+    QComboBox *colours = le->findChild<QComboBox *>("effectParam_colours");
+    QVERIFY2(colours != nullptr, "no Colours setting in the designer");
+    colours->setCurrentIndex(1);
+    auto line = [le]() {
+        QLabel *l = le->findChild<QLabel *>("effectColourSource");
+        return l != nullptr && !l->isHidden() ? l->text() : QString();
+    };
+    QVERIFY2(line().contains("none set"), qPrintable(line()));
+    auto pick = [](QAbstractButton *b, const QColor &c) {
+        QTimer::singleShot(0, [c]() {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (QColorDialog *d = qobject_cast<QColorDialog *>(w))
+                {
+                    d->setCurrentColor(c);
+                    d->accept();
+                }
+        });
+        b->click();
+    };
+    auto swatch = [le](const char *name) { return le->findChild<QPushButton *>(name); };
+    QVERIFY(swatch("effectColourFront") != nullptr && swatch("effectColourBehind") != nullptr);
+    QVERIFY(swatch("effectColourFront")->text().startsWith("+"));
+
+    pick(swatch("effectColourFront"), QColor("#00ff00"));
+    QCOMPARE(ed.ownLooks().size(), 1);
+    QCOMPARE(m_doc->palette(ed.ownLooks().at(0))->colorValue(), QColor("#00ff00"));
+    QVERIFY2(line().contains("the 1 Colour look under this effect"),
+             qPrintable(line()));
+    QVERIFY(!swatch("effectColourFront")->text().startsWith("+"));
+
+    pick(swatch("effectColourBehind"), QColor("#ff0000"));
+    QCOMPARE(ed.ownLooks().size(), 2);
+    QCOMPARE(m_doc->palette(ed.ownLooks().at(1))->colorValue(), QColor("#ff0000"));
+    QVERIFY2(line().contains("the 2 Colour looks under this effect"),
+             qPrintable(line()));
+    // What the designer hands back to the cue.
+    QCOMPARE(ed.ownLooks().size(), 2);
+}
+
 static const Scene *layerScene(Doc *doc, quint32 cueId)
 {
     const Collection *coll = qobject_cast<Collection *>(doc->function(doc->showTree()->cue(cueId)->collection));
     return coll == nullptr || coll->functions().isEmpty() ? nullptr
                                                           : qobject_cast<Scene *>(doc->function(coll->functions().first()));
+}
+
+void EffectDesigner_Test::frontAndBehindSurviveSaveAndLoad()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    auto pick = [](QAbstractButton *b, const QColor &c) {
+        QTimer::singleShot(0, [c]() {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (QColorDialog *d = qobject_cast<QColorDialog *>(w))
+                {
+                    d->setCurrentColor(c);
+                    d->accept();
+                }
+        });
+        b->click();
+    };
+
+    quint32 pid = QLCPalette::invalidId();
+    QString key;
+    {
+        EffectLayerDialog dlg(m_doc, c1, l1, t);
+        EffectDesigner *ed = dlg.designer();
+        QVERIFY(ed->pickEffect("Fire Spread"));
+        LookEditor *le = ed->lookEditor();
+        QComboBox *colours = le->findChild<QComboBox *>("effectParam_colours");
+        QVERIFY(colours != nullptr);
+        colours->setCurrentIndex(1);
+        pick(le->findChild<QPushButton *>("effectColourFront"), QColor("#00ff00"));
+        pick(le->findChild<QPushButton *>("effectColourBehind"), QColor("#ff0000"));
+        QCOMPARE(ed->ownLooks().size(), 2);
+        // Its own row shows both.
+        QComboBox *c1box = ed->findChild<QComboBox *>("edOwnColour");
+        QComboBox *c2box = ed->findChild<QComboBox *>("edOwnColour2");
+        QVERIFY(c1box != nullptr && c2box != nullptr);
+        QVERIFY(c2box->isVisibleTo(ed));
+        QCOMPARE(c1box->currentData().toUInt(), ed->ownLooks().at(0));
+        QCOMPARE(c2box->currentData().toUInt(), ed->ownLooks().at(1));
+        pid = ed->keepOneOff();
+        key = effectKey(st->effectKind(m_doc->palette(pid)));
+    }
+    QVERIFY(m_doc->palette(pid) != nullptr);
+    const QList<quint32> own = st->cue(c1)->layer(l1)->look(key)->own;
+    QCOMPARE(own.size(), 2);
+    QCOMPARE(m_doc->palette(own.at(0))->colorValue(), QColor("#00ff00"));
+    QCOMPARE(m_doc->palette(own.at(1))->colorValue(), QColor("#ff0000"));
+
+    // Saved with the show and loaded again.
+    QByteArray xml;
+    {
+        QBuffer buffer(&xml);
+        buffer.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buffer);
+        w.writeStartDocument();
+        m_doc->saveXML(&w);
+        w.writeEndDocument();
+    }
+    Doc *other = new Doc(this);
+    other->effectScriptRunner()->cache()->addDirectory(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts"));
+    {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        QVERIFY(other->loadXML(r, false));
+    }
+    ShowTreeController *ost = other->showTree();
+    const Look *loaded = ost->cue(c1)->layer(l1)->look(key);
+    QVERIFY(loaded != nullptr);
+    QCOMPARE(loaded->own, own);
+    QCOMPARE(other->palette(own.at(0))->colorValue(), QColor("#00ff00"));
+    QCOMPARE(other->palette(own.at(1))->colorValue(), QColor("#ff0000"));
+    QCOMPARE(other->palette(loaded->palettes.first())->effectParamValues().value("colours"), 1.0);
+
+    // Reopened: both are in the designer's Its own row and the swatches.
+    {
+        EffectLayerDialog dlg(other, c1, l1, t, key);
+        EffectDesigner *ed = dlg.designer();
+        QCOMPARE(ed->ownLooks(), own);
+        QCOMPARE(ed->findChild<QComboBox *>("edOwnColour")->currentData().toUInt(), own.at(0));
+        QCOMPARE(ed->findChild<QComboBox *>("edOwnColour2")->currentData().toUInt(), own.at(1));
+        LookEditor *le = ed->lookEditor();
+        QVERIFY2(le->findChild<QPushButton *>("effectColourFront")->property("colour").toString() == "#00ff00",
+                 "Front swatch");
+        QVERIFY2(le->findChild<QPushButton *>("effectColourBehind")->property("colour").toString() == "#ff0000",
+                 "Behind swatch");
+    }
+
+    // What plays: the fire's colours are the front, then the backfill.
+    const Scene *played = layerScene(other, c1);
+    QVERIFY(played != nullptr);
+    QList<QColor> use;
+    double dim = 1.0;
+    EffectInstance::sceneLookColours(other, played->id(), loaded->palettes.first(), use, dim);
+    QCOMPARE(use.size(), 2);
+    QCOMPARE(use.at(0), QColor("#00ff00"));
+    QCOMPARE(use.at(1), QColor("#ff0000"));
+    delete other;
 }
 
 void EffectDesigner_Test::aNewEffectOnTheBenchSavesAsAPalette()

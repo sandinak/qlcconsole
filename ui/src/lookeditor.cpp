@@ -49,6 +49,8 @@
 #include <QMessageBox>
 #include <QImageReader>
 #include <QPushButton>
+#include <QPainter>
+#include <QPaintEvent>
 #include <QSignalBlocker>
 #include <cmath>
 #include "lookeditor.h"
@@ -76,6 +78,30 @@
 #include "virtualconsole/vcxypadarea.h"
 #include "capabilitybar.h"
 #include "qlcpalette.h"
+
+/* The block of one effect's settings, with the faint tint behind it that
+   shows where it starts and finishes. Painted from the palette at every
+   paint, so every app theme (and a theme change) is followed. */
+namespace {
+class EffectSettingsPane : public QWidget
+{
+public:
+    explicit EffectSettingsPane(QWidget *parent) : QWidget(parent)
+    {
+        setObjectName(QStringLiteral("effectSettings"));
+    }
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(Qt::NoPen);
+        p.setBrush(LookEditor::settingsTint(palette(), property("tintAlt").toBool()));
+        p.drawRoundedRect(QRectF(rect()), 4, 4);
+    }
+};
+}
+
 #include "monitorproperties.h"
 #include "performerfill.h"
 #include "gobolibrary.h"
@@ -968,7 +994,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     QHBoxLayout *pickedRow = new QHBoxLayout();
     m_effectPickedLabel = new QLabel(effectPage);
     m_effectPickedLabel->setObjectName(QStringLiteral("effectPicked"));
-    m_effectPickedLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    { QFont bf = m_effectPickedLabel->font(); bf.setBold(true); m_effectPickedLabel->setFont(bf); }
     pickedRow->addWidget(m_effectPickedLabel);
     // What it is and how to program it: on hover, and a window on a click
     // ("we can have a [?] button to mouse over or pop a window").
@@ -993,7 +1019,9 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     efv->addWidget(m_effectBasedOnLabel);
     connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateBasedOn(); });
     // A param that another one decides (activeWhen) greys or comes back.
-    connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateEffectParamActivity(); });
+    connect(this, &LookEditor::paletteValueChanged, this, [this](quint32) { updateEffectParamActivity(); refreshColourSource(); });
+    if (m_doc->paletteOps() != nullptr)
+        connect(m_doc->paletteOps(), &PaletteOps::changed, this, [this]() { refreshColourSwatches(); });
 
     QScrollArea *detailScroll = new QScrollArea(effectPage);
     detailScroll->setObjectName(QStringLiteral("effectDetails"));
@@ -1088,7 +1116,7 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_effectTypesLabel->hide();
 
     // Dynamic area (params + palette/target bindings) — show in full, no scrolling.
-    m_effectDynWidget = new QWidget(effectPage);
+    m_effectDynWidget = new EffectSettingsPane(effectPage);
     efv->addWidget(m_effectDynWidget);
 
     // Keep the script's state across a scene change. Same idea (and the same
@@ -1889,9 +1917,221 @@ void LookEditor::showEvent(QShowEvent *ev)
         openPickerForNewEffect();
 }
 
+QColor LookEditor::settingsTint(const QPalette &pal, bool alternate)
+{
+    const QColor base = pal.color(QPalette::Window);
+    const QColor toward = pal.color(QPalette::Highlight);
+    const int pc = alternate ? 12 : 6;
+    return QColor((base.red() * (100 - pc) + toward.red() * pc) / 100,
+                  (base.green() * (100 - pc) + toward.green() * pc) / 100,
+                  (base.blue() * (100 - pc) + toward.blue() * pc) / 100);
+}
+
+QColor LookEditor::effectSettingsTint() const
+{
+    return settingsTint(m_effectDynWidget->palette(), m_effectDynWidget->property("tintAlt").toBool());
+}
+
+/* The Colour looks under the effect (until the next effect): its own
+   colours, front first (QLCPalette::isEffectScoped(), the rule the scene
+   paints by). */
+QList<quint32> LookEditor::effectColourLooks() const
+{
+    QList<quint32> out;
+    if (m_contextScene == nullptr)
+        return out;
+    bool under = false;
+    for (quint32 pid : m_contextScene->palettes())
+    {
+        const QLCPalette *p = m_doc->palette(pid);
+        if (p == nullptr)
+            continue;
+        if (p->type() == QLCPalette::Effect)
+            under = (pid == m_paletteId);
+        else if (under && p->type() == QLCPalette::Color)
+            out << pid;
+    }
+    return out;
+}
+
+bool LookEditor::pickEffectColour(int slot, const QColor &colour)
+{
+    if (m_contextScene == nullptr || slot < 0 || slot > 1 || m_doc->paletteOps() == nullptr
+        || !m_contextScene->palettes().contains(m_paletteId))
+        return false;
+    if (m_colourSetter)
+    {
+        const QList<quint32> had = effectColourLooks();
+        if (slot > had.size())
+            return false;
+        QColor pick = colour;
+        if (!pick.isValid())
+        {
+            const QColor initial = slot < had.size() && m_doc->palette(had.at(slot)) != nullptr
+                                   ? m_doc->palette(had.at(slot))->colorValue() : QColor(Qt::white);
+            const QString title = slot == 0 ? tr("Front colour") : tr("Behind colour");
+            pick = m_colourAsker ? m_colourAsker(initial, title)
+                                 : QColorDialog::getColor(initial, this, title, QColorDialog::DontUseNativeDialog);
+        }
+        if (!pick.isValid() || !m_colourSetter(slot, pick))
+            return false;
+        refreshColourSwatches();
+        return true;
+    }
+    const QList<quint32> have = effectColourLooks();
+    if (slot > have.size())
+        return false;                       // behind needs a front first
+    QColor c = colour;
+    if (!c.isValid())
+    {
+        const QColor initial = slot < have.size() && m_doc->palette(have.at(slot)) != nullptr
+                               ? m_doc->palette(have.at(slot))->colorValue() : QColor(Qt::white);
+        const QString title = slot == 0 ? tr("Front colour") : tr("Behind colour");
+        if (m_colourAsker)
+            c = m_colourAsker(initial, title);
+        else
+            c = QColorDialog::getColor(initial, this, title, QColorDialog::DontUseNativeDialog);
+    }
+    if (!c.isValid())
+        return false;
+    PaletteOps *ops = m_doc->paletteOps();
+    const QString what = slot == 0 ? tr("front") : tr("behind");
+    const quint32 sid = m_contextScene->id();
+    const QVariantList value = { QLCPalette::colorToString(c, QColor(Qt::black)) };
+    bool ok = false;
+    if (slot < have.size())
+    {
+        ok = ops->valueStep(tr("set the %1 colour of the effect").arg(what), have.at(slot),
+                            [&]() {
+            if (QLCPalette *p = m_doc->palette(have.at(slot)))
+                p->setValues(value);
+        });
+    }
+    else
+    {
+        // Under the effect: after its last colour, or right after it.
+        ok = ops->sceneStepMaking(tr("add the %1 colour under the effect").arg(what), { sid },
+                                  [&](QList<quint32> &made) {
+            QLCPalette *np = new QLCPalette(QLCPalette::Color);
+            np->setValues(value);
+            np->setName(PaletteNaming::colourName(c));
+            np->setPath(QString());
+            if (!m_doc->addPalette(np))
+            {
+                delete np;
+                return false;
+            }
+            made << np->id();
+            QList<quint32> order = m_contextScene->palettes();
+            m_contextScene->addPalette(np->id());       // appends
+            order.removeAll(np->id());
+            // After the effect's last colour, else after the effect itself
+            // (before the next look under it, not after it: it is its own).
+            const quint32 anchor = have.isEmpty() ? m_paletteId : have.last();
+            order.insert(order.indexOf(anchor) + 1, np->id());
+            m_contextScene->reorderPalettes(order);
+            return true;
+        });
+    }
+    if (!ok)
+        return false;
+    m_doc->notifyFunctionChanged(sid);
+    refreshColourSwatches();
+    return true;
+}
+
+QString LookEditor::colourSourceText() const
+{
+    const QLCPalette *p = m_doc->palette(m_paletteId);
+    if (p == nullptr || p->type() != QLCPalette::Effect || m_contextScene == nullptr
+        || !QLCPalette::effectUsesLookColours(p))
+        return QString();
+    const QMap<QString, double> v = p->effectParamValues();
+    const bool frontBehind = m_colourField != nullptr;
+    // Fire Spread's Fire mode ignores every colour look: Firelight's own.
+    if (frontBehind && v.value(QStringLiteral("colours"), 0.0) < 0.5)
+        return tr("Colours: its own (Firelight's fire colours). Colour looks are not used.");
+    const QList<quint32> pals = m_contextScene->palettes();
+    const int own = effectColourLooks().size();
+    if (own > 0)
+        return own == 1 ? tr("Colours: the 1 Colour look under this effect.")
+                        : tr("Colours: the %1 Colour looks under this effect.").arg(own);
+    int base = 0;
+    for (quint32 pid : pals)
+    {
+        const QLCPalette *c = m_doc->palette(pid);
+        if (c != nullptr && c->type() == QLCPalette::Color && !QLCPalette::isEffectScoped(m_doc, pals, pid))
+            ++base;
+    }
+    if (base > 0)
+        return base == 1 ? tr("Colours: the look's own 1 colour (no Colour look under this effect).")
+                         : tr("Colours: the look's own %1 colours (no Colour look under this effect).").arg(base);
+    return frontBehind ? tr("Colours: none set (no Colour look under this effect or in the look), so plain Fire.")
+                       : tr("Colours: its own (no Colour look under this effect or in the look).");
+}
+
+void LookEditor::refreshColourSource()
+{
+    if (m_colourSource.isNull())
+        return;
+    const QString t = colourSourceText();
+    m_colourSource->setText(t);
+    m_colourSource->setVisible(!t.isEmpty());
+}
+
+void LookEditor::refreshColourSwatches()
+{
+    refreshColourSource();
+    if (m_colourField.isNull())
+        return;
+    const QList<quint32> have = effectColourLooks();
+    static const char *names[2] = { "Front", "Behind" };
+    for (int i = 0; i < 2; ++i)
+    {
+        QPushButton *b = m_colourSwatch[i];
+        if (b == nullptr)
+            continue;
+        const QLCPalette *p = i < have.size() ? m_doc->palette(have.at(i)) : nullptr;
+        const QColor c = p != nullptr ? p->colorValue() : QColor();
+        QString where = tr("It is the %1 Colour look under this effect in the look's list.")
+                        .arg(i == 0 ? tr("first") : tr("second"));
+        if (p != nullptr && m_doc->paletteOps() != nullptr)
+        {
+            // Changing it changes every place that plays it: said before it is.
+            QList<PaletteOps::Use> others;
+            for (const PaletteOps::Use &u : m_doc->paletteOps()->usage(p->id()))
+                if (!(u.kind == PaletteOps::Use::Scene && m_contextScene != nullptr
+                      && u.owner == m_contextScene->id()))
+                    others << u;
+            if (!others.isEmpty())
+                where += QLatin1Char(' ') + tr("Also used in %1: changing it changes those too.")
+                                                .arg(PaletteOps::usageSummary(others));
+        }
+        b->setEnabled(i <= have.size() && m_contextScene != nullptr);
+        if (c.isValid())
+        {
+            QPixmap pm(18, 18);
+            pm.fill(c);
+            b->setIcon(QIcon(pm));
+            b->setText(tr(names[i]));
+            b->setToolTip(tr("%1 colour: %2. Click to change it.").arg(tr(names[i]), c.name()) + QLatin1Char(' ') + where);
+        }
+        else
+        {
+            b->setIcon(QIcon());
+            b->setText(QStringLiteral("+ ") + tr(names[i]));
+            b->setToolTip(i == 1 && have.isEmpty()
+                              ? tr("Pick the Front colour first: the Behind colour is the second Colour look under the effect.")
+                              : tr("Click to pick the %1 colour. %2").arg(tr(names[i]).toLower(), where));
+        }
+        b->setProperty("colour", c.isValid() ? c.name() : QString());
+    }
+}
+
 void LookEditor::setContextScene(Scene *scene)
 {
     m_contextScene = scene;
+    refreshColourSwatches();
     // Re-evaluate the applicability warning for the current look.
     if (m_paletteId != QLCPalette::invalidId())
         setPalette(m_paletteId);
@@ -3147,6 +3387,15 @@ void LookEditor::updateEffectParamActivity()
     if (p == nullptr || m_paramForm.isNull())
         return;
     const QMap<QString, double> values = p->effectParamValues();
+    if (!m_colourField.isNull() && m_paramForm != nullptr)
+    {
+        // Front and Behind only: the swatches (and their label) show then.
+        const bool on = values.value(QStringLiteral("colours"), 0.0) >= 0.5;
+        m_colourField->setVisible(on);
+        if (QWidget *lab = m_paramForm->labelForField(m_colourField))
+            lab->setVisible(on);
+        refreshColourSwatches();
+    }
     for (const EffectScript::ParamDef &pd : m_shownParamDefs)
     {
         if (pd.activeWhen.isEmpty())
@@ -3250,8 +3499,23 @@ void LookEditor::rebuildEffectDynWidget()
     m_learnRangeStatus = nullptr;
 
     QVBoxLayout *dv = new QVBoxLayout(m_effectDynWidget);
-    dv->setContentsMargins(0, 4, 0, 4);
+    dv->setContentsMargins(8, 8, 8, 8);     // room inside the tint
     dv->setSpacing(6);
+    {
+        // Several effects stacked in a look: neighbours alternate the tint.
+        int nth = 0;
+        if (m_contextScene != nullptr)
+            for (quint32 pid : m_contextScene->palettes())
+            {
+                if (pid == m_paletteId)
+                    break;
+                const QLCPalette *o = m_doc->palette(pid);
+                if (o != nullptr && o->type() == QLCPalette::Effect)
+                    ++nth;
+            }
+        m_effectDynWidget->setProperty("tintAlt", nth % 2 == 1);
+        m_effectDynWidget->update();
+    }
 
     QLCPalette *p = m_doc->palette(m_paletteId);
     if (!p || p->type() != QLCPalette::Effect)
@@ -3372,7 +3636,7 @@ void LookEditor::rebuildEffectDynWidget()
     if (!paldefs.isEmpty())
     {
         QLabel *hdrP = new QLabel(tr("Palette Bindings"), m_effectDynWidget);
-        hdrP->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdrP->font(); bf.setBold(true); hdrP->setFont(bf); }
         dv->addWidget(hdrP);
 
         // Explain the fallthrough behaviour so the programmer knows what unbound slots do.
@@ -3562,7 +3826,7 @@ void LookEditor::rebuildEffectDynWidget()
     {
         const MonitorProperties *mp = m_doc->monitorProperties();
         QLabel *hdrT = new QLabel(tr("Target Bindings"), m_effectDynWidget);
-        hdrT->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdrT->font(); bf.setBold(true); hdrT->setFont(bf); }
         dv->addWidget(hdrT);
 
         QFormLayout *tform = new QFormLayout();
@@ -3609,12 +3873,19 @@ void LookEditor::rebuildEffectDynWidget()
     const QStringList supersededBySpread = tmpScript.takesHostSpread() && hostSpread.isActive()
                                            ? tmpScript.hostSpreadParams() : QStringList();
 
+    m_colourSource = new QLabel(m_effectDynWidget);
+    m_colourSource->setObjectName(QStringLiteral("effectColourSource"));
+    m_colourSource->setWordWrap(true);
+    m_colourSource->setToolTip(tr("Which colours this effect plays: the Colour looks under it, else the look's own, else its own."));
+    dv->addWidget(m_colourSource);
+    refreshColourSource();
+
     // --- Parameters ---
     const QList<EffectScript::ParamDef> &pdefs = tmpScript.paramDefs();
     if (!pdefs.isEmpty())
     {
         QLabel *hdr = new QLabel(tr("Parameters"), m_effectDynWidget);
-        hdr->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdr->font(); bf.setBold(true); hdr->setFont(bf); }
         dv->addWidget(hdr);
 
         QFormLayout *form = new QFormLayout();
@@ -3863,6 +4134,29 @@ void LookEditor::rebuildEffectDynWidget()
                 connect(cb, QOverload<int>::of(&QComboBox::currentIndexChanged),
                         this, &LookEditor::slotEffectEnumParamChanged);
                 form->addRow(paramRowLabel(pd), cb);
+                if (pd.enumValues.size() == 2 && pd.enumValues.at(1) == QLatin1String("Front and Behind"))
+                {
+                    /* Front and Behind plays the Colour looks under the effect,
+                       first then second: said here, with a swatch for each. */
+                    QWidget *sw = new QWidget(m_effectDynWidget);
+                    sw->setObjectName(QStringLiteral("effectColourSwatches"));
+                    QHBoxLayout *sl = new QHBoxLayout(sw);
+                    sl->setContentsMargins(0, 0, 0, 0);
+                    for (int i = 0; i < 2; ++i)
+                    {
+                        QPushButton *b = new QPushButton(sw);
+                        b->setObjectName(i == 0 ? QStringLiteral("effectColourFront")
+                                                : QStringLiteral("effectColourBehind"));
+                        b->setFlat(false);
+                        connect(b, &QPushButton::clicked, this, [this, i]() { pickEffectColour(i); });
+                        sl->addWidget(b);
+                        m_colourSwatch[i] = b;
+                    }
+                    sl->addStretch(1);
+                    m_colourField = sw;
+                    form->addRow(tr("Colours from"), sw);
+                    refreshColourSwatches();
+                }
             }
             else
             {
@@ -3999,6 +4293,7 @@ void LookEditor::rebuildEffectDynWidget()
                 m_paramFields.insert(name.mid(12), field);
         }
         updateEffectParamActivity();
+        refreshColourSource();
 
         // "Learn range" — offered when the script has both note-range params.
         // Plays live: click, play your lowest & highest key, click again to lock.
@@ -4045,7 +4340,7 @@ void LookEditor::rebuildEffectDynWidget()
     if (tmpScript.takesHostSpread())
     {
         QLabel *hdr = new QLabel(tr("Spread"), m_effectDynWidget);
-        hdr->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdr->font(); bf.setBold(true); hdr->setFont(bf); }
         dv->addWidget(hdr);
         QWidget *row = new QWidget(m_effectDynWidget);
         row->setObjectName(QStringLiteral("effectSpread"));
@@ -4389,7 +4684,7 @@ void LookEditor::rebuildEffectDynWidget()
     if (!idefs.isEmpty() && !systemBound)
     {
         QLabel *hdr2 = new QLabel(tr("Input bindings"), m_effectDynWidget);
-        hdr2->setStyleSheet("font-weight: bold;");
+        { QFont bf = hdr2->font(); bf.setBold(true); hdr2->setFont(bf); }
         dv->addWidget(hdr2);
         dv->addWidget(new QLabel(
             tr("Connect a MIDI/OSC/HID input channel to each slot.\n"

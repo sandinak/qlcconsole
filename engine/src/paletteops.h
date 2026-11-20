@@ -231,6 +231,12 @@ public:
     bool sceneValueStep(const QString &label, const QList<quint32> &sceneIds,
                         const QList<quint32> &paletteIds, const std::function<bool()> &change);
 
+    /** Run @a change over scenes @a sceneIds as ONE step, where it also
+     *  makes palettes (it appends each to @a made): Undo puts the scenes
+     *  back and deletes them, Redo brings them back with their ids. */
+    bool sceneStepMaking(const QString &label, const QList<quint32> &sceneIds,
+                         const std::function<bool(QList<quint32> &made)> &change);
+
     /************************************************************************
      * Value steps: the Look Editor's edits to a palette's value -- and the
      * name that follows it (PaletteNaming) -- as one step.

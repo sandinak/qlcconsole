@@ -21,6 +21,7 @@
 #include <QWidget>
 #include <QFormLayout>
 #include <QPointer>
+#include <QLabel>
 #include <QColor>
 #include <functional>
 #include "qlcui_export.h"
@@ -294,10 +295,49 @@ private:
     QList<EffectScript::ParamDef> m_shownParamDefs;
     QHash<QString, QPointer<QWidget>> m_paramFields;
     QPointer<QFormLayout> m_paramForm;
+    QPointer<QWidget> m_colourField;              ///< the Front / Behind swatches
+    QPointer<QPushButton> m_colourSwatch[2];
+    std::function<QColor(const QColor &, const QString &)> m_colourAsker;
+    std::function<bool(int, const QColor &)> m_colourSetter;
+    void refreshColourSwatches();
+    QPointer<QLabel> m_colourSource;              ///< "Colours: ..." which ones play
+    void refreshColourSource();
+public:
+    /** One line: which colours the edited effect plays now -- the Colour
+     *  looks under it, else the look's, else its own (the rule
+     *  EffectInstance::sceneLookColours() reads by). Empty: it takes none. */
+    QString colourSourceText() const;
+    QLabel *colourSourceLabel() const { return m_colourSource; }
+private:
 public:
     /** Grey the parameter rows that don't count with the look's values
      *  now, each saying why ("Set by Framing: Waist Up"). */
     void updateEffectParamActivity();
+
+    /** The faint tint behind one effect's block of settings: the window
+     *  colour a few percent toward the highlight (@a alternate: a little
+     *  more, for the next effect's block). Every theme's own colours. */
+    static QColor settingsTint(const QPalette &pal, bool alternate);
+    /** For tests: the tint the settings block paints now, and its pane. */
+    QColor effectSettingsTint() const;
+    QWidget *effectSettingsPane() const { return m_effectDynWidget; }
+
+    /** The Colour looks under the edited effect in the context scene, in
+     *  order (front first): what Colours "Front and Behind" plays. */
+    QList<quint32> effectColourLooks() const;
+    /** Pick the colour of the @a slot-th (0 front, 1 behind) Colour look
+     *  under the effect: edits it, or adds it under the effect, as one
+     *  undo step. @a colour invalid: asks with the colour picker. */
+    bool pickEffectColour(int slot, const QColor &colour = QColor());
+    /** In place of the colour dialog (tests): false/invalid cancels. */
+    typedef std::function<QColor(const QColor &initial, const QString &title)> ColourAsker;
+    void setColourAsker(const ColourAsker &asker) { m_colourAsker = asker; }
+    /** A host that owns the effect's colours itself (the Show Tree's effect
+     *  designer, whose own colours are its draft's, not a scene's): the
+     *  swatches hand it the colour for slot 0 (front) / 1 (behind) to make
+     *  or change. Returns false if it refused. */
+    typedef std::function<bool(int slot, const QColor &colour)> ColourSetter;
+    void setColourSetter(const ColourSetter &setter) { m_colourSetter = setter; }
 private:
 
     QLineEdit *m_nameEdit;   //!< editable palette name

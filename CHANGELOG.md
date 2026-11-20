@@ -49,6 +49,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   reason, when a selected layer is set in its own cue.
 - **Show Tree: every cue and list tick box says what it does on hover**, in a
   sentence or two, on the label as well as the box; the base cue's had none.
+### Changed
+
+- **Fire Spread's two colours are findable, and an effect's settings sit
+  on a faint tint.** With Colours: Front and Behind, a Front and a Behind
+  swatch sit under the setting; click one to pick the colour, which is the
+  first or second Colour look under the effect (one undo step). Each effect's
+  block of settings has a slightly tinted background, alternating from one
+  effect to the next, so you see where one ends and the next begins. An
+  effect that takes colours now says which it plays: the Colour looks under
+  it, the look's own, or its own. In the Show Tree's effect page the same
+  swatches set the layer's two own colours. The settings' headings take the
+  theme's text colour (they were near-black on a dark theme).
 
 ## [0.5.1] - 2026-11-20
 
