@@ -345,7 +345,8 @@ nothing pulses.
 point catches first and the fire runs outward across the floor at an even
 speed, so a head twice as far away catches twice as late. As each head
 catches it flares, brighter and whiter, and within a second settles into
-Firelight's flicker. Once the whole rig has caught it keeps burning for as
+Firelight's flicker, each head and each pixel of a bar flickering on its
+own, so the burning rig reads as flames, not bands. Once the whole rig has caught it keeps burning for as
 long as the look plays.
 
 **It burns over what's there.** Until the fire reaches a head, Fire Spread

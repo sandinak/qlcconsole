@@ -16,6 +16,7 @@
 */
 
 #include <QtTest>
+#include <cmath>
 #include <QApplication>
 #include <QElapsedTimer>
 #include <QScopeGuard>
@@ -450,6 +451,160 @@ void FireSpreadPerf_Test::anUnreachedHeadCostsNothingToRead()
     QVERIFY2(darkMs < 0.25 * burningMs,
              qPrintable(QString("the unreached heads took %1 ms to read, the burning ones %2 ms")
                             .arg(darkMs).arg(burningMs)));
+}
+
+/* Burning, Fire Spread is a fire: each head -- each pixel of a bar -- with
+   its own flicker. Old code gave head i the flame seed i * 1.618, so every
+   head's flicker was the one before it a fixed phase on: travelling waves
+   along the heads' order, read on the Rig Overview as bands and diagonal
+   stripes across the bars and the rig, never fire. Measured: how alike two
+   neighbouring heads' flicker is over 20 s of burning (old code about 0.65
+   for every pair; independent flames average about 0). The frames, and
+   each head's values, go to QLC_SHOT_DIR when it is set. */
+void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
+{
+    EffectInstance *in = m_fire;
+    QList<EffectInstance::EffectCell> cells;
+    auto answersAt = [&](qint64 ms) {
+        in->setOffStageClock(ms);
+        int cols = 1, rows = 1;
+        cells = in->effectiveCells(cols, rows);
+        QJSValue fixtures = in->buildFixturesArray(cells, cols, rows);
+        return in->m_script.callTick(fixtures, in->buildInputsObject(), in->buildPalettesObject(),
+                                     in->buildParamsObject(), in->m_state, in->buildDataChannelsObject());
+    };
+    // A head's brightness: its colour's sum (the fire's colour rises with
+    // its flame) times its dimmer; a head of level only, its dimmer.
+    auto brightness = [](const QJSValue &o) {
+        const QJSValue d = o.property("dimmer");
+        double sum = 0;
+        bool colour = false;
+        for (const char *k : { "r", "g", "b", "w" })
+        {
+            const QJSValue v = o.property(k);
+            if (!v.isUndefined())
+            {
+                colour = true;
+                sum += v.toNumber();
+            }
+        }
+        const double dim = d.isUndefined() ? 1.0 : d.toNumber();
+        return colour ? sum * dim : dim * 255.0;
+    };
+
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    QFile dump;
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        dump.setFileName(QDir(dir).filePath(QStringLiteral("firespread-heads.csv")));
+        QVERIFY(dump.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        dump.write("t,fixture,model,head,r,g,b,w,dimmer\n");
+    }
+    auto dumpFrame = [&](qint64 ms, const QJSValue &result) {
+        if (!dump.isOpen())
+            return;
+        for (int i = 0; i < cells.size(); ++i)
+        {
+            const QJSValue o = result.property(quint32(i));
+            const Fixture *fx = m_app->doc()->fixture(cells.at(i).fixtureId);
+            auto v = [&](const char *k) {
+                const QJSValue x = o.property(k);
+                return x.isUndefined() ? QString() : QString::number(x.toNumber());
+            };
+            dump.write(QStringLiteral("%1,%2,%3,%4,%5,%6,%7,%8,%9\n")
+                           .arg(ms / 1000.0).arg(cells.at(i).fixtureId)
+                           .arg(fx && fx->fixtureDef() ? fx->fixtureDef()->model() : QString())
+                           .arg(cells.at(i).head).arg(v("r"), v("g"), v("b"), v("w"), v("dimmer"))
+                           .toUtf8());
+        }
+    };
+
+    // 20 s of the rig fully burning, 5 frames a second.
+    QList<QVector<double>> frames;
+    for (qint64 ms = 12000; ms < 32000; ms += 200)
+    {
+        const QJSValue result = answersAt(ms);
+        QVector<double> f(cells.size());
+        for (int i = 0; i < cells.size(); ++i)
+            f[i] = brightness(result.property(quint32(i)));
+        frames << f;
+        if (ms == 12000 || ms == 12400)
+            dumpFrame(ms, result);
+    }
+    dumpFrame(3000, answersAt(3000));          // mid-spread
+    dump.close();
+
+    // Neighbouring heads, each pixel and the next of the same fixture, and
+    // each fixture and the next: how alike their flicker is.
+    const int n = int(cells.size());
+    const int T = int(frames.size());
+    double pixelSum = 0, fixtureSum = 0;
+    int pixelPairs = 0, fixturePairs = 0;
+    for (int i = 0; i + 1 < n; ++i)
+    {
+        double ma = 0, mb = 0;
+        for (int t = 0; t < T; ++t) { ma += frames[t][i]; mb += frames[t][i + 1]; }
+        ma /= T; mb /= T;
+        double ab = 0, aa = 0, bb = 0;
+        for (int t = 0; t < T; ++t)
+        {
+            const double a = frames[t][i] - ma, b = frames[t][i + 1] - mb;
+            ab += a * b; aa += a * a; bb += b * b;
+        }
+        if (aa < 1e-9 || bb < 1e-9)
+            continue;                           // steady (a relay): no flicker to compare
+        const double r = ab / std::sqrt(aa * bb);
+        if (cells.at(i).fixtureId == cells.at(i + 1).fixtureId)
+        {
+            pixelSum += r;
+            ++pixelPairs;
+        }
+        else
+        {
+            fixtureSum += r;
+            ++fixturePairs;
+        }
+    }
+    const double pixelR = pixelPairs ? pixelSum / pixelPairs : 0;
+    const double fixtureR = fixturePairs ? fixtureSum / fixturePairs : 0;
+    REPORT("burning, neighbours alike: pixels %.2f (%d pairs), fixtures %.2f (%d pairs)",
+           pixelR, pixelPairs, fixtureR, fixturePairs);
+    QVERIFY(pixelPairs > 1000);
+
+    // The Rig Overview, looked at from the front at 45° and from above.
+    if (!dir.isEmpty())
+    {
+        StructureStudioView v(m_app->doc(), StructureStudioView::StageKind, 0);
+        v.setLocked(true);
+        v.setLiveValues(true);
+        v.setAmbient(0.0);
+        v.setStandOnCentreStage(true);
+        v.resize(1440, 900);
+        v.reload();
+        v.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&v));
+        v.setLiveValues(false);
+        for (StructureStudioView::Plane plane : { StructureStudioView::Angled, StructureStudioView::Top })
+        {
+            v.setPlane(plane);
+            for (qint64 ms : { qint64(3000), qint64(12000), qint64(12400) })
+            {
+                tickTo(ms);
+                v.m_liveDirty = true;
+                v.m_valueFrame = true;
+                v.m_lastFrameAt.start();
+                v.repaint();
+                v.grab().toImage().save(QDir(dir).filePath(
+                    QStringLiteral("firespread-%1-%2ms.png")
+                        .arg(plane == StructureStudioView::Top ? QStringLiteral("top") : QStringLiteral("45"))
+                        .arg(ms)));
+            }
+        }
+    }
+
+    QVERIFY2(pixelR < 0.3, qPrintable(QString("neighbouring pixels flicker alike (%1): bands, not fire").arg(pixelR)));
+    QVERIFY2(fixtureR < 0.3, qPrintable(QString("neighbouring fixtures flicker alike (%1): bands, not fire").arg(fixtureR)));
 }
 
 int main(int argc, char **argv)
