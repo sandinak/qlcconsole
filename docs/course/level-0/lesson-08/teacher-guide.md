@@ -158,6 +158,7 @@ Rig Overview (View → Rig Overview, ⇧⌘R).
 
 The course test (`ui/test/courseshow`, `lessonZeroEightTheVirtualStage`)
 opens the show, opens the Rig Overview and checks its **View** (Top,
-Front, Back, Side, 45°, and the follow-spot Operator and Operator plan) and **Room** (Work light, House, Dim, Blackout) choices
+Front, Back, Side, 45°; the follow-spot Operator and Operator plan join
+them only once a show has a follow spot) and **Room** (Work light, House, Dim, Blackout) choices
 and **Live**, then presses GO three times in the Run tab. The pictures
 are taken by the same test.

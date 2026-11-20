@@ -723,7 +723,7 @@ Where you see it:
 - **The Lighting Studio plot** marks the operator with an arrow the way they
   face, labelled *spot op · SL tower*, just off the edge of the stage
   (front of house and back of house are further out than it draws them).
-- **The Rig Overview's View** list has **Operator**, the rig from the
+- **The Rig Overview's View** list, once the show has a follow spot, has **Operator**, the rig from the
   operator's side, looking the way they face and down from their eye height
   to centre stage, and **Operator plan**, the plan turned so they are at the
   bottom edge: the stick pushed up goes up the screen. The plan turns in
