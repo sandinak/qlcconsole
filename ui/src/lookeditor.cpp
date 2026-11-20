@@ -78,6 +78,30 @@
 #include "virtualconsole/vcxypadarea.h"
 #include "capabilitybar.h"
 #include "qlcpalette.h"
+
+/* The block of one effect's settings, with the faint tint behind it that
+   shows where it starts and finishes. Painted from the palette at every
+   paint, so every app theme (and a theme change) is followed. */
+namespace {
+class EffectSettingsPane : public QWidget
+{
+public:
+    explicit EffectSettingsPane(QWidget *parent) : QWidget(parent)
+    {
+        setObjectName(QStringLiteral("effectSettings"));
+    }
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(Qt::NoPen);
+        p.setBrush(LookEditor::settingsTint(palette(), property("tintAlt").toBool()));
+        p.drawRoundedRect(QRectF(rect()), 4, 4);
+    }
+};
+}
+
 #include "monitorproperties.h"
 #include "performerfill.h"
 #include "gobolibrary.h"
@@ -1891,29 +1915,6 @@ void LookEditor::showEvent(QShowEvent *ev)
     QWidget::showEvent(ev);
     if (!ev->spontaneous())
         openPickerForNewEffect();
-}
-
-/* The block of one effect's settings, with the faint tint behind it that
-   shows where it starts and finishes. Painted from the palette at every
-   paint, so every app theme (and a theme change) is followed. */
-namespace {
-class EffectSettingsPane : public QWidget
-{
-public:
-    explicit EffectSettingsPane(QWidget *parent) : QWidget(parent)
-    {
-        setObjectName(QStringLiteral("effectSettings"));
-    }
-protected:
-    void paintEvent(QPaintEvent *) override
-    {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.setPen(Qt::NoPen);
-        p.setBrush(LookEditor::settingsTint(palette(), property("tintAlt").toBool()));
-        p.drawRoundedRect(QRectF(rect()), 4, 4);
-    }
-};
 }
 
 QColor LookEditor::settingsTint(const QPalette &pal, bool alternate)

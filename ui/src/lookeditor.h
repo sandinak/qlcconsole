@@ -21,6 +21,7 @@
 #include <QWidget>
 #include <QFormLayout>
 #include <QPointer>
+#include <QLabel>
 #include <QColor>
 #include <functional>
 #include "qlcui_export.h"
