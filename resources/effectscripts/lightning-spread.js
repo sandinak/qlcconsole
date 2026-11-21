@@ -105,6 +105,7 @@
     var ARC_TAU = 0.035;
     var CORE_STEP = 1 / 25;     // the core's glow jumps this often (jagged, not a sine)
     var CORE_SHARE = 0.2;       // the core: the nearest fifth of the Reach
+    var GONE = 6.3;             // e^-6.3 is under half a DMX step: a strike that far gone shows nothing
     var MAX_ARCS = 128;         // arcs alive at once, at most (Rate 20, Crawl 3)
     var ARC_FIELDS = 8;
 
@@ -190,6 +191,7 @@
         if (S !== undefined && S.places === A && S.decay === decay && S.K === K && S.seed === seed)
             return S;
         var n = A.at.length, s = new Float64Array(n * K), a = new Float64Array(n * K), tau = new Float64Array(n * K);
+        var gone = new Float64Array(n * K), end = new Float64Array(n);
         var span = decay * (1 - TAIL);
         for (var i = 0; i < n; i++) {
             var j = i * K, at = 0;
@@ -205,8 +207,16 @@
                          : (0.4 + 0.6 * hash(i + 1, seed + k * 0.29 + 0.5)) * (1 - 0.45 * k / K);
                 tau[j + k] = STRIKE_TAU * (0.6 + 1.0 * hash(i + 1, seed + k * 0.31 + 0.9));
             }
+            // When each strike, and the head's last, has died below half a
+            // DMX step (it would round to 0 at full): past that a tick
+            // works nothing out for it.
+            for (var g = 0; g < K; g++) {
+                gone[j + g] = a[j + g] > 0 ? s[j + g] + GONE * tau[j + g] : -1;
+                if (gone[j + g] > end[i])
+                    end[i] = gone[j + g];
+            }
         }
-        S = { places: A, decay: decay, K: K, seed: seed, s: s, a: a, tau: tau };
+        S = { places: A, decay: decay, K: K, seed: seed, s: s, a: a, tau: tau, gone: gone, end: end };
         if (state)
             state._strikes = S;
         return S;
@@ -223,7 +233,7 @@
         var L = looks(H, c, state);
         if (state)
             state.done = t >= A.last + decay;
-        var n = fixtures.length, at = A.at, kind = H.kind, ss = S.s, aa = S.a, tt = S.tau;
+        var n = fixtures.length, at = A.at, kind = H.kind, ss = S.s, aa = S.a, tt = S.tau, gg = S.gone, ee = S.end;
         var none = state && state._none ? state._none : {};
         if (state)
             state._none = none;
@@ -237,10 +247,16 @@
                 continue;
             }
             var lv = 0, j = i * K;
+            if (age >= ee[i]) {
+                out[i] = shown(L, H, c, kd, 0); // every strike has died away: dark till it is out
+                continue;
+            }
             for (var k = 0; k < K; k++) {
                 var since = age - ss[j + k];
                 if (since < 0)
                     break;                      // the strikes are in time order
+                if (age >= gg[j + k])
+                    continue;                   // this one has died away
                 var v = aa[j + k] * Math.exp(-since / tt[j + k]);
                 if (v > lv)
                     lv = v;
