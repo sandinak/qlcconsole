@@ -25,6 +25,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- Lightning Spread strikes white-hot: a strike burns white at its core and
+  a cold blue at its edge, then fades out in the look's colour (**Strike**:
+  White-Hot, the default; Look's Colour keeps the old look). Colour wheels
+  keep the look's slot.
+- Amber Pulse's Variation wanders each head on its own instead of in bands
+  along the rig.
+- Lightning Spread's burst costs about half what it did per tick (a strike
+  that has died away is skipped; the same frames).
 - **Updates are found sooner.** qlcconsole checks for a new version at every
   launch (not at most once a day) and every 4 hours while it runs. The
   conditional request, rate-limit back-off and skipped-version rule are

@@ -100,6 +100,8 @@ private slots:
     /** A dimmer flickers in level; a moving head gets its dimmer and is
      *  never moved (no pan or tilt written); a relay is not lightning's. */
     void lightningSpreadOnDimmersAndMovers();
+    void lightningSpreadStrikesWhiteHotWithABlueEdge();
+    void amberPulseHeadsWanderOnTheirOwn();
     /** Spell Spread on the same kinds: the lantern in the colour at the
      *  look's level, effect channels untouched; the relay is not its; a
      *  pixel not yet reached is not written. */

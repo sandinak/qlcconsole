@@ -4,6 +4,8 @@
   fixtures, amber adds warmth and richness without shifting hue as aggressively
   as orange from R+G. Great for candle flicker, sunset glow, and fire looks.
   Emits only the `a` intent; RGB/dimmer channels follow the look's palettes.
+  Variation's candle wander is each head's own (a hashed phase and rate a
+  head), so heads flicker independently instead of in bands along the rig.
 */
 (function() {
     var effect = new Object;
@@ -36,6 +38,12 @@
         }
     }
 
+    // A head's own number in 0..1 (a hash, the same every run).
+    function own(i, k) {
+        var x = Math.sin((i + 1) * 12.9898 + k * 78.233) * 43758.5453;
+        return x - Math.floor(x);
+    }
+
     effect.tick = function(fixtures, inputs, palettes, params, state) {
         var n      = fixtures.length;
         var rate   = params.rate   !== undefined ? params.rate   : 0.8;
@@ -52,9 +60,13 @@
             // Variation layers two incommensurable sines (per-fixture phase) for
             // organic, non-repeating candle-like wander on top of the base wave.
             if (vary > 0) {
+                // Each head its own: phases and a little rate of its own from
+                // a hash of the head (a phase in step with the head's order,
+                // i * 0.37, lined the rig up in bands).
+                var h1 = own(i, 1.3), h2 = own(i, 2.9), h3 = own(i, 4.7);
                 var w = 0.5
-                    + 0.30 * Math.sin(2 * Math.PI * (t * rate * 2.376 + i * 0.37))
-                    + 0.20 * Math.sin(2 * Math.PI * (t * rate * 5.831 + i * 0.71));
+                    + 0.30 * Math.sin(2 * Math.PI * (t * rate * 2.376 * (0.85 + 0.3 * h3) + h1))
+                    + 0.20 * Math.sin(2 * Math.PI * (t * rate * 5.831 * (1.15 - 0.3 * h3) + h2));
                 v = v * (1 - vary) + Math.max(0, Math.min(1, w)) * vary;
             }
             return { a: Math.round(minA + v * (maxA - minA)) };

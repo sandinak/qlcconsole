@@ -1433,11 +1433,97 @@ void SpreadEffects_Test::lightningSpreadBurstsOutAndFlickersOut()
         const QVariantMap o = run.at(0.0).first();
         QVERIFY(o.value("b").toInt() >= o.value("r").toInt());
         QVERIFY(o.value("r").toInt() > 150);
-        ScriptRun red(ls, rig, inputs, set, { QColor(255, 0, 0) });
+        QVariantMap own = set;
+        own.insert("strikeColour", 1);          // Look's Colour: every level in it
+        ScriptRun red(ls, rig, inputs, own, { QColor(255, 0, 0) });
         const QVariantMap r = red.at(0.0).first();
         QCOMPARE(r.value("r").toInt(), 255);
         QCOMPARE(r.value("g").toInt(), 0);
         QCOMPARE(r.value("dimmer").toDouble(), 1.0);
+    }
+}
+
+void SpreadEffects_Test::lightningSpreadStrikesWhiteHotWithABlueEdge()
+{
+    EffectScript ls;
+    QVERIFY(ls.load(kScripts + "lightning-spread.js"));
+    // One par with a dimmer on the point, a red look; the default Strike
+    // (White-Hot): white as it strikes, a cold blue edge on the way down,
+    // the look's red as it dies.
+    const QList<QVariantMap> rig = { { { "hasRGB", true }, { "hasDimmer", true }, { "fromTarget", 0.0 } } };
+    const QVariantMap inputs = { { "_fromTargetFar", 1.0 } };
+    const QVariantMap set = { { "mode", 0 }, { "spreadTime", 0.1 }, { "edge", 0.0 }, { "decay", 2.0 },
+                              { "strikes", 1 }, { "seed", 3 } };
+    ScriptRun run(ls, rig, inputs, set, { QColor(255, 0, 0) });
+    const QVariantMap peak = run.at(0.0).first();
+    QCOMPARE(levelOf(peak), 1.0);
+    QCOMPARE(QColor(peak.value("r").toInt(), peak.value("g").toInt(), peak.value("b").toInt()), QColor(255, 255, 255));
+    bool edge = false, dying = false;
+    for (int k = 1; k <= 200; ++k)
+    {
+        const QVariantMap o = run.at(k * 0.002).first();
+        const double l = levelOf(o);
+        const int r = o.value("r").toInt(), g = o.value("g").toInt(), b = o.value("b").toInt();
+        if (l > 0.32 && l < 0.5)
+        {
+            QVERIFY2(b > r && b > g, qPrintable(QString("at %1: %2,%3,%4, not the blue edge").arg(l).arg(r).arg(g).arg(b)));
+            edge = true;
+        }
+        if (l > 0 && l < 0.08)
+        {
+            QVERIFY2(r > b && r > g, qPrintable(QString("at %1: %2,%3,%4, not dying in the red").arg(l).arg(r).arg(g).arg(b)));
+            dying = true;
+        }
+    }
+    QVERIFY2(edge && dying, "the strike never passed through its edge and its dying levels");
+
+    // A colour wheel holds the look's slot: the wheel never turns in a flicker.
+    const QList<QVariantMap> wheel = { { { "hasColorWheel", true }, { "hasDimmer", true }, { "fromTarget", 0.0 } } };
+    ScriptRun spun(ls, wheel, inputs, set, { QColor(255, 0, 0) });
+    for (int k = 0; k <= 100; ++k)
+    {
+        const QVariantMap o = spun.at(k * 0.004).first();
+        if (levelOf(o) > 0)
+            QCOMPARE(QColor(o.value("r").toInt(), o.value("g").toInt(), o.value("b").toInt()), QColor(255, 0, 0));
+    }
+}
+
+void SpreadEffects_Test::amberPulseHeadsWanderOnTheirOwn()
+{
+    EffectScript ap;
+    QVERIFY(ap.load(kScripts + "amber-pulse.js"));
+    // Eight heads in a row, all on the same beat (Spread 0), full Variation:
+    // the wander is each head's own.
+    QList<QVariantMap> rig;
+    for (int i = 0; i < 8; ++i)
+        rig << QVariantMap{ { "hasRGB", true } };
+    ScriptRun run(ap, rig, QVariantMap(), { { "spread", 0 }, { "variation", 1.0 }, { "rate", 0.8 } });
+    QList<QList<double>> a(8);                  // [head][tick]
+    for (int k = 0; k < 600; ++k)
+    {
+        const QList<QVariantMap> f = run.at(k * 0.05);
+        for (int i = 0; i < 8; ++i)
+            a[i] << f.at(i).value("a").toDouble();
+    }
+    auto corr = [&](int x, int y) {
+        double mx = 0, my = 0;
+        for (int k = 0; k < a[x].size(); ++k) { mx += a[x][k]; my += a[y][k]; }
+        mx /= a[x].size(); my /= a[y].size();
+        double sxy = 0, sxx = 0, syy = 0;
+        for (int k = 0; k < a[x].size(); ++k)
+        {
+            sxy += (a[x][k] - mx) * (a[y][k] - my);
+            sxx += (a[x][k] - mx) * (a[x][k] - mx);
+            syy += (a[y][k] - my) * (a[y][k] - my);
+        }
+        return sxy / std::sqrt(sxx * syy);
+    };
+    // In step with the order, every pair of neighbours moved alike (-0.55
+    // each, the same lag): each its own, no pair is much alike.
+    for (int i = 0; i + 1 < 8; ++i)
+    {
+        const double c = corr(i, i + 1);
+        QVERIFY2(qAbs(c) < 0.35, qPrintable(QString("heads %1 and %2 move alike (%3): bands").arg(i).arg(i + 1).arg(c)));
     }
 }
 

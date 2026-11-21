@@ -29,7 +29,11 @@
   the same frame, and the same burst every run.
 
   Colours: the look's first colour (the effect's own Colour look under it,
-  else the look's), else a cold, slightly blue white. A head with no
+  else the look's), else a cold, slightly blue white. Strike: White-Hot
+  (the default) burns a strike's bright core white and its edge a cold
+  blue, the other Lightning's tint, as it dies into that colour; Look's
+  Colour keeps every level in it. A colour wheel holds the look's slot
+  either way (a flicker never turns the wheel). A head with no
   colour (a dimmer) flickers in level; a colour wheel holds its nearest
   slot and flickers on its dimmer; a moving head gets colour and dimmer
   only, so it never moves. A relay is not its (a flicker would chatter
@@ -56,7 +60,7 @@
     effect.targetDistance = true;   // fixture.fromTarget, inputs._fromTargetFar
     effect.naturalDurationMs = 3000;
     effect.endsWhenDone   = true;   // Runs: Once ends when the burst has flickered out (state.done)
-    effect.notes = "Lightning from the look's Aim target (centre stage without one). One Burst: a single blast races out in every direction, each head flashes to full as it is hit, then flickers out like lightning -- a strike, a re-strike or two at uneven gaps, gone -- and the stage is left to what is under it. Static Generator: the heads at the centre never go dark, and arcs crawl out from them at uneven gaps through a random few heads at a time, never beyond the Reach. Uses the effect's own Colour, else the look's, else a cold white. A dimmer flickers in level; moving heads get colour and dimmer only. Runs: Once ends a burst when the last head has flickered out. Needs the rig placed in the 2D plan.";
+    effect.notes = "Lightning from the look's Aim target (centre stage without one). One Burst: a single blast races out in every direction, each head flashes to full as it is hit, then flickers out like lightning -- a strike, a re-strike or two at uneven gaps, gone -- and the stage is left to what is under it. Static Generator: the heads at the centre never go dark, and arcs crawl out from them at uneven gaps through a random few heads at a time, never beyond the Reach. Uses the effect's own Colour, else the look's, else a cold white; Strike: White-Hot burns each strike white at its core and a cold blue at its edge as it dies into that colour (Look's Colour keeps it all in the colour). A dimmer flickers in level; moving heads get colour and dimmer only. Runs: Once ends a burst when the last head has flickered out. Needs the rig placed in the 2D plan.";
     effect.fixtureTypes = [
         "rgb", "rgbw", "rgba", "rgbwa", "rgbwauv",
         "wash", "spot", "beam", "dimmer", "color", "colorwheel",
@@ -93,12 +97,16 @@
         { name: "core",      label: "Core Glow", description: "How bright the heads at the centre glow between arcs: they never go dark",
           unit: "%", min: 5, max: 100, defaultValue: 25,
           activeWhen: [{ param: "mode", is: [1] }] },
+        { name: "strikeColour", label: "Strike", description: "White-Hot: each strike burns white at its core, a cold blue at its edge, and dies into the colour. Look's Colour: every level in the colour",
+          defaultValue: 0, values: ["White-Hot", "Look's Colour"] },
         { name: "lightningIntensity", label: "Intensity", description: "How bright the lightning is: 100% at full, 50% half as bright",
           unit: "%", min: 0, max: 100, defaultValue: 100 },
         { name: "seed",      label: "Seed",      description: "Random seed (same seed, same lightning)", type: "float", min: 1, max: 999, defaultValue: 1 }
     ];
 
     var COLD = { r: 200, g: 215, b: 255 };  // lightning with no colour of the look's
+    var WHITE = { r: 255, g: 255, b: 255 }; // a strike's white-hot core
+    var EDGE = { r: 120, g: 160, b: 255 };  // its cold blue edge (Lightning's tint, deeper)
     var STRIKE_TAU = 0.045;     // a strike dies away this fast (seconds), give or take
     var TAIL = 0.15;            // the last share of Flicker Out fades whatever is left to none
     var ARC_LIFE = 0.3;         // an arc's flicker on a head lasts this long
@@ -161,10 +169,11 @@
 
     /* What a head of kind @p k shows at level @p q (0..255) in colour @p c:
        worked out once a colour, kept for every head and tick after. */
-    function looks(H, c, state) {
+    function looks(H, c, hot, inten, state) {
         var L = state ? state._looks : undefined;
-        if (L === undefined || L.heads !== H || L.r !== c.r || L.g !== c.g || L.b !== c.b) {
-            L = { heads: H, r: c.r, g: c.g, b: c.b, table: {} };
+        if (L === undefined || L.heads !== H || L.r !== c.r || L.g !== c.g || L.b !== c.b
+            || L.hot !== hot || L.inten !== inten) {
+            L = { heads: H, r: c.r, g: c.g, b: c.b, hot: hot, inten: inten, table: {} };
             if (state)
                 state._looks = L;
         }
@@ -177,8 +186,24 @@
             t = L.table[k] = new Array(256);
         var o = t[q];
         if (o === undefined)
-            o = t[q] = SPREAD.light(H.rep[k], c, q / 255, false, c);
+            o = t[q] = SPREAD.light(H.rep[k], L.hot ? strikeColour(c, q / 255 / L.inten) : c, q / 255, false, c);
         return o;
+    }
+
+    function smooth(lo, hi, x) {
+        var u = clamp((x - lo) / (hi - lo), 0, 1);
+        return u * u * (3 - 2 * u);
+    }
+    function mix(a, b, u) {
+        return { r: Math.round(a.r + (b.r - a.r) * u), g: Math.round(a.g + (b.g - a.g) * u),
+                 b: Math.round(a.b + (b.b - a.b) * u) };
+    }
+
+    /* White-Hot: the colour of a strike at @p x of its full (before the
+       Intensity): white at the core, a cold blue edge below it, the
+       colour @p c as it dies away. */
+    function strikeColour(c, x) {
+        return mix(mix(c, EDGE, smooth(0.1, 0.45, x)), WHITE, smooth(0.55, 1, x));
     }
 
     /* A burst's strikes on each head: up to @p K, the first at once at
@@ -222,7 +247,7 @@
         return S;
     }
 
-    function burst(fixtures, t, params, inputs, state, seed, c, inten) {
+    function burst(fixtures, t, params, inputs, state, seed, c, inten, hot) {
         var spread = SPREAD.seconds(params, inputs);
         var edge   = clamp(num(params.edge, 0.4), 0, 1);
         var decay  = clamp(num(params.decay, 1.5), 0.2, 10);
@@ -230,7 +255,7 @@
         var A = SPREAD.arrivals(fixtures, inputs, 0, seed, spread, edge, state);
         var H = heads(fixtures, A, seed, state);
         var S = strikes(A, decay, K, seed, state);
-        var L = looks(H, c, state);
+        var L = looks(H, c, hot, inten, state);
         if (state)
             state.done = t >= A.last + decay;
         var n = fixtures.length, at = A.at, kind = H.kind, ss = S.s, aa = S.a, tt = S.tau, gg = S.gone, ee = S.end;
@@ -309,14 +334,14 @@
         return lo;
     }
 
-    function generator(fixtures, t, params, inputs, state, seed, c, inten) {
+    function generator(fixtures, t, params, inputs, state, seed, c, inten, hot) {
         var rate  = clamp(num(params.rate, 4), 0.2, 20);
         var reach = clamp(num(params.reach, 60), 5, 100) / 100;
         var crawl = clamp(num(params.crawl, 0.3), 0.05, 3);
         var core  = clamp(num(params.core, 25), 5, 100) / 100;
         var A = SPREAD.arrivals(fixtures, inputs, 0, seed, 1, 0, state);
         var H = heads(fixtures, A, seed, state);
-        var L = looks(H, c, state);
+        var L = looks(H, c, hot, inten, state);
         var n = fixtures.length, kind = H.kind, d = H.out, u = H.u, order = H.order, sorted = H.sorted;
         if (state)
             state.done = false;
@@ -400,9 +425,10 @@
         var own  = look ? look.ownDimmer : undefined;
         var inten = clamp(num(params.lightningIntensity, 100), 0, 100) / 100
                   * (own === undefined ? 1 : Math.max(0, Math.min(1, own)));
+        var hot  = num(params.strikeColour, 0) < 0.5 && inten > 0;
         if (num(params.mode, 0) >= 0.5)
-            return generator(fixtures, t, params, inputs, state, seed, c, inten);
-        return burst(fixtures, t, params, inputs, state, seed, c, inten);
+            return generator(fixtures, t, params, inputs, state, seed, c, inten, hot);
+        return burst(fixtures, t, params, inputs, state, seed, c, inten, hot);
     };
 
     return effect;

@@ -235,7 +235,7 @@ previews.
 | **Spatial Gradient** | A gradient laid across the rig by where each fixture really is (its 3D position), at a direction you set on a compass |
 | **Spell Spread** | The look's colour reaches each light in turn, out from the look's Aim target or in from a side of the stage; lights not yet reached keep what the cue under them gives |
 | **Warm Cool** | Alternates warm (white) and cool (blue) across the fixtures |
-| **Amber Pulse** / **UV Pulse** | A phase-shifted pulse or chase on the amber / UV emitters |
+| **Amber Pulse** / **UV Pulse** | A phase-shifted pulse or chase on the amber / UV emitters; Amber Pulse's **Variation** wanders each head on its own, like a candle |
 
 ### Spell Spread
 
@@ -502,7 +502,12 @@ To blast the stage with lightning from one point:
 
 The colour is the effect's own Colour look (put it under the effect in
 the look's list), else the look's colour, else a cold, slightly blue
-white. Each kind of head shows it its own way. A dimmer flickers in
+white. With **Strike** on **White-Hot** (the default), each strike burns
+white at its core and a cold blue at its edge as it dies away, then
+fades out in that colour: a red look gives white strikes with a blue
+edge and a red afterglow. **Look's Colour** keeps every level in the
+colour. A colour wheel keeps the look's slot either way, so a flicker
+never turns the wheel. Each kind of head shows it its own way. A dimmer flickers in
 level. An RGB par flickers in the colour. A moving head takes colour and
 dimmer only and never moves. On a colour wheel it holds the nearest slot
 and flickers on its dimmer. A pixel bar is hit pixel by pixel. A relay,

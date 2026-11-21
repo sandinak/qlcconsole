@@ -144,8 +144,9 @@ end** to **Hold**.
 
 **Lightning Spread** starts from the same point, but as lightning. On
 **One Burst** a blast reaches the whole rig in a fraction of a second, and
-each head flashes and flickers out with a re-strike or two, then the stage
-goes back to what is under it. On **Static Generator** the heads at the
+each head flashes white-hot, with a cold blue edge, and flickers out
+with a re-strike or two in the look's colour, then the stage goes back to
+what is under it. On **Static Generator** the heads at the
 point keep a jagged glow and arcs crawl out from them now and then, never
 past the **Reach**. Set **Runs** to **Once** and a burst ends when the last
 head is out.
