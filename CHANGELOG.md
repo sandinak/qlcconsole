@@ -58,6 +58,16 @@ parts of the app it doesn't use.
 
 ### Changed
 
+- Fixture Properties fits the screen: its rows scroll, OK and Cancel stay in
+  view (it ran off a laptop's screen for a moving head).
+- Show Review: with several rows selected, **Fix Selected (N)** fixes every
+  one that can be fixed in place in one go (pan turns, suggested cuts, the
+  footer's own fixes) and says how many need a visit. MOV-14's fix, when no
+  pan turn clears the stage, turns the head's Facing toward it too (one
+  undo step) instead of opening Fixture Properties -- except on a head that
+  is live, whose Facing is left alone (it is how the head hangs, so its beam
+  would land elsewhere until someone turned it on its pipe); the fix says
+  which heads it left and still warns that a live beam moves.
 - Lightning Spread strikes white-hot: a strike burns white at its core and
   a cold blue at its edge, then fades out in the look's colour (**Strike**:
   White-Hot, the default; Look's Colour keeps the old look). Colour wheels

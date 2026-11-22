@@ -500,6 +500,7 @@ private slots:
     void aFixtureIsRenamedFromItsEditDialogAndEverywhere();
     /** "when I select a fixture in the main studio view .. should also select
      *  it in the side layers". */
+    void fixturePropertiesFitsTheScreen();
     void selectingOnThePlotSelectsInLayers();
     /** "in truss view we have text stomping on each other .. shelf info on
      *  left and light info on right": a tower's shelf labels sit left of it,
@@ -1080,6 +1081,8 @@ private slots:
      *  one head or several -- is said first ("its beam moves now, a whole
      *  turn round") and done only on a yes. */
     void aLiveHeadsTurnIsSaidFirst();
+    /** A live head's Facing (how it hangs) is never written under the show. */
+    void aLiveHeadsFacingIsLeftAlone();
     /** Centre the pan for a selection (and the plot's menu): one undo step. */
     void centringASelectionIsOneUndoStep();
     /** A move changes the turn only when the stage crosses the seam, said. */
