@@ -4097,6 +4097,10 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
     }
     keep->click();
     settle(200);
+    // The Library lists it and opens its name a turn later (the designer
+    // lets go of its preview scene first).
+    for (int i = 0; i < 40 && !view->m_libRenaming; ++i)
+        settle(50);
     QLCPalette *made = nullptr;
     for (QLCPalette *p : doc->palettes())
         if (!before.contains(p->id()))

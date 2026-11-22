@@ -372,22 +372,27 @@ void ShowTreeView::followDesignerIntoTheLibrary(EffectDesigner *designer, bool n
             [this, nameNewOnes](quint32 paletteId, const QList<quint32> &, EffectDesigner::Outcome outcome) {
         if (outcome == EffectDesigner::OneOff)
             return;             // a one-off is the cue's, never listed in All
-        reloadLibrary();
-        const QLCPalette *p = m_doc->palette(paletteId);
-        if (p == nullptr)
-            return;
-        selectLibraryPalette(paletteId);
-        if (outcome == EffectDesigner::NewPalette && nameNewOnes)
-        {
-            // Saved under the effect's name: the name is open to type over,
-            // as Build ▸ Effects opens it (no name box first).
-            m_hint->setText(tr("Saved in this show as “%1”: type its name").arg(p->name()));
-            startLibraryRename();
-        }
-        else
-        {
-            paletteEdited(paletteId, true);
-        }
+        /* Deferred: the designer lets go of its hidden preview scene right
+           after this, and a function leaving the show reloads the Library
+           -- which would throw away the row we just opened to type in. */
+        QTimer::singleShot(0, this, [this, paletteId, outcome, nameNewOnes]() {
+            const QLCPalette *p = m_doc->palette(paletteId);
+            if (p == nullptr)
+                return;
+            reloadLibrary();
+            selectLibraryPalette(paletteId);
+            if (outcome == EffectDesigner::NewPalette && nameNewOnes)
+            {
+                // Saved under the effect's name: the name is open to type
+                // over, as Build ▸ Effects opens it (no name box first).
+                m_hint->setText(tr("Saved in this show as “%1”: type its name").arg(p->name()));
+                startLibraryRename();
+            }
+            else
+            {
+                paletteEdited(paletteId, true);
+            }
+        });
     });
 }
 
