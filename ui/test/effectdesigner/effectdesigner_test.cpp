@@ -202,7 +202,8 @@ void EffectDesigner_Test::frontAndBehindSurviveSaveAndLoad()
     quint32 pid = QLCPalette::invalidId();
     QString key;
     {
-        EffectLayerDialog dlg(m_doc, c1, l1, t);
+        EffectDesigner designer(m_doc);
+        EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
         EffectDesigner *ed = dlg.designer();
         QVERIFY(ed->pickEffect("Fire Spread"));
         LookEditor *le = ed->lookEditor();
@@ -255,7 +256,8 @@ void EffectDesigner_Test::frontAndBehindSurviveSaveAndLoad()
 
     // Reopened: both are in the designer's Its own row and the swatches.
     {
-        EffectLayerDialog dlg(other, c1, l1, t, key);
+        EffectDesigner designer(other);
+        EffectLayerHost dlg(other, &designer, c1, l1, t, key);
         EffectDesigner *ed = dlg.designer();
         QCOMPARE(ed->ownLooks(), own);
         QCOMPARE(ed->findChild<QComboBox *>("edOwnColour")->currentData().toUInt(), own.at(0));
@@ -411,7 +413,8 @@ void EffectDesigner_Test::keepOnALayerMakesAOneOff()
     st->setLayerLook(c1, l1, st->lookForPalette(full->id()));
     st->clearUndo();
 
-    EffectLayerDialog dlg(m_doc, c1, l1, t);
+    EffectDesigner designer(m_doc);
+    EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
     EffectDesigner *ed = dlg.designer();
     QVERIFY(!ed->isBench());
     QCOMPARE(ed->targetGroups(), QList<quint32>({ towers->id() }));
@@ -451,14 +454,16 @@ void EffectDesigner_Test::aLayersOneOffIsEditedInPlace()
     const quint32 l1 = st->addLayer(c1, t);
     quint32 first;
     {
-        EffectLayerDialog dlg(m_doc, c1, l1, t);
+        EffectDesigner designer(m_doc);
+        EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
         QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
         first = dlg.designer()->keepOneOff();
     }
     const int palettes = m_doc->palettes().count();
     const QString key = effectKey(st->effectKind(m_doc->palette(first)));
     {
-        EffectLayerDialog dlg(m_doc, c1, l1, t, key);
+        EffectDesigner designer(m_doc);
+        EffectLayerHost dlg(m_doc, &designer, c1, l1, t, key);
         EffectDesigner *ed = dlg.designer();
         QCOMPARE(ed->originalId(), first);
         QCOMPARE(dlg.previousLook().palettes, QList<quint32>({ first }));
@@ -568,7 +573,8 @@ void EffectDesigner_Test::aNamedEffectIsACopyUntilUpdated()
     const quint32 l1 = st->addLayer(c1, t);
     st->setLayerLook(c1, l1, st->lookForPalette(phaser->id()));
 
-    EffectLayerDialog dlg(m_doc, c1, l1, t);
+    EffectDesigner designer(m_doc);
+    EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
     EffectDesigner *ed = dlg.designer();
     QCOMPARE(ed->originalId(), phaser->id());
     QPushButton *update = ed->findChild<QPushButton *>("edUpdate");
@@ -614,7 +620,8 @@ void EffectDesigner_Test::anotherKindGoesBesideTheLayersEffect()
 
     quint32 dim = QLCPalette::invalidId();
     {
-        EffectLayerDialog dlg(m_doc, c1, l1, t);
+        EffectDesigner designer(m_doc);
+        EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
         QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
         dim = dlg.designer()->keepOneOff();
     }
@@ -630,7 +637,8 @@ void EffectDesigner_Test::anotherKindGoesBesideTheLayersEffect()
     // The same kind again, from the layer: it replaces that one only.
     quint32 dim2 = QLCPalette::invalidId();
     {
-        EffectLayerDialog dlg(m_doc, c1, l1, t);
+        EffectDesigner designer(m_doc);
+        EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
         QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
         dim2 = dlg.designer()->keepOneOff();
     }
@@ -639,7 +647,8 @@ void EffectDesigner_Test::anotherKindGoesBesideTheLayersEffect()
 
     // From the colour effect's own row, another kind: that row's effect goes.
     {
-        EffectLayerDialog dlg(m_doc, c1, l1, t, oldKey);
+        EffectDesigner designer(m_doc);
+        EffectLayerHost dlg(m_doc, &designer, c1, l1, t, oldKey);
         QVERIFY(dlg.designer()->pickEffect("Dimmer Phaser"));
         dlg.designer()->keepOneOff();
     }
@@ -661,7 +670,8 @@ void EffectDesigner_Test::theEffectsOwnColourIsKept()
     t.groups << towers->id();
     const quint32 l1 = st->addLayer(c1, t);
 
-    EffectLayerDialog dlg(m_doc, c1, l1, t);
+    EffectDesigner designer(m_doc);
+    EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
     EffectDesigner *ed = dlg.designer();
     QVERIFY(ed->pickEffect("Color Chase"));
     QComboBox *own = ed->findChild<QComboBox *>("edOwnColour");
@@ -681,6 +691,10 @@ void EffectDesigner_Test::theEffectsOwnColourIsKept()
 
 void EffectDesigner_Test::theShowTreeOpensItOnALayer()
 {
+    /* Board Q263: both doors -- a layer's right-click Design Effect… and
+       its Effect row's ⋯ -- open the designer in the DOCKED WORKBENCH's
+       editor pane, on that layer's fixtures. No modal window, and what is
+       kept lands on the layer. */
     FixtureGroup *towers = group("Towers", 0, 3);
     ShowTreeController *st = m_doc->showTree();
     const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
@@ -688,6 +702,7 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
     Target t;
     t.groups << towers->id();
     const quint32 l1 = st->addLayer(c1, t);
+    EffectDesigner::plugIntoWorkbench();
 
     ShowTreeView view(nullptr, m_doc);
     view.resize(1200, 800);
@@ -695,21 +710,12 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(view.selectNode(l1, c1));
 
-    // Drive the menus and the window as a person would, never waiting on one.
+    // Drive the menus as a person would, never waiting on one.
     QStringList menuActions;
     QString wanted;
-    bool triggered = false, designed = false;
+    bool triggered = false;
     QTimer driver;
     connect(&driver, &QTimer::timeout, this, [&]() {
-        if (EffectLayerDialog *dlg = qobject_cast<EffectLayerDialog *>(modalOrFixtureEditor()))
-        {
-            if (!designed && dlg->designer()->pickEffect("Dimmer Phaser"))
-            {
-                designed = true;
-                dlg->designer()->keepOneOff();
-            }
-            return;
-        }
         QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
         if (menu == nullptr)
             return;
@@ -720,8 +726,6 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
         if (a != nullptr && !triggered)
         {
             triggered = true;
-            // Not from in here: the window it opens waits, and this timer
-            // can't tick again until this returns.
             QTimer::singleShot(0, a, &QAction::trigger);
             return;
         }
@@ -729,19 +733,44 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
     });
     driver.start(20);
 
-    // The layer's right-click menu offers it.
+    // 1. The layer's right-click menu offers it, and it opens the pane.
+    wanted = QStringLiteral("stDesignEffectLayer");
     QTreeWidgetItem *item = view.m_tree->currentItem();
     QVERIFY(item != nullptr);
     view.slotTreeContextMenu(view.m_tree->visualItemRect(item).center());
     QVERIFY2(menuActions.contains("stDesignEffectLayer"), qPrintable(menuActions.join(',')));
+    QTRY_VERIFY(view.isWorkbenchDocked());
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    EffectDesigner *ed = qobject_cast<EffectDesigner *>(bench->effectPane());
+    QVERIFY2(ed != nullptr, "the layer's designer is not in the Workbench's pane");
+    QVERIFY2(QApplication::activeModalWidget() == nullptr, "a modal window opened");
+    QVERIFY(!ed->isBench());
+    QCOMPARE(ed->targetGroups(), QList<quint32>({ towers->id() }));
+    // In Context / Solo is shown, and it is the cue's one Solo.
+    QVERIFY(!ed->findChild<QPushButton *>("edSolo")->isHidden());
+    ed->setSolo(true);
+    QVERIFY(bench->isSolo());
+    ed->setSolo(false);
+    QVERIFY(!bench->isSolo());
+    // Nothing picked yet, so nothing to ask about: ↩ leaves at once.
+    QVERIFY(!ed->hasUnkeptChanges());
+    QVERIFY(bench->backOut());
+    QVERIFY(bench->effectPane() == nullptr);
 
-    // The Effect row's ⋯ menu too: designing there puts it on the layer.
+    // 2. The Effect row's ⋯ → Design a New Effect…: the same pane, and
+    // Keep on This Layer puts the effect on the layer.
     menuActions.clear();
+    triggered = false;
     wanted = QStringLiteral("stDesignEffect");
     view.attributeMenu(c1, l1, Target(), t, QStringLiteral("Effect."), view.mapToGlobal(QPoint(10, 10)));
     QVERIFY(triggered);
-    QVERIFY(designed);
     driver.stop();
+    QTRY_VERIFY(qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane()) != nullptr);
+    ed = qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane());
+    QCOMPARE(ed->targetGroups(), QList<quint32>({ towers->id() }));
+    QVERIFY(ed->pickEffect("Dimmer Phaser"));
+    QVERIFY(ed->keepOneOff() != QLCPalette::invalidId());
     const Layer *layer = st->cue(c1)->layer(l1);
     bool hasEffect = false;
     for (const Look &l : layer->looks)
@@ -749,7 +778,116 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
             && m_doc->palette(l.palettes.first())->scriptPath().endsWith("dimmer-phaser.js"))
             hasEffect = true;
     QVERIFY(hasEffect);
+    // Kept: the pane stays open on it, with nothing left to ask about.
+    QCOMPARE(view.dockedWorkbench()->effectPane(), static_cast<QWidget *>(ed));
+    QVERIFY(!ed->hasUnkeptChanges());
     QVERIFY(st->previewedCue() == c1 || st->previewedCue() == invalidId());
+}
+
+/* Board Q263: a draft nobody kept is not dropped in silence. Clicking
+   another row, or ↩, asks; Keep designing puts the selection back and the
+   designer is still there. */
+void EffectDesigner_Test::leavingADesignerAsksFirst()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    FixtureGroup *spots = group("Spots", 3, 2);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    Target t2;
+    t2.groups << spots->id();
+    st->addLayer(c1, t2);
+    EffectDesigner::plugIntoWorkbench();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.designEffectOnLayer(c1, l1, t));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    EffectDesigner *ed = qobject_cast<EffectDesigner *>(bench->effectPane());
+    QVERIFY(ed != nullptr);
+    QVERIFY(ed->pickEffect("Dimmer Phaser"));
+    QVERIFY(ed->hasUnkeptChanges());
+
+    // Keep designing: the pane stays, and so does the selection.
+    QString asked;
+    bool leave = false;
+    bench->setConfirm([&asked, &leave](const QString &, const QString &text) {
+        asked = text;
+        return leave;
+    });
+    const int designing = bench->rows()->layerOf(bench->rows()->currentItem());
+    QTreeWidgetItem *other = bench->rows()->layerItem(designing == 0 ? 1 : 0);
+    QVERIFY(other != nullptr);
+    bench->rows()->setCurrentItem(other);
+    QVERIFY2(asked.contains("hasn't been kept"), qPrintable(asked));
+    QCOMPARE(bench->effectPane(), static_cast<QWidget *>(ed));
+    QCOMPARE(bench->rows()->layerOf(bench->rows()->currentItem()), designing);
+
+    // Leave: the pane goes, and the draft left nothing behind.
+    const int palettes = m_doc->palettes().count();
+    leave = true;
+    bench->rows()->setCurrentItem(other);
+    QCOMPARE(bench->effectPane(), nullptr);
+    QCOMPARE(m_doc->palettes().count(), palettes);
+    QVERIFY(st->cue(c1)->layer(l1)->looks.isEmpty());
+}
+
+/* Board Q264: in the qlcconsole view the Library's effect doors open the
+   designer -- + Palette ▸ Effect on the bench (nothing is made until it is
+   kept) and Edit Effect on the palette it starts from -- while every other
+   palette type stays the Look Editor's. */
+void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *chase = effectPalette(m_doc, "Chase", "Color Chase");
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QLCPalette::colorToString(Qt::blue, QColor(Qt::black)));
+    QVERIFY(m_doc->addPalette(blue));
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    st->addLayer(c1, t);
+    EffectDesigner::plugIntoWorkbench();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.selectNode(c1));
+
+    // + Palette ▸ Effect: the bench, on the cue's own groups, and no
+    // palette made yet.
+    const int palettes = m_doc->palettes().count();
+    QVERIFY(view.designEffectPalette(QLCPalette::invalidId()));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    EffectDesigner *ed = qobject_cast<EffectDesigner *>(bench->effectPane());
+    QVERIFY2(ed != nullptr, "+ Palette > Effect did not open the designer");
+    QVERIFY(ed->isBench());
+    QCOMPARE(ed->tryOnGroups(), QList<quint32>({ towers->id() }));
+    QCOMPARE(m_doc->palettes().count(), palettes);
+    // The cue it was opened from stays loaded, so Make a Layer can put it there.
+    QCOMPARE(ed->cameFromCue(), c1);
+    ed->cancel();
+
+    // Edit Effect: the designer, started from that palette.
+    QVERIFY(view.designEffectPalette(chase->id()));
+    ed = qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane());
+    QVERIFY(ed != nullptr);
+    QCOMPARE(ed->originalId(), chase->id());
+    ed->cancel();
+
+    // Every other type: the Look Editor, not the designer.
+    QVERIFY(!view.designEffectPalette(blue->id()));
 }
 
 void EffectDesigner_Test::thereIsNoSaveAsPreset()
@@ -1240,7 +1378,8 @@ void EffectDesigner_Test::makeALayerIntoACue()
     // A layer's designer has none (it is the layer).
     Target t;
     t.groups << towers->id();
-    EffectLayerDialog dlg(m_doc, c1, l1, t);
+    EffectDesigner designer(m_doc);
+    EffectLayerHost dlg(m_doc, &designer, c1, l1, t);
     QVERIFY(dlg.designer()->findChild<QToolButton *>("edMakeLayer")->isHidden());
 }
 
@@ -1484,17 +1623,19 @@ void EffectDesigner_Test::picturesOfARealShow()
                     }
     QVERIFY2(cueId != invalidId(), "the show has no Show Tree layer on that group");
     {
-        EffectLayerDialog dlg(m_doc, cueId, layerId, target);
-        dlg.resize(1400, 860);
-        dlg.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&dlg));
+        // Board Q263: the layer's designer is the docked Workbench's pane.
+        EffectDesigner designer(m_doc);
+        EffectLayerHost dlg(m_doc, &designer, cueId, layerId, target);
+        designer.resize(1400, 860);
+        designer.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&designer));
         QVERIFY(dlg.designer()->pickEffect(qEnvironmentVariable("QLC_EFFECTDESIGNER_EFFECT", "Color Chase")));
         for (int i = 0; i < 20; ++i)
         {
             QTest::qWait(50);
             dlg.designer()->browser()->update();
         }
-        QVERIFY(dlg.grab().save(QDir(shots).filePath("effect-designer-layer.png")));
+        QVERIFY(designer.grab().save(QDir(shots).filePath("effect-designer-layer.png")));
         dlg.designer()->cancel();
     }
 

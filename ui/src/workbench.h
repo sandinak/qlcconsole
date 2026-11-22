@@ -26,6 +26,7 @@
 #include <functional>
 
 #include "programmingoutline.h"
+#include "showtreemodel.h"
 #include "function.h"
 #include "qlcui_export.h"
 
@@ -204,6 +205,9 @@ public:
         quint32 cueId = 0xFFFFFFFF;
         quint32 layerId = 0xFFFFFFFF;   //!< invalid: a layer carried in
         QString targetSignature;        //!< ShowTree::Target::signature()
+        /** What the layer lights, for the heads it is designed on and for
+         *  putting the effect back on a carried-in layer. */
+        ShowTree::Target target;
         QString key;                    //!< "Effect.Color"; empty: the layer's
         quint32 palette = 0xFFFFFFFF;   //!< the effect it has (invalid: none)
         /** The bench: the cue or scene it was opened from, Make a layer's
@@ -211,6 +215,10 @@ public:
          *  cue, a plain scene) -- or the bench showing already, its own. */
         quint32 fromCue = 0xFFFFFFFF;
         quint32 fromScene = 0xFFFFFFFF;
+        /** The bench: the groups to try it on (empty: the ones it
+         *  remembers). The Show Tree's Library sends the selected layer's,
+         *  else the selected cue's, so a new effect plays on something. */
+        QList<quint32> tryOn;
     };
     /** The effect designer's widget for @a request, made for the editor
      *  pane (the Workbench owns it and deletes it when the row changes);
@@ -224,9 +232,22 @@ public:
     bool designEffect();
     /** Ask for the effect designer for @a request: a cue layer's, or the
      *  bench's (cueId invalid; Build ▸ Effects) -- what is loaded is
-     *  unloaded first and the layers column steps aside while it shows.
+     *  unloaded first (a Show Tree cue stays loaded and plays in context)
+     *  and the layers column steps aside while it shows.
      *  False: no designer plugged in, or it declined. */
     bool designEffect(const EffectRequest &request);
+    /** Board Q263: design the effect of layer @a layerId (or the
+     *  carried-in layer @a signature) of cue @a cueId -- the row the
+     *  caller means, not the one that happens to be selected -- in the
+     *  editor pane. @a key: the Effect row ("Effect.Color"), empty for a
+     *  new effect beside the layer's. False: that layer isn't loaded here,
+     *  or no designer is plugged in. */
+    bool designEffectOn(quint32 cueId, quint32 layerId, const QString &signature,
+                        const QString &key = QString());
+    /** A designer in the editor pane with changes nobody has kept, and the
+     *  user asked for something that would drop them: ask. True means
+     *  "still designing" -- the caller leaves the pane alone. */
+    bool keepsDesigning();
     /** The designer the factory made, while the editor pane shows it
      *  (null: none). The Workbench deletes it when the row changes. */
     QWidget *effectPane() const
@@ -493,11 +514,19 @@ private:
     /** designEffect()'s designer, and whether it is the bench's. */
     QPointer<QWidget> m_effectPane;
     bool m_benchPane = false;
+    /** The layers row the pane's designer belongs to (ProgrammingOutline's
+     *  KeyRole): clicking another row asks before dropping the draft. */
+    QString m_effectPaneRow;
+    bool m_askingLeave = false;         //!< the question is up: don't ask again
     /** The bench's EffectRequest::fromCue / fromScene, kept while it shows. */
     quint32 m_benchFromCue = 0xFFFFFFFF;
     quint32 m_benchFromScene = 0xFFFFFFFF;
     /** Host the factory's @a pane under @a heading. */
     void hostEffectPane(QWidget *pane, const QString &heading, bool bench);
+    /** The designer for layer @a layer of the loaded cue, on Effect row
+     *  @a key (empty: a new effect beside the layer's) which plays
+     *  @a palette now, in the editor pane. */
+    bool designEffectForLayer(int layer, const QString &key, quint32 palette);
     /************************************************************************
      * Encoder banks: a MIDI controller's encoders turn the selection
      * (EncoderBank, docs/features/encoder-banks.md)

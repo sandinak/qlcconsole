@@ -51,8 +51,9 @@ class Doc;
  * and reports what the user chose with effectChosen(). Nothing in the show
  * changes until then, and cancel() (or destroying it) leaves no trace.
  *
- * Hosts: EffectLayerDialog (a Show Tree layer), the Workbench's editor
- * pane (Build ▸ Effects), and EffectsPage.
+ * Hosts: the Workbench's editor pane -- a Show Tree cue's layer
+ * (EffectLayerHost below, board Q263) or Build ▸ Effects' bench -- and
+ * EffectsPage.
  */
 class QLC_UI_EXPORT EffectDesigner final : public QWidget
 {
@@ -261,12 +262,18 @@ public:
     /** The bench's Try on groups as last picked (by name), in @a doc. */
     static QList<quint32> savedTryOnGroups(Doc *doc);
     /** Plug the designer into the Workbench's editor pane
-     *  (Workbench::setEffectPaneFactory): the bench's requests -- Build ▸
-     *  Effects -- get a designer on the Try on groups, told where it was
-     *  opened from (EffectRequest::fromCue / fromScene) for Make a layer,
-     *  whose new layer it then shows (revealLayer()). A cue layer's are
-     *  declined for now (the Show Tree's Design effect… dialog does those),
-     *  so the Workbench shows what it did before. */
+     *  (Workbench::setEffectPaneFactory). Two shapes, one designer
+     *  (board Q263):
+     *
+     *  - a **cue layer's** request (EffectRequest::cueId set): a designer
+     *    on that layer's heads, its other looks under the effect, Keep on
+     *    This Layer offered and In Context / Solo driving the Workbench's
+     *    own Solo -- an EffectLayerHost does the reading and the keeping;
+     *  - the **bench's** (no cue; Build ▸ Effects, and the Show Tree's
+     *    Library): a designer on the Try on groups (EffectRequest::tryOn
+     *    when the caller knows better), told where it was opened from
+     *    (fromCue / fromScene) for Make a layer, whose new layer it then
+     *    shows (revealLayer()). */
     static void plugIntoWorkbench();
 
     /** Copy everything an Effect palette runs from @a from to @a to (not its
@@ -335,46 +342,61 @@ private:
 };
 
 /**
- * The Show Tree's host: the designer for one layer of one cue, in a window
- * of its own. "Design effect…" on a layer (its ⋯ menu on an Effect row, or
- * the tree's right-click). What is kept goes on the layer as its Effect
- * look -- replacing the effect it had -- in one undo step.
+ * The Show Tree's half of the designer: one layer of one cue, designed in
+ * the Workbench's editor pane (board Q263 -- until 0.5.3 this was a modal
+ * "Design effect" window). Not a widget: it reads what the layer plays,
+ * sets a designer up for those heads, and puts what the user keeps on the
+ * layer as its Effect look -- replacing the effect it had -- in one undo
+ * step.
+ *
+ * It does not preview: docked, the Workbench already plays the cue (in
+ * context) or the layer alone (Solo), so there is one preview and one
+ * Solo, not two.
+ *
+ * Lifetime: the host is given the designer it configures and does NOT own
+ * it; the factory makes it the designer's child so it goes when the pane
+ * does.
  */
-class EffectLayerDialog final : public QDialog
+class QLC_UI_EXPORT EffectLayerHost final : public QObject
 {
     Q_OBJECT
 
 public:
-    /** The layer @a layerId of cue @a cueId; a carried-in layer has no id
-     *  of its own and is named by @a target (a value set on it makes it the
-     *  cue's own, as the tree does). @a key: the Effect row it was opened
-     *  from ("Effect.Color"), or empty / "Effect." for the layer's effect,
-     *  if any. */
-    EffectLayerDialog(Doc *doc, quint32 cueId, quint32 layerId, const ShowTree::Target &target,
-                      const QString &key = QString(), QWidget *parent = nullptr);
-    ~EffectLayerDialog() override;
+    /** Design the effect of layer @a layerId of cue @a cueId in
+     *  @a designer. A carried-in layer has no id of its own and is named
+     *  by @a target (a value set on it makes it the cue's own, as the tree
+     *  does). @a key: the Effect row it was opened from ("Effect.Color"),
+     *  or empty / "Effect." for the layer's effect, if any. */
+    EffectLayerHost(Doc *doc, EffectDesigner *designer, quint32 cueId, quint32 layerId,
+                    const ShowTree::Target &target, const QString &key = QString(),
+                    QObject *parent = nullptr);
+    ~EffectLayerHost() override;
 
     EffectDesigner *designer() const { return m_designer; }
     /** The Effect look the layer had (empty key: none). */
     ShowTree::Look previousLook() const { return m_previous; }
+    /** The layer, as the pane's heading reads it ("1.0.6 Dance Break · Steps"). */
+    QString where() const { return m_where; }
+    /** Something was kept on the layer. */
+    bool applied() const { return m_applied; }
 
     /** Put @a paletteId (with @a own) on the layer as its effect. */
     bool apply(quint32 paletteId, const QList<quint32> &own);
 
-    /** Open it for the layer and wait. True when an effect was put on it. */
-    static bool design(Doc *doc, QWidget *parent, quint32 cueId, quint32 layerId,
-                       const ShowTree::Target &target, const QString &key = QString());
+signals:
+    /** @a paletteId was put on the layer (an outcome that changed it). */
+    void kept(quint32 paletteId);
 
 private:
-    Doc *m_doc;
+    QPointer<Doc> m_doc;
     quint32 m_cueId;
     quint32 m_layerId;
     ShowTree::Target m_target;
     ShowTree::Look m_previous;
+    QString m_where;
     bool m_previousOwn = false;
     bool m_replacesOtherKind = false;
-    quint32 m_previewedBefore;
-    EffectDesigner *m_designer;
+    QPointer<EffectDesigner> m_designer;
     bool m_applied = false;
 };
 
