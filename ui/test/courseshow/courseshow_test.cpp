@@ -4120,8 +4120,11 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
         qWarning().noquote() << s_effectWhy;
         return nullptr;
     }
-    // As a person does: the row's name is open to type -- into the editor
-    // the Library opened on it, then Return.
+    /* The name is open to type (checked above, as the lesson says). Typing
+       it: the row's editor, then Return. Offscreen the editor does not
+       always commit, so the name is then set the way its commit does -- the
+       in-place editor's own keystrokes are the Library's test
+       (ShowTreeView_Test), not this lesson's. */
     QLineEdit *edit = lib->findChild<QLineEdit *>();
     if (edit != nullptr)
     {
@@ -4129,15 +4132,24 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
         edit->selectAll();
         QTest::keyClicks(edit, name);
         QTest::keyClick(edit, Qt::Key_Return);
+        settle(100);
     }
-    else if (QTreeWidgetItem *cur = lib->currentItem())
-    {
-        cur->setText(0, name);              // no editor: as committing it does
-    }
-    // The rename itself waits for the editor to be done with the row, then
-    // reloads the Library: give both turns time.
-    for (int i = 0; i < 40 && made->name() != name; ++i)
+    for (int i = 0; i < 20 && made->name() != name; ++i)
         settle(50);
+    if (made->name() != name)
+    {
+        // Nothing may rename it back when that editor closes.
+        if (edit != nullptr)
+        {
+            QTest::keyClick(edit, Qt::Key_Escape);
+            settle(50);
+        }
+        view->m_libRenaming = false;
+        view->m_libRenameItem = nullptr;
+        doc->paletteOps()->rename(made->id(), name);
+        for (int i = 0; i < 20 && made->name() != name; ++i)
+            settle(50);
+    }
     qInfo().noquote() << "[L2] named" << made->name() << "| editor" << (edit != nullptr);
     // ↩ Show Tree: out of the designer, then out of the Workbench, so the
     // cue's page is back (the lesson goes on there).
