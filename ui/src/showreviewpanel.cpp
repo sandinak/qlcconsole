@@ -668,19 +668,21 @@ void ShowReviewPanel::applyCuts(const QList<QVariantList> &cuts)
 }
 
 namespace {
-/* The turn and Facing of each head, to tell a pan fix that went in from one
-   the user cancelled: the jump reports "handled" either way. */
-QByteArray headRigState(Doc *doc, const QVariantList &heads)
+/* The turn and Facing of each head, to tell what a pan fix moved from what
+   it left: the jump reports "handled" whether it wrote, was cancelled, or
+   had nothing it could do. Per head, so a row is counted by its own heads. */
+QHash<quint32, QByteArray> headRigStates(Doc *doc, const QVariantList &heads)
 {
-    QByteArray out;
+    QHash<quint32, QByteArray> out;
     MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
     if (mp == nullptr)
         return out;
     for (const QVariant &v : heads)
     {
-        const FixtureRigProps rp = mp->fixtureRigProps(v.toUInt());
-        out += QByteArray::number(rp.panTurn) + ':'
-               + QByteArray::number(double(rp.panZeroDir), 'f', 3) + ';';
+        const quint32 fid = v.toUInt();
+        const FixtureRigProps rp = mp->fixtureRigProps(fid);
+        out.insert(fid, QByteArray::number(rp.panTurn) + ':'
+                            + QByteArray::number(double(rp.panZeroDir), 'f', 3));
     }
     return out;
 }
@@ -698,15 +700,14 @@ bool ShowReviewPanel::fixSelected()
         m_fixed = 0;
         m_left = 0;
         QVariantList heads;
-        QList<DirectFix> rest;
-        int panRows = 0;
+        QList<DirectFix> rest, panFixes;
         for (QTreeWidgetItem *item : items)
         {
             const DirectFix d = directFixOf(item);
             if (d.kind == DirectFix::PanTurn)
             {
                 heads += d.data;
-                ++panRows;
+                panFixes << d;
             }
             else if (d.kind == DirectFix::None)
                 ++m_left;
@@ -715,19 +716,32 @@ bool ShowReviewPanel::fixSelected()
         }
         if (heads.isEmpty() && rest.isEmpty())
             return false;
-        // The pan turns first: a Cancel there is a Cancel of the lot.
+        /* The pan turns first, all their heads in one step. Its dialog
+           answers for itself and reports "handled" whichever way it went --
+           turns written, Cancel, or nothing it could do -- so each row is
+           counted by what actually moved: a row whose heads all sit where
+           they were is still open and waits for a visit. The rest of the
+           batch (the cuts, the footer's own fixes) is the user's other
+           findings and goes ahead either way. */
         if (!heads.isEmpty())
         {
-            const QByteArray before = headRigState(m_doc, heads);
+            const QHash<quint32, QByteArray> before = headRigStates(m_doc, heads);
             if (!runJump(this, QStringLiteral("panturn"), heads))
                 return false;
-            /* Its dialog answers for itself and reports "handled" whichever
-               way it went -- turns written, Cancel, or nothing it could do. No
-               turn and no Facing moved means no: the rest of the batch stops
-               with it, and the count stays honest. */
-            if (headRigState(m_doc, heads) == before)
-                return false;
-            m_fixed += panRows;
+            const QHash<quint32, QByteArray> after = headRigStates(m_doc, heads);
+            for (const DirectFix &d : panFixes)
+            {
+                bool moved = false;
+                for (const QVariant &v : d.data)
+                {
+                    const quint32 fid = v.toUInt();
+                    moved = moved || after.value(fid) != before.value(fid);
+                }
+                if (moved)
+                    ++m_fixed;
+                else
+                    ++m_left;
+            }
         }
         QList<QVariantList> cuts;
         for (const DirectFix &d : rest)
@@ -815,6 +829,12 @@ void ShowReviewPanel::fixOrSay()
                                .arg(m_fixed).arg(m_left));
         else if (m_fixed > 0)
             m_summary->setText(tr("Fixed %1.").arg(m_fixed));
+        // Nothing fixed: say that, rather than leave the last click's line up.
+        else if (m_left > 0)
+            m_summary->setText(tr("Nothing fixed here. %1 need you at their place: select one and Fix ▸.")
+                               .arg(m_left));
+        else
+            m_summary->setText(tr("⚠ Nothing fixed. Re-check to see what is left."));
         return;
     }
     if (n == 1 && !fixSelected())

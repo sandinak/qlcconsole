@@ -163,7 +163,11 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
   turn clears the stage, the same fix turns the head's **Facing** toward
   the stage as well, to the Facing nearest its own that clears it, and says
   so first: the plot's Facing is how the head hangs, so turn it on its pipe
-  to match. Facing and turn are one undo step, and no window opens.
+  to match. Facing and turn are one undo step, and no window opens. A head
+  that is **live** keeps its Facing: its looks would be worked out from the
+  new one at once and its beam would land somewhere else until someone turned
+  the head on its pipe, so the fix says which heads it left alone and does
+  only their turn (and warns, as always, that a live beam moves).
 
 How long a move takes comes from the head's type: a moving head turns 180°
 in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).

@@ -11240,6 +11240,9 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
             {
                 fids << fid;
                 lines << PanTurn::changeText(m_doc, fid, rp.panTurn, PanTurn::proposal(m_doc, fid));
+                // That turn still swings a live beam: it is said, as always.
+                if (PanTurn::isLive(m_doc, fid) && fx != nullptr)
+                    live << fx->name();
             }
             continue;
         }
@@ -11250,11 +11253,15 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
            too. Its own best turn is still offered. */
         if (PanTurn::isLive(m_doc, fid))
         {
-            heldBack << (fx != nullptr ? fx->name() : QString::number(fid));
+            const QString name = fx != nullptr ? fx->name() : QString::number(fid);
+            heldBack << name;
             if (PanTurn::info(m_doc, fid).improves())
             {
                 fids << fid;
                 lines << PanTurn::changeText(m_doc, fid, rp.panTurn, PanTurn::proposal(m_doc, fid));
+                /* Its Facing waits, but this turn still moves a live beam:
+                   the warning and the warning icon stay on it. */
+                live << name;
             }
             continue;
         }
