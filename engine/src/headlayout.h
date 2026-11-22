@@ -146,6 +146,14 @@ namespace HeadLayoutLibrary
     QString fileNameFor(const QString &key);
     /** @p layout as the library writes it. */
     QByteArray toJson(const HeadLayout &layout);
+
+    /** Bumped whenever a head layout anywhere changes: one saved here, one
+     *  set on the show (MonitorProperties::setHeadLayout), the library
+     *  pointed elsewhere, or a show cleared. Lets a cache of RESOLVED
+     *  layouts (EffectInstance's, which resolves one per fixture a tick)
+     *  see a change without asking for every key again. */
+    quint32 generation();
+    void bumpGeneration();
 }
 
 /** @} */

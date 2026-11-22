@@ -481,14 +481,18 @@ shipped scripts for colour/position patterns.
 
 - **Order matters:** the returned array must match `fixtures[]` order and length.
   Returning fewer entries silently drops the tail.
-- **The fixture objects are kept between ticks.** The host builds each
-  fixture's object once and updates only what changes (its `pos` when it
-  moves, `aimAt`/`sceneTarget`/`lastSpot` each tick when present), so a big
-  pixel rig costs little to hand over. Treat them as **read-only**: anything
-  you set on one would still be there next tick. Keep your own per-fixture
-  data in `state` (keyed by `id`/`head`). The *array* is new every tick, so
-  sorting or reversing `fixtures` in place is safe — but return the intents
-  in the original order.
+- **The fixture objects are kept between ticks**, and so are the objects
+  hanging off them. The host builds each fixture's object once and changes
+  only what moved -- its `pos` when it moves, and the `aimAt`,
+  `sceneTarget`, `lastSpot` and `lookAim` objects **in place**, so the
+  values in them are always this tick's and the fixture object itself is
+  touched only when one of them appears or goes. A big pixel rig therefore
+  costs little to hand over. Treat them all as **read-only**: anything you
+  set on one would still be there next tick, and a reference you keep to
+  `f.sceneTarget` sees the *current* aim, not the one you kept it from.
+  Keep your own per-fixture data in `state` (keyed by `id`/`head`). The
+  *array* is new every tick, so sorting or reversing `fixtures` in place is
+  safe -- but return the intents in the original order.
 - **Answers: only the keys you mean.** The host reads each intent's own keys
   (an intent is usually `{r,g,b}`); a key it doesn't know is ignored.
 - **`fixtureTypes` filters the array:** if you tag `["moving"]`, wash fixtures

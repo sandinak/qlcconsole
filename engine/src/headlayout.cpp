@@ -16,6 +16,7 @@
 #include <QHash>
 #include <QMutex>
 #include <QRegularExpression>
+#include <atomic>
 
 #include "qlcfixturemode.h"
 #include "qlcfixturehead.h"
@@ -53,6 +54,14 @@ namespace
     {
         static QMutex m;
         return m;
+    }
+
+    /* Bumped by every change to any head layout (HeadLayoutLibrary::
+       generation()); read without the lock, from any thread. */
+    std::atomic<quint32> &layoutGeneration()
+    {
+        static std::atomic<quint32> gen{1};
+        return gen;
     }
 
     /* A file name for a key: the key with anything a file system might
@@ -405,11 +414,24 @@ QString HeadKinds::typeName(const QString &type)
  * HeadLayoutLibrary
  *****************************************************************************/
 
+quint32 HeadLayoutLibrary::generation()
+{
+    return layoutGeneration().load(std::memory_order_acquire);
+}
+
+void HeadLayoutLibrary::bumpGeneration()
+{
+    layoutGeneration().fetch_add(1, std::memory_order_release);
+}
+
 void HeadLayoutLibrary::setUserDirectoryOverride(const QString &path)
 {
-    QMutexLocker lock(&cacheLock());
-    overridePath() = path;
-    cache().clear();
+    {
+        QMutexLocker lock(&cacheLock());
+        overridePath() = path;
+        cache().clear();
+    }
+    bumpGeneration();
 }
 
 QDir HeadLayoutLibrary::userDirectory()
@@ -484,7 +506,10 @@ bool HeadLayoutLibrary::save(const HeadLayout &layout)
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         return false;
     f.write(toJson(layout));
-    QMutexLocker lock(&cacheLock());
-    cache().insert(layout.key, layout);
+    {
+        QMutexLocker lock(&cacheLock());
+        cache().insert(layout.key, layout);
+    }
+    bumpGeneration();
     return true;
 }

@@ -24,6 +24,7 @@
 #include <QColor>
 #include <QHash>
 #include <QList>
+#include <QPair>
 #include <QPointF>
 #include <QElapsedTimer>
 #include <QVariantMap>
@@ -32,6 +33,7 @@
 
 #include "effectscript.h"
 #include "freerotation.h"
+#include "headlayout.h"
 #include <array>
 #include "scenetransition.h"
 
@@ -298,16 +300,32 @@ public:
      *  effect fires in sync with the scene rather than independent of it. */
     float sceneEnvelope() const;
 
+    /** The look's master Dimmer, and the base values marked to be worked out
+     *  when something first reads them. Once per runTick(), and cheap: an
+     *  effect that only sets colours (replace writes) never reads a base
+     *  value, and over a pixel rig working them out anyway was milliseconds
+     *  a tick. */
+    void prepareSceneBase();
     /** Rebuild m_sceneBaseValues: the DMX value the scene's *non-effect* looks
      *  (Colour/Dimmer palettes + baked values) assign to each fixture channel.
      *  Lets an intensity effect flicker *around* the scene's base rather than
-     *  replacing it with an absolute value. Built once per runTick(). */
-    void buildSceneBaseValues();
-    void addSceneBaseValues(Scene *scene);
+     *  replacing it with an absolute value. Called by ensureSceneBaseValues()
+     *  on the first read of a tick; public so a test can time it. */
+    void buildSceneBaseValues() const;
+    void addSceneBaseValues(Scene *scene) const;
+    /** ...which this does, once a tick. Only inside a tick: the base values
+     *  belong to one (prepareSceneBase() arms it), so parseIntents() or
+     *  buildFixturesArray() called on their own -- as tests do -- see what
+     *  they always have, which is nothing. */
+    void ensureSceneBaseValues() const
+    { if (m_sceneBaseArmed && !m_sceneBaseBuilt) buildSceneBaseValues(); }
 
     /** Scene base DMX value for (fixtureId, channel), or @p dflt if the scene's
      *  looks don't drive that channel. */
     uchar sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const;
+    /** True when the scene's looks drive (fixtureId, channel) at all; false
+     *  for QLCChannel::invalid() without working the base values out. */
+    bool hasSceneBaseValue(quint32 fid, quint32 channel) const;
 
     /** A WLED look (QLCPalette::wledEffect()): what WLED fixtures in it are
      *  sent -- the effect, its controls and the look's colours, on their own
@@ -319,12 +337,18 @@ private:
     QJSValue buildFixturesArray(const QList<EffectCell> &cells, int gridCols, int gridRows);
     struct FixtureFacts;
     void readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const;
+    /* Both fill @p obj, making it the first time: a member's aim object is
+       kept and changed in place, so the cells that hold it are told once
+       and not again (naming a property on 6,144 cells a tick was most of
+       what handing the rig over cost). */
     /** @p head: an arm of a multi-arm fixture (AimSolver::arms()), aimed
      *  from its own origin; -1, the fixture as one. */
-    QJSValue aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
-                         const BeamOcclusion::Model &sight, int head = -1);
-    QJSValue sceneTargetObject(quint32 fid, StageTarget *st, const BeamOcclusion::Model &sight,
-                               int head = -1);
+    void aimAtObject(QJSValue &obj, quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
+                     const BeamOcclusion::Model &sight, int head = -1);
+    /** @p framed: the aim geometry is on @p obj now -- so that it can be
+     *  taken off again if the head loses it. */
+    void sceneTargetObject(QJSValue &obj, bool &framed, quint32 fid, StageTarget *st,
+                           const BeamOcclusion::Model &sight, int head = -1);
     /** Line of sight onto a script's aim object: blocked, blockedBy,
      *  blockedKind, blockedAt, clearance (see docs/dev/EFFECTSCRIPT_API.md). */
     void setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) const;
@@ -377,7 +401,7 @@ private:
        the list it is given does not sort the next one. */
     struct FixtureFacts
     {
-        const Fixture *fixture = nullptr;
+        Fixture *fixture = nullptr;
         const void *mode = nullptr;     //!< its mode, to see it change
         QString name;
         int heads = 0;
@@ -392,18 +416,65 @@ private:
         QVector3D pos;
         QJSValue posObj;                //!< shared by its cells
         quint64 seen = 0;               //!< the tick it was last looked at
-        bool sceneTargetSet = false;    //!< on its cells now
-        bool lastSpotSet = false;
+        bool aimAtSet = false;          //!< its aim object is on its cells now
+        bool sceneTargetSet = false;    //!< ...and its scene target
+        bool lastSpotSet = false;       //!< ...and where its beam was left
+        bool lookAimSet = false;        //!< ...and where the look points it
+        bool lookAimWanted = false;     //!< the look points it at all, this tick
+        /** Where its beam was left and where the look points it, as the
+         *  script sees them: made once, changed in place. */
+        QJSValue lastSpotObj, lookAimObj;
         QVector<int> arms;              //!< AimSolver::arms(): each aimed on its own
+        /** This head's own channels, with the whole fixture's for a head
+         *  that has none: read off the mode when the fixture changes, not
+         *  once a head a tick (a QLCFixtureHead copy is six containers). */
+        QVector<QList<quint32>> headChannels;
         /** Free rotation (FreeRotation), per head: [head][Pan/Tilt]. Empty
          *  when no head of it spins. */
         QVector<std::array<FreeRotation::Spin, 2>> spin;
     };
     QHash<quint32, FixtureFacts> m_facts;
+    /** The aim objects one MEMBER is handed -- a fixture (head -1), or one
+     *  arm of a multi-arm one: (fixture << 32) | (head + 1). Kept and
+     *  changed in place, like the facts. */
+    struct MemberAim
+    {
+        QJSValue aimAt;                 //!< the script's bound targets
+        QJSValue sceneTarget;           //!< the scene's own Aim look
+        bool framed = false;            //!< sceneTarget carries the aim geometry
+        quint64 seen = 0;               //!< the tick it was last filled
+    };
+    QHash<quint64, MemberAim> m_memberAims;
     QVector<QJSValue> m_cellObjects;
+    /** The cells' array, kept: what the script is handed each tick is a COPY
+     *  of it (Array.prototype.slice -- a block copy inside the engine), so
+     *  one that sorts the list it is given still does not sort the next
+     *  one, without naming 6,144 array places from C++ every tick. */
+    QJSValue m_cellArray, m_sliceFn;
     QList<EffectCell> m_cellsBuilt;
     int m_cellsBuiltCols = -1, m_cellsBuiltRows = -1;
     quint64 m_factsTick = 0;
+
+    /* Which fixtures the script's fixtureTypes let through, by fixture and
+       the mode it had: the answer walks every channel of every fixture, and
+       effectiveCells() asks once a tick. */
+    mutable QHash<quint32, QPair<const void *, bool>> m_typeMatch;
+    mutable QStringList m_typesLower;       //!< fixtureTypes(), lowered once
+    mutable bool m_typesLowerBuilt = false;
+    /* The loose fixtures' head layouts (effectiveCells()' last resort):
+       resolving one builds its library key and a cell for every head, so
+       they are kept while the fixtures, their modes and the show's head
+       layouts are the ones they were worked out for. */
+    mutable QList<quint32> m_looseKey;
+    mutable QVector<const void *> m_looseModes;
+    mutable QList<HeadLayout> m_looseLayouts;
+    mutable bool m_looseAnyGrid = false;
+    mutable quint32 m_looseLayoutGen = 0;
+    /** ...and the cells they make: a pure function of those fixtures, their
+     *  modes and those layouts, so the 6,144 of a step rig are laid out
+     *  once, not 50 times a second. */
+    mutable QList<EffectCell> m_looseCells;
+    mutable int m_looseCols = 1, m_looseRows = 1;
 
     Doc    *m_doc;
     quint32 m_sceneId;
@@ -557,8 +628,16 @@ private:
     //!< fixture dimmed by its own scene's Dimmer (empty with one scene).
     QHash<quint32, float> m_lookDimmerOf;
 
-    //!< scene base DMX per (fixtureId<<32|channel), rebuilt each runTick()
-    QHash<quint64, uchar> m_sceneBaseValues;
+    //!< scene base DMX per (fixtureId<<32|channel), worked out on the first
+    //!< read of a tick (ensureSceneBaseValues()); the high-water mark of how
+    //!< many entries it took, so it is not grown from nothing every time
+    mutable QHash<quint64, uchar> m_sceneBaseValues;
+    mutable bool m_sceneBaseBuilt = false;
+    bool m_sceneBaseArmed = false;      //!< a tick has asked for them
+    mutable int m_sceneBaseHint = 0;
+    //!< how many writes the LAST tick made (parseIntents() reserves that
+    //!< many, rather than growing from nothing)
+    mutable int m_writeHint = 0;
 };
 
 #endif // EFFECTINSTANCE_H
