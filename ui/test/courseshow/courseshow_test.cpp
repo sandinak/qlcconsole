@@ -4120,9 +4120,25 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
         qWarning().noquote() << s_effectWhy;
         return nullptr;
     }
-    if (QTreeWidgetItem *cur = lib->currentItem())
-        cur->setText(0, name);              // as typing the name does
-    settle(100);
+    // As a person does: the row's name is open to type -- into the editor
+    // the Library opened on it, then Return.
+    QLineEdit *edit = lib->findChild<QLineEdit *>();
+    if (edit != nullptr)
+    {
+        edit->setFocus();
+        edit->selectAll();
+        QTest::keyClicks(edit, name);
+        QTest::keyClick(edit, Qt::Key_Return);
+    }
+    else if (QTreeWidgetItem *cur = lib->currentItem())
+    {
+        cur->setText(0, name);              // no editor: as committing it does
+    }
+    // The rename itself waits for the editor to be done with the row, then
+    // reloads the Library: give both turns time.
+    for (int i = 0; i < 40 && made->name() != name; ++i)
+        settle(50);
+    qInfo().noquote() << "[L2] named" << made->name() << "| editor" << (edit != nullptr);
     // ↩ Show Tree: out of the designer, then out of the Workbench, so the
     // cue's page is back (the lesson goes on there).
     if (bench->backOut())
