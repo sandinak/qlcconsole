@@ -1993,6 +1993,13 @@ void SpreadEffects_Test::theStepBarsTickCost()
 
 void SpreadEffects_Test::theHostTickCostOverTheStepBars()
 {
+    /* It measures, so it takes its time: the whole run is reported at the
+       end (and in unittest-serial.txt, so nothing else is measured with
+       it). Over ten seconds is on purpose -- 6,144 heads are ticked for
+       each of two answers, three times over, and the least of the three is
+       what is read. */
+    QElapsedTimer took;
+    took.start();
     QLCFixtureDef *stepDef = loadDef(m_doc, kData + "PHS-Chorus-Step-Row-64.qxf");
     QVERIFY(stepDef != nullptr);
     const QList<Fixture *> bars = placeStepBars(m_doc, stepDef);
@@ -2210,6 +2217,7 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
                      qPrintable(QString("the host costs %1 ms a tick over 6,144 heads (%2),"
                                         " budget %3 ms")
                                     .arg(r.hostMs, 0, 'f', 2).arg(r.what).arg(r.budget, 0, 'f', 2)));
+    qInfo().noquote() << "the whole measurement took" << took.elapsed() << "ms";
 }
 
 QTEST_MAIN(SpreadEffects_Test)

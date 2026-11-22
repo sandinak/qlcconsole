@@ -1635,6 +1635,19 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         m_cellsBuilt = cells;
         m_cellsBuiltCols = gridCols;
         m_cellsBuiltRows = gridRows;
+        /* The cells changed, so the heads did: drop what we remember about
+           fixtures that are no longer among them. Kept forever it would hold
+           an answer for a deleted fixture's id, and a new fixture given that
+           id back could be handed it (the mode pointer it is checked against
+           can be recycled too). */
+        if (m_typeMatch.size() > cells.size())
+        {
+            QSet<quint32> here;
+            for (const Cell &c : cells)
+                here.insert(c.fixtureId);
+            for (auto it = m_typeMatch.begin(); it != m_typeMatch.end();)
+                it = here.contains(it.key()) ? it + 1 : m_typeMatch.erase(it);
+        }
     }
 
     /* The spread layer (S3): each head's place in the cycle, as "phase" in
