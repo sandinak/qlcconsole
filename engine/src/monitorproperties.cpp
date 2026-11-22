@@ -1210,6 +1210,7 @@ void MonitorProperties::reset()
         QMutexLocker lock(&m_headLayoutMutex);
         m_headLayouts.clear();
     }
+    HeadLayoutLibrary::bumpGeneration();        // caches of resolved layouts
     m_layers.clear();
     m_activeLayerId = defaultLayerId;
     ensureDefaultLayer();
@@ -4611,6 +4612,7 @@ void MonitorProperties::setHeadLayout(const HeadLayout &layout)
             return;
         m_headLayouts.insert(layout.key, layout);
     }
+    HeadLayoutLibrary::bumpGeneration();        // caches of resolved layouts
     emit headLayoutChanged(layout.key);
 }
 
