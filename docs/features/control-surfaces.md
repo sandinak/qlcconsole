@@ -167,7 +167,7 @@ pad read -- so no two surfaces can disagree.
 | **dim** | Ready: a press would fire it. |
 | **bright** | What it fires is running. |
 | **two blinks** | The double-GO guard held a command on that cue list ([Two GOs at once](show-control.md#two-gos-at-once)). The light then goes back to what it was saying. |
-| **the emergency stop's button, lit** | The show has been stopped, until the next GO. Every other light is dark then: after an ALL OFF nothing is ready until the show runs again. |
+| **the emergency stop's button** | Dim at every other moment -- it always works, so it is always findable on a dark stage -- and **lit** from an ALL OFF until the next GO. Every other light is dark while it is lit: after an ALL OFF nothing is ready until the show runs again. |
 
 The same words are in the **Its light** column of the Control Map table, so
 a desk's lights can be read from the laptop with no desk plugged in.

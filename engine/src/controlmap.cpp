@@ -1275,10 +1275,11 @@ ControlMap::Lamp ControlMap::lamp(const Binding &b) const
     OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
     const bool stopped = rules != nullptr && rules->emergencyStopped();
     /* The emergency stop has a light of its own: lit while the show is
-       stopped, in either mode, whatever else is bound. It is never dark
-       because something is not armed -- it always works. */
+       stopped, and ready at every other moment -- in either mode, whatever
+       else is bound, however dark the stage is. It is never dark because
+       something is not armed: it always works, so it always says so. */
     if (b.target.type == EmergencyStopTarget)
-        return stopped ? LampStopped : LampOff;
+        return stopped ? LampStopped : LampStandby;
     if (!targetExists(b.target))
         return LampOff;         // the thing it fired is gone
     const quint32 fid = feedbackFunction(b);

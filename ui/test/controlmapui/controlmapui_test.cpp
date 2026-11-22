@@ -368,7 +368,8 @@ void ControlMapUi_Test::thePanelSaysWhatEachLightShows()
     QCOMPARE(table->columnCount(), 4);
     QCOMPARE(table->horizontalHeaderItem(3)->text(), QString("Its light"));
     QCOMPARE(table->item(0, 3)->text(), QString("Ready"));
-    QCOMPARE(table->item(1, 3)->text(), QString("Dark"));       // the stop: nothing to say yet
+    // The stop is ready at every moment: it is never dark while the show runs.
+    QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
 
     // It runs: Running, and the table is not rebuilt for a light.
     QSignalSpy rebuilt(&panel, &ControlMapPanel::summaryChanged);
@@ -387,6 +388,7 @@ void ControlMapUi_Test::thePanelSaysWhatEachLightShows()
     QCOMPARE(table->item(0, 3)->text(), QString("Dark"));
     m_doc->outputRuleKeeper()->noteGo();
     QTRY_COMPARE(table->item(0, 3)->text(), QString("Ready"));
+    QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
 
     // The dim switch: on a pad that cannot dim, a ready control stays dark,
     // and the row says which.

@@ -471,7 +471,8 @@ void ControlMap_Test::theLightGoesDarkAfterTheStopUntilTheNextGo()
     cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
     cm->setBinding({ 0, 40, ControlMap::emergencyStop(), ControlMap::StartOnly });
     QCOMPARE(lastLight(m_stub, kNote), 30);
-    QCOMPARE(lastLight(m_stub, 40), 0);        // nothing to say yet
+    // The stop is ready at every moment, so it can be found in the dark.
+    QCOMPARE(lastLight(m_stub, 40), 30);
 
     m_doc->outputRuleKeeper()->emergencyStop();
     tick(3);
@@ -485,7 +486,7 @@ void ControlMap_Test::theLightGoesDarkAfterTheStopUntilTheNextGo()
     m_doc->outputRuleKeeper()->noteGo();
     tick(3);
     QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
-    QCOMPARE(lastLight(m_stub, 40), 0);
+    QCOMPARE(lastLight(m_stub, 40), 30);       // ready again
     QCOMPARE(lastLight(m_stub, kNote), 30);
 }
 
