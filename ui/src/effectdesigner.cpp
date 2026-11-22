@@ -206,9 +206,11 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_browser = new EffectBrowser(doc, m_effectCombo, split);
     m_browser->setObjectName(QStringLiteral("edBrowser"));
     m_browser->setPickWhileBrowsing(true);
-    // Narrow enough that the browser and the settings both fit the
-    // smallest window (the settings keep the stretch).
-    m_browser->setMinimumWidth(260);
+    /* Narrow enough that the browser and the effect's settings both fit
+       the smallest window (1024x640) in the Workbench's pane; the settings
+       keep the stretch, and the splitter is there to give the browser more
+       room on a bigger screen. Its own rows scroll rather than cut. */
+    m_browser->setMinimumWidth(200);
 
     QWidget *right = new QWidget(split);
     QVBoxLayout *rv = new QVBoxLayout(right);

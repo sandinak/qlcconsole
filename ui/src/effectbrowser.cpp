@@ -33,6 +33,7 @@
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "effectbrowser.h"
+#include "shrinkablebar.h"
 #include "effectorigin.h"
 #include "effectscript.h"
 #include "doc.h"
@@ -350,8 +351,12 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     v->addWidget(m_search);
 
     /* Where effects came from: the ones that come with qlcconsole, the ones
-       saved on this computer, the show's own. */
-    QHBoxLayout *origins = new QHBoxLayout;
+       saved on this computer, the show's own. The row is a ShrinkableBar:
+       the browser sits in the Workbench's editor pane beside the effect's
+       settings now (board Q263), so it must take a narrow column without
+       cutting "Show All Effects" in half (UX-36). */
+    QWidget *originRow = new QWidget(this);
+    QHBoxLayout *origins = new QHBoxLayout(originRow);
     origins->setContentsMargins(0, 0, 0, 0);
     origins->setSpacing(2);
     const QStringList names = { tr("Built-in"), tr("Mine"), tr("This show") };
@@ -383,7 +388,7 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_showAll->setVisible(false);           // until there are fixtures to fit
     connect(m_showAll, &QToolButton::toggled, this, [this]() { reload(); });
     origins->addWidget(m_showAll);
-    v->addLayout(origins);
+    v->addWidget(new ShrinkableBar(originRow, this));
 
     m_tabs = new QTabBar(this);
     m_tabs->setExpanding(false);
