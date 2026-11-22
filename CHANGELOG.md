@@ -10,6 +10,17 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Added
+
+- **Findability gate tests for View ▸ Workspace ▸ Tabs & Features… and
+  Settings ▸ Appearance ▸ Footer.** Each shipped with tests for what it does
+  but none for whether a person could find it: new tests walk the real menu
+  path -- the menu text as shown, the entry's place in its menu, and that it
+  opens the right dialog -- so a future rename or move breaks a test instead
+  of going unnoticed.
+
 ## [0.5.2] - 2026-11-22
 
 0.5.2 is an effects and Show Tree release. If you only read one line: fire
