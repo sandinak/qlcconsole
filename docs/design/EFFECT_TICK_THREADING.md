@@ -170,9 +170,9 @@ a head for its answer, and a fresh array of 6,144 cells to hand over.
 
 ROI (first guess): reach = shows with a big pixel rig running an effect
 over it (his step bars; one show now, more as pixel rigs spread) = small
-but growing; value = the GUI thread's remaining effect cost, now about
-1 ms a tick for one lit effect over 6,144 heads, so **at most 5 % of one
-core per effect** — below what the rig view itself costs a frame
+but growing; value = the GUI thread's remaining effect cost, now
+HOST_AFTER_LIT ms a tick for one lit effect over 6,144 heads, so **about
+CORE_AFTER_LIT % of one core per effect** — the rig view itself costs more a frame
 (OFFLOAD.md items 1 and 4 are 10-23 ms); cost = **large**: the snapshot
 refactor of a 3,200-line class, queued input with ordering rules,
 cross-thread `QJSEngine` lifetime, and the Blind/preview callers kept

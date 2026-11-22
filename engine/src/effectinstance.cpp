@@ -2806,16 +2806,24 @@ EffectInstance::parseIntents(const QJSValue &intents,
     writes.reserve(m_writeHint);
     m_lastIntentDeg.clear();
 
+    /* The places an answer's keys go, made ONCE for the tick and only the
+       places the last answer used put back: a fresh row of them a head cost
+       an unreached head more than reading it (firespreadperf). */
+    QJSValue said[IntentKey::Count];
+    QVarLengthArray<int, 12> saidPlaces;
+
     int len = qMin(intents.property("length").toInt(), cells.size());
     for (int i = 0; i < len; ++i)
     {
+        for (int place : saidPlaces)
+            said[place] = QJSValue();
+        saidPlaces.clear();
         QJSValue intent = intents.property(i);
         if (!intent.isObject())
             continue;
         /* Its own keys, read once into their places: asking each answer for
            every key it might have, head after head, was most of what reading
            them cost -- an answer usually has three. */
-        QJSValue said[IntentKey::Count];
         bool anyKey = false;
         QJSValueIterator kit(intent);
         while (kit.hasNext())
@@ -2824,7 +2832,10 @@ EffectInstance::parseIntents(const QJSValue &intents,
             anyKey = true;
             const int place = IntentKey::of(kit.name());
             if (place >= 0)
+            {
                 said[place] = kit.value();
+                saidPlaces.append(place);
+            }
         }
         /* An answer that says nothing (Fire Spread's head the front has not
            reached: left to what is under it) writes nothing: nothing below

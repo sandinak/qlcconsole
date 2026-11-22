@@ -2026,10 +2026,30 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
     const int ticks = qMax(4, qEnvironmentVariableIntValue("QLC_HOST_TICKS"));
 #endif
     struct Piece { QString what; double ms = 0; };
-    struct Row { QString what; QList<Piece> pieces; double hostMs = 0, tickMs = 0, baseMs = 0; };
+    struct Row { QString what; QList<Piece> pieces; double hostMs = 0, tickMs = 0, baseMs = 0,
+                 budget = 0; };
     QList<Row> table;
 
-    auto measure = [&](const QString &what, const QString &path) -> bool {
+    /* The budget, one for each. The host's own work -- the cells, the look's
+       base values, the per-head arguments and reading the answers -- runs on
+       the GUI thread 50 times a second, beside the rig view and the whole UI:
+       at a few ms a tick the operator sees the window go chunky (2026-11-17,
+       the uplights added to Fire Spread). On val (Intel, Release) it measured
+       14.2 ms saying nothing and 21.9 ms with every head a colour before
+       perf/053-effect-host, and 53 / 98 ms unoptimised; it now sits at about
+       a third of these lines. An unoptimised build pays about four times as
+       much, and CI's instrumented leg (QLC_SLOW_BUILD) three times that
+       again. QLC_HOST_TICK_BUDGET_MS overrides them both (0: no budget). */
+#ifdef __OPTIMIZE__
+    const double scale = 1.0;
+#else
+    const double scale = 4.0;
+#endif
+    const double slow = qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 3.0 : 1.0;
+    const bool pinned = qEnvironmentVariableIsSet("QLC_HOST_TICK_BUDGET_MS");
+    const double pin = pinned ? qEnvironmentVariable("QLC_HOST_TICK_BUDGET_MS").toDouble() : 0.0;
+
+    auto measure = [&](const QString &what, const QString &path, double budgetMs) -> bool {
         QLCPalette *pal = new QLCPalette(QLCPalette::Effect, m_doc);
         pal->setScriptPath(path);
         pal->setEffectParamValue(EffectRuns::runsKey(), 0);         // Loop
@@ -2086,6 +2106,7 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
         };
         Row r;
         r.what = what;
+        r.budget = pinned ? pin : budgetMs * scale * slow;
         int c2 = 1, r2 = 1;
         r.pieces << Piece{ QStringLiteral("cells"), best([&]() { inst.effectiveCells(c2, r2); }) };
         r.pieces << Piece{ QStringLiteral("look base"), best([&]() { inst.prepareSceneBase(); }) };
@@ -2105,8 +2126,8 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
         table << r;
         return true;
     };
-    QVERIFY(measure(QStringLiteral("says nothing"), saysNothing));
-    QVERIFY(measure(QStringLiteral("every head a colour"), saysColour));
+    QVERIFY(measure(QStringLiteral("says nothing"), saysNothing, 6.0));
+    QVERIFY(measure(QStringLiteral("every head a colour"), saysColour, 13.0));
 
 #ifdef QT_NO_DEBUG
     const QString build = QStringLiteral("release");
@@ -2121,31 +2142,14 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
             parts << QString("%1 %2").arg(pc.what).arg(pc.ms, 0, 'f', 2);
         lines << QString("%1 build, 96 step bars x 64 (6144 heads), the host, %2:"
                          " %3 ms a tick (%4; %5 us a head); whole tick %6 ms;"
-                         " base values when read %7 ms")
+                         " base values when read %7 ms; budget %8 ms")
                      .arg(build, r.what).arg(r.hostMs, 0, 'f', 2).arg(parts.join(", "))
                      .arg(r.hostMs * 1000.0 / 6144.0, 0, 'f', 3).arg(r.tickMs, 0, 'f', 2)
-                     .arg(r.baseMs, 0, 'f', 2);
+                     .arg(r.baseMs, 0, 'f', 2).arg(r.budget, 0, 'f', 2);
     }
     for (const QString &l : lines)
         qInfo().noquote() << l;
 
-    /* The budget. The host's own work -- the cells, the look's base values,
-       the per-head arguments and reading the answers -- runs on the GUI
-       thread 50 times a second, beside the rig view and the whole UI: at a
-       few ms a tick the operator sees the window go chunky (2026-11-17,
-       the uplights added to Fire Spread). Before perf/053-effect-host it
-       measured 14.2 ms saying nothing and 21.9 ms with every head a colour
-       on val (Intel, Release), and 53 / 98 ms unoptimised. The lines below
-       are what it sits well under now; CI's instrumented leg
-       (QLC_SLOW_BUILD) gets three times them. */
-#ifdef __OPTIMIZE__
-    const double defaultBudget = 10.0;
-#else
-    const double defaultBudget = 45.0;
-#endif
-    const double budget = qEnvironmentVariableIsSet("QLC_HOST_TICK_BUDGET_MS")
-        ? qEnvironmentVariable("QLC_HOST_TICK_BUDGET_MS").toDouble()
-        : defaultBudget * (qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 3.0 : 1.0);
     // The numbers, brought back from the pool (check-all.sh --shots).
     const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
     if (!shots.isEmpty())
@@ -2154,12 +2158,12 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
         if (out.open(QIODevice::WriteOnly | QIODevice::Text))
             QTextStream(&out) << lines.join("\n") << "\n";
     }
-    if (budget > 0)
-        for (const Row &r : table)
-            QVERIFY2(r.hostMs <= budget,
+    for (const Row &r : table)
+        if (r.budget > 0)
+            QVERIFY2(r.hostMs <= r.budget,
                      qPrintable(QString("the host costs %1 ms a tick over 6,144 heads (%2),"
                                         " budget %3 ms")
-                                    .arg(r.hostMs, 0, 'f', 2).arg(r.what).arg(budget, 0, 'f', 2)));
+                                    .arg(r.hostMs, 0, 'f', 2).arg(r.what).arg(r.budget, 0, 'f', 2)));
 }
 
 QTEST_MAIN(SpreadEffects_Test)
