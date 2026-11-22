@@ -1877,6 +1877,7 @@ void Workbench::loadCanvas(quint32 sceneId)
 
 void Workbench::clearEditors()
 {
+    m_effectPaneRow.clear();    // no designer here now (hostEffectPane sets it)
     releaseLentPane();
     if (m_canvas != nullptr)
     {

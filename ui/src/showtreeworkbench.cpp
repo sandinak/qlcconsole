@@ -339,6 +339,10 @@ bool ShowTreeView::designEffectOnLayer(quint32 cueId, quint32 layerId, const Tar
 {
     if (m_st.isNull() || m_st->cue(cueId) == nullptr)
         return false;
+    // Another effect being designed and not kept: asked before it goes.
+    if (Workbench *open = dockedWorkbench())
+        if (open->keepsDesigning())
+            return false;
     const Cue *cue = m_st->cue(cueId);
     // A layer carried into this cue has no id of its own here: its target
     // names it (a value kept on it makes it the cue's own, as the tree does).
@@ -422,6 +426,10 @@ bool ShowTreeView::designEffectPalette(quint32 paletteId)
     const QLCPalette *p = m_doc->palette(paletteId);
     if (paletteId != QLCPalette::invalidId() && (p == nullptr || p->type() != QLCPalette::Effect))
         return false;           // every other type is the Look Editor's (Q264)
+    // Another effect being designed and not kept: asked before it goes.
+    if (Workbench *open = dockedWorkbench())
+        if (open->keepsDesigning())
+            return false;
     // Read before docking: docking moves the tree's selection about.
     const QList<quint32> tryOn = effectTryOnGroups();
     const quint32 cueId = currentCueId();
