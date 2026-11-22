@@ -154,6 +154,34 @@ that matter to a desk:
 - A fader or a CC that goes on sending values is **one press** until it goes
   back to 0. Use a Virtual Console slider for a fader that sets a level.
 
+## What a control's light says
+
+A desk with a feedback line gets its lights from the show, so a button says
+what it would do **before** you press it. Every light is read from the one
+place that owns the answer -- the same place the Run tab, the footer and the
+pad read -- so no two surfaces can disagree.
+
+| The light | What it means |
+|---|---|
+| **dark** | Pressing it does nothing here, now: a hit whose place is not live, a cue list or cue that is not armed in Design (rules 2 and 3 above), a *Stop only* control with nothing to stop, a cue list with every cue cut, or the thing it fired is gone. The footer says which when you press it. |
+| **dim** | Ready: a press would fire it. |
+| **bright** | What it fires is running. |
+| **two blinks** | The double-GO guard held a command on that cue list ([Two GOs at once](show-control.md#two-gos-at-once)). The light then goes back to what it was saying. |
+| **the emergency stop's button, lit** | The show has been stopped, until the next GO. Every other light is dark then: after an ALL OFF nothing is ready until the show runs again. |
+
+The same words are in the **Its light** column of the Control Map table, so
+a desk's lights can be read from the laptop with no desk plugged in.
+
+**A pad whose lights are colours, not brightnesses.** Some pads (the APCs)
+read the velocity of a light message as a *colour index*, so a dim level
+there is another colour, or nothing at all. Switch **Dim a control that is
+ready** off, under the Control Map table: a ready control then stays dark,
+and running, GO held and stopped are unchanged. The setting is saved with
+the show.
+
+A computer key has no light, and nor has a control on a universe with no
+feedback line: the table says so on that row.
+
 ## The PMJ Black 1
 
 The PMJ's faders, encoders and buttons work only on an input patched with
@@ -230,6 +258,18 @@ after any build that changes a surface, and say which build.
 10. Patch a second input on the PMJ Black 1 profile and move a PMJ control on
     it. *Expect:* the footer names the second universe and says only the
     first is heard.
+11. **The lights.** With **Go** learned on the main cue list (step 6) and
+    the stop learned (step 7), look at the board between each of these.
+    *Expect:* **Go** glows dim before the first GO (the same level the board
+    lights itself at when it is plugged in); bright while a cue runs; it
+    **blinks twice** when you press Go twice inside a second, and goes back
+    to bright; the stop's button is dark until the show is stopped and then
+    **lit**, and while it is lit **Go is dark**; one GO after that, Go is
+    dim or bright again. The Control Map's **Its light** column says the
+    same words throughout.
+12. **A hit's light.** Learn a hit that lives in one song on a PMJ button.
+    *Expect:* dark while that song is not running, dim while it is, dark
+    again after the list moves past it -- without touching anything.
 
 **Akai APC40 mk2**
 
@@ -246,6 +286,13 @@ after any build that changes a surface, and say which build.
    time. Try the track fader: *Expect:* refused.
 5. Unplug and replug with a pad held. *Expect:* the lights come back and the
    next press fires.
+6. **Does this pad dim?** With *Dim a control that is ready* on (the
+   default), look at a pad learned on a scene that is not running.
+   *Expect, if the APC dims:* it glows faintly, and brightly while the scene
+   runs. *If instead it is dark, or a surprising colour:* this pad reads the
+   velocity as a colour -- switch **Dim a control that is ready** off and
+   check that a ready pad is dark and a running one is bright. **Write down
+   which it was**: it decides whether the APC gets the dim light by default.
 
 **Behringer X-Touch Mini**
 

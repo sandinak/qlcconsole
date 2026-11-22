@@ -10,6 +10,32 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Added
+
+- **A control surface's lights say what a button would do** (board Q269's
+  rule, made visible; CS3 of the control-surfaces plan). A Control Map
+  control used to light only while the thing it fired was running. Now it is
+  **dark** when a press would do nothing here and now (a hit whose place is
+  not live, a cue list or cue not armed in Design, *Stop only* with nothing
+  to stop, a list with every cue cut, a target that is gone), **dim** when a
+  press would fire it, **bright** while it runs, **blinks twice** when the
+  double-GO guard holds a command on its cue list, and the **emergency
+  stop's own button is lit** from an ALL OFF until the next GO -- with every
+  other light dark until then. Each of those is read from the one place that
+  owns it (ShowControl, the output rules), never worked out on the surface,
+  and a light nothing changed about is not sent again, so a mode or
+  production change never floods a MIDI line. The Control Map table gained
+  an **Its light** column saying the same words, so a desk can be read from
+  the laptop with nothing plugged in, and a row that can never light says so
+  (*A key has no light*, *No feedback line*). For a pad that reads a light's
+  velocity as a colour and not a brightness (the APCs), **Dim a control that
+  is ready** under the table switches the dim level off; it is saved with the
+  show. See [Control
+  surfaces](docs/features/control-surfaces.md#what-a-controls-light-says),
+  which gained two hardware-checklist steps for it.
+
 ## [0.5.2] - 2026-11-22
 
 0.5.2 is an effects and Show Tree release. If you only read one line: fire

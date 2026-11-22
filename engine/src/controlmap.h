@@ -48,6 +48,8 @@ class Doc;
 #define CONTROLMAP_STOP_FLAGS 1
 /** ... and isInputConnected(), for the tests. */
 #define CONTROLMAP_HAS_INPUT_PROBE 1
+/** ... and the light that says standby, held and stopped (lamp(), CS3). */
+#define CONTROLMAP_HAS_LAMP_STATES 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -55,8 +57,13 @@ class Doc;
  * Virtual Console widget in between (docs/dev/CONTROLMAP.md). A binding
  * fires a function (a scene, an effect, a chaser...), GOes a Show Tree cue
  * list, GOes one cue of a list, or fires a hit; how a press acts is its
- * mode. The control's light follows what it fires (input feedback, as a VC
- * button's does), where the universe has a feedback line.
+ * mode. The control's light says what the thing it fires is doing (input
+ * feedback, as a VC button's does), where the universe has a feedback line:
+ * dark when a press would do nothing now, dim when it is ready, bright
+ * while it runs, two blinks when the double-GO guard held a command on it
+ * (lamp(), CS3). Each of those is read from the one place that owns it --
+ * ShowControl and the OutputRuleKeeper -- never worked out here, and never
+ * per frame.
  *
  * Saved with the show as <ControlMap>, only when there is a binding, so a
  * show without one saves as before; QLC+ 4 skips the element.
@@ -101,6 +108,19 @@ public:
         StartOnly,  //!< a press starts it (never stops)
         StopOnly    //!< a press stops it (never starts)
     };
+
+    /** What a bound control's light says (CS3): the press rule (board
+     *  Q269) made visible on the desk, so the operator does not find out
+     *  by pressing. One status source each (lamp()). */
+    enum Lamp
+    {
+        LampOff,        //!< dark: a press would do nothing now
+        LampStandby,    //!< dim: a press would fire it
+        LampRunning,    //!< bright: what it fires is running
+        LampHeld,       //!< two blinks: the double-GO guard held a command
+        LampStopped     //!< the emergency stop's own light, after a stop
+    };
+    Q_ENUM(Lamp)
 
     struct Target
     {
@@ -295,8 +315,31 @@ public:
      *  Invalid: none. */
     quint32 feedbackFunction(const Binding &b) const;
     /** Sends every binding's light as it is now (a controller plugged
-     *  back in, a show loaded). */
+     *  back in, a show loaded): every one, whether it changed or not. */
     void resendFeedback();
+
+    /** What @a b's light says now (CS3). Dark when a press would do
+     *  nothing: the target is gone, the press would be refused
+     *  (surfaceMayFire(), the Q269 rule), a Stop-only on something idle, a
+     *  cue list with nothing left to GO (ShowControl::standbyStep()), or
+     *  the show is stopped (OutputRuleKeeper::emergencyStopped()). The
+     *  emergency stop's own light is lit while the show is stopped. Never
+     *  worked out here: each answer comes from the one place that owns it. */
+    Lamp lamp(const Binding &b) const;
+    /** A light in words, as the Control Map's table says it. */
+    static QString lampName(Lamp lamp);
+    /** The value a light is sent as, 0..255 (a MIDI velocity is half of
+     *  it). @a dim false: a control that is ready stays dark, for a pad
+     *  whose LEDs take a colour in the velocity and not a brightness. */
+    static uchar lampValue(Lamp lamp, bool dim = true);
+    /** Whether a control that is ready glows dim (the default) or stays
+     *  dark. Saved with the show (Lights="onoff"). */
+    bool dimWhenReady() const { return m_dimWhenReady; }
+    void setDimWhenReady(bool on);
+    /** Test hook: how long each step of the held blink lasts. */
+    void setBlinkMs(int ms) { m_blinkMs = ms; }
+    /** Whether the held blink is running on @a b now. */
+    bool isBlinking(const Binding &b) const;
 
 signals:
     /** A binding was added, removed or changed. */
@@ -320,6 +363,10 @@ signals:
     void armingChanged();
     /** The Run tab's list changed (a pick, a show loaded or cleared). */
     void runTabListChanged(quint32 listId);
+    /** A light may say something else now (CS3): the Control Map's table
+     *  reads lamp() again. Not per frame: on a GO, a list stopped, a
+     *  function started or stopped, the arming, the mode, the stop. */
+    void lampsChanged();
 
     /*********************************************************************
      * Load & Save
@@ -332,6 +379,13 @@ private slots:
     void slotFunctionStarted(quint32 id);
     void slotFunctionStopped(quint32 id);
     void slotFunctionRemoved(quint32 id);
+    /** A GO, a list stopped, the arming, the mode, an emergency stop
+     *  struck or ended: every light that says something else now is sent
+     *  (and only those). Queued: a command arrives on its own thread. */
+    void slotLampsMayHaveChanged();
+    /** The double-GO guard held a command on cue list @a chaserId: every
+     *  control that GOes it blinks twice (ShowControl::commandHeld). */
+    void slotGuardHeld(const QString &text, quint32 chaserId);
     void slotInputDeviceConnected();
     /** A controller went away or came back: a press it held is let go. */
     void slotInputDeviceChanged(quint32 universe);
@@ -355,8 +409,23 @@ private:
     /** Starts, stops or toggles (start: 1, stop: 0, toggle: -1) a function. */
     void actOnFunction(quint32 fid, int how, const QString &what);
     void goList(const Binding &b, bool stop);
-    void sendFeedback(const Binding &b, bool on) const;
-    void sendFeedbackFor(quint32 fid, bool on);
+    /** The cue list @a b GOes: for a cue, its step and sub-cue in it
+     *  (@a subCue -1: a main cue). Null: it has none (or a sub-cue the
+     *  list no longer holds). What goList() sends and what lamp() reads,
+     *  so they can never disagree. */
+    Chaser *targetChaser(const Binding &b, int *step = nullptr, int *subCue = nullptr) const;
+    /** Pushes @a b's light when lamp() says something else than was last
+     *  sent to that control (always with @a force: a device plugged back
+     *  in). A light nothing changed about sends nothing, so a mode switch
+     *  with forty bindings does not flood a MIDI line. */
+    void sendLamp(const Binding &b, bool force = false);
+    void sendLampValue(const Binding &b, uchar value, bool force);
+    /** Every binding's light (sendLamp() each). */
+    void sendLamps(bool force);
+    /** The light of a control that fires nothing any more: dark. */
+    void darkenLamp(const Binding &b);
+    /** One step of the held blink (on, off, on, off, then the truth). */
+    void blinkStep();
 
 private:
     Doc *m_doc;
@@ -421,6 +490,21 @@ private:
     QList<Target> m_selected;
     bool m_inputConnected = false;
     bool m_feedbackConnected = false;
+    /** The status sources behind the lights (CS3): ShowControl and the
+     *  OutputRuleKeeper, connected only while there is a binding. */
+    bool m_stateConnected = false;
+    /** The last value sent to each control, so only a change is sent. */
+    QHash<quint64, int> m_lampSent;
+    /** A control that is ready glows dim; off for a pad whose LEDs take a
+     *  colour in the velocity (the APCs) and show nothing at a dim level. */
+    bool m_dimWhenReady = true;
+    /** The bindings blinking because the guard held a command on their
+     *  cue list, and how many steps of the blink are left (0: none). */
+    QList<Binding> m_blinking;
+    int m_blinkLeft = 0;
+    int m_blinkMs = 150;
+    /** A tree edit's light pass is waiting: a batch of edits is one pass. */
+    bool m_lampsQueued = false;
 };
 
 /** @} */

@@ -20,9 +20,11 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QKeySequence>
+#include <QTimer>
 #include <QDebug>
 #include <climits>
 
+#include "outputrulekeeper.h"
 #include "showtreecontroller.h"
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
@@ -46,6 +48,7 @@
 #define KXMLMode QStringLiteral("Mode")
 #define KXMLKey QStringLiteral("Key")
 #define KXMLRunList QStringLiteral("RunList")
+#define KXMLLights QStringLiteral("Lights")
 
 namespace
 {
@@ -76,6 +79,22 @@ ControlMap::ControlMap(Doc *doc)
     connect(m_doc, &Doc::modeChanged, this, &ControlMap::armingChanged);
     if (m_doc->showTree() != nullptr)
         connect(m_doc->showTree(), &ShowTreeController::hitArmingChanged, this, &ControlMap::armingChanged);
+    // What may fire is what a light says (CS3): the same answer, shown.
+    connect(this, &ControlMap::armingChanged, this, &ControlMap::slotLampsMayHaveChanged);
+    /* A tree edit can change what a press would do (every cue of a list
+       cut for the rehearsal, a cue deleted): the lights follow. Once per
+       batch of edits, not once per edit: a show loading edits the tree
+       thousands of times. */
+    if (m_doc->showTree() != nullptr)
+        connect(m_doc->showTree(), &ShowTreeController::changed, this, [this]() {
+            if (m_bindings.isEmpty() || m_lampsQueued)
+                return;
+            m_lampsQueued = true;
+            QTimer::singleShot(0, this, [this]() {
+                m_lampsQueued = false;
+                slotLampsMayHaveChanged();
+            });
+        });
 }
 
 ControlMap::~ControlMap()
@@ -113,7 +132,7 @@ void ControlMap::setBinding(const Binding &b)
         {
             // Its old control goes dark, unless the new one is the same.
             if (e.universe != b.universe || e.channel != b.channel)
-                sendFeedback(e, false);
+                darkenLamp(e);
             m_bindings.removeAt(i);
         }
     }
@@ -121,9 +140,7 @@ void ControlMap::setBinding(const Binding &b)
         m_estopFlagged.clear();
     m_bindings.append(b);
     changed(true);
-    const quint32 fid = feedbackFunction(b);
-    Function *f = fid == 0xFFFFFFFF ? nullptr : m_doc->function(fid);
-    sendFeedback(b, f != nullptr && f->isRunning());
+    sendLamp(b, true);
 }
 
 bool ControlMap::removeBinding(const Target &target)
@@ -132,7 +149,7 @@ bool ControlMap::removeBinding(const Target &target)
     {
         if (m_bindings.at(i).target != target)
             continue;
-        sendFeedback(m_bindings.at(i), false);
+        darkenLamp(m_bindings.at(i));
         // A control held down keeps what it pressed: its release still lets go.
         if (target.type == EmergencyStopTarget)
             m_estopFlagged.clear();
@@ -153,6 +170,9 @@ bool ControlMap::setMode(const Target &target, Mode mode)
         {
             b.mode = mode;
             changed(true);
+            // A Stop-only control on something idle does nothing: dark.
+            sendLamps(false);
+            emit lampsChanged();
         }
         return true;
     }
@@ -164,7 +184,7 @@ void ControlMap::removeAll()
     if (m_bindings.isEmpty())
         return;
     for (const Binding &b : std::as_const(m_bindings))
-        sendFeedback(b, false);
+        darkenLamp(b);
     m_bindings.clear();
     m_estopFlagged.clear();
     // Controls held keep what they pressed: their releases still let go.
@@ -174,6 +194,10 @@ void ControlMap::removeAll()
 void ControlMap::reset()
 {
     m_encoderBank->reset();
+    m_blinking.clear();
+    m_blinkLeft = 0;
+    m_lampSent.clear();
+    m_dimWhenReady = true;
     const bool had = !m_bindings.isEmpty() || m_listening || !m_down.isEmpty();
     m_bindings.clear();
     m_down.clear();
@@ -268,6 +292,40 @@ void ControlMap::updateConnections()
             disconnect(timer, &MasterTimer::functionStopped, this, &ControlMap::slotFunctionStopped);
         }
         m_feedbackConnected = wantFeedback;
+    }
+
+    /* The status sources behind the lights (CS3): a GO carried out, a list
+       stopped, a command the guard held, the emergency stop struck or over.
+       Each arrives on the thread the command came in on (a plugin's, the
+       MasterTimer's), so each is queued: this class is GUI-thread only. */
+    ShowControl *sc = m_doc->showControl();
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    if (wantFeedback != m_stateConnected && sc != nullptr && rules != nullptr)
+    {
+        if (wantFeedback)
+        {
+            connect(sc, &ShowControl::cueTaken, this, &ControlMap::slotLampsMayHaveChanged,
+                    Qt::QueuedConnection);
+            connect(sc, &ShowControl::cueListStopped, this, &ControlMap::slotLampsMayHaveChanged,
+                    Qt::QueuedConnection);
+            connect(sc, &ShowControl::commandHeld, this, &ControlMap::slotGuardHeld,
+                    Qt::QueuedConnection);
+            connect(rules, &OutputRuleKeeper::emergencyStopStruck, this,
+                    &ControlMap::slotLampsMayHaveChanged, Qt::QueuedConnection);
+            connect(rules, &OutputRuleKeeper::emergencyStopEnded, this,
+                    &ControlMap::slotLampsMayHaveChanged, Qt::QueuedConnection);
+        }
+        else
+        {
+            disconnect(sc, &ShowControl::cueTaken, this, &ControlMap::slotLampsMayHaveChanged);
+            disconnect(sc, &ShowControl::cueListStopped, this, &ControlMap::slotLampsMayHaveChanged);
+            disconnect(sc, &ShowControl::commandHeld, this, &ControlMap::slotGuardHeld);
+            disconnect(rules, &OutputRuleKeeper::emergencyStopStruck, this,
+                       &ControlMap::slotLampsMayHaveChanged);
+            disconnect(rules, &OutputRuleKeeper::emergencyStopEnded, this,
+                       &ControlMap::slotLampsMayHaveChanged);
+        }
+        m_stateConnected = wantFeedback;
     }
 }
 
@@ -932,9 +990,15 @@ void ControlMap::actOnFunction(quint32 fid, int how, const QString &what)
     }
 }
 
-void ControlMap::goList(const Binding &b, bool stop)
+Chaser *ControlMap::targetChaser(const Binding &b, int *step, int *subCue) const
 {
+    if (step != nullptr)
+        *step = -1;
+    if (subCue != nullptr)
+        *subCue = -1;
     ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr || (b.target.type != CueListTarget && b.target.type != CueTarget))
+        return nullptr;
     // A cue bound and then made a sub-cue (Make Sub-cues): GO plays its
     // cue's step at that sub-cue, as /go 4.2 does.
     quint32 parent = 0xFFFFFFFF;
@@ -942,8 +1006,42 @@ void ControlMap::goList(const Binding &b, bool stop)
     const ShowTree::CueList *list = b.target.type == CueListTarget ? st->cueList(b.target.id)
                                                                    : st->listOfCue(sub ? parent : b.target.id);
     if (list == nullptr || list->chaser == ShowTree::invalidId())
-        return;
+        return nullptr;
     Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list->chaser));
+    if (chaser == nullptr || b.target.type != CueTarget)
+        return chaser;
+
+    const ShowTree::Cue *c = st->cue(sub ? parent : b.target.id);
+    // A cue with sub-cues plays their chaser as its step.
+    const ShowTree::CueList *subs = c == nullptr ? nullptr : st->cueList(st->subCueList(c->id));
+    const quint32 fid = subs != nullptr ? subs->chaser : c != nullptr ? c->collection : ShowTree::invalidId();
+    int at = -1;
+    for (int i = 0; c != nullptr && i < chaser->stepsCount(); ++i)
+    {
+        if (chaser->stepAt(i) != nullptr && chaser->stepAt(i)->fid == fid)
+        {
+            at = i;
+            break;
+        }
+    }
+    if (step != nullptr)
+        *step = at;
+    if (!sub)
+        return chaser;
+    // A sub-cue the list no longer holds: nothing to GO.
+    const ShowTree::CueList *own = st->listOfCue(b.target.id);
+    const int index = own == nullptr ? -1 : own->indexOf(b.target.id);
+    if (index < 0)
+        return nullptr;
+    if (subCue != nullptr)
+        *subCue = index;
+    return chaser;
+}
+
+void ControlMap::goList(const Binding &b, bool stop)
+{
+    int step = -1, subCue = -1;
+    Chaser *chaser = targetChaser(b, &step, &subCue);
     if (chaser == nullptr)
         return;
 
@@ -952,29 +1050,10 @@ void ControlMap::goList(const Binding &b, bool stop)
     r.command = stop ? ShowControl::Stop : ShowControl::Go;
     if (!stop && b.target.type == CueTarget)
     {
-        const ShowTree::Cue *c = st->cue(sub ? parent : b.target.id);
-        // A cue with sub-cues plays their chaser as its step.
-        const ShowTree::CueList *subs = c == nullptr ? nullptr : st->cueList(st->subCueList(c->id));
-        const quint32 fid = subs != nullptr ? subs->chaser : c != nullptr ? c->collection : ShowTree::invalidId();
-        int step = -1;
-        for (int i = 0; c != nullptr && i < chaser->stepsCount(); ++i)
-        {
-            if (chaser->stepAt(i) != nullptr && chaser->stepAt(i)->fid == fid)
-            {
-                step = i;
-                break;
-            }
-        }
         if (step < 0)
             return;
-        int subCue = -1;
-        if (sub)
-        {
-            const ShowTree::CueList *own = st->listOfCue(b.target.id);
-            subCue = own == nullptr ? -1 : own->indexOf(b.target.id);
-            if (subCue < 0 || subCue >= chaser->subCueCount(step))
-                return;
-        }
+        if (subCue >= 0 && subCue >= chaser->subCueCount(step))
+            return;
         r.cue = ShowControl::cueName(chaser, step, subCue);
     }
     // The console's one run path (docs/design/RUN_COMMANDS.md).
@@ -1191,11 +1270,104 @@ quint32 ControlMap::feedbackFunction(const Binding &b) const
     return 0xFFFFFFFF;
 }
 
-void ControlMap::sendFeedback(const Binding &b, bool on) const
+ControlMap::Lamp ControlMap::lamp(const Binding &b) const
+{
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    const bool stopped = rules != nullptr && rules->emergencyStopped();
+    /* The emergency stop has a light of its own: lit while the show is
+       stopped, in either mode, whatever else is bound. It is never dark
+       because something is not armed -- it always works. */
+    if (b.target.type == EmergencyStopTarget)
+        return stopped ? LampStopped : LampOff;
+    if (!targetExists(b.target))
+        return LampOff;         // the thing it fired is gone
+    const quint32 fid = feedbackFunction(b);
+    Function *f = fid == 0xFFFFFFFF ? nullptr : m_doc->function(fid);
+    if (f != nullptr && f->isRunning())
+        return LampRunning;
+    if (b.mode == StopOnly)
+        return LampOff;         // a press of it does nothing while nothing runs
+    if (stopped)
+        return LampOff;         // after ALL OFF, dark until the next GO
+    // The press rule itself (board Q269): a press that would be refused is
+    // dark, so the desk says "not now" before anyone presses it.
+    if (!surfaceMayFire(b.target))
+        return LampOff;
+    if (b.target.type == CueListTarget)
+    {
+        /* A plain GO on the list: only while there is something left to
+           play (the end of a single-shot list has nothing). A cue binding
+           jumps to its cue, which works at any time, so it is not asked. */
+        ShowControl *sc = m_doc->showControl();
+        Chaser *chaser = targetChaser(b);
+        if (sc == nullptr || chaser == nullptr || sc->standbyStep(chaser) < 0)
+            return LampOff;
+    }
+    return LampStandby;
+}
+
+QString ControlMap::lampName(Lamp lamp)
+{
+    switch (lamp)
+    {
+        case LampOff:       return tr("Dark");
+        case LampStandby:   return tr("Ready");
+        case LampRunning:   return tr("Running");
+        case LampHeld:      return tr("GO held");
+        case LampStopped:   return tr("Stopped");
+    }
+    return QString();
+}
+
+uchar ControlMap::lampValue(Lamp lamp, bool dim)
+{
+    switch (lamp)
+    {
+        case LampOff:
+            return 0;
+        case LampStandby:
+            /* Dim: 30 is MIDI velocity 15, the level the PMJ's own idle
+               template lights its board at. A pad whose LEDs take a colour
+               in the velocity shows nothing at a dim level, so with the
+               dim light off a ready control stays dark (as before CS3). */
+            return dim ? 30 : 0;
+        case LampRunning:
+        case LampHeld:
+        case LampStopped:
+            return UCHAR_MAX;
+    }
+    return 0;
+}
+
+bool ControlMap::isBlinking(const Binding &b) const
+{
+    if (m_blinkLeft <= 0)
+        return false;
+    for (const Binding &e : m_blinking)
+        if (e.universe == b.universe && e.channel == b.channel)
+            return true;
+    return false;
+}
+
+void ControlMap::setDimWhenReady(bool on)
+{
+    if (m_dimWhenReady == on)
+        return;
+    m_dimWhenReady = on;
+    sendLamps(true);
+    m_doc->setModified();
+    emit lampsChanged();
+}
+
+void ControlMap::sendLampValue(const Binding &b, uchar value, bool force)
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (iom == nullptr || isKey(b))
         return;     // a computer key has no light
+    const quint64 k = key(b.universe, b.channel);
+    if (!force && m_lampSent.value(k, -1) == int(value))
+        return;     // nothing changed here: a mode switch sends nothing
+    m_lampSent.insert(k, int(value));
     // The profile's own parameters for the control (a MIDI note's channel
     // and message), as a VC button's feedback takes them.
     QVariant params;
@@ -1206,35 +1378,100 @@ void ControlMap::sendFeedback(const Binding &b, bool on) const
         if (ich != nullptr)
             params = ip->profile()->channelExtraParams(ich);
     }
-    iom->sendFeedBack(b.universe, b.channel, on ? UCHAR_MAX : 0, params);
+    iom->sendFeedBack(b.universe, b.channel, value, params);
 }
 
-void ControlMap::sendFeedbackFor(quint32 fid, bool on)
+void ControlMap::sendLamp(const Binding &b, bool force)
+{
+    sendLampValue(b, lampValue(lamp(b), m_dimWhenReady), force);
+}
+
+void ControlMap::sendLamps(bool force)
 {
     for (const Binding &b : std::as_const(m_bindings))
-        if (feedbackFunction(b) == fid)
-            sendFeedback(b, on);
+    {
+        if (isBlinking(b))
+            continue;       // the blink has it until it is done
+        sendLamp(b, force);
+    }
+}
+
+void ControlMap::darkenLamp(const Binding &b)
+{
+    sendLampValue(b, 0, true);
+    m_lampSent.remove(key(b.universe, b.channel));
 }
 
 void ControlMap::resendFeedback()
 {
+    sendLamps(true);
+}
+
+void ControlMap::slotLampsMayHaveChanged()
+{
+    if (m_bindings.isEmpty())
+        return;
+    sendLamps(false);
+    emit lampsChanged();
+}
+
+void ControlMap::slotGuardHeld(const QString &text, quint32 chaserId)
+{
+    Q_UNUSED(text)
+    /* The guard held a GO (or a Back, a Stop...) on this list: every
+       control that GOes it blinks twice, so the surface says what the Run
+       tab, the footer and the pad say (rule 2 of the double-GO guard). */
+    QList<Binding> blinking;
     for (const Binding &b : std::as_const(m_bindings))
     {
-        const quint32 fid = feedbackFunction(b);
-        Function *f = fid == 0xFFFFFFFF ? nullptr : m_doc->function(fid);
-        sendFeedback(b, f != nullptr && f->isRunning());
+        const Chaser *chaser = targetChaser(b);
+        if (chaser != nullptr && chaser->id() == chaserId && !isKey(b))
+            blinking.append(b);
     }
+    if (blinking.isEmpty())
+        return;
+    // A hold on another list while one blinks: the first one's lights go
+    // back to the truth rather than stay wherever its last step left them.
+    const QList<Binding> was = m_blinking;
+    m_blinking = blinking;
+    for (const Binding &b : was)
+        if (!isBlinking(b))
+            sendLamp(b, true);
+    const bool running = m_blinkLeft > 0;
+    m_blinkLeft = 4;        // on, off, on, off: two blinks
+    if (!running)
+        blinkStep();        // one chain, however many holds come
+}
+
+void ControlMap::blinkStep()
+{
+    if (m_blinkLeft <= 0)
+    {
+        // Done: back to what each light says now.
+        const QList<Binding> was = m_blinking;
+        m_blinking.clear();
+        for (const Binding &b : was)
+            sendLamp(b, true);
+        emit lampsChanged();
+        return;
+    }
+    const bool on = (m_blinkLeft % 2) == 0;
+    for (const Binding &b : std::as_const(m_blinking))
+        sendLampValue(b, on ? lampValue(LampHeld, m_dimWhenReady) : 0, true);
+    --m_blinkLeft;
+    QTimer::singleShot(m_blinkMs, this, &ControlMap::blinkStep);
 }
 
 void ControlMap::slotFunctionStarted(quint32 id)
 {
-    sendFeedbackFor(id, true);
+    Q_UNUSED(id)
+    slotLampsMayHaveChanged();
 }
 
 void ControlMap::slotFunctionStopped(quint32 id)
 {
     m_heldStarted.remove(id);
-    sendFeedbackFor(id, false);
+    slotLampsMayHaveChanged();
 }
 
 void ControlMap::slotFunctionRemoved(quint32 id)
@@ -1257,12 +1494,16 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
 {
     if (doc == nullptr)
         return false;
-    if (m_bindings.isEmpty() && m_encoderBank->device().encoders < 0 && m_runTabList == 0xFFFFFFFF)
+    if (m_bindings.isEmpty() && m_encoderBank->device().encoders < 0 && m_runTabList == 0xFFFFFFFF
+        && m_dimWhenReady)
         return true;    // a show with none saves as before
     doc->writeStartElement(KXMLQLCControlMap);
     // The list the Run tab (and so the pad) plays, when it is not the main one.
     if (m_runTabList != 0xFFFFFFFF)
         doc->writeAttribute(KXMLRunList, QString::number(m_runTabList));
+    // Only when the dim light is off: a show with it on saves as before.
+    if (!m_dimWhenReady)
+        doc->writeAttribute(KXMLLights, QStringLiteral("onoff"));
     for (const Binding &b : m_bindings)
     {
         doc->writeStartElement(KXMLTrigger);
@@ -1306,7 +1547,12 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_swallowSeen.clear();
     m_blockedHeld.clear();
     m_heldStarted.clear();
+    m_blinking.clear();
+    m_blinkLeft = 0;
+    m_lampSent.clear();
     m_encoderBank->reset();
+    // The light a ready control shows; a file that says nothing: dim.
+    m_dimWhenReady = root.attributes().value(KXMLLights).toString() != QStringLiteral("onoff");
     bool okList = false;
     const quint32 runList = root.attributes().value(KXMLRunList).toUInt(&okList);
     const quint32 wasList = m_runTabList;
