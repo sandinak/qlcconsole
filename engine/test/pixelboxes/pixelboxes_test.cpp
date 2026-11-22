@@ -731,10 +731,21 @@ void PixelBoxes_Test::aOnceBreatheInAHitFiredAgain()
     for (int fire = 1; fire <= 2; ++fire)
     {
         hit->start(m_doc->masterTimer(), FunctionParent::master());
-        run(500);
-        const int mid = int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0)));
+        /* Its breath rises past half the 20% within the second it lasts;
+           waited for, not read at a set time: the universe is written a
+           frame or more after the effect plays, and GitHub's coverage
+           runner (2026-11-22) read 23 of 51 at 500 ms. A hit that doesn't
+           breathe again stays on its floor (3) the whole second. */
+        QElapsedTimer since;
+        since.start();
+        int mid = 0;
+        while (mid <= kTwentyPercent / 2 && since.elapsed() < 1000)
+        {
+            run(20);
+            mid = qMax(mid, int(uchar(sends("US Step 1 Top SR", kTopWhite, 1).at(0))));
+        }
         QVERIFY2(mid > kTwentyPercent / 2, qPrintable(QString("fire %1: %2").arg(fire).arg(mid)));
-        run(900);
+        run(int(qMax<qint64>(0, 1400 - since.elapsed())));
         hit->stop(FunctionParent::master());
         run(100);
     }
