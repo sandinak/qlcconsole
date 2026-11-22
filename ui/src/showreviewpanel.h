@@ -49,6 +49,7 @@ class Doc;
 class QLC_UI_EXPORT ShowReviewPanel final : public QDialog
 {
     Q_OBJECT
+    friend class ShowReviewPanel_Test;      // reads the batch fixes directly
 
 public:
     explicit ShowReviewPanel(Doc *doc, QWidget *parent = nullptr);
@@ -158,6 +159,8 @@ private:
     };
     DirectFix directFixOf(QTreeWidgetItem *item) const;
     void applyCut(const QVariantList &fix);
+    /** Every selected cut, each head's worst one taped off once. */
+    void applyCuts(const QList<QVariantList> &cuts);
 
     static Jumper s_jumper;
     static QPointer<ShowReviewPanel> s_shared;

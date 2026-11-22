@@ -327,6 +327,28 @@ void ShowReviewPanel_Test::fixSeveralAtOnce()
     ShowReviewPanel::setJumper(ShowReviewPanel::Jumper());
 }
 
+/* PWR-11 is found per cue AND zone, so a batch can hold two cuts for one
+   head. The beam needs the worst of them taped off once: added up, twice as
+   much of the light was cut away as the spill needed. */
+void ShowReviewPanel_Test::oneHeadsCutIsTapedOffOnce()
+{
+    ShowReviewPanel panel(m_doc);
+    QVERIFY(!m_doc->fixtures().isEmpty());
+    const quint32 fid = m_doc->fixtures().first()->id();
+    MonitorProperties *mp = m_doc->monitorProperties();
+    FixtureRigProps rp = mp->fixtureRigProps(fid);
+    rp.maskBottom = 0.0f;
+    mp->setFixtureRigProps(fid, rp);
+
+    // Cue 3 wants 12 degrees off, cue 7 wants 18: 18 is taped off, once.
+    panel.applyCuts({ QVariantList{ fid, 12.0 }, QVariantList{ fid, 18.0 } });
+    QCOMPARE(qRound(mp->fixtureRigProps(fid).maskBottom), 18);
+
+    // One finding on its own is unchanged: its cut goes on top of what is there.
+    panel.applyCut(QVariantList{ fid, 4.0 });
+    QCOMPARE(qRound(mp->fixtureRigProps(fid).maskBottom), 22);
+}
+
 void ShowReviewPanel_Test::footerEntriesFoldIn()
 {
     ShowReviewPanel panel(m_doc);

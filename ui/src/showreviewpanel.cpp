@@ -640,17 +640,51 @@ int ShowReviewPanel::directFixCount() const
 
 void ShowReviewPanel::applyCut(const QVariantList &fix)
 {
+    applyCuts({ fix });
+}
+
+void ShowReviewPanel::applyCuts(const QList<QVariantList> &cuts)
+{
     MonitorProperties *mp = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
     if (mp == nullptr)
         return;
-    for (int i = 0; i + 1 < fix.size(); i += 2)
+    /* PWR-11 is found per cue AND zone, so two findings can ask for the same
+       head's cut. What the beam needs is the worst of them, taped off ONCE:
+       adding them up cut twice as much off as the spill needed (one at a time
+       was safe because recheck() recomputed the cut in between). */
+    QHash<quint32, float> worst;
+    for (const QVariantList &fix : cuts)
+        for (int i = 0; i + 1 < fix.size(); i += 2)
+        {
+            const quint32 fid = fix.at(i).toUInt();
+            worst[fid] = qMax(worst.value(fid, 0.0f), fix.at(i + 1).toFloat());
+        }
+    for (auto it = worst.constBegin(); it != worst.constEnd(); ++it)
     {
-        const quint32 fid = fix.at(i).toUInt();
-        FixtureRigProps rp = mp->fixtureRigProps(fid);
-        rp.maskBottom += fix.at(i + 1).toFloat();
-        mp->setFixtureRigProps(fid, rp);
+        FixtureRigProps rp = mp->fixtureRigProps(it.key());
+        rp.maskBottom += it.value();
+        mp->setFixtureRigProps(it.key(), rp);
     }
 }
+
+namespace {
+/* The turn and Facing of each head, to tell a pan fix that went in from one
+   the user cancelled: the jump reports "handled" either way. */
+QByteArray headRigState(Doc *doc, const QVariantList &heads)
+{
+    QByteArray out;
+    MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (mp == nullptr)
+        return out;
+    for (const QVariant &v : heads)
+    {
+        const FixtureRigProps rp = mp->fixtureRigProps(v.toUInt());
+        out += QByteArray::number(rp.panTurn) + ':'
+               + QByteArray::number(double(rp.panZeroDir), 'f', 3) + ';';
+    }
+    return out;
+}
+} // namespace
 
 bool ShowReviewPanel::fixSelected()
 {
@@ -684,22 +718,30 @@ bool ShowReviewPanel::fixSelected()
         // The pan turns first: a Cancel there is a Cancel of the lot.
         if (!heads.isEmpty())
         {
+            const QByteArray before = headRigState(m_doc, heads);
             if (!runJump(this, QStringLiteral("panturn"), heads))
+                return false;
+            /* Its dialog answers for itself and reports "handled" whichever
+               way it went -- turns written, Cancel, or nothing it could do. No
+               turn and no Facing moved means no: the rest of the batch stops
+               with it, and the count stays honest. */
+            if (headRigState(m_doc, heads) == before)
                 return false;
             m_fixed += panRows;
         }
-        bool cut = false;
+        QList<QVariantList> cuts;
         for (const DirectFix &d : rest)
         {
             if (d.kind == DirectFix::Cut)
             {
-                applyCut(d.data);
-                cut = true;
+                cuts << d.data;
                 ++m_fixed;
             }
             else if (ShowStatus::instance()->runAction(d.key, this, d.data))
                 ++m_fixed;
         }
+        const bool cut = !cuts.isEmpty();
+        applyCuts(cuts);
         if (cut && m_doc != nullptr)
         {
             m_doc->setModified();

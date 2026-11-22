@@ -42,6 +42,8 @@ private slots:
     void fixGoesToThePlace();
     /** A footer design entry no check reads is listed under its id */
     void fixSeveralAtOnce();
+    /** Two cuts for one head in a batch: the worst taped off once. */
+    void oneHeadsCutIsTapedOffOnce();
     void footerEntriesFoldIn();
     /** The Show readiness dialog shows design entries' ids and opens the panel */
     void readinessDialogLeadsHere();
