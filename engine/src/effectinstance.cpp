@@ -2867,6 +2867,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
         const QList<quint32> &headChannels =
             haveHeadChannels ? facts->headChannels.at(head) : ownChannels;
 
+        /* Its mode, address and id once a cell: a head's answer asks for
+           each of them a dozen times and more, and a step rig has 6,144. */
+        const QLCFixtureMode *mode = fxi->fixtureMode();
+        const int addrBase = int(fxi->address());
+        const quint32 fxid = fxi->id();
         int uniIdx = (int)fxi->universe();
 
         // Track the pan/tilt degrees this fixture is driven to so the runner can
@@ -2930,7 +2935,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 if (a == 0) havePan = false;
                 else haveTilt = false;
             }
-            DmxWrite w{uniIdx, (int)fxi->address() + (int)sp.channel, uchar(v), fxi->id(), sp.channel};
+            DmxWrite w{uniIdx, addrBase + (int)sp.channel, uchar(v), fxid, sp.channel};
             w.snap = true;
             writes.append(w);
         }
@@ -2941,7 +2946,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             spotDeg.setX(panDeg); spotPan = true;
             const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Pan, panDeg, false, armHead);
             for (const SceneValue &sv : svs)
-                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
+                writes.append({uniIdx, addrBase + (int)sv.channel, sv.value, fxid, sv.channel});
         }
 
         // Tilt
@@ -2950,7 +2955,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             spotDeg.setY(tiltDeg); spotTilt = true;
             const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Tilt, tiltDeg, false, armHead);
             for (const SceneValue &sv : svs)
-                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
+                writes.append({uniIdx, addrBase + (int)sv.channel, sv.value, fxid, sv.channel});
         }
 
         if (spotPan || spotTilt)
@@ -3000,19 +3005,19 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 // A scale, not a set: two dimmer effects on it multiply.
                 const uchar base = sceneBaseValue(fid, miCh, 255);
                 const uchar out  = (uchar)qBound(0, (int)qRound(base * mul), 255);
-                writes.append({uniIdx, (int)fxi->address() + (int)miCh,
-                               out, fxi->id(), miCh, /*replace=*/true, mul, base});
+                writes.append({uniIdx, addrBase + (int)miCh,
+                               out, fxid, miCh, /*replace=*/true, mul, base});
             }
             else if (carriesColour)
             {
                 ownColourMul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f);
             }
-            else if (fxi->fixtureMode() != nullptr)
+            else if (mode != nullptr)
             {
                 // No master dimmer: dim by scaling THIS head's colour channels.
                 for (quint32 c : headChannels)
                 {
-                    QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                    QLCChannel *ch = mode->channel(c);
                     if (ch == nullptr) continue;
                     // Only channels that actually EMIT a colour can stand in for a
                     // dimmer. A colour-WHEEL channel is in the Colour group but its
@@ -3028,8 +3033,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     // flickers (user choice) rather than staying dark.
                     const uchar base = sceneBaseValue(fid, c, 255);
                     const uchar out = (uchar)qBound(0, (int)qRound(base * mul), 255);
-                    writes.append({uniIdx, (int)fxi->address() + (int)c,
-                                   out, fxi->id(), c, /*replace=*/true, mul, base});
+                    writes.append({uniIdx, addrBase + (int)c,
+                                   out, fxid, c, /*replace=*/true, mul, base});
                 }
             }
         }
@@ -3044,7 +3049,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         {
             const QJSValue &levelVal = iv(IntentKey::Level);
             if (!levelVal.isUndefined() && dimVal.isUndefined() && !carriesColour
-                && fxi->fixtureMode() != nullptr)
+                && mode != nullptr)
             {
                 const float level = qBound(0.0f, (float)levelVal.toNumber(), 1.0f);
                 const float mul = 1.0f + (level - 1.0f) * envelope;   // none of it while it isn't on
@@ -3052,7 +3057,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 const QList<int> forcedLTP = fxi->forcedLTPChannels();
                 for (quint32 c : headChannels)
                 {
-                    const QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                    const QLCChannel *ch = mode->channel(c);
                     if (ch == nullptr)
                         continue;
                     const bool isEmitter = (ch->group() == QLCChannel::Intensity
@@ -3073,8 +3078,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     if (!htp && !hasSceneBaseValue(fid, c))
                         continue;
                     const uchar base = sceneBaseValue(fid, c, 0);
-                    DmxWrite w{uniIdx, (int)fxi->address() + (int)c,
-                               (uchar)qBound(0, (int)qRound(base * mul), 255), fxi->id(), c,
+                    DmxWrite w{uniIdx, addrBase + (int)c,
+                               (uchar)qBound(0, (int)qRound(base * mul), 255), fxid, c,
                                /*replace=*/true, mul, base};
                     w.multiply = htp;
                     writes.append(w);
@@ -3110,8 +3115,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             // the whole (multi-head) fixture.
             for (quint32 c : headChannels)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (ch == nullptr) continue;
                 // Accept both Colour-group and Intensity-group (IntensityRed/Green/Blue
                 // presets) channels — the fixture definition preset determines which
@@ -3127,11 +3132,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     // looking "busy". Dropping them lets a note effect with nothing
                     // lit produce an EMPTY frame, which the runner uses to idle.
                     if (ownsColour)
-                        writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c,
+                        writes.append({uniIdx, addrBase + (int)c, dmxVal, fxid, c,
                                        /*replace=*/true});
                     else if (dmxVal != 0)
                     {
-                        DmxWrite w{uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c};
+                        DmxWrite w{uniIdx, addrBase + (int)c, dmxVal, fxid, c};
                         w.htp = true;
                         writes.append(w);
                     }
@@ -3185,8 +3190,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             if (!av.isUndefined() && miCh != QLCChannel::invalid())
             {
                 uchar amt = (uchar)qBound(0, (int)qRound(av.toInt() * envelope), 255);
-                writes.append({uniIdx, (int)fxi->address() + (int)miCh,
-                               amt, fxi->id(), miCh, /*replace=*/true});
+                writes.append({uniIdx, addrBase + (int)miCh,
+                               amt, fxid, miCh, /*replace=*/true});
             }
             else
             {
@@ -3219,8 +3224,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             quint32 nCh = top > 0 ? fxi->channels() : 0;
             for (quint32 c = 0; c < nCh; ++c)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (!ch || ch->group() != QLCChannel::Colour) continue;
 
                 // Find capability with closest colour
@@ -3245,7 +3250,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     }
                 }
                 if (bestDist < INT_MAX)
-                    writes.append({uniIdx, (int)fxi->address() + (int)c, bestDmx, fxi->id(), c});
+                    writes.append({uniIdx, addrBase + (int)c, bestDmx, fxid, c});
             }
         }
 
@@ -3258,8 +3263,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             quint32 nCh = fxi->channels();
             for (quint32 c = 0; c < nCh; ++c)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (!ch || ch->group() != QLCChannel::Shutter)
                     continue;
 
@@ -3316,7 +3321,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 }
 
                 if (found)
-                    writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
+                    writes.append({uniIdx, addrBase + (int)c, dmxVal, fxid, c});
             }
         }
 
@@ -3340,8 +3345,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             quint32 nCh = fxi->channels();
             for (quint32 c = 0; c < nCh; ++c)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (!ch) continue;
 
                 QLCChannel::Group   grp = ch->group();
@@ -3353,32 +3358,32 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     {
                         uchar v = (uchar)qBound(0, (int)(focusV.toNumber() * 255), 255);
                         if (pst == QLCChannel::BeamFocusNearFar)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                         else if (pst == QLCChannel::BeamFocusFarNear)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, (uchar)(255-v), fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, (uchar)(255-v), fxid, c});
                     }
                     if (!frostV.isUndefined() && pst == QLCChannel::Custom
                         && ch->name().contains("frost", Qt::CaseInsensitive))
                     {
                         uchar v = (uchar)qBound(0, (int)(frostV.toNumber() * 255), 255);
-                        writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                        writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                     }
                     if (!zoomV.isUndefined())
                     {
                         uchar v = (uchar)qBound(0, (int)(zoomV.toNumber() * 255), 255);
                         if (pst == QLCChannel::BeamZoomSmallBig)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                         else if (pst == QLCChannel::BeamZoomBigSmall)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, (uchar)(255-v), fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, (uchar)(255-v), fxid, c});
                     }
                 }
                 else if (grp == QLCChannel::Shutter && !irisV.isUndefined())
                 {
                     uchar v = (uchar)qBound(0, (int)(irisV.toNumber() * 255), 255);
                     if (pst == QLCChannel::ShutterIrisMinToMax)
-                        writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                        writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                     else if (pst == QLCChannel::ShutterIrisMaxToMin)
-                        writes.append({uniIdx, (int)fxi->address()+(int)c, (uchar)(255-v), fxi->id(), c});
+                        writes.append({uniIdx, addrBase+(int)c, (uchar)(255-v), fxid, c});
                 }
                 else if (grp == QLCChannel::Gobo && !goboV.isUndefined()
                          && pst == QLCChannel::GoboWheel)
@@ -3393,7 +3398,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                             continue;
                         if (gIdx == wantIdx)
                         {
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, cap->middle(), fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, cap->middle(), fxid, c});
                             break;
                         }
                         ++gIdx;
