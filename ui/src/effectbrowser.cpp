@@ -402,7 +402,10 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_list->setItemDelegate(new EffectRowDelegate(this));
     m_list->setUniformItemSizes(false);
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    m_list->setMinimumHeight(220);
+    /* Eight-ish rows at the smallest window: the origins row above it may
+       be scrolling sideways there (ShrinkableBar), and the list must give
+       up those pixels rather than be clipped. */
+    m_list->setMinimumHeight(180);
     v->addWidget(m_list, 1);
 
     m_fitNote = new QLabel(this);
