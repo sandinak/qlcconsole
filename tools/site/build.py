@@ -309,7 +309,7 @@ for fn in sorted(os.listdir(os.path.join(HERE, "news"))):
     html = re.sub(r'<p>\s*(<img[^>]*>)\s*</p>', thumb, html)
     html = re.sub(r'(?<!rel="noopener">)(<img[^>]*>)', lambda m: thumb(m) if 'qc-thumb' not in m.string[max(0, m.start() - 120):m.start()] else m.group(0), html)
     posts.append({"slug": "release-" + meta["tag"].replace(".", "-"), "title": meta["title"],
-                  "date_gmt": r["publishedAt"].rstrip("Z").replace("T", " "), "content": wrap(html),
+                  "date_gmt": r["publishedAt"].rstrip("Z").replace("T", " "), "content": wrap(STYLE + html),
                   "category": "Pre-releases" if r["isPrerelease"] else "Releases"})
 missing = sorted(set(releases) - {m for m in (front_matter(read("tools/site/news/" + f))[0].get("tag")
                                               for f in os.listdir(os.path.join(HERE, "news")) if f.endswith(".md"))}
