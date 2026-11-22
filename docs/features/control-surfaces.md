@@ -263,9 +263,10 @@ after any build that changes a surface, and say which build.
     *Expect:* **Go** glows dim before the first GO (the same level the board
     lights itself at when it is plugged in); bright while a cue runs; it
     **blinks twice** when you press Go twice inside a second, and goes back
-    to bright; the stop's button is dark until the show is stopped and then
-    **lit**, and while it is lit **Go is dark**; one GO after that, Go is
-    dim or bright again. The Control Map's **Its light** column says the
+    to bright; the stop's button glows dim all along (it always works) and
+    goes **lit** when the show is stopped, and while it is lit **Go is
+    dark**; one GO after that, Go is dim or bright again and the stop is
+    dim. The Control Map's **Its light** column says the
     same words throughout.
 12. **A hit's light.** Learn a hit that lives in one song on a PMJ button.
     *Expect:* dark while that song is not running, dim while it is, dark
