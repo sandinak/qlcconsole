@@ -4004,7 +4004,14 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
                                           : qobject_cast<EffectDesigner *>(bench->effectPane());
     if (ed == nullptr)
     {
-        qWarning() << "+ Palette > Effect did not open the designer in the Workbench's pane";
+        qWarning() << "+ Palette > Effect did not open the designer:"
+                   << "docked" << view->isWorkbenchDocked()
+                   << "| cue" << view->currentCueId()
+                   << "| pane" << (bench == nullptr ? "(no workbench)"
+                                                    : bench->effectPane() == nullptr
+                                                          ? "(empty)"
+                                                          : bench->effectPane()->metaObject()->className())
+                   << "| hint" << hintOf(view)->text();
         return nullptr;
     }
     // Nothing the show keeps is made until it is kept (the draft the
@@ -4020,21 +4027,32 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
                 groups << g->id();
     if (!groups.isEmpty())
         ed->setTryOnGroups(groups);
-    // As a person does: type the name in the browser, click the row.
+    // As a person does: type the name in the browser, click the row. The
+    // browser loads itself a moment after the pane opens, so wait for it.
     EffectBrowser *browser = ed->browser();
     if (browser == nullptr)
+    {
+        qWarning() << "the designer has no effect browser";
         return nullptr;
+    }
+    for (int i = 0; i < 60 && browser->list()->count() == 0; ++i)
+        settle(50);
     browser->search()->setFocus();
     browser->search()->selectAll();         // what was searched for last time goes
     QTest::keyClicks(browser->search(), effect);
-    settle(100);
     QListWidgetItem *hit = nullptr;
     QStringList shown;
-    for (int i = 0; i < browser->list()->count(); ++i)
+    for (int tries = 0; tries < 60 && hit == nullptr; ++tries)
     {
-        shown << browser->list()->item(i)->text();
-        if (browser->list()->item(i)->text() == effect && hit == nullptr)
-            hit = browser->list()->item(i);
+        shown.clear();
+        for (int i = 0; i < browser->list()->count(); ++i)
+        {
+            shown << browser->list()->item(i)->text();
+            if (browser->list()->item(i)->text() == effect && hit == nullptr)
+                hit = browser->list()->item(i);
+        }
+        if (hit == nullptr)
+            settle(50);
     }
     qInfo().noquote() << "[L2] the designer's browser shows for" << effect << ":" << shown.join(" | ");
     if (hit == nullptr)
@@ -4076,7 +4094,8 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
                       << "| renaming in the Library" << view->m_libRenaming;
     if (!view->m_libRenaming)
     {
-        qWarning() << "the name was not opened to type in the Library";
+        qWarning() << "the name was not opened to type in the Library; current row"
+                   << (lib->currentItem() == nullptr ? QString("(none)") : lib->currentItem()->text(0));
         return nullptr;
     }
     if (QTreeWidgetItem *cur = lib->currentItem())
@@ -5348,13 +5367,28 @@ void CourseShow_Test::lessonTwoFourExtension()
     QVERIFY(open(levelTwoFinish(4)));
     Doc *doc = m_app->doc();
     ShowTreeView *view = showTree();
+    /* Board Q264: Edit Effect opens the effect designer (docked), which
+       works on a copy -- so the extension sets Speed there and keeps it
+       with Update "Truss Wave", as the handout now says. */
     QVERIFY(libraryMenu(view, "Truss Wave", { QStringLiteral("Edit Effect") }));   // an effect palette
     settle(200);
-    QComboBox *speed = view->findChild<QComboBox *>(QStringLiteral("effectSpeedMaster"));
-    QVERIFY(speed != nullptr && speed->isVisible());
+    QComboBox *speed = nullptr;
+    for (QComboBox *c : view->findChildren<QComboBox *>(QStringLiteral("effectSpeedMaster")))
+        if (c->isVisible())
+            speed = c;
+    QVERIFY2(speed != nullptr, "no Speed master in the designer");
     const int main = speed->findText(QStringLiteral("Main Speed"));
     QVERIFY(main >= 0);
     speed->setCurrentIndex(main);
+    settle(200);
+    QPushButton *update = nullptr;
+    for (QPushButton *b : view->findChildren<QPushButton *>(QStringLiteral("edUpdate")))
+        if (b->isVisible())
+            update = b;
+    QVERIFY2(update != nullptr && update->isEnabled(),
+             qPrintable(QStringLiteral("no Update to keep it: %1").arg(update == nullptr ? "(none)" : "disabled")));
+    QVERIFY2(update->text().contains(QStringLiteral("Truss Wave")), qPrintable(update->text()));
+    update->click();
     settle(200);
     QCOMPARE(int(paletteNamed(doc, "Truss Wave")->effectParamValues().value(QStringLiteral("__speedMaster"))),
              int(SpeedMasters::Master1));
@@ -5371,6 +5405,16 @@ void CourseShow_Test::lessonTwoFourExtension()
     qInfo().noquote() << "[2.4x] footer:" << footer->isVisible() << shown.join(" | ")
                       << "| used" << doc->speedMasters()->usedMask();
     QVERIFY2(!shown.isEmpty() && shown.first().startsWith(QStringLiteral("Main Speed")), qPrintable(shown.join(" | ")));
+
+    // ↩ out of the designer and the dock, back to the tree's page.
+    if (Workbench *bench = view->dockedWorkbench())
+    {
+        bench->backOut();
+        settle(100);
+        if (view->isWorkbenchDocked())
+            view->closeWorkbench();
+        settle(100);
+    }
 
     // At home: the sparkle's own colour Amber, then none of its own.
     QVERIFY(view->selectNode(cueNumbered(doc, "1.0.6")));

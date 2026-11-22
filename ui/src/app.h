@@ -238,6 +238,10 @@ public:
      *  Window entry say what is in it -- where someone looking for "cues"
      *  looks. No rename, and no new menu item. */
     QString tabAside(const QString &label) const;
+    /** The tooltip tab @p label wears: its name in full, plus what is in it
+     *  when the name doesn't say ("Show Tree: your cue lists, cues and
+     *  hits"). What applyTabLabelMode() sets, so a test can ask for it. */
+    QString tabToolTipText(const QString &label) const;
     /** A quiet line above the tabs: @p text, with a button @p buttonText
      *  running @p action when given; × puts it away. */
     void showViewNotice(const QString &text, const QString &buttonText = QString(),

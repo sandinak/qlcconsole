@@ -3227,7 +3227,7 @@ void AppViews_Test::windowShortcutsFollowTheView()
 {
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(windowJumpsAsShown(m_app),
-             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree 4",
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree \u2014 cue lists, cues and hits 4",
                            "Timeline 5", "Virtual Console 6", "Run 7",
                            "|", "Functions", "Build", "Simple Desk D" }));
 
@@ -3235,7 +3235,8 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Fixtures 1", "Functions 2", "Shows 3", "Virtual Console 4",
                            "Simple Desk 5", "Inputs/Outputs 6",
-                           "|", "Lighting Studio", "Build", "Show Tree", "Run" }));
+                           "|", "Lighting Studio", "Build",
+                           "Show Tree \u2014 cue lists, cues and hits", "Run" }));
     // ⇧⌘1 is the first tab on screen, and it goes there.
     QAction *first = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
@@ -3249,7 +3250,8 @@ void AppViews_Test::windowShortcutsFollowTheView()
     m_app->setWorkspaceView(App::EverythingView);
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Functions 4",
-                           "Build 5", "Show Tree 6", "Timeline 7", "Virtual Console 8",
+                           "Build 5", "Show Tree \u2014 cue lists, cues and hits 6",
+                           "Timeline 7", "Virtual Console 8",
                            "Simple Desk 9", "Run 0" }));
 
     // A tab in a window of its own keeps its number.

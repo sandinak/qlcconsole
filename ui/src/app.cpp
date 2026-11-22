@@ -5870,6 +5870,13 @@ QString App::tabAside(const QString &label) const
     return QString();
 }
 
+QString App::tabToolTipText(const QString &label) const
+{
+    const QString shown = tabDisplayLabel(label);
+    const QString aside = tabAside(label);
+    return aside.isEmpty() ? shown : tr("%1: your %2").arg(shown, aside);
+}
+
 QStringList App::effectiveViewTabs() const
 {
     const QStringList all = workspaceViewTabs(EverythingView);
@@ -7964,9 +7971,7 @@ void App::applyTabLabelMode()
         const QIcon   &origIcon = m_tabOriginals.at(o).second;
         /* Whatever it shows, the tooltip names the tab in full -- and says
            what is in it where the name alone doesn't (Q266). */
-        const QString aside = tabAside(m_tabOriginals.at(o).first);
-        m_tab->setTabToolTip(i, aside.isEmpty() ? origText
-                                                : tr("%1: your %2").arg(origText, aside));
+        m_tab->setTabToolTip(i, tabToolTipText(m_tabOriginals.at(o).first));
         switch (m_tabLabelMode)
         {
         case TabIconOnly:

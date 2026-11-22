@@ -181,7 +181,9 @@ master**, so one tap moves everything on it together.
 
 1. In the Library, right-click **Truss Wave** → **Edit Effect**: the
    designer opens on it.
-2. Set **Speed** to **Main Speed**.
+2. Set **Speed** to **Main Speed**, then click **Update “Truss Wave”** —
+   the designer works on a copy, and Update keeps it everywhere the effect
+   plays.
 3. Look at the footer: a **Main Speed 120** button appears, beside the
    Grand Master. The wave now counts in beats of that master.
 4. Which effects in a show would you put on the same master, and why?

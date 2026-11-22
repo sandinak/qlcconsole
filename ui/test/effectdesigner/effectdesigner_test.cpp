@@ -957,8 +957,11 @@ void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
 
     // Edit Palette on every other type: the Look Editor, not the designer.
     place.edit(blue->id());
-    QVERIFY(qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane()) == nullptr);
-    QCOMPARE(view.dockedWorkbench()->currentPaletteId(), blue->id());
+    Workbench *docked = view.dockedWorkbench();
+    QCOMPARE(docked->currentPage(), Workbench::LookPage);
+    QCOMPARE(docked->currentPaletteId(), blue->id());
+    QVERIFY2(qobject_cast<EffectDesigner *>(docked->effectPane()) == nullptr,
+             "the designer was left in the pane under the Look Editor");
 }
 
 void EffectDesigner_Test::designerShots()

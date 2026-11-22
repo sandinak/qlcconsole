@@ -2029,6 +2029,15 @@ void Workbench::editPalette(quint32 paletteId)
 {
     if (m_doc->palette(paletteId) == nullptr)
         return;
+    /* A designer in the pane goes first: its draft and hidden preview must
+       not play on under the Look Editor (board Q264, where an effect
+       palette opens in the designer and any other type here). */
+    if (effectPane() != nullptr)
+    {
+        if (EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane()))
+            ed->cancel();
+        clearEditors();
+    }
     /* From a fixture group's layout: that fills the pane, and the look
        editor opened under it had no room. Go back to the scene first. */
     if (!m_groupBackButton->isHidden() && m_doc->function(m_groupReturnScene) != nullptr)
