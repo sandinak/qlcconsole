@@ -87,6 +87,11 @@ private slots:
      *  the designer (the bench, on the cue's groups; the palette it starts
      *  from); every other palette type stays the Look Editor's. */
     void theLibrarysEffectDoorsOpenTheDesigner();
+    /** The designer in the docked pane fits the product's smallest window
+     *  (1024x640): opening it on a cue layer's Effect row, and on the
+     *  bench from the Library, leaves the window no wider than the page
+     *  itself needs -- and no control in it is cut mid-word. */
+    void theDesignerFitsTheSmallestWindow();
     /** Pictures for the UX review (QLC_SHOT_DIR), at three window sizes:
      *  a cue's layer in the docked Workbench, its Effect row (the designer
      *  -- the Look Editor before board Q263), and the Library's

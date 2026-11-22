@@ -14,6 +14,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The Speed choice and the effect's own Colour / Dimmer are no longer cut
+  mid-word** (*"As the look (own speed unl"*, *"the laye"*): Speed reads
+  **As the look** with the whole sentence on hover, and the Its own combos
+  keep a readable width whatever room the pane has.
 - **A crash when the Show Tree closed with an effect designer open in the
   Workbench docked there**: the designer drops its hidden preview scene as
   it goes, and the show's "a function was removed" reached the tree's

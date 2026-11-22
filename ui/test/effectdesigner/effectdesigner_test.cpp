@@ -24,6 +24,8 @@
 #include <QTreeWidget>
 #include <QPushButton>
 #include <QComboBox>
+#include <QStyleOptionComboBox>
+#include <QStyle>
 #include <QLabel>
 #include <QPointer>
 #include <QPainter>
@@ -962,6 +964,108 @@ void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
     QCOMPARE(docked->currentPaletteId(), blue->id());
     QVERIFY2(qobject_cast<EffectDesigner *>(docked->effectPane()) == nullptr,
              "the designer was left in the pane under the Look Editor");
+}
+
+/* The headline of board Q263 is a pane in the Workbench, so it has to fit
+   the window the product calls its smallest (1024x640). The designer's
+   rows of controls scroll sideways (ShrinkableBar) instead of holding the
+   window open, and no combo is cut mid-word. */
+void EffectDesigner_Test::theDesignerFitsTheSmallestWindow()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *chase = effectPalette(m_doc, "Chase", "Color Chase");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Dance"), "01-Opening", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Dance Break");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    st->setLayerLook(c1, l1, st->lookForPalette(chase->id()));
+    EffectDesigner::plugIntoWorkbench();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTest::qWait(100);
+    // The page's own floor at that size, with no designer in the pane.
+    QVERIFY(view.openInWorkbench(c1, l1));
+    QTest::qWait(150);
+    const QSize plain = view.size();
+
+    auto fits = [&view, plain](const char *what) {
+        QTest::qWait(250);
+        if (view.width() <= plain.width() && view.height() <= plain.height())
+            return;
+        // Say which children are holding it open, widest first.
+        QList<QPair<int, QString>> wide;
+        if (Workbench *b = view.dockedWorkbench())
+            if (QWidget *pane = b->effectPane())
+                for (QWidget *w : pane->findChildren<QWidget *>())
+                    if (w->isVisibleTo(pane) && w->minimumSizeHint().width() > 150)
+                        wide << qMakePair(w->minimumSizeHint().width(),
+                                          QStringLiteral("%1(%2)").arg(QString::fromLatin1(w->metaObject()->className()),
+                                                                       w->objectName()));
+        std::sort(wide.begin(), wide.end(), [](const QPair<int, QString> &a, const QPair<int, QString> &b) {
+            return a.first > b.first;
+        });
+        QStringList said;
+        for (int i = 0; i < wide.size() && i < 8; ++i)
+            said << QStringLiteral("%1 %2").arg(wide.at(i).second).arg(wide.at(i).first);
+        QFAIL(qPrintable(QStringLiteral("%1: the window grew to %2x%3 (the page alone needs %4x%5); "
+                                        "widest in the pane: %6")
+                             .arg(QString::fromLatin1(what)).arg(view.width()).arg(view.height())
+                             .arg(plain.width()).arg(plain.height())
+                             .arg(said.isEmpty() ? QStringLiteral("(nothing over 150px)")
+                                                 : said.join(QStringLiteral(", ")))));
+    };
+
+    // 1. The layer's Effect row (board Q263).
+    TreeCueStack *cs = qobject_cast<TreeCueStack *>(view.dockedWorkbench()->stack());
+    QVERIFY(cs != nullptr);
+    const int li = cs->indexOfLayer(l1);
+    QVERIFY(li >= 0);
+    int ai = -1;
+    for (int i = 0; i < cs->layers().at(li).attributes.size(); ++i)
+        if (cs->layers().at(li).attributes.at(i).key.startsWith(QLatin1String("Effect.")))
+            ai = i;
+    QVERIFY(ai >= 0);
+    ProgrammingOutline::Row r;
+    r.kind = ProgrammingOutline::AttributeRow;
+    r.id = quint32(ai);
+    r.scene = quint32(li);
+    QVERIFY(view.dockedWorkbench()->selectRow(r));
+    EffectDesigner *ed = qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane());
+    QVERIFY(ed != nullptr);
+    fits("a layer's effect");
+
+    /* Nothing in it is cut mid-word (UX-36): each combo's text fits the
+       field the style gives it, at this smallest size. */
+    for (const char *name : { "edOwnColour", "edOwnDimmer", "effectSpeedMaster" })
+    {
+        QComboBox *c = nullptr;
+        for (QComboBox *box : ed->findChildren<QComboBox *>(QLatin1String(name)))
+            if (box->isVisibleTo(ed))
+                c = box;
+        if (c == nullptr)
+            continue;           // the Speed row belongs to the effect picked
+        QStyleOptionComboBox opt;
+        opt.initFrom(c);
+        opt.frame = c->hasFrame();
+        const QRect field = c->style()->subControlRect(QStyle::CC_ComboBox, &opt,
+                                                       QStyle::SC_ComboBoxEditField, c);
+        const int need = c->fontMetrics().horizontalAdvance(c->currentText());
+        QVERIFY2(field.width() >= need,
+                 qPrintable(QStringLiteral("%1 shows \"%2\" in %3px, it needs %4px at %5x%6")
+                                .arg(QString::fromLatin1(name), c->currentText())
+                                .arg(field.width()).arg(need).arg(view.width()).arg(view.height())));
+    }
+
+    // 2. The bench, from the Library (board Q264).
+    ed->cancel();
+    QVERIFY(view.designEffectPalette(QLCPalette::invalidId()));
+    QVERIFY(qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane()) != nullptr);
+    fits("the bench");
 }
 
 void EffectDesigner_Test::designerShots()

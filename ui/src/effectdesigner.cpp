@@ -38,6 +38,7 @@
 #include "palettenaming.h"
 #include "programmingoutline.h"
 #include "effectbrowser.h"
+#include "shrinkablebar.h"
 #include "lookeditor.h"
 #include "showtreecontroller.h"
 #include "effectscriptrunner.h"
@@ -125,8 +126,14 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     v->setContentsMargins(6, 6, 6, 6);
     v->setSpacing(6);
 
-    // The header: what it designs, on what, and what's on the rig.
-    QHBoxLayout *head = new QHBoxLayout();
+    /* The header: what it designs, on what, and what's on the rig. Every
+       row of controls here is a ShrinkableBar: the designer lives in the
+       Workbench's editor pane now (board Q263), so no row of it may hold
+       the window wider than the product's smallest -- a long title, the
+       Try on groups' names or five buttons scroll sideways instead. */
+    QWidget *headRow = new QWidget(this);
+    QHBoxLayout *head = new QHBoxLayout(headRow);
+    head->setContentsMargins(0, 0, 0, 0);
     m_title = new QLabel(this);
     m_title->setObjectName(QStringLiteral("edTitle"));
     m_title->setTextFormat(Qt::RichText);
@@ -171,7 +178,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     }
     m_contextRow->hide();
     head->addWidget(m_contextRow);
-    v->addLayout(head);
+    v->addWidget(new ShrinkableBar(headRow, this));
 
     m_onRig = new QLabel(this);
     m_onRig->setObjectName(QStringLiteral("edOnRig"));
@@ -199,7 +206,9 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     m_browser = new EffectBrowser(doc, m_effectCombo, split);
     m_browser->setObjectName(QStringLiteral("edBrowser"));
     m_browser->setPickWhileBrowsing(true);
-    m_browser->setMinimumWidth(340);
+    // Narrow enough that the browser and the settings both fit the
+    // smallest window (the settings keep the stretch).
+    m_browser->setMinimumWidth(260);
 
     QWidget *right = new QWidget(split);
     QVBoxLayout *rv = new QVBoxLayout(right);
@@ -208,7 +217,9 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     rv->addWidget(m_look, 1);
 
     // The effect's own colour and dimmer (inside that effect only).
-    QHBoxLayout *own = new QHBoxLayout();
+    QWidget *ownRow = new QWidget(right);
+    QHBoxLayout *own = new QHBoxLayout(ownRow);
+    own->setContentsMargins(0, 0, 0, 0);
     QLabel *ownLabel = new QLabel(tr("Its own:"), right);
     ownLabel->setToolTip(tr("A colour or dimmer that belongs to this effect: it applies inside the "
                             "effect only, not to the rest of the layer"));
@@ -228,7 +239,15 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     own->addWidget(m_ownColour2Combo, 1);
     own->addWidget(new QLabel(tr("Dimmer"), right));
     own->addWidget(m_ownDimmerCombo, 1);
-    rv->addLayout(own);
+    /* UX-36: never cut mid-word ("the laye"). Each combo is at least as
+       wide as its longest standing choice; the row scrolls instead of
+       squeezing them. */
+    for (QComboBox *c : { m_ownColourCombo, m_ownColour2Combo, m_ownDimmerCombo })
+    {
+        c->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        c->setMinimumContentsLength(12);
+    }
+    rv->addWidget(new ShrinkableBar(ownRow, right));
     auto ownPicked = [this]() {
         m_ownColour = m_ownColourCombo->currentData().toUInt();
         m_ownColour2 = m_ownColour == QLCPalette::invalidId() ? QLCPalette::invalidId()
@@ -262,7 +281,9 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     v->addWidget(split, 1);
 
     // The outcomes.
-    QHBoxLayout *btns = new QHBoxLayout();
+    QWidget *btnRow = new QWidget(this);
+    QHBoxLayout *btns = new QHBoxLayout(btnRow);
+    btns->setContentsMargins(0, 0, 0, 0);
     // No "Save as preset" (Q77): a palette is the effect kept; Export… in
     // the effect pane carries it to another show.
     btns->addStretch(1);
@@ -304,7 +325,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
             makeLayerInScene(m_fromScene);
     });
     btns->addWidget(m_makeLayerBtn);
-    v->addLayout(btns);
+    v->addWidget(new ShrinkableBar(btnRow, this));
 
     m_hint = new QLabel(this);
     m_hint->setObjectName(QStringLiteral("edHint"));
