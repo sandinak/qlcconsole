@@ -313,9 +313,12 @@ public:
      *  on the first read of a tick; public so a test can time it. */
     void buildSceneBaseValues() const;
     void addSceneBaseValues(Scene *scene) const;
-    /** ...which this does, once a tick. */
+    /** ...which this does, once a tick. Only inside a tick: the base values
+     *  belong to one (prepareSceneBase() arms it), so parseIntents() or
+     *  buildFixturesArray() called on their own -- as tests do -- see what
+     *  they always have, which is nothing. */
     void ensureSceneBaseValues() const
-    { if (!m_sceneBaseBuilt) buildSceneBaseValues(); }
+    { if (m_sceneBaseArmed && !m_sceneBaseBuilt) buildSceneBaseValues(); }
 
     /** Scene base DMX value for (fixtureId, channel), or @p dflt if the scene's
      *  looks don't drive that channel. */
@@ -630,6 +633,7 @@ private:
     //!< many entries it took, so it is not grown from nothing every time
     mutable QHash<quint64, uchar> m_sceneBaseValues;
     mutable bool m_sceneBaseBuilt = false;
+    bool m_sceneBaseArmed = false;      //!< a tick has asked for them
     mutable int m_sceneBaseHint = 0;
     //!< how many writes the LAST tick made (parseIntents() reserves that
     //!< many, rather than growing from nothing)

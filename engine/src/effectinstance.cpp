@@ -720,6 +720,7 @@ void EffectInstance::prepareSceneBase()
        that only sets colours never does, and over 96 pixel bars working
        out every head's base was milliseconds a tick. */
     m_sceneBaseBuilt = false;
+    m_sceneBaseArmed = true;
     m_sceneBaseValues.clear();
     m_lookDimmer = 1.0f;
     m_lookDimmerOf.clear();

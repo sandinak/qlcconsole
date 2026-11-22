@@ -107,14 +107,44 @@ Counted 2 HTTP posts instead of 1 once on dink under load (feat/046-candle-safet
 run, 2026-11-14), passed on rerun. Network-timing test against FakeWled: if it
 fails again, make it wait on the first post's reply instead of counting.
 
-## Effect host cost over many pixels (perf, before 0.5.0)
+## Effect host cost over many pixels (perf/053-effect-host, 2026-11-22) -- cut, leftovers
 
-Over the show's 96 step bars (6,144 pixel heads) an effect that returns
-nothing still costs ~3.4 ms a tick in the host (EffectInstance::parseIntents
-and per-head argument building), Release on an M-series Mac; Fire Spread
-~6.3 ms total. kronk (Intel MBP, the show laptop) will be slower. Measure on
-kronk with the real show (make perf / renderperf) and cut the host cost
-before 0.5.0. From feat/046-spell-spread's report.
+What it was: over the show's 96 step bars (6,144 pixel heads) the host's own
+work for one effect frame cost HOST_BEFORE_NOTHING ms a tick when the effect
+drew nothing and HOST_BEFORE_LIT ms with every head lit (val, Intel,
+Release). Branson, 2026-11-17: adding the uplights to Fire Spread made the
+rig visualisation "very chunky slow", worst while the front spreads.
+
+Cut to HOST_AFTER_NOTHING / HOST_AFTER_LIT ms by taking the per-head work
+out of the tick: the cells and the type filter are kept until the fixtures
+or their modes change, each member's aim objects are made once and changed
+in place (so no cell is named again), the look's base values are worked out
+only when something reads one (a colour effect never does), each head's
+channels come off its mode once, an answer's keys go into their places
+instead of being searched for thirty times a head, and the cells' array is
+copied inside the engine instead of named place by place.
+Guarded by **SpreadEffects_Test::theHostTickCostOverTheStepBars**, which
+reports every piece and fails over its budget.
+
+Left open:
+
+- **The look's base values still cost about BASE_AFTER ms when an effect
+  reads one** (a dimmer or level intent, or a look that points a head), and
+  the show's rig has such heads. Caching them safely needs the argument
+  snapshot of
+  [EFFECT_TICK_THREADING.md](../design/EFFECT_TICK_THREADING.md#the-smallest-safe-first-slice):
+  `QLCPalette` has no "a value changed" signal to invalidate on.
+- **Reading the answers is the floor that is left** (ANSWERS_AFTER ms with
+  every head lit): one `QJSValueIterator` and one JS object a head. A flat
+  protocol -- the script's answers written into a typed array the host reads
+  as one block -- would remove it, and is a real API change.
+- **One fixture group of 6,144 heads still lays its cells out every tick**:
+  the kept list covers the loose-fixture path and (for a second) the
+  multi-group stage grid, not a single big laid-out group.
+- Never measured on **kronk** (the Intel show laptop) with the real show:
+  val stands in for it.
+- The tick is still on the GUI thread, on purpose:
+  [EFFECT_TICK_THREADING.md](../design/EFFECT_TICK_THREADING.md).
 
 ## Candidate: Run / Tools switch as a cue step (Q251, not to build now)
 
