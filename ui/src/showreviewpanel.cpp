@@ -470,8 +470,12 @@ void ShowReviewPanel::updateButtons()
     bool allPanSeam = !sel.isEmpty();
     for (const ReviewFinding &f : sel)
         allPanSeam = allPanSeam && f.check == QLatin1String("MOV-14");
-    m_fix->setEnabled((sel.count() == 1 && !sel.first().jump.isEmpty()) || (footerRow && sel.isEmpty())
-                      || allPanSeam);
+    // Several rows: Fix does every one that fixes in place (a pan turn, a
+    // suggested cut, the footer's own fix); the rest want a visit each.
+    const int rows = int(m_tree->selectedItems().count());
+    const int direct = directFixCount();
+    m_fix->setEnabled((rows == 1 && ((sel.count() == 1 && !sel.first().jump.isEmpty()) || footerRow))
+                      || allPanSeam || (rows > 1 && direct > 0));
     m_accept->setEnabled(anyOpen);
     /* PWR-12 (light on the cyc): Accept is "I meant it", kept on the layer
        that lights it rather than as a note; Reopen takes that back; Fix
@@ -484,11 +488,16 @@ void ShowReviewPanel::updateButtons()
     bool panSeam = !sel.isEmpty();
     for (const ReviewFinding &f : sel)
         panSeam = panSeam && f.check == QLatin1String("MOV-14");
-    m_fix->setText(backwash ? tr("Show Me ▸")
+    const bool several = rows > 1 && !panSeam;
+    m_fix->setText(backwash && !several ? tr("Show Me ▸")
                    : panSeam ? (sel.count() > 1 ? tr("Centre Their Pans on Stage…") : tr("Centre the Pan on Stage…"))
+                   : several ? tr("Fix Selected (%1)").arg(direct)
                              : tr("Fix ▸"));
     m_fix->setToolTip(panSeam ? tr("Each head takes the turn of its pan that keeps the seam off the stage. "
                                    "It says what changes first; one undo step.")
+                      : several ? tr("Fixes every selected row that can be fixed here (pan turns, suggested "
+                                     "cuts, the footer's own fixes); rows that need you to go to the place "
+                                     "stay selected, one visit each")
                               : tr("Go to the place to fix it (or double-click the row)"));
     m_accept->setText(meantRows ? tr("I Meant It") : tr("Not a Problem…"));
     m_accept->setToolTip(meantRows ? tr("This light on the cyc is on purpose: kept on the layer that lights "
@@ -579,20 +588,124 @@ bool ShowReviewPanel::reopenSelected()
     return any || marks;
 }
 
+/* A row's fix in place, if it has one: the footer's own action ("status:"
+   with an action), a pan turn (MOV-14), a suggested cut. */
+ShowReviewPanel::DirectFix ShowReviewPanel::directFixOf(QTreeWidgetItem *item) const
+{
+    DirectFix d;
+    QString jump;
+    const QString footerKey = item->data(0, FooterKeyRole).toString();
+    if (!footerKey.isEmpty())
+    {
+        jump = QStringLiteral("status:") + footerKey;
+        d.data = item->data(0, FooterDataRole).toList();
+    }
+    else
+    {
+        const int idx = item->data(0, IndexRole).toInt();
+        if (idx < 0 || idx >= m_findings.count())
+            return d;
+        const ReviewFinding &f = m_findings.at(idx);
+        if (f.check == QLatin1String("MOV-14"))
+        {
+            d.kind = DirectFix::PanTurn;
+            d.data = f.jumpData;
+            return d;
+        }
+        if (!f.fixMask.isEmpty())
+        {
+            d.kind = DirectFix::Cut;
+            d.data = f.fixMask;
+            return d;
+        }
+        jump = f.jump;
+        d.data = f.jumpData;
+    }
+    if (jump.startsWith(QStringLiteral("status:"))
+        && !ShowStatus::instance()->actionLabel(jump.mid(7)).isEmpty())
+    {
+        d.kind = DirectFix::Footer;
+        d.key = jump.mid(7);
+    }
+    return d;
+}
+
+int ShowReviewPanel::directFixCount() const
+{
+    int n = 0;
+    for (QTreeWidgetItem *item : m_tree->selectedItems())
+        n += directFixOf(item).kind != DirectFix::None ? 1 : 0;
+    return n;
+}
+
+void ShowReviewPanel::applyCut(const QVariantList &fix)
+{
+    MonitorProperties *mp = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
+    if (mp == nullptr)
+        return;
+    for (int i = 0; i + 1 < fix.size(); i += 2)
+    {
+        const quint32 fid = fix.at(i).toUInt();
+        FixtureRigProps rp = mp->fixtureRigProps(fid);
+        rp.maskBottom += fix.at(i + 1).toFloat();
+        mp->setFixtureRigProps(fid, rp);
+    }
+}
+
 bool ShowReviewPanel::fixSelected()
 {
     const QList<QTreeWidgetItem *> items = m_tree->selectedItems();
-    /* Several MOV-14 rows: their heads centred together, one step. */
+    /* Several rows: every one that fixes in place, in one go -- the pan
+       turns of all their heads together (one step, said first), the
+       suggested cuts, the footer's own fixes. A row that only goes to its
+       place is left for a visit of its own (m_left). */
     if (items.count() > 1)
     {
+        m_fixed = 0;
+        m_left = 0;
         QVariantList heads;
-        for (const ReviewFinding &f : selectedFindings())
+        QList<DirectFix> rest;
+        int panRows = 0;
+        for (QTreeWidgetItem *item : items)
         {
-            if (f.check != QLatin1String("MOV-14"))
-                return false;
-            heads += f.jumpData;
+            const DirectFix d = directFixOf(item);
+            if (d.kind == DirectFix::PanTurn)
+            {
+                heads += d.data;
+                ++panRows;
+            }
+            else if (d.kind == DirectFix::None)
+                ++m_left;
+            else
+                rest << d;
         }
-        return !heads.isEmpty() && runJump(this, QStringLiteral("panturn"), heads);
+        if (heads.isEmpty() && rest.isEmpty())
+            return false;
+        // The pan turns first: a Cancel there is a Cancel of the lot.
+        if (!heads.isEmpty())
+        {
+            if (!runJump(this, QStringLiteral("panturn"), heads))
+                return false;
+            m_fixed += panRows;
+        }
+        bool cut = false;
+        for (const DirectFix &d : rest)
+        {
+            if (d.kind == DirectFix::Cut)
+            {
+                applyCut(d.data);
+                cut = true;
+                ++m_fixed;
+            }
+            else if (ShowStatus::instance()->runAction(d.key, this, d.data))
+                ++m_fixed;
+        }
+        if (cut && m_doc != nullptr)
+        {
+            m_doc->setModified();
+            recheck();
+        }
+        return m_fixed > 0;
     }
     if (items.count() != 1)
         return false;
@@ -655,7 +768,11 @@ void ShowReviewPanel::fixOrSay()
     const int n = int(m_tree->selectedItems().count());
     if (n > 1)
     {
-        fixSelected();              // several MOV-14 rows: one fix, or nothing
+        if (fixSelected() && m_left > 0)
+            m_summary->setText(tr("Fixed %1. %2 more need you at their place: select one and Fix ▸.")
+                               .arg(m_fixed).arg(m_left));
+        else if (m_fixed > 0)
+            m_summary->setText(tr("Fixed %1.").arg(m_fixed));
         return;
     }
     if (n == 1 && !fixSelected())
@@ -684,14 +801,7 @@ void ShowReviewPanel::applySuggestedCut()
     MonitorProperties *mp = m_doc != nullptr ? m_doc->monitorProperties() : nullptr;
     if (sel.count() != 1 || mp == nullptr)
         return;
-    const QVariantList &fix = sel.first().fixMask;
-    for (int i = 0; i + 1 < fix.size(); i += 2)
-    {
-        const quint32 fid = fix.at(i).toUInt();
-        FixtureRigProps rp = mp->fixtureRigProps(fid);
-        rp.maskBottom += fix.at(i + 1).toFloat();
-        mp->setFixtureRigProps(fid, rp);
-    }
+    applyCut(sel.first().fixMask);
     m_doc->setModified();
     recheck();
 }
@@ -769,6 +879,16 @@ void ShowReviewPanel::slotContextMenu(const QPoint &pos)
     QMenu menu(this);
     menu.setObjectName(QStringLiteral("showReviewRowMenu"));
     menu.setToolTipsVisible(true);
+    // Several rows: their fixes in place, in one go (as the Fix button).
+    const int direct = m_tree->selectedItems().count() > 1 ? directFixCount() : 0;
+    if (direct > 0)
+    {
+        QAction *all = menu.addAction(tr("Fix Selected (%1)").arg(direct));
+        all->setObjectName(QStringLiteral("reviewFixSelected"));
+        all->setToolTip(m_fix->toolTip());
+        connect(all, &QAction::triggered, this, [this]() { fixOrSay(); });
+        menu.addSeparator();
+    }
     {
         ContextMenu cm(&menu);
         ShowReviewMarker::fillMenu(cm, m_doc, sel, this, 10, false);

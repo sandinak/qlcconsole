@@ -11207,27 +11207,64 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
         const PanTurn::Info in = PanTurn::info(m_doc, fid);
         if (!in.valid)
             continue;
-        if (!in.improves())
+        // No turn clears it: its Facing (below), with its best turn.
+        if (in.needsFacing())
         {
-            if (in.crossesSeam())
-                stuck << fid;
+            stuck << fid;
             continue;
         }
+        if (!in.improves())
+            continue;
         fids << fid;
         lines << PanTurn::changeText(m_doc, fid, in.turn, in.proposal);
         if (PanTurn::isLive(m_doc, fid))
             if (const Fixture *fx = m_doc->fixture(fid))
                 live << fx->name();
     }
+    /* No turn clears the stage for these: their Facing turns toward it
+       (PanTurn::facingProposal), said first with what it means -- the plot's
+       Facing is how the head hangs, so the head is re-hung to match -- and
+       done here, with the pan turns, as one step. No window to go to. */
+    QMap<quint32, float> facings;
+    QStringList facingLines;
+    for (quint32 fid : stuck)
+    {
+        float room = 0.0f;
+        const float to = PanTurn::facingProposal(m_doc, fid, &room);
+        const FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
+        const Fixture *fx = m_doc->fixture(fid);
+        if (qAbs(to - rp.panZeroDir) < 0.01f)
+        {
+            // No Facing does better: its best turn is all there is.
+            if (PanTurn::info(m_doc, fid).improves())
+            {
+                fids << fid;
+                lines << PanTurn::changeText(m_doc, fid, rp.panTurn, PanTurn::proposal(m_doc, fid));
+            }
+            continue;
+        }
+        facings.insert(fid, to);
+        facingLines << tr("%1: Facing %2\302\260 \342\206\222 %3\302\260 (%4\302\260 of room either side of the stage)")
+                           .arg(fx != nullptr ? fx->name() : QString::number(fid))
+                           .arg(qRound(rp.panZeroDir) % 360).arg(qRound(to) % 360).arg(qMax(0, qRound(room)));
+        if (!fids.contains(fid))
+            fids << fid;
+        if (PanTurn::isLive(m_doc, fid))
+            if (fx != nullptr)
+                live << fx->name();
+    }
     if (fids.isEmpty())
     {
-        /* No turn does better: its Facing has to turn toward the stage.
-           Fixture Properties is where that is set. */
-        if (!stuck.isEmpty() && Monitor::instance() != nullptr)
-            Monitor::instance()->editFixtureProperties(stuck.first());
+        // Nothing does better, even facing it another way: say so, here.
+        QMessageBox::information(parent != nullptr ? parent : this, tr("Centre the Pan on Stage"),
+                                 tr("No Facing or pan turn keeps the seam off this stage: the stage fills "
+                                    "too much of the round from where the head hangs. Move the head, or "
+                                    "mark the finding Not a Problem."));
         m_doc->showReview()->run();
         return true;
     }
+    if (!facingLines.isEmpty())
+        lines << facingLines;
     QMessageBox box(parent != nullptr ? parent : this);
     box.setObjectName(QStringLiteral("centrePanConfirm"));
     box.setIcon(live.isEmpty() ? QMessageBox::Question : QMessageBox::Warning);
@@ -11236,6 +11273,10 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
     QString more = tr("Its looks are worked out again on the new turn: the same places on the stage, "
                       "reached from the other end of the pan channel, so a move across the stage no "
                       "longer swings the head round. Undo puts it back.");
+    if (!facings.isEmpty())
+        more = tr("A head's Facing is how it hangs: turn it on its pipe (or its yoke) to match, or its beams "
+                  "land the wrong way. Its looks are worked out again from the new Facing and turn: the same "
+                  "places on the stage. Undo puts it all back.");
     if (!live.isEmpty())
         more = tr("%1 is live: its beam moves now, a whole turn round to the same place.")
                    .arg(live.join(QStringLiteral(", ")))
@@ -11249,9 +11290,20 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
     if (box.clickedButton() != go)
         return true;
     if (Monitor *mon = Monitor::instance())
-        mon->centrePanOnStage(fids);
+    {
+        if (facings.isEmpty())
+            mon->centrePanOnStage(fids);
+        else
+            mon->faceAndCentreOnStage(facings, fids);
+    }
     else
     {
+        for (auto it = facings.constBegin(); it != facings.constEnd(); ++it)
+        {
+            FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(it.key());
+            rp.panZeroDir = it.value();
+            m_doc->monitorProperties()->setFixtureRigProps(it.key(), rp);
+        }
         for (quint32 fid : fids)
             PanTurn::centre(m_doc, fid);
         m_doc->setModified();

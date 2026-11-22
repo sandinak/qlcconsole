@@ -288,6 +288,45 @@ void ShowReviewPanel_Test::fixGoesToThePlace()
     ShowReviewPanel::setJumper(ShowReviewPanel::Jumper());
 }
 
+/* Several rows selected: Fix does every one that fixes in place (here the
+   footer's own fixes) in one go, and says how many want a visit. */
+void ShowReviewPanel_Test::fixSeveralAtOnce()
+{
+    // Static: the footer keeps its actions after the test (no way to clear one).
+    static QStringList ran;
+    ran.clear();
+    ShowStatus::instance()->setAction("fixtures.duplicates", "Number Them",
+        [](QWidget *, const QVariantList &) { ran << "number"; });
+    ShowStatus::instance()->setStatus("definitions.outofdate", ShowStatus::Warning,
+                                      "2 fixture definitions are out of date");
+    ShowStatus::instance()->setAction("definitions.outofdate", "Update Them",
+        [](QWidget *, const QVariantList &) { ran << "update"; });
+    int visits = 0;
+    ShowReviewPanel::setJumper([&visits](QWidget *, const QString &, const QVariantList &) {
+        ++visits;
+        return true;
+    });
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    panel.tree()->clearSelection();
+    for (const char *check : { "FIX-14", "FIX-03", "PAT-01" })
+    {
+        QTreeWidgetItem *row = rowOf(panel.tree(), check);
+        QVERIFY2(row != nullptr, check);
+        row->setSelected(true);
+    }
+    QCOMPARE(panel.directFixCount(), 2);
+    QVERIFY(panel.fixButton()->isEnabled());
+    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix Selected (2)"));
+    panel.fixButton()->click();
+    QCOMPARE(ran, QStringList() << "number" << "update");
+    QCOMPARE(visits, 0);                    // the overlap's place is not gone to
+    QCOMPARE(panel.fixedCount(), 2);
+    QCOMPARE(panel.leftCount(), 1);
+    QVERIFY2(panel.summary()->text().contains("1 more need you at their place"), qPrintable(panel.summary()->text()));
+    ShowReviewPanel::setJumper(ShowReviewPanel::Jumper());
+}
+
 void ShowReviewPanel_Test::footerEntriesFoldIn()
 {
     ShowReviewPanel panel(m_doc);

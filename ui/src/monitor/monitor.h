@@ -250,6 +250,10 @@ public:
      *  Properties' button for a selection, the plot's menu, Show Review's
      *  fix. Returns what changed, a line a head (PanTurn::changeText). */
     QStringList centrePanOnStage(const QList<quint32> &fids);
+    /** Show Review's MOV-14 fix where no turn clears the stage: each head
+     *  in @p facings turned to its new Facing (degrees), then every head of
+     *  @p fids centred on the stage -- one undo step for all of it. */
+    QStringList faceAndCentreOnStage(const QMap<quint32, float> &facings, const QList<quint32> &fids);
     /** The person placed, moved or patched @p fids: a head's pan turn
      *  changes only when the stage now crosses its seam
      *  (PanTurn::proposalAfterMove), and the notice line says so. Its own

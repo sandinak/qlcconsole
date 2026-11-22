@@ -41,6 +41,7 @@ private slots:
     /** Fix: a footer fix runs the footer's action, others go to the app's jumper */
     void fixGoesToThePlace();
     /** A footer design entry no check reads is listed under its id */
+    void fixSeveralAtOnce();
     void footerEntriesFoldIn();
     /** The Show readiness dialog shows design entries' ids and opens the panel */
     void readinessDialogLeadsHere();

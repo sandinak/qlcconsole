@@ -124,6 +124,14 @@ namespace PanTurn
      *  and the proposal does better. */
     int proposalAfterMove(Doc *doc, quint32 fixtureId);
 
+    /** When no turn clears the stage (Info::needsFacing()): the Facing
+     *  (FixtureRigProps::panZeroDir, degrees) nearest the head's own that
+     *  lets a turn clear it by kClearDeg, else the one with the most room;
+     *  @p roomOut the room it gives at its best turn. Returns the head's own
+     *  Facing when nothing does better. The plot's Facing is how the head
+     *  hangs: whoever takes it re-hangs the head to match. */
+    float facingProposal(Doc *doc, quint32 fixtureId, float *roomOut = nullptr);
+
     /** Set the head's turn (clamped to what it can take). True if it changed. */
     bool setTurn(Doc *doc, quint32 fixtureId, int turn);
     /** "Centre the pan on the stage": setTurn(proposal()). */
