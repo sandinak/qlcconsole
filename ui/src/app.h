@@ -232,6 +232,12 @@ public:
     /** What tab @p label reads as in the current view ("Inputs/Outputs" for
      *  Connections in Classic QLC+); its identity stays @p label. */
     QString tabDisplayLabel(const QString &label) const;
+    /** What tab @p label holds, in a person's words ("cue lists, cues and
+     *  hits"); empty when its name says it already. Board Q266: "Show Tree"
+     *  names the widget's shape, not the job, so the tab's tooltip and its
+     *  Window entry say what is in it -- where someone looking for "cues"
+     *  looks. No rename, and no new menu item. */
+    QString tabAside(const QString &label) const;
     /** A quiet line above the tabs: @p text, with a button @p buttonText
      *  running @p action when given; × puts it away. */
     void showViewNotice(const QString &text, const QString &buttonText = QString(),

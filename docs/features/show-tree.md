@@ -1,4 +1,4 @@
-# Show Tree
+# Show Tree: cue lists, cues and hits
 
 The Show Tree tab (**⇧⌘4** in the qlcconsole view; Build is a tab of the Everything view) is where you write a show
 as cues. Everything is in one tree:

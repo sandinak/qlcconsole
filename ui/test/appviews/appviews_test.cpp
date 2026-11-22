@@ -476,6 +476,54 @@ void AppViews_Test::theBuildTabWearsAHardHat()
     }
 }
 
+void AppViews_Test::theShowTreeSaysItHoldsCuesAndHits()
+{
+    /* "Show Tree" names the widget's shape, not the job: a newcomer looks
+       for cues. The name stays (every alternative collides with a QLC+
+       object this fork keeps first-class) and the words are added where
+       they are looked for. */
+    const QString aside = QStringLiteral("cue lists, cues and hits");
+    QTabWidget *tabs = m_app->m_tab;
+    int tree = -1, other = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+    {
+        if (tabs->tabBar()->tabData(i).toString() == QStringLiteral("Show Tree"))
+            tree = i;
+        else if (other < 0)
+            other = i;
+    }
+    QVERIFY(tree >= 0);
+
+    // 1. The tab's tooltip: its name in full, and what is in it.
+    const QString tip = tabs->tabToolTip(tree);
+    QVERIFY2(tip.startsWith(QStringLiteral("Show Tree")), qPrintable(tip));
+    QVERIFY2(tip.contains(aside), qPrintable(tip));
+    // No other tab grows one: a name that says the job keeps its own tooltip.
+    QVERIFY(other >= 0);
+    QCOMPARE(tabs->tabToolTip(other),
+             m_app->tabDisplayLabel(tabs->tabBar()->tabData(other).toString()));
+
+    // 2. The Window menu's entry says it too (no new item: the same jump).
+    m_app->updateWindowMenu();
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QStringLiteral("Show Tree"))
+            jump = a;
+    QVERIFY(jump != nullptr);
+    QVERIFY2(jump->text().startsWith(QStringLiteral("Show Tree")), qPrintable(jump->text()));
+    QVERIFY2(jump->text().contains(aside), qPrintable(jump->text()));
+
+    // 3. F1's title for the tab: the help's topic list reads the guide's
+    // first heading, so that is where the words go.
+    QString title;
+    const QList<QPair<QString, QString> > topics = HelpBrowser::topics();
+    for (const QPair<QString, QString> &t : topics)
+        if (t.first == QStringLiteral("show-tree.md"))
+            title = t.second;
+    QVERIFY2(title.startsWith(QStringLiteral("Show Tree")), qPrintable(title));
+    QVERIFY2(title.contains(aside), qPrintable(title));
+}
+
 void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
 {
     QTabWidget *tabs = m_app->m_tab;

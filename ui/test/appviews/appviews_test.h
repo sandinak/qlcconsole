@@ -67,6 +67,10 @@ private slots:
     /** "tab icon could be a construction hat": Build's tab and its
      *  Window-menu jump wear a hard hat, crisp at 1x and 2x. */
     void theBuildTabWearsAHardHat();
+    /** Board Q266: the Show Tree keeps its name and says what is in it --
+     *  "cue lists, cues and hits" in the tab's tooltip, in its Window menu
+     *  entry and in its help title. No other tab grows an aside. */
+    void theShowTreeSaysItHoldsCuesAndHits();
     /** Q68: Window ▸ Effects is Build ▸ Effects; no Effects window. */
     void windowEffectsIsBuildEffects();
     void withBuildHiddenItsJumpsLandInTheShowTree();

@@ -10,6 +10,14 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Changed
+
+- **The Show Tree says what is in it** (board Q266): its tab tooltip, its
+  **Window** menu entry and its help title now read *cue lists, cues and
+  hits*. The tab keeps its name, and no menu item was added.
+
 ## [0.5.2] - 2026-11-22
 
 0.5.2 is an effects and Show Tree release. If you only read one line: fire
