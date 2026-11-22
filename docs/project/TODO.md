@@ -110,13 +110,12 @@ fails again, make it wait on the first post's reply instead of counting.
 ## Effect host cost over many pixels (perf/053-effect-host, 2026-11-22) -- cut, leftovers
 
 What it was: over the show's 96 step bars (6,144 pixel heads) the host's own
-work for one effect frame cost HOST_BEFORE_NOTHING ms a tick when the effect
-drew nothing and HOST_BEFORE_LIT ms with every head lit (val, Intel,
-Release). Branson, 2026-11-17: adding the uplights to Fire Spread made the
-rig visualisation "very chunky slow", worst while the front spreads.
+work for one effect frame cost 14.2 ms a tick when the effect drew nothing
+and 21.9 ms with every head lit (val, Intel, Release). Branson, 2026-11-17:
+adding the uplights to Fire Spread made the rig visualisation "very chunky
+slow", worst while the front spreads.
 
-Cut to HOST_AFTER_NOTHING / HOST_AFTER_LIT ms by taking the per-head work
-out of the tick: the cells and the type filter are kept until the fixtures
+Cut to 3.6 / 9.1 ms by taking the per-head work out of the tick: the cells and the type filter are kept until the fixtures
 or their modes change, each member's aim objects are made once and changed
 in place (so no cell is named again), the look's base values are worked out
 only when something reads one (a colour effect never does), each head's
@@ -128,14 +127,14 @@ reports every piece and fails over its budget.
 
 Left open:
 
-- **The look's base values still cost about BASE_AFTER ms when an effect
-  reads one** (a dimmer or level intent, or a look that points a head), and
-  the show's rig has such heads. Caching them safely needs the argument
+- **The look's base values still cost about 3.3 ms when an effect reads
+  one** (a dimmer or level intent, or a look that points a head), and the
+  show's rig has such heads. Caching them safely needs the argument
   snapshot of
   [EFFECT_TICK_THREADING.md](../design/EFFECT_TICK_THREADING.md#the-smallest-safe-first-slice):
   `QLCPalette` has no "a value changed" signal to invalidate on.
-- **Reading the answers is the floor that is left** (ANSWERS_AFTER ms with
-  every head lit): one `QJSValueIterator` and one JS object a head. A flat
+- **Reading the answers is the floor that is left** (7.3 ms with every head
+  lit): one `QJSValueIterator` and one JS object a head. A flat
   protocol -- the script's answers written into a typed array the host reads
   as one block -- would remove it, and is a real API change.
 - **One fixture group of 6,144 heads still lays its cells out every tick**:

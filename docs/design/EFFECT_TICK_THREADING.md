@@ -153,10 +153,10 @@ took the per-head work out of the tick where it stood:
 - the cells' array is copied inside the engine (`Array.prototype.slice`)
   instead of named place by place, and is still a fresh array every tick
 
-which took the host's own cost over 6,144 heads from HOST_BEFORE_NOTHING ms
-a tick to HOST_AFTER_NOTHING ms (nothing drawn) and from HOST_BEFORE_LIT ms
-to HOST_AFTER_LIT ms (every head lit), on an Intel Mac in Release. At 50 Hz
-that is CORE_AFTER % of one core instead of CORE_BEFORE %, on the thread the
+which took the host's own cost over 6,144 heads from 14.2 ms
+a tick to 3.6 ms (nothing drawn) and from 21.9 ms
+to 9.1 ms (every head lit), on an Intel Mac in Release. At 50 Hz
+that is 18 % of one core instead of 71 %, on the thread the
 window paints on, which is what the operator was feeling.
 
 Measured, that is most of the gain a thread move could offer, for a
@@ -171,8 +171,8 @@ a head for its answer, and a fresh array of 6,144 cells to hand over.
 ROI (first guess): reach = shows with a big pixel rig running an effect
 over it (his step bars; one show now, more as pixel rigs spread) = small
 but growing; value = the GUI thread's remaining effect cost, now
-HOST_AFTER_LIT ms a tick for one lit effect over 6,144 heads, so **about
-CORE_AFTER_LIT % of one core per effect** — the rig view itself costs more a frame
+9.1 ms a tick for one lit effect over 6,144 heads, so **about
+45 % of one core per effect** — the rig view itself costs more a frame
 (OFFLOAD.md items 1 and 4 are 10-23 ms); cost = **large**: the snapshot
 refactor of a 3,200-line class, queued input with ordering rules,
 cross-thread `QJSEngine` lifetime, and the Blind/preview callers kept
