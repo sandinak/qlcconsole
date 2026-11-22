@@ -1643,10 +1643,15 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         if (m_typeMatch.size() > cells.size())
         {
             QSet<quint32> here;
-            for (const Cell &c : cells)
+            for (const EffectCell &c : cells)
                 here.insert(c.fixtureId);
             for (auto it = m_typeMatch.begin(); it != m_typeMatch.end();)
-                it = here.contains(it.key()) ? it + 1 : m_typeMatch.erase(it);
+            {
+                if (here.contains(it.key()))
+                    ++it;
+                else
+                    it = m_typeMatch.erase(it);
+            }
         }
     }
 
