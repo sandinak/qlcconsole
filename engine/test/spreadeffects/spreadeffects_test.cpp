@@ -2026,7 +2026,7 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
     const int ticks = qMax(4, qEnvironmentVariableIntValue("QLC_HOST_TICKS"));
 #endif
     struct Piece { QString what; double ms = 0; };
-    struct Row { QString what; QList<Piece> pieces; double hostMs = 0, tickMs = 0; };
+    struct Row { QString what; QList<Piece> pieces; double hostMs = 0, tickMs = 0, baseMs = 0; };
     QList<Row> table;
 
     auto measure = [&](const QString &what, const QString &path) -> bool {
@@ -2088,12 +2088,18 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
         r.what = what;
         int c2 = 1, r2 = 1;
         r.pieces << Piece{ QStringLiteral("cells"), best([&]() { inst.effectiveCells(c2, r2); }) };
-        r.pieces << Piece{ QStringLiteral("look base"), best([&]() { inst.buildSceneBaseValues(); }) };
+        r.pieces << Piece{ QStringLiteral("look base"), best([&]() { inst.prepareSceneBase(); }) };
         r.pieces << Piece{ QStringLiteral("arguments"),
                            best([&]() { inst.buildFixturesArray(cells, cols, gridRows); }) };
         r.pieces << Piece{ QStringLiteral("answers"), best([&]() { inst.parseIntents(answer, cells); }) };
         for (const Piece &pc : r.pieces)
             r.hostMs += pc.ms;
+        /* What the base values cost WHEN an effect reads one (a dimmer or a
+           level intent, a look that points a head): not part of the host's
+           tick for these two, which only set colours -- reported so that it
+           is known, and so that a change which starts reading them shows up
+           in "arguments" or "answers" above. */
+        r.baseMs = best([&]() { inst.buildSceneBaseValues(); });
         qint64 at = 4000;
         r.tickMs = best([&]() { inst.setOffStageClock(at += 20); inst.runTick(); });
         table << r;
@@ -2114,9 +2120,11 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
         for (const Piece &pc : r.pieces)
             parts << QString("%1 %2").arg(pc.what).arg(pc.ms, 0, 'f', 2);
         lines << QString("%1 build, 96 step bars x 64 (6144 heads), the host, %2:"
-                         " %3 ms a tick (%4; %5 us a head); whole tick %6 ms")
+                         " %3 ms a tick (%4; %5 us a head); whole tick %6 ms;"
+                         " base values when read %7 ms")
                      .arg(build, r.what).arg(r.hostMs, 0, 'f', 2).arg(parts.join(", "))
-                     .arg(r.hostMs * 1000.0 / 6144.0, 0, 'f', 3).arg(r.tickMs, 0, 'f', 2);
+                     .arg(r.hostMs * 1000.0 / 6144.0, 0, 'f', 3).arg(r.tickMs, 0, 'f', 2)
+                     .arg(r.baseMs, 0, 'f', 2);
     }
     for (const QString &l : lines)
         qInfo().noquote() << l;
