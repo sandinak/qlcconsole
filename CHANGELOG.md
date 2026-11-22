@@ -25,6 +25,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- Fixture Properties fits the screen: its rows scroll, OK and Cancel stay in
+  view (it ran off a laptop's screen for a moving head).
 - Show Review: with several rows selected, **Fix Selected (N)** fixes every
   one that can be fixed in place in one go (pan turns, suggested cuts, the
   footer's own fixes) and says how many need a visit. MOV-14's fix, when no
