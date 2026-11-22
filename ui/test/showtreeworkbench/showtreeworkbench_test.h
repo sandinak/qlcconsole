@@ -41,6 +41,8 @@ private slots:
     void openShowsTheCue();
     /** A value dropped on a layer changes the output at once; Undo and
      *  Redo (the tree's) take it back and put it back, the rows follow. */
+    /** Docked: the add bar's width floor must not starve the editor. */
+    void theDockedEditorIsNotStarvedByTheAddBar();
     void editUndoRedo();
     /** A cue's one-off value (a level, "A one-off value of this cue")
      *  changed in the Look Editor is one undo step on the shared history:
