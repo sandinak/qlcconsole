@@ -54,6 +54,7 @@
 #include "rgbmatrix.h"
 #include "effectbrowser.h"
 #include "lookeditor.h"
+#include "contextmenus.h"
 #include "efxeditor.h"
 #include "showtreecontroller.h"
 #include "effectscriptrunner.h"
@@ -876,7 +877,21 @@ void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
         return n;
     };
     const int named = namedEffects();
-    QVERIFY(view.designEffectPalette(QLCPalette::invalidId()));
+    // The Library's own menu item, as a person clicks it.
+    QAction *make = view.findChild<QAction *>(QStringLiteral("stNewPaletteEffect"));
+    if (make == nullptr)
+        if (QToolButton *plus = view.findChild<QToolButton *>(QStringLiteral("stNewPalette")))
+            if (plus->menu() != nullptr)
+            {
+                emit plus->menu()->aboutToShow();
+                QApplication::processEvents();
+                for (QAction *a : plus->menu()->actions())
+                    if (a->objectName() == QLatin1String("stNewPaletteEffect"))
+                        make = a;
+            }
+    QVERIFY2(make != nullptr, "no + Palette > Effect in the Library");
+    make->trigger();
+    QVERIFY(view.isWorkbenchDocked());
     Workbench *bench = view.dockedWorkbench();
     QVERIFY(bench != nullptr);
     EffectDesigner *ed = qobject_cast<EffectDesigner *>(bench->effectPane());
@@ -888,15 +903,20 @@ void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
     QCOMPARE(ed->cameFromCue(), c1);
     ed->cancel();
 
-    // Edit Effect: the designer, started from that palette.
-    QVERIFY(view.designEffectPalette(chase->id()));
+    // Edit Effect in the Library's palette menu (the canon's own hook):
+    // the designer, started from that palette.
+    ContextMenus::PalettePlace place = view.paletteMenuPlace();
+    QVERIFY(place.edit != nullptr);
+    place.edit(chase->id());
     ed = qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane());
-    QVERIFY(ed != nullptr);
+    QVERIFY2(ed != nullptr, "Edit Effect did not open the designer");
     QCOMPARE(ed->originalId(), chase->id());
     ed->cancel();
 
-    // Every other type: the Look Editor, not the designer.
-    QVERIFY(!view.designEffectPalette(blue->id()));
+    // Edit Palette on every other type: the Look Editor, not the designer.
+    place.edit(blue->id());
+    QVERIFY(qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane()) == nullptr);
+    QCOMPARE(view.dockedWorkbench()->currentPaletteId(), blue->id());
 }
 
 void EffectDesigner_Test::designerShots()
