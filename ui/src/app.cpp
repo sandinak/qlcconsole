@@ -11308,11 +11308,20 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
                       "reached from the other end of the pan channel, so a move across the stage no "
                       "longer swings the head round. Undo puts it back.");
     if (!facings.isEmpty())
+    {
         more = tr("A head's Facing is how it hangs: turn it on its pipe (or its yoke) to match, or its beams "
                   "land the wrong way. Its looks are worked out again from the new Facing and turn: the same "
                   "places on the stage. Undo puts it all back.");
+        // Said plainly, since a live head is named above with its turn only.
+        if (!heldBack.isEmpty())
+            more += QLatin1Char(' ') + (heldBack.size() > 1
+                                            ? tr("The live heads keep the Facing they have.")
+                                            : tr("The live head keeps the Facing it has."));
+    }
     if (!live.isEmpty())
-        more = tr("%1 is live: its beam moves now, a whole turn round to the same place.")
+        more = (live.size() > 1
+                    ? tr("%1 are live: their beams move now, a whole turn round to the same place.")
+                    : tr("%1 is live: its beam moves now, a whole turn round to the same place."))
                    .arg(live.join(QStringLiteral(", ")))
                + QStringLiteral("\n\n") + more;
     box.setInformativeText(more);

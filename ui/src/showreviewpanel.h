@@ -149,6 +149,9 @@ private:
     QString m_gone;     ///< fixSelected(): what was gone, when that stopped it
     int m_fixed = 0;    ///< fixSelected() of several rows: how many it fixed
     int m_left = 0;     ///< ... and how many want a visit of their own
+    int m_stayed = 0;   ///< ... and how many were left where they were (a no
+                        ///  to the pan fix, or nothing it could do): there is
+                        ///  no place to visit for those -- the fix IS here
 
     /** A row's fix in place (directFixOf()). */
     struct DirectFix

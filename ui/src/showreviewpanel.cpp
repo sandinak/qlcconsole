@@ -699,6 +699,7 @@ bool ShowReviewPanel::fixSelected()
     {
         m_fixed = 0;
         m_left = 0;
+        m_stayed = 0;
         QVariantList heads;
         QList<DirectFix> rest, panFixes;
         for (QTreeWidgetItem *item : items)
@@ -740,7 +741,7 @@ bool ShowReviewPanel::fixSelected()
                 if (moved)
                     ++m_fixed;
                 else
-                    ++m_left;
+                    ++m_stayed;     // a no, or nothing it could do: it is still here
             }
         }
         QList<QVariantList> cuts;
@@ -824,17 +825,23 @@ void ShowReviewPanel::fixOrSay()
     const int n = int(m_tree->selectedItems().count());
     if (n > 1)
     {
-        if (fixSelected() && m_left > 0)
-            m_summary->setText(tr("Fixed %1. %2 more need you at their place: select one and Fix ▸.")
-                               .arg(m_fixed).arg(m_left));
-        else if (m_fixed > 0)
-            m_summary->setText(tr("Fixed %1.").arg(m_fixed));
-        // Nothing fixed: say that, rather than leave the last click's line up.
-        else if (m_left > 0)
-            m_summary->setText(tr("Nothing fixed here. %1 need you at their place: select one and Fix ▸.")
-                               .arg(m_left));
+        const bool any = fixSelected();
+        QStringList said;
+        if (m_fixed > 0)
+            said << tr("Fixed %1.").arg(m_fixed);
         else
-            m_summary->setText(tr("⚠ Nothing fixed. Re-check to see what is left."));
+            // Say it, rather than leave the last click's line up.
+            said << tr("Nothing fixed here.");
+        if (m_left > 0)
+            said << tr("%1 more need you at their place: select one and Fix ▸.").arg(m_left);
+        /* Left where they are: the fix for those IS here (a no to it, or
+           nothing it could do), so they are not sent anywhere. */
+        if (m_stayed > 0)
+            said << (m_stayed > 1 ? tr("%1 were left as they were.").arg(m_stayed)
+                                  : tr("1 was left as it was."));
+        if (!any && m_left == 0 && m_stayed == 0)
+            said << tr("Re-check to see what is left.");
+        m_summary->setText(said.join(QLatin1Char(' ')));
         return;
     }
     if (n == 1 && !fixSelected())

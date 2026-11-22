@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <functional>
 #include <QTreeWidget>
 #include <QPushButton>
 #include <QLabel>
@@ -347,6 +348,43 @@ void ShowReviewPanel_Test::oneHeadsCutIsTapedOffOnce()
     // One finding on its own is unchanged: its cut goes on top of what is there.
     panel.applyCut(QVariantList{ fid, 4.0 });
     QCOMPARE(qRound(mp->fixtureRigProps(fid).maskBottom), 22);
+}
+
+/* Several rows that all want a visit: the summary says nothing was fixed
+   here, instead of leaving the last click's line up. */
+void ShowReviewPanel_Test::aBatchThatFixesNothingSaysSo()
+{
+    ShowReviewPanel panel(m_doc);
+    panel.recheck();
+    panel.tree()->clearSelection();
+
+    // The first two rows whose fix is a visit, wherever they sit in the tree.
+    int picked = 0;
+    std::function<void(QTreeWidgetItem *)> pick = [&](QTreeWidgetItem *item) {
+        for (int i = 0; i < item->childCount() && picked < 2; ++i)
+        {
+            QTreeWidgetItem *row = item->child(i);
+            if (panel.directFixOf(row).kind == ShowReviewPanel::DirectFix::None
+                && !row->text(0).isEmpty())
+            {
+                row->setSelected(true);
+                ++picked;
+            }
+            pick(row);
+        }
+    };
+    for (int i = 0; i < panel.tree()->topLevelItemCount() && picked < 2; ++i)
+        pick(panel.tree()->topLevelItem(i));
+    QCOMPARE(picked, 2);
+
+    panel.summary()->setText(QStringLiteral("Fixed 9."));        // the last click's line
+    panel.fixButton()->click();
+    QCOMPARE(panel.fixedCount(), 0);
+    QCOMPARE(panel.leftCount(), 2);
+    const QString said = panel.summary()->text();
+    QVERIFY2(said.startsWith(QStringLiteral("Nothing fixed here.")), qPrintable(said));
+    QVERIFY2(said.contains(QStringLiteral("2 more need you at their place")), qPrintable(said));
+    QVERIFY2(!said.contains(QStringLiteral("Fixed 9")), qPrintable(said));
 }
 
 void ShowReviewPanel_Test::footerEntriesFoldIn()
