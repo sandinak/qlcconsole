@@ -2034,7 +2034,7 @@ A layer plays one effect of each kind together — say a **Position** effect
 (a ballyhoo) and a **Dimmer** effect (a breathe) on the same movers:
 the movement keeps its pan and tilt, the breathe scales the level. On the
 layer's **Effect** row, **⋯ ▸ Set to** adds any effect palette beside the
-others, and **Design a New Effect…** designs one there -- in the Workbench
+others, and **Design a New Effect…** designs one there — in the Workbench
 docked in place of the page, on that layer's lights, **↩ Show Tree** back;
 each kind gets
 its own row (*Position effect*, *Dimmer effect*…). Another of the same
@@ -2310,8 +2310,8 @@ operation is one undo step on the tab's [Undo](#undo).
 - **+ Palette ▸ Effect** opens the **effect designer** on the bench
   (pick it, watch it on the lights, **Save in This Show…** names it);
   every other type makes a palette to set in the Look Editor.
-- **Edit Palette** (the Look Editor) -- on an effect palette, **Edit
-  Effect** (the designer) --, **Duplicate**, **Used By** (every cue and
+- **Edit Palette** (the Look Editor) — on an effect palette, **Edit
+  Effect** (the designer) —, **Duplicate**, **Used By** (every cue and
   look by number and layer, scenes, effect slots, and the VC buttons that
   fire them; click a cue or look to go there).
 - **Delete** (⌫, or right-click → **Delete Palette…**) asks first and names everything
