@@ -567,10 +567,17 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     look->stop(FunctionParent::master());
     QTRY_VERIFY(!look->isRunning());
     burst->setEffectParamValue(EffectRuns::atEndKey(), 1);
+    /* A longer run than the stage's 0.6 s, for this step only: letting go
+       is what is read here, and it can only be read once the burst has been
+       seen running. GitHub's macOS runner (2026-11-20) starved the engine
+       right past a 0.6 s run -- it began and ended between two ticks, so
+       the device was never sent the burst at all and nothing was left to
+       see. Hold above needs no window: that state stays. */
+    burst->setEffectParamValue(EffectRuns::lengthKey(), 3000);
     mark = wled.segHistory.size();
     look->start(doc.masterTimer(), FunctionParent::master());
     QTRY_VERIFY_WITH_TIMEOUT(ranSince(mark), 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(every("fx", 0), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(every("fx", 0), 8000);     // the 3 s run, then it lets go
     QVERIFY(every("frz", false));
     for (const QJsonValue &v : wled.segments())
         QCOMPARE(v.toObject().value("col").toArray().at(0).toArray(), QJsonArray({ 255, 0, 0 }));
