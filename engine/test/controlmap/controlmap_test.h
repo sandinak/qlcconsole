@@ -49,6 +49,7 @@ private slots:
     void aHeldGoBlinksTheControlTwice();
     void aCueListWithNothingToGoIsDark();
     void theDimLightIsSwitchableAndSavedWithTheShow();
+    void theLightsComeBackWhenTheControllerDoes();
     void aLightThatDidNotChangeIsNotSentAgain();
     void aCueListGoesAndACueJumps();
     void aCueMadeASubCueStillJumps();

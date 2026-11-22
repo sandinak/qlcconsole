@@ -592,6 +592,50 @@ void ControlMap_Test::theDimLightIsSwitchableAndSavedWithTheShow()
     QVERIFY(m_doc->controlMap()->dimWhenReady());
 }
 
+/* A desk that vanishes mid-show and comes back (a USB hub, a knocked
+   cable, the same board re-enumerated as another device) has a dark board
+   when it returns: every light is sent again, changed or not, and each
+   says what it says now and not what it said when the cable went. */
+void ControlMap_Test::theLightsComeBackWhenTheControllerDoes()
+{
+    Scene *a = scene("Warm", 0);
+    Scene *b = scene("Cool", 1);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote + 1, ControlMap::function(b->id()), ControlMap::Toggle });
+    send(kNote, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    QCOMPARE(lastLight(m_stub, kNote), 255);
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+    tick(3);
+    // While it is gone the scene is stopped from the Workbench: the board
+    // cannot be told, and must not be believed when it comes back.
+    a->stop(FunctionParent::master());
+    tick(3);
+    m_stub->m_feedback.clear();
+
+    // Back -- as another device behind the same patch.
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake 2"));
+    QCoreApplication::processEvents();
+    QCOMPARE(m_stub->m_feedback.count(), 2);        // both lights, not only what changed
+    QCOMPARE(lastLight(m_stub, kNote), 30);         // ready, not the 255 it was left at
+    QCOMPARE(lastLight(m_stub, kNote + 1), 30);
+
+    // A universe that is no longer patched at all: nothing crashes and
+    // nothing is sent (the show runs on without a desk).
+    iom->setOutputPatch(0, QString(), QString(), 0, true);
+    QVERIFY(iom->feedbackPatch(0) == nullptr);
+    m_stub->m_feedback.clear();
+    cm->resendFeedback();
+    QVERIFY(m_stub->m_feedback.isEmpty());
+    send(kNote, 127);
+    tick(2);
+    QVERIFY(a->isRunning());                        // it still fires
+}
+
 /* A light nothing changed about is not sent again: a mode switch or a
    production change with a bank of pads must not flood the MIDI line. */
 void ControlMap_Test::aLightThatDidNotChangeIsNotSentAgain()
