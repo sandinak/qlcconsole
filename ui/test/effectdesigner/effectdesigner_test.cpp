@@ -786,6 +786,48 @@ void EffectDesigner_Test::theShowTreeOpensItOnALayer()
     QVERIFY(st->previewedCue() == c1 || st->previewedCue() == invalidId());
 }
 
+void EffectDesigner_Test::theAddEffectBarDesignsOnTheSelectedLayer()
+{
+    FixtureGroup *towers = group("Towers", 0, 3);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ListMode::NonTracking);
+    const quint32 c1 = st->addCue(list, -1, "One");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    EffectDesigner::plugIntoWorkbench();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1300, 820);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(c1, l1));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+
+    // The tooltip names the layer, and the action does what it says.
+    QAction *design = bench->findChild<QAction *>(QStringLiteral("workbenchDesignEffect"));
+    QVERIFY(design != nullptr);
+    QVERIFY2(design->toolTip().contains(QStringLiteral("selected layer")), qPrintable(design->toolTip()));
+    design->trigger();
+    EffectDesigner *ed = qobject_cast<EffectDesigner *>(bench->effectPane());
+    QVERIFY2(ed != nullptr, "+ Effect > Effect Palette... opened no designer");
+    QVERIFY2(!ed->isBench(), "it went to the bench instead of the layer");
+    QCOMPARE(ed->targetGroups(), QList<quint32>({ towers->id() }));
+    // The cue stays loaded behind it (before Q263 the bench unloaded it).
+    TreeCueStack *cs = qobject_cast<TreeCueStack *>(bench->stack());
+    QVERIFY(cs != nullptr);
+    QCOMPARE(cs->cueId(), c1);
+
+    // Kept: on that layer, beside the effects it has.
+    QVERIFY(ed->pickEffect("Dimmer Phaser"));
+    QVERIFY(ed->keepOneOff() != QLCPalette::invalidId());
+    bool landed = false;
+    for (const Look &l : st->cue(c1)->layer(l1)->looks)
+        landed = landed || (isEffectKey(l.key) && !l.palettes.isEmpty());
+    QVERIFY2(landed, "the effect did not land on the selected layer");
+}
+
 /* Board Q263: a draft nobody kept is not dropped in silence. Clicking
    another row, or ↩, asks; Keep designing puts the selection back and the
    designer is still there. */

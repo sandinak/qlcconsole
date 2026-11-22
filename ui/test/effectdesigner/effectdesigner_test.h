@@ -75,6 +75,10 @@ private slots:
      *  WORKBENCH's editor pane (board Q263: no modal window), on that
      *  layer's fixtures, and what is kept lands there. */
     void theShowTreeOpensItOnALayer();
+    /** Board Q263: + Effect ▾ → Effect Palette… on a cue layer designs
+     *  THAT layer's effect in the pane -- what its tooltip always said --
+     *  with the cue still loaded behind it, and what is kept lands there. */
+    void theAddEffectBarDesignsOnTheSelectedLayer();
     /** Board Q263: a draft nobody kept is never dropped in silence --
      *  clicking another row asks, and Keep designing puts the selection
      *  back. */
