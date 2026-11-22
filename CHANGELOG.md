@@ -10,7 +10,40 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
-## [Unreleased]
+## [0.5.2] - 2026-11-22
+
+0.5.2 is an effects and Show Tree release. If you only read one line: fire
+looks like fire, lightning is a new effect, and a show can put away the
+parts of the app it doesn't use.
+
+- **Lightning Spread**, a new effect: One Burst blasts out from the look's
+  Aim target in a fraction of a second, Static Generator keeps the centre
+  glowing and crawls arcs out from it. A strike burns white-hot at its core
+  with a cold blue edge, then fades out in the look's colour.
+- **Fire Spread, Firelight and Candle Flicker look like flames.** Every
+  head and every pixel flickers on its own; before, the rig showed bands
+  and diagonal stripes running across the bars.
+- **Turn features off per show:** View ▸ Workspace ▸ Tabs & Features… puts
+  away Venues, the power estimate, the Grand Master, speed masters, engine
+  load, Show Review, control surfaces or focus calls for one show. The
+  emergency stop is never hidden.
+- **Show Tree:** fold a Production or Show to its songs in one click, Notes
+  on the Show and Section pages, several layers released or untracked in one
+  undo step, and every cue and list tick box says what it does on hover.
+- **Fire Spread's two colours are findable**, and each effect's settings sit
+  on a faint tint so you can see where one effect ends and the next begins.
+- **Updates are found sooner:** a check at every launch and every 4 hours.
+- Fixture library: 0 definitions from QLC+ upstream this release (1,792
+  checked, base a9735b224). Translation catalogues refreshed.
+
+### Known issues
+
+- Why-on names a Run tab hit only as "a Virtual Console widget".
+- There is no Undo for the groups and palettes Fill Roles makes.
+- The 3D view does not draw the Upstage line.
+- On Windows, Pad Run, the pad's focus, walk and follow spot, MSC in and
+  MIDI timecode in are off for now; the emergency stop works on every pad.
+
 
 ### Added
 

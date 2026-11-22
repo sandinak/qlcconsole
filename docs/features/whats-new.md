@@ -2,6 +2,52 @@
 
 The latest changes, newest first. Each links to the guide with the detail.
 
+## 0.5.2 (November 2026)
+
+- **Lightning Spread**, a new effect: **One Burst** blasts out from the
+  look's Aim target in a fraction of a second, each light flashing to full
+  and flickering out; **Static Generator** keeps the centre glowing and
+  crawls arcs out from it. A strike burns white-hot at its core with a cold
+  blue edge, then fades out in the look's colour. See
+  [Lightning Spread](effects.md#lightning-spread).
+- **Fire Spread, Firelight and Candle Flicker look like flames.** Every
+  head and every pixel of a bar flickers on its own; the rig no longer
+  shows bands and diagonal stripes running across the bars. See
+  [Fire Spread](effects.md#fire-spread).
+- **Turn features off per show.** **View ▸ Workspace ▸ Tabs & Features…**
+  puts away Venues, the power estimate, the Grand Master, speed masters,
+  engine load, Show Review, control surfaces or focus calls for one show,
+  and a right-click on the footer shows or hides its chips. The emergency
+  stop is never hidden. See [Features](getting-started.md#features).
+- **Show Tree: fold a level in one click.** A Production or Show row wears
+  two small buttons at its right edge: fold to songs, and open all.
+- **Notes on a Show and on a song section**, plain text like a cue's note,
+  first in the Notes pane and in the Markdown export.
+- **Several layers, one change.** Select layers across cues and
+  right-click: **Release After This Cue** and **Untrack From This Cue** act
+  on all of them in one undo step.
+- **Every cue and list tick box says what it does on hover** -- the base
+  cue's had none.
+- **Fire Spread's two colours are findable**, and each effect's settings
+  sit on a faint tint, so you can see where one effect ends and the next
+  begins. An effect that takes colours says which it plays.
+- **A song keeps its name, start and note when its number is edited.**
+- **Updates are found sooner:** a check at every launch and every 4 hours
+  while the app runs.
+
+## 0.5.1 (November 2026)
+
+- **A big show opens on Windows.** A 95-universe, 2,800-fixture show took
+  230 s to open and now takes 18 s; it is faster on every machine.
+- **Control surfaces are safer:** an emergency stop you learn once from a
+  pad, presses that follow Design/Operate and the hit's place, and an
+  unplugged controller lets go of what it held. See
+  [The emergency stop](focus-calls.md#a-venue-focus-cue-pre-show).
+- **New Venue from a Show,** and the room lined up under the tour show.
+- **House roles and six standard cues** (House to half, House out, House
+  full, Stage up, Stage out, Work lights), filled by Fill Roles.
+- **Run tab hit row:** a button under GO for each hit armed right now.
+
 ## 0.5.0 (November 2026)
 
 The first public release since 0.4.3: it carries 0.4.4 through 0.4.13
