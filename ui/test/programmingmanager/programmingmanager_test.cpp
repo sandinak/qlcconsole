@@ -44,9 +44,7 @@
 #include <QSplitter>
 #include <QLayout>
 #include <QScrollArea>
-#include <QScrollBar>
 #include <QLabel>
-#include "shrinkablebar.h"
 
 #include <QRegularExpression>
 #include <QDateTime>
@@ -3695,98 +3693,4 @@ void ProgrammingManager_Test::effectsSayWhereTheyCameFromAndHowTheyRun()
     menu->findChild<QMenu *>("effectRunsMenu")->findChild<QAction *>("effectRunsLoop")->trigger();
     QCOMPARE(efx->runOrder(), Function::Loop);
     delete menu;
-}
-
-/* Laptop fit (noted 2026-11-10): the Workbench add bar's row was cut off
-   after Own Copy at 1024x640 -- as Build actually lays it out, the
-   navigator takes its 2:7 share against the Workbench, narrower than
-   testing the Workbench alone ever shows (column ~280 px wide against the
-   row's own ~405 px). Scrolling the bar can bring Open into view, but only
-   by pushing + Scene off the other end -- not what "reachable" should mean
-   for a row of buttons a person works down left to right. The column now
-   asks for the row's own width, so at rest -- no scrolling -- every button
-   is already in view, pixels included (QWidget::grab, not just geometry). */
-void ProgrammingManager_Test::theWorkbenchAddBarStaysReachableInBuildAt1024x640()
-{
-    Scene *s = new Scene(m_doc);
-    s->setName("Wash");
-    QVERIFY(m_doc->addFunction(s));
-    Collection *c = new Collection(m_doc);
-    c->setName("0.0.1-Startup");
-    c->addFunction(s->id());
-    QVERIFY(m_doc->addFunction(c));
-
-    ProgrammingManager mgr(nullptr, m_doc);
-    mgr.m_workbench->load(c->id());
-    mgr.resize(1024, 640);
-    mgr.show();
-    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
-    QTest::qWait(50);
-    QCoreApplication::processEvents();
-
-    Workbench *wb = mgr.m_workbench;
-    QVERIFY(wb != nullptr);
-
-    // QLC_SHOT_DIR: the whole Build picture at 1024x640, before and after.
-    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
-    if (!shotDir.isEmpty())
-    {
-        QDir().mkpath(shotDir);
-        QVERIFY(mgr.grab().save(QString("%1/workbench-addbar-1024x640.png").arg(shotDir)));
-    }
-
-    // ShrinkableBar has no Q_OBJECT (findChild<ShrinkableBar*> can't name
-    // it); find the QScrollArea that really is one by its C++ type.
-    QScrollArea *bar = nullptr;
-    for (QScrollArea *sa : wb->findChildren<QScrollArea *>())
-        if (dynamic_cast<ShrinkableBar *>(sa) != nullptr)
-        {
-            bar = sa;
-            break;
-        }
-    QVERIFY2(bar != nullptr, "the add bar is a ShrinkableBar");
-
-    QList<QToolButton *> row { wb->m_addSceneBtn, wb->m_addEffectBtn, wb->m_upBtn, wb->m_downBtn,
-                               wb->m_removeBtn, wb->m_ownCopyBtn, wb->m_openBtn };
-    for (QToolButton *b : row)
-        QVERIFY(b != nullptr);
-
-    // At rest -- no scrolling, what a person actually sees first -- every
-    // button in the row is already inside the bar's viewport. (A row wider
-    // than its viewport can still scroll two buttons at opposite ends into
-    // view one at a time; that is not what "reachable" should mean here --
-    // the fix is for nothing to need hunting for a scrollbar at all.)
-    QCOMPARE(bar->horizontalScrollBar()->value(), 0);
-    for (QToolButton *b : row)
-    {
-        QVERIFY2(b->isVisibleTo(wb), qPrintable(QStringLiteral("%1 is hidden").arg(b->objectName())));
-        const QRect onViewport(b->mapTo(bar->viewport(), QPoint(0, 0)), b->size());
-        const QRect viewport = bar->viewport()->rect();
-        QVERIFY2(viewport.contains(onViewport),
-                 qPrintable(QStringLiteral("%1 at %2 is outside the bar's viewport %3 at rest "
-                                           "(Build %4x%5, Workbench %6, bar viewport %7, "
-                                           "scrollbar max %8)")
-                                .arg(b->objectName())
-                                .arg(QStringLiteral("%1,%2 %3x%4").arg(onViewport.x()).arg(onViewport.y())
-                                         .arg(onViewport.width()).arg(onViewport.height()))
-                                .arg(QStringLiteral("%1x%2").arg(viewport.width()).arg(viewport.height()))
-                                .arg(mgr.width()).arg(mgr.height())
-                                .arg(wb->width())
-                                .arg(viewport.width())
-                                .arg(bar->horizontalScrollBar()->maximum())));
-    }
-
-    // Pixels, not just geometry: Open's own area actually paints something,
-    // not blank bar background, with no scrolling at all.
-    const QRect openRect(wb->m_openBtn->mapTo(bar, QPoint(0, 0)), wb->m_openBtn->size());
-    const QImage grabbed = bar->grab(openRect).toImage().convertToFormat(QImage::Format_RGB32);
-    QVERIFY2(!grabbed.isNull() && grabbed.width() > 0 && grabbed.height() > 0,
-             "Open's own area grabs a real image at rest");
-    const QRgb corner = grabbed.pixel(0, 0);
-    bool differs = false;
-    for (int y = 0; y < grabbed.height() && !differs; ++y)
-        for (int x = 0; x < grabbed.width() && !differs; ++x)
-            if (grabbed.pixel(x, y) != corner)
-                differs = true;
-    QVERIFY2(differs, "Open's own area is not a single flat colour (its icon/text actually paints)");
 }

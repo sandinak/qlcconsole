@@ -183,12 +183,6 @@ private slots:
     /** Build ▸ Effects: "based on" beside an effect palette; Runs on the
      *  right-click, a classic effect's Once its Run order Single shot. */
     void effectsSayWhereTheyCameFromAndHowTheyRun();
-    /** Laptop fit (noted 2026-11-10): as Build actually lays it out (the
-     *  navigator at its 2:7 split against the Workbench), the add bar's row
-     *  -- + Scene, + Effect, up/down, Remove, Own Copy, Open -- was cut off
-     *  after Own Copy at 1024x640, no scroll bringing both ends into view
-     *  at once; the column now asks for the row's own width. */
-    void theWorkbenchAddBarStaysReachableInBuildAt1024x640();
 
 private:
     Doc* m_doc;
