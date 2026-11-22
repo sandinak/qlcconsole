@@ -63,6 +63,20 @@ wider one). The audit covers the model: where it is stored, how scopes
 resolve, LED feedback, fader pickup when the scope changes; GO and the
 e-stop can never be mapped away.
 
+**Where the slices stand** (2026-11-22,
+[SCOPED_CONTROLS_2026-11-22.md](../design/SCOPED_CONTROLS_2026-11-22.md):
+the scoped model as it will be built, plus an ROI line per remaining
+slice). The audit's **CS1 safety floor and CS2 help shipped in 0.5.1**, so
+**Q269 and Q270 need nothing more in software** -- only a bench pass, which
+no surface has had since the Build era. **CS3, the run lamp from the one
+status source, is built** for 0.5.3 (dark / dim / bright / two blinks / the
+stop lit, each read from the place that owns it). Next by the audit's
+ranking: **CS9** (one Win10 bench run) and **CS10** (retire the VC
+Programmer Frame wizard) on the next bench day, then **CS4** (who hears this
+control), **CS5 + CS8** together on the PMJ (Q271), then **CS6** faders and
+**CS7** scoped buttons (Q272) -- CS7 wants CS3's lamp words and CS4's clash
+warning under it.
+
 ## Controller looks per pad type: Steam Deck first (0.5.x, planned 2026-11-17)
 
 Today the pad picture (`FocusControlMap`) has two looks: Xbox (also every

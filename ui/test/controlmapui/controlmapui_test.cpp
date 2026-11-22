@@ -23,6 +23,7 @@
 #include <QScopeGuard>
 #include <QApplication>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QLineEdit>
 #include <QKeyEvent>
@@ -32,6 +33,7 @@
 #include <QtTest>
 
 #include "controlmapui_test.h"
+#include "outputrulekeeper.h"
 #include "showcontrolsyncpage.h"
 #include "controllearndialog.h"
 #include "programmingoutline.h"
@@ -334,6 +336,80 @@ void ControlMapUi_Test::aStopOnAProfileFaderIsWarnedOnceAndOnlyOnItsOwnLine()
     // A line about another control does not carry the stop's warning.
     cm->handleInput(0, 9, 127);
     QVERIFY2(last->text().contains("Warm") && !last->text().contains("fader"), qPrintable(last->text()));
+}
+
+/* CS3. The panel's "Its light" column says what the desk's LED says, so
+   the press rule can be read without the desk: Ready, Running, Stopped,
+   Dark. The dim switch changes what is sent, not what the row says. */
+void ControlMapUi_Test::thePanelSaysWhatEachLightShows()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(),
+             "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    QLCIOPlugin *stub = m_doc->ioPluginCache()->plugins().at(0);
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));   // the feedback line
+
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.resize(900, 400);
+    panel.show();
+    cm->setBinding({ 0, 188, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 190, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QTableWidget *table = panel.table();
+    QCOMPARE(table->rowCount(), 2);
+    QCOMPARE(table->columnCount(), 4);
+    QCOMPARE(table->horizontalHeaderItem(3)->text(), QString("Its light"));
+    QCOMPARE(table->item(0, 3)->text(), QString("Ready"));
+    // The stop is ready at every moment: it is never dark while the show runs.
+    QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
+
+    /* The emergency stop struck: the stop's own row says Stopped and the
+       scene's row is dark until the next GO -- and the table is not
+       rebuilt for a light, only the one column written. (What a running
+       control's row says is ControlMap_Test's: it needs the timer.) */
+    QSignalSpy rebuilt(&panel, &ControlMapPanel::summaryChanged);
+    m_doc->outputRuleKeeper()->emergencyStop();
+    QTRY_COMPARE(table->item(1, 3)->text(), QString("Stopped"));
+    QCOMPARE(table->item(0, 3)->text(), QString("Dark"));
+    QCOMPARE(rebuilt.count(), 0);
+    m_doc->outputRuleKeeper()->noteGo();
+    QTRY_COMPARE(table->item(0, 3)->text(), QString("Ready"));
+    QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
+
+    // The dim switch: on a pad that cannot dim, a ready control stays dark,
+    // and the row says which.
+    QCheckBox *dim = panel.findChild<QCheckBox *>("controlMapDimReady");
+    QVERIFY(dim != nullptr);
+    QVERIFY(dim->isChecked());
+    dim->setChecked(false);
+    QVERIFY(!cm->dimWhenReady());
+    QTRY_COMPARE(table->item(0, 3)->text(), QString("Ready (dark)"));
+}
+
+/* A control that can never light says so, rather than leaving a column
+   that never changes: a computer key, and a universe with no feedback line. */
+void ControlMapUi_Test::thePanelSaysWhenAControlHasNoLight()
+{
+    Scene *a = scene("Warm");
+    Scene *b = scene("Cool");
+    ControlMap *cm = m_doc->controlMap();
+    ControlMapPanel panel(m_doc);
+    panel.resize(900, 400);
+    panel.show();
+    // Nothing patched at all: no light can reach a control.
+    cm->setBinding({ 0, 188, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ ControlMap::KeyboardUniverse, ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier),
+                     ControlMap::function(b->id()), ControlMap::Toggle });
+    QTableWidget *table = panel.table();
+    QCOMPARE(table->rowCount(), 2);
+    QCOMPARE(table->item(0, 3)->text(), QString("No feedback line"));
+    QCOMPARE(table->item(1, 3)->text(), QString("A key has no light"));
 }
 
 void ControlMapUi_Test::anEncoderLearnStopsListeningWhenThePanelHides()

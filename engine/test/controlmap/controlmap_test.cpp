@@ -29,6 +29,7 @@
 #include "mastertimer.h"
 #undef private
 #include "controlmap_test.h"
+#include "outputrulekeeper.h"
 #include "qlcfile.h"
 #include "showtreecontroller.h"
 #include "inputoutputmap.h"
@@ -149,6 +150,31 @@ Scene *ControlMap_Test::scene(const QString &name, int channel)
     s->setValue(fid, 0, 255);
     m_doc->addFunction(s);
     return s;
+}
+
+quint32 ControlMap_Test::cueList(int cues, QList<quint32> *cueIds)
+{
+    ShowTreeController *st = m_doc->showTree();
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName("All");
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(m_doc->fixtures().at(0)->id());
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName("Full");
+    full->setValue(255);
+    m_doc->addPalette(full);
+    const quint32 prod = st->addProduction("Show");
+    const quint32 listId = st->addCueList(prod, "Act 1");
+    for (int i = 0; i < cues; ++i)
+    {
+        ShowTree::Target t;
+        t.groups << g->id();
+        const quint32 c = st->addCue(listId, i - 1, QString("Cue %1").arg(i + 1));
+        st->setLayerLook(c, st->addLayer(c, t), st->lookForPalette(full->id()));
+        if (cueIds != nullptr)
+            *cueIds << c;
+    }
+    return listId;
 }
 
 /* Learn: the next press (not a release) binds that control; learning
@@ -316,7 +342,8 @@ void ControlMap_Test::theLightFollowsWhatItFires()
     ControlMap *cm = m_doc->controlMap();
     cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
     QVERIFY(!m_stub->m_feedback.isEmpty());
-    QCOMPARE(m_stub->m_feedback.last(), qMakePair(kNote, uchar(0)));   // off: it isn't running
+    // Dim: it isn't running, and a press would fire it (CS3).
+    QCOMPARE(m_stub->m_feedback.last(), qMakePair(kNote, uchar(30)));
 
     send(kNote, 127);
     tick();
@@ -324,7 +351,7 @@ void ControlMap_Test::theLightFollowsWhatItFires()
     send(kNote, 0);
     send(kNote, 127);
     tick(3);
-    QCOMPARE(m_stub->m_feedback.last(), qMakePair(kNote, uchar(0)));
+    QCOMPARE(m_stub->m_feedback.last(), qMakePair(kNote, uchar(30)));
 
     // Started from elsewhere (a VC button, the Workbench): lit too.
     a->start(m_doc->masterTimer(), FunctionParent::master());
@@ -340,6 +367,314 @@ void ControlMap_Test::theLightFollowsWhatItFires()
     // Removed: off.
     cm->removeBinding(ControlMap::function(a->id()));
     QCOMPARE(m_stub->m_feedback.last(), qMakePair(kNote, uchar(0)));
+}
+
+/* CS3. The light has five things to say, each read from the one place that
+   owns the answer: dark (a press would do nothing), dim (ready), bright
+   (running), two blinks (the guard held a GO) and the stop's own lit.
+   Here: ready, running, and a Stop-only control with nothing to stop. */
+void ControlMap_Test::theLightSaysReadyRunningAndDark()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    const ControlMap::Target target = ControlMap::function(a->id());
+    cm->setBinding({ 0, kNote, target, ControlMap::Toggle });
+
+    // Ready: dim, which is MIDI velocity 15 (the value halves on the wire).
+    QCOMPARE(cm->lamp(*cm->binding(target)), ControlMap::LampStandby);
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+    QCOMPARE(ControlMap::lampName(ControlMap::LampStandby), QString("Ready"));
+
+    send(kNote, 127);
+    tick();
+    QVERIFY(a->isRunning());
+    QCOMPARE(cm->lamp(*cm->binding(target)), ControlMap::LampRunning);
+    QCOMPARE(lastLight(m_stub, kNote), 255);
+
+    // Stop only while it runs: bright, and a press stops it.
+    QVERIFY(cm->setMode(target, ControlMap::StopOnly));
+    QCOMPARE(lastLight(m_stub, kNote), 255);
+    send(kNote, 0);
+    send(kNote, 127);
+    tick(3);
+    QVERIFY(!a->isRunning());
+    // Nothing to stop: a press of it does nothing, so it is dark -- not dim.
+    QCOMPARE(cm->lamp(*cm->binding(target)), ControlMap::LampOff);
+    QCOMPARE(lastLight(m_stub, kNote), 0);
+    QCOMPARE(ControlMap::lampName(ControlMap::LampOff), QString("Dark"));
+
+    // Back to Toggle: ready again (the mode change alone sends the light).
+    QVERIFY(cm->setMode(target, ControlMap::Toggle));
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+
+    // The thing it fired is gone: dark, as its binding goes with it.
+    QVERIFY(m_doc->deleteFunction(a->id()));
+    QCOMPARE(lastLight(m_stub, kNote), 0);
+}
+
+/* The press rule itself (board Q269), shown on the desk: a hit whose place
+   is not live is dark, so the operator does not find out by pressing. */
+void ControlMap_Test::aLightIsDarkWhereAPressWouldBeRefused()
+{
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    // A hit under cue 1: its place is live only while that cue is.
+    const quint32 hit = st->addHit(ShowTree::HitScope::Cue, cues.at(0), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    ShowTree::Target t;
+    t.groups << m_doc->fixtureGroups().at(0)->id();
+    st->setLayerLook(hit, st->addLayer(hit, t), st->lookForPalette(m_doc->palettes().at(0)->id()));
+
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 20, ControlMap::hit(hit), ControlMap::Toggle });
+    const ControlMap::Binding *b = cm->binding(ControlMap::hit(hit));
+    QVERIFY(b != nullptr);
+
+    // Operate with the list stopped: the cue is not live, so dark.
+    m_doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    tick(2);
+    QVERIFY(!st->isHitArmed(hit));
+    QCOMPARE(cm->lamp(*b), ControlMap::LampOff);
+    QCOMPARE(lastLight(m_stub, 20), 0);
+
+    // Cue 1 live: the place is live, so the pad is dim -- press me.
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    chaser->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+    QVERIFY(st->isHitArmed(hit));
+    QCOMPARE(cm->lamp(*b), ControlMap::LampStandby);
+    QCOMPARE(lastLight(m_stub, 20), 30);
+
+    // GO to cue 2: cue 1 has left the stage, so the pad goes dark -- worked
+    // out on the cue change, not per frame (hitArmingChanged).
+    ShowControl::Request r;
+    r.chaser = chaser->id();
+    r.command = ShowControl::Go;
+    QVERIFY(m_doc->showControl()->run(r, ShowControl::RouteOther));
+    tick(3);
+    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QVERIFY(!st->isHitArmed(hit));
+    QCOMPARE(lastLight(m_stub, 20), 0);
+}
+
+/* After an emergency stop every light is dark until the next GO, and the
+   stop's own control is lit: one status source with the footer and the pad
+   (OutputRuleKeeper::emergencyStopped()). */
+void ControlMap_Test::theLightGoesDarkAfterTheStopUntilTheNextGo()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 40, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+    // The stop is ready at every moment, so it can be found in the dark.
+    QCOMPARE(lastLight(m_stub, 40), 30);
+
+    m_doc->outputRuleKeeper()->emergencyStop();
+    tick(3);
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::emergencyStop())), ControlMap::LampStopped);
+    QCOMPARE(lastLight(m_stub, 40), 255);      // the stop says the show is stopped
+    QCOMPARE(lastLight(m_stub, kNote), 0);     // dark until the next GO
+    QCOMPARE(ControlMap::lampName(ControlMap::LampStopped), QString("Stopped"));
+
+    // The first GO after the stop ends it: the lights come back.
+    m_doc->outputRuleKeeper()->noteGo();
+    tick(3);
+    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
+    QCOMPARE(lastLight(m_stub, 40), 30);       // ready again
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+}
+
+/* The double-GO guard held a command: every control that GOes that list
+   blinks twice and then says what it says now -- the same notice the Run
+   tab, the footer and the pad get (guard rule 2). */
+void ControlMap_Test::aHeldGoBlinksTheControlTwice()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    ShowTreeController *st = m_doc->showTree();
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBlinkMs(1);
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    ShowControl *sc = m_doc->showControl();
+    sc->setGoGuardMs(ShowControl::maxGoGuardMs());   // long, so a loaded
+    auto unhook = qScopeGuard([sc]() { sc->setGoGuardMs(0); });   // machine still holds
+
+    send(10, 127);                      // the first GO is carried out
+    tick(2);
+    QVERIFY(chaser->isRunning());
+    QSignalSpy held(sc, &ShowControl::commandHeld);
+    m_stub->m_feedback.clear();
+    send(10, 0);
+    send(10, 127);                      // a second GO inside the window
+    tick(2);
+    QCOMPARE(held.count(), 1);
+
+    // On, off, on, off, then the truth (bright: the list runs).
+    QTRY_COMPARE(m_stub->m_feedback.count(), 5);
+    QList<int> blink;
+    for (const auto &f : m_stub->m_feedback)
+        if (f.first == 10u)
+            blink << int(f.second);
+    QCOMPARE(blink, QList<int>({ 255, 0, 255, 0, 255 }));
+    QVERIFY(!cm->isBlinking(*cm->binding(ControlMap::cueList(listId))));
+    QVERIFY(chaser->isRunning());       // the held GO did not advance the list
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+
+    /* The trigger removed in the middle of a blink: it stops at once and
+       goes dark, rather than blink on for a control that fires nothing.
+       Slow steps, so the chain is certainly still in flight. */
+    cm->setBlinkMs(50);
+    send(10, 0);
+    send(10, 127);
+    tick(2);
+    QVERIFY2(cm->isBlinking(*cm->binding(ControlMap::cueList(listId))), "the second hold did not blink");
+    QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
+    QCOMPARE(lastLight(m_stub, 10), 0);
+    m_stub->m_feedback.clear();
+    QTest::qWait(250);                  // the three steps left would have fallen here
+    QVERIFY2(m_stub->m_feedback.isEmpty(), "a removed trigger's control was still blinking");
+}
+
+/* A cue list a GO would do nothing with -- every cue cut for the rehearsal
+   -- is dark, read from ShowControl::standbyStep() and not from the
+   Control Map's own guess. */
+void ControlMap_Test::aCueListWithNothingToGoIsDark()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    QCOMPARE(lastLight(m_stub, 10), 30);        // ready: GO plays cue 1
+
+    // Every cue cut: a GO would play nothing, so the control goes dark --
+    // and it follows the edit by itself (one pass per batch of edits).
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setCuesSkipped(cues, true));
+    tick(2);
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::cueList(listId))), ControlMap::LampOff);
+    QCOMPARE(lastLight(m_stub, 10), 0);
+
+    QVERIFY(st->setCuesSkipped({ cues.at(1) }, false));
+    tick(2);
+    QCOMPARE(lastLight(m_stub, 10), 30);
+}
+
+/* A pad whose lights take a colour in the velocity and not a brightness
+   (the APCs) shows nothing at a dim level: the dim light switches off, a
+   ready control stays dark, and running and stopped are unchanged. Saved
+   with the show; a show with it on saves as before. */
+void ControlMap_Test::theDimLightIsSwitchableAndSavedWithTheShow()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    QVERIFY(cm->dimWhenReady());
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+
+    cm->setDimWhenReady(false);
+    QCOMPARE(lastLight(m_stub, kNote), 0);      // ready, and dark
+    // Still bright while it runs.
+    send(kNote, 127);
+    tick();
+    QCOMPARE(lastLight(m_stub, kNote), 255);
+    send(kNote, 0);
+    send(kNote, 127);
+    tick(3);
+    QCOMPARE(lastLight(m_stub, kNote), 0);
+    // The lamp itself still says Ready: only the value sent changes.
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::function(a->id()))), ControlMap::LampStandby);
+
+    const QByteArray xml = saveShow(m_doc);
+    QVERIFY(xml.contains("Lights=\"onoff\""));
+    QVERIFY(loadShow(m_doc, xml));
+    QVERIFY(!m_doc->controlMap()->dimWhenReady());
+    QCOMPARE(lastLight(m_stub, kNote), 0);
+
+    m_doc->controlMap()->setDimWhenReady(true);
+    const QByteArray on = saveShow(m_doc);
+    QVERIFY(!on.contains("Lights="));           // a show with it on saves as before
+    QVERIFY(loadShow(m_doc, on));
+    QVERIFY(m_doc->controlMap()->dimWhenReady());
+}
+
+/* A desk that vanishes mid-show and comes back (a USB hub, a knocked
+   cable, the same board re-enumerated as another device) has a dark board
+   when it returns: every light is sent again, changed or not, and each
+   says what it says now and not what it said when the cable went. */
+void ControlMap_Test::theLightsComeBackWhenTheControllerDoes()
+{
+    Scene *a = scene("Warm", 0);
+    Scene *b = scene("Cool", 1);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote + 1, ControlMap::function(b->id()), ControlMap::Toggle });
+    send(kNote, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    QCOMPARE(lastLight(m_stub, kNote), 255);
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+    tick(3);
+    // While it is gone the scene is stopped from the Workbench: the board
+    // cannot be told, and must not be believed when it comes back.
+    a->stop(FunctionParent::master());
+    tick(3);
+    m_stub->m_feedback.clear();
+
+    // Back -- as another device behind the same patch.
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake 2"));
+    QCoreApplication::processEvents();
+    QCOMPARE(m_stub->m_feedback.count(), 2);        // both lights, not only what changed
+    QCOMPARE(lastLight(m_stub, kNote), 30);         // ready, not the 255 it was left at
+    QCOMPARE(lastLight(m_stub, kNote + 1), 30);
+
+    // A universe that is no longer patched at all: nothing crashes and
+    // nothing is sent (the show runs on without a desk).
+    iom->setOutputPatch(0, QString(), QString(), 0, true);
+    QVERIFY(iom->feedbackPatch(0) == nullptr);
+    m_stub->m_feedback.clear();
+    cm->resendFeedback();
+    QVERIFY(m_stub->m_feedback.isEmpty());
+    send(kNote, 127);
+    tick(2);
+    QVERIFY(a->isRunning());                        // it still fires
+}
+
+/* A light nothing changed about is not sent again: a mode switch or a
+   production change with a bank of pads must not flood the MIDI line. */
+void ControlMap_Test::aLightThatDidNotChangeIsNotSentAgain()
+{
+    Scene *a = scene("Warm", 0);
+    Scene *b = scene("Cool", 1);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote + 1, ControlMap::function(b->id()), ControlMap::Toggle });
+
+    m_stub->m_feedback.clear();
+    m_doc->setMode(Doc::Operate);               // a scene fires in both modes
+    QCoreApplication::processEvents();
+    tick(2);
+    QCOMPARE(m_stub->m_feedback.count(), 0);    // nothing to say: nothing sent
+
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    QCOMPARE(m_stub->m_feedback.count(), 1);    // one light, not both
+    QCOMPARE(m_stub->m_feedback.last(), qMakePair(kNote, uchar(255)));
+
+    // A device plugged back in sends every light, changed or not.
+    m_stub->m_feedback.clear();
+    cm->resendFeedback();
+    QCOMPARE(m_stub->m_feedback.count(), 2);
 }
 
 void ControlMap_Test::aCueListGoesAndACueJumps()
@@ -527,7 +862,8 @@ void ControlMap_Test::aHitFires()
     send(20, 0);
     tick(3);
     QVERIFY(!m_doc->function(coll)->isRunning());
-    QCOMPARE(m_stub->m_feedback.last(), qMakePair(quint32(20), uchar(0)));
+    // Dim, not dark: the hit's place is live, so a press would fire it (CS3).
+    QCOMPARE(m_stub->m_feedback.last(), qMakePair(quint32(20), uchar(30)));
 }
 
 void ControlMap_Test::savedWithTheShowAndLoadedBack()
