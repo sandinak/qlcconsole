@@ -34,8 +34,6 @@
 
 #include "controlmapui_test.h"
 #include "outputrulekeeper.h"
-#include "functionparent.h"
-#include "mastertimer.h"
 #include "showcontrolsyncpage.h"
 #include "controllearndialog.h"
 #include "programmingoutline.h"
@@ -371,21 +369,15 @@ void ControlMapUi_Test::thePanelSaysWhatEachLightShows()
     // The stop is ready at every moment: it is never dark while the show runs.
     QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
 
-    // It runs: Running, and the table is not rebuilt for a light.
+    /* The emergency stop struck: the stop's own row says Stopped and the
+       scene's row is dark until the next GO -- and the table is not
+       rebuilt for a light, only the one column written. (What a running
+       control's row says is ControlMap_Test's: it needs the timer.) */
     QSignalSpy rebuilt(&panel, &ControlMapPanel::summaryChanged);
-    a->start(m_doc->masterTimer(), FunctionParent::master());
-    m_doc->masterTimer()->timerTick();
-    QTRY_COMPARE(table->item(0, 3)->text(), QString("Running"));
-    QCOMPARE(rebuilt.count(), 0);
-    a->stop(FunctionParent::master());
-    m_doc->masterTimer()->timerTick();
-    QTRY_COMPARE(table->item(0, 3)->text(), QString("Ready"));
-
-    // The emergency stop struck: the stop's own row says Stopped and the
-    // scene's row is dark until the next GO.
     m_doc->outputRuleKeeper()->emergencyStop();
     QTRY_COMPARE(table->item(1, 3)->text(), QString("Stopped"));
     QCOMPARE(table->item(0, 3)->text(), QString("Dark"));
+    QCOMPARE(rebuilt.count(), 0);
     m_doc->outputRuleKeeper()->noteGo();
     QTRY_COMPARE(table->item(0, 3)->text(), QString("Ready"));
     QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
