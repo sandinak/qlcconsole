@@ -1329,6 +1329,55 @@ void AppViews_Test::settingsAppearanceHoldsHowTheWindowLooks()
     QCOMPARE(m_app->theme(), int(App::ThemeRedShift));
 }
 
+/* Findability (board Q65, commit 385edaab9): the footer chips moved from the
+   View menu to Settings ▸ Appearance ▸ Footer, but nothing tested that a
+   person could still find them there. Walk the real path -- the File menu's
+   Settings… action, the Appearance tab, the Footer group box -- and open
+   the dialog through the menu action itself, not the AppSettings
+   constructor. A future rename or move of any of the three breaks this. */
+void AppViews_Test::footerChipsAreFindableFromSettingsAppearance()
+{
+    QMenu *file = nullptr;
+    foreach (QAction *a, m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->text().remove('&') == "File")
+            file = a->menu();
+    QVERIFY2(file != nullptr, "the menu bar has a File menu");
+
+    QAction *settingsAction = nullptr;
+    foreach (QAction *a, file->actions())
+        if (a->objectName() == QStringLiteral("appSettings"))
+            settingsAction = a;
+    QVERIFY2(settingsAction != nullptr, "Settings… sits on the File menu");
+    QCOMPARE(settingsAction->text(), QString("&Settings…"));   // the menu text as shown
+
+    QVERIFY(settingsAction->isEnabled());
+    bool sawAppearanceTab = false, sawFooterGroup = false;
+    QTimer::singleShot(100, m_app, [&]() {
+        AppSettings *dlg = m_app->findChild<AppSettings *>();
+        QVERIFY(dlg != nullptr);
+        QTabWidget *tabs = dlg->findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
+        QVERIFY(tabs != nullptr);
+        // Its place: the second tab, named as it reads.
+        QWidget *appearance = tabs->widget(1);
+        sawAppearanceTab = (appearance != nullptr
+                             && appearance->objectName() == QStringLiteral("settingsAppearance")
+                             && tabs->tabText(1) == QString("Appearance"));
+        if (appearance != nullptr)
+        {
+            QGroupBox *footer = appearance->findChild<QGroupBox *>(QStringLiteral("settingsFooter"));
+            sawFooterGroup = (footer != nullptr && footer->title() == QString("Footer"));
+            if (footer != nullptr)
+                for (const char *name : { "settingsFooterLoad", "settingsFooterPower",
+                                          "settingsFooterGrandMaster", "settingsFooterSpeedMasters" })
+                    QVERIFY2(footer->findChild<QCheckBox *>(name) != nullptr, name);
+        }
+        dlg->reject();
+    });
+    settingsAction->trigger();
+    QVERIFY2(sawAppearanceTab, "Settings… opened on a tab named Appearance, second in the dialog");
+    QVERIFY2(sawFooterGroup, "the Appearance tab has a Footer group with the chip checkboxes");
+}
+
 void AppViews_Test::theViewMenuIsOnlyViews()
 {
     QMenu *view = nullptr;
@@ -3413,6 +3462,63 @@ void AppViews_Test::runAndConnectionsCantBeUnchecked()
     m_app->setWorkspaceView(App::ConsoleView);
     m_app->setTabLabelMode(App::TabIconAndText);
     m_app->doc()->resetModified();
+}
+
+/* Findability (board Q293): the feature shipped in 0.5.2 with tests for what
+   it does but nothing testing that a person can find it. Walk the path a
+   person clicks -- the menu bar's View menu, its Workspace submenu, "Tabs &
+   Features…" in its place there -- and trigger the real menu action (not
+   App::slotChooseTabs() by hand) to check it opens the real dialog, titled
+   as the menu calls it. A future rename or move of the item breaks this. */
+void AppViews_Test::tabsAndFeaturesIsFindableFromViewWorkspace()
+{
+    QMenu *view = nullptr;
+    foreach (QAction *a, m_app->menuBar()->actions())
+        if (a->menu() != nullptr && a->text().remove('&') == "View")
+            view = a->menu();
+    QVERIFY2(view != nullptr, "the menu bar has a View menu");
+
+    QMenu *workspace = nullptr;
+    QAction *workspaceAction = nullptr;
+    foreach (QAction *a, view->actions())
+        if (a->menu() != nullptr && a->menu()->objectName() == QStringLiteral("viewWorkspaceMenu"))
+        {
+            workspace = a->menu();
+            workspaceAction = a;
+        }
+    QVERIFY2(workspace != nullptr, "the View menu has a Workspace submenu");
+    QCOMPARE(workspaceAction->text(), QString("Workspace"));   // the menu text as shown
+
+    QAction *tabsAndFeatures = nullptr;
+    foreach (QAction *a, workspace->actions())
+        if (a->objectName() == QStringLiteral("viewTabsAction"))
+            tabsAndFeatures = a;
+    QVERIFY2(tabsAndFeatures != nullptr, "Tabs & Features… sits in the Workspace submenu");
+    QCOMPARE(tabsAndFeatures->text(), QString("Tabs && Features…"));
+
+    // Its place in the submenu: last, after the three view choices and the
+    // separator that sets it apart from them.
+    const QList<QAction *> items = workspace->actions();
+    QCOMPARE(items.last(), tabsAndFeatures);
+    QVERIFY2(items.size() >= 2 && items.at(items.size() - 2)->isSeparator(),
+             "a separator sets Tabs & Features… apart from the view choices");
+
+    // Triggering the menu item itself -- not calling slotChooseTabs() --
+    // opens the real dialog.
+    m_app->setWorkspaceView(App::ConsoleView);
+    QVERIFY(tabsAndFeatures->isEnabled());
+    bool opened = false;
+    QTimer::singleShot(100, m_app, [&]() {
+        QDialog *dlg = m_app->findChild<QDialog *>(QStringLiteral("chooseTabsDialog"));
+        opened = (dlg != nullptr);
+        if (dlg != nullptr)
+        {
+            QCOMPARE(dlg->windowTitle(), QString("Tabs & Features"));
+            dlg->reject();
+        }
+    });
+    tabsAndFeatures->trigger();
+    QVERIFY2(opened, "the menu item opened the Tabs & Features dialog");
 }
 
 /* View ▸ Workspace ▸ Tabs & Features…, as a person uses it: tick or untick
