@@ -155,6 +155,11 @@ public:
     /** Save as a named palette, filed as the show's palettes are. Empty
      *  @a name asks for one (the effect's name offered). */
     quint32 saveAsPalette(const QString &name = QString(), const QString &folder = QString());
+    /** Where Save in This Show… files it when it is given no folder of its
+     *  own (a palette path; empty: where the show keeps its effects). The
+     *  Library's + Palette ▸ Effect sends the folder it has selected. */
+    void setSaveFolder(const QString &folder) { m_saveFolder = folder; }
+    QString saveFolder() const { return m_saveFolder; }
     /** Write the design into the palette it started from. */
     bool updateOriginal();
     /** Throw the draft away. */
@@ -314,6 +319,7 @@ private:
     QString draftSignature() const;
     void markKept();
     QString m_oneOffWhere;
+    QString m_saveFolder;       ///< setSaveFolder(): the Library's folder
     quint32 m_fromCue;
     quint32 m_fromScene;
     bool m_oneOffAllowed = false;

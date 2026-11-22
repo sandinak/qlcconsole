@@ -83,6 +83,12 @@ private slots:
      *  the designer (the bench, on the cue's groups; the palette it starts
      *  from); every other palette type stays the Look Editor's. */
     void theLibrarysEffectDoorsOpenTheDesigner();
+    /** Pictures for the UX review (QLC_SHOT_DIR), at three window sizes:
+     *  a cue's layer in the docked Workbench, its Effect row (the designer
+     *  -- the Look Editor before board Q263), and the Library's
+     *  + Palette ▸ Effect. Driven through calls that exist either side of
+     *  the change, so the same test takes the before and the after. */
+    void designerShots();
     /** Q77: no Save as preset -- a palette is the effect kept, Export…
      *  carries it to another show. */
     void thereIsNoSaveAsPreset();

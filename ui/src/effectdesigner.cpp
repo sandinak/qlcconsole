@@ -151,7 +151,8 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
         m_contextBtn->setToolTip(tr("The rest of the cue plays too, with this layer's effect over it"));
         m_soloBtn = new QPushButton(tr("Solo"), m_contextRow);
         m_soloBtn->setObjectName(QStringLiteral("edSolo"));
-        m_soloBtn->setToolTip(tr("Only this layer's heads play: the effect alone"));
+        m_soloBtn->setToolTip(tr("Only this layer plays -- its own colour and dimmer with this effect "
+                                 "over them -- instead of the whole cue"));
         QButtonGroup *bg = new QButtonGroup(m_contextRow);
         for (QPushButton *b : { m_contextBtn, m_soloBtn })
         {
@@ -458,6 +459,7 @@ void EffectDesigner::plugIntoWorkbench()
         // Tree's Library sends the cue's).
         if (!req.tryOn.isEmpty())
             ed->setTryOnGroups(req.tryOn);
+        ed->setSaveFolder(req.folder);
         ed->setCameFrom(req.fromCue, req.fromScene);
         ed->setEffect(req.palette);
         connect(ed, &EffectDesigner::layerMade, wb,
@@ -946,7 +948,8 @@ quint32 EffectDesigner::saveAsPalette(const QString &name, const QString &folder
         // the list (Build ▸ Effects starts the rename), as + Palette does.
         n = suggested;
     }
-    const QString path = folder.isEmpty() ? st->suggestPaletteFolder(QLCPalette::Effect) : folder;
+    const QString asked = folder.isEmpty() ? m_saveFolder : folder;
+    const QString path = asked.isEmpty() ? st->suggestPaletteFolder(QLCPalette::Effect) : asked;
     const quint32 pid = m_draftId;
     // One undo step in the tree's history (D22): undo makes it a one-off
     // again, which goes once nothing uses it.

@@ -219,6 +219,10 @@ public:
          *  remembers). The Show Tree's Library sends the selected layer's,
          *  else the selected cue's, so a new effect plays on something. */
         QList<quint32> tryOn;
+        /** Where Save in This Show… files it (a palette path; empty: where
+         *  the show keeps its effects). The Library sends the folder it has
+         *  selected, so an effect made in the song's folder stays there. */
+        QString folder;
     };
     /** The effect designer's widget for @a request, made for the editor
      *  pane (the Workbench owns it and deletes it when the row changes);

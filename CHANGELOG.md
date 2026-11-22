@@ -17,6 +17,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **The Show Tree says what is in it** (board Q266): its tab tooltip, its
   **Window** menu entry and its help title now read *cue lists, cues and
   hits*. The tab keeps its name, and no menu item was added.
+- **One effect designer, where you already are** (board Q263 and Q264).
+  A cue layer's effect is designed in the **Workbench docked in the Show
+  Tree** — on that layer's lights, with the layer's colour and dimmer
+  under it, **In Context / Solo** (the cue's own Solo, not a second one),
+  **Keep on This Layer** or **Save in This Show…**, and **↩ Show Tree**
+  back. The modal "Design effect" window is gone. Opened from the layer's
+  right-click **Design Effect…**, its Effect row's **⋯** or that row's
+  **✎**; **+ Effect ▾ → Effect Palette…** on a cue now designs the
+  selected layer's effect instead of unloading the cue. In the Library,
+  **+ Palette ▸ Effect** opens the designer on the bench — pick it, watch
+  it on the lights, then **Save in This Show…** names and files it in the
+  folder you are standing in, so nothing empty is ever made — and
+  **Edit Effect** opens the designer on the palette it starts from; every
+  other palette type still opens in the Look Editor. A design nobody has
+  kept is never dropped in silence: leaving, clicking another row or
+  another cue asks first. Course lesson 2.4 teaches the new path.
 
 ## [0.5.2] - 2026-11-22
 

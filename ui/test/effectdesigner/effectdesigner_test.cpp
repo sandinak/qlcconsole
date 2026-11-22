@@ -49,6 +49,7 @@
 #include "programmingmanager.h"
 #include "workbench.h"
 #include "programmingoutline.h"
+#include "treecuestack.h"
 #include "paletteops.h"
 #include "rgbmatrix.h"
 #include "effectbrowser.h"
@@ -888,6 +889,89 @@ void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
 
     // Every other type: the Look Editor, not the designer.
     QVERIFY(!view.designEffectPalette(blue->id()));
+}
+
+void EffectDesigner_Test::designerShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *blue = new QLCPalette(QLCPalette::Color, m_doc);
+    blue->setName("Blue");
+    blue->setValue(QLCPalette::colorToString(Qt::blue, QColor(Qt::black)));
+    QVERIFY(m_doc->addPalette(blue));
+    QLCPalette *chase = effectPalette(m_doc, "Chase", "Color Chase");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Dance"), "01-Opening", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Dance Break");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    st->setLayerLook(c1, l1, st->lookForPalette(blue->id()));
+    st->setLayerLook(c1, l1, st->lookForPalette(chase->id()));
+    EffectDesigner::plugIntoWorkbench();
+
+    for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        const QString tag = QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
+        ShowTreeView view(nullptr, m_doc);
+        view.resize(size);
+        view.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&view));
+        QVERIFY(view.selectNode(l1, c1));
+        QTest::qWait(100);
+
+        // 1. The cue's layer in the docked Workbench (unchanged by this work).
+        QVERIFY(view.openInWorkbench(c1, l1));
+        Workbench *bench = view.dockedWorkbench();
+        QVERIFY(bench != nullptr);
+        bench->rows()->expandAll();
+        QTest::qWait(200);
+        QVERIFY(view.grab().save(QDir(dir).filePath(QStringLiteral("docked-layer-%1.png").arg(tag))));
+
+        // 2. Its Effect row: the designer (the Look Editor before Q263).
+        TreeCueStack *cs = qobject_cast<TreeCueStack *>(bench->stack());
+        QVERIFY(cs != nullptr);
+        const int li = cs->indexOfLayer(l1);
+        QVERIFY(li >= 0);
+        int ai = -1;
+        for (int i = 0; i < cs->layers().at(li).attributes.size(); ++i)
+            if (cs->layers().at(li).attributes.at(i).key.startsWith(QLatin1String("Effect.")))
+                ai = i;
+        QVERIFY2(ai >= 0, "the layer has no Effect row");
+        ProgrammingOutline::Row r;
+        r.kind = ProgrammingOutline::AttributeRow;
+        r.id = quint32(ai);
+        r.scene = quint32(li);
+        QVERIFY(bench->selectRow(r));
+        QTest::qWait(400);
+        QVERIFY(view.grab().save(QDir(dir).filePath(QStringLiteral("docked-effect-row-%1.png").arg(tag))));
+
+        // 3. The Library's + Palette ▸ Effect (board Q264): the designer on
+        // the bench here, an empty palette in the Look Editor before.
+        QAction *make = view.findChild<QAction *>(QStringLiteral("stNewPaletteEffect"));
+        if (make == nullptr)
+            if (QToolButton *plus = view.findChild<QToolButton *>(QStringLiteral("stNewPalette")))
+                if (plus->menu() != nullptr)
+                {
+                    emit plus->menu()->aboutToShow();
+                    QTest::qWait(100);
+                    for (QAction *a : plus->menu()->actions())
+                        if (a->objectName() == QLatin1String("stNewPaletteEffect"))
+                            make = a;
+                }
+        if (make != nullptr)
+        {
+            make->trigger();
+            QTest::qWait(500);
+            QVERIFY(view.grab().save(QDir(dir).filePath(QStringLiteral("library-new-effect-%1.png").arg(tag))));
+        }
+        if (Workbench *b = view.dockedWorkbench())
+            if (EffectDesigner *ed = qobject_cast<EffectDesigner *>(b->effectPane()))
+                ed->cancel();
+    }
 }
 
 void EffectDesigner_Test::thereIsNoSaveAsPreset()

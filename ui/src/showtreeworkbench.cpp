@@ -43,6 +43,8 @@
 #include "showtreecontroller.h"
 #include "monitor/monitor.h"
 #include "lookeditor.h"
+#include "effectdesigner.h"
+#include "paletteops.h"
 #include "qlcpalette.h"
 #include "workbench.h"
 #include "treecuestack.h"
@@ -351,10 +353,38 @@ bool ShowTreeView::designEffectOnLayer(quint32 cueId, quint32 layerId, const Tar
         m_hint->setText(tr("Select the layer to design an effect for"));
         return false;
     }
+    followDesignerIntoTheLibrary(qobject_cast<EffectDesigner *>(bench->effectPane()), false);
     m_hint->setText(tr("Designing the effect for %1: Keep on This Layer, or Save in This Show "
                        "(↩ Show Tree puts the page back)").arg(m_st->targetLabel(target)));
     updateButtons();
     return true;
+}
+
+void ShowTreeView::followDesignerIntoTheLibrary(EffectDesigner *designer, bool nameNewOnes)
+{
+    if (designer == nullptr)
+        return;
+    connect(designer, &EffectDesigner::effectChosen, this,
+            [this, nameNewOnes](quint32 paletteId, const QList<quint32> &, EffectDesigner::Outcome outcome) {
+        if (outcome == EffectDesigner::OneOff)
+            return;             // a one-off is the cue's, never listed in All
+        reloadLibrary();
+        const QLCPalette *p = m_doc->palette(paletteId);
+        if (p == nullptr)
+            return;
+        selectLibraryPalette(paletteId);
+        if (outcome == EffectDesigner::NewPalette && nameNewOnes)
+        {
+            // Saved under the effect's name: the name is open to type over,
+            // as Build ▸ Effects opens it (no name box first).
+            m_hint->setText(tr("Saved in this show as “%1”: type its name").arg(p->name()));
+            startLibraryRename();
+        }
+        else
+        {
+            paletteEdited(paletteId, true);
+        }
+    });
 }
 
 QList<quint32> ShowTreeView::effectTryOnGroups() const
@@ -415,8 +445,13 @@ bool ShowTreeView::designEffectPalette(quint32 paletteId)
     req.palette = paletteId;
     req.fromCue = onCue ? cueId : invalidId();
     req.tryOn = tryOn;
+    // Saved where the Library stands (the song's folder), as + Palette does.
+    const QString where = libraryPaletteFolder();
+    if (!where.isEmpty())
+        req.folder = PaletteOps::pathForFolder(where);
     if (!bench->designEffect(req))
         return false;
+    followDesignerIntoTheLibrary(qobject_cast<EffectDesigner *>(bench->effectPane()), true);
     m_hint->setText(p != nullptr
                     ? tr("Designing “%1”: Update it, or Save in This Show as a new one beside it "
                          "(↩ Show Tree puts the page back)").arg(p->name())

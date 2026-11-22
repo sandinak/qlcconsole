@@ -974,6 +974,12 @@ public:
     bool designEffectPalette(quint32 paletteId);
     /** The groups a new effect plays on first (designEffectPalette()). */
     QList<quint32> effectTryOnGroups() const;
+private:
+    /** A designer in the docked pane: what it keeps shows in the Library at
+     *  once, and a new palette's name is opened to type there (as Build ▸
+     *  Effects does) when @a nameNewOnes. */
+    void followDesignerIntoTheLibrary(class EffectDesigner *designer, bool nameNewOnes);
+public:
     /** ↩: the page back, the Workbench handed back, the cue (and the layer
      *  the Workbench had selected) selected in the tree. */
     bool closeWorkbench();

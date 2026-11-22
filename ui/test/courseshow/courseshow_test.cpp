@@ -117,6 +117,8 @@
 #include "qlcchannel.h"
 #include "paletteops.h"
 #include "effectbrowser.h"
+#include "effectdesigner.h"
+#include "workbench.h"
 #include "effectscriptcache.h"
 #include "speedmasters.h"
 #include "doc.h"
@@ -3957,8 +3959,15 @@ bool treeMenu(ShowTreeView *view, QTreeWidgetItem *item, const QStringList &path
    (the new palette is filed there); in the picker that opens by itself,
    @a effect searched for and clicked, then Done; then @a name typed in the
    Look Editor's Name. Returns the new palette, or null. */
+/* Lesson 2.4 steps 5-7, as a person does them (board Q264): the Library's
+   + Palette ▸ Effect opens the EFFECT DESIGNER on the bench, docked in
+   place of the page. Try on ▾ picks the lights, the browser picks the
+   effect -- which plays at once -- and Save in This Show… files it in the
+   folder the Library has selected and opens its name to type there. */
 QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder, const QString &effect,
-                             const QString &name, const QString &shotDir = QString(), const QString &shotName = QString())
+                             const QString &name, const QString &shotDir = QString(),
+                             const QString &shotName = QString(),
+                             const QStringList &tryOn = QStringList())
 {
     QTreeWidget *lib = view->library();
     QTreeWidgetItem *f = showLibraryRow(lib, folder);
@@ -3990,33 +3999,28 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
     }
     make->trigger();
     settle(200);
-    QLCPalette *made = nullptr;
-    for (QLCPalette *p : doc->palettes())
-        if (!before.contains(p->id()))
-            made = p;
-    if (made == nullptr)
-        return nullptr;
-    QDialog *picker = view->findChild<QDialog *>(QStringLiteral("effectPicker"));
-    const bool byItself = picker != nullptr && picker->isVisible();
-    if (!byItself)
+    Workbench *bench = view->dockedWorkbench();
+    EffectDesigner *ed = bench == nullptr ? nullptr
+                                          : qobject_cast<EffectDesigner *>(bench->effectPane());
+    if (ed == nullptr)
     {
-        // Not open by itself (the Look Editor was closed): Change effect….
-        QPushButton *change = view->findChild<QPushButton *>(QStringLiteral("effectChange"));
-        if (change == nullptr || !change->isVisible())
-        {
-            qWarning() << "no Change effect… button";
-            return nullptr;
-        }
-        change->click();
-        settle(200);
+        qWarning() << "+ Palette > Effect did not open the designer in the Workbench's pane";
+        return nullptr;
     }
-    EffectBrowser *browser = nullptr;
-    for (EffectBrowser *b : view->findChildren<EffectBrowser *>())
-        if (b->isVisible())
-            browser = b;
-    qInfo().noquote() << "[L2] new effect palette" << made->name() << "| picker open by itself" << byItself
-                      << "| browser" << (browser != nullptr) << "| path" << made->path();
-    if (browser == nullptr || picker == nullptr)
+    // Nothing is made until it is kept.
+    if (doc->palettes().count() != before.count())
+        qWarning() << "a palette was made before the effect was kept";
+    // Try on ▾: the lights the lesson plays it on.
+    QList<quint32> groups;
+    for (const QString &want : tryOn)
+        for (FixtureGroup *g : doc->fixtureGroups())
+            if (g->name() == want)
+                groups << g->id();
+    if (!groups.isEmpty())
+        ed->setTryOnGroups(groups);
+    // As a person does: type the name in the browser, click the row.
+    EffectBrowser *browser = ed->browser();
+    if (browser == nullptr)
         return nullptr;
     browser->search()->setFocus();
     browser->search()->selectAll();         // what was searched for last time goes
@@ -4030,36 +4034,58 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
         if (browser->list()->item(i)->text() == effect && hit == nullptr)
             hit = browser->list()->item(i);
     }
-    qInfo().noquote() << "[L2] picker shows for" << effect << ":" << shown.join(" | ");
+    qInfo().noquote() << "[L2] the designer's browser shows for" << effect << ":" << shown.join(" | ");
     if (hit == nullptr)
         return nullptr;
     QListWidget *list = browser->list();
     list->scrollToItem(hit);
     QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(hit).center());
-    settle(100);
+    settle(200);
+    qInfo().noquote() << "[L2] the designer plays" << ed->effectName() << "on" << ed->previewText();
     if (!shotDir.isEmpty())
     {
-        // The picker as the student sees it: the search, the effect, Done.
-        picker->resize(860, 600);
-        settle(100);
-        HelpShots::Frame f;
-        f.grab = picker;
-        f.callouts << mark(browser->search(), 1)
-                   << markRect(list->viewport(), list->visualItemRect(hit), picker, 2)
-                   << mark(picker->findChild<QPushButton *>(QStringLiteral("effectPickerDone")), 3);
-        save(HelpShots::annotate(picker->grab().toImage(), f), shotDir, shotName);
+        // The designer as the student sees it: the search, the effect,
+        // Try on ▾ and Save in This Show….
+        HelpShots::Frame fr;
+        fr.grab = ed;
+        fr.callouts << mark(browser->search(), 1)
+                    << markRect(list->viewport(), list->visualItemRect(hit), ed, 2)
+                    << mark(ed->findChild<QToolButton *>(QStringLiteral("edTryOn")), 3)
+                    << mark(ed->findChild<QPushButton *>(QStringLiteral("edSavePalette")), 4);
+        save(HelpShots::annotate(ed->grab().toImage(), fr), shotDir, shotName);
     }
-    if (QPushButton *done = picker->findChild<QPushButton *>(QStringLiteral("effectPickerDone")))
-        done->click();
-    settle(100);
-    qInfo().noquote() << "[L2] after Done:" << made->name() << "| script" << made->scriptPath();
-    QLineEdit *edit = view->findChild<QLineEdit *>(QStringLiteral("lookName"));
-    if (edit == nullptr || !edit->isVisible())
+    // Save in This Show…: filed where the Library stands, named after the
+    // effect, and its name open to type there.
+    QPushButton *keep = ed->findChild<QPushButton *>(QStringLiteral("edSavePalette"));
+    if (keep == nullptr || !keep->isEnabled())
+    {
+        qWarning() << "no Save in This Show…" << (keep != nullptr);
         return nullptr;
-    edit->setFocus();
-    edit->selectAll();
-    QTest::keyClicks(edit, name);
-    QTest::keyClick(edit, Qt::Key_Return);
+    }
+    keep->click();
+    settle(200);
+    QLCPalette *made = nullptr;
+    for (QLCPalette *p : doc->palettes())
+        if (!before.contains(p->id()))
+            made = p;
+    if (made == nullptr)
+        return nullptr;
+    qInfo().noquote() << "[L2] saved in this show as" << made->name() << "| folder" << made->path()
+                      << "| renaming in the Library" << view->m_libRenaming;
+    if (!view->m_libRenaming)
+    {
+        qWarning() << "the name was not opened to type in the Library";
+        return nullptr;
+    }
+    if (QTreeWidgetItem *cur = lib->currentItem())
+        cur->setText(0, name);              // as typing the name does
+    settle(100);
+    // ↩ Show Tree: out of the designer, then out of the Workbench, so the
+    // cue's page is back (the lesson goes on there).
+    if (bench->backOut())
+        settle(100);
+    if (view->isWorkbenchDocked())
+        view->closeWorkbench();
     settle(100);
     return made->name() == name ? made : nullptr;
 }
@@ -4634,7 +4660,7 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
 
     // Part A: the steps sparkle -- an effect palette of the song's own.
     QLCPalette *sparkle = newEffectPalette(doc, view, "01-Everybody Scream", "Sparkle", "Step Sparkle",
-                                           shots, QStringLiteral("effect-picker"));
+                                           shots, QStringLiteral("effect-picker"), { "Steps" });
     LESSON_STEP(sparkle != nullptr, "the sparkle palette");
     LESSON_STEP(view->selectNode(cue), "select the dance break");
     settle(50);
@@ -4698,7 +4724,8 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
 
     // Part B: the truss washes, a wave of their blue (Rainbow: with one
     // colour in the look it sweeps that colour across the heads).
-    QLCPalette *wave = newEffectPalette(doc, view, "01-Everybody Scream", "Rainbow", "Truss Wave");
+    QLCPalette *wave = newEffectPalette(doc, view, "01-Everybody Scream", "Rainbow", "Truss Wave",
+                                        QString(), QString(), { "TrussW-RGB" });
     LESSON_STEP(wave != nullptr, "the wave palette");
     LESSON_STEP(view->selectNode(cue), "select the dance break");
     settle(50);
