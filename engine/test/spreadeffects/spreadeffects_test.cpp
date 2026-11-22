@@ -2179,7 +2179,7 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
         const double once = pieceMs(r, "cells") + pieceMs(r, "look base");
         QVERIFY2(r.hostMs > 0 && once <= 0.10 * r.hostMs,
                  qPrintable(QString("%1: the cells and the look's base values cost %2 of the"
-                                    " host's %3 ms a tick (%4 %%), more than a tenth")
+                                    " host's %3 ms a tick (%4 per cent), more than a tenth")
                                 .arg(r.what).arg(once, 0, 'f', 2).arg(r.hostMs, 0, 'f', 2)
                                 .arg(r.hostMs > 0 ? 100.0 * once / r.hostMs : 0.0, 0, 'f', 0)));
     }
