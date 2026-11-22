@@ -33,6 +33,7 @@
 class QXmlStreamReader;
 class QXmlStreamWriter;
 class EncoderBank;
+class Chaser;
 class Doc;
 
 /** @addtogroup engine Engine
