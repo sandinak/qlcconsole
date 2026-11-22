@@ -111,6 +111,14 @@ private slots:
      *  places are worked out once at that size. Lightning Spread's script
      *  costs no more than twice Fire Spread's, spreading. */
     void theStepBarsTickCost();
+    /** What the HOST costs a tick over the same 96 bars, piece by piece
+     *  (the cells, the look's base values, the per-head arguments, reading
+     *  the answers back), for an effect that says nothing and one that
+     *  colours every head: reported (QLC_SHOT_DIR gets the numbers) and
+     *  held to a budget. The script's own cost is theStepBarsTickCost's
+     *  business; this is what every effect on a big rig pays whatever it
+     *  draws. */
+    void theHostTickCostOverTheStepBars();
     /** Through the scene, the effect runner and the faders to DMX: a cue
      *  under the step bars plays blue; the spell's red reaches the pixels
      *  near its point and the rest stay blue. Last: its scenes are left

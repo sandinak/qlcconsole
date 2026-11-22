@@ -20,6 +20,8 @@
 #include <QFile>
 #include <QTextStream>
 #include <cmath>
+#include <ctime>
+#include <functional>
 
 #include "spreadeffects_test.h"
 #include "../common/stdprelude.h"
@@ -92,6 +94,43 @@ Fixture *place(Doc *doc, QLCFixtureDef *def, const QString &mode, const QString 
         return nullptr;
     doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, mm);
     return f;
+}
+
+/* The show's 96 step bars (6,144 pixel heads) as it stands them: three
+   sections of four steps, eight strips a step, two bars a universe. */
+QList<Fixture *> placeStepBars(Doc *doc, QLCFixtureDef *stepDef)
+{
+    QList<Fixture *> bars;
+    static const char *sections[] = { "US", "CS", "DS" };
+    for (int s = 0; s < 3; ++s)
+        for (int stepNo = 1; stepNo <= 4; ++stepNo)
+            for (int strip = 1; strip <= 8; ++strip)
+            {
+                const int n = bars.size();
+                Fixture *f = place(doc, stepDef, "ALL",
+                                   QString("%1%2 #%3").arg(sections[s]).arg(stepNo).arg(strip),
+                                   quint32(n / 2), quint32((n % 2) * 192),
+                                   QVector3D(2200.0f * (strip - 1) - 7700.0f,
+                                             3000.0f * s + 400.0f * stepNo, 0));
+                if (f == nullptr)
+                    return QList<Fixture *>();
+                bars << f;
+            }
+    return bars;
+}
+
+/* This thread's CPU time, in ns: what a tick costs itself, whatever else
+   the machine is doing (on a shared gate host wall-clock time swells under
+   another leg's load). Where there is no per-thread clock: wall-clock
+   time, as before. Same rule as EffectInstance_Test's budget. */
+qint64 threadCpuNs(const QElapsedTimer &wall)
+{
+#if defined(Q_OS_UNIX) && defined(CLOCK_THREAD_CPUTIME_ID)
+    struct timespec ts;
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
+        return qint64(ts.tv_sec) * 1000000000LL + qint64(ts.tv_nsec);
+#endif
+    return wall.nsecsElapsed();
 }
 
 QLCPalette *effectPalette(Doc *doc, const QString &script, const QVariantMap &set)
@@ -1822,21 +1861,8 @@ void SpreadEffects_Test::theStepBarsTickCost()
 {
     QLCFixtureDef *stepDef = loadDef(m_doc, kData + "PHS-Chorus-Step-Row-64.qxf");
     QVERIFY(stepDef != nullptr);
-    // 96 step bars as the show stands them: three sections of four steps,
-    // eight strips a step, two bars a universe.
-    QList<Fixture *> bars;
-    static const char *sections[] = { "US", "CS", "DS" };
-    for (int s = 0; s < 3; ++s)
-        for (int stepNo = 1; stepNo <= 4; ++stepNo)
-            for (int strip = 1; strip <= 8; ++strip)
-            {
-                const int n = bars.size();
-                Fixture *f = place(m_doc, stepDef, "ALL", QString("%1%2 #%3").arg(sections[s]).arg(stepNo).arg(strip),
-                                   quint32(n / 2), quint32((n % 2) * 192),
-                                   QVector3D(2200.0f * (strip - 1) - 7700.0f, 3000.0f * s + 400.0f * stepNo, 0));
-                QVERIFY(f != nullptr);
-                bars << f;
-            }
+    const QList<Fixture *> bars = placeStepBars(m_doc, stepDef);
+    QCOMPARE(bars.size(), 96);
 
     struct Cost { QString what; double tickMs = 0, scriptMs = 0; };
     QList<Cost> costs;
@@ -1963,6 +1989,169 @@ void SpreadEffects_Test::theStepBarsTickCost()
         if (out.open(QIODevice::WriteOnly | QIODevice::Text))
             QTextStream(&out) << lines.join("\n") << "\n";
     }
+}
+
+void SpreadEffects_Test::theHostTickCostOverTheStepBars()
+{
+    QLCFixtureDef *stepDef = loadDef(m_doc, kData + "PHS-Chorus-Step-Row-64.qxf");
+    QVERIFY(stepDef != nullptr);
+    const QList<Fixture *> bars = placeStepBars(m_doc, stepDef);
+    QCOMPARE(bars.size(), 96);
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    /* The two ends of what any spread hands back, head by head: nothing at
+       all (the fire has not reached it -- it keeps what is under it) and a
+       colour (all burning). Between them lies every effect's answer, so
+       what the host costs for both is what it costs for all. */
+    auto script = [&dir](const QString &name, const QString &intent) -> QString {
+        QFile f(dir.filePath(name + ".js"));
+        if (!f.open(QIODevice::WriteOnly))
+            return QString();
+        // It names palettes.look, so the host hands it the look's colour
+        // rather than painting that over what it returns.
+        f.write(QString("(function() { var e = {}; e.apiVersion = 1; e.name = 'T %1';"
+                        " /* palettes.look */ e.fixtureTypes = ['rgb'];"
+                        " e.tick = function(fx) { return fx.map(function() { return %2; }); };"
+                        " return e; })()").arg(name, intent).toUtf8());
+        return f.fileName();
+    };
+    const QString saysNothing = script(QStringLiteral("nothing"), QStringLiteral("{}"));
+    const QString saysColour = script(QStringLiteral("colour"), QStringLiteral("{ r: 255, g: 80, b: 0 }"));
+    QVERIFY(!saysNothing.isEmpty() && !saysColour.isEmpty());
+
+#ifdef QT_NO_DEBUG
+    const int ticks = qMax(12, qEnvironmentVariableIntValue("QLC_HOST_TICKS"));
+#else
+    const int ticks = qMax(4, qEnvironmentVariableIntValue("QLC_HOST_TICKS"));
+#endif
+    struct Piece { QString what; double ms = 0; };
+    struct Row { QString what; QList<Piece> pieces; double hostMs = 0, tickMs = 0; };
+    QList<Row> table;
+
+    auto measure = [&](const QString &what, const QString &path) -> bool {
+        QLCPalette *pal = new QLCPalette(QLCPalette::Effect, m_doc);
+        pal->setScriptPath(path);
+        pal->setEffectParamValue(EffectRuns::runsKey(), 0);         // Loop
+        m_doc->addPalette(pal);
+        Scene *scene = new Scene(m_doc);
+        m_doc->addFunction(scene);
+        for (Fixture *f : bars)
+            scene->addFixture(f->id());
+        /* As a cue carries it: a Colour BEFORE the effect is the base the
+           effect plays over (the show's blue under Fire Spread), so the
+           host works out every head's base value, as it does on the rig. */
+        scene->addPalette(colourPalette(m_doc, QColor(0, 0, 255))->id());
+        scene->addPalette(aimAt(m_doc, QVector3D(0.0f, 1.0f, 0))->id());
+        scene->addPalette(pal->id());
+        EffectInstance inst(m_doc, scene->id(), pal->id());
+        if (!inst.isValid())
+            return false;
+        inst.setOffStageClock(4000);
+        inst.runTick();                   // the first: the cells, the facts, the places
+
+        int cols = 1, gridRows = 1;
+        const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, gridRows);
+        if (cells.size() != 96 * 64)
+            return false;
+        // One answer, read again and again: what the host pays to read it.
+        QJSValue fixtures = inst.buildFixturesArray(cells, cols, gridRows);
+        QJSValue inputs = inst.buildInputsObject();
+        const QJSValue palettes = inst.buildPalettesObject();
+        const QJSValue params = inst.buildParamsObject();
+        QJSValue state = inst.m_script.newState();
+        const QJSValue data = inst.m_script.engine()->newObject();
+        inputs.setProperty("_time", 4.0);
+        const QJSValue answer = inst.m_script.callTick(fixtures, inputs, palettes, params, state, data);
+        if (!answer.isArray())
+            return false;
+        inst.collectGarbage();            // not a GC pause inside a measurement
+
+        QElapsedTimer clock;
+        clock.start();
+        /* The least of three runs: CPU time still swells when the machine
+           is busy (shared caches), and what is really slow stays slow in
+           every run (EffectInstance_Test's rule). */
+        auto best = [&](const std::function<void()> &run) {
+            double ms = 0;
+            for (int attempt = 0; attempt < 3; ++attempt)
+            {
+                const qint64 from = threadCpuNs(clock);
+                for (int i = 0; i < ticks; ++i)
+                    run();
+                const double one = double(threadCpuNs(clock) - from) / 1e6 / ticks;
+                ms = attempt == 0 ? one : qMin(ms, one);
+            }
+            return ms;
+        };
+        Row r;
+        r.what = what;
+        int c2 = 1, r2 = 1;
+        r.pieces << Piece{ QStringLiteral("cells"), best([&]() { inst.effectiveCells(c2, r2); }) };
+        r.pieces << Piece{ QStringLiteral("look base"), best([&]() { inst.buildSceneBaseValues(); }) };
+        r.pieces << Piece{ QStringLiteral("arguments"),
+                           best([&]() { inst.buildFixturesArray(cells, cols, gridRows); }) };
+        r.pieces << Piece{ QStringLiteral("answers"), best([&]() { inst.parseIntents(answer, cells); }) };
+        for (const Piece &pc : r.pieces)
+            r.hostMs += pc.ms;
+        qint64 at = 4000;
+        r.tickMs = best([&]() { inst.setOffStageClock(at += 20); inst.runTick(); });
+        table << r;
+        return true;
+    };
+    QVERIFY(measure(QStringLiteral("says nothing"), saysNothing));
+    QVERIFY(measure(QStringLiteral("every head a colour"), saysColour));
+
+#ifdef QT_NO_DEBUG
+    const QString build = QStringLiteral("release");
+#else
+    const QString build = QStringLiteral("debug");
+#endif
+    QStringList lines;
+    for (const Row &r : table)
+    {
+        QStringList parts;
+        for (const Piece &pc : r.pieces)
+            parts << QString("%1 %2").arg(pc.what).arg(pc.ms, 0, 'f', 2);
+        lines << QString("%1 build, 96 step bars x 64 (6144 heads), the host, %2:"
+                         " %3 ms a tick (%4; %5 us a head); whole tick %6 ms")
+                     .arg(build, r.what).arg(r.hostMs, 0, 'f', 2).arg(parts.join(", "))
+                     .arg(r.hostMs * 1000.0 / 6144.0, 0, 'f', 3).arg(r.tickMs, 0, 'f', 2);
+    }
+    for (const QString &l : lines)
+        qInfo().noquote() << l;
+
+    /* The budget. The host's own work -- the cells, the look's base values,
+       the per-head arguments and reading the answers -- runs on the GUI
+       thread 50 times a second, beside the rig view and the whole UI: at a
+       few ms a tick the operator sees the window go chunky (2026-11-17,
+       the uplights added to Fire Spread). Before perf/053-effect-host it
+       measured 2.4 ms saying nothing and 6.4 ms with every head a colour
+       on val (Intel, Release); 1 ms is the line both now sit well under.
+       An unoptimised build pays about three times as much, and CI's
+       instrumented leg (QLC_SLOW_BUILD) three times that again. */
+#ifdef __OPTIMIZE__
+    const double defaultBudget = 1.0;
+#else
+    const double defaultBudget = 3.0;
+#endif
+    const double budget = qEnvironmentVariableIsSet("QLC_HOST_TICK_BUDGET_MS")
+        ? qEnvironmentVariable("QLC_HOST_TICK_BUDGET_MS").toDouble()
+        : defaultBudget * (qEnvironmentVariableIsSet("QLC_SLOW_BUILD") ? 3.0 : 1.0);
+    // The numbers, brought back from the pool (check-all.sh --shots).
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        QFile out(QDir(shots).filePath(QString("host-tick-cost-%1.txt").arg(build)));
+        if (out.open(QIODevice::WriteOnly | QIODevice::Text))
+            QTextStream(&out) << lines.join("\n") << "\n";
+    }
+    if (budget > 0)
+        for (const Row &r : table)
+            QVERIFY2(r.hostMs <= budget,
+                     qPrintable(QString("the host costs %1 ms a tick over 6,144 heads (%2),"
+                                        " budget %3 ms")
+                                    .arg(r.hostMs, 0, 'f', 2).arg(r.what).arg(budget, 0, 'f', 2)));
 }
 
 QTEST_MAIN(SpreadEffects_Test)

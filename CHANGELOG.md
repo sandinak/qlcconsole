@@ -10,6 +10,18 @@ active work in [TODO.md](docs/project/TODO.md).
 Versions here are independent of the QLC+ base version embedded in the
 in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relate).
 
+## [Unreleased]
+
+### Changed
+
+- **Effects cost the host less on a big rig.** Over the show's 96 step bars
+  (6,144 pixel heads) the engine's own work for one effect frame -- the
+  cells, the look's base values, the arguments each head is handed and
+  reading its answer back -- fell from about 2.4 ms to under 0.6 ms a tick
+  when the effect draws nothing and from 6.4 ms to about 1 ms with every
+  head lit (Release, Intel). Nothing changes on the wire; the rig view and
+  the rest of the window stop going chunky while a spread runs.
+
 ## [0.5.2] - 2026-11-22
 
 0.5.2 is an effects and Show Tree release. If you only read one line: fire
