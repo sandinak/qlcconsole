@@ -34353,6 +34353,38 @@ void Monitor_Test::aLiveHeadsTurnIsSaidFirst()
     QCOMPARE(a.turnAfter, 1);
 }
 
+/* A Facing is how the head HANGS. Written while the head is live, every look
+   is worked out from it at once, so the beam points somewhere else until
+   someone turns the head on its pipe -- a stage left dark or lit in the wrong
+   place mid-show. faceAndCentreOnStage leaves a live head's Facing alone. */
+void Monitor_Test::aLiveHeadsFacingIsLeftAlone()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    MonitorProperties *props = m_doc->monitorProperties();
+    const float was = props->fixtureRigProps(fid).panZeroDir;
+    QMap<quint32, float> facing;
+    facing.insert(fid, was + 245.0f);          // the far side of the round
+
+    // Design, nothing running: the Facing is written, as the fix means it.
+    QVERIFY(!PanTurn::isLive(m_doc, fid));
+    QVERIFY(!rig.mon->faceAndCentreOnStage(facing, { fid }).isEmpty());
+    QCOMPARE(qRound(props->fixtureRigProps(fid).panZeroDir), qRound(was + 245.0f));
+
+    // Put it back, then go live: the Facing is left alone.
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.panZeroDir = was;
+    rp.panTurn = 0;
+    props->setFixtureRigProps(fid, rp);
+    m_doc->setMode(Doc::Operate);
+    auto design = qScopeGuard([this]() { m_doc->setMode(Doc::Design); });
+    QVERIFY(PanTurn::isLive(m_doc, fid));
+    rig.mon->faceAndCentreOnStage(facing, { fid });
+    QCOMPARE(qRound(props->fixtureRigProps(fid).panZeroDir), qRound(was));
+}
+
 /* For a selection (the plot's menu, Fixture Properties for several):
    every head centred, one undo step, said on the notice line. */
 void Monitor_Test::centringASelectionIsOneUndoStep()

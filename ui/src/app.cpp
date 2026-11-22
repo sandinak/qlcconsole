@@ -11226,7 +11226,7 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
        Facing is how the head hangs, so the head is re-hung to match -- and
        done here, with the pan turns, as one step. No window to go to. */
     QMap<quint32, float> facings;
-    QStringList facingLines;
+    QStringList facingLines, heldBack;
     for (quint32 fid : stuck)
     {
         float room = 0.0f;
@@ -11236,6 +11236,21 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
         if (qAbs(to - rp.panZeroDir) < 0.01f)
         {
             // No Facing does better: its best turn is all there is.
+            if (PanTurn::info(m_doc, fid).improves())
+            {
+                fids << fid;
+                lines << PanTurn::changeText(m_doc, fid, rp.panTurn, PanTurn::proposal(m_doc, fid));
+            }
+            continue;
+        }
+        /* A Facing is how the head HANGS: its looks are worked out from it at
+           once, so until someone turns the head on its pipe every beam points
+           somewhere else. Never that to a live head -- Monitor::proposePanTurns
+           keeps the same rule for a turn, and faceAndCentreOnStage refuses it
+           too. Its own best turn is still offered. */
+        if (PanTurn::isLive(m_doc, fid))
+        {
+            heldBack << (fx != nullptr ? fx->name() : QString::number(fid));
             if (PanTurn::info(m_doc, fid).improves())
             {
                 fids << fid;
@@ -11255,16 +11270,28 @@ bool App::centrePansFromReview(QWidget *parent, const QVariantList &data)
     }
     if (fids.isEmpty())
     {
-        // Nothing does better, even facing it another way: say so, here.
+        /* Nothing does better, even facing it another way -- or the only fix
+           left is a live head's Facing, which waits for the show to stop. */
         QMessageBox::information(parent != nullptr ? parent : this, tr("Centre the Pan on Stage"),
-                                 tr("No Facing or pan turn keeps the seam off this stage: the stage fills "
-                                    "too much of the round from where the head hangs. Move the head, or "
-                                    "mark the finding Not a Problem."));
+                                 heldBack.isEmpty()
+                                     ? tr("No Facing or pan turn keeps the seam off this stage: the stage fills "
+                                          "too much of the round from where the head hangs. Move the head, or "
+                                          "mark the finding Not a Problem.")
+                                     : tr("%1 is live, and the only fix left is its Facing -- how the head hangs "
+                                          "on its pipe. It waits until the show is not running.")
+                                           .arg(heldBack.join(QStringLiteral(", "))));
         m_doc->showReview()->run();
         return true;
     }
     if (!facingLines.isEmpty())
         lines << facingLines;
+    if (!heldBack.isEmpty())
+        lines << (heldBack.size() > 1
+                      ? tr("%1 are live: their Facings are left as they are -- turning a head on its pipe "
+                           "is rig work, not for a live beam.")
+                      : tr("%1 is live: its Facing is left as it is -- turning a head on its pipe is rig "
+                           "work, not for a live beam."))
+                     .arg(heldBack.join(QStringLiteral(", ")));
     QMessageBox box(parent != nullptr ? parent : this);
     box.setObjectName(QStringLiteral("centrePanConfirm"));
     box.setIcon(live.isEmpty() ? QMessageBox::Question : QMessageBox::Warning);

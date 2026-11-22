@@ -2084,6 +2084,12 @@ QStringList Monitor::faceAndCentreOnStage(const QMap<quint32, float> &facings, c
     const QByteArray before = rigSnapshot();
     for (auto it = facings.constBegin(); it != facings.constEnd(); ++it)
     {
+        /* A Facing is a physical re-hang: written to a live head it points
+           every look somewhere else until someone turns the head on its pipe.
+           Refused here as well as in the caller, so no path can do it
+           (proposePanTurns keeps the same rule for a turn). */
+        if (PanTurn::isLive(m_doc, it.key()))
+            continue;
         FixtureRigProps rp = m_props->fixtureRigProps(it.key());
         if (qAbs(rp.panZeroDir - it.value()) < 0.01f)
             continue;
