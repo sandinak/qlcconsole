@@ -17,10 +17,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Effects cost the host less on a big rig.** Over the show's 96 step bars
   (6,144 pixel heads) the engine's own work for one effect frame -- the
   cells, the look's base values, the arguments each head is handed and
-  reading its answer back -- fell from about 2.4 ms to under 0.6 ms a tick
-  when the effect draws nothing and from 6.4 ms to about 1 ms with every
-  head lit (Release, Intel). Nothing changes on the wire; the rig view and
-  the rest of the window stop going chunky while a spread runs.
+  reading its answer back -- fell from about HOST_BEFORE_NOTHING ms to
+  HOST_AFTER_NOTHING ms a tick when the effect draws nothing, and from
+  HOST_BEFORE_LIT ms to HOST_AFTER_LIT ms with every head lit (Release, on
+  an Intel Mac); a whole Fire Spread frame over that rig went from 25 ms to
+  TICK_AFTER_FIRE ms. Nothing changes on the wire; the rig view and the rest
+  of the window stop going chunky while a spread runs.
 
 ## [0.5.2] - 2026-11-22
 
