@@ -60,9 +60,9 @@ STYLE = """<style>
 .qc-top{font-size:.85em}
 .qc-example img{max-height:420px;width:auto}
 .wp-block-post-content img{max-width:100%;height:auto}
-.qc-thumb{display:inline-block;margin:.4em 1em .8em 0;max-width:320px;vertical-align:top}
+.qc-thumb{display:table;margin:.6em auto 1em auto;max-width:320px}
 .wp-block-post-content .qc-thumb img{max-width:320px;max-height:240px;width:auto;height:auto;display:block;border:1px solid rgba(127,127,127,.35);border-radius:6px;cursor:zoom-in}
-.qc-thumb figcaption{font-size:.8em;opacity:.75;margin-top:.3em;line-height:1.3}
+.qc-thumb figcaption{font-size:.8em;opacity:.75;margin-top:.3em;line-height:1.3;text-align:center}
 .wp-block-post-content table{border-collapse:collapse}
 .wp-block-post-content td,.wp-block-post-content th{border:1px solid rgba(127,127,127,.35);padding:.35em .6em;vertical-align:top}
 </style>"""
