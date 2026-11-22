@@ -302,6 +302,12 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
 
 Workbench::~Workbench()
 {
+    /* Nothing may call back into a half-gone Workbench: the effect designer
+       in the editor pane drops its hidden preview scene as it is destroyed
+       (with our children), and the show's signals would reach us with that
+       pane already freed. */
+    if (m_doc != nullptr)
+        m_doc->disconnect(this);
     // A page the back end lent goes back before it would go with us.
     releaseLentPane();
     stopPreview();
@@ -577,7 +583,15 @@ void Workbench::buildAddBar(QWidget *column)
     designLook->setObjectName(QStringLiteral("workbenchDesignEffect"));
     designLook->setToolTip(tr("Design an effect palette and make it a layer here, beside the effects "
                               "already there (a movement and an intensity effect together)"));
-    connect(designLook, &QAction::triggered, this, [this]() { designEffect(EffectRequest()); });
+    connect(designLook, &QAction::triggered, this, [this]() {
+        /* On a Show Tree cue this designs the SELECTED LAYER's effect --
+           what the tooltip has always said -- and only elsewhere (a Build
+           collection, a scene) the bench, whose Make a layer puts it here
+           (board Q263). */
+        if (qobject_cast<TreeCueStack *>(m_stack) != nullptr && designEffect())
+            return;
+        designEffect(EffectRequest());
+    });
     effectMenu->addSection(tr("QLC+ effects (EFX, RGB Matrix)"));
     m_addEfxBtn = effectMenu->addAction(QIcon(QStringLiteral(":/efx.png")), tr("EFX"));
     m_addEfxBtn->setObjectName(QStringLiteral("workbenchAddEfx"));
@@ -944,42 +958,72 @@ bool Workbench::backOut()
         m_rows->setFocus(Qt::OtherFocusReason);
         return true;
     }
-    // The effect bench: left as clicking away leaves it (its draft goes with
-    // the designer, as its Cancel), back to the scene it was opened from --
-    // asked first when what is designed hasn't been kept.
-    if (m_benchPane && effectPane() != nullptr)
+    /* The effect designer in the editor pane: left as clicking away leaves
+       it (its draft goes with the designer, as its Cancel) -- asked first
+       when what is designed hasn't been kept (board Q263). The bench goes
+       back to the scene it was opened from; a cue layer's goes back to that
+       layer's page, with the cue still loaded. */
+    if (effectPane() != nullptr)
     {
+        if (keepsDesigning())
+            return true;        // Esc was answered: still designing
         EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane());
-        if (ed != nullptr && ed->hasUnkeptChanges())
-        {
-            const QString title = tr("Effect designer");
-            const QString text = tr("Leave the effect designer? This effect hasn't been kept.");
-            bool leave = false;
-            if (m_confirm)
-                leave = m_confirm(title, text);
-            else
-            {
-                QMessageBox box(QMessageBox::Question, title, text, QMessageBox::NoButton, this);
-                QPushButton *keep = box.addButton(tr("Keep designing"), QMessageBox::RejectRole);
-                QPushButton *go = box.addButton(tr("Leave"), QMessageBox::DestructiveRole);
-                box.setDefaultButton(keep);
-                box.setEscapeButton(keep);
-                box.exec();
-                leave = box.clickedButton() == go;
-            }
-            if (!leave)
-                return true;        // Esc was answered: still designing
-        }
+        if (ed != nullptr)
+            ed->cancel();       // nothing kept: the draft goes, as Cancel
         const quint32 scene = m_benchFromScene;
-        clear();
-        if (m_doc->function(scene) != nullptr)
-            load(scene);
-        else if (m_returnTo)
-            m_returnTo();
+        const int layer = m_rows->layerOf(m_rows->currentItem());
+        m_effectPaneRow.clear();
+        if (m_benchPane && qobject_cast<TreeCueStack *>(m_stack) == nullptr)
+        {
+            clear();
+            if (m_doc->function(scene) != nullptr)
+                load(scene);
+            else if (m_returnTo)
+                m_returnTo();
+        }
+        else if (layer >= 0)
+        {
+            // The layer's own page (not its Effect row, which would open the
+            // designer again). Shown even when that row was already the
+            // current one, where selecting it changes nothing.
+            selectLayer(layer);
+            slotRowsSelectionChanged();
+        }
+        else
+        {
+            slotRowsSelectionChanged();
+        }
         m_rows->setFocus(Qt::OtherFocusReason);
         return true;
     }
     return goBack();
+}
+
+bool Workbench::keepsDesigning()
+{
+    EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane());
+    if (m_askingLeave || ed == nullptr || !ed->hasUnkeptChanges())
+        return false;
+    const QString title = tr("Effect designer");
+    const QString text = tr("Leave the effect designer? This effect hasn't been kept.");
+    m_askingLeave = true;
+    bool leave = false;
+    if (m_confirm)
+    {
+        leave = m_confirm(title, text);
+    }
+    else
+    {
+        QMessageBox box(QMessageBox::Question, title, text, QMessageBox::NoButton, this);
+        QPushButton *keep = box.addButton(tr("Keep designing"), QMessageBox::RejectRole);
+        QPushButton *go = box.addButton(tr("Leave"), QMessageBox::DestructiveRole);
+        box.setDefaultButton(keep);
+        box.setEscapeButton(keep);
+        box.exec();
+        leave = box.clickedButton() == go;
+    }
+    m_askingLeave = false;
+    return !leave;
 }
 
 void Workbench::keyPressEvent(QKeyEvent *ev)
@@ -1272,7 +1316,18 @@ void Workbench::updateAddBar()
     m_addSceneBtn->setEnabled(add);
     m_addSceneBtn->setToolTip(add ? tr("Add a scene from the show as a layer (the menu: a new empty one)") : why);
     m_addEffectBtn->setEnabled(add);
-    m_addEffectBtn->setToolTip(add ? tr("A new EFX or RGB Matrix, added as a layer") : why);
+    m_addEffectBtn->setToolTip(add ? tr("An effect palette, an EFX or an RGB Matrix, added here") : why);
+    /* + Effect ▾ → Effect Palette…: on a Show Tree cue it designs the
+       selected layer's effect in the pane (board Q263); in a Build
+       collection or scene it is the bench, and Make a layer puts it here. */
+    if (QAction *design = m_addEffectBtn->menu() == nullptr
+            ? nullptr
+            : m_addEffectBtn->menu()->findChild<QAction *>(QStringLiteral("workbenchDesignEffect")))
+        design->setToolTip(qobject_cast<TreeCueStack *>(m_stack) != nullptr && layer >= 0
+                           ? tr("Design an effect for the selected layer, beside the effects it already "
+                                "has (a movement and an intensity effect together)")
+                           : tr("Design an effect palette and make it a layer here, beside the effects "
+                                "already there (a movement and an intensity effect together)"));
     m_addEfxBtn->setEnabled(add);
     m_addEfxBtn->setToolTip(!add ? why
                             : hasGroups ? tr("A new EFX on the selected layer's fixtures, added after it")
@@ -1620,6 +1675,38 @@ void Workbench::updateOverview()
 
 void Workbench::slotRowsSelectionChanged()
 {
+    if (m_askingLeave)
+        return;             // the selection is being put back: nothing moves
+    /* An effect is being designed in the pane and another row was clicked:
+       the draft would go with the pane, so ask first (board Q263). Keep
+       designing puts the selection back on the row being designed. */
+    if (!m_effectPaneRow.isEmpty() && effectPane() != nullptr)
+    {
+        QTreeWidgetItem *now = m_rows->currentItem();
+        const QString key = now == nullptr ? QString()
+                                           : now->data(0, ProgrammingOutline::KeyRole).toString();
+        if (key != m_effectPaneRow)
+        {
+            if (keepsDesigning())
+            {
+                const QString back = m_effectPaneRow;
+                m_askingLeave = true;
+                for (QTreeWidgetItemIterator it(m_rows); *it; ++it)
+                    if ((*it)->data(0, ProgrammingOutline::KeyRole).toString() == back)
+                    {
+                        m_rows->clearSelection();
+                        m_rows->setCurrentItem(*it);
+                        (*it)->setSelected(true);
+                        break;
+                    }
+                m_askingLeave = false;
+                return;
+            }
+            if (EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane()))
+                ed->cancel();       // nothing kept: the draft goes with the pane
+            m_effectPaneRow.clear();
+        }
+    }
     /* The editor pane follows the rows: a scene row edits the scene, a look
        row its palette (the Look Editor), a target row its channels, a ▣ row
        its function's stock editor. With several rows selected, the current
@@ -1801,6 +1888,7 @@ void Workbench::loadCanvas(quint32 sceneId)
 
 void Workbench::clearEditors()
 {
+    m_effectPaneRow.clear();    // no designer here now (hostEffectPane sets it)
     releaseLentPane();
     if (m_canvas != nullptr)
     {
@@ -1950,6 +2038,15 @@ void Workbench::editPalette(quint32 paletteId)
 {
     if (m_doc->palette(paletteId) == nullptr)
         return;
+    /* A designer in the pane goes first: its draft and hidden preview must
+       not play on under the Look Editor (board Q264, where an effect
+       palette opens in the designer and any other type here). */
+    if (effectPane() != nullptr)
+    {
+        if (EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane()))
+            ed->cancel();
+        clearEditors();
+    }
     /* From a fixture group's layout: that fills the pane, and the look
        editor opened under it had no room. Go back to the scene first. */
     if (!m_groupBackButton->isHidden() && m_doc->function(m_groupReturnScene) != nullptr)
@@ -2784,15 +2881,50 @@ bool Workbench::designEffect()
     const QList<WorkbenchStack::Layer> layers = m_stack->layers();
     if (layer < 0 || layer >= layers.size())
         return false;
+    QString key;
+    quint32 palette = QLCPalette::invalidId();
+    if (row.kind == ProgrammingOutline::AttributeRow && int(row.id) < layers.at(layer).attributes.size())
+    {
+        key = layers.at(layer).attributes.at(int(row.id)).key;
+        palette = layers.at(layer).attributes.at(int(row.id)).palette;
+    }
+    return designEffectForLayer(layer, key, palette);
+}
+
+bool Workbench::designEffectOn(quint32 cueId, quint32 layerId, const QString &signature, const QString &key)
+{
+    TreeCueStack *cs = qobject_cast<TreeCueStack *>(m_stack);
+    if (!s_effectPane || cs == nullptr || cs->cueId() != cueId)
+        return false;
+    const int layer = cs->indexOfLayer(layerId, signature);
+    const QList<WorkbenchStack::Layer> layers = cs->layers();
+    if (layer < 0 || layer >= layers.size())
+        return false;
+    // The layer the caller means is selected, as if it had been clicked:
+    // the tree beside the dock follows it, and ↩ comes back to it.
+    selectLayer(layer);
+    quint32 palette = QLCPalette::invalidId();
+    if (!key.isEmpty() && key != QLatin1String("Effect."))
+        for (const WorkbenchStack::Layer::Attribute &a : layers.at(layer).attributes)
+            if (a.key == key)
+                palette = a.palette;
+    return designEffectForLayer(layer, key, palette);
+}
+
+bool Workbench::designEffectForLayer(int layer, const QString &key, quint32 palette)
+{
+    const QList<WorkbenchStack::Layer> layers = m_stack == nullptr ? QList<WorkbenchStack::Layer>()
+                                                                   : m_stack->layers();
+    if (!s_effectPane || layer < 0 || layer >= layers.size())
+        return false;
     EffectRequest req;
     req.cueId = layers.at(layer).cueId;
     req.layerId = layers.at(layer).layerId;
     req.targetSignature = layers.at(layer).targetSignature;
-    if (row.kind == ProgrammingOutline::AttributeRow && int(row.id) < layers.at(layer).attributes.size())
-    {
-        req.key = layers.at(layer).attributes.at(int(row.id)).key;
-        req.palette = layers.at(layer).attributes.at(int(row.id)).palette;
-    }
+    if (TreeCueStack *cs = qobject_cast<TreeCueStack *>(m_stack))
+        req.target = cs->targetAt(layer);
+    req.key = key;
+    req.palette = palette;
     QWidget *w = s_effectPane(this, req, m_functionPage);
     if (w == nullptr)
         return false;
@@ -2829,8 +2961,13 @@ bool Workbench::designEffect(const EffectRequest &request)
             req.fromScene = loadedFunction();
         }
     }
-    // The bench: nothing loaded behind it, so its preview is the only one playing.
-    clear();
+    /* The bench: nothing loaded behind it, so its preview is the only one
+       playing -- except docked in the Show Tree (board Q264: the Library's
+       + Palette ▸ Effect and Edit Effect open the designer here), where the
+       cue stays loaded and plays in context behind it, and ↩ comes back to
+       its page. */
+    if (qobject_cast<TreeCueStack *>(m_stack) == nullptr)
+        clear();
     m_benchFromCue = req.fromCue;
     m_benchFromScene = req.fromScene;
     QWidget *w = s_effectPane(this, req, m_functionPage);
@@ -2845,6 +2982,12 @@ bool Workbench::designEffect(const EffectRequest &request)
 void Workbench::hostEffectPane(QWidget *pane, const QString &heading, bool bench)
 {
     clearEditors();
+    // The row it is designing for: clicking another one asks before the
+    // draft goes (keepsDesigning()).
+    QTreeWidgetItem *cur = m_rows->currentItem();
+    const bool cue = qobject_cast<TreeCueStack *>(m_stack) != nullptr;
+    m_effectPaneRow = cur == nullptr || (bench && !cue)
+                          ? QString() : cur->data(0, ProgrammingOutline::KeyRole).toString();
     m_groupBackButton->hide();
     m_funcEditor = pane;
     m_effectPane = pane;
@@ -2862,6 +3005,16 @@ void Workbench::setSolo(bool solo)
     m_stack->setSolo(solo);
     syncStackPreview();
     updateOnRig();
+    /* Whoever asked -- the header's Solo, or the effect designer's
+       In Context / Solo in the pane (board Q263) -- both read the stack, so
+       they never disagree. */
+    if (m_soloBtn != nullptr)
+    {
+        QSignalBlocker block(m_soloBtn);
+        m_soloBtn->setChecked(solo);
+    }
+    if (EffectDesigner *ed = qobject_cast<EffectDesigner *>(effectPane()))
+        ed->setSolo(solo);
 }
 
 bool Workbench::isSolo() const

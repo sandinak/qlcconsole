@@ -21,7 +21,8 @@ Students can:
 
 1. say when an effect serves a song (energy, rhythm, a peak) and when it
    pulls focus, and keep effects on the scenery, not on faces;
-2. make an **effect palette** (+ Palette → Effect, the browser, a name) in
+2. make an **effect palette** (+ Palette → Effect, the designer, Save in
+   This Show) in
    the song's folder and put it on a layer;
 3. give an effect **its own colour**.
 
@@ -78,8 +79,11 @@ On the projector:
 1. Make **1.0.6 Dance Break** (Block) with the three still layers (steps
    1–6). Point out: nothing moves.
 2. Click the song's folder in the Library, **+ Palette → Effect**. The
-   browser opens by itself. Search `Sparkle`, pick
-   **Sparkle · Dimmer**, **Done**. Name it `Step Sparkle`.
+   **effect designer** fills the page's place. Click **Try on**, pick
+   **Steps**, search `Sparkle`, pick **Sparkle · Dimmer** — *the steps
+   twinkle before it has a name*. That is the point of the lesson: see it,
+   then keep it. **Save in This Show…**, and type `Step Sparkle` where the
+   Library opens its name.
    Point at the **Built-in · Mine · This show** buttons and the grey
    **based on Sparkle** line: a show's own effects stay traceable to the
    effect they came from. Runs defaults to Loop; leave it.
@@ -177,9 +181,10 @@ Every step of the handout is run by the course test (`ui/test/courseshow`,
 `levelTwoWithTheMouse`, `lessonTwoFourExtension`, `lessonTwoFourStageChase`) on the real app,
 offscreen, with the effect scripts the app ships with: the drops and
 their hints, **+ Palette → Effect** with the song folder selected (the
-palette is filed there), the effect browser (it opens on its own; the
-search, the click on *Sparkle · Dimmer* and *Rainbow*, **Done**), the
-Look Editor's Name, **⋯ → Its Own Colour / Dimmer**, and what the rig
+designer opens, and **Save in This Show…** files the palette there), the
+designer's browser (the search, the click on *Sparkle · Dimmer* and
+*Rainbow*), **Try on**, the name typed in the Library,
+**⋯ → Its Own Colour / Dimmer**, and what the rig
 sends: the steps still, then twinkling, with white pixels among them;
 the truss boxes still, then a moving wave; the step tops still
 throughout. The extension's Speed and the footer's **Main Speed 120**,

@@ -29,28 +29,44 @@ Each setting has a slider and, beside it, its number. Click the number
 and type an exact value, in the setting's own units (a rate in cycles a
 second, a level from 0 to 1); **Return** sets it and the slider follows.
 
-Open it from any of three places:
+It is always the **Workbench's editor pane** — docked in the Show Tree in
+place of the cue's page, or in Build — never a window of its own. It comes
+in two shapes: **on a layer**, playing on that layer's lights, and on the
+**bench**, playing on the **Try on ▾** groups (remembered between
+sessions) for an effect that has no home yet.
 
-- **On a Show Tree layer.** Right-click a layer and choose **Design
-  effect…**, or use **Design Effect…** in the ⋯ menu of a layer's Effect
-  row. The designer plays on that layer's fixtures. The layer's own colour
-  and dimmer play under the effect, so it looks as it will in the cue.
-  **In Context** keeps the rest of the cue playing; **Solo** plays only the
-  effect.
-- **Build ▸ Effects** (Everything view; the Library's **Effects** heading in the qlcconsole view). **+ New**, or click an effect palette: the
-  designer opens in the Workbench's editor pane, on the **bench**
-  described next. Right-click an effect for the palette menu it has everywhere:
-  Edit Effect, Runs ▸, Used By ▸, Move to Folder ▸, Duplicate, Rename and
-  Delete Palette…. See [Making effects](build.md#making-effects).
-- Build ▸ Effects (in the qlcconsole view, the Library's Effects) is effects' one home: no window of their own any more.
-  **Try on ▾** on the bench picks the groups it plays on, and it
-  remembers them.
+Open it from any of these places:
+
+- **On a Show Tree layer.** Right-click the layer → **Design Effect…**,
+  the ⋯ menu of its **Effect** row → **Design (a New) Effect…**, or **✎**
+  on that row. The Workbench docks in place of the cue's page and the
+  designer fills its editor pane, playing on that layer's fixtures. The
+  layer's own colour and dimmer play under the effect, so it looks as it
+  will in the cue. **In Context** keeps the rest of the cue playing;
+  **Solo** plays that layer alone — the same Solo as the Workbench
+  header's, so the two never disagree. **↩ Show Tree** puts the page back.
+- **The Library's effect palettes** (qlcconsole view). **+ Palette ▸
+  Effect** opens the designer on the bench: pick an effect, watch it on the
+  lights, then **Save in This Show…** names and files it. Nothing is made
+  until you keep it. Right-click an effect palette → **Edit Effect** opens
+  the designer on that palette, where **Update “name”** writes the design
+  back into it. (Every other palette type opens in the Look Editor, as
+  before.)
+- **Build ▸ Effects** (Everything view). **+ New**, or click an effect
+  palette: the same designer, on the bench. Right-click an effect for the
+  palette menu it has everywhere: Edit Effect, Runs ▸, Used By ▸, Move to
+  Folder ▸, Duplicate, Rename and Delete Palette…. See
+  [Making effects](build.md#making-effects).
+- **The Workbench's + Effect ▾ → Effect Palette…**. On a Show Tree cue it
+  designs the **selected layer's** effect, beside the effects that layer
+  already has; in a Build collection or scene it is the bench, and
+  **Make a Layer ▾** puts what you design there.
 
 The designer works on a copy, so nothing in the show changes until you
 pick one of these. **While the effect plays** — in a cue on stage, a
 scene in Build — your changes show on the rig at once (speed, size,
-colours, any setting, another effect picked); **Cancel** puts it back as
-it was, **Update** keeps them.
+colours, any setting, another effect picked); **leaving** the designer
+puts it back as it was, **Update** keeps them.
 
 - **Keep on This Layer** (on a layer): a one-off for that layer, named
   after the effect and the cue ("Color Chase · 0.0.3 Announcer
@@ -78,11 +94,13 @@ it was, **Update** keeps them.
   browser's presets on this computer (**Mine**), and the palette then
   plays that effect. An effect of the same name is replaced only if you
   say so. To take it to another computer, use **Export…**.
-- **Cancel** (or closing the window) throws the copy away. The show is
-  left as it was, and a show that was saved stays saved. On the bench in
-  Build, **Esc** goes back to the scene you came from and asks first if
-  the effect hasn't been kept
-  ([Backing out](build.md#backing-out-esc)).
+- **↩** (the Workbench's back) and **Esc** leave the designer and throw
+  the copy away. The show is left as it was, and a show that was saved
+  stays saved. A design nobody has kept is never dropped in silence: they
+  ask first (**Keep designing** / **Leave**), and so does clicking another
+  layer, another row or another cue while you are designing
+  ([Backing out](build.md#backing-out-esc)). Leaving the tab drops the
+  draft, as closing a window did.
 
 ### Where an effect came from
 

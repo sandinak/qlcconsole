@@ -43,6 +43,9 @@
 #include "showtreecontroller.h"
 #include "monitor/monitor.h"
 #include "lookeditor.h"
+#include "effectdesigner.h"
+#include "paletteops.h"
+#include "qlcpalette.h"
 #include "workbench.h"
 #include "treecuestack.h"
 #include "function.h"
@@ -324,6 +327,153 @@ bool ShowTreeView::closeWorkbench()
     return true;
 }
 
+/****************************************************************************
+ * W4: the effect designer in the pane (board Q263, Q264). There is no modal
+ * "Design effect" window any more: every door docks the Workbench and
+ * puts the designer in its editor pane -- on a cue layer's own fixtures, or
+ * on the bench for an effect that has no home yet.
+ ****************************************************************************/
+
+bool ShowTreeView::designEffectOnLayer(quint32 cueId, quint32 layerId, const Target &target,
+                                       const QString &key)
+{
+    if (m_st.isNull() || m_st->cue(cueId) == nullptr)
+        return false;
+    // Another effect being designed and not kept: asked before it goes.
+    if (Workbench *open = dockedWorkbench())
+        if (open->keepsDesigning())
+            return false;
+    const Cue *cue = m_st->cue(cueId);
+    // A layer carried into this cue has no id of its own here: its target
+    // names it (a value kept on it makes it the cue's own, as the tree does).
+    const bool own = cue->layer(layerId) != nullptr;
+    const quint32 lid = own ? layerId : invalidId();
+    const QString signature = own ? QString() : target.signature();
+    if (!openInWorkbench(cueId, lid, signature))
+        return false;
+    Workbench *bench = dockedWorkbench();
+    if (bench == nullptr || !bench->designEffectOn(cueId, lid, signature, key))
+    {
+        m_hint->setText(tr("Select the layer to design an effect for"));
+        return false;
+    }
+    followDesignerIntoTheLibrary(qobject_cast<EffectDesigner *>(bench->effectPane()), false);
+    m_hint->setText(tr("Designing the effect for %1: Keep on This Layer, or Save in This Show "
+                       "(↩ Show Tree puts the page back)").arg(m_st->targetLabel(target)));
+    updateButtons();
+    return true;
+}
+
+void ShowTreeView::followDesignerIntoTheLibrary(EffectDesigner *designer, bool nameNewOnes)
+{
+    if (designer == nullptr)
+        return;
+    connect(designer, &EffectDesigner::effectChosen, this,
+            [this, nameNewOnes](quint32 paletteId, const QList<quint32> &, EffectDesigner::Outcome outcome) {
+        if (outcome == EffectDesigner::OneOff)
+            return;             // a one-off is the cue's, never listed in All
+        /* Deferred: the designer lets go of its hidden preview scene right
+           after this, and a function leaving the show reloads the Library
+           -- which would throw away the row we just opened to type in. */
+        QTimer::singleShot(0, this, [this, paletteId, outcome, nameNewOnes]() {
+            const QLCPalette *p = m_doc->palette(paletteId);
+            if (p == nullptr)
+                return;
+            reloadLibrary();
+            selectLibraryPalette(paletteId);
+            if (outcome == EffectDesigner::NewPalette && nameNewOnes)
+            {
+                // Saved under the effect's name: the name is open to type
+                // over, as Build ▸ Effects opens it (no name box first).
+                m_hint->setText(tr("Saved in this show as “%1”: type its name").arg(p->name()));
+                startLibraryRename();
+            }
+            else
+            {
+                paletteEdited(paletteId, true);
+            }
+        });
+    });
+}
+
+QList<quint32> ShowTreeView::effectTryOnGroups() const
+{
+    QList<quint32> groups;
+    if (m_st.isNull())
+        return groups;
+    auto add = [this, &groups](const Target &t) {
+        for (quint32 g : t.groups)
+            if (!groups.contains(g))
+                groups << g;
+        for (quint32 sid : t.sets)
+            if (const GroupSet *gs = m_st->groupSet(sid))
+                for (quint32 g : gs->groups)
+                    if (!groups.contains(g))
+                        groups << g;
+    };
+    const quint32 cueId = currentCueId();
+    const Cue *cue = cueId == invalidId() ? nullptr : m_st->cue(cueId);
+    if (cue == nullptr)
+        return groups;
+    // The selected layer's groups; else every layer of the selected cue, so
+    // a new effect plays on something the person can see.
+    if (currentKind() == LayerNode)
+        if (const Layer *l = cue->layer(currentId()))
+            add(l->target);
+    if (groups.isEmpty())
+        for (const Layer &l : cue->layers)
+            add(l.target);
+    return groups;
+}
+
+bool ShowTreeView::designEffectPalette(quint32 paletteId)
+{
+    const QLCPalette *p = m_doc->palette(paletteId);
+    if (paletteId != QLCPalette::invalidId() && (p == nullptr || p->type() != QLCPalette::Effect))
+        return false;           // every other type is the Look Editor's (Q264)
+    // Another effect being designed and not kept: asked before it goes.
+    if (Workbench *open = dockedWorkbench())
+        if (open->keepsDesigning())
+            return false;
+    // Read before docking: docking moves the tree's selection about.
+    const QList<quint32> tryOn = effectTryOnGroups();
+    const quint32 cueId = currentCueId();
+    const bool onCue = cueId != invalidId() && !m_st.isNull() && m_st->cue(cueId) != nullptr;
+    if (onCue)
+    {
+        // Docked on the cue: the effect plays in context, and Make a Layer
+        // can put it straight on it.
+        const bool layer = currentKind() == LayerNode;
+        if (!openInWorkbench(cueId, layer ? currentId() : invalidId()))
+            return false;
+    }
+    else if (!dockWorkbench())
+    {
+        return false;
+    }
+    Workbench *bench = dockedWorkbench();
+    if (bench == nullptr)
+        return false;
+    Workbench::EffectRequest req;
+    req.palette = paletteId;
+    req.fromCue = onCue ? cueId : invalidId();
+    req.tryOn = tryOn;
+    // Saved where the Library stands (the song's folder), as + Palette does.
+    const QString where = libraryPaletteFolder();
+    if (!where.isEmpty())
+        req.folder = PaletteOps::pathForFolder(where);
+    if (!bench->designEffect(req))
+        return false;
+    followDesignerIntoTheLibrary(qobject_cast<EffectDesigner *>(bench->effectPane()), true);
+    m_hint->setText(p != nullptr
+                    ? tr("Designing “%1”: Update it, or Save in This Show as a new one beside it "
+                         "(↩ Show Tree puts the page back)").arg(p->name())
+                    : tr("Designing a new effect: Try on picks the lights it plays on, Save in This Show "
+                         "names and keeps it (↩ Show Tree puts the page back)"));
+    updateButtons();
+    return true;
+}
+
 void ShowTreeView::workbenchFollowTree()
 {
     if (!isWorkbenchDocked() || m_wb->syncing || m_reloading)
@@ -331,6 +481,14 @@ void ShowTreeView::workbenchFollowTree()
     const quint32 cueId = currentCueId();
     if (cueId == invalidId())
         return;
+    /* An effect is being designed in the pane: the cue must not change
+       under it without a word (board Q263). Keep designing puts the tree
+       back where the Workbench is. */
+    if (!m_wb->bench.isNull() && m_wb->bench->keepsDesigning())
+    {
+        selectForWorkbench(m_wb->cue, invalidId(), QString());
+        return;
+    }
     const NodeKind kind = currentKind();
     if (kind == LayerNode)
         openInWorkbench(cueId, currentId());

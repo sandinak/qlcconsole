@@ -151,7 +151,8 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
         m_contextBtn->setToolTip(tr("The rest of the cue plays too, with this layer's effect over it"));
         m_soloBtn = new QPushButton(tr("Solo"), m_contextRow);
         m_soloBtn->setObjectName(QStringLiteral("edSolo"));
-        m_soloBtn->setToolTip(tr("Only this layer's heads play: the effect alone"));
+        m_soloBtn->setToolTip(tr("Only this layer plays -- its own colour and dimmer with this effect "
+                                 "over them -- instead of the whole cue"));
         QButtonGroup *bg = new QButtonGroup(m_contextRow);
         for (QPushButton *b : { m_contextBtn, m_soloBtn })
         {
@@ -430,15 +431,37 @@ void EffectDesigner::plugIntoWorkbench()
 {
     Workbench::setEffectPaneFactory([](Workbench *wb, const Workbench::EffectRequest &req, QWidget *parent)
                                         -> QWidget * {
-        if (wb == nullptr || wb->doc() == nullptr || req.cueId != 0xFFFFFFFF)
+        if (wb == nullptr || wb->doc() == nullptr)
             return nullptr;
         EffectDesigner *ed = new EffectDesigner(wb->doc(), parent);
-        ed->setObjectName(QStringLiteral("workbenchEffectDesigner"));
+        // In the pane there is no Cancel: the Workbench's ↩ (and Esc) leaves,
+        // asking first when the effect hasn't been kept.
         ed->setCancelVisible(false);
+        QPointer<Workbench> bench = wb;
+        if (req.cueId != ShowTree::invalidId())
+        {
+            /* W4 for a cue layer (board Q263): the layer's heads, its other
+               looks under the effect, Keep on This Layer offered, and the
+               Workbench's own preview -- so In Context / Solo here is the
+               cue's Solo, not a second one. */
+            ed->setObjectName(QStringLiteral("workbenchLayerDesigner"));
+            new EffectLayerHost(wb->doc(), ed, req.cueId, req.layerId, req.target, req.key, ed);
+            ed->setSolo(wb->isSolo());
+            connect(ed, &EffectDesigner::soloChanged, wb, [bench](bool solo) {
+                if (!bench.isNull())
+                    bench->setSolo(solo);
+            });
+            return ed;
+        }
+        ed->setObjectName(QStringLiteral("workbenchEffectDesigner"));
         ed->setTargets(QList<quint32>(), QList<quint32>());
+        // The caller may know better than the remembered groups (the Show
+        // Tree's Library sends the cue's).
+        if (!req.tryOn.isEmpty())
+            ed->setTryOnGroups(req.tryOn);
+        ed->setSaveFolder(req.folder);
         ed->setCameFrom(req.fromCue, req.fromScene);
         ed->setEffect(req.palette);
-        QPointer<Workbench> bench = wb;
         connect(ed, &EffectDesigner::layerMade, wb,
                 [bench](quint32 cueId, quint32 layerId, quint32 sceneId, quint32 paletteId) {
             if (!bench.isNull())
@@ -925,7 +948,8 @@ quint32 EffectDesigner::saveAsPalette(const QString &name, const QString &folder
         // the list (Build ▸ Effects starts the rename), as + Palette does.
         n = suggested;
     }
-    const QString path = folder.isEmpty() ? st->suggestPaletteFolder(QLCPalette::Effect) : folder;
+    const QString asked = folder.isEmpty() ? m_saveFolder : folder;
+    const QString path = asked.isEmpty() ? st->suggestPaletteFolder(QLCPalette::Effect) : asked;
     const quint32 pid = m_draftId;
     // One undo step in the tree's history (D22): undo makes it a one-off
     // again, which goes once nothing uses it.
@@ -1621,20 +1645,22 @@ void EffectDesigner::scheduleBrowserReload()
 }
 
 /****************************************************************************
- * EffectLayerDialog
+ * EffectLayerHost: a cue layer's half of the designer (board Q263)
  ****************************************************************************/
 
-EffectLayerDialog::EffectLayerDialog(Doc *doc, quint32 cueId, quint32 layerId, const Target &target,
-                                     const QString &key, QWidget *parent)
-    : QDialog(parent)
+EffectLayerHost::EffectLayerHost(Doc *doc, EffectDesigner *designer, quint32 cueId, quint32 layerId,
+                                 const Target &target, const QString &key, QObject *parent)
+    : QObject(parent)
     , m_doc(doc)
     , m_cueId(cueId)
     , m_layerId(layerId)
     , m_target(target)
-    , m_previewedBefore(doc->showTree()->previewedCue())
+    , m_designer(designer)
 {
-    setObjectName(QStringLiteral("effectLayerDialog"));
-    ShowTreeController *st = doc->showTree();
+    setObjectName(QStringLiteral("effectLayerHost"));
+    if (m_doc == nullptr || m_designer.isNull() || m_doc->showTree() == nullptr)
+        return;
+    ShowTreeController *st = m_doc->showTree();
     const CueList *list = st->listOfCue(cueId);
     // Opened on one effect's row: a pick of another kind replaces it. From
     // the layer, or its Effect row, another kind goes beside the others.
@@ -1683,12 +1709,7 @@ EffectLayerDialog::EffectLayerDialog(Doc *doc, quint32 cueId, quint32 layerId, c
 
     const QString where = own != nullptr && !own->name.isEmpty() ? own->name : st->targetLabel(m_target);
     const QString cueText = list == nullptr ? QString() : st->cueLabel(*list, list->indexOf(cueId));
-    setWindowTitle(tr("Design effect — %1 · %2").arg(cueText, where));
-
-    QVBoxLayout *v = new QVBoxLayout(this);
-    v->setContentsMargins(0, 0, 0, 0);
-    m_designer = new EffectDesigner(doc, this);
-    v->addWidget(m_designer);
+    m_where = cueText.isEmpty() ? where : tr("%1 · %2").arg(cueText, where);
 
     QList<quint32> groups = m_target.groups, fixtures = m_target.fixtures;
     for (quint32 set : m_target.sets)
@@ -1703,50 +1724,30 @@ EffectLayerDialog::EffectLayerDialog(Doc *doc, quint32 cueId, quint32 layerId, c
     m_designer->setOneOffAllowed(true);
     m_designer->setOneOffLabel(QStringLiteral("%1 %2").arg(cueText, where).trimmed());
     m_designer->setContextChoice(true);
-    m_designer->setCancelVisible(true);
     m_designer->setEffect(m_previous.palettes.value(0, QLCPalette::invalidId()), m_previous.own);
 
-    // In context: the cue plays under it. Solo: only the effect.
-    connect(m_designer, &EffectDesigner::soloChanged, this, [this](bool solo) {
-        if (solo)
-            m_doc->showTree()->stopPreview();
-        else if (m_doc->mode() == Doc::Design)
-            m_doc->showTree()->previewCue(m_cueId);
-    });
-    connect(m_designer, &EffectDesigner::effectChosen, this,
+    connect(m_designer.data(), &EffectDesigner::effectChosen, this,
             [this](quint32 pid, const QList<quint32> &own, EffectDesigner::Outcome outcome) {
         if (outcome == EffectDesigner::UpdatedPalette && m_previous.palettes.value(0) == pid
             && m_previous.own == own)
         {
             m_applied = true;           // the layer already plays it
+            emit kept(pid);
             return;
         }
-        apply(pid, own);
+        if (apply(pid, own))
+            emit kept(pid);
     });
-    connect(m_designer, &EffectDesigner::effectChosen, this, &QDialog::accept, Qt::QueuedConnection);
-    connect(m_designer, &EffectDesigner::cancelled, this, &QDialog::reject);
-    connect(this, &QDialog::rejected, m_designer, [this]() {
-        if (m_designer->draftId() != QLCPalette::invalidId())
-            m_designer->cancel();
-    });
-
-    if (m_doc->mode() == Doc::Design && m_previewedBefore == ShowTree::invalidId())
-        st->previewCue(cueId);          // in context: the cue, under the effect
-    resize(1180, 760);
 }
 
-EffectLayerDialog::~EffectLayerDialog()
+EffectLayerHost::~EffectLayerHost()
 {
-    // Back as the tree had it: its preview of the cue it showed.
-    ShowTreeController *st = m_doc->showTree();
-    if (m_previewedBefore != ShowTree::invalidId())
-        st->previewCue(m_previewedBefore);
-    else
-        st->stopPreview();
 }
 
-bool EffectLayerDialog::apply(quint32 paletteId, const QList<quint32> &own)
+bool EffectLayerHost::apply(quint32 paletteId, const QList<quint32> &own)
 {
+    if (m_doc == nullptr || m_doc->showTree() == nullptr)
+        return false;
     ShowTreeController *st = m_doc->showTree();
     const QLCPalette *p = m_doc->palette(paletteId);
     if (p == nullptr)
@@ -1777,14 +1778,12 @@ bool EffectLayerDialog::apply(quint32 paletteId, const QList<quint32> &own)
     look.own = own;
     any |= set(look);
     st->endBatch(any);
-    m_applied = any;
+    m_applied = m_applied || any;
+    // The next keep edits what this one left (a one-off edited in place).
+    if (any)
+    {
+        m_previous = look;
+        m_previousOwn = true;
+    }
     return any;
-}
-
-bool EffectLayerDialog::design(Doc *doc, QWidget *parent, quint32 cueId, quint32 layerId,
-                               const Target &target, const QString &key)
-{
-    EffectLayerDialog dlg(doc, cueId, layerId, target, key, parent);
-    dlg.exec();
-    return dlg.m_applied;
 }

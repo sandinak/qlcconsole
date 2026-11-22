@@ -5859,6 +5859,24 @@ QString App::tabDisplayLabel(const QString &label) const
     return label;
 }
 
+QString App::tabAside(const QString &label) const
+{
+    /* Board Q266: the Show Tree keeps its name (every alternative collides
+       with a QLC+ object this fork keeps first-class), and pays the
+       findability cost in words instead: the tab's tooltip, its Window
+       entry and its help title all say what is in it. */
+    if (label == tr("Show Tree"))
+        return tr("cue lists, cues and hits");
+    return QString();
+}
+
+QString App::tabToolTipText(const QString &label) const
+{
+    const QString shown = tabDisplayLabel(label);
+    const QString aside = tabAside(label);
+    return aside.isEmpty() ? shown : tr("%1: your %2").arg(shown, aside);
+}
+
 QStringList App::effectiveViewTabs() const
 {
     const QStringList all = workspaceViewTabs(EverythingView);
@@ -6664,7 +6682,9 @@ void App::updateWindowMenu()
     {
         const QString label = jump->data().toString();
         const QString shown = tabDisplayLabel(label);
-        jump->setText(away.contains(label) ? tr("%1 — In Its Own Window").arg(shown) : shown);
+        const QString aside = tabAside(label);
+        jump->setText(away.contains(label) ? tr("%1 — In Its Own Window").arg(shown)
+                      : aside.isEmpty() ? shown : tr("%1 — %2").arg(shown, aside));
     }
     if (m_windowDockMenu != NULL)
     {
@@ -7949,8 +7969,9 @@ void App::applyTabLabelMode()
             continue;
         const QString origText = tabDisplayLabel(m_tabOriginals.at(o).first);
         const QIcon   &origIcon = m_tabOriginals.at(o).second;
-        /* Whatever it shows, the tooltip names the tab in full. */
-        m_tab->setTabToolTip(i, origText);
+        /* Whatever it shows, the tooltip names the tab in full -- and says
+           what is in it where the name alone doesn't (Q266). */
+        m_tab->setTabToolTip(i, tabToolTipText(m_tabOriginals.at(o).first));
         switch (m_tabLabelMode)
         {
         case TabIconOnly:

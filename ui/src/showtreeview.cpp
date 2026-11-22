@@ -3045,6 +3045,16 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
 ShowTreeView::~ShowTreeView()
 {
+    /* Nothing outside may call back into a half-gone view. A child going
+       down can still change the show -- an effect designer in the Workbench
+       docked here drops its hidden preview scene as it goes -- and
+       Doc::functionRemoved then reached updateBridgeBanner with the
+       banner's widgets already freed (a crash, found by
+       EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner). */
+    if (m_doc != nullptr)
+        m_doc->disconnect(this);
+    if (!m_st.isNull())
+        m_st->disconnect(this);
     // The Library goes back from Build before it is gone with this view.
     returnLibrary();
     // A docked Workbench goes back to Build (or with the tree's own).
@@ -5833,15 +5843,30 @@ void ShowTreeView::showLayerPage(const CueList &list, int index, const Layer *ow
             }
         }
 
-        // ✎ opens the value's palette in the Look Editor below.
+        /* ✎ opens the value's palette in the Look Editor below -- except an
+           effect, which opens in the designer on this layer's own fixtures
+           (board Q264: Edit Effect means the designer everywhere). */
         QToolButton *editBtn = new QToolButton(m_rowsHost);
         editBtn->setText(QStringLiteral("✎"));
         quint32 editPid = QLCPalette::invalidId();
         if (!addEffect && rl->values.contains(key) && !rl->values.value(key).look.palettes.isEmpty())
             editPid = rl->values.value(key).look.palettes.first();
+        const bool designIt = isEffectKey(key) && editPid != QLCPalette::invalidId()
+                              && !rl->target.isEmpty();
         editBtn->setEnabled(editPid != QLCPalette::invalidId());
-        editBtn->setToolTip(tr("Edit this value in the Look Editor"));
-        connect(editBtn, &QToolButton::clicked, this, [this, editPid]() { editPalette(editPid); });
+        editBtn->setToolTip(designIt ? tr("Design this effect on this layer's lights")
+                                     : tr("Edit this value in the Look Editor"));
+        {
+            const quint32 ecue = cue.id;
+            const quint32 elayer = own == nullptr ? invalidId() : own->id;
+            const Target etarget = rl->target;
+            connect(editBtn, &QToolButton::clicked, this, [this, editPid, designIt, ecue, elayer,
+                                                           etarget, key]() {
+                if (designIt && designEffectOnLayer(ecue, elayer, etarget, key))
+                    return;
+                editPalette(editPid);
+            });
+        }
 
         QToolButton *more = new QToolButton(m_rowsHost);
         more->setObjectName(QStringLiteral("stMore:%1").arg(key));
@@ -6378,7 +6403,9 @@ void ShowTreeView::fillAttributeMenu(QMenu *out, quint32 cueId, quint32 layerId,
         // and an intensity effect together); on an effect's row: that one.
         menu.addAction(key == QLatin1String("Effect.") ? tr("Design a New Effect…") : tr("Design Effect…"),
                        this, [this, cueId, layerId, rowTarget, key]() {
-            EffectLayerDialog::design(m_doc, this, cueId, layerId, rowTarget, key);
+            // Board Q263: in the docked Workbench's pane, on this layer's
+            // fixtures -- no modal window.
+            designEffectOnLayer(cueId, layerId, rowTarget, key);
         })->setObjectName("stDesignEffect");
         // How that effect runs (Runs ▸) is the effect palette's own, below.
     }
@@ -9252,7 +9279,7 @@ void ShowTreeView::fillLayerMenu(ContextMenu &menu, quint32 cueId, quint32 layer
         {
             const Target dt = own->target;
             menu.add(ContextMenu::Kind, tr("Design Effect…"), [this, cueId, layerId, dt]() {
-                EffectLayerDialog::design(m_doc, this, cueId, layerId, dt);
+                designEffectOnLayer(cueId, layerId, dt);        // Q263: the docked pane
             }, QStringLiteral("stDesignEffectLayer"));
         }
         /* How the layer is built (split, children, parts, detach) is one
@@ -11448,7 +11475,15 @@ ContextMenus::PalettePlace ShowTreeView::paletteMenuPlace()
 {
     ContextMenus::PalettePlace place;
     place.parent = this;
-    place.edit = [this](quint32 pid) { editPalette(pid); };
+    place.edit = [this](quint32 pid) {
+        /* Board Q264: Edit Effect opens the designer here as it does in
+           Build (one editor, one meaning); the Look Editor keeps every
+           other palette type. */
+        const QLCPalette *p = m_doc->palette(pid);
+        if (p != nullptr && p->type() == QLCPalette::Effect && designEffectPalette(pid))
+            return;
+        editPalette(pid);
+    };
     place.showUse = [this](int kind, quint32 owner, quint32 layer) {
         if (kind == PaletteOps::Use::Cue || kind == PaletteOps::Use::Look)
         {
@@ -11616,8 +11651,15 @@ void ShowTreeView::fillNewPaletteMenu(QMenu *menu, const QString &folder)
     for (const auto &t : types)
     {
         const QLCPalette::PaletteType type = t.second;
-        menu->addAction(t.first, this, [this, type]() { newPaletteFromLibrary(type); })
-            ->setObjectName(QStringLiteral("stNewPalette%1").arg(QLCPalette::typeToString(type)));
+        menu->addAction(t.first, this, [this, type]() {
+            /* Board Q264: an effect is designed first and named when it is
+               kept (Save in This Show…), so nothing empty is made and it is
+               seen on lights before it has a name. Every other type is a
+               palette to set in the Look Editor. */
+            if (type == QLCPalette::Effect && designEffectPalette(QLCPalette::invalidId()))
+                return;
+            newPaletteFromLibrary(type);
+        })->setObjectName(QStringLiteral("stNewPalette%1").arg(QLCPalette::typeToString(type)));
     }
 }
 
