@@ -529,8 +529,10 @@ void ControlMap_Test::aHeldGoBlinksTheControlTwice()
     QVERIFY(chaser->isRunning());       // the held GO did not advance the list
     QCOMPARE(st->runningCue(listId), cues.at(0));
 
-    // The trigger removed in the middle of a blink: it stops at once and
-    // goes dark, rather than blink on for a control that fires nothing.
+    /* The trigger removed in the middle of a blink: it stops at once and
+       goes dark, rather than blink on for a control that fires nothing.
+       Slow steps, so the chain is certainly still in flight. */
+    cm->setBlinkMs(50);
     send(10, 0);
     send(10, 127);
     tick(2);
@@ -538,7 +540,7 @@ void ControlMap_Test::aHeldGoBlinksTheControlTwice()
     QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
     QCOMPARE(lastLight(m_stub, 10), 0);
     m_stub->m_feedback.clear();
-    QTest::qWait(20);                   // the blink's steps would have fallen here
+    QTest::qWait(250);                  // the three steps left would have fallen here
     QVERIFY2(m_stub->m_feedback.isEmpty(), "a removed trigger's control was still blinking");
 }
 
