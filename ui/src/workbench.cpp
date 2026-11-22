@@ -975,8 +975,10 @@ bool Workbench::backOut()
         else if (layer >= 0)
         {
             // The layer's own page (not its Effect row, which would open the
-            // designer again).
+            // designer again). Shown even when that row was already the
+            // current one, where selecting it changes nothing.
             selectLayer(layer);
+            slotRowsSelectionChanged();
         }
         else
         {
