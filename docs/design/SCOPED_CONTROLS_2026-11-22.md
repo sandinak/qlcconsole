@@ -190,7 +190,8 @@ Audit §5.4 rule 1, as the learn must enforce it:
    hold both. A file that does hold both keeps the GO and drops the narrower
    one on load, the same way a duplicate control is dropped today.
 4. **The e-stop lamp is never scoped dark.** It shows the stop's own state
-   (lit while the show is stopped), at every place, in both modes.
+   -- dim whenever the show is running, lit while the show is stopped -- at
+   every place, in both modes. No place change can darken it.
 
 GO itself needs no arm on a desk (Q269, shipped): the double-GO guard and the
 CS3 lamp cover it. That is unchanged by places.
@@ -262,7 +263,7 @@ never worked out in the Control Map:
 | **Standby** (dim, 30 -> MIDI velocity 15) | a press would fire it | `surfaceMayFire()` + `standbyStep()` |
 | **Running** (bright, 255 -> velocity 127) | what it fires is running | `Function::isRunning()` (as before) |
 | **Held** (two blinks, then back) | the double-GO guard held a command on this binding's cue list | `ShowControl::commandHeld` |
-| **Stopped** (lit) | the emergency stop's own lamp, after an ALL OFF until the next GO | `OutputRuleKeeper::emergencyStopped()` |
+| **Stopped** (lit) | the emergency stop's own lamp, after an ALL OFF until the next GO. At every other moment the stop is **dim**, never dark: it always works, so it is always findable on a dark stage | `OutputRuleKeeper::emergencyStopped()` |
 
 Dim 30 is velocity 15, which is the level the PMJ's own idle template lights
 its 54 LEDs at (`resources/miditemplates/PMJ-Black-1-idle.qxm`), so a PMJ
