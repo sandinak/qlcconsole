@@ -2774,7 +2774,7 @@ enum Key { R, G, B, W, A, UV, Dimmer, Level, Pan, Tilt, PanSpin, TiltSpin,
 
 /** @p name's place, or -1 for a key the host knows nothing of (which it
  *  ignores, as it always has). */
-int of(const QString &name)
+static int of(const QString &name)
 {
     static const QHash<QString, int> places = {
         { QStringLiteral("r"), R },                 { QStringLiteral("g"), G },

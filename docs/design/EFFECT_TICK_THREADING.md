@@ -135,18 +135,36 @@ perf/053-effect-host did **not** move the tick. The note above is why: the
 move is not small (a snapshot type the whole class has to be rewritten
 against, queued input, cross-thread lifetime for a `QJSEngine`) and not
 safe while `Doc` has no lock and the UI edits it live. The branch instead
-removed the per-head work that made the tick expensive — the per-cell named
-property stores, the per-cell head-channel copies, the look-aim lookups and
-the per-tick cell and base-value rebuilds — which took the host's own cost
-over 6,144 heads from about 2.4 ms a tick to under 0.6 ms (nothing drawn)
-and from 6.4 ms to about 1 ms (every head lit) on an Intel Mac in Release.
-At 50 Hz that is 3 % of one core instead of 32 %, on the thread the window
-paints on, which is what the operator was feeling.
+took the per-head work out of the tick where it stood:
+
+- the cells of a loose-fixture rig, and which fixtures the script's
+  `fixtureTypes` let through, are worked out once and kept until the
+  fixtures, their modes or any head layout change (before: 96 library-key
+  lookups and 96 × 192 channel walks, 50 times a second)
+- each member's `aimAt` / `sceneTarget` object, and each fixture's
+  `lookAim` and `lastSpot`, are made once and changed in place, so no cell
+  is named again (before: two or three named property stores on each of
+  6,144 cells a tick)
+- the look's base values are worked out only when something reads one — a
+  colour-only effect never does
+- a head's channels, mode, address and id come off its fixture once
+- an answer's keys go into their places, so reading one is an index and not
+  a walk of the names it has (thirty asks a head)
+- the cells' array is copied inside the engine (`Array.prototype.slice`)
+  instead of named place by place, and is still a fresh array every tick
+
+which took the host's own cost over 6,144 heads from HOST_BEFORE_NOTHING ms
+a tick to HOST_AFTER_NOTHING ms (nothing drawn) and from HOST_BEFORE_LIT ms
+to HOST_AFTER_LIT ms (every head lit), on an Intel Mac in Release. At 50 Hz
+that is CORE_AFTER % of one core instead of CORE_BEFORE %, on the thread the
+window paints on, which is what the operator was feeling.
 
 Measured, that is most of the gain a thread move could offer, for a
 fraction of the risk. The move is worth revisiting when a single effect's
 *script* (not the host) is the cost — a matrix effect on a very large
-canvas — because a script cannot be cached away.
+canvas — because a script cannot be cached away. What is left of the host's
+own cost is the floor the protocol sets: one JS object and one property walk
+a head for its answer, and a fresh array of 6,144 cells to hand over.
 
 ## ROI
 
