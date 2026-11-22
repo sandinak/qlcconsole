@@ -14,6 +14,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Update checks stay out of the way:** at launch, then once a night
+  (22:00-07:00 local) while it runs, and never in Operate (a launch straight
+  into Operate skips its check). It used to look every 4 hours, show or no
+  show.
 - **Effects cost the host less on a big rig.** Over the show's 96 step bars
   (6,144 pixel heads) the engine's own work for one effect frame -- the
   cells, the look's base values, the arguments each head is handed and

@@ -585,7 +585,7 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     updGroup->setObjectName(QStringLiteral("settingsUpdates"));
     updGroup->setProperty("helpTopic", QStringLiteral("updates.md"));
     QVBoxLayout *updLayout = new QVBoxLayout(updGroup);
-    m_updateCheck = new QCheckBox(tr("Check for updates (once a day, from GitHub)"), updGroup);
+    m_updateCheck = new QCheckBox(tr("Check for updates (at launch, and once a night when not in Operate)"), updGroup);
     m_updateCheck->setObjectName(QStringLiteral("settingsUpdateCheck"));
     m_updateCheck->setChecked(UpdateChecker::checkEnabled());
     m_updateCheck->setToolTip(tr("Asks GitHub's list of qlcconsole releases -- nothing is sent "

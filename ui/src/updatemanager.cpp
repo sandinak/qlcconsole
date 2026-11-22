@@ -31,6 +31,7 @@
 #include "updatedownloader.h"
 #include "updateinstaller.h"
 #include "updatemanager.h"
+#include "doc.h"
 #include "updatedialog.h"
 #include "qlcconfig.h"
 
@@ -40,11 +41,11 @@
 UpdateManager::UpdateManager(Doc *doc, QWidget *window)
     : QObject(window)
     , m_doc(doc)
+    , m_periodic(nullptr)
     , m_window(window)
     , m_checker(new UpdateChecker(this))
     , m_downloader(new UpdateDownloader(this))
     , m_installer(new UpdateInstaller(this))
-    , m_periodic(nullptr)
     , m_state(NoUpdate)
     , m_percent(0)
 {
@@ -163,6 +164,12 @@ void UpdateManager::scheduleChecks(int firstDelayMs)
 
     if (backgroundChecksAllowed() == false)
         return;
+    /* At launch, then once a night while it runs (22:00-07:00 local, a
+       day since the last) -- and never in Operate: a show, rehearsal or
+       class is not interrupted by the network or by what it finds. The
+       hourly timer only looks whether that is so (no network until it is);
+       a launch straight into Operate skips its check too, and Help > Check
+       for Updates... asks whenever the person does. */
     QTimer::singleShot(firstDelayMs, this, &UpdateManager::slotLaunchCheck);
     m_periodic = new QTimer(this);
     m_periodic->setInterval(3600 * 1000);
@@ -170,20 +177,42 @@ void UpdateManager::scheduleChecks(int firstDelayMs)
     m_periodic->start();
 }
 
+bool UpdateManager::isOffHours(const QTime &local)
+{
+    // The night, local time: no rehearsal, class or show is in the room.
+    return local.isValid() && (local.hour() >= 22 || local.hour() < 7);
+}
+
+bool UpdateManager::periodicCheckWanted(const QDateTime &nowLocal) const
+{
+    if (m_state != NoUpdate && m_state != Failed)
+        return false;
+    if (m_doc != nullptr && m_doc->mode() == Doc::Operate)
+        return false;
+    if (isOffHours(nowLocal.time()) == false)
+        return false;
+    return m_checker->isCheckDue(nowLocal.toUTC());
+}
+
 void UpdateManager::slotPeriodic()
+{
+    if (periodicCheckWanted())
+        m_checker->check(false);
+}
+
+bool UpdateManager::launchCheckWanted() const
 {
     // Already found (or busy with) one: nothing to ask until it is dealt with.
     if (m_state != NoUpdate && m_state != Failed)
-        return;
-    if (m_checker->isCheckDue())
-        m_checker->check(false);
+        return false;
+    if (m_doc != nullptr && m_doc->mode() == Doc::Operate)
+        return false;
+    return m_checker->isLaunchCheckDue();
 }
 
 void UpdateManager::slotLaunchCheck()
 {
-    if (m_state != NoUpdate && m_state != Failed)
-        return;
-    if (m_checker->isLaunchCheckDue())
+    if (launchCheckWanted())
         m_checker->check(false);
 }
 

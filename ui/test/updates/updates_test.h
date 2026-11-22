@@ -56,6 +56,7 @@ private slots:
     void checkTimeout();
     void checkDue();
     void launchCheckDue();
+    void checksOnlyAtLaunchAndAtNightNeverInOperate();
     void policyDisablesEverything();
 
     void downloadVerified();

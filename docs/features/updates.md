@@ -5,8 +5,11 @@ Windows, install it for you. It never updates or restarts during a show.
 
 ## What you see
 
-A few seconds after the window opens, and then then at most every 4 hours while it runs,
-qlcconsole asks GitHub for its list of releases. This happens in the
+A few seconds after the window opens, and then once a night while it runs
+(between 22:00 and 07:00 your time), qlcconsole asks GitHub for its list of
+releases. It never asks in **Operate**: a show, rehearsal or class is not
+interrupted by the network, so a launch straight into Operate skips its check
+too. **Help → Check for Updates…** asks whenever you do. This happens in the
 background. When there is a newer version, the footer shows a chip:
 
 **Update available: 0.2.0**
@@ -42,7 +45,7 @@ If one of these is true when you quit, the update is left for the next quit.
 The **Software Update** group in **Settings → General** belongs to this computer, not
 to the show:
 
-- **Check for updates (at launch and every 4 hours, from GitHub)** turns checking on or off.
+- **Check for updates (at launch, and once a night when not in Operate)** turns checking on or off.
 - **Channel**: **Stable releases**, or **Pre-releases too** (for example
   the **Show Tree** builds handed out to a class). A build starts on the
   channel of its own release. If GitHub marks that release as a

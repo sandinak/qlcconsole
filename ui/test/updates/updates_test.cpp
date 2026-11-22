@@ -715,9 +715,11 @@ void Updates_Test::checkDue()
     const QDateTime now = QDateTime::currentDateTimeUtc();
     QVERIFY(c.isCheckDue(now));                         // never checked
     QSettings().setValue("updates/lastCheck", now.addSecs(-3600));
-    QVERIFY(c.isCheckDue(now) == false);                // within 4 h
-    QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 3600));
-    QVERIFY(c.isCheckDue(now));
+    QVERIFY(c.isCheckDue(now) == false);                // within the day
+    QSettings().setValue("updates/lastCheck", now.addSecs(-19 * 3600));
+    QVERIFY(c.isCheckDue(now) == false);
+    QSettings().setValue("updates/lastCheck", now.addSecs(-21 * 3600));
+    QVERIFY(c.isCheckDue(now));                         // once a night
     UpdateChecker::setCheckEnabled(false);
     QVERIFY(c.isCheckDue(now) == false);
     UpdateChecker::setCheckEnabled(true);
@@ -729,18 +731,18 @@ void Updates_Test::launchCheckDue()
 {
     UpdateChecker c;
     const QDateTime now = QDateTime::currentDateTimeUtc();
-    // Checked 5 h ago: due at launch, and again while running.
+    // Checked 5 h ago: due at launch.
     QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 3600));
     QVERIFY(c.isLaunchCheckDue(now));
     // Checked 5 min ago (relaunch, crash loop): not due, either way.
     QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 60));
     QVERIFY(c.isLaunchCheckDue(now) == false);
     QVERIFY(c.isCheckDue(now) == false);
-    // Checked 1 h ago: a launch asks, a running app waits for 4 h.
+    // Checked 1 h ago: a launch asks, a running app waits for the next night.
     QSettings().setValue("updates/lastCheck", now.addSecs(-3600));
     QVERIFY(c.isLaunchCheckDue(now));
     QVERIFY(c.isCheckDue(now) == false);
-    QVERIFY(c.isCheckDue(now.addSecs(3 * 3600 + 60)));  // 4 h after the check
+    QVERIFY(c.isCheckDue(now.addSecs(19 * 3600 + 60)));  // 20 h after the check
     // retryAfter and disabled still win.
     QSettings().setValue("updates/lastCheck", now.addSecs(-5 * 3600));
     QSettings().setValue("updates/retryAfter", now.addSecs(60));
@@ -854,6 +856,35 @@ void Updates_Test::downloadWithoutSumsRefused()
 /*****************************************************************************
  * Never during a show
  *****************************************************************************/
+
+/* His rule (2026-11-22): at launch, and once a day in the off hours while
+   it runs -- never in Operate, never in the working day. */
+void Updates_Test::checksOnlyAtLaunchAndAtNightNeverInOperate()
+{
+    Doc doc(this);
+    QWidget window;
+    CountingManager mgr(&doc, &window);
+    const QDateTime today = QDateTime::currentDateTime();
+    const QDateTime night(today.date(), QTime(23, 30)), noon(today.date(), QTime(12, 0));
+    QSettings().setValue("updates/lastCheck", night.toUTC().addSecs(-21 * 3600));
+    QVERIFY(UpdateManager::isOffHours(QTime(22, 0)) && UpdateManager::isOffHours(QTime(3, 0))
+            && UpdateManager::isOffHours(QTime(6, 59)));
+    QVERIFY(!UpdateManager::isOffHours(QTime(7, 0)) && !UpdateManager::isOffHours(QTime(12, 0))
+            && !UpdateManager::isOffHours(QTime(21, 59)));
+    // Design: the launch asks; a running app asks at night, not at noon.
+    doc.setMode(Doc::Design);
+    QVERIFY(mgr.launchCheckWanted());
+    QVERIFY(mgr.periodicCheckWanted(night));
+    QVERIFY(mgr.periodicCheckWanted(noon) == false);
+    // Operate: nothing asks, launch or night.
+    doc.setMode(Doc::Operate);
+    QVERIFY(mgr.launchCheckWanted() == false);
+    QVERIFY(mgr.periodicCheckWanted(night) == false);
+    doc.setMode(Doc::Design);
+    // Checked last night: not again tonight.
+    QSettings().setValue("updates/lastCheck", night.toUTC().addSecs(-3600));
+    QVERIFY(mgr.periodicCheckWanted(night) == false);
+}
 
 void Updates_Test::nothingInstallsDuringShow()
 {

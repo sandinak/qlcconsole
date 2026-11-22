@@ -22,6 +22,7 @@
 
 #include <QPointer>
 #include <QObject>
+#include <QDateTime>
 
 #include "updatechecker.h"
 #include "qlcui_export.h"
@@ -42,7 +43,7 @@ class Doc;
  * The app's side of updating: when to check, what the footer chip says,
  * the dialog, and the hand-off to the installer at quit.
  *
- * Checks a few seconds after the window is up and then at most every 4 hours
+ * Checks a few seconds after the window is up and then once a night (22:00-07:00 local)
  * (UpdateChecker::isLaunchCheckDue() at launch, isCheckDue() after), in the background; Help → Check for
  * Updates… checks now. An update shows as a footer chip, never a pop-up.
  * Install (or "Install updates automatically", which starts this on its
@@ -89,9 +90,18 @@ public:
     QString footerText() const;
 
     /** Background checks: the first after @p firstDelayMs, then hourly
-     *  looking whether one is due (4 hours since the last). Not when disabled, or on a headless
+     *  looking whether one is due (a day since the last; never in Operate). Not when disabled, or on a headless
      *  (offscreen/minimal) platform -- tests and the help's screenshots
      *  never reach GitHub. */
+    /** Whether the launch check asks GitHub now: none found or under way
+     *  yet, the show not in Operate, and isLaunchCheckDue(). */
+    bool launchCheckWanted() const;
+    /** Whether the running check asks now (@p nowLocal): as
+     *  launchCheckWanted(), but only in the off hours (isOffHours()) and a
+     *  day since the last check (isCheckDue()). Never in Operate. */
+    bool periodicCheckWanted(const QDateTime &nowLocal = QDateTime::currentDateTime()) const;
+    /** 22:00-07:00 local: when a running app may look for updates. */
+    static bool isOffHours(const QTime &local);
     void scheduleChecks(int firstDelayMs = 8000);
     static bool backgroundChecksAllowed();
 
@@ -136,8 +146,8 @@ private slots:
     void slotCheckFinished(UpdateChecker::Status status);
     void slotDownloadFinished(bool ok, const QString &error);
     void slotPrepared(bool ok, const QString &error);
-    void slotPeriodic();
     void slotLaunchCheck();
+    void slotPeriodic();
 
 private:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -145,13 +155,13 @@ private:
     void updateFooter();
 
     Doc *m_doc;
+    QTimer *m_periodic;
     QPointer<QWidget> m_window;
     UpdateChecker *m_checker;
     UpdateDownloader *m_downloader;
     UpdateInstaller *m_installer;
     QPointer<UpdateDialog> m_dialog;
     QPointer<QLabel> m_footer;
-    QTimer *m_periodic;
     State m_state;
     UpdateRelease m_release;
     QString m_message;
