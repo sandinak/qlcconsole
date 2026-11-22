@@ -33,7 +33,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   (*A key has no light*, *No feedback line*). For a pad that reads a light's
   velocity as a colour and not a brightness (the APCs), **Dim a control that
   is ready** under the table switches the dim level off; it is saved with the
-  show. See [Control
+  show, and it never darkens the emergency stop -- a panic button stays
+  findable whatever the rest of the board does. A new show takes the desk
+  dark with it, and the lights are worked out once per batch of changes, not
+  once per function that starts. See [Control
   surfaces](docs/features/control-surfaces.md#what-a-controls-light-says),
   which gained two hardware-checklist steps for it.
 

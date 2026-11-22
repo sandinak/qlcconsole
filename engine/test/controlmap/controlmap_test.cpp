@@ -19,6 +19,7 @@
 
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QEventLoop>
 #include <QSignalSpy>
 #include <QBuffer>
 #include <QScopeGuard>
@@ -139,6 +140,10 @@ void ControlMap_Test::tick(int n)
     for (int i = 0; i < n; ++i)
         m_doc->masterTimer()->timerTick();
     QCoreApplication::processEvents();     // started / stopped, queued
+    /* The lights are worked out once per turn of the event loop, not once
+       per event (one pass asks the Chaser mutexes the MasterTimer thread
+       holds), so the pass the first round asked for lands in this one. */
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
 }
 
 Scene *ControlMap_Test::scene(const QString &name, int channel)
@@ -648,6 +653,98 @@ void ControlMap_Test::theLightsComeBackWhenTheControllerDoes()
     send(kNote, 127);
     tick(2);
     QVERIFY(a->isRunning());                        // it still fires
+}
+
+/* Review finding 2. A new show takes the desk dark with it. Without this
+   a File > New left every learned control lit as the last show had it --
+   and with the bindings gone there was nothing left to correct them. */
+void ControlMap_Test::aNewShowTakesTheLightsWithIt()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 40, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    send(kNote, 127);
+    tick(2);
+    QVERIFY(a->isRunning());
+    QCOMPARE(lastLight(m_stub, kNote), 255);
+    QCOMPARE(lastLight(m_stub, 40), 30);
+
+    m_stub->m_feedback.clear();
+    cm->reset();                            // a new show
+    QVERIFY(cm->isEmpty());
+    // Every control it lit is sent 0: nothing of the old show is left lit.
+    QCOMPARE(m_stub->m_feedback.count(), 2);
+    QCOMPARE(lastLight(m_stub, kNote), 0);
+    QCOMPARE(lastLight(m_stub, 40), 0);
+    // And nothing is left that would light them again.
+    m_stub->m_feedback.clear();
+    cm->resendFeedback();
+    QVERIFY(m_stub->m_feedback.isEmpty());
+}
+
+/* Review finding 3. The dim switch is for a pad whose lights are colours;
+   it must never take the panic button's light away, because a stop nobody
+   can find on a dark stage is not a stop. */
+void ControlMap_Test::theDimSwitchNeverDarkensTheStop()
+{
+    Scene *a = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 40, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+    QCOMPARE(lastLight(m_stub, 40), 30);
+
+    cm->setDimWhenReady(false);
+    QCOMPARE(lastLight(m_stub, kNote), 0);      // a scene's ready light goes
+    QCOMPARE(lastLight(m_stub, 40), 30);        // the stop's does not
+
+    // Still lit while the show is stopped, and dim again after a GO.
+    m_doc->outputRuleKeeper()->emergencyStop();
+    tick(3);
+    QCOMPARE(lastLight(m_stub, 40), 255);
+    m_doc->outputRuleKeeper()->noteGo();
+    tick(3);
+    QCOMPARE(lastLight(m_stub, 40), 30);
+    // Saved and loaded back, the stop still has its light.
+    QVERIFY(loadShow(m_doc, saveShow(m_doc)));
+    QVERIFY(!m_doc->controlMap()->dimWhenReady());
+    QCOMPARE(lastLight(m_stub, 40), 30);
+}
+
+/* Review finding 1. A collection starting many scenes sends one
+   functionStarted each; the lights are worked out once for the batch, not
+   once per scene -- a pass asks ShowControl for each cue-list binding's
+   standby cue, and that takes the Chaser mutexes the MasterTimer thread
+   holds while it steps. */
+void ControlMap_Test::manyFunctionsAtOnceAreOneLightPass()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    QList<Scene *> scenes;
+    for (int i = 0; i < 4; ++i)
+        scenes << scene(QString("S%1").arg(i), i);
+    cm->setBinding({ 0, kNote, ControlMap::function(scenes.at(0)->id()), ControlMap::Toggle });
+    tick(2);
+
+    QSignalSpy passes(cm, &ControlMap::lampsChanged);
+    for (Scene *sc : scenes)
+        sc->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    for (Scene *sc : scenes)
+        QVERIFY(sc->isRunning());
+    QCOMPARE(lastLight(m_stub, kNote), 255);        // the light is right
+    QCOMPARE(passes.count(), 1);                    // and was worked out once
+
+    // The same on the way back down.
+    passes.clear();
+    for (Scene *sc : scenes)
+        sc->stop(FunctionParent::master());
+    tick(3);
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+    QCOMPARE(passes.count(), 1);
 }
 
 /* A light nothing changed about is not sent again: a mode switch or a

@@ -50,6 +50,10 @@ private slots:
     void aCueListWithNothingToGoIsDark();
     void theDimLightIsSwitchableAndSavedWithTheShow();
     void theLightsComeBackWhenTheControllerDoes();
+    // the independent review's lamp findings
+    void aNewShowTakesTheLightsWithIt();
+    void theDimSwitchNeverDarkensTheStop();
+    void manyFunctionsAtOnceAreOneLightPass();
     void aLightThatDidNotChangeIsNotSentAgain();
     void aCueListGoesAndACueJumps();
     void aCueMadeASubCueStillJumps();

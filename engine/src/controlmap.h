@@ -334,7 +334,8 @@ public:
      *  whose LEDs take a colour in the velocity and not a brightness. */
     static uchar lampValue(Lamp lamp, bool dim = true);
     /** Whether a control that is ready glows dim (the default) or stays
-     *  dark. Saved with the show (Lights="onoff"). */
+     *  dark. Saved with the show (Lights="onoff"). The emergency stop is
+     *  never dimmed away by it: a panic button is always findable. */
     bool dimWhenReady() const { return m_dimWhenReady; }
     void setDimWhenReady(bool on);
     /** Test hook: how long each step of the held blink lasts. */
@@ -380,9 +381,13 @@ private slots:
     void slotFunctionStarted(quint32 id);
     void slotFunctionStopped(quint32 id);
     void slotFunctionRemoved(quint32 id);
-    /** A GO, a list stopped, the arming, the mode, an emergency stop
-     *  struck or ended: every light that says something else now is sent
-     *  (and only those). Queued: a command arrives on its own thread. */
+    /** A GO, a list stopped, a function started or stopped, the arming,
+     *  the mode, an emergency stop struck or ended, a tree edit: asks for
+     *  a light pass. One pass per turn of the event loop, however many
+     *  events arrive in it -- a pass asks ShowControl for each cue-list
+     *  binding's standby cue, and that takes the Chaser mutexes the
+     *  MasterTimer thread holds while it steps. Queued twice over, in
+     *  fact: the signals arrive on their own threads. */
     void slotLampsMayHaveChanged();
     /** The double-GO guard held a command on cue list @a chaserId: every
      *  control that GOes it blinks twice (ShowControl::commandHeld). */
@@ -500,11 +505,17 @@ private:
      *  colour in the velocity (the APCs) and show nothing at a dim level. */
     bool m_dimWhenReady = true;
     /** The bindings blinking because the guard held a command on their
-     *  cue list, and how many steps of the blink are left (0: none). */
+     *  cue list, how many steps of the blink are left (0: none), and
+     *  whether a chain is in flight -- which the counter cannot say: it is
+     *  0 through the last step's wait, and a hold landing there must not
+     *  start a second chain on the same counter. */
     QList<Binding> m_blinking;
     int m_blinkLeft = 0;
+    bool m_blinkRunning = false;
     int m_blinkMs = 150;
-    /** A tree edit's light pass is waiting: a batch of edits is one pass. */
+    /** A light pass is waiting: everything that can change a light (a
+     *  function started or stopped, a GO, the arming, a tree edit) asks
+     *  for one, and a whole batch of them is one pass. */
     bool m_lampsQueued = false;
 };
 

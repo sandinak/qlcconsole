@@ -82,19 +82,12 @@ ControlMap::ControlMap(Doc *doc)
     // What may fire is what a light says (CS3): the same answer, shown.
     connect(this, &ControlMap::armingChanged, this, &ControlMap::slotLampsMayHaveChanged);
     /* A tree edit can change what a press would do (every cue of a list
-       cut for the rehearsal, a cue deleted): the lights follow. Once per
-       batch of edits, not once per edit: a show loading edits the tree
-       thousands of times. */
+       cut for the rehearsal, a cue deleted): the lights follow, through
+       the same one-pass-per-turn queue (a show loading edits the tree
+       thousands of times). */
     if (m_doc->showTree() != nullptr)
-        connect(m_doc->showTree(), &ShowTreeController::changed, this, [this]() {
-            if (m_bindings.isEmpty() || m_lampsQueued)
-                return;
-            m_lampsQueued = true;
-            QTimer::singleShot(0, this, [this]() {
-                m_lampsQueued = false;
-                slotLampsMayHaveChanged();
-            });
-        });
+        connect(m_doc->showTree(), &ShowTreeController::changed, this,
+                &ControlMap::slotLampsMayHaveChanged);
 }
 
 ControlMap::~ControlMap()
@@ -196,6 +189,14 @@ void ControlMap::reset()
     m_encoderBank->reset();
     m_blinking.clear();
     m_blinkLeft = 0;
+    m_blinkRunning = false;
+    /* The desk goes dark with the show (review finding 2). Without this a
+       File > New left every learned control lit as the last show had it,
+       and nothing was left to correct it with: the bindings and the record
+       of what was sent both go here. A show loaded next sends its own
+       lights (loadXML -> resendFeedback). */
+    for (const Binding &b : std::as_const(m_bindings))
+        darkenLamp(b);
     m_lampSent.clear();
     m_dimWhenReady = true;
     const bool had = !m_bindings.isEmpty() || m_listening || !m_down.isEmpty();
@@ -1384,7 +1385,12 @@ void ControlMap::sendLampValue(const Binding &b, uchar value, bool force)
 
 void ControlMap::sendLamp(const Binding &b, bool force)
 {
-    sendLampValue(b, lampValue(lamp(b), m_dimWhenReady), force);
+    /* The emergency stop is never dimmed away (review finding 3): the
+       switch is there for a pad whose lights are colours, and a panic
+       button that cannot be found is worse than an odd colour. Its ready
+       light is sent whatever the switch says. */
+    const bool dim = m_dimWhenReady || b.target.type == EmergencyStopTarget;
+    sendLampValue(b, lampValue(lamp(b), dim), force);
 }
 
 void ControlMap::sendLamps(bool force)
@@ -1405,7 +1411,7 @@ void ControlMap::darkenLamp(const Binding &b)
         if (m_blinking.at(i).universe == b.universe && m_blinking.at(i).channel == b.channel)
             m_blinking.removeAt(i);
     if (m_blinking.isEmpty())
-        m_blinkLeft = 0;
+        m_blinkLeft = 0;    // the chain in flight ends at its next step
     sendLampValue(b, 0, true);
     m_lampSent.remove(key(b.universe, b.channel));
 }
@@ -1417,10 +1423,23 @@ void ControlMap::resendFeedback()
 
 void ControlMap::slotLampsMayHaveChanged()
 {
-    if (m_bindings.isEmpty())
+    /* One pass per turn of the event loop, never one per event (review
+       finding 1). A collection starting thirty scenes sends thirty
+       functionStarted; each pass asks ShowControl::standbyStep() for every
+       cue-list binding, and that takes the Chaser mutexes the ChaserRunner
+       holds while it steps on the MasterTimer thread. Thirty passes would
+       contend with the DMX tick for no gain: the lights are the same
+       either way, so they are worked out once, after the batch. */
+    if (m_bindings.isEmpty() || m_lampsQueued)
         return;
-    sendLamps(false);
-    emit lampsChanged();
+    m_lampsQueued = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_lampsQueued = false;
+        if (m_bindings.isEmpty())
+            return;
+        sendLamps(false);
+        emit lampsChanged();
+    });
 }
 
 void ControlMap::slotGuardHeld(const QString &text, quint32 chaserId)
@@ -1445,11 +1464,18 @@ void ControlMap::slotGuardHeld(const QString &text, quint32 chaserId)
     for (const Binding &b : was)
         if (!isBlinking(b))
             sendLamp(b, true);
-    const bool running = m_blinkLeft > 0;
+    /* One chain, however many holds arrive (review finding 4). The
+       counter alone could not say whether a chain was in flight: it is 0
+       for the whole of the last step's wait, so a hold landing there used
+       to start a second chain, and the two shared the counter -- twice the
+       rate, or one blink. */
     m_blinkLeft = 4;        // on, off, on, off: two blinks
     emit lampsChanged();    // the table says "GO held" while it blinks
-    if (!running)
-        blinkStep();        // one chain, however many holds come
+    if (!m_blinkRunning)
+    {
+        m_blinkRunning = true;
+        blinkStep();
+    }
 }
 
 void ControlMap::blinkStep()
@@ -1457,6 +1483,7 @@ void ControlMap::blinkStep()
     if (m_blinkLeft <= 0)
     {
         // Done: back to what each light says now.
+        m_blinkRunning = false;
         const QList<Binding> was = m_blinking;
         m_blinking.clear();
         for (const Binding &b : was)
