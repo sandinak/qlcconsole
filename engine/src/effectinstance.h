@@ -631,7 +631,8 @@ private:
     mutable QHash<quint64, uchar> m_sceneBaseValues;
     mutable bool m_sceneBaseBuilt = false;
     mutable int m_sceneBaseHint = 0;
-    //!< ...and of how many writes a tick made (parseIntents())
+    //!< how many writes the LAST tick made (parseIntents() reserves that
+    //!< many, rather than growing from nothing)
     mutable int m_writeHint = 0;
 };
 

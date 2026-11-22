@@ -1888,8 +1888,9 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
        loses it. The script is handed a COPY of the kept list, so one that
        sorts or reverses what it is given does not sort the next tick's
        (EFFECTSCRIPT_API.md). */
-    const bool freshArray = rebuild || !m_cellArray.isArray()
-                            || m_cellArray.property("length").toInt() != cells.size();
+    // rebuild covers every change to the cells, so the kept list is the
+    // right length whenever it is not set.
+    const bool freshArray = rebuild || !m_cellArray.isArray();
     if (freshArray)
         m_cellArray = engine->newArray(uint(cells.size()));
     for (int i = 0; i < cells.size(); ++i)
@@ -2798,8 +2799,9 @@ EffectInstance::parseIntents(const QJSValue &intents,
                               const QList<EffectInstance::EffectCell> &cells) const
 {
     QList<DmxWrite> writes;
-    /* About as many as the last tick made: a step rig's 18,000 writes grown
-       from nothing was a megabyte of copying a tick. */
+    /* As many as the LAST tick made: a step rig's 18,000 writes grown from
+       nothing is a megabyte of copying a tick, and a high-water mark would
+       claim that much again on every dark tick. */
     writes.reserve(m_writeHint);
     m_lastIntentDeg.clear();
 
@@ -3432,7 +3434,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         writes.removeAt(i);
     }
 
-    m_writeHint = qMax(m_writeHint, int(writes.size()));
+    m_writeHint = int(writes.size());
     return writes;
 }
 
