@@ -807,6 +807,7 @@ void EffectDesigner_Test::leavingADesignerAsksFirst()
     view.resize(1200, 800);
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
+    const int palettes = m_doc->palettes().count();      // before the draft
     QVERIFY(view.designEffectOnLayer(c1, l1, t));
     Workbench *bench = view.dockedWorkbench();
     QVERIFY(bench != nullptr);
@@ -831,7 +832,6 @@ void EffectDesigner_Test::leavingADesignerAsksFirst()
     QCOMPARE(bench->rows()->layerOf(bench->rows()->currentItem()), designing);
 
     // Leave: the pane goes, and the draft left nothing behind.
-    const int palettes = m_doc->palettes().count();
     leave = true;
     bench->rows()->setCurrentItem(other);
     QCOMPARE(bench->effectPane(), nullptr);
@@ -865,9 +865,17 @@ void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
     QVERIFY(QTest::qWaitForWindowExposed(&view));
     QVERIFY(view.selectNode(c1));
 
-    // + Palette ▸ Effect: the bench, on the cue's own groups, and no
-    // palette made yet.
-    const int palettes = m_doc->palettes().count();
+    // + Palette ▸ Effect: the bench, on the cue's own groups, and nothing
+    // in the show until it is kept (the draft is a one-off of the tree's,
+    // in no list).
+    auto namedEffects = [this]() {
+        int n = 0;
+        for (const QLCPalette *p : m_doc->palettes())
+            if (p->type() == QLCPalette::Effect && !m_doc->showTree()->isInlinePalette(p->id()))
+                ++n;
+        return n;
+    };
+    const int named = namedEffects();
     QVERIFY(view.designEffectPalette(QLCPalette::invalidId()));
     Workbench *bench = view.dockedWorkbench();
     QVERIFY(bench != nullptr);
@@ -875,7 +883,7 @@ void EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner()
     QVERIFY2(ed != nullptr, "+ Palette > Effect did not open the designer");
     QVERIFY(ed->isBench());
     QCOMPARE(ed->tryOnGroups(), QList<quint32>({ towers->id() }));
-    QCOMPARE(m_doc->palettes().count(), palettes);
+    QCOMPARE(namedEffects(), named);
     // The cue it was opened from stays loaded, so Make a Layer can put it there.
     QCOMPARE(ed->cameFromCue(), c1);
     ed->cancel();

@@ -4007,9 +4007,11 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
         qWarning() << "+ Palette > Effect did not open the designer in the Workbench's pane";
         return nullptr;
     }
-    // Nothing is made until it is kept.
-    if (doc->palettes().count() != before.count())
-        qWarning() << "a palette was made before the effect was kept";
+    // Nothing the show keeps is made until it is kept (the draft the
+    // designer works on is a one-off, in no list).
+    for (QLCPalette *p : doc->palettes())
+        if (!before.contains(p->id()) && doc->showTree()->isInlinePalette(p->id()) == false)
+            qWarning() << "a palette was made before the effect was kept:" << p->name();
     // Try on ▾: the lights the lesson plays it on.
     QList<quint32> groups;
     for (const QString &want : tryOn)
