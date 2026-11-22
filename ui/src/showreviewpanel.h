@@ -49,6 +49,7 @@ class Doc;
 class QLC_UI_EXPORT ShowReviewPanel final : public QDialog
 {
     Q_OBJECT
+    friend class ShowReviewPanel_Test;      // reads the batch fixes directly
 
 public:
     explicit ShowReviewPanel(Doc *doc, QWidget *parent = nullptr);
@@ -102,8 +103,15 @@ public:
     /** Whether every one of @a findings is a PWR-12 row "I meant it"
      *  answers (@a meant) or takes back (false). */
     static bool allMeantRows(const QList<ReviewFinding> &findings, bool meant);
-    /** Fix the selected row: its jump, or a footer row's action. */
+    /** Fix the selected row: its jump, or a footer row's action. Several
+     *  rows: every one that fixes in place, together (fixedCount(),
+     *  leftCount() the rows that need a visit each). */
     bool fixSelected();
+    int fixedCount() const { return m_fixed; }
+    int leftCount() const { return m_left; }
+    /** The selected rows that fix in place (a pan turn, a suggested cut, the
+     *  footer's own fix): what Fix does with several rows selected. */
+    int directFixCount() const;
     /** Fix ▸ / a double-click: fixSelected(), and if it couldn't go there,
      *  the summary line says so -- by name when the cue, list, scene or
      *  palette is gone */
@@ -139,6 +147,23 @@ private:
     QPushButton *m_off;
     QList<ReviewFinding> m_findings;
     QString m_gone;     ///< fixSelected(): what was gone, when that stopped it
+    int m_fixed = 0;    ///< fixSelected() of several rows: how many it fixed
+    int m_left = 0;     ///< ... and how many want a visit of their own
+    int m_stayed = 0;   ///< ... and how many were left where they were (a no
+                        ///  to the pan fix, or nothing it could do): there is
+                        ///  no place to visit for those -- the fix IS here
+
+    /** A row's fix in place (directFixOf()). */
+    struct DirectFix
+    {
+        enum Kind { None, PanTurn, Cut, Footer } kind = None;
+        QString key;            ///< Footer: the status entry's key
+        QVariantList data;      ///< the heads, the cut, the entry's items
+    };
+    DirectFix directFixOf(QTreeWidgetItem *item) const;
+    void applyCut(const QVariantList &fix);
+    /** Every selected cut, each head's worst one taped off once. */
+    void applyCuts(const QList<QVariantList> &cuts);
 
     static Jumper s_jumper;
     static QPointer<ShowReviewPanel> s_shared;

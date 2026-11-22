@@ -2078,6 +2078,42 @@ QStringList Monitor::centrePanOnStage(const QList<quint32> &fids)
     return changes;
 }
 
+QStringList Monitor::faceAndCentreOnStage(const QMap<quint32, float> &facings, const QList<quint32> &fids)
+{
+    QStringList changes;
+    const QByteArray before = rigSnapshot();
+    for (auto it = facings.constBegin(); it != facings.constEnd(); ++it)
+    {
+        /* A Facing is a physical re-hang: written to a live head it points
+           every look somewhere else until someone turns the head on its pipe.
+           Refused here as well as in the caller, so no path can do it
+           (proposePanTurns keeps the same rule for a turn). */
+        if (PanTurn::isLive(m_doc, it.key()))
+            continue;
+        FixtureRigProps rp = m_props->fixtureRigProps(it.key());
+        if (qAbs(rp.panZeroDir - it.value()) < 0.01f)
+            continue;
+        rp.panZeroDir = it.value();
+        m_props->setFixtureRigProps(it.key(), rp);
+        if (const Fixture *fx = m_doc->fixture(it.key()))
+            changes << tr("%1 faces %2\302\260 now.").arg(fx->name()).arg(qRound(it.value()) % 360);
+    }
+    for (quint32 fid : fids)
+    {
+        const int was = m_props->fixtureRigProps(fid).panTurn;
+        if (PanTurn::centre(m_doc, fid))
+            changes << PanTurn::changeText(m_doc, fid, was, m_props->fixtureRigProps(fid).panTurn);
+    }
+    if (changes.isEmpty())
+        return changes;
+    pushRigUndo(before);
+    m_doc->setModified();
+    if (m_graphicsView != nullptr && !facings.isEmpty())
+        m_graphicsView->refreshAllItems();      // the facing arrows
+    sayTurnChanges(changes, false);
+    return changes;
+}
+
 QStringList Monitor::proposePanTurns(const QList<quint32> &fids, bool ownStep)
 {
     QStringList changes;
@@ -12656,8 +12692,66 @@ private:
 };
 } // namespace
 
+/* Fixture Properties is taller than a laptop's screen for a moving head
+   (Aim & Mount, the beam, the DMX rows): everything above its buttons goes
+   in a scroller (AppUtil::verticalScroller) and the dialog is held to the
+   screen, so OK and Cancel are always in view. */
+static void fitFixtureEditorToScreen(QDialog &dlg)
+{
+    QBoxLayout *vl = qobject_cast<QBoxLayout *>(dlg.layout());
+    if (vl == nullptr || dlg.findChild<QScrollArea *>(QStringLiteral("fixturePropertiesScroll")) != nullptr)
+        return;
+    // The buttons stay under the scroller: the last QDialogButtonBox row.
+    int keep = vl->count();
+    for (int i = vl->count() - 1; i >= 0; --i)
+        if (qobject_cast<QDialogButtonBox *>(vl->itemAt(i)->widget()) != nullptr)
+        {
+            keep = i;
+            break;
+        }
+    if (keep <= 0)
+        return;
+    QWidget *body = new QWidget;
+    body->setObjectName(QStringLiteral("fixturePropertiesBody"));
+    QVBoxLayout *bl = new QVBoxLayout(body);
+    bl->setContentsMargins(0, 0, 0, 0);
+    bl->setSpacing(vl->spacing());
+    for (int i = 0; i < keep; ++i)
+    {
+        QLayoutItem *item = vl->takeAt(0);
+        if (QWidget *w = item->widget())
+        {
+            bl->addWidget(w);
+            delete item;
+        }
+        else if (QLayout *l = item->layout())
+        {
+            l->setParent(nullptr);
+            bl->addLayout(l);
+        }
+        else
+            bl->addItem(item);
+    }
+    QScrollArea *scroll = AppUtil::verticalScroller(body, &dlg);
+    scroll->setObjectName(QStringLiteral("fixturePropertiesScroll"));
+    vl->insertWidget(0, scroll, 1);
+    // Its natural size, held to the screen it opens on.
+    const QScreen *screen = dlg.parentWidget() != nullptr ? dlg.parentWidget()->screen() : dlg.screen();
+    const QRect room = screen != nullptr ? screen->availableGeometry() : QRect();
+    const QSize want = body->sizeHint() + QSize(scroll->verticalScrollBar()->sizeHint().width() + 24,
+                                                dlg.layout()->itemAt(vl->count() - 1)->sizeHint().height() + 48);
+    if (room.isValid())
+    {
+        const int h = qMin(want.height(), int(room.height() * 0.9));
+        const int w = qMin(want.width(), int(room.width() * 0.95));
+        dlg.resize(w, h);
+        dlg.setMaximumHeight(room.height());
+    }
+}
+
 int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32 &next)
 {
+    fitFixtureEditorToScreen(dlg);
     dlg.setModal(false);
     QEventLoop loop;
     connect(&dlg, &QDialog::finished, &loop, &QEventLoop::quit);

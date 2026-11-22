@@ -24,6 +24,8 @@
 #include <QShortcut>
 #include "../common/fakewled.h"
 #include <QScrollBar>
+#include <QScreen>
+#include <QScrollArea>
 #include <QShortcut>
 #include <memory>
 #include <QGraphicsItem>
@@ -21689,6 +21691,43 @@ void Monitor_Test::aFixtureIsRenamedFromItsEditDialogAndEverywhere()
     QCOMPARE(f->name(), QString("SR Spot"));
 }
 
+/* Fixture Properties is taller than a laptop's screen for a moving head:
+   its rows scroll and the dialog fits the screen, OK and Cancel in view. */
+void Monitor_Test::fixturePropertiesFitsTheScreen()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *f = new Fixture(m_doc);
+    f->setName("Spot 1");
+    f->setChannels(4);
+    f->setAddress(300);
+    QVERIFY(m_doc->addFixture(f));
+    cleanup.ids << f->id();
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
+    QString why;
+    driveDialog([&why](QWidget *dlg) {
+        if (dlg->findChild<QLineEdit *>("fixtureNameEdit") == nullptr)
+            return false;
+        QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
+        QDialogButtonBox *buttons = dlg->findChild<QDialogButtonBox *>();
+        const QRect room = dlg->screen()->availableGeometry();
+        if (scroll == nullptr)
+            why = "no scroller";
+        else if (!scroll->isAncestorOf(dlg->findChild<QLineEdit *>("fixtureNameEdit")))
+            why = "the rows are not in the scroller";
+        else if (buttons == nullptr || scroll->isAncestorOf(buttons))
+            why = "the buttons scroll away";
+        else if (dlg->frameGeometry().height() > room.height())
+            why = QString("%1 tall on a %2 screen").arg(dlg->frameGeometry().height()).arg(room.height());
+        else if (buttons->geometry().bottom() > dlg->height())
+            why = "the buttons are below the window";
+        return true;
+    });
+    rig.mon->showFixtureItemEditor(f->id());
+    QVERIFY2(why.isEmpty(), qPrintable(why));
+}
+
 void Monitor_Test::selectingOnThePlotSelectsInLayers()
 {
     Doc *doc = new Doc(this);
@@ -34312,6 +34351,38 @@ void Monitor_Test::aLiveHeadsTurnIsSaidFirst()
     a = press({ fid }, "fixturePanTurnLater", true);
     QVERIFY(a.text.isEmpty());
     QCOMPARE(a.turnAfter, 1);
+}
+
+/* A Facing is how the head HANGS. Written while the head is live, every look
+   is worked out from it at once, so the beam points somewhere else until
+   someone turns the head on its pipe -- a stage left dark or lit in the wrong
+   place mid-show. faceAndCentreOnStage leaves a live head's Facing alone. */
+void Monitor_Test::aLiveHeadsFacingIsLeftAlone()
+{
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    MonitorProperties *props = m_doc->monitorProperties();
+    const float was = props->fixtureRigProps(fid).panZeroDir;
+    QMap<quint32, float> facing;
+    facing.insert(fid, was + 245.0f);          // the far side of the round
+
+    // Design, nothing running: the Facing is written, as the fix means it.
+    QVERIFY(!PanTurn::isLive(m_doc, fid));
+    QVERIFY(!rig.mon->faceAndCentreOnStage(facing, { fid }).isEmpty());
+    QCOMPARE(qRound(props->fixtureRigProps(fid).panZeroDir), qRound(was + 245.0f));
+
+    // Put it back, then go live: the Facing is left alone.
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.panZeroDir = was;
+    rp.panTurn = 0;
+    props->setFixtureRigProps(fid, rp);
+    m_doc->setMode(Doc::Operate);
+    auto design = qScopeGuard([this]() { m_doc->setMode(Doc::Design); });
+    QVERIFY(PanTurn::isLive(m_doc, fid));
+    rig.mon->faceAndCentreOnStage(facing, { fid });
+    QCOMPARE(qRound(props->fixtureRigProps(fid).panZeroDir), qRound(was));
 }
 
 /* For a selection (the plot's menu, Fixture Properties for several):
