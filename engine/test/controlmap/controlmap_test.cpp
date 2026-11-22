@@ -505,8 +505,8 @@ void ControlMap_Test::aHeldGoBlinksTheControlTwice()
     cm->setBlinkMs(1);
     cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
     ShowControl *sc = m_doc->showControl();
-    sc->setGoGuardMs(1000);
-    auto unhook = qScopeGuard([sc]() { sc->setGoGuardMs(0); });
+    sc->setGoGuardMs(ShowControl::maxGoGuardMs());   // long, so a loaded
+    auto unhook = qScopeGuard([sc]() { sc->setGoGuardMs(0); });   // machine still holds
 
     send(10, 127);                      // the first GO is carried out
     tick(2);
@@ -528,6 +528,18 @@ void ControlMap_Test::aHeldGoBlinksTheControlTwice()
     QVERIFY(!cm->isBlinking(*cm->binding(ControlMap::cueList(listId))));
     QVERIFY(chaser->isRunning());       // the held GO did not advance the list
     QCOMPARE(st->runningCue(listId), cues.at(0));
+
+    // The trigger removed in the middle of a blink: it stops at once and
+    // goes dark, rather than blink on for a control that fires nothing.
+    send(10, 0);
+    send(10, 127);
+    tick(2);
+    QVERIFY2(cm->isBlinking(*cm->binding(ControlMap::cueList(listId))), "the second hold did not blink");
+    QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
+    QCOMPARE(lastLight(m_stub, 10), 0);
+    m_stub->m_feedback.clear();
+    QTest::qWait(20);                   // the blink's steps would have fallen here
+    QVERIFY2(m_stub->m_feedback.isEmpty(), "a removed trigger's control was still blinking");
 }
 
 /* A cue list a GO would do nothing with -- every cue cut for the rehearsal

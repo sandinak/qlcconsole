@@ -1399,6 +1399,13 @@ void ControlMap::sendLamps(bool force)
 
 void ControlMap::darkenLamp(const Binding &b)
 {
+    // A control that fires nothing stops blinking too, rather than go on
+    // for the rest of the hold's blink on a trigger that has gone.
+    for (int i = m_blinking.count() - 1; i >= 0; --i)
+        if (m_blinking.at(i).universe == b.universe && m_blinking.at(i).channel == b.channel)
+            m_blinking.removeAt(i);
+    if (m_blinking.isEmpty())
+        m_blinkLeft = 0;
     sendLampValue(b, 0, true);
     m_lampSent.remove(key(b.universe, b.channel));
 }
