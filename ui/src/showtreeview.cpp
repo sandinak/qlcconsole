@@ -11173,6 +11173,20 @@ void ShowTreeView::reloadLibrary()
     }
     if (!m_filter->text().isEmpty())
         slotFilterChanged(m_filter->text());
+    /* Board Q264: an effect just saved from the designer is named here.
+       The row is opened to type after THIS rebuild, whichever reload comes
+       last (a palette added reloads us again, and that threw the editor
+       away: the effect kept the effect's name). */
+    if (m_libRenameAfterReload != QLCPalette::invalidId())
+    {
+        const quint32 pid = m_libRenameAfterReload;
+        m_libRenameAfterReload = QLCPalette::invalidId();
+        if (m_doc->palette(pid) != nullptr)
+        {
+            selectLibraryPalette(pid);
+            startLibraryRename();
+        }
+    }
 }
 
 void ShowTreeView::slotFilterChanged(const QString &text)

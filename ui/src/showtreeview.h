@@ -1444,6 +1444,9 @@ private:
     bool m_libRenaming = false;
     quint32 m_libraryClip = 0xFFFFFFFF;     //!< Q215: the reusable cue copied in the Library
     QTreeWidgetItem *m_libRenameItem = nullptr;
+    /** A palette the designer just saved: its name is opened to type after
+     *  the next reloadLibrary(), whichever one comes last (board Q264). */
+    quint32 m_libRenameAfterReload = 0xFFFFFFFF;
     void slotLibraryItemRenamed(QTreeWidgetItem *item, int column);
     /** The Look Editor's Used by line for @a paletteId. */
     void updateUsedBy(quint32 paletteId);

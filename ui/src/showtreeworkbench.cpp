@@ -379,17 +379,21 @@ void ShowTreeView::followDesignerIntoTheLibrary(EffectDesigner *designer, bool n
             const QLCPalette *p = m_doc->palette(paletteId);
             if (p == nullptr)
                 return;
-            reloadLibrary();
-            selectLibraryPalette(paletteId);
             if (outcome == EffectDesigner::NewPalette && nameNewOnes)
             {
                 // Saved under the effect's name: the name is open to type
                 // over, as Build ▸ Effects opens it (no name box first).
+                // reloadLibrary() opens it, so a reload of its own (the
+                // palette added, the preview scene gone) cannot throw the
+                // editor away first.
                 m_hint->setText(tr("Saved in this show as “%1”: type its name").arg(p->name()));
-                startLibraryRename();
+                m_libRenameAfterReload = paletteId;
+                reloadLibrary();
             }
             else
             {
+                reloadLibrary();
+                selectLibraryPalette(paletteId);
                 paletteEdited(paletteId, true);
             }
         });
