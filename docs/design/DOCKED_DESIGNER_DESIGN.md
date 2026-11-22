@@ -224,3 +224,36 @@ cues and hits*. No rename, no new menu item, so the menu count is flat.
 Shots for the UX review: the docked designer on a cue layer and on the
 bench, at 1024×640, 1440×900 and 1920×1080, beside the same cue's page
 before the change.
+
+## 9. What was built (2026-11-22, feat/053-docked-designer)
+
+Q266 and Q263 + Q264 as above, with four things worth recording because
+they differ from, or add to, the plan:
+
+- **No Cancel in the pane.** The designer's Cancel stays hidden either
+  side (as the bench's always was): **↩** and **Esc** leave, and they ask
+  first when nothing has been kept (§4). One way out, not two.
+- **Save in This Show… files where the Library stands.** `+ Palette ▸
+  Effect` always filed the new palette in the folder selected in the
+  Library (the song's folder, which lesson 2.4's exit ticket asks about),
+  so the request carries it: `EffectRequest::folder` →
+  `EffectDesigner::setSaveFolder()`. Without this the effect would have
+  landed in the show's effects folder and the lesson's claim would be
+  false.
+- **What the designer keeps shows in the Library at once**, and a new
+  palette's name is opened to type there, as Build ▸ Effects opens it
+  (`ShowTreeView::followDesignerIntoTheLibrary`). The course's "name it"
+  step needs it.
+- **A latent crash, fixed:** a child going down can still change the show
+  — the designer drops its hidden preview scene as it is destroyed — and
+  `Doc::functionRemoved` reached `ShowTreeView::updateBridgeBanner` with
+  the banner's widgets already freed. Both `~ShowTreeView` and
+  `~Workbench` now let go of the show's signals first. Reachable before
+  this work through `+ Effect ▾ → Effect Palette…` in a Workbench the
+  tree owns (no lender).
+
+**Left open: Q265** (§7, a Build scene dropped on a cue lands as layers,
+⌥ keeps it ▣, a ▣ block gets **Make It Layers…**). It shares no code with
+the designer: the drop path (`ShowTreeView::dropFunctions`) and the menu
+slot beside **Capture into Palettes…**, reusing Upgrade This Show's
+step-scene reader. Its own branch.
