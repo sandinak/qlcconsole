@@ -12,6 +12,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **A crash when the Show Tree closed with an effect designer open in the
+  Workbench docked there**: the designer drops its hidden preview scene as
+  it goes, and the show's "a function was removed" reached the tree's
+  banner with its widgets already freed.
+
 ### Changed
 
 - **The Show Tree says what is in it** (board Q266): its tab tooltip, its

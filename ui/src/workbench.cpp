@@ -302,6 +302,12 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
 
 Workbench::~Workbench()
 {
+    /* Nothing may call back into a half-gone Workbench: the effect designer
+       in the editor pane drops its hidden preview scene as it is destroyed
+       (with our children), and the show's signals would reach us with that
+       pane already freed. */
+    if (m_doc != nullptr)
+        m_doc->disconnect(this);
     // A page the back end lent goes back before it would go with us.
     releaseLentPane();
     stopPreview();

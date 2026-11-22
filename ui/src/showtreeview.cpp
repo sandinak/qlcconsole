@@ -3045,6 +3045,16 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
 
 ShowTreeView::~ShowTreeView()
 {
+    /* Nothing outside may call back into a half-gone view. A child going
+       down can still change the show -- an effect designer in the Workbench
+       docked here drops its hidden preview scene as it goes -- and
+       Doc::functionRemoved then reached updateBridgeBanner with the
+       banner's widgets already freed (a crash, found by
+       EffectDesigner_Test::theLibrarysEffectDoorsOpenTheDesigner). */
+    if (m_doc != nullptr)
+        m_doc->disconnect(this);
+    if (!m_st.isNull())
+        m_st->disconnect(this);
     // The Library goes back from Build before it is gone with this view.
     returnLibrary();
     // A docked Workbench goes back to Build (or with the tree's own).
