@@ -67,6 +67,9 @@ public slots:
     void refresh();
     /** A key row's control says "· Armed" in Design while it may fire. */
     void refreshArming();
+    /** The "Its light" column: what each control's light shows now
+     *  (ControlMap::lamp(), CS3) -- the same answer the desk's LED has. */
+    void refreshLamps();
 
 signals:
     void summaryChanged();
@@ -90,6 +93,10 @@ private slots:
 private:
     QString controlText(const ControlMap::Binding &b) const;
     QString stopRowText(const ControlMap::Binding &b) const;
+    /** What a binding's light says, in words ("Ready", "Running", "GO
+     *  held", "Stopped", "Dark"), or why it has none (a computer key, a
+     *  universe with no feedback line). */
+    QString lampText(const ControlMap::Binding &b) const;
 
 private:
     Doc *m_doc;
@@ -97,6 +104,9 @@ private:
     QPushButton *m_remove;
     QPushButton *m_removeAll;
     QPushButton *m_estop;
+    /** Whether a ready control glows dim (CS3): off for a pad whose lights
+     *  take a colour in the velocity and not a brightness. */
+    QCheckBox *m_dim = nullptr;
     QLabel *m_empty;
     QLabel *m_last;
     /** "Control surfaces are off for this show": the triggers and the encoder

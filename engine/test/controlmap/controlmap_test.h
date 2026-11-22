@@ -41,6 +41,20 @@ private slots:
     void startOnlyAndStopOnly();
     void oneControlOneTarget();
     void theLightFollowsWhatItFires();
+    // CS3: the light says ready, running, held and stopped, each from the
+    // one place that owns the answer (docs/design/SCOPED_CONTROLS_2026-11-22.md)
+    void theLightSaysReadyRunningAndDark();
+    void aLightIsDarkWhereAPressWouldBeRefused();
+    void theLightGoesDarkAfterTheStopUntilTheNextGo();
+    void aHeldGoBlinksTheControlTwice();
+    void aCueListWithNothingToGoIsDark();
+    void theDimLightIsSwitchableAndSavedWithTheShow();
+    void theLightsComeBackWhenTheControllerDoes();
+    // the independent review's lamp findings
+    void aNewShowTakesTheLightsWithIt();
+    void theDimSwitchNeverDarkensTheStop();
+    void manyFunctionsAtOnceAreOneLightPass();
+    void aLightThatDidNotChangeIsNotSentAgain();
     void aCueListGoesAndACueJumps();
     void aCueMadeASubCueStillJumps();
     void aHitFires();
@@ -100,6 +114,9 @@ private:
     /** A controller that misbehaves: values sent in order on one control. */
     void sweepTargets(bool viaKey);
     void sendAll(quint32 channel, const QList<int> &values);
+    /** A cue list of @a cues cues on one fixture group, each a Dimmer
+     *  look at full: the list's id. */
+    quint32 cueList(int cues, QList<quint32> *cueIds = nullptr);
 
 private:
     Doc *m_doc = nullptr;
