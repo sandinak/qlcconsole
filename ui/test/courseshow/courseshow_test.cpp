@@ -3964,6 +3964,10 @@ bool treeMenu(ShowTreeView *view, QTreeWidgetItem *item, const QStringList &path
    place of the page. Try on ▾ picks the lights, the browser picks the
    effect -- which plays at once -- and Save in This Show… files it in the
    folder the Library has selected and opens its name to type there. */
+/* Why the last newEffectPalette() gave up: the gate shows the FAIL line
+   and the log's last 80 lines, so the reason has to ride on the line. */
+QString s_effectWhy;
+
 QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder, const QString &effect,
                              const QString &name, const QString &shotDir = QString(),
                              const QString &shotName = QString(),
@@ -3973,7 +3977,8 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
     QTreeWidgetItem *f = showLibraryRow(lib, folder);
     if (f == nullptr)
     {
-        qWarning() << "no Library row" << folder;
+        s_effectWhy = QStringLiteral("no Library row %1").arg(folder);
+        qWarning() << s_effectWhy;
         return nullptr;
     }
     lib->setCurrentItem(f);
@@ -3995,7 +4000,10 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
                     make = a;
         }
         if (make == nullptr)
+        {
+            s_effectWhy = QStringLiteral("no + Palette > Effect item");
             return nullptr;
+        }
     }
     make->trigger();
     settle(200);
@@ -4004,14 +4012,14 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
                                           : qobject_cast<EffectDesigner *>(bench->effectPane());
     if (ed == nullptr)
     {
-        qWarning() << "+ Palette > Effect did not open the designer:"
-                   << "docked" << view->isWorkbenchDocked()
-                   << "| cue" << view->currentCueId()
-                   << "| pane" << (bench == nullptr ? "(no workbench)"
-                                                    : bench->effectPane() == nullptr
-                                                          ? "(empty)"
-                                                          : bench->effectPane()->metaObject()->className())
-                   << "| hint" << hintOf(view)->text();
+        s_effectWhy = QStringLiteral("no designer: docked %1, cue %2, pane %3, hint \"%4\"")
+                          .arg(view->isWorkbenchDocked() ? 1 : 0).arg(view->currentCueId())
+                          .arg(bench == nullptr ? QStringLiteral("(no workbench)")
+                               : bench->effectPane() == nullptr
+                                     ? QStringLiteral("(empty)")
+                                     : QString::fromLatin1(bench->effectPane()->metaObject()->className()),
+                               hintOf(view)->text());
+        qWarning().noquote() << s_effectWhy;
         return nullptr;
     }
     // Nothing the show keeps is made until it is kept (the draft the
@@ -4032,7 +4040,7 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
     EffectBrowser *browser = ed->browser();
     if (browser == nullptr)
     {
-        qWarning() << "the designer has no effect browser";
+        s_effectWhy = QStringLiteral("the designer has no effect browser");
         return nullptr;
     }
     for (int i = 0; i < 60 && browser->list()->count() == 0; ++i)
@@ -4056,7 +4064,11 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
     }
     qInfo().noquote() << "[L2] the designer's browser shows for" << effect << ":" << shown.join(" | ");
     if (hit == nullptr)
+    {
+        s_effectWhy = QStringLiteral("the browser has no \"%1\" (it shows: %2)")
+                          .arg(effect, shown.isEmpty() ? QStringLiteral("nothing") : shown.join(QStringLiteral(", ")));
         return nullptr;
+    }
     QListWidget *list = browser->list();
     list->scrollToItem(hit);
     QTest::mouseClick(list->viewport(), Qt::LeftButton, Qt::NoModifier, list->visualItemRect(hit).center());
@@ -4079,7 +4091,8 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
     QPushButton *keep = ed->findChild<QPushButton *>(QStringLiteral("edSavePalette"));
     if (keep == nullptr || !keep->isEnabled())
     {
-        qWarning() << "no Save in This Show…" << (keep != nullptr);
+        s_effectWhy = QStringLiteral("Save in This Show is %1")
+                          .arg(keep == nullptr ? QStringLiteral("not there") : QStringLiteral("greyed"));
         return nullptr;
     }
     keep->click();
@@ -4089,13 +4102,18 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
         if (!before.contains(p->id()))
             made = p;
     if (made == nullptr)
+    {
+        s_effectWhy = QStringLiteral("nothing was saved in the show");
         return nullptr;
+    }
     qInfo().noquote() << "[L2] saved in this show as" << made->name() << "| folder" << made->path()
                       << "| renaming in the Library" << view->m_libRenaming;
     if (!view->m_libRenaming)
     {
-        qWarning() << "the name was not opened to type in the Library; current row"
-                   << (lib->currentItem() == nullptr ? QString("(none)") : lib->currentItem()->text(0));
+        s_effectWhy = QStringLiteral("the name was not opened to type in the Library (row \"%1\")")
+                          .arg(lib->currentItem() == nullptr ? QStringLiteral("(none)")
+                                                            : lib->currentItem()->text(0));
+        qWarning().noquote() << s_effectWhy;
         return nullptr;
     }
     if (QTreeWidgetItem *cur = lib->currentItem())
@@ -4108,7 +4126,13 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
     if (view->isWorkbenchDocked())
         view->closeWorkbench();
     settle(100);
-    return made->name() == name ? made : nullptr;
+    if (made->name() != name)
+    {
+        s_effectWhy = QStringLiteral("named \"%1\", not \"%2\"").arg(made->name(), name);
+        return nullptr;
+    }
+    s_effectWhy.clear();
+    return made;
 }
 
 QString nextReceives(ShowTreeView *view)
@@ -4682,7 +4706,7 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     // Part A: the steps sparkle -- an effect palette of the song's own.
     QLCPalette *sparkle = newEffectPalette(doc, view, "01-Everybody Scream", "Sparkle", "Step Sparkle",
                                            shots, QStringLiteral("effect-picker"), { "Steps" });
-    LESSON_STEP(sparkle != nullptr, "the sparkle palette");
+    LESSON_STEP(sparkle != nullptr, QStringLiteral("the sparkle palette -- %1").arg(s_effectWhy));
     LESSON_STEP(view->selectNode(cue), "select the dance break");
     settle(50);
     {
@@ -4747,7 +4771,7 @@ static bool lessonTwoFourByMouse(Doc *doc, ShowTreeView *view, const QString &sh
     // colour in the look it sweeps that colour across the heads).
     QLCPalette *wave = newEffectPalette(doc, view, "01-Everybody Scream", "Rainbow", "Truss Wave",
                                         QString(), QString(), { "TrussW-RGB" });
-    LESSON_STEP(wave != nullptr, "the wave palette");
+    LESSON_STEP(wave != nullptr, QStringLiteral("the wave palette -- %1").arg(s_effectWhy));
     LESSON_STEP(view->selectNode(cue), "select the dance break");
     settle(50);
     {
@@ -5445,7 +5469,7 @@ void CourseShow_Test::lessonTwoFourStageChase()
     QVERIFY(view->selectNode(cue));
     settle(50);
     QLCPalette *chase = newEffectPalette(doc, view, "01-Everybody Scream", "Color Chase", "Stage Chase");
-    QVERIFY(chase != nullptr);
+    QVERIFY2(chase != nullptr, qPrintable(s_effectWhy));
     QVERIFY(view->selectNode(cue));
     settle(50);
     QTreeWidgetItem *row = treeCue(view, "1.0.2");
