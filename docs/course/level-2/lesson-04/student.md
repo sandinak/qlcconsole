@@ -63,8 +63,8 @@ Which lights move, and which stay still?
    leaves the designer; press it again to put the cue's page back.
 8. Click **1.0.6 Dance Break**; drag **Step Sparkle** onto the **Steps**
    row. Now it twinkles in the cue.
-9. Click **↩ Back**, then the **Steps** row. On **Dimmer effect**: **⋯ →
-   Its Own Colour / Dimmer → White**.
+9. **↩ Show Tree** until the cue's page is back, then click the **Steps**
+   row. On **Dimmer effect**: **⋯ → Its Own Colour / Dimmer → White**.
 
    ![Its own colour](../../images/lesson-2-4/sparkle-row.png)
 
@@ -76,7 +76,8 @@ Which lights move, and which stay still?
 
     ![The dance break](../../images/lesson-2-4/rig-dance-break.png)
 
-12. Click **↩ Back**. **File ▸ Save As** → `Lesson2-4-yourname.qlcc`.
+12. **↩ Show Tree** until the cue's page is back. **File ▸ Save As** →
+    `Lesson2-4-yourname.qlcc`.
 
 An effect comes in with its cue, so a sudden sparkle never jumps out of a slow build: over the cue's fade in it grows from nothing to its full movement, and over the fade out of the cue that ends it, it dies away. To change that, use **⋯ → Fade In / Out** on the effect's row.
 
