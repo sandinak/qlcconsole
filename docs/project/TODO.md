@@ -122,8 +122,14 @@ only when something reads one (a colour effect never does), each head's
 channels come off its mode once, an answer's keys go into their places
 instead of being searched for thirty times a head, and the cells' array is
 copied inside the engine instead of named place by place.
+On dink (M-series, Release) the same two cases went 3.68 / 5.30 -> 0.68 /
+1.83 ms, and a whole Fire Spread tick over the rig 5.88 -> 3.64 ms.
 Guarded by **SpreadEffects_Test::theHostTickCostOverTheStepBars**, which
-reports every piece and fails over its budget.
+reports every piece and holds two SHARES -- the cells and the look's base
+under a tenth of the tick, the arguments under half the answers -- plus a
+per-row budget. The shares are what fail on the old code: an absolute
+budget set from Intel numbers passes it on an M-series Mac (found by
+gating the pre-change engine on dink, 2026-11-22).
 
 Left open:
 

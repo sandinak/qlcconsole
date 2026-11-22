@@ -2158,6 +2158,52 @@ void SpreadEffects_Test::theHostTickCostOverTheStepBars()
         if (out.open(QIODevice::WriteOnly | QIODevice::Text))
             QTextStream(&out) << lines.join("\n") << "\n";
     }
+    auto pieceMs = [](const Row &r, const char *what) {
+        for (const Piece &pc : r.pieces)
+            if (pc.what == QLatin1String(what))
+                return pc.ms;
+        return 0.0;
+    };
+
+    /* What the rig's own work costs a tick, as a SHARE of it. Laying the
+       6,144 cells out and working out the look's base values were a third
+       of the host's tick before perf/053-effect-host (0.17 + 1.06 of
+       3.68 ms on an M-series Mac, 0.68 + 3.88 of 14.24 ms on an Intel one);
+       they are kept, and worked out on demand, so they are a rounding error
+       now. A share and not a time, because both are measured in the same
+       run as the tick they are a share of: how fast the machine is cancels
+       out, which an absolute budget cannot do -- 6 ms passes the OLD code
+       on a fast Mac and would fail the new code on a slow one. */
+    for (const Row &r : table)
+    {
+        const double once = pieceMs(r, "cells") + pieceMs(r, "look base");
+        QVERIFY2(r.hostMs > 0 && once <= 0.10 * r.hostMs,
+                 qPrintable(QString("%1: the cells and the look's base values cost %2 of the"
+                                    " host's %3 ms a tick (%4 %%), more than a tenth")
+                                .arg(r.what).arg(once, 0, 'f', 2).arg(r.hostMs, 0, 'f', 2)
+                                .arg(r.hostMs > 0 ? 100.0 * once / r.hostMs : 0.0, 0, 'f', 0)));
+    }
+#ifdef __OPTIMIZE__
+    /* ...and handing the rig over costs well under reading its answers
+       back. Naming two or three properties on each of 6,144 cells made the
+       arguments as dear as the answers (2.12 against 1.98 ms on an M-series
+       Mac, 8.45 against 8.55 on an Intel one); each cell's objects are
+       changed in place now, so no cell is named again. Optimised builds
+       only: unoptimised, reading an answer swells enough to hide it. */
+    for (const Row &r : table)
+    {
+        if (r.what != QStringLiteral("every head a colour"))
+            continue;
+        const double args = pieceMs(r, "arguments"), answers = pieceMs(r, "answers");
+        QVERIFY2(answers > 0 && args <= 0.5 * answers,
+                 qPrintable(QString("the per-head arguments cost %1 ms against %2 ms to read"
+                                    " the answers: more than half")
+                                .arg(args, 0, 'f', 2).arg(answers, 0, 'f', 2)));
+    }
+#endif
+
+    /* The budget is the backstop over all of it: a share stays right while
+       everything gets slower together. */
     for (const Row &r : table)
         if (r.budget > 0)
             QVERIFY2(r.hostMs <= r.budget,

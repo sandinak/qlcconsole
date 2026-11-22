@@ -115,7 +115,12 @@ private slots:
      *  (the cells, the look's base values, the per-head arguments, reading
      *  the answers back), for an effect that says nothing and one that
      *  colours every head: reported (QLC_SHOT_DIR gets the numbers) and
-     *  held to a budget. The script's own cost is theStepBarsTickCost's
+     *  held to three things. The one that bites on any machine is a SHARE:
+     *  the cells and the look's base values together under a tenth of the
+     *  host's tick, and (optimised) the arguments under half what reading
+     *  the answers costs -- both measured in the same run as what they are
+     *  a share of, so how fast the Mac is cancels out. The per-row budget
+     *  is the backstop. The script's own cost is theStepBarsTickCost's
      *  business; this is what every effect on a big rig pays whatever it
      *  draws. */
     void theHostTickCostOverTheStepBars();
