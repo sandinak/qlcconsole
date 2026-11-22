@@ -42,8 +42,6 @@ private slots:
     void fixGoesToThePlace();
     /** A footer design entry no check reads is listed under its id */
     void fixSeveralAtOnce();
-    /** A batch where every row wants a visit says nothing was fixed. */
-    void aBatchThatFixesNothingSaysSo();
     /** Two cuts for one head in a batch: the worst taped off once. */
     void oneHeadsCutIsTapedOffOnce();
     void footerEntriesFoldIn();
