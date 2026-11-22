@@ -28,6 +28,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QFileDialog>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QPainter>
 #include <functional>
@@ -663,35 +664,20 @@ void Autosave_Test::openTheSavedShowKeepsTheAutosaveAside()
     // File ▸ Open: the file chosen, then the question.
     bool chosen = false;
     bool asked = false;
-    bool primed = false;
     onModal([&](QWidget *w) {
         if (QFileDialog *fd = qobject_cast<QFileDialog *>(w))
         {
-            // The dialog reads its folder in the background, and an accept
-            // before it holds our file takes whatever else it holds (under
-            // load, a different file with no autosave beside it). So the
-            // folder and file are asked for ONCE (setDirectory again on
-            // every tick restarts that read, so a loaded host never saw it
-            // finish), and then each tick only waits for the dialog to
-            // report the show as the selection.
-            if (!primed)
-            {
-                primed = true;
-                fd->setDirectory(QFileInfo(show).absolutePath());
-                fd->selectFile(show);
-                return false;
-            }
-            // Compared as canonical paths: a temp folder under /var is
-            // /private/var to the dialog once it has read it.
-            const QString picked = fd->selectedFiles().value(0);
-            if (picked.isEmpty()
-                || QFileInfo(picked).canonicalFilePath() != QFileInfo(show).canonicalFilePath())
-            {
-                // A bare file name in the folder it has, never an absolute
-                // path that could change the directory (and restart the read).
-                fd->selectFile(QFileInfo(show).fileName());
-                return false;
-            }
+            /* The show is TYPED IN, not picked out of the view: the dialog
+               reads its folder on another thread, and on a loaded host that
+               read is what never finished inside the minute -- the dialog
+               kept reporting the old folder's selection, so the test waited
+               it out and Open was cancelled (the gate's longest-standing
+               flake: 2026-11-08, 11-16, 11-22). An absolute path in the name
+               field is what accept() resolves, with no folder read in it. */
+            if (QLineEdit *name = fd->findChild<QLineEdit *>("fileNameEdit"))
+                name->setText(show);
+            else
+                fd->selectFile(show);       // no name field: not Qt's own dialog
             chosen = true;
             static_cast<QDialog *>(fd)->accept();
             return false;
