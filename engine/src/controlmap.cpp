@@ -1440,6 +1440,7 @@ void ControlMap::slotGuardHeld(const QString &text, quint32 chaserId)
             sendLamp(b, true);
     const bool running = m_blinkLeft > 0;
     m_blinkLeft = 4;        // on, off, on, off: two blinks
+    emit lampsChanged();    // the table says "GO held" while it blinks
     if (!running)
         blinkStep();        // one chain, however many holds come
 }
