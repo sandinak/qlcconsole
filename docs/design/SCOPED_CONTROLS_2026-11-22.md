@@ -21,9 +21,9 @@ Two reasons not to jump the queue to CS7:
 
 1. CS7's own LED rule (audit §5.3) is *"each bound control shows its
    **resolved** binding: dark = nothing here, dim = assigned and idle,
-   bright = running"*. Today a Control Map light is one bit: `sendFeedback(b,
-   bool on)` with `on` = "the bound function is running"
-   (`engine/src/controlmap.cpp:1194`). There is no dim, no blink and no
+   bright = running"*. In 0.5.2 a Control Map light is one bit:
+   `ControlMap::sendFeedback(b, bool on)` with `on` = "the bound function is
+   running" (`engine/src/controlmap.cpp`). There is no dim, no blink and no
    "nothing here now", so a scoped binding would have no way to say that
    its place is not live -- the first thing a student needs to see from a
    bank of scoped pads. CS3 builds that vocabulary; CS7 then adds one more
