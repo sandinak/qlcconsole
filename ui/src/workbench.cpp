@@ -615,6 +615,15 @@ void Workbench::buildAddBar(QWidget *column)
 
     // Scrolls sideways rather than holding Build wide (ShrinkableBar).
     col->addWidget(new ShrinkableBar(bar, column));
+
+    /* Laptop fit (noted 2026-11-10): ShrinkableBar stays genuinely
+       shrinkable (elsewhere that is the point of it), but this column only
+       ever holds this one row beside the header and the layer list, so it
+       may as well ask for the row's own natural width -- below that, Open
+       always needed a scroll just to come into view. The splitter still
+       squeezes it below this when the window itself is too small for
+       everything (as any minimum can be). */
+    column->setMinimumWidth(qMax(column->minimumSizeHint().width(), bar->sizeHint().width()));
 }
 
 void Workbench::buildEditorPane()

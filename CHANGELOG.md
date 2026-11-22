@@ -49,6 +49,23 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   once per function that starts. See [Control
   surfaces](docs/features/control-surfaces.md#what-a-controls-light-says),
   which gained two hardware-checklist steps for it.
+### Added
+
+- **Findability gate tests for View ▸ Workspace ▸ Tabs & Features… and
+  Settings ▸ Appearance ▸ Footer.** Each shipped with tests for what it does
+  but none for whether a person could find it: new tests walk the real menu
+  path -- the menu text as shown, the entry's place in its menu, and that it
+  opens the right dialog -- so a future rename or move breaks a test instead
+  of going unnoticed.
+
+### Fixed
+
+- **Build: the Workbench's add-bar row was cut off after Own Copy at
+  1024x640.** The navigator's share of the split left the row's buttons (+
+  Scene, + Effect, the layer arrows, Remove, Own Copy, Open) narrower than
+  the row needed, so Open needed a scroll no obvious scrollbar invited; the
+  column now asks for the row's own width, so every button is in view at
+  rest.
 
 ## [0.5.2] - 2026-11-22
 
