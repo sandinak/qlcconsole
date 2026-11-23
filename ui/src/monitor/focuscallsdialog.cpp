@@ -18,6 +18,9 @@
 */
 
 #include <QDialogButtonBox>
+#include <QApplication>
+#include <QMainWindow>
+#include <QScreen>
 #include <QListWidget>
 #include <QCheckBox>
 #include <QPointer>
@@ -495,6 +498,39 @@ QString FocusCallsDialog::startPracticeFor(Doc *doc, const QList<FocusCall> &cal
     return doc->programmer()->venueCorrections()->startPractice(fids, seed, minDeg, maxDeg, why);
 }
 
+namespace
+{
+/* A venue prompt waits for an answer: in front of everything while it is
+   open (his rule 2026-11-22: it hid behind Fixture Properties and the main
+   window, and could not be found), centred on the main window so it opens on
+   the screen being worked on, and given the keyboard. */
+void putVenuePromptInFront(QDialog *d, QWidget *parent)
+{
+    d->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+    d->adjustSize();
+    QWidget *anchor = parent != nullptr ? parent->window() : QApplication::activeWindow();
+    if (anchor == nullptr)
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->isVisible() && qobject_cast<QMainWindow *>(w) != nullptr)
+                anchor = w;
+    if (anchor != nullptr)
+    {
+        QRect r = d->frameGeometry();
+        r.moveCenter(anchor->frameGeometry().center());
+        if (QScreen *screen = anchor->screen())
+        {
+            const QRect room = screen->availableGeometry();
+            r.moveLeft(qBound(room.left(), r.left(), qMax(room.left(), room.right() - r.width())));
+            r.moveTop(qBound(room.top(), r.top(), qMax(room.top(), room.bottom() - r.height())));
+        }
+        d->move(r.topLeft());
+    }
+    d->show();
+    d->raise();
+    d->activateWindow();
+}
+} // namespace
+
 QDialog *FocusCallsDialog::showPracticeResult(Doc *doc, QWidget *parent)
 {
     VenueCorrections *venues = doc->programmer()->venueCorrections();
@@ -616,8 +652,7 @@ QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fa
     });
     update();
     tick->start();
-    d->show();
-    d->raise();
+    putVenuePromptInFront(d, parent);
     return d;
 }
 
@@ -671,8 +706,7 @@ QDialog *FocusCallsDialog::confirmVenue(Doc *doc, QWidget *parent)
         venues->setActiveVenue(QString());
         d->close();
     });
-    d->show();
-    d->raise();
+    putVenuePromptInFront(d, parent);
     return d;
 }
 
@@ -709,8 +743,7 @@ QDialog *FocusCallsDialog::offerVenueImport(Doc *doc, QWidget *parent, const QSt
         FocusCallsDialog::confirmVenue(doc, parent);
     });
     QObject::connect(no, &QPushButton::clicked, d, &QDialog::close);
-    d->show();
-    d->raise();
+    putVenuePromptInFront(d, parent);
     return d;
 }
 
