@@ -538,7 +538,7 @@ void closeThroughWindow(const Row &r, QWidget *w, QStringList &problems)
         settle(1);
         QTest::keyClick(w->windowHandle(), Qt::Key_Escape);
     }
-    QTest::qWaitFor([&]() { return g.isNull() || !g->isVisible(); }, 500);
+    (void)QTest::qWaitFor([&]() { return g.isNull() || !g->isVisible(); }, 500);
     if (!g.isNull() && g->isVisible())
     {
         problems << ((r.flags & ClosesByWindow) ? QStringLiteral("a close through its window did not close it")
@@ -558,7 +558,7 @@ QList<QWidget *> newWindows(const QSet<QWidget *> &before)
         if (!w->isVisible() || before.contains(w) || qobject_cast<QMenu *>(w) != nullptr)
             continue;
         const Qt::WindowType t = w->windowType();
-        if (t == Qt::Popup || t == Qt::ToolTip || t == Qt::SplashScreen || t == Qt::Desktop)
+        if (t == Qt::Popup || t == Qt::ToolTip || t == Qt::SplashScreen)
             continue;
         out << w;
     }
@@ -679,7 +679,7 @@ QStringList runRow(App *app, const Row &r, QString *what = nullptr)
     });
     poll.start();
     r.open(app);
-    QTest::qWaitFor([&]() { return done; }, kOpenTimeout + 2000);
+    (void)QTest::qWaitFor([&]() { return done; }, kOpenTimeout + 2000);
     poll.stop();
     closeStrays(before);
     settle();
@@ -941,7 +941,7 @@ void WindowSanity_Test::aHiddenEditorIsFoundFromTheBanner()
         QStringList problems;
         QTimer::singleShot(0, this, [&]() {
             QDialog *dlg = nullptr;
-            QTest::qWaitFor([&]() {
+            (void)QTest::qWaitFor([&]() {
                 for (QWidget *w : QApplication::topLevelWidgets())
                     if (w->isVisible() && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
                         dlg = qobject_cast<QDialog *>(w);
