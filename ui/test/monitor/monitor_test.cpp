@@ -3520,15 +3520,22 @@ void Monitor_Test::theFixtureEditorTakesClicksAndKeysThroughItsWindow()
     // Opened by a double click on the plot through the main window, as on
     // his Mac; then Cancel clicked through the editor's window.
     Outcome dbl;
+    bool grabberAfterRelease = true;
+    QPoint onFixture;
     drive(dbl, [&](QDialog *dlg) {
+        /* The button comes up while the editor is open (it opened on the
+           second press): the plot has to see that release, or the press that
+           opened the editor is still held and a move drags a selection. */
+        QTest::mouseRelease(mainWin, Qt::LeftButton, Qt::NoModifier, onFixture);
+        grabberAfterRelease = rig.gv->scene()->mouseGrabberItem() != nullptr;
         const QPoint at = cancelAt(dlg);
         if (at.x() >= 0)
             QTest::mouseClick(dlg->windowHandle(), Qt::LeftButton, Qt::NoModifier, at);
     });
-    const QPoint onFixture = rig.gv->viewport()->mapTo(&rig.parent,
-                                                       rig.gv->mapFromScene(rig.item->iconCentreScene()));
+    onFixture = rig.gv->viewport()->mapTo(&rig.parent, rig.gv->mapFromScene(rig.item->iconCentreScene()));
     QTest::mouseDClick(mainWin, Qt::LeftButton, Qt::NoModifier, onFixture);
     QVERIFY2(dbl.opened, "a double click on the fixture did not open Fixture Properties");
+    QVERIFY2(!grabberAfterRelease, "the plot still held the press that opened the editor after its release");
     QVERIFY2(dbl.closedByAct, "after a double click opened it, a click on Cancel did not reach Cancel");
     QVERIFY(editor() == nullptr);
 }
