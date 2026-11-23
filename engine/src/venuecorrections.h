@@ -181,6 +181,11 @@ public:
      *********************************************************************/
 public:
     QStringList venueNames() const;
+    /** The one venue whose recorded room output (its patch's target
+     *  addresses) this machine reaches now, by a connected route
+     *  (NetworkRoute::checkRoute, a tunnel never counts): the room it is in.
+     *  Empty when none is reached, or more than one is (board Q294). */
+    QString roomReached() const;
     bool hasVenue(const QString &name) const;
     Venue venue(const QString &name) const;
 
