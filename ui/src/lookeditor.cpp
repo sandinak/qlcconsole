@@ -4270,6 +4270,8 @@ void LookEditor::rebuildEffectDynWidget()
                 form->addRow(perBeat ? tr("%1 (per beat)").arg(label) : label, row);
             }
         }
+        // A narrow pane: the slider and its number go under the label, not past the edge.
+        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
         dv->addLayout(form);
         // Each row's field by its param (its own or its child's objectName,
         // "effectParam_<name>"), for updateEffectParamActivity().

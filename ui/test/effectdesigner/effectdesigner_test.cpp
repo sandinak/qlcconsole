@@ -1155,20 +1155,6 @@ void EffectDesigner_Test::theDesignerControlsAreWhollyVisible()
     }
 
     QStringList bad;
-    {
-        QString geo = QStringLiteral("designer %1 wide; ").arg(ed->width());
-        for (QSplitter *sp : view.findChildren<QSplitter *>())
-            if (sp->isVisible())
-            {
-                QStringList z;
-                for (int sz : sp->sizes())
-                    z << QString::number(sz);
-                geo += QStringLiteral("%1[%2] ").arg(sp->objectName(), z.join(QLatin1Char(',')));
-            }
-        bad << geo;
-        bad.clear();
-        qInfo("%s", qPrintable(geo));
-    }
     auto check = [&bad](const QWidget *c, const QString &name) {
         QString why;
         if (!whollyShown(c, &why))

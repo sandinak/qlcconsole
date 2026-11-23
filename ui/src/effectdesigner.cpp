@@ -218,7 +218,7 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
        the smallest window (1024x640) in the Workbench's pane; the settings
        keep the stretch, and the splitter is there to give the browser more
        room on a bigger screen. Its own rows scroll rather than cut. */
-    m_browser->setMinimumWidth(200);
+    m_browser->setMinimumWidth(160);
 
     QWidget *right = new QWidget(split);
     QVBoxLayout *rv = new QVBoxLayout(right);
@@ -230,29 +230,29 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
     QWidget *ownRow = new QWidget(right);
     QGridLayout *own = new QGridLayout(ownRow);
     own->setContentsMargins(0, 0, 0, 0);
-    /* Two lines (UX-34): Colour (then the second colour) on the first, Dimmer
-       under it, so each toggle shows at the pane's width without scrolling. */
-    int ownCol = 0;
+    /* One line a choice (UX-34), under the "Its own:" heading: the settings
+       side is only ~250 px wide at the smallest window, and a combo of its
+       full width beside its label is all that fits there. */
     QLabel *ownLabel = new QLabel(tr("Its own:"), right);
     ownLabel->setToolTip(tr("A colour or dimmer that belongs to this effect: it applies inside the "
                             "effect only, not to the rest of the layer"));
-    own->addWidget(ownLabel, 0, ownCol++);
+    own->addWidget(ownLabel, 0, 0, 1, 2);
     m_ownColourCombo = new QComboBox(right);
     m_ownColourCombo->setObjectName(QStringLiteral("edOwnColour"));
     m_ownDimmerCombo = new QComboBox(right);
     m_ownDimmerCombo->setObjectName(QStringLiteral("edOwnDimmer"));
-    own->addWidget(new QLabel(tr("Colour"), right), 0, ownCol++);
-    own->addWidget(m_ownColourCombo, 0, ownCol++);
+    own->addWidget(new QLabel(tr("Colour"), right), 1, 0);
+    own->addWidget(m_ownColourCombo, 1, 1);
     // The second own colour (the Behind of Front and Behind), once there is a first.
     m_ownColour2Combo = new QComboBox(right);
     m_ownColour2Combo->setObjectName(QStringLiteral("edOwnColour2"));
     m_ownColour2Combo->setToolTip(tr("The second colour of the effect (Front and Behind's Behind)"));
     m_ownColour2Label = new QLabel(tr("then"), right);
-    own->addWidget(m_ownColour2Label, 0, ownCol++);
-    own->addWidget(m_ownColour2Combo, 0, ownCol++);
-    own->addWidget(new QLabel(tr("Dimmer"), right), 1, 1);
-    own->addWidget(m_ownDimmerCombo, 1, 2);
-    own->setColumnStretch(ownCol, 1);
+    own->addWidget(m_ownColour2Label, 2, 0);
+    own->addWidget(m_ownColour2Combo, 2, 1);
+    own->addWidget(new QLabel(tr("Dimmer"), right), 3, 0);
+    own->addWidget(m_ownDimmerCombo, 3, 1);
+    own->setColumnStretch(1, 1);
     /* UX-36: never cut mid-word ("the laye"). Each combo is at least as
        wide as its longest standing choice; the row scrolls instead of
        squeezing them. */
