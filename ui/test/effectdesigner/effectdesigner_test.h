@@ -92,6 +92,8 @@ private slots:
      *  bench from the Library, leaves the window no wider than the page
      *  itself needs -- and no control in it is cut mid-word. */
     void theDesignerFitsTheSmallestWindow();
+    void theDesignerControlsAreWhollyVisible_data();
+    void theDesignerControlsAreWhollyVisible();
     /** Pictures for the UX review (QLC_SHOT_DIR), at three window sizes:
      *  a cue's layer in the docked Workbench, its Effect row (the designer
      *  -- the Look Editor before board Q263), and the Library's

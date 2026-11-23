@@ -1586,6 +1586,24 @@ void Workbench::showPage(Page page)
     // The bench's designer has the width; the layers come back with anything else.
     m_split->widget(0)->setVisible(!(w == m_functionPage && m_benchPane && !m_effectPane.isNull()
                                      && m_funcEditor == m_effectPane));
+    /* A layer's effect designer takes the width the layers left (UX-34): at
+       its ~400 px share of the split Solo, Show All Effects and the value
+       boxes ran off the edge. The layers column shrinks to its floor while
+       designing, and the split the person set comes back after (a move of
+       the handle meanwhile is theirs and is kept). */
+    const bool designing = w == m_functionPage && !m_effectPane.isNull() && m_funcEditor == m_effectPane;
+    if (designing && !m_benchPane && m_splitBeforeDesign.isEmpty())
+    {
+        m_splitBeforeDesign = m_split->sizes();
+        const int total = m_split->width();
+        const int col = qMin(m_split->widget(0)->minimumSizeHint().width(), total / 4);
+        m_split->setSizes({ col, qMax(1, total - col) });
+    }
+    else if (!designing && !m_splitBeforeDesign.isEmpty())
+    {
+        m_split->setSizes(m_splitBeforeDesign);
+        m_splitBeforeDesign.clear();
+    }
     // The console's channels are drawn when it shows (a switch from one
     // fixture to another fires no showEvent).
     if (page == TargetPage && !m_fixtureScroll->isHidden())

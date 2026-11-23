@@ -518,6 +518,7 @@ private:
     /** designEffect()'s designer, and whether it is the bench's. */
     QPointer<QWidget> m_effectPane;
     bool m_benchPane = false;
+    QList<int> m_splitBeforeDesign;     // the split to give back when the designer leaves
     /** The layers row the pane's designer belongs to (ProgrammingOutline's
      *  KeyRole): clicking another row asks before dropping the draft. */
     QString m_effectPaneRow;

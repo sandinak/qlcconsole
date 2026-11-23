@@ -387,8 +387,15 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_showAll->setAutoRaise(true);
     m_showAll->setVisible(false);           // until there are fixtures to fit
     connect(m_showAll, &QToolButton::toggled, this, [this]() { reload(); });
-    origins->addWidget(m_showAll);
+    // Its own line (UX-34): beside the three origins it was cut at a narrow column.
     v->addWidget(new ShrinkableBar(originRow, this));
+    QWidget *allRow = new QWidget(this);
+    QHBoxLayout *allLay = new QHBoxLayout(allRow);
+    allLay->setContentsMargins(0, 0, 0, 0);
+    allLay->addWidget(m_showAll);
+    allLay->addStretch(1);
+    v->addWidget(allRow);
+    allRow->setVisible(false);
 
     m_tabs = new QTabBar(this);
     m_tabs->setExpanding(false);
@@ -593,6 +600,7 @@ void EffectBrowser::setTargets(const EffectFit::Targets &targets)
 {
     m_targets = targets;
     m_showAll->setVisible(m_targets.known());
+    m_showAll->parentWidget()->setVisible(m_targets.known());
     reload();
 }
 

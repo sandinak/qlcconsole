@@ -1068,6 +1068,124 @@ void EffectDesigner_Test::theDesignerFitsTheSmallestWindow()
     fits("the bench");
 }
 
+/* UX-34 / UX-36: the designer pane's width is what the Workbench gives it,
+   and the controls the review named must lie WHOLLY inside what the person
+   sees -- mapped through every parent (the scrolling rows' viewports clip
+   them), not just isVisible(). */
+static bool whollyShown(const QWidget *w, QString *why)
+{
+    if (w == nullptr || !w->isVisibleTo(w->window()))
+    {
+        *why = QStringLiteral("not shown");
+        return false;
+    }
+    QRect r = w->rect();
+    for (const QWidget *p = w->parentWidget(); p != nullptr; p = p->parentWidget())
+    {
+        r = QRect(w->mapTo(p, QPoint(0, 0)), w->size());
+        if (!p->rect().contains(r))
+        {
+            *why = QStringLiteral("cut by %1(%2): %3,%4 %5x%6 in %7x%8")
+                       .arg(QString::fromLatin1(p->metaObject()->className()), p->objectName())
+                       .arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())
+                       .arg(p->width()).arg(p->height());
+            return false;
+        }
+    }
+    return true;
+}
+
+void EffectDesigner_Test::theDesignerControlsAreWhollyVisible_data()
+{
+    QTest::addColumn<int>("w");
+    QTest::addColumn<int>("h");
+    QTest::newRow("1024x640") << 1024 << 640;
+    QTest::newRow("1440x900") << 1440 << 900;
+    QTest::newRow("1920x1080") << 1920 << 1080;
+}
+
+void EffectDesigner_Test::theDesignerControlsAreWhollyVisible()
+{
+    QFETCH(int, w);
+    QFETCH(int, h);
+    FixtureGroup *towers = group("Towers", 0, 3);
+    QLCPalette *chase = effectPalette(m_doc, "Chase", "Color Chase");
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("Dance"), "01-Opening", ListMode::Tracking);
+    const quint32 c1 = st->addCue(list, -1, "Dance Break");
+    Target t;
+    t.groups << towers->id();
+    const quint32 l1 = st->addLayer(c1, t);
+    st->setLayerLook(c1, l1, st->lookForPalette(chase->id()));
+    EffectDesigner::plugIntoWorkbench();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(w, h);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QTest::qWait(100);
+    QVERIFY(view.openInWorkbench(c1, l1));
+    QTest::qWait(150);
+    TreeCueStack *cs = qobject_cast<TreeCueStack *>(view.dockedWorkbench()->stack());
+    QVERIFY(cs != nullptr);
+    const int li = cs->indexOfLayer(l1);
+    int ai = -1;
+    for (int i = 0; i < cs->layers().at(li).attributes.size(); ++i)
+        if (cs->layers().at(li).attributes.at(i).key.startsWith(QLatin1String("Effect.")))
+            ai = i;
+    QVERIFY(ai >= 0);
+    ProgrammingOutline::Row r;
+    r.kind = ProgrammingOutline::AttributeRow;
+    r.id = quint32(ai);
+    r.scene = quint32(li);
+    QVERIFY(view.dockedWorkbench()->selectRow(r));
+    EffectDesigner *ed = qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane());
+    QVERIFY(ed != nullptr);
+    QTest::qWait(400);
+
+    QStringList bad;
+    auto check = [&bad](const QWidget *c, const QString &name) {
+        QString why;
+        if (!whollyShown(c, &why))
+            bad << QStringLiteral("%1: %2").arg(name, why);
+    };
+    int named = 0;
+    for (const char *n : { "edSolo", "edInContext", "edOwnColour", "edOwnDimmer", "effectShowAll" })
+    {
+        QWidget *c = ed->findChild<QWidget *>(QLatin1String(n));
+        QVERIFY2(c != nullptr, n);
+        if (QLatin1String(n) == QLatin1String("effectShowAll") && !c->isVisibleTo(ed))
+            QFAIL("Show All Effects is not shown on a layer with fixtures");
+        check(c, QLatin1String(n));
+        ++named;
+    }
+    // The second colour's toggle only once there is a first.
+    // Every parameter's value box (a number beside its slider).
+    const QList<QDoubleSpinBox *> boxes = ed->findChildren<QDoubleSpinBox *>(QRegularExpression(QStringLiteral("^effectParam_")));
+    QVERIFY2(!boxes.isEmpty(), "the effect shows no parameter value boxes");
+    for (QDoubleSpinBox *b : boxes)
+        if (b->isVisibleTo(ed))
+        {
+            // Horizontal containment: a long list may scroll down, never sideways.
+            QString why;
+            QRect rr(0, 0, b->width(), b->height());
+            bool ok = true;
+            for (const QWidget *p = b->parentWidget(); p != nullptr && ok; p = p->parentWidget())
+            {
+                const QRect m(b->mapTo(p, QPoint(0, 0)), b->size());
+                if (m.left() < 0 || m.right() >= p->width())
+                {
+                    bad << QStringLiteral("%1: cut sideways by %2(%3), x %4..%5 of %6")
+                               .arg(b->objectName(), QString::fromLatin1(p->metaObject()->className()),
+                                    p->objectName()).arg(m.left()).arg(m.right()).arg(p->width());
+                    ok = false;
+                }
+            }
+        }
+    QVERIFY(named == 5);
+    QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("at %1x%2:\n").arg(w).arg(h) + bad.join(QLatin1Char('\n'))));
+}
+
 void EffectDesigner_Test::designerShots()
 {
     const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");

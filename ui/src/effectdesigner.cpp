@@ -15,6 +15,7 @@
 #include <QMessageBox>
 #include <QButtonGroup>
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
 #include <QToolButton>
@@ -177,8 +178,15 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
         });
     }
     m_contextRow->hide();
-    head->addWidget(m_contextRow);
     v->addWidget(new ShrinkableBar(headRow, this));
+    /* In Context / Solo on a line of their own (UX-34): beside the title and
+       Try on they were a sliver at the pane's ~400 px. */
+    QWidget *ctxLine = new QWidget(this);
+    QHBoxLayout *ctxLay = new QHBoxLayout(ctxLine);
+    ctxLay->setContentsMargins(0, 0, 0, 0);
+    ctxLay->addWidget(m_contextRow);
+    ctxLay->addStretch(1);
+    v->addWidget(ctxLine);
 
     m_onRig = new QLabel(this);
     m_onRig->setObjectName(QStringLiteral("edOnRig"));
@@ -220,27 +228,31 @@ EffectDesigner::EffectDesigner(Doc *doc, QWidget *parent)
 
     // The effect's own colour and dimmer (inside that effect only).
     QWidget *ownRow = new QWidget(right);
-    QHBoxLayout *own = new QHBoxLayout(ownRow);
+    QGridLayout *own = new QGridLayout(ownRow);
     own->setContentsMargins(0, 0, 0, 0);
+    /* Two lines (UX-34): Colour (then the second colour) on the first, Dimmer
+       under it, so each toggle shows at the pane's width without scrolling. */
+    int ownCol = 0;
     QLabel *ownLabel = new QLabel(tr("Its own:"), right);
     ownLabel->setToolTip(tr("A colour or dimmer that belongs to this effect: it applies inside the "
                             "effect only, not to the rest of the layer"));
-    own->addWidget(ownLabel);
+    own->addWidget(ownLabel, 0, ownCol++);
     m_ownColourCombo = new QComboBox(right);
     m_ownColourCombo->setObjectName(QStringLiteral("edOwnColour"));
     m_ownDimmerCombo = new QComboBox(right);
     m_ownDimmerCombo->setObjectName(QStringLiteral("edOwnDimmer"));
-    own->addWidget(new QLabel(tr("Colour"), right));
-    own->addWidget(m_ownColourCombo, 1);
+    own->addWidget(new QLabel(tr("Colour"), right), 0, ownCol++);
+    own->addWidget(m_ownColourCombo, 0, ownCol++);
     // The second own colour (the Behind of Front and Behind), once there is a first.
     m_ownColour2Combo = new QComboBox(right);
     m_ownColour2Combo->setObjectName(QStringLiteral("edOwnColour2"));
     m_ownColour2Combo->setToolTip(tr("The second colour of the effect (Front and Behind's Behind)"));
     m_ownColour2Label = new QLabel(tr("then"), right);
-    own->addWidget(m_ownColour2Label);
-    own->addWidget(m_ownColour2Combo, 1);
-    own->addWidget(new QLabel(tr("Dimmer"), right));
-    own->addWidget(m_ownDimmerCombo, 1);
+    own->addWidget(m_ownColour2Label, 0, ownCol++);
+    own->addWidget(m_ownColour2Combo, 0, ownCol++);
+    own->addWidget(new QLabel(tr("Dimmer"), right), 1, 1);
+    own->addWidget(m_ownDimmerCombo, 1, 2);
+    own->setColumnStretch(ownCol, 1);
     /* UX-36: never cut mid-word ("the laye"). Each combo is at least as
        wide as its longest standing choice; the row scrolls instead of
        squeezing them. */
