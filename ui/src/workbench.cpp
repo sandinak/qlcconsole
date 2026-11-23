@@ -1616,8 +1616,7 @@ void Workbench::fitDesigner()
     QWidget *column = m_split->widget(0);
     if (!designing)
     {
-        if (column->isHidden())
-            column->setVisible(true);
+        column->setVisible(true);       // as every page but the designer's has always done
         if (m_designing)
         {
             if (!m_designDragged && m_splitBeforeDesign.value(0) + m_splitBeforeDesign.value(1) > 200)
