@@ -21762,6 +21762,11 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
         }
         poll.stop();
         QTest::qWait(200);              // laid out and painted
+        fprintf(stderr, "FPBTN dialog '%s' children=%d buttons=%d nameEdit=%d scroll=%d size=%dx%d\n",
+                qPrintable(dlg->windowTitle()), int(dlg->findChildren<QWidget *>().size()),
+                int(dlg->findChildren<QAbstractButton *>().size()),
+                dlg->findChild<QLineEdit *>("fixtureNameEdit") != nullptr,
+                dlg->findChild<QScrollArea *>("fixturePropertiesScroll") != nullptr, dlg->width(), dlg->height());
         QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
         for (QAbstractButton *b : dlg->findChildren<QAbstractButton *>())
         {
