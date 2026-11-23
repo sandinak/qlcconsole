@@ -12597,6 +12597,16 @@ public:
         default:
             return false;
         }
+        /* A real screen hands every click and key to a WINDOW first (a
+           QWidgetWindow: a QWindow with no QObject parent, so never "in" the
+           editor), and the window hands it on to the widget under the
+           pointer or with focus -- where this filter sees it again and
+           decides. Eaten at the window, it reached no widget at all:
+           Fixture Properties took no click and no key (its title bar, drawn
+           by macOS, still worked), and the release of the click that opened
+           it never ended that press (builds 4365, 4367). */
+        if (obj->isWindowType())
+            return false;
         if (inEditor(obj))
             return false;
         // The editor's own children opened later (a colour picker, a message).
@@ -12662,6 +12672,7 @@ private:
         case QEvent::MouseButtonPress:
         {
             auto *me = static_cast<QMouseEvent *>(e);
+            m_pressSeen = true;
             m_pick = Fixture::invalidId();
             if (me->button() == Qt::LeftButton)
                 m_pick = fixtureAt(me->position().toPoint());
@@ -12669,6 +12680,12 @@ private:
         }
         case QEvent::MouseButtonRelease:
         {
+            /* The release of the press that opened the editor (a double
+               click): the plot started that press, so it ends it. Kept from
+               it, the plot held the press, and every move after it dragged
+               a selection from where the editor was opened. */
+            if (!m_pressSeen)
+                return false;
             auto *me = static_cast<QMouseEvent *>(e);
             const quint32 pick = m_pick;
             m_pick = Fixture::invalidId();
@@ -12689,6 +12706,7 @@ private:
     QList<QPointer<StructureStudioView> > m_views;
     QList<QPointer<QAction> > m_menus;
     quint32 m_pick = Fixture::invalidId();
+    bool m_pressSeen = false;   // a press on the plot since the lock began
 };
 } // namespace
 
