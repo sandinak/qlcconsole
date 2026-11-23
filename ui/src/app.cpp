@@ -7246,16 +7246,19 @@ QFile::FileError App::loadXML(const QString& fileName, const QString &asShow)
                            "to replace the original, choose its name there.").arg(damagedLine));
                 });
             }
-            /* Last changed over a day ago: "Still at <venue>?", New venue
-               the default (board Q129). Not modal, so it never holds up a
-               show opened from the command line. */
+            /* Which venue, asked only when it isn't clear (board Q294,
+               revising Q129): see FocusCallsDialog::askVenueIfUnclear().
+               Not modal, so it never holds up a show opened from the
+               command line. */
             if (m_noGui == false)
                 QTimer::singleShot(0, this, [this, show]() {
                     /* No venue file of its own, but one beside it for the
                        same show (an earlier version, a Finder copy): offered
                        (gap 8); else, an old venue confirmed. */
-                    if (FocusCallsDialog::offerVenueImport(m_doc, this, show) == nullptr)
-                        FocusCallsDialog::confirmVenue(m_doc, this);
+                    QString said;
+                    FocusCallsDialog::askVenueIfUnclear(m_doc, this, show, &said);
+                    if (!said.isEmpty() && statusBar() != nullptr)
+                        statusBar()->showMessage(said, 8000);
                 });
             retval = QFile::NoError;
             cacheShowDefinitions();     // the next run of it needs nothing remote

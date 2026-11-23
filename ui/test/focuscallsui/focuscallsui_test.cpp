@@ -38,6 +38,7 @@
 #include "monitorproperties.h"
 #include "venuecorrections.h"
 #include "focuscallsdialog.h"
+#include "showfeatures.h"
 #include "focuscontrolmap.h"
 #include "focusmodepanel.h"
 #include "operatorvoice.h"
@@ -624,6 +625,65 @@ void FocusCallsUi_Test::theVenueAskFitsWithAPadAtEverySize()
     }
     d->close();
     m_doc->inputOutputMap()->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
+/* Board Q294: the venue is asked about only when it isn't clear. */
+void FocusCallsUi_Test::theVenueIsAskedOnlyWhenUnclear()
+{
+    auto sidecar = [this](const QString &file, const QStringList &names) {
+        const QString show = m_dir->filePath(file);
+        QFile f(VenueCorrections::sidecarPath(show));
+        if (!f.open(QIODevice::WriteOnly))
+            return QString();
+        QString xml = QString("<QlcVenues Version=\"1\" Show=\"%1\" Active=\"%2\">").arg(file, names.first());
+        for (const QString &n : names)
+            xml += QString("<Venue Name=\"%1\" Modified=\"%2\"/>")
+                       .arg(n, QDateTime::currentDateTime().addDays(-3).toString(Qt::ISODate));
+        f.write((xml + "</QlcVenues>").toUtf8());
+        f.close();
+        return show;
+    };
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+
+    // One venue on file: that one, nothing asked.
+    QString show = sidecar("One.qlcc", { "Lincoln HS" });
+    venues->setShowFile(show, true);
+    QVERIFY(venues->needsConfirm());
+    QVERIFY(FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show) == nullptr);
+    QVERIFY(!venues->needsConfirm());
+    QCOMPARE(venues->activeVenue(), QString("Lincoln HS"));
+
+    // Several, no room reached: asked.
+    show = sidecar("Two.qlcc", { "Lincoln HS", "Main Hall" });
+    venues->setShowFile(show, true);
+    QPointer<QDialog> d = FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show);
+    QVERIFY(d != nullptr);
+    QCOMPARE(d->objectName(), QString("venueConfirm"));
+    d->close();
+    QTRY_VERIFY(d.isNull());
+
+    // Venues turned off for the show: never asked.
+    venues->setShowFile(show, true);
+    ShowFeatures::instance()->setOn(ShowFeatures::Venues, false);
+    QVERIFY(FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show) == nullptr);
+    ShowFeatures::instance()->setOn(ShowFeatures::Venues, true);
+
+    // A launch straight into Operate: not now; asked once back in Design.
+    venues->setShowFile(show, true);
+    QVERIFY(venues->needsConfirm());
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show) == nullptr);
+    QDialog *asked = nullptr;
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if (w->objectName() == QLatin1String("venueConfirm") && w->isVisible())
+            asked = qobject_cast<QDialog *>(w);
+    QVERIFY2(asked == nullptr, "asked over a running show");
+    m_doc->setMode(Doc::Design);
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if (w->objectName() == QLatin1String("venueConfirm") && w->isVisible())
+            asked = qobject_cast<QDialog *>(w);
+    QVERIFY2(asked != nullptr, "not asked once back in Design");
+    asked->close();
 }
 
 void FocusCallsUi_Test::anOldVenueIsAskedAbout()

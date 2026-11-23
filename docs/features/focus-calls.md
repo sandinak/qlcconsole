@@ -102,10 +102,17 @@ a fixed light's aim (its pan and how far down it points), a lens zoomed
 by hand, and which fixture type and mode it was. It also holds the room's
 **truss trims** and **target positions** (below).
 
-**Still at the venue?** When you open a show whose applied venue was last
-changed more than 20 hours ago, the laptop asks "Still at Lincoln
-HS?" (until you answer, the footer's chip says **Venue: Lincoln HS?** and
-its menu starts with **Still at Lincoln HS?…**, which asks again):
+**Still at the venue?** It is asked only when the venue isn't clear. When you
+open a show whose applied venue was last changed more than 20 hours ago:
+with **Venues** turned off for the show (View ▸ Workspace ▸ Tabs &
+Features…) nothing is asked; with only one venue on file, that one is used;
+with several, the one whose room output this network reaches is used, and
+the status bar says so. Otherwise the laptop asks "Still at Lincoln HS?" in
+a window that stays in front of every other and opens on the main window's
+screen. A show opened straight into Operate is never interrupted: the
+question waits until you are back in Design. Until you answer, the footer's chip says
+**Venue: Lincoln HS?** and its menu starts with **Still at Lincoln HS?…**,
+which asks again:
 
 - **New venue** (the default): the name field comes filled with the date and
   selected: press Enter to take it, or type the room's name over it. Choosing

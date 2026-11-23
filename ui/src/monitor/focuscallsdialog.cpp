@@ -54,6 +54,7 @@
 #include <QTimer>
 
 #include "focuscallsdialog.h"
+#include "showfeatures.h"
 #include "venuerigdialog.h"
 #include "focusreport.h"
 #include "operatorvoice.h"
@@ -654,6 +655,47 @@ QDialog *FocusCallsDialog::askVenue(Doc *doc, QWidget *parent, const QString &fa
     tick->start();
     putVenuePromptInFront(d, parent);
     return d;
+}
+
+QDialog *FocusCallsDialog::askVenueIfUnclear(Doc *doc, QWidget *parent, const QString &showFile, QString *said)
+{
+    if (!ShowFeatures::isOn(ShowFeatures::Venues))
+        return nullptr;
+    if (QDialog *offer = offerVenueImport(doc, parent, showFile))
+        return offer;
+    VenueCorrections *venues = doc->programmer()->venueCorrections();
+    if (!venues->needsConfirm())
+        return nullptr;
+    const QStringList names = venues->venueNames();
+    if (names.size() == 1 && names.first() == venues->activeVenue())
+    {
+        venues->confirmVenue();         // the only room it has been in
+        return nullptr;
+    }
+    const QString here = venues->roomReached();
+    if (!here.isEmpty())
+    {
+        if (here != venues->activeVenue())
+            venues->setActiveVenue(here);
+        venues->confirmVenue();
+        if (said != nullptr)
+            *said = tr("Venue: %1 (this network reaches its room's output)").arg(here);
+        return nullptr;
+    }
+    if (doc->mode() == Doc::Operate)
+    {
+        // A show running is never interrupted: asked once it is back in Design.
+        QPointer<QWidget> p(parent);
+        QObject *once = new QObject(doc);
+        QObject::connect(doc, &Doc::modeChanged, once, [doc, p, once](Doc::Mode m) {
+            if (m != Doc::Design)
+                return;
+            once->deleteLater();
+            confirmVenue(doc, p);
+        });
+        return nullptr;
+    }
+    return confirmVenue(doc, parent);
 }
 
 QDialog *FocusCallsDialog::confirmVenue(Doc *doc, QWidget *parent)

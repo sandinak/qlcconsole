@@ -81,6 +81,15 @@ public:
      *  default), Still here, or None. Not modal; null when nothing needs
      *  asking. */
     static QDialog *confirmVenue(Doc *doc, QWidget *parent);
+    /** At a show's open (board Q294): which venue, asked only when it isn't
+     *  clear. Venues turned off for the show: nothing. A venue file beside
+     *  the show, not its own: offered. One venue on file: that one. Several:
+     *  the one whose room output this network reaches (roomReached()), used
+     *  without asking. Else "Still at ...?" -- never over a launch straight
+     *  into Operate: it waits for Design. The prompt, or null. @p said gets
+     *  a line for the status bar when a venue was taken without asking. */
+    static QDialog *askVenueIfUnclear(Doc *doc, QWidget *parent, const QString &showFile,
+                                      QString *said = nullptr);
 
     /** Gap 8: @p showFile opened with no venue file of its own, but a
      *  sibling *.venues.xml for the same show (its Show= has the same name

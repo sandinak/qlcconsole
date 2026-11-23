@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **The venue is asked about only when it isn't clear** (board Q294): never
+  with Venues turned off for the show, not with only one venue on file, not
+  when this network reaches one venue's room output (that one is used, the
+  status bar says so), and never over a launch straight into Operate (it
+  waits for Design). When it is asked, the prompt stays in front of every
+  window and opens centred on the main window, on its screen.
 - **Update checks stay out of the way:** at launch, then once a night
   (22:00-07:00 local) while it runs, and never in Operate (a launch straight
   into Operate skips its check). It used to look every 4 hours, show or no
