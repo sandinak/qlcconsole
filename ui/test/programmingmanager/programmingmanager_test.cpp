@@ -64,6 +64,7 @@
 #include "efx.h"
 #include "programmingoutline.h"
 #include "workbench.h"
+#include "effectdesigner.h"
 #include "workbenchstack.h"
 #include "scenegrouplooks.h"
 #include "functionstreewidget.h"
@@ -3695,6 +3696,45 @@ void ProgrammingManager_Test::effectsSayWhereTheyCameFromAndHowTheyRun()
     menu->findChild<QMenu *>("effectRunsMenu")->findChild<QAction *>("effectRunsLoop")->trigger();
     QCOMPARE(efx->runOrder(), Function::Loop);
     delete menu;
+}
+
+/* The effect designer in Build's Workbench has the pane's width
+   (Workbench::fitDesigner()); Build's own add-bar fit (fitAddBar) must not
+   hand it back to the layers column on a resize or show, at 1024x640 or
+   after a resize and back. */
+void ProgrammingManager_Test::aBuildResizeKeepsTheDesignerItsWidth()
+{
+    EffectDesigner::plugIntoWorkbench();
+    Scene *s = new Scene(m_doc);
+    s->setName("Wash");
+    QVERIFY(m_doc->addFunction(s));
+    Collection *c = new Collection(m_doc);
+    c->setName("0.0.1-Startup");
+    c->addFunction(s->id());
+    QVERIFY(m_doc->addFunction(c));
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.m_workbench->load(c->id());
+    mgr.resize(1024, 640);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    QTest::qWait(100);
+    Workbench *wb = mgr.m_workbench;
+    Workbench::EffectRequest req;
+    QVERIFY(wb->designEffect(req));
+    QTest::qWait(200);
+    QWidget *pane = wb->effectPane();
+    QVERIFY(pane != nullptr);
+    QVERIFY2(pane->width() >= Workbench::kDesignerWants,
+             qPrintable(QStringLiteral("the designer is %1 px at 1024x640").arg(pane->width())));
+    for (const QSize &sz : { QSize(1100, 700), QSize(1024, 640), QSize(1400, 800), QSize(1024, 640) })
+    {
+        mgr.resize(sz);
+        QTest::qWait(150);
+        QVERIFY2(pane->width() >= Workbench::kDesignerWants,
+                 qPrintable(QStringLiteral("the designer is %1 px after Build resized to %2x%3")
+                                .arg(pane->width()).arg(sz.width()).arg(sz.height())));
+    }
 }
 
 /* Laptop fit (noted 2026-11-10): the Workbench add bar's row was cut off

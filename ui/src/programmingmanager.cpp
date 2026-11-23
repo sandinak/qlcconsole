@@ -2401,6 +2401,9 @@ void ProgrammingManager::fitAddBar()
 {
     if (m_workbench == nullptr || !m_workbench->isVisible())
         return;
+    // A designer has the pane's width (Workbench::fitDesigner()): not the add bar's to take back.
+    if (m_workbench->designerHasTheWidth())
+        return;
     QSplitter *split = m_workbench->findChild<QSplitter *>(QStringLiteral("workbenchSplitter"));
     QWidget *column = m_workbench->findChild<QWidget *>(QStringLiteral("workbenchColumn"));
     QWidget *bar = m_workbench->findChild<QWidget *>(QStringLiteral("workbenchAddBar"));

@@ -254,6 +254,11 @@ public:
     bool keepsDesigning();
     /** The designer the factory made, while the editor pane shows it
      *  (null: none). The Workbench deletes it when the row changes. */
+    /** The width a docked effect designer wants (px): the layers column steps
+     *  aside when it would leave less (columnFloor in fitDesigner()). */
+    static constexpr int kDesignerWants = 560;
+    /** A designer is the editor pane: Build's add-bar fit leaves the split alone. */
+    bool designerHasTheWidth() const { return m_designing; }
     QWidget *effectPane() const
     { return m_funcEditor != nullptr && m_funcEditor == m_effectPane ? m_effectPane.data() : nullptr; }
     /** The show this Workbench edits (for a factory). */
@@ -292,6 +297,7 @@ signals:
 
 protected:
     void showEvent(QShowEvent *ev) override;
+    void resizeEvent(QResizeEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
 public:
     /** RC8, "GO holds previews" (ShowTreeController::stageTakenForRun):
@@ -330,6 +336,8 @@ private:
     void buildEditorPane();
 
     void showPage(Page page);
+    /** The designer takes the pane's width: see workbench.cpp. */
+    void fitDesigner();
     /** The header, the add bar and the overview, as the stack now is. */
     void updateHeader();
     void updateAddBar();
@@ -519,6 +527,8 @@ private:
     QPointer<QWidget> m_effectPane;
     bool m_benchPane = false;
     QList<int> m_splitBeforeDesign;     // the split to give back when the designer leaves
+    bool m_designing = false;           // a designer is the editor pane (fitDesigner())
+    bool m_designDragged = false;       // the person moved the handle meanwhile: theirs, kept
     /** The layers row the pane's designer belongs to (ProgrammingOutline's
      *  KeyRole): clicking another row asks before dropping the draft. */
     QString m_effectPaneRow;

@@ -2818,7 +2818,7 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                 return;
             m_libRenaming = false;
             m_libRenameItem = nullptr;
-            QTimer::singleShot(0, this, [this]() { reloadLibrary(); });
+            m_libraryTimer->start();        // coalesced with any other reload due
         });
         connect(m_library, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *item) {
             const int kind = item->data(0, KindRole).toInt();
@@ -11174,10 +11174,11 @@ void ShowTreeView::reloadLibrary()
     if (!m_filter->text().isEmpty())
         slotFilterChanged(m_filter->text());
     /* Board Q264: an effect just saved from the designer is named here.
-       The row is opened to type after THIS rebuild, whichever reload comes
-       last (a palette added reloads us again, and that threw the editor
-       away: the effect kept the effect's name). */
-    if (m_libRenameAfterReload != QLCPalette::invalidId())
+       The row is opened to type by the LAST reload of the burst: the
+       designer's preview scene leaving the show, the palette added and the
+       ops changing each restart m_libraryTimer, so while it is still
+       running this is not the last one and the id waits. */
+    if (m_libRenameAfterReload != QLCPalette::invalidId() && !m_libraryTimer->isActive())
     {
         const quint32 pid = m_libRenameAfterReload;
         m_libRenameAfterReload = QLCPalette::invalidId();

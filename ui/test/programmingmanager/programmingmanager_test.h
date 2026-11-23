@@ -189,6 +189,7 @@ private slots:
      *  after Own Copy at 1024x640, no scroll bringing both ends into view
      *  at once; the column now asks for the row's own width. */
     void theWorkbenchAddBarStaysReachableInBuildAt1024x640();
+    void aBuildResizeKeepsTheDesignerItsWidth();
 
 private:
     Doc* m_doc;

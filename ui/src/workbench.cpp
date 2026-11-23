@@ -171,6 +171,7 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
     m_split->setStretchFactor(0, 3);
     m_split->setStretchFactor(1, 4);
     SplitterHandles::remember(m_split, SETTINGS_SPLITTER);
+    connect(m_split, &QSplitter::splitterMoved, this, [this]() { if (m_designing) m_designDragged = true; });
 
     m_restartTimer = new QTimer(this);
     m_restartTimer->setSingleShot(true);
@@ -1572,10 +1573,6 @@ void Workbench::layersChanged()
  * The editor pane
  ****************************************************************************/
 
-/* The width the effect designer needs to show every control without
-   scrolling sideways (its settings side alone wants ~250 px). */
-static const int kDesignerWants = 560;
-
 void Workbench::showPage(Page page)
 {
     QWidget *w = page == ScenePage ? m_scenePage : page == LookPage ? m_lookPage
@@ -1591,30 +1588,67 @@ void Workbench::showPage(Page page)
     // at, greyed, under the header's banner -- what plays is the list.
     m_page->setEnabled(m_stack == nullptr
                        || m_doc->showTree()->originalFor(loadedFunction()) == Function::invalidId());
-    /* The designer has the width (UX-34): the bench's always; a layer's when
-       the layers column would leave it less than it needs (the smallest
-       window gives the pane ~730 px, the column wants 355 of them), and with
-       room to spare the column stays and the designer takes the rest. The
-       layers come back with anything else. */
-    const bool designing = w == m_functionPage && !m_effectPane.isNull() && m_funcEditor == m_effectPane;
-    const int total = m_split->width();
-    const int columnFloor = m_split->widget(0)->minimumSizeHint().width();
-    const bool columnAway = designing && (m_benchPane || total - columnFloor < kDesignerWants);
-    m_split->widget(0)->setVisible(!columnAway);
-    if (designing && !columnAway && m_splitBeforeDesign.isEmpty())
-    {
-        m_splitBeforeDesign = m_split->sizes();
-        m_split->setSizes({ columnFloor, qMax(1, total - columnFloor) });
-    }
-    else if (!designing && !m_splitBeforeDesign.isEmpty())
-    {
-        m_split->setSizes(m_splitBeforeDesign);
-        m_splitBeforeDesign.clear();
-    }
+    fitDesigner();
     // The console's channels are drawn when it shows (a switch from one
     // fixture to another fires no showEvent).
     if (page == TargetPage && !m_fixtureScroll->isHidden())
         m_fixtureConsole->showChannels();
+}
+
+/* The designer has the width (UX-34): the bench's always; a layer's when
+   the layers column would leave it less than kDesignerWants (the smallest
+   window gives the pane ~730 px, the column wants 355 of them); with room to
+   spare the column stays at its floor and the designer takes the rest. The
+   layers come back with anything else.
+
+   Asked again on every resize and show while the designer is the pane (the
+   first answer comes before the first layout, when the split is ~100 px), and
+   it changes the column only when the answer changes.
+
+   The split this makes is never the person's: setSizes() does not emit
+   splitterMoved, so SplitterHandles::remember() does not save it. A drag
+   made while designing IS theirs: it is saved as any drag is, and the split
+   from before is then not put back over it. */
+void Workbench::fitDesigner()
+{
+    const bool designing = m_page->currentWidget() == m_functionPage && !m_effectPane.isNull()
+                           && m_funcEditor == m_effectPane;
+    QWidget *column = m_split->widget(0);
+    if (!designing)
+    {
+        if (column->isHidden())
+            column->setVisible(true);
+        if (m_designing)
+        {
+            if (!m_designDragged && m_splitBeforeDesign.value(0) + m_splitBeforeDesign.value(1) > 200)
+                m_split->setSizes(m_splitBeforeDesign);
+            m_splitBeforeDesign.clear();
+            m_designDragged = false;
+            m_designing = false;
+        }
+        return;
+    }
+    if (!m_designing)
+    {
+        m_designing = true;
+        m_designDragged = false;
+        m_splitBeforeDesign = m_split->sizes();
+    }
+    const int total = m_split->width();
+    const int columnFloor = column->minimumSizeHint().width();
+    const bool away = m_benchPane || total - columnFloor < kDesignerWants;
+    if (away == column->isHidden() && !away)
+        return;                 // already as asked, the column shown
+    if (away)
+    {
+        if (!column->isHidden())
+            column->setVisible(false);
+        return;
+    }
+    // Room for both: the column at its floor, unless the person has dragged.
+    column->setVisible(true);
+    if (!m_designDragged)
+        m_split->setSizes({ columnFloor, qMax(1, total - columnFloor) });
 }
 
 Workbench::Page Workbench::currentPage() const
@@ -2714,9 +2748,18 @@ void Workbench::slotModeChanged()
     updateOnRig();
 }
 
+void Workbench::resizeEvent(QResizeEvent *ev)
+{
+    QWidget::resizeEvent(ev);
+    if (m_designing)
+        fitDesigner();
+}
+
 void Workbench::showEvent(QShowEvent *ev)
 {
     QWidget::showEvent(ev);
+    if (m_designing)
+        fitDesigner();
     startPreview();
     startOperate();
     scheduleEncoderRings();
