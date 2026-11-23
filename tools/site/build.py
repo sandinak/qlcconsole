@@ -293,7 +293,7 @@ for fn in sorted(os.listdir(os.path.join(HERE, "news"))):
         print("skipping", fn, "(no published GitHub release", meta["tag"] + ")")
         continue
     url = f"{GH}/releases/tag/{meta['tag']}"
-    html = md(body, "README.md") + (f'<p><a href="{url}">Full release notes and downloads →</a></p>')
+    html = md(body, "tools/site/news/" + fn) + (f'<p><a href="{url}">Full release notes and downloads →</a></p>')
     # A post's pictures are thumbnails: small, captioned with their alt text,
     # and a click opens the full screenshot (his ask 2026-11-22: full-width
     # screenshots were far too big for the screen).
