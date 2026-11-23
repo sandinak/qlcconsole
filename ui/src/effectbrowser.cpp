@@ -403,6 +403,8 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     // Whole names ("Position", not "Positi…"): scroll arrows if they don't fit.
     m_tabs->setElideMode(Qt::ElideNone);
     m_tabs->setUsesScrollButtons(true);
+    // Close-set tabs (UX-36): more of them fit a narrow column before it scrolls.
+    m_tabs->setStyleSheet(QStringLiteral("QTabBar::tab { padding: 4px 6px; }"));
     v->addWidget(m_tabs);
 
     m_list = new QListWidget(this);
