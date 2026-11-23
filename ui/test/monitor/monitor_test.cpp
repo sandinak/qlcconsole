@@ -21745,40 +21745,28 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
     QVERIFY(rig.build(m_doc));
     QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
     QStringList dead, report;
-    int checked = 0, tries = 0;
-    QTimer poll;
-    poll.setInterval(50);
-    QObject::connect(&poll, &QTimer::timeout, [&]() {
-        QDialog *dlg = nullptr;
-        for (QWidget *w : QApplication::topLevelWidgets())
-            if (w->isVisible() && qobject_cast<QDialog *>(w) != nullptr
-                && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
-                dlg = qobject_cast<QDialog *>(w);
-        if (dlg == nullptr)
-        {
-            if (++tries > 100)
-                poll.stop();
-            return;
-        }
-        poll.stop();
-        QTest::qWait(200);              // laid out and painted
-        report << QString("dialog '%1' children=%2 buttons=%3 nameEdit=%4 scroll=%5 size=%6x%7")
-                      .arg(dlg->windowTitle()).arg(dlg->findChildren<QWidget *>().size())
-                      .arg(dlg->findChildren<QAbstractButton *>().size())
-                      .arg(dlg->findChild<QLineEdit *>("fixtureNameEdit") != nullptr)
-                      .arg(dlg->findChild<QScrollArea *>("fixturePropertiesScroll") != nullptr)
-                      .arg(dlg->width()).arg(dlg->height());
+    int checked = 0;
+    bool ran = false;
+    driveDialog([&](QWidget *dlg) {
+        ran = true;
+        if (dlg->findChild<QLineEdit *>("fixtureNameEdit") == nullptr)
+            return false;
+        if (dlg->layout() != nullptr)
+            dlg->layout()->activate();
         QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
+        report << QString("dialog '%1' vis=%2 widgets=%3 buttons=%4 scroll=%5 %6x%7")
+                      .arg(dlg->windowTitle()).arg(dlg->isVisible()).arg(dlg->findChildren<QWidget *>().size())
+                      .arg(dlg->findChildren<QAbstractButton *>().size()).arg(scroll != nullptr)
+                      .arg(dlg->width()).arg(dlg->height());
         for (QAbstractButton *b : dlg->findChildren<QAbstractButton *>())
         {
-            report << QString("%1 vis=%2 en=%3").arg(b->text()).arg(b->isVisible()).arg(b->isEnabled());
-            if (!b->isVisible() || !b->isEnabled() || b->text().isEmpty())
+            if (b->text().isEmpty() || qobject_cast<QDialogButtonBox *>(b->parentWidget()) != nullptr)
                 continue;
-            if (qobject_cast<QDialogButtonBox *>(b->parentWidget()) != nullptr)
+            report << QString("%1[v%2 e%3]").arg(b->text()).arg(b->isVisible()).arg(b->isEnabled());
+            if (!b->isVisible() || !b->isEnabled())
                 continue;
             if (scroll != nullptr)
                 scroll->ensureWidgetVisible(b);
-            QCoreApplication::processEvents();
             QWidget *hit = dlg->childAt(b->mapTo(dlg, b->rect().center()));
             ++checked;
             if (!(hit == b || (hit != nullptr && b->isAncestorOf(hit))))
@@ -21786,13 +21774,12 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
                     hit ? QString::fromLatin1(hit->metaObject()->className()) : QStringLiteral("nothing"),
                     hit ? hit->objectName() : QString());
         }
-        dlg->reject();
-    });
-    poll.start();
+        return true;
+    }, false);
     rig.mon->showFixtureItemEditor(f->id());
-    fprintf(stderr, "FPBTN buttons: %s\nFPBTN covered: %s\n", qPrintable(report.join(" | ")), qPrintable(dead.join(" | ")));
-    QVERIFY2(checked > 0, qPrintable(QString("no clickable buttons (tries %1); seen: ").arg(tries) + report.join(" | ")));
-    QVERIFY2(dead.isEmpty(), qPrintable(QString("covered: ") + dead.join("; ")));
+    QVERIFY2(ran, "the dialog never opened");
+    QVERIFY2(checked > 0, qPrintable("no clickable buttons; seen: " + report.join(" | ")));
+    QVERIFY2(dead.isEmpty(), qPrintable(QString("covered: ") + dead.join("; ") + " || " + report.join(" | ")));
 }
 
 void Monitor_Test::selectingOnThePlotSelectsInLayers()
