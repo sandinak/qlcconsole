@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Fixture Properties takes clicks and keys again** (builds 4365 and
+  4367 on a Mac): opened from the 2D plot, its title bar worked but nothing
+  inside it took a click or a key, and moving the mouse dragged a selection
+  from the click that opened it. The lock that keeps the rig still while it
+  is open caught every click and key at the window, before the window could
+  hand them to the editor, and kept the plot from seeing that click's
+  release.
 - **The docked effect designer shows all of its controls at 1024x640 and up**:
   while it designs a layer's effect it takes the width the layers column
   was holding (the split you set comes back when you leave it), and
