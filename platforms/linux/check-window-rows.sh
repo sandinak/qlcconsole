@@ -41,9 +41,12 @@ dialog_classes()
 # Dialogs built in place: "FILE COUNT" per line.
 inline_counts()
 {
-    (cd "$1/ui/src" && grep -rcE --include='*.cpp' \
-        '(^|[^A-Za-z0-9_])QDialog +[A-Za-z_][A-Za-z0-9_]* *[({;]|new +QDialog *\(' . ) \
-        | grep -v ':0$' | sed -e 's|^\./||' -e 's/:/ /' | sort
+    # Comments (/* ... */ and //) are not code: dropped first.
+    (cd "$1/ui/src" && find . -name '*.cpp' -print | sort | while read -r f; do
+        n=$(perl -0pe 's{/\*.*?\*/}{}gs; s{//[^\n]*}{}g' "$f" \
+            | grep -cE '(^|[^A-Za-z0-9_])QDialog +[A-Za-z_][A-Za-z0-9_]* *[({;]|new +QDialog *\(')
+        [ "$n" -gt 0 ] && echo "${f#./} $n"
+    done )
 }
 
 # Row keys, with repeats: one per line.
@@ -167,6 +170,7 @@ self_test()
     mkdir -p "$r/ui/src/monitor" "$r/ui/test/windowsanity" "$r/platforms/linux"
     printf 'class QLC_UI_EXPORT Alpha final : public QDialog\n{\n};\n' > "$r/ui/src/alpha.h"
     printf 'class Beta : public QDialog {};\nclass NotOne : public QWidget {};\n' > "$r/ui/src/beta.h"
+    printf '/* a comment\n   QDialog would; then */\n// QDialog d(x)\n' > "$r/ui/src/comment.cpp"
     printf 'void f()\n{\n    QDialog dlg(this);\n    QDialog *p = new QDialog(this);\n    QDialog *q = other;\n}\n' \
         > "$r/ui/src/monitor/plot.cpp"
     printf 'row("Alpha", x)\nrow("monitor/plot.cpp#One", x)\n' > "$r/$TEST_REL"
