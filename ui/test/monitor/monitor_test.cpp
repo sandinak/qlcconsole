@@ -21744,40 +21744,48 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
     InventoryRig rig;
     QVERIFY(rig.build(m_doc));
     QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
-    QStringList dead;
-    int checked = 0;
-    driveDialog([&dead, &checked](QWidget *dlg) {
-        if (dlg->findChild<QLineEdit *>("fixtureNameEdit") == nullptr)
-            return false;
-        dlg->raise();
-        QCoreApplication::processEvents();
+    QStringList dead, report;
+    int checked = 0, tries = 0;
+    QTimer poll;
+    poll.setInterval(50);
+    QObject::connect(&poll, &QTimer::timeout, [&]() {
+        QDialog *dlg = nullptr;
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->isVisible() && qobject_cast<QDialog *>(w) != nullptr
+                && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+                dlg = qobject_cast<QDialog *>(w);
+        if (dlg == nullptr)
+        {
+            if (++tries > 100)
+                poll.stop();
+            return;
+        }
+        poll.stop();
+        QTest::qWait(200);              // laid out and painted
         QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
         for (QAbstractButton *b : dlg->findChildren<QAbstractButton *>())
         {
-            qInfo().noquote() << "FPBTN" << b->text() << "visible" << b->isVisible() << "visibleTo" << b->isVisibleTo(dlg)
-                              << "enabled" << b->isEnabled() << "parentEnabled" << (b->parentWidget() ? b->parentWidget()->isEnabled() : true)
-                              << "window" << (b->window() == dlg) << "dlgVisible" << dlg->isVisible()
-                              << "scroll" << (dlg->findChild<QScrollArea *>("fixturePropertiesScroll") != nullptr);
+            report << QString("%1 vis=%2 en=%3").arg(b->text()).arg(b->isVisible()).arg(b->isEnabled());
             if (!b->isVisible() || !b->isEnabled() || b->text().isEmpty())
                 continue;
             if (qobject_cast<QDialogButtonBox *>(b->parentWidget()) != nullptr)
-                continue;           // OK / Cancel: clicking would close it
+                continue;
             if (scroll != nullptr)
                 scroll->ensureWidgetVisible(b);
             QCoreApplication::processEvents();
-            const QPoint c = b->rect().center();
-            QWidget *hit = dlg->childAt(b->mapTo(dlg, c));
-            const bool under = hit == b || (hit != nullptr && b->isAncestorOf(hit));
+            QWidget *hit = dlg->childAt(b->mapTo(dlg, b->rect().center()));
             ++checked;
-            if (!under)
-                dead << QString("%1 (under it: %2 %3)").arg(b->text(),
+            if (!(hit == b || (hit != nullptr && b->isAncestorOf(hit))))
+                dead << QString("%1 (under it: %2 '%3')").arg(b->text(),
                     hit ? QString::fromLatin1(hit->metaObject()->className()) : QStringLiteral("nothing"),
                     hit ? hit->objectName() : QString());
         }
-        return true;
-    }, false);
+        dlg->reject();
+    });
+    poll.start();
     rig.mon->showFixtureItemEditor(f->id());
-    QVERIFY2(checked > 0, "no buttons found");
+    fprintf(stderr, "FPBTN buttons: %s\nFPBTN covered: %s\n", qPrintable(report.join(" | ")), qPrintable(dead.join(" | ")));
+    QVERIFY2(checked > 0, qPrintable("no clickable buttons; seen: " + report.join(" | ")));
     QVERIFY2(dead.isEmpty(), qPrintable(QString("covered: ") + dead.join("; ")));
 }
 
