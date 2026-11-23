@@ -389,6 +389,16 @@ void ShowTreeView::followDesignerIntoTheLibrary(EffectDesigner *designer, bool n
                 m_hint->setText(tr("Saved in this show as “%1”: type its name").arg(p->name()));
                 m_libRenameAfterReload = paletteId;
                 reloadLibrary();
+                /* The designer's preview scene leaves the show a moment
+                   later and reloads the Library again, closing the editor
+                   the first reload opened: open it once more when that has
+                   settled (the pending id is spent by the first reload). */
+                QTimer::singleShot(400, this, [this, paletteId]() {
+                    if (m_doc->palette(paletteId) == nullptr || m_libRenaming)
+                        return;
+                    selectLibraryPalette(paletteId);
+                    startLibraryRename();
+                });
             }
             else
             {
