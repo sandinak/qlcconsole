@@ -21,6 +21,7 @@
 #include "../common/fixtureeditor.h"
 #include <QApplication>
 #include <QMenu>
+#include <QSplitter>
 #include <QTreeWidget>
 #include <QPushButton>
 #include <QComboBox>
@@ -1203,6 +1204,19 @@ void EffectDesigner_Test::theDesignerControlsAreWhollyVisible()
             }
         }
     QVERIFY(named == 5);
+    if (!bad.isEmpty())
+    {
+        // Where the width went: each visible splitter's panes.
+        for (QSplitter *sp : view.findChildren<QSplitter *>())
+            if (sp->isVisible())
+            {
+                QStringList z;
+                for (int i = 0; i < sp->count(); ++i)
+                    z << QStringLiteral("%1(min %2)").arg(sp->sizes().at(i)).arg(sp->widget(i)->minimumSizeHint().width());
+                bad << QStringLiteral("split %1 [%2]").arg(sp->objectName(), z.join(QLatin1Char(' ')));
+            }
+        bad << QStringLiteral("designer %1 wide").arg(ed->width());
+    }
     QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("at %1x%2:\n").arg(w).arg(h) + bad.join(QLatin1Char('\n'))));
 }
 
