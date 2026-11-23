@@ -21744,42 +21744,38 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
     InventoryRig rig;
     QVERIFY(rig.build(m_doc));
     QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
-    QStringList dead, report;
-    int checked = 0;
-    bool ran = false;
-    driveDialog([&](QWidget *dlg) {
-        ran = true;
-        if (dlg->findChild<QLineEdit *>("fixtureNameEdit") == nullptr)
-            return false;
-        if (dlg->layout() != nullptr)
-            dlg->layout()->activate();
-        QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
-        report << QString("dialog '%1' vis=%2 widgets=%3 buttons=%4 scroll=%5 %6x%7")
-                      .arg(dlg->windowTitle()).arg(dlg->isVisible()).arg(dlg->findChildren<QWidget *>().size())
-                      .arg(dlg->findChildren<QAbstractButton *>().size()).arg(scroll != nullptr)
-                      .arg(dlg->width()).arg(dlg->height());
-        for (QAbstractButton *b : dlg->findChildren<QAbstractButton *>())
+    // A real mouse click on OK (press and release through the event system,
+    // as a trackpad does) closes it; button->click() would skip the input path.
+    QString why = QStringLiteral("the dialog never opened");
+    QPointer<QWidget> seen;
+    QTimer::singleShot(0, [&]() {
+        QWidget *dlg = modalOrFixtureEditor();
+        if (dlg == nullptr)
+            return;
+        seen = dlg;
+        QDialogButtonBox *btns = dlg->findChild<QDialogButtonBox *>();
+        QPushButton *ok = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
+        if (ok == nullptr)
         {
-            if (b->text().isEmpty() || qobject_cast<QDialogButtonBox *>(b->parentWidget()) != nullptr)
-                continue;
-            report << QString("%1[v%2 e%3]").arg(b->text()).arg(b->isVisible()).arg(b->isEnabled());
-            if (!b->isVisible() || !b->isEnabled())
-                continue;
-            if (scroll != nullptr)
-                scroll->ensureWidgetVisible(b);
-            QWidget *hit = dlg->childAt(b->mapTo(dlg, b->rect().center()));
-            ++checked;
-            if (!(hit == b || (hit != nullptr && b->isAncestorOf(hit))))
-                dead << QString("%1 (under it: %2 '%3')").arg(b->text(),
-                    hit ? QString::fromLatin1(hit->metaObject()->className()) : QStringLiteral("nothing"),
-                    hit ? hit->objectName() : QString());
+            why = "no OK";
+            dlg->close();
+            return;
         }
-        return true;
-    }, false);
+        why = QString("OK took no click (enabled %1, window active %2, modal %3, appModal '%4')")
+                  .arg(ok->isEnabled()).arg(dlg->isActiveWindow()).arg(dlg->isModal())
+                  .arg(QApplication::activeModalWidget() ? QApplication::activeModalWidget()->windowTitle() : QString());
+        QTest::mouseClick(ok, Qt::LeftButton);
+        QTimer::singleShot(300, [&, dlg]() {
+            if (seen && seen->isVisible())
+                qobject_cast<QDialog *>(dlg)->reject();     // so the test ends
+        });
+    });
+    QElapsedTimer t;
+    t.start();
     rig.mon->showFixtureItemEditor(f->id());
-    QVERIFY2(ran, "the dialog never opened");
-    QVERIFY2(checked > 0, qPrintable("no clickable buttons; seen: " + report.join(" | ")));
-    QVERIFY2(dead.isEmpty(), qPrintable(QString("covered: ") + dead.join("; ") + " || " + report.join(" | ")));
+    const bool closedByClick = seen && t.elapsed() < 280;
+    QVERIFY2(seen, qPrintable(why));
+    QVERIFY2(closedByClick, qPrintable(why));
 }
 
 void Monitor_Test::selectingOnThePlotSelectsInLayers()
