@@ -93,6 +93,11 @@ show's own names. Hover a row for **why it matters**. Show **Open**,
   Show Tree, the function, the Patch dialog on the fixtures, Connections on
   the universe, the Lighting Studio. If that place has changed or gone
   since the last check, the summary line says so: **Re-check**.
+- **Several rows selected**: **Fix Selected (N)** (the button, or the top of
+  the right-click menu) does every row that fixes in place in one go: pan
+  turns (MOV-14), suggested cuts, the footer's own fixes. Rows that need
+  you at their place are left selected, and the line under the list says
+  how many.
 - **Not a Problem…** (it was **Not a Problem…**) says the finding doesn't matter
   here. Write a note (it is required) and your name. See [Accepting a finding](#accepting-a-finding).
 - **Reopen** takes an acceptance back.
@@ -155,8 +160,14 @@ in the design (docs/design/SHOW_REVIEW.md in the source).
   fix, **Centre the Pan on Stage…**, says which turn and where the seam goes
   before it changes anything (one undo step), and warns when the head is
   live. With several selected it centres them all as one step. When no
-  turn clears the stage it says so, and the real fix: point the head's
-  Facing toward the stage, then Centre the Pan on Stage.
+  turn clears the stage, the same fix turns the head's **Facing** toward
+  the stage as well, to the Facing nearest its own that clears it, and says
+  so first: the plot's Facing is how the head hangs, so turn it on its pipe
+  to match. Facing and turn are one undo step, and no window opens. A head
+  that is **live** keeps its Facing: its looks would be worked out from the
+  new one at once and its beam would land somewhere else until someone turned
+  the head on its pipe, so the fix says which heads it left alone and does
+  only their turn (and warns, as always, that a live beam moves).
 
 How long a move takes comes from the head's type: a moving head turns 180°
 in 0.4 s, a scanner in 0.1 s, pan and tilt together (the slower of the two).

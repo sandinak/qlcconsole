@@ -48,6 +48,10 @@ private slots:
     void theEmergencyStopLearnsOneButtonWithASecondPress();
     void aStopThatCannotWorkIsFlaggedOnTheButtonAndTheRow();
     void aStopOnAProfileFaderIsWarnedOnceAndOnlyOnItsOwnLine();
+    // CS3: the panel says what each control's light shows, so the rule can
+    // be read with no desk on the bench
+    void thePanelSaysWhatEachLightShows();
+    void thePanelSaysWhenAControlHasNoLight();
     void anEncoderLearnStopsListeningWhenThePanelHides();
     void learnKeyShots();
 

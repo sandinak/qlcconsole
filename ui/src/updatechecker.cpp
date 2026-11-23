@@ -476,7 +476,7 @@ bool UpdateChecker::isCheckDue(const QDateTime &now) const
     if (retry.isValid() && now < retry)
         return false;
     const QDateTime last = lastCheck();
-    return last.isValid() == false || last.secsTo(now) >= 4 * 3600 || last > now;
+    return last.isValid() == false || last.secsTo(now) >= 20 * 3600 || last > now;
 }
 
 bool UpdateChecker::isLaunchCheckDue(const QDateTime &now) const

@@ -109,6 +109,12 @@ private slots:
      *  beat are in Settings ▸ Appearance, not the View menu, and set the
      *  same settings the View menu did. */
     void settingsAppearanceHoldsHowTheWindowLooks();
+    /** Findability (board Q65, commit 385edaab9): the footer chips moved
+     *  here from the View menu, but nothing tested that a person could
+     *  still find them. Walks the real menu path -- File ▸ Settings…, the
+     *  Appearance tab, the Footer group -- and opens the dialog through the
+     *  menu action, not the AppSettings constructor directly. */
+    void footerChipsAreFindableFromSettingsAppearance();
     /** Q65: View is only what you look at. */
     void theViewMenuIsOnlyViews();
     /** Q150: the venue chip in the footer, by view; View ▸ Venue… and
@@ -159,6 +165,12 @@ private slots:
     void theTabBarDefaultsPerView();
     void aCustomTabSetRoundTripsThroughTheShow();
     void runAndConnectionsCantBeUnchecked();   // and every other box works from a click
+    /** Findability (board Q293): the feature shipped with tests for what it
+     *  does but none for whether a person can find it. Walks the real menu
+     *  path -- View ▸ Workspace ▸ Tabs & Features…, its text, its place in
+     *  the Workspace submenu -- and triggers the menu action itself (not
+     *  slotChooseTabs() by hand) to check it opens the real dialog. */
+    void tabsAndFeaturesIsFindableFromViewWorkspace();
     /** Q293: View ▸ Workspace ▸ Tabs & Features… turns each feature off for
      *  the show -- its footer chip, menu items and pages put away -- and on
      *  again brings them back; the show is marked changed. */

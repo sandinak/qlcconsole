@@ -44,6 +44,55 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   other palette type still opens in the Look Editor. A design nobody has
   kept is never dropped in silence: leaving, clicking another row or
   another cue asks first. Course lesson 2.4 teaches the new path.
+### Changed
+
+- **Update checks stay out of the way:** at launch, then once a night
+  (22:00-07:00 local) while it runs, and never in Operate (a launch straight
+  into Operate skips its check). It used to look every 4 hours, show or no
+  show.
+- **Effects cost the host less on a big rig.** Over the show's 96 step bars
+  (6,144 pixel heads) the engine's own work for one effect frame -- the
+  cells, the look's base values, the arguments each head is handed and
+  reading its answer back -- fell from about 14 ms to 3.6 ms a tick when the
+  effect draws nothing, and from 22 ms to 9 ms with every head lit (Release,
+  on an Intel Mac); a whole Fire Spread frame over that rig went from 25 ms
+  to 15 ms. Nothing changes on the wire; the rig view and the rest of the
+  window stop going chunky while a spread runs.
+### Added
+
+- **A control surface's lights say what a button would do** (board Q269's
+  rule, made visible; CS3 of the control-surfaces plan). A Control Map
+  control used to light only while the thing it fired was running. Now it is
+  **dark** when a press would do nothing here and now (a hit whose place is
+  not live, a cue list or cue not armed in Design, *Stop only* with nothing
+  to stop, a list with every cue cut, a target that is gone), **dim** when a
+  press would fire it, **bright** while it runs, **blinks twice** when the
+  double-GO guard holds a command on its cue list. The **emergency stop's
+  own button** is dim at every other moment -- it always works, so it can
+  always be found on a dark stage -- and **lit** from an ALL OFF until the
+  next GO, with every other light dark until then. Each of those is read from the one place that
+  owns it (ShowControl, the output rules), never worked out on the surface,
+  and a light nothing changed about is not sent again, so a mode or
+  production change never floods a MIDI line. The Control Map table gained
+  an **Its light** column saying the same words, so a desk can be read from
+  the laptop with nothing plugged in, and a row that can never light says so
+  (*A key has no light*, *No feedback line*). For a pad that reads a light's
+  velocity as a colour and not a brightness (the APCs), **Dim a control that
+  is ready** under the table switches the dim level off; it is saved with the
+  show, and it never darkens the emergency stop -- a panic button stays
+  findable whatever the rest of the board does. A new show takes the desk
+  dark with it, and the lights are worked out once per batch of changes, not
+  once per function that starts. See [Control
+  surfaces](docs/features/control-surfaces.md#what-a-controls-light-says),
+  which gained two hardware-checklist steps for it.
+### Added
+
+- **Findability gate tests for View ▸ Workspace ▸ Tabs & Features… and
+  Settings ▸ Appearance ▸ Footer.** Each shipped with tests for what it does
+  but none for whether a person could find it: new tests walk the real menu
+  path -- the menu text as shown, the entry's place in its menu, and that it
+  opens the right dialog -- so a future rename or move breaks a test instead
+  of going unnoticed.
 
 ## [0.5.2] - 2026-11-22
 
@@ -93,6 +142,14 @@ parts of the app it doesn't use.
 
 ### Changed
 
+- Show Review: with several rows selected, **Fix Selected (N)** fixes every
+  one that can be fixed in place in one go (pan turns, suggested cuts, the
+  footer's own fixes) and says how many need a visit. MOV-14's fix, when no
+  pan turn clears the stage, turns the head's Facing toward it too (one
+  undo step) instead of opening Fixture Properties -- except on a head that
+  is live, whose Facing is left alone (it is how the head hangs, so its beam
+  would land elsewhere until someone turned it on its pipe); the fix says
+  which heads it left and still warns that a live beam moves.
 - Lightning Spread strikes white-hot: a strike burns white at its core and
   a cold blue at its edge, then fades out in the look's colour (**Strike**:
   White-Hot, the default; Look's Colour keeps the old look). Colour wheels

@@ -336,6 +336,45 @@ int PanTurn::proposalAfterMove(Doc *doc, quint32 fixtureId)
     return in.proposalMargin > in.margin + 0.5f ? in.proposal : in.turn;
 }
 
+float PanTurn::facingProposal(Doc *doc, quint32 fixtureId, float *roomOut)
+{
+    const Info in = info(doc, fixtureId);
+    AimSolver::Frame f;
+    if (!in.valid || !AimSolver::frameFor(doc, fixtureId, f))
+    {
+        if (roomOut != nullptr)
+            *roomOut = 0.0f;
+        return 0.0f;
+    }
+    const float own = f.panZeroDir;
+    auto room = [&](float facing) {
+        AimSolver::Frame g = f;
+        g.panZeroDir = facing;
+        float best = -360.0f;
+        for (int k = in.lowest; k <= in.highest; ++k)
+            best = qMax(best, margin(g, in.span, k));
+        return best;
+    };
+    float bestFacing = own, bestRoom = room(own);
+    /* The span is where the stage is from the head: it doesn't turn with
+       the Facing, so each Facing is read against the same one. Nearest
+       first, 5 degrees a step, each way. */
+    for (int d = 5; d <= 180; d += 5)
+        for (int sign : { 1, -1 })
+        {
+            const float facing = wrap360(own + float(sign * d));
+            const float r = room(facing);
+            if (bestRoom < kClearDeg && r > bestRoom + 0.5f)
+            {
+                bestFacing = facing;
+                bestRoom = r;
+            }
+        }
+    if (roomOut != nullptr)
+        *roomOut = bestRoom;
+    return bestFacing;
+}
+
 bool PanTurn::setTurn(Doc *doc, quint32 fixtureId, int turn)
 {
     MonitorProperties *mp = doc != nullptr ? doc->monitorProperties() : nullptr;

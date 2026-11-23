@@ -299,6 +299,32 @@ void ShowTreeWorkbench_Test::openShowsTheCue()
     QCOMPARE(stack->layerOfFixture(m_fixtures[5]), -1);
 }
 
+/* Build's laptop fit gives the layer column the add bar's own natural width
+   as a floor (chore/053-cleanups). DOCKED in the Show Tree the editor is the
+   point and the dock asks for its panes at 17/23/60, so that floor must not
+   leave the editor narrower than the layer list it sits beside -- in the dock
+   the add bar may scroll, which is what ShrinkableBar is for. */
+void ShowTreeWorkbench_Test::theDockedEditorIsNotStarvedByTheAddBar()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c2));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    QApplication::processEvents();
+
+    QWidget *column = bench->findChild<QWidget *>(QStringLiteral("workbenchColumn"));
+    QVERIFY(column != nullptr);
+    QVERIFY(bench->m_page != nullptr);
+    QVERIFY2(bench->m_page->width() >= column->width(),
+             qPrintable(QString("docked at 1024: the layer column takes %1 px of the bench's %2, "
+                                "leaving the editor %3")
+                            .arg(column->width()).arg(bench->width()).arg(bench->m_page->width())));
+}
+
 void ShowTreeWorkbench_Test::editUndoRedo()
 {
     const Show s = SHOW();

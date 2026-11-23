@@ -42,7 +42,7 @@
 
 namespace
 {
-enum Column { ControlCol = 0, TargetCol, ModeCol };
+enum Column { ControlCol = 0, TargetCol, ModeCol, LampCol };
 const int TargetRole = Qt::UserRole;
 const int TypeRole = Qt::UserRole + 1;
 }
@@ -73,12 +73,13 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_featureOff->hide();
     lay->addWidget(m_featureOff);
 
-    m_table = new QTableWidget(0, 3, this);
+    m_table = new QTableWidget(0, 4, this);
     m_table->setObjectName(QStringLiteral("controlMapTable"));
-    m_table->setHorizontalHeaderLabels({ tr("Control"), tr("Fires"), tr("When pressed") });
+    m_table->setHorizontalHeaderLabels({ tr("Control"), tr("Fires"), tr("When pressed"), tr("Its light") });
     m_table->horizontalHeader()->setSectionResizeMode(ControlCol, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(TargetCol, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(ModeCol, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(LampCol, QHeaderView::ResizeToContents);
     m_table->verticalHeader()->hide();
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -96,12 +97,20 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_estop->setToolTip(tr("One button on a MIDI or OSC controller that is ALL OFF: every press stops "
                            "everything, from Design or Operate, at any moment. It is learned with a second "
                            "press to confirm, and never on a fader, knob or encoder."));
+    m_dim = new QCheckBox(tr("Dim a control that is ready"), this);
+    m_dim->setObjectName(QStringLiteral("controlMapDimReady"));
+    m_dim->setToolTip(tr("A control whose press would fire something glows dim, and bright "
+                         "while it runs. Switch this off for a pad whose lights take a "
+                         "colour in the velocity and not a brightness (the APCs): a ready "
+                         "control then stays dark, and running, GO held and stopped are "
+                         "unchanged."));
     m_last = new QLabel(this);
     m_last->setObjectName(QStringLiteral("controlMapLast"));
     m_last->setStyleSheet(QStringLiteral("color: gray;"));
     row->addWidget(m_remove);
     row->addWidget(m_removeAll);
     row->addWidget(m_estop);
+    row->addWidget(m_dim);
     row->addWidget(m_last, 1);
     lay->addLayout(row);
     buildEncoderBox(lay);
@@ -109,6 +118,9 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     connect(m_remove, &QPushButton::clicked, this, &ControlMapPanel::slotRemove);
     connect(m_removeAll, &QPushButton::clicked, this, &ControlMapPanel::slotRemoveAll);
     connect(m_estop, &QPushButton::clicked, this, &ControlMapPanel::slotEmergencyStop);
+    connect(m_dim, &QCheckBox::toggled, this, [this](bool on) {
+        m_doc->controlMap()->setDimWhenReady(on);
+    });
     connect(m_table, &QTableWidget::itemSelectionChanged, this, [this]() {
         m_remove->setEnabled(!m_table->selectionModel()->selectedRows().isEmpty());
     });
@@ -119,6 +131,8 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     // A profile that now calls the stop's control a fader: the row says so.
     connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged, this, [this]() { refresh(); });
     connect(cm, &ControlMap::stopStateChanged, this, &ControlMapPanel::refreshStop);
+    // What each control's light says now (CS3): one source with the desk.
+    connect(cm, &ControlMap::lampsChanged, this, &ControlMapPanel::refreshLamps);
     // A key's "Armed" follows the mode, the Run tab and the Show Tree.
     connect(cm, &ControlMap::armingChanged, this, &ControlMapPanel::refreshArming);
     // Names follow renames.
@@ -181,8 +195,11 @@ void ControlMapPanel::refresh()
             m_doc->controlMap()->setMode(target, ControlMap::Mode(mode->currentData().toInt()));
         });
         m_table->setCellWidget(r, ModeCol, mode);
+
+        m_table->setItem(r, LampCol, new QTableWidgetItem());
     }
     refreshStop();
+    refreshLamps();
     const bool any = !bindings.isEmpty();
     /* Control surfaces off for the show (Q293): the triggers and the encoder
        bank are put away; the Emergency Stop button never is. */
@@ -191,6 +208,7 @@ void ControlMapPanel::refresh()
     m_table->setVisible(surfaces && any);
     m_remove->setVisible(surfaces);
     m_removeAll->setVisible(surfaces);
+    m_dim->setVisible(surfaces && any);     // nothing is lit with no trigger
     m_featureOff->setVisible(!surfaces);
     if (m_encoderBox != nullptr)
         m_encoderBox->setVisible(surfaces);
@@ -199,6 +217,46 @@ void ControlMapPanel::refresh()
     m_remove->setEnabled(any && !m_table->selectionModel()->selectedRows().isEmpty());
     refreshEncoder();
     emit summaryChanged();
+}
+
+QString ControlMapPanel::lampText(const ControlMap::Binding &b) const
+{
+    ControlMap *cm = m_doc->controlMap();
+    if (ControlMap::isKey(b))
+        return tr("A key has no light");
+    // A universe with no feedback line cannot light anything: say so here
+    // rather than leave a column that never changes.
+    if (m_doc->inputOutputMap()->feedbackPatch(b.universe) == nullptr)
+        return tr("No feedback line");
+    if (cm->isBlinking(b))
+        return ControlMap::lampName(ControlMap::LampHeld);
+    const ControlMap::Lamp lamp = cm->lamp(b);
+    if (lamp == ControlMap::LampStandby && !cm->dimWhenReady())
+        return tr("Ready (dark)");
+    return ControlMap::lampName(lamp);
+}
+
+void ControlMapPanel::refreshLamps()
+{
+    ControlMap *cm = m_doc->controlMap();
+    const QList<ControlMap::Binding> bindings = cm->bindings();
+    for (int r = 0; r < bindings.count() && r < m_table->rowCount(); ++r)
+    {
+        QTableWidgetItem *item = m_table->item(r, LampCol);
+        if (item == nullptr)
+            continue;
+        item->setText(lampText(bindings.at(r)));
+        item->setToolTip(tr("What the control's light shows now: Dark (pressing it does "
+                            "nothing here), Ready, Running, GO held (the double-GO guard "
+                            "held a command: two blinks) or Stopped (after an emergency "
+                            "stop, until the next GO)."));
+    }
+    if (m_dim != nullptr)
+    {
+        m_dim->blockSignals(true);
+        m_dim->setChecked(cm->dimWhenReady());
+        m_dim->blockSignals(false);
+    }
 }
 
 QString ControlMapPanel::controlText(const ControlMap::Binding &b) const

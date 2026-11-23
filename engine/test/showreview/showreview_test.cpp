@@ -2868,6 +2868,21 @@ void ShowReview_Test::mov14()
     QVERIFY(fires("MOV-14"));
     msg = findings("MOV-14").first().message;
     QVERIFY2(msg.startsWith("Spot 1") && msg.contains("No turn clears the stage"), qPrintable(msg));
+
+    /* The fix in place (Show Review's Fix, no window): the Facing nearest its
+       own that lets a turn clear the stage, then that turn -- quiet. */
+    const float own = mp->fixtureRigProps(spot->id()).panZeroDir;
+    float room = 0.0f;
+    const float to = PanTurn::facingProposal(m_doc, spot->id(), &room);
+    QVERIFY2(room >= PanTurn::kClearDeg, qPrintable(QString("room %1").arg(room)));
+    QVERIFY(qAbs(to - own) > 1.0f);
+    rp = mp->fixtureRigProps(spot->id());
+    rp.panZeroDir = to;
+    mp->setFixtureRigProps(spot->id(), rp);
+    PanTurn::centre(m_doc, spot->id());
+    QVERIFY2(quiet("MOV-14"), qPrintable(findings("MOV-14").isEmpty() ? QString() : findings("MOV-14").first().message));
+    // A head that already clears: its own Facing back.
+    QCOMPARE(PanTurn::facingProposal(m_doc, spot->id()), to);
 }
 
 namespace

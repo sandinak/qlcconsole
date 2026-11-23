@@ -188,7 +188,7 @@ public:
     void setTimeout(int msec);
 
     /** Due while running: enabled, not disabled by policy, not rate
-     *  limited, and the last check over 4 hours ago. */
+     *  limited, and the last check over 20 hours ago (once a night). */
     bool isCheckDue(const QDateTime &now = QDateTime::currentDateTimeUtc()) const;
 
     /** Due at launch: as isCheckDue(), but the last check only needs to be

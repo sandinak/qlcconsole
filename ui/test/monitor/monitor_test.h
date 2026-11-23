@@ -1080,6 +1080,8 @@ private slots:
      *  one head or several -- is said first ("its beam moves now, a whole
      *  turn round") and done only on a yes. */
     void aLiveHeadsTurnIsSaidFirst();
+    /** A live head's Facing (how it hangs) is never written under the show. */
+    void aLiveHeadsFacingIsLeftAlone();
     /** Centre the pan for a selection (and the plot's menu): one undo step. */
     void centringASelectionIsOneUndoStep();
     /** A move changes the turn only when the stage crosses the seam, said. */

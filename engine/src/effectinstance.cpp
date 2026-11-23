@@ -440,9 +440,10 @@ void EffectInstance::runTick()
         return;
     }
 
-    // Snapshot the scene's base per-channel values so an intensity flicker can
-    // modulate *around* the Dimmer/Colour looks instead of overriding them.
-    buildSceneBaseValues();
+    // The look's Dimmer now; its base per-channel values when something
+    // reads them, so an intensity flicker can modulate *around* the
+    // Dimmer/Colour looks instead of overriding them.
+    prepareSceneBase();
 
     /* How it runs (EffectRuns): a one-shot script that loops or repeats
        starts each run afresh, as it did the first. Only a run that ends
@@ -694,19 +695,43 @@ QList<EffectInstance::DmxWrite> EffectInstance::dmxWrites() const
 // Private helpers
 // ---------------------------------------------------------------------------
 
-void EffectInstance::buildSceneBaseValues()
+/* The look's master Dimmer (0..1, 1 with no Dimmer look), as the scene
+   paints it: the last Dimmer palette of its own, not one scoped to an
+   effect after it. A few palette reads -- not the per-channel values. */
+static float lookDimmerOfScene(Doc *doc, const Scene *scene)
 {
+    float dim = 1.0f;
+    const QList<quint32> ordered = scene->runtimePalettes();
+    for (quint32 pid : ordered)
+    {
+        QLCPalette *p = doc->palette(pid);
+        if (p == nullptr || p->type() != QLCPalette::Dimmer)
+            continue;
+        if (QLCPalette::isEffectScoped(doc, ordered, pid))
+            continue;
+        dim = qBound(0.0f, float(p->value().toDouble() / 255.0), 1.0f);
+    }
+    return dim;
+}
+
+void EffectInstance::prepareSceneBase()
+{
+    /* The values themselves wait until something reads them: an effect
+       that only sets colours never does, and over 96 pixel bars working
+       out every head's base was milliseconds a tick. */
+    m_sceneBaseBuilt = false;
+    m_sceneBaseArmed = true;
     m_sceneBaseValues.clear();
     m_lookDimmer = 1.0f;
     m_lookDimmerOf.clear();
     /* Every scene it plays, the one it is bound to last: each fixture with
-       its own scene's base and Dimmer. */
+       its own scene's Dimmer. */
     for (int i = m_alsoScenes.size() - 1; i >= 0; --i)
     {
         Scene *scene = qobject_cast<Scene*>(m_doc->function(m_alsoScenes.at(i)));
         if (scene == nullptr)
             continue;
-        addSceneBaseValues(scene);
+        m_lookDimmer = lookDimmerOfScene(m_doc, scene);
         for (quint32 fid : scene->writtenFixtures(m_effectPaletteId))
             m_lookDimmerOf.insert(fid, m_lookDimmer);
         m_lookDimmer = 1.0f;
@@ -714,15 +739,30 @@ void EffectInstance::buildSceneBaseValues()
     Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId));
     if (scene == nullptr)
         return;
-    addSceneBaseValues(scene);
+    m_lookDimmer = lookDimmerOfScene(m_doc, scene);
     if (!m_lookDimmerOf.isEmpty())
         for (quint32 fid : scene->writtenFixtures(m_effectPaletteId))
             m_lookDimmerOf.insert(fid, m_lookDimmer);
 }
 
-void EffectInstance::addSceneBaseValues(Scene *scene)
+void EffectInstance::buildSceneBaseValues() const
+{
+    m_sceneBaseBuilt = true;
+    m_sceneBaseValues.clear();
+    m_sceneBaseValues.reserve(m_sceneBaseHint);
+    // Every scene it plays, the one it is bound to last.
+    for (int i = m_alsoScenes.size() - 1; i >= 0; --i)
+        if (Scene *scene = qobject_cast<Scene*>(m_doc->function(m_alsoScenes.at(i))))
+            addSceneBaseValues(scene);
+    if (Scene *scene = qobject_cast<Scene*>(m_doc->function(m_sceneId)))
+        addSceneBaseValues(scene);
+    m_sceneBaseHint = qMax(m_sceneBaseHint, int(m_sceneBaseValues.size()));
+}
+
+void EffectInstance::addSceneBaseValues(Scene *scene) const
 {
     QHash<quint64, uchar> mine;
+    mine.reserve(m_sceneBaseHint);
     auto key = [](quint32 fid, quint32 ch) -> quint64 {
         return (quint64(fid) << 32) | ch;
     };
@@ -746,9 +786,8 @@ void EffectInstance::addSceneBaseValues(Scene *scene)
         // this effect's base either (else the base would still wash it out).
         if (QLCPalette::isEffectScoped(m_doc, orderedPalettes, pid))
             continue;
-        // Capture the look's master Dimmer (0..1) for host-side colour scaling.
-        if (p->type() == QLCPalette::Dimmer)
-            m_lookDimmer = qBound(0.0f, float(p->value().toDouble() / 255.0), 1.0f);
+        // (The look's master Dimmer for host-side colour scaling is read in
+        //  prepareSceneBase(), which runs whether these values are needed.)
         const int cOff = QLCPalette::colorSetOffset(m_doc, orderedPalettes, pid);
         for (const SceneValue &sv : p->valuesFromFixtureGroups(m_doc, groups, scene, cOff))
             mine[key(sv.fxi, sv.channel)] = sv.value;
@@ -771,7 +810,16 @@ void EffectInstance::addSceneBaseValues(Scene *scene)
 
 uchar EffectInstance::sceneBaseValue(quint32 fid, quint32 channel, uchar dflt) const
 {
+    ensureSceneBaseValues();
     return m_sceneBaseValues.value((quint64(fid) << 32) | channel, dflt);
+}
+
+bool EffectInstance::hasSceneBaseValue(quint32 fid, quint32 channel) const
+{
+    if (channel == QLCChannel::invalid())
+        return false;
+    ensureSceneBaseValues();
+    return m_sceneBaseValues.contains((quint64(fid) << 32) | channel);
 }
 
 float EffectInstance::sceneEnvelope() const
@@ -947,7 +995,15 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
     if (fxIds.isEmpty())
         return {};
 
-    const QStringList types = m_script.fixtureTypes();
+    if (!m_typesLowerBuilt)
+    {
+        /* The script's kinds, lowered once: a fixtureTypes() list and a
+           toLower() per kind per fixture, every tick, was pure cost. */
+        m_typesLowerBuilt = true;
+        for (const QString &t : m_script.fixtureTypes())
+            m_typesLower << t.toLower();
+    }
+    const QStringList &types = m_typesLower;
     if (types.isEmpty())
         return fxIds;
 
@@ -959,6 +1015,18 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
         Fixture *fxi = m_doc->fixture(fid);
         if (!fxi || !fxi->fixtureMode())
             continue;
+
+        /* What a fixture can do follows from its MODE, so the answer is
+           kept and looked at again only when the mode changes: walking
+           every channel of 96 pixel bars (192 channels each) to answer the
+           same question, once a tick, was milliseconds a frame. */
+        const auto known = m_typeMatch.constFind(fid);
+        if (known != m_typeMatch.constEnd() && known->first == fxi->fixtureMode())
+        {
+            if (known->second)
+                filtered.append(fid);
+            continue;
+        }
 
         bool hasRGB = false, hasPT = false, hasDimmer = false, hasEmitter = false;
         bool hasShutt = false, hasColorWheel = false, hasUV = false;
@@ -1004,9 +1072,8 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
         }
 
         bool matches = false;
-        for (const QString &t : types)
+        for (const QString &tl : types)
         {
-            const QString tl = t.toLower();
             // Heads that turn endlessly on pan or tilt (Free Spin).
             if (tl == QLatin1String("freerotate") && FreeRotation::canSpin(fxi)) { matches = true; break; }
             // RGB variants: rgb, rgbw, rgba, rgbwa, rgbwauv, wash, color
@@ -1030,6 +1097,7 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
             if ((tl == QLatin1String("uv")       ||
                  tl == QLatin1String("uvonly"))  && hasUV)         { matches = true; break; }
         }
+        m_typeMatch.insert(fid, qMakePair(static_cast<const void *>(fxi->fixtureMode()), matches));
         if (matches)
             filtered.append(fid);
     }
@@ -1244,61 +1312,89 @@ EffectInstance::effectiveCells(int &gridCols, int &gridRows) const
        effect on one loose box draws on the box and not on a 75-pixel strip.
        Fixtures of one row stay a run of their heads, as below. */
     const MonitorProperties *props = m_doc->monitorProperties();
-    QList<HeadLayout> loose;
-    bool anyGrid = false;
-    for (quint32 fid : fxIds)
+    /* Resolving one layout builds its library key, takes two locks and
+       lays out a cell for every head; a 96-bar rig asked for 96 of them,
+       50 times a second. They are kept while the fixtures, their modes and
+       every head layout anywhere (HeadLayoutLibrary::generation()) are the
+       ones they were worked out for. */
+    const quint32 layoutGen = HeadLayoutLibrary::generation();
+    bool fresh = m_looseKey == fxIds && m_looseModes.size() == fxIds.size()
+                 && m_looseLayoutGen == layoutGen;
+    for (int i = 0; fresh && i < fxIds.size(); ++i)
     {
-        Fixture *fxi = m_doc->fixture(fid);
-        HeadLayout l = (fxi != nullptr && props != nullptr) ? props->headLayoutFor(fxi) : HeadLayout();
-        if (fxi != nullptr && (!l.isValid() || l.cells.size() < fxi->heads()))
-            l = HeadLayout();
-        anyGrid = anyGrid || (l.isValid() && l.size.height() > 1);
-        loose << l;
+        const Fixture *fxi = m_doc->fixture(fxIds.at(i));
+        fresh = (fxi != nullptr ? static_cast<const void *>(fxi->fixtureMode()) : nullptr)
+                == m_looseModes.at(i);
     }
-    if (anyGrid)
+    if (!fresh)
     {
-        int x = 0, tallest = 1;
-        for (int i = 0; i < fxIds.size(); ++i)
+        m_looseLayouts.clear();
+        m_looseModes.clear();
+        m_looseAnyGrid = false;
+        for (quint32 fid : fxIds)
         {
-            Fixture *fxi = m_doc->fixture(fxIds.at(i));
-            if (fxi == nullptr)
-                continue;
-            const HeadLayout &l = loose.at(i);
-            const int nh = qMax(1, fxi->heads());
-            if (!l.isValid())
-            {
-                for (int h = 0; h < nh; ++h)
-                    cells.append({fxIds.at(i), h, x++, 0});
-                continue;
-            }
-            for (int h = 0; h < nh; ++h)
-            {
-                const QPoint at = l.cellOf(h);
-                cells.append({fxIds.at(i), h, x + qMax(0, at.x()), qMax(0, at.y())});
-            }
-            x += l.size.width();
-            tallest = qMax(tallest, l.size.height());
+            Fixture *fxi = m_doc->fixture(fid);
+            HeadLayout l = (fxi != nullptr && props != nullptr) ? props->headLayoutFor(fxi) : HeadLayout();
+            if (fxi != nullptr && (!l.isValid() || l.cells.size() < fxi->heads()))
+                l = HeadLayout();
+            m_looseAnyGrid = m_looseAnyGrid || (l.isValid() && l.size.height() > 1);
+            m_looseLayouts << l;
+            m_looseModes << (fxi != nullptr ? static_cast<const void *>(fxi->fixtureMode()) : nullptr);
         }
-        gridCols = qMax(1, x);
-        gridRows = tallest;
-        return cells;
+        const QList<HeadLayout> &loose = m_looseLayouts;
+        m_looseCells.clear();
+        m_looseCols = 1;
+        m_looseRows = 1;
+        if (m_looseAnyGrid)
+        {
+            int x = 0, tallest = 1;
+            for (int i = 0; i < fxIds.size(); ++i)
+            {
+                Fixture *fxi = m_doc->fixture(fxIds.at(i));
+                if (fxi == nullptr)
+                    continue;
+                const HeadLayout &l = loose.at(i);
+                const int nh = qMax(1, fxi->heads());
+                if (!l.isValid())
+                {
+                    for (int h = 0; h < nh; ++h)
+                        m_looseCells.append({fxIds.at(i), h, x++, 0});
+                    continue;
+                }
+                for (int h = 0; h < nh; ++h)
+                {
+                    const QPoint at = l.cellOf(h);
+                    m_looseCells.append({fxIds.at(i), h, x + qMax(0, at.x()), qMax(0, at.y())});
+                }
+                x += l.size.width();
+                tallest = qMax(tallest, l.size.height());
+            }
+            m_looseCols = qMax(1, x);
+            m_looseRows = tallest;
+        }
+        else
+        {
+            // No laid-out group → a 1-D strip of every head of the loose
+            // fixtures, in fixture order.
+            int col = 0;
+            for (quint32 fid : fxIds)
+            {
+                Fixture *fxi = m_doc->fixture(fid);
+                if (fxi == nullptr)
+                    continue;
+                const int nh = qMax(1, fxi->heads());
+                for (int h = 0; h < nh; ++h)
+                    m_looseCells.append({fid, h, col++, 0});
+            }
+            m_looseCols = qMax(1, col);
+            m_looseRows = 1;
+        }
+        m_looseKey = fxIds;
+        m_looseLayoutGen = layoutGen;
     }
-
-    // Fallback: no laid-out group → a 1-D strip of every head of the loose
-    // fixtures, in fixture order.
-    int col = 0;
-    for (quint32 fid : fxIds)
-    {
-        Fixture *fxi = m_doc->fixture(fid);
-        if (fxi == nullptr)
-            continue;
-        const int nh = qMax(1, fxi->heads());
-        for (int h = 0; h < nh; ++h)
-            cells.append({fid, h, col++, 0});
-    }
-    gridCols = qMax(1, col);
-    gridRows = 1;
-    return cells;
+    gridCols = m_looseCols;
+    gridRows = m_looseRows;
+    return m_looseCells;
 }
 
 bool EffectInstance::aimCentre(QVector3D *centre) const
@@ -1368,8 +1464,14 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
     QLCPalette *effectPal = m_doc->palette(m_effectPaletteId);
     ++m_factsTick;
 
-    /* Each fixture once: its facts when it has changed, where it is now. */
-    bool rebuild = cells != m_cellsBuilt || gridCols != m_cellsBuiltCols
+    /* Each fixture once: its facts when it has changed, where it is now.
+       The cells usually come from effectiveCells()' own store, so they
+       share their buffer with the ones they were built for: that is the
+       same list without comparing 6,144 of them. */
+    const bool sameCells = cells.size() == m_cellsBuilt.size()
+                           && (cells.constData() == m_cellsBuilt.constData()
+                               || cells == m_cellsBuilt);
+    bool rebuild = !sameCells || gridCols != m_cellsBuiltCols
                    || gridRows != m_cellsBuiltRows;
     bool moved = false;
     for (const EffectCell &cell : cells)
@@ -1430,7 +1532,8 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         for (const EffectCell &cell : cells)
         {
             FixtureFacts &f = m_facts[cell.fixtureId];
-            f.sceneTargetSet = f.lastSpotSet = false;
+            // Fresh cells hold none of the aim objects yet.
+            f.aimAtSet = f.sceneTargetSet = f.lastSpotSet = f.lookAimSet = false;
             if (f.fixture == nullptr)
             {
                 m_cellObjects.append(QJSValue());
@@ -1532,6 +1635,24 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         m_cellsBuilt = cells;
         m_cellsBuiltCols = gridCols;
         m_cellsBuiltRows = gridRows;
+        /* The cells changed, so the heads did: drop what we remember about
+           fixtures that are no longer among them. Kept forever it would hold
+           an answer for a deleted fixture's id, and a new fixture given that
+           id back could be handed it (the mode pointer it is checked against
+           can be recycled too). */
+        if (m_typeMatch.size() > cells.size())
+        {
+            QSet<quint32> here;
+            for (const EffectCell &c : cells)
+                here.insert(c.fixtureId);
+            for (auto it = m_typeMatch.begin(); it != m_typeMatch.end();)
+            {
+                if (here.contains(it.key()))
+                    ++it;
+                else
+                    it = m_typeMatch.erase(it);
+            }
+        }
     }
 
     /* The spread layer (S3): each head's place in the cycle, as "phase" in
@@ -1674,8 +1795,6 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
     /* Keyed by member: (fixture << 32) | (arm + 1) -- every arm of a
        multi-arm fixture is aimed from where it is (AimSolver::arms()). */
     auto memberKey = [](quint32 fid, int head) { return (quint64(fid) << 32) | quint32(head + 1); };
-    QHash<quint64, QJSValue> aimAtOf, sceneTargetOf;
-    QHash<quint32, QJSValue> lastSpotOf;
     if (aiming || sceneTarget || !m_lastSpotIn.isEmpty())
     {
         // Line of sight: the stage's model, fetched once for every head.
@@ -1684,40 +1803,115 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
         for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
         {
             const quint32 fid = it.key();
-            const FixtureFacts &f = it.value();
+            FixtureFacts &f = it.value();
             if (f.fixture == nullptr)
                 continue;
-            if (aiming)
-                aimAtOf.insert(memberKey(fid, -1), aimAtObject(fid, f.pos, effectPal, *sight));
-            if (sceneTarget)
-                sceneTargetOf.insert(memberKey(fid, -1), sceneTargetObject(fid, sceneTarget, *sight));
+            if (!aiming && sceneTarget == nullptr)
+                continue;
+            /* Each member's object is made once and changed in place, so
+               the cells holding it are told once (f.aimAtSet below). The
+               fixture as one (head -1), then each arm of a multi-arm one. */
+            QVarLengthArray<int, 8> members;
+            members.append(-1);
             for (int arm : f.arms)
+                members.append(arm);
+            for (int member : members)
             {
+                MemberAim &ma = m_memberAims[memberKey(fid, member)];
+                ma.seen = m_factsTick;
                 if (aiming)
-                    aimAtOf.insert(memberKey(fid, arm),
-                                   aimAtObject(fid, f.pos, effectPal, *sight, arm));
+                    aimAtObject(ma.aimAt, fid, f.pos, effectPal, *sight, member);
                 if (sceneTarget)
-                    sceneTargetOf.insert(memberKey(fid, arm),
-                                         sceneTargetObject(fid, sceneTarget, *sight, arm));
-            }
-            // lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
-            // previous Operate-mode tick (possibly from a different scene).  Lets a
-            // followspot script seed followMode = "lastPosition" so the beam holds
-            // across scene transitions instead of snapping.  Property is absent when
-            // no prior position is known (e.g. first use after launch).
-            if (m_lastSpotIn.contains(fid))
-            {
-                const QPointF ls = m_lastSpotIn.value(fid);
-                QJSValue lastObj = engine->newObject();
-                lastObj.setProperty("pan",  ls.x());
-                lastObj.setProperty("tilt", ls.y());
-                lastSpotOf.insert(fid, lastObj);
+                    sceneTargetObject(ma.sceneTarget, ma.framed, fid, sceneTarget, *sight, member);
             }
         }
+        // Members that are gone (a fixture dropped, its arms changed): their
+        // objects with them.
+        for (auto it = m_memberAims.begin(); it != m_memberAims.end(); )
+        {
+            if (it->seen != m_factsTick)
+                it = m_memberAims.erase(it);
+            else
+                ++it;
+        }
+    }
+    else if (!m_memberAims.isEmpty())
+        m_memberAims.clear();
+
+    /* lastSpot: pan/tilt (degrees) where this fixture's beam was left by the
+       previous Operate-mode tick (possibly from a different scene).  Lets a
+       followspot script seed followMode = "lastPosition" so the beam holds
+       across scene transitions instead of snapping.  Property is absent when
+       no prior position is known (e.g. first use after launch). Its object
+       too is made once and changed in place. */
+    for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
+    {
+        FixtureFacts &f = it.value();
+        const auto spot = f.fixture != nullptr ? m_lastSpotIn.constFind(it.key())
+                                               : m_lastSpotIn.constEnd();
+        if (spot != m_lastSpotIn.constEnd())
+        {
+            if (f.lastSpotObj.isUndefined())
+                f.lastSpotObj = engine->newObject();
+            f.lastSpotObj.setProperty("pan",  spot->x());
+            f.lastSpotObj.setProperty("tilt", spot->y());
+        }
+        else
+            f.lastSpotObj = QJSValue();
     }
 
-    QJSValue arr = engine->newArray(uint(cells.size()));
-    QSet<quint32> sceneTargetCleared, lastSpotCleared;
+    /* lookAim: where the look's own Aim / Pan-Tilt points this head, as
+       fractions of its pan and tilt range (the scripts' own units) -- the
+       centre a movement effect moves round ("should I expect the lights
+       to ballyhoo over the point of target 2?"). Absent when the look
+       doesn't point it. Worked out once a FIXTURE -- its channels and its
+       base values are the fixture's, so every head of a pixel bar had the
+       same four channel look-ups and the same answer. */
+    for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
+    {
+        FixtureFacts &f = it.value();
+        f.lookAimWanted = false;
+        if (f.fixture == nullptr)
+            continue;
+        const quint32 fid = it.key();
+        const Fixture *fx = f.fixture;
+        const quint32 panCh = fx->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
+        const quint32 tiltCh = fx->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
+        auto has = [this, fid](quint32 ch) { return hasSceneBaseValue(fid, ch); };
+        if (!has(panCh) && !has(tiltCh))
+            continue;
+        const quint32 panFine = fx->channelNumber(QLCChannel::Pan, QLCChannel::LSB);
+        const quint32 tiltFine = fx->channelNumber(QLCChannel::Tilt, QLCChannel::LSB);
+        auto frac = [this, fid, fx](quint32 msb, quint32 lsb) {
+            const int hi = sceneBaseValue(fid, msb, 128);
+            const int lo = lsb != QLCChannel::invalid() ? sceneBaseValue(fid, lsb, 0) : 0;
+            /* Over the pointing band when the channel has one (a
+               two-arm beam points with 0-127): 64 is half way round,
+               not a quarter. */
+            const QLCChannel *ch = fx->channel(msb);
+            uchar bandLo = 0, bandHi = 255;
+            if (ch != nullptr && Fixture::positionBand(ch, bandLo, bandHi))
+                return Fixture::positionFraction(ch, hi + lo / 256.0, lsb != QLCChannel::invalid());
+            return double((hi << 8) | lo) / 65535.0;
+        };
+        if (f.lookAimObj.isUndefined())
+            f.lookAimObj = engine->newObject();
+        f.lookAimObj.setProperty("pan", has(panCh) ? frac(panCh, panFine) : 0.5);
+        f.lookAimObj.setProperty("tilt", has(tiltCh) ? frac(tiltCh, tiltFine) : 0.5);
+        f.lookAimWanted = true;
+    }
+
+    /* The list of cells is kept, and only put together again when the cells
+       themselves changed: everything on them is already this tick's -- a
+       cell is told about an aim object only when it first gets one, or
+       loses it. The script is handed a COPY of the kept list, so one that
+       sorts or reverses what it is given does not sort the next tick's
+       (EFFECTSCRIPT_API.md). */
+    // rebuild covers every change to the cells, so the kept list is the
+    // right length whenever it is not set.
+    const bool freshArray = rebuild || !m_cellArray.isArray();
+    if (freshArray)
+        m_cellArray = engine->newArray(uint(cells.size()));
     for (int i = 0; i < cells.size(); ++i)
     {
         QJSValue &obj = m_cellObjects[i];
@@ -1725,74 +1919,61 @@ QJSValue EffectInstance::buildFixturesArray(const QList<EffectInstance::EffectCe
             continue;
         const quint32 fid = cells.at(i).fixtureId;
         FixtureFacts &f = m_facts[fid];
-        const int arm = f.arms.contains(cells.at(i).head) ? cells.at(i).head : -1;
-        if (aiming)
-            obj.setProperty("aimAt", aimAtOf.value(memberKey(fid, arm)));
-        if (sceneTarget)
-            obj.setProperty("sceneTarget", sceneTargetOf.value(memberKey(fid, arm)));
-        else if (f.sceneTargetSet)
+        if ((aiming && !f.aimAtSet) || (sceneTarget != nullptr && !f.sceneTargetSet))
         {
-            obj.deleteProperty("sceneTarget");
-            sceneTargetCleared.insert(fid);
-        }
-        /* lookAim: where the look's own Aim / Pan-Tilt points this head, as
-           fractions of its pan and tilt range (the scripts' own units) -- the
-           centre a movement effect moves round ("should I expect the lights
-           to ballyhoo over the point of target 2?"). Absent when the look
-           doesn't point it. */
-        if (f.fixture != nullptr)
-        {
-            const quint32 panCh = f.fixture->channelNumber(QLCChannel::Pan, QLCChannel::MSB);
-            const quint32 tiltCh = f.fixture->channelNumber(QLCChannel::Tilt, QLCChannel::MSB);
-            const quint32 panFine = f.fixture->channelNumber(QLCChannel::Pan, QLCChannel::LSB);
-            const quint32 tiltFine = f.fixture->channelNumber(QLCChannel::Tilt, QLCChannel::LSB);
-            auto has = [this, fid](quint32 ch) {
-                return ch != QLCChannel::invalid()
-                       && m_sceneBaseValues.contains((quint64(fid) << 32) | ch);
-            };
-            if (has(panCh) || has(tiltCh))
+            const int arm = f.arms.contains(cells.at(i).head) ? cells.at(i).head : -1;
+            const auto ma = m_memberAims.constFind(memberKey(fid, arm));
+            if (ma != m_memberAims.constEnd())
             {
-                const Fixture *fx = f.fixture;
-                auto frac = [this, fid, fx](quint32 msb, quint32 lsb) {
-                    const int hi = sceneBaseValue(fid, msb, 128);
-                    const int lo = lsb != QLCChannel::invalid() ? sceneBaseValue(fid, lsb, 0) : 0;
-                    /* Over the pointing band when the channel has one (a
-                       two-arm beam points with 0-127): 64 is half way round,
-                       not a quarter. */
-                    const QLCChannel *ch = fx->channel(msb);
-                    uchar bandLo = 0, bandHi = 255;
-                    if (ch != nullptr && Fixture::positionBand(ch, bandLo, bandHi))
-                        return Fixture::positionFraction(ch, hi + lo / 256.0, lsb != QLCChannel::invalid());
-                    return double((hi << 8) | lo) / 65535.0;
-                };
-                QJSValue la = engine->newObject();
-                la.setProperty("pan", has(panCh) ? frac(panCh, panFine) : 0.5);
-                la.setProperty("tilt", has(tiltCh) ? frac(tiltCh, tiltFine) : 0.5);
-                obj.setProperty("lookAim", la);
+                if (aiming && !f.aimAtSet)
+                    obj.setProperty("aimAt", ma->aimAt);
+                if (sceneTarget != nullptr && !f.sceneTargetSet)
+                    obj.setProperty("sceneTarget", ma->sceneTarget);
             }
-            else if (obj.hasOwnProperty("lookAim"))
-                obj.deleteProperty("lookAim");
         }
-        if (lastSpotOf.contains(fid))
-            obj.setProperty("lastSpot", lastSpotOf.value(fid));
-        else if (f.lastSpotSet)
+        if (sceneTarget == nullptr && f.sceneTargetSet)
+            obj.deleteProperty("sceneTarget");
+        if (f.lookAimWanted)
         {
-            obj.deleteProperty("lastSpot");
-            lastSpotCleared.insert(fid);
+            if (!f.lookAimSet)
+                obj.setProperty("lookAim", f.lookAimObj);
         }
-        arr.setProperty(quint32(i), obj);
+        else if (f.lookAimSet)
+            obj.deleteProperty("lookAim");
+        if (!f.lastSpotObj.isUndefined())
+        {
+            if (!f.lastSpotSet)
+                obj.setProperty("lastSpot", f.lastSpotObj);
+        }
+        else if (f.lastSpotSet)
+            obj.deleteProperty("lastSpot");
+        if (freshArray)
+            m_cellArray.setProperty(quint32(i), obj);
     }
     for (auto it = m_facts.begin(); it != m_facts.end(); ++it)
     {
-        if (sceneTarget)
-            it->sceneTargetSet = true;
-        else if (sceneTargetCleared.contains(it.key()))
-            it->sceneTargetSet = false;
-        if (lastSpotOf.contains(it.key()))
-            it->lastSpotSet = true;
-        else if (lastSpotCleared.contains(it.key()))
-            it->lastSpotSet = false;
+        it->aimAtSet = aiming;
+        it->sceneTargetSet = sceneTarget != nullptr;
+        it->lookAimSet = it->lookAimWanted;
+        it->lastSpotSet = !it->lastSpotObj.isUndefined();
     }
+
+    // A copy, made inside the engine; a cell the fixture of which is gone
+    // is a hole in the list and stays one (Array.prototype.slice keeps them).
+    if (!m_sliceFn.isCallable())
+        m_sliceFn = engine->evaluate(QStringLiteral("(function(a){return a.slice();})"));
+    if (m_sliceFn.isCallable())
+    {
+        const QJSValue copy = m_sliceFn.call(QJSValueList() << m_cellArray);
+        if (copy.isArray())
+            return copy;
+    }
+    // No slice to be had (it cannot happen, but a dark rig would be the
+    // price): name every place, as it was done before.
+    QJSValue arr = engine->newArray(uint(cells.size()));
+    for (int i = 0; i < cells.size(); ++i)
+        if (!m_cellObjects.at(i).isUndefined())
+            arr.setProperty(quint32(i), m_cellObjects.at(i));
     return arr;
 }
 
@@ -1808,9 +1989,31 @@ void EffectInstance::readFixtureFacts(const Fixture *fxi, FixtureFacts &f) const
     f.switches = fxi->outputRules().testFlag(Fixture::Switch) || Fountain::isFlame(fxi);
     f.arms = AimSolver::arms(fxi);
     f.spin.clear();
+    f.headChannels.clear();
     const QLCFixtureMode *mode = fxi->fixtureMode();
     if (mode == nullptr)
         return;
+
+    /* Each head's own channels, with the whole fixture's for a head that
+       has none (a single-head fixture): read here, not per head per tick --
+       Fixture::head() hands back a QLCFixtureHead by value, six containers
+       to take and give back, 6,144 times a tick on a step rig. */
+    {
+        QList<quint32> whole;
+        const int nh = qMax(1, fxi->heads());
+        f.headChannels.resize(nh);
+        for (int h = 0; h < nh; ++h)
+        {
+            if (h < mode->heads().size())
+                f.headChannels[h] = mode->heads().at(h).channels();
+            if (!f.headChannels.at(h).isEmpty())
+                continue;
+            if (whole.isEmpty())
+                for (quint32 c = 0; c < fxi->channels(); ++c)
+                    whole << c;
+            f.headChannels[h] = whole;
+        }
+    }
 
     // Free rotation, head by head: read once, here, not every tick -- and
     // only for a fixture with pan or tilt (not every pixel of a strip).
@@ -1905,12 +2108,15 @@ void EffectInstance::setSight(QJSValue &obj, const BeamOcclusion::Hit &hit) cons
     obj.setProperty("clearance", double(hit.clearance));
 }
 
-QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalette *effectPal,
-                                     const BeamOcclusion::Model &sight, int head)
+void EffectInstance::aimAtObject(QJSValue &aimAt, quint32 fid, const QVector3D &pos,
+                                 QLCPalette *effectPal,
+                                 const BeamOcclusion::Model &sight, int head)
 {
     const GroupHead member(fid, head);
-    // aimAt: pre-computed pan/tilt for each bound target slot
-    QJSValue aimAt = m_script.engine()->newObject();
+    // aimAt: pre-computed pan/tilt for each bound target slot. Kept from
+    // tick to tick -- every slot is written again below, so none goes stale.
+    if (aimAt.isUndefined())
+        aimAt = m_script.engine()->newObject();
     const MonitorProperties *mp = m_doc->monitorProperties();
     const QMap<QString, quint32> &tgtBindings = effectPal->effectTargetBindings();
     for (const EffectScript::TargetDef &td : m_script.targetDefs())
@@ -1943,7 +2149,6 @@ QJSValue EffectInstance::aimAtObject(quint32 fid, const QVector3D &pos, QLCPalet
         }
         aimAt.setProperty(td.name, aimObj);
     }
-    return aimAt;
 }
 
 void EffectInstance::syncFollowBeam(Scene *sc)
@@ -1982,14 +2187,21 @@ void EffectInstance::syncFollowBeam(Scene *sc)
     }
 }
 
-QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
-                                           const BeamOcclusion::Model &sight, int head)
+void EffectInstance::sceneTargetObject(QJSValue &so, bool &framed, quint32 fid, StageTarget *st,
+                                       const BeamOcclusion::Model &sight, int head)
 {
     const GroupHead member(fid, head);
     const MonitorProperties *mp = m_doc->monitorProperties();
     QVector3D raw = mp->targetPosition(st);    // the blocked position (BLOCKING.md)
 
-    QJSValue so = m_script.engine()->newObject();
+    // Kept from tick to tick and changed in place, so the cells holding it
+    // need telling once (@p framed says whether the aim geometry below is
+    // on it now, so that it can be taken off again).
+    if (so.isUndefined())
+    {
+        so = m_script.engine()->newObject();
+        framed = false;
+    }
     // Raw target world location (metres) — the anchor a shape /
     // formation effect centres on.  Shared by every fixture and
     // independent of rig geometry, so it is always present.
@@ -2034,8 +2246,18 @@ QJSValue EffectInstance::sceneTargetObject(quint32 fid, StageTarget *st,
         // blocked / blockedBy / clearance: whether anything solid on stage
         // stands between the head and the point it is aimed at.
         setSight(so, AimSolver::lineOfSight(m_doc, sight, fid, frame.position, tp));
+        framed = true;
     }
-    return so;
+    else if (framed)
+    {
+        // Its rig geometry is gone (unplaced, or its arms changed): the
+        // angles go with it, rather than standing as the script last saw them.
+        for (const char *key : { "pan", "tilt", "reachMargin", "distance", "level",
+                                 "height", "beamWidth", "blocked", "blockedBy",
+                                 "blockedKind", "blockedAt", "clearance" })
+            so.deleteProperty(QLatin1String(key));
+        framed = false;
+    }
 }
 
 int EffectInstance::speedAssignment() const
@@ -2558,50 +2780,99 @@ QJSValue EffectInstance::buildDataChannelsObject() const
     return obj;
 }
 
+namespace IntentKey
+{
+/* The keys an intent may carry, each in its own place. The host reads an
+   answer's own keys once into an array of these, so asking for one is an
+   index and not a walk of the names the answer did have: it asks thirty
+   times a head, and a step rig has 6,144 heads a tick. */
+enum Key { R, G, B, W, A, UV, Dimmer, Level, Pan, Tilt, PanSpin, TiltSpin,
+           AimX, AimY, AimZ, Zoom, Focus, Iris, Frost, Gobo,
+           ShutterOpen, StrobeRate, Count };
+
+/** @p name's place, or -1 for a key the host knows nothing of (which it
+ *  ignores, as it always has). */
+static int of(const QString &name)
+{
+    static const QHash<QString, int> places = {
+        { QStringLiteral("r"), R },                 { QStringLiteral("g"), G },
+        { QStringLiteral("b"), B },                 { QStringLiteral("w"), W },
+        { QStringLiteral("a"), A },                 { QStringLiteral("uv"), UV },
+        { QStringLiteral("dimmer"), Dimmer },       { QStringLiteral("level"), Level },
+        { QStringLiteral("pan"), Pan },             { QStringLiteral("tilt"), Tilt },
+        { QStringLiteral("panSpin"), PanSpin },     { QStringLiteral("tiltSpin"), TiltSpin },
+        { QStringLiteral("aimX"), AimX },           { QStringLiteral("aimY"), AimY },
+        { QStringLiteral("aimZ"), AimZ },           { QStringLiteral("zoom"), Zoom },
+        { QStringLiteral("focus"), Focus },         { QStringLiteral("iris"), Iris },
+        { QStringLiteral("frost"), Frost },         { QStringLiteral("gobo"), Gobo },
+        { QStringLiteral("shutterOpen"), ShutterOpen },
+        { QStringLiteral("strobeRate"), StrobeRate },
+    };
+    const auto it = places.constFind(name);
+    return it == places.constEnd() ? -1 : it.value();
+}
+}
+
 QList<EffectInstance::DmxWrite>
 EffectInstance::parseIntents(const QJSValue &intents,
                               const QList<EffectInstance::EffectCell> &cells) const
 {
     QList<DmxWrite> writes;
+    /* As many as the LAST tick made: a step rig's 18,000 writes grown from
+       nothing is a megabyte of copying a tick, and a high-water mark would
+       claim that much again on every dark tick. */
+    writes.reserve(m_writeHint);
     m_lastIntentDeg.clear();
+
+    /* The places an answer's keys go, made ONCE for the tick and only the
+       places the last answer used put back: a fresh row of them a head cost
+       an unreached head more than reading it (firespreadperf). */
+    QJSValue said[IntentKey::Count];
+    QVarLengthArray<int, 12> saidPlaces;
 
     int len = qMin(intents.property("length").toInt(), cells.size());
     for (int i = 0; i < len; ++i)
     {
+        for (int place : saidPlaces)
+            said[place] = QJSValue();
+        saidPlaces.clear();
         QJSValue intent = intents.property(i);
         if (!intent.isObject())
             continue;
-        /* Its own keys, read once: asking each answer for every key it might
-           have, head after head, was most of what reading them cost -- an
-           answer usually has three. */
-        QVarLengthArray<QPair<QString, QJSValue>, 8> keys;
+        /* Its own keys, read once into their places: asking each answer for
+           every key it might have, head after head, was most of what reading
+           them cost -- an answer usually has three. */
+        bool anyKey = false;
         QJSValueIterator kit(intent);
         while (kit.hasNext())
         {
             kit.next();
-            keys.append(qMakePair(kit.name(), kit.value()));
+            anyKey = true;
+            const int place = IntentKey::of(kit.name());
+            if (place >= 0)
+            {
+                said[place] = kit.value();
+                saidPlaces.append(place);
+            }
         }
         /* An answer that says nothing (Fire Spread's head the front has not
            reached: left to what is under it) writes nothing: nothing below
            reads a key it does not have. Asking the head for its channels
            first was most of a spread's reading while thousands waited. */
-        if (keys.isEmpty())
+        if (!anyKey)
             continue;
         /* By reference: a QJSValue copy is a persistent handle of the
            engine's, taken and given back -- a dozen and more a head. */
-        static const QJSValue undefinedValue;
-        auto iv = [&keys](const char *name) -> const QJSValue & {
-            for (const auto &k : keys)
-                if (k.first == QLatin1String(name))
-                    return k.second;
-            return undefinedValue;
-        };
+        auto iv = [&said](int key) -> const QJSValue & { return said[key]; };
 
         const EffectCell &cell = cells.at(i);
         quint32 fid  = cell.fixtureId;
         int     head = cell.head;
         const float envelope = envelopeFor(fid, head);   // this cell's, by the transition
-        Fixture *fxi = m_doc->fixture(fid);
+        /* The fixture and its facts as buildFixturesArray() read them: the
+           same cells, so the same fixture, and not a Doc look-up a head. */
+        const auto facts = m_facts.constFind(fid);
+        Fixture *fxi = facts != m_facts.constEnd() ? facts->fixture : m_doc->fixture(fid);
         /* Unpatched fixtures too: their channels are inert (no address, no
            DMX), and what the effect would do goes to the fixture for the rig
            view -- a look on the inventory can be seen before it is patched. */
@@ -2611,11 +2882,26 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // multi-head/pixel fixture, or the whole fixture for a single-head one.
         // Colour + colour-scaled-dimmer writes target only these, so a pixel
         // effect lights individual pixels instead of the entire fixture.
-        const QLCFixtureHead cellHead = fxi->head(head);
-        QList<quint32> headChannels = cellHead.channels();
-        if (headChannels.isEmpty())
-            for (quint32 c = 0; c < fxi->channels(); ++c) headChannels << c;
+        // Read off the mode once a fixture (FixtureFacts::headChannels).
+        const bool haveHeadChannels = facts != m_facts.constEnd()
+                                      && head >= 0 && head < facts->headChannels.size();
+        QList<quint32> ownChannels;
+        if (!haveHeadChannels)
+        {
+            const QVector<QLCFixtureHead> &mh = fxi->fixtureMode()->heads();
+            if (head >= 0 && head < mh.size())
+                ownChannels = mh.at(head).channels();
+            if (ownChannels.isEmpty())
+                for (quint32 c = 0; c < fxi->channels(); ++c) ownChannels << c;
+        }
+        const QList<quint32> &headChannels =
+            haveHeadChannels ? facts->headChannels.at(head) : ownChannels;
 
+        /* Its mode, address and id once a cell: a head's answer asks for
+           each of them a dozen times and more, and a step rig has 6,144. */
+        const QLCFixtureMode *mode = fxi->fixtureMode();
+        const int addrBase = int(fxi->address());
+        const quint32 fxid = fxi->id();
         int uniIdx = (int)fxi->universe();
 
         // Track the pan/tilt degrees this fixture is driven to so the runner can
@@ -2632,15 +2918,17 @@ EffectInstance::parseIntents(const QJSValue &intents,
         float panDeg  = 0.0f,  tiltDeg  = 0.0f;
         /* An arm of a multi-arm fixture is its own cell and points on its
            own: solved from where it is, written to its own pan and tilt.
-           Written to every head, the last arm's answer moved them all. */
-        const int armHead = AimSolver::isArm(fxi, head) ? head : -1;
+           Written to every head, the last arm's answer moved them all.
+           Its arms are in its facts (AimSolver::arms(), read once). */
+        const int armHead = (facts != m_facts.constEnd() ? facts->arms.contains(head)
+                                                         : AimSolver::isArm(fxi, head)) ? head : -1;
 
-        const QJSValue &axVal = iv("aimX");
-        const QJSValue &ayVal = iv("aimY");
+        const QJSValue &axVal = iv(IntentKey::AimX);
+        const QJSValue &ayVal = iv(IntentKey::AimY);
         if (!axVal.isUndefined() && !ayVal.isUndefined())
         {
-            float az = iv("aimZ").isUndefined()
-                       ? 0.0f : (float)iv("aimZ").toNumber();
+            float az = iv(IntentKey::AimZ).isUndefined()
+                       ? 0.0f : (float)iv(IntentKey::AimZ).toNumber();
             QVector3D world((float)axVal.toNumber(), (float)ayVal.toNumber(), az);
             float pd = 0.0f, td = 0.0f;
             if (AimSolver::aimDegrees(m_doc, GroupHead(fid, armHead), world, pd, td))
@@ -2650,9 +2938,9 @@ EffectInstance::parseIntents(const QJSValue &intents,
             }
         }
 
-        const QJSValue &panVal = iv("pan");
+        const QJSValue &panVal = iv(IntentKey::Pan);
         if (!panVal.isUndefined())  { panDeg  = (float)panVal.toNumber();  havePan  = true; }
-        const QJSValue &tiltVal = iv("tilt");
+        const QJSValue &tiltVal = iv(IntentKey::Tilt);
         if (!tiltVal.isUndefined()) { tiltDeg = (float)tiltVal.toNumber(); haveTilt = true; }
 
         /* Free rotation: "clockwise at 40%" as this head's own DMX
@@ -2661,7 +2949,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
            part way to what is under it is another speed, or a position. */
         for (int a = 0; a < 2; ++a)
         {
-            const QJSValue &sv = iv(a == 0 ? "panSpin" : "tiltSpin");
+            const QJSValue &sv = iv(a == 0 ? IntentKey::PanSpin : IntentKey::TiltSpin);
             if (sv.isUndefined())
                 continue;
             const auto facts = m_facts.constFind(fid);
@@ -2677,7 +2965,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 if (a == 0) havePan = false;
                 else haveTilt = false;
             }
-            DmxWrite w{uniIdx, (int)fxi->address() + (int)sp.channel, uchar(v), fxi->id(), sp.channel};
+            DmxWrite w{uniIdx, addrBase + (int)sp.channel, uchar(v), fxid, sp.channel};
             w.snap = true;
             writes.append(w);
         }
@@ -2688,7 +2976,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             spotDeg.setX(panDeg); spotPan = true;
             const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Pan, panDeg, false, armHead);
             for (const SceneValue &sv : svs)
-                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
+                writes.append({uniIdx, addrBase + (int)sv.channel, sv.value, fxid, sv.channel});
         }
 
         // Tilt
@@ -2697,7 +2985,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             spotDeg.setY(tiltDeg); spotTilt = true;
             const QList<SceneValue> svs = fxi->positionToValues(QLCChannel::Tilt, tiltDeg, false, armHead);
             for (const SceneValue &sv : svs)
-                writes.append({uniIdx, (int)fxi->address() + (int)sv.channel, sv.value, fxi->id(), sv.channel});
+                writes.append({uniIdx, addrBase + (int)sv.channel, sv.value, fxid, sv.channel});
         }
 
         if (spotPan || spotTilt)
@@ -2719,13 +3007,13 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // Written REPLACE so the effect can dip the value BELOW the scene base
         // (HTP could only push it up).  Per-fixture phase (script `spread`) makes
         // fixtures flicker independently rather than in unison.
-        const QJSValue &dimVal = iv("dimmer");
+        const QJSValue &dimVal = iv(IntentKey::Dimmer);
         // An intent that brings its own colour (a rainbow's hue) and a dimmer
         // on a fixture with no master dimmer: the dimmer dims THAT colour.
         // Scaling the emitters from the look's base instead put every one --
         // white too -- at full under the hue, and a rainbow came out white.
-        const bool carriesColour = !iv("r").isUndefined() || !iv("g").isUndefined()
-                                || !iv("b").isUndefined() || !iv("w").isUndefined();
+        const bool carriesColour = !iv(IntentKey::R).isUndefined() || !iv(IntentKey::G).isUndefined()
+                                || !iv(IntentKey::B).isUndefined() || !iv(IntentKey::W).isUndefined();
         float ownColourMul = 1.0f;
         if (!dimVal.isUndefined())
         {
@@ -2747,19 +3035,19 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 // A scale, not a set: two dimmer effects on it multiply.
                 const uchar base = sceneBaseValue(fid, miCh, 255);
                 const uchar out  = (uchar)qBound(0, (int)qRound(base * mul), 255);
-                writes.append({uniIdx, (int)fxi->address() + (int)miCh,
-                               out, fxi->id(), miCh, /*replace=*/true, mul, base});
+                writes.append({uniIdx, addrBase + (int)miCh,
+                               out, fxid, miCh, /*replace=*/true, mul, base});
             }
             else if (carriesColour)
             {
                 ownColourMul = qBound(0.0f, (float)dimVal.toNumber(), 1.0f);
             }
-            else if (fxi->fixtureMode() != nullptr)
+            else if (mode != nullptr)
             {
                 // No master dimmer: dim by scaling THIS head's colour channels.
                 for (quint32 c : headChannels)
                 {
-                    QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                    QLCChannel *ch = mode->channel(c);
                     if (ch == nullptr) continue;
                     // Only channels that actually EMIT a colour can stand in for a
                     // dimmer. A colour-WHEEL channel is in the Colour group but its
@@ -2775,8 +3063,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     // flickers (user choice) rather than staying dark.
                     const uchar base = sceneBaseValue(fid, c, 255);
                     const uchar out = (uchar)qBound(0, (int)qRound(base * mul), 255);
-                    writes.append({uniIdx, (int)fxi->address() + (int)c,
-                                   out, fxi->id(), c, /*replace=*/true, mul, base});
+                    writes.append({uniIdx, addrBase + (int)c,
+                                   out, fxid, c, /*replace=*/true, mul, base});
                 }
             }
         }
@@ -2789,9 +3077,9 @@ EffectInstance::parseIntents(const QJSValue &intents,
            look's own colour counts as under it too. Not with a dimmer or a
            colour in the same intent. */
         {
-            const QJSValue &levelVal = iv("level");
+            const QJSValue &levelVal = iv(IntentKey::Level);
             if (!levelVal.isUndefined() && dimVal.isUndefined() && !carriesColour
-                && fxi->fixtureMode() != nullptr)
+                && mode != nullptr)
             {
                 const float level = qBound(0.0f, (float)levelVal.toNumber(), 1.0f);
                 const float mul = 1.0f + (level - 1.0f) * envelope;   // none of it while it isn't on
@@ -2799,7 +3087,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 const QList<int> forcedLTP = fxi->forcedLTPChannels();
                 for (quint32 c : headChannels)
                 {
-                    const QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                    const QLCChannel *ch = mode->channel(c);
                     if (ch == nullptr)
                         continue;
                     const bool isEmitter = (ch->group() == QLCChannel::Intensity
@@ -2817,12 +3105,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
                        is left as it is. */
                     const bool htp = forcedHTP.contains(int(c))
                         || (ch->group() == QLCChannel::Intensity && !forcedLTP.contains(int(c)));
-                    const quint64 k = (quint64(fid) << 32) | c;
-                    if (!htp && !m_sceneBaseValues.contains(k))
+                    if (!htp && !hasSceneBaseValue(fid, c))
                         continue;
                     const uchar base = sceneBaseValue(fid, c, 0);
-                    DmxWrite w{uniIdx, (int)fxi->address() + (int)c,
-                               (uchar)qBound(0, (int)qRound(base * mul), 255), fxi->id(), c,
+                    DmxWrite w{uniIdx, addrBase + (int)c,
+                               (uchar)qBound(0, (int)qRound(base * mul), 255), fxid, c,
                                /*replace=*/true, mul, base};
                     w.multiply = htp;
                     writes.append(w);
@@ -2848,7 +3135,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // Only while it's on: an effect whose look has stopped (envelope 0)
         // must not hold its heads black over whatever plays there next.
         const bool ownsColour = carriesColour && envelope > 0.0f
-            && (iv("r").toInt() > 0 || iv("g").toInt() > 0 || iv("b").toInt() > 0 || iv("w").toInt() > 0);
+            && (iv(IntentKey::R).toInt() > 0 || iv(IntentKey::G).toInt() > 0 || iv(IntentKey::B).toInt() > 0 || iv(IntentKey::W).toInt() > 0);
         auto writeEmitter = [&](QLCChannel::PrimaryColour colour, uchar dmxValRaw) -> bool {
             // Scale colour output by the scene's actuation envelope (so the effect
             // ramps in/holds with the scene) and by the look's master Dimmer.
@@ -2858,8 +3145,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             // the whole (multi-head) fixture.
             for (quint32 c : headChannels)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (ch == nullptr) continue;
                 // Accept both Colour-group and Intensity-group (IntensityRed/Green/Blue
                 // presets) channels — the fixture definition preset determines which
@@ -2875,11 +3162,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     // looking "busy". Dropping them lets a note effect with nothing
                     // lit produce an EMPTY frame, which the runner uses to idle.
                     if (ownsColour)
-                        writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c,
+                        writes.append({uniIdx, addrBase + (int)c, dmxVal, fxid, c,
                                        /*replace=*/true});
                     else if (dmxVal != 0)
                     {
-                        DmxWrite w{uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c};
+                        DmxWrite w{uniIdx, addrBase + (int)c, dmxVal, fxid, c};
                         w.htp = true;
                         writes.append(w);
                     }
@@ -2888,7 +3175,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
             }
             return matched;
         };
-        auto writeColour = [&](const char *prop, QLCChannel::PrimaryColour colour) -> bool {
+        auto writeColour = [&](int prop, QLCChannel::PrimaryColour colour) -> bool {
             const QJSValue &v = iv(prop);
             if (v.isUndefined()) return true; // nothing requested — not a "miss"
             uchar dmxVal = (uchar)qBound(0, v.toInt(), 255);
@@ -2899,7 +3186,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         // Also drives White (wMix): RGB intensity is HTP, so if the look's base
         // colour already saturates R/G the boost would be masked — White usually
         // has headroom, so it carries the visible pulse while R/G add the hue.
-        auto writeAsRGB = [&](const char *prop,
+        auto writeAsRGB = [&](int prop,
                               float rMix, float gMix, float bMix, float wMix) {
             const QJSValue &v = iv(prop);
             if (v.isUndefined()) return;
@@ -2909,18 +3196,18 @@ EffectInstance::parseIntents(const QJSValue &intents,
             writeEmitter(QLCChannel::Blue,  (uchar)qBound(0, (int)qRound(amount * bMix), 255));
             writeEmitter(QLCChannel::White, (uchar)qBound(0, (int)qRound(amount * wMix), 255));
         };
-        writeColour("r",  QLCChannel::Red);
-        writeColour("g",  QLCChannel::Green);
-        writeColour("b",  QLCChannel::Blue);
+        writeColour(IntentKey::R,  QLCChannel::Red);
+        writeColour(IntentKey::G,  QLCChannel::Green);
+        writeColour(IntentKey::B,  QLCChannel::Blue);
         // White/Amber/UV: use the discrete emitter if present, otherwise adapt
         // the intent onto RGB(W) so it still works on fixtures that lack it.
-        if (!writeColour("w", QLCChannel::White))
-            writeAsRGB("w", 1.0f, 1.0f, 1.0f, 0.0f);
+        if (!writeColour(IntentKey::W, QLCChannel::White))
+            writeAsRGB(IntentKey::W, 1.0f, 1.0f, 1.0f, 0.0f);
         // A colour that says nothing of white means none: the look's white
         // mustn't wash it out on an RGBW head.
-        if (ownsColour && iv("w").isUndefined())
+        if (ownsColour && iv(IntentKey::W).isUndefined())
             writeEmitter(QLCChannel::White, 0);
-        if (!writeColour("a", QLCChannel::Amber))
+        if (!writeColour(IntentKey::A, QLCChannel::Amber))
         {
             // Fixture has no discrete amber emitter.  A colour-only warmth pulse
             // (white/RGB) is HTP-merged, so against a lit scene it can only push
@@ -2928,32 +3215,32 @@ EffectInstance::parseIntents(const QJSValue &intents,
             // candle.  Instead express the amber pulse as a BRIGHTNESS flicker on
             // the master dimmer, written with REPLACE semantics so it drives the
             // full range (incl. downward) and the scene's warm colour flickers.
-            const QJSValue &av = iv("a");
+            const QJSValue &av = iv(IntentKey::A);
             quint32 miCh = fxi->masterIntensityChannel();
             if (!av.isUndefined() && miCh != QLCChannel::invalid())
             {
                 uchar amt = (uchar)qBound(0, (int)qRound(av.toInt() * envelope), 255);
-                writes.append({uniIdx, (int)fxi->address() + (int)miCh,
-                               amt, fxi->id(), miCh, /*replace=*/true});
+                writes.append({uniIdx, addrBase + (int)miCh,
+                               amt, fxid, miCh, /*replace=*/true});
             }
             else
             {
                 // No master dimmer either — fall back to the additive colour mix.
-                writeAsRGB("a", 1.0f, 0.494f, 0.0f, 1.0f);
+                writeAsRGB(IntentKey::A, 1.0f, 0.494f, 0.0f, 1.0f);
             }
         }
-        writeColour("uv", QLCChannel::UV);             // no meaningful RGB approximation
+        writeColour(IntentKey::UV, QLCChannel::UV);             // no meaningful RGB approximation
 
         // Color-wheel fallback: if r/g/b intent present but no additive RGB found,
         // find the closest color-wheel slot and write it.
-        bool hasColorIntent = !iv("r").isUndefined()
-                           || !iv("g").isUndefined()
-                           || !iv("b").isUndefined();
+        bool hasColorIntent = !iv(IntentKey::R).isUndefined()
+                           || !iv(IntentKey::G).isUndefined()
+                           || !iv(IntentKey::B).isUndefined();
         if (hasColorIntent && writes.size() == colourWritesBefore)
         {
-            int tR = qBound(0, iv("r").toInt(), 255);
-            int tG = qBound(0, iv("g").toInt(), 255);
-            int tB = qBound(0, iv("b").toInt(), 255);
+            int tR = qBound(0, iv(IntentKey::R).toInt(), 255);
+            int tG = qBound(0, iv(IntentKey::G).toInt(), 255);
+            int tB = qBound(0, iv(IntentKey::B).toInt(), 255);
             // A wheel has a colour, not a level: match the hue at full, so a
             // breathing blue stays on the blue slot instead of hopping to
             // whichever slot is nearest a darker blue. Black: leave the wheel.
@@ -2967,8 +3254,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             quint32 nCh = top > 0 ? fxi->channels() : 0;
             for (quint32 c = 0; c < nCh; ++c)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (!ch || ch->group() != QLCChannel::Colour) continue;
 
                 // Find capability with closest colour
@@ -2993,21 +3280,21 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     }
                 }
                 if (bestDist < INT_MAX)
-                    writes.append({uniIdx, (int)fxi->address() + (int)c, bestDmx, fxi->id(), c});
+                    writes.append({uniIdx, addrBase + (int)c, bestDmx, fxid, c});
             }
         }
 
         // Shutter channel: "shutterOpen" (0=closed, 1=open) or
         // "strobeRate" (0..1 normalized within the fixture's strobe capability range).
-        const QJSValue &shutterOpenVal = iv("shutterOpen");
-        const QJSValue &strobeRateVal  = iv("strobeRate");
+        const QJSValue &shutterOpenVal = iv(IntentKey::ShutterOpen);
+        const QJSValue &strobeRateVal  = iv(IntentKey::StrobeRate);
         if (!shutterOpenVal.isUndefined() || !strobeRateVal.isUndefined())
         {
             quint32 nCh = fxi->channels();
             for (quint32 c = 0; c < nCh; ++c)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (!ch || ch->group() != QLCChannel::Shutter)
                     continue;
 
@@ -3064,7 +3351,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                 }
 
                 if (found)
-                    writes.append({uniIdx, (int)fxi->address() + (int)c, dmxVal, fxi->id(), c});
+                    writes.append({uniIdx, addrBase + (int)c, dmxVal, fxid, c});
             }
         }
 
@@ -3074,11 +3361,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
         //   zoom   0..1  — BeamZoomSmallBig (or BigSmall inverted)
         //   iris   0..1  — ShutterIrisMinToMax (or MaxToMin inverted); in Shutter group
         //   gobo   int   — 0-based index into the GoboWheel's non-shake capabilities
-        const QJSValue &focusV = iv("focus");
-        const QJSValue &frostV = iv("frost");
-        const QJSValue &zoomV  = iv("zoom");
-        const QJSValue &irisV  = iv("iris");
-        const QJSValue &goboV  = iv("gobo");
+        const QJSValue &focusV = iv(IntentKey::Focus);
+        const QJSValue &frostV = iv(IntentKey::Frost);
+        const QJSValue &zoomV  = iv(IntentKey::Zoom);
+        const QJSValue &irisV  = iv(IntentKey::Iris);
+        const QJSValue &goboV  = iv(IntentKey::Gobo);
 
         bool hasBeamIntent = !focusV.isUndefined() || !frostV.isUndefined()
                           || !zoomV.isUndefined()  || !irisV.isUndefined()
@@ -3088,8 +3375,8 @@ EffectInstance::parseIntents(const QJSValue &intents,
             quint32 nCh = fxi->channels();
             for (quint32 c = 0; c < nCh; ++c)
             {
-                if (!fxi->fixtureMode()) break;
-                QLCChannel *ch = fxi->fixtureMode()->channel(c);
+                if (mode == nullptr) break;
+                QLCChannel *ch = mode->channel(c);
                 if (!ch) continue;
 
                 QLCChannel::Group   grp = ch->group();
@@ -3101,32 +3388,32 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     {
                         uchar v = (uchar)qBound(0, (int)(focusV.toNumber() * 255), 255);
                         if (pst == QLCChannel::BeamFocusNearFar)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                         else if (pst == QLCChannel::BeamFocusFarNear)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, (uchar)(255-v), fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, (uchar)(255-v), fxid, c});
                     }
                     if (!frostV.isUndefined() && pst == QLCChannel::Custom
                         && ch->name().contains("frost", Qt::CaseInsensitive))
                     {
                         uchar v = (uchar)qBound(0, (int)(frostV.toNumber() * 255), 255);
-                        writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                        writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                     }
                     if (!zoomV.isUndefined())
                     {
                         uchar v = (uchar)qBound(0, (int)(zoomV.toNumber() * 255), 255);
                         if (pst == QLCChannel::BeamZoomSmallBig)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                         else if (pst == QLCChannel::BeamZoomBigSmall)
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, (uchar)(255-v), fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, (uchar)(255-v), fxid, c});
                     }
                 }
                 else if (grp == QLCChannel::Shutter && !irisV.isUndefined())
                 {
                     uchar v = (uchar)qBound(0, (int)(irisV.toNumber() * 255), 255);
                     if (pst == QLCChannel::ShutterIrisMinToMax)
-                        writes.append({uniIdx, (int)fxi->address()+(int)c, v, fxi->id(), c});
+                        writes.append({uniIdx, addrBase+(int)c, v, fxid, c});
                     else if (pst == QLCChannel::ShutterIrisMaxToMin)
-                        writes.append({uniIdx, (int)fxi->address()+(int)c, (uchar)(255-v), fxi->id(), c});
+                        writes.append({uniIdx, addrBase+(int)c, (uchar)(255-v), fxid, c});
                 }
                 else if (grp == QLCChannel::Gobo && !goboV.isUndefined()
                          && pst == QLCChannel::GoboWheel)
@@ -3141,7 +3428,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                             continue;
                         if (gIdx == wantIdx)
                         {
-                            writes.append({uniIdx, (int)fxi->address()+(int)c, cap->middle(), fxi->id(), c});
+                            writes.append({uniIdx, addrBase+(int)c, cap->middle(), fxid, c});
                             break;
                         }
                         ++gIdx;
@@ -3182,6 +3469,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
         writes.removeAt(i);
     }
 
+    m_writeHint = int(writes.size());
     return writes;
 }
 

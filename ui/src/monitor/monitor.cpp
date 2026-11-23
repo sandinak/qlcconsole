@@ -2078,6 +2078,42 @@ QStringList Monitor::centrePanOnStage(const QList<quint32> &fids)
     return changes;
 }
 
+QStringList Monitor::faceAndCentreOnStage(const QMap<quint32, float> &facings, const QList<quint32> &fids)
+{
+    QStringList changes;
+    const QByteArray before = rigSnapshot();
+    for (auto it = facings.constBegin(); it != facings.constEnd(); ++it)
+    {
+        /* A Facing is a physical re-hang: written to a live head it points
+           every look somewhere else until someone turns the head on its pipe.
+           Refused here as well as in the caller, so no path can do it
+           (proposePanTurns keeps the same rule for a turn). */
+        if (PanTurn::isLive(m_doc, it.key()))
+            continue;
+        FixtureRigProps rp = m_props->fixtureRigProps(it.key());
+        if (qAbs(rp.panZeroDir - it.value()) < 0.01f)
+            continue;
+        rp.panZeroDir = it.value();
+        m_props->setFixtureRigProps(it.key(), rp);
+        if (const Fixture *fx = m_doc->fixture(it.key()))
+            changes << tr("%1 faces %2\302\260 now.").arg(fx->name()).arg(qRound(it.value()) % 360);
+    }
+    for (quint32 fid : fids)
+    {
+        const int was = m_props->fixtureRigProps(fid).panTurn;
+        if (PanTurn::centre(m_doc, fid))
+            changes << PanTurn::changeText(m_doc, fid, was, m_props->fixtureRigProps(fid).panTurn);
+    }
+    if (changes.isEmpty())
+        return changes;
+    pushRigUndo(before);
+    m_doc->setModified();
+    if (m_graphicsView != nullptr && !facings.isEmpty())
+        m_graphicsView->refreshAllItems();      // the facing arrows
+    sayTurnChanges(changes, false);
+    return changes;
+}
+
 QStringList Monitor::proposePanTurns(const QList<quint32> &fids, bool ownStep)
 {
     QStringList changes;
