@@ -37,6 +37,7 @@ private slots:
     void anEmptiedPaneDrawsNoOldNoteOverItsEmptyLine();
     void addTickAndUndoFromThePane();
     void rowsWithNotesAreMarked();
+    void theShowGoesWhileACuePreviews();
     void snapshotAndShowMe();
     void showMeInOperateOnlyMovesTheCamera();
     void theNotesListFiltersAndJumps();
