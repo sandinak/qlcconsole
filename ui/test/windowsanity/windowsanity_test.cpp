@@ -132,6 +132,15 @@ int appFilterCount()
     return n;
 }
 
+/** @p w is the window in front with the keyboard. The offscreen platform
+ *  can leave QApplication's active window unset when a hidden window is
+ *  shown again while it still is the focus window: either counts. */
+bool isActive(const QWidget *w)
+{
+    return QApplication::activeWindow() == w
+        || (w->windowHandle() != nullptr && QGuiApplication::focusWindow() == w->windowHandle());
+}
+
 QString describe(const QWidget *w)
 {
     if (w == nullptr)
@@ -189,7 +198,19 @@ bool trigger(QObject *root, const QString &text)
         t.remove(QStringLiteral("..."));
         return t.trimmed();
     };
-    for (QAction *a : root->findChildren<QAction *>())
+    QList<QAction *> actions = root->findChildren<QAction *>();
+    // A menu made for a tool button need not be the root's child.
+    for (QWidget *w : QApplication::allWidgets())
+        if (QMenu *m = qobject_cast<QMenu *>(w))
+            for (QWidget *p = m->parentWidget(); p != nullptr; p = p->parentWidget())
+                if (p == root)
+                {
+                    actions << m->actions();
+                    break;
+                }
+    if (QWidget *rw = qobject_cast<QWidget *>(root))
+        actions << rw->actions();
+    for (QAction *a : actions)
         if (plain(a->text()) == plain(text) && a->isEnabled())
         {
             a->trigger();
@@ -206,6 +227,9 @@ enum RowFlag
 {
     /** Not a dialog: closed as the window system closes a window, not by Esc. */
     ClosesByWindow = 1 << 0,
+    /** A free window (not a dialog) that reopens where it was put, on any
+     *  screen: it must fit there, not on the main window's screen. */
+    FreeWindow = 1 << 1,
 };
 
 struct Row
@@ -259,7 +283,7 @@ QList<Row> windows()
                 [](App *a) { a->slotShowUnsavedChanges(); })
          << row("AddressTool", QStringLiteral("Address tool"), [](App *a) { a->slotAddressTool(); })
          << row("DmxMonitorWindow", QStringLiteral("DMX monitor"), [](App *a) { a->slotDmxMonitor(); },
-                ClosesByWindow)
+                ClosesByWindow | FreeWindow)
          << row("BugReportDialog", QStringLiteral("Report a Bug"), [](App *a) { a->reportBug(); })
          << row("TimecodeCalibrationDialog", QStringLiteral("Timecode calibration"),
                 [](App *a) { a->openTimecodeCalibration(); })
@@ -371,6 +395,9 @@ QWidget *clickTarget(QWidget *w, bool *isButton)
     for (QPushButton *b : w->findChildren<QPushButton *>())
         if (!order.contains(b))
             order << b;
+    for (QAbstractButton *b : w->findChildren<QAbstractButton *>())
+        if (!order.contains(b))
+            order << b;
     const int buttons = int(order.size());
     for (QLineEdit *e : w->findChildren<QLineEdit *>())
         if (qobject_cast<QAbstractSpinBox *>(e->parentWidget()) == nullptr)
@@ -466,7 +493,7 @@ void checkHiddenBlocker(App *app, QWidget *w, QWidget *held, QStringList &proble
         settle();
         return;
     }
-    if (QApplication::activeWindow() != w)
+    if (!isActive(w))
         problems << QStringLiteral("brought back, but not in front (active: %1)")
                         .arg(describe(QApplication::activeWindow()));
     if (w->screen() != app->screen())
@@ -494,10 +521,10 @@ QStringList checkOpen(App *app, const Row &r, QWidget *w)
                                    "behind it, on another screen or Space)");
 
     // On the main window's screen, and wholly on it.
-    if (w->screen() != app->screen())
+    if (w->screen() != app->screen() && !(r.flags & FreeWindow))
         problems << QStringLiteral("opened on screen %1, its main window is on %2")
                         .arg(w->screen()->name(), app->screen()->name());
-    const QRect room = app->screen()->availableGeometry();
+    const QRect room = ((r.flags & FreeWindow) ? w->screen() : app->screen())->availableGeometry();
     const QRect frame = w->frameGeometry();
     if (!room.contains(frame))
         problems << QStringLiteral("runs off its screen: %1x%2 at (%3,%4), the screen has %5x%6 at (%7,%8)")
@@ -512,7 +539,7 @@ QStringList checkOpen(App *app, const Row &r, QWidget *w)
         }
 
     // In front while it holds anything.
-    if (r.held && QApplication::activeWindow() != w)
+    if (r.held && !isActive(w))
         problems << QStringLiteral("holds a view but is not in front (active: %1)")
                         .arg(describe(QApplication::activeWindow()));
 
@@ -872,6 +899,23 @@ void WindowSanity_Test::theCheckerFindsWhatItShould()
                d->show();
            }), QStringLiteral("runs off its screen"));
 
+    /* A dialog put back where it was last time, on another screen than the
+       main window's now (a saved geometry), and one a little taller than
+       the laptop with room to shrink: WindowPlacement brings each onto the
+       main window's screen and fits it. */
+    QVERIFY(placeMain(m_app, screens.at(1)));
+    expect(QStringLiteral("a saved place on another screen"), row("", QStringLiteral("saved"), [](App *a) {
+               QDialog *d = goodDialog(a);
+               d->move(sizeScreens().first()->availableGeometry().topLeft() + QPoint(30, 30));
+               d->show();
+           }), QString());
+    QVERIFY(placeMain(m_app, screens.first()));
+    expect(QStringLiteral("taller than the laptop, can shrink"), row("", QStringLiteral("shrinks"), [](App *a) {
+               QDialog *d = goodDialog(a);
+               d->resize(500, 900);
+               d->show();
+           }), QString());
+
     // No parent, with the main window on the second screen.
     QVERIFY(placeMain(m_app, screens.at(1)));
     expect(QStringLiteral("no parent"), row("", QStringLiteral("orphan"), [](App *) {
@@ -977,7 +1021,7 @@ void WindowSanity_Test::aHiddenEditorIsFoundFromTheBanner()
                 settle();
                 if (!dlg->isVisible())
                     problems << QStringLiteral("Show it did not bring the editor back");
-                if (QApplication::activeWindow() != dlg)
+                if (!isActive(dlg))
                     problems << QStringLiteral("the editor is back but not active");
                 if (dlg->screen() != m_app->screen())
                     problems << QStringLiteral("the editor came back on %1, not the main window's %2")
