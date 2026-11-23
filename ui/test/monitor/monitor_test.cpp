@@ -21728,6 +21728,55 @@ void Monitor_Test::fixturePropertiesFitsTheScreen()
     QVERIFY2(why.isEmpty(), qPrintable(why));
 }
 
+/* Every button in Fixture Properties takes a click (his report 2026-11-22:
+   "none of the buttons are operable" after its rows went into a scroller):
+   the widget under each button's centre is that button, and a real click on
+   it emits clicked(). */
+void Monitor_Test::fixturePropertiesButtonsTakeClicks()
+{
+    FixtureCleanup cleanup(m_doc);
+    Fixture *f = new Fixture(m_doc);
+    f->setName("Spot 1");
+    f->setChannels(4);
+    f->setAddress(300);
+    QVERIFY(m_doc->addFixture(f));
+    cleanup.ids << f->id();
+    InventoryRig rig;
+    QVERIFY(rig.build(m_doc));
+    QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
+    QStringList dead;
+    int checked = 0;
+    driveDialog([&dead, &checked](QWidget *dlg) {
+        if (dlg->findChild<QLineEdit *>("fixtureNameEdit") == nullptr)
+            return false;
+        dlg->raise();
+        QCoreApplication::processEvents();
+        QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
+        for (QAbstractButton *b : dlg->findChildren<QAbstractButton *>())
+        {
+            if (!b->isVisible() || !b->isEnabled() || b->text().isEmpty())
+                continue;
+            if (qobject_cast<QDialogButtonBox *>(b->parentWidget()) != nullptr)
+                continue;           // OK / Cancel: clicking would close it
+            if (scroll != nullptr)
+                scroll->ensureWidgetVisible(b);
+            QCoreApplication::processEvents();
+            const QPoint c = b->rect().center();
+            QWidget *hit = dlg->childAt(b->mapTo(dlg, c));
+            const bool under = hit == b || (hit != nullptr && b->isAncestorOf(hit));
+            ++checked;
+            if (!under)
+                dead << QString("%1 (under it: %2 %3)").arg(b->text(),
+                    hit ? QString::fromLatin1(hit->metaObject()->className()) : QStringLiteral("nothing"),
+                    hit ? hit->objectName() : QString());
+        }
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(f->id());
+    QVERIFY2(checked > 0, "no buttons found");
+    QVERIFY2(dead.isEmpty(), qPrintable(QString("covered: ") + dead.join("; ")));
+}
+
 void Monitor_Test::selectingOnThePlotSelectsInLayers()
 {
     Doc *doc = new Doc(this);
