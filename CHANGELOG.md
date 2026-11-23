@@ -85,6 +85,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   window stop going chunky while a spread runs.
 ### Added
 
+- **A lost window is easy to find**: while Fixture Properties holds the 2D
+  plot still, the plot reads "Fixture Properties is open." with a **Show
+  it** button that brings the editor back in front, on the main window's
+  screen, if it went behind another window or to another desktop. Every
+  dialog is now checked in the gate the way a real screen uses it (clicks
+  and keys through its window, on its main window's screen and fitting a
+  1024x640 laptop, nothing left grabbed when it closes), and a new dialog
+  without that check stops the gate.
+
 - **A control surface's lights say what a button would do** (board Q269's
   rule, made visible; CS3 of the control-surfaces plan). A Control Map
   control used to light only while the thing it fired was running. Now it is

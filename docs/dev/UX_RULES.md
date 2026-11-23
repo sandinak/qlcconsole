@@ -41,14 +41,14 @@ that have one. Change both files together.
 | Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77 | 14 | 8 |
 | Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25 | 6 | 5 |
 | Feedback & state | UX-26, UX-27, UX-28, UX-29, UX-30, UX-31, UX-32, UX-33 | 8 | 6 |
-| Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40, UX-78, UX-79, UX-80 | 10 | 8 |
+| Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40, UX-78, UX-79, UX-80, UX-81 | 11 | 9 |
 | Consistency across views | UX-41, UX-42, UX-43, UX-44, UX-45, UX-46, UX-47, UX-48 | 8 | 6 |
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
 | Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 3 |
 
-Main check: 48 tests, 23 review, 6 walker, 3 manual. 48 of 80 enforced.
+Main check: 49 tests, 23 review, 6 walker, 3 manual. 49 of 81 enforced.
 
 ## Units & numbers
 
@@ -455,6 +455,17 @@ A top-level menu has at most 14 items; past that, items go into submenus named b
 - **Check:** `contextmenus_test::everyMenuKeepsTheLaws` (enforced)
 - **Right:** `Fixture Manager: 9 items and Group ▸, Power ▸`
 - **Wrong:** `A flat 17-item list; a submenu "Power ▸" with one entry`
+
+### UX-81 A window works where it opens, and is never lost while it blocks
+
+Every dialog or window takes clicks and keys through its own window (Esc cancels it), belongs to the main window and opens on the main window's screen, fits there with OK and Cancel in view (down to 1024x640), and, while it holds anything still, is in front; if it goes out of sight what it holds says so and brings it back. Closed, it leaves nothing grabbed.
+
+- **Why:** 2026-11-22/23: on his Mac, Fixture Properties took no click or key (the rig-view lock ate them at the window; every test sent them to widgets), a Venue prompt opened behind other windows, Fixture Properties moved to another Space on Cmd-Tab and left the main window locked, and a dialog taller than a laptop ran off the screen. Each time a window was open and blocking where he could not find or use it.
+- **Check:** `windowsanity_test::everyWindowWorksThroughItsWindow`, `windowsanity_test::aHiddenEditorIsFoundFromTheBanner`, `windowsanity_test::theCheckerFindsWhatItShould`, `check-window-rows.sh` (enforced)
+- **Right:** `Fixture Properties out of sight: the plot reads "Fixture Properties is open. [Show it]"; Show it brings it back in front`
+- **Wrong:** `The plot ignores every click and nothing says why; the editor is on another Space`
+
+**How it is checked (R-WIN).** `windowsanity_test` opens every window the way the app does (its slot, menu item or static `open()`), with the main window on three screens side by side (1024x640, 1440x900, 1920x1080, the offscreen platform's own), and asserts: a press and Esc sent to the *window* (`QTest::mousePress(dlg->windowHandle(), …)`, as macOS delivers them, not to the widget) reach it; it has the main window as parent or transient parent and passes through `WindowSpace`; it opens on the main window's screen inside `availableGeometry()`, OK/Cancel in view; while it holds a view it is active, and hidden, the held view shows a `BlockingWindowBanner` whose Show it brings it back; closed, there is no mouse or keyboard grabber, no scene grabber item, no extra application event filter, and the main window takes a click. A new dialog is one `row()` in `windows()`. `platforms/linux/check-window-rows.sh` (in the gate before the build) fails a QDialog in ui/src with neither a row nor a line in `platforms/linux/window-rows-allow.txt`.
 
 ## Consistency across views
 
