@@ -21762,11 +21762,12 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
         }
         poll.stop();
         QTest::qWait(200);              // laid out and painted
-        fprintf(stderr, "FPBTN dialog '%s' children=%d buttons=%d nameEdit=%d scroll=%d size=%dx%d\n",
-                qPrintable(dlg->windowTitle()), int(dlg->findChildren<QWidget *>().size()),
-                int(dlg->findChildren<QAbstractButton *>().size()),
-                dlg->findChild<QLineEdit *>("fixtureNameEdit") != nullptr,
-                dlg->findChild<QScrollArea *>("fixturePropertiesScroll") != nullptr, dlg->width(), dlg->height());
+        report << QString("dialog '%1' children=%2 buttons=%3 nameEdit=%4 scroll=%5 size=%6x%7")
+                      .arg(dlg->windowTitle()).arg(dlg->findChildren<QWidget *>().size())
+                      .arg(dlg->findChildren<QAbstractButton *>().size())
+                      .arg(dlg->findChild<QLineEdit *>("fixtureNameEdit") != nullptr)
+                      .arg(dlg->findChild<QScrollArea *>("fixturePropertiesScroll") != nullptr)
+                      .arg(dlg->width()).arg(dlg->height());
         QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
         for (QAbstractButton *b : dlg->findChildren<QAbstractButton *>())
         {
@@ -21790,7 +21791,7 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
     poll.start();
     rig.mon->showFixtureItemEditor(f->id());
     fprintf(stderr, "FPBTN buttons: %s\nFPBTN covered: %s\n", qPrintable(report.join(" | ")), qPrintable(dead.join(" | ")));
-    QVERIFY2(checked > 0, qPrintable("no clickable buttons; seen: " + report.join(" | ")));
+    QVERIFY2(checked > 0, qPrintable(QString("no clickable buttons (tries %1); seen: ").arg(tries) + report.join(" | ")));
     QVERIFY2(dead.isEmpty(), qPrintable(QString("covered: ") + dead.join("; ")));
 }
 
