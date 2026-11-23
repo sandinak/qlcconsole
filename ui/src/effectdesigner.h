@@ -260,8 +260,6 @@ private:
     QString tryOnNames() const;
     /** The fixtures the preview plays on. */
     QList<quint32> previewFixtures() const;
-    void syncBrowserTargets();
-    QList<quint32> m_browserFixtures;   // what the browser was last told it fits
     /** Keep the show's modified flag as it was across a change of our own. */
     template <typename F> void quietly(F f);
 

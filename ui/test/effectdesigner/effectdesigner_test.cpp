@@ -1143,6 +1143,17 @@ void EffectDesigner_Test::theDesignerControlsAreWhollyVisible()
     EffectDesigner *ed = qobject_cast<EffectDesigner *>(view.dockedWorkbench()->effectPane());
     QVERIFY(ed != nullptr);
     QTest::qWait(400);
+    /* Show All Effects appears once the browser knows the fixtures to fit (a
+       patched group; this rig's stand-in fixtures may not say). Tell it, so
+       the control is on screen to be measured. */
+    EffectBrowser *browser = ed->findChild<EffectBrowser *>(QStringLiteral("edBrowser"));
+    QVERIFY(browser != nullptr);
+    if (!browser->showAllButton()->isVisibleTo(ed))
+    {
+        browser->setTargets(EffectFit::targetsOf(m_doc, towers->fixtureList()));
+        QTest::qWait(150);
+    }
+
     QStringList bad;
     auto check = [&bad](const QWidget *c, const QString &name) {
         QString why;
