@@ -51,9 +51,9 @@ public:
      *  it deletes itself when @p blocker closes). Null when either is null. */
     static BlockingWindowBanner *whileOpen(QWidget *heldArea, QWidget *blocker);
 
-    /** Brings @p window back where @p near is: un-minimised, onto @p near's
+    /** Brings @p window back where @p nextTo is: un-minimised, onto @p nextTo's
      *  screen if it is on another, shown, raised and given the keyboard. */
-    static void bringBack(QWidget *window, QWidget *near);
+    static void bringBack(QWidget *window, QWidget *nextTo);
 
     /** The banner over @p heldArea, if one is up. */
     static BlockingWindowBanner *bannerOn(const QWidget *heldArea);

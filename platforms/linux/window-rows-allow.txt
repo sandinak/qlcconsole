@@ -1,0 +1,104 @@
+# Dialogs in ui/src that windowsanity_test does not walk yet
+# (platforms/linux/check-window-rows.sh). Each line says why. A new dialog
+# never goes here to pass the gate: give it a row in
+# ui/test/windowsanity/windowsanity_test.cpp (one line, how the app opens it).
+# Shrink this list; never grow it without a reason on the line.
+#
+# "not yet walked": reachable, no row written yet (the first pass covered the
+# main window's menus, the rig view and focus calls/venues).
+# "deep": opened from inside another dialog, an editor tab or a
+# context menu on an item; needs that state built first.
+# "virtual console": the Virtual Console's widget property editors.
+#
+AddChannelsGroup                 deep
+AddFixture                       not yet walked
+AddRGBPanel                      not yet walked
+AddVCButtonMatrix                virtual console
+AddVCSliderMatrix                virtual console
+AssignHotKey                     not yet walked
+AudioTriggersConfiguration       deep
+BulkResultDialog                 deep
+BundleEditor                     deep
+ChannelModifierEditor            deep
+ChannelsSelection                deep
+ConfigImportDialog               not yet walked
+ConnectionEditor                 not yet walked
+ControlLearnDialog               deep
+ControllerTestDialog             not yet walked
+CreateFixtureGroup               not yet walked
+CreateGroupsDialog               not yet walked
+CueSheetDialog                   not yet walked
+CustomFeedbackDialog             virtual console
+DebugBox                         not yet walked
+DefinitionPicker                 deep
+EffectScriptEditor               deep
+FixtureRemap                     not yet walked
+FocusModeSetupDialog             not yet walked
+FunctionLiveEditDialog           not yet walked
+FunctionWizard                   not yet walked
+GoboWheelsDialog                 not yet walked
+HeadTypesDialog                  not yet walked
+ImportSelectionDialog            deep
+ImportSheet                      deep
+InputChannelEditor               virtual console
+InputProfileEditor               deep
+LedLayoutDialog                  deep
+LiveCaptureDialog                not yet walked
+OutputRulesDialog                not yet walked
+PaletteEditDialog                deep
+PaletteManager                   not yet walked
+PatchInventoryDialog             not yet walked
+PatchLabelsDialog                deep
+PerformersDialog                 not yet walked
+PositionTool                     not yet walked
+PowerMeasureDialog               deep
+PowerProfileDialog               not yet walked
+PreferencesDialog                not yet walked
+ProgrammerFrameWizard            not yet walked
+RiserFaceEditor                  deep
+RoleFillDialog                   deep
+ScriptCuesDialog                 not yet walked
+SelectInputChannel               virtual console
+ShowConverter                    not yet walked
+ShowDifferencesDialog            not yet walked
+ShowNotesList                    not yet walked
+SprinkleSpansDialog              deep
+StageGroupDialog                 not yet walked
+StagePieceDialog                 deep
+StringAnchorsDialog              deep
+StructureDuplicateDialog         not yet walked
+StudioComponentBrowser           not yet walked
+StudioGroupEditor                not yet walked
+UpdateDialog                     not yet walked
+VCButtonProperties               virtual console
+VCClockProperties                virtual console
+VCCueListProperties              virtual console
+VCCueRunnerProperties            virtual console
+VCFrameProperties                virtual console
+VCMatrixPresetSelection          virtual console
+VCMatrixProperties               virtual console
+VCPropertiesEditor               virtual console
+VCShowControlProperties          virtual console
+VCSliderProperties               virtual console
+VCSpeedDialProperties            virtual console
+VCWidgetSelection                virtual console
+VCXYPadFixtureEditor             virtual console
+VCXYPadProperties                virtual console
+WledDevicesDialog                not yet walked
+inline contextmenus.cpp 1  not yet walked
+inline helpbrowser.cpp 1  not yet walked
+inline lookeditor.cpp 3  not yet walked
+inline monitor/focuscallsdialog.cpp 4  not yet walked
+inline monitor/monitor.cpp 14  not yet walked
+inline monitor/monitorgraphicsview.cpp 1  not yet walked
+inline monitor/studiogroupeditor.cpp 1  not yet walked
+inline monitor/venuerigdialog.cpp 1  not yet walked
+inline powerdistributionwidget.cpp 1  not yet walked
+inline scripteditor.cpp 3  not yet walked
+inline showreviewpanel.cpp 1  not yet walked
+inline showsettingsdialog.cpp 2  not yet walked
+inline showtreesections.cpp 3  not yet walked
+inline showtreetimecode.cpp 1  not yet walked
+inline showtreeview.cpp 3  not yet walked
+inline speedmasterspanel.cpp 1  not yet walked
+inline virtualconsole/vcbutton.cpp 1  not yet walked

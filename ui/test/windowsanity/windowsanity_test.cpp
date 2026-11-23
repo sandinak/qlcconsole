@@ -71,6 +71,7 @@
 #include "effectscriptcache.h"
 
 #include "blockingwindowbanner.h"
+#include "windowspace.h"
 #include "focuscallsdialog.h"
 #include "venuerigdialog.h"
 #include "venuefromshowdialog.h"
@@ -635,6 +636,7 @@ QStringList runRow(App *app, const Row &r, QString *what = nullptr)
         if (w->isVisible())
             before << w;
     const int filters = appFilterCount();
+    const int keptBefore = WindowSpace::keptCount();
 
     QStringList problems;
     bool found = false, done = false;
@@ -665,6 +667,13 @@ QStringList runRow(App *app, const Row &r, QString *what = nullptr)
         done = true;              // before anything that spins the event loop
         if (what != nullptr)
             *what = describe(w);
+        /* A dialog goes through WindowSpace when it is shown: it stays on
+           its main window's macOS Space (a Cmd-Tab back took Fixture
+           Properties to another one). One with no parent widget is not
+           kept. */
+        if (w->windowType() == Qt::Dialog && WindowSpace::keptCount() == keptBefore)
+            problems << QStringLiteral("a dialog that does not stay on its main window's Space "
+                                       "(WindowSpace keeps only a dialog with a parent widget)");
         problems << checkOpen(app, r, w);
         closeThroughWindow(r, w, problems);
     });

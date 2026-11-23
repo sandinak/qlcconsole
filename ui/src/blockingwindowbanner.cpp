@@ -139,14 +139,14 @@ void BlockingWindowBanner::showBlocker()
     bringBack(m_blocker, m_area);
 }
 
-void BlockingWindowBanner::bringBack(QWidget *window, QWidget *near)
+void BlockingWindowBanner::bringBack(QWidget *window, QWidget *nextTo)
 {
     if (window == nullptr)
         return;
     window = window->window();
     if (window->isMinimized())
         window->showNormal();
-    QWidget *anchor = near != nullptr ? near->window() : nullptr;
+    QWidget *anchor = nextTo != nullptr ? nextTo->window() : nullptr;
     QScreen *screen = anchor != nullptr ? anchor->screen() : nullptr;
     if (screen != nullptr)
     {
