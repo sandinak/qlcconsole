@@ -88,13 +88,12 @@ bool WindowPlacement::keepOnParentScreen(QWidget *w)
     if (size != w->size())
         w->resize(size);
 
-    /* Moved only when it was put somewhere (a saved place, or a move) or is
-       on another screen: one never moved is centred over its parent by
-       QDialog itself, which also keeps it on that screen. */
-    if (!elsewhere && !w->testAttribute(Qt::WA_Moved))
-        return true;
+    /* Placed here, which also keeps QDialog from centring it again by its
+       own sums (they left a dialog as tall as the screen 2 px past its
+       bottom): one never put anywhere, or on another screen, is centred
+       over its main window, as QDialog would; then kept inside the room. */
     QRect r(frame.topLeft(), size + margins);
-    if (elsewhere)
+    if (elsewhere || !w->testAttribute(Qt::WA_Moved))
         r.moveCenter(anchor->frameGeometry().center());
     r.moveLeft(qBound(room.left(), r.left(), qMax(room.left(), room.right() + 1 - r.width())));
     r.moveTop(qBound(room.top(), r.top(), qMax(room.top(), room.bottom() + 1 - r.height())));
