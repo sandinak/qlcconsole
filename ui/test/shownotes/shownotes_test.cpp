@@ -123,6 +123,10 @@ void ShowNotes_Test::cleanup()
     ShowNotesPane::setViewProvider(nullptr);
     delete m_rig;
     m_rig = nullptr;
+    /* A cue still previewed is let go of the way the app does it (the show
+       going away: ShowTreeController::reset()), not left to ~Doc, which
+       frees the MasterTimer first and so cannot stop it. */
+    m_doc->showTree()->stopPreview();
     for (Function *f : m_doc->functions())
         f->stop(FunctionParent::master());
     delete m_doc;
@@ -282,6 +286,28 @@ void ShowNotes_Test::rowsWithNotesAreMarked()
                                                                ShowTreeView::NoteMarkRole).toString().isEmpty());
     QVERIFY(!rowOf(view, ShowTreeView::ListNode, m_list)->toolTip(0).contains("Act 1 long"));
     Q_UNUSED(n)
+}
+
+void ShowNotes_Test::theShowGoesWhileACuePreviews()
+{
+    // File > Open / quit with a cue on stage: the view first, then the Doc.
+    {
+        ShowTreeView view(nullptr, m_doc);
+        QVERIFY(view.selectNode(m_cue3));
+    }
+    /* (A hidden view stops the preview when it selects, so the cue goes on
+       stage after it, as the Workbench or a jump does.) */
+    m_doc->showTree()->previewCue(m_cue2);
+    QCOMPARE(int(m_doc->showTree()->previewState()), int(ShowTreeController::PreviewState::Playing));
+    Doc *doc = m_doc;
+    delete m_rig;
+    m_rig = nullptr;
+    // reset() (Doc::clearContents) stops the preview with the timer still there.
+    doc->clearContents();
+    QCOMPARE(int(doc->showTree()->previewState()), int(ShowTreeController::PreviewState::Off));
+    delete doc;                 // and ~Doc with nothing left running
+    m_doc = nullptr;
+    m_doc = new Doc(this);      // cleanup() has a Doc to delete
 }
 
 void ShowNotes_Test::snapshotAndShowMe()
