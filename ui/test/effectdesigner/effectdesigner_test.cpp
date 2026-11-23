@@ -1155,7 +1155,10 @@ void EffectDesigner_Test::theDesignerControlsAreWhollyVisible()
         QWidget *c = ed->findChild<QWidget *>(QLatin1String(n));
         QVERIFY2(c != nullptr, n);
         if (QLatin1String(n) == QLatin1String("effectShowAll") && !c->isVisibleTo(ed))
-            QFAIL("Show All Effects is not shown on a layer with fixtures");
+            QFAIL(qPrintable(QStringLiteral("Show All Effects is not shown on a layer with fixtures (hidden=%1, row hidden=%2, browser shown=%3, text=%4)")
+                                 .arg(c->isHidden()).arg(c->parentWidget()->isHidden())
+                                 .arg(ed->findChild<QWidget *>(QStringLiteral("edBrowser"))->isVisibleTo(ed))
+                                 .arg(qobject_cast<QToolButton *>(c)->text())));
         check(c, QLatin1String(n));
         ++named;
     }
