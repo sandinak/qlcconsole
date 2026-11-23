@@ -19,6 +19,7 @@
 
 #include <QScopedPointer>
 #include "../common/fixtureeditor.h"
+#include "windowspace.h"
 #include <QtTest>
 #include <QDir>
 #include <QShortcut>
@@ -3538,6 +3539,40 @@ void Monitor_Test::theFixtureEditorTakesClicksAndKeysThroughItsWindow()
     QVERIFY2(!grabberAfterRelease, "the plot still held the press that opened the editor after its release");
     QVERIFY2(dbl.closedByAct, "after a double click opened it, a click on Cancel did not reach Cancel");
     QVERIFY(editor() == nullptr);
+}
+
+/* Qt's Cocoa plugin makes every dialog an NSPanel that moves to the active
+   Space: a Cmd-Tab back from an app on another desktop pulled Fixture
+   Properties there, away from the main window (build 4441). WindowSpace
+   clears that for a parented dialog when it is shown. Off screen there is no
+   NSWindow to read, so this holds the rule (which windows) and that showing
+   the editor goes through it; the native line is checked on his Mac. */
+void Monitor_Test::theFixtureEditorStaysOnItsMainWindowsSpace()
+{
+    QWidget main;
+    QDialog child(&main);
+    QDialog lone;
+    QMenu menu(&main);
+    QWidget tool(&main, Qt::Tool);
+    QVERIFY(WindowSpace::staysWithParent(&child));
+    QVERIFY(!WindowSpace::staysWithParent(&lone));      // nothing to stay with
+    QVERIFY(!WindowSpace::staysWithParent(&menu));      // a popup, as Qt makes it
+    QVERIFY(!WindowSpace::staysWithParent(&tool));      // a palette, as Qt makes it
+    QVERIFY(!WindowSpace::staysWithParent(&main));      // the main window itself
+    // Off screen nothing native is touched (no NSView behind a winId).
+    QVERIFY(!WindowSpace::keepOnParentSpace(&child));
+
+    WindowSpace::install();
+    WindowSpace::install();                             // once only
+    QVERIFY(WindowSpace::isInstalled());
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    rig.parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    const int before = WindowSpace::keptCount();
+    driveDialog([](QWidget *) { return true; }, false);
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QCOMPARE(WindowSpace::keptCount(), before + 1);
 }
 
 /* The same in the Rig Overview: it swings and zooms while the editor is open,

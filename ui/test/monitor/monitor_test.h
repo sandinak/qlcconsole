@@ -139,6 +139,9 @@ private slots:
      *  screen sends them: to its window first (QWidgetWindow), then to the
      *  button. The rig-view lock ate them at the window (build 4365/4367). */
     void theFixtureEditorTakesClicksAndKeysThroughItsWindow();
+    /** Fixture Properties (and every parented dialog) stays on its main
+     *  window's macOS Space on a Cmd-Tab back (WindowSpace). */
+    void theFixtureEditorStaysOnItsMainWindowsSpace();
     /** Fixture Properties' orientation diagram draws a fixed light where it
      *  throws: each of the six faces (Back upstage, Bottom down, Stage left
      *  SL), and a Pan/Tilt aim, following the aim as it is edited (RC5). */

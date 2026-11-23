@@ -21,6 +21,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   is open caught every click and key at the window, before the window could
   hand them to the editor, and kept the plot from seeing that click's
   release.
+- **Fixture Properties stays on qlcconsole's desktop** (macOS Spaces):
+  a Cmd-Tab back from an app on another desktop pulled the open dialog
+  onto that desktop, away from the main window. Every dialog that belongs
+  to a window (Fixture Properties, Show Review, the venue prompts, message
+  boxes) now stays on its window's desktop, and Cmd-Tab takes you there.
 - **The docked effect designer shows all of its controls at 1024x640 and up**:
   while it designs a layer's effect it takes the width the layers column
   was holding (the split you set comes back when you leave it), and
