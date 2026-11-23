@@ -1163,7 +1163,10 @@ void EffectDesigner_Test::theDesignerControlsAreWhollyVisible()
     int named = 0;
     for (const char *n : { "edSolo", "edInContext", "edOwnColour", "edOwnDimmer", "effectShowAll" })
     {
-        QWidget *c = ed->findChild<QWidget *>(QLatin1String(n));
+        // The designer's own browser (the Look Editor keeps a hidden picker of its own).
+        QWidget *c = QLatin1String(n) == QLatin1String("effectShowAll")
+                         ? static_cast<QWidget *>(ed->findChild<EffectBrowser *>(QStringLiteral("edBrowser"))->showAllButton())
+                         : ed->findChild<QWidget *>(QLatin1String(n));
         QVERIFY2(c != nullptr, n);
         if (QLatin1String(n) == QLatin1String("effectShowAll") && !c->isVisibleTo(ed))
         {
