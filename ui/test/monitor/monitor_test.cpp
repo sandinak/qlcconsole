@@ -25,6 +25,7 @@
 #include "../common/fakewled.h"
 #include <QScrollBar>
 #include <QScreen>
+#include <QWindow>
 #include <QScrollArea>
 #include <QShortcut>
 #include <memory>
@@ -3433,6 +3434,103 @@ void Monitor_Test::theFixtureEditorLeavesThePlotForLookingAndAClickSwitchesIt()
     QVERIFY(props->fixtureRigProps(firstId).fixedAim);
     QVERIFY(!props->fixtureRigProps(otherId).fixedAim);
     QVERIFY(QApplication::activeModalWidget() == nullptr);
+}
+
+/* A real screen hands a click or a key to the WINDOW (QWidgetWindow, a
+   QWindow with no QObject parent), and the window hands it on to the widget
+   under the pointer or with focus. The rig-view lock is an application event
+   filter, so it sees both; it took the window's event for "outside the
+   editor" and ate it, and nothing in Fixture Properties took a click or a
+   key (his Mac, builds 4365 and 4367). QTest::mouseClick(QWidget *) sends
+   straight to the button and never showed it: these go through the window,
+   as the Mac does. The editor is opened by a double click that also comes
+   through the main window, as his does. */
+void Monitor_Test::theFixtureEditorTakesClicksAndKeysThroughItsWindow()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    rig.parent.resize(1230, 760);
+    rig.parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    QWindow *mainWin = rig.parent.windowHandle();
+    QVERIFY(mainWin != nullptr);
+
+    auto editor = []() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->isVisible() && qobject_cast<QDialog *>(w) != nullptr
+                && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+                return static_cast<QDialog *>(w);
+        return static_cast<QDialog *>(nullptr);
+    };
+    /* Runs @p act on the open editor; if the editor is still open after it,
+       the act did not reach it: rejected here so the test never hangs. */
+    struct Outcome { bool opened = false; bool closedByAct = false; int result = -1; };
+    auto drive = [&](Outcome &out, const std::function<void(QDialog *)> &act) {
+        QTimer::singleShot(0, [&out, act, editor]() {
+            QDialog *dlg = editor();
+            if (dlg == nullptr)
+                return;
+            out.opened = true;
+            if (!QTest::qWaitForWindowExposed(dlg->windowHandle()))
+            {
+                dlg->reject();
+                return;
+            }
+            QPointer<QDialog> guard(dlg);
+            act(dlg);
+            QApplication::processEvents();
+            out.closedByAct = guard.isNull() || !guard->isVisible();
+            if (!guard.isNull())
+            {
+                out.result = guard->result();
+                if (guard->isVisible())
+                    guard->reject();
+            }
+        });
+    };
+    auto cancelAt = [](QDialog *dlg) {
+        QDialogButtonBox *btns = dlg->findChild<QDialogButtonBox *>();
+        QPushButton *b = btns != nullptr ? btns->button(QDialogButtonBox::Cancel) : nullptr;
+        return b != nullptr ? b->mapTo(dlg, b->rect().center()) : QPoint(-1, -1);
+    };
+
+    // Cancel clicked through the editor's window.
+    Outcome click;
+    drive(click, [&](QDialog *dlg) {
+        const QPoint at = cancelAt(dlg);
+        if (at.x() >= 0)
+            QTest::mouseClick(dlg->windowHandle(), Qt::LeftButton, Qt::NoModifier, at);
+    });
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY(click.opened);
+    QVERIFY2(click.closedByAct, "a click on Cancel, sent to the editor's window, did not reach Cancel");
+    QCOMPARE(click.result, int(QDialog::Rejected));
+
+    // Esc pressed with the editor's window in front.
+    Outcome esc;
+    drive(esc, [](QDialog *dlg) {
+        dlg->activateWindow();
+        QApplication::processEvents();
+        QTest::keyClick(dlg->windowHandle(), Qt::Key_Escape);
+    });
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY(esc.opened);
+    QVERIFY2(esc.closedByAct, "Esc, sent to the editor's window, did not close it");
+
+    // Opened by a double click on the plot through the main window, as on
+    // his Mac; then Cancel clicked through the editor's window.
+    Outcome dbl;
+    drive(dbl, [&](QDialog *dlg) {
+        const QPoint at = cancelAt(dlg);
+        if (at.x() >= 0)
+            QTest::mouseClick(dlg->windowHandle(), Qt::LeftButton, Qt::NoModifier, at);
+    });
+    const QPoint onFixture = rig.gv->viewport()->mapTo(&rig.parent,
+                                                       rig.gv->mapFromScene(rig.item->iconCentreScene()));
+    QTest::mouseDClick(mainWin, Qt::LeftButton, Qt::NoModifier, onFixture);
+    QVERIFY2(dbl.opened, "a double click on the fixture did not open Fixture Properties");
+    QVERIFY2(dbl.closedByAct, "after a double click opened it, a click on Cancel did not reach Cancel");
+    QVERIFY(editor() == nullptr);
 }
 
 /* The same in the Rig Overview: it swings and zooms while the editor is open,

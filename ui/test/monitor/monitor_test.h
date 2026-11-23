@@ -135,6 +135,10 @@ private slots:
     void openingAFixtureEditorKeepsTheRigViewsZoom();
     void theFixtureEditorLeavesThePlotForLookingAndAClickSwitchesIt();
     void aClickOnTheRigOverviewSwitchesTheFixtureEditor();
+    /** Fixture Properties takes clicks and keys that come the way a real
+     *  screen sends them: to its window first (QWidgetWindow), then to the
+     *  button. The rig-view lock ate them at the window (build 4365/4367). */
+    void theFixtureEditorTakesClicksAndKeysThroughItsWindow();
     /** Fixture Properties' orientation diagram draws a fixed light where it
      *  throws: each of the six faces (Back upstage, Bottom down, Stage left
      *  SL), and a Pan/Tilt aim, following the aim as it is edited (RC5). */
