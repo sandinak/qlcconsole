@@ -11179,10 +11179,8 @@ void ShowTreeView::reloadLibrary()
        away: the effect kept the effect's name). */
     if (m_libRenameAfterReload != QLCPalette::invalidId())
     {
-        /* Kept until the settling is over (the caller's timer clears it): a
-           later reload -- the designer's preview scene leaving the show --
-           rebuilds the tree again and closes the editor this opened. */
         const quint32 pid = m_libRenameAfterReload;
+        m_libRenameAfterReload = QLCPalette::invalidId();
         if (m_doc->palette(pid) != nullptr)
         {
             selectLibraryPalette(pid);

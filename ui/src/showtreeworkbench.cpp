@@ -389,10 +389,6 @@ void ShowTreeView::followDesignerIntoTheLibrary(EffectDesigner *designer, bool n
                 m_hint->setText(tr("Saved in this show as “%1”: type its name").arg(p->name()));
                 m_libRenameAfterReload = paletteId;
                 reloadLibrary();
-                QTimer::singleShot(600, this, [this, paletteId]() {
-                    if (m_libRenameAfterReload == paletteId)
-                        m_libRenameAfterReload = QLCPalette::invalidId();
-                });
             }
             else
             {
