@@ -27,7 +27,7 @@ bool WindowSpace::keepOnParentSpace(QWidget *w)
     // Off screen (the tests) a winId is no NSView.
     if (w == nullptr || QGuiApplication::platformName() != QLatin1String("cocoa"))
         return false;
-    NSView *view = reinterpret_cast<NSView *>(w->winId());
+    NSView *view = (__bridge NSView *)reinterpret_cast<void *>(w->winId());
     NSWindow *win = view != nil ? view.window : nil;
     if (win == nil)
         return false;
