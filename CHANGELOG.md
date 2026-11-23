@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The docked effect designer shows all of its controls at 1024x640 and up**:
+  while it designs a layer's effect it takes the width the layers column
+  was holding (the split you set comes back when you leave it), and
+  **In Context / Solo**, **Show All Effects** and the effect's own
+  Colour / Dimmer sit on lines of their own, so Solo is no longer a
+  sliver, nothing is hidden to the right, and every parameter's number box
+  shows beside its slider.
 - **The Speed choice and the effect's own Colour / Dimmer are no longer cut
   mid-word** (*"As the look (own speed unl"*, *"the laye"*): Speed reads
   **As the look** with the whole sentence on hover, and the Its own combos

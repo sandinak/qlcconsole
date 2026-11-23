@@ -44,7 +44,10 @@ Open it from any of these places:
   layer's own colour and dimmer play under the effect, so it looks as it
   will in the cue. **In Context** keeps the rest of the cue playing;
   **Solo** plays that layer alone — the same Solo as the Workbench
-  header's, so the two never disagree. **↩ Show Tree** puts the page back.
+  header's, so the two never disagree. While it designs, the designer takes
+  the width the layers list was using (the split you set comes back when
+  you leave), and every control shows without scrolling sideways, down to
+  a 1024x640 window. **↩ Show Tree** puts the page back.
 - **The Library's effect palettes** (qlcconsole view). **+ Palette ▸
   Effect** opens the designer on the bench: pick an effect, watch it on the
   lights, then **Save in This Show…** names and files it. Nothing is made
