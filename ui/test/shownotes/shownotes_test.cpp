@@ -293,10 +293,13 @@ void ShowNotes_Test::theShowGoesWhileACuePreviews()
     // File > Open / quit with a cue on stage: the view first, then the Doc.
     {
         ShowTreeView view(nullptr, m_doc);
-        m_doc->showTree()->previewCue(m_cue2);
         QVERIFY(view.selectNode(m_cue3));
     }
-    QVERIFY(m_doc->showTree()->previewState() != ShowTreeController::PreviewState::Off);
+    /* (A hidden view stops the preview when it selects, so the cue goes on
+       stage after it, as the Workbench or a jump does.) */
+    m_doc->showTree()->previewCue(m_cue2);
+    QCOMPARE(int(m_doc->showTree()->previewState()), int(ShowTreeController::PreviewState::Playing));
+    QVERIFY(m_doc->function(m_doc->showTree()->cue(m_cue2)->collection)->isRunning());
     Doc *doc = m_doc;
     delete m_rig;
     m_rig = nullptr;
