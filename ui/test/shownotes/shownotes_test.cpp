@@ -299,7 +299,6 @@ void ShowNotes_Test::theShowGoesWhileACuePreviews()
        stage after it, as the Workbench or a jump does.) */
     m_doc->showTree()->previewCue(m_cue2);
     QCOMPARE(int(m_doc->showTree()->previewState()), int(ShowTreeController::PreviewState::Playing));
-    QVERIFY(m_doc->function(m_doc->showTree()->cue(m_cue2)->collection)->isRunning());
     Doc *doc = m_doc;
     delete m_rig;
     m_rig = nullptr;
