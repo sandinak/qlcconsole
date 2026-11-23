@@ -80,6 +80,7 @@ private slots:
      *  New venue until it is confirmed. */
     void theVenueAskFitsWithAPadAtEverySize();
     void theVenueIsAskedOnlyWhenUnclear();
+    void theVenueIsTheRoomThisNetworkReaches();
     void anOldVenueIsAskedAbout();
     /** Gap 8: opened with no venue file, a sibling's is offered. */
     void aSiblingsVenuesAreOffered();
