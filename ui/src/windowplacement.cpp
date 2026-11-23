@@ -19,6 +19,7 @@
 
 #include <QApplication>
 #include <QEvent>
+#include <QMargins>
 #include <QPointer>
 #include <QScreen>
 #include <QWidget>
@@ -67,13 +68,21 @@ bool WindowPlacement::keepOnParentScreen(QWidget *w)
         return false;
 
     const QRect room = screen->availableGeometry();
-    const QRect frame = w->frameGeometry();
+    QRect frame = w->frameGeometry();
+    if (w->windowHandle() != nullptr)
+        frame = frame.united(w->geometry().marginsAdded(w->windowHandle()->frameMargins()));
     const bool elsewhere = w->screen() != screen || !room.intersects(frame);
     if (!elsewhere && room.contains(frame))
         return false;
 
-    // The frame's own margins (title bar), known once the window exists.
-    const QSize margins = frame.size() - w->size();
+    /* The frame's own margins (title bar): the window's, which the platform
+       knows once it exists, even before the widget's frame geometry does. */
+    QSize margins = frame.size() - w->size();
+    if (w->windowHandle() != nullptr)
+    {
+        const QMargins m = w->windowHandle()->frameMargins();
+        margins = margins.expandedTo(QSize(m.left() + m.right(), m.top() + m.bottom()));
+    }
     const QSize most = room.size() - margins;
     const QSize size = w->size().boundedTo(most).expandedTo(w->minimumSize());
     if (size != w->size())

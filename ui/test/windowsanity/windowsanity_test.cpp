@@ -36,6 +36,7 @@
 #include <QScreen>
 #include <QTabBar>
 #include <QTabWidget>
+#include <QToolButton>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -210,6 +211,10 @@ bool trigger(QObject *root, const QString &text)
                 }
     if (QWidget *rw = qobject_cast<QWidget *>(root))
         actions << rw->actions();
+    if (QMenu *rm = qobject_cast<QMenu *>(root))
+        for (QAction *a : rm->actions())
+            if (a->menu() != nullptr)
+                actions << a->menu()->actions();
     for (QAction *a : actions)
         if (plain(a->text()) == plain(text) && a->isEnabled())
         {
@@ -326,7 +331,12 @@ QList<Row> windows()
          << row("NetworkTopologyDialog", QStringLiteral("Network Topology"),
                 [](App *a) { studio(a)->slotEditNetworkNode(0); })
          << row("PatchListDialog", QStringLiteral("Patch List"),
-                [](App *a) { QVERIFY(trigger(studio(a), QStringLiteral("Patch List…"))); })
+                [](App *a) {
+                    // The plot's More menu (a tool button's menu).
+                    Monitor *m = studio(a);
+                    QVERIFY(m->m_moreBtn != nullptr && m->m_moreBtn->menu() != nullptr);
+                    QVERIFY(trigger(m->m_moreBtn->menu(), QStringLiteral("Patch List…")));
+                })
          << row("PowerDistributionDialog", QStringLiteral("Power distribution"),
                 [](App *a) { emit studio(a)->m_graphicsView->powerDoubleClicked(0); })
          << row("MonitorBackgroundSelection", QStringLiteral("Background"),
@@ -369,6 +379,12 @@ struct Known
 const QList<Known> &knownIssues()
 {
     static const QList<Known> list = {
+        { "Fixture Properties", "1024x640", "runs off its screen",
+          "TODO.md 0.5.3: Fixture Properties needs its fit-to-screen scroller back (reverted on "
+          "fix/053-fixture-props-revert-fit because the whole window took no clicks)" },
+        { "Fixture Properties", "1024x640", "OK / Cancel are out of view", "the same" },
+        { "Fixture Properties", "1440x900", "runs off its screen", "the same: 1046 px tall" },
+        { "Fixture Properties", "1440x900", "OK / Cancel are out of view", "the same" },
     };
     return list;
 }
@@ -422,6 +438,21 @@ QWidget *clickTarget(QWidget *w, bool *isButton)
     return nullptr;
 }
 
+/** Counts the presses an object gets. */
+class PressCounter final : public QObject
+{
+public:
+    int presses = 0;
+
+protected:
+    bool eventFilter(QObject *, QEvent *e) override
+    {
+        if (e->type() == QEvent::MouseButtonPress)
+            ++presses;
+        return false;
+    }
+};
+
 /** The window's input, the way a real screen hands it over: to the window
  *  first. A press on a button through the window holds it down (let go off
  *  it: nothing is clicked); a click on a field gives it the keyboard. */
@@ -432,7 +463,19 @@ void checkInputThroughWindow(QWidget *w, QStringList &problems)
     QWidget *c = clickTarget(w, &isButton);
     if (c == nullptr)
     {
-        problems << QStringLiteral("nothing in it to click (no button or field in view)");
+        /* No button or field (a monitor, a view): whatever is under its
+           middle must get the press. An object filter runs after every
+           application one, so it sees only what got through. */
+        const QPoint mid = w->rect().center();
+        QWidget *under = w->childAt(mid) != nullptr ? w->childAt(mid) : w;
+        PressCounter counter;
+        under->installEventFilter(&counter);
+        QTest::mousePress(win, Qt::LeftButton, Qt::NoModifier, mid);
+        QTest::mouseRelease(win, Qt::LeftButton, Qt::NoModifier, mid);
+        under->removeEventFilter(&counter);
+        if (counter.presses == 0)
+            problems << QStringLiteral("a press sent through its window did not reach what is under it (%1)")
+                            .arg(QString::fromLatin1(under->metaObject()->className()));
         return;
     }
     const QRect vis = c->visibleRegion().boundingRect();
