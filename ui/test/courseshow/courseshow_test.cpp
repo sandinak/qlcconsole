@@ -4114,9 +4114,19 @@ QLCPalette *newEffectPalette(Doc *doc, ShowTreeView *view, const QString &folder
                       << "| renaming in the Library" << view->m_libRenaming;
     if (!view->m_libRenaming)
     {
-        s_effectWhy = QStringLiteral("the name was not opened to type in the Library (row \"%1\")")
+        QStringList seen;
+        for (QTreeWidgetItemIterator it(lib); *it; ++it)
+            if ((*it)->data(0, ShowTreeView::IdRole).toUInt() == made->id())
+            {
+                QTreeWidgetItem *top = *it;
+                while (top->parent() != nullptr)
+                    top = top->parent();
+                seen << QStringLiteral("kind %1 under %2").arg((*it)->data(0, ShowTreeView::KindRole).toInt()).arg(top->text(0));
+            }
+        s_effectWhy = QStringLiteral("the name was not opened to type in the Library (row \"%1\"; palette %2 \"%3\" in the Library: %4)")
                           .arg(lib->currentItem() == nullptr ? QStringLiteral("(none)")
-                                                            : lib->currentItem()->text(0));
+                                                            : lib->currentItem()->text(0))
+                          .arg(made->id()).arg(made->name(), seen.isEmpty() ? QStringLiteral("nowhere") : seen.join(QStringLiteral("; ")));
         qWarning().noquote() << s_effectWhy;
         return nullptr;
     }
