@@ -21747,35 +21747,36 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
     // A real mouse click on OK (press and release through the event system,
     // as a trackpad does) closes it; button->click() would skip the input path.
     QString why = QStringLiteral("the dialog never opened");
-    QPointer<QWidget> seen;
+    QElapsedTimer t;
+    qint64 clickedAt = -1, finishedAt = -1;
+    int result = -1;
     QTimer::singleShot(0, [&]() {
-        QWidget *dlg = modalOrFixtureEditor();
+        QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
         if (dlg == nullptr)
             return;
-        seen = dlg;
+        QObject::connect(dlg, &QDialog::finished, [&](int r) { finishedAt = t.elapsed(); result = r; });
         QDialogButtonBox *btns = dlg->findChild<QDialogButtonBox *>();
         QPushButton *ok = btns ? btns->button(QDialogButtonBox::Ok) : nullptr;
         if (ok == nullptr)
         {
             why = "no OK";
-            dlg->close();
+            dlg->reject();
             return;
         }
-        why = QString("OK took no click (enabled %1, window active %2, modal %3, appModal '%4')")
-                  .arg(ok->isEnabled()).arg(dlg->isActiveWindow()).arg(dlg->isModal())
-                  .arg(QApplication::activeModalWidget() ? QApplication::activeModalWidget()->windowTitle() : QString());
+        why = QString("OK took no mouse click (enabled %1, active %2, modal %3)")
+                  .arg(ok->isEnabled()).arg(dlg->isActiveWindow()).arg(dlg->isModal());
+        clickedAt = t.elapsed();
         QTest::mouseClick(ok, Qt::LeftButton);
-        QTimer::singleShot(300, [&, dlg]() {
-            if (seen && seen->isVisible())
-                qobject_cast<QDialog *>(dlg)->reject();     // so the test ends
-        });
+        if (finishedAt < 0)
+        {
+            QPointer<QDialog> guard(dlg);
+            QTimer::singleShot(300, [guard]() { if (guard) guard->reject(); });   // so the test ends
+        }
     });
-    QElapsedTimer t;
     t.start();
     rig.mon->showFixtureItemEditor(f->id());
-    const bool closedByClick = seen && t.elapsed() < 280;
-    QVERIFY2(seen, qPrintable(why));
-    QVERIFY2(closedByClick, qPrintable(why));
+    QVERIFY2(clickedAt >= 0, qPrintable(why));
+    QVERIFY2(finishedAt >= 0 && finishedAt - clickedAt < 250 && result == QDialog::Accepted, qPrintable(why));
 }
 
 void Monitor_Test::selectingOnThePlotSelectsInLayers()
