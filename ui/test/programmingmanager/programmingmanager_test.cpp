@@ -3789,4 +3789,15 @@ void ProgrammingManager_Test::theWorkbenchAddBarStaysReachableInBuildAt1024x640(
             if (grabbed.pixel(x, y) != corner)
                 differs = true;
     QVERIFY2(differs, "Open's own area is not a single flat colour (its icon/text actually paints)");
+
+    // Bigger windows: the whole row fits there too (shots for the review).
+    for (const QSize &sz : { QSize(1440, 900), QSize(1920, 1080) })
+    {
+        mgr.resize(sz);
+        QTest::qWait(50);
+        QCoreApplication::processEvents();
+        if (!shotDir.isEmpty())
+            QVERIFY(mgr.grab().save(QString("%1/workbench-addbar-%2x%3.png").arg(shotDir).arg(sz.width()).arg(sz.height())));
+        QCOMPARE(bar->horizontalScrollBar()->maximum(), 0);
+    }
 }
