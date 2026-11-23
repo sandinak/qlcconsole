@@ -3797,6 +3797,16 @@ void ProgrammingManager_Test::theWorkbenchAddBarStaysReachableInBuildAt1024x640(
     // view one at a time; that is not what "reachable" should mean here --
     // the fix is for nothing to need hunting for a scrollbar at all.)
     QCOMPARE(bar->horizontalScrollBar()->value(), 0);
+    {
+        QSplitter *sp = wb->findChild<QSplitter *>(QStringLiteral("workbenchSplitter"));
+        QStringList d;
+        for (int i = 0; sp != nullptr && i < sp->count(); ++i)
+            d << QStringLiteral("pane%1 size %2 min %3").arg(i).arg(sp->sizes().at(i)).arg(sp->widget(i)->minimumSizeHint().width());
+        if (sp != nullptr)
+            for (QWidget *pg : sp->widget(1)->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+                d << QStringLiteral("child %1(%2) min %3").arg(QString::fromLatin1(pg->metaObject()->className()), pg->objectName()).arg(pg->minimumSizeHint().width());
+        qInfo().noquote() << "ADDBAR-DIAG" << d.join(" | ");
+    }
     for (QToolButton *b : row)
     {
         QVERIFY2(b->isVisibleTo(wb), qPrintable(QStringLiteral("%1 is hidden").arg(b->objectName())));
