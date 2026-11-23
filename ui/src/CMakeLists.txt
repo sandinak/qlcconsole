@@ -36,6 +36,7 @@ add_library(${module_name}
     editkeys.cpp editkeys.h
     itemicons.cpp itemicons.h
     layoutdiagnostics.cpp layoutdiagnostics.h
+    blockingwindowbanner.cpp blockingwindowbanner.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui
     audiobar.cpp audiobar.h
     audioeditor.cpp audioeditor.h audioeditor.ui

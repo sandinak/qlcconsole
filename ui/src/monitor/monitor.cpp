@@ -194,6 +194,7 @@
 #include "createfixturegroup.h"
 #include "app.h"
 #include "apputil.h"
+#include "blockingwindowbanner.h"
 #include "doc.h"
 #include "programmercontroller.h"
 #include "venuecorrections.h"
@@ -12725,6 +12726,8 @@ int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32
     dlg.show();
     dlg.raise();
     dlg.activateWindow();
+    // The plot says what holds it, and brings the editor back if it is lost.
+    BlockingWindowBanner::whileOpen(m_graphicsView, &dlg);
     loop.exec();
     return dlg.result();
 }
