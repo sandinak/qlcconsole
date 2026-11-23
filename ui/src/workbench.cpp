@@ -1076,6 +1076,10 @@ bool Workbench::selectRow(const ProgrammingOutline::Row &row)
 
 void Workbench::selectLayer(int index)
 {
+    /* The rows were out of sight while a designer had the width: they catch
+       up on show (a hidden outline only marks itself stale). */
+    if (m_split->widget(0)->isHidden())
+        m_split->widget(0)->show();
     QTreeWidgetItem *it = m_rows->layerItem(index);
     if (it == nullptr)
         return;
