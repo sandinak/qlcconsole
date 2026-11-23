@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QAbstractScrollArea>
 #include <QApplication>
 #include <QDialog>
 #include <QHBoxLayout>
@@ -117,9 +118,13 @@ void BlockingWindowBanner::place()
 {
     if (m_area == nullptr)
         return;
-    const int w = qMax(0, m_area->width() - 2 * kMargin);
+    // Inside a scrolled view's viewport: clear of its rulers and scroll bars.
+    QRect room = m_area->rect();
+    if (auto *sa = qobject_cast<QAbstractScrollArea *>(m_area.data()))
+        room = sa->viewport()->geometry();
+    const int w = qMax(0, room.width() - 2 * kMargin);
     const int h = qMax(sizeHint().height(), heightForWidth(w));
-    setGeometry(kMargin, kMargin, w, h);
+    setGeometry(room.left() + kMargin, room.top() + kMargin, w, h);
     raise();
 }
 
@@ -177,9 +182,11 @@ bool BlockingWindowBanner::onShowButton(QObject *obj) const
 
 bool BlockingWindowBanner::eventFilter(QObject *obj, QEvent *e)
 {
-    if (obj == m_area && e->type() == QEvent::Resize)
+    if (e->type() == QEvent::Resize && m_area != nullptr)
     {
-        place();
+        auto *sa = qobject_cast<QAbstractScrollArea *>(m_area.data());
+        if (obj == m_area || (sa != nullptr && obj == sa->viewport()))
+            place();
         return false;
     }
     const QEvent::Type t = e->type();
