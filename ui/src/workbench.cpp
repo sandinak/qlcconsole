@@ -1568,6 +1568,10 @@ void Workbench::layersChanged()
  * The editor pane
  ****************************************************************************/
 
+/* The width the effect designer needs to show every control without
+   scrolling sideways (its settings side alone wants ~250 px). */
+static const int kDesignerWants = 560;
+
 void Workbench::showPage(Page page)
 {
     QWidget *w = page == ScenePage ? m_scenePage : page == LookPage ? m_lookPage
@@ -1583,21 +1587,20 @@ void Workbench::showPage(Page page)
     // at, greyed, under the header's banner -- what plays is the list.
     m_page->setEnabled(m_stack == nullptr
                        || m_doc->showTree()->originalFor(loadedFunction()) == Function::invalidId());
-    // The bench's designer has the width; the layers come back with anything else.
-    m_split->widget(0)->setVisible(!(w == m_functionPage && m_benchPane && !m_effectPane.isNull()
-                                     && m_funcEditor == m_effectPane));
-    /* A layer's effect designer takes the width the layers left (UX-34): at
-       its ~400 px share of the split Solo, Show All Effects and the value
-       boxes ran off the edge. The layers column shrinks to its floor while
-       designing, and the split the person set comes back after (a move of
-       the handle meanwhile is theirs and is kept). */
+    /* The designer has the width (UX-34): the bench's always; a layer's when
+       the layers column would leave it less than it needs (the smallest
+       window gives the pane ~730 px, the column wants 355 of them), and with
+       room to spare the column stays and the designer takes the rest. The
+       layers come back with anything else. */
     const bool designing = w == m_functionPage && !m_effectPane.isNull() && m_funcEditor == m_effectPane;
-    if (designing && !m_benchPane && m_splitBeforeDesign.isEmpty())
+    const int total = m_split->width();
+    const int columnFloor = m_split->widget(0)->minimumSizeHint().width();
+    const bool columnAway = designing && (m_benchPane || total - columnFloor < kDesignerWants);
+    m_split->widget(0)->setVisible(!columnAway);
+    if (designing && !columnAway && m_splitBeforeDesign.isEmpty())
     {
         m_splitBeforeDesign = m_split->sizes();
-        const int total = m_split->width();
-        const int col = qMin(m_split->widget(0)->minimumSizeHint().width(), total / 4);
-        m_split->setSizes({ col, qMax(1, total - col) });
+        m_split->setSizes({ columnFloor, qMax(1, total - columnFloor) });
     }
     else if (!designing && !m_splitBeforeDesign.isEmpty())
     {
