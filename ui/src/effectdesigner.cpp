@@ -39,6 +39,7 @@
 #include "palettenaming.h"
 #include "programmingoutline.h"
 #include "effectbrowser.h"
+#include "effectfit.h"
 #include "shrinkablebar.h"
 #include "lookeditor.h"
 #include "showtreecontroller.h"
@@ -527,6 +528,7 @@ void EffectDesigner::setTargets(const QList<quint32> &groups, const QList<quint3
     m_fixtures = fixtures;
     m_targetLabel = label;
     rebuildScene();
+    syncBrowserTargets();
     refreshPreview(false);
     updateHeader();
     updateMakeLayerButton();
@@ -544,6 +546,7 @@ void EffectDesigner::setTryOnGroups(const QList<quint32> &groups)
     if (isBench())
     {
         rebuildScene();
+        syncBrowserTargets();
         refreshPreview(false);
     }
     updateHeader();
@@ -555,6 +558,18 @@ void EffectDesigner::setBaseLooks(const QList<quint32> &paletteIds)
     m_base = paletteIds;
     rebuildScene();
     refreshPreview(false);
+}
+
+/* The browser fits effects to the fixtures the designer plays on: told when
+   they change, so Show All Effects is offered whenever there are some (UX-34;
+   it stayed hidden, the look's own context scene having none). */
+void EffectDesigner::syncBrowserTargets()
+{
+    const QList<quint32> fixtures = previewFixtures();
+    if (fixtures.isEmpty() || fixtures == m_browserFixtures)
+        return;
+    m_browserFixtures = fixtures;
+    m_browser->setTargets(EffectFit::targetsOf(m_doc, fixtures));
 }
 
 QList<quint32> EffectDesigner::previewFixtures() const
@@ -716,6 +731,8 @@ void EffectDesigner::setEffect(quint32 paletteId, const QList<quint32> &own)
     m_lastSignature.clear();
     quietly([this]() { m_look->setPalette(m_draftId); });
     m_browser->setTargets(m_look->lookTargets());
+    m_browserFixtures.clear();
+    syncBrowserTargets();
     refreshPreview(false);
     updateHeader();
     updateButtons();
