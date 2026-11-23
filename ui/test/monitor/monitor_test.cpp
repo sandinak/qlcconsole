@@ -21754,6 +21754,10 @@ void Monitor_Test::fixturePropertiesButtonsTakeClicks()
         QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
         for (QAbstractButton *b : dlg->findChildren<QAbstractButton *>())
         {
+            qInfo().noquote() << "FPBTN" << b->text() << "visible" << b->isVisible() << "visibleTo" << b->isVisibleTo(dlg)
+                              << "enabled" << b->isEnabled() << "parentEnabled" << (b->parentWidget() ? b->parentWidget()->isEnabled() : true)
+                              << "window" << (b->window() == dlg) << "dlgVisible" << dlg->isVisible()
+                              << "scroll" << (dlg->findChild<QScrollArea *>("fixturePropertiesScroll") != nullptr);
             if (!b->isVisible() || !b->isEnabled() || b->text().isEmpty())
                 continue;
             if (qobject_cast<QDialogButtonBox *>(b->parentWidget()) != nullptr)
