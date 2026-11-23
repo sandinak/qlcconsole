@@ -217,12 +217,15 @@ public:
 
 protected:
     void showEvent(QShowEvent *ev) override;
+    void resizeEvent(QResizeEvent *ev) override;
     void hideEvent(QHideEvent *ev) override;
     /** Esc with the focus in the navigator: the Workbench backs out (a
      *  palette opened from the list goes back to what was showing). */
     void keyPressEvent(QKeyEvent *ev) override;
 
 private slots:
+    /** Give the Workbench's layer column the add bar's width (laptop fit). */
+    void fitAddBar();
     /** The navigator's selection changed: load what is selected. */
     void slotOutlineSelectionChanged();
     void slotPaletteTreeMenu(const QPoint &pos);
