@@ -500,7 +500,6 @@ private slots:
     void aFixtureIsRenamedFromItsEditDialogAndEverywhere();
     /** "when I select a fixture in the main studio view .. should also select
      *  it in the side layers". */
-    void fixturePropertiesFitsTheScreen();
     void selectingOnThePlotSelectsInLayers();
     /** "in truss view we have text stomping on each other .. shelf info on
      *  left and light info on right": a tower's shelf labels sit left of it,

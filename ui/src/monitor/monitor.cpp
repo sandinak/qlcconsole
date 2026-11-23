@@ -12692,66 +12692,8 @@ private:
 };
 } // namespace
 
-/* Fixture Properties is taller than a laptop's screen for a moving head
-   (Aim & Mount, the beam, the DMX rows): everything above its buttons goes
-   in a scroller (AppUtil::verticalScroller) and the dialog is held to the
-   screen, so OK and Cancel are always in view. */
-static void fitFixtureEditorToScreen(QDialog &dlg)
-{
-    QBoxLayout *vl = qobject_cast<QBoxLayout *>(dlg.layout());
-    if (vl == nullptr || dlg.findChild<QScrollArea *>(QStringLiteral("fixturePropertiesScroll")) != nullptr)
-        return;
-    // The buttons stay under the scroller: the last QDialogButtonBox row.
-    int keep = vl->count();
-    for (int i = vl->count() - 1; i >= 0; --i)
-        if (qobject_cast<QDialogButtonBox *>(vl->itemAt(i)->widget()) != nullptr)
-        {
-            keep = i;
-            break;
-        }
-    if (keep <= 0)
-        return;
-    QWidget *body = new QWidget;
-    body->setObjectName(QStringLiteral("fixturePropertiesBody"));
-    QVBoxLayout *bl = new QVBoxLayout(body);
-    bl->setContentsMargins(0, 0, 0, 0);
-    bl->setSpacing(vl->spacing());
-    for (int i = 0; i < keep; ++i)
-    {
-        QLayoutItem *item = vl->takeAt(0);
-        if (QWidget *w = item->widget())
-        {
-            bl->addWidget(w);
-            delete item;
-        }
-        else if (QLayout *l = item->layout())
-        {
-            l->setParent(nullptr);
-            bl->addLayout(l);
-        }
-        else
-            bl->addItem(item);
-    }
-    QScrollArea *scroll = AppUtil::verticalScroller(body, &dlg);
-    scroll->setObjectName(QStringLiteral("fixturePropertiesScroll"));
-    vl->insertWidget(0, scroll, 1);
-    // Its natural size, held to the screen it opens on.
-    const QScreen *screen = dlg.parentWidget() != nullptr ? dlg.parentWidget()->screen() : dlg.screen();
-    const QRect room = screen != nullptr ? screen->availableGeometry() : QRect();
-    const QSize want = body->sizeHint() + QSize(scroll->verticalScrollBar()->sizeHint().width() + 24,
-                                                dlg.layout()->itemAt(vl->count() - 1)->sizeHint().height() + 48);
-    if (room.isValid())
-    {
-        const int h = qMin(want.height(), int(room.height() * 0.9));
-        const int w = qMin(want.width(), int(room.width() * 0.95));
-        dlg.resize(w, h);
-        dlg.setMaximumHeight(room.height());
-    }
-}
-
 int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32 &next)
 {
-    fitFixtureEditorToScreen(dlg);
     dlg.setModal(false);
     QEventLoop loop;
     connect(&dlg, &QDialog::finished, &loop, &QEventLoop::quit);

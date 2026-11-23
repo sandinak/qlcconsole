@@ -21691,43 +21691,6 @@ void Monitor_Test::aFixtureIsRenamedFromItsEditDialogAndEverywhere()
     QCOMPARE(f->name(), QString("SR Spot"));
 }
 
-/* Fixture Properties is taller than a laptop's screen for a moving head:
-   its rows scroll and the dialog fits the screen, OK and Cancel in view. */
-void Monitor_Test::fixturePropertiesFitsTheScreen()
-{
-    FixtureCleanup cleanup(m_doc);
-    Fixture *f = new Fixture(m_doc);
-    f->setName("Spot 1");
-    f->setChannels(4);
-    f->setAddress(300);
-    QVERIFY(m_doc->addFixture(f));
-    cleanup.ids << f->id();
-    InventoryRig rig;
-    QVERIFY(rig.build(m_doc));
-    QVERIFY(dropFixtureAtCentre(rig.gv, f->id()));
-    QString why;
-    driveDialog([&why](QWidget *dlg) {
-        if (dlg->findChild<QLineEdit *>("fixtureNameEdit") == nullptr)
-            return false;
-        QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
-        QDialogButtonBox *buttons = dlg->findChild<QDialogButtonBox *>();
-        const QRect room = dlg->screen()->availableGeometry();
-        if (scroll == nullptr)
-            why = "no scroller";
-        else if (!scroll->isAncestorOf(dlg->findChild<QLineEdit *>("fixtureNameEdit")))
-            why = "the rows are not in the scroller";
-        else if (buttons == nullptr || scroll->isAncestorOf(buttons))
-            why = "the buttons scroll away";
-        else if (dlg->frameGeometry().height() > room.height())
-            why = QString("%1 tall on a %2 screen").arg(dlg->frameGeometry().height()).arg(room.height());
-        else if (buttons->geometry().bottom() > dlg->height())
-            why = "the buttons are below the window";
-        return true;
-    });
-    rig.mon->showFixtureItemEditor(f->id());
-    QVERIFY2(why.isEmpty(), qPrintable(why));
-}
-
 void Monitor_Test::selectingOnThePlotSelectsInLayers()
 {
     Doc *doc = new Doc(this);
