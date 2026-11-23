@@ -39,6 +39,7 @@
 #include "stagetarget.h"
 #include "teachingsettings.h"
 #include "inputoutputmap.h"
+#include "networkroute.h"
 #include "fixturegroup.h"
 #include "fixture.h"
 #include "doc.h"
@@ -878,6 +879,31 @@ QStringList VenueCorrections::venueNames() const
     for (const Venue &v : m_venues)
         out << v.name;
     return out;
+}
+
+QString VenueCorrections::roomReached() const
+{
+    QString found;
+    for (const Venue &v : m_venues)
+    {
+        bool reached = false;
+        for (auto it = v.rig.patch.constBegin(); it != v.rig.patch.constEnd() && !reached; ++it)
+            for (const Universe::OfflinePatch &p : it.value())
+            {
+                const QString target = NetworkRoute::targetFromParameters(p.params);
+                if (!target.isEmpty() && NetworkRoute::checkRoute(target).kind == NetworkRoute::Reached)
+                {
+                    reached = true;
+                    break;
+                }
+            }
+        if (!reached)
+            continue;
+        if (!found.isEmpty())
+            return QString();       // two rooms answer: not clear
+        found = v.name;
+    }
+    return found;
 }
 
 bool VenueCorrections::hasVenue(const QString &name) const

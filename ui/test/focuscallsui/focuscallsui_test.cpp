@@ -38,6 +38,7 @@
 #include "monitorproperties.h"
 #include "venuecorrections.h"
 #include "focuscallsdialog.h"
+#include "showfeatures.h"
 #include "focuscontrolmap.h"
 #include "focusmodepanel.h"
 #include "operatorvoice.h"
@@ -57,6 +58,7 @@
 #include "workbench.h"
 #include "monitorgraphicsview.h"
 #include "focuscallcue.h"
+#include "networkroute.h"
 #include "fixturevisualtraits.h"
 #include "cuerunner.h"
 #include "showcontrol.h"
@@ -624,6 +626,134 @@ void FocusCallsUi_Test::theVenueAskFitsWithAPadAtEverySize()
     }
     d->close();
     m_doc->inputOutputMap()->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+}
+
+/* Board Q294: the venue is asked about only when it isn't clear. */
+void FocusCallsUi_Test::theVenueIsAskedOnlyWhenUnclear()
+{
+    auto sidecar = [this](const QString &file, const QStringList &names) {
+        const QString show = m_dir->filePath(file);
+        QFile f(VenueCorrections::sidecarPath(show));
+        if (!f.open(QIODevice::WriteOnly))
+            return QString();
+        QString xml = QString("<QlcVenues Version=\"1\" Show=\"%1\" Active=\"%2\">").arg(file, names.first());
+        for (const QString &n : names)
+            xml += QString("<Venue Name=\"%1\" Modified=\"%2\"/>")
+                       .arg(n, QDateTime::currentDateTime().addDays(-3).toString(Qt::ISODate));
+        f.write((xml + "</QlcVenues>").toUtf8());
+        f.close();
+        return show;
+    };
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+
+    // One venue on file: that one, nothing asked.
+    QString show = sidecar("One.qlcc", { "Lincoln HS" });
+    venues->setShowFile(show, true);
+    QVERIFY(venues->needsConfirm());
+    QVERIFY(FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show) == nullptr);
+    QVERIFY(!venues->needsConfirm());
+    QCOMPARE(venues->activeVenue(), QString("Lincoln HS"));
+
+    // Several, no room reached: asked.
+    show = sidecar("Two.qlcc", { "Lincoln HS", "Main Hall" });
+    venues->setShowFile(show, true);
+    QPointer<QDialog> d = FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show);
+    QVERIFY(d != nullptr);
+    QCOMPARE(d->objectName(), QString("venueConfirm"));
+    d->close();
+    QTRY_VERIFY(d.isNull());
+
+    // Venues turned off for the show: never asked.
+    venues->setShowFile(show, true);
+    ShowFeatures::instance()->setOn(ShowFeatures::Venues, false);
+    QVERIFY(FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show) == nullptr);
+    ShowFeatures::instance()->setOn(ShowFeatures::Venues, true);
+
+    // A launch straight into Operate: not now; asked once back in Design.
+    venues->setShowFile(show, true);
+    QVERIFY(venues->needsConfirm());
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show) == nullptr);
+    QDialog *asked = nullptr;
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if (w->objectName() == QLatin1String("venueConfirm") && w->isVisible())
+            asked = qobject_cast<QDialog *>(w);
+    QVERIFY2(asked == nullptr, "asked over a running show");
+    m_doc->setMode(Doc::Design);
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if (w->objectName() == QLatin1String("venueConfirm") && w->isVisible())
+            asked = qobject_cast<QDialog *>(w);
+    QVERIFY2(asked != nullptr, "not asked once back in Design");
+    asked->close();
+}
+
+void FocusCallsUi_Test::theVenueIsTheRoomThisNetworkReaches()
+{
+    // Two venues, each with its room's Art-Net node; this computer is on
+    // Main Hall's network only. A room answering is clear: nothing asked.
+    auto write = [this](const QString &file, const QString &active) {
+        const QString show = m_dir->filePath(file);
+        QFile f(VenueCorrections::sidecarPath(show));
+        if (!f.open(QIODevice::WriteOnly))
+            return QString();
+        const QString old = QDateTime::currentDateTime().addDays(-3).toString(Qt::ISODate);
+        auto venue = [&old](const QString &name, const QString &node) {
+            return QString("<Venue Name=\"%1\" Modified=\"%2\"><Patch Universe=\"0\">"
+                           "<Output Plugin=\"ArtNet\" Line=\"0\"><PluginParameters outputIP=\"%3\"/></Output>"
+                           "</Patch></Venue>").arg(name, old, node);
+        };
+        f.write(QString("<QlcVenues Version=\"1\" Show=\"%1\" Active=\"%2\">%3%4</QlcVenues>")
+                    .arg(file, active, venue("Lincoln HS", "10.20.30.40"), venue("Main Hall", "192.168.77.50"))
+                    .toUtf8());
+        f.close();
+        return show;
+    };
+    auto onNetworks = [](const QStringList &ips) {
+        QList<NetworkRoute::LocalAddress> list;
+        for (const QString &ip : ips)
+            list << NetworkRoute::LocalAddress{ QStringLiteral("en%1").arg(list.size()), QHostAddress(ip), 24 };
+        NetworkRoute::setResolverForTest([list]() { return list; }, [list](const QHostAddress &to) {
+            for (const NetworkRoute::LocalAddress &a : list)
+                if (to.isInSubnet(a.ip, 24))
+                    return a.ip;
+            return QHostAddress();      // no default route: nothing else is reached
+        });
+    };
+    VenueCorrections *venues = m_doc->programmer()->venueCorrections();
+
+    // On Main Hall's network, Lincoln HS last used: Main Hall, not asked, said.
+    onNetworks({ "192.168.77.10" });
+    QString show = write("Room.qlcc", "Lincoln HS");
+    venues->setShowFile(show, true);
+    QVERIFY(venues->needsConfirm());
+    QCOMPARE(venues->roomReached(), QString("Main Hall"));
+    QString said;
+    QVERIFY(FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show, &said) == nullptr);
+    QCOMPARE(venues->activeVenue(), QString("Main Hall"));
+    QVERIFY(!venues->needsConfirm());
+    QVERIFY2(said.contains("Main Hall"), qPrintable(said));
+
+    // On both rooms' networks: not clear, asked.
+    onNetworks({ "192.168.77.10", "10.20.30.11" });
+    show = write("Both.qlcc", "Lincoln HS");
+    venues->setShowFile(show, true);
+    QVERIFY(venues->roomReached().isEmpty());
+    QPointer<QDialog> d = FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show);
+    QVERIFY(d != nullptr);
+    d->close();
+    QTRY_VERIFY(d.isNull());
+
+    // On neither: asked.
+    onNetworks({ "172.30.1.5" });
+    show = write("None.qlcc", "Lincoln HS");
+    venues->setShowFile(show, true);
+    QVERIFY(venues->roomReached().isEmpty());
+    d = FocusCallsDialog::askVenueIfUnclear(m_doc, nullptr, show);
+    QVERIFY(d != nullptr);
+    d->close();
+    QTRY_VERIFY(d.isNull());
+
+    NetworkRoute::setResolverForTest(nullptr, nullptr);
 }
 
 void FocusCallsUi_Test::anOldVenueIsAskedAbout()

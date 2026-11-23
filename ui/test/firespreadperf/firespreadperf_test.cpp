@@ -647,6 +647,84 @@ void FireSpreadPerf_Test::theBurningRigFlickersHeadByHead()
     QVERIFY2(std::abs(fixtureR) < 0.3, qPrintable(QString("neighbouring fixtures flicker alike (%1): bands, not fire").arg(fixtureR)));
 }
 
+void FireSpreadPerf_Test::lightningOnTheRig()
+{
+    Doc *doc = m_app->doc();
+    Scene *look = new Scene(doc);
+    QVERIFY(doc->addFunction(look));
+    for (quint32 id : m_lookFixtures)
+        look->addFixture(id);
+    // A violet look: the strike burns white at its core, a cold blue at its
+    // edge, and dies away in the violet.
+    QLCPalette *violet = new QLCPalette(QLCPalette::Color, doc);
+    violet->setValue(QColor(110, 0, 255));
+    QVERIFY(doc->addPalette(violet));
+    look->addPalette(violet->id());
+    auto lightning = [&](int mode) {
+        QLCPalette *p = new QLCPalette(QLCPalette::Effect, doc);
+        p->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/lightning-spread.js");
+        p->setEffectParamValue(QStringLiteral("mode"), mode);
+        p->setEffectParamValue(QStringLiteral("spreadTime"), 0.8);
+        p->setEffectParamValue(QStringLiteral("decay"), 2.5);
+        p->setEffectParamValue(QStringLiteral("seed"), 3.0);
+        p->setEffectParamValue(EffectRuns::runsKey(), 0);
+        doc->addPalette(p);
+        return p;
+    };
+    QLCPalette *burst = lightning(0), *generator = lightning(1);
+    look->addPalette(burst->id());
+
+    EffectInstance *fire = m_fire;
+    const auto back = qScopeGuard([this, fire]() { m_fire = fire; });
+    EffectInstance oneBurst(doc, look->id(), burst->id());
+    QVERIFY2(oneBurst.isValid(), qPrintable(oneBurst.error()));
+    m_fire = &oneBurst;
+
+    auto lit = [](const EffectInstance &in) {
+        int n = 0;
+        for (const EffectInstance::DmxWrite &w : in.dmxWrites())
+            n += w.value > 0 ? 1 : 0;
+        return n;
+    };
+    tickTo(400);
+    const int burning = lit(oneBurst);
+    tickTo(8000);
+    const int atRest = lit(oneBurst);
+    REPORT("Lightning Spread, one burst: %d channels lit at 0.4 s, %d at rest (8 s)", burning, atRest);
+    QVERIFY2(burning > 100, qPrintable(QString::number(burning)));
+    QCOMPARE(atRest, 0);
+
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        return;
+    QDir().mkpath(dir);
+    StructureStudioView v(doc, StructureStudioView::StageKind, 0);
+    v.setLocked(true);
+    v.setLiveValues(true);
+    v.setAmbient(0.0);
+    v.setStandOnCentreStage(true);
+    v.resize(1440, 900);
+    v.reload();
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.setPlane(StructureStudioView::Angled);
+    auto shot = [&](qint64 ms, const QString &name) {
+        tickTo(ms);
+        v.m_liveDirty = true;
+        settle(150);
+        v.grab().toImage().save(QDir(dir).filePath(QStringLiteral("lightning-%1-%2ms.png").arg(name).arg(ms)));
+    };
+    for (qint64 ms : { qint64(250), qint64(500), qint64(900) })
+        shot(ms, QStringLiteral("burst-45"));
+    look->removePalette(burst->id());
+    look->addPalette(generator->id());
+    EffectInstance arcs(doc, look->id(), generator->id());
+    QVERIFY2(arcs.isValid(), qPrintable(arcs.error()));
+    m_fire = &arcs;
+    for (qint64 ms : { qint64(2000), qint64(2150) })
+        shot(ms, QStringLiteral("generator-45"));
+}
+
 /* Firelight and Candle Flicker over the same rig: each head its own flame
    too. Old code seeded head i's flicker i * 1.618 (Firelight) or
    i * 0.618 (Candle Flicker): Firelight's neighbours flickered alike

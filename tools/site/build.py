@@ -60,6 +60,9 @@ STYLE = """<style>
 .qc-top{font-size:.85em}
 .qc-example img{max-height:420px;width:auto}
 .wp-block-post-content img{max-width:100%;height:auto}
+.qc-thumb{display:table;margin:.6em auto 1em auto;max-width:320px}
+.wp-block-post-content .qc-thumb img{max-width:320px;max-height:240px;width:auto;height:auto;display:block;border:1px solid rgba(127,127,127,.35);border-radius:6px;cursor:zoom-in}
+.qc-thumb figcaption{font-size:.8em;opacity:.75;margin-top:.3em;line-height:1.3;text-align:center}
 .wp-block-post-content table{border-collapse:collapse}
 .wp-block-post-content td,.wp-block-post-content th{border:1px solid rgba(127,127,127,.35);padding:.35em .6em;vertical-align:top}
 </style>"""
@@ -290,9 +293,23 @@ for fn in sorted(os.listdir(os.path.join(HERE, "news"))):
         print("skipping", fn, "(no published GitHub release", meta["tag"] + ")")
         continue
     url = f"{GH}/releases/tag/{meta['tag']}"
-    html = md(body, "README.md") + (f'<p><a href="{url}">Full release notes and downloads →</a></p>')
+    html = md(body, "tools/site/news/" + fn) + (f'<p><a href="{url}">Full release notes and downloads →</a></p>')
+    # A post's pictures are thumbnails: small, captioned with their alt text,
+    # and a click opens the full screenshot (his ask 2026-11-22: full-width
+    # screenshots were far too big for the screen).
+    def thumb(m):
+        tag = m.group(1)
+        src = re.search(r'src="(\{\{IMG:[^}]+\}\})"', tag)
+        if src is None:
+            return m.group(0)
+        alt = re.search(r'alt="([^"]*)"', tag)
+        cap = f'<figcaption>{alt.group(1)}</figcaption>' if alt else ''
+        return (f'<figure class="qc-thumb"><a href="{src.group(1)}" target="_blank" rel="noopener">'
+                f'{tag}</a>{cap}</figure>')
+    html = re.sub(r'<p>\s*(<img[^>]*>)\s*</p>', thumb, html)
+    html = re.sub(r'(?<!rel="noopener">)(<img[^>]*>)', lambda m: thumb(m) if 'qc-thumb' not in m.string[max(0, m.start() - 120):m.start()] else m.group(0), html)
     posts.append({"slug": "release-" + meta["tag"].replace(".", "-"), "title": meta["title"],
-                  "date_gmt": r["publishedAt"].rstrip("Z").replace("T", " "), "content": wrap(html),
+                  "date_gmt": r["publishedAt"].rstrip("Z").replace("T", " "), "content": wrap(STYLE + html),
                   "category": "Pre-releases" if r["isPrerelease"] else "Releases"})
 missing = sorted(set(releases) - {m for m in (front_matter(read("tools/site/news/" + f))[0].get("tag")
                                               for f in os.listdir(os.path.join(HERE, "news")) if f.endswith(".md"))}

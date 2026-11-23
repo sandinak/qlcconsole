@@ -53,6 +53,10 @@ private slots:
 
     /** Firelight and Candle Flicker over the same rig: each head its own
      *  flame, no waves or stripes along the heads' order */
+    /** Lightning Spread on the same rig, under a violet look: lit as the
+     *  burst goes out, dark at rest; the Rig Overview pictured as it goes
+     *  (QLC_SHOT_DIR): One Burst and Static Generator. */
+    void lightningOnTheRig();
     void flameEffectsFlickerHeadByHead_data();
     void flameEffectsFlickerHeadByHead();
 
