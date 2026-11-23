@@ -32,7 +32,7 @@ go on the scenery, never at the cost of light on the singers.
 | Word | Means |
 |---|---|
 | **Effect** | A pattern that moves through the lights: a sparkle, a wave, a chase. In the Show Tree, an effect palette dropped on a layer. |
-| **Effect palette** | A palette that plays an effect. Made with **+ Palette → Effect**; the effect is picked in the **effect browser**. |
+| **Effect palette** | A palette that plays an effect. Made with **+ Palette → Effect**, which opens the **effect designer**: the effect is picked in the **effect browser** and kept with **Save in This Show…**. |
 | **Sparkle** | Pixels flash and fade at random, like glitter. |
 | **Wave** | Brightness that travels across the lights (here, *Rainbow* with one colour: it sweeps that colour across them). |
 | **Its own colour** | A colour that belongs to the effect only: the sparkle glints white while the steps stay in the chorus colour. |
@@ -79,29 +79,35 @@ Switch roles after each part.
 ### A sparkle on the steps
 
 7. In the Library, click the folder **Palettes → Colour → 01-Everybody
-   Scream**, so the new palette goes in the song's folder. Then click
+   Scream**, so the new effect goes in the song's folder. Then click
    **+ Palette → Effect**.
-   - *You should see:* the effect browser open, over **New Effect** in the Look Editor.
-8. In the effect browser, in the search box type `Sparkle`, click **Sparkle · Dimmer**, then
-   **Done**.
+   - *You should see:* the **effect designer** fill the page's place —
+     the browser down one side, the effect's settings beside it. Nothing
+     has been made yet.
+8. Click **Try on** and pick **Steps**, so it plays on the steps. In the
+   browser's search box type `Sparkle`, then click **Sparkle · Dimmer**.
+   - *You should see:* the steps twinkle **now**, before the effect has a
+     name or a home.
 
-![The effect browser](../../images/lesson-2-4/effect-picker.png)
+![The effect designer](../../images/lesson-2-4/effect-picker.png)
 
-   **(1)** search, **(2)** the effect, **(3)** Done.
+   **(1)** search, **(2)** the effect, **(3)** Try on, **(4)** Save in
+   This Show.
 
    The browser's **Built-in · Mine · This show** buttons narrow the list
    by where an effect came from: shipped with qlcconsole, saved on this
-   computer, or one of this show's own effect palettes. Under the name in
-   the Look Editor, a grey **based on Sparkle** line says what yours was
-   made from.
+   computer, or one of this show's own effect palettes. A grey
+   **based on Sparkle** line says what yours was made from.
 
-9. In the Look Editor's **Name** box, type `Step Sparkle` and press
-   **Return**.
+9. Click **Save in This Show…**. It is filed in the song's folder, and its
+   name opens in the Library: type `Step Sparkle` and press **Return**.
+   Then **↩ Show Tree** — once to leave the designer, again to put the
+   cue's page back.
 10. Click **1.0.6 Dance Break**, then drag **Step Sparkle** onto the
     **Steps** row.
-    - *You should see:* the steps twinkle, pixel by pixel.
-11. Click **↩ Back** to close the Look Editor, then click the **Steps**
-    row. On its **Dimmer effect** row, click **⋯ → Its Own Colour / Dimmer → White**.
+    - *You should see:* the steps twinkle in the cue, pixel by pixel.
+11. Click the **Steps** row. On its **Dimmer effect** row, click
+    **⋯ → Its Own Colour / Dimmer → White**.
     - *You should see:* the row reads **Step Sparkle in White**: white
       glints over the violet steps.
 
@@ -120,9 +126,9 @@ floor, and its **Length** is that one breath.
 
 12. Click the **01-Everybody Scream** folder in the Library again, then
     **+ Palette → Effect**.
-13. In the browser, search `Rainbow`,
-    click **Rainbow**, then **Done**.
-    Name it `Truss Wave` and press **Return**.
+13. **Try on**, pick **TrussW-RGB**; search `Rainbow` and click
+    **Rainbow**. Then **Save in This Show…**, name it `Truss Wave` and
+    press **Return**.
 14. Click **1.0.6 Dance Break** and drag **Truss Wave** onto the
     **TrussW-RGB** row.
     - *You should see:* a wave of blue travels across the truss boxes.
@@ -131,7 +137,7 @@ floor, and its **Length** is that one breath.
 
 ![The dance break](../../images/lesson-2-4/rig-dance-break.png)
 
-15. Click **↩ Back** to close the Look Editor.
+15. **↩ Show Tree** until the cue's page is back.
 
 ### Save
 
@@ -145,7 +151,8 @@ floor, and its **Length** is that one breath.
 | The browser shows nothing for your search | Clear the search box first: it keeps what you typed last time. |
 | The new palette isn't in the song's folder | Click the folder in the Library before **+ Palette**. Or right-click it → **Move to Folder**. |
 | No **Its Own Colour / Dimmer** in the menu | Use the ⋯ on the **Dimmer effect** row, not the Colour row. |
-| The steps don't twinkle | Drop Step Sparkle on the **Steps** row, not on the dashed box. |
+| Nothing twinkles in the designer | **Try on** has no lights picked: click it and pick **Steps**. |
+| The steps don't twinkle in the cue | Drop Step Sparkle on the **Steps** row, not on the dashed box. |
 | Something else went wrong | Undo (⌘Z) one step at a time. |
 
 ## Done early? (Extension)
@@ -155,7 +162,7 @@ a layer, plays on every layer in it that has no effect of its own, and
 each keeps its own level. A chase across the stage then reads as a chase.
 
 1. In the song's folder, **+ Palette → Effect**; search `Color Chase`,
-   click it, **Done**; name it `Stage Chase`.
+   click it, **Save in This Show…**; name it `Stage Chase`.
 2. Click **1.0.2 Chorus** and drag **Stage Chase** onto the cue itself
    (its row in the tree), not a layer. The Dance Break's washes keep
    their own Truss Wave, so the chase would not reach them.
@@ -172,8 +179,11 @@ is lit, not only its RGB pixels.
 **On the beat: a speed master.** An effect can run on a **speed
 master**, so one tap moves everything on it together.
 
-1. In the Library, right-click **Truss Wave** → **Edit Effect**.
-2. In the Look Editor, set **Speed** to **Main Speed**.
+1. In the Library, right-click **Truss Wave** → **Edit Effect**: the
+   designer opens on it.
+2. Set **Speed** to **Main Speed**, then click **Update “Truss Wave”** —
+   the designer works on a copy, and Update keeps it everywhere the effect
+   plays.
 3. Look at the footer: a **Main Speed 120** button appears, beside the
    Grand Master. The wave now counts in beats of that master.
 4. Which effects in a show would you put on the same master, and why?

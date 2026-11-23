@@ -2010,7 +2010,9 @@ void LayoutSanity_Test::theTabStripFitsTheWindow()
                 const QString expect = fit == App::TabFitFull ? full
                                      : fit == App::TabFitShort ? m_app->tabShortLabel(label) : QString();
                 QCOMPARE(bar->tabText(i), expect);
-                QCOMPARE(bar->tabToolTip(i), full);
+                // The tab's name in full, plus what is in it where the name
+                // doesn't say (board Q266: the Show Tree's cue lists).
+                QCOMPARE(bar->tabToolTip(i), m_app->tabToolTipText(label));
                 const QRect r = bar->tabRect(i);
                 QVERIFY2(r.left() >= 0 && r.right() < bar->width() && r.width() > 0,
                          qPrintable(QStringLiteral("%1: tab \"%2\" is outside the strip (%3..%4 of %5)")

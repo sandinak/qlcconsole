@@ -2380,6 +2380,45 @@ void ProgrammingManager::showEvent(QShowEvent *ev)
     // W6: the Show Tree's Library, lent for as long as this tab shows.
     borrowLibrary();
     QWidget::showEvent(ev);
+    QTimer::singleShot(0, this, &ProgrammingManager::fitAddBar);
+}
+
+void ProgrammingManager::resizeEvent(QResizeEvent *ev)
+{
+    QWidget::resizeEvent(ev);
+    if (isVisible())
+        QTimer::singleShot(0, this, &ProgrammingManager::fitAddBar);
+}
+
+/* Laptop fit: the Workbench's own 3:4 split, inside Build's 2:7 one, left
+   its layer column (the add bar's row lives there) 280 px at 1024x640
+   against the row's 405 px, so the row was cut off after Own Copy. Here,
+   where Build embeds it, hand the column what the row needs out of the
+   editor pane -- a size, not a minimum, so the Show Tree's docked Workbench
+   and a person's own drag are untouched (only a resize or a show, with the
+   column too narrow, asks again). The pane keeps its own minimum. */
+void ProgrammingManager::fitAddBar()
+{
+    if (m_workbench == nullptr || !m_workbench->isVisible())
+        return;
+    // A designer has the pane's width (Workbench::fitDesigner()): not the add bar's to take back.
+    if (m_workbench->designerHasTheWidth())
+        return;
+    QSplitter *split = m_workbench->findChild<QSplitter *>(QStringLiteral("workbenchSplitter"));
+    QWidget *column = m_workbench->findChild<QWidget *>(QStringLiteral("workbenchColumn"));
+    QWidget *bar = m_workbench->findChild<QWidget *>(QStringLiteral("workbenchAddBar"));
+    if (split == nullptr || column == nullptr || bar == nullptr || split->count() != 2)
+        return;
+    const int need = bar->sizeHint().width();
+    const QList<int> now = split->sizes();
+    const int total = now.value(0) + now.value(1);
+    if (now.value(0) >= need || total <= 0)
+        return;
+    const int editorMin = qMax(split->widget(1)->minimumSizeHint().width(),
+                               split->widget(1)->minimumWidth());
+    const int want = qMin(need, total - editorMin);
+    if (want > now.value(0))
+        split->setSizes({ want, total - want });
 }
 
 bool ProgrammingManager::borrowLibrary()

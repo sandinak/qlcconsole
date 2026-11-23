@@ -33,6 +33,7 @@
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
 #include "effectbrowser.h"
+#include "shrinkablebar.h"
 #include "effectorigin.h"
 #include "effectscript.h"
 #include "doc.h"
@@ -350,8 +351,12 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     v->addWidget(m_search);
 
     /* Where effects came from: the ones that come with qlcconsole, the ones
-       saved on this computer, the show's own. */
-    QHBoxLayout *origins = new QHBoxLayout;
+       saved on this computer, the show's own. The row is a ShrinkableBar:
+       the browser sits in the Workbench's editor pane beside the effect's
+       settings now (board Q263), so it must take a narrow column without
+       cutting "Show All Effects" in half (UX-36). */
+    QWidget *originRow = new QWidget(this);
+    QHBoxLayout *origins = new QHBoxLayout(originRow);
     origins->setContentsMargins(0, 0, 0, 0);
     origins->setSpacing(2);
     const QStringList names = { tr("Built-in"), tr("Mine"), tr("This show") };
@@ -382,8 +387,15 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     m_showAll->setAutoRaise(true);
     m_showAll->setVisible(false);           // until there are fixtures to fit
     connect(m_showAll, &QToolButton::toggled, this, [this]() { reload(); });
-    origins->addWidget(m_showAll);
-    v->addLayout(origins);
+    // Its own line (UX-34): beside the three origins it was cut at a narrow column.
+    v->addWidget(new ShrinkableBar(originRow, this));
+    QWidget *allRow = new QWidget(this);
+    QHBoxLayout *allLay = new QHBoxLayout(allRow);
+    allLay->setContentsMargins(0, 0, 0, 0);
+    allLay->addWidget(m_showAll);
+    allLay->addStretch(1);
+    v->addWidget(allRow);
+    allRow->setVisible(false);
 
     m_tabs = new QTabBar(this);
     m_tabs->setExpanding(false);
@@ -391,13 +403,19 @@ EffectBrowser::EffectBrowser(Doc *doc, QComboBox *source, QWidget *parent)
     // Whole names ("Position", not "Positi…"): scroll arrows if they don't fit.
     m_tabs->setElideMode(Qt::ElideNone);
     m_tabs->setUsesScrollButtons(true);
+    // Close-set tabs (UX-36): more of them fit a narrow column before it scrolls.
+    m_tabs->setStyleSheet(QStringLiteral("QTabBar::tab { padding: 4px 6px; }"));
     v->addWidget(m_tabs);
 
     m_list = new QListWidget(this);
     m_list->setItemDelegate(new EffectRowDelegate(this));
     m_list->setUniformItemSizes(false);
     m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    m_list->setMinimumHeight(220);
+    /* No floor of its own: the origins row above it grows by a scroll bar's
+       height when it has to scroll (ShrinkableBar), and a list that insists
+       on a height is then clipped instead of simply being shorter. Its
+       sizeHint still asks for a comfortable list wherever there is room. */
+    m_list->setMinimumHeight(0);
     v->addWidget(m_list, 1);
 
     m_fitNote = new QLabel(this);
@@ -584,6 +602,7 @@ void EffectBrowser::setTargets(const EffectFit::Targets &targets)
 {
     m_targets = targets;
     m_showAll->setVisible(m_targets.known());
+    m_showAll->parentWidget()->setVisible(m_targets.known());
     reload();
 }
 

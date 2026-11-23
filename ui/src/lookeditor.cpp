@@ -4270,6 +4270,8 @@ void LookEditor::rebuildEffectDynWidget()
                 form->addRow(perBeat ? tr("%1 (per beat)").arg(label) : label, row);
             }
         }
+        // A narrow pane: the slider and its number go under the label, not past the edge.
+        form->setRowWrapPolicy(QFormLayout::WrapLongRows);
         dv->addLayout(form);
         // Each row's field by its param (its own or its child's objectName,
         // "effectParam_<name>"), for updateEffectParamActivity().
@@ -4446,10 +4448,16 @@ void LookEditor::rebuildEffectDynWidget()
         cb->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         cb->setMinimumContentsLength(12);
         SpeedMasters *sm = m_doc->speedMasters();
+        /* UX-36: short enough to read on the row, whatever width it gets;
+           the whole sentence is on hover. */
         cb->addItem(lookSpeed == SpeedMasters::Inherit
-                        ? tr("As the look (own speed unless a chase sets one)")
+                        ? tr("As the look")
                         : tr("As the look (%1)").arg(sm->assignmentName(lookSpeed)),
                     int(SpeedMasters::Inherit));
+        cb->setItemData(0, lookSpeed == SpeedMasters::Inherit
+                               ? tr("As the look: its own speed, unless a chase sets one")
+                               : tr("As the look: %1").arg(sm->assignmentName(lookSpeed)),
+                        Qt::ToolTipRole);
         cb->addItem(sm->assignmentName(SpeedMasters::Free), int(SpeedMasters::Free));
         cb->addItem(sm->assignmentName(SpeedMasters::MainClock), int(SpeedMasters::MainClock));
         for (int i = 0; i < m_doc->speedMasters()->count(); ++i)

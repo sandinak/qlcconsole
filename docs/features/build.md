@@ -50,7 +50,8 @@ QLC+ plays it.
    where it is used, what fires it, what is on the rig.
 4. **Its layers** — what is loaded, one row per layer
    ([The Workbench](#the-workbench)).
-5. **+ Scene, + Effect ▾** (EFX or RGB Matrix), ▲ ▼, **Remove**, **▣ Open**.
+5. **+ Scene, + Effect ▾** (an effect palette, EFX or RGB Matrix), ▲ ▼,
+   **Remove**, **▣ Open**.
 6. **The editor pane** — what the selected row edits; here, the Look Editor.
 7. **The Library** — under every section, to drag onto a layer
    ([The Library and the command bar](#the-library-and-the-command-bar)).
@@ -249,7 +250,10 @@ selected again. Loading something from the navigator starts afresh.
   after the selected layer (if it adds nothing, the line over the layers says
   why: already a layer, can't hold itself, or nothing loaded); its menu's **New Empty Scene** makes one, filed
   with the collection.
-- **+ Effect ▾** → **EFX** or **RGB Matrix** makes a **new** one on the selected layer's
+- **+ Effect ▾** → **Effect Palette…** designs an effect on the bench and
+  **Make a Layer ▾** puts it here (on a Show Tree cue it designs the
+  selected layer's own effect instead, in the pane);
+  **EFX** or **RGB Matrix** makes a **new** one on the selected layer's
   groups — an EFX on its heads, an RGB Matrix on its first group — add it
   after that layer and open it in the editor pane. With no layer selected,
   it goes at the end, on nothing yet.

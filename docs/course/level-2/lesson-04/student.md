@@ -11,6 +11,8 @@ app: true
 words:
   - term: Effect palette
     means: "A palette that plays a moving pattern: **+ Palette → Effect**, then pick it in the effect browser."
+  - term: Effect designer
+    means: "Where an effect is made: the browser, its settings, and **Try on** to pick the lights it plays on while you shape it. **Save in This Show…** keeps it for the whole show."
   - term: Sparkle / wave
     means: "Pixels flash at random like glitter / brightness travels across the lights."
   - term: Based on
@@ -46,38 +48,45 @@ Which lights move, and which stay still?
 4. Drop **Steps** (Chorus Colour, Full), **StepTops** (Blue, 25%) and
    **TrussW-RGB** (Blue, Full) as layers.
 5. In the Library click **Palettes → Colour → 01-Everybody Scream**, then
-   **+ Palette → Effect**.
-6. In the browser, search `Sparkle`,
-   click **Sparkle · Dimmer**, **Done**.
+   **+ Palette → Effect**. The **effect designer** opens in place of the
+   page: nothing is made yet.
+6. **Try on**, and pick **Steps**; then search `Sparkle` in the browser and click
+   **Sparkle · Dimmer**. **The steps twinkle now** — before the effect has
+   a name or a home.
 
-   ![The effect browser](../../images/lesson-2-4/effect-picker.png)
+   ![The effect designer](../../images/lesson-2-4/effect-picker.png)
 
    The browser lists every effect. **Built-in · Mine · This show** narrow it by where an effect came from.
 
-7. In the Look Editor's **Name**, type `Step Sparkle`, **Return**.
+7. **Save in This Show…**. It is filed in the song's folder and its name
+   opens in the Library: type `Step Sparkle`, **Return**. **↩ Show Tree**
+   leaves the designer; press it again to put the cue's page back.
 8. Click **1.0.6 Dance Break**; drag **Step Sparkle** onto the **Steps**
-   row. The steps twinkle.
-9. Click **↩ Back**, then the **Steps** row. On **Dimmer effect**: **⋯ →
-   Its Own Colour / Dimmer → White**.
+   row. Now it twinkles in the cue.
+9. **↩ Show Tree** until the cue's page is back, then click the **Steps**
+   row. On **Dimmer effect**: **⋯ → Its Own Colour / Dimmer → White**.
 
    ![Its own colour](../../images/lesson-2-4/sparkle-row.png)
 
-10. Click the song folder again, **+ Palette → Effect**; pick **Rainbow**,
-    **Done**; name it `Truss Wave`.
+10. Click the song folder again, **+ Palette → Effect**; **Try on**, pick
+    **TrussW-RGB**; pick **Rainbow**; **Save in This Show…** and name it
+    `Truss Wave`; **↩ Show Tree** back.
 11. Click **1.0.6 Dance Break**; drag **Truss Wave** onto the
     **TrussW-RGB** row: a wave of blue across the boxes.
 
     ![The dance break](../../images/lesson-2-4/rig-dance-break.png)
 
-12. Click **↩ Back**. **File ▸ Save As** → `Lesson2-4-yourname.qlcc`.
+12. **↩ Show Tree** until the cue's page is back. **File ▸ Save As** →
+    `Lesson2-4-yourname.qlcc`.
 
 An effect comes in with its cue, so a sudden sparkle never jumps out of a slow build: over the cue's fade in it grows from nothing to its full movement, and over the fade out of the cue that ends it, it dies away. To change that, use **⋯ → Fade In / Out** on the effect's row.
 
 The sparkle runs as long as the cue plays (**Runs: Loop** in the Look Editor). Once and N times stop it after that many runs. A wave such as Breathe runs whole breaths: on **Once** it rises, falls and stops on its floor, and its **Length** is that one breath.
 
-**Stuck?** The search finds nothing: clear the box first. No *Its own
-colour*: use the ⋯ on the **Dimmer effect** row. Not twinkling: drop it
-on the **Steps** row, not the dashed box.
+**Stuck?** The search finds nothing: clear the box first. Nothing twinkles
+in the designer: **Try on** has no lights picked. No *Its own colour*: use
+the ⋯ on the **Dimmer effect** row. Not twinkling in the cue: drop it on
+the **Steps** row, not the dashed box.
 
 ## Exit ticket
 

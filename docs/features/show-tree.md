@@ -1,4 +1,4 @@
-# Show Tree
+# Show Tree: cue lists, cues and hits
 
 The Show Tree tab (**⇧⌘4** in the qlcconsole view; Build is a tab of the Everything view) is where you write a show
 as cues. Everything is in one tree:
@@ -208,14 +208,21 @@ the tree and the Workbench follows it.
     **⋯**, Release, Make reusable, a line aim's strip;
   - a value: its palette in the **Look Editor**, at full height. It says
     whether the palette is shared (changing it changes every cue that uses
-    it) or a one-off of this cue.
+    it) or a one-off of this cue;
+  - an **effect**: the **effect designer**, on that layer's lights, with
+    the browser, the effect's settings and its own colour and dimmer --
+    **In Context** / **Solo**, then **Keep on This Layer** (a one-off) or
+    **Save in This Show…** (a palette for the whole show). ↩ comes back to
+    the layer's page, asking first if nothing has been kept
+    ([The effect designer](effects.md#the-effect-designer)).
 - **Changing things.** Drop palettes, groups and fixtures from the Library
   onto a layer row (below the rows: onto the cue), exactly as onto the tree.
   Right-click a value for the tree's menu (set, clear, off, Level…);
   **⌫** on a value clears it, so it inherits again. Right-click a layer for
   Solo, Release, Remove. **+ Scene** plays scenes (or any function) from
-  the show as layers; **+ Effect ▾** → **EFX** or **RGB Matrix** makes a
-  new one on the selected layer's fixtures. **▲ ▼** and **Remove** work on the cue's own
+  the show as layers; **+ Effect ▾** → **Effect Palette…** designs the
+  selected layer's effect in the pane, beside the effects it already has,
+  and **EFX** or **RGB Matrix** makes a new one on that layer's fixtures. **▲ ▼** and **Remove** work on the cue's own
   layers.
 - **Carried-in rows are read-only.** They aren't removed, moved or
   cleared here: they belong to the cue they come from. Setting a value on
@@ -2027,7 +2034,9 @@ A layer plays one effect of each kind together — say a **Position** effect
 (a ballyhoo) and a **Dimmer** effect (a breathe) on the same movers:
 the movement keeps its pan and tilt, the breathe scales the level. On the
 layer's **Effect** row, **⋯ ▸ Set to** adds any effect palette beside the
-others, and **Design a New Effect…** designs one there; each kind gets
+others, and **Design a New Effect…** designs one there — in the Workbench
+docked in place of the page, on that layer's lights, **↩ Show Tree** back;
+each kind gets
 its own row (*Position effect*, *Dimmer effect*…). Another of the same
 kind replaces that row's. See [Stack a movement and an intensity
 effect](effects.md#stack-a-movement-and-an-intensity-effect).
@@ -2298,7 +2307,11 @@ operation is one undo step on the tab's [Undo](#undo).
   folder renamed or deleted.
 - **Move** palettes by dragging them onto a folder (the **Palettes**
   heading itself is *no folder*), or right-click → **Move to Folder ▸**.
-- **Edit Palette** (the Look Editor), **Duplicate**, **Used By** (every cue and
+- **+ Palette ▸ Effect** opens the **effect designer** on the bench
+  (pick it, watch it on the lights, **Save in This Show…** names it);
+  every other type makes a palette to set in the Look Editor.
+- **Edit Palette** (the Look Editor) — on an effect palette, **Edit
+  Effect** (the designer) —, **Duplicate**, **Used By** (every cue and
   look by number and layer, scenes, effect slots, and the VC buttons that
   fire them; click a cue or look to go there).
 - **Delete** (⌫, or right-click → **Delete Palette…**) asks first and names everything
@@ -2318,9 +2331,11 @@ operation is one undo step on the tab's [Undo](#undo).
   really that old layout changes: a folder you made that happens to be
   called like a type (*Color* holding levels) or *Colour* stays as it is.
   Saved, every path says it is the new kind, and is never changed again.
-- **Still in Build** (a tab of the Everything view): designing effects
-  (the browser, presets, WLED), `.qxfx` import and export, Bundles, and
-  capturing.
+- **Still in Build** (a tab of the Everything view): Bundles, and
+  capturing a scene into palettes from there. Effects are **not**: the
+  designer, the browser, presets, WLED and `.qxfx` import and export are
+  here too, in the docked Workbench
+  ([The effect designer](effects.md#the-effect-designer)).
 
 ## Editing the tree
 

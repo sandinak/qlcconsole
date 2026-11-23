@@ -958,6 +958,28 @@ public:
      *  selected: where Build ▸ Effects pointed (App::showEffects()). False:
      *  the show has none. */
     bool showLibraryEffects();
+    /** Board Q263: design the effect of layer @a layerId of cue @a cueId
+     *  (a carried-in layer: @a target names it) in the docked Workbench's
+     *  editor pane -- on that layer's fixtures, In Context / Solo, Keep on
+     *  This Layer / Save in This Show, ↩ Show Tree. @a key: the Effect row
+     *  it was asked from ("Effect.Color"), empty for a new effect beside
+     *  the layer's. There is no modal designer any more. */
+    bool designEffectOnLayer(quint32 cueId, quint32 layerId, const ShowTree::Target &target,
+                             const QString &key = QString());
+    /** Board Q264: design effect palette @a paletteId (invalid: a new
+     *  effect) in the docked Workbench's editor pane, on the bench -- the
+     *  Library's + Palette ▸ Effect and Edit Effect. Try on: the selected
+     *  layer's groups, else the selected cue's layers', else the ones the
+     *  bench remembers. */
+    bool designEffectPalette(quint32 paletteId);
+    /** The groups a new effect plays on first (designEffectPalette()). */
+    QList<quint32> effectTryOnGroups() const;
+private:
+    /** A designer in the docked pane: what it keeps shows in the Library at
+     *  once, and a new palette's name is opened to type there (as Build ▸
+     *  Effects does) when @a nameNewOnes. */
+    void followDesignerIntoTheLibrary(class EffectDesigner *designer, bool nameNewOnes);
+public:
     /** ↩: the page back, the Workbench handed back, the cue (and the layer
      *  the Workbench had selected) selected in the tree. */
     bool closeWorkbench();
@@ -1422,6 +1444,9 @@ private:
     bool m_libRenaming = false;
     quint32 m_libraryClip = 0xFFFFFFFF;     //!< Q215: the reusable cue copied in the Library
     QTreeWidgetItem *m_libRenameItem = nullptr;
+    /** A palette the designer just saved: its name is opened to type after
+     *  the next reloadLibrary(), whichever one comes last (board Q264). */
+    quint32 m_libRenameAfterReload = 0xFFFFFFFF;
     void slotLibraryItemRenamed(QTreeWidgetItem *item, int column);
     /** The Look Editor's Used by line for @a paletteId. */
     void updateUsedBy(quint32 paletteId);

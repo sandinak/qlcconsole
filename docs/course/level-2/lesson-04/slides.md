@@ -36,8 +36,9 @@ teacher says. It can be turned into a deck as it is.*
 
 ## 5. An effect palette
 
-- + Palette → Effect, in the song's folder.
-- The browser: search, click, **Done**.
+- + Palette → Effect, in the song's folder: the **effect designer**.
+- **Try on** the lights, then the browser: search, click — it plays at once.
+- **Save in This Show…** keeps it; type its name in the Library.
 - Picture: `effect-picker.png`.
 - Origins: Built-in · Mine · This show; "based on"; Runs: Loop.
 

@@ -70,9 +70,36 @@ private slots:
     void anotherKindGoesBesideTheLayersEffect();
     /** The effect's own colour goes into the look, after the effect. */
     void theEffectsOwnColourIsKept();
-    /** The Show Tree opens it: Design effect… in a layer's right-click
-     *  menu and in its Effect row's ⋯ menu, and what is kept lands there. */
+    /** The Show Tree opens it: Design Effect… in a layer's right-click
+     *  menu and in its Effect row's ⋯ menu open it in the DOCKED
+     *  WORKBENCH's editor pane (board Q263: no modal window), on that
+     *  layer's fixtures, and what is kept lands there. */
     void theShowTreeOpensItOnALayer();
+    /** Board Q263: + Effect ▾ → Effect Palette… on a cue layer designs
+     *  THAT layer's effect in the pane -- what its tooltip always said --
+     *  with the cue still loaded behind it, and what is kept lands there. */
+    void theAddEffectBarDesignsOnTheSelectedLayer();
+    /** Board Q263: a draft nobody kept is never dropped in silence --
+     *  clicking another row asks, and Keep designing puts the selection
+     *  back. */
+    void leavingADesignerAsksFirst();
+    /** Board Q264: the Library's + Palette ▸ Effect and Edit Effect open
+     *  the designer (the bench, on the cue's groups; the palette it starts
+     *  from); every other palette type stays the Look Editor's. */
+    void theLibrarysEffectDoorsOpenTheDesigner();
+    /** The designer in the docked pane fits the product's smallest window
+     *  (1024x640): opening it on a cue layer's Effect row, and on the
+     *  bench from the Library, leaves the window no wider than the page
+     *  itself needs -- and no control in it is cut mid-word. */
+    void theDesignerFitsTheSmallestWindow();
+    void theDesignerControlsAreWhollyVisible_data();
+    void theDesignerControlsAreWhollyVisible();
+    /** Pictures for the UX review (QLC_SHOT_DIR), at three window sizes:
+     *  a cue's layer in the docked Workbench, its Effect row (the designer
+     *  -- the Look Editor before board Q263), and the Library's
+     *  + Palette ▸ Effect. Driven through calls that exist either side of
+     *  the change, so the same test takes the before and the after. */
+    void designerShots();
     /** Q77: no Save as preset -- a palette is the effect kept, Export…
      *  carries it to another show. */
     void thereIsNoSaveAsPreset();

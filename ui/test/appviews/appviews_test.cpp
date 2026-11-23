@@ -476,6 +476,54 @@ void AppViews_Test::theBuildTabWearsAHardHat()
     }
 }
 
+void AppViews_Test::theShowTreeSaysItHoldsCuesAndHits()
+{
+    /* "Show Tree" names the widget's shape, not the job: a newcomer looks
+       for cues. The name stays (every alternative collides with a QLC+
+       object this fork keeps first-class) and the words are added where
+       they are looked for. */
+    const QString aside = QStringLiteral("cue lists, cues and hits");
+    QTabWidget *tabs = m_app->m_tab;
+    int tree = -1, other = -1;
+    for (int i = 0; i < tabs->count(); ++i)
+    {
+        if (tabs->tabBar()->tabData(i).toString() == QStringLiteral("Show Tree"))
+            tree = i;
+        else if (other < 0)
+            other = i;
+    }
+    QVERIFY(tree >= 0);
+
+    // 1. The tab's tooltip: its name in full, and what is in it.
+    const QString tip = tabs->tabToolTip(tree);
+    QVERIFY2(tip.startsWith(QStringLiteral("Show Tree")), qPrintable(tip));
+    QVERIFY2(tip.contains(aside), qPrintable(tip));
+    // No other tab grows one: a name that says the job keeps its own tooltip.
+    QVERIFY(other >= 0);
+    QCOMPARE(tabs->tabToolTip(other),
+             m_app->tabDisplayLabel(tabs->tabBar()->tabData(other).toString()));
+
+    // 2. The Window menu's entry says it too (no new item: the same jump).
+    m_app->updateWindowMenu();
+    QAction *jump = nullptr;
+    foreach (QAction *a, m_app->m_windowJumps)
+        if (a->data().toString() == QStringLiteral("Show Tree"))
+            jump = a;
+    QVERIFY(jump != nullptr);
+    QVERIFY2(jump->text().startsWith(QStringLiteral("Show Tree")), qPrintable(jump->text()));
+    QVERIFY2(jump->text().contains(aside), qPrintable(jump->text()));
+
+    // 3. F1's title for the tab: the help's topic list reads the guide's
+    // first heading, so that is where the words go.
+    QString title;
+    const QList<QPair<QString, QString> > topics = HelpBrowser::topics();
+    for (const QPair<QString, QString> &t : topics)
+        if (t.first == QStringLiteral("show-tree.md"))
+            title = t.second;
+    QVERIFY2(title.startsWith(QStringLiteral("Show Tree")), qPrintable(title));
+    QVERIFY2(title.contains(aside), qPrintable(title));
+}
+
 void AppViews_Test::windowFunctionsOpensTheFunctionsTab()
 {
     QTabWidget *tabs = m_app->m_tab;
@@ -3228,7 +3276,7 @@ void AppViews_Test::windowShortcutsFollowTheView()
 {
     QCOMPARE(m_app->workspaceView(), App::ConsoleView);
     QCOMPARE(windowJumpsAsShown(m_app),
-             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree 4",
+             QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Show Tree \u2014 cue lists, cues and hits 4",
                            "Timeline 5", "Virtual Console 6", "Run 7",
                            "|", "Functions", "Build", "Simple Desk D" }));
 
@@ -3236,7 +3284,8 @@ void AppViews_Test::windowShortcutsFollowTheView()
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Fixtures 1", "Functions 2", "Shows 3", "Virtual Console 4",
                            "Simple Desk 5", "Inputs/Outputs 6",
-                           "|", "Lighting Studio", "Build", "Show Tree", "Run" }));
+                           "|", "Lighting Studio", "Build",
+                           "Show Tree \u2014 cue lists, cues and hits", "Run" }));
     // ⇧⌘1 is the first tab on screen, and it goes there.
     QAction *first = nullptr;
     foreach (QAction *a, m_app->m_windowJumps)
@@ -3250,7 +3299,8 @@ void AppViews_Test::windowShortcutsFollowTheView()
     m_app->setWorkspaceView(App::EverythingView);
     QCOMPARE(windowJumpsAsShown(m_app),
              QStringList({ "Connections 1", "Fixtures 2", "Lighting Studio 3", "Functions 4",
-                           "Build 5", "Show Tree 6", "Timeline 7", "Virtual Console 8",
+                           "Build 5", "Show Tree \u2014 cue lists, cues and hits 6",
+                           "Timeline 7", "Virtual Console 8",
                            "Simple Desk 9", "Run 0" }));
 
     // A tab in a window of its own keeps its number.

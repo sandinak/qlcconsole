@@ -12,6 +12,45 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **The docked effect designer shows all of its controls at 1024x640 and up**:
+  while it designs a layer's effect it takes the width the layers column
+  was holding (the split you set comes back when you leave it), and
+  **In Context / Solo**, **Show All Effects** and the effect's own
+  Colour / Dimmer sit on lines of their own, so Solo is no longer a
+  sliver, nothing is hidden to the right, and every parameter's number box
+  shows beside its slider.
+- **The Speed choice and the effect's own Colour / Dimmer are no longer cut
+  mid-word** (*"As the look (own speed unl"*, *"the laye"*): Speed reads
+  **As the look** with the whole sentence on hover, and the Its own combos
+  keep a readable width whatever room the pane has.
+- **A crash when the Show Tree closed with an effect designer open in the
+  Workbench docked there**: the designer drops its hidden preview scene as
+  it goes, and the show's "a function was removed" reached the tree's
+  banner with its widgets already freed.
+
+### Changed
+
+- **The Show Tree says what is in it** (board Q266): its tab tooltip, its
+  **Window** menu entry and its help title now read *cue lists, cues and
+  hits*. The tab keeps its name, and no menu item was added.
+- **One effect designer, where you already are** (board Q263 and Q264).
+  A cue layer's effect is designed in the **Workbench docked in the Show
+  Tree** — on that layer's lights, with the layer's colour and dimmer
+  under it, **In Context / Solo** (the cue's own Solo, not a second one),
+  **Keep on This Layer** or **Save in This Show…**, and **↩ Show Tree**
+  back. The modal "Design effect" window is gone. Opened from the layer's
+  right-click **Design Effect…**, its Effect row's **⋯** or that row's
+  **✎**; **+ Effect ▾ → Effect Palette…** on a cue now designs the
+  selected layer's effect instead of unloading the cue. In the Library,
+  **+ Palette ▸ Effect** opens the designer on the bench — pick it, watch
+  it on the lights, then **Save in This Show…** names and files it in the
+  folder you are standing in, so nothing empty is ever made — and
+  **Edit Effect** opens the designer on the palette it starts from; every
+  other palette type still opens in the Look Editor. A design nobody has
+  kept is never dropped in silence: leaving, clicking another row or
+  another cue asks first. Course lesson 2.4 teaches the new path.
 ### Changed
 
 - **The venue is asked about only when it isn't clear** (board Q294): never
@@ -67,6 +106,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   path -- the menu text as shown, the entry's place in its menu, and that it
   opens the right dialog -- so a future rename or move breaks a test instead
   of going unnoticed.
+
+### Fixed
+
+- **Build: the Workbench's add-bar row was cut off after Own Copy at
+  1024x640.** The navigator's share of the split left the row's buttons (+
+  Scene, + Effect, the layer arrows, Remove, Own Copy, Open) narrower than
+  the row needed, so Open needed a scroll no obvious scrollbar invited; the
+  Build now hands the layer column the row's own width out of the editor
+  pane, so every button is in view at rest. (The Show Tree's docked
+  Workbench is unchanged.)
 
 ## [0.5.2] - 2026-11-22
 
