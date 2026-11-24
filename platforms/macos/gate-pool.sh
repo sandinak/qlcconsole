@@ -377,11 +377,33 @@ else
 fi || fail 99 "could not start"
 # Detached (nohup: an ssh drop doesn't end it) in its own process group
 # (set -m), so Ctrl-C here stops all of it and nothing else.
+# A host named in GATE_TMUX_HOSTS (space-separated) ends every process an
+# ssh session left behind when it closes -- nohup, screen and launchctl
+# submit alike (a managed laptop, brm2, 2026-11-24) -- so the gate runs in a
+# tmux session there instead: `tmux attach -t gate-<id>` on that host
+# watches it. Its pid file is the session's shell, a process-group leader,
+# so stop() and the reaper work the same.
+if [[ " ${GATE_TMUX_HOSTS:-} " == *" $NAME "* ]]; then
+    printf '%s\n' 'echo $$ > "$HOME/gates/'"$ID"'.pid"; rm -f "$0"' \
+        'exec bash "$HOME/gates/'"$ID"'.sh" > /dev/null 2>&1 < /dev/null' > "$PROBES/start.sh"
+    if [ "${DEST[H]}" = local ]; then
+        cp "$PROBES/start.sh" "$HOME/gates/$ID.start"
+    else
+        ssh "${SSHOPT[@]}" "${DEST[H]}" "cat > \"\$HOME/gates/$ID.start\"" < "$PROBES/start.sh"
+    fi || fail 99 "could not start"
+    on $H <<EOF || fail 99 "could not start"
+export PATH="$XP\$PATH"
+tmux new-session -d -s "gate-$ID" "bash \$HOME/gates/$ID.start" || exit 1
+for i in 1 2 3 4 5 6 7 8 9 10; do [ -s "\$HOME/gates/$ID.pid" ] && exit 0; sleep 1; done
+exit 1
+EOF
+else
 on $H <<EOF || fail 99 "could not start"
 set -m
 nohup bash "\$HOME/gates/$ID.sh" > /dev/null 2>&1 < /dev/null &
 echo \$! > "\$HOME/gates/$ID.pid"
 EOF
+fi
 
 stop() {
     trap - INT TERM
