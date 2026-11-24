@@ -28,58 +28,40 @@ the same control, so give each control one job.
 
 An external fader that is not where the control is does nothing until you
 move it to, or through, the current value; then it follows. This stops a
-fader that was left at the bottom from dropping the Grand Master to zero the
-moment you touch it. It holds for the **Grand Master**, a **speed master's
-Rate** fader, a **channel group's** fader and a **Virtual Console slider**
-with **Catch values** on (every new slider or knob has it on, however it is
-made: added, from a wizard, an Eos import or a copy of one that has it; one
-in a saved show keeps its setting). An encoder (an input in **Encoder** or
-**Relative** mode) has no position, so it is never made to wait.
+fader that was left at the bottom from dropping a control to zero the
+moment you touch it. It holds for a **speed master's Rate** fader, a
+**channel group's** fader and a **Virtual Console slider** with **Catch
+values** on, in Playback, Level or Speed master mode (every new slider or
+knob has it on, however it is made: added, from a wizard, an Eos import or
+a copy of one that has it; one in a saved show keeps its setting). An
+encoder (an input in **Encoder** or **Relative** mode) has no position, so
+it is never made to wait.
 
-A fader that is waiting says so where you look: the footer's **GM** chip
-reads **GM ▲** (or ▼) in amber, the way to move the fader, and a speed
-master's footer button gets the same arrow. Their tooltips, and a slider's,
-say it in full: *"Grand Master fader: move it to 75% to take over"*. The
-percent is where on the fader's travel: a speed master's Rate fader has
-100% rate at its middle, so it reads *"move it to 50%"*. It clears when the
-fader gets there (or when you move the control on screen to where the fader
-is).
+**Masters follow at once.** The **Grand Master** (footer and Simple Desk)
+and a Virtual Console slider set to **Grand Master**, **Submaster** or
+**Group master** do not wait: they follow their fader, up and down, from the
+first value, whatever Catch values says. They stay that way until their
+surface type declares them.
+
+A fader that is waiting says so in the tooltip of the control, and a speed
+master's footer button gets an arrow, the way to move the fader:
+*"Speed 1 fader: move it to 50% to take over"*. The percent is where on the
+fader's travel: a speed master's Rate fader has 100% rate at its middle, so
+it reads *"move it to 50%"*. It clears when the fader gets there (or when
+you move the control on screen to where the fader is).
 
 Right after the show opens nobody knows where a fader is. A fader that is
 already at the control is taken at once; one anywhere else waits, whichever
 way you move it, so a control never jumps to a fader that was somewhere
-else (a master's one exception follows).
-
-A **master** has one exception: taking it **down** never waits. Pull the
-fader down from below the master, by more than a nudge from where it was
-left, and the master follows at once, wherever the fader was and whoever
-raised the master (the screen slider, the footer chip, the pad). A fader
-left resting is not pulled by its own jitter. Right after the show opens,
-a fader thrown or tapped to the bottom (a touch fader in jump mode, a
-backup desk's blackout) takes the master out at once; a fader part way
-still waits. A motor fader sent down because the master was dipped or
-dragged on screen is not a pull, even for the moves it makes just after the
-master is back up; a pull below every value it was sent is. Throwing it
-down in an emergency takes the stage out. Raising it still waits for the
-pick-up. This holds for the **Grand Master** and for a Virtual Console
-slider set to **Grand Master**, **Submaster** or **Group master**; a speed
-master, a playback or a level slider waits both ways.
+else. A resting fader's jitter is no move.
 
 A Virtual Console slider with **Inverted appearance** reads its fader
 upside down, and so does its pick-up: a slider at 0 is picked up by a
 fader at the top. A level slider with limits is picked up where its value
 sits on the fader's travel, and its hint says that place.
 
-Giving a control another fader (Learn again, a new Grand Master input in
-the Virtual Console's properties) starts over: the new fader waits until it
-reaches the control.
-
-A **motorised** fader is treated like any other, because a controller's
-feedback line does not say whether its faders have motors (most only light
-pads). When a fader starts to wait, the control's value is sent to it once
-on the universe's **Feedback** line (Connections): a motor fader drives
-itself there and is picked up when it arrives; a plain one ignores it. A
-motor fader is also sent the new value when the control is moved on screen.
+Giving a control another fader (Learn again) starts over: the new fader
+waits until it reaches the control.
 
 ## The rules for a surface
 

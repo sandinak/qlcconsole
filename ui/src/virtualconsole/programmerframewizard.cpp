@@ -472,7 +472,6 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
         else if (e.kind == ProgrammerMap::GrandMasterSlider)
         {
             VCSlider* slider = new VCSlider(frame, doc);
-            slider->setCatchValues(true);   // pick-up on for a new fader (Q299)
             slider->setCaption(ProgrammerFrameWizard::tr("Master"));
             slider->setSliderMode(VCSlider::GrandMaster);
             const int natH = (e.style == VCSlider::WKnob) ? KNOB_H : SLIDER_H;

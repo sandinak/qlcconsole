@@ -48,15 +48,10 @@
 #include "efxfixture.h"
 #undef protected
 
-#include "grandmasterslider.h"
 #include "qlcinputsource.h"
 #include "consolechannel.h"
 #include "vcframe.h"
 #include "channelsgroup.h"
-#include "qlcfile.h"
-#include "ioplugincache.h"
-#include "iopluginstub.h"
-#include <QDir>
 #include <QLabel>
 #include "vcslider_test.h"
 
@@ -746,147 +741,6 @@ void VCSlider_Test::effectControlOnAnEfx()
 
 QTEST_MAIN(VCSlider_Test)
 
-/* Q299: the Grand Master's external fader is picked up, and the footer chip
-   (the signal) says where to move it. The Virtual Console's own GM slider
-   (VCDockArea, connected first) takes the crossing value; this one must not
-   flash a stale hint in between: exactly one hint, then one clear. */
-void VCSlider_Test::grandMasterFaderIsPickedUp()
-{
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 9);
-    GrandMasterSlider gms(nullptr, iom);
-    QSignalSpy hints(&gms, &GrandMasterSlider::pickupHintChanged);
-    iom->setGrandMasterValue(200);
-    QVERIFY(gms.pickupHint().isEmpty());
-
-    // Below the Grand Master: it does nothing, and says where to go.
-    emit iom->inputValueChanged(0, 9, 10);
-    emit iom->inputValueChanged(0, 9, 40);
-    QCOMPARE(int(iom->grandMasterValue()), 200);
-    QVERIFY2(gms.pickupHint().contains(QStringLiteral("78%")), qPrintable(gms.pickupHint()));
-    QVERIFY(gms.toolTip().contains(QStringLiteral("move it to")));
-    QCOMPARE(gms.pickupDirection(), 1);
-    // Said on the slider, not only on hover: "GM" with the way to move it
-    bool arrow = false;
-    foreach (QLabel *l, gms.findChildren<QLabel *>())
-        arrow = arrow || l->text() == GrandMasterSlider::pickupLabel(QStringLiteral("GM"), 1);
-    QVERIFY(arrow);
-    QCOMPARE(hints.count(), 1);
-
-    // Moved through it: it follows and the hint clears, with no wrong
-    // hint in between.
-    emit iom->inputValueChanged(0, 9, 210);
-    QCOMPARE(int(iom->grandMasterValue()), 210);
-    QVERIFY(gms.pickupHint().isEmpty());
-    QVERIFY(!gms.toolTip().contains(QStringLiteral("move it to")));
-    QCOMPARE(hints.count(), 2);
-    QCOMPARE(hints.last().at(0).toString(), QString());
-    QCOMPARE(gms.pickupDirection(), 0);
-
-    emit iom->inputValueChanged(0, 9, 100);
-    QCOMPARE(int(iom->grandMasterValue()), 100);
-}
-
-/* Lowering the GM never waits. After a start the fader's place is unknown:
-   thrown down from the top (an emergency fade-out), it is taken on its
-   second value; nudged up from the bottom it waits (no blackout). A fader
-   left low after the GM was raised elsewhere takes it down when pulled. */
-void VCSlider_Test::grandMasterThrownDownFollowsAtOnce()
-{
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 7);
-    GrandMasterSlider gms(nullptr, iom);
-    iom->setGrandMasterValue(255);
-
-    emit iom->inputValueChanged(0, 7, 200);     // the first value of the throw
-    emit iom->inputValueChanged(0, 7, 120);
-    QCOMPARE(int(iom->grandMasterValue()), 120);
-    emit iom->inputValueChanged(0, 7, 0);
-    QCOMPARE(int(iom->grandMasterValue()), 0);
-
-    // Raised on screen (or the footer chip, or the pad) while the fader
-    // sits at 30%: pulling the fader to 0 lowers the GM at once.
-    emit iom->inputValueChanged(0, 7, 77);
-    QCOMPARE(int(iom->grandMasterValue()), 77);
-    iom->setGrandMasterValue(255);
-    emit iom->inputValueChanged(0, 7, 60);
-    QCOMPARE(int(iom->grandMasterValue()), 60);
-    emit iom->inputValueChanged(0, 7, 0);
-    QCOMPARE(int(iom->grandMasterValue()), 0);
-
-    // Raising it waits: the fader at 80%, the GM lowered to 50% elsewhere,
-    // and the fader nudged up.
-    iom->setGrandMasterValue(204);
-    emit iom->inputValueChanged(0, 7, 204);
-    iom->setGrandMasterValue(128);
-    emit iom->inputValueChanged(0, 7, 206);
-    emit iom->inputValueChanged(0, 7, 210);
-    emit iom->inputValueChanged(0, 7, 214);
-    QCOMPARE(int(iom->grandMasterValue()), 128);
-
-    // Another fader learnt for the GM: where the old one was is no guide.
-    // The new one sits part way and is nudged up: the GM stays.
-    iom->setGrandMasterValue(255);
-    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 8);
-    emit iom->inputValueChanged(0, 8, 30);
-    emit iom->inputValueChanged(0, 8, 33);
-    emit iom->inputValueChanged(0, 8, 31);
-    QCOMPARE(int(iom->grandMasterValue()), 255);
-    QVERIFY(!gms.pickupHint().isEmpty());
-}
-
-namespace
-{
-qint64 s_gmNow = 0;
-}
-
-/* Review round 5: a motor fader sent down because the GM was dipped on
-   screen is no pull, even for the reports it makes after the GM is back
-   (feedback lags); and a fader tapped to 0 right after a start (no position
-   known yet) takes the stage out: lowering never waits. */
-void VCSlider_Test::grandMasterMotorDipIsNoPullAndATapToZeroIsTaken()
-{
-    FaderPickup::setClockForTest([]() { return s_gmNow; });
-    s_gmNow = 100000;
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 6);
-    GrandMasterSlider gms(nullptr, iom);
-    iom->setGrandMasterValue(255);
-    emit iom->inputValueChanged(0, 6, 255);     // the motor fader follows
-
-    iom->setGrandMasterValue(0);                // dipped on screen: sent 0
-    s_gmNow += 40;
-    emit iom->inputValueChanged(0, 6, 240);
-    emit iom->inputValueChanged(0, 6, 150);
-    iom->setGrandMasterValue(255);              // back: sent 255
-    s_gmNow += 40;
-    emit iom->inputValueChanged(0, 6, 120);
-    emit iom->inputValueChanged(0, 6, 100);     // still falling: the motor
-    QCOMPARE(int(iom->grandMasterValue()), 255);
-    emit iom->inputValueChanged(0, 6, 254);     // arrived
-    QCOMPARE(int(iom->grandMasterValue()), 254);
-
-    // Dragged on screen 255 -> 40 -> 128: the lagging motor falls through
-    // the GM; it stays at 128.
-    iom->setGrandMasterValue(40);
-    emit iom->inputValueChanged(0, 6, 200);
-    iom->setGrandMasterValue(128);
-    emit iom->inputValueChanged(0, 6, 50);
-    emit iom->inputValueChanged(0, 6, 45);
-    QCOMPARE(int(iom->grandMasterValue()), 128);
-
-    // A new GM input (as after a start: its place unknown), the GM at
-    // 100%: one 0 (a jump-mode touch fader, a backup desk's blackout)
-    // takes it out.
-    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 5);
-    iom->setGrandMasterValue(255);
-    s_gmNow += FaderPickup::TravelMs + 1;
-    emit iom->inputValueChanged(0, 5, 0);
-    QCOMPARE(int(iom->grandMasterValue()), 0);
-    QVERIFY(gms.pickupHint().isEmpty());
-    FaderPickup::setClockForTest(nullptr);
-}
-
 /* An encoder (Encoder / Relative mode) has no position: its value is the
    slider's plus a step, so it is never picked up, even after a reset (a
    tab switch) with a step bigger than the catch threshold. */
@@ -1010,98 +864,72 @@ void VCSlider_Test::sliderCatchValuesAreUnchanged()
     QCOMPARE(slider.sliderValue(), 128);
 }
 
-/* Review round 3, finding 1: a fader that followed the GM down and was left
-   there is not "pulled" by its jitter once the GM is raised elsewhere. The
-   downward run is measured from where the fader stopped following. */
-void VCSlider_Test::grandMasterLeftLowIsNotDroppedByJitter()
-{
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 6);
-    GrandMasterSlider gms(nullptr, iom);
-    iom->setGrandMasterValue(150);
-
-    // The fader is at the GM and follows it down to 39%
-    emit iom->inputValueChanged(0, 6, 150);
-    emit iom->inputValueChanged(0, 6, 130);
-    emit iom->inputValueChanged(0, 6, 100);
-    QCOMPARE(int(iom->grandMasterValue()), 100);
-
-    // Raised to full on screen; the parked fader jitters by one
-    iom->setGrandMasterValue(255);
-    emit iom->inputValueChanged(0, 6, 99);
-    QCOMPARE(int(iom->grandMasterValue()), 255);
-    emit iom->inputValueChanged(0, 6, 100);
-    emit iom->inputValueChanged(0, 6, 98);
-    QCOMPARE(int(iom->grandMasterValue()), 255);
-    QVERIFY(!gms.pickupHint().isEmpty());
-
-    // A real pull down from there still lowers it at once
-    emit iom->inputValueChanged(0, 6, 80);
-    QCOMPARE(int(iom->grandMasterValue()), 80);
-}
-
-/* Review round 3, finding 2: lowering a master never waits, on a Virtual
-   Console slider too (new sliders catch values). Grand, sub and group
-   masters lower at once; a speed master, a playback or a level slider do
-   not (pulling those down is not the safe way). */
-void VCSlider_Test::masterSlidersLowerAtOnce()
+/* Q313: a master never waits. The Grand Master, a submaster and a group
+   master slider follow their fader at once, both ways, even with catch
+   values on (new sliders have them). */
+void VCSlider_Test::masterSlidersFollowAtOnce()
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
     QWidget w;
     VCSlider slider(&w, m_doc);
     slider.setCatchValues(true);
-    slider.setSliderMode(VCSlider::GrandMaster);
     slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 22)),
                           VCSlider::sliderInputSourceId);
     m_doc->setMode(Doc::Operate);
-    iom->setGrandMasterValue(255);
 
-    // The fader parked at 60%, then pulled to 0: the GM goes down
-    emit iom->inputValueChanged(0, 22, 153);
-    QCOMPARE(int(iom->grandMasterValue()), 255);
-    emit iom->inputValueChanged(0, 22, 120);
-    emit iom->inputValueChanged(0, 22, 60);
-    emit iom->inputValueChanged(0, 22, 0);
-    QCOMPARE(int(iom->grandMasterValue()), 0);
+    const VCSlider::SliderMode modes[] = { VCSlider::GrandMaster, VCSlider::Submaster,
+                                           VCSlider::GroupMaster };
+    for (VCSlider::SliderMode mode : modes)
+    {
+        slider.setSliderMode(mode);
+        slider.setCatchValues(true);
+        slider.setSliderValue(255, false);
+        slider.m_pickup.reset();
+        // The first value is far from the master: it follows (up, down, up)
+        emit iom->inputValueChanged(0, 22, 100);
+        QCOMPARE(slider.sliderValue(), 100);
+        emit iom->inputValueChanged(0, 22, 220);
+        QCOMPARE(slider.sliderValue(), 220);
+        emit iom->inputValueChanged(0, 22, 5);
+        QCOMPARE(slider.sliderValue(), 5);
+        QVERIFY(slider.pickupHint().isEmpty());
+        if (mode == VCSlider::GrandMaster)
+            QCOMPARE(int(iom->grandMasterValue()), 5);
+    }
 
-    // Raising it still waits
-    iom->setGrandMasterValue(200);
+    // A level fader with the same catch values still waits
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
     emit iom->inputValueChanged(0, 22, 10);
     emit iom->inputValueChanged(0, 22, 40);
-    QCOMPARE(int(iom->grandMasterValue()), 200);
-
-    QVERIFY(slider.m_pickup.lowerAtOnce());
-    slider.setSliderMode(VCSlider::Submaster);
-    QVERIFY(slider.m_pickup.lowerAtOnce());
-    slider.setSliderMode(VCSlider::GroupMaster);
-    QVERIFY(slider.m_pickup.lowerAtOnce());
-    slider.setSliderMode(VCSlider::SpeedMaster);
-    QVERIFY(!slider.m_pickup.lowerAtOnce());
-    slider.setSliderMode(VCSlider::Playback);
-    QVERIFY(!slider.m_pickup.lowerAtOnce());
-    slider.setSliderMode(VCSlider::Level);
-    QVERIFY(!slider.m_pickup.lowerAtOnce());
+    QCOMPARE(slider.sliderValue(), 200);
     m_doc->setMode(Doc::Design);
+}
 
-    // A loaded Grand Master slider lowers at once too
-    slider.setSliderMode(VCSlider::GrandMaster);
-    QBuffer buffer;
-    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
-    QXmlStreamWriter xw(&buffer);
-    xw.setAutoFormatting(true);
-    xw.writeStartDocument();
-    QVERIFY(slider.saveXML(&xw));
-    xw.writeEndDocument();
-    xw.setDevice(NULL);
-    buffer.close();
-    QVERIFY(buffer.buffer().contains(">GrandMaster</SliderMode>"));
-    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
-    QXmlStreamReader xr(&buffer);
-    xr.readNextStartElement();
-    VCSlider loaded(&w, m_doc);
-    QVERIFY(loaded.loadXML(xr));
-    QCOMPARE(loaded.sliderMode(), VCSlider::GrandMaster);
-    QVERIFY(loaded.m_pickup.lowerAtOnce());
+/* A parked fader's jitter never moves a control that waits: a level fader
+   left below, then above, the slider and nudged by a few steps. */
+void VCSlider_Test::parkedFaderJitterNeverJumpsANonMaster()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 26)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(150, false);
+    for (int v : { 30, 33, 31, 29, 34, 30 })
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 26, v);
+    QCOMPARE(slider.sliderValue(), 150);
+    QVERIFY(!slider.pickupHint().isEmpty());
+    slider.setSliderValue(60, false);
+    slider.m_pickup.reset();
+    for (int v : { 200, 197, 203, 199, 202 })
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 26, v);
+    QCOMPARE(slider.sliderValue(), 60);
+    m_doc->setMode(Doc::Design);
 }
 
 /* Review round 3, finding 3: an inverted slider reads its fader upside
@@ -1171,29 +999,6 @@ void VCSlider_Test::limitedSliderIsPickedUpOnItsOwnScale()
     m_doc->setMode(Doc::Design);
 }
 
-namespace
-{
-/* The I/O plugin stub patched as universe 0's feedback line: what is sent
-   to the device lands in its m_feedback. */
-IOPluginStub *patchFeedbackStub(Doc *doc)
-{
-    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
-    dir.setFilter(QDir::Files);
-    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
-    doc->ioPluginCache()->load(dir);
-    IOPluginStub *stub = nullptr;
-    for (QLCIOPlugin *pl : doc->ioPluginCache()->plugins())
-        if ((stub = dynamic_cast<IOPluginStub *>(pl)) != nullptr)
-            break;
-    if (stub == nullptr)
-        return nullptr;
-    if (!doc->inputOutputMap()->setOutputPatch(0, stub->name(), QString(), 0, true))
-        return nullptr;
-    stub->m_feedback.clear();
-    return stub;
-}
-}
-
 /* Review round 4, findings 2, 3 and 5: pick-up is on for every new
    absolute fader, however it is made (a knob, a copy, the Eos import is in
    its own test), and a copy keeps it, a master's lower-at-once with it. */
@@ -1206,8 +1011,7 @@ void VCSlider_Test::everyNewSliderCatchesValues()
     QCOMPARE(sliders.first()->widgetStyle(), VCSlider::WKnob);
     QVERIFY(sliders.first()->catchValues());
 
-    // A Submaster copied (copy/paste, duplicate) keeps catching values and
-    // lowering at once, and saves it
+    // A Submaster copied (copy/paste, duplicate) keeps catching values and saves it
     QWidget w;
     VCSlider sub(&w, m_doc);
     sub.setSliderMode(VCSlider::Submaster);
@@ -1216,7 +1020,6 @@ void VCSlider_Test::everyNewSliderCatchesValues()
     QVERIFY(copy != nullptr);
     QVERIFY(copy->catchValues());
     QCOMPARE(copy->sliderMode(), VCSlider::Submaster);
-    QVERIFY(copy->m_pickup.lowerAtOnce());
     QBuffer buffer;
     buffer.open(QIODevice::WriteOnly | QIODevice::Text);
     QXmlStreamWriter xw(&buffer);
@@ -1232,83 +1035,4 @@ void VCSlider_Test::everyNewSliderCatchesValues()
     QVERIFY(plainCopy != nullptr);
     QVERIFY(!plainCopy->catchValues());
     delete plainCopy;
-}
-
-/* Review round 4, finding 4: when a VC slider's fader starts to wait, the
-   slider's value is sent to it once (a motor fader drives itself there);
-   its reports on the way are not taken and nothing more is sent. */
-void VCSlider_Test::aWaitingSliderSendsItsValueBack()
-{
-    IOPluginStub *stub = patchFeedbackStub(m_doc);
-    QVERIFY(stub != nullptr);
-    QVERIFY(m_doc->inputOutputMap()->canSendFeedback(0));
-
-    QWidget w;
-    VCSlider slider(&w, m_doc);
-    slider.setSliderMode(VCSlider::Level);
-    slider.setCatchValues(true);
-    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 25)),
-                          VCSlider::sliderInputSourceId);
-    m_doc->setMode(Doc::Operate);
-    slider.setSliderValue(200, false);
-    stub->m_feedback.clear();
-
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 0);
-    QCOMPARE(slider.sliderValue(), 200);
-    QCOMPARE(stub->m_feedback.size(), 1);
-    QCOMPARE(stub->m_feedback.last().first, quint32(25));
-    QCOMPARE(int(stub->m_feedback.last().second), 200);
-
-    // The motor on its way: not taken, nothing more sent
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 80);
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 150);
-    QCOMPARE(slider.sliderValue(), 200);
-    QCOMPARE(stub->m_feedback.size(), 1);
-
-    // Arrived: picked up, and it follows
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 199);
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 120);
-    QCOMPARE(slider.sliderValue(), 120);
-
-    // After a Design/Operate switch the pick-up starts over: sent again
-    m_doc->setMode(Doc::Design);
-    m_doc->setMode(Doc::Operate);
-    stub->m_feedback.clear();
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 10);
-    QCOMPARE(slider.sliderValue(), 120);
-    QCOMPARE(stub->m_feedback.size(), 1);
-    QCOMPARE(int(stub->m_feedback.last().second), 120);
-    m_doc->setMode(Doc::Design);
-}
-
-/* Review round 4, finding 4: a Simple Desk channel group moved on screen
-   sends its value to the group's fader (a motor fader follows); a value
-   that came from the fader is not sent back to it. */
-void VCSlider_Test::channelGroupMovedOnScreenMovesItsFader()
-{
-    IOPluginStub *stub = patchFeedbackStub(m_doc);
-    QVERIFY(stub != nullptr);
-
-    ChannelsGroup *grp = new ChannelsGroup(m_doc);
-    grp->setName(QStringLiteral("Wash"));
-    QVERIFY(m_doc->addChannelsGroup(grp));
-    grp->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 32)));
-
-    QWidget w;
-    ConsoleChannel cc(&w, m_doc, Fixture::invalidId(), 0, false);
-    cc.setChannelsGroup(grp->id());
-    cc.setValue(100, false);
-    stub->m_feedback.clear();
-
-    cc.setValue(180);                               // moved on screen
-    QCOMPARE(stub->m_feedback.size(), 1);
-    QCOMPARE(stub->m_feedback.last().first, quint32(32));
-    QCOMPARE(int(stub->m_feedback.last().second), 180);
-
-    // The fader at it, then moved: followed, never sent back
-    stub->m_feedback.clear();
-    emit grp->valueChanged(32, 179);
-    emit grp->valueChanged(32, 120);
-    QCOMPARE(int(cc.value()), 120);
-    QVERIFY(stub->m_feedback.isEmpty());
 }

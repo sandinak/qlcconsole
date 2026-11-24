@@ -8,7 +8,6 @@ add_executable(${module_name} WIN32 MACOSX_BUNDLE
 
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src
-    ../../../engine/test/iopluginstub
     ../../../plugins/interfaces
     ../../src
     ../../src/virtualconsole
@@ -22,7 +21,6 @@ target_link_libraries(${module_name} PRIVATE
     Qt6::Test
     Qt6::Widgets
     qlcplusengine
-    iopluginstub   # its typeinfo, for UBSan vptr on static_cast
     qlcplusui
 )
 

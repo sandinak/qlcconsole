@@ -1364,7 +1364,6 @@ private:
      *  those, always visible and adjustable regardless of active tab. */
     QSlider* m_statusGrandMasterSlider = nullptr;
     QLabel* m_statusGrandMasterValueLabel = nullptr;
-    QLabel* m_statusGrandMasterNameLabel = nullptr;   //!< "GM"; an arrow while its fader waits
     /** The GM label+slider+value's shared container — toggled as one unit
      *  by m_showFooterGM, same pattern as Load/Power below. */
     QWidget* m_statusGrandMasterBox = nullptr;

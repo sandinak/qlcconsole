@@ -204,11 +204,9 @@ private:
         quint32 inChannel[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
         uchar inLast[ControlCount] = { 0, 0, 0 };   //!< for a button's press
         FaderPickup ratePickup;     //!< the Rate fader's soft takeover
-        int fedRate = -1;           //!< the rate (0..255) last sent to it or seen from it
-        int held = 0;               //!< hold(): VC widgets driving it
+            int held = 0;               //!< hold(): VC widgets driving it
     };
 
-    void sendRateFeedback(int index, bool force);
     bool valid(int index) const { return index >= 0 && index < MaxCount; }
     double positionLocked(int index, qint64 now, double mainPos, int depth = 0) const;
     double bpmLocked(int index, double mainBpm, int depth = 0) const;

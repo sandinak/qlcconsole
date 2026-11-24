@@ -31,25 +31,6 @@
 #include "inputpatch.h"
 #include "apputil.h"
 
-namespace
-{
-/* One Grand Master, one input: every GrandMasterSlider (Simple Desk's, the
-   Virtual Console's) judges the fader with the same pick-up, so one that
-   takes a value and moves the GM does not leave another with a stale view
-   of where the fader is (which flashed a wrong hint on the footer chip).
-   Lowering the GM is always the safe way, so a pull down below it is taken
-   at once (an emergency fade-out never waits); raising it waits. */
-FaderPickup &gmPickup()
-{
-    static FaderPickup pickup = []() {
-        FaderPickup p;
-        p.setLowerAtOnce(true);
-        return p;
-    }();
-    return pickup;
-}
-}
-
 GrandMasterSlider::GrandMasterSlider(QWidget* parent, InputOutputMap *ioMap)
     : QFrame(parent)
     , m_ioMap(ioMap)
@@ -146,8 +127,6 @@ void GrandMasterSlider::slotValueChanged(int value)
 {
     // Update display value
     updateDisplayValue();
-    if (!m_pickupHint.isEmpty() || gmPickup().last() >= 0)
-        updatePickupHint();
 
     // Avoid double calls triggered by slotGrandMasterValueChanged
     int curval = m_ioMap->grandMasterValue();
@@ -184,8 +163,6 @@ void GrandMasterSlider::updateTooltip()
             break;
     }
 
-    if (!m_pickupHint.isEmpty())
-        tooltip = m_pickupHint + QStringLiteral("<br>") + tooltip;
     setToolTip(tooltip);
 }
 
@@ -213,8 +190,6 @@ void GrandMasterSlider::slotGrandMasterValueChanged(uchar value)
     m_slider->blockSignals(false);
 
     updateDisplayValue();
-    if (!m_pickupHint.isEmpty() || gmPickup().last() >= 0)
-        updatePickupHint();
 }
 
 void GrandMasterSlider::slotGrandMasterValueModeChanged(GrandMaster::ValueMode mode)
@@ -244,8 +219,6 @@ void GrandMasterSlider::sendFeedback()
                 chName = ich->name();
         }
     }
-    // A motor fader now travels to the GM: its falls on the way are no pull
-    gmPickup().noteFeedback(m_slider->value());
     if (m_slider->invertedAppearance())
         m_ioMap->sendFeedBack(universe, channel, UCHAR_MAX - m_slider->value(), chName);
     else
@@ -258,55 +231,10 @@ void GrandMasterSlider::sendFeedback()
 
 void GrandMasterSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
 {
-    const quint32 gmUniverse = VirtualConsole::instance()->properties().grandMasterInputUniverse();
-    const quint32 gmChannel = VirtualConsole::instance()->properties().grandMasterInputChannel();
-    if (universe == gmUniverse && channel == gmChannel)
+    if (universe == VirtualConsole::instance()->properties().grandMasterInputUniverse() &&
+        channel == VirtualConsole::instance()->properties().grandMasterInputChannel())
     {
-        // A fader newly set to drive the GM: where the old one was is no guide
-        gmPickup().setSource(gmUniverse, gmChannel);
-        // Pick-up: the fader does nothing until it reaches the Grand Master
-        // (FaderPickup, Q299), except a pull down, which lowers it at once. When the wait starts the GM is sent back: a
-        // motor fader drives itself there, a plain one ignores it.
-        bool sendBack = false;
-        const bool take = gmPickup().accept(value, m_slider->value(), &sendBack);
-        if (sendBack)
-            sendFeedback();
-        if (take)
-            m_slider->setValue(value);
-        updatePickupHint();
+        m_slider->setValue(value);
     }
 }
 
-int GrandMasterSlider::pickupDirection() const
-{
-    return gmPickup().direction(m_slider->value());
-}
-
-QString GrandMasterSlider::pickupHint() const
-{
-    const int cur = m_slider->value();
-    if (!gmPickup().waiting(cur))
-        return QString();
-    return FaderPickup::hintText(tr("Grand Master"), int(cur * 100.0 / UCHAR_MAX + 0.5));
-}
-
-void GrandMasterSlider::updatePickupHint()
-{
-    const QString hint = pickupHint();
-    if (hint == m_pickupHint)
-        return;
-    m_pickupHint = hint;
-    updateTooltip();
-    // Said where the eye is, not only on hover: "GM" gets the way to move
-    m_nameLabel->setText(pickupLabel(tr("GM"), pickupDirection()));
-    emit pickupHintChanged(hint);
-}
-
-QString GrandMasterSlider::pickupLabel(const QString &name, int direction)
-{
-    if (direction > 0)
-        return name + QLatin1Char(' ') + QChar(0x25B2);    // move it up
-    if (direction < 0)
-        return name + QLatin1Char(' ') + QChar(0x25BC);    // move it down
-    return name;
-}

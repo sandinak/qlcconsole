@@ -16,22 +16,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **A fader is picked up before it follows**: an external fader (MIDI,
   OSC) that is not where the control is does nothing until you move it to,
-  or through, the current value, then it follows (soft takeover). It was
-  only Virtual Console sliders that could; now the Grand Master, the speed
-  masters' Rate faders and a channel group's fader do too, and every new
-  Virtual Console slider or knob has it on, from a wizard, an import or a
-  copy too (a slider in a saved show keeps its setting). A fader waiting says so on the control: **GM ▲** in amber on
-  the footer chip, an arrow on the speed master's button, and *"Grand Master
-  fader: move it to 75% to take over"* in the tooltip. After a start, a
-  fader already at the control follows at once; any other waits, whichever
-  way it moves. Pulling a master's fader down never waits (the Grand
-  Master, and a Virtual Console Grand, Sub or Group master slider): below
-  it, a pull down takes it down at once, and so does a fader thrown or
-  tapped to the bottom right after a start; a resting fader's jitter does
-  not, nor does a motor fader still travelling to a value the master was
-  sent (dipped or dragged on screen). A controller's feedback line is sent the value
-  when a wait starts, so a motor fader drives itself there. An encoder
-  (Encoder or Relative mode) is never made to wait.
+  or through, the current value, then it follows (soft takeover). Virtual
+  Console sliders could; now a speed master's Rate fader and a channel
+  group's fader do too, and every new Virtual Console slider or knob has it
+  on (not a Grand, Sub or Group master slider). A waiting fader says so in
+  its tooltip and with an arrow on the speed master's button. The Grand
+  Master and the master sliders follow their fader at once, as before, until
+  their surface type declares them (Q313).
 
 ### Fixed
 

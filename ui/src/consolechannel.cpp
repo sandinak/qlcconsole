@@ -32,7 +32,6 @@
 #include "qlcchannel.h"
 #include "qlccapability.h"
 
-#include "inputoutputmap.h"
 #include "qlcinputsource.h"
 #include "channelsgroup.h"
 #include "doc.h"
@@ -233,40 +232,15 @@ void ConsoleChannel::setChannelsGroup(quint32 grpid)
 void ConsoleChannel::slotInputValueChanged(quint32 channel, uchar value)
 {
     Q_UNUSED(channel)
-    // A channel group's external fader is picked up before it follows (Q299).
-    // When the wait starts the group's value is sent back: a motor fader
-    // drives itself there, a plain one ignores it.
+    // A channel group's external fader is picked up before it follows (Q299)
     ChannelsGroup *grp = m_doc->channelsGroup(m_group);
     QSharedPointer<QLCInputSource> src = grp != NULL ? grp->inputSource() : QSharedPointer<QLCInputSource>();
-    const bool hasSource = !src.isNull() && src->isValid();
     // Another fader drives the group now: where the old one was is no guide
-    if (hasSource)
+    if (!src.isNull() && src->isValid())
         m_pickup.setSource(src->universe(), src->channel());
-    bool sendBack = false;
-    const bool take = m_pickup.accept(value, m_slider->value(), &sendBack);
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    if (sendBack && hasSource && iom->canSendFeedback(src->universe()))
-        iom->sendFeedBack(src->universe(), src->channel(), uchar(m_slider->value()), QVariant());
-    if (take)
-    {
-        m_fromInput = true;
+    if (m_pickup.accept(value, m_slider->value()))
         setValue(value);
-        m_fromInput = false;
-    }
     m_slider->setToolTip(pickupHint());
-}
-
-void ConsoleChannel::sendGroupFeedback(uchar value)
-{
-    ChannelsGroup *grp = m_doc->channelsGroup(m_group);
-    if (grp == NULL)
-        return;
-    QSharedPointer<QLCInputSource> src = grp->inputSource();
-    if (src.isNull() || !src->isValid())
-        return;
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    if (iom->canSendFeedback(src->universe()))
-        iom->sendFeedBack(src->universe(), src->channel(), value, QVariant());
 }
 
 QString ConsoleChannel::pickupHint() const
@@ -315,13 +289,7 @@ void ConsoleChannel::slotSpinChanged(int value)
     if (m_group == Fixture::invalidId())
         emit valueChanged(m_fixture, m_chIndex, value);
     else
-    {
-        // Moved on screen: a motor fader follows (Q299). Not when the
-        // value is the fader's own: a hand on it is not fought.
-        if (!m_fromInput)
-            sendGroupFeedback(uchar(value));
         emit groupValueChanged(m_group, value);
-    }
 }
 
 void ConsoleChannel::slotSliderChanged(int value)

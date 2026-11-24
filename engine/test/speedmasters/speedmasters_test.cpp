@@ -20,8 +20,6 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QtTest>
-#include <QDir>
-#include "qlcfile.h"
 #include <QElapsedTimer>
 
 #include <cmath>
@@ -50,9 +48,7 @@
 #include "scene.h"
 #include "doc.h"
 #include "faderpickup.h"
-#include "iopluginstub.h"
 #include "inputoutputmap.h"
-#include "ioplugincache.h"
 
 #include "speedmasters_test.h"
 
@@ -867,11 +863,6 @@ void SpeedMasters_Test::onlyTheMastersSomethingIsOnAreUsed()
 
 QTEST_MAIN(SpeedMasters_Test)
 
-namespace
-{
-qint64 s_fakeNow = 0;
-}
-
 /* Q299: an external fader is picked up (soft takeover), as a Virtual Console
    slider's "catch values" always did. */
 void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
@@ -927,131 +918,6 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     QVERIFY(!p.accept(1, 255));
     QVERIFY(!p.accept(2, 255));
 
-    // *sendBack once, when the wait starts (a motor drives there; a hand
-    // on it is not fought on every value).
-    p.reset();
-    bool sendBack = false;
-    QVERIFY(!p.accept(20, 128, &sendBack));
-    QVERIFY(sendBack);
-    QVERIFY(!p.accept(40, 128, &sendBack));
-    QVERIFY(!sendBack);
-    QVERIFY(p.accept(126, 128, &sendBack));
-    QVERIFY(!sendBack);
-
-    // The Grand Master lowers at once: thrown down from the top after a
-    // start, it follows as soon as the pull is more than jitter...
-    FaderPickup gm;
-    gm.setLowerAtOnce(true);
-    QVERIFY(!gm.accept(200, 255));
-    QVERIFY(gm.accept(120, 255));
-    QVERIFY(gm.accept(0, 120));
-    // ...and a fader left low after the GM was raised elsewhere (screen,
-    // footer chip, pad) takes it down when pulled: lowering never waits.
-    QVERIFY(gm.accept(77, 0));
-    QVERIFY(!gm.accept(75, 255));           // jitter-sized: not yet
-    QVERIFY(gm.accept(70, 255));            // a pull: taken
-    QVERIFY(gm.accept(0, 70));
-    // Raising it still waits: parked above, nudged up, it stays.
-    gm.reset();
-    QVERIFY(!gm.accept(204, 128));
-    QVERIFY(!gm.accept(210, 128));
-    QVERIFY(!gm.accept(214, 128));
-    // Parked part way and nudged up, then jittering: no drop.
-    gm.reset();
-    QVERIFY(!gm.accept(30, 255));
-    QVERIFY(!gm.accept(33, 255));
-    QVERIFY(!gm.accept(31, 255));
-    QVERIFY(gm.waiting(255));
-    // A fader that followed the GM down and was left there: the GM raised
-    // elsewhere, its jitter is no pull (the run starts where it stopped
-    // following), a real pull still is.
-    gm.reset();
-    QVERIFY(gm.accept(150, 150));
-    QVERIFY(gm.accept(130, 150));
-    QVERIFY(gm.accept(100, 130));
-    QVERIFY(!gm.accept(99, 255));
-    QVERIFY(!gm.accept(100, 255));
-    QVERIFY(!gm.accept(98, 255));
-    QVERIFY(gm.accept(80, 255));
-    // Review round 4/5: a motor fader that follows the GM is sent down by
-    // feedback when the GM is dipped on screen (255, 0, back to 255). Its
-    // reports on the way, made before and after the GM is back (feedback
-    // lags, the motor slows down), are no pull: the GM stays where the
-    // operator left it, and the fader is taken when it arrives.
-    s_fakeNow = 1000;
-    FaderPickup::setClockForTest([]() { return s_fakeNow; });
-    gm.reset();
-    QVERIFY(gm.accept(255, 255));
-    gm.noteFeedback(0);                     // dipped on screen
-    s_fakeNow += 50;
-    QVERIFY(!gm.accept(240, 0));            // above the dipped GM: a wait
-    QVERIFY(!gm.accept(150, 0));
-    gm.noteFeedback(255);                   // back up
-    s_fakeNow += 50;
-    QVERIFY(!gm.accept(120, 255));          // the GM is back: no pull
-    QVERIFY(!gm.accept(100, 255));          // still falling: no pull either
-    QVERIFY(!gm.accept(96, 255));
-    QVERIFY(gm.waiting(255));
-    QVERIFY(!gm.accept(180, 255));          // on its way up
-    QVERIFY(gm.accept(253, 255));           // arrived: picked up
-    // Dragged on screen 255 -> 40 -> 128: the lagging motor falls through
-    // the GM and below it on its way to 40; that is no pull either.
-    gm.noteFeedback(40);
-    QVERIFY(!gm.accept(200, 40));
-    gm.noteFeedback(128);
-    QVERIFY(!gm.accept(50, 128));           // through 128, falling: the motor
-    QVERIFY(!gm.accept(45, 128));
-    QVERIFY(gm.accept(126, 128));           // and back up to the GM
-    // The GM (following, so sent 126) raised on screen: a hand pulling the
-    // fader below every value sent is taken at once.
-    gm.noteFeedback(126);
-    gm.noteFeedback(255);
-    QVERIFY(gm.accept(80, 255));
-    // The travel ends: TravelMs after the last value sent, a fall is a hand.
-    gm.reset();
-    QVERIFY(gm.accept(255, 255));
-    gm.noteFeedback(0);
-    QVERIFY(!gm.accept(200, 0));
-    gm.noteFeedback(255);
-    QVERIFY(!gm.accept(150, 255));          // the motor
-    s_fakeNow += FaderPickup::TravelMs + 1;
-    QVERIFY(!gm.accept(147, 255));          // jitter, measured from the motor's last
-    QVERIFY(gm.accept(100, 255));           // a hand's pull
-    // A plain fader sent feedback when its wait started is still pulled.
-    gm.reset();
-    bool sb = false;
-    QVERIFY(!gm.accept(100, 200, &sb));
-    QVERIFY(sb);
-    gm.noteFeedback(200);
-    QVERIFY(gm.accept(90, 255));
-
-    // Lowering never waits (review round 5): a first value at the bottom
-    // (a fader tapped to 0, a backup desk's blackout) is taken at once...
-    s_fakeNow += FaderPickup::TravelMs + 1;
-    gm.reset();
-    QVERIFY(gm.accept(0, 255));
-    // ...but not while a motor may be moving (it is sent up to the GM at
-    // the start, and its first report may be from the bottom)
-    gm.reset();
-    gm.noteFeedback(255);
-    QVERIFY(!gm.accept(2, 255));
-    QVERIFY(!gm.accept(60, 255));
-    QVERIFY(gm.accept(252, 255));
-    // A fader that reported above the GM, the GM raised past it elsewhere,
-    // then thrown to 0 in one report: taken.
-    s_fakeNow += FaderPickup::TravelMs + 1;
-    gm.reset();
-    QVERIFY(!gm.accept(200, 100));
-    QVERIFY(gm.accept(0, 255));
-    // A plain (not lower-at-once) control: a first 0 still waits.
-    p.reset();
-    QVERIFY(!p.accept(0, 255));
-    // Raised while the fader waits below it: a pull from there is taken.
-    gm.reset();
-    QVERIFY(!gm.accept(100, 200));
-    QVERIFY(gm.accept(90, 255));
-    FaderPickup::setClockForTest(nullptr);
-
     // Another fader drives the control: the old one's place is no guide.
     p.setSource(0, 11);
     QVERIFY(!p.accept(10, 128));
@@ -1106,57 +972,4 @@ void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()
     QCOMPARE(sm->rate(1), 1.0);
     QVERIFY(!sm->pickupHint(1).isEmpty());
     sm->clearInput(1, SpeedMasters::RateControl);
-}
-
-/* A feedback line on the universe does not make a fader motorised (most
-   light pads only): every fader waits. When the wait starts the rate is
-   sent back once, so a motor fader drives itself there; its reports on the
-   way are not taken. */
-void SpeedMasters_Test::aMotorisedRateFaderIsSentTheValue()
-{
-    QDir dir(QStringLiteral("../iopluginstub"));
-    dir.setFilter(QDir::Files);
-    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
-    m_doc->ioPluginCache()->load(dir);
-    IOPluginStub *stub = nullptr;
-    foreach (QLCIOPlugin *pl, m_doc->ioPluginCache()->plugins())
-        if ((stub = dynamic_cast<IOPluginStub *>(pl)) != nullptr)
-            break;
-    QVERIFY(stub != nullptr);
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));
-    QVERIFY(iom->canSendFeedback(0));
-    QVERIFY(!iom->canSendFeedback(3) || iom->universesCount() <= 3);
-
-    SpeedMasters *sm = m_doc->speedMasters();
-    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
-    sm->setRate(1, 1.0);
-    stub->m_feedback.clear();
-
-    // Touched far from the rate: the rate stays, the fader is sent it once.
-    emit iom->inputValueChanged(0, 11, 20);
-    QCOMPARE(sm->rate(1), 1.0);
-    QCOMPARE(stub->m_feedback.size(), 1);
-    QCOMPARE(stub->m_feedback.last().first, quint32(11));
-    QCOMPARE(int(stub->m_feedback.last().second), 128);   // 1.0 = 127.5, rounded
-
-    // A plain fader (an LED-only feedback line) nudged on, or a motor's
-    // reports on its way: none is taken, and nothing more is sent.
-    emit iom->inputValueChanged(0, 11, 40);
-    emit iom->inputValueChanged(0, 11, 80);
-    QCOMPARE(sm->rate(1), 1.0);
-    QVERIFY(!sm->pickupHint(1).isEmpty());
-    QCOMPARE(stub->m_feedback.size(), 1);
-
-    // Once the fader is there, it follows.
-    emit iom->inputValueChanged(0, 11, 126);
-    QVERIFY(sm->pickupHint(1).isEmpty());
-    emit iom->inputValueChanged(0, 11, 60);
-    QVERIFY(qAbs(sm->rate(1) - 60 / 127.5) < 1e-9);
-
-    // Moved from the screen: the motor follows.
-    stub->m_feedback.clear();
-    sm->setRate(1, 2.0);
-    QVERIFY(!stub->m_feedback.isEmpty());
-    QCOMPARE(int(stub->m_feedback.last().second), 255);
 }

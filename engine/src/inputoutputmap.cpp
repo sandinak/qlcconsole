@@ -2099,14 +2099,6 @@ bool InputOutputMap::sendFeedBack(quint32 universe, quint32 channel, uchar value
     }
 }
 
-bool InputOutputMap::canSendFeedback(quint32 universe) const
-{
-    if (universe >= universesCount())
-        return false;
-    OutputPatch *patch = m_universeArray.at(universe)->feedbackPatch();
-    return patch != NULL && patch->isPatched();
-}
-
 void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
 {
     const QStringList lines = plugin->inputs();

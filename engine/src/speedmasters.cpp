@@ -49,8 +49,6 @@ SpeedMasters::SpeedMasters(Doc *doc, QObject *parent)
     m_clock.start();
     reset();
     connect(this, &SpeedMasters::changed, this, [this](int) { markUsageDirty(); });
-    // A motorised Rate fader follows the rate when something else sets it
-    connect(this, &SpeedMasters::changed, this, [this](int index) { sendRateFeedback(index, false); });
 }
 
 int SpeedMasters::count() const
@@ -637,32 +635,6 @@ int SpeedMasters::pickupDirection(int index) const
     return m.ratePickup.direction(qBound(0, int(m.rate * 127.5 + 0.5), 255));
 }
 
-void SpeedMasters::sendRateFeedback(int index, bool force)
-{
-    if (m_doc == nullptr)
-        return;
-    quint32 u = UINT_MAX, c = UINT_MAX;
-    int cur = 0;
-    {
-        QMutexLocker locker(&m_mutex);
-        Master &m = m_masters[index];
-        u = m.inUniverse[RateControl];
-        c = m.inChannel[RateControl];
-        cur = qBound(0, int(m.rate * 127.5 + 0.5), 255);
-        // Only when the rate moved (not for every value a waiting fader
-        // sends: a motor would fight the hand on it), and not an echo of
-        // the fader's own value
-        const bool moved = cur != m.fedRate;
-        const bool echo = qAbs(cur - int(m.inLast[RateControl])) <= FaderPickup::Threshold;
-        m.fedRate = cur;
-        if (!force && (!moved || echo))
-            return;
-    }
-    if (u == UINT_MAX || !m_doc->inputOutputMap()->canSendFeedback(u))
-        return;
-    m_doc->inputOutputMap()->sendFeedBack(u, c, uchar(cur), QVariant());
-}
-
 void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value)
 {
     // Find what this channel drives first, then act outside the lock: tap(),
@@ -697,15 +669,13 @@ void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value
                 // near the centre detent runs the master at its tempo.
                 // Pick-up: a fader that is not where the rate is does
                 // nothing until it reaches it. When the wait starts the
-                // rate is sent back: a motor fader drives itself there.
-                bool sendBack = false, take = false;
+                // 
+                bool take = false;
                 {
                     QMutexLocker locker(&m_mutex);
                     const int cur = qBound(0, int(m_masters[h.index].rate * 127.5 + 0.5), 255);
-                    take = m_masters[h.index].ratePickup.accept(value, cur, &sendBack);
+                    take = m_masters[h.index].ratePickup.accept(value, cur);
                 }
-                if (sendBack)
-                    sendRateFeedback(h.index, true);
                 if (!take)
                 {
                     emit changed(h.index);   // the footer shows the hint

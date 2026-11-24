@@ -18,7 +18,6 @@
 */
 
 #include <QCoreApplication>
-#include <QElapsedTimer>
 #include <QString>
 
 #include "faderpickup.h"
@@ -27,26 +26,4 @@ QString FaderPickup::hintText(const QString &name, int percent)
 {
     return QCoreApplication::translate("FaderPickup", "%1 fader: move it to %2% to take over")
                .arg(name).arg(percent);
-}
-
-namespace
-{
-qint64 (*s_testClock)() = nullptr;
-}
-
-void FaderPickup::setClockForTest(qint64 (*clock)())
-{
-    s_testClock = clock;
-}
-
-qint64 FaderPickup::nowMs()
-{
-    if (s_testClock != nullptr)
-        return s_testClock();
-    static QElapsedTimer timer = []() {
-        QElapsedTimer t;
-        t.start();
-        return t;
-    }();
-    return timer.elapsed();
 }

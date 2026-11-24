@@ -4,7 +4,6 @@ add_executable(speedmasters_test WIN32
 target_include_directories(speedmasters_test PRIVATE
     ../../../plugins/interfaces
     ../../src
-    ../iopluginstub
     ../common
 )
 
@@ -13,5 +12,4 @@ target_link_libraries(speedmasters_test PRIVATE
     Qt6::Gui
     Qt6::Test
     qlcplusengine
-    iopluginstub
 )

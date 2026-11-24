@@ -288,7 +288,7 @@ bool VCSlider::copyFrom(const VCWidget* widget)
     setValueDisplayStyle(slider->valueDisplayStyle());
     setInvertedAppearance(slider->invertedAppearance());
 
-    /* Copy fader pick-up (Q299): a copied master keeps lowering at once */
+    /* Copy fader pick-up (Q299) */
     setCatchValues(slider->catchValues());
 
     /* Copy Click & Go feature */
@@ -365,7 +365,7 @@ void VCSlider::hideEvent(QHideEvent *)
 QString VCSlider::pickupHint() const
 {
     const int cur = pickupCurrent();
-    if (!catchValues() || !m_pickup.waiting(cur))
+    if (!picksUp() || !m_pickup.waiting(cur))
         return QString();
     // Where on the fader's travel: an inverted slider's fader is upside down
     return FaderPickup::hintText(caption().isEmpty() ? tr("Slider") : caption(),
@@ -509,22 +509,18 @@ bool VCSlider::catchValues() const
 
 void VCSlider::setCatchValues(bool enable)
 {
-    updatePickupMode();
     if (enable == m_catchValues)
         return;
 
     m_catchValues = enable;
 }
 
-void VCSlider::updatePickupMode()
+bool VCSlider::picksUp() const
 {
-    /* Lowering a master never waits (Q299): the Grand Master, a submaster
-       (it scales its frame's widgets) and a group master only take light
-       out when pulled down, so an emergency pull-down on one is taken at
-       once. A speed master is not one (slower is not safer), nor is a
-       playback or level fader (pulling it down changes the look). */
-    m_pickup.setLowerAtOnce(m_sliderMode == GrandMaster || m_sliderMode == Submaster ||
-                            m_sliderMode == GroupMaster);
+    /* A master never waits (Q313): the Grand Master, a submaster and a group
+       master follow their fader at once, both ways. */
+    return catchValues() && m_sliderMode != GrandMaster && m_sliderMode != Submaster &&
+           m_sliderMode != GroupMaster;
 }
 
 int VCSlider::pickupValue(uchar input) const
@@ -971,7 +967,6 @@ void VCSlider::setSliderMode(SliderMode mode)
         m_doc->masterTimer()->unregisterDMXSource(this);
     }
 
-    updatePickupMode();
 }
 
 /*****************************************************************************
@@ -2442,9 +2437,6 @@ void VCSlider::updateFeedback()
         fbv = int(SCALE(float(fbv), float(m_slider->minimum()),
                         float(m_slider->maximum()), float(0), float(UCHAR_MAX)));
     }
-    // A motor fader now travels to the slider: its falls on the way are
-    // no pull (FaderPickup::noteFeedback)
-    m_pickup.noteFeedback(pickupCurrent());
     sendFeedback(fbv);
 }
 
@@ -2514,24 +2506,18 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             QSharedPointer<QLCInputSource> src = inputSource(sliderInputSourceId);
             const bool absolute = src.isNull() ||
                                   src->workingMode() == QLCInputSource::Absolute;
-            if (!absolute && m_pickup.last() >= 0)
+            if ((!absolute || !picksUp()) && m_pickup.last() >= 0)
             {
                 m_pickup.reset();       // made an encoder since: no wait left
                 updatePickupHint();
             }
 
-            if (catchValues() && absolute)
+            if (picksUp() && absolute)
             {
                 m_pickup.setSource(universe, pagedCh);   // another fader: start over
-                bool sendBack = false;
-                if (m_pickup.accept(value, pickupCurrent(), &sendBack) == false)
+                if (m_pickup.accept(value, pickupCurrent()) == false)
                 {
                     m_lastInputValue = value;
-                    // The wait starts: the slider's value is sent back once,
-                    // so a motor fader drives itself there (a plain one
-                    // ignores it)
-                    if (sendBack)
-                        updateFeedback();
                     updatePickupHint();
                     return;
                 }

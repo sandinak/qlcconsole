@@ -55,7 +55,6 @@ private slots:
     void aControlSurfaceDrivesAMaster();
     void aFaderIsPickedUpBeforeItFollows();
     void aRateFaderWaitsToBePickedUp();
-    void aMotorisedRateFaderIsSentTheValue();
     void onlyTheMastersSomethingIsOnAreUsed();
 
 private:
