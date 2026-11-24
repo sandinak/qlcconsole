@@ -12537,9 +12537,11 @@ private:
 
 /* Under the orientation dial: what each mark is, and where it points now
    (always, not only while it is dragged), then -- for a mover -- what
-   Front of device is. @p mover: the pan marks are in the legend; @p symbol:
-   the symbol's box can be dragged. */
-static QWidget *facingDialColumn(QWidget *parent, FacingPreviewWidget *dial, bool mover, bool symbol)
+   Front of device is. @p mover: the pan range is in the legend, and with
+   @p marks its DMX direction and seam; @p symbol: the symbol's box can be
+   dragged. */
+static QWidget *facingDialColumn(QWidget *parent, FacingPreviewWidget *dial, bool mover, bool symbol,
+                                 bool marks = true)
 {
     QWidget *col = new QWidget(parent);
     col->setObjectName(QStringLiteral("fixtureFacingColumn"));
@@ -12560,12 +12562,13 @@ static QWidget *facingDialColumn(QWidget *parent, FacingPreviewWidget *dial, boo
     QLabel *legend = new QLabel(col);
     legend->setObjectName(QStringLiteral("fixtureFacingLegend"));
     legend->setTextFormat(Qt::RichText);
-    QString text = QObject::tr("<span style='color:#50c878'>&#9644;</span> front (drag)");
+    QString text = QObject::tr("<span style=\"color:#50c878\">&#9644;</span> front (drag)");
     if (symbol)
-        text += QObject::tr("<br><span style='color:#5a96e6'>&#9644;</span> symbol (drag box)");
+        text += QObject::tr("<br><span style=\"color:#5a96e6\">&#9644;</span> symbol (drag box)");
     if (mover)
-        text += QObject::tr("<br><span style='color:#a078d2'>&#9644;</span> pan, &#8635; DMX up"
-                            "<br><span style='color:#e65050'>&#10005;</span> pan seam");
+        text += marks ? QObject::tr("<br><span style=\"color:#a078d2\">&#9644;</span> pan, &#8635; DMX up"
+                                    "<br><span style=\"color:#e65050\">&#10005;</span> pan seam")
+                      : QObject::tr("<br><span style=\"color:#a078d2\">&#9644;</span> pan range");
     legend->setText(text);
     QFont sf = legend->font();
     sf.setPointSizeF(sf.pointSizeF() * 0.85);
@@ -13278,7 +13281,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         foreach (quint32 fid, fids)
             if (Fixture *f = m_doc->fixture(fid))
                 anyPan = anyPan || f->channelNumber(QLCChannel::Pan, QLCChannel::MSB, 0) != QLCChannel::invalid();
-        aimRow->addWidget(facingDialColumn(aimBox, aimDial, anyPan, true), 0, Qt::AlignTop);
+        aimRow->addWidget(facingDialColumn(aimBox, aimDial, anyPan, true, false), 0, Qt::AlignTop);
         {
             QVBoxLayout *aimRight = new QVBoxLayout;
             aimRight->addLayout(aimForm);
