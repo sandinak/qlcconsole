@@ -1088,6 +1088,12 @@ click picks that one). Nothing in the view itself can be dragged, deleted
 or added, and no menu or other editor changes the rig, until the editor is
 closed, so **Cancel** puts back exactly what that editor did.
 
+While it is open the plot says so across its top: **Fixture Properties is
+open. This view waits until it closes.** If the editor went out of sight
+(behind another window, onto another desktop, minimised), click **Show It**
+on that line: the editor comes back in front, on the screen the main window
+is on. The line goes away when the editor closes.
+
 ### Front, Back and Side
 
 ![The same truss's editor in the Back view: looking downstage, stage left on the left](../images/lighting-studio-truss-editor-back.png)

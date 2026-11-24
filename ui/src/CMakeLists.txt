@@ -31,10 +31,13 @@ add_library(${module_name}
     controllertestdialog.cpp controllertestdialog.h
     mappingcheck.cpp mappingcheck.h
     apputil.cpp apputil.h
+    windowspace.cpp windowspace.h
     contextmenus.cpp contextmenus.h
     editkeys.cpp editkeys.h
     itemicons.cpp itemicons.h
     layoutdiagnostics.cpp layoutdiagnostics.h
+    blockingwindowbanner.cpp blockingwindowbanner.h
+    windowplacement.cpp windowplacement.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui
     audiobar.cpp audiobar.h
     audioeditor.cpp audioeditor.h audioeditor.ui
@@ -356,6 +359,13 @@ target_include_directories(${module_name} PUBLIC
 )
 
 target_include_directories(${module_name} PUBLIC ${FFTW3_INCLUDE_DIRS})
+
+if(APPLE)
+    # WindowSpace's macOS side: a dialog stays on its main window's Space.
+    target_sources(${module_name} PRIVATE windowspace_mac.mm)
+    set_source_files_properties(windowspace_mac.mm PROPERTIES COMPILE_OPTIONS "-fobjc-arc")
+    target_link_libraries(${module_name} PRIVATE "-framework AppKit")
+endif()
 
 target_link_libraries(${module_name} PUBLIC
     Qt6::Core

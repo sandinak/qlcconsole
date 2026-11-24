@@ -165,6 +165,8 @@
 #include "qlcfile.h"
 #include "legacysettings.h"
 #include "apputil.h"
+#include "windowspace.h"
+#include "windowplacement.h"
 #include "wledconfigcheck.h"
 #include "wleddiscovery.h"
 #include "controlsurfaceengine.h"
@@ -319,6 +321,10 @@ App::App()
     QCoreApplication::setOrganizationDomain("qlcplus.org");
     QCoreApplication::setApplicationName(APPNAME);
     installSettingsTitle();
+    // A dialog stays on its main window's Space on a Cmd-Tab back (macOS).
+    WindowSpace::install();
+    // A dialog opens on its main window's screen, and fits on it.
+    WindowPlacement::install();
 }
 
 namespace

@@ -331,6 +331,17 @@ if ! PP_OUT=$("$REPO/platforms/linux/check-private-public.sh" --self-test 2>&1 \
     exit 1
 fi
 
+# Every top-level dialog in ui/src has a row in windowsanity_test (opened as
+# the app opens it, checked through its window) or an allowlist line saying
+# why not yet (2026-11-23: window bugs found on his Mac, none by a test).
+if ! WR_OUT=$("$REPO/platforms/linux/check-window-rows.sh" --self-test 2>&1 \
+        && "$REPO/platforms/linux/check-window-rows.sh" --source "$REPO" 2>&1); then
+    echo >&2 "$WR_OUT"
+    { echo "gate=1 host=$GATE_HOST qt=$QT_VERSION rev=$GATE_REV"
+      echo "check-window-rows.sh failed: a dialog without a windowsanity_test row. Nothing built or tested."; } | tee "$LOGS/summary.txt"
+    exit 1
+fi
+
 # near and far are macros on Windows: a variable with either name passes
 # every Mac and Linux leg and breaks CI's Windows build (2026-11-09).
 if ! WN_OUT=$("$REPO/platforms/linux/check-windows-names.sh" --self-test 2>&1 \

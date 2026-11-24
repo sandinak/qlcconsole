@@ -14,6 +14,25 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A dialog fits on its screen**: one taller than a laptop's screen ran off
+  the bottom with OK and Cancel out of reach; now it opens shrunk to fit
+  where it can, centred over the main window. A dialog you put on another
+  screen stays there; one left across two screens is pulled onto one.
+- **Fixture Properties holds the rest of the window again, input methods
+  too**: with it open, a click on a field of the main window moved the
+  keyboard there, and accents, emoji or an input method typed into it.
+- **Fixture Properties takes clicks and keys again** (builds 4365 and
+  4367 on a Mac): opened from the 2D plot, its title bar worked but nothing
+  inside it took a click or a key, and moving the mouse dragged a selection
+  from the click that opened it. The lock that keeps the rig still while it
+  is open caught every click and key at the window, before the window could
+  hand them to the editor, and kept the plot from seeing that click's
+  release.
+- **Fixture Properties stays on qlcconsole's desktop** (macOS Spaces):
+  a Cmd-Tab back from an app on another desktop pulled the open dialog
+  onto that desktop, away from the main window. Every dialog that belongs
+  to a window (Fixture Properties, Show Review, the venue prompts, message
+  boxes) now stays on its window's desktop, and Cmd-Tab takes you there.
 - **The docked effect designer shows all of its controls at 1024x640 and up**:
   while it designs a layer's effect it takes the width the layers column
   was holding (the split you set comes back when you leave it), and
@@ -72,6 +91,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   to 15 ms. Nothing changes on the wire; the rig view and the rest of the
   window stop going chunky while a spread runs.
 ### Added
+
+- **A lost window is easy to find**: while Fixture Properties holds the 2D
+  plot still, the plot reads "Fixture Properties is open." with a **Show
+  it** button that brings the editor back in front, on the main window's
+  screen, if it went behind another window or to another desktop. Every
+  dialog is now checked in the gate the way a real screen uses it (clicks
+  and keys through its window, on its main window's screen and fitting a
+  1024x640 laptop, nothing left grabbed when it closes), and a new dialog
+  without that check stops the gate.
 
 - **A control surface's lights say what a button would do** (board Q269's
   rule, made visible; CS3 of the control-surfaces plan). A Control Map

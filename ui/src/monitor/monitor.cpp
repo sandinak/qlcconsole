@@ -194,6 +194,7 @@
 #include "createfixturegroup.h"
 #include "app.h"
 #include "apputil.h"
+#include "blockingwindowbanner.h"
 #include "doc.h"
 #include "programmercontroller.h"
 #include "venuecorrections.h"
@@ -12577,8 +12578,35 @@ public:
 
     bool eventFilter(QObject *obj, QEvent *e) override
     {
+        const bool drop = drops(obj, e);
+        /* Qt gives a click's focus (to a field of the main window, say)
+           before any filter sees the press: a dropped press still moved the
+           keyboard out of the editor, and what is typed by input method
+           (dead keys, accents held down, emoji, an IME) would land there.
+           The keyboard goes back to the editor. */
+        if (drop && (e->type() == QEvent::MouseButtonPress || e->type() == QEvent::MouseButtonDblClick))
+            QTimer::singleShot(0, this, [this]() { refocusEditor(); });
+        return drop;
+    }
+
+private:
+    void refocusEditor()
+    {
+        if (m_editor == nullptr || !m_editor->isVisible())
+            return;
+        m_editor->activateWindow();
+        if (QWidget *f = m_editor->focusWidget())
+            f->setFocus(Qt::OtherFocusReason);
+        else
+            m_editor->setFocus(Qt::OtherFocusReason);
+    }
+
+    bool drops(QObject *obj, QEvent *e)
+    {
         switch (e->type())
         {
+        case QEvent::InputMethod:          // typed text that is not a key press
+        case QEvent::InputMethodQuery:
         case QEvent::MouseButtonPress:
         case QEvent::MouseButtonRelease:
         case QEvent::MouseButtonDblClick:
@@ -12597,6 +12625,16 @@ public:
         default:
             return false;
         }
+        /* A real screen hands every click and key to a WINDOW first (a
+           QWidgetWindow: a QWindow with no QObject parent, so never "in" the
+           editor), and the window hands it on to the widget under the
+           pointer or with focus -- where this filter sees it again and
+           decides. Eaten at the window, it reached no widget at all:
+           Fixture Properties took no click and no key (its title bar, drawn
+           by macOS, still worked), and the release of the click that opened
+           it never ended that press (builds 4365, 4367). */
+        if (obj->isWindowType())
+            return false;
         if (inEditor(obj))
             return false;
         // The editor's own children opened later (a colour picker, a message).
@@ -12662,6 +12700,7 @@ private:
         case QEvent::MouseButtonPress:
         {
             auto *me = static_cast<QMouseEvent *>(e);
+            m_pressSeen = true;
             m_pick = Fixture::invalidId();
             if (me->button() == Qt::LeftButton)
                 m_pick = fixtureAt(me->position().toPoint());
@@ -12669,6 +12708,12 @@ private:
         }
         case QEvent::MouseButtonRelease:
         {
+            /* The release of the press that opened the editor (a double
+               click): the plot started that press, so it ends it. Kept from
+               it, the plot held the press, and every move after it dragged
+               a selection from where the editor was opened. */
+            if (!m_pressSeen)
+                return false;
             auto *me = static_cast<QMouseEvent *>(e);
             const quint32 pick = m_pick;
             m_pick = Fixture::invalidId();
@@ -12689,6 +12734,7 @@ private:
     QList<QPointer<StructureStudioView> > m_views;
     QList<QPointer<QAction> > m_menus;
     quint32 m_pick = Fixture::invalidId();
+    bool m_pressSeen = false;   // a press on the plot since the lock began
 };
 } // namespace
 
@@ -12707,6 +12753,12 @@ int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32
     dlg.show();
     dlg.raise();
     dlg.activateWindow();
+    /* The plot says what holds it, and brings the editor back if it is lost.
+       AFTER the lock, on purpose: the application's event filters run last
+       installed first, so the banner sees a click on its Show It before the
+       lock drops it (windowsanity_test::theBannerAnswersAheadOfTheLock fails
+       if these two lines swap). */
+    BlockingWindowBanner::whileOpen(m_graphicsView, &dlg);
     loop.exec();
     return dlg.result();
 }
