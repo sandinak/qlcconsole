@@ -595,8 +595,8 @@ AppSettings::AppSettings(App *app, QWidget *parent)
     chanRow->addWidget(new QLabel(tr("Channel:"), updGroup));
     m_updateChannel = new QComboBox(updGroup);
     m_updateChannel->setObjectName(QStringLiteral("settingsUpdateChannel"));
-    m_updateChannel->addItem(tr("Stable releases"), int(UpdateChecker::Stable));
-    m_updateChannel->addItem(tr("Pre-releases too (e.g. Show Tree)"), int(UpdateChecker::PreRelease));
+    m_updateChannel->addItem(tr("Stable"), int(UpdateChecker::Stable));
+    m_updateChannel->addItem(tr("Beta (stable releases too)"), int(UpdateChecker::PreRelease));
     m_updateChannel->setCurrentIndex(m_updateChannel->findData(int(UpdateChecker::channel())));
     chanRow->addWidget(m_updateChannel);
     chanRow->addStretch();
