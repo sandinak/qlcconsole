@@ -3606,6 +3606,21 @@ static bool chooseFeatures(App *app, const QMap<QString, bool> &want)
     return found;
 }
 
+/* UX-review shots, only where the pool gives QLC_SHOT_DIR. */
+static void featureShot(QWidget *w, const QString &name)
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty() || w == nullptr)
+        return;
+    const QSize sizes[3] = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        w->window()->resize(qMin(sz.width(), 640), qMin(sz.height(), 560));
+        QCoreApplication::processEvents();
+        w->grab().save(QDir(dir).filePath(QStringLiteral("%1-%2x%3.png").arg(name).arg(sz.width()).arg(sz.height())));
+    }
+}
+
 /* The same, with the question Turning Venues off asks while a venue is
    applied: @p answer is the button's object name ("venueOffClear",
    "venueOffKeep") or "cancel". @p asked is set when the question came, and
@@ -3622,6 +3637,7 @@ static bool chooseFeaturesAnswering(App *app, const QMap<QString, bool> &want, c
         if (q == nullptr || *asked)
             return;
         *asked = true;
+        featureShot(q, QStringLiteral("venue-off-prompt"));
         if (askedText != nullptr)
             *askedText = q->text() + QLatin1Char('\n') + q->informativeText();
         if (answer == QLatin1String("cancel"))
@@ -3924,6 +3940,8 @@ void AppViews_Test::turningVenuesOffAsksWhileAVenueIsApplied()
             seen = true;
             QLabel *l = dlg->findChild<QLabel *>("chooseFeaturesVenueNote");
             note = l != nullptr && l->text().contains("PMS") && l->text().contains("applied");
+            if (note)
+                featureShot(dlg, QStringLiteral("features-dialog-venue-applied"));
             dlg->reject();
         });
         m_app->menuBar()->findChild<QAction *>("viewTabsAction")->trigger();
