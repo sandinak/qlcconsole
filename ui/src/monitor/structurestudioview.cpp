@@ -10506,6 +10506,11 @@ void StructureStudioView::drawRulers(QPainter &p) const
     const double by = height() - GH;
     p.fillRect(QRectF(0, by, width(), GH), band);
     p.setPen(edge); p.drawLine(QPointF(0, by), QPointF(width(), by));
+    /* No number under the unit's name in the corner: "1000" in a
+       millimetre show ran into "↔ mm". */
+    const QFontMetricsF rfm(p.font());
+    const double nameRight = m_fromBehind ? 0.0
+                           : GW + 3 + rfm.horizontalAdvance(QString("↔ %1").arg(sfx)) + 4;
     for (int k = -200; k <= 200; ++k)
     {
         const double aVal = centreA + k * stepM;
@@ -10513,11 +10518,11 @@ void StructureStudioView::drawRulers(QPainter &p) const
         if (sx < GW || sx > width() + 20) continue;
         p.setPen((k == 0) ? QPen(roomInk(QColor(0, 190, 255)), 1.2) : QPen(tickCol, 1.0));
         p.drawLine(QPointF(sx, by), QPointF(sx, by + 6));
-        if (k % lblEvery == 0)
+        const QString tickText = (k == 0 && fromCl) ? QStringLiteral("CL") : rulerTickText(qAbs(k));
+        if (k % lblEvery == 0 && sx - rfm.horizontalAdvance(tickText) / 2.0 >= nameRight)
         {
             p.setPen((k == 0) ? roomInk(QColor(0, 190, 255)) : textCol);
-            p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter,
-                       (k == 0 && fromCl) ? QStringLiteral("CL") : rulerTickText(qAbs(k)));
+            p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter, tickText);
         }
     }
     /* From behind, the numbers still count out from the structure's centre
