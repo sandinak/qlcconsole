@@ -14692,7 +14692,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         /* The mount view (MountInSituView: the fixture on its truss, pipe or
            tower, with its height offset) shares the slot's one picture area:
            the two together do not fit a laptop's Place tab. A fixture on a
-           structure opens on its mount; "Plan | On its mount" switches. Not
+           structure opens on its mount; "Plan | On Its Mount" switches. Not
            on a structure the view has nothing to say, so the switch is gone
            and the map has the room. */
         MountInSituView *mountView = new MountInSituView(m_doc, fxId_dlg, viewSlot);
@@ -14704,7 +14704,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         switchLay->setSpacing(0);
         QPushButton *planBtn = new QPushButton(tr("Plan"), switchRow);
         planBtn->setObjectName(QStringLiteral("fixtureViewPlan"));
-        QPushButton *mountBtn = new QPushButton(tr("On its mount"), switchRow);
+        QPushButton *mountBtn = new QPushButton(tr("On Its Mount"), switchRow);
         mountBtn->setObjectName(QStringLiteral("fixtureViewMount"));
         for (QPushButton *b : { planBtn, mountBtn })
         {
