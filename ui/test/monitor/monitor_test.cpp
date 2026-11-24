@@ -34994,8 +34994,8 @@ void Monitor_Test::fixturePropertiesMaskLensFollowsTheMaskingBoxes()
         seen.tab = fpTabOf(dlg, lens);
         fpReachByClicks(dlg, lens);
         seen.halfW = lens->halfWidth();
-        top->setValue(10.0);
-        left->setValue(5.0);
+        top->setValue(4.0);
+        left->setValue(3.0);
         seen.typedTop = lens->mask().top;
         seen.typedLeft = lens->mask().left;
         // Drag the top edge further in: the box follows, applied live.
@@ -35016,9 +35016,9 @@ void Monitor_Test::fixturePropertiesMaskLensFollowsTheMaskingBoxes()
     QVERIFY(seen.found);
     QCOMPARE(seen.tab, QStringLiteral("aim"));
     QVERIFY(seen.halfW > 0.0);
-    QCOMPARE(seen.typedTop, 10.0f);
-    QCOMPARE(seen.typedLeft, 5.0f);
-    QVERIFY2(seen.dragged > 10.0, "a drag of the top edge did not set the Top box");
+    QCOMPARE(seen.typedTop, 4.0f);
+    QCOMPARE(seen.typedLeft, 3.0f);
+    QVERIFY2(seen.dragged > 4.0, "a drag of the top edge did not set the Top box");
     QCOMPARE(seen.liveProp, seen.dragged);               // live, like a typed value
     QCOMPARE(props->fixtureRigProps(fid).maskTop, 0.0f);  // Cancel put it back
     QCOMPARE(props->fixtureRigProps(fid).maskLeft, 0.0f);
