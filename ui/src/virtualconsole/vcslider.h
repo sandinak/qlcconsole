@@ -819,6 +819,7 @@ protected slots:
 protected:
     int m_lastInputValue;
     FaderPickup m_pickup;
+    void updatePickupHint();
 
     /*********************************************************************
      * Intensity
