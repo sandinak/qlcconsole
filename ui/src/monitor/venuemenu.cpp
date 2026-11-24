@@ -81,6 +81,8 @@ QString VenueMenu::chipText(Doc *doc, int clashes)
     }
     QString text = vc->needsConfirm() ? tr("Venue: %1?").arg(vc->activeVenue())
                                       : tr("Venue: %1").arg(vc->activeVenue());
+    if (!ShowFeatures::isOn(ShowFeatures::Venues))      // kept applied with the feature off
+        text += tr(" \302\267 Venues off");
     if (clashes < 0)
     {
         clashes = clashCount(doc);
@@ -111,6 +113,9 @@ QString VenueMenu::chipToolTip(Doc *doc, int clashes)
     }
     const QString name = vc->activeVenue();
     lines << tr("%1 is applied: its focus corrections, house rig and patch over the show's own.").arg(name);
+    if (!ShowFeatures::isOn(ShowFeatures::Venues))
+        lines << tr("Venue: %1 \342\200\224 applied; Venues is off for this show. It stays here while it is "
+                    "applied; clear it from the venue menu and the chip goes.").arg(name);
     if (vc->needsConfirm())
     {
         const QDateTime when = vc->lastChanged(name);

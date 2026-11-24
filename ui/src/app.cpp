@@ -6088,6 +6088,23 @@ void App::slotChooseTabs()
     }
     clickToggles(features);
     col->addWidget(features);
+    /* A venue applied stays on the rig and in the footer whatever this
+       switch says (Q293: its corrections are never live unseen), so the
+       Venues row says so here, and turning it off asks (below). */
+    VenueCorrections *venues = (m_doc != NULL && m_doc->programmer() != NULL)
+                                   ? m_doc->programmer()->venueCorrections() : nullptr;
+    if (venues != nullptr && venues->isActive())
+    {
+        QLabel *note = new QLabel(tr("%1 is applied to the rig. With Venues off it stays applied and "
+                                     "stays in the footer, or you can clear it when you turn Venues off.")
+                                      .arg(venues->activeVenue()), &dlg);
+        note->setObjectName(QStringLiteral("chooseFeaturesVenueNote"));
+        note->setWordWrap(true);
+        col->addWidget(note);
+        for (int i = 0; i < features->count(); ++i)
+            if (features->item(i)->data(Qt::UserRole).toInt() == ShowFeatures::Venues)
+                features->item(i)->setToolTip(note->text());
+    }
 
     QDialogButtonBox *box = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel
                                                  | QDialogButtonBox::RestoreDefaults, &dlg);
@@ -6115,6 +6132,33 @@ void App::slotChooseTabs()
             off.insert(features->item(i)->data(Qt::UserRole).toInt());
     if (off != sf->offSet())
     {
+        /* Venues turned off with one applied: its corrections are on the rig,
+           so say so and ask, never leave the chip standing without a word. */
+        if (off.contains(ShowFeatures::Venues) && sf->on(ShowFeatures::Venues)
+            && venues != nullptr && venues->isActive())
+        {
+            QMessageBox ask(this);
+            ask.setObjectName(QStringLiteral("venueOffPrompt"));
+            ask.setProperty("helpTopic", QStringLiteral("venues.md"));
+            ask.setIcon(QMessageBox::Question);
+            ask.setWindowTitle(tr("Turn Venues Off"));
+            ask.setText(tr("%1 is applied to the rig.").arg(venues->activeVenue()));
+            ask.setInformativeText(tr("Turning Venues off: clear the venue so its corrections leave "
+                                      "the rig, or keep it applied (it stays in the footer so it is "
+                                      "never live unseen)."));
+            QPushButton *clear = ask.addButton(tr("Clear the Venue and Turn Off"), QMessageBox::AcceptRole);
+            clear->setObjectName(QStringLiteral("venueOffClear"));
+            QPushButton *keep = ask.addButton(tr("Keep It Applied"), QMessageBox::ActionRole);
+            keep->setObjectName(QStringLiteral("venueOffKeep"));
+            QPushButton *cancel = ask.addButton(QMessageBox::Cancel);
+            ask.setDefaultButton(keep);
+            ask.setEscapeButton(cancel);
+            ask.exec();
+            if (ask.clickedButton() == clear)
+                venues->setActiveVenue(QString());
+            else if (ask.clickedButton() != keep)
+                return;         // Cancel: nothing changes
+        }
         sf->setOffSet(off);
         if (m_doc != NULL)
             m_doc->setModified();

@@ -266,7 +266,12 @@ Some things have no switch:
 - **A live state is never hidden.** The Grand Master below full, or a
   speed master away from its tempo, is said in the footer (**GM 30%**,
   **Speed 1 ×0.50**) while its own chip is put away, by the feature or by
-  the footer's right-click. A venue applied keeps its chip with Venues off.
+  the footer's right-click. A venue applied keeps its chip with Venues off:
+  turning Venues off while one is applied asks first (**Clear the Venue
+  and Turn Off**, **Keep It Applied** or **Cancel**), and the dialog's
+  Venues row says which venue is applied. Cleared, its corrections leave
+  the rig and the chip goes; kept, the chip stays and reads **Venue: PMS ·
+  Venues off**, its tooltip saying why.
   The Run tab's **Pad** button stays while the pad has a state to say
   (running the show, **Stopped** after the emergency stop).
 - **The emergency stop is never hidden.** With Control Surfaces off, the
