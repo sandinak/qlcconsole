@@ -213,7 +213,12 @@ void SpeedMastersFooter::tick()
         QString name = sm->name(i);
         if (compact && name == tr("Speed %1").arg(i + 1))
             name = tr("S%1").arg(i + 1);            // unnamed: its number
-        const QString text = buttonText(name, sm->bpm(i), paused, compact ? 4 : 10);
+        QString text = buttonText(name, sm->bpm(i), paused, compact ? 4 : 10);
+        // A Rate fader waiting to be picked up: the way to move it, on the
+        // button itself (the sentence is the tooltip, below)
+        const int pickup = sm->pickupDirection(i);
+        if (pickup != 0)
+            text += QLatin1Char(' ') + QChar(pickup > 0 ? 0x25B2 : 0x25BC);
         // Only on a change: a label that changes width every frame would
         // jiggle the footer.
         if (b->text() != text)

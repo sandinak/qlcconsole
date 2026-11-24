@@ -177,6 +177,15 @@ Per-computer setup is open Q7.
   every scoped fader. A **motorised** fader (or a ring, `encoderbank.h`
   `rings`) is sent to the new value instead. Encoders need neither (relative).
   The Control Surfaces row shows *"Fader 1: move up to 62 % to pick up"*.
+  *As built (`faderpickup.h`):* whether a fader has a motor cannot be told
+  from its universe (a feedback line is mostly pad LEDs: APC mini,
+  nanoKONTROL2), so every fader waits alike, and when a wait starts the
+  value is sent back once: a motor drives itself there and is picked up on
+  arrival, a plain fader ignores it. After a start the fader's place is
+  unknown: a first value at the control is taken, and a first move *away*
+  from it (a GM thrown down) is taken as one that sat there; a move toward
+  it waits. The waiting state shows on the control itself (an arrow on the
+  GM chip and the speed button), the sentence in the tooltip.
 - **Feedback** lights only what is armed now: the existing Lamp states
   (`controlmap.h`: dark = a press would do nothing, dim = ready, bright =
   running, blink = held) extended to scoped controls, so a cue's buttons go

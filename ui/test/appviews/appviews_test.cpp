@@ -137,6 +137,7 @@
 #include "showstatus.h"
 #include "inputdevicenotices.h"
 #include "speedmastersfooter.h"
+#include "grandmasterslider.h"
 #include "speedmasters.h"
 #include "padrun.h"
 #include "fixturetreewidget.h"
@@ -2873,6 +2874,61 @@ void AppViews_Test::aRefusedSurfacePressSaysSoOnTheFooter()
              qPrintable(m_app->statusBar()->currentMessage()));
     QVERIFY(m_app->statusBar()->currentMessage().contains("armed"));
     cm->handleInput(0, 20, 0);
+}
+
+void AppViews_Test::aWaitingGrandMasterFaderShowsOnTheFooter()
+{
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    VirtualConsole *vc = VirtualConsole::instance();
+    const quint32 wasU = vc->m_properties.grandMasterInputUniverse();
+    const quint32 wasC = vc->m_properties.grandMasterInputChannel();
+    const uchar wasGm = iom->grandMasterValue();
+    auto restore = qScopeGuard([=]() {
+        vc->m_properties.setGrandMasterInputSource(wasU, wasC);
+        iom->setGrandMasterValue(wasGm);
+    });
+    QLabel *name = m_app->m_statusGrandMasterNameLabel;
+    QVERIFY(name != nullptr);
+    vc->m_properties.setGrandMasterInputSource(0, 117);
+    iom->setGrandMasterValue(255);
+    QCOMPARE(name->text(), QStringLiteral("GM"));
+
+    // The fader sits at the bottom and is nudged: the GM stays, and the chip
+    // says which way to move it, in amber, with the sentence as its tip.
+    emit iom->inputValueChanged(0, 117, 3);
+    emit iom->inputValueChanged(0, 117, 6);
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    QCOMPARE(name->text(), GrandMasterSlider::pickupLabel(QStringLiteral("GM"), 1));
+    QVERIFY(name->styleSheet().contains(QStringLiteral("#b9770e")));
+    QVERIFY2(name->toolTip().contains(QStringLiteral("move it to 100%")), qPrintable(name->toolTip()));
+    QVERIFY(m_app->m_statusGrandMasterSlider->toolTip().contains(QStringLiteral("move it to")));
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        const QSize was = m_app->size();
+        for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            m_app->resize(size);
+            for (int i = 0; i < 6; ++i)
+            {
+                QCoreApplication::processEvents();
+                QTest::qWait(30);
+            }
+            QVERIFY(m_app->grab().save(QStringLiteral("%1/gmpickup-window-%2x%3.png")
+                                       .arg(dir).arg(size.width()).arg(size.height())));
+            QVERIFY(m_app->statusBar()->grab().save(QStringLiteral("%1/gmpickup-footer-%2.png")
+                                                   .arg(dir).arg(size.width())));
+        }
+        m_app->resize(was);
+    }
+
+    // Up through it: it follows, and the chip is plain again.
+    emit iom->inputValueChanged(0, 117, 253);
+    QCOMPARE(int(iom->grandMasterValue()), 253);
+    QCOMPARE(name->text(), QStringLiteral("GM"));
+    QVERIFY(name->styleSheet().isEmpty());
+    QCOMPARE(m_app->m_statusGrandMasterSlider->toolTip(), QStringLiteral("Grand Master"));
 }
 
 QTEST_MAIN(AppViews_Test)

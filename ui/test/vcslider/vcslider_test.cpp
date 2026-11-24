@@ -50,6 +50,9 @@
 
 #include "grandmasterslider.h"
 #include "qlcinputsource.h"
+#include "consolechannel.h"
+#include "channelsgroup.h"
+#include <QLabel>
 #include "vcslider_test.h"
 
 namespace
@@ -739,7 +742,9 @@ void VCSlider_Test::effectControlOnAnEfx()
 QTEST_MAIN(VCSlider_Test)
 
 /* Q299: the Grand Master's external fader is picked up, and the footer chip
-   (the signal) says where to move it. */
+   (the signal) says where to move it. The Virtual Console's own GM slider
+   (VCDockArea, connected first) takes the crossing value; this one must not
+   flash a stale hint in between: exactly one hint, then one clear. */
 void VCSlider_Test::grandMasterFaderIsPickedUp()
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
@@ -755,18 +760,104 @@ void VCSlider_Test::grandMasterFaderIsPickedUp()
     QCOMPARE(int(iom->grandMasterValue()), 200);
     QVERIFY2(gms.pickupHint().contains(QStringLiteral("78%")), qPrintable(gms.pickupHint()));
     QVERIFY(gms.toolTip().contains(QStringLiteral("move it to")));
+    QCOMPARE(gms.pickupDirection(), 1);
+    // Said on the slider, not only on hover: "GM" with the way to move it
+    bool arrow = false;
+    foreach (QLabel *l, gms.findChildren<QLabel *>())
+        arrow = arrow || l->text() == GrandMasterSlider::pickupLabel(QStringLiteral("GM"), 1);
+    QVERIFY(arrow);
     QCOMPARE(hints.count(), 1);
 
-    // Moved through it: it follows and the hint clears.
+    // Moved through it: it follows and the hint clears, with no wrong
+    // hint in between.
     emit iom->inputValueChanged(0, 9, 210);
     QCOMPARE(int(iom->grandMasterValue()), 210);
     QVERIFY(gms.pickupHint().isEmpty());
     QVERIFY(!gms.toolTip().contains(QStringLiteral("move it to")));
-    QVERIFY(hints.count() >= 2);
+    QCOMPARE(hints.count(), 2);
     QCOMPARE(hints.last().at(0).toString(), QString());
+    QCOMPARE(gms.pickupDirection(), 0);
 
     emit iom->inputValueChanged(0, 9, 100);
     QCOMPARE(int(iom->grandMasterValue()), 100);
+}
+
+/* After a start the fader's place is unknown. Thrown down from the top (an
+   emergency fade-out), it is taken on its second value; nudged up from the
+   bottom it waits (no blackout). */
+void VCSlider_Test::grandMasterThrownDownFollowsAtOnce()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 7);
+    GrandMasterSlider gms(nullptr, iom);
+    iom->setGrandMasterValue(255);
+
+    emit iom->inputValueChanged(0, 7, 200);     // the first value of the throw
+    emit iom->inputValueChanged(0, 7, 120);
+    QCOMPARE(int(iom->grandMasterValue()), 120);
+    emit iom->inputValueChanged(0, 7, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+
+    // Another fader learnt for the GM: where the old one was is no guide.
+    // The new one sits at the bottom and is nudged up: the GM stays.
+    iom->setGrandMasterValue(255);
+    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 8);
+    emit iom->inputValueChanged(0, 8, 3);
+    emit iom->inputValueChanged(0, 8, 6);
+    emit iom->inputValueChanged(0, 8, 2);
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    QVERIFY(!gms.pickupHint().isEmpty());
+}
+
+/* A channel group's external fader (Simple Desk) is picked up, and a
+   re-learnt one starts over. */
+void VCSlider_Test::channelGroupFaderIsPickedUp()
+{
+    ChannelsGroup *grp = new ChannelsGroup(m_doc);
+    grp->setName(QStringLiteral("Wash"));
+    QVERIFY(m_doc->addChannelsGroup(grp));
+    grp->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 30)));
+
+    QWidget w;
+    ConsoleChannel cc(&w, m_doc, Fixture::invalidId(), 0, false);
+    cc.setChannelsGroup(grp->id());
+    cc.setLabel(QStringLiteral("Wash"));
+    cc.setValue(200, false);
+
+    emit grp->valueChanged(30, 10);
+    emit grp->valueChanged(30, 40);
+    QCOMPARE(int(cc.value()), 200);                 // waits below
+    QVERIFY2(cc.pickupHint().contains(QStringLiteral("move it to 78%")), qPrintable(cc.pickupHint()));
+    emit grp->valueChanged(30, 220);
+    QCOMPARE(int(cc.value()), 220);                 // through it: follows
+    QVERIFY(cc.pickupHint().isEmpty());
+    emit grp->valueChanged(30, 90);
+    QCOMPARE(int(cc.value()), 90);
+
+    // Below again, then the group is given another fader that sits high:
+    // its first value only says where it is (the old fader's last value is
+    // not taken as a crossing).
+    cc.setValue(128, false);
+    emit grp->valueChanged(30, 10);
+    QCOMPARE(int(cc.value()), 128);
+    grp->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 31)));
+    emit grp->valueChanged(31, 250);
+    QCOMPARE(int(cc.value()), 128);
+    QVERIFY(!cc.pickupHint().isEmpty());
+}
+
+/* A slider added from the Virtual Console has catch values on; one built
+   the way a loaded show builds it (the constructor) has it off. */
+void VCSlider_Test::addedSlidersCatchValues()
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    vc->slotAddSlider();
+    QList<VCSlider *> sliders = vc->contents()->findChildren<VCSlider *>();
+    QCOMPARE(sliders.size(), 1);
+    QVERIFY(sliders.first()->catchValues());
+    QWidget w;
+    VCSlider loaded(&w, m_doc);
+    QVERIFY(!loaded.catchValues());
 }
 
 /* A slider keeps its saved "catch values"; new ones have it, and its hint

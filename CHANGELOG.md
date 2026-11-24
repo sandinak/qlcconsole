@@ -20,10 +20,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   only Virtual Console sliders that could; now the Grand Master, the speed
   masters' Rate faders and a channel group's fader do too, and a new
   Virtual Console slider has it on (a slider in a saved show keeps its
-  setting). A fader waiting says so and where to move it: *"Grand Master
-  fader: move it to 75% to take over"* on the footer chip and the slider's
-  tooltip. A motorised fader (its device has a feedback line) is sent the
-  value instead of waiting. Encoders are relative and unchanged.
+  setting). A fader waiting says so on the control: **GM ▲** in amber on
+  the footer chip, an arrow on the speed master's button, and *"Grand Master
+  fader: move it to 75% to take over"* in the tooltip. After a start, a
+  fader already at the control, or thrown away from it (the GM pulled
+  down), follows at once. A controller's feedback line is sent the value
+  when a wait starts, so a motor fader drives itself there. Encoders are
+  relative and unchanged.
 
 ### Fixed
 

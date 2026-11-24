@@ -34,16 +34,31 @@ Rate** fader, a **channel group's** fader and a **Virtual Console slider**
 with **Catch values** on (new sliders have it on; one in a saved show keeps
 its setting). Encoders are relative and need none of it.
 
-A fader that is waiting says so: the tooltip of the footer's **GM** chip,
-the speed master's footer button and the slider read *"Grand Master fader:
-move it to 75% to take over"*, and it clears when the fader gets there (or
-when you move the control on screen to where the fader is).
+A fader that is waiting says so where you look: the footer's **GM** chip
+reads **GM ▲** (or ▼) in amber, the way to move the fader, and a speed
+master's footer button gets the same arrow. Their tooltips, and a slider's,
+say it in full: *"Grand Master fader: move it to 75% to take over"*. The
+percent is where on the fader's travel: a speed master's Rate fader has
+100% rate at its middle, so it reads *"move it to 50%"*. It clears when the
+fader gets there (or when you move the control on screen to where the fader
+is).
 
-A **motorised** fader, one whose controller has a feedback line patched
-(Connections, the universe's Feedback), is not made to wait: the first time
-you touch it away from the control it is sent the current value and moves
-there, then follows your hand. It is also sent the new value when the control
-is moved on screen.
+Right after the show opens nobody knows where a fader is. A fader that is
+already at the control is taken at once, and so is one whose first move
+goes *away* from the control, the way you throw the Grand Master down to
+take the stage out: it must have been sitting at the top. A fader that
+first moves *toward* the control was somewhere else, and waits.
+
+Giving a control another fader (Learn again, a new Grand Master input in
+the Virtual Console's properties) starts over: the new fader waits until it
+reaches the control.
+
+A **motorised** fader is treated like any other, because a controller's
+feedback line does not say whether its faders have motors (most only light
+pads). When a fader starts to wait, the control's value is sent to it once
+on the universe's **Feedback** line (Connections): a motor fader drives
+itself there and is picked up when it arrives; a plain one ignores it. A
+motor fader is also sent the new value when the control is moved on screen.
 
 ## The rules for a surface
 

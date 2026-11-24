@@ -874,15 +874,64 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     FaderPickup p;
     QVERIFY(!p.accept(10, 100));            // the first value only says where it is
     QVERIFY(p.waiting(100));
+    QCOMPARE(p.direction(100), 1);          // move it up
     QVERIFY(!p.accept(20, 100));            // still below
     QVERIFY(p.waiting(100));
     QVERIFY(!p.waiting(22));                // the control moved to where the fader is
     QVERIFY(p.accept(98, 100));             // within the threshold: picked up
     QVERIFY(!p.waiting(100));
+    QCOMPARE(p.direction(100), 0);
     QVERIFY(p.accept(200, 100));            // and it follows from here
     p.reset();
     QVERIFY(!p.accept(250, 100));           // above: waits too
+    QCOMPARE(p.direction(100), -1);
     QVERIFY(p.accept(90, 100));             // crossed through it
+
+    // A first value already at the control is taken.
+    p.reset();
+    QVERIFY(p.accept(253, 255));
+
+    // Thrown down from the top after a start (the emergency fade-out): the
+    // first value says where it is, the second, further away, is taken.
+    p.reset();
+    QVERIFY(!p.accept(200, 255));
+    QVERIFY(p.accept(120, 255));
+    QVERIFY(p.accept(0, 255));
+
+    // Left at the bottom and nudged up: it waits, and once it has moved
+    // toward the control it keeps waiting, even when pulled back down.
+    p.reset();
+    QVERIFY(!p.accept(3, 255));
+    QVERIFY(!p.accept(6, 255));
+    QVERIFY(!p.accept(0, 255));
+    QVERIFY(!p.accept(30, 255));
+    QVERIFY(p.waiting(255));
+
+    // A parked fader's jitter is no move.
+    p.reset();
+    QVERIFY(!p.accept(3, 255));
+    QVERIFY(!p.accept(1, 255));
+    QVERIFY(!p.accept(2, 255));
+
+    // *sendBack once, when the wait starts (a motor drives there; a hand
+    // on it is not fought on every value).
+    p.reset();
+    bool sendBack = false;
+    QVERIFY(!p.accept(20, 128, &sendBack));
+    QVERIFY(sendBack);
+    QVERIFY(!p.accept(40, 128, &sendBack));
+    QVERIFY(!sendBack);
+    QVERIFY(p.accept(126, 128, &sendBack));
+    QVERIFY(!sendBack);
+
+    // Another fader drives the control: the old one's place is no guide.
+    p.setSource(0, 11);
+    QVERIFY(!p.accept(10, 128));
+    p.setSource(0, 11);                     // the same one: kept
+    QCOMPARE(p.last(), 10);
+    p.setSource(0, 12);
+    QCOMPARE(p.last(), -1);
+    QVERIFY(!p.accept(250, 128));           // not a crossing from 10
 }
 
 void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()
@@ -892,20 +941,49 @@ void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()
     sm->setRate(1, 1.0);
     QVERIFY(sm->pickupHint(1).isEmpty());
 
-    // Below the rate: nothing happens, and the footer says where to go.
+    // Below the rate: nothing happens, and the footer says where to go:
+    // 100 % rate is the fader's middle, so 50 % of its travel.
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 10);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 30);
     QCOMPARE(sm->rate(1), 1.0);
-    QVERIFY2(sm->pickupHint(1).contains(QStringLiteral("100%")), qPrintable(sm->pickupHint(1)));
+    QVERIFY2(sm->pickupHint(1).contains(QStringLiteral("move it to 50%")), qPrintable(sm->pickupHint(1)));
+    QCOMPARE(sm->pickupDirection(1), 1);
 
     // Through it: it follows, and the hint clears.
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 200);
     QVERIFY(qAbs(sm->rate(1) - 200 / 127.5) < 1e-9);
     QVERIFY(sm->pickupHint(1).isEmpty());
+    QCOMPARE(sm->pickupDirection(1), 0);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 60);
     QVERIFY(qAbs(sm->rate(1) - 60 / 127.5) < 1e-9);
+
+    // Rate 50 % is a quarter of the way up. (Another fader, so it starts
+    // unknown; it comes down toward the rate.)
+    sm->setRate(1, 0.5);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 13);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 13, 210);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 13, 200);
+    QCOMPARE(sm->rate(1), 0.5);
+    QVERIFY2(sm->pickupHint(1).contains(QStringLiteral("move it to 25%")), qPrintable(sm->pickupHint(1)));
+    QCOMPARE(sm->pickupDirection(1), -1);
+
+    // Re-learnt to another fader that sits high: its first value is not
+    // taken as a crossing from where the old fader was (below).
+    sm->setRate(1, 1.0);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 10);
+    QCOMPARE(sm->rate(1), 1.0);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 12);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 250);
+    QCOMPARE(sm->rate(1), 1.0);
+    QVERIFY(!sm->pickupHint(1).isEmpty());
+    sm->clearInput(1, SpeedMasters::RateControl);
 }
 
+/* A feedback line on the universe does not make a fader motorised (most
+   light pads only): every fader waits. When the wait starts the rate is
+   sent back once, so a motor fader drives itself there; its reports on the
+   way are not taken. */
 void SpeedMasters_Test::aMotorisedRateFaderIsSentTheValue()
 {
     QDir dir(QStringLiteral("../iopluginstub"));
@@ -927,17 +1005,24 @@ void SpeedMasters_Test::aMotorisedRateFaderIsSentTheValue()
     sm->setRate(1, 1.0);
     stub->m_feedback.clear();
 
-    // Touched far from the rate: the rate stays, the fader is sent it, and
-    // nothing is said to be waiting.
+    // Touched far from the rate: the rate stays, the fader is sent it once.
     emit iom->inputValueChanged(0, 11, 20);
     QCOMPARE(sm->rate(1), 1.0);
-    QVERIFY(sm->pickupHint(1).isEmpty());
-    QVERIFY(!stub->m_feedback.isEmpty());
+    QCOMPARE(stub->m_feedback.size(), 1);
     QCOMPARE(stub->m_feedback.last().first, quint32(11));
     QCOMPARE(int(stub->m_feedback.last().second), 128);   // 1.0 = 127.5, rounded
 
+    // A plain fader (an LED-only feedback line) nudged on, or a motor's
+    // reports on its way: none is taken, and nothing more is sent.
+    emit iom->inputValueChanged(0, 11, 40);
+    emit iom->inputValueChanged(0, 11, 80);
+    QCOMPARE(sm->rate(1), 1.0);
+    QVERIFY(!sm->pickupHint(1).isEmpty());
+    QCOMPARE(stub->m_feedback.size(), 1);
+
     // Once the fader is there, it follows.
-    emit iom->inputValueChanged(0, 11, 128);
+    emit iom->inputValueChanged(0, 11, 126);
+    QVERIFY(sm->pickupHint(1).isEmpty());
     emit iom->inputValueChanged(0, 11, 60);
     QVERIFY(qAbs(sm->rate(1) - 60 / 127.5) < 1e-9);
 

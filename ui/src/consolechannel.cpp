@@ -224,6 +224,7 @@ void ConsoleChannel::setLabel(QString label)
 void ConsoleChannel::setChannelsGroup(quint32 grpid)
 {
     m_group = grpid;
+    m_pickup.reset();
     ChannelsGroup *grp = m_doc->channelsGroup(grpid);
     connect(grp, SIGNAL(valueChanged(quint32,uchar)),
             this, SLOT(slotInputValueChanged(quint32,uchar)));
@@ -232,15 +233,19 @@ void ConsoleChannel::setChannelsGroup(quint32 grpid)
 void ConsoleChannel::slotInputValueChanged(quint32 channel, uchar value)
 {
     Q_UNUSED(channel)
-    // A channel group's external fader is picked up before it follows (Q299);
-    // a motorised one is sent the group's value instead.
+    // A channel group's external fader is picked up before it follows (Q299).
+    // When the wait starts the group's value is sent back: a motor fader
+    // drives itself there, a plain one ignores it.
     ChannelsGroup *grp = m_doc->channelsGroup(m_group);
     QSharedPointer<QLCInputSource> src = grp != NULL ? grp->inputSource() : QSharedPointer<QLCInputSource>();
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    const bool motor = !src.isNull() && src->isValid() && iom->canSendFeedback(src->universe());
+    const bool hasSource = !src.isNull() && src->isValid();
+    // Another fader drives the group now: where the old one was is no guide
+    if (hasSource)
+        m_pickup.setSource(src->universe(), src->channel());
     bool sendBack = false;
-    const bool take = m_pickup.accept(value, m_slider->value(), motor, &sendBack);
-    if (sendBack)
+    const bool take = m_pickup.accept(value, m_slider->value(), &sendBack);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (sendBack && hasSource && iom->canSendFeedback(src->universe()))
         iom->sendFeedBack(src->universe(), src->channel(), uchar(m_slider->value()), QVariant());
     if (take)
         setValue(value);

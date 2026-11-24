@@ -31,6 +31,19 @@
 #include "inputpatch.h"
 #include "apputil.h"
 
+namespace
+{
+/* One Grand Master, one input: every GrandMasterSlider (Simple Desk's, the
+   Virtual Console's) judges the fader with the same pick-up, so one that
+   takes a value and moves the GM does not leave another with a stale view
+   of where the fader is (which flashed a wrong hint on the footer chip). */
+FaderPickup &gmPickup()
+{
+    static FaderPickup pickup;
+    return pickup;
+}
+}
+
 GrandMasterSlider::GrandMasterSlider(QWidget* parent, InputOutputMap *ioMap)
     : QFrame(parent)
     , m_ioMap(ioMap)
@@ -127,7 +140,7 @@ void GrandMasterSlider::slotValueChanged(int value)
 {
     // Update display value
     updateDisplayValue();
-    if (!m_pickupHint.isEmpty() || m_pickup.last() >= 0)
+    if (!m_pickupHint.isEmpty() || gmPickup().last() >= 0)
         updatePickupHint();
 
     // Avoid double calls triggered by slotGrandMasterValueChanged
@@ -194,7 +207,7 @@ void GrandMasterSlider::slotGrandMasterValueChanged(uchar value)
     m_slider->blockSignals(false);
 
     updateDisplayValue();
-    if (!m_pickupHint.isEmpty() || m_pickup.last() >= 0)
+    if (!m_pickupHint.isEmpty() || gmPickup().last() >= 0)
         updatePickupHint();
 }
 
@@ -237,14 +250,17 @@ void GrandMasterSlider::sendFeedback()
 
 void GrandMasterSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
 {
-    if (universe == VirtualConsole::instance()->properties().grandMasterInputUniverse() &&
-        channel == VirtualConsole::instance()->properties().grandMasterInputChannel())
+    const quint32 gmUniverse = VirtualConsole::instance()->properties().grandMasterInputUniverse();
+    const quint32 gmChannel = VirtualConsole::instance()->properties().grandMasterInputChannel();
+    if (universe == gmUniverse && channel == gmChannel)
     {
-        // Pick-up: the fader does nothing until it reaches the Grand Master;
-        // a motorised one is sent the value instead (FaderPickup, Q299).
+        // A fader newly set to drive the GM: where the old one was is no guide
+        gmPickup().setSource(gmUniverse, gmChannel);
+        // Pick-up: the fader does nothing until it reaches the Grand Master
+        // (FaderPickup, Q299). When the wait starts the GM is sent back: a
+        // motor fader drives itself there, a plain one ignores it.
         bool sendBack = false;
-        const bool take = m_pickup.accept(value, m_slider->value(),
-                                          m_ioMap->canSendFeedback(universe), &sendBack);
+        const bool take = gmPickup().accept(value, m_slider->value(), &sendBack);
         if (sendBack)
             sendFeedback();
         if (take)
@@ -253,10 +269,15 @@ void GrandMasterSlider::slotInputValueChanged(quint32 universe, quint32 channel,
     }
 }
 
+int GrandMasterSlider::pickupDirection() const
+{
+    return gmPickup().direction(m_slider->value());
+}
+
 QString GrandMasterSlider::pickupHint() const
 {
     const int cur = m_slider->value();
-    if (!m_pickup.waiting(cur))
+    if (!gmPickup().waiting(cur))
         return QString();
     return FaderPickup::hintText(tr("Grand Master"), int(cur * 100.0 / UCHAR_MAX + 0.5));
 }
@@ -268,6 +289,16 @@ void GrandMasterSlider::updatePickupHint()
         return;
     m_pickupHint = hint;
     updateTooltip();
+    // Said where the eye is, not only on hover: "GM" gets the way to move
+    m_nameLabel->setText(pickupLabel(tr("GM"), pickupDirection()));
     emit pickupHintChanged(hint);
 }
 
+QString GrandMasterSlider::pickupLabel(const QString &name, int direction)
+{
+    if (direction > 0)
+        return name + QLatin1Char(' ') + QChar(0x25B2);    // move it up
+    if (direction < 0)
+        return name + QLatin1Char(' ') + QChar(0x25BC);    // move it down
+    return name;
+}

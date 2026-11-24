@@ -48,6 +48,14 @@ public:
     /** "Grand Master fader: move it to 75% to take over" while the external
      *  fader waits to be picked up; empty otherwise. Also in the tooltip. */
     QString pickupHint() const;
+
+    /** Which way to move the external fader to pick the GM up: +1 up,
+     *  -1 down, 0 when it is not waiting */
+    int pickupDirection() const;
+
+    /** @p name with an arrow the way to move a waiting fader ("GM ▲") */
+    static QString pickupLabel(const QString &name, int direction);
+
     void setInvertedAppearance(bool invert);
 
 signals:
@@ -69,7 +77,6 @@ protected:
     QSlider* m_slider;
     QLabel* m_nameLabel;
     InputOutputMap* m_ioMap;
-    FaderPickup m_pickup;
     QString m_pickupHint;
 
     /*************************************************************************

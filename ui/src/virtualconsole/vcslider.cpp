@@ -2462,6 +2462,7 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
              * or by 'surpassing' the current value */
             if (catchValues())
             {
+                m_pickup.setSource(universe, pagedCh);   // another fader: start over
                 if (m_pickup.accept(value, sliderValue()) == false)
                 {
                     m_lastInputValue = value;

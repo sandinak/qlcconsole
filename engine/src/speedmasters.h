@@ -163,10 +163,15 @@ public:
     void clearInput(int index, Control control);
     bool input(int index, Control control, quint32 *universe, quint32 *channel) const;
 
-    /** "Speed 1 fader: move it to 100% to take over" while the Rate fader
+    /** "Speed 1 fader: move it to 50% to take over" while the Rate fader
      *  driving master @p index waits to be picked up (FaderPickup); empty
-     *  otherwise. */
+     *  otherwise. The percent is where on the fader's travel: 100 % rate
+     *  is its middle, so 50 %. */
     QString pickupHint(int index) const;
+
+    /** Which way to move that waiting Rate fader: +1 up, -1 down, 0 when
+     *  it is not waiting */
+    int pickupDirection(int index) const;
 
 public slots:
     /** A value from an input universe (InputOutputMap::inputValueChanged). */
@@ -199,6 +204,7 @@ private:
         quint32 inChannel[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
         uchar inLast[ControlCount] = { 0, 0, 0 };   //!< for a button's press
         FaderPickup ratePickup;     //!< the Rate fader's soft takeover
+        int fedRate = -1;           //!< the rate (0..255) last sent to it or seen from it
         int held = 0;               //!< hold(): VC widgets driving it
     };
 

@@ -936,9 +936,11 @@ void App::init()
     addTab(w, QIcon(":/virtualconsole.png"), tr("Virtual Console"));
     w = new SimpleDesk(m_tab, m_doc);
     addTab(w, QIcon(":/slidermatrix.png"), tr("Simple Desk"));
-    // The Grand Master's external fader waits to be picked up: say so on the footer chip
+    // The Grand Master's external fader waits to be picked up: say so on the
+    // footer chip, where the eye is, not only on hover: "GM ▲" in amber (the
+    // way to move it), the value it has to reach, and the sentence as the tip.
     if (GrandMasterSlider *gms = SimpleDesk::instance()->grandMasterSlider())
-        connect(gms, &GrandMasterSlider::pickupHintChanged, this, [this](const QString &hint)
+        connect(gms, &GrandMasterSlider::pickupHintChanged, this, [this, gms](const QString &hint)
         {
             if (m_statusGrandMasterSlider == NULL)
                 return;
@@ -946,6 +948,14 @@ void App::init()
             m_statusGrandMasterSlider->setToolTip(hint.isEmpty() ? base : hint);
             if (m_statusGrandMasterValueLabel != NULL)
                 m_statusGrandMasterValueLabel->setToolTip(hint);
+            if (m_statusGrandMasterNameLabel != NULL)
+            {
+                m_statusGrandMasterNameLabel->setText(
+                    GrandMasterSlider::pickupLabel(tr("GM"), hint.isEmpty() ? 0 : gms->pickupDirection()));
+                m_statusGrandMasterNameLabel->setToolTip(hint);
+                m_statusGrandMasterNameLabel->setStyleSheet(hint.isEmpty() ? QString()
+                    : QStringLiteral("QLabel { color: #b9770e; font-weight: bold; }"));
+            }
         });
     /* The cue runner's full-screen home (docs/design/SHOW_TREE_DESIGN.md §6B, D26):
        the operator's view -- big targets, keyboard GO, nothing to bump. It
@@ -9152,7 +9162,9 @@ void App::initStatusBar()
         QHBoxLayout *gmLayout = new QHBoxLayout(gmBox);
         gmLayout->setContentsMargins(0, 0, 4, 0);
         gmLayout->setSpacing(4);
-        gmLayout->addWidget(new QLabel(tr("GM"), gmBox));
+        m_statusGrandMasterNameLabel = new QLabel(tr("GM"), gmBox);
+        m_statusGrandMasterNameLabel->setObjectName(QStringLiteral("footerGrandMasterName"));
+        gmLayout->addWidget(m_statusGrandMasterNameLabel);
         m_statusGrandMasterSlider = new QSlider(Qt::Horizontal, gmBox);
         m_statusGrandMasterSlider->setRange(0, 255);
         // Cap, don't fix, the width — a hard setFixedWidth() here (stacked

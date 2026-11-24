@@ -371,6 +371,9 @@ private slots:
     void aPmjFaderOrEncoderInOperateEditsNothing();
     void aSecondPmjBoardIsNamedNotIgnoredInSilence();
     void aRefusedSurfacePressSaysSoOnTheFooter();
+    /** Q299: a Grand Master fader waiting to be picked up is said on the
+     *  footer chip itself (arrow, amber), not only in its tooltip. */
+    void aWaitingGrandMasterFaderShowsOnTheFooter();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

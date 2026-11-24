@@ -33,6 +33,9 @@ private slots:
     /* Speed master mode */
     void speedMasterRate();
     void grandMasterFaderIsPickedUp();
+    void grandMasterThrownDownFollowsAtOnce();
+    void channelGroupFaderIsPickedUp();
+    void addedSlidersCatchValues();
     void sliderCatchValuesAreUnchanged();
     void speedMasterTempo();
     void speedMasterFollowsTheMaster();

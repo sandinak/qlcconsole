@@ -892,8 +892,10 @@ public:
      */
     bool sendFeedBack(quint32 universe, quint32 channel, uchar value, const QVariant &params);
 
-    /** True when @p universe has a feedback line patched: a motorised fader
-     *  on it can be sent a value (FaderPickup sends one instead of waiting). */
+    /** True when @p universe has a feedback line patched, so a value can be
+     *  sent back to its device. It does not say a fader there has a motor
+     *  (most feedback lines light pads): FaderPickup treats every fader
+     *  alike and only sends the value when a wait starts. */
     bool canSendFeedback(quint32 universe) const;
 
 private:
