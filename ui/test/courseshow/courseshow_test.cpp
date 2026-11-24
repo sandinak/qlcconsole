@@ -6675,8 +6675,14 @@ void CourseShow_Test::levelTwoPictures()
 void CourseShow_Test::levelThreeMorePictures()
 {
     // Lessons 3.1, 3.2, 3.3, 3.4, 3.7 and 3.10's pictures, taken at the steps
-    // their pages number; set COURSE_SHOTS to docs/course/images.
-    const QString root = qEnvironmentVariable("COURSE_SHOTS");
+    // their pages number; set COURSE_SHOTS to docs/course/images. On the gate
+    // pool (which cannot name a folder here), COURSE_SHOTS=shots with --shots
+    // puts them in QLC_SHOT_DIR/course, copied back with the shots.
+    QString root = qEnvironmentVariable("COURSE_SHOTS");
+    if (root == QLatin1String("shots") && !qEnvironmentVariable("QLC_SHOT_DIR").isEmpty())
+        root = qEnvironmentVariable("QLC_SHOT_DIR") + QStringLiteral("/course");
+    else if (root == QLatin1String("shots"))
+        root.clear();
     if (root.isEmpty())
         QSKIP("set COURSE_SHOTS to the course's images folder");
     m_app->setTheme(App::ThemeBlue);
@@ -6945,7 +6951,8 @@ void CourseShow_Test::levelThreeMorePictures()
             f.callouts << mark(mon->m_layersPanel, 1);
             QVERIFY(shoot(f, d, "plot-boom"));
         }
-        // Fixture Properties, as the student opens it: Aim & Mount.
+        /* Fixture Properties, as the student uses it: Face on the Place tab,
+           then Points and Tilt in yoke on the Aim & Mount tab. */
         QString err;
         QTimer::singleShot(400, [this, &err, d]() {
             for (QWidget *w : QApplication::topLevelWidgets())
@@ -6953,20 +6960,44 @@ void CourseShow_Test::levelThreeMorePictures()
                 QDialog *dlg = qobject_cast<QDialog *>(w);
                 if (dlg == nullptr || !dlg->isVisible() || !dlg->windowTitle().startsWith(QLatin1String("Fixture Properties")))
                     continue;
-                dlg->resize(640, 900);
                 settle(200);
-                HelpShots::Frame f;
-                f.grab = dlg;
-                for (const char *name : { "fixtureFace", "fixtureAim", "fixtureAimDown" })
+                QTabWidget *tabs = dlg->findChild<QTabWidget *>(QStringLiteral("fixturePropertiesTabs"));
+                if (tabs == nullptr)
                 {
-                    QWidget *c = dlg->findChild<QWidget *>(QString::fromLatin1(name));
-                    if (c == nullptr || !c->isVisible())
-                        err += QStringLiteral(" %1").arg(QLatin1String(name));
-                    else
-                        f.callouts << mark(c, f.callouts.size() + 1, HelpShots::Right);
+                    err = QStringLiteral(" no tabs");
+                    dlg->reject();
+                    return;
                 }
-                f.pad = QMargins(0, 0, 36, 0);
-                save(HelpShots::annotate(dlg->grab().toImage(), f), d, "aim-mount");
+                const QList<std::pair<const char *, QStringList>> pictures = {
+                    { "place-face", { "fixtureFace" } },
+                    { "aim-mount", { "fixtureAim", "fixtureAimDown" } } };
+                for (const auto &pic : pictures)
+                {
+                    HelpShots::Frame f;
+                    f.grab = dlg;
+                    QList<QWidget *> rows;
+                    for (const QString &name : pic.second)
+                    {
+                        QWidget *c = dlg->findChild<QWidget *>(name);
+                        if (c == nullptr || !fixtureRowShown(dlg, c))
+                            err += QLatin1Char(' ') + name;
+                        else
+                            rows << c;
+                    }
+                    settle(200);
+                    // 1 its tab, then its rows.
+                    QTabBar *bar = tabs->tabBar();
+                    const QRect tab = bar->tabRect(tabs->currentIndex());
+                    HelpShots::Callout t;
+                    t.number = 1;
+                    t.place = HelpShots::Above;
+                    t.rect = QRect(bar->mapTo(dlg, tab.topLeft()), tab.size());
+                    f.callouts << t;
+                    for (QWidget *c : rows)
+                        f.callouts << mark(c, f.callouts.size() + 1, HelpShots::Right);
+                    f.pad = QMargins(0, 0, 36, 0);
+                    save(HelpShots::annotate(dlg->grab().toImage(), f), d, QLatin1String(pic.first));
+                }
                 dlg->accept();
                 return;
             }

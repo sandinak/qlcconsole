@@ -189,8 +189,8 @@ of the audience. A spot hung out front with its pan zero facing away from
 the stage has the seam in the middle of the stage, so a follow spot walked
 across it whips round.
 
-The turn a head works in is kept with it. **Fixture Properties ▸ Pan works
-around** shows where the seam is and how clear of it the stage is; Show
+The turn a head works in is kept with it. **Fixture Properties ▸ Aim & Mount
+▸ Pan works around** shows where the seam is and how clear of it the stage is; Show
 Review warns about a head with its seam on the stage (**MOV-14**), and its
 fix, **Centre the Pan on Stage…**, moves the seam off the stage in one
 Undo step. Nothing else moves it.

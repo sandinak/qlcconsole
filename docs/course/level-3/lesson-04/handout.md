@@ -104,10 +104,11 @@ the room). Switch roles after each part.
 
    ![The plot: the boom, the par, and what hangs on what](../../images/lesson-3-4/plot-boom.png)
 
-8. Double-click **SR Boom Par** to open its **Fixture Properties**. In **Face**,
-   pick **Stage left**: the par throws across the stage, away from the wing.
-   - *You should see:* in **Aim & Mount**, **Points (° from DS)** reads 270
-     and **Tilt in yoke** reads level.
+8. Double-click **SR Boom Par** to open its **Fixture Properties**. On the
+   **Place** tab, in **Face**, pick **Stage left**: the par throws across the
+   stage, away from the wing.
+   - *You should see:* on the **Aim & Mount** tab, **Points (° from DS)**
+     reads 270 and **Tilt in yoke** reads level.
 9. In **Tilt in yoke**, type `20 down`. Click **OK**.
    - *You should see:* the beam tipped down toward the stage on the plot.
 

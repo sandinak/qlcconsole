@@ -56,9 +56,13 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
    ![The plot: the boom, the par, and what hangs on what](../../images/lesson-3-4/plot-boom.png)
 
-7. Double-click **SR Boom Par**. **Face** → **Stage left**: in **Aim &
-   Mount**, **Points (° from DS)** reads 270. In **Tilt in yoke** type
-   `20 down`. **OK**.
+7. Double-click **SR Boom Par**. On the **Place** tab, **Face** → **Stage
+   left**.
+
+   ![The Place tab: the par's Face](../../images/lesson-3-4/place-face.png)
+
+   On the **Aim & Mount** tab, **Points (° from DS)** reads 270. In **Tilt
+   in yoke** type `20 down`. **OK**.
 
    ![Aim and mount for the par](../../images/lesson-3-4/aim-mount.png)
 
@@ -96,8 +100,8 @@ The default puts the seam straight behind the head, which is right for a
 head over the stage or facing it. A head hung out front with its pan zero
 facing away from the stage has the seam in the middle of the stage.
 
-In Fixture Properties, **Aim & Mount ▸ Pan works around** shows the turn,
-where the seam is and how clear of it the stage is. **Centre on Stage**
+In Fixture Properties, the **Aim & Mount** tab's **Pan works around** shows
+the turn and how clear of the stage the seam is. **Centre on Stage**
 picks the turn that keeps the seam off the stage with the most room;
 **Earlier Turn** and **Later Turn** move the seam a turn either way. Each
 is live, and **OK** keeps it as one undo step. If the head is live its beam

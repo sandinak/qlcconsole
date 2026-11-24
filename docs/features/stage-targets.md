@@ -477,9 +477,11 @@ out front whose pan zero faces away from the stage has the seam in the
 middle of the stage: "it ran up against the start and end of the channel
 and had to rotate."
 
-Fixture Properties shows it under **Aim & Mount ▸ Pan works around**: the
-bearing with the most room either way, the turn, where the seam is, and how
-clear of it the stage is. Three buttons change it, live like every row
+Fixture Properties shows it on its **Aim & Mount** tab, **Pan works
+around**: the bearing with the most room either way and the turn, then, in
+short, how clear of the stage the seam is (*seam 40° clear of the stage*,
+in amber when it is on or near the stage); point at it for the whole of
+it, where the seam is and what Centre on Stage would set. Three buttons change it, live like every row
 (OK keeps it as one undo step, Cancel puts it back). When the head is live
 (in Operate, or a running look sets it) each asks first: its beam moves
 now, a whole turn round to the same place.

@@ -65,8 +65,9 @@ is arithmetic from the plot's numbers.
    the active layer is locked. Pick **Towers**.
 3. Name it, **Pipe height** `14'`, OK. Add the par (**Add Here ▸
    Fixture…**), then right-click it → **Mounting & Masking ▸ Mount on ▸ Boom ▸ SR Boom**.
-4. Double-click the par: **Face ▸ Stage left**, then **Aim & Mount**:
-   **Points (° from DS)** reads 270; type `20 down` in **Tilt in yoke**.
+4. Double-click the par: on the **Place** tab, **Face ▸ Stage left**; then
+   the **Aim & Mount** tab: **Points (° from DS)** reads 270; type `20 down`
+   in **Tilt in yoke**.
 5. Right-click the boom → **Lock Layer “Towers”**; drag it: the status line
    says why it didn't move.
 

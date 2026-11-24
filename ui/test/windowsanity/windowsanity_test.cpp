@@ -1210,6 +1210,8 @@ void WindowSanity_Test::fixturePropertiesEveryTabFits()
         QVERIFY(mon != nullptr);
         for (const Case &c : cases)
         {
+            // Each as it opens the first time: the tabs this goes through are not remembered.
+            QSettings().remove(QStringLiteral("fixtureProperties"));
             const QString where = QStringLiteral("%1 @ %2").arg(c.tag, sizeName(s));
             bool ran = false;
             QTimer::singleShot(0, this, [&]() {

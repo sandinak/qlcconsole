@@ -3124,7 +3124,7 @@ void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
         driveDialog([&](QWidget *dlg) {
             auto shown = [dlg](const char *name) {
                 QWidget *w = dlg->findChild<QWidget *>(name);
-                return w != nullptr && w->isVisibleTo(dlg);
+                return fixtureRowShown(dlg, w);
             };
             seen.lens = shown("fixtureLensSetTo");
             seen.preview = shown("fixtureFacingPreview");
@@ -3133,7 +3133,7 @@ void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
             seen.connection = shown("fixtureConnection");
             for (QLabel *l : dlg->findChildren<QLabel *>())
             {
-                if (!l->isVisibleTo(dlg))
+                if (!fixtureRowShown(dlg, l))
                     continue;
                 seen.panOffset = seen.panOffset || l->text() == "Pan offset (cal):";
                 seen.pixelPath = seen.pixelPath || l->text() == "Pixel path:";
@@ -3273,7 +3273,7 @@ void Monitor_Test::aFixedLightsEditorAimsItByPanAndTilt()
         QDoubleSpinBox *down = dlg->findChild<QDoubleSpinBox *>("fixtureAimDown");
         if (down == nullptr)
             return false;
-        tiltShown = down->isVisibleTo(dlg);
+        tiltShown = fixtureRowShown(dlg, down);
         for (QLabel *l : dlg->findChildren<QLabel *>())
             if (l->text().startsWith("Points ("))
                 panLabel = l->text();
@@ -3744,8 +3744,8 @@ void Monitor_Test::aFixedLightsFaceAimsItAndItsYokeTiltsUp()
         QDoubleSpinBox *roll = dlg->findChild<QDoubleSpinBox *>("fixtureTilt");
         if (face == nullptr || aim == nullptr || down == nullptr || roll == nullptr)
             return false;
-        faceShown = face->isVisibleTo(dlg);
-        rollShown = roll->isVisibleTo(dlg);
+        faceShown = fixtureRowShown(dlg, face);
+        rollShown = fixtureRowShown(dlg, roll);
         faceBefore = face->currentData(Qt::UserRole).toInt();
         // Back: aimed upstage, level -- and the rows read it.
         face->setCurrentIndex(face->findData(int(FixtureRigProps::FaceBack), Qt::UserRole));
@@ -3974,7 +3974,7 @@ void Monitor_Test::aLensSetInFixturePropertiesIsTheLights()
         QDoubleSpinBox *lens = dlg->findChild<QDoubleSpinBox *>("fixtureLensSetTo");
         if (lens == nullptr)
             return false;
-        shown = lens->isVisibleTo(dlg);
+        shown = fixtureRowShown(dlg, lens);
         lo = lens->minimum();
         hi = lens->maximum();
         before = lens->value();
