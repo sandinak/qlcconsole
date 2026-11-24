@@ -51,6 +51,7 @@
 #include "grandmasterslider.h"
 #include "qlcinputsource.h"
 #include "consolechannel.h"
+#include "vcframe.h"
 #include "channelsgroup.h"
 #include <QLabel>
 #include "vcslider_test.h"
