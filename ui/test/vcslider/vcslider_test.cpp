@@ -907,11 +907,11 @@ void VCSlider_Test::encoderKnobIsNeverPickedUp()
     slider.updateFeedback();
     slider.m_pickup.reset();                    // the tab was switched
 
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 1);  // +1 detent
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 2);  // +1 detent (MIDI 1, scaled x2)
     QCOMPARE(slider.sliderValue(), 108);
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 1);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 2);
     QCOMPARE(slider.sliderValue(), 116);
-    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 126); // -2
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 252); // -2 (MIDI 126)
     QCOMPARE(slider.sliderValue(), 100);
     QVERIFY(slider.pickupHint().isEmpty());
     m_doc->setMode(Doc::Design);
