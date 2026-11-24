@@ -18,6 +18,7 @@
 #include <QSignalSpy>
 #include <QtTest>
 #include <QDir>
+#include <cmath>
 
 #include "planmapwidget.h"
 #include "measurementunits.h"
@@ -87,8 +88,8 @@ void PlanMap_Test::dragEmitsSnappedPosition()
     const QList<QVariant> a = spy.last();
     const double gx = a.at(0).toDouble(), gy = a.at(1).toDouble();
     QVERIFY(gx != 0 || gy != 0);
-    QCOMPARE(std::fmod(gx, 304.8) + 0.0, 0.0);               // on the foot grid
-    QVERIFY(qAbs(std::fmod(gy / 304.8, 1.0)) < 1e-9);
+    QVERIFY(qAbs(gx / 304.8 - std::round(gx / 304.8)) < 1e-9);   // on the foot grid
+    QVERIFY(qAbs(gy / 304.8 - std::round(gy / 304.8)) < 1e-9);
     QTest::mouseRelease(&w, Qt::LeftButton, Qt::NoModifier, (from + QPointF(23, 12)).toPoint());
     QCOMPARE(w.position(), QPointF(gx, gy));
 }
@@ -102,8 +103,10 @@ void PlanMap_Test::shiftDragIsFree()
     const QPointF from = w.dotPoint();
     QTest::mousePress(&w, Qt::LeftButton, Qt::ShiftModifier, (from + QPointF(23.3, 11.7)).toPoint());
     QVERIFY(spy.count() >= 1);
-    const double gx = spy.last().at(0).toDouble();
-    QVERIFY2(qAbs(std::fmod(gx, 304.8)) > 1.0 && qAbs(std::fmod(gx, 304.8) - 304.8) > 1.0,
+    const double gx = spy.last().at(0).toDouble(), gy = spy.last().at(1).toDouble();
+    const double ox = qAbs(gx - std::round(gx / 304.8) * 304.8);
+    const double oy = qAbs(gy - std::round(gy / 304.8) * 304.8);
+    QVERIFY2(ox > 1.0 || oy > 1.0,
              "shift drag should not land on the grid");
 }
 
