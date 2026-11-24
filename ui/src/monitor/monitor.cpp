@@ -12738,20 +12738,191 @@ private:
 };
 } // namespace
 
-/* Fixture Properties is taller than a laptop's screen for a moving head
-   (Fixture, Position, Aim & Mount, the DMX rows). Its rows are built in this
-   scroller from the start; the header above it and OK / Cancel below it are
-   the dialog's own, always in view. The body has its parent from birth. */
-static QVBoxLayout *fixtureEditorRows(QDialog &dlg, QVBoxLayout *vl)
+namespace
 {
-    QWidget *body = new QWidget(&dlg);
-    body->setObjectName(QStringLiteral("fixturePropertiesBody"));
-    QVBoxLayout *rows = new QVBoxLayout(body);
-    rows->setContentsMargins(0, 0, 0, 0);
-    QScrollArea *scroll = AppUtil::verticalScroller(body, &dlg);
-    scroll->setObjectName(QStringLiteral("fixturePropertiesScroll"));
-    vl->addWidget(scroll, 1);
-    return rows;
+const char *const kFixturePropertiesTab = "fixtureProperties/tab";
+const char *const kFixturePropertiesMore = "fixtureProperties/aimMoreOpen";
+bool g_revealing = false;      // Monitor::revealFixtureEditorRow(): not the person's choice
+
+/* Fixture Properties' tabs (the owner's choice, 2026-11-23: "Tabs + shade").
+   Fixture | Place | Aim & Mount | DMX Controls between the header (name,
+   type, pan/tilt) and OK / Cancel, which stay in view. Each page's rows are
+   in a vertical scroller, a safety net only: at its default (More folded)
+   every page fits a 1024x640 screen (windowsanity_test). It opens on the
+   tab last used, else Fixture; Ctrl+Tab and Ctrl+Shift+Tab go round them. */
+class FixtureEditorTabs
+{
+public:
+    FixtureEditorTabs(QDialog &dlg, QVBoxLayout *vl)
+        : m_tabs(new QTabWidget(&dlg))
+    {
+        m_tabs->setObjectName(QStringLiteral("fixturePropertiesTabs"));
+        vl->addWidget(m_tabs, 1);
+        QTabWidget *tabs = m_tabs;
+        auto step = [tabs](int by) {
+            const int n = tabs->count();
+            if (n > 0)
+                tabs->setCurrentIndex((tabs->currentIndex() + by + n) % n);
+        };
+        /* Ctrl is Control on every platform: on a Mac that is Qt's Meta
+           (Qt's Ctrl there is Command, and Command+Tab is the system's). */
+        for (const QKeySequence &ks : { QKeySequence(Qt::CTRL | Qt::Key_Tab), QKeySequence(Qt::META | Qt::Key_Tab) })
+        {
+            QShortcut *sc = new QShortcut(ks, &dlg);
+            QObject::connect(sc, &QShortcut::activated, tabs, [step]() { step(1); });
+        }
+        for (const QKeySequence &ks : { QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Backtab),
+                                        QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab),
+                                        QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Backtab),
+                                        QKeySequence(Qt::META | Qt::SHIFT | Qt::Key_Tab) })
+        {
+            QShortcut *sc = new QShortcut(ks, &dlg);
+            QObject::connect(sc, &QShortcut::activated, tabs, [step]() { step(-1); });
+        }
+    }
+
+    /** A page, @p key naming it (fixture, place, aim, dmx): the rows go in
+     *  its layout, inside its scroller. */
+    QVBoxLayout *page(const QString &key, const QString &title)
+    {
+        QWidget *body = new QWidget(m_tabs);
+        body->setObjectName(QStringLiteral("fixturePropertiesPage-") + key);
+        QVBoxLayout *rows = new QVBoxLayout(body);
+        QScrollArea *scroll = AppUtil::verticalScroller(body, m_tabs);
+        scroll->setObjectName(QStringLiteral("fixturePropertiesScroll-") + key);
+        m_tabs->addTab(scroll, title);
+        m_keys << key;
+        m_titles << title;
+        m_bodies << body;
+        return rows;
+    }
+
+    void setTitle(const QString &key, const QString &title)
+    {
+        const int i = int(m_keys.indexOf(key));
+        if (i < 0)
+            return;
+        m_titles[i] = title;
+        m_tabs->setTabText(i, title);
+    }
+
+    /** Built: each page's rows to its top, the remembered tab, and the tab
+     *  the person goes to remembered (when @p dlg closes: not one a test or
+     *  Monitor::revealFixtureEditorRow() showed, nor one Qt picks as the
+     *  dialog is taken down). */
+    void finish(QDialog &dlg)
+    {
+        for (QWidget *b : m_bodies)
+            if (QVBoxLayout *l = qobject_cast<QVBoxLayout *>(b->layout()))
+                l->addStretch(1);
+        const QString was = QSettings().value(QLatin1String(kFixturePropertiesTab)).toString();
+        m_tabs->setCurrentIndex(qMax(0, int(m_keys.indexOf(was))));
+        auto chosen = std::make_shared<QString>();
+        const QStringList keys = m_keys;
+        QTabWidget *tabs = m_tabs;
+        QObject::connect(m_tabs, &QTabWidget::currentChanged, m_tabs, [keys, chosen, tabs](int i) {
+            if (!g_revealing && i >= 0 && i < keys.size() && tabs->window()->isVisible())
+                *chosen = keys.at(i);
+        });
+        QObject::connect(&dlg, &QDialog::finished, m_tabs, [chosen]() {
+            if (!chosen->isEmpty())
+                QSettings().setValue(QLatin1String(kFixturePropertiesTab), *chosen);
+        });
+    }
+
+    /** Several fixtures: a tab with a row they differ on (it reads "mixed")
+     *  says so in its title. */
+    void markDiffering()
+    {
+        for (int i = 0; i < m_bodies.size(); ++i)
+        {
+            bool mixed = false;
+            for (QWidget *w : m_bodies.at(i)->findChildren<QWidget *>())
+                if (w->isVisibleTo(m_bodies.at(i)) && FixtureFields::showsMixed(w))
+                {
+                    mixed = true;
+                    break;
+                }
+            m_tabs->setTabText(i, mixed ? m_titles.at(i) + QStringLiteral(" •") : m_titles.at(i));
+            m_tabs->setTabToolTip(i, mixed ? QObject::tr("These fixtures differ on a row here: it reads "
+                                                         "“mixed” until it is set")
+                                           : QString());
+        }
+    }
+
+    QTabWidget *tabs() const { return m_tabs; }
+
+private:
+    QTabWidget *m_tabs;
+    QStringList m_keys;
+    QStringList m_titles;
+    QList<QWidget *> m_bodies;
+};
+
+/* Aim & Mount's shade: the rows set once at the focus call and rarely again
+   (masking, pan/tilt calibration, direction, the test pose) fold under
+   More, folded by default and remembered. Folded, it says in one line what
+   is not at its default ("pan cal 5.0°"), so a calibration is never hidden
+   without a word. */
+struct AimShade
+{
+    QToolButton *toggle = nullptr;
+    QLabel *summary = nullptr;
+    QList<QWidget *> rows;              // the fields; their labels follow them
+    QSet<QWidget *> notForThisOne;      // rows this fixture has none of
+    QFormLayout *form = nullptr;
+    std::function<QString()> changed;   // what is not at its default, "" for nothing
+    QString inside;                     // what it holds, said when nothing is changed
+
+    bool open() const { return toggle != nullptr && toggle->isChecked(); }
+
+    void apply()
+    {
+        bool any = false;
+        for (QWidget *w : rows)
+        {
+            const bool show = open() && !notForThisOne.contains(w);
+            any = any || !notForThisOne.contains(w);
+            w->setVisible(show);
+            if (QWidget *l = form->labelForField(w))
+                l->setVisible(show);
+        }
+        toggle->parentWidget()->setVisible(any);    // its row: no More for none
+        toggle->setArrowType(open() ? Qt::DownArrow : Qt::RightArrow);
+        const QString now = changed ? changed() : QString();
+        summary->setText(now.isEmpty() ? inside : now);
+        summary->setStyleSheet(now.isEmpty() ? QStringLiteral("color:#8a8e99;")
+                                             : QStringLiteral("color:#e0a040;"));
+        summary->setToolTip(now.isEmpty() ? QString() : QObject::tr("Not at its default: %1").arg(now));
+        summary->setVisible(any && !open());
+    }
+};
+} // namespace
+
+bool Monitor::revealFixtureEditorRow(QWidget *row)
+{
+    if (row == nullptr)
+        return false;
+    QDialog *dlg = qobject_cast<QDialog *>(row->window());
+    QTabWidget *tabs = dlg != nullptr ? dlg->findChild<QTabWidget *>(QStringLiteral("fixturePropertiesTabs"))
+                                      : nullptr;
+    if (tabs == nullptr)
+        return false;
+    g_revealing = true;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i)->isAncestorOf(row))
+            tabs->setCurrentIndex(i);
+    // In Aim & Mount's More: unfolded for now, not remembered.
+    if (QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore")))
+        if (!more->isChecked())
+            for (QWidget *p = row; p != nullptr && p != dlg; p = p->parentWidget())
+                if (p->property("fixtureAimShade").toBool())
+                {
+                    more->setChecked(true);
+                    break;
+                }
+    g_revealing = false;
+    return row->isVisible();
 }
 
 int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32 &next)
@@ -12820,22 +12991,37 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                                   .arg(fids.count()), &dlg);
         head->setWordWrap(true);
         vl->addWidget(head);
-        QVBoxLayout *rows = fixtureEditorRows(dlg, vl);
-
-        QGroupBox *box = new QGroupBox(tr("Fixture"), rows->parentWidget());
-        QFormLayout *form = new QFormLayout(box);
+        // The same tabs as for one (FixtureEditorTabs); no DMX Controls.
+        FixtureEditorTabs tabs(dlg, vl);
+        QVBoxLayout *fixturePage = tabs.page(QStringLiteral("fixture"), tr("Fixture"));
+        QVBoxLayout *placePage = tabs.page(QStringLiteral("place"), tr("Place"));
+        QVBoxLayout *aimPage = tabs.page(QStringLiteral("aim"), tr("Aim && Mount"));
+        QWidget *box = fixturePage->parentWidget();
+        QWidget *placeBox = placePage->parentWidget();
+        QWidget *aimBox = aimPage->parentWidget();
+        QFormLayout *form = new QFormLayout;
+        fixturePage->addLayout(form);
+        QHBoxLayout *placeRow = new QHBoxLayout;
+        QFormLayout *placeForm = new QFormLayout;
+        placeRow->addLayout(placeForm, 1);
+        placePage->addLayout(placeRow);
+        QFormLayout *aimForm = new QFormLayout;
+        aimPage->addLayout(aimForm);
         FixtureFields *fields = new FixtureFields(this, form, box);
+        fields->movePlaceRows(placeForm);       // where it is and how it sits: Place
+        fields->setPowerCompact();
         fields->setFixtures(fids, fids.first());
 
-        QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox(box);
+        QDoubleSpinBox *panZeroSpin = new QDoubleSpinBox(aimBox);
         panZeroSpin->setObjectName(QStringLiteral("fixtureAim"));
         panZeroSpin->setMaximum(359);
         panZeroSpin->setSuffix(QString::fromUtf8("°"));
         panZeroSpin->setDecimals(1);
-        form->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
+        aimForm->addRow(tr("Aim — front of device (° from DS):"), panZeroSpin);
         /* The aim as a dial, seen from above as the plot is: drag the green
-           arrow's head round and the Aim row follows (and sets them all). */
-        FacingPreviewWidget *aimDial = new FacingPreviewWidget(box);
+           arrow's head round and the Aim row follows (and sets them all).
+           Beside the Place rows, as it is for one fixture. */
+        FacingPreviewWidget *aimDial = new FacingPreviewWidget(placeBox);
         aimDial->setObjectName(QStringLiteral("fixtureFacingPreview"));
         {
             float panMax = 0.0f;
@@ -12849,23 +13035,23 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
             aimDial->setPanMax(panMax);
         }
         aimDial->setTurnable([panZeroSpin](double deg) { panZeroSpin->setValue(deg); });
-        form->addRow(QString(), aimDial);
-        QDoubleSpinBox *rotSpin = new QDoubleSpinBox(box);
+        placeRow->addWidget(aimDial, 0, Qt::AlignTop);
+        QDoubleSpinBox *rotSpin = new QDoubleSpinBox(placeBox);
         rotSpin->setObjectName(QStringLiteral("fixtureIconRotation"));
         rotSpin->setMaximum(359);
         rotSpin->setDecimals(0);
         rotSpin->setSuffix(QString::fromUtf8("°"));
-        form->addRow(tr("Icon rotation (visual):"), rotSpin);
+        placeForm->addRow(tr("Icon rotation (visual):"), rotSpin);
         /* Fixed lights (no pan or tilt channel) are aimed by Pan (the Aim
            row) and this elevation (Q100); a moving head ignores it. */
         auto isFixedLight = [this](quint32 fid) {
             return RigHeads::isFixedUnit(m_doc->fixture(fid));
         };
-        QDoubleSpinBox *aimDownSpin = new YokeTiltSpinBox(box);
+        QDoubleSpinBox *aimDownSpin = new YokeTiltSpinBox(aimBox);
         aimDownSpin->setObjectName(QStringLiteral("fixtureAimDown"));
         aimDownSpin->setToolTip(tr("For the fixed lights among them: how far they are tipped in "
                                    "their yokes, \"45° down\" to \"10° up\""));
-        form->addRow(tr("Tilt in yoke:"), aimDownSpin);
+        aimForm->addRow(tr("Tilt in yoke:"), aimDownSpin);
         bool anyFixed = false;
         float down0 = 0.0f;
         bool downDiffers = false, haveDown = false;
@@ -12884,7 +13070,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         if (!downDiffers)
             aimDownSpin->setValue(double(down0));
         aimDownSpin->setVisible(anyFixed);
-        if (QWidget *l = form->labelForField(aimDownSpin))
+        if (QWidget *l = aimForm->labelForField(aimDownSpin))
             l->setVisible(anyFixed);
         connect(aimDownSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
                 [this, fids, aimDownSpin, isFixedLight](double v) {
@@ -12910,7 +13096,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                     turners << fid;
             if (!turners.isEmpty())
             {
-                QWidget *row = new QWidget(box);
+                QWidget *row = new QWidget(aimBox);
                 row->setObjectName(QStringLiteral("fixturePanTurnRow"));
                 QHBoxLayout *rl = new QHBoxLayout(row);
                 rl->setContentsMargins(0, 0, 0, 0);
@@ -12948,10 +13134,9 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                         PanTurn::centre(m_doc, fid);
                     sayIt();
                 });
-                form->addRow(tr("Pan works around:"), row);
+                aimForm->addRow(tr("Pan works around:"), row);
             }
         }
-        rows->addWidget(box);
 
         auto loadExtras = [this, fids, panZeroSpin, rotSpin]() {
             const float aim = m_props->fixtureRigProps(fids.first()).panZeroDir;
@@ -12974,11 +13159,14 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                 sp->blockSignals(false);
         };
         loadExtras();
+        // A tab with a row they differ on says so; set, the mark goes.
+        tabs.markDiffering();
+        connect(fields, &FixtureFields::edited, &dlg, [&tabs]() { tabs.markDiffering(); });
         aimDial->setFacing(qMax(0.0, panZeroSpin->value()));
         connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), aimDial,
                 [aimDial](double v) { aimDial->setFacing(qMax(0.0, v)); });
         connect(panZeroSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
-                [this, fids, panZeroSpin, loadExtras, isFixedLight](double v) {
+                [this, fids, panZeroSpin, loadExtras, isFixedLight, &tabs](double v) {
             if (FixtureFields::spinIsMixed(panZeroSpin))
                 return;
             foreach (quint32 fid, fids)
@@ -12993,9 +13181,10 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                     fi->setFacing(rp.panZeroDir);
             }
             loadExtras();
+            tabs.markDiffering();
         });
         connect(rotSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
-                [this, fids, rotSpin, loadExtras](double v) {
+                [this, fids, rotSpin, loadExtras, &tabs](double v) {
             if (FixtureFields::spinIsMixed(rotSpin))
                 return;
             foreach (quint32 fid, fids)
@@ -13008,13 +13197,17 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                 fi->setRotation(int(v));
             }
             loadExtras();
+            tabs.markDiffering();
         });
+        connect(aimDownSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [&tabs](double) { tabs.markDiffering(); });
 
         QDialogButtonBox *btns = new QDialogButtonBox(
             QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
         connect(btns, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
         connect(btns, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
         vl->addWidget(btns);
+        tabs.finish(dlg);
 
         if (execFixtureEditor(dlg, fids, next) != QDialog::Accepted)
         {
@@ -13081,10 +13274,10 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     sep->setFrameShadow(QFrame::Sunken);
     vl->addWidget(sep);
 
-    // --- Fixture info (read-only, live-updating) ---
+    // --- Fixture info (read-only, live-updating): Pan and Tilt on one line ---
     {
-        QFormLayout *infoForm = new QFormLayout;
-        infoForm->setContentsMargins(0, 2, 0, 4);
+        QHBoxLayout *infoForm = new QHBoxLayout;
+        infoForm->setContentsMargins(0, 2, 0, 2);
 
         // Live Pan/Tilt readout — only for fixtures that have P/T channels
         QLabel *panLabel  = nullptr;
@@ -13095,16 +13288,25 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         if (hasPan)
         {
             panLabel = new QLabel("—", &dlg);
+            panLabel->setObjectName(QStringLiteral("fixturePanReadout"));
             panLabel->setStyleSheet("color: #aaa; font-size: 10px;");
-            infoForm->addRow(tr("Pan:"), panLabel);
+            infoForm->addWidget(new QLabel(tr("Pan:"), &dlg));
+            infoForm->addWidget(panLabel);
+            infoForm->addSpacing(16);
         }
         if (hasTilt)
         {
             tiltLabel = new QLabel("—", &dlg);
+            tiltLabel->setObjectName(QStringLiteral("fixtureTiltReadout"));
             tiltLabel->setStyleSheet("color: #aaa; font-size: 10px;");
-            infoForm->addRow(tr("Tilt:"), tiltLabel);
+            infoForm->addWidget(new QLabel(tr("Tilt:"), &dlg));
+            infoForm->addWidget(tiltLabel);
         }
-        vl->addLayout(infoForm);
+        infoForm->addStretch(1);
+        if (hasPan || hasTilt)
+            vl->addLayout(infoForm);
+        else
+            delete infoForm;
 
         // Refresh the P/T labels every 150ms while the dialog is open
         if ((hasPan || hasTilt) && fxi)
@@ -13161,19 +13363,30 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         }
     }
 
-    QFrame *sep2 = new QFrame;
-    sep2->setFrameShape(QFrame::HLine);
-    sep2->setFrameShadow(QFrame::Sunken);
-    vl->addWidget(sep2);
-    // Everything from here to the buttons scrolls.
-    QVBoxLayout *rows = fixtureEditorRows(dlg, vl);
-    QWidget *rowsBody = rows->parentWidget();
+    /* Its rows in tabs (FixtureEditorTabs), the header above and OK / Cancel
+       below in view. Place holds where it is and how it sits on what holds
+       it -- what a crew member reads off the plot for one light: X / Y,
+       Mounted on, Orientation, Placement, Tilt. Fixture keeps what it is and
+       how it is driven (symbol, owner, colour, DMX, draw); Aim & Mount where
+       it points and its calibration. */
+    FixtureEditorTabs tabs(dlg, vl);
+    QVBoxLayout *fixturePage = tabs.page(QStringLiteral("fixture"), tr("Fixture"));
+    QVBoxLayout *placePage = tabs.page(QStringLiteral("place"), tr("Place"));
+    QVBoxLayout *aimPage = tabs.page(QStringLiteral("aim"), tr("Aim && Mount"));
+    QWidget *fixtureBox = fixturePage->parentWidget();
+    QWidget *posBox = placePage->parentWidget();
+    QHBoxLayout *posRow = new QHBoxLayout;
+    QFormLayout *posForm = new QFormLayout;
+    posRow->addLayout(posForm, 1);
+    placePage->addLayout(posRow);
 
     /* What it is and how it sits: the studio inspector's rows (FixtureFields),
        live like the rest of this dialog. */
-    QGroupBox *fixtureBox = new QGroupBox(tr("Fixture"), rowsBody);
-    QFormLayout *fixtureForm = new QFormLayout(fixtureBox);
+    QFormLayout *fixtureForm = new QFormLayout;
+    fixturePage->addLayout(fixtureForm);
     FixtureFields *fields = new FixtureFields(this, fixtureForm, fixtureBox);
+    fields->movePlaceRows(posForm);
+    fields->setPowerCompact();
     fields->setFixtures({ fxId }, fxId);
     /* A WLED string: how it is reached, with its LEDs and pixel path (the
        Fixture rows). Changed in Definition & Mode. */
@@ -13189,11 +13402,10 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         conn->setToolTip(tr("Definition & Mode… changes how it is reached"));
         fixtureForm->insertRow(0, tr("Connection:"), conn);
     }
-    rows->addWidget(fixtureBox);
 
     // Its mount's fine-tuning, its aim and calibration, testing it.
-    QGroupBox *rigBox = new QGroupBox(tr("Aim && Mount"), rowsBody);
-    QFormLayout *rigForm = new QFormLayout(rigBox);
+    QFormLayout *rigForm = new QFormLayout;
+    aimPage->addLayout(rigForm);
 
     const bool isFeet_fx = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
     const double toDisp_fx   = isFeet_fx ? 3.28084 : 1.0;
@@ -13201,6 +13413,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
 
     // Fine height nudge above/below a structural mount (truss/bar/tower).
     QDoubleSpinBox *heightOffSpin = new FeetInchesSpinBox(isFeet_fx);
+    heightOffSpin->setObjectName(QStringLiteral("fixtureHeightOffset"));
     heightOffSpin->setRange(-10 * toDisp_fx, 10 * toDisp_fx);
     heightOffSpin->setToolTip(tr("Raise (+) or lower (−) the fixture relative to its "
                                  "mount — e.g. lift a followspot above the truss."));
@@ -13231,6 +13444,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
        it; every view and Show Review reads it. A unit setting, kept with the
        show. */
     QDoubleSpinBox *maskSpin[4];
+    QWidget *maskRow = nullptr;      // in More (AimShade), added below
     {
         static const char *const names[4] = { QT_TR_NOOP("Top"), QT_TR_NOOP("Bottom"),
                                               QT_TR_NOOP("Left"), QT_TR_NOOP("Right") };
@@ -13249,7 +13463,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
             rl->addWidget(new QLabel(tr(names[i])));
             rl->addWidget(maskSpin[i], 1);
         }
-        rigForm->addRow(tr("Masking (tape):"), row);
+        maskRow = row;
     }
     QComboBox *laserClassCb = new QComboBox;
     laserClassCb->setObjectName(QStringLiteral("fixtureLaserClass"));
@@ -13264,23 +13478,25 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     rigForm->addRow(tr("Laser class:"), laserClassCb);
 
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;
+    panOffsetSpin->setObjectName(QStringLiteral("fixturePanOffset"));
     panOffsetSpin->setRange(-720, 720);   // 540° pan fixtures need up to ±270°; 720 gives headroom
     panOffsetSpin->setSuffix(QString::fromUtf8("°"));
     panOffsetSpin->setDecimals(1);
     panOffsetSpin->setToolTip(tr("Calibration offset added to every computed pan angle"));
-    rigForm->addRow(tr("Pan offset (cal):"), panOffsetSpin);
 
     QDoubleSpinBox *tiltOffsetSpin = new QDoubleSpinBox;
+    tiltOffsetSpin->setObjectName(QStringLiteral("fixtureTiltOffset"));
     tiltOffsetSpin->setRange(-360, 360);  // generous range for any tilt fixture
     tiltOffsetSpin->setSuffix(QString::fromUtf8("°"));
     tiltOffsetSpin->setDecimals(1);
     tiltOffsetSpin->setToolTip(tr("Calibration offset added to every computed tilt angle"));
-    rigForm->addRow(tr("Tilt offset (cal):"), tiltOffsetSpin);
 
     QCheckBox *panInvertCb = new QCheckBox(tr("Invert pan"));
+    panInvertCb->setObjectName(QStringLiteral("fixturePanInvert"));
     panInvertCb->setToolTip(tr("Reverse pan direction: use when increasing DMX physically moves\n"
                                "the fixture the wrong way (mirrors the computed value around centre)"));
     QCheckBox *tiltInvertCb = new QCheckBox(tr("Invert tilt"));
+    tiltInvertCb->setObjectName(QStringLiteral("fixtureTiltInvert"));
     tiltInvertCb->setToolTip(tr("Reverse tilt direction: use when increasing DMX physically tilts\n"
                                 "the fixture the wrong way (mirrors the computed value around centre)"));
     QWidget *invertRow = new QWidget;
@@ -13290,24 +13506,28 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     invertLayout->addSpacing(16);
     invertLayout->addWidget(tiltInvertCb);
     invertLayout->addStretch();
-    rigForm->addRow(tr("Direction:"), invertRow);
 
     /* Which turn of its pan a head with more than 360 degrees works in, and
        where that leaves the seam (PanTurn): stored with the head, changed
        only here, by Show Review's fix or when the person moves it. Live
        like every row; OK is one undo step, Cancel puts it back. */
+    /* Two lines: the turn and, short, where its seam is ("seam 40° clear of
+       the stage"), the whole of it on hover; then its buttons. */
     QWidget *turnRow = new QWidget;
     turnRow->setObjectName(QStringLiteral("fixturePanTurnRow"));
     QVBoxLayout *turnLayout = new QVBoxLayout(turnRow);
     turnLayout->setContentsMargins(0, 0, 0, 0);
     turnLayout->setSpacing(2);
+    QHBoxLayout *turnSays = new QHBoxLayout;
+    turnSays->setContentsMargins(0, 0, 0, 0);
     QLabel *turnLabel = new QLabel(turnRow);
     turnLabel->setObjectName(QStringLiteral("fixturePanTurn"));
     turnLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     QLabel *turnStage = new QLabel(turnRow);
     turnStage->setObjectName(QStringLiteral("fixturePanTurnStage"));
-    turnStage->setWordWrap(true);
     turnStage->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    turnSays->addWidget(turnLabel);
+    turnSays->addWidget(turnStage, 1);
     QHBoxLayout *turnBtns = new QHBoxLayout;
     turnBtns->setContentsMargins(0, 0, 0, 0);
     QPushButton *turnCentreBtn = new QPushButton(tr("Centre on Stage"), turnRow);
@@ -13323,14 +13543,29 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     turnBtns->addWidget(turnEarlierBtn);
     turnBtns->addWidget(turnLaterBtn);
     turnBtns->addStretch();
-    turnLayout->addWidget(turnLabel);
-    turnLayout->addWidget(turnStage);
+    turnLayout->addLayout(turnSays);
     turnLayout->addLayout(turnBtns);
     rigForm->addRow(tr("Pan works around:"), turnRow);
     auto refreshTurn = [this, fxId, turnLabel, turnStage, turnCentreBtn, turnEarlierBtn, turnLaterBtn]() {
         const PanTurn::Info in = PanTurn::info(m_doc, fxId);
         turnLabel->setText(PanTurn::worksAround(in));
-        turnStage->setText(PanTurn::stageText(in));
+        const QString whole = PanTurn::stageText(in);
+        QString brief;
+        if (in.hasTurns && in.span.valid)
+        {
+            if (in.span.overStage)
+                brief = tr("over the stage");
+            else if (in.margin >= PanTurn::kClearDeg)
+                brief = tr("seam %1° clear of the stage").arg(qRound(in.margin));
+            else if (in.margin >= 0.0f)
+                brief = tr("seam only %1° clear of the stage").arg(qRound(in.margin));
+            else
+                brief = tr("seam on the stage");
+        }
+        turnStage->setText(brief.isEmpty() ? QString() : QStringLiteral("\u00b7 ") + brief);
+        turnStage->setStyleSheet(in.crossesSeam() ? QStringLiteral("color:#e0a040;") : QString());
+        turnStage->setToolTip(whole);
+        turnLabel->setToolTip(whole);
         turnCentreBtn->setEnabled(in.hasTurns && in.proposal != in.turn);
         turnEarlierBtn->setEnabled(in.hasTurns && in.turn > in.lowest);
         turnLaterBtn->setEnabled(in.hasTurns && in.turn < in.highest);
@@ -13381,15 +13616,18 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                               "adjust offsets/panZero until it tracks the target correctly."));
     // Target picker — only visible when mode == 2
     QComboBox *testTargetCb = new QComboBox;
+    testTargetCb->setObjectName(QStringLiteral("testTarget"));
     for (StageTarget *t : m_props->stageTargets())
         testTargetCb->addItem(t->name(), t->id());
     testTargetCb->setVisible(false);
     QPushButton *testBtn = new QPushButton(tr("Test"));
+    testBtn->setObjectName(QStringLiteral("fixtureTest"));
     testBtn->setCheckable(true);
     testBtn->setToolTip(tr("While checked, overrides fixture DMX with the selected test pose.\n"
                            "Changes to panZeroDir and offsets take effect immediately.\n"
                            "Blacks out all other fixtures while active."));
     QPushButton *locateBtn = new QPushButton(tr("Locate"));
+    locateBtn->setObjectName(QStringLiteral("fixtureLocate"));
     locateBtn->setToolTip(tr("Flash this fixture at full intensity 3 times to identify it on the rig.\n"
                              "Works in any running scene without affecting other fixtures."));
     // Both drive real DMX at the fixture's address, which a staged fixture
@@ -13405,7 +13643,6 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     testRowLayout->addWidget(testModeCb, 1);
     testRowLayout->addWidget(testTargetCb, 1);
     testRowLayout->addWidget(testBtn);
-    rigForm->addRow(tr("Test orientation:"), testRowWidget);
 
     // Locate (flash-to-identify) is useful for ANY fixture, not just movers —
     // an LED bar/wash has no orientation to test but still needs identifying
@@ -13418,6 +13655,42 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     locateRowLayout->addWidget(locateBtn);
     locateRowLayout->addStretch();
     rigForm->addRow(tr("Identify:"), locateRowWidget);
+
+    /* More (AimShade): masking, calibration, direction and the test pose,
+       folded by default, the fold remembered; folded, a line says what in
+       it is not at its default. */
+    AimShade shade;
+    shade.form = rigForm;
+    {
+        QWidget *moreRow = new QWidget;
+        moreRow->setObjectName(QStringLiteral("fixtureAimMoreRow"));
+        QHBoxLayout *ml = new QHBoxLayout(moreRow);
+        ml->setContentsMargins(0, 0, 0, 0);
+        shade.toggle = new QToolButton(moreRow);
+        shade.toggle->setObjectName(QStringLiteral("fixtureAimMore"));
+        shade.toggle->setText(tr("More"));
+        shade.toggle->setCheckable(true);
+        shade.toggle->setAutoRaise(true);
+        shade.toggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        shade.toggle->setToolTip(tr("Masking, pan and tilt calibration, direction and the test pose: "
+                                    "set once at the focus call"));
+        shade.toggle->setChecked(QSettings().value(QLatin1String(kFixturePropertiesMore), false).toBool());
+        shade.summary = new QLabel(moreRow);
+        shade.summary->setObjectName(QStringLiteral("fixtureAimMoreSummary"));
+        ml->addWidget(shade.toggle);
+        ml->addWidget(shade.summary, 1);
+        rigForm->addRow(moreRow);
+    }
+    for (const auto &r : { std::make_pair(tr("Masking (tape):"), maskRow),
+                           std::make_pair(tr("Pan offset (cal):"), static_cast<QWidget *>(panOffsetSpin)),
+                           std::make_pair(tr("Tilt offset (cal):"), static_cast<QWidget *>(tiltOffsetSpin)),
+                           std::make_pair(tr("Direction:"), invertRow),
+                           std::make_pair(tr("Test orientation:"), testRowWidget) })
+    {
+        r.second->setProperty("fixtureAimShade", true);    // Monitor::revealFixtureEditorRow()
+        rigForm->addRow(r.first, r.second);
+        shade.rows << r.second;
+    }
 
     connect(testModeCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int) {
         testTargetCb->setVisible(testModeCb->currentData().toInt() == 2);
@@ -13475,8 +13748,10 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     const bool isMover = (hasPanCh || hasTiltCh);
     const bool isStrip = isLinearFixture(fxi);
 
-    auto hideRow = [rigForm](QWidget *w) {
+    auto hideRow = [rigForm, &shade](QWidget *w) {
         if (!w) return;
+        if (shade.rows.contains(w))
+            shade.notForThisOne.insert(w);      // not unfolded by More
         w->setVisible(false);
         if (QWidget *l = rigForm->labelForField(w)) l->setVisible(false);
     };
@@ -13515,7 +13790,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     const bool pixelString = WledFixture::isPixelString(fxi);
     if (pixelString)
     {
-        rigBox->setTitle(tr("Mount"));
+        tabs.setTitle(QStringLiteral("aim"), tr("Mount"));
         for (QWidget *w : std::initializer_list<QWidget *>{ panZeroSpin, aimDownSpin, lensSpin,
                                                            maskSpin[0]->parentWidget(), laserClassCb,
                                                            panOffsetSpin, tiltOffsetSpin, invertRow,
@@ -13525,7 +13800,70 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     bool aimTouched = rp.fixedAim;
     bool lensTouched = false;
 
-    rows->addWidget(rigBox);
+    // More's summary: what in it is not at its default, for the rows it has.
+    shade.changed = [&shade, maskSpin, panOffsetSpin, tiltOffsetSpin, panInvertCb, tiltInvertCb, testBtn,
+                     maskRow, invertRow, testRowWidget]() {
+        auto has = [&shade](QWidget *w) { return !shade.notForThisOne.contains(w); };
+        QStringList bits;
+        if (has(maskRow))
+        {
+            static const char *const sides[4] = { QT_TR_NOOP("T"), QT_TR_NOOP("B"),
+                                                  QT_TR_NOOP("L"), QT_TR_NOOP("R") };
+            QStringList tape;
+            for (int i = 0; i < 4; ++i)
+                if (maskSpin[i]->value() > 0.0)
+                    tape << QStringLiteral("%1 %2°").arg(tr(sides[i])).arg(maskSpin[i]->value(), 0, 'f', 1);
+            if (!tape.isEmpty())
+                bits << tr("tape %1").arg(tape.join(QLatin1Char(' ')));
+        }
+        if (has(panOffsetSpin) && !qFuzzyIsNull(panOffsetSpin->value()))
+            bits << tr("pan cal %1°").arg(panOffsetSpin->value(), 0, 'f', 1);
+        if (has(tiltOffsetSpin) && !qFuzzyIsNull(tiltOffsetSpin->value()))
+            bits << tr("tilt cal %1°").arg(tiltOffsetSpin->value(), 0, 'f', 1);
+        if (has(invertRow) && panInvertCb->isChecked())
+            bits << tr("pan inverted");
+        if (has(invertRow) && tiltInvertCb->isChecked())
+            bits << tr("tilt inverted");
+        if (has(testRowWidget) && testBtn->isChecked())
+            bits << tr("testing");
+        return bits.join(QStringLiteral(" \u00b7 "));
+    };
+    {
+        QStringList inside;
+        if (!shade.notForThisOne.contains(maskRow))
+            inside << tr("masking");
+        if (!shade.notForThisOne.contains(panOffsetSpin))
+            inside << tr("calibration");
+        if (!shade.notForThisOne.contains(invertRow))
+            inside << tr("direction");
+        if (!shade.notForThisOne.contains(testRowWidget))
+            inside << tr("test pose");
+        shade.inside = inside.join(QStringLiteral(", "));
+    }
+    shade.apply();
+    connect(shade.toggle, &QToolButton::toggled, &dlg, [&shade](bool) { shade.apply(); });
+    connect(shade.toggle, &QToolButton::clicked, &dlg, [](bool open) {
+        QSettings().setValue(QLatin1String(kFixturePropertiesMore), open);   // the person's fold
+    });
+    for (int i = 0; i < 4; ++i)
+        connect(maskSpin[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg,
+                [&shade](double) { shade.apply(); });
+    for (QDoubleSpinBox *sp : { panOffsetSpin, tiltOffsetSpin })
+        connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&shade](double) { shade.apply(); });
+    for (QAbstractButton *b : std::initializer_list<QAbstractButton *>{ panInvertCb, tiltInvertCb, testBtn })
+        connect(b, &QAbstractButton::toggled, &dlg, [&shade](bool) { shade.apply(); });
+
+    /* The Tab key in the order the rows read: up front, then More's. */
+    {
+        QList<QWidget *> order = { heightOffSpin, panZeroSpin, aimDownSpin, lensSpin, laserClassCb,
+                                   turnCentreBtn, turnEarlierBtn, turnLaterBtn, locateBtn, shade.toggle };
+        for (int i = 0; i < 4; ++i)
+            order << maskSpin[i];
+        order << panOffsetSpin << tiltOffsetSpin << panInvertCb << tiltInvertCb
+              << testModeCb << testTargetCb << testBtn;
+        for (int i = 1; i < order.size(); ++i)
+            QWidget::setTabOrder(order.at(i - 1), order.at(i));
+    }
 
     // --- Test orientation DMX source (owned by shared_ptr; cleaned up when dialog closes) ---
     const quint32 fxId_dlg = fxId;
@@ -13754,12 +14092,10 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
             turnTo(m_props->fixtureRigProps(fxId_dlg).panTurn + 1);
     });
 
-    // Position & Orientation  (placed above Rig Assignment, per user request).
-    // Spinboxes on the left, live facing preview on the right to save height.
-    QGroupBox *posBox = new QGroupBox(tr("Position && Orientation"), rowsBody);
-    QHBoxLayout *posRow = new QHBoxLayout(posBox);
-    QFormLayout *posForm = new QFormLayout;
-    posRow->addLayout(posForm, 1);
+    /* Place: X and Y on the plot, where that puts it on stage, then (from
+       FixtureFields, already in posForm) what holds it and how it sits, and
+       its icon's rotation; the live facing dial on the right. */
+    int placeAt = 0;
     // X / Y on the plot, as every length is entered (Settings > Units); the
     // grid's size is in its own cells.
     const double gridToDisp_fx = double(m_props->gridUnitMetres()) * toDisp_fx;
@@ -13774,7 +14110,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     const QPointF plotPos = fxItem != nullptr ? fxItem->realPosition()
                                               : QPointF(stored.m_position.x(), stored.m_position.y());
     xSpin->setValue(plotPos.x() * toDisp_fx / 1000.0);
-    posForm->addRow(tr("X:"), xSpin);
+    posForm->insertRow(placeAt++, tr("X:"), xSpin);
 
     FeetInchesSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
     ySpin->setFitsEveryValue(true);   // its whole value, as a Mac's form keeps it at its size
@@ -13782,9 +14118,37 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     ySpin->setMaximum(m_graphicsView->gridSize().height() * gridToDisp_fx);
     ySpin->setSingleStep(0.1);
     ySpin->setValue(plotPos.y() * toDisp_fx / 1000.0);
-    posForm->addRow(tr("Y:"), ySpin);
+    posForm->insertRow(placeAt++, tr("Y:"), ySpin);
+
+    /* Where the fixture actually ENDS UP, in stage coordinates: one compact
+       read-only line under X / Y.
+     *
+       X / Y above are the fixture's own plot XY, which for a
+       MOUNTED fixture is not where it is: the position is derived from the
+       structure, and the only hint of the height was "10.0 ft along" buried in
+       the Rig Assignment text -- an offset along a tower, not a height you
+       could read. Nothing in this dialog answered "so where is it?".
+
+       Read-only on purpose: for a mounted fixture the answer belongs to the
+       mount, and editing it here would just be overwritten. */
+    QLabel *stagePosLbl = new QLabel(posBox);
+    stagePosLbl->setObjectName(QStringLiteral("fixtureStagePosition"));
+    stagePosLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    stagePosLbl->setStyleSheet(QStringLiteral("color:#8a8e99;"));
+    stagePosLbl->setToolTip(tr("Where it is on stage (X across, Y deep, Z up). Read-only: on a "
+                               "truss, pipe or tower its mount decides it"));
+    refreshStagePos = [this, stagePosLbl, fxId_dlg]() {
+        const QVector3D w = fixtureWorldCentre(m_doc, fxId_dlg);    // metres
+        stagePosLbl->setText(tr("On stage: X %1   Y %2   Z %3")
+                             .arg(MeasurementUnits::formatMetres(double(w.x())),
+                                  MeasurementUnits::formatMetres(double(w.y())),
+                                  MeasurementUnits::formatMetres(double(w.z()))));
+    };
+    refreshStagePos();
+    posForm->insertRow(placeAt++, QString(), stagePosLbl);
 
     QSpinBox *rotSpin = new QSpinBox;
+    rotSpin->setObjectName(QStringLiteral("fixtureIconRotation"));
     rotSpin->setRange(0, 359);
     rotSpin->setSuffix(QString::fromUtf8("°"));
     rotSpin->setValue(fxItem != nullptr ? int(fxItem->rotation()) : int(stored.m_rotation.y()));
@@ -13800,30 +14164,8 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         QLabel *offPlot = new QLabel(tr("<i>Not on the plot.</i>"), posBox);
         offPlot->setObjectName(QStringLiteral("fixtureNotOnPlot"));
         offPlot->setToolTip(why);
-        posForm->addRow(QString(), offPlot);
+        posForm->insertRow(placeAt++, QString(), offPlot);
     }
-
-    /* Where the fixture actually ENDS UP, in stage coordinates.
-     *
-       X / Y above are the fixture's own plot XY, which for a
-       MOUNTED fixture is not where it is: the position is derived from the
-       structure, and the only hint of the height was "10.0 ft along" buried in
-       the Rig Assignment text -- an offset along a tower, not a height you
-       could read. Nothing in this dialog answered "so where is it?".
-
-       Read-only on purpose: for a mounted fixture the answer belongs to the
-       mount, and editing it here would just be overwritten. */
-    QLabel *stagePosLbl = new QLabel(&dlg);
-    stagePosLbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    refreshStagePos = [this, stagePosLbl, fxId_dlg]() {
-        const QVector3D w = fixtureWorldCentre(m_doc, fxId_dlg);    // metres
-        stagePosLbl->setText(tr("X %1   Y %2   Z %3")
-                             .arg(MeasurementUnits::formatMetres(double(w.x())),
-                                  MeasurementUnits::formatMetres(double(w.y())),
-                                  MeasurementUnits::formatMetres(double(w.z()))));
-    };
-    refreshStagePos();
-    posForm->addRow(tr("Stage position:"), stagePosLbl);
 
     // A linear fixture (strip / bar / tape) is oriented by its Face and Angle
     // (the Fixture rows above) — not an icon rotation.
@@ -13880,16 +14222,11 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     // A string: where it is, not which way it faces.
     if (pixelString)
     {
-        posBox->setTitle(tr("Position"));
         rotSpin->setVisible(false);
         if (QWidget *l = posForm->labelForField(rotSpin)) l->setVisible(false);
         if (QWidget *pv = posBox->findChild<QWidget *>(QStringLiteral("fixtureFacingPreview")))
             pv->setVisible(false);
     }
-
-    // Insert the Position & Orientation box directly above Rig Assignment.
-    const int rigIdx = rows->indexOf(rigBox);
-    rows->insertWidget(rigIdx >= 0 ? rigIdx : rows->count(), posBox);
 
     // A Fixture-row edit: running scenes recompute, the stage position and a
     // running test follow.
@@ -13978,8 +14315,11 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
 
         if (resetCh >= 0 || identifyCh >= 0)
         {
-            QGroupBox *dmxBox = new QGroupBox(tr("DMX Controls"), rowsBody);
-            QHBoxLayout *dmxHl = new QHBoxLayout(dmxBox);
+            // A tab of their own, last: only for a fixture that has them.
+            QVBoxLayout *dmxPage = tabs.page(QStringLiteral("dmx"), tr("DMX Controls"));
+            QWidget *dmxBox = dmxPage->parentWidget();
+            QHBoxLayout *dmxHl = new QHBoxLayout;
+            dmxPage->addLayout(dmxHl);
 
             if (identifyCh >= 0)
             {
@@ -14028,7 +14368,6 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
             }
 
             dmxHl->addStretch();
-            rows->addWidget(dmxBox);
         }
     }
 
@@ -14054,6 +14393,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         });
     }
     vl->addWidget(btns);
+    tabs.finish(dlg);
 
     if (execFixtureEditor(dlg, fids, next) != QDialog::Accepted)
     {

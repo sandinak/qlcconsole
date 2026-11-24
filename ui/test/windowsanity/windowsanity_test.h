@@ -64,6 +64,13 @@ private slots:
      *  straight to Show It reaches it while the editor is open. */
     void theBannerAnswersAheadOfTheLock();
 
+    /** Fixture Properties (a truss mover, the Focus Spot with its DMX
+     *  Controls, three together) at 1024x640, 1440x900 and 1920x1080: every
+     *  tab, as it opens (Aim & Mount's More folded), fits with no vertical
+     *  scroll bar, OK / Cancel in view, and takes input through its window.
+     *  QLC_SHOT_DIR: each tab at each size, and Aim & Mount unfolded. */
+    void fixturePropertiesEveryTabFits();
+
     /** Every window at every screen size. */
     void everyWindowWorksThroughItsWindow_data();
     void everyWindowWorksThroughItsWindow();

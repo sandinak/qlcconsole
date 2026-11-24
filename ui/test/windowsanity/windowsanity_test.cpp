@@ -36,6 +36,9 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScreen>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QSettings>
 #include <QTabBar>
 #include <QTabWidget>
 #include <QToolButton>
@@ -1180,6 +1183,151 @@ void WindowSanity_Test::theBannerAnswersAheadOfTheLock()
     settle();
     QVERIFY2(ran, "Fixture Properties did not open");
     QVERIFY2(back, "a click on Show It did not get past the rig-view lock");
+}
+
+void WindowSanity_Test::fixturePropertiesEveryTabFits()
+{
+    // As it opens the first time: on Fixture, More folded.
+    QSettings().remove(QStringLiteral("fixtureProperties"));
+    struct Case { QString tag; QList<quint32> ids; };
+    QList<Case> cases;
+    for (Fixture *f : m_app->doc()->fixtures())
+    {
+        if (f->name() == QLatin1String("SR Truss Spot 1"))
+            cases << Case{ QStringLiteral("mover"), { f->id() } };
+        else if (f->name() == QLatin1String("SR AT Spot"))
+            cases << Case{ QStringLiteral("focus-spot"), { f->id() } };
+    }
+    QCOMPARE(cases.size(), 2);
+    cases << Case{ QStringLiteral("several"), someFixtures(m_app->doc(), 3) };
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+
+    QStringList problems;
+    for (QScreen *s : sizeScreens())
+    {
+        QVERIFY(placeMain(m_app, s));
+        Monitor *mon = studio(m_app);
+        QVERIFY(mon != nullptr);
+        for (const Case &c : cases)
+        {
+            const QString where = QStringLiteral("%1 @ %2").arg(c.tag, sizeName(s));
+            bool ran = false;
+            QTimer::singleShot(0, this, [&]() {
+                QDialog *dlg = nullptr;
+                (void)QTest::qWaitFor([&]() {
+                    for (QWidget *w : QApplication::topLevelWidgets())
+                        if (w->isVisible() && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+                            dlg = qobject_cast<QDialog *>(w);
+                    return dlg != nullptr;
+                }, kOpenTimeout);
+                if (dlg == nullptr)
+                    return;
+                ran = true;
+                settle();
+                /* Its pages: the tabs', or (no tabs) every scroller in it, one
+                   page -- so the one tall scroller it had fails here. */
+                QTabWidget *tabs = dlg->findChild<QTabWidget *>(QStringLiteral("fixturePropertiesTabs"));
+                const int pages = tabs != nullptr ? tabs->count() : 1;
+                if (tabs == nullptr)
+                    problems << where + QStringLiteral(": no tabs");
+                if (tabs != nullptr && tabs->currentIndex() != 0)
+                    problems << where + QStringLiteral(": opened on tab %1, not Fixture").arg(tabs->currentIndex());
+                if (QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore")))
+                    if (more->isChecked())
+                        problems << where + QStringLiteral(": More is open");
+                const QRect room = dlg->screen()->availableGeometry();
+                for (int i = 0; i < pages; ++i)
+                {
+                    QString page = QStringLiteral("whole");
+                    if (tabs != nullptr)
+                    {
+                        tabs->setCurrentIndex(i);
+                        page = tabs->tabText(i).remove(QLatin1Char('&'));
+                    }
+                    settle();
+                    const QString at = QStringLiteral("%1, %2").arg(where, page);
+                    QList<QScrollArea *> areas;
+                    if (tabs != nullptr)
+                    {
+                        if (QScrollArea *a = qobject_cast<QScrollArea *>(tabs->widget(i)))
+                            areas << a;
+                    }
+                    else
+                        areas = dlg->findChildren<QScrollArea *>();
+                    for (QScrollArea *a : areas)
+                    {
+                        if (!a->isVisible() || a->widget() == nullptr)
+                            continue;
+                        const int need = a->widget()->sizeHint().height(), has = a->viewport()->height();
+                        if (a->verticalScrollBar()->isVisible() || need > has)
+                            problems << at + QStringLiteral(": scrolls (%1 px of rows in %2 px; the dialog "
+                                                            "is %3 px tall on a %4 px screen)")
+                                                 .arg(need).arg(has).arg(dlg->frameGeometry().height())
+                                                 .arg(room.height());
+                    }
+                    if (!room.contains(dlg->frameGeometry()))
+                        problems << at + QStringLiteral(": runs off its screen");
+                    QDialogButtonBox *bb = dlg->findChild<QDialogButtonBox *>();
+                    if (bb == nullptr || !bb->isVisible()
+                        || !dlg->rect().contains(QRect(bb->mapTo(dlg, QPoint(0, 0)), bb->size()))
+                        || !room.contains(QRect(bb->mapToGlobal(QPoint(0, 0)), bb->size())))
+                        problems << at + QStringLiteral(": OK / Cancel are out of view");
+                    QStringList input;
+                    checkInputThroughWindow(dlg, input);
+                    for (const QString &p : input)
+                        problems << at + QStringLiteral(": ") + p;
+                    if (!shots.isEmpty())
+                    {
+                        QDir().mkpath(shots);
+                        QString key = tabs != nullptr ? tabs->widget(i)->objectName().section(QLatin1Char('-'), 1)
+                                                      : QStringLiteral("whole");
+                        const QRect screen = s->geometry();
+                        auto save = [&](const QString &name) {
+                            settle();
+                            QImage img(screen.size(), QImage::Format_RGB32);
+                            img.fill(QColor(40, 40, 46));
+                            QPainter p(&img);
+                            p.drawPixmap(m_app->mapToGlobal(QPoint(0, 0)) - screen.topLeft(), m_app->grab());
+                            p.drawPixmap(dlg->mapToGlobal(QPoint(0, 0)) - screen.topLeft(), dlg->grab());
+                            p.end();
+                            img.save(QDir(shots).filePath(QStringLiteral("fptabs-%1-%2-%3.png")
+                                                              .arg(c.tag, name, sizeName(s))));
+                        };
+                        save(key);
+                        // Aim & Mount with More unfolded, as it reads open.
+                        QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+                        if (key == QLatin1String("aim") && more != nullptr && more->isVisible())
+                        {
+                            more->setChecked(true);
+                            save(QStringLiteral("aim-more"));
+                            more->setChecked(false);
+                        }
+                    }
+                }
+                QPointer<QDialog> g(dlg);
+                dlg->activateWindow();
+                settle(1);
+                QTest::keyClick(dlg->windowHandle(), Qt::Key_Escape);
+                (void)QTest::qWaitFor([&]() { return g.isNull() || !g->isVisible(); }, 500);
+                if (!g.isNull() && g->isVisible())
+                {
+                    problems << where + QStringLiteral(": Esc did not close it");
+                    g->reject();
+                }
+            });
+            if (c.ids.size() == 1)
+                mon->showFixtureItemEditor(c.ids.first());
+            else
+                mon->showFixtureItemEditor(c.ids);
+            settle();
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            if (!ran)
+                problems << where + QStringLiteral(": did not open");
+            m_app->doc()->resetModified();
+        }
+    }
+    QSettings().remove(QStringLiteral("fixtureProperties"));
+    QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QStringLiteral("\n  "))));
 }
 
 void WindowSanity_Test::everyWindowWorksThroughItsWindow_data()

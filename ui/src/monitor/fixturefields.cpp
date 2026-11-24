@@ -154,6 +154,18 @@ bool FixtureFields::spinIsMixed(const QDoubleSpinBox *sp)
     return !sp->specialValueText().isEmpty() && sp->value() <= sp->minimum();
 }
 
+bool FixtureFields::showsMixed(const QWidget *w)
+{
+    if (const QComboBox *cb = qobject_cast<const QComboBox *>(w))
+        return cb->currentIndex() >= 0 && comboIsMixed(cb);
+    if (const QDoubleSpinBox *sp = qobject_cast<const QDoubleSpinBox *>(w))
+        return sp->value() <= sp->minimum()
+            && (sp->specialValueText() == QObject::tr("mixed") || sp->specialValueText() == tr("mixed"));
+    if (const ColourSwatchButton *c = qobject_cast<const ColourSwatchButton *>(w))
+        return c->isMixed();
+    return false;
+}
+
 FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *parent,
                              StructureStudioView *view)
     : QObject(parent)
@@ -381,6 +393,7 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     powerCol->setContentsMargins(0, 0, 0, 0);
     powerCol->setSpacing(2);
     QHBoxLayout *powerRow = new QHBoxLayout;
+    m_powerRow = powerRow;
     powerRow->setSpacing(4);
     m_maxAmps = new QDoubleSpinBox(powerBox);
     m_maxAmps->setObjectName(QStringLiteral("fixtureMaxAmps"));
@@ -389,9 +402,10 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     m_maxAmps->setSingleStep(0.1);
     m_maxAmps->setSuffix(QStringLiteral(" A"));
     m_maxAmps->setSpecialValueText(tr("No limit"));
-    m_maxAmps->setToolTip(tr("The most it may draw. Whenever what it is sent would draw more, "
-                             "its output is scaled down -- every colour together, so the colour "
-                             "holds. Needs its draw measured (Measure… or Profile…)."));
+    m_maxAmpsTip = tr("The most it may draw. Whenever what it is sent would draw more, "
+                      "its output is scaled down -- every colour together, so the colour "
+                      "holds. Needs its draw measured (Measure… or Profile…).");
+    m_maxAmps->setToolTip(m_maxAmpsTip);
     QToolButton *profileBtn = new QToolButton(powerBox);
     profileBtn->setObjectName(QStringLiteral("fixtureProfile"));
     profileBtn->setText(tr("Profile…"));
@@ -404,6 +418,7 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     /* The buttons under the box, not beside it: four in one row were cut
        to "Mea…re…" and "Cop…es…" in the Studio editors' inspector (UX-36). */
     QHBoxLayout *powerBtns = new QHBoxLayout;
+    m_powerBtns = powerBtns;
     powerBtns->setSpacing(4);
     m_copyPower = new QToolButton(powerBox);
     m_copyPower->setObjectName(QStringLiteral("fixtureCopyPower"));
@@ -597,8 +612,49 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
 void FixtureFields::row(QWidget *w, bool visible)
 {
     w->setVisible(visible);
-    if (QWidget *l = m_form->labelForField(w))
+    QWidget *l = m_form->labelForField(w);
+    if (l == nullptr && m_placeForm != nullptr)
+        l = m_placeForm->labelForField(w);
+    if (l != nullptr)
         l->setVisible(visible);
+}
+
+void FixtureFields::movePlaceRows(QFormLayout *to)
+{
+    if (to == nullptr || to == m_form)
+        return;
+    m_placeForm = to;
+    for (QWidget *w : { static_cast<QWidget *>(m_mountOn), static_cast<QWidget *>(m_towerPos),
+                        static_cast<QWidget *>(m_orientation), static_cast<QWidget *>(m_face),
+                        static_cast<QWidget *>(m_placement), static_cast<QWidget *>(m_angle),
+                        static_cast<QWidget *>(m_tilt) })
+    {
+        const QFormLayout::TakeRowResult taken = m_form->takeRow(w);
+        QWidget *label = taken.labelItem != nullptr ? taken.labelItem->widget() : nullptr;
+        delete taken.labelItem;
+        delete taken.fieldItem;
+        if (label != nullptr)
+            to->addRow(label, w);
+        else
+            to->addRow(w);
+    }
+}
+
+void FixtureFields::setPowerCompact()
+{
+    if (m_powerStatus != nullptr || m_powerRow == nullptr || m_powerBtns == nullptr)
+        return;
+    m_powerStatus = new QLabel(m_maxAmps->parentWidget());
+    m_powerStatus->setObjectName(QStringLiteral("fixturePowerStatus"));
+    m_powerRow->addWidget(m_powerStatus);
+    m_powerRow->setStretch(0, 0);
+    m_powerRow->addStretch(1);
+    // Copy to Same Fixtures… beside Profile… and Measure…, not a line of its own.
+    if (QLayout *col = m_copyPower->parentWidget()->layout())
+        col->removeWidget(m_copyPower);
+    m_powerBtns->insertWidget(2, m_copyPower);
+    m_powerNote->hide();
+    reload();
 }
 
 void FixtureFields::hideAll()
@@ -1000,6 +1056,22 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
         if (!pp.isMeasured() && pp.maxAmps > 0.0 && !many)
             note += QStringLiteral("\n") + tr("The maximum does nothing until it is measured.");
         m_powerNote->setText(note);
+        if (m_powerStatus != nullptr)
+        {
+            /* Compact: a word or two on the row, the whole note on hover; a
+               maximum that does nothing yet is said in the warning colour. */
+            const bool idleMax = !pp.isMeasured() && pp.maxAmps > 0.0 && !many;
+            QString status;
+            if (many)
+                status = tr("%1 of %2 measured").arg(measured).arg(m_fids.size());
+            else
+                status = pp.isMeasured() ? tr("measured") : tr("not measured");
+            m_powerStatus->setText(status);
+            m_powerStatus->setStyleSheet(idleMax ? QStringLiteral("color:#e0a040;")
+                                                 : QStringLiteral("color:#8a8e99;"));
+            m_powerStatus->setToolTip(note);
+            m_maxAmps->setToolTip(m_maxAmpsTip + QStringLiteral("\n\n") + note);
+        }
     }
 
     m_loading = false;

@@ -1,3 +1,47 @@
+/* Fixture Properties is taller than a laptop's screen for a moving head:
+   its rows are in tabs, each page's in a scroller (a safety net), the name
+   above them and OK / Cancel below them in view, the dialog no taller than
+   its screen. */
+void Monitor_Test::fixturePropertiesRowsScrollButtonsStay()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    QString why;
+    driveDialog([&why](QWidget *dlg) {
+        QLineEdit *name = dlg->findChild<QLineEdit *>("fixtureNameEdit");
+        if (name == nullptr)
+            return false;
+        QTabWidget *tabs = dlg->findChild<QTabWidget *>("fixturePropertiesTabs");
+        QDialogButtonBox *buttons = dlg->findChild<QDialogButtonBox *>();
+        QWidget *x = dlg->findChild<QWidget *>("fixtureX");
+        QWidget *aim = dlg->findChild<QWidget *>("fixtureAim");
+        const QRect room = dlg->screen()->availableGeometry();
+        if (tabs == nullptr)
+            why = "no tabs";
+        else if (x == nullptr || aim == nullptr)
+            why = "no X or Aim row";
+        else if (tabs->isAncestorOf(name))
+            why = "the name is in a tab";
+        else if (buttons == nullptr || tabs->isAncestorOf(buttons))
+            why = "the buttons are in a tab";
+        else if (dlg->height() > room.height())
+            why = QString("%1 tall on a %2 screen").arg(dlg->height()).arg(room.height());
+        else
+            for (QWidget *row : { x, aim })
+            {
+                QScrollArea *page = nullptr;
+                for (int i = 0; i < tabs->count(); ++i)
+                    if (tabs->widget(i)->isAncestorOf(row))
+                        page = qobject_cast<QScrollArea *>(tabs->widget(i));
+                if (page == nullptr)
+                    why = row->objectName() + " is not in a page's scroller";
+            }
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY2(why.isEmpty(), qPrintable(why));
+}
+
 /*
   Q Light Controller Plus - Test Unit
   monitor_test.cpp
@@ -28,6 +72,8 @@
 #include <QScreen>
 #include <QWindow>
 #include <QScrollArea>
+#include <QTabWidget>
+#include <QTabBar>
 #include <QShortcut>
 #include <memory>
 #include <QGraphicsItem>
@@ -34358,6 +34404,7 @@ struct TurnRig
     MonitorGraphicsView *gv = nullptr;
     Doc *doc = nullptr;
     quint32 deck = 0;
+    bool hasDeck = false;       // deck 0 is a deck: the first a show has
     QList<quint32> fids;
     QVector3D grid;
     MonitorProperties::GridUnits units = MonitorProperties::Meters;
@@ -34369,7 +34416,7 @@ struct TurnRig
         for (quint32 fid : fids)
             doc->deleteFixture(fid);
         MonitorProperties *p = doc->monitorProperties();
-        if (deck != 0)
+        if (hasDeck)
             p->removePlatform(deck);
         p->setGridUnits(units);
         p->setGridSize(grid);
@@ -34398,6 +34445,7 @@ struct TurnRig
         pl->setDepth(8.0f);
         pl->setHeight(0.5f);
         deck = pl->id();
+        hasDeck = true;
         return !p->stageDecks().isEmpty() && p->stageDecks().first() == pl;
     }
     quint32 head(const char *name, float x, int panMax = 540)
@@ -34438,9 +34486,10 @@ void Monitor_Test::thePanTurnInFixturePropertiesIsOneUndoStep()
             if (label == nullptr || stage == nullptr || btn == nullptr || row == nullptr)
                 return false;
             seen.found = true;
+            Monitor::revealFixtureEditorRow(row);       // on Aim & Mount
             seen.shown = row->isVisibleTo(dlg);
             seen.before = label->text();
-            seen.beforeStage = stage->text();
+            seen.beforeStage = stage->toolTip();        // the whole of it; the line says it short
             auto grab = [&](const QString &when) {
                 if (shots.isEmpty() || shot.isEmpty())
                     return;
@@ -34456,7 +34505,7 @@ void Monitor_Test::thePanTurnInFixturePropertiesIsOneUndoStep()
             grab(QStringLiteral("before"));
             btn->click();
             seen.after = label->text();
-            seen.afterStage = stage->text();
+            seen.afterStage = stage->toolTip();
             grab(QStringLiteral("after"));
             return true;
         }, accept);
@@ -34509,6 +34558,324 @@ void Monitor_Test::thePanTurnInFixturePropertiesIsOneUndoStep()
     }, false);
     rig.mon->showFixtureItemEditor(one);
     QVERIFY(!rowShown);
+}
+
+/* Fixture Properties' tabs (the owner's "Tabs + shade", 2026-11-23). */
+namespace
+{
+QTabWidget *fpTabs(QWidget *dlg)
+{
+    return dlg->findChild<QTabWidget *>(QStringLiteral("fixturePropertiesTabs"));
+}
+
+// fixture, place, aim, dmx: the page's name.
+QString fpKey(QTabWidget *tabs, int i)
+{
+    return i < 0 || i >= tabs->count() ? QString() : tabs->widget(i)->objectName().section(QLatin1Char('-'), 1);
+}
+
+QString fpCurrent(QWidget *dlg)
+{
+    QTabWidget *tabs = fpTabs(dlg);
+    return tabs != nullptr ? fpKey(tabs, tabs->currentIndex()) : QStringLiteral("(no tabs)");
+}
+
+// As a person does: a click on the tab @p w is on, then on More if it is in it.
+bool fpReachByClicks(QWidget *dlg, QWidget *w)
+{
+    QTabWidget *tabs = fpTabs(dlg);
+    if (tabs == nullptr || w == nullptr)
+        return false;
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i)->isAncestorOf(w) && tabs->currentIndex() != i)
+        {
+            QTabBar *bar = tabs->tabBar();
+            QTest::mouseClick(bar, Qt::LeftButton, Qt::NoModifier, bar->tabRect(i).center());
+        }
+    QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+    for (QWidget *p = w; p != nullptr && p != dlg; p = p->parentWidget())
+        if (p->property("fixtureAimShade").toBool() && more != nullptr && !more->isChecked())
+        {
+            QTest::mouseClick(more, Qt::LeftButton);
+            break;
+        }
+    QCoreApplication::processEvents();
+    return w->isVisible();
+}
+
+void fpForget()
+{
+    QSettings().remove(QStringLiteral("fixtureProperties"));
+}
+}
+
+/* It opens on Fixture the first time, then on the tab last used; Ctrl+Tab
+   and Ctrl+Shift+Tab go round the tabs, Tab stays on the page shown, Esc
+   cancels. */
+void Monitor_Test::fixturePropertiesOpensOnTheTabLastUsed()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+
+    QStringList seen;
+    QString focusOff;
+    bool escClosed = false;
+    QTimer::singleShot(0, [&]() {
+        QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
+        if (dlg == nullptr)
+            return;
+        dlg->activateWindow();
+        QApplication::processEvents();
+        QWindow *win = dlg->windowHandle();
+        seen << fpCurrent(dlg);
+        QTest::keyClick(win, Qt::Key_Tab, Qt::ControlModifier);
+        seen << fpCurrent(dlg);
+        QTest::keyClick(win, Qt::Key_Tab, Qt::ControlModifier);
+        seen << fpCurrent(dlg);
+        QTest::keyClick(win, Qt::Key_Backtab, Qt::ControlModifier | Qt::ShiftModifier);
+        seen << fpCurrent(dlg);
+        QTest::keyClick(win, Qt::Key_Tab, Qt::ControlModifier);
+        seen << fpCurrent(dlg);
+        // Tab from Aim: the next field is on this page, not a hidden one.
+        if (QWidget *aim = dlg->findChild<QWidget *>(QStringLiteral("fixtureAim")))
+        {
+            aim->setFocus(Qt::TabFocusReason);
+            QTest::keyClick(win, Qt::Key_Tab);
+            QWidget *f = QApplication::focusWidget();
+            QTabWidget *tabs = fpTabs(dlg);
+            if (f == nullptr || !f->isVisible()
+                || (tabs != nullptr && !tabs->currentWidget()->isAncestorOf(f)))
+                focusOff = f != nullptr ? f->objectName() + QLatin1Char(' ') + f->metaObject()->className()
+                                        : QStringLiteral("nothing");
+        }
+        QPointer<QDialog> g(dlg);
+        QTest::keyClick(win, Qt::Key_Escape);
+        escClosed = g.isNull() || !g->isVisible();
+        if (!escClosed)
+            dlg->reject();
+    });
+    rig.mon->showFixtureItemEditor(fid);
+    QCOMPARE(seen, QStringList({ "fixture", "place", "aim", "place", "aim" }));
+    QVERIFY2(focusOff.isEmpty(), qPrintable("Tab from Aim went to " + focusOff));
+    QVERIFY(escClosed);
+
+    // Again: on Aim & Mount. A click on Place, OK; again: on Place.
+    QString opened;
+    driveDialog([&](QWidget *dlg) {
+        opened = fpCurrent(dlg);
+        QTabWidget *tabs = fpTabs(dlg);
+        if (tabs == nullptr)
+            return false;
+        QTest::mouseClick(tabs->tabBar(), Qt::LeftButton, Qt::NoModifier, tabs->tabBar()->tabRect(1).center());
+        return true;
+    }, true);
+    rig.mon->showFixtureItemEditor(fid);
+    QCOMPARE(opened, QStringLiteral("aim"));
+    driveDialog([&](QWidget *dlg) { opened = fpCurrent(dlg); return true; }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QCOMPARE(opened, QStringLiteral("place"));
+
+    // A row brought into view (Monitor::revealFixtureEditorRow) is not a choice.
+    driveDialog([&](QWidget *dlg) {
+        return Monitor::revealFixtureEditorRow(dlg->findChild<QWidget *>(QStringLiteral("fixturePanOffset")));
+    }, true);
+    rig.mon->showFixtureItemEditor(fid);
+    driveDialog([&](QWidget *dlg) {
+        opened = fpCurrent(dlg);
+        QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+        return more != nullptr && !more->isChecked();
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QCOMPARE(opened, QStringLiteral("place"));
+}
+
+/* Several fixtures: a tab with a row they differ on says so in its title
+   ("Aim & Mount •"), the row still reads "mixed"; set, the mark goes. */
+void Monitor_Test::fixturePropertiesMarksTheTabTheyDifferOn()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 a = rig.head("Spot 1", 20.0f);
+    const quint32 b = rig.head("Spot 2", 21.0f);
+    QVERIFY(a != Fixture::invalidId() && b != Fixture::invalidId());
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(b);
+    rp.panZeroDir = 90.0f;                         // their aims differ
+    m_doc->monitorProperties()->setFixtureRigProps(b, rp);
+
+    QMap<QString, QString> before, after;
+    QString aimText;
+    driveDialog([&](QWidget *dlg) {
+        QTabWidget *tabs = fpTabs(dlg);
+        QDoubleSpinBox *aim = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureAim"));
+        if (tabs == nullptr || aim == nullptr)
+            return false;
+        for (int i = 0; i < tabs->count(); ++i)
+            before[fpKey(tabs, i)] = tabs->tabText(i);
+        aimText = aim->text();
+        aim->setValue(45.0);                       // set on both: no longer mixed
+        for (int i = 0; i < tabs->count(); ++i)
+            after[fpKey(tabs, i)] = tabs->tabText(i);
+        return true;
+    }, false);
+    rig.mon->editFixturesProperties({ a, b });
+    QCOMPARE(aimText, QStringLiteral("mixed"));
+    QVERIFY2(before.value("aim").contains(QChar(0x2022)), qPrintable(before.value("aim")));
+    QVERIFY2(!before.value("fixture").contains(QChar(0x2022)), qPrintable(before.value("fixture")));
+    QVERIFY2(!after.value("aim").contains(QChar(0x2022)), qPrintable(after.value("aim")));
+}
+
+/* Aim & Mount's More: folded by default, the fold remembered; folded, a
+   set calibration is said ("pan cal 5.0°"), never hidden silently. */
+void Monitor_Test::fixturePropertiesFoldedMoreSaysWhatIsSet()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(fid);
+    rp.panOffsetDeg = 5.0f;
+    m_doc->monitorProperties()->setFixtureRigProps(fid, rp);
+
+    struct Look { bool found = false, folded = false, offsetShown = true, summaryShown = false;
+                  QString summary; bool openShowsOffset = false, openHidesSummary = false; };
+    Look look;
+    driveDialog([&](QWidget *dlg) {
+        QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+        QLabel *sum = dlg->findChild<QLabel *>(QStringLiteral("fixtureAimMoreSummary"));
+        QWidget *off = dlg->findChild<QWidget *>(QStringLiteral("fixturePanOffset"));
+        QTabWidget *tabs = fpTabs(dlg);
+        if (more == nullptr || sum == nullptr || off == nullptr || tabs == nullptr)
+            return false;
+        look.found = true;
+        for (int i = 0; i < tabs->count(); ++i)
+            if (fpKey(tabs, i) == QLatin1String("aim"))
+                QTest::mouseClick(tabs->tabBar(), Qt::LeftButton, Qt::NoModifier, tabs->tabBar()->tabRect(i).center());
+        QCoreApplication::processEvents();
+        look.folded = !more->isChecked();
+        look.offsetShown = off->isVisible();
+        look.summaryShown = sum->isVisible();
+        look.summary = sum->text();
+        QTest::mouseClick(more, Qt::LeftButton);          // the person unfolds it
+        look.openShowsOffset = off->isVisible();
+        look.openHidesSummary = !sum->isVisible();
+        return true;
+    }, true);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(look.found);
+    QVERIFY2(look.folded, "More is open the first time");
+    QVERIFY2(!look.offsetShown, "pan offset shown while More is folded");
+    QVERIFY2(look.summaryShown && look.summary.contains(QString::fromUtf8("pan cal 5.0°")),
+             qPrintable(look.summary));
+    QVERIFY(look.openShowsOffset && look.openHidesSummary);
+
+    // Opened by the person: open next time; folded again, folded after.
+    bool open = false;
+    driveDialog([&](QWidget *dlg) {
+        QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+        if (more == nullptr)
+            return false;
+        open = more->isChecked();
+        QTest::mouseClick(more, Qt::LeftButton);
+        return true;
+    }, true);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY2(open, "More's fold is not remembered");
+    driveDialog([&](QWidget *dlg) {
+        QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+        open = more != nullptr && more->isChecked();
+        return more != nullptr;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(!open);
+}
+
+/* Nothing was lost to the tabs and the shade: every control Fixture
+   Properties showed for a moving head, and for two, before them (its named
+   widgets, walked on fix/053-fixture-props-fit 22f8c6d00), is still there
+   and is reached by a click on its tab (and on More). The rows named since
+   (they had no name) are reached too. The power note is the Max draw row's
+   status and tooltip now. */
+void Monitor_Test::fixturePropertiesKeepsEveryControl()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 a = rig.head("Spot 1", 20.0f);
+    const quint32 b = rig.head("Spot 2", 21.0f);
+    QVERIFY(a != Fixture::invalidId() && b != Fixture::invalidId());
+
+    const QStringList oneBefore = {
+        "colourReset", "colourSwatch", "definitionAndModeButton", "fixtureAddress", "fixtureAim",
+        "fixtureColour", "fixtureCopyPower", "fixtureFacingPreview", "fixtureMaskBottom", "fixtureMaskLeft",
+        "fixtureMaskRight", "fixtureMaskTop", "fixtureMaxAmps", "fixtureMeasure", "fixtureNameEdit",
+        "fixtureOrientation", "fixtureOwner", "fixturePanTurn", "fixturePanTurnCentre", "fixturePanTurnEarlier",
+        "fixturePanTurnLater", "fixturePanTurnRow", "fixturePanTurnStage", "fixturePatch", "fixturePlacement",
+        "fixtureProfile", "fixtureStageLook", "fixtureTilt", "fixtureUniverse", "fixtureX", "fixtureY",
+        "testOrientation" };
+    const QStringList oneNamedSince = {
+        "fixtureIconRotation", "fixtureStagePosition", "fixturePanOffset", "fixtureTiltOffset",
+        "fixturePanInvert", "fixtureTiltInvert", "fixtureTest", "fixtureLocate" };
+    const QStringList severalBefore = {
+        "colourReset", "colourSwatch", "fixtureAddress", "fixtureAim", "fixtureColour", "fixtureCopyPower",
+        "fixtureFacingPreview", "fixtureIconRotation", "fixtureMaxAmps", "fixtureMeasure", "fixtureOrientation",
+        "fixtureOwner", "fixturePanTurn", "fixturePanTurnCentre", "fixturePanTurnRow", "fixturePatch",
+        "fixturePlacement", "fixtureProfile", "fixtureStageLook", "fixtureTilt", "fixtureUniverse" };
+
+    auto walk = [](QWidget *dlg, const QStringList &names, QStringList &lost) {
+        for (const QString &n : names)
+        {
+            // Each from the tab it opens on, as a person finds it.
+            QWidget *w = dlg->findChild<QWidget *>(n);
+            if (w == nullptr)
+                lost << n + QStringLiteral(" (gone)");
+            else if (!fpReachByClicks(dlg, w))
+                lost << n + QStringLiteral(" (not reached)");
+        }
+        // The power note: not a line of its own, said on the Max draw row.
+        QLabel *note = dlg->findChild<QLabel *>(QStringLiteral("fixturePowerNote"));
+        QLabel *status = dlg->findChild<QLabel *>(QStringLiteral("fixturePowerStatus"));
+        if (note == nullptr || status == nullptr)
+            lost << QStringLiteral("fixturePowerNote / fixturePowerStatus (gone)");
+        else if (!fpReachByClicks(dlg, status) || status->toolTip() != note->text() || note->text().isEmpty())
+            lost << QStringLiteral("fixturePowerNote (\"%1\" not on its row: \"%2\")")
+                        .arg(note->text(), status->toolTip());
+    };
+    QStringList lostOne, lostSeveral;
+    QString statusText;
+    driveDialog([&](QWidget *dlg) {
+        if (fpTabs(dlg) == nullptr)
+        {
+            lostOne << QStringLiteral("(no tabs)");
+            return true;
+        }
+        walk(dlg, oneBefore + oneNamedSince, lostOne);
+        if (QLabel *st = dlg->findChild<QLabel *>(QStringLiteral("fixturePowerStatus")))
+            statusText = st->text();
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(a);
+    QVERIFY2(lostOne.isEmpty(), qPrintable(lostOne.join(", ")));
+    QCOMPARE(statusText, QStringLiteral("not measured"));
+    driveDialog([&](QWidget *dlg) {
+        if (fpTabs(dlg) == nullptr)
+        {
+            lostSeveral << QStringLiteral("(no tabs)");
+            return true;
+        }
+        walk(dlg, severalBefore, lostSeveral);
+        return true;
+    }, false);
+    rig.mon->editFixturesProperties({ a, b });
+    QVERIFY2(lostSeveral.isEmpty(), qPrintable(lostSeveral.join(", ")));
 }
 
 void Monitor_Test::aLiveHeadsTurnIsSaidFirst()
