@@ -2745,3 +2745,144 @@ void ControlMap_Test::aKeyAtAPlaceFollowsItToo()
     tick();
     QVERIFY(a->isRunning());
 }
+
+/* A key out of its place follows the key rule it follows inside it: in
+   Design a scene key never acts, not even to stop the scene that runs (it
+   used to, through the let-go path, only while its place was not live). In
+   Operate it still lets go. */
+void ControlMap_Test::aKeyOutOfItsPlaceFollowsTheKeyRule()
+{
+    QList<quint32> cues;
+    cueList(3, &cues);
+    Scene *warm = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f6 = ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(warm->id()), ControlMap::Toggle,
+                     ControlMap::inCue(cues.at(1)) });
+    QCOMPARE(m_doc->mode(), Doc::Design);
+    warm->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    QVERIFY(warm->isRunning());
+    QVERIFY(!cm->isPlaceLive(ControlMap::inCue(cues.at(1))));
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    QVERIFY(!cm->handleKey(f6, true));               // the key goes on
+    cm->handleKey(f6, false);
+    tick(3);
+    QVERIFY2(warm->isRunning(), "a scene key acted in Design out of its place");
+    QCOMPARE(blocked.count(), 1);
+    QVERIFY2(blocked.last().at(0).toString().contains("Operate"), qPrintable(blocked.last().at(0).toString()));
+    // Its place selected: refused the same way.
+    cm->setSelectedTargets({ ControlMap::cue(cues.at(1)) });
+    QVERIFY(cm->isPlaceLive(ControlMap::inCue(cues.at(1))));
+    QVERIFY(!cm->handleKey(f6, true));
+    cm->handleKey(f6, false);
+    tick(3);
+    QVERIFY(warm->isRunning());
+    cm->setSelectedTargets({});
+    // Operate, out of its place: what runs can still be let go.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(cm->handleKey(f6, true));
+    cm->handleKey(f6, false);
+    tick(3);
+    QVERIFY(!warm->isRunning());
+    m_doc->setMode(Doc::Design);
+}
+
+/* Two triggers at two places of one scope (two running lists) share the
+   control, but never step through each other: nobody chose Step Through
+   Them. The run list's has it. */
+void ControlMap_Test::twoPlacesOfOneScopeDoNotStepThrough()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    ShowTreeController *st = m_doc->showTree();
+    quint32 prod = ShowTree::invalidId();
+    st->cueList(listId, &prod);
+    const quint32 other = st->addCueList(prod, "Ambience");
+    QVERIFY(other != ShowTree::invalidId());
+    {
+        ShowTree::Target t;
+        t.groups << m_doc->fixtureGroups().at(0)->id();
+        const quint32 c = st->addCue(other, -1, "Rain");
+        st->setLayerLook(c, st->addLayer(c, t), st->lookForPalette(m_doc->palettes().at(0)->id()));
+    }
+    Scene *stab = scene("Stab", 1);
+    Scene *haze = scene("Haze", 2);
+    ControlMap *cm = m_doc->controlMap();
+    // Haze first in the table: "the first" alone would pick it.
+    cm->setBinding({ 0, kNote, ControlMap::function(haze->id()), ControlMap::Toggle, ControlMap::inList(other) });
+    cm->setBinding({ 0, kNote, ControlMap::function(stab->id()), ControlMap::Toggle, ControlMap::inList(listId) });
+    QCOMPARE(cm->bindingsOn(0, kNote).count(), 2);
+    m_doc->setMode(Doc::Operate);
+    cm->setRunTabList(listId);
+    Function *a = m_doc->function(st->cueList(listId)->chaser);
+    Function *b = m_doc->function(st->cueList(other)->chaser);
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    b->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    QVERIFY(cm->isPlaceLive(ControlMap::inList(listId)));
+    QVERIFY(cm->isPlaceLive(ControlMap::inList(other)));
+    QCOMPARE(cm->armedOn(0, kNote).count(), 1);
+    QCOMPARE(cm->bindingOn(0, kNote)->target, ControlMap::function(stab->id()));
+    // Two presses: Stab on, Stab off. Haze never.
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(stab->isRunning() && !haze->isRunning());
+    send(kNote, 127); send(kNote, 0); tick(3);
+    QVERIFY2(!haze->isRunning(), "two places of one scope stepped through each other");
+    QVERIFY(!stab->isRunning());
+    // The Run tab on Ambience: Haze has it.
+    cm->setRunTabList(other);
+    QCOMPARE(cm->bindingOn(0, kNote)->target, ControlMap::function(haze->id()));
+    a->stop(FunctionParent::master());
+    b->stop(FunctionParent::master());
+    tick(3);
+    m_doc->setMode(Doc::Design);
+}
+
+/* A hit learned at a place wider than its own: it is offered only its own
+   and narrower places, and one left wider (an older show) does not take the
+   control where the hit cannot fire, so the wider trigger still fires. */
+void ControlMap_Test::aHitLearnedWiderThanItsPlaceDoesNotHoldTheControl()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 hit = st->addHit(ShowTree::HitScope::Cue, cues.at(1), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    {
+        ShowTree::Target t;
+        t.groups << m_doc->fixtureGroups().at(0)->id();
+        st->setLayerLook(hit, st->addLayer(hit, t), st->lookForPalette(m_doc->palettes().at(0)->id()));
+    }
+    Scene *warm = scene("Warm", 0);
+    ControlMap *cm = m_doc->controlMap();
+
+    // Learn offers the cue (and nothing wider) for a hit at cue 2.
+    const QList<ControlMap::Place> offered = cm->placeChoices(ControlMap::inCue(cues.at(1)), ControlMap::hit(hit));
+    QVERIFY(offered.contains(ControlMap::inCue(cues.at(1))));
+    QVERIFY(!offered.contains(ControlMap::everywhere()));
+    QVERIFY(!offered.contains(ControlMap::inList(listId)));
+    QVERIFY(cm->placeChoices(ControlMap::inCue(cues.at(1))).contains(ControlMap::everywhere()));   // a scene: all
+
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote, ControlMap::function(warm->id()), ControlMap::Toggle, ControlMap::everywhere() });
+    cm->setBinding({ 0, kNote, ControlMap::hit(hit), ControlMap::Toggle, ControlMap::inList(listId) });
+    Function *coll = m_doc->function(st->cue(hit)->collection);
+    QVERIFY(coll != nullptr);
+    m_doc->setMode(Doc::Operate);
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+    QVERIFY(!st->isHitArmed(hit));
+    // Cue 1: the hit cannot fire, so Warm has the button.
+    QCOMPARE(cm->bindingOn(0, kNote)->target, ControlMap::function(warm->id()));
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::hit(hit))), ControlMap::LampOff);
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY2(warm->isRunning(), "a hit armed wider than its place held the button dead");
+    QVERIFY(!coll->isRunning());
+    warm->stop(FunctionParent::master());
+    // Cue 2: the hit's place is live, it has the button.
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QCOMPARE(cm->bindingOn(0, kNote)->target, ControlMap::hit(hit));
+    m_doc->setMode(Doc::Design);
+}

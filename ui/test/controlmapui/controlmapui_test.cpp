@@ -1359,8 +1359,10 @@ void ControlMapUi_Test::theShowTreeLearnsWhereYouRightClicked()
     QVERIFY(offered(cues.at(0), &text) == ControlMap::everywhere());
     QVERIFY2(items.contains("In cue list Act 1") && items.first().startsWith("In cue "),
              qPrintable(items.join(" | ")));
-    // A hit works at its own place.
+    // A hit works at its own place, and is offered nothing wider: there it
+    // could not fire, and would hold the control dark.
     QVERIFY(offered(hit, &text) == ControlMap::inCue(cues.at(1)));
+    QVERIFY2(!items.contains("Everywhere") && !items.contains("In cue list Act 1"), qPrintable(items.join(" | ")));
 }
 
 /* A GO learned from a cue list's or a cue's right-click, its Works left as

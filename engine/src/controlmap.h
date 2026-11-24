@@ -326,7 +326,10 @@ public:
     bool isPlaceLive(const Place &place) const;
     /** Of the bindings on a control, the armed ones at the narrowest live
      *  place (cue > list > production > everywhere), in the table's order.
-     *  More than one: they share that place and step through. */
+     *  A hit counts only while it may fire (surfaceMayFire()). Two places
+     *  of that scope live at once: the run list's (isRunListPlace()), else
+     *  the first in the table. More than one: they share that one place
+     *  and step through. */
     QList<Binding> armedOn(quint32 universe, quint32 channel) const;
     /** Whether @a b is one of the armed ones on its control (armedOn()). */
     bool isArmedOnControl(const Binding &b) const;
@@ -340,8 +343,15 @@ public:
     /** The places a trigger learned at @a where may have, narrowest first:
      *  that place and the ones around it (a cue, its list, its production,
      *  everywhere), then those around the cue live now (or selected in the
-     *  Show Tree), each once. Everywhere is always one of them. */
-    QList<Place> placeChoices(const Place &where) const;
+     *  Show Tree), each once. Everywhere is always one of them. For a hit
+     *  @a target, only its own place and those inside it (placeOfHit()). */
+    QList<Place> placeChoices(const Place &where, const Target &target = Target()) const;
+    /** Whether @a inner is @a outer or inside it (a cue in a list, a list
+     *  in a production; everything is inside everywhere). */
+    bool isPlaceWithin(const Place &inner, const Place &outer) const;
+    /** Whether @a place is (or holds) the run list: everywhere, its
+     *  production, the list itself or one of its cues. */
+    bool isRunListPlace(const Place &place) const;
     /** The place of hit @a hitId (where a binding learned on it goes). */
     Place placeOfHit(quint32 hitId) const;
 
@@ -508,6 +518,16 @@ private:
     /** A binding on control @a k whose function runs (narrowest first):
      *  with none armed, a press of it still lets go. Null: none. */
     const Binding *runningOn(quint64 k) const;
+    /** Whether binding @a b may have its control now: its place is live,
+     *  and a hit may fire. */
+    bool holdsControl(const Binding &b) const;
+    /** A hit binding on control @a k whose place is live but which may not
+     *  fire (its own place is not live). Null: none. */
+    const Binding *refusedHitOn(quint64 k) const;
+    /** Says why a press of control @a k fired nothing armed. */
+    void sayNotLive(quint64 k);
+    /** The cue list of cue @a cueId (a sub-cue's: its cue's). */
+    quint32 listOfCueId(quint32 cueId) const;
     /** The binding whose light control @a k shows (null: dark). */
     const Binding *lampOwner(quint64 k) const;
     /** The emergency stop's binding when it is on control @a k. */

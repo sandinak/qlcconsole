@@ -208,7 +208,11 @@ there or chosen in the Run tab. The Operate / Design rules above still
 apply on top.
 
 **Learn Trigger… offers the place.** From a hit's right-click it starts
-at the hit's own place. A cue list's GO and a jump to a cue start at
+at the hit's own place, and a hit is offered only its own place and the
+ones inside it: a hit fires only where its place is live, so a trigger
+wider than that would hold the control and fire nothing. (One left wider
+in an older show does not hold it: where the hit cannot fire, the next
+wider trigger on that control fires.) A cue list's GO and a jump to a cue start at
 **Everywhere**: their job is to bring that list or cue live, and a trigger
 that works only once it is already live could never start the list or jump
 to the cue. The cue or list you right-clicked is offered in the list, with
@@ -220,7 +224,9 @@ now. Learned from a scene or effect in Build it starts at Everywhere. Under the 
 
 - At **different places**, the **narrowest armed** one fires: cue, then
   cue list, then production, then everywhere. Learn says so in that line,
-  and Learn does not refuse it.
+  and Learn does not refuse it. Two places of one kind live at once (two
+  running lists, two cues of two lists) never step through each other:
+  the one in the Run tab's list fires, else the first in the table.
 - At the **same place**, Learn refuses it, naming the trigger that is
   there, with **Move It Here** -- and, on a button or key, **Step Through
   Them**: both stay and each press fires the next one (as a VC button with
@@ -234,7 +240,8 @@ now. Learned from a scene or effect in Build it starts at Everywhere. Under the 
 
 **Letting go.** A trigger whose place is no longer live can still stop
 what it started (a Toggle press, a Momentary release): only a start is held
-back. Its light stays bright while that runs, then goes dark.
+back. A computer key keeps the key rule there too: in Design a scene or
+effect key does nothing, in its place or out of it. Its light stays bright while that runs, then goes dark.
 
 **Lights and the hub follow what is armed now.** A control's light is the
 one of the trigger that would fire: when the GO leaves cue 2.3, a control

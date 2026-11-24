@@ -111,6 +111,9 @@ private slots:
     void placesAreSavedAndAnOldShowIsEverywhere();
     void theStopIsEverywhereAndAboveEveryPlace();
     void aKeyAtAPlaceFollowsItToo();
+    void aKeyOutOfItsPlaceFollowsTheKeyRule();
+    void twoPlacesOfOneScopeDoNotStepThrough();
+    void aHitLearnedWiderThanItsPlaceDoesNotHoldTheControl();
     void aPlaceTakenIsNeverMovedOnto();
 
 private:

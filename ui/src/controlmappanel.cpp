@@ -223,7 +223,7 @@ void ControlMapPanel::refresh()
         place->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         place->setMinimumContentsLength(10);
         QList<ControlMap::Place> places = estop ? QList<ControlMap::Place>{ ControlMap::Place() }
-                                                : cm->placeChoices(b.place);
+                                                : cm->placeChoices(b.place, b.target);
         if (!places.contains(b.place))
             places.prepend(b.place);
         for (const ControlMap::Place &p : std::as_const(places))

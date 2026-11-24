@@ -96,7 +96,7 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
                            "things in other places: the narrowest live place has it."));
     const ControlMap::Binding *bound = cm->binding(target);
     QList<ControlMap::Place> places = estop ? QList<ControlMap::Place>{ ControlMap::Place() }
-                                            : cm->placeChoices(where);
+                                            : cm->placeChoices(where, target);
     if (bound != nullptr && !places.contains(bound->place))
         places.prepend(bound->place);
     for (const ControlMap::Place &p : std::as_const(places))
@@ -111,7 +111,11 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     // list, never jump to the cue). Everywhere by default; the place is
     // offered. A hit or a scene works where it was learned.
     const bool bringsItLive = target.type == ControlMap::CueListTarget || target.type == ControlMap::CueTarget;
-    setPlace(bound != nullptr ? bound->place : bringsItLive ? ControlMap::everywhere() : where);
+    // A hit fires only inside its own place: learned outside it, at its own.
+    ControlMap::Place learnAt = where;
+    if (target.type == ControlMap::HitTarget && !cm->isPlaceWithin(where, cm->placeOfHit(target.id)))
+        learnAt = cm->placeOfHit(target.id);
+    setPlace(bound != nullptr ? bound->place : bringsItLive ? ControlMap::everywhere() : learnAt);
     m_place->setEnabled(!estop && places.count() > 1);
     form->addRow(tr("Works"), m_place);
     lay->addLayout(form);

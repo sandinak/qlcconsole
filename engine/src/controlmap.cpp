@@ -842,8 +842,7 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         const Binding *running = runningOn(k);
         if (running == nullptr)
         {
-            say(k, tr("Not fired: %1 is not live here. %2")
-                       .arg(controlName(universe, channel), placesText(bindingsOn(universe, channel))));
+            sayNotLive(k);
             return;
         }
         b = *running;
@@ -875,6 +874,19 @@ void ControlMap::say(quint64 k, const QString &why)
         return;
     m_blockedHeld[k].start();
     emit blocked(why);
+}
+
+void ControlMap::sayNotLive(quint64 k)
+{
+    const quint32 universe = quint32(k >> 32), channel = quint32(k & 0xFFFFFFFF);
+    // A hit at a live place that may not fire: its own reason, not "not live here".
+    if (const Binding *hit = refusedHitOn(k))
+    {
+        say(k, tr("Not fired: %1. %2").arg(targetName(hit->target), refusalFor(hit->target)));
+        return;
+    }
+    say(k, tr("Not fired: %1 is not live here. %2")
+               .arg(controlName(universe, channel), placesText(bindingsOn(universe, channel))));
 }
 
 void ControlMap::slotInputDeviceChanged(quint32 universe)
@@ -1209,25 +1221,134 @@ bool ControlMap::isPlaceLive(const Place &place) const
     return false;
 }
 
+bool ControlMap::holdsControl(const Binding &b) const
+{
+    if (b.target.type == EmergencyStopTarget || !isPlaceLive(b.place))
+        return false;
+    // A hit only while it may fire itself: learned at a place wider than
+    // its own, it does not take the control from a wider trigger that would.
+    return b.target.type != HitTarget || surfaceMayFire(b.target);
+}
+
+quint32 ControlMap::listOfCueId(quint32 cueId) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr)
+        return 0xFFFFFFFF;
+    // A sub-cue (a cue made one after it was bound): its cue's list.
+    quint32 parent = 0xFFFFFFFF;
+    const ShowTree::CueList *l = st->listOfCue(st->isSubCue(cueId, &parent) ? parent : cueId);
+    return l == nullptr ? quint32(0xFFFFFFFF) : l->id;
+}
+
+bool ControlMap::isRunListPlace(const Place &place) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 run = runList();
+    if (st == nullptr || run == 0xFFFFFFFF)
+        return false;
+    switch (place.scope)
+    {
+        case Everywhere:
+            return true;
+        case ProductionPlace:
+        {
+            quint32 prod = 0xFFFFFFFF;
+            return st->cueList(run, &prod) != nullptr && prod == place.id;
+        }
+        case ListPlace:
+            return place.id == run;
+        case CuePlace:
+            return listOfCueId(place.id) == run;
+    }
+    return false;
+}
+
+bool ControlMap::isPlaceWithin(const Place &inner, const Place &outer) const
+{
+    if (outer.scope == Everywhere)
+        return true;
+    if (int(inner.scope) < int(outer.scope))
+        return false;
+    if (inner == outer)
+        return true;
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr)
+        return false;
+    quint32 list = 0xFFFFFFFF;
+    switch (inner.scope)
+    {
+        case CuePlace:
+        {
+            quint32 parent = 0xFFFFFFFF;
+            if (outer.scope == CuePlace)
+                return st->isSubCue(inner.id, &parent) && parent == outer.id;
+            list = listOfCueId(inner.id);
+            break;
+        }
+        case ListPlace:
+            list = inner.id;
+            break;
+        default:
+            return false;
+    }
+    if (list == 0xFFFFFFFF)
+        return false;
+    if (outer.scope == ListPlace)
+        return list == outer.id;
+    quint32 prod = 0xFFFFFFFF;
+    return outer.scope == ProductionPlace && st->cueList(list, &prod) != nullptr && prod == outer.id;
+}
+
 QList<ControlMap::Binding> ControlMap::armedOn(quint32 universe, quint32 channel) const
 {
-    QList<Binding> out;
+    QList<Binding> live;
     int best = -1;
     for (int i : m_byControl.value(key(universe, channel)))
     {
         const Binding &b = m_bindings.at(i);
-        if (b.target.type == EmergencyStopTarget || !isPlaceLive(b.place))
+        if (!holdsControl(b))
             continue;
         const int rank = int(b.place.scope);
         if (rank > best)
         {
-            out.clear();
+            live.clear();
             best = rank;
         }
         if (rank == best)
-            out << b;
+            live << b;
     }
+    if (live.count() < 2)
+        return live;
+    /* Only those at one place step through (Q303). Two places of one scope
+       live together (two lists' cues, two running lists): the run list's
+       has the control, else the first in the table -- never each press
+       the next, which nobody chose. */
+    Place chosen = live.first().place;
+    for (const Binding &b : std::as_const(live))
+    {
+        if (isRunListPlace(b.place))
+        {
+            chosen = b.place;
+            break;
+        }
+    }
+    QList<Binding> out;
+    for (const Binding &b : std::as_const(live))
+        if (b.place == chosen)
+            out << b;
     return out;
+}
+
+const ControlMap::Binding *ControlMap::refusedHitOn(quint64 k) const
+{
+    for (int i : m_byControl.value(k))
+    {
+        const Binding &b = m_bindings.at(i);
+        if (b.target.type == HitTarget && isPlaceLive(b.place) && !surfaceMayFire(b.target))
+            return &b;
+    }
+    return nullptr;
 }
 
 bool ControlMap::isArmedOnControl(const Binding &b) const
@@ -1365,7 +1486,7 @@ ControlMap::Place ControlMap::placeOfHit(quint32 hitId) const
     return Place();
 }
 
-QList<ControlMap::Place> ControlMap::placeChoices(const Place &where) const
+QList<ControlMap::Place> ControlMap::placeChoices(const Place &where, const Target &target) const
 {
     ShowTreeController *st = m_doc->showTree();
     QList<Place> out;
@@ -1427,6 +1548,20 @@ QList<ControlMap::Place> ControlMap::placeChoices(const Place &where) const
     out.removeAll(Place());
     around(now);
     add(Place());
+    if (target.type == HitTarget)
+    {
+        /* A hit fires only where its own place is live: a wider place would
+           arm it where it cannot fire, dark, holding the control from a
+           wider trigger that would. Its place and the ones inside it. */
+        const Place own = placeOfHit(target.id);
+        QList<Place> within;
+        for (const Place &p : std::as_const(out))
+            if (isPlaceWithin(p, own))
+                within << p;
+        if (!within.contains(own))
+            within << own;
+        return within;
+    }
     return out;
 }
 
@@ -1464,17 +1599,21 @@ bool ControlMap::handleKey(quint32 channel, bool pressed)
     // The narrowest armed place has the key (Q296); none: it goes on to
     // whatever has the keyboard, and the footer says where it works.
     const Binding *b = bindingOn(KeyboardUniverse, channel);
-    if (b == nullptr && runningOn(k) == nullptr)
+    const Binding *running = b == nullptr ? runningOn(k) : nullptr;
+    if (b == nullptr && running == nullptr)
     {
-        say(k, tr("Not fired: %1 is not live here. %2")
-                   .arg(controlName(KeyboardUniverse, channel), placesText(bindingsOn(KeyboardUniverse, channel))));
+        sayNotLive(k);
         return false;
     }
-    if (b != nullptr && !keyMayFire(b->target))
+    /* The key rule holds wherever its place is: in Design a scene or effect
+       key, or one whose target is not armed, does nothing even to let go of
+       what runs (in Operate a running one may still be let go, as on a
+       surface). The key goes on to whatever has the keyboard; the footer
+       says why it fired nothing. */
+    const Binding *acting = b != nullptr ? b : running;
+    if (!keyMayFire(acting->target) && (b != nullptr || m_doc->mode() != Doc::Operate))
     {
-        // The key goes on to whatever has the keyboard; the footer says why
-        // it fired nothing.
-        say(key(KeyboardUniverse, channel), tr("Not fired: %1. %2").arg(targetName(b->target), refusalFor(b->target)));
+        say(k, tr("Not fired: %1. %2").arg(targetName(acting->target), refusalFor(acting->target)));
         return false;
     }
     handleInput(KeyboardUniverse, channel, UCHAR_MAX);
@@ -1557,12 +1696,7 @@ bool ControlMap::isArmed(const Target &target) const
     auto listArmed = [&](quint32 listId) {
         return listId != 0xFFFFFFFF && (listId == run || m_selected.contains(cueList(listId)));
     };
-    auto listOf = [st](quint32 cueId) {
-        // A sub-cue (a cue made one after it was bound): its cue's list.
-        quint32 parent = 0xFFFFFFFF;
-        const ShowTree::CueList *l = st->listOfCue(st->isSubCue(cueId, &parent) ? parent : cueId);
-        return l == nullptr ? quint32(0xFFFFFFFF) : l->id;
-    };
+    auto listOf = [this](quint32 cueId) { return listOfCueId(cueId); };
     switch (target.type)
     {
         case CueListTarget:
