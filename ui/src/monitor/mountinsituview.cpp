@@ -102,6 +102,7 @@ MountInSituView::MountInSituView(Doc *doc, quint32 fixtureId, QWidget *parent)
     m_caption = new QLabel(this);
     m_caption->setObjectName(QStringLiteral("mountCaption"));
     m_caption->setWordWrap(true);
+    m_caption->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
     lay->addWidget(m_caption);
     refresh();
 }
@@ -205,6 +206,8 @@ void MountInSituView::refresh()
         m_view->setBeams(false);
         m_view->setMaxFrameRate(5);
         m_view->setFocusPolicy(Qt::NoFocus);
+        m_view->setMinimumSize(40, 40);   // the picture gives way, the caption never does
+        m_view->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
         static_cast<QVBoxLayout *>(layout())->insertWidget(0, m_view, 1);
         m_dim = new DimensionOverlay(m_view);
         m_dim->setGeometry(m_view->rect());
@@ -222,7 +225,8 @@ void MountInSituView::refresh()
         m_heightText = tr("%1 above the %2").arg(MeasurementUnits::formatLength(mm), what);
     else
         m_heightText = tr("%1 below the %2").arg(MeasurementUnits::formatLength(-mm), what);
-    m_dim->text = m_heightText;
+    m_dim->text = qAbs(mm) < 0.5 ? tr("flush") : MeasurementUnits::formatLength(qAbs(mm)) + (mm > 0 ? QStringLiteral(" \xe2\x86\x91") : QStringLiteral(" \xe2\x86\x93"));
+    m_dim->setToolTip(m_heightText);
     m_dim->update();
 
     // Orientation: hung below, upright on top, or centred on the run.

@@ -267,6 +267,7 @@ void MountView_Test::picturesForReview()
         v.resize(260, 160);
         v.show();
         QTest::qWait(30);
+        v.grab();                  // the view fits itself to its size as it first paints
         QVERIFY(v.grab().save(QDir(dir).filePath(QStringLiteral("mountview-%1.png").arg(s.name))));
     }
 }
