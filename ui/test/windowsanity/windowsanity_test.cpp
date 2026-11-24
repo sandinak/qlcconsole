@@ -1187,7 +1187,7 @@ void WindowSanity_Test::theBannerAnswersAheadOfTheLock()
 
 void WindowSanity_Test::fixturePropertiesEveryTabFits()
 {
-    // As it opens the first time: on Fixture, More folded.
+    // As it opens the first time: on Fixture, Calibrate folded.
     QSettings().remove(QStringLiteral("fixtureProperties"));
     struct Case { QString tag; QList<quint32> ids; };
     QList<Case> cases;
@@ -1236,7 +1236,10 @@ void WindowSanity_Test::fixturePropertiesEveryTabFits()
                     problems << where + QStringLiteral(": opened on tab %1, not Fixture").arg(tabs->currentIndex());
                 if (QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore")))
                     if (more->isChecked())
-                        problems << where + QStringLiteral(": More is open");
+                        problems << where + QStringLiteral(": Calibrate is open");
+                // Three tabs: Fixture | Place | Aim & Beam (DMX Controls went to Fixture's Find it row).
+                if (tabs != nullptr && tabs->count() != 3)
+                    problems << where + QStringLiteral(": %1 tabs, not 3").arg(tabs->count());
                 const QRect room = dlg->screen()->availableGeometry();
                 for (int i = 0; i < pages; ++i)
                 {
@@ -1274,6 +1277,26 @@ void WindowSanity_Test::fixturePropertiesEveryTabFits()
                         || !dlg->rect().contains(QRect(bb->mapTo(dlg, QPoint(0, 0)), bb->size()))
                         || !room.contains(QRect(bb->mapToGlobal(QPoint(0, 0)), bb->size())))
                         problems << at + QStringLiteral(": OK / Cancel are out of view");
+                    /* Aim & Beam with Calibrate unfolded, on a screen of 800 or
+                       more: the dialog grows to show it all, no scroll. */
+                    QToolButton *cal = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+                    if (tabs != nullptr && tabs->widget(i)->objectName().endsWith(QLatin1String("-aim"))
+                        && room.height() >= 800 && cal != nullptr && cal->isVisible() && !cal->isChecked())
+                    {
+                        QTest::mouseClick(cal, Qt::LeftButton);
+                        settle();
+                        for (QScrollArea *a : areas)
+                            if (a->isVisible() && a->widget() != nullptr
+                                && (a->verticalScrollBar()->isVisible()
+                                    || a->widget()->sizeHint().height() > a->viewport()->height()))
+                                problems << at + QStringLiteral(" (Calibrate open): scrolls (%1 px of rows in %2 px)")
+                                                     .arg(a->widget()->sizeHint().height()).arg(a->viewport()->height());
+                        if (!room.contains(dlg->frameGeometry()))
+                            problems << at + QStringLiteral(" (Calibrate open): runs off its screen");
+                        QTest::mouseClick(cal, Qt::LeftButton);
+                        settle();
+                        QSettings().remove(QStringLiteral("fixtureProperties"));
+                    }
                     QStringList input;
                     checkInputThroughWindow(dlg, input);
                     for (const QString &p : input)
@@ -1296,7 +1319,7 @@ void WindowSanity_Test::fixturePropertiesEveryTabFits()
                                                               .arg(c.tag, name, sizeName(s))));
                         };
                         save(key);
-                        // Aim & Mount with More unfolded, as it reads open.
+                        // Aim & Beam with Calibrate unfolded, as it reads open.
                         QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
                         if (key == QLatin1String("aim") && more != nullptr && more->isVisible())
                         {

@@ -856,7 +856,7 @@ wall is aimed up at the middle of the flame. One put in the **gap** between
 the outer and inner wall is aimed at the inner wall instead — at the
 nearest point of its outside face, half way up — so it washes the wall and
 leaves the silk to the pars inside. Change either on Fixture Properties'
-Aim & Mount tab. Drag it
+Aim & Beam tab. Drag it
 out of the base to take it out.
 
 **A WLED set in the fountain.** A pixel fixture mounted in it (a WLED
@@ -1195,53 +1195,87 @@ are in tabs. It opens on the tab you used last (Fixture the first time);
   **Owner** (Tour, House or Rental; see
   [Owner](venues.md#owner-tour-house-or-rental)), **Colour** (a fixed
   light's gel; the [patch list](fixture-manager.md#the-patch-list) lists
-  it), **DMX** with **Patch…**, and where they apply **WLED** (**Fix on
-  Device…**) and **Max draw**. Max draw says *measured* or *not measured*
-  beside its field; point at it for what has been measured.
+  it), a laser's **Laser class**, **DMX** with **Patch…**, and under it
+  **Find it**: **Locate** (flashes it three times), and for a fixture
+  whose definition has them its own **Identify** and **Reset** — each
+  sends the fixture's value, holds it about 3 seconds, then puts the
+  channel back as it was (a cue that sets that channel in the meantime
+  keeps its value). All three need it patched. Then, where they apply,
+  **WLED** (**Fix on Device…**) and **Max draw**. Max draw says *measured*
+  or *not measured* beside its field; point at it for what has been
+  measured.
 - **Place** — where it is and how it sits: **X** and **Y** on the plot,
   with a line under them saying where it really is on stage once its mount
   is counted (*On stage: X … Y … Z …*, read-only); **Mounted on**,
-  **Position** on a tower (top, a shelf or the base), **Orientation**,
-  **Face**, **Placement**, **Angle** and **Tilt**; **Icon rotation**; and
-  the orientation diagram. A fixture not on the plot has X, Y and Icon
-  rotation greyed, *Not on the plot*.
-- **Aim &amp; Mount** — where it points: **Height offset** (raised or
-  lowered from its mount, a followspot on a riser above the truss, say);
-  **Aim** — a mover's front of device, or a fixed light's **Points** and
-  **Tilt in yoke**; **Beam (lens set to)**, the angle a lens zoomed by
-  hand is set to (see [The beam](#the-beam)); a laser's **Laser class**;
-  for a head with more than a turn of pan, **Pan works around** — its pan
-  turn and, short, how clear of the stage its seam is (point at it for the
-  whole of it), with **Centre on Stage**, **Earlier Turn** and **Later
-  Turn** (see [The pan turn and its seam](stage-targets.md#the-pan-turn-and-its-seam));
-  and **Identify: Locate**.
-  **More** folds away what is set once at the focus call: **Masking
-  (tape)**, the [calibration offsets](#calibration-offsets), **Invert
-  pan** / **Invert tilt** and **Test orientation**. It is folded at first
-  and stays as you leave it; folded, the line beside it says what in it is
-  not at its default (*pan cal 5.0° · tape B 15.0°*), so a calibration is
-  never hidden without a word.
-- **DMX Controls** — for a fixture whose definition has them,
-  **Identify** and **Reset**: each sends the fixture's own value, holds it
-  about 3 seconds, then puts the channel back as it was. A cue that sets
-  that channel in the meantime keeps its value.
+  **Position** on a tower (top, a shelf or the base), **Height offset**
+  (raised or lowered from its truss, pipe or tower, a followspot on a riser
+  above the truss, say), **Orientation**, **Face**, **Placement**,
+  **Angle** and **Tilt**. A fixture not on the plot has X and Y greyed,
+  *Not on the plot*.
+  Beside the rows is a **plan map**: the stage from above with the
+  centre line and plaster line dashed and the fixture as a dot. Drag the
+  dot and X and Y follow (live, like a typed value; **Cancel** puts it
+  back; Shift drags free of the grid); type X or Y and the dot moves. Its
+  dimension lines say how far it is from the plaster line and how far
+  *SR* or *SL* of the centre line (stage right and left as the performer
+  sees them), in your Settings ▸ Units. A fixture on a truss, pipe or
+  tower shows where its mount puts it and cannot be dragged: the map
+  says so. (With several fixtures selected there is no map: X and Y
+  differ.) A fixture on a truss, pipe or tower also has **On its mount**,
+  a side view of it on that structure with its height offset written
+  beside it (*2' above the truss*); **Plan | On its mount** above the
+  picture switches between the two, and the mount view follows Height
+  offset, Orientation, Face, Placement, Angle and Tilt as you change them.
+  A fixture not on a structure has only the map.
+- **Aim &amp; Beam** — where it points, what comes out, and calibrating
+  it. At the left, the orientation diagram (below), with where it points
+  under it in degrees and words (*270° · stage left*); beside it **Front
+  of device** — a mover's pan home, where its pan 0 points on stage — or a
+  fixed light's **Points** and **Tilt in yoke**; **Symbol turn**, which
+  turns only the plot symbol, with **Match Front** to point the symbol
+  where the light points; and for a head with more than a turn of pan,
+  **Pan works around** — its pan turn and, short, how clear of the stage
+  its seam is (point at it for the whole of it), with **Centre on Stage**,
+  **Earlier Turn** and **Later Turn** (see
+  [The pan turn and its seam](stage-targets.md#the-pan-turn-and-its-seam)).
+  Front of device is a setting of the rig, not a DMX value: the head moves
+  only while a look or **Test** runs. Under them, **Beam (lens set to)**,
+  the angle a lens zoomed by hand is set to (see [The beam](#the-beam)),
+  and **Masking (tape)**; at the left of those, the **mask lens** — the
+  beam seen from behind, the shaded bands what the tape covers and a
+  line under it the share of the beam still getting through. The four
+  Masking boxes draw it, and dragging a band's edge sets them (applied
+  live; **Cancel** puts them back). A laser shows its scan window.
+  **Calibrate** folds away what is set once at the focus call: the
+  [calibration offsets](#calibration-offsets), **Direction** (**Invert
+  pan** / **Invert tilt**) and **Test orientation** — test it, see it go
+  the wrong way, flip it, test again, all in one place. It is folded at
+  first and stays as you leave it; folded, the line beside it says what in
+  it is not at its default (*pan cal 5.0° · pan inverted*), so a
+  calibration is never hidden without a word. A WLED string has no Aim
+  &amp; Beam tab: nothing on it is a string's.
 
-Several fixtures open the same tabs (no DMX Controls); a tab with a row
-they differ on has a dot after its name (**Aim &amp; Mount •**), and the
+Several fixtures open the same tabs (no Find it row); a tab with a row
+they differ on has a dot after its name (**Aim &amp; Beam •**), and the
 row reads *mixed* until you set it.
 
-**The orientation diagram** on the Place tab shows the
-light from above, DS at the bottom. The **green** arrow is where it
-throws: a mover's front of device (pan zero), or a fixed light's face
-(Back points upstage, Stage left to stage left) or its Pan and Tilt aim
-— the steeper it points, the shorter the arrow; straight down is a
-filled dot, straight up a ring. The **blue** arrow is the icon rotation,
-which only turns the symbol and never the aim. The diagram follows each
-field as you change it. It is drawn the way the plot is: stage right on
-the left. **Drag the green arrow's head** round to point the light, and
-the Aim field follows: it turns in 15° steps, hold **Shift** for any
-angle. Several fixtures' Fixture Properties have the same dial on their
-Place tab, and dragging it sets them all.
+**The orientation diagram** at the left of Aim &amp; Beam shows the
+light from above, DS at the bottom, beside the rows it draws, with a key
+under it. The **green** arrow is where it throws: a mover's front of
+device (pan zero), or a fixed light's face (Back points upstage, Stage
+left to stage left) or its Pan and Tilt aim — the steeper it points, the
+shorter the arrow; straight down is a filled dot, straight up a ring. The
+**blue** arrow and the box are the symbol's turn, which only turns the
+symbol and never the aim. For a mover, the **purple** arc is its pan
+range, the small arrow on it the way DMX up turns the head (ticking
+**Invert pan** flips it), and the **red ✕** its pan seam. The diagram
+follows each field as you change it. It is drawn the way the plot is:
+stage right on the left. **Drag the green arrow's head** round to point
+the light, and Front of device and the line under the diagram follow as
+you drag: it turns in 15° steps, hold **Shift** for any angle. **Drag the
+box** round to turn the symbol (Symbol turn follows) the same way.
+Several fixtures' Fixture Properties have the same dial, and dragging it
+sets them all.
 
 **On the plot**, a selected moving head's green facing arrow has a ring
 round its head: drag the head round (no key needed) to turn its pan-zero
@@ -1268,7 +1302,7 @@ selected fixture (select a group row, or "Ungrouped" — to take
 everything in it; ⌘-click or ⇧-click on the canvas to add or remove). A row
 they differ on reads **mixed** and changes nothing until you set it — then
 it is set on all of them. **Fixture Properties…** with several selected
-opens the same rows (plus aim and icon rotation) for all of them, and so
+opens the same rows (plus aim and symbol turn) for all of them, and so
 does **double-clicking** one of the selected fixtures — on the plot, in Plot
 layers, or in a structure editor's fixture list (a group's or a truss's
 worth too; click one first to edit it alone). Dragging
@@ -1276,7 +1310,7 @@ any selected fixture moves them all, as one undo. **Distribute** spaces a
 few selected fixtures between the outermost two and lines them up.
 
 **Aiming a fixed light.** A par, a profile, a laser or anything else with no
-pan or tilt channel is aimed as it is on its yoke, in **Aim & Mount**:
+pan or tilt channel is aimed as it is on its yoke, in **Aim & Beam**:
 **Points** is which way it points seen from above (0 downstage, 90 stage
 right, 180 upstage, 270 stage left) and **Tilt in yoke** how far it is
 tipped up or down from level, written that way: "45° down" (a typical front
@@ -1285,8 +1319,8 @@ type "10 up" or "10 down" (a plain number is up, minus is down). The beam
 in the 3D view, where its light lands on the plot, Quick focus and the
 orientation diagram all take the same aim. Until you set either, it points
 as its mount says (straight down when hung). With several selected, the
-same two rows act on the fixed lights among them. A moving head's **Aim —
-front of device** is its pan home instead.
+same two rows act on the fixed lights among them. A moving head's **Front
+of device** is its pan home instead.
 
 **Face sets a fixed light's aim too.** A fixed light has the **Face** row
 as a strip does: **Back** points it upstage, level; **Front** downstage;
@@ -1426,8 +1460,8 @@ pressing **Duplicate**:
   would change, you are asked first ("Change the Patch"); declining makes
   nothing.
 
-**Testing which way it points.** Fixture Properties → **Aim &amp; Mount ▸
-More ▸ Test orientation**:
+**Testing which way it points.** Fixture Properties → **Aim &amp; Beam ▸
+Calibrate ▸ Test orientation**:
 the first pose centres pan and tilt, and is named for how the fixture is
 mounted — **Straight down** hung, **Straight up** upright, **Straight out**
 on a side arm — following Orientation as you change it.
@@ -2050,7 +2084,7 @@ lasers:
   no-light zone that keeps lasers out (the showband between the cyc and the
   risers), the part inside it is drawn in red.
 - **Masking.** Tape over the front of any light: **Fixture Properties ▸
-  Aim &amp; Mount ▸ More ▸ Masking (tape)** or right-click ▸ **Masking…**. Top, bottom, left and
+  Aim &amp; Beam ▸ Masking (tape)** or right-click ▸ **Masking…**. Top, bottom, left and
   right are degrees cut off the beam (or a laser's scan window), seen from
   behind the light. "Tape off the bottom 15°" is 15 in Bottom. The plot,
   Show Review (PWR-09 to 12) and area coverage all use it; it is the unit's
@@ -2137,7 +2171,7 @@ against the zones.
 ## Calibration offsets
 
 A moving head's **Pan offset** and **Tilt offset** (Fixture Properties ▸
-**Aim &amp; Mount ▸ More**, or [Quick focus](#quick-focus)) correct the *physical* head: a
+**Aim &amp; Beam ▸ Calibrate**, or [Quick focus](#quick-focus)) correct the *physical* head: a
 yoke bolted a few degrees round, a tilt that homes a little high. They are
 calibration, not design:
 

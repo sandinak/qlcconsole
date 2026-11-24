@@ -619,6 +619,22 @@ void FixtureFields::row(QWidget *w, bool visible)
         l->setVisible(visible);
 }
 
+void FixtureFields::insertBeforeDmx(const QString &label, QWidget *field)
+{
+    int at = -1;
+    QFormLayout::ItemRole role;
+    m_form->getWidgetPosition(m_dmxBox, &at, &role);
+    m_form->insertRow(at < 0 ? m_form->rowCount() : at, label, field);
+}
+
+void FixtureFields::insertAfterDmx(const QString &label, QWidget *field)
+{
+    int at = -1;
+    QFormLayout::ItemRole role;
+    m_form->getWidgetPosition(m_dmxNote, &at, &role);
+    m_form->insertRow(at < 0 ? m_form->rowCount() : at + 1, label, field);
+}
+
 void FixtureFields::movePlaceRows(QFormLayout *to)
 {
     if (to == nullptr || to == m_form)

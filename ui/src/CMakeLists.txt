@@ -110,12 +110,14 @@ add_library(${module_name}
     virtualconsole/programmermap.cpp virtualconsole/programmermap.h
     virtualconsole/programmerframewizard.cpp virtualconsole/programmerframewizard.h
     monitor/monitor.cpp monitor/monitor.h
+    monitor/planmapwidget.cpp monitor/planmapwidget.h
     monitor/performersdialog.cpp monitor/performersdialog.h
     monitor/focuscontrolmap.cpp monitor/focuscontrolmap.h
     monitor/focusmodepanel.cpp monitor/focusmodepanel.h
     monitor/focuscallsdialog.cpp monitor/focuscallsdialog.h
     monitor/structureduplicatedialog.cpp monitor/structureduplicatedialog.h
     monitor/focusmenu.cpp monitor/focusmenu.h
+    monitor/masklenswidget.cpp monitor/masklenswidget.h
     monitor/venuemenu.cpp monitor/venuemenu.h
     monitor/venuerigdialog.cpp monitor/venuerigdialog.h
     monitor/rolefilldialog.cpp monitor/rolefilldialog.h
@@ -167,6 +169,7 @@ add_library(${module_name}
     monitor/lightcontrols.cpp monitor/lightcontrols.h
     monitor/rigeditsession.h
     monitor/fixturefields.cpp monitor/fixturefields.h
+    monitor/mountinsituview.cpp monitor/mountinsituview.h
     monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
     monitor/handprops.cpp monitor/handprops.h

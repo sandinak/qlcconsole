@@ -321,8 +321,9 @@ listens to is a footer line of its own, with **Send on Its Port**.
 WLED's own API, or a WLED definition) isn't hung and pointed like a light,
 so its **Fixture Properties** shows what a string has: its connection and
 IP, its LEDs, its string length and its pixel path. The aiming rows are
-hidden: Aim, Tilt in yoke, Beam, Masking, Orientation, Face, Tilt, the icon
-rotation and the facing diagram (the Aim & Mount tab reads **Mount**). Anything
+hidden: Aim, Tilt in yoke, Beam, Masking, Orientation, Face, Tilt, the
+symbol turn and the facing diagram (it has no Aim & Beam tab; its height
+offset is on Place). Anything
 already set in them is kept, not cleared. A WLED driving something that
 pans or tilts is aimed as a light again.
 
@@ -950,7 +951,7 @@ opened — over the web while in Operate too). So:
   the double-GO guard as any GO is.
 - **Move-in-black** never pre-sets a Show-only fixture: a laser's mode
   channel may be what turns it on.
-- **Identify and Reset** (the plot's and Fixture Properties' DMX Controls tab,
+- **Identify and Reset** (the plot's, and Fixture Properties' Find it row,
   the Fixtures tab's Reset) are refused for a Show-only fixture — and for
   any fixture patched over its addresses — in Design and Operate, as
   Locate is: greyed, saying why.

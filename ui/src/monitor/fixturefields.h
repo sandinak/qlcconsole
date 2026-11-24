@@ -79,6 +79,11 @@ public:
      *  Studio inspector, narrower, keeps the long form (UX-36). */
     void setPowerCompact();
 
+    /** Fixture Properties: a row of its own just above DMX (Laser class),
+     *  or just under it and its note (Find it: Locate, Identify, Reset). */
+    void insertBeforeDmx(const QString &label, QWidget *field);
+    void insertAfterDmx(const QString &label, QWidget *field);
+
     /** "mixed" on a spin box, for rows of the same kind beside these: its
      *  lowest value, one step below @p lowest, reads "mixed". */
     static void spinMixed(QDoubleSpinBox *sp, bool mixed, double lowest);

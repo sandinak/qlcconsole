@@ -1262,7 +1262,7 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
        flushOps(), so a long truss and a wide deck interleave face by face
        instead of one winning outright on where its centre sits. */
 
-    const bool nameEveryone = (m_kind != StageKind);
+    const bool nameEveryone = (m_kind != StageKind) && m_decorations;
     p.setFont(QFont("Arial", 8));
 
     m_ops.clear();
@@ -2099,8 +2099,27 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
 /* Where centre stage stands in the angled view: this far down the window. */
 static const double kStageCentreDown = 0.6;
 
+void StructureStudioView::setFocus(const QVector3D &worldCentre, double halfWidthM)
+{
+    m_focusOn = true;
+    m_focusCentre = worldCentre;
+    m_focusHalfM = qMax(0.05, halfWidthM);
+    m_zoomed = false;
+    refit();
+    update();
+}
+
 void StructureStudioView::refit()
 {
+    if (m_focusOn)
+    {
+        const double half = (m_rotation & 1) ? height() / 2.0 : width() / 2.0;
+        m_scale = qBound(4.0, qMax(1.0, half - 6.0) / m_focusHalfM, 4000.0);
+        m_originPx = QPointF(0, 0);
+        m_originPx = QPointF(width() / 2.0, height() / 2.0)
+                     - planeToScreenVec(project(m_focusCentre));
+        return;
+    }
     QList<QVector3D> pts;
     collectPoints(pts);
 
@@ -2258,7 +2277,8 @@ void StructureStudioView::drawGrid(QPainter &p) const
         p.setPen(QPen(QColor(90, 94, 104), 1.5));
         p.drawLine(QPointF(0, y0), QPointF(width(), y0));
         p.setPen(QColor(150, 154, 165));
-        p.drawText(QPointF(6, y0 - 4), tr("floor"));
+        if (m_decorations)
+            p.drawText(QPointF(6, y0 - 4), tr("floor"));
     }
 }
 
@@ -9527,6 +9547,8 @@ void StructureStudioView::drawFixtureName(QPainter &p, const QPointF &at, const 
 {
     /* Written after every body (drawFixtures()): drawn as each fixture was,
        the next one's body painted over the last one's name. */
+    if (!m_decorations)
+        return;             // a small look-only picture carries no name labels
     m_pendingNames << PendingName{ at, name, p.pen().color() };
 }
 
@@ -11200,11 +11222,16 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     drawUnsavedMarks(p);
     /* The rulers are read over the rig, so they go over it: painted before
        the geometry, a deck or truss reaching the edge covered them. */
-    drawRulers(p);
-    drawCursorReadout(p);
-    drawDimensions(p);   // selected fixture's own W/H, or the structure's
+    if (m_decorations)
+    {
+        drawRulers(p);
+        drawCursorReadout(p);
+        drawDimensions(p);   // selected fixture's own W/H, or the structure's
+    }
 
     // Plane badge.
+    if (m_decorations)
+    {
     p.setPen(QColor(160, 164, 175));
     // One entry per Plane -- adding Angled to the enum without adding it here
     // read off the end of the array.
@@ -11215,6 +11242,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
                : m_fromBehind      ? tr("2D — %1, looking downstage").arg(names[idx])
                                    : tr("2D — %1").arg(names[idx]));
     drawOrientationLabels(p);
+    }
 
     /* Never ask for frames faster than we can draw them.
      *

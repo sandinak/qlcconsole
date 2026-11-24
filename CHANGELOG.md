@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Fixture Properties shows three pictures.** **Place** has a plan map of the stage (centre line, plaster line, the fixture as a dot): drag the dot and X / Y follow, type X / Y and the dot moves; it reads how far the fixture is *SR* or *SL* of the centre line and from the plaster line, and on a truss, pipe or tower it is not draggable and says why. **Aim & Beam** has the mask lens, the beam seen from behind with the tape on it and how much gets through: the four Masking boxes draw it, and dragging a band's edge sets them (a laser shows its scan window). A fixture on a truss, pipe or tower also has **On its mount** (a side view with its height offset, following the Place rows as you type): **Plan | On its mount** switches the one picture area. Mount view detail: the truss, pipe or tower a fixture hangs on, front-on with the fixture ringed, its face, hung or upright, angle and tilt, and the height offset on a dimension line in your unit.
 - **Fixture Properties fits a laptop's screen**: a moving head's rows
   (Fixture, Position, Aim & Mount, DMX Controls) scroll between its name
   and its OK / Cancel, which stay in view; it was over 1000 px tall and
@@ -74,6 +75,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   (*pan cal 5.0°*). Pan works around reads in two lines, the whole on hover;
   Max draw says *not measured* on its row. With several fixtures a tab with
   a row they differ on has a dot. Every tab fits a 1024x640 screen.
+- **Fixture Properties relaid: Fixture | Place | Aim & Beam.** The
+  orientation dial sits beside **Front of device**, says where it points
+  always (*270° · stage left*) as you drag, and has a key; drag its box to
+  turn the plot symbol (**Symbol turn**, was Icon rotation) or **Match
+  Front**. It shows the pan seam (✕) and which way DMX up turns the head,
+  flipped live by **Invert pan**, now under **Direction** in **Calibrate**
+  (was More) with the offsets and the test pose. **Locate**, **Identify**
+  and **Reset** are one **Find it** row under DMX on Fixture (DMX Controls
+  is gone); Height offset is on Place, Laser class on Fixture; a WLED
+  string has no Aim tab.
 - **The Show Tree says what is in it** (board Q266): its tab tooltip, its
   **Window** menu entry and its help title now read *cue lists, cues and
   hits*. The tab keeps its name, and no menu item was added.
