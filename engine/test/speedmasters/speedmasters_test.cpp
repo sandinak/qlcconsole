@@ -896,7 +896,7 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     p.reset();
     QVERIFY(!p.accept(200, 255));
     QVERIFY(p.accept(120, 255));
-    QVERIFY(p.accept(0, 255));
+    QVERIFY(p.accept(0, 120));             // the control now follows it
 
     // Left at the bottom and nudged up: it waits, and once it has moved
     // toward the control it keeps waiting, even when pulled back down.
