@@ -301,6 +301,41 @@ void SpeedMastersPanel::editInputs(int index)
             pick[c]->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(u, ch)));
         lay->addWidget(pick[c]);
     }
+    // The three pickers are what OK writes for this master: a control one of
+    // them holds is refused in another (one job per control, Q297), and
+    // Move It Here between them takes it from the other picker too.
+    for (int c = 0; c < SpeedMasters::ControlCount; ++c)
+    {
+        pick[c]->setOwnersHook([&pick, &controls, &titles, sm, index, c](quint32 universe, quint32 channel,
+                                                                         const QList<ControlOwners::Owner> &now) {
+            QList<ControlOwners::Owner> out;
+            for (const ControlOwners::Owner &o : now)
+                if (o.kind != ControlOwners::SpeedMaster || o.index != index)
+                    out << o;
+            for (int other = 0; other < SpeedMasters::ControlCount; ++other)
+            {
+                const QSharedPointer<QLCInputSource> src = pick[other]->inputSource();
+                if (other == c || src.isNull() || !src->isValid() || src->universe() != universe
+                    || src->channel() != channel)
+                    continue;
+                ControlOwners::Owner o;
+                o.kind = ControlOwners::SpeedMaster;
+                o.index = index;
+                o.part = int(controls[other]);
+                o.thing = tr("%1 %2").arg(sm->name(index), titles.at(other));
+                o.where = tr("Speed Masters");
+                o.fix = tr("Speed Masters ▸ Inputs…");
+                out << o;
+            }
+            return out;
+        });
+        pick[c]->setMoveHook([&pick, &controls, index](const QList<ControlOwners::Owner> &owners) {
+            for (const ControlOwners::Owner &o : owners)
+                for (int other = 0; other < SpeedMasters::ControlCount; ++other)
+                    if (o.kind == ControlOwners::SpeedMaster && o.index == index && o.part == int(controls[other]))
+                        pick[other]->setInputSource(QSharedPointer<QLCInputSource>());
+        });
+    }
     QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);

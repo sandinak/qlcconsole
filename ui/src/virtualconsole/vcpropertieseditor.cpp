@@ -243,10 +243,17 @@ VCPropertiesEditor::VCPropertiesEditor(QWidget* parent, const VCProperties& prop
     connect(m_gmCollision, &ControlCollisionBox::moveRequested, this, [this]() {
         VirtualConsole *vc = VirtualConsole::instance();
         Doc *doc = vc != nullptr ? vc->getDoc() : nullptr;
-        if (!ControlOwners::releaseAll(doc, m_gmCollision->owners()))
+        const QList<ControlOwners::Owner> owners = m_gmCollision->owners();
+        if (!ControlOwners::canMove(owners))
             return;
         const quint32 universe = m_gmCollision->universe();
         const quint32 channel = m_gmCollision->channel();
+        // The owners let go on OK, if the Grand Master still has it then:
+        // Cancel leaves the show as it was.
+        ControlOwners::releaseOnAccept(this, doc, owners, universe, channel, [this, universe, channel]() {
+            return m_properties.grandMasterInputUniverse() == universe
+                   && m_properties.grandMasterInputChannel() == channel;
+        });
         m_gmCollision->clear();
         m_properties.setGrandMasterInputSource(universe, channel);
         updateGrandMasterInputSource();

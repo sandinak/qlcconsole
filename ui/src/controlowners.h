@@ -26,11 +26,14 @@
 #include <QString>
 #include <QList>
 
+#include <functional>
+
 #include "controlmap.h"
 #include "qlcui_export.h"
 
 class QLCInputSource;
 class Doc;
+class QWidget;
 
 /** @addtogroup ui UI
  * @{
@@ -46,8 +49,9 @@ class Doc;
  *
  * One job per control: a control another listener has is refused at Learn,
  * naming it (refusal()), with Move It Here (release()) -- except where the
- * owner can't let go: the PMJ's controls come with its profile, and nothing
- * takes the emergency stop's control (its own Learn can take a control from
+ * owner can't let go: the PMJ's controls come with its profile, the encoder
+ * bank's encoders, pushes and bank buttons are runs learned together, and
+ * nothing takes the emergency stop's control (its own Learn can take a control from
  * anything else).
  *
  * Every owner has a place. Today all of them are Everywhere, so any two
@@ -143,6 +147,18 @@ public:
     /** release() for each of @a owners; false when any can't let go
      *  (nothing is released then). */
     static bool releaseAll(Doc *doc, const QList<Owner> &owners);
+
+    /** release() for each of @a owners that still listens to @a channel
+     *  of @a universe now (one that has let go since is left alone).
+     *  Returns how many let go. */
+    static int releaseStill(Doc *doc, const QList<Owner> &owners, quint32 universe, quint32 channel);
+    /** Move It Here in a dialog with OK (a widget's Properties, Speed
+     *  Masters ▸ Inputs…, a channel group, the Grand Master): @a owners let
+     *  go when the dialog @a from is in is accepted, if @a stillPicked()
+     *  says it still picks the control; Cancel changes nothing. Not in a
+     *  dialog: they let go now. */
+    static void releaseOnAccept(QWidget *from, Doc *doc, const QList<Owner> &owners,
+                                quint32 universe, quint32 channel, const std::function<bool()> &stillPicked);
 
     /** The control in words ("MIDI · CC 7, MIDI ch 1", "Key · F5"). */
     static QString controlName(Doc *doc, quint32 universe, quint32 channel);

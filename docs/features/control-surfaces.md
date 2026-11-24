@@ -24,14 +24,18 @@ when you learn it for another, naming the owner: *Note 60 already does
 Button "House lights" (Virtual Console). One job per control.* Press
 **Move It Here** to take it from there and give it to what you are
 learning (the old owner stops reacting at once), or **Cancel** to leave it
-where it is. Every Learn says this the same way: Learn Trigger…, the
+where it is. In a window with **OK** (a widget's Properties, a speed
+master's Inputs…, a channel group, the Grand Master) the move happens on
+OK: Cancel there leaves the control with its old owner. Every Learn says this the same way: Learn Trigger…, the
 emergency stop, the encoder bank, a widget's External Input (auto-detect or
 Choose…), a speed master's Inputs…, the Grand Master's input and a channel
 group's input. Move It Here is not on Undo: to put a control back, learn it
-there again. Two exceptions, with no Move It Here: the PMJ Black 1's
-controls that do something come with its profile, and nothing takes the
-**emergency stop's** control (the stop's own Learn can take a control from
-anything else). Two Virtual Console widgets on one input are Show Review's
+there again. Three exceptions, with no Move It Here: the PMJ Black 1's
+controls that do something come with its profile; the **encoder bank's**
+encoders, pushes and bank buttons are learned as one run, so taking one
+would stop the rest (learn the bank again on other controls first; its Next
+and Previous buttons can move); and nothing takes the **emergency stop's**
+control (the stop's own Learn can take a control from anything else). Two Virtual Console widgets on one input are Show Review's
 *Same input twice* (VC-06), not refused here.
 
 A show saved before this, or with two jobs on a control for any other

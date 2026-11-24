@@ -18,6 +18,7 @@
 */
 
 #include <QStringList>
+#include <QDialog>
 #include <QMap>
 
 #include "controlowners.h"
@@ -83,7 +84,10 @@ QString ControlOwners::controlName(Doc *doc, quint32 universe, quint32 channel)
 {
     if (doc == nullptr || doc->controlMap() == nullptr)
         return QString();
-    return doc->controlMap()->controlName(universe, channel & kPageMask);
+    // A key's channel is the whole key combination (its modifiers sit above
+    // 16 bits): only a console channel carries a page to leave out.
+    const quint32 control = universe == ControlMap::KeyboardUniverse ? channel : (channel & kPageMask);
+    return doc->controlMap()->controlName(universe, control);
 }
 
 QString ControlOwners::pmjControlName(quint32 channel)
@@ -139,6 +143,16 @@ QList<QPair<quint64, ControlOwners::Owner>> ControlOwners::owned(Doc *doc)
                 o.index = i;
                 o.where = tr("encoder bank");
                 o.fix = tr("Control Map ▸ Encoder bank ▸ Learn More…");
+                // The encoders, their pushes and the bank buttons are runs
+                // learned together: taking one would stop the rest of the
+                // run (and the bank), so it isn't moved one at a time.
+                if (part == EncoderTurn || part == EncoderPush || part == BankDirect)
+                {
+                    o.movable = false;
+                    o.fixedWhy = tr("The encoder bank's encoders, pushes and bank buttons are learned as "
+                                    "one run, and taking one would stop the others: learn the bank again "
+                                    "on other controls first (Control Map ▸ Encoder bank).");
+                }
                 switch (part)
                 {
                     case EncoderTurn: o.thing = tr("Encoder %1").arg(i + 1); break;
@@ -357,21 +371,10 @@ bool ControlOwners::release(Doc *doc, const Owner &owner)
             EncoderBank::Device d = enc->device();
             switch (owner.part)
             {
-                case EncoderTurn:
-                    // The encoders are a run from the first: it ends before this one.
-                    if (owner.index > 0)
-                        d.encoderCount = owner.index;
-                    else
-                        d.encoders = -1;
-                    break;
-                case EncoderPush: d.pushes = -1; break;
+                // Next and Previous are one control each. The encoders, pushes
+                // and bank buttons are runs: one of them can't let go alone.
                 case BankNext: d.bankNext = -1; break;
                 case BankPrevious: d.bankPrevious = -1; break;
-                case BankDirect:
-                    if (d.bankLamps == d.bankDirect)
-                        d.bankLamps = -1;
-                    d.bankDirect = -1;
-                    break;
                 default:
                     return false;
             }
@@ -419,6 +422,44 @@ bool ControlOwners::releaseAll(Doc *doc, const QList<Owner> &owners)
     for (const Owner &o : owners)
         ok = release(doc, o) && ok;
     return ok;
+}
+
+int ControlOwners::releaseStill(Doc *doc, const QList<Owner> &owners, quint32 universe, quint32 channel)
+{
+    int released = 0;
+    const QList<Owner> now = ControlOwners::owners(doc, universe, channel);
+    for (const Owner &o : owners)
+    {
+        for (const Owner &n : now)
+        {
+            if (n.sameAs(o) && n.movable && release(doc, n))
+            {
+                ++released;
+                break;
+            }
+        }
+    }
+    return released;
+}
+
+void ControlOwners::releaseOnAccept(QWidget *from, Doc *doc, const QList<Owner> &owners,
+                                    quint32 universe, quint32 channel, const std::function<bool()> &stillPicked)
+{
+    QDialog *dlg = from != nullptr ? qobject_cast<QDialog *>(from->window()) : nullptr;
+    if (dlg == nullptr)
+    {
+        releaseAll(doc, owners);
+        return;
+    }
+    // Nothing changes on the show until OK: Cancel leaves the owners as
+    // they are. On OK, only what still has the control lets go, and only
+    // when the dialog still picks it (it may have been changed since).
+    QPointer<Doc> d(doc);
+    QObject::connect(dlg, &QDialog::accepted, dlg, [d, owners, universe, channel, stillPicked]() {
+        if (d.isNull() || (stillPicked && !stillPicked()))
+            return;
+        releaseStill(d.data(), owners, universe, channel);
+    }, Qt::SingleShotConnection);
 }
 
 QList<ControlOwners::Collision> ControlOwners::collisions(Doc *doc)

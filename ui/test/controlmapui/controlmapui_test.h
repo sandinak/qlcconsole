@@ -64,6 +64,9 @@ private slots:
     void aPmjControlIsRefusedWithNoMoveItHere();
     void theEncoderLearnRefusesAndMoves();
     void theInputPickersRefuseAndMove();
+    void aMoveInADialogWaitsForOk();
+    void theSpeedMasterInputsDialogKeepsOneJobPerControl();
+    void aKeyIsNamedWholeInARefusal();
     void theStopIsNeverTakenButCanTake();
     void theHubListsControlsWithTwoJobs();
     void collisionShots();

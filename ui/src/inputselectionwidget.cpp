@@ -28,6 +28,7 @@
 #include <QDial>
 #include <QSlider>
 #include <QCheckBox>
+#include <QPointer>
 
 #include "inputoutputmap.h"
 
@@ -126,9 +127,19 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
         // Take it from there, then set it here.
         const quint32 universe = m_collision->property("learnUniverse").toUInt();
         const quint32 channel = m_collision->property("learnChannel").toUInt();
-        if (!ControlOwners::releaseAll(m_doc, m_collision->owners()))
+        const QList<ControlOwners::Owner> owners = m_collision->owners();
+        if (!ControlOwners::canMove(owners))
             return;
+        // In a dialog the owners let go on its OK, while this still picks
+        // the control: Cancel leaves the show as it was.
+        QPointer<InputSelectionWidget> self(this);
+        ControlOwners::releaseOnAccept(this, m_doc, owners, universe, channel, [self, universe, channel]() {
+            return !self.isNull() && !self->m_inputSource.isNull()
+                   && self->m_inputSource->universe() == universe && self->m_inputSource->channel() == channel;
+        });
         m_collision->clear();
+        if (m_moveHook)
+            m_moveHook(owners);
         takeSource(universe, channel, m_pendingKeepFeedback);
         emit inputValueChanged(universe, channel);
     });
@@ -307,7 +318,9 @@ bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage
     if (m_collision->isRefusing() && m_collision->property("learnUniverse").toUInt() == universe
         && m_collision->property("learnChannel").toUInt() == channelWithPage)
         return true;
-    const QList<ControlOwners::Owner> taken = ControlOwners::others(m_doc, universe, channelWithPage, m_self);
+    QList<ControlOwners::Owner> taken = ControlOwners::others(m_doc, universe, channelWithPage, m_self);
+    if (m_ownersHook)
+        taken = m_ownersHook(universe, channelWithPage, taken);
     if (taken.isEmpty())
     {
         m_collision->clear();

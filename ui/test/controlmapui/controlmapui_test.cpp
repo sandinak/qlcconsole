@@ -968,6 +968,14 @@ void ControlMapUi_Test::theEncoderLearnRefusesAndMoves()
         cm->handleInput(0, 18, 127);
         ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
         QVERIFY2(box->isRefusing() && box->text().contains("Encoder 3 (encoder bank)"), qPrintable(box->text()));
+        // An encoder is one of a run learned together: taking it would stop
+        // the rest of the bank, so there is no Move It Here, and why is said.
+        QVERIFY2(box->text().contains("learned as one run"), qPrintable(box->text()));
+        QVERIFY(!box->moveButton()->isVisibleTo(&d));
+        QVERIFY(!ControlOwners::releaseAll(m_doc, box->owners()));
+        QVERIFY(enc->isEnabled());
+        QCOMPARE(enc->device().encoders, 16);
+        QCOMPARE(enc->device().encoderCount, 8);
         d.reject();
     }
 
@@ -1052,7 +1060,154 @@ void ControlMapUi_Test::theInputPickersRefuseAndMove()
     QVERIFY(vcpe.properties().grandMasterInputUniverse() == InputOutputMap::invalidUniverse());
     gm->moveButton()->click();
     QCOMPARE(vcpe.properties().grandMasterInputChannel(), 61u);
+    // The trigger lets go on OK, not before.
+    QVERIFY(!cm->isEmpty());
+    vcpe.accept();
     QVERIFY(cm->isEmpty());
+
+    // Cancel: the trigger keeps it.
+    cm->setBinding({ 0, 62, ControlMap::function(a->id()), ControlMap::Toggle });
+    VCPropertiesEditor cancelled(nullptr, VirtualConsole::instance()->properties(), iom);
+    QVERIFY(QMetaObject::invokeMethod(&cancelled, "slotGrandMasterInputValueChanged",
+                                      Q_ARG(quint32, 0), Q_ARG(quint32, 62)));
+    cancelled.grandMasterCollision()->moveButton()->click();
+    cancelled.reject();
+    const ControlMap::Binding *kept = cm->binding(ControlMap::function(a->id()));
+    QVERIFY(kept != nullptr && kept->channel == 62u);
+}
+
+/* Move It Here in a dialog with OK (a widget's Properties, a channel group)
+   takes the control from its owner only on OK: Cancel leaves it where it
+   was, and so does picking another control before OK. */
+void ControlMapUi_Test::aMoveInADialogWaitsForOk()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    new VirtualConsole(nullptr, m_doc);
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    cm->setBinding({ 0, 7, ControlMap::function(a->id()), ControlMap::Toggle });
+    auto bound = [&]() {
+        const ControlMap::Binding *b = cm->binding(ControlMap::function(a->id()));
+        return b != nullptr && b->channel == 7u;
+    };
+    auto moveInto = [&](QDialog &dlg) {
+        InputSelectionWidget *isw = new InputSelectionWidget(m_doc, &dlg);
+        isw->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 7, 127);
+        isw->m_autoDetectInputButton->setChecked(false);
+        if (!isw->collisionBox()->isRefusing())
+            return static_cast<InputSelectionWidget *>(nullptr);
+        isw->collisionBox()->moveButton()->click();
+        return isw;
+    };
+
+    // Cancel: the trigger still has it.
+    {
+        QDialog dlg;
+        InputSelectionWidget *isw = moveInto(dlg);
+        QVERIFY(isw != nullptr);
+        QVERIFY(!isw->inputSource().isNull() && isw->inputSource()->channel() == 7u);
+        QVERIFY(bound());
+        dlg.reject();
+        QVERIFY(bound());
+    }
+    // Another control picked before OK: the trigger still has it.
+    {
+        QDialog dlg;
+        InputSelectionWidget *isw = moveInto(dlg);
+        QVERIFY(isw != nullptr);
+        isw->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 8)));
+        dlg.accept();
+        QVERIFY(bound());
+    }
+    // OK: the trigger lets go.
+    {
+        QDialog dlg;
+        QVERIFY(moveInto(dlg) != nullptr);
+        QVERIFY(bound());
+        dlg.accept();
+        QVERIFY(cm->binding(ControlMap::function(a->id())) == nullptr);
+    }
+}
+
+/* Speed Masters ▸ Inputs…: the dialog's three pickers are what OK writes.
+   Move It Here from one part to another leaves one job on the control, and
+   two pickers can't both hold one free control. */
+void ControlMapUi_Test::theSpeedMasterInputsDialogKeepsOneJobPerControl()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    sm->setInput(0, SpeedMasters::TapControl, 0, 36);
+    SpeedMastersPanel panel(m_doc);
+
+    bool ran = false;
+    QString rateRefusal, pauseRefusal;
+    QTimer::singleShot(0, this, [&]() {
+        QDialog *dlg = nullptr;
+        for (QWidget *w : QApplication::topLevelWidgets())
+            if (w->objectName() == QLatin1String("speedMasterInputsDialog") && w->isVisible())
+                dlg = qobject_cast<QDialog *>(w);
+        if (dlg == nullptr)
+            return;
+        InputSelectionWidget *tap = dlg->findChild<InputSelectionWidget *>("speedMasterInputTap");
+        InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
+        InputSelectionWidget *pause = dlg->findChild<InputSelectionWidget *>("speedMasterInputPause");
+        if (tap == nullptr || rate == nullptr || pause == nullptr)
+        {
+            dlg->reject();
+            return;
+        }
+        // Rate on Tap's control: refused naming Tap; Move It Here empties Tap.
+        rate->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 36, 127);
+        rate->m_autoDetectInputButton->setChecked(false);
+        rateRefusal = rate->collisionBox()->text();
+        if (rate->collisionBox()->isRefusing())
+            rate->collisionBox()->moveButton()->click();
+        // A free control Pause holds in this dialog: refused in Tap.
+        pause->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 50)));
+        tap->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 50, 127);
+        tap->m_autoDetectInputButton->setChecked(false);
+        pauseRefusal = tap->collisionBox()->isRefusing() ? tap->collisionBox()->text() : QString();
+        ran = true;
+        dlg->accept();
+    });
+    panel.editInputs(0);
+    QVERIFY(ran);
+    QVERIFY2(rateRefusal.contains("Speed 1 Tap (Speed Masters)"), qPrintable(rateRefusal));
+    QVERIFY2(pauseRefusal.contains("Speed 1 Pause (Speed Masters)"), qPrintable(pauseRefusal));
+    quint32 u = 99, c = 99;
+    QVERIFY(!sm->input(0, SpeedMasters::TapControl, &u, &c));
+    QVERIFY(sm->input(0, SpeedMasters::RateControl, &u, &c));
+    QCOMPARE(c, 36u);
+    QVERIFY(sm->input(0, SpeedMasters::PauseControl, &u, &c));
+    QCOMPARE(c, 50u);
+    QVERIFY2(ControlOwners::collisions(m_doc).isEmpty(),
+             qPrintable(ControlOwners::collisionText(m_doc, ControlOwners::collisions(m_doc).value(0))));
+}
+
+/* A computer key is named whole (its code and modifiers are above 16 bits),
+   not as the key its low bits happen to spell. */
+void ControlMapUi_Test::aKeyIsNamedWholeInARefusal()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f5 = ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier);
+    const quint32 shift1 = ControlMap::keyChannel(Qt::Key_1, Qt::ShiftModifier);
+    QVERIFY(f5 > 0xFFFF && shift1 > 0xFFFF);
+    const QString name = ControlOwners::controlName(m_doc, ControlMap::KeyboardUniverse, f5);
+    QCOMPARE(name, cm->controlName(ControlMap::KeyboardUniverse, f5));
+    QVERIFY2(name.contains("F5"), qPrintable(name));
+    QVERIFY(ControlOwners::controlName(m_doc, ControlMap::KeyboardUniverse, shift1)
+            != cm->controlName(ControlMap::KeyboardUniverse, quint32(Qt::Key_1)));
+
+    cm->setBinding({ ControlMap::KeyboardUniverse, f5, ControlMap::function(a->id()), ControlMap::Toggle });
+    const QList<ControlOwners::Owner> taken = ControlOwners::owners(m_doc, ControlMap::KeyboardUniverse, f5);
+    QCOMPARE(taken.count(), 1);
+    const QString refusal = ControlOwners::refusal(m_doc, ControlMap::KeyboardUniverse, f5, taken);
+    QVERIFY2(refusal.startsWith(name + " already does Scene: Warm"), qPrintable(refusal));
 }
 
 /* The emergency stop: nothing takes its control (no Move It Here), and its

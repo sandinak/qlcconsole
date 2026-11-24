@@ -23,6 +23,8 @@
 #include <QKeySequence>
 #include <QWidget>
 
+#include <functional>
+
 #include "ui_inputselectionwidget.h"
 #include "qlcinputsource.h"
 #include "controlowners.h"
@@ -65,6 +67,16 @@ public:
      *  a speed master, a channel group). A control another listener has
      *  is refused, naming it, with Move It Here (ControlOwners, Q297). */
     void setListener(const ControlOwners::Owner &self) { m_self = self; }
+    /** For a dialog with several pickers (Speed Masters ▸ Inputs…): the
+     *  owners a control has, given those of the show now. The dialog's own
+     *  pickers speak for what OK will write. */
+    void setOwnersHook(std::function<QList<ControlOwners::Owner>(quint32 universe, quint32 channel,
+                                                                 const QList<ControlOwners::Owner> &now)> hook)
+    { m_ownersHook = hook; }
+    /** Called on Move It Here with the owners it takes the control from
+     *  (they let go on the dialog's OK): a sibling picker lets go here. */
+    void setMoveHook(std::function<void(const QList<ControlOwners::Owner> &owners)> hook)
+    { m_moveHook = hook; }
     /** The refusal (hidden when there is none). */
     ControlCollisionBox *collisionBox() const { return m_collision; }
 
@@ -120,6 +132,8 @@ private:
     ControlOwners::Owner m_self;
     ControlCollisionBox *m_collision;
     bool m_pendingKeepFeedback = false;
+    std::function<QList<ControlOwners::Owner>(quint32, quint32, const QList<ControlOwners::Owner> &)> m_ownersHook;
+    std::function<void(const QList<ControlOwners::Owner> &)> m_moveHook;
 };
 
 #endif // INPUTSELECTIONWIDGET_H
