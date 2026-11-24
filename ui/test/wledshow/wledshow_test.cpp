@@ -498,7 +498,7 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     QTRY_VERIFY(!scene->isRunning());
 
     /* A WLED look, as the Look Editor makes it: WLED's own Fireworks
-       Starburst, Runs: Once (0.6 s), At the end: Hold. The device runs it
+       Starburst, Runs: Once, At the end: Hold. The device runs it
        for the run, then every segment freezes on its frame -- it does not
        go round again. */
     QLCPalette *burst = new QLCPalette(QLCPalette::Effect, &doc);
@@ -507,7 +507,10 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     burst->setWledEffect("Fireworks Starburst");
     burst->setEffectParamValue(EffectRuns::runsKey(), 1);
     burst->setEffectParamValue(EffectRuns::atEndKey(), 0);
-    burst->setEffectParamValue(EffectRuns::lengthKey(), 600);
+    // 3 s, not WLED's 0.6 s: the running burst is looked for in what the
+    // device took, and a slow CI runner sent its first frame after a 0.6 s
+    // window had closed (run 45317137267).
+    burst->setEffectParamValue(EffectRuns::lengthKey(), 3000);
     QVERIFY(doc.addPalette(burst));
     Scene *look = new Scene(&doc);
     QVERIFY(doc.addFunction(look));
@@ -548,7 +551,7 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     int mark = wled.segHistory.size();
     look->start(doc.masterTimer(), FunctionParent::master());
     QTRY_VERIFY_WITH_TIMEOUT(ranSince(mark), 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 10000);
     QVERIFY(every("fx", starburst));                    // held: still the burst, stopped
     QCOMPARE(wled.state.value("on").toBool(), true);
     QCOMPARE(revs(wled), (QList<bool>{ false, true, false, true }));   // each its own way still
@@ -559,7 +562,7 @@ void WledShow_Test::anEffectFromAShowPlaysOnEverySpanOfAFountain()
     mark = wled.segHistory.size();
     look->start(doc.masterTimer(), FunctionParent::master());
     QTRY_VERIFY_WITH_TIMEOUT(ranSince(mark), 5000);
-    QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(every("frz", true), 10000);
 
     // At the end: Release. After its run it lets go: the look's own red
     // comes back, solid (its effect settings at rest, not latched on the
