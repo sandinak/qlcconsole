@@ -34,6 +34,8 @@ private slots:
     void speedMasterRate();
     void grandMasterFaderIsPickedUp();
     void grandMasterThrownDownFollowsAtOnce();
+    void grandMasterMotorDipIsNoPullAndATapToZeroIsTaken();
+    void encoderKnobIsNeverPickedUp();
     void channelGroupFaderIsPickedUp();
     void addedSlidersCatchValues();
     void sliderCatchValuesAreUnchanged();

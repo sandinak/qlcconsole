@@ -33,7 +33,8 @@ moment you touch it. It holds for the **Grand Master**, a **speed master's
 Rate** fader, a **channel group's** fader and a **Virtual Console slider**
 with **Catch values** on (every new slider or knob has it on, however it is
 made: added, from a wizard, an Eos import or a copy of one that has it; one
-in a saved show keeps its setting). Encoders are relative and need none of it.
+in a saved show keeps its setting). An encoder (an input in **Encoder** or
+**Relative** mode) has no position, so it is never made to wait.
 
 A fader that is waiting says so where you look: the footer's **GM** chip
 reads **GM ▲** (or ▼) in amber, the way to move the fader, and a speed
@@ -47,15 +48,19 @@ is).
 Right after the show opens nobody knows where a fader is. A fader that is
 already at the control is taken at once; one anywhere else waits, whichever
 way you move it, so a control never jumps to a fader that was somewhere
-else.
+else (a master's one exception follows).
 
 A **master** has one exception: taking it **down** never waits. Pull the
 fader down from below the master, by more than a nudge from where it was
 left, and the master follows at once, wherever the fader was and whoever
 raised the master (the screen slider, the footer chip, the pad). A fader
-left resting is not pulled by its own jitter, and a motor fader sent down
-because the master was dipped on screen is not a pull either. Throwing it down in an
-emergency always takes the stage out. Raising it still waits for the
+left resting is not pulled by its own jitter. Right after the show opens,
+a fader thrown or tapped to the bottom (a touch fader in jump mode, a
+backup desk's blackout) takes the master out at once; a fader part way
+still waits. A motor fader sent down because the master was dipped or
+dragged on screen is not a pull, even for the moves it makes just after the
+master is back up; a pull below every value it was sent is. Throwing it
+down in an emergency takes the stage out. Raising it still waits for the
 pick-up. This holds for the **Grand Master** and for a Virtual Console
 slider set to **Grand Master**, **Submaster** or **Group master**; a speed
 master, a playback or a level slider waits both ways.

@@ -244,6 +244,8 @@ void GrandMasterSlider::sendFeedback()
                 chName = ich->name();
         }
     }
+    // A motor fader now travels to the GM: its falls on the way are no pull
+    gmPickup().noteFeedback(m_slider->value());
     if (m_slider->invertedAppearance())
         m_ioMap->sendFeedBack(universe, channel, UCHAR_MAX - m_slider->value(), chName);
     else

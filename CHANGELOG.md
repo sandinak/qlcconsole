@@ -26,9 +26,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   fader already at the control follows at once; any other waits, whichever
   way it moves. Pulling a master's fader down never waits (the Grand
   Master, and a Virtual Console Grand, Sub or Group master slider): below
-  it, a pull down takes it down at once; a resting fader's jitter does not. A controller's feedback line is sent the value
-  when a wait starts, so a motor fader drives itself there. Encoders are
-  relative and unchanged.
+  it, a pull down takes it down at once, and so does a fader thrown or
+  tapped to the bottom right after a start; a resting fader's jitter does
+  not, nor does a motor fader still travelling to a value the master was
+  sent (dipped or dragged on screen). A controller's feedback line is sent the value
+  when a wait starts, so a motor fader drives itself there. An encoder
+  (Encoder or Relative mode) is never made to wait.
 
 ### Fixed
 

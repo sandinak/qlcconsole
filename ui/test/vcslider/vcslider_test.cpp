@@ -825,14 +825,96 @@ void VCSlider_Test::grandMasterThrownDownFollowsAtOnce()
     QCOMPARE(int(iom->grandMasterValue()), 128);
 
     // Another fader learnt for the GM: where the old one was is no guide.
-    // The new one sits at the bottom and is nudged up: the GM stays.
+    // The new one sits part way and is nudged up: the GM stays.
     iom->setGrandMasterValue(255);
     VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 8);
-    emit iom->inputValueChanged(0, 8, 3);
-    emit iom->inputValueChanged(0, 8, 6);
-    emit iom->inputValueChanged(0, 8, 2);
+    emit iom->inputValueChanged(0, 8, 30);
+    emit iom->inputValueChanged(0, 8, 33);
+    emit iom->inputValueChanged(0, 8, 31);
     QCOMPARE(int(iom->grandMasterValue()), 255);
     QVERIFY(!gms.pickupHint().isEmpty());
+}
+
+namespace
+{
+qint64 s_gmNow = 0;
+}
+
+/* Review round 5: a motor fader sent down because the GM was dipped on
+   screen is no pull, even for the reports it makes after the GM is back
+   (feedback lags); and a fader tapped to 0 right after a start (no position
+   known yet) takes the stage out: lowering never waits. */
+void VCSlider_Test::grandMasterMotorDipIsNoPullAndATapToZeroIsTaken()
+{
+    FaderPickup::setClockForTest([]() { return s_gmNow; });
+    s_gmNow = 100000;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 6);
+    GrandMasterSlider gms(nullptr, iom);
+    iom->setGrandMasterValue(255);
+    emit iom->inputValueChanged(0, 6, 255);     // the motor fader follows
+
+    iom->setGrandMasterValue(0);                // dipped on screen: sent 0
+    s_gmNow += 40;
+    emit iom->inputValueChanged(0, 6, 240);
+    emit iom->inputValueChanged(0, 6, 150);
+    iom->setGrandMasterValue(255);              // back: sent 255
+    s_gmNow += 40;
+    emit iom->inputValueChanged(0, 6, 120);
+    emit iom->inputValueChanged(0, 6, 100);     // still falling: the motor
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    emit iom->inputValueChanged(0, 6, 254);     // arrived
+    QCOMPARE(int(iom->grandMasterValue()), 254);
+
+    // Dragged on screen 255 -> 40 -> 128: the lagging motor falls through
+    // the GM; it stays at 128.
+    iom->setGrandMasterValue(40);
+    emit iom->inputValueChanged(0, 6, 200);
+    iom->setGrandMasterValue(128);
+    emit iom->inputValueChanged(0, 6, 50);
+    emit iom->inputValueChanged(0, 6, 45);
+    QCOMPARE(int(iom->grandMasterValue()), 128);
+
+    // A new GM input (as after a start: its place unknown), the GM at
+    // 100%: one 0 (a jump-mode touch fader, a backup desk's blackout)
+    // takes it out.
+    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 5);
+    iom->setGrandMasterValue(255);
+    s_gmNow += FaderPickup::TravelMs + 1;
+    emit iom->inputValueChanged(0, 5, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+    QVERIFY(gms.pickupHint().isEmpty());
+    FaderPickup::setClockForTest(nullptr);
+}
+
+/* An encoder (Encoder / Relative mode) has no position: its value is the
+   slider's plus a step, so it is never picked up, even after a reset (a
+   tab switch) with a step bigger than the catch threshold. */
+void VCSlider_Test::encoderKnobIsNeverPickedUp()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    QSharedPointer<QLCInputSource> src(new QLCInputSource(0, 24));
+    src->setWorkingMode(QLCInputSource::Encoder);
+    src->setSensitivity(8);
+    slider.setInputSource(src, VCSlider::sliderInputSourceId);
+    connect(src.data(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+            &slider, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(100, false);
+    slider.updateFeedback();
+    slider.m_pickup.reset();                    // the tab was switched
+
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 1);  // +1 detent
+    QCOMPARE(slider.sliderValue(), 108);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 1);
+    QCOMPARE(slider.sliderValue(), 116);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 126); // -2
+    QCOMPARE(slider.sliderValue(), 100);
+    QVERIFY(slider.pickupHint().isEmpty());
+    m_doc->setMode(Doc::Design);
 }
 
 /* A channel group's external fader (Simple Desk) is picked up, and a

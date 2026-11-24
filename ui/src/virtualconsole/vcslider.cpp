@@ -2442,6 +2442,9 @@ void VCSlider::updateFeedback()
         fbv = int(SCALE(float(fbv), float(m_slider->minimum()),
                         float(m_slider->maximum()), float(0), float(UCHAR_MAX)));
     }
+    // A motor fader now travels to the slider: its falls on the way are
+    // no pull (FaderPickup::noteFeedback)
+    m_pickup.noteFeedback(pickupCurrent());
     sendFeedback(fbv);
 }
 
@@ -2505,7 +2508,19 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
              * is at the top). */
             value = uchar(pickupValue(value));
 
-            if (catchValues())
+            /* An encoder (Relative / Encoder mode) has no position: its
+             * value is the slider's own plus a step, so it never waits to
+             * be picked up (it would wait for ever after a reset) */
+            QSharedPointer<QLCInputSource> src = inputSource(sliderInputSourceId);
+            const bool absolute = src.isNull() ||
+                                  src->workingMode() == QLCInputSource::Absolute;
+            if (!absolute && m_pickup.last() >= 0)
+            {
+                m_pickup.reset();       // made an encoder since: no wait left
+                updatePickupHint();
+            }
+
+            if (catchValues() && absolute)
             {
                 m_pickup.setSource(universe, pagedCh);   // another fader: start over
                 bool sendBack = false;
