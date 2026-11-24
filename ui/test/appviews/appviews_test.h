@@ -175,6 +175,8 @@ private slots:
      *  the show -- its footer chip, menu items and pages put away -- and on
      *  again brings them back; the show is marked changed. */
     void eachFeatureSwitchHidesWhatItOwns();
+    void everyFeatureSwitchRespondsThroughTheDialog();
+    void turningVenuesOffAsksWhileAVenueIsApplied();
     /** Q293: the features turned off are saved with the show; a show saved
      *  with all on (an older show: no attribute) opens with everything on. */
     void featuresAreSavedWithTheShow();

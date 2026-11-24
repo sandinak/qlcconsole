@@ -3605,6 +3605,37 @@ static bool chooseFeatures(App *app, const QMap<QString, bool> &want)
     return found;
 }
 
+/* The same, with the question Turning Venues off asks while a venue is
+   applied: @p answer is the button's object name ("venueOffClear",
+   "venueOffKeep") or "cancel". @p asked is set when the question came, and
+   @p askedText holds what it said. With no @p answer a question is a
+   failure of the test (cancelled). */
+static bool chooseFeaturesAnswering(App *app, const QMap<QString, bool> &want, const QString &answer,
+                                    bool *asked, QString *askedText = nullptr)
+{
+    *asked = false;
+    QTimer poll;
+    poll.setInterval(20);
+    QObject::connect(&poll, &QTimer::timeout, app, [&]() {
+        QMessageBox *q = app->findChild<QMessageBox *>("venueOffPrompt");
+        if (q == nullptr || *asked)
+            return;
+        *asked = true;
+        if (askedText != nullptr)
+            *askedText = q->text() + QLatin1Char('\n') + q->informativeText();
+        if (answer == QLatin1String("cancel"))
+            q->button(QMessageBox::Cancel)->click();
+        else if (QAbstractButton *b = q->findChild<QAbstractButton *>(answer))
+            b->click();
+        else
+            q->button(QMessageBox::Cancel)->click();
+    });
+    poll.start();
+    const bool ok = chooseFeatures(app, want);
+    poll.stop();
+    return ok;
+}
+
 static const QStringList kFeatureRows = { "Venues", "Power Estimate", "Grand Master", "Speed Masters",
                                           "Engine Load", "Show Review", "Control Surfaces", "Focus Calls" };
 
@@ -3719,6 +3750,221 @@ void AppViews_Test::eachFeatureSwitchHidesWhatItOwns()
     QVERIFY(chooseFeatures(m_app, allFeatures(true)));
     check(true);
     doc->resetModified();
+}
+
+/* The Tabs & Features dialog, driven as a person drives it, for EVERY
+   feature: off, everything it owns put away at once and nothing else
+   touched; on again, all back. Then the same with a venue applied (his
+   real show), where Venues asks and the chip says why it stays. */
+void AppViews_Test::everyFeatureSwitchRespondsThroughTheDialog()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    Doc *doc = m_app->doc();
+    VenueCorrections *vc = doc->programmer()->venueCorrections();
+    QTemporaryDir dir;
+    const bool was[4] = { m_app->footerChipShown(App::FooterLoad), m_app->footerChipShown(App::FooterPower),
+                          m_app->footerChipShown(App::FooterGrandMaster),
+                          m_app->footerChipShown(App::FooterSpeedMasters) };
+    auto back = qScopeGuard([this, was, vc]() {
+        vc->reset();
+        m_app->setFooterChipShown(App::FooterLoad, was[0]);
+        m_app->setFooterChipShown(App::FooterPower, was[1]);
+        m_app->setFooterChipShown(App::FooterGrandMaster, was[2]);
+        m_app->setFooterChipShown(App::FooterSpeedMasters, was[3]);
+        m_app->clearDocument();
+        m_app->setTabLabelMode(App::TabIconAndText);
+    });
+    m_app->setFooterChipShown(App::FooterLoad, true);
+    m_app->setFooterChipShown(App::FooterPower, true);
+    m_app->setFooterChipShown(App::FooterGrandMaster, true);
+    m_app->setFooterChipShown(App::FooterSpeedMasters, true);
+    m_app->showContext(QStringLiteral("Lighting Studio"));
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    QComboBox *overlay = nullptr;
+    QTRY_VERIFY((overlay = mon->findChild<QComboBox *>("studioOverlay")) != nullptr);
+    Scene *scene = new Scene(doc);
+    scene->setName("Look");
+    QVERIFY(doc->addFunction(scene));
+    VenueChip *venueChip = m_app->m_venueChip;
+    QAction *viewVenue = m_app->findChild<QAction *>(QStringLiteral("viewVenueAction"));
+    QLabel *review = m_app->findChild<QLabel *>("footerReview");
+    CueRunner *run = m_app->findChild<CueRunner *>("runTab");
+    QVERIFY(venueChip != nullptr && viewVenue != nullptr && review != nullptr && run != nullptr);
+    QToolButton *runFocus = run->findChild<QToolButton *>("crFocusCalls");
+    QToolButton *runPad = run->findChild<QToolButton *>("crPadRun");
+    QVERIFY(runFocus != nullptr && runPad != nullptr);
+    auto focusShown = [this, doc](const QString &name) {
+        QMenu m;
+        FocusMenu::fill(&m, doc, m_app, []() {});
+        QAction *a = m.findChild<QAction *>(name);
+        return a != nullptr && a->isVisible();
+    };
+    doc->resetModified();
+
+    // Whether what @p row owns is shown now, as the person sees it.
+    auto shown = [&](const QString &row) {
+        if (row == "Venues")
+            return !venueChip->isHidden() && viewVenue->isVisible() && focusShown("focusVenues");
+        if (row == "Power Estimate")
+        {
+            if (overlay->findText("Power") < 0)
+                return false;
+            FixtureManager *fm = FixtureManager::instance();
+            for (FixtureTreeWidget *t : fm->findChildren<FixtureTreeWidget *>())
+                for (int i = 0; i < t->topLevelItemCount(); ++i)
+                    if (t->topLevelItem(i)->text(0) == QStringLiteral("Power"))
+                        return true;
+            return false;
+        }
+        if (row == "Grand Master")
+            return !m_app->m_statusGrandMasterBox->isHidden();
+        if (row == "Speed Masters")
+            return !m_app->m_statusSpeedMasters->isHidden();
+        if (row == "Engine Load")
+            return !m_app->m_statusLoadLabel->isHidden();
+        if (row == "Show Review")
+        {
+            doc->showReview()->run();
+            return !review->isHidden();
+        }
+        if (row == "Control Surfaces")
+        {
+            QMenu m;
+            return !runPad->isHidden()
+                   && ControlLearnDialog::addTo(&m, doc, ControlMap::function(scene->id()), m_app) != nullptr;
+        }
+        if (row == "Focus Calls")
+            return focusShown("focusVenue") && focusShown("focusEditCalls") && !runFocus->isHidden();
+        return false;
+    };
+    // Only @p off (if any) is away; every other feature still shown.
+    auto onlyAway = [&](const QString &off, bool venueKept) {
+        for (const QString &row : kFeatureRows)
+        {
+            bool want = row != off;
+            if (row == "Venues" && venueKept)
+                continue;   // checked on its own
+            QVERIFY2(shown(row) == want, qPrintable(row + (want ? " should be shown" : " should be away")
+                                                    + " with " + (off.isEmpty() ? "all on" : off + " off")));
+        }
+    };
+
+    for (int applied = 0; applied < 2; ++applied)
+    {
+        if (applied == 1)
+        {
+            vc->setShowFile(dir.filePath("Tour.qlcc"), false);
+            QVERIFY(vc->setActiveVenue(vc->addVenue("PMS")));
+        }
+        onlyAway(QString(), false);
+        if (QTest::currentTestFailed())
+            return;
+        for (const QString &row : kFeatureRows)
+        {
+            bool asked = false;
+            QVERIFY(chooseFeaturesAnswering(m_app, { { row, false } }, "venueOffKeep", &asked));
+            // Only Venues asks, and only while a venue is applied.
+            QCOMPARE(asked, row == "Venues" && applied == 1);
+            QVERIFY2(m_app->doc()->isModified(), qPrintable(row));
+            if (row == "Venues" && applied == 1)
+            {
+                // Kept: the chip stays and says why; the menus are away.
+                QVERIFY(!venueChip->isHidden());
+                QVERIFY(venueChip->text().contains("Venues off"));
+                QVERIFY(venueChip->toolTip().contains("Venues is off for this show"));
+                QVERIFY(!viewVenue->isVisible());
+                QVERIFY(!focusShown("focusVenues"));
+                onlyAway(row, true);
+            }
+            else
+                onlyAway(row, false);
+            if (QTest::currentTestFailed())
+                return;
+            doc->resetModified();
+            QVERIFY(chooseFeaturesAnswering(m_app, { { row, true } }, "cancel", &asked));
+            QVERIFY(!asked);
+            QVERIFY2(doc->isModified(), qPrintable(row));
+            onlyAway(QString(), false);
+            if (QTest::currentTestFailed())
+                return;
+            doc->resetModified();
+        }
+    }
+}
+
+/* Turning Venues off while a venue is applied: the dialog says so, then asks. */
+void AppViews_Test::turningVenuesOffAsksWhileAVenueIsApplied()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    Doc *doc = m_app->doc();
+    VenueCorrections *vc = doc->programmer()->venueCorrections();
+    QTemporaryDir dir;
+    auto back = qScopeGuard([this, vc]() {
+        vc->reset();
+        m_app->clearDocument();
+    });
+    VenueChip *chip = m_app->m_venueChip;
+    QAction *viewVenue = m_app->findChild<QAction *>(QStringLiteral("viewVenueAction"));
+    QVERIFY(chip != nullptr && viewVenue != nullptr);
+    vc->setShowFile(dir.filePath("Tour.qlcc"), false);
+    const QString name = vc->addVenue("PMS");
+    ShowFeatures *sf = ShowFeatures::instance();
+
+    // The dialog's Venues row says the venue is applied; none applied, no note.
+    auto noteShown = [this]() {
+        bool note = false, seen = false;
+        QTimer::singleShot(100, m_app, [&]() {
+            QDialog *dlg = m_app->findChild<QDialog *>("chooseTabsDialog");
+            if (dlg == nullptr)
+                return;
+            seen = true;
+            QLabel *l = dlg->findChild<QLabel *>("chooseFeaturesVenueNote");
+            note = l != nullptr && l->text().contains("PMS") && l->text().contains("applied");
+            dlg->reject();
+        });
+        m_app->menuBar()->findChild<QAction *>("viewTabsAction")->trigger();
+        return seen && note;
+    };
+    QVERIFY(!noteShown());
+    QVERIFY(vc->setActiveVenue(name));
+    QVERIFY(noteShown());
+
+    bool asked = false;
+    QString text;
+    // Cancel: nothing changes.
+    QVERIFY(chooseFeaturesAnswering(m_app, { { "Venues", false } }, "cancel", &asked, &text));
+    QVERIFY(asked);
+    QVERIFY2(text.contains("PMS is applied to the rig"), qPrintable(text));
+    QVERIFY(sf->on(ShowFeatures::Venues));
+    QVERIFY(vc->isActive());
+    QVERIFY(!chip->isHidden());
+    QVERIFY(viewVenue->isVisible());
+
+    // Keep it applied: Venues off, the venue and its chip stay, saying why.
+    QVERIFY(chooseFeaturesAnswering(m_app, { { "Venues", false } }, "venueOffKeep", &asked));
+    QVERIFY(asked);
+    QVERIFY(!sf->on(ShowFeatures::Venues));
+    QVERIFY(vc->isActive());
+    QVERIFY(!chip->isHidden());
+    QCOMPARE(m_app->venueFooterText(), QString("Venue: PMS \302\267 Venues off"));
+    QVERIFY(chip->toolTip().contains("Venue: PMS \342\200\224 applied; Venues is off for this show"));
+    QVERIFY(!viewVenue->isVisible());
+    // On again: back as it was, no question.
+    QVERIFY(chooseFeaturesAnswering(m_app, { { "Venues", true } }, "cancel", &asked));
+    QVERIFY(!asked);
+    QCOMPARE(m_app->venueFooterText(), QString("Venue: PMS"));
+
+    // Clear and turn off: the venue leaves the rig, the chip goes.
+    QVERIFY(chooseFeaturesAnswering(m_app, { { "Venues", false } }, "venueOffClear", &asked));
+    QVERIFY(asked);
+    QVERIFY(!sf->on(ShowFeatures::Venues));
+    QVERIFY(!vc->isActive());
+    QTRY_VERIFY(chip->isHidden());
+    QVERIFY(!viewVenue->isVisible());
+    QVERIFY(vc->venueNames().contains(name));       // cleared, not deleted
 }
 
 void AppViews_Test::featuresAreSavedWithTheShow()
@@ -3878,7 +4124,8 @@ void AppViews_Test::anAppliedVenueIsSaidWithVenuesOff()
     QVERIFY(vc->setActiveVenue(vc->addVenue("Lincoln HS")));
     // On the rig: said whatever the switch.
     QTRY_VERIFY(!chip->isHidden());
-    QCOMPARE(m_app->venueFooterText(), QString("Venue: Lincoln HS"));
+    QCOMPARE(m_app->venueFooterText(), QString("Venue: Lincoln HS \302\267 Venues off"));
+    QVERIFY(chip->toolTip().contains("Venues is off for this show"));
     QVERIFY(vc->setActiveVenue(QString()));
     QTRY_VERIFY(chip->isHidden());
 }
