@@ -148,6 +148,10 @@ private:
     /** Sets what learn @a target heard (the control @a channel of
      *  @a universe) on the encoder bank's device. */
     void applyEncoderLearn(int target, quint32 universe, quint32 channel);
+    /** @a d as a learn of @a target heard on @a channel of @a universe
+     *  leaves it (the whole bank on that universe). */
+    static EncoderBank::Device learnedDevice(EncoderBank::Device d, int target,
+                                             quint32 universe, quint32 channel);
 
     QGroupBox *m_encoderBox = nullptr;
     QComboBox *m_encPreset = nullptr;

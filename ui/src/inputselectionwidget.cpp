@@ -149,13 +149,12 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
             for (const ControlOwners::Owner &o : std::as_const(show))
                 if (!ControlOwners::canRelease(m_doc, o))
                     return;
-            m_pendingOwners = show;
-            m_pendingUniverse = universe;
-            m_pendingChannel = channel;
             if (m_hooked != dlg)
             {
                 m_hooked = dlg;
                 connect(dlg, &QDialog::accepted, this, &InputSelectionWidget::commitMove);
+                // Cancel: nothing waits for a later OK of the same window.
+                connect(dlg, &QDialog::rejected, this, [this]() { m_pendingMoves.clear(); });
             }
         }
         // Another picker of this window: it lets go here, in the window.
@@ -164,6 +163,19 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
                 m_local.release(o);
         m_collision->clear();
         takeSource(universe, channel, m_pendingKeepFeedback);
+        /* Each move is kept with the source it set: a window that edits
+           many presets with this one picker (Speed Dial, Matrix, XY Pad)
+           moves on to another preset, and on OK each control that a
+           preset still keeps is taken from its owners. */
+        if (dlg != nullptr && !show.isEmpty())
+        {
+            PendingMove pm;
+            pm.owners = show;
+            pm.universe = universe;
+            pm.channel = channel;
+            pm.source = m_inputSource.toWeakRef();
+            m_pendingMoves << pm;
+        }
         emit inputValueChanged(universe, channel);
     });
 
@@ -369,15 +381,38 @@ bool InputSelectionWidget::isLocal(const ControlOwners::Owner &owner) const
     return m_local.covers && m_local.covers(owner);
 }
 
+QList<ControlOwners::Owner> InputSelectionWidget::pendingMove() const
+{
+    QList<ControlOwners::Owner> out;
+    for (const PendingMove &pm : m_pendingMoves)
+        out << pm.owners;
+    return out;
+}
+
 void InputSelectionWidget::commitMove()
 {
-    const QList<ControlOwners::Owner> owners = m_pendingOwners;
-    m_pendingOwners.clear();
-    // Chosen something else since (or cleared it): nothing to take.
-    if (owners.isEmpty() || m_inputSource.isNull() || m_inputSource->universe() != m_pendingUniverse
-        || m_inputSource->channel() != m_pendingChannel)
-        return;
-    ControlOwners::releaseAll(m_doc, owners);
+    const QList<PendingMove> moves = m_pendingMoves;
+    m_pendingMoves.clear();
+    QList<ControlOwners::Owner> owners;
+    for (const PendingMove &pm : moves)
+    {
+        /* Chosen something else since (or cleared it): the source it set is
+           gone, or no longer on that control. Moved on to another preset:
+           the one it was set for still keeps it. */
+        const QSharedPointer<QLCInputSource> src = pm.source.toStrongRef();
+        if (src.isNull() || src->universe() != pm.universe || src->channel() != pm.channel)
+            continue;
+        for (const ControlOwners::Owner &o : pm.owners)
+        {
+            bool seen = false;
+            for (const ControlOwners::Owner &had : std::as_const(owners))
+                seen = seen || had.sameAs(o);
+            if (!seen)
+                owners << o;
+        }
+    }
+    if (!owners.isEmpty())
+        ControlOwners::releaseAll(m_doc, owners);
 }
 
 void InputSelectionWidget::takeSource(quint32 universe, quint32 channelWithPage, bool keepFeedback)

@@ -837,14 +837,27 @@ void ControlMapPanel::slotEncoderHeard(quint32 universe, quint32 channel)
        bank -- a run of encoders, pushes or bank buttons from the one heard --
        is asked who else listens to it. The rings are feedback lines: they
        hear nothing. */
+    EncoderBank *enc = m_doc->controlMap()->encoderBank();
+    const EncoderBank::Device d = enc->device();
+    QList<quint32> channels;
     if (target != LearnRings)
     {
-        const EncoderBank::Device d = m_doc->controlMap()->encoderBank()->device();
         const int run = target == LearnEncoders || target == LearnPushes ? d.encoderCount
                       : target == LearnDirect ? EncoderBank::bankCount() : 1;
-        QList<quint32> channels;
         for (int i = 0; i < run; ++i)
             channels << channel + quint32(i);
+    }
+    /* A control heard on another universe moves the whole bank there (its
+       encoders, pushes and bank buttons): each of them is asked there too,
+       as a universe chosen in the box is. */
+    if (universe != d.universe && enc->isEnabled())
+    {
+        for (quint32 ch : encoderChannels(learnedDevice(d, target, universe, channel)))
+            if (!channels.contains(ch))
+                channels << ch;
+    }
+    if (!channels.isEmpty())
+    {
         const QList<QPair<quint32, ControlOwners::Owner>> taken = encoderTaken(universe, channels);
         if (!taken.isEmpty())
         {
@@ -862,7 +875,13 @@ void ControlMapPanel::slotEncoderHeard(quint32 universe, quint32 channel)
 void ControlMapPanel::applyEncoderLearn(int target, quint32 universe, quint32 channel)
 {
     EncoderBank *enc = m_doc->controlMap()->encoderBank();
-    EncoderBank::Device d = enc->device();
+    enc->setDevice(learnedDevice(enc->device(), target, universe, channel), QStringLiteral("custom"));
+    refresh();
+}
+
+EncoderBank::Device ControlMapPanel::learnedDevice(EncoderBank::Device d, int target,
+                                                   quint32 universe, quint32 channel)
+{
     d.universe = universe;
     const qint32 ch = qint32(channel);
     switch (target)
@@ -879,6 +898,5 @@ void ControlMapPanel::applyEncoderLearn(int target, quint32 universe, quint32 ch
         break;
     case LearnRings: d.rings = ch; break;
     }
-    enc->setDevice(d, QStringLiteral("custom"));
-    refresh();
+    return d;
 }

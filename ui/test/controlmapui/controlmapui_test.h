@@ -82,6 +82,8 @@ private slots:
     void moveItHereIsAllOrNothing();
     void anEncoderPresetAsksWhoHasItsControls();
     void anEncoderRefusalNamesEachOwnersControl();
+    void aMoveForEachPresetIsTakenOnOk();
+    void anEncoderLearnOnAnotherUniverseAsksForTheWholeBank();
 
 private:
     Scene *scene(const QString &name);

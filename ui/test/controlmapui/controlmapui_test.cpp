@@ -2196,3 +2196,118 @@ void ControlMapUi_Test::anEncoderRefusalNamesEachOwnersControl()
     QVERIFY2(!text.contains(QString("%1 already does Scene: Warm (Control Map) and").arg(c41)), qPrintable(text));
     cm->handleInput(0, 40, 0);
 }
+
+/* One picker for many presets (Speed Dial, Matrix, XY Pad): Move It Here
+   for preset A, then preset B selected (the picker shows B's source), then
+   OK -- the control preset A keeps is still taken from its trigger. Two
+   moves for two presets take both controls; a move whose preset then
+   learned another control takes nothing. */
+void ControlMapUi_Test::aMoveForEachPresetIsTakenOnOk()
+{
+    Scene *a = scene("Warm");
+    Scene *b = scene("Cool");
+    Scene *c = scene("Blue");
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    new VirtualConsole(nullptr, m_doc);
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    const ControlMap::Target warm = ControlMap::function(a->id());
+    const ControlMap::Target cool = ControlMap::function(b->id());
+    const ControlMap::Target blue = ControlMap::function(c->id());
+    cm->setBinding({ 0, 60, warm, ControlMap::Toggle });
+    cm->setBinding({ 0, 61, cool, ControlMap::Toggle });
+    cm->setBinding({ 0, 62, blue, ControlMap::Toggle });
+
+    QDialog dlg;
+    QVBoxLayout *lay = new QVBoxLayout(&dlg);
+    InputSelectionWidget *isw = new InputSelectionWidget(m_doc, &dlg);
+    lay->addWidget(isw);
+    // As the Properties windows keep a preset's source: the picker's own.
+    QSharedPointer<QLCInputSource> presetA;
+    QSharedPointer<QLCInputSource> presetB(new QLCInputSource(0, 80));
+    QSharedPointer<QLCInputSource> presetC(new QLCInputSource(0, 81));
+    QSharedPointer<QLCInputSource> *editing = &presetA;
+    connect(isw, &InputSelectionWidget::inputValueChanged, &dlg, [&]() { *editing = isw->inputSource(); });
+    auto hear = [&](quint32 ch) {
+        isw->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, ch, 127);
+        isw->m_autoDetectInputButton->setChecked(false);
+    };
+
+    hear(60);                                   // preset A: Warm's control
+    QVERIFY(isw->collisionBox()->isRefusing());
+    isw->collisionBox()->moveButton()->click();
+    QCOMPARE(presetA->channel(), 60u);
+
+    editing = &presetB;                         // preset B selected
+    isw->setInputSource(presetB);
+    hear(61);                                   // Cool's control
+    QVERIFY(isw->collisionBox()->isRefusing());
+    isw->collisionBox()->moveButton()->click();
+    QCOMPARE(presetB->channel(), 61u);
+
+    editing = &presetC;                         // preset C: moved, then changed its mind
+    isw->setInputSource(presetC);
+    hear(62);
+    QVERIFY(isw->collisionBox()->isRefusing());
+    isw->collisionBox()->moveButton()->click();
+    hear(63);                                   // a free control
+    QCOMPARE(presetC->channel(), 63u);
+
+    isw->setInputSource(presetB);               // another preset showing at OK
+    editing = &presetB;
+    QVERIFY(cm->binding(warm) != nullptr && cm->binding(cool) != nullptr);
+    dlg.accept();
+    QVERIFY2(cm->binding(warm) == nullptr, "preset A's control still fires Warm too");
+    QVERIFY2(cm->binding(cool) == nullptr, "preset B's control still fires Cool too");
+    QVERIFY2(cm->binding(blue) != nullptr && cm->binding(blue)->channel == 62u,
+             "Blue lost its control though preset C let it go");
+}
+
+/* An encoder-bank Learn heard on another universe moves the whole bank
+   there: its other controls (pushes, Next bank...) are asked there too,
+   as a universe chosen in the box is, not only the run just heard. */
+void ControlMapUi_Test::anEncoderLearnOnAnotherUniverseAsksForTheWholeBank()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    EncoderBank *enc = cm->encoderBank();
+    EncoderBank::Device dev;
+    dev.universe = 0;
+    dev.encoders = 0;
+    dev.encoderCount = 8;
+    dev.pushes = 32;
+    dev.bankNext = 50;
+    enc->setDevice(dev, QStringLiteral("custom"));
+    QVERIFY(enc->isEnabled());
+    const ControlMap::Target warm = ControlMap::function(a->id());
+    cm->setBinding({ 1, 50, warm, ControlMap::Toggle });   // the second controller
+
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    ControlCollisionBox *box = panel.encoderCollision();
+
+    // Encoders turned on universe 2: CC 0-7 are free there, its CC 50 is not.
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderLearn"));
+    QVERIFY(cm->isListening());
+    cm->handleInput(1, 0, 127);
+    QVERIFY2(box->isRefusing() && box->text().contains("Scene: Warm (Control Map)"), qPrintable(box->text()));
+    QCOMPARE(enc->device().universe, 0u);          // not moved
+    QCOMPARE(enc->device().bankNext, 50);
+    cm->handleInput(1, 0, 0);
+    box->moveButton()->click();
+    QVERIFY(cm->binding(warm) == nullptr);
+    QCOMPARE(enc->device().universe, 1u);
+    QCOMPARE(enc->device().encoders, 0);
+
+    // Next bank learned back on universe 1: the encoders there are a trigger's.
+    cm->setBinding({ 0, 3, warm, ControlMap::Toggle });
+    QAction *next = panel.findChild<QAction *>("encoderLearnNext");
+    QVERIFY(next != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderLearnMore", Q_ARG(QAction *, next)));
+    cm->handleInput(0, 90, 127);
+    QVERIFY2(box->isRefusing() && box->text().contains("Scene: Warm (Control Map)"), qPrintable(box->text()));
+    QCOMPARE(enc->device().universe, 1u);
+    QCOMPARE(enc->device().bankNext, 50);
+    cm->handleInput(0, 90, 0);
+}

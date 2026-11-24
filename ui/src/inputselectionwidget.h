@@ -90,7 +90,7 @@ public:
     /** The show's listeners Move It Here takes the control from when the
      *  window this is in is accepted (empty: none waiting). Outside a
      *  dialog it takes it at once. */
-    QList<ControlOwners::Owner> pendingMove() const { return m_pendingOwners; }
+    QList<ControlOwners::Owner> pendingMove() const;
 
 protected slots:
     void slotAttachKey();
@@ -121,8 +121,9 @@ protected:
     bool refuseTaken(quint32 universe, quint32 channelWithPage, bool keepFeedback);
     /** Sets the source to the control, as Choose… or auto-detect does. */
     void takeSource(quint32 universe, quint32 channelWithPage, bool keepFeedback);
-    /** The window was accepted: the control is taken from pendingMove(),
-     *  if this still has it. */
+    /** The window was accepted: each Move It Here's control is taken from
+     *  its owners if the source it set is still kept on it (by this picker
+     *  or by the preset it was set for, when one picker edits many). */
     void commitMove();
     bool isLocal(const ControlOwners::Owner &owner) const;
 
@@ -149,9 +150,16 @@ private:
     ControlCollisionBox *m_collision;
     bool m_pendingKeepFeedback = false;
     LocalOwners m_local;
-    QList<ControlOwners::Owner> m_pendingOwners;
-    quint32 m_pendingUniverse = 0;
-    quint32 m_pendingChannel = 0;
+    /** One Move It Here waiting for OK: the source it set, weakly (a
+     *  window that edits many presets with this picker keeps each one's). */
+    struct PendingMove
+    {
+        QList<ControlOwners::Owner> owners;
+        quint32 universe = 0;
+        quint32 channel = 0;
+        QWeakPointer<QLCInputSource> source;
+    };
+    QList<PendingMove> m_pendingMoves;
     QPointer<QDialog> m_hooked;
 };
 
