@@ -18,12 +18,16 @@
 */
 
 #include <QRadioButton>
+#include <QGridLayout>
 #include <QSettings>
 #include <QCheckBox>
 #include <QSpinBox>
 #include <QAction>
 
 #include "vcpropertieseditor.h"
+#include "controlcollisionbox.h"
+#include "controlowners.h"
+#include "virtualconsole.h"
 #include "selectinputchannel.h"
 #include "inputoutputmap.h"
 #include "qlcinputsource.h"
@@ -231,6 +235,44 @@ VCPropertiesEditor::VCPropertiesEditor(QWidget* parent, const VCProperties& prop
         break;
     }
 
+    // One job per control (Q297): a control with another job is refused here.
+    m_gmCollision = new ControlCollisionBox(this);
+    m_gmCollision->setObjectName(QStringLiteral("gmCollision"));
+    if (QGridLayout *gl = qobject_cast<QGridLayout *>(m_gmInputUniverseEdit->parentWidget()->layout()))
+        gl->addWidget(m_gmCollision, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
+    m_gmCollision->setMovesOnOk(true);
+    connect(m_gmCollision, &ControlCollisionBox::moveRequested, this, [this]() {
+        VirtualConsole *vc = VirtualConsole::instance();
+        Doc *doc = vc != nullptr ? vc->getDoc() : nullptr;
+        /* These properties apply only on OK, so the control is taken from
+           the others only then (Cancel leaves every one as it was). Asked
+           now whether they can let go. */
+        const QList<ControlOwners::Owner> owners = m_gmCollision->owners();
+        if (!ControlOwners::canMove(owners))
+            return;
+        for (const ControlOwners::Owner &o : owners)
+            if (!ControlOwners::canRelease(doc, o))
+                return;
+        const quint32 universe = m_gmCollision->universe();
+        const quint32 channel = m_gmCollision->channel();
+        m_gmPendingMove = owners;
+        m_gmPendingUniverse = universe;
+        m_gmPendingChannel = channel;
+        m_gmCollision->clear();
+        m_properties.setGrandMasterInputSource(universe, channel);
+        updateGrandMasterInputSource();
+    });
+    connect(this, &QDialog::accepted, this, [this]() {
+        const QList<ControlOwners::Owner> owners = m_gmPendingMove;
+        m_gmPendingMove.clear();
+        VirtualConsole *vc = VirtualConsole::instance();
+        // Chosen another control since (or none): nothing to take.
+        if (owners.isEmpty() || vc == nullptr || m_properties.grandMasterInputUniverse() != m_gmPendingUniverse
+            || m_properties.grandMasterInputChannel() != m_gmPendingChannel)
+            return;
+        ControlOwners::releaseAll(vc->getDoc(), owners);
+    });
+
     updateGrandMasterInputSource();
 }
 
@@ -381,6 +423,33 @@ void VCPropertiesEditor::slotAutoDetectGrandMasterInputToggled(bool checked)
 void VCPropertiesEditor::slotGrandMasterInputValueChanged(quint32 universe,
                                                           quint32 channel)
 {
+    takeGrandMasterInput(universe, channel);
+}
+
+void VCPropertiesEditor::takeGrandMasterInput(quint32 universe, quint32 channel)
+{
+    // What it has already (auto-detect hears it on and on), or the same
+    // refusal still showing: nothing new to ask.
+    if (m_properties.grandMasterInputUniverse() == universe
+        && m_properties.grandMasterInputChannel() == channel)
+        return;
+    if (m_gmCollision->isRefusing() && m_gmCollision->universe() == universe
+        && m_gmCollision->channel() == channel)
+        return;
+    VirtualConsole *vc = VirtualConsole::instance();
+    Doc *doc = vc != nullptr ? vc->getDoc() : nullptr;
+    if (doc != nullptr)
+    {
+        ControlOwners::Owner self;
+        self.kind = ControlOwners::GrandMaster;
+        const QList<ControlOwners::Owner> taken = ControlOwners::others(doc, universe, channel, self);
+        if (!taken.isEmpty())
+        {
+            m_gmCollision->refuse(doc, universe, channel, taken);
+            return;
+        }
+    }
+    m_gmCollision->clear();
     m_properties.setGrandMasterInputSource(universe, channel);
     updateGrandMasterInputSource();
 }
@@ -389,10 +458,7 @@ void VCPropertiesEditor::slotChooseGrandMasterInputClicked()
 {
     SelectInputChannel sic(this, m_ioMap);
     if (sic.exec() == QDialog::Accepted)
-    {
-        m_properties.setGrandMasterInputSource(sic.universe(), sic.channel());
-        updateGrandMasterInputSource();
-    }
+        takeGrandMasterInput(sic.universe(), sic.channel());
 }
 
 void VCPropertiesEditor::updateGrandMasterInputSource()

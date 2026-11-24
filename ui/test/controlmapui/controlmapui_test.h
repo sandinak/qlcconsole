@@ -59,6 +59,33 @@ private slots:
     void theSurfacesStatusFollowsTheShow();
     void surfacesOffKeepsTheStop();
     void surfacesShots();
+    // One job per control (Q297)
+    void aTriggerLearnRefusesAWidgetsControlAndMovesIt();
+    void aPmjControlIsRefusedWithNoMoveItHere();
+    void theEncoderLearnRefusesAndMoves();
+    void theInputPickersRefuseAndMove();
+    void aMoveInAPropertiesWindowWaitsForOk();
+    void theStopIsNeverTakenButCanTake();
+    void theHubListsControlsWithTwoJobs();
+    void collisionShots();
+    // Places for triggers (Q295, Q296, Q303)
+    void theLearnDialogOffersThePlace();
+    void theShowTreeLearnsWhereYouRightClicked();
+    void aGoLearnedFromTheTreeFiresInOperate();
+    void onlyTheSamePlaceIsRefused();
+    void aSteppingTriggerReopensAndSavesOnItsOwnControl();
+    void moveItHereLetsGoOfASubControlsOwnInput();
+    void theTableAndTheHubShowEachPlace();
+    void theLightFollowsWhatIsArmedNow();
+    void placeShots();
+    void theFiresColumnNeverCutsAName();
+    void cancelInTheCollisionBoxLeavesBothTriggers();
+    void theHubSaysAPlaceDeletedOrFromANewerVersion();
+    void moveItHereIsAllOrNothing();
+    void anEncoderPresetAsksWhoHasItsControls();
+    void anEncoderRefusalNamesEachOwnersControl();
+    void aMoveForEachPresetIsTakenOnOk();
+    void anEncoderLearnOnAnotherUniverseAsksForTheWholeBank();
 
 private:
     Scene *scene(const QString &name);

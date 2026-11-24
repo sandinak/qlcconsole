@@ -1290,9 +1290,13 @@ list (GO), one cue of a list (a jump to it) or a hit.
   a cue: **GO**, **GO while held** (the list stops on the release) or
   **Stop the list**. A fader or a CC that goes on sending values counts as
   one press until it goes back to 0.
-- **One control, one thing.** Learning a control that already fires
-  something moves it (the dialog says what it fires now), and a thing has
-  one control: learning again replaces it. Once bound, the menu reads
+- **One control, one thing in one place.** A trigger has a place
+  (**Works**: a cue, a cue list, a production or everywhere), and one
+  control may have a trigger at each place: the narrowest live one fires
+  ([Where a trigger works](control-surfaces.md#where-a-trigger-works)).
+  Learning a control that already fires something at the same place is
+  refused, naming it, with **Move It Here** (or **Step Through Them** on a
+  button); a thing has one control: learning again replaces it. Once bound, the menu reads
   **Trigger:** and the control's name; the dialog's **Remove trigger**
   takes it off.
 - **The light follows.** The control's LED is on while what it fires
@@ -1329,7 +1333,7 @@ list (GO), one cue of a list (a jump to it) or a hit.
 
 **Learn Trigger…** also takes a key on the computer keyboard: press it
 (with ⇧, ⌥, ⌘ or ⌃ if you like) while the dialog listens. The same choices
-of how a press acts, the same **one control, one thing**, the same
+of how a press acts, the same **one control, one thing in one place**, the same
 **Remove trigger**; the Control Map table lists the key (*Key · F5*); it is
 saved with the show, and deleting a scene takes its key with it. Holding
 a key is one press (auto-repeat is ignored); letting go is the release,

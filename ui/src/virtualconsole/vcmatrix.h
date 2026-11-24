@@ -246,6 +246,8 @@ private:
      *********************************************************************/
 public:
     void addCustomControl(VCMatrixControl const& control);
+    QList<QPair<quint8, QSharedPointer<QLCInputSource> > > subInputSources() const override;
+    void setSubInputSource(QSharedPointer<QLCInputSource> const& source, quint8 id) override;
     void resetCustomControls();
     QList<VCMatrixControl *> customControls() const;
     QMap<quint32,QString> customControlsMap() const;

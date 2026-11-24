@@ -31,10 +31,13 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QColor>
+#include <QTimer>
 
 #include "showfeatures.h"
 #include "controlmappanel.h"
 #include "controllearndialog.h"
+#include "controlcollisionbox.h"
+#include "controlowners.h"
 #include "inputoutputmap.h"
 #include "encoderbank.h"
 #include "controlmap.h"
@@ -42,7 +45,7 @@
 
 namespace
 {
-enum Column { ControlCol = 0, TargetCol, ModeCol, LampCol };
+enum Column { ControlCol = 0, TargetCol, PlaceCol, ModeCol, LampCol };
 const int TargetRole = Qt::UserRole;
 const int TypeRole = Qt::UserRole + 1;
 }
@@ -73,14 +76,28 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_featureOff->hide();
     lay->addWidget(m_featureOff);
 
-    m_table = new QTableWidget(0, 4, this);
+    m_table = new QTableWidget(0, 5, this);
     m_table->setObjectName(QStringLiteral("controlMapTable"));
-    m_table->setHorizontalHeaderLabels({ tr("Control"), tr("Fires"), tr("When pressed"), tr("Its light") });
+    m_table->setHorizontalHeaderLabels({ tr("Control"), tr("Fires"), tr("Works"), tr("When pressed"),
+                                         tr("Its light") });
+    m_table->horizontalHeaderItem(PlaceCol)->setToolTip(
+        tr("Where the trigger works (its place): only while that cue is live, that cue list runs or that "
+           "production is current -- or everywhere. One control can have a trigger in each place: the "
+           "narrowest live place has it."));
     m_table->horizontalHeader()->setSectionResizeMode(ControlCol, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(TargetCol, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(PlaceCol, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(ModeCol, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(LampCol, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(LampCol, QHeaderView::Interactive);
     m_table->verticalHeader()->hide();
+    // Names wrap, never cut (UX-36): a narrow panel shows "Scene: Warm
+    // wash" on two lines rather than "Scene: War…".
+    m_table->setWordWrap(true);
+    m_table->setTextElideMode(Qt::ElideNone);
+    connect(m_table->horizontalHeader(), &QHeaderView::sectionResized, this, [this](int section) {
+        if (section == TargetCol)
+            fitRowHeights();
+    });
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setMinimumHeight(140);
@@ -171,12 +188,16 @@ void ControlMapPanel::refresh()
         c->setData(TypeRole, int(b.target.type));
         m_table->setItem(r, ControlCol, c);
         QTableWidgetItem *t = new QTableWidgetItem(cm->targetName(b.target));
+        t->setToolTip(cm->targetName(b.target));
         if (!cm->targetExists(b.target))
             t->setForeground(Qt::gray);
         m_table->setItem(r, TargetCol, t);
 
         QComboBox *mode = new QComboBox(m_table);
         mode->setObjectName(QStringLiteral("controlMapMode"));
+        // Narrow: what it fires keeps the room; the list shows every name in full.
+        mode->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        mode->setMinimumContentsLength(8);
         const bool list = b.target.type == ControlMap::CueListTarget || b.target.type == ControlMap::CueTarget;
         const bool estop = b.target.type == ControlMap::EmergencyStopTarget;
         const QList<ControlMap::Mode> modes = estop
@@ -195,6 +216,41 @@ void ControlMapPanel::refresh()
             m_doc->controlMap()->setMode(target, ControlMap::Mode(mode->currentData().toInt()));
         });
         m_table->setCellWidget(r, ModeCol, mode);
+
+        // Works: its place (Q295), changed here as at Learn.
+        QComboBox *place = new QComboBox(m_table);
+        place->setObjectName(QStringLiteral("controlMapPlace"));
+        place->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        place->setMinimumContentsLength(10);
+        QList<ControlMap::Place> places = estop ? QList<ControlMap::Place>{ ControlMap::Place() }
+                                                : cm->placeChoices(b.place, b.target);
+        if (!places.contains(b.place))
+            places.prepend(b.place);
+        for (const ControlMap::Place &p : std::as_const(places))
+        {
+            // A place another trigger on this control has is not offered:
+            // moving there would take it (Learn refuses it, or steps through).
+            if (p != b.place && cm->isPlaceTaken(b, p))
+                continue;
+            QString name = cm->placeName(p);
+            if (!name.isEmpty())
+                name[0] = name.at(0).toUpper();
+            place->addItem(name, QVariantList{ int(p.scope), p.id });
+            if (p == b.place)
+                place->setCurrentIndex(place->count() - 1);
+        }
+        // Widened because its place was deleted, or from a newer version: said.
+        const QString note = cm->placeNote(b.target);
+        place->setToolTip(note.isEmpty() ? place->currentText() : note);
+        place->setEnabled(!estop && place->count() > 1);
+        connect(place, QOverload<int>::of(&QComboBox::activated), this, [this, place, target](int) {
+            const QVariantList v = place->currentData().toList();
+            if (v.count() == 2
+                && !m_doc->controlMap()->setPlace(target, ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()),
+                                                                             v.at(1).toUInt() }))
+                QTimer::singleShot(0, this, &ControlMapPanel::refresh);     // refused: back to where it is
+        });
+        m_table->setCellWidget(r, PlaceCol, place);
 
         m_table->setItem(r, LampCol, new QTableWidgetItem());
     }
@@ -231,6 +287,24 @@ QString ControlMapPanel::lampText(const ControlMap::Binding &b) const
     if (cm->isBlinking(b))
         return ControlMap::lampName(ControlMap::LampHeld);
     const ControlMap::Lamp lamp = cm->lamp(b);
+    // Dark because the control is another trigger's here now (Q296), or its
+    // place is not live: said, so the table answers "why is it dark".
+    if (lamp == ControlMap::LampOff && b.target.type != ControlMap::EmergencyStopTarget
+        && cm->targetExists(b.target) && !cm->isArmedOnControl(b))
+    {
+        if (b.place.scope == ControlMap::NewerPlace)
+            return tr("Dark (place from a newer version)");
+        if (!cm->isPlaceLive(b.place))
+            return tr("Dark (not live here)");
+        // A hit fires only where its own place is live (its trigger may
+        // be learned wider, as every old show's is: everywhere).
+        if (b.target.type == ControlMap::HitTarget && !cm->surfaceMayFire(b.target))
+            return tr("Dark (its hit is not live here)");
+        // Only when one is: armed on the control at a narrower place.
+        if (!cm->armedOn(b.universe, b.channel).isEmpty())
+            return tr("Dark (a narrower place has it)");
+        return tr("Dark (not live here)");
+    }
     if (lamp == ControlMap::LampStandby && !cm->dimWhenReady())
         return tr("Ready (dark)");
     return ControlMap::lampName(lamp);
@@ -240,12 +314,15 @@ void ControlMapPanel::refreshLamps()
 {
     ControlMap *cm = m_doc->controlMap();
     const QList<ControlMap::Binding> bindings = cm->bindings();
+    bool resized = false;
     for (int r = 0; r < bindings.count() && r < m_table->rowCount(); ++r)
     {
         QTableWidgetItem *item = m_table->item(r, LampCol);
         if (item == nullptr)
             continue;
-        item->setText(lampText(bindings.at(r)));
+        const QString text = lampText(bindings.at(r));
+        resized = resized || item->text() != text;
+        item->setText(text);
         item->setToolTip(tr("What the control's light shows now: Dark (pressing it does "
                             "nothing here), Ready, Running, GO held (the double-GO guard "
                             "held a command: two blinks) or Stopped (after an emergency "
@@ -257,6 +334,30 @@ void ControlMapPanel::refreshLamps()
         m_dim->setChecked(cm->dimWhenReady());
         m_dim->blockSignals(false);
     }
+    if (resized)
+        fitRows();
+}
+
+void ControlMapPanel::fitRows()
+{
+    // The light's words wrap at about "No feedback line": what it fires
+    // keeps the room.
+    const int cap = m_table->fontMetrics().horizontalAdvance(tr("No feedback line")) + 16;
+    m_table->resizeColumnToContents(LampCol);
+    if (m_table->columnWidth(LampCol) > cap)
+        m_table->setColumnWidth(LampCol, cap);
+    fitRowHeights();
+}
+
+void ControlMapPanel::fitRowHeights()
+{
+    m_table->resizeRowsToContents();
+    // Never lower than its pickers: Works and When pressed stay whole.
+    for (int r = 0; r < m_table->rowCount(); ++r)
+        for (int c : { int(PlaceCol), int(ModeCol) })
+            if (QWidget *w = m_table->cellWidget(r, c))
+                if (m_table->rowHeight(r) < w->sizeHint().height() + 2)
+                    m_table->setRowHeight(r, w->sizeHint().height() + 2);
 }
 
 QString ControlMapPanel::controlText(const ControlMap::Binding &b) const
@@ -438,7 +539,41 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     m_encNote->setWordWrap(true);
     m_encNote->setStyleSheet(QStringLiteral("color: gray;"));
     box->addWidget(m_encNote);
+    m_encCollision = new ControlCollisionBox(m_encoderBox);
+    m_encCollision->setObjectName(QStringLiteral("encoderCollision"));
+    box->addWidget(m_encCollision);
     lay->addWidget(m_encoderBox);
+    connect(m_encCollision, &ControlCollisionBox::moveRequested, this, [this]() {
+        // Take the controls from there, then set them here.
+        const int target = m_encPending;
+        const quint32 u = m_encCollision->property("learnUniverse").toUInt();
+        const quint32 ch = m_encCollision->property("learnChannel").toUInt();
+        if (target == LearnNone || !ControlOwners::releaseAll(m_doc, m_encCollision->owners()))
+            return;
+        m_encCollision->clear();
+        m_encPending = LearnNone;
+        if (target == ApplyDevice)
+            applyEncoderDevice(m_encPendingDevice, m_encPendingKey);
+        else
+            applyEncoderLearn(target, u, ch);
+    });
+    connect(m_encCollision, &ControlCollisionBox::cancelled, this, [this]() {
+        // Nothing changes: the preset, universe and controls stay as they are.
+        m_encPending = LearnNone;
+        refreshEncoder();
+    });
+    // The stop's control is refused by the Control Map itself while it
+    // listens: the same refusal here, with no Move It Here.
+    connect(m_doc->controlMap(), &ControlMap::refused, this, [this](const QString &) {
+        const ControlMap::Binding *stop = m_doc->controlMap()->binding(ControlMap::emergencyStop());
+        if (m_encLearning == LearnNone || stop == nullptr)
+            return;
+        ControlOwners::Owner self;
+        self.kind = ControlOwners::Encoder;
+        m_encPending = LearnNone;
+        m_encCollision->refuse(m_doc, stop->universe, stop->channel,
+                               ControlOwners::others(m_doc, stop->universe, stop->channel, self));
+    });
 
     connect(m_encPreset, QOverload<int>::of(&QComboBox::activated), this, &ControlMapPanel::slotEncoderPreset);
     connect(m_encUniverse, QOverload<int>::of(&QComboBox::activated), this, &ControlMapPanel::slotEncoderEdited);
@@ -509,25 +644,101 @@ void ControlMapPanel::refreshEncoder()
     m_encShowing = false;
 }
 
+QList<QPair<quint32, ControlOwners::Owner>> ControlMapPanel::encoderTaken(quint32 universe,
+                                                                         const QList<quint32> &channels) const
+{
+    ControlOwners::Owner self;
+    self.kind = ControlOwners::Encoder;
+    QList<QPair<quint32, ControlOwners::Owner>> taken;
+    for (quint32 ch : channels)
+    {
+        for (const ControlOwners::Owner &one : ControlOwners::others(m_doc, universe, ch, self))
+        {
+            bool seen = false;
+            for (const QPair<quint32, ControlOwners::Owner> &t : std::as_const(taken))
+                seen = seen || t.second.sameAs(one);
+            if (!seen)
+                taken << qMakePair(ch, one);
+        }
+    }
+    return taken;
+}
+
+QList<quint32> ControlMapPanel::encoderChannels(const EncoderBank::Device &d)
+{
+    // Every control the bank listens to (the rings are feedback lines: they hear nothing).
+    QList<quint32> out;
+    auto run = [&out](qint32 first, int count) {
+        for (int i = 0; first >= 0 && i < count; ++i)
+            out << quint32(first) + quint32(i);
+    };
+    if (d.encoders < 0)
+        return out;
+    run(d.encoders, d.encoderCount);
+    run(d.pushes, d.encoderCount);
+    run(d.bankNext, 1);
+    run(d.bankPrevious, 1);
+    run(d.bankDirect, EncoderBank::bankCount());
+    return out;
+}
+
+bool ControlMapPanel::setEncoderDevice(const EncoderBank::Device &d, const QString &key)
+{
+    /* One job per control (Q297), as at Learn: a preset, Custom turned back
+       on or another universe hands the bank a whole run of controls; each
+       is asked who else listens to it, and a taken one is refused with the
+       same box (Move It Here, Cancel). */
+    m_encCollision->clear();
+    m_encPending = LearnNone;
+    const QList<QPair<quint32, ControlOwners::Owner>> taken = encoderTaken(d.universe, encoderChannels(d));
+    if (!taken.isEmpty())
+    {
+        m_encPending = ApplyDevice;
+        m_encPendingDevice = d;
+        m_encPendingKey = key;
+        m_encCollision->refuseRun(m_doc, d.universe, taken);
+        refreshEncoder();       // the pickers show what the bank still has
+        return false;
+    }
+    applyEncoderDevice(d, key);
+    return true;
+}
+
+void ControlMapPanel::applyEncoderDevice(const EncoderBank::Device &d, const QString &key)
+{
+    EncoderBank *enc = m_doc->controlMap()->encoderBank();
+    enc->setDevice(d, key);
+    enc->setEnabled(true);
+    refresh();
+}
+
 void ControlMapPanel::slotEncoderPreset(int index)
 {
     EncoderBank *enc = m_doc->controlMap()->encoderBank();
     const QString key = m_encPreset->itemData(index).toString();
     if (key.isEmpty())
     {
+        m_encCollision->clear();
+        m_encPending = LearnNone;
         enc->setEnabled(false);
     }
     else if (key == QLatin1String("custom"))
     {
-        if (enc->device().encoders >= 0)
-            enc->setEnabled(true);
+        if (enc->device().encoders >= 0 && !enc->isEnabled())
+        {
+            setEncoderDevice(enc->device(), enc->presetKey());
+            return;
+        }
     }
     else
     {
         EncoderBank::Device d = enc->device();
         d.universe = quint32(qMax(0, m_encUniverse->currentData().toInt()));
         if (EncoderBank::preset(key, &d))
-            enc->setDevice(d, key);
+        {
+            setEncoderDevice(d, key);
+            return;
+        }
     }
     refresh();
 }
@@ -540,10 +751,19 @@ void ControlMapPanel::slotEncoderEdited()
     EncoderBank::Device d = enc->device();
     if (d.encoders < 0)
         return;
+    const quint32 was = d.universe;
     d.universe = quint32(qMax(0, m_encUniverse->currentData().toInt()));
     d.encoding = EncoderBank::Encoding(m_encEncoding->currentData().toInt());
     d.invert = m_encInvert->isChecked();
+    // Another universe: other controls, asked as a Learn asks.
+    const bool on = enc->isEnabled();
+    if (d.universe != was && on)
+    {
+        setEncoderDevice(d, enc->presetKey());
+        return;
+    }
     enc->setDevice(d, enc->presetKey());
+    enc->setEnabled(on);        // off stays off (its controls are asked when it is turned on)
     refresh();
 }
 
@@ -610,8 +830,58 @@ void ControlMapPanel::slotEncoderHeard(quint32 universe, quint32 channel)
         return;
     const int target = m_encLearning;
     endEncoderLearn();
+    m_encCollision->clear();
+    m_encPending = LearnNone;
+
+    /* One job per control (Q297): every control the learn would hand the
+       bank -- a run of encoders, pushes or bank buttons from the one heard --
+       is asked who else listens to it. The rings are feedback lines: they
+       hear nothing. */
     EncoderBank *enc = m_doc->controlMap()->encoderBank();
-    EncoderBank::Device d = enc->device();
+    const EncoderBank::Device d = enc->device();
+    QList<quint32> channels;
+    if (target != LearnRings)
+    {
+        const int run = target == LearnEncoders || target == LearnPushes ? d.encoderCount
+                      : target == LearnDirect ? EncoderBank::bankCount() : 1;
+        for (int i = 0; i < run; ++i)
+            channels << channel + quint32(i);
+    }
+    /* A control heard on another universe moves the whole bank there (its
+       encoders, pushes and bank buttons): each of them is asked there too,
+       as a universe chosen in the box is. */
+    if (universe != d.universe && enc->isEnabled())
+    {
+        for (quint32 ch : encoderChannels(learnedDevice(d, target, universe, channel)))
+            if (!channels.contains(ch))
+                channels << ch;
+    }
+    if (!channels.isEmpty())
+    {
+        const QList<QPair<quint32, ControlOwners::Owner>> taken = encoderTaken(universe, channels);
+        if (!taken.isEmpty())
+        {
+            m_encPending = target;
+            m_encCollision->setProperty("learnUniverse", universe);
+            m_encCollision->setProperty("learnChannel", channel);
+            // Each owner with its own control, not all under the first one taken.
+            m_encCollision->refuseRun(m_doc, universe, taken);
+            return;
+        }
+    }
+    applyEncoderLearn(target, universe, channel);
+}
+
+void ControlMapPanel::applyEncoderLearn(int target, quint32 universe, quint32 channel)
+{
+    EncoderBank *enc = m_doc->controlMap()->encoderBank();
+    enc->setDevice(learnedDevice(enc->device(), target, universe, channel), QStringLiteral("custom"));
+    refresh();
+}
+
+EncoderBank::Device ControlMapPanel::learnedDevice(EncoderBank::Device d, int target,
+                                                   quint32 universe, quint32 channel)
+{
     d.universe = universe;
     const qint32 ch = qint32(channel);
     switch (target)
@@ -628,6 +898,5 @@ void ControlMapPanel::slotEncoderHeard(quint32 universe, quint32 channel)
         break;
     case LearnRings: d.rings = ch; break;
     }
-    enc->setDevice(d, QStringLiteral("custom"));
-    refresh();
+    return d;
 }

@@ -22,9 +22,12 @@
 
 #include <QWidget>
 
+#include "controlowners.h"
+#include "encoderbank.h"
 #include "controlmap.h"
 #include "qlcui_export.h"
 
+class ControlCollisionBox;
 class QTableWidget;
 class QVBoxLayout;
 class QGroupBox;
@@ -62,6 +65,8 @@ public:
      *  encoder, the pushes, the bank buttons and the rings, what it is
      *  mapped to. */
     QGroupBox *encoderBox() const { return m_encoderBox; }
+    /** The encoder learn's refusal (a control with another job). */
+    ControlCollisionBox *encoderCollision() const { return m_encCollision; }
     /** The Emergency Stop… button (always shown). */
     QPushButton *stopButton() const { return m_estop; }
 
@@ -99,6 +104,11 @@ private:
      *  held", "Stopped", "Dark"), or why it has none (a computer key, a
      *  universe with no feedback line). */
     QString lampText(const ControlMap::Binding &b) const;
+    /** What it fires and its light wrap, never cut (UX-36): the light's
+     *  column is kept narrow, every row as tall as its words. */
+    void fitRows();
+    /** Every row as tall as its words, never lower than its pickers. */
+    void fitRowHeights();
 
 private:
     Doc *m_doc;
@@ -117,11 +127,31 @@ private:
 
     /** What the next control heard is set as. */
     enum LearnTarget { LearnNone = 0, LearnEncoders, LearnPushes, LearnNext, LearnPrevious, LearnDirect,
-                       LearnRings };
+                       LearnRings, ApplyDevice };
+    /** Who else listens to @a channels of @a universe: (channel, owner),
+     *  each owner once (the bank's own controls are not in the way). */
+    QList<QPair<quint32, ControlOwners::Owner>> encoderTaken(quint32 universe,
+                                                            const QList<quint32> &channels) const;
+    /** Every control device @a d listens to (encoders, pushes, bank buttons). */
+    static QList<quint32> encoderChannels(const EncoderBank::Device &d);
+    /** Sets the bank's device (a preset, Custom on again, another universe)
+     *  unless a control of it has another job: then refused with the
+     *  learn's box, and set on Move It Here. False: refused. */
+    bool setEncoderDevice(const EncoderBank::Device &d, const QString &key);
+    void applyEncoderDevice(const EncoderBank::Device &d, const QString &key);
+    EncoderBank::Device m_encPendingDevice;
+    QString m_encPendingKey;
     void buildEncoderBox(QVBoxLayout *lay);
     void startEncoderLearn(int target);
     void endEncoderLearn();
     void refreshEncoder();
+    /** Sets what learn @a target heard (the control @a channel of
+     *  @a universe) on the encoder bank's device. */
+    void applyEncoderLearn(int target, quint32 universe, quint32 channel);
+    /** @a d as a learn of @a target heard on @a channel of @a universe
+     *  leaves it (the whole bank on that universe). */
+    static EncoderBank::Device learnedDevice(EncoderBank::Device d, int target,
+                                             quint32 universe, quint32 channel);
 
     QGroupBox *m_encoderBox = nullptr;
     QComboBox *m_encPreset = nullptr;
@@ -134,6 +164,10 @@ private:
     QLabel *m_encMap = nullptr;
     int m_encLearning = LearnNone;
     bool m_encShowing = false;
+    /** A learn refused (another listener has the control): it waits for
+     *  Move It Here or Cancel. */
+    ControlCollisionBox *m_encCollision = nullptr;
+    int m_encPending = LearnNone;
 };
 
 /** @} */

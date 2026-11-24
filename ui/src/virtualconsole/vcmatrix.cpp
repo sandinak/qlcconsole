@@ -1142,6 +1142,23 @@ void VCMatrix::addCustomControl(VCMatrixControl const& control)
     slotFunctionChanged(); // Start update timer
 }
 
+QList<QPair<quint8, QSharedPointer<QLCInputSource> > > VCMatrix::subInputSources() const
+{
+    QList<QPair<quint8, QSharedPointer<QLCInputSource> > > out;
+    for (auto *s : m_controls.values())
+        if (!s->m_inputSource.isNull() && s->m_inputSource->isValid())
+            out << qMakePair(s->m_id, s->m_inputSource);
+    return out;
+}
+
+void VCMatrix::setSubInputSource(QSharedPointer<QLCInputSource> const& source, quint8 id)
+{
+    for (auto *s : m_controls.values())
+        if (s->m_id == id)
+            s->m_inputSource = source;
+    setInputSource(source, id);
+}
+
 void VCMatrix::resetCustomControls()
 {
     for (QHash<QWidget *, VCMatrixControl *>::iterator it = m_controls.begin();

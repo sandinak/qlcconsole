@@ -18,8 +18,10 @@
 #include <QGridLayout>
 #include <QPushButton>
 #include <QLabel>
+#include <QShowEvent>
 
 #include "controlsurfacespanel.h"
+#include "controlowners.h"
 #include "virtualconsole.h"
 #include "vcwidget.h"
 #include "vcframe.h"
@@ -52,6 +54,8 @@ const Row kRows[] = {
     { "pmj",     "surfacePmj" },
     { "web",     "surfaceCompanion" },
     { "pads",    "surfacePads" },
+    { "collisions", "surfaceCollisions" },
+    { "places",  "surfacePlaces" },
 };
 }
 
@@ -107,6 +111,16 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             tr("Pad Run and the focus tools from a game controller."),
             tr("Set Up…"),
             tr("Go to the patch: right-click the pad for its test and jobs.") } },
+        { QStringLiteral("collisions"),
+          { tr("Who has it now"),
+            tr("A control that two of the above listen to does two jobs at once. One job per control: "
+               "each line says where to fix it."),
+            QString(), QString() } },
+        { QStringLiteral("places"),
+          { tr("Triggers by place"),
+            tr("A control can fire one thing in a cue and another everywhere else: the narrowest "
+               "live place has it. Each control with a trigger at a place, and which one has it now."),
+            QString(), QString() } },
     };
 
     QGridLayout *grid = new QGridLayout(this);
@@ -132,15 +146,23 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
         QLabel *status = new QLabel(this);
         status->setObjectName(QString::fromLatin1(row.object) + QStringLiteral("Status"));
         status->setWordWrap(true);
+        grid->addWidget(what, r, 0);
+        m_status.insert(key, status);
+        m_what.insert(key, what);
+        // Who has it now is read only: each line says where its fix is.
+        if (t.button.isEmpty())
+        {
+            grid->addWidget(status, r, 1, 1, 2);
+            ++r;
+            continue;
+        }
         QPushButton *btn = new QPushButton(t.button, this);
         btn->setObjectName(QString::fromLatin1(row.object) + QStringLiteral("SetUp"));
         btn->setToolTip(t.tip);
         btn->setAccessibleName(tr("Set up %1").arg(t.name));
         connect(btn, &QPushButton::clicked, this, [this, key]() { emit setUpRequested(key); });
-        grid->addWidget(what, r, 0);
         grid->addWidget(status, r, 1);
         grid->addWidget(btn, r, 2, Qt::AlignTop);
-        m_status.insert(key, status);
         m_buttons.insert(key, btn);
         ++r;
     }
@@ -149,12 +171,20 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     ControlMap *cm = m_doc->controlMap();
     connect(cm, &ControlMap::bindingsChanged, this, &ControlSurfacesPanel::refresh);
     connect(cm, &ControlMap::stopStateChanged, this, &ControlSurfacesPanel::refresh);
+    /* Who has a control now follows the GO, the mode and the selection
+       (Q296): only that row, and only while it is shown (a light pass comes
+       with every GO and function start; showEvent() reads everything). */
+    connect(cm, &ControlMap::lampsChanged, this, [this]() {
+        if (isVisible())
+            refreshPlaces();
+    });
     connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &ControlSurfacesPanel::refresh);
     InputOutputMap *iom = m_doc->inputOutputMap();
     connect(iom, &InputOutputMap::inputPatchChanged, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::universeAdded, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::universeRemoved, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->speedMasters(), &SpeedMasters::changed, this, &ControlSurfacesPanel::refresh);
+    connect(cm->encoderBank(), &EncoderBank::deviceChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::settingsChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::statusChanged, this, &ControlSurfacesPanel::refresh);
     refresh();
@@ -175,7 +205,73 @@ QString ControlSurfacesPanel::status(const QString &key) const
 
 QString ControlSurfacesPanel::summary() const
 {
-    return triggersText() + QStringLiteral(" · ") + stopText();
+    QString text = triggersText() + QStringLiteral(" · ") + stopText();
+    const int n = ControlOwners::collisions(m_doc).count();
+    if (n > 0)
+        text += QStringLiteral(" · ") + (n == 1 ? tr("1 control with two jobs")
+                                                : tr("%1 controls with two jobs").arg(n));
+    return text;
+}
+
+QString ControlSurfacesPanel::placesText() const
+{
+    ControlMap *cm = m_doc->controlMap();
+    // Each control with a trigger at a place, or with more than one trigger.
+    QList<QPair<quint32, quint32>> controls;
+    for (const ControlMap::Binding &b : cm->bindings())
+    {
+        if (b.target.type == ControlMap::EmergencyStopTarget)
+            continue;
+        const QPair<quint32, quint32> c(b.universe, b.channel);
+        if (controls.contains(c))
+            continue;
+        const QList<ControlMap::Binding> on = cm->bindingsOn(b.universe, b.channel);
+        bool placed = on.count() > 1;
+        for (const ControlMap::Binding &o : on)
+            placed |= o.place.scope != ControlMap::Everywhere;
+        if (placed)
+            controls << c;
+    }
+    QStringList lines;
+    for (const QPair<quint32, quint32> &c : std::as_const(controls))
+    {
+        const QString line = tr("%1: %2.").arg(cm->controlName(c.first, c.second),
+                                               cm->placesText(cm->bindingsOn(c.first, c.second)));
+        const ControlMap::Binding *now = cm->bindingOn(c.first, c.second);
+        lines << (now != nullptr ? tr("%1 Now: %2 (%3).").arg(line, cm->targetName(now->target),
+                                                              cm->placeName(now->place))
+                                 : tr("%1 Now: nothing (no place of it is live).").arg(line));
+    }
+    // A trigger whose place was deleted (widened) or is from a newer version: said.
+    lines << cm->placeNotes();
+    return lines.join(QStringLiteral("\n"));
+}
+
+void ControlSurfacesPanel::refreshPlaces()
+{
+    // Triggers by place: there only while a trigger has a place (or a control has two).
+    const QString places = ShowFeatures::isOn(ShowFeatures::ControlSurfaces) ? placesText() : QString();
+    m_status["places"]->setText(places);
+    m_status["places"]->setVisible(!places.isEmpty());
+    m_what["places"]->setVisible(!places.isEmpty());
+}
+
+QString ControlSurfacesPanel::collisionsText() const
+{
+    const QList<ControlOwners::Collision> all = ControlOwners::collisions(m_doc);
+    if (all.isEmpty())
+        return tr("Every control has one job");
+    QStringList lines;
+    for (const ControlOwners::Collision &c : all)
+        lines << ControlOwners::collisionText(m_doc, c);
+    return lines.join(QStringLiteral("\n"));
+}
+
+void ControlSurfacesPanel::showEvent(QShowEvent *event)
+{
+    // A Virtual Console input says nothing when it changes: read it again.
+    refresh();
+    QWidget::showEvent(event);
 }
 
 QString ControlSurfacesPanel::triggersText() const
@@ -296,6 +392,12 @@ void ControlSurfacesPanel::refresh()
     m_status["pmj"]->setText(pmjText());
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());
+    m_status["collisions"]->setText(collisionsText());
+    // Who has it now is there only while a control has two jobs.
+    const bool clash = !ControlOwners::collisions(m_doc).isEmpty();
+    m_status["collisions"]->setVisible(clash);
+    m_what["collisions"]->setVisible(clash);
+    refreshPlaces();
     // Triggers and the encoder bank are put away; the stop and the rest stay.
     m_buttons["map"]->setEnabled(on);
     m_buttons["encoder"]->setEnabled(on);

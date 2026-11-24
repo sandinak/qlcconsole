@@ -298,6 +298,8 @@ private:
      *********************************************************************/
 public:
     void addPreset(VCSpeedDialPreset const& preset);
+    QList<QPair<quint8, QSharedPointer<QLCInputSource> > > subInputSources() const override;
+    void setSubInputSource(QSharedPointer<QLCInputSource> const& source, quint8 id) override;
     void resetPresets();
     QList<VCSpeedDialPreset *> presets() const;
 

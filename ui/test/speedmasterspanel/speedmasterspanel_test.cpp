@@ -43,6 +43,7 @@
 #include <QMainWindow>
 #include <QStatusBar>
 #include "inputselectionwidget.h"
+#include "controlcollisionbox.h"
 #include "qlcinputsource.h"
 #include "inputoutputmap.h"
 #include "collectioneditor.h"
@@ -382,6 +383,67 @@ void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
 /* "vs a blink can we have a bar that goes across the bug(s) in time .. a
    configurable option? No Blink, Blink, Bar" and "show action on that bug
    only when relevant .. all the time or not at all" */
+/* The Inputs… window sets all three of a master's inputs on OK, so its
+   pickers are asked of each other, not of the show: Move It Here from this
+   master's own Rate clears the Rate picker (OK never writes it back beside
+   Tap), and two pickers never take one free control. */
+void SpeedMastersPanel_Test::itsPickersNeverShareAControl()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    sm->setInput(0, SpeedMasters::RateControl, 0, 70);
+    SpeedMastersPanel panel(m_doc);
+
+    bool refused = false;
+    QTimer::singleShot(0, this, [&refused, iom]() {
+        QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
+        QVERIFY(dlg != nullptr);
+        auto done = qScopeGuard([dlg]() { dlg->accept(); });      // a failed check never hangs it
+        InputSelectionWidget *tap = dlg->findChild<InputSelectionWidget *>("speedMasterInputTap");
+        InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
+        tap->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 70, 127);
+        refused = tap->collisionBox()->isRefusing()
+                  && tap->collisionBox()->text().contains("Rate (Speed Masters)");
+        tap->collisionBox()->moveButton()->click();
+        tap->m_autoDetectInputButton->setChecked(false);
+        QVERIFY(rate->inputSource().isNull());
+        QCOMPARE(tap->inputSource()->channel(), 70u);
+    });
+    panel.row(0).inputs->click();
+    QVERIFY(refused);
+    quint32 u = 99, c = 99;
+    QVERIFY(sm->input(0, SpeedMasters::TapControl, &u, &c));
+    QCOMPARE(c, 70u);
+    QVERIFY2(!sm->input(0, SpeedMasters::RateControl, nullptr, nullptr), "Rate written back onto Tap's control");
+
+    // Pause on a free control, then Rate on the same one: refused, naming Pause.
+    refused = false;
+    QTimer::singleShot(0, this, [&refused, iom]() {
+        QDialog *dlg = qobject_cast<QDialog *>(modalOrFixtureEditor());
+        QVERIFY(dlg != nullptr);
+        auto done = qScopeGuard([dlg]() { dlg->accept(); });      // a failed check never hangs it
+        InputSelectionWidget *rate = dlg->findChild<InputSelectionWidget *>("speedMasterInputRate");
+        InputSelectionWidget *pause = dlg->findChild<InputSelectionWidget *>("speedMasterInputPause");
+        pause->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 80, 127);
+        pause->m_autoDetectInputButton->setChecked(false);
+        QVERIFY(!pause->collisionBox()->isRefusing());
+        QCOMPARE(pause->inputSource()->channel(), 80u);
+        rate->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 80, 127);
+        rate->m_autoDetectInputButton->setChecked(false);
+        refused = rate->collisionBox()->isRefusing() && rate->collisionBox()->text().contains("Pause (Speed Masters)");
+        QVERIFY(rate->inputSource().isNull());
+        rate->collisionBox()->cancelButton()->click();
+    });
+    panel.row(0).inputs->click();
+    QVERIFY(refused);
+    QVERIFY(sm->input(0, SpeedMasters::PauseControl, &u, &c));
+    QCOMPARE(c, 80u);
+    QVERIFY(!sm->input(0, SpeedMasters::RateControl, nullptr, nullptr));
+}
+
 void SpeedMastersPanel_Test::theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying()
 {
     SpeedMasters *sm = m_doc->speedMasters();

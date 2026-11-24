@@ -28,11 +28,14 @@
 #include <QDial>
 #include <QSlider>
 #include <QCheckBox>
+#include <QDialog>
+#include <utility>
 
 #include "inputoutputmap.h"
 
 #include "customfeedbackdialog.h"
 #include "inputselectionwidget.h"
+#include "controlcollisionbox.h"
 #include "selectinputchannel.h"
 #include "qlcinputchannel.h"
 #include "qlcinputsource.h"
@@ -119,10 +122,73 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
     pl->addWidget(m_previewLabel, 1);
     rv->addLayout(pl);
 
+    m_self.kind = ControlOwners::VCInput;
+    m_collision = new ControlCollisionBox(this);
+    connect(m_collision, &ControlCollisionBox::moveRequested, this, [this]() {
+        // Take it from there, then set it here.
+        const quint32 universe = m_collision->property("learnUniverse").toUInt();
+        const quint32 channel = m_collision->property("learnChannel").toUInt();
+        if (!ControlOwners::canMove(m_collision->owners()))
+            return;
+        QList<ControlOwners::Owner> show;
+        QList<ControlOwners::Owner> local;
+        for (const ControlOwners::Owner &o : m_collision->owners())
+            (isLocal(o) ? local : show) << o;
+        QDialog *dlg = qobject_cast<QDialog *>(window());
+        if (dlg == nullptr)
+        {
+            // Not in a window with OK: taken now.
+            if (!show.isEmpty() && !ControlOwners::releaseAll(m_doc, show))
+                return;
+        }
+        else
+        {
+            /* A Properties window applies this source only on OK, so the
+               control is taken from the others only then: Cancel leaves
+               every one as it was. Asked now whether they can let go. */
+            for (const ControlOwners::Owner &o : std::as_const(show))
+                if (!ControlOwners::canRelease(m_doc, o))
+                    return;
+            if (m_hooked != dlg)
+            {
+                m_hooked = dlg;
+                connect(dlg, &QDialog::accepted, this, &InputSelectionWidget::commitMove);
+                // Cancel: nothing waits for a later OK of the same window.
+                connect(dlg, &QDialog::rejected, this, [this]() { m_pendingMoves.clear(); });
+            }
+        }
+        // Another picker of this window: it lets go here, in the window.
+        for (const ControlOwners::Owner &o : std::as_const(local))
+            if (m_local.release)
+                m_local.release(o);
+        m_collision->clear();
+        takeSource(universe, channel, m_pendingKeepFeedback);
+        /* Each move is kept with the source it set: a window that edits
+           many presets with this one picker (Speed Dial, Matrix, XY Pad)
+           moves on to another preset, and on OK each control that a
+           preset still keeps is taken from its owners. */
+        if (dlg != nullptr && !show.isEmpty())
+        {
+            PendingMove pm;
+            pm.owners = show;
+            pm.universe = universe;
+            pm.channel = channel;
+            pm.source = m_inputSource.toWeakRef();
+            m_pendingMoves << pm;
+        }
+        emit inputValueChanged(universe, channel);
+    });
+
     if (QGridLayout *gl = qobject_cast<QGridLayout *>(layout()))
+    {
+        gl->addWidget(m_collision, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
         gl->addWidget(m_relativeGroup, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
+    }
     else if (layout() != NULL)
+    {
+        layout()->addWidget(m_collision);
         layout()->addWidget(m_relativeGroup);
+    }
 
     connect(m_behaviourCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotBehaviourChanged()));
     connect(m_sensitivitySpin, SIGNAL(valueChanged(int)), this, SLOT(slotBehaviourChanged()));
@@ -236,6 +302,8 @@ void InputSelectionWidget::slotAutoDetectInputToggled(bool checked)
 void InputSelectionWidget::slotInputValueChanged(quint32 universe, quint32 channel)
 {
     const quint32 chWithPage = (m_widgetPage << 16) | channel;
+    if (refuseTaken(universe, chWithPage, false))
+        return;
 
     if (m_emitOdd == true && m_signalsReceived % 2)
     {
@@ -267,40 +335,122 @@ void InputSelectionWidget::slotChooseInputClicked()
     SelectInputChannel sic(this, m_doc->inputOutputMap());
     if (sic.exec() == QDialog::Accepted)
     {
-        uchar lowerValue = 0;
-        uchar upperValue = 0;
-        uchar monitorValue = 0;
-        QVariant extraLowerParams;
-        QVariant extraUpperParams;
-        QVariant extraMonitorParams;
-        if (!m_inputSource.isNull())
-        {
-            lowerValue = m_inputSource->feedbackValue(QLCInputFeedback::LowerValue);
-            upperValue = m_inputSource->feedbackValue(QLCInputFeedback::UpperValue);
-            monitorValue = m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue);
-            extraLowerParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::LowerValue);
-            extraUpperParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::UpperValue);
-            extraMonitorParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::MonitorValue);
-        }
-        m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(sic.universe(), (m_widgetPage << 16) | sic.channel()));
-        if (!m_inputSource.isNull())
-        {
-            if (lowerValue != m_inputSource->feedbackValue(QLCInputFeedback::LowerValue))
-                m_inputSource->setFeedbackValue(QLCInputFeedback::LowerValue, lowerValue);
-            if (upperValue != m_inputSource->feedbackValue(QLCInputFeedback::UpperValue))
-                m_inputSource->setFeedbackValue(QLCInputFeedback::UpperValue, upperValue);
-            if (monitorValue != m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue))
-                m_inputSource->setFeedbackValue(QLCInputFeedback::MonitorValue, monitorValue);
-            if (extraLowerParams.isValid())
-                m_inputSource->setFeedbackExtraParams(QLCInputFeedback::LowerValue, extraLowerParams);
-            if (extraUpperParams.isValid())
-                m_inputSource->setFeedbackExtraParams(QLCInputFeedback::UpperValue, extraUpperParams);
-            if (extraMonitorParams.isValid())
-                m_inputSource->setFeedbackExtraParams(QLCInputFeedback::MonitorValue, extraMonitorParams);
-        }
-        updateInputSource();
-        emit inputValueChanged(sic.universe(), (m_widgetPage << 16) | sic.channel());
+        const quint32 chWithPage = (m_widgetPage << 16) | sic.channel();
+        if (refuseTaken(sic.universe(), chWithPage, true))
+            return;
+        takeSource(sic.universe(), chWithPage, true);
+        emit inputValueChanged(sic.universe(), chWithPage);
     }
+}
+
+bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage, bool keepFeedback)
+{
+    // What it has already: nothing new to ask (auto-detect hears it on and on).
+    if (!m_inputSource.isNull() && m_inputSource->universe() == universe
+        && m_inputSource->channel() == channelWithPage)
+        return false;
+    // The same refusal still showing: not asked again on every value.
+    if (m_collision->isRefusing() && m_collision->property("learnUniverse").toUInt() == universe
+        && m_collision->property("learnChannel").toUInt() == channelWithPage)
+        return true;
+    // The show's listeners, but those this window sets on OK as its other
+    // pickers hold them now (a speed master's own Tap, Rate and Pause).
+    QList<ControlOwners::Owner> taken;
+    for (const ControlOwners::Owner &o : ControlOwners::others(m_doc, universe, channelWithPage, m_self))
+        if (!isLocal(o))
+            taken << o;
+    if (m_local.owners)
+        for (const ControlOwners::Owner &o : m_local.owners(universe, channelWithPage & 0xFFFF))
+            if (ControlOwners::collides(m_self, o))
+                taken << o;
+    if (taken.isEmpty())
+    {
+        m_collision->clear();
+        return false;
+    }
+    m_pendingKeepFeedback = keepFeedback;
+    m_collision->setMovesOnOk(qobject_cast<QDialog *>(window()) != nullptr);
+    m_collision->setProperty("learnUniverse", universe);
+    m_collision->setProperty("learnChannel", channelWithPage);
+    m_collision->refuse(m_doc, universe, channelWithPage, taken);
+    return true;
+}
+
+bool InputSelectionWidget::isLocal(const ControlOwners::Owner &owner) const
+{
+    return m_local.covers && m_local.covers(owner);
+}
+
+QList<ControlOwners::Owner> InputSelectionWidget::pendingMove() const
+{
+    QList<ControlOwners::Owner> out;
+    for (const PendingMove &pm : m_pendingMoves)
+        out << pm.owners;
+    return out;
+}
+
+void InputSelectionWidget::commitMove()
+{
+    const QList<PendingMove> moves = m_pendingMoves;
+    m_pendingMoves.clear();
+    QList<ControlOwners::Owner> owners;
+    for (const PendingMove &pm : moves)
+    {
+        /* Chosen something else since (or cleared it): the source it set is
+           gone, or no longer on that control. Moved on to another preset:
+           the one it was set for still keeps it. */
+        const QSharedPointer<QLCInputSource> src = pm.source.toStrongRef();
+        if (src.isNull() || src->universe() != pm.universe || src->channel() != pm.channel)
+            continue;
+        for (const ControlOwners::Owner &o : pm.owners)
+        {
+            bool seen = false;
+            for (const ControlOwners::Owner &had : std::as_const(owners))
+                seen = seen || had.sameAs(o);
+            if (!seen)
+                owners << o;
+        }
+    }
+    if (!owners.isEmpty())
+        ControlOwners::releaseAll(m_doc, owners);
+}
+
+void InputSelectionWidget::takeSource(quint32 universe, quint32 channelWithPage, bool keepFeedback)
+{
+    uchar lowerValue = 0;
+    uchar upperValue = 0;
+    uchar monitorValue = 0;
+    QVariant extraLowerParams;
+    QVariant extraUpperParams;
+    QVariant extraMonitorParams;
+    // As Choose… always did: the feedback values of what it had (none: 0).
+    const bool keep = keepFeedback;
+    if (keep && !m_inputSource.isNull())
+    {
+        lowerValue = m_inputSource->feedbackValue(QLCInputFeedback::LowerValue);
+        upperValue = m_inputSource->feedbackValue(QLCInputFeedback::UpperValue);
+        monitorValue = m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue);
+        extraLowerParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::LowerValue);
+        extraUpperParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::UpperValue);
+        extraMonitorParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::MonitorValue);
+    }
+    m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(universe, channelWithPage));
+    if (keep)
+    {
+        if (lowerValue != m_inputSource->feedbackValue(QLCInputFeedback::LowerValue))
+            m_inputSource->setFeedbackValue(QLCInputFeedback::LowerValue, lowerValue);
+        if (upperValue != m_inputSource->feedbackValue(QLCInputFeedback::UpperValue))
+            m_inputSource->setFeedbackValue(QLCInputFeedback::UpperValue, upperValue);
+        if (monitorValue != m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue))
+            m_inputSource->setFeedbackValue(QLCInputFeedback::MonitorValue, monitorValue);
+        if (extraLowerParams.isValid())
+            m_inputSource->setFeedbackExtraParams(QLCInputFeedback::LowerValue, extraLowerParams);
+        if (extraUpperParams.isValid())
+            m_inputSource->setFeedbackExtraParams(QLCInputFeedback::UpperValue, extraUpperParams);
+        if (extraMonitorParams.isValid())
+            m_inputSource->setFeedbackExtraParams(QLCInputFeedback::MonitorValue, extraMonitorParams);
+    }
+    updateInputSource();
 }
 
 void InputSelectionWidget::slotCustomFeedbackClicked()

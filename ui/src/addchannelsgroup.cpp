@@ -132,6 +132,10 @@ AddChannelsGroup::AddChannelsGroup(QWidget* parent, Doc* doc, ChannelsGroup *gro
 
     m_inputSelWidget = new InputSelectionWidget(m_doc, this);
     m_inputSelWidget->setKeyInputVisibility(false);
+    ControlOwners::Owner self;          // one job per control (Q297)
+    self.kind = ControlOwners::ChannelGroup;
+    self.index = int(group->id());
+    m_inputSelWidget->setListener(self);
     m_inputSelWidget->setInputSource(group->inputSource());
     m_inputSelWidget->show();
     m_extControlLayout->addWidget(m_inputSelWidget);

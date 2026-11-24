@@ -104,6 +104,21 @@ private slots:
     void aHeldRefusedPressSaysItOnce();
     void aReplugFreesThePressThatTaughtTheStop();
     void aReleaseActsOnWhatWasPressed();
+    // Places for triggers (Q295, Q296, Q303; CONTROL_SCOPES phase 3)
+    void aTriggerAtACueIsArmedOnlyWhileItIsLive();
+    void theNarrowestArmedTriggerWins();
+    void twoAtOnePlaceStepThrough();
+    void placesAreSavedAndAnOldShowIsEverywhere();
+    void theStopIsEverywhereAndAboveEveryPlace();
+    void aKeyAtAPlaceFollowsItToo();
+    void aKeyOutOfItsPlaceFollowsTheKeyRule();
+    void twoPlacesOfOneScopeDoNotStepThrough();
+    void aHitLearnedWiderThanItsPlaceDoesNotHoldTheControl();
+    void aPlaceTakenIsNeverMovedOnto();
+    void aTriggerWhosePlaceIsDeletedWidensAsAHitDoes();
+    void aPlaceFromANewerVersionIsKeptAndNeverFires();
+    void aHitsTriggerFollowsTheHitWhenItMoves();
+    void aPlaceThatGoesNeverWidensOntoATakenOne();
 
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,

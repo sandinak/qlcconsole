@@ -18,9 +18,48 @@ settings of its own. With **Control Surfaces** off for the show (see the
 emergency stop below) the triggers and the encoder bank lines say so and
 their buttons are off; the emergency stop line stays.
 
-One control (a MIDI note or CC, an OSC message) can be heard by several
-parts of the program at once. Nothing warns you yet when two of them take
-the same control, so give each control one job.
+**One job per control.** A control (a MIDI note or CC, an OSC message, a
+computer key) that one part of the program already listens to is refused
+when you learn it for another, naming the owner: *Note 60 already does
+Button "House lights" (Virtual Console). One job per control.* Press
+**Move It Here** to take it from there and give it to what you are
+learning (the old owner stops reacting at once), or **Cancel** to leave it
+where it is -- Cancel changes nothing, on either side. Move It Here takes
+the control from every owner or from none: if one of them cannot let go,
+each keeps it. Every Learn says this the same way: Learn Trigger…, the
+emergency stop, the encoder bank (a Learn, a preset, Custom turned back on
+or another universe: each hands the bank a run of controls, and each
+taken one is named with its own control), a widget's External Input
+(auto-detect or Choose…), a speed master's Inputs…, the Grand Master's
+input and a channel group's input. In a window with **OK** (a widget's
+Properties, a speed master's Inputs…, the Virtual Console's Properties, a
+channel group) Move It Here takes the control when you press OK: Cancel on
+that window leaves it with its old owner. In a speed master's Inputs… its
+Tap, Rate and Pause are asked of each other as they stand in the window,
+so two of them never end up on one control. Move It Here is not on Undo:
+to put a control back, learn it there again. Three exceptions, with no
+Move It Here: the PMJ Black 1's controls that do something come with its
+profile; the encoder bank's encoders, pushes and bank buttons are set up
+as runs (one taken would take the rest of its run with it: change the
+bank's controls first -- its Next and Previous buttons can be moved); and
+nothing takes the **emergency stop's** control (the stop's own Learn can
+take a control from anything except the PMJ's controls and the encoder
+bank's runs). Two Virtual Console widgets on one input are Show Review's
+*Same input twice* (VC-06), not refused here.
+
+**A trigger has a place.** A Control Map trigger works where you learned
+it, as a hit does: **in a cue** (only while that cue is live), **in a cue
+list** (while it runs, or while it is the current production's main list
+and nothing else runs), **in a production** (while it is current) or
+**everywhere**. So one control may have several triggers at different
+places -- *Note 60: Scene: Warm everywhere, except Hit: Stab in cue 2.3* --
+and only the **same place** counts as a second job. More in [Where a
+trigger works](#where-a-trigger-works) below.
+
+A show saved before this, or with two jobs on a control for any other
+reason, loads as it is. The **Who has it now** line at the bottom of
+Control surfaces (there only while there is one) lists every such control with what listens to it and where
+to fix it; the Devices line adds *1 control with two jobs*.
 
 | What | Where you set it (or **Set Up…** in Control surfaces) | What it does |
 |---|---|---|
@@ -163,6 +202,92 @@ that matter to a desk:
 - A fader or a CC that goes on sending values is **one press** until it goes
   back to 0. Use a Virtual Console slider for a fader that sets a level.
 
+## Where a trigger works
+
+Every trigger has a place, chosen in **Works** when you learn it and
+changed later in the **Works** column of the Control Map table:
+
+| Works | Armed while |
+|---|---|
+| **In cue 2.3 …** | that cue is the live cue of its list (the GO that leaves it disarms it) |
+| **In cue list Act 1** | that list runs, or it is the current production's main list and nothing of that production runs |
+| **In production …** | that production is current (or none is) |
+| **Everywhere** | always -- what every trigger was before places, and what every older show loads as |
+
+This is the hits' own rule: a trigger in cue 2.3 is armed exactly when a
+hit living under cue 2.3 is. In **Design** a place is also armed while you
+are looking at it: the cue selected in the Show Tree, or the list selected
+there or chosen in the Run tab. The Operate / Design rules above still
+apply on top.
+
+**Learn Trigger… offers the place.** From a hit's right-click it starts
+at the hit's own place, and a hit is offered only its own place and the
+ones inside it: a hit fires only where its place is live, so a trigger
+wider than that would hold the control and fire nothing. (One left wider
+in an older show does not hold it: where the hit cannot fire, the next
+wider trigger on that control fires.) A cue list's GO and a jump to a cue start at
+**Everywhere**: their job is to bring that list or cue live, and a trigger
+that works only once it is already live could never start the list or jump
+to the cue. The cue or list you right-clicked is offered in the list, with
+the places around it (the cue's list, its production) and the cue live
+now. Learned from a scene or effect in Build it starts at Everywhere. Under the control, a line says what the control will do where:
+*Key · F6: Scene: Warm everywhere, except Scene: Strobe in cue 2 Chorus.*
+
+**Several triggers on one control.**
+
+- At **different places**, the **narrowest armed** one fires: cue, then
+  cue list, then production, then everywhere. Learn says so in that line,
+  and Learn does not refuse it. Two places of one kind live at once (two
+  running lists, two cues of two lists) never step through each other:
+  the one in the Run tab's list fires, else the first in the table.
+- At the **same place**, Learn refuses it, naming the trigger that is
+  there, with **Move It Here** -- and, on a button or key, **Step Through
+  Them**: both stay and each press fires the next one (as a VC button with
+  two hits at one place does). A pair you stepped through is not listed
+  under **Who has it now**: it is your choice, not two jobs.
+- The table's **Works** does not offer a place another trigger on that
+  control already has: moving there would take that trigger. Learn the
+  control again to replace it or step through them.
+- Another listener (a VC widget, the encoder bank, a master, the PMJ) is
+  refused whatever the place: those listen everywhere.
+
+**Letting go.** A trigger whose place is no longer live can still stop
+what it started (a Toggle press, a Momentary release): only a start is held
+back. A computer key keeps the key rule there too: in Design a scene or
+effect key does nothing, in its place or out of it. Its light stays bright while that runs, then goes dark.
+
+**A place that goes.** Delete the cue, cue list or production a trigger
+works in and the trigger moves out, as a hit does: to its production, or
+everywhere when that is gone too (never onto a place another trigger on
+that control has while a wider one is free). When every place it could
+move to already has another trigger on that control, it stays where it
+was and never fires -- it is not made to step through with that one --
+and the note says so: choose a place in **Works**, or remove it. A hit's
+trigger follows the hit when you move the hit to another place, with the
+same rule. **Control surfaces ▸ Triggers
+by place** and the trigger's **Works** say what happened: *Scene: Strobe
+worked only in cue 2 Chorus, which was deleted: it works in production
+Show now.* Undo the delete and it goes back.
+
+**A place from a newer version.** A show saved by a later qlcconsole may
+have a trigger at a place this one does not know (a layer, an effect). It
+is kept, saved back exactly as it came, and never fires here: **Works**
+says *In a place from a newer version*, **Its light** *Dark (place from a
+newer version)*, and Triggers by place says so. Choose a place in Works
+to use it here.
+
+**Lights and the hub follow what is armed now.** A control's light is the
+one of the trigger that would fire: when the GO leaves cue 2.3, a control
+learned there goes dark (or shows the everywhere one's light). The table's
+**Its light** says *Dark (not live here)*, *Dark (its hit is not live
+here)* (a hit's trigger whose hit's own place is not live) or *Dark (a
+narrower place has it)*. **Control surfaces ▸ Triggers by place** lists each control with a
+trigger at a place, what it does where and which trigger has it now
+(*Now: Scene: Strobe (in cue 2 Chorus)*).
+
+The **emergency stop** has no place: it is everywhere, alone on its
+control, and comes before every trigger and every place.
+
 ## What a control's light says
 
 A desk with a feedback line gets its lights from the show, so a button says
@@ -255,7 +380,10 @@ after any build that changes a surface, and say which build.
    list GOes; press twice within a second and the second is held (*Second
    GO held*).
 7. Learn **Emergency Stop…** on a PMJ button: press, release, press. *Expect:*
-   the dialog asks you to press it again, then shows the control. Start the
+   the dialog asks you to press it again, then shows the control. (A PMJ
+   button that does something itself, such as **O** or a Select button, is
+   refused: *already does the PMJ Black 1's O (PMJ overlay)*. Use **Go**,
+   **Favorites** or a Down button.) Start the
    list and a scene, press the button in Design and then in Operate.
    *Expect:* everything stops each time, with *ALL OFF* in the Control
    Map's last-fired line.
@@ -277,9 +405,23 @@ after any build that changes a surface, and say which build.
     dark**; one GO after that, Go is dim or bright again and the stop is
     dim. The Control Map's **Its light** column says the
     same words throughout.
-12. **A hit's light.** Learn a hit that lives in one song on a PMJ button.
+12. **A hit's light.** Learn a hit that lives in one song on a free PMJ
+    button (a Down button or **Favorites**).
     *Expect:* dark while that song is not running, dim while it is, dark
     again after the list moves past it -- without touching anything.
+13. **One job per control.** Learn Trigger… on a scene and press **O**.
+    *Expect:* refused, *… already does the PMJ Black 1's O (PMJ overlay).
+    One job per control.*, the reason it can't be moved, and no **Move It
+    Here**. Then give a Virtual Console button's External Input the
+    **1-Down** button, and Learn Trigger… on a scene with the same button.
+    *Expect:* refused naming the VC button; **Move It Here** binds it to the
+    scene, and pressing it fires the scene and not the VC button.
+14. **A trigger at a cue.** Right-click cue 2 ▸ **Learn Trigger…** on a
+    hit (Works: *In cue 2 …*) and press **1-Down**. Learn a scene on the
+    same button from Build (Works: *Everywhere*). *Expect:* Learn says
+    *… everywhere, except … in cue 2*. In Operate: before cue 2, the button
+    fires the scene; GO to cue 2 -- it fires the hit; GO past it -- the
+    scene again. The light follows each GO without a press.
 
 **Akai APC40 mk2**
 

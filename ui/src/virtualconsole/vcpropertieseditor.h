@@ -25,11 +25,14 @@
 #include "ui_vcproperties.h"
 #include "vcwidgetproperties.h"
 #include "vcproperties.h"
+#include "controlowners.h"
 #include "universe.h"
+#include "qlcui_export.h"
 
 class VirtualConsole;
 class InputOutputMap;
 class VCFrame;
+class ControlCollisionBox;
 
 /** @addtogroup ui_vc_props
  * @{
@@ -47,7 +50,7 @@ class VCFrame;
 #define SETTINGS_AUDIOTRIGGERS_SIZE "virtualconsole/audiotriggerssize"
 #define SETTINGS_RGBMATRIX_SIZE     "virtualconsole/rgbmatrixsize"
 
-class VCPropertiesEditor final : public QDialog, public Ui_VCPropertiesEditor
+class QLC_UI_EXPORT VCPropertiesEditor final : public QDialog, public Ui_VCPropertiesEditor
 {
     Q_OBJECT
     Q_DISABLE_COPY(VCPropertiesEditor)
@@ -103,8 +106,26 @@ private slots:
     void slotGrandMasterInputValueChanged(quint32 universe, quint32 channel);
     void slotChooseGrandMasterInputClicked();
 
+public:
+    /** The Grand Master input's refusal: a control another listener has
+     *  (ControlOwners, Q297), with Move It Here. */
+    ControlCollisionBox *grandMasterCollision() const { return m_gmCollision; }
+
 private:
     void updateGrandMasterInputSource();
+    /** Sets the Grand Master's input to the control, or refuses it when
+     *  another listener has it (the box says who). */
+    void takeGrandMasterInput(quint32 universe, quint32 channel);
+    ControlCollisionBox *m_gmCollision = nullptr;
+    /** Move It Here's owners, taken from them on OK (not before: Cancel
+     *  changes nothing). */
+    QList<ControlOwners::Owner> m_gmPendingMove;
+    quint32 m_gmPendingUniverse = 0;
+    quint32 m_gmPendingChannel = 0;
+
+public:
+    /** Test hook: what OK takes the Grand Master's control from. */
+    QList<ControlOwners::Owner> grandMasterPendingMove() const { return m_gmPendingMove; }
 };
 
 /** @} */

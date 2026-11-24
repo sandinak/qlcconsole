@@ -47,7 +47,11 @@ public:
     explicit ControlSurfacesPanel(Doc *doc, QWidget *parent = nullptr);
 
     /** The row keys, in order: "map", "estop", "encoder", "vc", "masters",
-     *  "pmj", "web", "pads". */
+     *  "pmj", "web", "pads", "collisions" (Who has it now: every control
+     *  two listeners have, with how to fix it; no Set Up…, and shown only
+     *  while there is one), "places" (Triggers by place: each control with
+     *  a trigger at a place, what it does where and which trigger has it
+     *  now, Q296; read only, shown only while there is one). */
     static QStringList keys();
 
     /** The status line of row @p key, as the row shows it. */
@@ -76,10 +80,20 @@ private:
     QString webText() const;
     QString encoderText() const;
     QString stopText() const;
+    QString collisionsText() const;
+    QString placesText() const;
+    /** The Triggers by place row only (who has each control now). */
+    void refreshPlaces();
+
+protected:
+    void showEvent(QShowEvent *event) override;
+
+private:
 
     Doc *m_doc;
     QLabel *m_featureOff = nullptr;
     QMap<QString, QLabel *> m_status;
+    QMap<QString, QLabel *> m_what;
     QMap<QString, QPushButton *> m_buttons;
     QString m_lastSummary;
 };

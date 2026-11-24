@@ -9557,9 +9557,12 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
     /* ---- The node's own menu ---- */
     // Fire it from a MIDI or OSC control (the Control Map): GO on a list, a
     // jump to a cue, a hit. Not on a sub-cue: its cue's GO plays it.
-    auto learn = [this, &menu](const ControlMap::Target &target) {
+    // The dialog offers the place right-clicked and the ones around it
+    // (Q295): a hit works at its own place by default; a GO on a list or a
+    // jump to a cue everywhere (it brings that place live).
+    auto learn = [this, &menu](const ControlMap::Target &target, const ControlMap::Place &where) {
         QMenu *staging = new QMenu(menu.menu());
-        if (QAction *a = ControlLearnDialog::addTo(staging, m_doc, target, this))
+        if (QAction *a = ControlLearnDialog::addTo(staging, m_doc, target, this, where))
             menu.add(ContextMenu::Kind, a);
     };
     if (kind == LayerNode || kind == TrackedLayerNode)
@@ -9614,7 +9617,8 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
         menu.add(ContextMenu::Open, tr("Open in Workbench"), [this]() { openSelectionInWorkbench(); },
                  QStringLiteral("stOpenWorkbenchMenu"));
         if (list != nullptr && !list->isSubCues())
-            learn(list->looks ? ControlMap::hit(cueId) : ControlMap::cue(cueId));
+            learn(list->looks ? ControlMap::hit(cueId) : ControlMap::cue(cueId),
+                  list->looks ? m_doc->controlMap()->placeOfHit(cueId) : ControlMap::inCue(cueId));
         if (!hit && list != nullptr)
         {
             // Skip cue / Unskip cue: the selected cues (all skipped: Unskip).
@@ -9785,7 +9789,7 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
     {
         const CueList *l = m_st->cueList(id);
         if (l != nullptr && !l->isSubCues())
-            learn(ControlMap::cueList(id));
+            learn(ControlMap::cueList(id), ControlMap::inList(id));
         QAction *conv = menu.add(ContextMenu::Kind, tr("Convert to Tracking…"),
                                  [this, id]() { convertListToTracking(id); }, QStringLiteral("stConvertList"));
         conv->setEnabled(mayConvert(l));
