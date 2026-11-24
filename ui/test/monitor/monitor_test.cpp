@@ -32061,6 +32061,8 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
         }
     };
 
+    QHash<QString, QString> got;
+    int spotsCount = -1, lanternsCount = -1;
     {
         MonitorGraphicsView view(doc);
         view.resize(900, 700);
@@ -32087,22 +32089,14 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
                 out.prepend(rowName(r));
             return out.join(" > ");
         };
-        QCOMPARE(chain("T1-S1"), QString("Trusses > T-1 > Bar 1 > T1-S1"));
-        QCOMPARE(chain("T1-S2"), QString("Trusses > T-1 > Bar 1 > T1-S2"));
-        QCOMPARE(chain("Lantern A"), QString("Trusses > T-1 > Hook A > Lantern A"));
-        // A bar whose truss has no folder: still under its truss.
-        QCOMPARE(chain("T2-S1"), QString("Trusses > T-2 > Bar 2 > T2-S1"));
-        QCOMPARE(chain("Lantern B"), QString("Trusses > T-2 > Hook B > Lantern B"));
-        // A pipe hung from a truss sits under it as a bar does.
-        QCOMPARE(chain("Hung Pipe"), QString("Trusses > T-2 > Hung Pipe"));
-
-        // The groups across the bars are still listed, with all their fixtures.
+        /* Read here, checked after the shots below, so the shots are
+           taken whatever the tree says. */
+        for (const QString &n : { "T1-S1", "T1-S2", "Lantern A", "T2-S1", "Lantern B", "Hung Pipe" })
+            got.insert(n, chain(n));
         QTreeWidgetItem *spots = layersRow(panel, "T-Spots");
-        QVERIFY(spots != nullptr);
-        QCOMPARE(spots->childCount(), 3);
+        spotsCount = spots == nullptr ? -1 : spots->childCount();
         QTreeWidgetItem *lanterns = layersRow(panel, "Lanterns");
-        QVERIFY(lanterns != nullptr);
-        QCOMPARE(lanterns->childCount(), 2);
+        lanternsCount = lanterns == nullptr ? -1 : lanterns->childCount();
     }
 
     // UX shots: the Plot layers panel beside the plot, at three sizes.
@@ -32127,6 +32121,18 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
                                                  .arg(sz.width()).arg(sz.height())));
         }
     }
+
+    QCOMPARE(got.value("T1-S1"), QString("Trusses > T-1 > Bar 1 > T1-S1"));
+    QCOMPARE(got.value("T1-S2"), QString("Trusses > T-1 > Bar 1 > T1-S2"));
+    QCOMPARE(got.value("Lantern A"), QString("Trusses > T-1 > Hook A > Lantern A"));
+    // A bar whose truss has no folder: still under its truss.
+    QCOMPARE(got.value("T2-S1"), QString("Trusses > T-2 > Bar 2 > T2-S1"));
+    QCOMPARE(got.value("Lantern B"), QString("Trusses > T-2 > Hook B > Lantern B"));
+    // A pipe hung from a truss sits under it as a bar does.
+    QCOMPARE(got.value("Hung Pipe"), QString("Trusses > T-2 > Hung Pipe"));
+    // The groups across the bars are still listed, with all their fixtures.
+    QCOMPARE(spotsCount, 3);
+    QCOMPARE(lanternsCount, 2);
 }
 
 /* Q155-2: Branson's aprons are at floor height. Hiding the apron took its
