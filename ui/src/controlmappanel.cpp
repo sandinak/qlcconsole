@@ -332,8 +332,9 @@ void ControlMapPanel::fitRows()
     // The light's words wrap at about "No feedback line": what it fires
     // keeps the room.
     const int cap = m_table->fontMetrics().horizontalAdvance(tr("No feedback line")) + 16;
-    m_table->setColumnWidth(LampCol, qMax(m_table->horizontalHeader()->sectionSizeHint(LampCol),
-                                          qMin(m_table->sizeHintForColumn(LampCol), cap)));
+    m_table->resizeColumnToContents(LampCol);
+    if (m_table->columnWidth(LampCol) > cap)
+        m_table->setColumnWidth(LampCol, cap);
     m_table->resizeRowsToContents();
 }
 
