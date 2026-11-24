@@ -73,8 +73,9 @@ struct Rig
     MonitorProperties *props;
     Truss *truss = nullptr;
     Pipe *pipe = nullptr;
+    Pipe *boom = nullptr;
     Tower *tower = nullptr;
-    quint32 onTruss = 0, onPipe = 0, onTower = 0, free = 0;
+    quint32 onTruss = 0, onPipe = 0, onBoom = 0, onTower = 0, free = 0;
 
     explicit Rig(QObject *parent)
         : docOwner(new Doc(parent))
@@ -89,12 +90,28 @@ struct Rig
         truss->setLength(4.0f);
         truss->setWidth(0.3f);
 
+        // An electric: a horizontal pipe, the fixture hanging under it.
         pipe = props->addPipe();
         pipe->setName("PIPE-1");
+        pipe->setOrientation(Pipe::Horizontal);
+        pipe->setOriginX(2.0f);
+        pipe->setOriginY(3.0f);
+        pipe->setBaseZ(4.0f);
         pipe->setLength(3.0f);
+
+        // A boom: a vertical pipe with the fixture part way up it.
+        boom = props->addPipe();
+        boom->setName("BOOM-1");
+        boom->setOrientation(Pipe::Vertical);
+        boom->setOriginX(6.0f);
+        boom->setOriginY(3.0f);
+        boom->setLength(3.0f);
 
         tower = props->addTower();
         tower->setName("TOWER-1");
+        tower->setWidth(0.6f);
+        tower->setDepth(0.6f);
+        tower->setHeight(3.0f);
 
         Fixture *a = addPar(doc, "On truss", 0);
         FixtureRigProps ra;
@@ -107,13 +124,24 @@ struct Rig
         Fixture *b = addPar(doc, "On pipe", 10);
         FixtureRigProps rb;
         rb.pipeId = pipe->id();
+        rb.pipeOffset = 1.5f;
         props->setFixtureRigProps(b->id(), rb);
         onPipe = b->id();
+
+        Fixture *e = addPar(doc, "On boom", 40);
+        FixtureRigProps re;
+        re.pipeId = boom->id();
+        re.pipeOffset = 1.5f;
+        props->setFixtureRigProps(e->id(), re);
+        onBoom = e->id();
 
         Fixture *c = addPar(doc, "On tower", 20);
         FixtureRigProps rc;
         rc.towerId = tower->id();
         rc.towerMountSide = FixtureRigProps::TowerTop;
+        rc.towerU = 0.3f;
+        rc.towerV = 0.3f;
+        rc.mountingType = Truss::FloorMounted;     // standing on the tower's top
         props->setFixtureRigProps(c->id(), rc);
         onTower = c->id();
 
@@ -158,6 +186,15 @@ void MountView_Test::aFixtureOnAPipeShowsThePipe()
     QVERIFY(v.isMounted());
     QVERIFY2(v.caption().contains(QStringLiteral("pipe PIPE-1")), qPrintable(v.caption()));
     QCOMPARE(v.view()->highlighted(), QList<quint32>({ rig.onPipe }));
+}
+
+void MountView_Test::aFixtureOnABoomShowsTheBoom()
+{
+    Rig rig(this);
+    MountInSituView v(rig.doc, rig.onBoom);
+    QVERIFY(v.isMounted());
+    QVERIFY2(v.caption().contains(QStringLiteral("pipe BOOM-1")), qPrintable(v.caption()));
+    QCOMPARE(v.view()->highlighted(), QList<quint32>({ rig.onBoom }));
 }
 
 void MountView_Test::aFixtureOnATowerShowsTheTower()
@@ -290,8 +327,9 @@ void MountView_Test::picturesForReview()
     QDir().mkpath(dir);
     Rig rig(this);
     rig.setOffset(rig.onTruss, 0.6858f);
+    rig.setOffset(rig.onTower, 0.3f);
     struct Shot { const char *name; quint32 fid; } shots[] = {
-        { "truss", rig.onTruss }, { "pipe", rig.onPipe },
+        { "truss", rig.onTruss }, { "pipe", rig.onPipe }, { "boom", rig.onBoom },
         { "tower", rig.onTower }, { "free", rig.free } };
     for (const Shot &s : shots)
     {

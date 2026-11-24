@@ -1262,7 +1262,7 @@ void StructureStudioView::drawRigDepthSorted(QPainter &p) const
        flushOps(), so a long truss and a wide deck interleave face by face
        instead of one winning outright on where its centre sits. */
 
-    const bool nameEveryone = (m_kind != StageKind);
+    const bool nameEveryone = (m_kind != StageKind) && m_decorations;
     p.setFont(QFont("Arial", 8));
 
     m_ops.clear();
@@ -2277,7 +2277,8 @@ void StructureStudioView::drawGrid(QPainter &p) const
         p.setPen(QPen(QColor(90, 94, 104), 1.5));
         p.drawLine(QPointF(0, y0), QPointF(width(), y0));
         p.setPen(QColor(150, 154, 165));
-        p.drawText(QPointF(6, y0 - 4), tr("floor"));
+        if (m_decorations)
+            p.drawText(QPointF(6, y0 - 4), tr("floor"));
     }
 }
 
@@ -9546,6 +9547,8 @@ void StructureStudioView::drawFixtureName(QPainter &p, const QPointF &at, const 
 {
     /* Written after every body (drawFixtures()): drawn as each fixture was,
        the next one's body painted over the last one's name. */
+    if (!m_decorations)
+        return;             // a small look-only picture carries no name labels
     m_pendingNames << PendingName{ at, name, p.pen().color() };
 }
 
