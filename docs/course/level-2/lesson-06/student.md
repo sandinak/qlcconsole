@@ -85,8 +85,8 @@ only while it is armed: selected in the Show Tree, or in the Run tab's cue
 list. It never fires while a text field, the
 command line or an editor has the keyboard, and a key the app already uses
 is refused with the reason. One control does one job **in one place**:
-**Works** in the Learn dialog says where the trigger is live -- the cue or
-list you right-clicked, or **Everywhere**. A key with a trigger at the
+**Works** in the Learn dialog says where the trigger is live -- a cue, a
+list, or **Everywhere** (where a GO starts). A key with a trigger at the
 same place is refused, naming it (**Move It Here** takes it over; **Step
 Through Them** keeps both, a press each). At another place it is not: the
 narrowest live place fires, so **F5** can be Red Stab in the verse and a

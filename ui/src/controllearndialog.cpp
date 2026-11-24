@@ -106,7 +106,12 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
             name[0] = name.at(0).toUpper();
         m_place->addItem(name, QVariantList{ int(p.scope), p.id });
     }
-    setPlace(bound != nullptr ? bound->place : where);
+    // A GO on a list or a jump to a cue brings that place live: learned
+    // there, it would work only once it is already live (never start the
+    // list, never jump to the cue). Everywhere by default; the place is
+    // offered. A hit or a scene works where it was learned.
+    const bool bringsItLive = target.type == ControlMap::CueListTarget || target.type == ControlMap::CueTarget;
+    setPlace(bound != nullptr ? bound->place : bringsItLive ? ControlMap::everywhere() : where);
     m_place->setEnabled(!estop && places.count() > 1);
     form->addRow(tr("Works"), m_place);
     lay->addLayout(form);

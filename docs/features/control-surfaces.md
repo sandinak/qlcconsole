@@ -207,12 +207,13 @@ are looking at it: the cue selected in the Show Tree, or the list selected
 there or chosen in the Run tab. The Operate / Design rules above still
 apply on top.
 
-**Learn Trigger… offers the place.** From a cue's right-click it is that
-cue; from a cue list's, that list; from a hit's, the hit's own place. The
-list also has the places around it (the cue's list, its production), the
-cue live now and **Everywhere** -- pick Everywhere to keep the old
-behaviour. Learned from a scene or effect in Build it starts at
-Everywhere. Under the control, a line says what the control will do where:
+**Learn Trigger… offers the place.** From a hit's right-click it starts
+at the hit's own place. A cue list's GO and a jump to a cue start at
+**Everywhere**: their job is to bring that list or cue live, and a trigger
+that works only once it is already live could never start the list or jump
+to the cue. The cue or list you right-clicked is offered in the list, with
+the places around it (the cue's list, its production) and the cue live
+now. Learned from a scene or effect in Build it starts at Everywhere. Under the control, a line says what the control will do where:
 *Key · F6: Scene: Warm everywhere, except Scene: Strobe in cue 2 Chorus.*
 
 **Several triggers on one control.**
@@ -223,7 +224,11 @@ Everywhere. Under the control, a line says what the control will do where:
 - At the **same place**, Learn refuses it, naming the trigger that is
   there, with **Move It Here** -- and, on a button or key, **Step Through
   Them**: both stay and each press fires the next one (as a VC button with
-  two hits at one place does).
+  two hits at one place does). A pair you stepped through is not listed
+  under **Who has it now**: it is your choice, not two jobs.
+- The table's **Works** does not offer a place another trigger on that
+  control already has: moving there would take that trigger. Learn the
+  control again to replace it or step through them.
 - Another listener (a VC widget, the encoder bank, a master, the PMJ) is
   refused whatever the place: those listen everywhere.
 

@@ -31,6 +31,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QColor>
+#include <QTimer>
 
 #include "showfeatures.h"
 #include "controlmappanel.h"
@@ -87,8 +88,16 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_table->horizontalHeader()->setSectionResizeMode(TargetCol, QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(PlaceCol, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(ModeCol, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(LampCol, QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(LampCol, QHeaderView::Interactive);
     m_table->verticalHeader()->hide();
+    // Names wrap, never cut (UX-36): a narrow panel shows "Scene: Warm
+    // wash" on two lines rather than "Scene: War…".
+    m_table->setWordWrap(true);
+    m_table->setTextElideMode(Qt::ElideNone);
+    connect(m_table->horizontalHeader(), &QHeaderView::sectionResized, this, [this](int section) {
+        if (section == TargetCol)
+            m_table->resizeRowsToContents();
+    });
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_table->setMinimumHeight(140);
@@ -219,6 +228,10 @@ void ControlMapPanel::refresh()
             places.prepend(b.place);
         for (const ControlMap::Place &p : std::as_const(places))
         {
+            // A place another trigger on this control has is not offered:
+            // moving there would take it (Learn refuses it, or steps through).
+            if (p != b.place && cm->isPlaceTaken(b, p))
+                continue;
             QString name = cm->placeName(p);
             if (!name.isEmpty())
                 name[0] = name.at(0).toUpper();
@@ -227,12 +240,13 @@ void ControlMapPanel::refresh()
                 place->setCurrentIndex(place->count() - 1);
         }
         place->setToolTip(place->currentText());
-        place->setEnabled(!estop && places.count() > 1);
+        place->setEnabled(!estop && place->count() > 1);
         connect(place, QOverload<int>::of(&QComboBox::activated), this, [this, place, target](int) {
             const QVariantList v = place->currentData().toList();
-            if (v.count() == 2)
-                m_doc->controlMap()->setPlace(target, ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()),
-                                                                         v.at(1).toUInt() });
+            if (v.count() == 2
+                && !m_doc->controlMap()->setPlace(target, ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()),
+                                                                             v.at(1).toUInt() }))
+                QTimer::singleShot(0, this, &ControlMapPanel::refresh);     // refused: back to where it is
         });
         m_table->setCellWidget(r, PlaceCol, place);
 
@@ -289,12 +303,15 @@ void ControlMapPanel::refreshLamps()
 {
     ControlMap *cm = m_doc->controlMap();
     const QList<ControlMap::Binding> bindings = cm->bindings();
+    bool resized = false;
     for (int r = 0; r < bindings.count() && r < m_table->rowCount(); ++r)
     {
         QTableWidgetItem *item = m_table->item(r, LampCol);
         if (item == nullptr)
             continue;
-        item->setText(lampText(bindings.at(r)));
+        const QString text = lampText(bindings.at(r));
+        resized = resized || item->text() != text;
+        item->setText(text);
         item->setToolTip(tr("What the control's light shows now: Dark (pressing it does "
                             "nothing here), Ready, Running, GO held (the double-GO guard "
                             "held a command: two blinks) or Stopped (after an emergency "
@@ -306,6 +323,18 @@ void ControlMapPanel::refreshLamps()
         m_dim->setChecked(cm->dimWhenReady());
         m_dim->blockSignals(false);
     }
+    if (resized)
+        fitRows();
+}
+
+void ControlMapPanel::fitRows()
+{
+    // The light's words wrap at about "No feedback line": what it fires
+    // keeps the room.
+    const int cap = m_table->fontMetrics().horizontalAdvance(tr("No feedback line")) + 16;
+    m_table->setColumnWidth(LampCol, qMax(m_table->horizontalHeader()->sectionSizeHint(LampCol),
+                                          qMin(m_table->sizeHintForColumn(LampCol), cap)));
+    m_table->resizeRowsToContents();
 }
 
 QString ControlMapPanel::controlText(const ControlMap::Binding &b) const

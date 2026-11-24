@@ -54,9 +54,11 @@ class Doc;
  * takes it from there and binds it here in one go. Two triggers at the same
  * place on a button may Step Through Them instead (Q303).
  *
- * Works: the trigger's place (Q295) -- where it was learned (the cue, cue
- * list or hit's place right-clicked) by default, the places around it, the
- * cue live now, and everywhere. A line under it says what the control does
+ * Works: the trigger's place (Q295) -- where it was learned (the hit's
+ * place, or the place a scene was learned at) by default, the places around
+ * it, the cue live now, and everywhere. A GO on a cue list or a jump to a
+ * cue defaults to everywhere (its own place would arm it only once it is
+ * already live); the place right-clicked is offered. A line under it says what the control does
  * where once it is learned ("Scene: Warm everywhere, except Hit: Stab in cue
  * 2.3"): the narrowest live place has it (Q296).
  */

@@ -194,10 +194,22 @@ bool ControlMap::setPlace(const Target &target, const Place &place)
         return false;
     if (b->place == place)
         return true;
+    // Another trigger on this control at that place: refused, never
+    // replaced (Learn refuses it too, Q296/Q297). isPlaceTaken() says so.
+    if (isPlaceTaken(*b, place))
+        return false;
     Binding moved = *b;
     moved.place = place;
     setBinding(moved);
     return true;
+}
+
+bool ControlMap::isPlaceTaken(const Binding &b, const Place &place) const
+{
+    for (const Binding &e : bindingsOn(b.universe, b.channel))
+        if (e.target != b.target && e.place == place)
+            return true;
+    return false;
 }
 
 bool ControlMap::setMode(const Target &target, Mode mode)

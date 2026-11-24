@@ -2633,6 +2633,35 @@ void ControlMap_Test::placesAreSavedAndAnOldShowIsEverywhere()
     QVERIFY(!saveShow(m_doc).contains("Scope="));
 }
 
+/* Works changed from the table (setPlace()) onto a place another trigger on
+   the control already has: refused, and both stay (it used to replace the
+   other one without a word). */
+void ControlMap_Test::aPlaceTakenIsNeverMovedOnto()
+{
+    QList<quint32> cues;
+    cueList(2, &cues);
+    Scene *warm = scene("Warm", 0);
+    Scene *stab = scene("Stab", 1);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote, ControlMap::function(stab->id()), ControlMap::Toggle, ControlMap::inCue(cues.at(1)) });
+    QCOMPARE(cm->bindingsOn(0, kNote).count(), 2);
+    const ControlMap::Binding warmB = *cm->binding(ControlMap::function(warm->id()));
+    QVERIFY(cm->isPlaceTaken(warmB, ControlMap::inCue(cues.at(1))));
+    QVERIFY(!cm->isPlaceTaken(warmB, ControlMap::inCue(cues.at(0))));
+    QVERIFY(!cm->isPlaceTaken(warmB, ControlMap::everywhere()));     // its own place
+
+    QVERIFY(!cm->setPlace(ControlMap::function(warm->id()), ControlMap::inCue(cues.at(1))));
+    QVERIFY(!cm->setPlace(ControlMap::function(stab->id()), ControlMap::everywhere()));
+    QCOMPARE(cm->bindingsOn(0, kNote).count(), 2);
+    QCOMPARE(cm->binding(ControlMap::function(warm->id()))->place, ControlMap::everywhere());
+    QCOMPARE(cm->binding(ControlMap::function(stab->id()))->place, ControlMap::inCue(cues.at(1)));
+    // A free place: moved.
+    QVERIFY(cm->setPlace(ControlMap::function(stab->id()), ControlMap::inCue(cues.at(0))));
+    QCOMPARE(cm->binding(ControlMap::function(stab->id()))->place, ControlMap::inCue(cues.at(0)));
+    QCOMPARE(cm->bindingsOn(0, kNote).count(), 2);
+}
+
 /* The emergency stop is everywhere, always, alone on its control and above
    every place: no GO, no place, no trigger takes it. */
 void ControlMap_Test::theStopIsEverywhereAndAboveEveryPlace()

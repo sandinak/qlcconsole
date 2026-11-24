@@ -102,6 +102,9 @@ private:
      *  held", "Stopped", "Dark"), or why it has none (a computer key, a
      *  universe with no feedback line). */
     QString lampText(const ControlMap::Binding &b) const;
+    /** What it fires and its light wrap, never cut (UX-36): the light's
+     *  column is kept narrow, every row as tall as its words. */
+    void fitRows();
 
 private:
     Doc *m_doc;

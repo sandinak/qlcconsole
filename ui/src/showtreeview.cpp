@@ -9557,8 +9557,9 @@ void ShowTreeView::fillTreeMenu(QMenu *out, QTreeWidgetItem *item)
     /* ---- The node's own menu ---- */
     // Fire it from a MIDI or OSC control (the Control Map): GO on a list, a
     // jump to a cue, a hit. Not on a sub-cue: its cue's GO plays it.
-    // It works where it was right-clicked by default (Q295): the cue, the
-    // list, the hit's own place; the dialog offers the ones around it.
+    // The dialog offers the place right-clicked and the ones around it
+    // (Q295): a hit works at its own place by default; a GO on a list or a
+    // jump to a cue everywhere (it brings that place live).
     auto learn = [this, &menu](const ControlMap::Target &target, const ControlMap::Place &where) {
         QMenu *staging = new QMenu(menu.menu());
         if (QAction *a = ControlLearnDialog::addTo(staging, m_doc, target, this, where))

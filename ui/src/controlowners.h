@@ -156,7 +156,9 @@ public:
         quint32 channel = 0;
         QList<Owner> owners;
     };
-    /** Every control with two jobs, in universe and channel order. */
+    /** Every control with two jobs, in universe and channel order. Two
+     *  triggers at one place are not: they are there only because someone
+     *  chose Step Through Them (Q303). */
     static QList<Collision> collisions(Doc *doc);
     /** One collision in words, with how to fix it. */
     static QString collisionText(Doc *doc, const Collision &c);

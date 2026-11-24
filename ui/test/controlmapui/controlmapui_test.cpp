@@ -1217,7 +1217,8 @@ quint32 placesShow(Doc *doc, QList<quint32> *cues, quint32 *prod = nullptr)
 
 /** Opens a context menu (@a open), chooses Learn Trigger… on it and returns
  *  the place its dialog offers first (Works), and its text. */
-ControlMap::Place placeLearnOffers(const std::function<void()> &open, QString *text, bool *seen)
+ControlMap::Place placeLearnOffers(const std::function<void()> &open, QString *text, bool *seen,
+                                   QStringList *items = nullptr)
 {
     ControlMap::Place place;
     *seen = false;
@@ -1229,7 +1230,11 @@ ControlMap::Place placeLearnOffers(const std::function<void()> &open, QString *t
             return;
         dialogWatch.stop();
         place = d->place();
-        *text = d->findChild<QComboBox *>("learnPlace")->currentText();
+        QComboBox *works = d->findChild<QComboBox *>("learnPlace");
+        *text = works->currentText();
+        if (items != nullptr)
+            for (int i = 0; i < works->count(); ++i)
+                *items << works->itemText(i);
         *seen = true;
         d->reject();
     });
@@ -1326,8 +1331,10 @@ void ControlMapUi_Test::theShowTreeLearnsWhereYouRightClicked()
     view.show();
     QCoreApplication::processEvents();
     view.tree()->expandAll();
-    auto offered = [&view](quint32 id, QString *text) {
+    QStringList items;
+    auto offered = [&view, &items](quint32 id, QString *text) {
         bool seen = false;
+        items.clear();
         if (!view.selectNode(id))
             return ControlMap::Place{ ControlMap::Everywhere, 0 };
         QTreeWidgetItem *item = view.tree()->currentItem();
@@ -1335,15 +1342,55 @@ void ControlMapUi_Test::theShowTreeLearnsWhereYouRightClicked()
         const QPoint pos = view.tree()->visualItemRect(item).center();
         const ControlMap::Place p = placeLearnOffers([&]() {
             QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos));
-        }, text, &seen);
-        return seen ? p : ControlMap::Place{ ControlMap::Everywhere, 0 };
+        }, text, &seen, &items);
+        return seen ? p : ControlMap::Place{ ControlMap::ListPlace, 0 };
     };
     QString text;
-    QVERIFY(offered(list, &text) == ControlMap::inList(list));
-    QCOMPARE(text, QString("In cue list Act 1"));
-    QVERIFY(offered(cues.at(0), &text) == ControlMap::inCue(cues.at(0)));
-    QVERIFY2(text.startsWith("In cue "), qPrintable(text));
+    // A GO on a list or a jump to a cue brings that place live: everywhere
+    // by default (its own place would arm it only once it is already live),
+    // the place right-clicked offered.
+    QVERIFY(offered(list, &text) == ControlMap::everywhere());
+    QCOMPARE(text, QString("Everywhere"));
+    QVERIFY2(items.contains("In cue list Act 1"), qPrintable(items.join(" | ")));
+    QVERIFY(offered(cues.at(0), &text) == ControlMap::everywhere());
+    QVERIFY2(items.contains("In cue list Act 1") && items.first().startsWith("In cue "),
+             qPrintable(items.join(" | ")));
+    // A hit works at its own place.
     QVERIFY(offered(hit, &text) == ControlMap::inCue(cues.at(1)));
+}
+
+/* A GO learned from a cue list's or a cue's right-click, its Works left as
+   it was, fires in Operate: it starts a list that isn't running and jumps to
+   a cue that isn't live (learned at its own place it never could). */
+void ControlMapUi_Test::aGoLearnedFromTheTreeFiresInOperate()
+{
+    QList<quint32> cues;
+    quint32 prod = 0;
+    placesShow(m_doc, &cues, &prod);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 encore = st->addCueList(prod, "Encore");
+    const quint32 last = st->addCue(encore, -1, "Bows");
+    QVERIFY(last != ShowTree::invalidId());
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f9 = ControlMap::keyChannel(Qt::Key_F9, Qt::NoModifier);
+    const quint32 f10 = ControlMap::keyChannel(Qt::Key_F10, Qt::NoModifier);
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(encore), nullptr, ControlMap::inList(encore));
+        QVERIFY(d.learnKey(Qt::Key_F9, Qt::NoModifier));
+        d.accept();
+    }
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cue(cues.at(1)), nullptr, ControlMap::inCue(cues.at(1)));
+        QVERIFY(d.learnKey(Qt::Key_F10, Qt::NoModifier));
+        d.accept();
+    }
+    QVERIFY(cm->binding(ControlMap::cueList(encore)) != nullptr);
+    QVERIFY(cm->binding(ControlMap::cue(cues.at(1))) != nullptr);
+    m_doc->setMode(Doc::Operate);
+    // Nothing running, Encore not the main list, cue 2 not live: armed all the same.
+    QCOMPARE(cm->armedOn(ControlMap::KeyboardUniverse, f9).count(), 1);
+    QCOMPARE(cm->armedOn(ControlMap::KeyboardUniverse, f10).count(), 1);
+    m_doc->setMode(Doc::Design);
 }
 
 /* Q296: a trigger at another place shares the control, and Learn says which
@@ -1394,6 +1441,8 @@ void ControlMapUi_Test::onlyTheSamePlaceIsRefused()
     }
     QCOMPARE(cm->bindingsOn(ControlMap::KeyboardUniverse, f6).count(), 3);
     QCOMPARE(cm->armedOn(ControlMap::KeyboardUniverse, f6).count(), 2);     // Warm and Cool step
+    // Stepped through by choice: not "two jobs on one control" in the hub.
+    QVERIFY(ControlOwners::collisions(m_doc).isEmpty());
     // Another listener is refused whatever the place: one job per control.
     auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
     vcButtonOn(m_doc, 60, "House lights");
@@ -1429,6 +1478,11 @@ void ControlMapUi_Test::theTableAndTheHubShowEachPlace()
     QVERIFY(works0 != nullptr && works1 != nullptr);
     QCOMPARE(works0->currentText(), QString("Everywhere"));
     QVERIFY2(works1->currentText().startsWith("In cue "), qPrintable(works1->currentText()));
+    // Warm has everywhere on this control: not offered to Strobe (moving
+    // there would take Warm's trigger without a word), and refused.
+    QCOMPARE(works1->findText("Everywhere"), -1);
+    QVERIFY(!cm->setPlace(ControlMap::function(strobe->id()), ControlMap::everywhere()));
+    QCOMPARE(cm->bindingsOn(0, 60).count(), 2);
     // Moved from the table: in the list.
     const int at = works1->findText("In cue list Act 1");
     QVERIFY(at >= 0);
@@ -1554,6 +1608,45 @@ void ControlMapUi_Test::placeShots()
         tree->selectShowControlRow(QStringLiteral("map"));
         QCoreApplication::processEvents();
         QVERIFY(mgr.grab().save(dir.absoluteFilePath(QString("places-table-%1.png").arg(tag))));
+    }
+}
+
+/* UX-36: at the smallest size the Control Map table's Fires column wraps
+   what each control fires, never cuts it ("Scene: War…"), so two rows on
+   one key can be told apart. */
+void ControlMapUi_Test::theFiresColumnNeverCutsAName()
+{
+    QList<quint32> cues;
+    const quint32 list = placesShow(m_doc, &cues);
+    Scene *warm = scene("Warm wash");
+    Scene *strobe = scene("Strobe");
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f6 = ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 62, ControlMap::cueList(list), ControlMap::Toggle, ControlMap::inList(list) });
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(strobe->id()), ControlMap::Toggle,
+                     ControlMap::inCue(cues.at(1)) });
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.resize(1024, 640);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    mgr.showShowControlPage();
+    mgr.findChild<ConnectionsTree *>()->selectShowControlRow(QStringLiteral("map"));
+    QCoreApplication::processEvents();
+    QTableWidget *table = mgr.findChild<QTableWidget *>("controlMapTable");
+    QVERIFY(table != nullptr && table->isVisible());
+    QCOMPARE(table->rowCount(), 3);
+    QTRY_VERIFY(table->columnWidth(1) > 0);
+    QCoreApplication::processEvents();
+    const QFontMetrics fm(table->font());
+    for (int r = 0; r < table->rowCount(); ++r)
+    {
+        const QString text = table->item(r, 1)->text();
+        const int width = table->columnWidth(1) - 8;           // the cell's text margins
+        const QRect need = fm.boundingRect(QRect(0, 0, width, 10000), Qt::TextWordWrap, text);
+        QVERIFY2(need.width() <= width && need.height() <= table->rowHeight(r),
+                 qPrintable(QString("row %1 \"%2\" needs %3x%4, has %5x%6").arg(r).arg(text)
+                            .arg(need.width()).arg(need.height()).arg(width).arg(table->rowHeight(r))));
     }
 }
 

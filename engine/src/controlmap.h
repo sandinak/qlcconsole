@@ -244,10 +244,13 @@ public:
     bool removeBinding(const Target &target);
     /** Changes how @a target's control acts; false: no binding. */
     bool setMode(const Target &target, Mode mode);
-    /** Moves @a target's binding to @a place; a binding already at that
-     *  place on its control is replaced (as setBinding()). False: no
-     *  binding, or the emergency stop (always everywhere). */
+    /** Moves @a target's binding to @a place. False: no binding, the
+     *  emergency stop (always everywhere), or another trigger on its
+     *  control is at that place (isPlaceTaken(): never replaced from here;
+     *  Learn refuses it, or steps through them). */
     bool setPlace(const Target &target, const Place &place);
+    /** Whether another binding on @a b's control is at @a place. */
+    bool isPlaceTaken(const Binding &b, const Place &place) const;
     /** Whether a computer key is bound. */
     bool hasKeyBindings() const { return m_keyBindings > 0; }
     /** Drops every binding (each light off). */

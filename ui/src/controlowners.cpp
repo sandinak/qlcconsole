@@ -453,8 +453,11 @@ QList<ControlOwners::Collision> ControlOwners::collisions(Doc *doc)
         for (int a = 0; a < list.count(); ++a)
         {
             bool clash = false;
+            // Two triggers at one place stay only by Step Through Them
+            // (Q303; Learn refuses them otherwise): chosen, not two jobs.
             for (int b = 0; b < list.count() && !clash; ++b)
-                clash = a != b && collides(list.at(a), list.at(b));
+                clash = a != b && collides(list.at(a), list.at(b))
+                        && !(list.at(a).kind == Trigger && list.at(b).kind == Trigger);
             if (clash)
                 c.owners << list.at(a);
         }

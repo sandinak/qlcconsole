@@ -70,10 +70,12 @@ private slots:
     // Places for triggers (Q295, Q296, Q303)
     void theLearnDialogOffersThePlace();
     void theShowTreeLearnsWhereYouRightClicked();
+    void aGoLearnedFromTheTreeFiresInOperate();
     void onlyTheSamePlaceIsRefused();
     void theTableAndTheHubShowEachPlace();
     void theLightFollowsWhatIsArmedNow();
     void placeShots();
+    void theFiresColumnNeverCutsAName();
 
 private:
     Scene *scene(const QString &name);
