@@ -190,6 +190,7 @@
 #include "blocking.h"
 #include "masklenswidget.h"
 #include "planmapwidget.h"
+#include "mountinsituview.h"
 #include "feetinchesspinbox.h"
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
@@ -34826,7 +34827,7 @@ void Monitor_Test::fixturePropertiesKeepsEveryControl()
         "fixtureFindItRow", "fixtureAimReadout", "fixtureFacingLegend", "fixtureSymbolMatchFront",
         "fixtureAimExplainer",
         // The pictures: the mask lens on Aim & Beam, the plan map on Place.
-        "fixtureMaskLens", "planMap" };
+        "fixtureMaskLens", "planMap", "fixtureMountView" };
     const QStringList severalBefore = {
         "colourReset", "colourSwatch", "fixtureAddress", "fixtureAim", "fixtureColour", "fixtureCopyPower",
         "fixtureFacingPreview", "fixtureIconRotation", "fixtureMaxAmps", "fixtureMeasure", "fixtureOrientation",
@@ -35139,6 +35140,82 @@ void Monitor_Test::fixturePropertiesPlanMapIsLockedOnAMount()
     QVERIFY2(!reason.isEmpty(), "no reason said");
     QCOMPARE(caption, reason);
     QCOMPARE(dragX, xBefore);
+}
+
+/* A fixture on a truss: Place has the mount view (opened on, the plan one
+   click away), its height text follows Height offset as it is typed, and
+   Cancel puts the offset back. A free fixture has no switch. */
+void Monitor_Test::fixturePropertiesMountViewFollowsHeightOffset()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    const quint32 freeFid = rig.head("Spot 2", 22.0f);
+    QVERIFY(fid != Fixture::invalidId() && freeFid != Fixture::invalidId());
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *truss = props->addTruss();
+    truss->setOrigin(QVector3D(16.0f, 12.0f, 5.0f));
+    truss->setDirection(QPointF(1.0, 0.0));
+    truss->setLength(8.0f);
+    truss->setWidth(0.3f);
+    const quint32 trussId = truss->id();
+    const auto removeTruss = qScopeGuard([props, trussId]() { props->removeTruss(trussId); });
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.trussId = trussId;
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fid, rp);
+    const double toDisp = FeetInchesSpinBox::valuesInFeet() ? 3.28084 : 1.0;
+
+    bool found = false, mounted = false, shown = false, planBack = false, switchShown = false;
+    QString tab, before, after;
+    driveDialog([&](QWidget *dlg) {
+        MountInSituView *mv = dlg->findChild<MountInSituView *>(QStringLiteral("fixtureMountView"));
+        QDoubleSpinBox *h = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureHeightOffset"));
+        PlanMapWidget *map = dlg->findChild<PlanMapWidget *>(QStringLiteral("planMap"));
+        QPushButton *plan = dlg->findChild<QPushButton *>(QStringLiteral("fixtureViewPlan"));
+        if (mv == nullptr || h == nullptr || map == nullptr || plan == nullptr)
+            return false;
+        found = true;
+        tab = fpTabOf(dlg, mv);
+        fpReachByClicks(dlg, h);
+        mounted = mv->isMounted();
+        shown = mv->isVisibleTo(dlg) && !map->isVisibleTo(dlg);
+        switchShown = plan->isVisibleTo(dlg);
+        before = mv->heightText();
+        h->setValue(2.0 * toDisp);
+        after = mv->heightText();
+        plan->click();
+        planBack = map->isVisibleTo(dlg) && !mv->isVisibleTo(dlg);
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(found);
+    QCOMPARE(tab, QStringLiteral("place"));
+    QVERIFY(mounted && shown && switchShown);
+    QVERIFY2(before != after, qPrintable(before + " / " + after));
+    QVERIFY(planBack);
+    QCOMPARE(props->fixtureRigProps(fid).mountZOffset, 0.0f);      // Cancel
+
+    // Not on a structure: no switch, the map has the room.
+    bool freeFound = false, freeSwitch = true, freeMap = false;
+    driveDialog([&](QWidget *dlg) {
+        QPushButton *plan = dlg->findChild<QPushButton *>(QStringLiteral("fixtureViewPlan"));
+        PlanMapWidget *map = dlg->findChild<PlanMapWidget *>(QStringLiteral("planMap"));
+        if (plan == nullptr || map == nullptr)
+            return false;
+        freeFound = true;
+        fpReachByClicks(dlg, map);
+        freeSwitch = plan->isVisibleTo(dlg);
+        freeMap = map->isVisibleTo(dlg);
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(freeFid);
+    QVERIFY(freeFound);
+    QVERIFY(!freeSwitch);
+    QVERIFY(freeMap);
 }
 
 /* The symbol's box on the dial turns the plot symbol (Symbol turn, was

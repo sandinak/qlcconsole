@@ -1221,7 +1221,12 @@ are in tabs. It opens on the tab you used last (Fixture the first time);
   sees them), in your Settings ▸ Units. A fixture on a truss, pipe or
   tower shows where its mount puts it and cannot be dragged: the map
   says so. (With several fixtures selected there is no map: X and Y
-  differ.)
+  differ.) A fixture on a truss, pipe or tower also has **On its mount**,
+  a side view of it on that structure with its height offset written
+  beside it (*2' above the truss*); **Plan | On its mount** above the
+  picture switches between the two, and the mount view follows Height
+  offset, Orientation, Face, Placement, Angle and Tilt as you change them.
+  A fixture not on a structure has only the map.
 - **Aim &amp; Beam** — where it points, what comes out, and calibrating
   it. At the left, the orientation diagram (below), with where it points
   under it in degrees and words (*270° · stage left*); beside it **Front

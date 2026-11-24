@@ -177,6 +177,7 @@
 #include "monitor.h"
 #include "masklenswidget.h"
 #include "planmapwidget.h"
+#include "mountinsituview.h"
 #include "outputrulekeeper.h"
 #include "wledfixture.h"
 #include "contextmenus.h"
@@ -14683,7 +14684,61 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         planMap->setObjectName(QStringLiteral("planMap"));
         planMap->setFromProperties(m_props);
         planMap->setOrigin(QPointF(0, 0));
-        viewSlot->layout()->addWidget(planMap);
+        /* The mount view (MountInSituView: the fixture on its truss, pipe or
+           tower, with its height offset) shares the slot's one picture area:
+           the two together do not fit a laptop's Place tab. A fixture on a
+           structure opens on its mount; "Plan | On its mount" switches. Not
+           on a structure the view has nothing to say, so the switch is gone
+           and the map has the room. */
+        MountInSituView *mountView = new MountInSituView(m_doc, fxId_dlg, viewSlot);
+        mountView->setObjectName(QStringLiteral("fixtureMountView"));
+        QWidget *switchRow = new QWidget(viewSlot);
+        switchRow->setObjectName(QStringLiteral("fixturePlaceViewSwitch"));
+        QHBoxLayout *switchLay = new QHBoxLayout(switchRow);
+        switchLay->setContentsMargins(0, 0, 0, 0);
+        switchLay->setSpacing(0);
+        QPushButton *planBtn = new QPushButton(tr("Plan"), switchRow);
+        planBtn->setObjectName(QStringLiteral("fixtureViewPlan"));
+        QPushButton *mountBtn = new QPushButton(tr("On its mount"), switchRow);
+        mountBtn->setObjectName(QStringLiteral("fixtureViewMount"));
+        for (QPushButton *b : { planBtn, mountBtn })
+        {
+            b->setCheckable(true);
+            b->setAutoExclusive(true);
+            switchLay->addWidget(b);
+        }
+        QVBoxLayout *slotLay = qobject_cast<QVBoxLayout *>(viewSlot->layout());
+        slotLay->addWidget(switchRow);
+        slotLay->addWidget(mountView);
+        slotLay->addWidget(planMap);
+        auto showPicture = [planMap, mountView, planBtn, mountBtn, switchRow]() {
+            const bool mounted = mountView->isMounted();
+            switchRow->setVisible(mounted);
+            const bool wantMount = mounted && mountBtn->isChecked();
+            mountView->setVisible(wantMount);
+            planMap->setVisible(!wantMount);
+            planBtn->setChecked(!wantMount);
+        };
+        mountBtn->setChecked(mountView->isMounted());
+        planBtn->setChecked(!mountView->isMounted());
+        connect(planBtn, &QPushButton::clicked, mountView, showPicture);
+        connect(mountBtn, &QPushButton::clicked, mountView, showPicture);
+        showPicture();
+        // Whatever on Place changes (its rows, X / Y, a live rig update): redraw it.
+        auto refreshMount = [mountView, showPicture, mountBtn, planBtn]() {
+            const bool was = mountView->isMounted();
+            mountView->refresh();
+            if (mountView->isMounted() && !was)
+                mountBtn->setChecked(true);         // just put on a structure: show it
+            if (!mountView->isMounted())
+                planBtn->setChecked(true);
+            showPicture();
+        };
+        connect(m_props, &MonitorProperties::rigPropsChanged, mountView, [refreshMount, fxId_dlg](quint32 f) {
+            if (f == fxId_dlg)
+                refreshMount();
+        });
+        connect(fields, &FixtureFields::edited, mountView, [refreshMount]() { refreshMount(); });
         auto refreshMap = [=, this]() {
             const FixtureRigProps now = m_props->fixtureRigProps(fxId_dlg);
             const bool held = now.trussId != Truss::invalidId() || now.pipeId != Pipe::invalidId()
@@ -14708,7 +14763,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         refreshMap();
         for (QDoubleSpinBox *sp : { xSpin, ySpin })
             connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), planMap,
-                    [refreshMap](double) { refreshMap(); });
+                    [refreshMap, refreshMount](double) { refreshMap(); refreshMount(); });
         connect(fields, &FixtureFields::edited, planMap, [refreshMap]() { refreshMap(); });
         connect(planMap, &PlanMapWidget::positionChanged, &dlg, [=](double xMm, double yMm) {
             xSpin->setValue(xMm / 1000.0 * toDisp_fx);       // each applies live, like a typed value

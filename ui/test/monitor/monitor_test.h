@@ -180,6 +180,7 @@ private slots:
     void fixturePropertiesMaskLensFollowsTheMaskingBoxes();
     void fixturePropertiesPlanMapFollowsXY();
     void fixturePropertiesPlanMapIsLockedOnAMount();
+    void fixturePropertiesMountViewFollowsHeightOffset();
     /** The dial's symbol box and Match Front set Symbol turn. */
     void fixturePropertiesSymbolTurnsFromTheDial();
     /** Invert pan flips the dial's DMX-direction arrow; the seam is drawn. */
