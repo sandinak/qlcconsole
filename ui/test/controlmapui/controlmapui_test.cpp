@@ -1641,6 +1641,7 @@ void ControlMapUi_Test::moveItHereLetsGoOfASubControlsOwnInput()
     matrix->addCustomControl(control);
 
     VCFrame *frame = new VCFrame(parent, m_doc);
+    frame->setHeaderVisible(true);
     frame->setMultipageMode(true);
     frame->setTotalPagesNumber(2);
     {
