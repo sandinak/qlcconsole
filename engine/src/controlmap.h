@@ -51,6 +51,8 @@ class Doc;
 #define CONTROLMAP_HAS_INPUT_PROBE 1
 /** ... and the light that says standby, held and stopped (lamp(), CS3). */
 #define CONTROLMAP_HAS_LAMP_STATES 1
+/** ... and a place on each trigger (Place, Q295). */
+#define CONTROLMAP_HAS_PLACES 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -76,6 +78,19 @@ class Doc;
  * or in Design while its target is armed (isArmed(): the Run tab's list,
  * or what is selected in the Show Tree). Saved as a Key attribute in
  * place of Universe/Channel, so a build without keys skips it.
+ *
+ * A trigger has a place (board Q295, Q296, Q303; docs/design/CONTROL_SCOPES.md
+ * phase 3), as a hit has: a cue, a cue list, a production or everywhere. It
+ * is armed only while its place is live (the hits' own rule,
+ * ShowTreeController::isHitPlaceLive(); in Design also while the place is
+ * selected in the Show Tree or is the Run tab's list). One control may have
+ * several triggers at different places: a press fires the narrowest armed
+ * one (cue > list > production > everywhere). Several at the same place
+ * step through, one per press (Q157). A trigger whose place is not live
+ * can still let go of what it runs. The emergency stop is always
+ * everywhere, alone on its control, and comes before all of it. Saved as
+ * Scope= and ScopeOf= on the trigger, only when not everywhere: a show
+ * saved before places loads with every trigger everywhere, as it was.
  *
  * GUI thread only: input arrives queued from the input patches, feedback
  * follows the MasterTimer's started/stopped signals queued here. With no
@@ -133,15 +148,39 @@ public:
         bool operator!=(const Target &o) const { return !(*this == o); }
     };
 
+    /** Where a trigger is armed (Q295): the places a hit has, from the
+     *  widest, so a higher value is a narrower place and wins. */
+    enum PlaceScope
+    {
+        Everywhere = 0, //!< always (the old behaviour, and every old show's)
+        ProductionPlace,//!< while that production is current (or none is)
+        ListPlace,      //!< while that cue list runs (or is its production's main list, nothing running)
+        CuePlace        //!< while that cue is the live cue of its list
+    };
+
+    struct Place
+    {
+        PlaceScope scope = Everywhere;
+        quint32 id = 0xFFFFFFFF;    //!< the production, list or cue (not for Everywhere)
+
+        bool operator==(const Place &o) const
+        { return scope == o.scope && (scope == Everywhere || id == o.id); }
+        bool operator!=(const Place &o) const { return !(*this == o); }
+    };
+
     struct Binding
     {
         quint32 universe = 0xFFFFFFFF;
         quint32 channel = 0xFFFFFFFF;
         Target target;
         Mode mode = Toggle;
+        Place place;
 
         bool operator==(const Binding &o) const
-        { return universe == o.universe && channel == o.channel && target == o.target && mode == o.mode; }
+        {
+            return universe == o.universe && channel == o.channel && target == o.target && mode == o.mode
+                   && place == o.place;
+        }
     };
 
     static Target function(quint32 id) { return Target{ FunctionTarget, id }; }
@@ -151,6 +190,11 @@ public:
     /** The emergency stop (ALL OFF through ShowControl::run(), the one path).
      *  Only one binding of it can exist. */
     static Target emergencyStop() { return Target{ EmergencyStopTarget, 0 }; }
+
+    static Place everywhere() { return Place(); }
+    static Place inProduction(quint32 id) { return Place{ ProductionPlace, id }; }
+    static Place inList(quint32 id) { return Place{ ListPlace, id }; }
+    static Place inCue(quint32 id) { return Place{ CuePlace, id }; }
 
     /** The universe of a computer-keyboard key's binding (its channel:
      *  keyChannel()). No input universe has this number. */
@@ -179,20 +223,31 @@ public:
 
     /** The binding firing @a target (null: none). */
     const Binding *binding(const Target &target) const;
-    /** The binding on a control (null: none). */
+    /** The binding a press of a control fires now: of the armed ones
+     *  (armedOn()), the next one (they step through). Null: none is armed
+     *  (or nothing is bound there). */
     const Binding *bindingOn(quint32 universe, quint32 channel) const;
-    /** Whether a control fires something here. */
+    /** Every binding on a control, in the table's order. */
+    QList<Binding> bindingsOn(quint32 universe, quint32 channel) const;
+    /** Whether a control fires something here (at any place). */
     bool isBound(quint32 universe, quint32 channel) const
     { return m_byControl.contains(key(universe, channel)); }
 
-    /** Binds @a b: one control fires one thing and one thing has one
-     *  control, so a binding on the same control or for the same target
-     *  is replaced. Marks the show modified. */
-    void setBinding(const Binding &b);
+    /** Binds @a b. One thing has one control, so a binding for the same
+     *  target is replaced. On the same control, one at the same place is
+     *  replaced too -- unless @a stepThrough: then both stay and a press
+     *  fires each in turn (Q303). Different places share a control (Q296).
+     *  The emergency stop is alone on its control: either one replaces the
+     *  other. Marks the show modified. */
+    void setBinding(const Binding &b, bool stepThrough = false);
     /** Drops @a target's binding (its light goes off); false: none. */
     bool removeBinding(const Target &target);
     /** Changes how @a target's control acts; false: no binding. */
     bool setMode(const Target &target, Mode mode);
+    /** Moves @a target's binding to @a place; a binding already at that
+     *  place on its control is replaced (as setBinding()). False: no
+     *  binding, or the emergency stop (always everywhere). */
+    bool setPlace(const Target &target, const Place &place);
     /** Whether a computer key is bound. */
     bool hasKeyBindings() const { return m_keyBindings > 0; }
     /** Drops every binding (each light off). */
@@ -258,6 +313,39 @@ public:
     static bool stringToMode(const QString &str, Mode *mode);
 
     /*********************************************************************
+     * Places (Q295, Q296, Q303)
+     *********************************************************************/
+public:
+    /** Whether @a place is live now: everywhere always; otherwise the
+     *  hits' rule (ShowTreeController::isHitPlaceLive()), and in Design
+     *  also while the cue is selected in the Show Tree, or the list is
+     *  selected or the Run tab's. A place that is gone never is. */
+    bool isPlaceLive(const Place &place) const;
+    /** Of the bindings on a control, the armed ones at the narrowest live
+     *  place (cue > list > production > everywhere), in the table's order.
+     *  More than one: they share that place and step through. */
+    QList<Binding> armedOn(quint32 universe, quint32 channel) const;
+    /** Whether @a b is one of the armed ones on its control (armedOn()). */
+    bool isArmedOnControl(const Binding &b) const;
+    /** The place in words, as a sentence ends: "everywhere", "in cue 2.3
+     *  Chorus", "in cue list Main", "in production DanceHysteria". */
+    QString placeName(const Place &place) const;
+    /** What a control does where, as one line: "Scene: Warm everywhere,
+     *  except Hit: Stab in cue 2.3" (narrower places after "except"); two
+     *  at one place "... (each press the next)". @a bindings: one control's. */
+    QString placesText(const QList<Binding> &bindings) const;
+    /** The places a trigger learned at @a where may have, narrowest first:
+     *  that place and the ones around it (a cue, its list, its production,
+     *  everywhere), then those around the cue live now (or selected in the
+     *  Show Tree), each once. Everywhere is always one of them. */
+    QList<Place> placeChoices(const Place &where) const;
+    /** The place of hit @a hitId (where a binding learned on it goes). */
+    Place placeOfHit(quint32 hitId) const;
+
+    static QString placeScopeToString(PlaceScope scope);
+    static PlaceScope stringToPlaceScope(const QString &str);
+
+    /*********************************************************************
      * Computer keys: where they may fire
      *********************************************************************/
 public:
@@ -318,6 +406,11 @@ public:
     /** Sends every binding's light as it is now (a controller plugged
      *  back in, a show loaded): every one, whether it changed or not. */
     void resendFeedback();
+
+    /** What a control's light says now: that of the binding a press would
+     *  fire (bindingOn()); none armed, that of one whose function runs (its
+     *  press lets go); else dark. */
+    Lamp controlLamp(quint32 universe, quint32 channel) const;
 
     /** What @a b's light says now (CS3). Dark when a press would do
      *  nothing: the target is gone, the press would be refused
@@ -403,8 +496,21 @@ private:
     void changed(bool modified);
     void rebuild();
     void updateConnections();
-    /** @return whether the press may start things (its release acts) */
-    bool press(const Binding &b);
+    /** @return whether the press may start things (its release acts).
+     *  @a placeLive false: its place is not live, it may only let go. */
+    bool press(const Binding &b, bool placeLive = true);
+    /** The binding a press of control @a k fires: the next of the armed
+     *  ones; @a advance moves the step on. False: none is armed. */
+    bool pick(quint64 k, Binding *out, bool advance) const;
+    /** A binding on control @a k whose function runs (narrowest first):
+     *  with none armed, a press of it still lets go. Null: none. */
+    const Binding *runningOn(quint64 k) const;
+    /** The binding whose light control @a k shows (null: dark). */
+    const Binding *lampOwner(quint64 k) const;
+    /** The emergency stop's binding when it is on control @a k. */
+    const Binding *stopOn(quint64 k) const;
+    /** Sends control @a k's light (dark when nothing is bound there now). */
+    void sendControlLamp(quint32 universe, quint32 channel, bool force);
     void release(const Binding &b);
     /** The emergency stop: ALL OFF through ShowControl::run() (never held). */
     void emergencyStop(const Binding &b, uchar value);
@@ -437,8 +543,12 @@ private:
     Doc *m_doc;
     EncoderBank *m_encoderBank = nullptr;
     QList<Binding> m_bindings;
-    /** control -> index in m_bindings */
-    QHash<quint64, int> m_byControl;
+    /** control -> indexes in m_bindings (several: at different places, or
+     *  stepping through at one) */
+    QHash<quint64, QList<int>> m_byControl;
+    /** Q303: per control, the armed ones it last stepped through and the
+     *  next one's index; a change of what is armed starts again at the first */
+    mutable QHash<quint64, QPair<QList<Target>, int>> m_step;
     /** controls held down (a press is an edge from 0) */
     QSet<quint64> m_down;
     /** the press a learn heard, until its release */

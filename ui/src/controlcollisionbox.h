@@ -38,7 +38,8 @@ class Doc;
  * job (ControlOwners, board Q297): "<control> already does <thing>
  * (<where>). One job per control." with [Move It Here] [Cancel]. Move It
  * Here is not there when the owner can't let go (the PMJ, the emergency
- * stop); the reason is said instead. Hidden until a refusal; the Learn
+ * stop); the reason is said instead. Two triggers at the same place on a
+ * button may instead Step Through Them (Q303). Hidden until a refusal; the Learn
  * that owns it takes the control on moveRequested(), after
  * ControlOwners::releaseAll().
  */
@@ -51,6 +52,11 @@ public:
 
     /** Shows the refusal for @a owners of a control. */
     void refuse(Doc *doc, quint32 universe, quint32 channel, const QList<ControlOwners::Owner> &owners);
+    /** Offers Step Through Them (Q303): the owners are triggers at the same
+     *  place and the control is a button, so it may fire each in turn. */
+    void setStepThrough(bool offered);
+    bool offersStepThrough() const { return m_stepOffered; }
+    QPushButton *stepButton() const { return m_step; }
     /** Hides it and forgets the owners. */
     void clear();
 
@@ -65,6 +71,8 @@ public:
 signals:
     /** Move It Here was pressed (the owners are not released yet). */
     void moveRequested();
+    /** Step Through Them was pressed: keep both, each press the next. */
+    void stepThroughRequested();
     /** Cancel was pressed: the control is not taken. */
     void cancelled();
 
@@ -72,7 +80,10 @@ private:
     QLabel *m_text;
     QLabel *m_note;
     QPushButton *m_move;
+    QPushButton *m_step;
     QPushButton *m_cancel;
+    QLabel *m_stepNote;
+    bool m_stepOffered = false;
     QList<ControlOwners::Owner> m_owners;
     quint32 m_universe = 0;
     quint32 m_channel = 0;

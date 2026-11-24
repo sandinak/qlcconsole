@@ -34,6 +34,15 @@ controls that do something come with its profile, and nothing takes the
 anything else). Two Virtual Console widgets on one input are Show Review's
 *Same input twice* (VC-06), not refused here.
 
+**A trigger has a place.** A Control Map trigger works where you learned
+it, as a hit does: **in a cue** (only while that cue is live), **in a cue
+list** (while it runs, or while it is the current production's main list
+and nothing else runs), **in a production** (while it is current) or
+**everywhere**. So one control may have several triggers at different
+places -- *Note 60: Scene: Warm everywhere, except Hit: Stab in cue 2.3* --
+and only the **same place** counts as a second job. More in [Where a
+trigger works](#where-a-trigger-works) below.
+
 A show saved before this, or with two jobs on a control for any other
 reason, loads as it is. The **Who has it now** line at the bottom of
 Control surfaces (there only while there is one) lists every such control with what listens to it and where
@@ -180,6 +189,59 @@ that matter to a desk:
 - A fader or a CC that goes on sending values is **one press** until it goes
   back to 0. Use a Virtual Console slider for a fader that sets a level.
 
+## Where a trigger works
+
+Every trigger has a place, chosen in **Works** when you learn it and
+changed later in the **Works** column of the Control Map table:
+
+| Works | Armed while |
+|---|---|
+| **In cue 2.3 …** | that cue is the live cue of its list (the GO that leaves it disarms it) |
+| **In cue list Act 1** | that list runs, or it is the current production's main list and nothing of that production runs |
+| **In production …** | that production is current (or none is) |
+| **Everywhere** | always -- what every trigger was before places, and what every older show loads as |
+
+This is the hits' own rule: a trigger in cue 2.3 is armed exactly when a
+hit living under cue 2.3 is. In **Design** a place is also armed while you
+are looking at it: the cue selected in the Show Tree, or the list selected
+there or chosen in the Run tab. The Operate / Design rules above still
+apply on top.
+
+**Learn Trigger… offers the place.** From a cue's right-click it is that
+cue; from a cue list's, that list; from a hit's, the hit's own place. The
+list also has the places around it (the cue's list, its production), the
+cue live now and **Everywhere** -- pick Everywhere to keep the old
+behaviour. Learned from a scene or effect in Build it starts at
+Everywhere. Under the control, a line says what the control will do where:
+*Key · F6: Scene: Warm everywhere, except Scene: Strobe in cue 2 Chorus.*
+
+**Several triggers on one control.**
+
+- At **different places**, the **narrowest armed** one fires: cue, then
+  cue list, then production, then everywhere. Learn says so in that line,
+  and Learn does not refuse it.
+- At the **same place**, Learn refuses it, naming the trigger that is
+  there, with **Move It Here** -- and, on a button or key, **Step Through
+  Them**: both stay and each press fires the next one (as a VC button with
+  two hits at one place does).
+- Another listener (a VC widget, the encoder bank, a master, the PMJ) is
+  refused whatever the place: those listen everywhere.
+
+**Letting go.** A trigger whose place is no longer live can still stop
+what it started (a Toggle press, a Momentary release): only a start is held
+back. Its light stays bright while that runs, then goes dark.
+
+**Lights and the hub follow what is armed now.** A control's light is the
+one of the trigger that would fire: when the GO leaves cue 2.3, a control
+learned there goes dark (or shows the everywhere one's light). The table's
+**Its light** says *Dark (not live here)* or *Dark (a narrower place has
+it)*. **Control surfaces ▸ Triggers by place** lists each control with a
+trigger at a place, what it does where and which trigger has it now
+(*Now: Scene: Strobe (in cue 2 Chorus)*).
+
+The **emergency stop** has no place: it is everywhere, alone on its
+control, and comes before every trigger and every place.
+
 ## What a control's light says
 
 A desk with a feedback line gets its lights from the show, so a button says
@@ -308,6 +370,12 @@ after any build that changes a surface, and say which build.
     **1-Down** button, and Learn Trigger… on a scene with the same button.
     *Expect:* refused naming the VC button; **Move It Here** binds it to the
     scene, and pressing it fires the scene and not the VC button.
+14. **A trigger at a cue.** Right-click cue 2 ▸ **Learn Trigger…** on a
+    hit (Works: *In cue 2 …*) and press **1-Down**. Learn a scene on the
+    same button from Build (Works: *Everywhere*). *Expect:* Learn says
+    *… everywhere, except … in cue 2*. In Operate: before cue 2, the button
+    fires the scene; GO to cue 2 -- it fires the hit; GO past it -- the
+    scene again. The light follows each GO without a press.
 
 **Akai APC40 mk2**
 

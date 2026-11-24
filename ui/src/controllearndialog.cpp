@@ -36,7 +36,8 @@
 #include "inputpatch.h"
 #include "doc.h"
 
-ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &target, QWidget *parent)
+ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &target, QWidget *parent,
+                                       const ControlMap::Place &where)
     : QDialog(parent)
     , m_doc(doc)
     , m_target(target)
@@ -86,7 +87,35 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
                                  "held. Start only / Stop only: a press only starts, or only stops, it."));
     form->addRow(tr("When pressed"), m_mode);
     m_mode->setEnabled(!estop);
+
+    // Works: where it is armed (Q295). The stop is everywhere, always.
+    m_place = new QComboBox(this);
+    m_place->setObjectName(QStringLiteral("learnPlace"));
+    m_place->setToolTip(tr("Where this trigger works: only while that cue is live, that cue list runs or "
+                           "that production is current -- or everywhere. One control can fire other "
+                           "things in other places: the narrowest live place has it."));
+    const ControlMap::Binding *bound = cm->binding(target);
+    QList<ControlMap::Place> places = estop ? QList<ControlMap::Place>{ ControlMap::Place() }
+                                            : cm->placeChoices(where);
+    if (bound != nullptr && !places.contains(bound->place))
+        places.prepend(bound->place);
+    for (const ControlMap::Place &p : std::as_const(places))
+    {
+        QString name = cm->placeName(p);
+        if (!name.isEmpty())
+            name[0] = name.at(0).toUpper();
+        m_place->addItem(name, QVariantList{ int(p.scope), p.id });
+    }
+    setPlace(bound != nullptr ? bound->place : where);
+    m_place->setEnabled(!estop && places.count() > 1);
+    form->addRow(tr("Works"), m_place);
     lay->addLayout(form);
+
+    m_placeNote = new QLabel(this);
+    m_placeNote->setObjectName(QStringLiteral("learnPlaceNote"));
+    m_placeNote->setWordWrap(true);
+    m_placeNote->setVisible(!estop);
+    lay->addWidget(m_placeNote);
 
     m_note = new QLabel(this);
     m_note->setObjectName(QStringLiteral("learnNote"));
@@ -104,6 +133,13 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     m_collision = new ControlCollisionBox(this);
     lay->addWidget(m_collision);
     connect(m_collision, &ControlCollisionBox::moveRequested, this, &ControlLearnDialog::slotMoveHere);
+    connect(m_collision, &ControlCollisionBox::stepThroughRequested, this, &ControlLearnDialog::slotStepThrough);
+    // Another place: another answer to who has the control (Q296).
+    connect(m_place, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this]() {
+        if (hasControl())
+            checkOwners();
+        updateText();
+    });
     connect(m_collision, &ControlCollisionBox::cancelled, this, [this]() {
         // Not taken: back to the control this had (none, or its own).
         const ControlMap::Binding *b = m_doc->controlMap()->binding(m_target);
@@ -175,7 +211,8 @@ ControlLearnDialog::~ControlLearnDialog()
         m_doc->controlMap()->stopListening();
 }
 
-QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Target &target, QWidget *parent)
+QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Target &target, QWidget *parent,
+                                   const ControlMap::Place &where)
 {
     if (menu == nullptr || doc == nullptr || !target.isValid())
         return nullptr;
@@ -192,10 +229,13 @@ QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Targ
         // A key in Design says whether it may fire now (docs: armed).
         if (ControlMap::isKey(*b) && doc->mode() == Doc::Design && doc->controlMap()->isArmed(target))
             control = tr("%1 · Armed").arg(control);
+        // Learned at a place: said, so the menu shows where it works.
+        if (b->place.scope != ControlMap::Everywhere)
+            control = tr("%1 · %2").arg(control, doc->controlMap()->placeName(b->place));
         text = tr("Trigger: %1…").arg(control);
     }
-    QAction *a = menu->addAction(text, parent, [doc, target, parent]() {
-        ControlLearnDialog d(doc, target, parent);
+    QAction *a = menu->addAction(text, parent, [doc, target, parent, where]() {
+        ControlLearnDialog d(doc, target, parent, where);
         d.exec();
     });
     a->setObjectName(QStringLiteral("learnTrigger"));
@@ -216,6 +256,46 @@ void ControlLearnDialog::setMode(ControlMap::Mode mode)
     if (i < 0)
         i = m_mode->findData(int(ControlMap::Toggle));
     m_mode->setCurrentIndex(i);
+}
+
+ControlMap::Place ControlLearnDialog::place() const
+{
+    const QVariantList v = m_place->currentData().toList();
+    if (v.count() != 2)
+        return ControlMap::Place();
+    return ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()), v.at(1).toUInt() };
+}
+
+void ControlLearnDialog::setPlace(const ControlMap::Place &place)
+{
+    for (int i = 0; i < m_place->count(); ++i)
+    {
+        const QVariantList v = m_place->itemData(i).toList();
+        if (v.count() == 2 && ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()), v.at(1).toUInt() } == place)
+        {
+            m_place->setCurrentIndex(i);
+            return;
+        }
+    }
+}
+
+QString ControlLearnDialog::placeText() const
+{
+    if (!hasControl() || m_target.type == ControlMap::EmergencyStopTarget)
+        return QString();
+    ControlMap *cm = m_doc->controlMap();
+    // The control as it will be: the others on it, and this one here.
+    QList<ControlMap::Binding> on;
+    for (const ControlMap::Binding &b : cm->bindingsOn(m_universe, m_channel))
+        if (b.target != m_target && (b.place != place() || m_stepThrough || m_collision->offersStepThrough()))
+            on << b;
+    ControlMap::Binding self;
+    self.universe = m_universe;
+    self.channel = m_channel;
+    self.target = m_target;
+    self.place = place();
+    on << self;
+    return tr("%1: %2.").arg(cm->controlName(m_universe, m_channel), cm->placesText(on));
 }
 
 void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
@@ -284,14 +364,31 @@ ControlOwners::Owner ControlLearnDialog::self() const
     o.kind = m_target.type == ControlMap::EmergencyStopTarget ? ControlOwners::EmergencyStop
                                                               : ControlOwners::Trigger;
     o.target = m_target;
+    o.place = m_target.type == ControlMap::EmergencyStopTarget ? ControlMap::Place() : place();
     return o;
 }
 
 void ControlLearnDialog::checkOwners()
 {
-    m_collision->refuse(m_doc, m_universe, m_channel,
-                        ControlOwners::others(m_doc, m_universe, m_channel, self()));
+    m_stepThrough = false;
+    const QList<ControlOwners::Owner> others = ControlOwners::others(m_doc, m_universe, m_channel, self());
+    m_collision->refuse(m_doc, m_universe, m_channel, others);
+    /* Triggers at this same place on a button: they may step through, one
+       per press (Q303). Not on a fader, and never beside the stop. */
+    const bool button = m_universe == ControlMap::KeyboardUniverse
+                        || m_doc->controlMap()->isButtonControl(m_universe, m_channel);
+    m_collision->setStepThrough(m_target.type != ControlMap::EmergencyStopTarget && button
+                                && ControlOwners::allTriggers(others));
     m_ok->setEnabled(hasControl() && !m_collision->isRefusing());
+}
+
+void ControlLearnDialog::slotStepThrough()
+{
+    if (!hasControl() || !m_collision->offersStepThrough())
+        return;
+    m_collision->clear();
+    m_stepThrough = true;
+    accept();
 }
 
 void ControlLearnDialog::slotMoveHere()
@@ -321,9 +418,11 @@ void ControlLearnDialog::updateText()
     if (!hasControl())
     {
         m_heard->setText(tr("Listening…"));
+        m_placeNote->clear();
         return;
     }
     m_heard->setText(tr("Control: <b>%1</b>").arg(cm->controlName(m_universe, m_channel).toHtmlEscaped()));
+    m_placeNote->setText(placeText());
 }
 
 void ControlLearnDialog::accept()
@@ -336,13 +435,14 @@ void ControlLearnDialog::accept()
     b.channel = m_channel;
     b.target = m_target;
     b.mode = mode();
+    b.place = m_target.type == ControlMap::EmergencyStopTarget ? ControlMap::Place() : place();
     ControlMap *cm = m_doc->controlMap();
     cm->stopListening();
     const ControlMap::Binding *had = cm->binding(m_target);
-    if (had != nullptr && had->universe == b.universe && had->channel == b.channel)
+    if (had != nullptr && had->universe == b.universe && had->channel == b.channel && had->place == b.place)
         cm->setMode(m_target, b.mode);
     else
-        cm->setBinding(b);
+        cm->setBinding(b, m_stepThrough);
     QDialog::accept();
 }
 

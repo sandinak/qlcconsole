@@ -2417,3 +2417,302 @@ void ControlMap_Test::aReleaseActsOnWhatWasPressed()
 }
 
 QTEST_GUILESS_MAIN(ControlMap_Test)
+
+/*****************************************************************************
+ * Places (Q295, Q296, Q303): a trigger is armed only while its place is live
+ *****************************************************************************/
+
+/* A scene learned "in cue 2" fires while cue 2 is the live cue and not
+   before or after it: the GO moves the control. Its light follows. */
+void ControlMap_Test::aTriggerAtACueIsArmedOnlyWhileItIsLive()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    Scene *a = scene("Strobe", 1);
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->setMode(Doc::Operate);
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });      // GO, everywhere
+    ControlMap::Binding placed{ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle,
+                                ControlMap::inCue(cues.at(1)) };
+    cm->setBinding(placed);
+    QCOMPARE(cm->binding(ControlMap::function(a->id()))->place, ControlMap::inCue(cues.at(1)));
+    QVERIFY(cm->placeName(ControlMap::inCue(cues.at(1))).startsWith("in cue 2"));
+    tick(2);
+
+    // Before the list runs: not live, dark, a press fires nothing and says so.
+    QVERIFY(!cm->isPlaceLive(placed.place));
+    QVERIFY(cm->bindingOn(0, kNote) == nullptr);
+    QCOMPARE(cm->controlLamp(0, kNote), ControlMap::LampOff);
+    QCOMPARE(lastLight(m_stub, kNote), 0);
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    send(kNote, 127);
+    tick();
+    QVERIFY(!a->isRunning());
+    QCOMPARE(blocked.count(), 1);
+    QVERIFY2(blocked.last().at(0).toString().contains("in cue 2"), qPrintable(blocked.last().at(0).toString()));
+    send(kNote, 0);
+
+    // GO, GO: cue 2 is live, the light is ready, a press fires it.
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(m_doc->showTree()->runningCue(listId), cues.at(0));
+    QVERIFY(!cm->isPlaceLive(placed.place));
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(m_doc->showTree()->runningCue(listId), cues.at(1));
+    QVERIFY(cm->isPlaceLive(placed.place));
+    QCOMPARE(lastLight(m_stub, kNote), 30);
+    send(kNote, 127);
+    tick();
+    QVERIFY(a->isRunning());
+    QCOMPARE(lastLight(m_stub, kNote), 255);
+    send(kNote, 0);
+
+    // The next GO leaves cue 2: the control disarms. What it started can
+    // still be let go (letting go is always allowed), and then it is dark.
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(m_doc->showTree()->runningCue(listId), cues.at(2));
+    QVERIFY(!cm->isPlaceLive(placed.place));
+    QCOMPARE(lastLight(m_stub, kNote), 255);        // still running: a press stops it
+    send(kNote, 127);
+    tick(3);
+    QVERIFY(!a->isRunning());
+    send(kNote, 0);
+    tick(2);
+    QCOMPARE(lastLight(m_stub, kNote), 0);
+    send(kNote, 127);                               // and nothing starts it here
+    tick();
+    QVERIFY(!a->isRunning());
+    send(kNote, 0);
+}
+
+/* One control, three triggers: everywhere, in the list, in cue 2. The
+   narrowest live place has it (cue > list > production > everywhere), and
+   the control's light is that one's. */
+void ControlMap_Test::theNarrowestArmedTriggerWins()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    quint32 prod = ShowTree::invalidId();
+    m_doc->showTree()->cueList(listId, &prod);
+    // A second list in the production: while it runs, Act 1 is not "the list we're in".
+    const quint32 other = m_doc->showTree()->addCueList(prod, "Act 2");
+    QVERIFY(other != ShowTree::invalidId());
+    {
+        ShowTree::Target t;
+        t.groups << m_doc->fixtureGroups().at(0)->id();
+        ShowTreeController *st = m_doc->showTree();
+        const quint32 c = st->addCue(other, -1, "Act 2 opens");
+        st->setLayerLook(c, st->addLayer(c, t), st->lookForPalette(m_doc->palettes().at(0)->id()));
+    }
+    Scene *wide = scene("Wide", 0);
+    Scene *song = scene("Song", 1);
+    Scene *cue2 = scene("Cue 2", 2);
+    Scene *show = scene("Show", 3);
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->setMode(Doc::Operate);
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote, ControlMap::function(wide->id()), ControlMap::Toggle, ControlMap::everywhere() });
+    cm->setBinding({ 0, kNote, ControlMap::function(song->id()), ControlMap::Toggle, ControlMap::inList(listId) });
+    cm->setBinding({ 0, kNote, ControlMap::function(cue2->id()), ControlMap::Toggle, ControlMap::inCue(cues.at(1)) });
+    cm->setBinding({ 0, 50, ControlMap::function(show->id()), ControlMap::Toggle, ControlMap::inProduction(prod) });
+    // Different places share the control: none replaced the others.
+    QCOMPARE(cm->bindingsOn(0, kNote).count(), 3);
+    QCOMPARE(cm->count(), 5);
+    QVERIFY2(cm->placesText(cm->bindingsOn(0, kNote)).startsWith("Scene: Wide everywhere, except Scene: Song in cue list Act 1"),
+             qPrintable(cm->placesText(cm->bindingsOn(0, kNote))));
+
+    auto owner = [cm]() {
+        const ControlMap::Binding *b = cm->bindingOn(0, kNote);
+        return b == nullptr ? quint32(0xFFFFFFFF) : b->target.id;
+    };
+    // Nothing runs: Act 1 is the production's main list, so the list has it.
+    QCOMPARE(owner(), song->id());
+    QVERIFY(cm->isPlaceLive(ControlMap::inProduction(prod)));
+    // Cue 1: still the list. Cue 2: the cue's.
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(owner(), song->id());
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(owner(), cue2->id());
+    QCOMPARE(cm->armedOn(0, kNote).count(), 1);
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(cue2->isRunning());
+    QVERIFY(!song->isRunning() && !wide->isRunning());
+    // The others' lights in the table are dark: a narrower place has it.
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::function(song->id()))), ControlMap::LampOff);
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::function(wide->id()))), ControlMap::LampOff);
+    cue2->stop(FunctionParent::master());
+    // Cue 3: back to the list.
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(owner(), song->id());
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(song->isRunning());
+    song->stop(FunctionParent::master());
+    // Act 1 stopped and Act 2 running: Act 1 is not live, so everywhere has it.
+    cm->setMode(ControlMap::cueList(listId), ControlMap::StopOnly);
+    send(10, 127); send(10, 0); tick(3);
+    Function *act2 = m_doc->function(m_doc->showTree()->cueList(other)->chaser);
+    QVERIFY(act2 != nullptr);
+    act2->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    QCOMPARE(owner(), wide->id());
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(wide->isRunning());
+    act2->stop(FunctionParent::master());
+    tick(2);
+}
+
+/* Two triggers at the same place on one button step through, one per press
+   (Q303); learned without Step Through, the second replaces the first. */
+void ControlMap_Test::twoAtOnePlaceStepThrough()
+{
+    Scene *a = scene("A", 0);
+    Scene *b = scene("B", 1);
+    Scene *c = scene("C", 2);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote, ControlMap::function(b->id()), ControlMap::Toggle }, true);
+    QCOMPARE(cm->count(), 2);
+    QCOMPARE(cm->armedOn(0, kNote).count(), 2);
+    QVERIFY(cm->placesText(cm->bindingsOn(0, kNote)).contains("each press the next"));
+
+    QCOMPARE(cm->bindingOn(0, kNote)->target, ControlMap::function(a->id()));
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(a->isRunning() && !b->isRunning());
+    QCOMPARE(cm->bindingOn(0, kNote)->target, ControlMap::function(b->id()));
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(b->isRunning());
+    send(kNote, 127); send(kNote, 0); tick(3);       // A again: it toggles off
+    QVERIFY(!a->isRunning() && b->isRunning());
+
+    // Without Step Through, a third at the same place replaces both.
+    cm->setBinding({ 0, kNote, ControlMap::function(c->id()), ControlMap::Toggle });
+    QCOMPARE(cm->count(), 1);
+    QCOMPARE(cm->bindingsOn(0, kNote).first().target, ControlMap::function(c->id()));
+}
+
+/* Saved as Scope= and ScopeOf= (as a hit's) and loaded back; a show saved
+   before places loads with every trigger everywhere, firing as it did. */
+void ControlMap_Test::placesAreSavedAndAnOldShowIsEverywhere()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    quint32 prod = ShowTree::invalidId();
+    m_doc->showTree()->cueList(listId, &prod);
+    Scene *a = scene("A", 0);
+    Scene *b = scene("B", 1);
+    Scene *c = scene("C", 2);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote, ControlMap::function(b->id()), ControlMap::Momentary, ControlMap::inCue(cues.at(1)) });
+    cm->setBinding({ 0, 7, ControlMap::function(c->id()), ControlMap::Toggle, ControlMap::inProduction(prod) });
+    cm->setBinding({ 0, 8, ControlMap::cueList(listId), ControlMap::Toggle, ControlMap::inList(listId) });
+    const QList<ControlMap::Binding> before = cm->bindings();
+    const QByteArray xml = saveShow(m_doc);
+    QVERIFY2(xml.contains(QString("Scope=\"Cue\" ScopeOf=\"%1\"").arg(cues.at(1)).toUtf8()), xml.constData());
+    QVERIFY(xml.contains("Scope=\"Production\""));
+    QVERIFY(xml.contains("Scope=\"List\""));
+    Doc *other = new Doc(this);
+    QVERIFY(loadShow(other, xml));
+    QCOMPARE(other->controlMap()->bindings(), before);
+    QCOMPARE(other->controlMap()->bindingsOn(0, kNote).count(), 2);
+    delete other;
+
+    // A show from before places: no Scope, so everywhere -- and a press fires.
+    const QByteArray old =
+        QString("<ControlMap><Trigger Universe=\"0\" Channel=\"%1\" Target=\"Function\" ID=\"%2\"/>"
+                "<Trigger Universe=\"0\" Channel=\"7\" Target=\"Function\" ID=\"%3\" Mode=\"Momentary\"/>"
+                "</ControlMap>").arg(kNote).arg(a->id()).arg(c->id()).toUtf8();
+    QXmlStreamReader r(old);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(cm->loadXML(r));
+    QCOMPARE(cm->count(), 2);
+    for (const ControlMap::Binding &bd : cm->bindings())
+        QCOMPARE(bd.place, ControlMap::everywhere());
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(a->isRunning());
+    // Saved again: still without a place, as an older build writes it.
+    QVERIFY(!saveShow(m_doc).contains("Scope="));
+}
+
+/* The emergency stop is everywhere, always, alone on its control and above
+   every place: no GO, no place, no trigger takes it. */
+void ControlMap_Test::theStopIsEverywhereAndAboveEveryPlace()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    Scene *a = scene("A", 0);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setStopDebounceMs(0);
+    // Asked for at a place: it is everywhere all the same.
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle, ControlMap::inCue(cues.at(0)) });
+    QCOMPARE(cm->binding(ControlMap::emergencyStop())->place, ControlMap::everywhere());
+    QVERIFY(!cm->setPlace(ControlMap::emergencyStop(), ControlMap::inCue(cues.at(0))));
+    cm->setBinding({ 0, kNote, ControlMap::function(a->id()), ControlMap::Toggle, ControlMap::inCue(cues.at(0)) });
+    QCOMPARE(cm->controlLamp(0, kStopNote), ControlMap::LampStandby);
+
+    // Its control is the stop's alone: a trigger there replaces it (Learn
+    // refuses that before it gets here), and the stop back replaces that.
+    Scene *b = scene("B", 1);
+    cm->setBinding({ 0, kStopNote, ControlMap::function(b->id()), ControlMap::Toggle, ControlMap::inList(listId) });
+    QVERIFY(cm->binding(ControlMap::emergencyStop()) == nullptr);
+    cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QCOMPARE(cm->bindingsOn(0, kStopNote).count(), 1);
+    QVERIFY(cm->binding(ControlMap::function(b->id())) == nullptr);
+
+    // Whatever place is live, in either mode: ALL OFF.
+    for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        m_doc->setMode(mode);
+        a->start(m_doc->masterTimer(), FunctionParent::master());
+        tick(2);
+        QVERIFY(a->isRunning());
+        QVERIFY(!cm->isPlaceLive(ControlMap::inCue(cues.at(0))));
+        send(kStopNote, 127);
+        tick(3);
+        QVERIFY(!a->isRunning());
+        send(kStopNote, 0);
+        tick();
+    }
+    // A stop in a file with a place loads everywhere.
+    const QByteArray xml = "<ControlMap><Trigger Universe=\"0\" Channel=\"40\" Target=\"EmergencyStop\" "
+                           "Scope=\"Cue\" ScopeOf=\"7\"/></ControlMap>";
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(cm->loadXML(r));
+    QCOMPARE(cm->binding(ControlMap::emergencyStop())->place, ControlMap::everywhere());
+}
+
+/* A computer key at a place follows the same rule: in Operate it fires only
+   while its place is live, and in Design while the place is selected. */
+void ControlMap_Test::aKeyAtAPlaceFollowsItToo()
+{
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    Scene *a = scene("A", 0);
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f5 = ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f5, ControlMap::function(a->id()), ControlMap::Toggle,
+                     ControlMap::inCue(cues.at(1)) });
+    m_doc->setMode(Doc::Operate);
+    QSignalSpy blocked(cm, &ControlMap::blocked);
+    QVERIFY(!cm->handleKey(f5, true));               // not live: the key goes on
+    QCOMPARE(blocked.count(), 1);
+    QVERIFY(!a->isRunning());
+    // Design, the cue selected in the Show Tree: armed there (a scene key is
+    // still Operate-only, so it says so rather than fire).
+    m_doc->setMode(Doc::Design);
+    cm->setSelectedTargets({ ControlMap::cue(cues.at(1)) });
+    QVERIFY(cm->isPlaceLive(ControlMap::inCue(cues.at(1))));
+    QVERIFY(cm->bindingOn(ControlMap::KeyboardUniverse, f5) != nullptr);
+    cm->setSelectedTargets({});
+    QVERIFY(!cm->isPlaceLive(ControlMap::inCue(cues.at(1))));
+    // Operate, cue 2 live: it fires.
+    m_doc->setMode(Doc::Operate);
+    cm->setBinding({ 0, 11, ControlMap::cue(cues.at(1)), ControlMap::Toggle });    // jump to cue 2
+    send(11, 127); send(11, 0);
+    tick(3);
+    QCOMPARE(m_doc->showTree()->runningCue(listId), cues.at(1));
+    QVERIFY(cm->handleKey(f5, true));
+    cm->handleKey(f5, false);
+    tick();
+    QVERIFY(a->isRunning());
+}

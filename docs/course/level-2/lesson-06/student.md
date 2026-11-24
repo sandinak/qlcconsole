@@ -84,9 +84,13 @@ modifiers), and pick how it behaves. It fires in **Operate**; in Design,
 only while it is armed: selected in the Show Tree, or in the Run tab's cue
 list. It never fires while a text field, the
 command line or an editor has the keyboard, and a key the app already uses
-is refused with the reason. One control does one job: a key or button
-that already fires something else is refused, naming what it does now,
-and **Move It Here** takes it over.
+is refused with the reason. One control does one job **in one place**:
+**Works** in the Learn dialog says where the trigger is live -- the cue or
+list you right-clicked, or **Everywhere**. A key with a trigger at the
+same place is refused, naming it (**Move It Here** takes it over; **Step
+Through Them** keeps both, a press each). At another place it is not: the
+narrowest live place fires, so **F5** can be Red Stab in the verse and a
+blackout everywhere else.
 
 Learn **F5** to **Red Stab**. In Operate, with the Verse up, press it.
 

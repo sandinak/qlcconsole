@@ -44,7 +44,7 @@
 
 namespace
 {
-enum Column { ControlCol = 0, TargetCol, ModeCol, LampCol };
+enum Column { ControlCol = 0, TargetCol, PlaceCol, ModeCol, LampCol };
 const int TargetRole = Qt::UserRole;
 const int TypeRole = Qt::UserRole + 1;
 }
@@ -75,11 +75,17 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_featureOff->hide();
     lay->addWidget(m_featureOff);
 
-    m_table = new QTableWidget(0, 4, this);
+    m_table = new QTableWidget(0, 5, this);
     m_table->setObjectName(QStringLiteral("controlMapTable"));
-    m_table->setHorizontalHeaderLabels({ tr("Control"), tr("Fires"), tr("When pressed"), tr("Its light") });
+    m_table->setHorizontalHeaderLabels({ tr("Control"), tr("Fires"), tr("Works"), tr("When pressed"),
+                                         tr("Its light") });
+    m_table->horizontalHeaderItem(PlaceCol)->setToolTip(
+        tr("Where the trigger works (its place): only while that cue is live, that cue list runs or that "
+           "production is current -- or everywhere. One control can have a trigger in each place: the "
+           "narrowest live place has it."));
     m_table->horizontalHeader()->setSectionResizeMode(ControlCol, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(TargetCol, QHeaderView::Stretch);
+    m_table->horizontalHeader()->setSectionResizeMode(PlaceCol, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(ModeCol, QHeaderView::ResizeToContents);
     m_table->horizontalHeader()->setSectionResizeMode(LampCol, QHeaderView::ResizeToContents);
     m_table->verticalHeader()->hide();
@@ -173,12 +179,16 @@ void ControlMapPanel::refresh()
         c->setData(TypeRole, int(b.target.type));
         m_table->setItem(r, ControlCol, c);
         QTableWidgetItem *t = new QTableWidgetItem(cm->targetName(b.target));
+        t->setToolTip(cm->targetName(b.target));
         if (!cm->targetExists(b.target))
             t->setForeground(Qt::gray);
         m_table->setItem(r, TargetCol, t);
 
         QComboBox *mode = new QComboBox(m_table);
         mode->setObjectName(QStringLiteral("controlMapMode"));
+        // Narrow: what it fires keeps the room; the list shows every name in full.
+        mode->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        mode->setMinimumContentsLength(8);
         const bool list = b.target.type == ControlMap::CueListTarget || b.target.type == ControlMap::CueTarget;
         const bool estop = b.target.type == ControlMap::EmergencyStopTarget;
         const QList<ControlMap::Mode> modes = estop
@@ -197,6 +207,34 @@ void ControlMapPanel::refresh()
             m_doc->controlMap()->setMode(target, ControlMap::Mode(mode->currentData().toInt()));
         });
         m_table->setCellWidget(r, ModeCol, mode);
+
+        // Works: its place (Q295), changed here as at Learn.
+        QComboBox *place = new QComboBox(m_table);
+        place->setObjectName(QStringLiteral("controlMapPlace"));
+        place->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        place->setMinimumContentsLength(10);
+        QList<ControlMap::Place> places = estop ? QList<ControlMap::Place>{ ControlMap::Place() }
+                                                : cm->placeChoices(b.place);
+        if (!places.contains(b.place))
+            places.prepend(b.place);
+        for (const ControlMap::Place &p : std::as_const(places))
+        {
+            QString name = cm->placeName(p);
+            if (!name.isEmpty())
+                name[0] = name.at(0).toUpper();
+            place->addItem(name, QVariantList{ int(p.scope), p.id });
+            if (p == b.place)
+                place->setCurrentIndex(place->count() - 1);
+        }
+        place->setToolTip(place->currentText());
+        place->setEnabled(!estop && places.count() > 1);
+        connect(place, QOverload<int>::of(&QComboBox::activated), this, [this, place, target](int) {
+            const QVariantList v = place->currentData().toList();
+            if (v.count() == 2)
+                m_doc->controlMap()->setPlace(target, ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()),
+                                                                         v.at(1).toUInt() });
+        });
+        m_table->setCellWidget(r, PlaceCol, place);
 
         m_table->setItem(r, LampCol, new QTableWidgetItem());
     }
@@ -233,6 +271,15 @@ QString ControlMapPanel::lampText(const ControlMap::Binding &b) const
     if (cm->isBlinking(b))
         return ControlMap::lampName(ControlMap::LampHeld);
     const ControlMap::Lamp lamp = cm->lamp(b);
+    // Dark because the control is another trigger's here now (Q296), or its
+    // place is not live: said, so the table answers "why is it dark".
+    if (lamp == ControlMap::LampOff && b.target.type != ControlMap::EmergencyStopTarget
+        && cm->targetExists(b.target) && !cm->isArmedOnControl(b))
+    {
+        if (!cm->isPlaceLive(b.place))
+            return tr("Dark (not live here)");
+        return tr("Dark (a narrower place has it)");
+    }
     if (lamp == ControlMap::LampStandby && !cm->dimWhenReady())
         return tr("Ready (dark)");
     return ControlMap::lampName(lamp);

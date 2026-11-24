@@ -49,7 +49,9 @@ public:
     /** The row keys, in order: "map", "estop", "encoder", "vc", "masters",
      *  "pmj", "web", "pads", "collisions" (Who has it now: every control
      *  two listeners have, with how to fix it; no Set Up…, and shown only
-     *  while there is one). */
+     *  while there is one), "places" (Triggers by place: each control with
+     *  a trigger at a place, what it does where and which trigger has it
+     *  now, Q296; read only, shown only while there is one). */
     static QStringList keys();
 
     /** The status line of row @p key, as the row shows it. */
@@ -79,6 +81,7 @@ private:
     QString encoderText() const;
     QString stopText() const;
     QString collisionsText() const;
+    QString placesText() const;
 
 protected:
     void showEvent(QShowEvent *event) override;

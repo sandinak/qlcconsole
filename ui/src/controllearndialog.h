@@ -48,22 +48,32 @@ class Doc;
  * is refused, saying why (KeyTriggers::refusal()); Esc, Tab, Return, Space
  * and the arrows keep working the dialog.
  *
- * A control something else already listens to (another trigger, a Virtual
- * Console widget, the encoder bank, a master, the PMJ...) is refused,
- * naming it (ControlOwners, board Q297), with Move It Here: that takes it
- * from there and binds it here in one go.
+ * A control something else already listens to (another trigger at the same
+ * place, a Virtual Console widget, the encoder bank, a master, the PMJ...)
+ * is refused, naming it (ControlOwners, board Q297), with Move It Here: that
+ * takes it from there and binds it here in one go. Two triggers at the same
+ * place on a button may Step Through Them instead (Q303).
+ *
+ * Works: the trigger's place (Q295) -- where it was learned (the cue, cue
+ * list or hit's place right-clicked) by default, the places around it, the
+ * cue live now, and everywhere. A line under it says what the control does
+ * where once it is learned ("Scene: Warm everywhere, except Hit: Stab in cue
+ * 2.3"): the narrowest live place has it (Q296).
  */
 class QLC_UI_EXPORT ControlLearnDialog final : public QDialog
 {
     Q_OBJECT
 
 public:
-    ControlLearnDialog(Doc *doc, const ControlMap::Target &target, QWidget *parent = nullptr);
+    /** @a where: the place it is learned at (the default of Works). */
+    ControlLearnDialog(Doc *doc, const ControlMap::Target &target, QWidget *parent = nullptr,
+                       const ControlMap::Place &where = ControlMap::Place());
     ~ControlLearnDialog();
 
     /** Adds "Learn trigger…" (or, bound, "Trigger: <control>…") for
      *  @a target to @a menu; choosing it opens the dialog. */
-    static QAction *addTo(QMenu *menu, Doc *doc, const ControlMap::Target &target, QWidget *parent);
+    static QAction *addTo(QMenu *menu, Doc *doc, const ControlMap::Target &target, QWidget *parent,
+                          const ControlMap::Place &where = ControlMap::Place());
 
     /** Whether a control is chosen (heard, or the one already bound). */
     bool hasControl() const { return m_universe != 0xFFFFFFFF; }
@@ -71,6 +81,11 @@ public:
     quint32 channel() const { return m_channel; }
     ControlMap::Mode mode() const;
     void setMode(ControlMap::Mode mode);
+    /** Works: the place chosen. */
+    ControlMap::Place place() const;
+    void setPlace(const ControlMap::Place &place);
+    /** What the control will do where, once learned (empty: no control yet). */
+    QString placeText() const;
 
 public slots:
     void accept() override;
@@ -89,6 +104,8 @@ private slots:
     void slotRemove();
     /** Move It Here: the owners let go, then this binds it (accept()). */
     void slotMoveHere();
+    /** Step Through Them: kept beside the one(s) at this place (Q303). */
+    void slotStepThrough();
 
 private:
     void updateText();
@@ -106,6 +123,9 @@ private:
     QLabel *m_note;
     QLabel *m_keyNote;
     QComboBox *m_mode;
+    QComboBox *m_place;
+    QLabel *m_placeNote;
+    bool m_stepThrough = false;
     QPushButton *m_ok;
     QPushButton *m_remove;
     ControlCollisionBox *m_collision;

@@ -257,7 +257,7 @@ void ControlMapUi_Test::theEmergencyStopLearnsOneButtonWithASecondPress()
     QTableWidget *table = panel.table();
     QCOMPARE(table->rowCount(), 1);
     QCOMPARE(table->item(0, 1)->text(), QString("Emergency stop (ALL OFF)"));
-    QComboBox *how = qobject_cast<QComboBox *>(table->cellWidget(0, 2));
+    QComboBox *how = qobject_cast<QComboBox *>(table->cellWidget(0, 3));
     QVERIFY(how != nullptr && !how->isEnabled() && how->count() == 1);
 
     // Learning again from the dialog shows the control it has.
@@ -382,11 +382,12 @@ void ControlMapUi_Test::thePanelSaysWhatEachLightShows()
     cm->setBinding({ 0, 190, ControlMap::emergencyStop(), ControlMap::StartOnly });
     QTableWidget *table = panel.table();
     QCOMPARE(table->rowCount(), 2);
-    QCOMPARE(table->columnCount(), 4);
-    QCOMPARE(table->horizontalHeaderItem(3)->text(), QString("Its light"));
-    QCOMPARE(table->item(0, 3)->text(), QString("Ready"));
+    QCOMPARE(table->columnCount(), 5);
+    QCOMPARE(table->horizontalHeaderItem(4)->text(), QString("Its light"));
+    QCOMPARE(table->horizontalHeaderItem(2)->text(), QString("Works"));
+    QCOMPARE(table->item(0, 4)->text(), QString("Ready"));
     // The stop is ready at every moment: it is never dark while the show runs.
-    QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
+    QCOMPARE(table->item(1, 4)->text(), QString("Ready"));
 
     /* The emergency stop struck: the stop's own row says Stopped and the
        scene's row is dark until the next GO -- and the table is not
@@ -394,12 +395,12 @@ void ControlMapUi_Test::thePanelSaysWhatEachLightShows()
        control's row says is ControlMap_Test's: it needs the timer.) */
     QSignalSpy rebuilt(&panel, &ControlMapPanel::summaryChanged);
     m_doc->outputRuleKeeper()->emergencyStop();
-    QTRY_COMPARE(table->item(1, 3)->text(), QString("Stopped"));
-    QCOMPARE(table->item(0, 3)->text(), QString("Dark"));
+    QTRY_COMPARE(table->item(1, 4)->text(), QString("Stopped"));
+    QCOMPARE(table->item(0, 4)->text(), QString("Dark"));
     QCOMPARE(rebuilt.count(), 0);
     m_doc->outputRuleKeeper()->noteGo();
-    QTRY_COMPARE(table->item(0, 3)->text(), QString("Ready"));
-    QCOMPARE(table->item(1, 3)->text(), QString("Ready"));
+    QTRY_COMPARE(table->item(0, 4)->text(), QString("Ready"));
+    QCOMPARE(table->item(1, 4)->text(), QString("Ready"));
 
     // The dim switch: on a pad that cannot dim, a ready control stays dark,
     // and the row says which.
@@ -408,7 +409,7 @@ void ControlMapUi_Test::thePanelSaysWhatEachLightShows()
     QVERIFY(dim->isChecked());
     dim->setChecked(false);
     QVERIFY(!cm->dimWhenReady());
-    QTRY_COMPARE(table->item(0, 3)->text(), QString("Ready (dark)"));
+    QTRY_COMPARE(table->item(0, 4)->text(), QString("Ready (dark)"));
 }
 
 /* A control that can never light says so, rather than leaving a column
@@ -427,8 +428,8 @@ void ControlMapUi_Test::thePanelSaysWhenAControlHasNoLight()
                      ControlMap::function(b->id()), ControlMap::Toggle });
     QTableWidget *table = panel.table();
     QCOMPARE(table->rowCount(), 2);
-    QCOMPARE(table->item(0, 3)->text(), QString("No feedback line"));
-    QCOMPARE(table->item(1, 3)->text(), QString("A key has no light"));
+    QCOMPARE(table->item(0, 4)->text(), QString("No feedback line"));
+    QCOMPARE(table->item(1, 4)->text(), QString("A key has no light"));
 }
 
 void ControlMapUi_Test::anEncoderLearnStopsListeningWhenThePanelHides()
@@ -537,7 +538,7 @@ void ControlMapUi_Test::thePanelListsChangesAndRemoves()
     QVERIFY(table->item(1, 0)->text().contains("Channel 3"));
 
     // The mode, from the table.
-    QComboBox *mode = qobject_cast<QComboBox *>(table->cellWidget(0, 2));
+    QComboBox *mode = qobject_cast<QComboBox *>(table->cellWidget(0, 3));
     QVERIFY(mode != nullptr);
     const int momentary = mode->findData(int(ControlMap::Momentary));
     mode->setCurrentIndex(momentary);
@@ -1133,7 +1134,7 @@ void ControlMapUi_Test::theHubListsControlsWithTwoJobs()
     QVERIFY2(hub->summary().contains("1 control with two jobs"), qPrintable(hub->summary()));
     QVERIFY(!hub->findChild<QLabel *>("surfaceCollisionsStatus")->isHidden());
     QCOMPARE(ControlOwners::collisions(m_doc).count(), 1);
-    QCOMPARE(ControlOwners::collisions(m_doc).first().owners.first().place, ControlOwners::Everywhere);
+    QVERIFY(ControlOwners::collisions(m_doc).first().owners.first().place == ControlMap::everywhere());
 
     // Fixed (the trigger removed): one job again.
     cm->removeBinding(ControlMap::function(a->id()));
@@ -1196,6 +1197,362 @@ void ControlMapUi_Test::collisionShots()
     }
 }
 
+/****************************************************************************
+ * Places for triggers (CONTROL_SCOPES.md §8 phase 3, board Q295, Q296, Q303)
+ ****************************************************************************/
+
+namespace
+{
+/** A production with a cue list of two cues; @a cues: their ids. */
+quint32 placesShow(Doc *doc, QList<quint32> *cues, quint32 *prod = nullptr)
+{
+    ShowTreeController *st = doc->showTree();
+    const quint32 p = st->addProduction("Show");
+    const quint32 list = st->addCueList(p, "Act 1");
+    *cues << st->addCue(list, -1, "Top") << st->addCue(list, 0, "Chorus");
+    if (prod != nullptr)
+        *prod = p;
+    return list;
+}
+
+/** Opens a context menu (@a open), chooses Learn Trigger… on it and returns
+ *  the place its dialog offers first (Works), and its text. */
+ControlMap::Place placeLearnOffers(const std::function<void()> &open, QString *text, bool *seen)
+{
+    ControlMap::Place place;
+    *seen = false;
+    QTimer dialogWatch;
+    dialogWatch.setInterval(10);
+    QObject::connect(&dialogWatch, &QTimer::timeout, [&]() {
+        ControlLearnDialog *d = qobject_cast<ControlLearnDialog *>(QApplication::activeModalWidget());
+        if (d == nullptr)
+            return;
+        dialogWatch.stop();
+        place = d->place();
+        *text = d->findChild<QComboBox *>("learnPlace")->currentText();
+        *seen = true;
+        d->reject();
+    });
+    QTimer driver;
+    driver.setInterval(10);
+    QObject::connect(&driver, &QTimer::timeout, [&]() {
+        QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (menu == nullptr)
+            return;
+        driver.stop();
+        for (QAction *a : menu->actions())
+            if (a->objectName() == QLatin1String("learnTrigger"))
+            {
+                dialogWatch.start();
+                a->trigger();
+                break;
+            }
+        menu->close();
+    });
+    driver.start();
+    open();
+    return place;
+}
+}
+
+/* Learn Trigger… offers the place (Works): where it was learned by default,
+   the places around it, and everywhere -- the old behaviour, kept. */
+void ControlMapUi_Test::theLearnDialogOffersThePlace()
+{
+    QList<quint32> cues;
+    quint32 prod = 0;
+    const quint32 list = placesShow(m_doc, &cues, &prod);
+    ControlMap *cm = m_doc->controlMap();
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cue(cues.at(0)), nullptr, ControlMap::inCue(cues.at(0)));
+        QComboBox *works = d.findChild<QComboBox *>("learnPlace");
+        QVERIFY(works != nullptr && works->isEnabled());
+        QVERIFY(d.place() == ControlMap::inCue(cues.at(0)));
+        // The cue, its list, its production, everywhere.
+        QCOMPARE(works->count(), 4);
+        QVERIFY2(works->itemText(0).startsWith("In cue "), qPrintable(works->itemText(0)));
+        QCOMPARE(works->itemText(1), QString("In cue list Act 1"));
+        QCOMPARE(works->itemText(2), QString("In production Show"));
+        QCOMPARE(works->itemText(3), QString("Everywhere"));
+        QVERIFY(d.learnKey(Qt::Key_F5, Qt::NoModifier));
+        QVERIFY2(d.findChild<QLabel *>("learnPlaceNote")->text().contains("in cue"),
+                 qPrintable(d.findChild<QLabel *>("learnPlaceNote")->text()));
+        d.accept();
+    }
+    QVERIFY(cm->binding(ControlMap::cue(cues.at(0)))->place == ControlMap::inCue(cues.at(0)));
+    // A list: the list, its production, everywhere; another place chosen is kept.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(list), nullptr, ControlMap::inList(list));
+        QCOMPARE(d.findChild<QComboBox *>("learnPlace")->count(), 3);
+        d.setPlace(ControlMap::inProduction(prod));
+        QVERIFY(d.learnKey(Qt::Key_F7, Qt::NoModifier));
+        d.accept();
+    }
+    QVERIFY(cm->binding(ControlMap::cueList(list))->place == ControlMap::inProduction(prod));
+    // Learned with no place (a scene from Build): everywhere, as before places.
+    Scene *a = scene("Warm");
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        QVERIFY(d.place() == ControlMap::everywhere());
+        QVERIFY(d.learnKey(Qt::Key_F8, Qt::NoModifier));
+        d.accept();
+    }
+    QVERIFY(cm->binding(ControlMap::function(a->id()))->place == ControlMap::everywhere());
+    // The emergency stop: everywhere, and nothing else to choose.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::emergencyStop());
+        QVERIFY(!d.findChild<QComboBox *>("learnPlace")->isEnabled());
+        QVERIFY(d.place() == ControlMap::everywhere());
+    }
+    // The menu says where a learned one works.
+    QWidget owner;
+    QMenu m;
+    QAction *act = ControlLearnDialog::addTo(&m, m_doc, ControlMap::cue(cues.at(0)), &owner);
+    QVERIFY2(act->text().contains("· in cue"), qPrintable(act->text()));
+}
+
+/* Right-click ▸ Learn Trigger… in the Show Tree: the place is where you
+   right-clicked -- the cue, the list, the hit's own place. */
+void ControlMapUi_Test::theShowTreeLearnsWhereYouRightClicked()
+{
+    QList<quint32> cues;
+    const quint32 list = placesShow(m_doc, &cues);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 hit = st->addHit(ShowTree::HitScope::Cue, cues.at(1), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(900, 700);
+    view.show();
+    QCoreApplication::processEvents();
+    view.tree()->expandAll();
+    auto offered = [&view](quint32 id, QString *text) {
+        bool seen = false;
+        if (!view.selectNode(id))
+            return ControlMap::Place{ ControlMap::Everywhere, 0 };
+        QTreeWidgetItem *item = view.tree()->currentItem();
+        view.tree()->scrollToItem(item);
+        const QPoint pos = view.tree()->visualItemRect(item).center();
+        const ControlMap::Place p = placeLearnOffers([&]() {
+            QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos));
+        }, text, &seen);
+        return seen ? p : ControlMap::Place{ ControlMap::Everywhere, 0 };
+    };
+    QString text;
+    QVERIFY(offered(list, &text) == ControlMap::inList(list));
+    QCOMPARE(text, QString("In cue list Act 1"));
+    QVERIFY(offered(cues.at(0), &text) == ControlMap::inCue(cues.at(0)));
+    QVERIFY2(text.startsWith("In cue "), qPrintable(text));
+    QVERIFY(offered(hit, &text) == ControlMap::inCue(cues.at(1)));
+}
+
+/* Q296: a trigger at another place shares the control, and Learn says which
+   one has it where. Only the same place is refused -- and a button may Step
+   Through Them there (Q303). */
+void ControlMapUi_Test::onlyTheSamePlaceIsRefused()
+{
+    QList<quint32> cues;
+    placesShow(m_doc, &cues);
+    Scene *warm = scene("Warm");
+    Scene *strobe = scene("Strobe");
+    Scene *cool = scene("Cool");
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f6 = ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(warm->id()), ControlMap::Toggle });
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(strobe->id()), nullptr, ControlMap::inCue(cues.at(1)));
+        QVERIFY(d.learnKey(Qt::Key_F6, Qt::NoModifier));
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>();
+        QVERIFY2(!box->isRefusing(), qPrintable(box->text()));
+        const QString note = d.findChild<QLabel *>("learnPlaceNote")->text();
+        QVERIFY2(note.contains("Scene: Warm everywhere, except Scene: Strobe in cue"), qPrintable(note));
+        // Everywhere instead: the same place as Warm, so refused.
+        d.setPlace(ControlMap::everywhere());
+        QVERIFY(box->isRefusing());
+        QVERIFY2(box->text().contains("Warm"), qPrintable(box->text()));
+        d.setPlace(ControlMap::inCue(cues.at(1)));
+        QVERIFY(!box->isRefusing());
+        d.accept();
+    }
+    QCOMPARE(cm->bindingsOn(ControlMap::KeyboardUniverse, f6).count(), 2);
+    // A third, everywhere: refused (Warm is there), with Step Through Them.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(cool->id()));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        QVERIFY(d.learnKey(Qt::Key_F6, Qt::NoModifier));
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>();
+        QVERIFY(box->isRefusing());
+        QVERIFY2(!box->text().contains("Strobe"), qPrintable(box->text()));    // another place: not in the way
+        // The key by its name (not its low bits, "Key · 5").
+        QVERIFY2(box->text().startsWith("Key · F6 already does Scene: Cool") == false
+                 && box->text().startsWith("Key · F6 already does Scene: Warm"), qPrintable(box->text()));
+        QVERIFY(box->offersStepThrough());
+        QVERIFY(box->stepButton()->isVisible());
+        QCOMPARE(box->stepButton()->text(), QString("Step Through Them"));
+        QTest::mouseClick(box->stepButton(), Qt::LeftButton);
+    }
+    QCOMPARE(cm->bindingsOn(ControlMap::KeyboardUniverse, f6).count(), 3);
+    QCOMPARE(cm->armedOn(ControlMap::KeyboardUniverse, f6).count(), 2);     // Warm and Cool step
+    // Another listener is refused whatever the place: one job per control.
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 60, "House lights");
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(strobe->id()), nullptr, ControlMap::inCue(cues.at(0)));
+        cm->handleInput(0, 60, 127);
+        QCoreApplication::processEvents();
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>();
+        QVERIFY(box->isRefusing());
+        QVERIFY(!box->offersStepThrough());
+        cm->handleInput(0, 60, 0);
+    }
+}
+
+/* The Control Map's Works column and the hub's Triggers by place row: each
+   trigger's place, and which one has the control now. */
+void ControlMapUi_Test::theTableAndTheHubShowEachPlace()
+{
+    QList<quint32> cues;
+    placesShow(m_doc, &cues);
+    Scene *warm = scene("Warm");
+    Scene *strobe = scene("Strobe");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 60, ControlMap::function(strobe->id()), ControlMap::Toggle, ControlMap::inCue(cues.at(1)) });
+
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QTableWidget *table = panel.table();
+    QCOMPARE(table->rowCount(), 2);
+    QComboBox *works0 = qobject_cast<QComboBox *>(table->cellWidget(0, 2));
+    QComboBox *works1 = qobject_cast<QComboBox *>(table->cellWidget(1, 2));
+    QVERIFY(works0 != nullptr && works1 != nullptr);
+    QCOMPARE(works0->currentText(), QString("Everywhere"));
+    QVERIFY2(works1->currentText().startsWith("In cue "), qPrintable(works1->currentText()));
+    // Moved from the table: in the list.
+    const int at = works1->findText("In cue list Act 1");
+    QVERIFY(at >= 0);
+    works1->setCurrentIndex(at);
+    emit works1->activated(at);
+    QVERIFY(cm->binding(ControlMap::function(strobe->id()))->place.scope == ControlMap::ListPlace);
+    cm->setPlace(ControlMap::function(strobe->id()), ControlMap::inCue(cues.at(1)));
+
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    hub->refresh();
+    QVERIFY(!hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());
+    QString text = hub->status("places");
+    QVERIFY2(text.contains("Scene: Warm everywhere, except Scene: Strobe in cue"), qPrintable(text));
+    QVERIFY2(text.contains("Now: Scene: Warm (everywhere)"), qPrintable(text));
+    // Design, cue 2 selected in the Show Tree: its trigger has the control now.
+    cm->setSelectedTargets({ ControlMap::cue(cues.at(1)) });
+    QTRY_VERIFY2(hub->status("places").contains("Now: Scene: Strobe (in cue"), qPrintable(hub->status("places")));
+    cm->setSelectedTargets({});
+    QTRY_VERIFY(hub->status("places").contains("Now: Scene: Warm"));
+    // All everywhere again (an old show): the row goes.
+    cm->removeBinding(ControlMap::function(strobe->id()));
+    hub->refresh();
+    QVERIFY(hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());
+}
+
+/* The desk's light follows what is armed now: the control shows the
+   narrowest armed trigger's light, and the table says why one is dark. */
+void ControlMapUi_Test::theLightFollowsWhatIsArmedNow()
+{
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY2(!m_doc->ioPluginCache()->plugins().isEmpty(),
+             "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    QLCIOPlugin *stub = m_doc->ioPluginCache()->plugins().at(0);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));
+
+    QList<quint32> cues;
+    placesShow(m_doc, &cues);
+    Scene *warm = scene("Warm");
+    Scene *strobe = scene("Strobe");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(strobe->id()), ControlMap::Toggle, ControlMap::inCue(cues.at(1)) });
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QTableWidget *table = panel.table();
+    // Alone, at a cue that is not live: dark, and the table says why.
+    QCOMPARE(cm->controlLamp(0, 60), ControlMap::LampOff);
+    QCOMPARE(table->item(0, 4)->text(), QString("Dark (not live here)"));
+    // Everywhere beside it: that one has the control, so it is ready.
+    cm->setBinding({ 0, 60, ControlMap::function(warm->id()), ControlMap::Toggle });
+    QCOMPARE(cm->controlLamp(0, 60), ControlMap::LampStandby);
+    // Cue 2 selected (Design): Strobe has it; Warm is dark under it.
+    cm->setSelectedTargets({ ControlMap::cue(cues.at(1)) });
+    QTRY_COMPARE(table->item(1, 4)->text(), QString("Dark (a narrower place has it)"));
+    QCOMPARE(table->item(0, 4)->text(), QString("Ready"));
+    QCOMPARE(cm->bindingOn(0, 60)->target, ControlMap::function(strobe->id()));
+    cm->setSelectedTargets({});
+}
+
+/* With QLC_SHOT_DIR: Learn with Works and the line that says who has the
+   control where; the Control Map table's Works; the hub's Triggers by place
+   (UX review, three sizes). */
+void ControlMapUi_Test::placeShots()
+{
+    const QByteArray env = qgetenv("QLC_SHOT_DIR");
+    if (env.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    const QDir dir(QString::fromLocal8Bit(env));
+    QDir().mkpath(dir.absolutePath());
+    QList<quint32> cues;
+    const quint32 list = placesShow(m_doc, &cues);
+    Scene *warm = scene("Warm wash");
+    Scene *strobe = scene("Strobe");
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f6 = ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 61, ControlMap::cueList(list), ControlMap::Toggle, ControlMap::inList(list) });
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(strobe->id()), nullptr, ControlMap::inCue(cues.at(1)));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        QVERIFY(d.learnKey(Qt::Key_F6, Qt::NoModifier));
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QVERIFY(d.grab().save(dir.absoluteFilePath("places-learn.png")));
+        d.setPlace(ControlMap::everywhere());
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QVERIFY(d.grab().save(dir.absoluteFilePath("places-learn-same-place.png")));
+        d.setPlace(ControlMap::inCue(cues.at(1)));
+        d.accept();
+    }
+    cm->setSelectedTargets({ ControlMap::cue(cues.at(1)) });
+    QCoreApplication::processEvents();
+    InputOutputManager mgr(nullptr, m_doc);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlPage();
+        ConnectionsTree *tree = mgr.findChild<ConnectionsTree *>();
+        tree->selectShowControlRow(QStringLiteral("surfaces"));
+        QCoreApplication::processEvents();
+        // The Triggers by place row, in view (it is the last row).
+        QLabel *places = mgr.findChild<QLabel *>("surfacePlacesStatus");
+        QVERIFY(places != nullptr && places->isVisibleTo(&mgr));
+        for (QScrollArea *area : mgr.findChildren<QScrollArea *>())
+            if (area->isAncestorOf(places))
+                area->ensureWidgetVisible(places);
+        QCoreApplication::processEvents();
+        const QString tag = QString("%1x%2").arg(sz.width()).arg(sz.height());
+        QVERIFY(mgr.grab().save(dir.absoluteFilePath(QString("places-hub-%1.png").arg(tag))));
+        tree->selectShowControlRow(QStringLiteral("map"));
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(dir.absoluteFilePath(QString("places-table-%1.png").arg(tag))));
+    }
+}
+
 QTEST_MAIN(ControlMapUi_Test)
 
 /* The Control surfaces hub (Connections ▸ Devices ▸ Show control & sync):
@@ -1214,13 +1571,16 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     ControlSurfacesPanel *hub = page->surfaces();
     QVERIFY(hub != nullptr);
     QCOMPARE(ControlSurfacesPanel::keys(),
-             QStringList({ "map", "estop", "encoder", "vc", "masters", "pmj", "web", "pads", "collisions" }));
+             QStringList({ "map", "estop", "encoder", "vc", "masters", "pmj", "web", "pads", "collisions",
+                          "places" }));
+    QVERIFY(hub->setUpButton("places") == nullptr);         // read only
+    QVERIFY(hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());       // no trigger at a place
     QCOMPARE(hub->status("collisions"), QString("Every control has one job"));
     QVERIFY(hub->setUpButton("collisions") == nullptr);     // read only
     QVERIFY(hub->findChild<QLabel *>("surfaceCollisionsStatus")->isHidden());   // nothing to say
     for (const QString &key : ControlSurfacesPanel::keys())
     {
-        if (key == QLatin1String("collisions"))
+        if (key == QLatin1String("collisions") || key == QLatin1String("places"))
             continue;
         QVERIFY2(hub->setUpButton(key) != nullptr, qPrintable(key));
         QCOMPARE(hub->setUpButton(key)->text(), QString("Set Up…"));

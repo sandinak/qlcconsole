@@ -69,21 +69,20 @@ bool ControlOwners::Owner::sameAs(const Owner &o) const
     return false;
 }
 
-QString ControlOwners::placeName(Place place)
+QString ControlOwners::placeName(Doc *doc, const ControlMap::Place &place)
 {
-    switch (place)
-    {
-        case Everywhere:
-            return tr("everywhere");
-    }
-    return QString();
+    if (doc == nullptr || doc->controlMap() == nullptr)
+        return QString();
+    return doc->controlMap()->placeName(place);
 }
 
 QString ControlOwners::controlName(Doc *doc, quint32 universe, quint32 channel)
 {
     if (doc == nullptr || doc->controlMap() == nullptr)
         return QString();
-    return doc->controlMap()->controlName(universe, channel & kPageMask);
+    // A computer key is the whole channel (key and modifiers), not a page.
+    return doc->controlMap()->controlName(universe, universe == ControlMap::KeyboardUniverse
+                                                        ? channel : channel & kPageMask);
 }
 
 QString ControlOwners::pmjControlName(quint32 channel)
@@ -118,7 +117,10 @@ QList<QPair<quint64, ControlOwners::Owner>> ControlOwners::owned(Doc *doc)
         {
             o.kind = Trigger;
             o.thing = cm->targetName(b.target);
-            o.fix = tr("Control Map table ▸ Remove");
+            o.place = b.place;
+            if (b.place.scope != ControlMap::Everywhere)
+                o.where = tr("%1, %2").arg(map, cm->placeName(b.place));
+            o.fix = tr("Control Map table ▸ Remove, or another place in Works");
         }
         out << qMakePair(controlKey(b.universe, b.channel), o);
     }
@@ -293,8 +295,19 @@ bool ControlOwners::collides(const Owner &a, const Owner &b)
     // The encoder bank's own device: one mapping, set up together.
     if (a.kind == Encoder && b.kind == Encoder)
         return false;
-    // Q296: at different places one control may have two jobs (phase 3).
-    return a.place == b.place;
+    // Q296: two triggers at different places share a control (the narrowest
+    // armed one fires); every other listener is everywhere, always.
+    if (a.kind == Trigger && b.kind == Trigger)
+        return a.place == b.place;
+    return true;
+}
+
+bool ControlOwners::allTriggers(const QList<Owner> &owners)
+{
+    for (const Owner &o : owners)
+        if (o.kind != Trigger)
+            return false;
+    return !owners.isEmpty();
 }
 
 bool ControlOwners::canMove(const QList<Owner> &owners)

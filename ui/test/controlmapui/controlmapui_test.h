@@ -67,6 +67,13 @@ private slots:
     void theStopIsNeverTakenButCanTake();
     void theHubListsControlsWithTwoJobs();
     void collisionShots();
+    // Places for triggers (Q295, Q296, Q303)
+    void theLearnDialogOffersThePlace();
+    void theShowTreeLearnsWhereYouRightClicked();
+    void onlyTheSamePlaceIsRefused();
+    void theTableAndTheHubShowEachPlace();
+    void theLightFollowsWhatIsArmedNow();
+    void placeShots();
 
 private:
     Scene *scene(const QString &name);

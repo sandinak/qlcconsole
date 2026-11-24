@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <QDebug>
 #include <climits>
+#include <algorithm>
 
 #include "outputrulekeeper.h"
 #include "showtreecontroller.h"
@@ -49,6 +50,8 @@
 #define KXMLKey QStringLiteral("Key")
 #define KXMLRunList QStringLiteral("RunList")
 #define KXMLLights QStringLiteral("Lights")
+#define KXMLScope QStringLiteral("Scope")
+#define KXMLScopeOf QStringLiteral("ScopeOf")
 
 namespace
 {
@@ -108,24 +111,50 @@ const ControlMap::Binding *ControlMap::binding(const Target &target) const
 
 const ControlMap::Binding *ControlMap::bindingOn(quint32 universe, quint32 channel) const
 {
-    const int i = m_byControl.value(key(universe, channel), -1);
-    return i < 0 ? nullptr : &m_bindings.at(i);
+    Binding b;
+    if (!pick(key(universe, channel), &b, false))
+        return nullptr;
+    return binding(b.target);
 }
 
-void ControlMap::setBinding(const Binding &b)
+QList<ControlMap::Binding> ControlMap::bindingsOn(quint32 universe, quint32 channel) const
 {
-    if (!b.target.isValid() || b.universe == 0xFFFFFFFF || b.channel == 0xFFFFFFFF)
+    QList<Binding> out;
+    for (int i : m_byControl.value(key(universe, channel)))
+        out << m_bindings.at(i);
+    return out;
+}
+
+const ControlMap::Binding *ControlMap::stopOn(quint64 k) const
+{
+    for (int i : m_byControl.value(k))
+        if (m_bindings.at(i).target.type == EmergencyStopTarget)
+            return &m_bindings.at(i);
+    return nullptr;
+}
+
+void ControlMap::setBinding(const Binding &in, bool stepThrough)
+{
+    if (!in.target.isValid() || in.universe == 0xFFFFFFFF || in.channel == 0xFFFFFFFF)
         return;
+    Binding b = in;
+    // The emergency stop is everywhere, always (CONTROL_SCOPES §6).
+    if (b.target.type == EmergencyStopTarget)
+        b.place = Place();
+    if (b.place.scope != Everywhere && b.place.id == 0xFFFFFFFF)
+        b.place = Place();
+    QList<QPair<quint32, quint32>> left;        // controls a replaced binding leaves
     for (int i = m_bindings.count() - 1; i >= 0; --i)
     {
         const Binding &e = m_bindings.at(i);
         if (e == b)
             return;     // already so
-        if (e.target == b.target || (e.universe == b.universe && e.channel == b.channel))
+        const bool sameControl = e.universe == b.universe && e.channel == b.channel;
+        const bool stop = e.target.type == EmergencyStopTarget || b.target.type == EmergencyStopTarget;
+        if (e.target == b.target || (sameControl && (stop || (!stepThrough && e.place == b.place))))
         {
-            // Its old control goes dark, unless the new one is the same.
-            if (e.universe != b.universe || e.channel != b.channel)
-                darkenLamp(e);
+            if (!sameControl)
+                left << qMakePair(e.universe, e.channel);
             m_bindings.removeAt(i);
         }
     }
@@ -133,7 +162,10 @@ void ControlMap::setBinding(const Binding &b)
         m_estopFlagged.clear();
     m_bindings.append(b);
     changed(true);
-    sendLamp(b, true);
+    // Its old control goes dark (or shows what is left there).
+    for (const QPair<quint32, quint32> &c : std::as_const(left))
+        sendControlLamp(c.first, c.second, true);
+    sendControlLamp(b.universe, b.channel, true);
 }
 
 bool ControlMap::removeBinding(const Target &target)
@@ -142,15 +174,30 @@ bool ControlMap::removeBinding(const Target &target)
     {
         if (m_bindings.at(i).target != target)
             continue;
-        darkenLamp(m_bindings.at(i));
+        const Binding gone = m_bindings.at(i);
         // A control held down keeps what it pressed: its release still lets go.
         if (target.type == EmergencyStopTarget)
             m_estopFlagged.clear();
         m_bindings.removeAt(i);
         changed(true);
+        // Dark, or what another binding on the control says now.
+        sendControlLamp(gone.universe, gone.channel, true);
         return true;
     }
     return false;
+}
+
+bool ControlMap::setPlace(const Target &target, const Place &place)
+{
+    const Binding *b = binding(target);
+    if (b == nullptr || target.type == EmergencyStopTarget)
+        return false;
+    if (b->place == place)
+        return true;
+    Binding moved = *b;
+    moved.place = place;
+    setBinding(moved);
+    return true;
 }
 
 bool ControlMap::setMode(const Target &target, Mode mode)
@@ -179,6 +226,7 @@ void ControlMap::removeAll()
     for (const Binding &b : std::as_const(m_bindings))
         darkenLamp(b);
     m_bindings.clear();
+    m_step.clear();
     m_estopFlagged.clear();
     // Controls held keep what they pressed: their releases still let go.
     changed(true);
@@ -201,6 +249,7 @@ void ControlMap::reset()
     m_dimWhenReady = true;
     const bool had = !m_bindings.isEmpty() || m_listening || !m_down.isEmpty();
     m_bindings.clear();
+    m_step.clear();
     m_down.clear();
     m_fired.clear();
     m_pressed.clear();
@@ -239,7 +288,7 @@ void ControlMap::rebuild()
     m_keyBindings = 0;
     for (int i = 0; i < m_bindings.count(); ++i)
     {
-        m_byControl.insert(key(m_bindings.at(i).universe, m_bindings.at(i).channel), i);
+        m_byControl[key(m_bindings.at(i).universe, m_bindings.at(i).channel)] << i;
         if (isKey(m_bindings.at(i)))
             ++m_keyBindings;
     }
@@ -678,8 +727,8 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
     // held, is swallowed below.
     if (value > 0 && universe != KeyboardUniverse)
     {
-        const int si = m_byControl.value(k, -1);
-        const bool isStop = si >= 0 && m_bindings.at(si).target.type == EmergencyStopTarget;
+        const Binding *stop = stopOn(k);
+        const bool isStop = stop != nullptr;
         // The press that taught the stop is swallowed until its release; a
         // release that was lost must not swallow the first real press for long.
         if (isStop && m_swallow.contains(k))
@@ -693,7 +742,7 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         }
         if (isStop && !m_swallow.contains(k))
         {
-            emergencyStop(m_bindings.at(si), value);
+            emergencyStop(*stop, value);
             return;
         }
     }
@@ -703,8 +752,7 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         m_pendingReleased = true;
     if (m_listening && value > 0 && universe != KeyboardUniverse)
     {
-        const int bi = m_byControl.value(k, -1);
-        if (bi >= 0 && m_bindings.at(bi).target.type == EmergencyStopTarget)
+        if (stopOn(k) != nullptr)
         {
             // Its held learn press (swallowed above): not a new choice.
             emit refused(tr("%1 is the emergency stop. Choose another control.")
@@ -764,17 +812,33 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
             updateConnections();        // nothing held, nothing bound: stop listening
         return;
     }
-    const int i = m_byControl.value(k, -1);
-    if (i < 0)
+    if (!m_byControl.contains(k))
         return;
-    const Binding b = m_bindings.at(i);
     // A press is the edge from 0: a fader or an aftertouch going on
     // sending values is still the one press.
     if (m_down.contains(k))
         return;
     m_down.insert(k);
+    /* The narrowest armed place has the control (Q296); several there step
+       through, one per press (Q303). None armed: one whose function runs
+       may still let go of it (letting go is always allowed); else the
+       press does nothing, and says where its triggers work. */
+    Binding b;
+    bool live = true;
+    if (!pick(k, &b, true))
+    {
+        const Binding *running = runningOn(k);
+        if (running == nullptr)
+        {
+            say(k, tr("Not fired: %1 is not live here. %2")
+                       .arg(controlName(universe, channel), placesText(bindingsOn(universe, channel))));
+            return;
+        }
+        b = *running;
+        live = false;
+    }
     m_pressed.insert(k, b);
-    if (press(b))
+    if (press(b, live))
         m_fired.insert(k);
 }
 
@@ -884,12 +948,14 @@ void ControlMap::emergencyStop(const Binding &b, uchar value)
     }
 }
 
-bool ControlMap::press(const Binding &b)
+bool ControlMap::press(const Binding &b, bool placeLive)
 {
     // A computer key was checked where it is pressed (keyMayFire()).
-    const bool may = isKey(b) || surfaceMayFire(b.target);
-    auto notFired = [this, &b]() {
-        say(key(b.universe, b.channel), tr("Not fired: %1. %2").arg(targetName(b.target), refusalFor(b.target)));
+    const bool may = placeLive && (isKey(b) || surfaceMayFire(b.target));
+    auto notFired = [this, &b, placeLive]() {
+        say(key(b.universe, b.channel),
+            placeLive ? tr("Not fired: %1. %2").arg(targetName(b.target), refusalFor(b.target))
+                      : tr("Not fired: %1 works only %2.").arg(targetName(b.target), placeName(b.place)));
     };
     switch (b.target.type)
     {
@@ -1063,6 +1129,296 @@ void ControlMap::goList(const Binding &b, bool stop)
 }
 
 /*****************************************************************************
+ * Places
+ *****************************************************************************/
+
+QString ControlMap::placeScopeToString(PlaceScope scope)
+{
+    switch (scope)
+    {
+        case Everywhere:      return QStringLiteral("Global");
+        case ProductionPlace: return QStringLiteral("Production");
+        case ListPlace:       return QStringLiteral("List");
+        case CuePlace:        return QStringLiteral("Cue");
+    }
+    return QString();
+}
+
+ControlMap::PlaceScope ControlMap::stringToPlaceScope(const QString &str)
+{
+    if (str == QLatin1String("Production"))
+        return ProductionPlace;
+    if (str == QLatin1String("List"))
+        return ListPlace;
+    if (str == QLatin1String("Cue"))
+        return CuePlace;
+    return Everywhere;
+}
+
+bool ControlMap::isPlaceLive(const Place &place) const
+{
+    if (place.scope == Everywhere)
+        return true;
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr)
+        return false;
+    switch (place.scope)
+    {
+        case ProductionPlace:
+            if (st->production(place.id) == nullptr)
+                return false;
+            break;
+        case ListPlace:
+            if (st->cueList(place.id) == nullptr)
+                return false;
+            break;
+        case CuePlace:
+            if (st->cue(place.id) == nullptr)
+                return false;
+            break;
+        case Everywhere:
+            break;
+    }
+    // The hits' own rule: the one answer for "is this place live".
+    if (st->isHitPlaceLive(ShowTree::HitScope(int(place.scope)), place.id))
+        return true;
+    if (m_doc->mode() == Doc::Operate)
+        return false;
+    // Design: also while it is what you are looking at (CONTROL_SCOPES §6.4).
+    switch (place.scope)
+    {
+        case CuePlace:
+            return m_selected.contains(cue(place.id));
+        case ListPlace:
+            return place.id == runList() || m_selected.contains(cueList(place.id));
+        default:
+            break;
+    }
+    return false;
+}
+
+QList<ControlMap::Binding> ControlMap::armedOn(quint32 universe, quint32 channel) const
+{
+    QList<Binding> out;
+    int best = -1;
+    for (int i : m_byControl.value(key(universe, channel)))
+    {
+        const Binding &b = m_bindings.at(i);
+        if (b.target.type == EmergencyStopTarget || !isPlaceLive(b.place))
+            continue;
+        const int rank = int(b.place.scope);
+        if (rank > best)
+        {
+            out.clear();
+            best = rank;
+        }
+        if (rank == best)
+            out << b;
+    }
+    return out;
+}
+
+bool ControlMap::isArmedOnControl(const Binding &b) const
+{
+    for (const Binding &a : armedOn(b.universe, b.channel))
+        if (a.target == b.target)
+            return true;
+    return false;
+}
+
+bool ControlMap::pick(quint64 k, Binding *out, bool advance) const
+{
+    const QList<Binding> tier = armedOn(quint32(k >> 32), quint32(k & 0xFFFFFFFF));
+    if (tier.isEmpty())
+        return false;
+    if (tier.count() == 1)
+    {
+        *out = tier.first();
+        return true;
+    }
+    // Several at one place: each press the next (Q303, as a VC button's hits).
+    QList<Target> targets;
+    for (const Binding &b : tier)
+        targets << b.target;
+    auto it = m_step.find(k);
+    if (it == m_step.end() || it->first != targets)
+        it = m_step.insert(k, qMakePair(targets, 0));
+    *out = tier.at(it->second % tier.count());
+    if (advance)
+        it->second = (it->second + 1) % tier.count();
+    return true;
+}
+
+const ControlMap::Binding *ControlMap::runningOn(quint64 k) const
+{
+    const Binding *best = nullptr;
+    for (int i : m_byControl.value(k))
+    {
+        const Binding &b = m_bindings.at(i);
+        if (b.target.type == EmergencyStopTarget)
+            continue;
+        const quint32 fid = feedbackFunction(b);
+        const Function *f = fid == 0xFFFFFFFF ? nullptr : m_doc->function(fid);
+        if (f == nullptr || !f->isRunning())
+            continue;
+        if (best == nullptr || int(b.place.scope) > int(best->place.scope))
+            best = &b;
+    }
+    return best;
+}
+
+QString ControlMap::placeName(const Place &place) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    switch (place.scope)
+    {
+        case Everywhere:
+            return tr("everywhere");
+        case ProductionPlace:
+        {
+            const ShowTree::Production *p = st == nullptr ? nullptr : st->production(place.id);
+            return p == nullptr ? tr("in a production that is gone") : tr("in production %1").arg(p->name);
+        }
+        case ListPlace:
+        {
+            const ShowTree::CueList *l = st == nullptr ? nullptr : st->cueList(place.id);
+            return l == nullptr ? tr("in a cue list that is gone") : tr("in cue list %1").arg(l->name);
+        }
+        case CuePlace:
+        {
+            const ShowTree::CueList *l = st == nullptr ? nullptr : st->listOfCue(place.id);
+            if (l == nullptr)
+                return tr("in a cue that is gone");
+            return tr("in cue %1").arg(st->cueLabel(*l, l->indexOf(place.id)));
+        }
+    }
+    return QString();
+}
+
+QString ControlMap::placesText(const QList<Binding> &bindings) const
+{
+    // Grouped by place, widest first; a place's own in the given order.
+    QList<Binding> sorted;
+    for (const Binding &b : bindings)
+        if (b.target.type != EmergencyStopTarget)
+            sorted << b;
+    std::stable_sort(sorted.begin(), sorted.end(), [](const Binding &a, const Binding &b) {
+        return int(a.place.scope) < int(b.place.scope);
+    });
+    QStringList groups;
+    for (int i = 0; i < sorted.count();)
+    {
+        QStringList names;
+        const Place at = sorted.at(i).place;
+        int j = i;
+        for (; j < sorted.count() && sorted.at(j).place == at; ++j)
+            names << targetName(sorted.at(j).target);
+        // Same scope, another place (two cues): its own group.
+        QString group = names.count() > 1
+                ? tr("%1 %2 (each press the next)").arg(names.join(QStringLiteral(" / ")), placeName(at))
+                : tr("%1 %2").arg(names.first(), placeName(at));
+        groups << group;
+        i = j;
+    }
+    if (groups.isEmpty())
+        return QString();
+    if (groups.count() == 1)
+        return groups.first();
+    // "A everywhere, except B in cue 2.3, C in cue 3.1"
+    return tr("%1, except %2").arg(groups.first(), groups.mid(1).join(QStringLiteral(", ")));
+}
+
+ControlMap::Place ControlMap::placeOfHit(quint32 hitId) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr || st->cue(hitId) == nullptr)
+        return Place();
+    quint32 of = 0xFFFFFFFF;
+    switch (st->hitScope(hitId, &of))
+    {
+        case ShowTree::HitScope::Global:
+            return Place();
+        case ShowTree::HitScope::Cue:
+            return inCue(of);
+        case ShowTree::HitScope::List:
+            return inList(of);
+        case ShowTree::HitScope::Production:
+        {
+            quint32 prod = 0xFFFFFFFF;
+            if (const ShowTree::CueList *l = st->listOfCue(hitId))
+                st->cueList(l->id, &prod);
+            return prod == 0xFFFFFFFF ? Place() : inProduction(prod);
+        }
+    }
+    return Place();
+}
+
+QList<ControlMap::Place> ControlMap::placeChoices(const Place &where) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    QList<Place> out;
+    auto add = [&out](const Place &p) {
+        if (!out.contains(p))
+            out << p;
+    };
+    // A place and the ones around it: a cue, its list, its production.
+    auto around = [&](const Place &p) {
+        if (st == nullptr || p.scope == Everywhere)
+            return;
+        quint32 list = 0xFFFFFFFF, prod = 0xFFFFFFFF;
+        if (p.scope == CuePlace)
+        {
+            quint32 parent = 0xFFFFFFFF;
+            const ShowTree::CueList *l = st->listOfCue(st->isSubCue(p.id, &parent) ? parent : p.id);
+            if (l == nullptr || l->looks)
+                return;
+            add(p);
+            list = l->id;
+        }
+        else if (p.scope == ListPlace)
+        {
+            list = p.id;
+        }
+        else
+        {
+            prod = p.id;
+        }
+        if (list != 0xFFFFFFFF)
+        {
+            if (st->cueList(list, &prod) == nullptr)
+                return;
+            add(inList(list));
+        }
+        if (prod != 0xFFFFFFFF && st->production(prod) != nullptr)
+            add(inProduction(prod));
+    };
+    around(where);
+    add(Place());
+    // Where you are now: the Run tab's live cue, else what the Show Tree has selected.
+    Place now;
+    const quint32 run = runList();
+    const quint32 live = st == nullptr || run == 0xFFFFFFFF ? 0xFFFFFFFF : st->runningCue(run);
+    if (live != 0xFFFFFFFF)
+        now = inCue(live);
+    for (const Target &t : m_selected)
+    {
+        if (now.scope != Everywhere)
+            break;
+        if (t.type == CueTarget)
+            now = inCue(t.id);
+        else if (t.type == CueListTarget)
+            now = inList(t.id);
+    }
+    if (now.scope == Everywhere && run != 0xFFFFFFFF)
+        now = inList(run);
+    // Narrowest first, then everywhere last.
+    out.removeAll(Place());
+    around(now);
+    add(Place());
+    return out;
+}
+
+/*****************************************************************************
  * Computer keys
  *****************************************************************************/
 
@@ -1083,17 +1439,26 @@ bool ControlMap::handleKey(quint32 channel, bool pressed)
     }
     if (m_down.contains(k))
         return true;    // held: one press
-    const Binding *b = bindingOn(KeyboardUniverse, channel);
-    if (b == nullptr)
+    if (!m_byControl.contains(k))
         return false;
-    if (b->target.type == EmergencyStopTarget)
+    if (const Binding *stop = stopOn(k))
     {
+        Q_UNUSED(stop)
         // A show file put the stop on a key: it does nothing, and says so.
         say(k, tr("The emergency stop is bound to a computer key, which cannot be the stop: a key works "
                   "only in Operate. Learn it on a MIDI or OSC button."));
         return false;
     }
-    if (!keyMayFire(b->target))
+    // The narrowest armed place has the key (Q296); none: it goes on to
+    // whatever has the keyboard, and the footer says where it works.
+    const Binding *b = bindingOn(KeyboardUniverse, channel);
+    if (b == nullptr && runningOn(k) == nullptr)
+    {
+        say(k, tr("Not fired: %1 is not live here. %2")
+                   .arg(controlName(KeyboardUniverse, channel), placesText(bindingsOn(KeyboardUniverse, channel))));
+        return false;
+    }
+    if (b != nullptr && !keyMayFire(b->target))
     {
         // The key goes on to whatever has the keyboard; the footer says why
         // it fired nothing.
@@ -1291,6 +1656,10 @@ ControlMap::Lamp ControlMap::lamp(const Binding &b) const
         return LampOff;         // a press of it does nothing while nothing runs
     if (stopped)
         return LampOff;         // after ALL OFF, dark until the next GO
+    // Its place is not live, or a narrower one has the control (Q296): a
+    // press would not fire it.
+    if (!isArmedOnControl(b))
+        return LampOff;
     // The press rule itself (board Q269): a press that would be refused is
     // dark, so the desk says "not now" before anyone presses it.
     if (!surfaceMayFire(b.target))
@@ -1385,22 +1754,64 @@ void ControlMap::sendLampValue(const Binding &b, uchar value, bool force)
 
 void ControlMap::sendLamp(const Binding &b, bool force)
 {
+    // One light per control: what the control does now (Q296).
+    sendControlLamp(b.universe, b.channel, force);
+}
+
+void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
+{
+    Binding at;
+    at.universe = universe;
+    at.channel = channel;
+    const quint64 k = key(universe, channel);
+    if (!m_byControl.contains(k))
+    {
+        darkenLamp(at);     // nothing is bound there any more
+        return;
+    }
+    const Binding *owner = lampOwner(k);
+    if (owner == nullptr)
+    {
+        sendLampValue(at, 0, force);
+        return;
+    }
     /* The emergency stop is never dimmed away (review finding 3): the
        switch is there for a pad whose lights are colours, and a panic
        button that cannot be found is worse than an odd colour. Its ready
        light is sent whatever the switch says. */
-    const bool dim = m_dimWhenReady || b.target.type == EmergencyStopTarget;
-    sendLampValue(b, lampValue(lamp(b), dim), force);
+    const bool dim = m_dimWhenReady || owner->target.type == EmergencyStopTarget;
+    sendLampValue(at, lampValue(lamp(*owner), dim), force);
 }
 
 void ControlMap::sendLamps(bool force)
 {
+    QSet<quint64> done;
     for (const Binding &b : std::as_const(m_bindings))
     {
+        const quint64 k = key(b.universe, b.channel);
+        if (done.contains(k))
+            continue;       // one light per control
+        done.insert(k);
         if (isBlinking(b))
             continue;       // the blink has it until it is done
-        sendLamp(b, force);
+        sendControlLamp(b.universe, b.channel, force);
     }
+}
+
+const ControlMap::Binding *ControlMap::lampOwner(quint64 k) const
+{
+    if (const Binding *stop = stopOn(k))
+        return stop;
+    Binding next;
+    if (pick(k, &next, false))
+        return binding(next.target);
+    return runningOn(k);
+}
+
+ControlMap::Lamp ControlMap::controlLamp(quint32 universe, quint32 channel) const
+{
+    const Binding *owner = lampOwner(key(universe, channel));
+    return owner == nullptr ? LampOff : lamp(*owner);
 }
 
 void ControlMap::darkenLamp(const Binding &b)
@@ -1452,7 +1863,10 @@ void ControlMap::slotGuardHeld(const QString &text, quint32 chaserId)
     for (const Binding &b : std::as_const(m_bindings))
     {
         const Chaser *chaser = targetChaser(b);
-        if (chaser != nullptr && chaser->id() == chaserId && !isKey(b))
+        // Only where the control is this binding's now (Q296).
+        const Binding *owner = lampOwner(key(b.universe, b.channel));
+        if (chaser != nullptr && chaser->id() == chaserId && !isKey(b)
+            && owner != nullptr && owner->target == b.target)
             blinking.append(b);
     }
     if (blinking.isEmpty())
@@ -1558,6 +1972,13 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
         doc->writeAttribute(KXMLID, QString::number(b.target.id));
         if (b.mode != Toggle)
             doc->writeAttribute(KXMLMode, modeToString(b.mode));
+        // Its place, as a hit's (Scope=, ScopeOf=); everywhere says nothing,
+        // so an older build loads it as it always was.
+        if (b.place.scope != Everywhere)
+        {
+            doc->writeAttribute(KXMLScope, placeScopeToString(b.place.scope));
+            doc->writeAttribute(KXMLScopeOf, QString::number(b.place.id));
+        }
         doc->writeEndElement();
     }
     m_encoderBank->saveXML(doc);
@@ -1573,6 +1994,7 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
         return false;
     }
     m_bindings.clear();
+    m_step.clear();
     m_down.clear();
     m_fired.clear();
     m_pressed.clear();
@@ -1628,15 +2050,31 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
             okI = true;                 // the stop has no id: missing or bad is fine
         if (attrs.hasAttribute(KXMLMode) && !stringToMode(attrs.value(KXMLMode).toString(), &b.mode))
             b.mode = Toggle;
+        // Its place (none in a show saved before places: everywhere).
+        if (attrs.hasAttribute(KXMLScope))
+        {
+            bool okP = false;
+            b.place.scope = stringToPlaceScope(attrs.value(KXMLScope).toString());
+            b.place.id = attrs.value(KXMLScopeOf).toUInt(&okP);
+            if (b.place.scope == Everywhere || !okP)
+                b.place = Place();
+        }
         root.skipCurrentElement();
         if (b.target.type == EmergencyStopTarget)
+        {
             b.target.id = 0;            // one stop: whatever id a file gave it
+            b.place = Place();          // and always everywhere
+        }
         // A target a newer build knows and this one doesn't: left out.
         if (!okU || !okC || !okI || !okT)
             continue;
+        // One control per thing; one control may have several things (at
+        // different places, or stepping through at one), never beside the stop.
         bool dup = false;
         for (const Binding &e : std::as_const(m_bindings))
-            dup |= e.target == b.target || (e.universe == b.universe && e.channel == b.channel);
+            dup |= e.target == b.target
+                   || (e.universe == b.universe && e.channel == b.channel
+                       && (e.target.type == EmergencyStopTarget || b.target.type == EmergencyStopTarget));
         if (!dup)
             m_bindings.append(b);
     }

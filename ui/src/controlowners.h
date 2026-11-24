@@ -50,10 +50,12 @@ class Doc;
  * takes the emergency stop's control (its own Learn can take a control from
  * anything else).
  *
- * Every owner has a place. Today all of them are Everywhere, so any two
- * owners of one control collide; places (a cue, a layer, an effect) come
- * with phase 3 (Q295, Q296), when two owners at different places may share
- * a control and collides() says so.
+ * Every owner has a place. A Control Map trigger has its own (a cue, a cue
+ * list, a production or everywhere: phase 3, Q295, Q296); every other
+ * listener is everywhere. Two triggers at different places share a control
+ * (the narrowest armed one fires), so only two at the same place collide --
+ * and those may step through instead (Q303). A trigger and any other
+ * listener always collide.
  *
  * Reads the models live and keeps nothing (GUI thread only).
  */
@@ -75,12 +77,6 @@ public:
         Pmj             //!< the PMJ Black 1 overlay (fixed by its profile)
     };
 
-    /** Where a mapping is live (Q295). Only Everywhere exists yet. */
-    enum Place
-    {
-        Everywhere
-    };
-
     /** The encoder bank's parts that listen (its rings and lamps are
      *  feedback lines and hear nothing). */
     enum EncoderPart { EncoderTurn, EncoderPush, BankNext, BankPrevious, BankDirect };
@@ -88,7 +84,8 @@ public:
     struct Owner
     {
         Kind kind = Trigger;
-        Place place = Everywhere;
+        /** Where it is live (Q295): a trigger's own; everywhere for the rest. */
+        ControlMap::Place place;
         /** What it does, as a person reads it ("Scene: Warm wash",
          *  "Speed master 1 Tap"). */
         QString thing;
@@ -112,8 +109,8 @@ public:
         bool sameAs(const Owner &o) const;
     };
 
-    /** The place in words ("everywhere"). */
-    static QString placeName(Place place);
+    /** The place in words ("everywhere", "in cue 2.3"). */
+    static QString placeName(Doc *doc, const ControlMap::Place &place);
 
     /** Everything that listens to @a channel of @a universe now
      *  (KeyboardUniverse: a computer key). A Virtual Console channel's
@@ -122,11 +119,15 @@ public:
     /** owners(), without @a self (the listener that is learning). */
     static QList<Owner> others(Doc *doc, quint32 universe, quint32 channel, const Owner &self);
 
-    /** Whether @a a and @a b on one control is two jobs on it. Today any
-     *  two listeners at the same place, but not two Virtual Console widgets
-     *  (Show Review's VC-06 has their page and job rules) and not two parts
-     *  of the encoder bank's own device. */
+    /** Whether @a a and @a b on one control is two jobs on it: two
+     *  triggers at the same place (Q296: at different places they share
+     *  it), a trigger and another listener, or two other listeners -- but
+     *  not two Virtual Console widgets (Show Review's VC-06 has their page
+     *  and job rules) and not two parts of the encoder bank's own device. */
     static bool collides(const Owner &a, const Owner &b);
+    /** Whether every one of @a owners is a trigger (not the stop): a
+     *  button may then step through them (Q303). */
+    static bool allTriggers(const QList<Owner> &owners);
 
     /** "<control> already does <thing> (<where>). One job per control.",
      *  one line per owner, and the reason when one of them can't let go. */
