@@ -288,6 +288,9 @@ bool VCSlider::copyFrom(const VCWidget* widget)
     setValueDisplayStyle(slider->valueDisplayStyle());
     setInvertedAppearance(slider->invertedAppearance());
 
+    /* Copy fader pick-up (Q299): a copied master keeps lowering at once */
+    setCatchValues(slider->catchValues());
+
     /* Copy Click & Go feature */
     setClickAndGoType(slider->clickAndGoType());
 
@@ -2505,9 +2508,15 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             if (catchValues())
             {
                 m_pickup.setSource(universe, pagedCh);   // another fader: start over
-                if (m_pickup.accept(value, pickupCurrent()) == false)
+                bool sendBack = false;
+                if (m_pickup.accept(value, pickupCurrent(), &sendBack) == false)
                 {
                     m_lastInputValue = value;
+                    // The wait starts: the slider's value is sent back once,
+                    // so a motor fader drives itself there (a plain one
+                    // ignores it)
+                    if (sendBack)
+                        updateFeedback();
                     updatePickupHint();
                     return;
                 }

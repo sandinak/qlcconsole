@@ -18,9 +18,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   OSC) that is not where the control is does nothing until you move it to,
   or through, the current value, then it follows (soft takeover). It was
   only Virtual Console sliders that could; now the Grand Master, the speed
-  masters' Rate faders and a channel group's fader do too, and a new
-  Virtual Console slider has it on (a slider in a saved show keeps its
-  setting). A fader waiting says so on the control: **GM ▲** in amber on
+  masters' Rate faders and a channel group's fader do too, and every new
+  Virtual Console slider or knob has it on, from a wizard, an import or a
+  copy too (a slider in a saved show keeps its setting). A fader waiting says so on the control: **GM ▲** in amber on
   the footer chip, an arrow on the speed master's button, and *"Grand Master
   fader: move it to 75% to take over"* in the tooltip. After a start, a
   fader already at the control follows at once; any other waits, whichever

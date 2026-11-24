@@ -248,8 +248,25 @@ void ConsoleChannel::slotInputValueChanged(quint32 channel, uchar value)
     if (sendBack && hasSource && iom->canSendFeedback(src->universe()))
         iom->sendFeedBack(src->universe(), src->channel(), uchar(m_slider->value()), QVariant());
     if (take)
+    {
+        m_fromInput = true;
         setValue(value);
+        m_fromInput = false;
+    }
     m_slider->setToolTip(pickupHint());
+}
+
+void ConsoleChannel::sendGroupFeedback(uchar value)
+{
+    ChannelsGroup *grp = m_doc->channelsGroup(m_group);
+    if (grp == NULL)
+        return;
+    QSharedPointer<QLCInputSource> src = grp->inputSource();
+    if (src.isNull() || !src->isValid())
+        return;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom->canSendFeedback(src->universe()))
+        iom->sendFeedBack(src->universe(), src->channel(), value, QVariant());
 }
 
 QString ConsoleChannel::pickupHint() const
@@ -298,7 +315,13 @@ void ConsoleChannel::slotSpinChanged(int value)
     if (m_group == Fixture::invalidId())
         emit valueChanged(m_fixture, m_chIndex, value);
     else
+    {
+        // Moved on screen: a motor fader follows (Q299). Not when the
+        // value is the fader's own: a hand on it is not fought.
+        if (!m_fromInput)
+            sendGroupFeedback(uchar(value));
         emit groupValueChanged(m_group, value);
+    }
 }
 
 void ConsoleChannel::slotSliderChanged(int value)

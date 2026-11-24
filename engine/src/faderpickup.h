@@ -68,6 +68,7 @@ public:
     void reset()
     {
         m_last = -1;
+        m_lastCurrent = -1;
         m_runTop = -1;
         m_waiting = false;
     }
@@ -101,9 +102,17 @@ public:
         if (sendBack != nullptr)
             *sendBack = false;
         const int last = m_last;
+        const int lastCurrent = m_lastCurrent;
         m_last = value;
-        // Where this downward run started (a rise starts a new one)
-        if (last == -1 || value > last)
+        m_lastCurrent = current;
+        // Where this downward run started (a rise starts a new one). A
+        // fall counts only while the fader stays below a control that
+        // stays put: a report made at or above the control as it then
+        // stood, or a control that has moved since (feedback sends a motor
+        // fader after it), starts the run again here. A motor fader driven
+        // down by feedback is then never a "pull" that lowers a master.
+        if (last == -1 || value > last ||
+            last >= lastCurrent - Threshold || current != lastCurrent)
             m_runTop = value;
         bool take = false;
         if (last == -1)
@@ -174,6 +183,7 @@ public:
 private:
     static int absDiff(int a) { return a < 0 ? -a : a; }
     int m_last = -1;
+    int m_lastCurrent = -1;     //!< where the control was at the last report
     int m_runTop = -1;          //!< where the current downward run started (a take or a wait restarts it)
     bool m_waiting = false;
     bool m_lowerAtOnce = false; //!< a pull down below the control is taken at once

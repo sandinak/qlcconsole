@@ -53,6 +53,10 @@
 #include "consolechannel.h"
 #include "vcframe.h"
 #include "channelsgroup.h"
+#include "qlcfile.h"
+#include "ioplugincache.h"
+#include "iopluginstub.h"
+#include <QDir>
 #include <QLabel>
 #include "vcslider_test.h"
 
@@ -1083,4 +1087,146 @@ void VCSlider_Test::limitedSliderIsPickedUpOnItsOwnScale()
     QVERIFY2(slider.pickupHint().contains(QStringLiteral("move it to 50%")),
              qPrintable(slider.pickupHint()));
     m_doc->setMode(Doc::Design);
+}
+
+namespace
+{
+/* The I/O plugin stub patched as universe 0's feedback line: what is sent
+   to the device lands in its m_feedback. */
+IOPluginStub *patchFeedbackStub(Doc *doc)
+{
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = nullptr;
+    for (QLCIOPlugin *pl : doc->ioPluginCache()->plugins())
+        if ((stub = dynamic_cast<IOPluginStub *>(pl)) != nullptr)
+            break;
+    if (stub == nullptr)
+        return nullptr;
+    if (!doc->inputOutputMap()->setOutputPatch(0, stub->name(), QString(), 0, true))
+        return nullptr;
+    stub->m_feedback.clear();
+    return stub;
+}
+}
+
+/* Review round 4, findings 2, 3 and 5: pick-up is on for every new
+   absolute fader, however it is made (a knob, a copy, the Eos import is in
+   its own test), and a copy keeps it, a master's lower-at-once with it. */
+void VCSlider_Test::everyNewSliderCatchesValues()
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    vc->slotAddKnob();
+    QList<VCSlider *> sliders = vc->contents()->findChildren<VCSlider *>();
+    QCOMPARE(sliders.size(), 1);
+    QCOMPARE(sliders.first()->widgetStyle(), VCSlider::WKnob);
+    QVERIFY(sliders.first()->catchValues());
+
+    // A Submaster copied (copy/paste, duplicate) keeps catching values and
+    // lowering at once, and saves it
+    QWidget w;
+    VCSlider sub(&w, m_doc);
+    sub.setSliderMode(VCSlider::Submaster);
+    sub.setCatchValues(true);
+    VCSlider *copy = qobject_cast<VCSlider *>(sub.createCopy(vc->contents()));
+    QVERIFY(copy != nullptr);
+    QVERIFY(copy->catchValues());
+    QCOMPARE(copy->sliderMode(), VCSlider::Submaster);
+    QVERIFY(copy->m_pickup.lowerAtOnce());
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xw(&buffer);
+    xw.writeStartDocument();
+    QVERIFY(copy->saveXML(&xw));
+    xw.writeEndDocument();
+    QVERIFY(buffer.buffer().contains("CatchValues=\"true\""));
+    delete copy;
+
+    // One that was off stays off
+    VCSlider plain(&w, m_doc);
+    VCSlider *plainCopy = qobject_cast<VCSlider *>(plain.createCopy(vc->contents()));
+    QVERIFY(plainCopy != nullptr);
+    QVERIFY(!plainCopy->catchValues());
+    delete plainCopy;
+}
+
+/* Review round 4, finding 4: when a VC slider's fader starts to wait, the
+   slider's value is sent to it once (a motor fader drives itself there);
+   its reports on the way are not taken and nothing more is sent. */
+void VCSlider_Test::aWaitingSliderSendsItsValueBack()
+{
+    IOPluginStub *stub = patchFeedbackStub(m_doc);
+    QVERIFY(stub != nullptr);
+    QVERIFY(m_doc->inputOutputMap()->canSendFeedback(0));
+
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 25)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(200, false);
+    stub->m_feedback.clear();
+
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 0);
+    QCOMPARE(slider.sliderValue(), 200);
+    QCOMPARE(stub->m_feedback.size(), 1);
+    QCOMPARE(stub->m_feedback.last().first, quint32(25));
+    QCOMPARE(int(stub->m_feedback.last().second), 200);
+
+    // The motor on its way: not taken, nothing more sent
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 80);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 150);
+    QCOMPARE(slider.sliderValue(), 200);
+    QCOMPARE(stub->m_feedback.size(), 1);
+
+    // Arrived: picked up, and it follows
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 199);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 120);
+    QCOMPARE(slider.sliderValue(), 120);
+
+    // After a Design/Operate switch the pick-up starts over: sent again
+    m_doc->setMode(Doc::Design);
+    m_doc->setMode(Doc::Operate);
+    stub->m_feedback.clear();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 25, 10);
+    QCOMPARE(slider.sliderValue(), 120);
+    QCOMPARE(stub->m_feedback.size(), 1);
+    QCOMPARE(int(stub->m_feedback.last().second), 120);
+    m_doc->setMode(Doc::Design);
+}
+
+/* Review round 4, finding 4: a Simple Desk channel group moved on screen
+   sends its value to the group's fader (a motor fader follows); a value
+   that came from the fader is not sent back to it. */
+void VCSlider_Test::channelGroupMovedOnScreenMovesItsFader()
+{
+    IOPluginStub *stub = patchFeedbackStub(m_doc);
+    QVERIFY(stub != nullptr);
+
+    ChannelsGroup *grp = new ChannelsGroup(m_doc);
+    grp->setName(QStringLiteral("Wash"));
+    QVERIFY(m_doc->addChannelsGroup(grp));
+    grp->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 32)));
+
+    QWidget w;
+    ConsoleChannel cc(&w, m_doc, Fixture::invalidId(), 0, false);
+    cc.setChannelsGroup(grp->id());
+    cc.setValue(100, false);
+    stub->m_feedback.clear();
+
+    cc.setValue(180);                               // moved on screen
+    QCOMPARE(stub->m_feedback.size(), 1);
+    QCOMPARE(stub->m_feedback.last().first, quint32(32));
+    QCOMPARE(int(stub->m_feedback.last().second), 180);
+
+    // The fader at it, then moved: followed, never sent back
+    stub->m_feedback.clear();
+    emit grp->valueChanged(32, 179);
+    emit grp->valueChanged(32, 120);
+    QCOMPARE(int(cc.value()), 120);
+    QVERIFY(stub->m_feedback.isEmpty());
 }

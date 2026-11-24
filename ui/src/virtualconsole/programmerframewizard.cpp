@@ -457,6 +457,7 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
             if (e.controlByte == 1)
                 roleLabel += QStringLiteral(" ◐"); // half-circle = LSB / fine
             VCSlider* slider = new VCSlider(frame, doc);
+            slider->setCatchValues(true);   // pick-up on for a new fader (Q299)
             slider->setCaption(roleLabel);
             slider->setParameterRole(e.role);
             slider->setParameterControlByte(e.controlByte);
@@ -471,6 +472,7 @@ VCFrame* ProgrammerFrameWizard::generateFrame(Doc* doc,
         else if (e.kind == ProgrammerMap::GrandMasterSlider)
         {
             VCSlider* slider = new VCSlider(frame, doc);
+            slider->setCatchValues(true);   // pick-up on for a new fader (Q299)
             slider->setCaption(ProgrammerFrameWizard::tr("Master"));
             slider->setSliderMode(VCSlider::GrandMaster);
             const int natH = (e.style == VCSlider::WKnob) ? KNOB_H : SLIDER_H;

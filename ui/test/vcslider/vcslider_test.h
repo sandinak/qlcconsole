@@ -41,6 +41,9 @@ private slots:
     void masterSlidersLowerAtOnce();
     void invertedSliderIsPickedUpWhereItsFaderIs();
     void limitedSliderIsPickedUpOnItsOwnScale();
+    void everyNewSliderCatchesValues();
+    void aWaitingSliderSendsItsValueBack();
+    void channelGroupMovedOnScreenMovesItsFader();
     void speedMasterTempo();
     void speedMasterFollowsTheMaster();
     void speedMasterSavesAndLoads();

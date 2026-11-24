@@ -87,6 +87,10 @@ private:
      *  to emit the proper signal when value changes */
     quint32 m_group;
     FaderPickup m_pickup;   //!< a channel group's external fader (Q299)
+    bool m_fromInput = false;   //!< the value comes from the group's fader: not sent back to it
+
+    /** Send @p value to the group's fader (a motor fader goes there) */
+    void sendGroupFeedback(uchar value);
 
 public:
     /** "Group: move it to 75% to take over" while the group's external fader waits */

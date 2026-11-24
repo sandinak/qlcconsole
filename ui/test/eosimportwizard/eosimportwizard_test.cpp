@@ -207,6 +207,7 @@ void EosImportWizard_Test::subFaders()
     {
         QCOMPARE(ordered.at(i)->sliderMode(), VCSlider::Playback);
         QCOMPARE(ordered.at(i)->playbackFunction(), subs.at(i).function);
+        QVERIFY(ordered.at(i)->catchValues());               // picked up, no jump (Q299)
         QCOMPARE(ordered.at(i)->y(), ordered.at(0)->y());    // in a row
         QVERIFY(frame->rect().contains(ordered.at(i)->geometry()));
     }

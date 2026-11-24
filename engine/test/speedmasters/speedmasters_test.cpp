@@ -968,6 +968,23 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     QVERIFY(!gm.accept(100, 255));
     QVERIFY(!gm.accept(98, 255));
     QVERIFY(gm.accept(80, 255));
+    // Review round 4: a motor fader that follows the GM is sent down by
+    // feedback when the GM is dipped on screen (255, 0, back to 255). Its
+    // reports on the way down, made above the dipped GM, are no pull once
+    // the GM is back up: the GM stays where the operator left it.
+    gm.reset();
+    QVERIFY(gm.accept(255, 255));
+    QVERIFY(!gm.accept(240, 0));            // above the dipped GM: a wait
+    QVERIFY(!gm.accept(150, 0));
+    QVERIFY(!gm.accept(120, 255));          // the GM is back: no pull
+    QVERIFY(gm.waiting(255));
+    // The control moved while the fader was below it: the run starts over
+    // at the first report under the new value; a hand's pull from there is
+    // still taken at once.
+    gm.reset();
+    QVERIFY(!gm.accept(100, 200));
+    QVERIFY(!gm.accept(90, 255));
+    QVERIFY(gm.accept(60, 255));
 
     // Another fader drives the control: the old one's place is no guide.
     p.setSource(0, 11);
