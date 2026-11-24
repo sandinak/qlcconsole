@@ -106,13 +106,11 @@ public:
         m_last = value;
         m_lastCurrent = current;
         // Where this downward run started (a rise starts a new one). A
-        // fall counts only while the fader stays below a control that
-        // stays put: a report made at or above the control as it then
-        // stood, or a control that has moved since (feedback sends a motor
-        // fader after it), starts the run again here. A motor fader driven
-        // down by feedback is then never a "pull" that lowers a master.
-        if (last == -1 || value > last ||
-            last >= lastCurrent - Threshold || current != lastCurrent)
+        // fall made while the fader was above the control as it then stood
+        // is no pull (a motor fader sent down by feedback when the control
+        // was dipped on screen): the run starts again here, so only a fall
+        // from below the control counts.
+        if (last == -1 || value > last || last > lastCurrent + Threshold)
             m_runTop = value;
         bool take = false;
         if (last == -1)
