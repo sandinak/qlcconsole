@@ -12,6 +12,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Changed
+
+- **A fader is picked up before it follows**: an external fader (MIDI,
+  OSC) that is not where the control is does nothing until you move it to,
+  or through, the current value, then it follows (soft takeover). Virtual
+  Console sliders could; now a speed master's Rate fader and a channel
+  group's fader do too, and every new Virtual Console slider or knob has it
+  on (not a Grand, Sub or Group master slider). A waiting fader says so in
+  its tooltip and with an arrow on the speed master's button. The Grand
+  Master and the master sliders follow their fader at once, as before, until
+  their surface type declares them (Q313).
+
 ### Fixed
 
 - **A trigger that steps through reopens cleanly, and Move It Here lets go of preset buttons.** Reopening the Trigger… dialog of a trigger made with Step Through Them no longer refuses OK as a second job (and no longer offers a Move It Here that deleted its sibling); it keeps stepping while its control and place stay. Move It Here from a Speed Dial or XY Pad preset, a Matrix custom control or a Frame page shortcut now lets go of the sub-control's own input, so the old one stops answering, stays gone after save and reload, and the hub counts one job.

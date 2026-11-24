@@ -53,6 +53,8 @@ private slots:
     void aShowUsesFourToSixteen();
     void aMasterFollowsTheShowTimeline();
     void aControlSurfaceDrivesAMaster();
+    void aFaderIsPickedUpBeforeItFollows();
+    void aRateFaderWaitsToBePickedUp();
     void onlyTheMastersSomethingIsOnAreUsed();
 
 private:

@@ -48,6 +48,11 @@
 #include "efxfixture.h"
 #undef protected
 
+#include "qlcinputsource.h"
+#include "consolechannel.h"
+#include "vcframe.h"
+#include "channelsgroup.h"
+#include <QLabel>
 #include "vcslider_test.h"
 
 namespace
@@ -735,3 +740,313 @@ void VCSlider_Test::effectControlOnAnEfx()
 }
 
 QTEST_MAIN(VCSlider_Test)
+
+/* An encoder (Encoder / Relative mode) has no position: its value is the
+   slider's plus a step, so it is never picked up, even after a reset (a
+   tab switch) with a step bigger than the catch threshold. */
+void VCSlider_Test::encoderKnobIsNeverPickedUp()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    QSharedPointer<QLCInputSource> src(new QLCInputSource(0, 24));
+    src->setWorkingMode(QLCInputSource::Encoder);
+    src->setSensitivity(8);
+    slider.setInputSource(src, VCSlider::sliderInputSourceId);
+    connect(src.data(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+            &slider, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(100, false);
+    slider.updateFeedback();
+    slider.m_pickup.reset();                    // the tab was switched
+
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 2);  // +1 detent (MIDI 1, scaled x2)
+    QCOMPARE(slider.sliderValue(), 108);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 2);
+    QCOMPARE(slider.sliderValue(), 116);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 252); // -2 (MIDI 126)
+    QCOMPARE(slider.sliderValue(), 100);
+    QVERIFY(slider.pickupHint().isEmpty());
+    m_doc->setMode(Doc::Design);
+}
+
+/* A channel group's external fader (Simple Desk) is picked up, and a
+   re-learnt one starts over. */
+void VCSlider_Test::channelGroupFaderIsPickedUp()
+{
+    ChannelsGroup *grp = new ChannelsGroup(m_doc);
+    grp->setName(QStringLiteral("Wash"));
+    QVERIFY(m_doc->addChannelsGroup(grp));
+    grp->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 30)));
+
+    QWidget w;
+    ConsoleChannel cc(&w, m_doc, Fixture::invalidId(), 0, false);
+    cc.setChannelsGroup(grp->id());
+    cc.setLabel(QStringLiteral("Wash"));
+    cc.setValue(200, false);
+
+    emit grp->valueChanged(30, 10);
+    emit grp->valueChanged(30, 40);
+    QCOMPARE(int(cc.value()), 200);                 // waits below
+    QVERIFY2(cc.pickupHint().contains(QStringLiteral("move it to 78%")), qPrintable(cc.pickupHint()));
+    emit grp->valueChanged(30, 220);
+    QCOMPARE(int(cc.value()), 220);                 // through it: follows
+    QVERIFY(cc.pickupHint().isEmpty());
+    emit grp->valueChanged(30, 90);
+    QCOMPARE(int(cc.value()), 90);
+
+    // Below again, then the group is given another fader that sits high:
+    // its first value only says where it is (the old fader's last value is
+    // not taken as a crossing).
+    cc.setValue(128, false);
+    emit grp->valueChanged(30, 10);
+    QCOMPARE(int(cc.value()), 128);
+    grp->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 31)));
+    emit grp->valueChanged(31, 250);
+    QCOMPARE(int(cc.value()), 128);
+    QVERIFY(!cc.pickupHint().isEmpty());
+}
+
+/* A slider added from the Virtual Console has catch values on; one built
+   the way a loaded show builds it (the constructor) has it off. */
+void VCSlider_Test::addedSlidersCatchValues()
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    vc->slotAddSlider();
+    QList<VCSlider *> sliders = vc->contents()->findChildren<VCSlider *>();
+    QCOMPARE(sliders.size(), 1);
+    QVERIFY(sliders.first()->catchValues());
+    QWidget w;
+    VCSlider loaded(&w, m_doc);
+    QVERIFY(!loaded.catchValues());
+}
+
+/* A slider keeps its saved "catch values"; new ones have it, and its hint
+   is said on the slider. */
+void VCSlider_Test::sliderCatchValuesAreUnchanged()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 20)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!slider.catchValues());          // as saved: no attribute, no catch
+    slider.setSliderValue(100, false);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    QCOMPARE(slider.sliderValue(), 10);      // not catching: it follows at once
+
+    slider.setCatchValues(true);
+    slider.setSliderValue(100, false);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 30);
+    QCOMPARE(slider.sliderValue(), 100);     // waits
+    QVERIFY(slider.pickupHint().contains(QStringLiteral("move it to")));
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 150);
+    QCOMPARE(slider.sliderValue(), 150);     // crossed it: follows
+    QVERIFY(slider.pickupHint().isEmpty());
+
+    // As before: a fader that was elsewhere and is moved further away waits
+    // (the slider on a new page at 200, the fader left at 100; then one
+    // parked above and nudged up).
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 99);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 94);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 60);
+    QCOMPARE(slider.sliderValue(), 200);
+    slider.setSliderValue(128, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 206);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 210);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 214);
+    QCOMPARE(slider.sliderValue(), 128);
+
+    // A mode or limits change is a different control: the wait starts over
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 20);
+    QVERIFY(!slider.pickupHint().isEmpty());
+    slider.setLevelLowLimit(5);
+    QVERIFY(slider.pickupHint().isEmpty());
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 20);
+    QVERIFY(!slider.pickupHint().isEmpty());
+    slider.setSliderMode(VCSlider::Level);
+    QVERIFY(slider.pickupHint().isEmpty());
+}
+
+/* Q313: a master never waits. The Grand Master, a submaster and a group
+   master slider follow their fader at once, both ways, even with catch
+   values on (new sliders have them). */
+void VCSlider_Test::masterSlidersFollowAtOnce()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 22)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+
+    const VCSlider::SliderMode modes[] = { VCSlider::GrandMaster, VCSlider::Submaster,
+                                           VCSlider::GroupMaster };
+    for (VCSlider::SliderMode mode : modes)
+    {
+        slider.setSliderMode(mode);
+        slider.setCatchValues(true);
+        slider.setSliderValue(255, false);
+        slider.m_pickup.reset();
+        // The first value is far from the master: it follows (up, down, up)
+        emit iom->inputValueChanged(0, 22, 100);
+        QCOMPARE(slider.sliderValue(), 100);
+        emit iom->inputValueChanged(0, 22, 220);
+        QCOMPARE(slider.sliderValue(), 220);
+        emit iom->inputValueChanged(0, 22, 5);
+        QCOMPARE(slider.sliderValue(), 5);
+        QVERIFY(slider.pickupHint().isEmpty());
+        if (mode == VCSlider::GrandMaster)
+            QCOMPARE(int(iom->grandMasterValue()), 5);
+    }
+
+    // A level fader with the same catch values still waits
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
+    emit iom->inputValueChanged(0, 22, 10);
+    emit iom->inputValueChanged(0, 22, 40);
+    QCOMPARE(slider.sliderValue(), 200);
+    m_doc->setMode(Doc::Design);
+}
+
+/* A parked fader's jitter never moves a control that waits: a level fader
+   left below, then above, the slider and nudged by a few steps. */
+void VCSlider_Test::parkedFaderJitterNeverJumpsANonMaster()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 26)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(150, false);
+    for (int v : { 30, 33, 31, 29, 34, 30 })
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 26, v);
+    QCOMPARE(slider.sliderValue(), 150);
+    QVERIFY(!slider.pickupHint().isEmpty());
+    slider.setSliderValue(60, false);
+    slider.m_pickup.reset();
+    for (int v : { 200, 197, 203, 199, 202 })
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 26, v);
+    QCOMPARE(slider.sliderValue(), 60);
+    m_doc->setMode(Doc::Design);
+}
+
+/* Review round 3, finding 3: an inverted slider reads its fader upside
+   down, and the pick-up judges the value it would take: at 0, its fader at
+   the top (raw 255) is at it, taken at once, and pulling it follows. */
+void VCSlider_Test::invertedSliderIsPickedUpWhereItsFaderIs()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setInvertedAppearance(true);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 23)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(0, false);
+
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 255);
+    QCOMPARE(slider.sliderValue(), 0);
+    QVERIFY(slider.pickupHint().isEmpty());          // taken, not waiting
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 200);
+    QCOMPARE(slider.sliderValue(), 55);              // follows, no snap to full
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 128);
+    QCOMPARE(slider.sliderValue(), 127);
+
+    // Waiting, its hint says where on the fader's travel: the slider at
+    // 200 is its fader at 22% (55 of 255)
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 250);
+    QCOMPARE(slider.sliderValue(), 200);
+    QVERIFY2(slider.pickupHint().contains(QStringLiteral("move it to 22%")),
+             qPrintable(slider.pickupHint()));
+    m_doc->setMode(Doc::Design);
+}
+
+/* A level slider with limits takes its input scaled to its range, so the
+   pick-up compares the fader with the slider on the input's own scale:
+   limits 100..200 at 150 is the fader at its middle. */
+void VCSlider_Test::limitedSliderIsPickedUpOnItsOwnScale()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setLevelLowLimit(100);
+    slider.setLevelHighLimit(200);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 24)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(150, false);
+    QCOMPARE(slider.sliderValue(), 150);
+
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 128);   // at it
+    QVERIFY(slider.pickupHint().isEmpty());
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 100);
+    QVERIFY2(slider.sliderValue() >= 137 && slider.sliderValue() <= 141,
+             qPrintable(QString::number(slider.sliderValue())));
+
+    // Waiting, the hint is on the fader's travel: 150 is its middle
+    slider.setSliderValue(150, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 10);
+    QCOMPARE(slider.sliderValue(), 150);
+    QVERIFY2(slider.pickupHint().contains(QStringLiteral("move it to 50%")),
+             qPrintable(slider.pickupHint()));
+    m_doc->setMode(Doc::Design);
+}
+
+/* Review round 4, findings 2, 3 and 5: pick-up is on for every new
+   absolute fader, however it is made (a knob, a copy, the Eos import is in
+   its own test), and a copy keeps it, a master's lower-at-once with it. */
+void VCSlider_Test::everyNewSliderCatchesValues()
+{
+    VirtualConsole *vc = VirtualConsole::instance();
+    vc->slotAddKnob();
+    QList<VCSlider *> sliders = vc->contents()->findChildren<VCSlider *>();
+    QCOMPARE(sliders.size(), 1);
+    QCOMPARE(sliders.first()->widgetStyle(), VCSlider::WKnob);
+    QVERIFY(sliders.first()->catchValues());
+
+    // A Submaster copied (copy/paste, duplicate) keeps catching values and saves it
+    QWidget w;
+    VCSlider sub(&w, m_doc);
+    sub.setSliderMode(VCSlider::Submaster);
+    sub.setCatchValues(true);
+    VCSlider *copy = qobject_cast<VCSlider *>(sub.createCopy(vc->contents()));
+    QVERIFY(copy != nullptr);
+    QVERIFY(copy->catchValues());
+    QCOMPARE(copy->sliderMode(), VCSlider::Submaster);
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xw(&buffer);
+    xw.writeStartDocument();
+    QVERIFY(copy->saveXML(&xw));
+    xw.writeEndDocument();
+    QVERIFY(buffer.buffer().contains("CatchValues=\"true\""));
+    delete copy;
+
+    // One that was off stays off
+    VCSlider plain(&w, m_doc);
+    VCSlider *plainCopy = qobject_cast<VCSlider *>(plain.createCopy(vc->contents()));
+    QVERIFY(plainCopy != nullptr);
+    QVERIFY(!plainCopy->catchValues());
+    delete plainCopy;
+}

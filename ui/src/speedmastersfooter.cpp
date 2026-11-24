@@ -213,16 +213,27 @@ void SpeedMastersFooter::tick()
         QString name = sm->name(i);
         if (compact && name == tr("Speed %1").arg(i + 1))
             name = tr("S%1").arg(i + 1);            // unnamed: its number
-        const QString text = buttonText(name, sm->bpm(i), paused, compact ? 4 : 10);
+        QString text = buttonText(name, sm->bpm(i), paused, compact ? 4 : 10);
+        // A Rate fader waiting to be picked up: the way to move it, on the
+        // button itself (the sentence is the tooltip, below)
+        const int pickup = sm->pickupDirection(i);
+        if (pickup != 0)
+            text += QLatin1Char(' ') + QChar(pickup > 0 ? 0x25B2 : 0x25BC);
         // Only on a change: a label that changes width every frame would
         // jiggle the footer.
         if (b->text() != text)
         {
             wider = wider || b->text().size() != text.size();
             b->setText(text);
-            b->setToolTip(tr("%1: %2 BPM. Click for the speed masters.")
-                          .arg(sm->name(i)).arg(sm->bpm(i), 0, 'f', 1));
         }
+        // A Rate fader waiting to be picked up says so, and where to move it
+        QString tip = tr("%1: %2 BPM. Click for the speed masters.")
+                          .arg(sm->name(i)).arg(sm->bpm(i), 0, 'f', 1);
+        const QString hint = sm->pickupHint(i);
+        if (!hint.isEmpty())
+            tip = hint + QStringLiteral("\n") + tip;
+        if (b->toolTip() != tip)
+            b->setToolTip(tip);
         // The level (the rate, 0..200 %) shows only while it's being moved,
         // then fades: the blink is the beat.
         const qint64 now = m_clock.elapsed();

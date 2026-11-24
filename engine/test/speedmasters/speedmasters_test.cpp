@@ -47,6 +47,8 @@
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
+#include "faderpickup.h"
+#include "inputoutputmap.h"
 
 #include "speedmasters_test.h"
 
@@ -736,7 +738,10 @@ void SpeedMasters_Test::aControlSurfaceDrivesAMaster()
     QCOMPARE(c, quint32(11));
     QVERIFY(!sm->input(0, SpeedMasters::RateControl, nullptr, nullptr));
 
-    // The fader: top is 200 %, the middle 100 %, the bottom stopped.
+    // The fader: top is 200 %, the middle 100 %, the bottom stopped. It has
+    // to be picked up first: a fader that says where it is, near the rate.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 128);
+    QCOMPARE(sm->rate(1), 1.0);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 255);
     QCOMPARE(sm->rate(1), 2.0);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 128);
@@ -857,3 +862,128 @@ void SpeedMasters_Test::onlyTheMastersSomethingIsOnAreUsed()
 }
 
 QTEST_MAIN(SpeedMasters_Test)
+
+/* Q299: an external fader is picked up (soft takeover), as a Virtual Console
+   slider's "catch values" always did. */
+void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
+{
+    FaderPickup p;
+    QVERIFY(!p.accept(10, 100));            // the first value only says where it is
+    QVERIFY(p.waiting(100));
+    QCOMPARE(p.direction(100), 1);          // move it up
+    QVERIFY(!p.accept(20, 100));            // still below
+    QVERIFY(p.waiting(100));
+    QVERIFY(!p.waiting(22));                // the control moved to where the fader is
+    QVERIFY(p.accept(98, 100));             // within the threshold: picked up
+    QVERIFY(!p.waiting(100));
+    QCOMPARE(p.direction(100), 0);
+    QVERIFY(p.accept(200, 100));            // and it follows from here
+    p.reset();
+    QVERIFY(!p.accept(250, 100));           // above: waits too
+    QCOMPARE(p.direction(100), -1);
+    QVERIFY(p.accept(90, 100));             // crossed through it
+
+    // A first value already at the control is taken.
+    p.reset();
+    QVERIFY(p.accept(253, 255));
+
+    // A fader that was somewhere else and is pulled further away waits:
+    // the control never jumps to it (a VC slider on a new page at 200 with
+    // the fader left at 100; a Rate fader parked below the rate; one parked
+    // above and nudged up).
+    p.reset();
+    QVERIFY(!p.accept(99, 200));
+    QVERIFY(!p.accept(94, 200));
+    QVERIFY(!p.accept(60, 200));
+    QVERIFY(p.waiting(200));
+    p.reset();
+    QVERIFY(!p.accept(204, 128));
+    QVERIFY(!p.accept(206, 128));
+    QVERIFY(!p.accept(210, 128));
+    QVERIFY(!p.accept(214, 128));
+    QVERIFY(p.waiting(128));
+
+    // Left at the bottom and nudged up: it waits, and once it has moved
+    // toward the control it keeps waiting, even when pulled back down.
+    p.reset();
+    QVERIFY(!p.accept(3, 255));
+    QVERIFY(!p.accept(6, 255));
+    QVERIFY(!p.accept(0, 255));
+    QVERIFY(!p.accept(30, 255));
+    QVERIFY(p.waiting(255));
+
+    // A parked fader's jitter is no move.
+    p.reset();
+    QVERIFY(!p.accept(3, 255));
+    QVERIFY(!p.accept(1, 255));
+    QVERIFY(!p.accept(2, 255));
+
+    // Another fader drives the control: the old one's place is no guide.
+    p.setSource(0, 11);
+    QVERIFY(!p.accept(10, 128));
+    p.setSource(0, 11);                     // the same one: kept
+    QCOMPARE(p.last(), 10);
+    p.setSource(0, 12);
+    QCOMPARE(p.last(), -1);
+    QVERIFY(!p.accept(250, 128));           // not a crossing from 10
+}
+
+void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
+    sm->setRate(1, 1.0);
+    QVERIFY(sm->pickupHint(1).isEmpty());
+
+    // Below the rate: nothing happens, and the footer says where to go:
+    // 100 % rate is the fader's middle, so 50 % of its travel.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 30);
+    QCOMPARE(sm->rate(1), 1.0);
+    QVERIFY2(sm->pickupHint(1).contains(QStringLiteral("move it to 50%")), qPrintable(sm->pickupHint(1)));
+    QCOMPARE(sm->pickupDirection(1), 1);
+
+    // Through it: it follows, and the hint clears.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 200);
+    QVERIFY(qAbs(sm->rate(1) - 200 / 127.5) < 1e-9);
+    QVERIFY(sm->pickupHint(1).isEmpty());
+    QCOMPARE(sm->pickupDirection(1), 0);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 60);
+    QVERIFY(qAbs(sm->rate(1) - 60 / 127.5) < 1e-9);
+
+    // Rate 50 % is a quarter of the way up. (Another fader, so it starts
+    // unknown; it comes down toward the rate.)
+    sm->setRate(1, 0.5);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 13);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 13, 210);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 13, 200);
+    QCOMPARE(sm->rate(1), 0.5);
+    QVERIFY2(sm->pickupHint(1).contains(QStringLiteral("move it to 25%")), qPrintable(sm->pickupHint(1)));
+    QCOMPARE(sm->pickupDirection(1), -1);
+
+    // Re-learnt to another fader that sits high: its first value is not
+    // taken as a crossing from where the old fader was (below).
+    sm->setRate(1, 1.0);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 10);
+    QCOMPARE(sm->rate(1), 1.0);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 12);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 250);
+    QCOMPARE(sm->rate(1), 1.0);
+    QVERIFY(!sm->pickupHint(1).isEmpty());
+    sm->clearInput(1, SpeedMasters::RateControl);
+    QVERIFY(sm->pickupHint(1).isEmpty());   // no fader, no wait
+
+    // Learnt again, the same fader starts a fresh wait: its old position
+    // is not a crossing
+    sm->setRate(1, 1.0);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 12);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 250);
+    QCOMPARE(sm->rate(1), 1.0);
+    sm->clearInput(1, SpeedMasters::RateControl);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 12);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 10);
+    QCOMPARE(sm->rate(1), 1.0);             // first sight, far: waits
+    QVERIFY(!sm->pickupHint(1).isEmpty());
+    sm->clearInput(1, SpeedMasters::RateControl);
+}

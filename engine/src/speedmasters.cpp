@@ -588,6 +588,10 @@ void SpeedMasters::setInput(int index, Control control, quint32 universe, quint3
         m.inUniverse[control] = universe;
         m.inChannel[control] = channel;
         m.inLast[control] = 0;
+        // Another fader (or none) drives the rate: where the old one was
+        // says nothing about the new one
+        if (control == RateControl)
+            m.ratePickup.setSource(universe, channel);
     }
     emit changed(index);
 }
@@ -595,6 +599,11 @@ void SpeedMasters::setInput(int index, Control control, quint32 universe, quint3
 void SpeedMasters::clearInput(int index, Control control)
 {
     setInput(index, control, UINT_MAX, UINT_MAX);
+    if (control == RateControl && valid(index))
+    {
+        QMutexLocker locker(&m_mutex);
+        m_masters[index].ratePickup.reset();
+    }
 }
 
 bool SpeedMasters::input(int index, Control control, quint32 *universe, quint32 *channel) const
@@ -606,6 +615,29 @@ bool SpeedMasters::input(int index, Control control, quint32 *universe, quint32 
     if (universe != nullptr) *universe = m.inUniverse[control];
     if (channel != nullptr) *channel = m.inChannel[control];
     return m.inUniverse[control] != UINT_MAX;
+}
+
+QString SpeedMasters::pickupHint(int index) const
+{
+    if (!valid(index))
+        return QString();
+    QMutexLocker locker(&m_mutex);
+    const Master &m = m_masters[index];
+    const int cur = qBound(0, int(m.rate * 127.5 + 0.5), 255);
+    if (!m.ratePickup.waiting(cur))
+        return QString();
+    // Where on the fader's travel the rate is: 100 % rate is its middle
+    return FaderPickup::hintText(m.name.isEmpty() ? tr("Speed %1").arg(index + 1) : m.name,
+                                 int(cur * 100.0 / 255.0 + 0.5));
+}
+
+int SpeedMasters::pickupDirection(int index) const
+{
+    if (!valid(index))
+        return 0;
+    QMutexLocker locker(&m_mutex);
+    const Master &m = m_masters[index];
+    return m.ratePickup.direction(qBound(0, int(m.rate * 127.5 + 0.5), 255));
 }
 
 void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value)
@@ -640,6 +672,19 @@ void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value
             {
                 // A fader's middle is 100 %: snap there, so a fader parked
                 // near the centre detent runs the master at its tempo.
+                // Pick-up: a fader that is not where the rate is does
+                // nothing until it reaches it.
+                bool take = false;
+                {
+                    QMutexLocker locker(&m_mutex);
+                    const int cur = qBound(0, int(m_masters[h.index].rate * 127.5 + 0.5), 255);
+                    take = m_masters[h.index].ratePickup.accept(value, cur);
+                }
+                if (!take)
+                {
+                    emit changed(h.index);   // the footer shows the hint
+                    break;
+                }
                 double rate = value / 127.5;
                 if (qAbs(rate - 1.0) < 0.02)
                     rate = 1.0;

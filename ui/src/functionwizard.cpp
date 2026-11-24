@@ -869,6 +869,7 @@ VCWidget *FunctionWizard::createWidget(int type, VCWidget *parent, int xpos, int
         case VCWidget::SliderWidget:
         {
             VCSlider* slider = new VCSlider(parent, m_doc);
+            slider->setCatchValues(true);   // pick-up on for a new fader (Q299)
             vc->setupWidget(slider, parent);
             slider->move(QPoint(xpos, ypos));
             // Click & Go Slider in Pallette Frames

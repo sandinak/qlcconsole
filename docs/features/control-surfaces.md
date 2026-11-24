@@ -72,6 +72,45 @@ to fix it; the Devices line adds *1 control with two jobs*.
 | **Companion** | The qlcconsole module in Bitfocus Companion | A Stream Deck over the web access socket. See [Stream Deck](show-control.md#stream-deck-companion). |
 | **Game pads** | **Connections**, right-click the pad | Pad Run and the focus tools. See [Show control](show-control.md#go-from-the-game-controller-pad-run). |
 
+## A fader is picked up before it follows
+
+An external fader that is not where the control is does nothing until you
+move it to, or through, the current value; then it follows. This stops a
+fader that was left at the bottom from dropping a control to zero the
+moment you touch it. It holds for a **speed master's Rate** fader, a
+**channel group's** fader and a **Virtual Console slider** with **Catch
+values** on, in Playback, Level or Speed master mode (every new slider or
+knob has it on, however it is made: added, from a wizard, an Eos import or
+a copy of one that has it; one in a saved show keeps its setting). An
+encoder (an input in **Encoder** or **Relative** mode) has no position, so
+it is never made to wait.
+
+**Masters follow at once.** The **Grand Master** (footer and Simple Desk)
+and a Virtual Console slider set to **Grand Master**, **Submaster** or
+**Group master** do not wait: they follow their fader, up and down, from the
+first value, whatever Catch values says. They stay that way until their
+surface type declares them.
+
+A fader that is waiting says so in the tooltip of the control, and a speed
+master's footer button gets an arrow, the way to move the fader:
+*"Speed 1 fader: move it to 50% to take over"*. The percent is where on the
+fader's travel: a speed master's Rate fader has 100% rate at its middle, so
+it reads *"move it to 50%"*. It clears when the fader gets there (or when
+you move the control on screen to where the fader is).
+
+Right after the show opens nobody knows where a fader is. A fader that is
+already at the control is taken at once; one anywhere else waits, whichever
+way you move it, so a control never jumps to a fader that was somewhere
+else. A resting fader's jitter is no move.
+
+A Virtual Console slider with **Inverted appearance** reads its fader
+upside down, and so does its pick-up: a slider at 0 is picked up by a
+fader at the top. A level slider with limits is picked up where its value
+sits on the fader's travel, and its hint says that place.
+
+Giving a control another fader (Learn again) starts over: the new fader
+waits until it reaches the control.
+
 ## The rules for a surface
 
 These are the same rules the pad and the phone page follow, written so you

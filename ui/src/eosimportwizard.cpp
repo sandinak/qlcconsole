@@ -476,6 +476,7 @@ VCFrame *EosImportWizard::addSubFaders(Doc *doc, const QList<EosImportedSub> &su
     {
         const EosImportedSub &s = playable.at(i);
         VCSlider *slider = new VCSlider(frame, doc);
+        slider->setCatchValues(true);   // pick-up on for a new fader (Q299)
         vc->placeWidget(slider, frame);
         slider->setSliderMode(VCSlider::Playback);
         slider->setPlaybackFunction(s.function);

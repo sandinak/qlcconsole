@@ -982,6 +982,7 @@ void VirtualConsole::slotAddSlider()
         return;
 
     VCSlider* slider = new VCSlider(parent, m_doc);
+    slider->setCatchValues(true);   // pick-up on for a new fader (Q299); loaded ones keep theirs
     setupWidget(slider, parent);
     m_doc->setModified();
 }
@@ -1013,6 +1014,7 @@ void VirtualConsole::slotAddSliderMatrix()
     for (int i = 0; i < count; i++)
     {
         VCSlider* slider = new VCSlider(frame, m_doc);
+        slider->setCatchValues(true);
         Q_ASSERT(slider != NULL);
         addWidgetInMap(slider);
         connectWidgetToParent(slider, frame);
@@ -1037,6 +1039,7 @@ void VirtualConsole::slotAddKnob()
         return;
 
     VCSlider* knob = new VCSlider(parent, m_doc);
+    knob->setCatchValues(true);     // an absolute knob is picked up too (Q299)
     setupWidget(knob, parent);
     knob->resize(QSize(60, 90));
     knob->setWidgetStyle(VCSlider::WKnob);

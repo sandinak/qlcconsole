@@ -60,9 +60,9 @@
  *  playback value change stable */
 #define PLAYBACK_CHANGE_THRESHOLD   5  // roughly this is 100ms
 
-/** +/- value range to catch the slider for external
+/** (the rule itself is FaderPickup::Threshold)
+ *  +/- value range to catch the slider for external
  *  controllers with no feedback support */
-#define VALUE_CATCHING_THRESHOLD    4
 
 const quint8 VCSlider::sliderInputSourceId = 0;
 const quint8 VCSlider::overrideResetInputSourceId = 1;
@@ -110,7 +110,6 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
     , m_widgetMode(WSlider)
     , m_cngType(ClickAndGoWidget::None)
     , m_isOverriding(false)
-    , m_lastInputValue(-1)
 {
     /* Set the class name "VCSlider" as the object name as well */
     setObjectName(VCSlider::staticMetaObject.className());
@@ -287,6 +286,9 @@ bool VCSlider::copyFrom(const VCWidget* widget)
     setValueDisplayStyle(slider->valueDisplayStyle());
     setInvertedAppearance(slider->invertedAppearance());
 
+    /* Copy fader pick-up (Q299) */
+    setCatchValues(slider->catchValues());
+
     /* Copy Click & Go feature */
     setClickAndGoType(slider->clickAndGoType());
 
@@ -346,12 +348,32 @@ void VCSlider::enableWidgetUI(bool enable)
     if (m_storeButton)
         m_storeButton->setEnabled(enable);
     if (enable == false)
-        m_lastInputValue = -1;
+    {
+        m_pickup.reset();
+    }
 }
 
 void VCSlider::hideEvent(QHideEvent *)
 {
-    m_lastInputValue = -1;
+    m_pickup.reset();
+}
+
+QString VCSlider::pickupHint() const
+{
+    const int cur = pickupCurrent();
+    if (!picksUp() || !m_pickup.waiting(cur))
+        return QString();
+    // Where on the fader's travel: an inverted slider's fader is upside down
+    return FaderPickup::hintText(caption().isEmpty() ? tr("Slider") : caption(),
+                                 int(pickupValue(uchar(cur)) * 100.0 / UCHAR_MAX + 0.5));
+}
+
+void VCSlider::updatePickupHint()
+{
+    if (m_slider == nullptr)
+        return;
+    // The slider's own tooltip: the widget's tooltip says what it drives
+    m_slider->setToolTip(pickupHint());
 }
 
 /*****************************************************************************
@@ -487,6 +509,33 @@ void VCSlider::setCatchValues(bool enable)
         return;
 
     m_catchValues = enable;
+}
+
+bool VCSlider::picksUp() const
+{
+    /* A master never waits (Q313): the Grand Master, a submaster and a group
+       master follow their fader at once, both ways. */
+    return catchValues() && m_sliderMode != GrandMaster && m_sliderMode != Submaster &&
+           m_sliderMode != GroupMaster;
+}
+
+int VCSlider::pickupValue(uchar input) const
+{
+    // An inverted slider reads its fader upside down
+    return invertedAppearance() ? UCHAR_MAX - input : input;
+}
+
+int VCSlider::pickupCurrent() const
+{
+    // The slider's value on the input's 0..255 scale: a level slider with
+    // limits spans only part of it (the input is scaled to its range)
+    if (m_slider == nullptr)
+        return 0;
+    const int lo = m_slider->minimum(), hi = m_slider->maximum();
+    if (hi <= lo)
+        return 0;
+    return qBound(0, qRound(SCALE(double(m_slider->value()), double(lo), double(hi),
+                                  0.0, double(UCHAR_MAX))), int(UCHAR_MAX));
 }
 
 /*****************************************************************************
@@ -750,6 +799,7 @@ void VCSlider::setSliderMode(SliderMode mode)
                 this, &VCSlider::slotEffectTrackerChanged);
 
     m_sliderMode = mode;
+    m_pickup.reset();           // a different control: a fresh wait
 
     if (mode == Level)
     {
@@ -1139,6 +1189,7 @@ QList <VCSlider::LevelChannel> VCSlider::levelChannels()
 void VCSlider::setLevelLowLimit(uchar value)
 {
     m_levelLowLimit = value;
+    m_pickup.reset();
     if (m_cngWidget != NULL)
         m_cngWidget->setLevelLowLimit(value);
 }
@@ -1151,6 +1202,7 @@ uchar VCSlider::levelLowLimit() const
 void VCSlider::setLevelHighLimit(uchar value)
 {
     m_levelHighLimit = value;
+    m_pickup.reset();
     if (m_cngWidget != NULL)
         m_cngWidget->setLevelHighLimit(value);
 }
@@ -2439,18 +2491,34 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             /* When 'values catching" is enabled, controllers that do not have motorized faders
              * can catch up with the current slider value by entering a certain threshold
              * or by 'surpassing' the current value */
-            if (catchValues())
-            {
-                uchar currentValue = sliderValue();
+            /* An inverted slider reads its fader upside down: the pick-up
+             * judges the value the slider would take, against where the
+             * slider is on the same 0..255 scale (so lowering a master is
+             * lowering it, and an inverted slider at 0 is where its fader
+             * is at the top). */
+            value = uchar(pickupValue(value));
 
-                // filter 'out of threshold' cases
-                if (m_lastInputValue == -1 ||
-                    (m_lastInputValue < currentValue - VALUE_CATCHING_THRESHOLD && value < currentValue - VALUE_CATCHING_THRESHOLD) ||
-                    (m_lastInputValue > currentValue + VALUE_CATCHING_THRESHOLD && value > currentValue + VALUE_CATCHING_THRESHOLD))
+            /* An encoder (Relative / Encoder mode) has no position: its
+             * value is the slider's own plus a step, so it never waits to
+             * be picked up (it would wait for ever after a reset) */
+            QSharedPointer<QLCInputSource> src = inputSource(sliderInputSourceId);
+            const bool absolute = src.isNull() ||
+                                  src->workingMode() == QLCInputSource::Absolute;
+            if ((!absolute || !picksUp()) && m_pickup.last() >= 0)
+            {
+                m_pickup.reset();       // made an encoder since: no wait left
+                updatePickupHint();
+            }
+
+            if (picksUp() && absolute)
+            {
+                m_pickup.setSource(universe, pagedCh);   // another fader: start over
+                if (m_pickup.accept(value, pickupCurrent()) == false)
                 {
-                    m_lastInputValue = value;
+                    updatePickupHint();
                     return;
                 }
+                updatePickupHint();
             }
 
             if (m_monitorEnabled == true && m_isOverriding == false)
@@ -2460,11 +2528,7 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
                 updateOverrideFeedback(true);
             }
 
-            if (invertedAppearance())
-                value = UCHAR_MAX - value;
-
             setSliderValue(value, true, true);
-            m_lastInputValue = value;
         }
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), overrideResetInputSourceId))

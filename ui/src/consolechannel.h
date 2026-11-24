@@ -28,6 +28,7 @@
 #include "clickandgowidget.h"
 #include "qlcchannel.h"
 #include "dmxsource.h"
+#include "faderpickup.h"
 
 class QContextMenuEvent;
 class QIntValidator;
@@ -85,6 +86,12 @@ private:
     /** this value is set only through setChannelsGroup,
      *  to emit the proper signal when value changes */
     quint32 m_group;
+    QString m_lastHint;     //!< the pickup hint now in the slider's tooltip
+    FaderPickup m_pickup;   //!< a channel group's external fader (Q299)
+
+public:
+    /** "Group: move it to 75% to take over" while the group's external fader waits */
+    QString pickupHint() const;
 
     /*************************************************************************
      * Group

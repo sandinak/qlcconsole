@@ -2875,6 +2875,35 @@ void AppViews_Test::aRefusedSurfacePressSaysSoOnTheFooter()
     cm->handleInput(0, 20, 0);
 }
 
+/* Q313: the Grand Master follows its external fader at once, both ways: no
+   pick-up, nothing waiting, no hint on the footer. */
+void AppViews_Test::theGrandMasterFollowsItsFaderAtOnce()
+{
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    VirtualConsole *vc = VirtualConsole::instance();
+    const quint32 wasU = vc->m_properties.grandMasterInputUniverse();
+    const quint32 wasC = vc->m_properties.grandMasterInputChannel();
+    const uchar wasGm = iom->grandMasterValue();
+    auto restore = qScopeGuard([=]() {
+        vc->m_properties.setGrandMasterInputSource(wasU, wasC);
+        iom->setGrandMasterValue(wasGm);
+    });
+    vc->m_properties.setGrandMasterInputSource(0, 117);
+    iom->setGrandMasterValue(255);
+
+    // The first value is far below: the GM goes there. Then up, then down.
+    emit iom->inputValueChanged(0, 117, 100);
+    QCOMPARE(int(iom->grandMasterValue()), 100);
+    emit iom->inputValueChanged(0, 117, 220);
+    QCOMPARE(int(iom->grandMasterValue()), 220);
+    emit iom->inputValueChanged(0, 117, 5);
+    QCOMPARE(int(iom->grandMasterValue()), 5);
+    emit iom->inputValueChanged(0, 117, 250);
+    QCOMPARE(int(iom->grandMasterValue()), 250);
+    QCOMPARE(m_app->m_statusGrandMasterSlider->value(), 250);
+    QVERIFY(!m_app->m_statusGrandMasterSlider->toolTip().contains(QStringLiteral("move it to")));
+}
+
 QTEST_MAIN(AppViews_Test)
 
 /* WCAG relative luminance and contrast. */

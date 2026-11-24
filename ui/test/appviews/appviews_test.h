@@ -371,6 +371,8 @@ private slots:
     void aPmjFaderOrEncoderInOperateEditsNothing();
     void aSecondPmjBoardIsNamedNotIgnoredInSilence();
     void aRefusedSurfacePressSaysSoOnTheFooter();
+    /** Q313: the Grand Master follows its fader at once, nothing waits. */
+    void theGrandMasterFollowsItsFaderAtOnce();
 
     /** Quitting with the window still up and the Show Tree in front: the
      *  tab goes before the Doc, so its hide event (which stops its preview)

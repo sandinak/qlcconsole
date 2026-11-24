@@ -32,6 +32,8 @@
 #include "qlcchannel.h"
 #include "qlccapability.h"
 
+#include "qlcinputsource.h"
+#include "channelsgroup.h"
 #include "doc.h"
 #include "fixture.h"
 #include "apputil.h"
@@ -221,6 +223,7 @@ void ConsoleChannel::setLabel(QString label)
 void ConsoleChannel::setChannelsGroup(quint32 grpid)
 {
     m_group = grpid;
+    m_pickup.reset();
     ChannelsGroup *grp = m_doc->channelsGroup(grpid);
     connect(grp, SIGNAL(valueChanged(quint32,uchar)),
             this, SLOT(slotInputValueChanged(quint32,uchar)));
@@ -229,7 +232,27 @@ void ConsoleChannel::setChannelsGroup(quint32 grpid)
 void ConsoleChannel::slotInputValueChanged(quint32 channel, uchar value)
 {
     Q_UNUSED(channel)
-    setValue(value);
+    // A channel group's external fader is picked up before it follows (Q299)
+    ChannelsGroup *grp = m_doc->channelsGroup(m_group);
+    QSharedPointer<QLCInputSource> src = grp != NULL ? grp->inputSource() : QSharedPointer<QLCInputSource>();
+    // Another fader drives the group now: where the old one was is no guide
+    if (!src.isNull() && src->isValid())
+        m_pickup.setSource(src->universe(), src->channel());
+    if (m_pickup.accept(value, m_slider->value()))
+        setValue(value);
+    const QString hint = pickupHint();
+    if (!hint.isEmpty())
+        m_slider->setToolTip(hint);
+    else if (!m_slider->toolTip().isEmpty() && m_slider->toolTip() == m_lastHint)
+        m_slider->setToolTip(QString());
+    m_lastHint = hint;
+}
+
+QString ConsoleChannel::pickupHint() const
+{
+    if (!m_pickup.waiting(m_slider->value()))
+        return QString();
+    return FaderPickup::hintText(m_label->text(), int(m_slider->value() * 100.0 / UCHAR_MAX + 0.5));
 }
 
 /*****************************************************************************
