@@ -23,6 +23,7 @@
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QPushButton>
+#include <QTableWidget>
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QHBoxLayout>

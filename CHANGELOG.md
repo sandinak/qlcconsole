@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Control surfaces in one place.** Connections ▸ Devices ▸ Show control & sync has a new **Control surfaces** row: one line for each place a surface is set up (Control Map triggers, Emergency Stop, Encoder bank, Virtual Console inputs, speed and Grand Masters, the PMJ, Companion, game pads), what is set up now, and a **Set up…** button that goes there. With Control Surfaces off for the show it says so; the emergency stop line stays.
 - **A dialog fits on its screen**: one taller than a laptop's screen ran off
   the bottom with OK and Cancel out of reach; now it opens shrunk to fit
   where it can, centred over the main window. A dialog you put on another

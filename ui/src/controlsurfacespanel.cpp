@@ -273,7 +273,9 @@ QString ControlSurfacesPanel::padsText() const
     for (quint32 u = 0; u < iom->universesCount(); ++u)
     {
         InputPatch *ip = iom->inputPatch(u);
-        if (ip != nullptr && ip->plugin() != nullptr && InputOutputMap::isGamepadLine(ip->plugin(), ip->input()))
+        if (ip != nullptr && ip->plugin() != nullptr
+            && (!ip->plugin()->inputDeviceKind(ip->input()).isEmpty()
+                || !InputOutputMap::channelRoles(ip->plugin(), ip->input()).isEmpty()))
             ++n;
     }
     if (n == 0)
