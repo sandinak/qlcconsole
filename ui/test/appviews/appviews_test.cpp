@@ -58,6 +58,7 @@
 #include "cuerunner.h"
 #include "showtreemodel.h"
 #include "showtreeview.h"
+#include "updatechecker.h"
 #include "lookeditor.h"
 #include "showreviewpanel.h"
 #include "showreview.h"
@@ -1258,6 +1259,23 @@ void AppViews_Test::reopenLastShowCheckboxRoundTrips()
         dlg.accept();
     }
     QVERIFY(!App::reopenLastShow());
+}
+
+/* Settings ▸ General ▸ Software Update: the channels are named for what
+   is published -- Stable, and Beta (a GitHub pre-release) -- not after a
+   feature that was once only in the betas ("Pre-releases too (e.g. Show
+   Tree)" outlived the Show Tree betas by a dozen releases). */
+void AppViews_Test::theUpdateChannelsAreStableAndBeta()
+{
+    AppSettings dlg(m_app);
+    QComboBox *chan = dlg.findChild<QComboBox *>(QStringLiteral("settingsUpdateChannel"));
+    QVERIFY(chan != nullptr);
+    QCOMPARE(chan->count(), 2);
+    QCOMPARE(chan->itemText(chan->findData(int(UpdateChecker::Stable))), QStringLiteral("Stable"));
+    const QString beta = chan->itemText(chan->findData(int(UpdateChecker::PreRelease)));
+    QVERIFY2(beta.startsWith(QLatin1String("Beta")), qPrintable(beta));
+    QVERIFY2(!beta.contains(QLatin1String("Show Tree")), qPrintable(beta));
+    dlg.reject();
 }
 
 void AppViews_Test::settingsAdvancedHoldsAutoOpen()

@@ -161,7 +161,7 @@ void UpdateDialog::refresh()
                     m_heading->setText(tr("qlcconsole is up to date"));
                     m_detail->setText(tr("This is %1, the newest on the %2 channel.")
                                           .arg(current, UpdateChecker::channel() == UpdateChecker::Stable
-                                                        ? tr("Stable") : tr("Pre-release")));
+                                                        ? tr("Stable") : tr("Beta")));
                     break;
                 case UpdateChecker::Idle:
                     m_heading->setText(tr("Software Update"));

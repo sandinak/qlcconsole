@@ -14,6 +14,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The update channel is called Beta**: Settings ▸ General ▸ Software
+  Update offered "Pre-releases too (e.g. Show Tree)", named after the
+  Show Tree betas of 0.2. The channels are now **Stable** and **Beta
+  (stable releases too)**, and the update window says "the Beta channel".
 - **A dialog fits on its screen**: one taller than a laptop's screen ran off
   the bottom with OK and Cancel out of reach; now it opens shrunk to fit
   where it can, centred over the main window. A dialog you put on another

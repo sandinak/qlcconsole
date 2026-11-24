@@ -46,11 +46,11 @@ The **Software Update** group in **Settings → General** belongs to this comput
 to the show:
 
 - **Check for updates (at launch, and once a night when not in Operate)** turns checking on or off.
-- **Channel**: **Stable releases**, or **Pre-releases too** (for example
-  the **Show Tree** builds handed out to a class). A build starts on the
-  channel of its own release. If GitHub marks that release as a
-  pre-release, the build follows Pre-releases from its first check.
-  Otherwise it follows Stable.
+- **Channel**: **Stable**, or **Beta (stable releases too)**: the beta
+  builds published ahead of a release, and every stable release as well.
+  A build starts on the channel of its own release. If GitHub marks that
+  release as a pre-release (a beta), the build follows Beta from its first
+  check. Otherwise it follows Stable.
 - **Install updates automatically** is off by default, so qlcconsole asks
   first. When it is on, an update is downloaded and checked in the
   background as soon as it is found. The chip then says it will install

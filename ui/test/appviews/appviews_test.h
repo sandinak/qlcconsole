@@ -104,6 +104,7 @@ private slots:
     void settingsChoosesTheUnits();
     void settingsAdvancedHoldsAutoOpen();
     void reopenLastShowDecision();
+    void theUpdateChannelsAreStableAndBeta();
     void reopenLastShowCheckboxRoundTrips();
     /** Q65: theme, toolbar style, the footer's chips and the speed masters'
      *  beat are in Settings ▸ Appearance, not the View menu, and set the
