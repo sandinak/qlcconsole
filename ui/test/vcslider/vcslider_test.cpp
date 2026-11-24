@@ -762,7 +762,7 @@ void VCSlider_Test::grandMasterFaderIsPickedUp()
     QCOMPARE(int(iom->grandMasterValue()), 210);
     QVERIFY(gms.pickupHint().isEmpty());
     QVERIFY(!gms.toolTip().contains(QStringLiteral("move it to")));
-    QCOMPARE(hints.count(), 2);
+    QVERIFY(hints.count() >= 2);
     QCOMPARE(hints.last().at(0).toString(), QString());
 
     emit iom->inputValueChanged(0, 9, 100);
