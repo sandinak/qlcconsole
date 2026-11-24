@@ -3117,7 +3117,7 @@ void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
     };
     struct Seen { bool lens = false, preview = false, orientation = false, face = false,
                   panOffset = false, aim = false, connection = false, pixelPath = false,
-                  leds = false; };
+                  leds = false, aimTab = false, heightOnPlace = false; };
     const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
     auto open = [&](const QString &shot) {
         Seen seen;
@@ -3131,6 +3131,16 @@ void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
             seen.orientation = shown("fixtureOrientation");
             seen.face = shown("fixtureFace");
             seen.connection = shown("fixtureConnection");
+            if (QTabWidget *tabs = dlg->findChild<QTabWidget *>(QStringLiteral("fixturePropertiesTabs")))
+                for (int i = 0; i < tabs->count(); ++i)
+                {
+                    const QString key = tabs->widget(i)->objectName().section(QLatin1Char('-'), 1);
+                    if (key == QLatin1String("aim"))
+                        seen.aimTab = tabs->isTabVisible(i);
+                    if (QWidget *h = dlg->findChild<QWidget *>("fixtureHeightOffset"))
+                        seen.heightOnPlace = seen.heightOnPlace
+                            || (key == QLatin1String("place") && tabs->widget(i)->isAncestorOf(h));
+                }
             for (QLabel *l : dlg->findChildren<QLabel *>())
             {
                 if (!fixtureRowShown(dlg, l))
@@ -3138,7 +3148,7 @@ void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
                 seen.panOffset = seen.panOffset || l->text() == "Pan offset (cal):";
                 seen.pixelPath = seen.pixelPath || l->text() == "Pixel path:";
                 seen.leds = seen.leds || l->text() == "Light:";
-                seen.aim = seen.aim || l->text().startsWith("Aim") || l->text().startsWith("Points");
+                seen.aim = seen.aim || l->text().startsWith("Front of device") || l->text().startsWith("Points");
             }
             if (!shots.isEmpty())
             {
@@ -3170,6 +3180,8 @@ void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
     Seen s = open("after-properties-wled");
     QVERIFY(!s.lens && !s.preview && !s.orientation && !s.face && !s.panOffset && !s.aim);
     QVERIFY(s.connection && s.pixelPath && s.leds);     // what a string has
+    QVERIFY2(!s.aimTab, "a string has an Aim & Beam (was Mount) tab");   // nothing on it is a string's
+    QVERIFY(s.heightOnPlace);                           // its height offset is a place
     QCOMPARE(props->fixtureRigProps(rig.fxi->id()).lensDeg, 22.0f);   // kept, only hidden
 
     // Its Art-Net cousin from another maker is a fixed light, aimed as one.
@@ -3188,7 +3200,7 @@ void Monitor_Test::aWledStringIsNotAimedInFixtureProperties()
     rig.fxi->setTransport(Fixture::WledTransport);
     QVERIFY(!WledFixture::isPixelString(rig.fxi));
     s = open("properties-mover");
-    QVERIFY(s.orientation && s.panOffset && s.aim);
+    QVERIFY(s.orientation && s.panOffset && s.aim && s.aimTab);
 }
 
 /* "Fixture Properties edits every selected fixture: double-clicking one of
@@ -34548,7 +34560,7 @@ QString fpCurrent(QWidget *dlg)
     return tabs != nullptr ? fpKey(tabs, tabs->currentIndex()) : QStringLiteral("(no tabs)");
 }
 
-// As a person does: a click on the tab @p w is on, then on More if it is in it.
+// As a person does: a click on the tab @p w is on, then on Calibrate if it is in it.
 bool fpReachByClicks(QWidget *dlg, QWidget *w)
 {
     QTabWidget *tabs = fpTabs(dlg);
@@ -34698,8 +34710,9 @@ void Monitor_Test::fixturePropertiesMarksTheTabTheyDifferOn()
     QVERIFY2(!after.value("aim").contains(QChar(0x2022)), qPrintable(after.value("aim")));
 }
 
-/* Aim & Mount's More: folded by default, the fold remembered; folded, a
-   set calibration is said ("pan cal 5.0°"), never hidden silently. */
+/* Aim & Beam's Calibrate (was More): folded by default, the fold
+   remembered (More's, before, read once); folded, a set calibration is
+   said ("pan cal 5.0°"), never hidden silently. */
 void Monitor_Test::fixturePropertiesFoldedMoreSaysWhatIsSet()
 {
     fpForget();
@@ -34763,6 +34776,20 @@ void Monitor_Test::fixturePropertiesFoldedMoreSaysWhatIsSet()
     }, false);
     rig.mon->showFixtureItemEditor(fid);
     QVERIFY(!open);
+
+    // More's fold, remembered before it was Calibrate, is Calibrate's.
+    fpForget();
+    QSettings().setValue(QStringLiteral("fixtureProperties/aimMoreOpen"), true);
+    QString text;
+    driveDialog([&](QWidget *dlg) {
+        QToolButton *more = dlg->findChild<QToolButton *>(QStringLiteral("fixtureAimMore"));
+        open = more != nullptr && more->isChecked();
+        text = more != nullptr ? more->text() : QString();
+        return more != nullptr;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(open);
+    QCOMPARE(text, QStringLiteral("Calibrate"));
 }
 
 /* Nothing was lost to the tabs and the shade: every control Fixture
@@ -34791,12 +34818,16 @@ void Monitor_Test::fixturePropertiesKeepsEveryControl()
         "testOrientation" };
     const QStringList oneNamedSince = {
         "fixtureIconRotation", "fixtureStagePosition", "fixturePanOffset", "fixtureTiltOffset",
-        "fixturePanInvert", "fixtureTiltInvert", "fixtureTest", "fixtureLocate" };
+        "fixturePanInvert", "fixtureTiltInvert", "fixtureTest", "fixtureLocate",
+        // The relayout's (fp-relayout first cut): Find it, the dial's readout and legend, Match Front.
+        "fixtureFindItRow", "fixtureAimReadout", "fixtureFacingLegend", "fixtureSymbolMatchFront",
+        "fixtureAimExplainer" };
     const QStringList severalBefore = {
         "colourReset", "colourSwatch", "fixtureAddress", "fixtureAim", "fixtureColour", "fixtureCopyPower",
         "fixtureFacingPreview", "fixtureIconRotation", "fixtureMaxAmps", "fixtureMeasure", "fixtureOrientation",
         "fixtureOwner", "fixturePanTurn", "fixturePanTurnCentre", "fixturePanTurnRow", "fixturePatch",
-        "fixturePlacement", "fixtureProfile", "fixtureStageLook", "fixtureTilt", "fixtureUniverse" };
+        "fixturePlacement", "fixtureProfile", "fixtureStageLook", "fixtureTilt", "fixtureUniverse",
+        "fixtureAimReadout", "fixtureSymbolMatchFront" };
 
     auto walk = [](QWidget *dlg, const QStringList &names, QStringList &lost) {
         for (const QString &n : names)
@@ -34844,6 +34875,260 @@ void Monitor_Test::fixturePropertiesKeepsEveryControl()
     }, false);
     rig.mon->editFixturesProperties({ a, b });
     QVERIFY2(lostSeveral.isEmpty(), qPrintable(lostSeveral.join(", ")));
+}
+
+namespace
+{
+// A drag on the dial, as a person makes it: press, two moves, release.
+void fpDrag(QWidget *dial, const QPointF &from, const QPointF &to, Qt::KeyboardModifiers mods = Qt::NoModifier)
+{
+    QTest::mousePress(dial, Qt::LeftButton, mods, from.toPoint());
+    for (const QPointF &at : { from + (to - from) / 2.0, to })
+    {
+        QMouseEvent ev(QEvent::MouseMove, at, dial->mapToGlobal(at), Qt::NoButton, Qt::LeftButton, mods);
+        QApplication::sendEvent(dial, &ev);
+    }
+    QTest::mouseRelease(dial, Qt::LeftButton, mods, to.toPoint());
+}
+
+QString fpTabOf(QWidget *dlg, QWidget *w)
+{
+    QTabWidget *tabs = fpTabs(dlg);
+    if (tabs == nullptr || w == nullptr)
+        return QString();
+    for (int i = 0; i < tabs->count(); ++i)
+        if (tabs->widget(i)->isAncestorOf(w))
+            return fpKey(tabs, i);
+    return QString();
+}
+}
+
+/* "When I move the arrow I don't see any value change": the dial is on
+   Aim & Beam beside Front of device, and the line under it says where it
+   points -- always, and as it is dragged -- in the field's own number. */
+void Monitor_Test::fixturePropertiesDialSaysWhereItPoints()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+
+    struct Seen { bool found = false; QString dialTab, aimTab, readoutTab, before, during, after;
+                  bool duringShown = false, explained = false; double field = -1.0; };
+    Seen seen;
+    driveDialog([&](QWidget *dlg) {
+        QWidget *dial = dlg->findChild<QWidget *>(QStringLiteral("fixtureFacingPreview"));
+        QDoubleSpinBox *aim = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureAim"));
+        QLabel *readout = dlg->findChild<QLabel *>(QStringLiteral("fixtureAimReadout"));
+        if (dial == nullptr || aim == nullptr || readout == nullptr || fpTabs(dlg) == nullptr)
+            return false;
+        seen.found = true;
+        seen.dialTab = fpTabOf(dlg, dial);
+        seen.aimTab = fpTabOf(dlg, aim);
+        seen.readoutTab = fpTabOf(dlg, readout);
+        fpReachByClicks(dlg, dial);
+        aim->setValue(0.0);
+        seen.before = readout->text();
+        const QPointF c = QRectF(dial->rect()).center();
+        const QPointF tip = dial->property("greenTip").toPointF();
+        // Pressed on the green head, dragged round to the plot's left: stage right.
+        QTest::mousePress(dial, Qt::LeftButton, Qt::NoModifier, (c + tip).toPoint());
+        for (const QPointF &at : { c + QPointF(-30, 2), c + QPointF(-40, 0) })
+        {
+            QMouseEvent ev(QEvent::MouseMove, at, dial->mapToGlobal(at), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(dial, &ev);
+        }
+        seen.during = readout->text();          // while the button is still down
+        seen.duringShown = readout->isVisible();
+        QTest::mouseRelease(dial, Qt::LeftButton, Qt::NoModifier, (c + QPointF(-40, 0)).toPoint());
+        seen.after = readout->text();
+        seen.field = aim->value();
+        QWidget *explain = dlg->findChild<QWidget *>(QStringLiteral("fixtureAimExplainer"));
+        seen.explained = explain != nullptr && explain->isVisible();
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(seen.found);
+    QCOMPARE(seen.dialTab, QStringLiteral("aim"));
+    QCOMPARE(seen.aimTab, QStringLiteral("aim"));
+    QCOMPARE(seen.readoutTab, QStringLiteral("aim"));
+    QCOMPARE(seen.before, QString::fromUtf8("0° · downstage"));
+    QCOMPARE(seen.field, 90.0);
+    QVERIFY(seen.duringShown);
+    // The field's number, and its words.
+    QCOMPARE(seen.during, QString::fromUtf8("%1° · stage right").arg(qRound(seen.field)));
+    QCOMPARE(seen.after, seen.during);           // still said once let go
+    QVERIFY2(seen.explained, "no line says what Front of device is");
+}
+
+/* The symbol's box on the dial turns the plot symbol (Symbol turn, was
+   Icon rotation), in 15-degree steps; Match Front sets it to the front. */
+void Monitor_Test::fixturePropertiesSymbolTurnsFromTheDial()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+
+    struct Seen { bool found = false, draggable = false; QString symTab; int afterDrag = -1, afterMatch = -1;
+                  double plotAfterMatch = -1.0, front = -1.0; };
+    Seen seen;
+    driveDialog([&](QWidget *dlg) {
+        QWidget *dial = dlg->findChild<QWidget *>(QStringLiteral("fixtureFacingPreview"));
+        QSpinBox *sym = dlg->findChild<QSpinBox *>(QStringLiteral("fixtureIconRotation"));
+        QDoubleSpinBox *aim = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureAim"));
+        QPushButton *match = dlg->findChild<QPushButton *>(QStringLiteral("fixtureSymbolMatchFront"));
+        if (dial == nullptr || sym == nullptr || aim == nullptr || match == nullptr)
+            return false;
+        seen.found = true;
+        seen.draggable = dial->property("symbolTurnable").toBool();
+        seen.symTab = fpTabOf(dlg, sym);
+        fpReachByClicks(dlg, dial);
+        sym->setValue(0);
+        const QPointF c = QRectF(dial->rect()).center();
+        // The box grabbed in the middle, pulled up the plot: upstage, 180.
+        fpDrag(dial, c, c + QPointF(2, -40));
+        seen.afterDrag = sym->value();
+        aim->setValue(270.0);
+        seen.front = aim->value();
+        fpReachByClicks(dlg, match);
+        QTest::mouseClick(match, Qt::LeftButton);
+        seen.afterMatch = sym->value();
+        if (MonitorFixtureItem *fi = rig.gv->fixtureItemForId(fid))
+            seen.plotAfterMatch = fi->rotation();
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(seen.found);
+    QVERIFY(seen.draggable);
+    QCOMPARE(seen.symTab, QStringLiteral("aim"));     // under the dial, not on Place
+    QCOMPARE(seen.afterDrag, 180);
+    QCOMPARE(seen.afterMatch, int(seen.front));
+    QCOMPARE(seen.plotAfterMatch, 270.0);           // live on the plot
+}
+
+/* Invert pan (in Calibrate, under Direction) flips the dial's small arrow
+   -- which way DMX up turns the head -- as it is ticked; the pan seam is
+   drawn on the dial. */
+void Monitor_Test::fixturePropertiesInvertPanFlipsTheDial()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+
+    struct Seen { bool found = false; int before = 0, ticked = 0, unticked = 0; double seam = -1.0;
+                  QString direction; };
+    Seen seen;
+    driveDialog([&](QWidget *dlg) {
+        QWidget *dial = dlg->findChild<QWidget *>(QStringLiteral("fixtureFacingPreview"));
+        QCheckBox *inv = dlg->findChild<QCheckBox *>(QStringLiteral("fixturePanInvert"));
+        if (dial == nullptr || inv == nullptr)
+            return false;
+        seen.found = true;
+        fpReachByClicks(dlg, inv);              // Aim & Beam, Calibrate unfolded
+        for (QFormLayout *form : dlg->findChildren<QFormLayout *>())
+            if (QLabel *l = qobject_cast<QLabel *>(form->labelForField(inv->parentWidget())))
+                seen.direction = l->text();
+        seen.before = dial->property("panSense").toInt();
+        seen.seam = dial->property("seam").toDouble();
+        QTest::mouseClick(inv, Qt::LeftButton);
+        seen.ticked = dial->property("panSense").toInt();
+        QTest::mouseClick(inv, Qt::LeftButton);
+        seen.unticked = dial->property("panSense").toInt();
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(seen.found);
+    QCOMPARE(seen.direction, QStringLiteral("Direction:"));
+    QVERIFY2(seen.before != 0, "no DMX direction on the dial");
+    QCOMPARE(seen.ticked, -seen.before);
+    QCOMPARE(seen.unticked, seen.before);
+    QVERIFY2(seen.seam >= 0.0, "no seam on the dial");
+    QVERIFY(!m_doc->monitorProperties()->fixtureRigProps(fid).panInvert);   // Cancel
+}
+
+/* Locate, Identify and Reset on one Find it row under DMX on the Fixture
+   tab -- Identify and Reset only when the definition has them; no DMX
+   Controls tab, and one remembered opens on Fixture. Height offset is on
+   Place, Laser class on Fixture. */
+void Monitor_Test::fixturePropertiesFindItIsUnderDmx()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    FixtureCleanup cleanup(m_doc);
+    Fixture *f = stagedWithMaintenance(m_doc, &cleanup);
+    QVERIFY(f != nullptr);
+    QVERIFY(m_doc->patchFixture(f->id(), 0, 440));
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 head = rig.head("Spot 1", 20.0f);
+    QVERIFY(head != Fixture::invalidId());
+
+    struct Seen { bool found = false; QString opened; QStringList keys; QMap<QString, QString> tabOf;
+                  QStringList inRow; bool enabled = false; bool belowDmx = false; };
+    auto look = [&](quint32 fid) {
+        Seen seen;
+        driveDialog([&](QWidget *dlg) {
+            QTabWidget *tabs = fpTabs(dlg);
+            QWidget *row = dlg->findChild<QWidget *>(QStringLiteral("fixtureFindItRow"));
+            if (tabs == nullptr || row == nullptr)
+                return false;
+            seen.found = true;
+            seen.opened = fpCurrent(dlg);
+            for (int i = 0; i < tabs->count(); ++i)
+                seen.keys << fpKey(tabs, i);
+            for (const char *n : { "fixtureFindItRow", "fixtureHeightOffset", "fixtureLaserClass", "fixtureAim" })
+                seen.tabOf[QLatin1String(n)] = fpTabOf(dlg, dlg->findChild<QWidget *>(n));
+            seen.enabled = true;
+            for (const char *n : { "fixtureLocate", "fixtureIdentify", "fixtureReset" })
+                if (QPushButton *b = dlg->findChild<QPushButton *>(n))
+                {
+                    if (row->isAncestorOf(b))
+                        seen.inRow << QLatin1String(n);
+                    seen.enabled = seen.enabled && b->isEnabled();
+                }
+            // Its row is the one after DMX's (and DMX's note).
+            QWidget *dmx = dlg->findChild<QWidget *>(QStringLiteral("fixtureUniverse"));
+            for (QFormLayout *form : dlg->findChildren<QFormLayout *>())
+            {
+                int dmxRow = -1, findRow = -1;
+                QFormLayout::ItemRole role;
+                if (dmx != nullptr)
+                    form->getWidgetPosition(dmx->parentWidget(), &dmxRow, &role);
+                form->getWidgetPosition(row, &findRow, &role);
+                if (dmxRow >= 0 && findRow > dmxRow && findRow <= dmxRow + 2)
+                    seen.belowDmx = true;
+            }
+            return true;
+        }, false);
+        rig.mon->showFixtureItemEditor(fid);
+        return seen;
+    };
+
+    QSettings().setValue(QStringLiteral("fixtureProperties/tab"), QStringLiteral("dmx"));   // DMX Controls, before
+    Seen s = look(f->id());
+    QVERIFY(s.found);
+    QCOMPARE(s.opened, QStringLiteral("fixture"));
+    QCOMPARE(s.keys, QStringList({ "fixture", "place", "aim" }));
+    QCOMPARE(s.tabOf.value("fixtureFindItRow"), QStringLiteral("fixture"));
+    QCOMPARE(s.tabOf.value("fixtureLaserClass"), QStringLiteral("fixture"));
+    QCOMPARE(s.tabOf.value("fixtureHeightOffset"), QStringLiteral("place"));
+    QCOMPARE(s.tabOf.value("fixtureAim"), QStringLiteral("aim"));
+    QCOMPARE(s.inRow, QStringList({ "fixtureLocate", "fixtureIdentify", "fixtureReset" }));
+    QVERIFY(s.enabled);
+    QVERIFY2(s.belowDmx, "Find it is not the row under DMX");
+
+    // A head with no Identify or Reset of its own: Locate alone.
+    s = look(head);
+    QVERIFY(s.found);
+    QCOMPARE(s.inRow, QStringList({ "fixtureLocate" }));
 }
 
 void Monitor_Test::aLiveHeadsTurnIsSaidFirst()

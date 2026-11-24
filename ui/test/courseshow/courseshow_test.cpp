@@ -6897,7 +6897,7 @@ void CourseShow_Test::levelThreeMorePictures()
         doc->resetModified();
     }
 
-    // --- 3.4: the boom, the par on it, Plot layers; the par's Aim & Mount.
+    // --- 3.4: the boom, the par on it, Plot layers; the par's Aim & Beam.
     {
         const QString d = root + QStringLiteral("/lesson-3-4");
         QVERIFY(open(kClassroom));
@@ -6952,7 +6952,8 @@ void CourseShow_Test::levelThreeMorePictures()
             QVERIFY(shoot(f, d, "plot-boom"));
         }
         /* Fixture Properties, as the student uses it: Face on the Place tab,
-           then Points and Tilt in yoke on the Aim & Mount tab. */
+           then Points (the dial's line under it) and Tilt in yoke on the
+           Aim & Beam tab. */
         QString err;
         QTimer::singleShot(400, [this, &err, d]() {
             for (QWidget *w : QApplication::topLevelWidgets())
@@ -6970,7 +6971,7 @@ void CourseShow_Test::levelThreeMorePictures()
                 }
                 const QList<std::pair<const char *, QStringList>> pictures = {
                     { "place-face", { "fixtureFace" } },
-                    { "aim-mount", { "fixtureAim", "fixtureAimDown" } } };
+                    { "aim-beam", { "fixtureAim", "fixtureAimReadout", "fixtureAimDown" } } };
                 for (const auto &pic : pictures)
                 {
                     HelpShots::Frame f;

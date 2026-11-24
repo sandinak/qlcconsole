@@ -65,6 +65,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   (*pan cal 5.0°*). Pan works around reads in two lines, the whole on hover;
   Max draw says *not measured* on its row. With several fixtures a tab with
   a row they differ on has a dot. Every tab fits a 1024x640 screen.
+- **Fixture Properties relaid: Fixture | Place | Aim & Beam.** The
+  orientation dial sits beside **Front of device**, says where it points
+  always (*270° · stage left*) as you drag, and has a key; drag its box to
+  turn the plot symbol (**Symbol turn**, was Icon rotation) or **Match
+  Front**. It shows the pan seam (✕) and which way DMX up turns the head,
+  flipped live by **Invert pan**, now under **Direction** in **Calibrate**
+  (was More) with the offsets and the test pose. **Locate**, **Identify**
+  and **Reset** are one **Find it** row under DMX on Fixture (DMX Controls
+  is gone); Height offset is on Place, Laser class on Fixture; a WLED
+  string has no Aim tab.
 - **The Show Tree says what is in it** (board Q266): its tab tooltip, its
   **Window** menu entry and its help title now read *cue lists, cues and
   hits*. The tab keeps its name, and no menu item was added.

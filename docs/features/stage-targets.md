@@ -477,7 +477,7 @@ out front whose pan zero faces away from the stage has the seam in the
 middle of the stage: "it ran up against the start and end of the channel
 and had to rotate."
 
-Fixture Properties shows it on its **Aim & Mount** tab, **Pan works
+Fixture Properties shows it on its **Aim & Beam** tab, **Pan works
 around**: the bearing with the most room either way and the turn, then, in
 short, how clear of the stage the seam is (*seam 40° clear of the stage*,
 in amber when it is on or near the stage); point at it for the whole of

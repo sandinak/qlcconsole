@@ -61,10 +61,11 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 
    ![The Place tab: the par's Face](../../images/lesson-3-4/place-face.png)
 
-   On the **Aim & Mount** tab, **Points (° from DS)** reads 270. In **Tilt
-   in yoke** type `20 down`. **OK**.
+   On the **Aim & Beam** tab, **Points (° from DS)** reads 270, and the line
+   under the diagram beside it says *270° · stage left*. In **Tilt in yoke**
+   type `20 down`. **OK**.
 
-   ![Aim and mount for the par](../../images/lesson-3-4/aim-mount.png)
+   ![Aim and beam for the par](../../images/lesson-3-4/aim-beam.png)
 
 8. Right-click the boom → **Lock Layer “Towers”** and drag it: **Layer
    locked — unlock it in Layers to move**. Click the **Towers** padlock in
@@ -100,7 +101,7 @@ The default puts the seam straight behind the head, which is right for a
 head over the stage or facing it. A head hung out front with its pan zero
 facing away from the stage has the seam in the middle of the stage.
 
-In Fixture Properties, the **Aim & Mount** tab's **Pan works around** shows
+In Fixture Properties, the **Aim & Beam** tab's **Pan works around** shows
 the turn and how clear of the stage the seam is. **Centre on Stage**
 picks the turn that keeps the seam off the stage with the most room;
 **Earlier Turn** and **Later Turn** move the seam a turn either way. Each

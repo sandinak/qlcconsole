@@ -107,12 +107,13 @@ the room). Switch roles after each part.
 8. Double-click **SR Boom Par** to open its **Fixture Properties**. On the
    **Place** tab, in **Face**, pick **Stage left**: the par throws across the
    stage, away from the wing.
-   - *You should see:* on the **Aim & Mount** tab, **Points (° from DS)**
-     reads 270 and **Tilt in yoke** reads level.
+   - *You should see:* on the **Aim & Beam** tab, **Points (° from DS)**
+     reads 270 (*270° · stage left* under the diagram) and **Tilt in yoke**
+     reads level.
 9. In **Tilt in yoke**, type `20 down`. Click **OK**.
    - *You should see:* the beam tipped down toward the stage on the plot.
 
-   ![Aim and mount for the par](../../images/lesson-3-4/aim-mount.png)
+   ![Aim and beam for the par](../../images/lesson-3-4/aim-beam.png)
 
 ### Layers and locks
 

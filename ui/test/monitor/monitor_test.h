@@ -169,11 +169,21 @@ private slots:
     void fixturePropertiesOpensOnTheTabLastUsed();
     /** Several fixtures: a tab with a row they differ on is marked "•". */
     void fixturePropertiesMarksTheTabTheyDifferOn();
-    /** Aim & Mount's More: folded by default and remembered; folded, a set
-     *  pan calibration shows in its summary line. */
+    /** Aim & Beam's Calibrate (was More): folded by default and remembered;
+     *  folded, a set pan calibration shows in its summary line. */
     void fixturePropertiesFoldedMoreSaysWhatIsSet();
     /** Every control it showed before the tabs is still reached by clicks. */
     void fixturePropertiesKeepsEveryControl();
+    /** The dial beside Front of device; its readout says where it points,
+     *  as it is dragged, in the field's number and words. */
+    void fixturePropertiesDialSaysWhereItPoints();
+    /** The dial's symbol box and Match Front set Symbol turn. */
+    void fixturePropertiesSymbolTurnsFromTheDial();
+    /** Invert pan flips the dial's DMX-direction arrow; the seam is drawn. */
+    void fixturePropertiesInvertPanFlipsTheDial();
+    /** Locate, Identify, Reset on Find it under DMX on Fixture; no DMX
+     *  Controls tab; Height offset on Place, Laser class on Fixture. */
+    void fixturePropertiesFindItIsUnderDmx();
     /** A WLED's string of LEDs shows what a string has, none of a hung
      *  light's aim rows; a mover keeps them (shots with QLC_SHOT_DIR). */
     void aWledStringIsNotAimedInFixtureProperties();
