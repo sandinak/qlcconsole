@@ -362,6 +362,9 @@ void SpeedMastersPanel_Test::aMastersInputsAreMappedInItsWindow()
     QCOMPARE(panel.row(0).inputs->text(), SpeedMastersPanel::inputsText(2));
 
     // And the controller drives it.
+    // Pick-up (Q299/Q313): the Rate fader first says where it is, near the
+    // rate (1.0x = 128), and only then drives it.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 7, 128);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 7, 255);
     QCOMPARE(sm->rate(0), 2.0);
     QCOMPARE(panel.row(0).rate->value(), 200);
