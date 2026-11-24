@@ -32112,6 +32112,10 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
     const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
     if (!shots.isEmpty())
     {
+        /* In the product's default unit, as his show is worked (the ruler
+           read "SL (m)" in metres while every other plot shot read feet). */
+        MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+        props->convertGridUnits(MonitorProperties::Feet);
         const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
         foreach (const QSize &sz, sizes)
         {
@@ -32143,6 +32147,136 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
     QCOMPARE(spotsCount, 3);
     QCOMPARE(lanternsCount, 2);
     QVERIFY2(cutShort.isEmpty(), qPrintable("cut at the eye/lock column: " + cutShort.join(", ")));
+}
+
+/* Review of the bar nest: a bar takes its truss's place in Plot layers
+   only while it is on the truss's layer. Moving T-1 to another layer
+   takes its hangers with it, not its bars, so Bar 1 stays on 'Trusses':
+   listed under Rear > T-1, its eye was Rear's and it was not. */
+void Monitor_Test::aBarOnAnotherLayerThanItsTrussStaysOnItsOwn()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 trusses = props->addLayer("Trusses");
+    const quint32 rear = props->addLayer("Rear");
+
+    Truss *t1 = props->addTruss();
+    t1->setName("T-1");
+    t1->setType(Truss::Vertical);
+    t1->setOrigin(QVector3D(3.2f, 3.6f, 0.0f));
+    t1->setLength(3.0f);
+    t1->setLayerId(trusses);
+    Truss *bar1 = props->addTruss();
+    bar1->setName("Bar 1");
+    bar1->setParentTrussId(t1->id());
+    bar1->setParentOffset(3.0f);
+    bar1->setLength(1.0f);
+    bar1->setLayerId(trusses);
+    props->recomputeChildTrusses();
+
+    MonitorGraphicsView view(doc);
+    view.resize(900, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(12, 8));
+    view.updateTrusses();
+    foreach (const MonitorProperties::MonitorGroup &g, props->groups())
+        props->removeGroup(g.id);
+    t1->setGroupId(0);
+    bar1->setGroupId(0);
+
+    MonitorLayersPanel panel(doc, &view);
+    auto chain = [&panel](const QString &name) {
+        QStringList out;
+        for (QTreeWidgetItem *r = layersRow(panel, name); r != nullptr; r = r->parent())
+            out.prepend(rowName(r));
+        return out.join(" > ");
+    };
+    panel.reload();
+    QCOMPARE(chain("Bar 1"), QString("Trusses > T-1 > Bar 1"));
+
+    // T-1 moved to Rear (as Move to Layer leaves it): Bar 1 is still on Trusses.
+    t1->setLayerId(rear);
+    QCOMPARE(bar1->layerId(), trusses);
+    panel.reload();
+    QCOMPARE(chain("T-1"), QString("Rear > T-1"));
+    QCOMPARE(chain("Bar 1"), QString("Trusses > Bar 1"));
+}
+
+/* Review of the bar nest: a boom built on its stand and put in a hand-made
+   'Booms' folder stays in the folder, with its fixture, rather than being
+   pulled out under the stand. */
+void Monitor_Test::aBoomInAHandMadeFolderStaysThere()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 lid = props->addLayer("Side");
+
+    Stand *stand = props->addStand();
+    stand->setName("Stand SL");
+    stand->setOriginX(9.0f);
+    stand->setOriginY(5.0f);
+    stand->setLayerId(lid);
+    Pipe *boom = props->addPipe();
+    boom->setName("Boom SL");
+    boom->setStandId(stand->id());
+    boom->setLayerId(lid);
+    Pipe *free = props->addPipe();           // a stand-mounted pipe in no folder
+    free->setName("Boom SR");
+    free->setStandId(stand->id());
+    free->setLayerId(lid);
+
+    Fixture *side = plainFixture(doc, "Side 1", 0);
+
+    MonitorGraphicsView view(doc);
+    view.resize(900, 700);
+    view.setGridMetrics(1000.0);
+    view.setGridSize(QSize(12, 8));
+    view.updateTrusses();
+    view.attachFixtureToPipe(side->id(), boom->id());
+    QCOMPARE(props->fixtureRigProps(side->id()).pipeId, boom->id());
+
+    foreach (const MonitorProperties::MonitorGroup &g, props->groups())
+        props->removeGroup(g.id);
+    const quint32 booms = props->nextGroupId();
+    props->createGroup(booms, "Booms", lid, 0);
+    stand->setGroupId(0);
+    boom->setGroupId(booms);
+    free->setGroupId(0);
+    props->setFixtureLayer(side->id(), lid);
+    props->setFixtureGroup(side->id(), booms);
+
+    MonitorLayersPanel panel(doc, &view);
+    panel.reload();
+    auto chain = [&panel](const QString &name) {
+        QStringList out;
+        for (QTreeWidgetItem *r = layersRow(panel, name); r != nullptr; r = r->parent())
+            out.prepend(rowName(r));
+        return out.join(" > ");
+    };
+    QCOMPARE(chain("Boom SL"), QString("Side > Booms > Boom SL"));
+    QCOMPARE(chain("Side 1"), QString("Side > Booms > Boom SL > Side 1"));
+    // One in no folder still sits under its stand.
+    QCOMPARE(chain("Boom SR"), QString("Side > Stand SL > Boom SR"));
+}
+
+/* UX-01: the stand view's rulers read in Settings > Units' unit. With
+   millimetres they said "m" and 1, 2 beside fields in mm. */
+void Monitor_Test::studioRulersReadInTheChosenUnit()
+{
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+    QCOMPARE(StructureStudioView::rulerUnitSymbol(), MeasurementUnits::symbol(MeasurementUnits::Millimetres));
+    QCOMPARE(StructureStudioView::rulerTickText(2), QString("2000"));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Centimetres);
+    QCOMPARE(StructureStudioView::rulerTickText(1), QString("100"));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
+    QCOMPARE(StructureStudioView::rulerUnitSymbol(), MeasurementUnits::symbol(MeasurementUnits::Metres));
+    QCOMPARE(StructureStudioView::rulerTickText(3), QString("3"));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    QCOMPARE(StructureStudioView::rulerUnitSymbol(), MeasurementUnits::symbol(MeasurementUnits::Feet));
+    QCOMPARE(StructureStudioView::rulerTickText(4), QString("4"));
+    QCOMPARE(StructureStudioView::rulerStepMetres(), 0.3048);
 }
 
 /* Q155-2: Branson's aprons are at floor height. Hiding the apron took its

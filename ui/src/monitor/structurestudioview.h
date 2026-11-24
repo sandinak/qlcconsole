@@ -236,6 +236,14 @@ public:
      *  Overview footer: Real move speed). */
     static void setMoveSpeed(bool on);
     static bool moveSpeed();
+    /** The rulers' tick spacing in metres: a foot for feet or inches
+     *  (Settings > Units), else a metre */
+    static double rulerStepMetres();
+    /** What the rulers are labelled in: Settings > Units' own unit */
+    static QString rulerUnitSymbol();
+    /** Tick @a k (k steps from zero) as the rulers write it, in Settings >
+     *  Units' unit: a millimetre show reads 1000, 2000, never 1, 2 */
+    static QString rulerTickText(int k);
     /** Walk every head toward where the output puts it, to @a nowMs (a
      *  clock in ms; the view's own when drawing), before the fixtures are
      *  drawn. Public so a test can walk the clock. */

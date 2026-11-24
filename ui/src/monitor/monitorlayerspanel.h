@@ -247,6 +247,9 @@ private:
      *  hanger under its tower or truss, a bar under its truss or stand, a
      *  crossbar under its boom. Rows under a fixture group stay there. */
     void nestByMounts(QTreeWidgetItem *layerNode);
+    /** The folder a truss or pipe row was put in by hand (0: none, or
+     *  not a truss or pipe), which nestByMounts keeps it in */
+    quint32 handFolderOf(QTreeWidgetItem *row, const QString &kind, quint32 id) const;
     /** "kind:id" of what @p kind / @p id is mounted on, or empty. */
     QString mountParentKey(const QString &kind, quint32 id) const;
     /** A row's lock badge: 🔒 when the object is locked on its own, ↑🔒

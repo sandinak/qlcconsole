@@ -21,7 +21,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   pulls them out to the top of the layer (it is still listed, under its
   layer). A pipe hung from a truss or a stand sits under it too, and a
   row nested under what it hangs on keeps its whole name ("Lantern A"
-  under its hanger was cut to "Lanter").
+  under its hanger was cut to "Lanter"). A bar left on its own layer
+  when its truss moves is listed there, and a boom in a folder made by
+  hand stays in it. The stand view's rulers read in Settings ▸ Units
+  (a millimetre show read "m" and 1, 2).
 - **Fixture Properties fits a laptop's screen**: a moving head's rows
   (Fixture, Position, Aim & Mount, DMX Controls) scroll between its name
   and its OK / Cancel, which stay in view; it was over 1000 px tall and

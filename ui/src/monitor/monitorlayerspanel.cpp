@@ -762,7 +762,10 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
        from a truss -- and a hanger on a bar. One with no folder of its own
        takes the layer and folder of the structure it is on, up the chain,
        so it is built inside T-1's folder ("T1-S1 and 2 .. which are on the
-       bar on t1 .. not under T1"). One put in a folder by hand stays there. */
+       bar on t1 .. not under T1"). One put in a folder by hand stays there.
+       Only while it is on the same layer: a truss moved to another layer
+       takes its hangers with it but not its bars, so a bar left behind is
+       listed on the layer it is really on, where its eye works. */
     QHash<QString, int> indexOf;
     for (int i = 0; i < out.size(); i++)
         indexOf.insert(out.at(i).kind + QLatin1Char(':') + QString::number(out.at(i).id), i);
@@ -779,8 +782,10 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
         int at = -1;
         for (int depth = 0; depth < 16 && indexOf.contains(up); depth++)
         {
+            const ItemDesc &p = out.at(indexOf.value(up));
+            if (p.layerId != d.layerId)
+                break;      // the chain leaves this layer: stop below it
             at = indexOf.value(up);
-            const ItemDesc &p = out.at(at);
             if (p.groupId != 0)
                 break;
             up = mountParentKey(p.kind, p.id);
@@ -1410,6 +1415,25 @@ QString MonitorLayersPanel::mountParentKey(const QString &kind, quint32 id) cons
     return QString();
 }
 
+quint32 MonitorLayersPanel::handFolderOf(QTreeWidgetItem *row, const QString &kind, quint32 id) const
+{
+    /* A structure shown as its own folder ("T-1 · on truss"): the folder
+       that one sits in. */
+    if (row->data(0, NodeTypeRole).toInt() == NodeGroup)
+        return m_props->group(row->data(0, NodeIdRole).toUInt()).parentGroupId;
+    if (kind == QLatin1String("truss"))
+    {
+        const Truss *t = m_props->truss(id);
+        return t != nullptr ? t->groupId() : 0;
+    }
+    if (kind == QLatin1String("pipe"))
+    {
+        const Pipe *p = m_props->pipe(id);
+        return p != nullptr ? p->groupId() : 0;
+    }
+    return 0;       // fixtures and hangers nest as they always have
+}
+
 void MonitorLayersPanel::nestByMounts(QTreeWidgetItem *layerNode)
 {
     if (layerNode == nullptr)
@@ -1471,6 +1495,20 @@ void MonitorLayersPanel::nestByMounts(QTreeWidgetItem *layerNode)
         QTreeWidgetItem *host = rowOf.value(mountParentKey(kind, id), nullptr);
         if (host == nullptr || host == up || host == row)
             continue;
+        /* A bar, pipe or boom put in a folder by hand stays in it: a boom
+           on its stand in a "Booms" folder is not pulled out under the
+           stand. Only a host inside that same folder takes it. */
+        const quint32 ownFolder = handFolderOf(row, kind, id);
+        if (ownFolder != 0)
+        {
+            bool hostInFolder = false;
+            for (QTreeWidgetItem *a = host; a != nullptr; a = a->parent())
+                if (a->data(0, NodeTypeRole).toInt() == NodeGroup
+                    && a->data(0, NodeIdRole).toUInt() == ownFolder)
+                    { hostInFolder = true; break; }
+            if (!hostInFolder)
+                continue;
+        }
         bool inside = false;     // never under itself
         for (QTreeWidgetItem *a = host; a != nullptr; a = a->parent())
             if (a == row) { inside = true; break; }
