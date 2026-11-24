@@ -294,3 +294,21 @@ Each phase: help in `docs/features/control-surfaces.md`, a course note, gate
 tests that fail on today's code (a static control refused for a show; an old
 show's stop still live; a motorised fader not waiting), shots at 3 sizes for
 the hub, and a CHANGELOG line.
+
+## 11. Decisions, revision 2 (2026-11-24)
+
+Branson took the recommendation on every question:
+
+| Board | Here | Decision |
+|---|---|---|
+| Q305 | Q-J | A computer-owned input line outside the show's universes, found by the device's identity. |
+| Q306 | Q-K | Static roles: GM, Stop, GO, Back, Blackout; then speed master rate/tap, Blind, cue next/prev; then Design editing (encoder pages, look faders). Built in that order. |
+| Q307 | Q-L | A surface type is fixed; a different layout is a new type (Copy to Edit). |
+| Q308 | Q-M | Old shows' GM / stop / encoder bank / speed-master inputs: ask once per show per computer (Use Here / Not Here); the stop stays live until this computer has one; the file never changes. |
+| Q309 | Q-N | A show's trigger on a control that is static here: static wins; the trigger is kept, not armed, listed as blocked with the reason. |
+| Q310 | Q-O | Learn Trigger… becomes **Assign to Control…** on every assignable thing, buttons and faders. |
+| Q311 | Q-P | The surface map lives in the Control surfaces page, plus a footer chip per enabled surface that opens it there. |
+| Q312 | Q-Q | Companion's pages are its own static layout on that computer; qlcconsole assigns nothing to it (free keys later). |
+| Q313 | Q-R | Pick-up ships for non-master faders only; the GM and VC master sliders follow at once until their type declares them; motor "send the value" waits for declared facts. |
+
+Build order: §10, phase 0 first.
