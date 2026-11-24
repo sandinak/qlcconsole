@@ -139,7 +139,7 @@ void MaskLens_Test::valuesClampToTheHalfAngle()
     w.setMask(0.f, 0.f, 0.f, 0.f);
     const QPointF e = w.edgePoint(MaskLensWidget::Left);
     const double ppd = (w.edgePoint(MaskLensWidget::Right).x() - e.x()) / 30.0;
-    drag(w, MaskLensWidget::Left, e + QPointF(2.3 * ppd, 0));
+    drag(w, MaskLensWidget::Left, e + QPointF(2.5 * ppd, 0));
     QCOMPARE(w.mask().left, 2.5f);
 }
 

@@ -86,6 +86,8 @@ double MaskLensWidget::percentThrough(double halfW, double halfH, bool rectangle
     const double y0 = -halfH + double(mask.top), y1 = halfH - double(mask.bottom);
     if (x1 <= x0 || y1 <= y0)
         return 0.0;
+    if (mask.isNone())
+        return 100.0;
     if (rectangle)
         return 100.0 * ((x1 - x0) * (y1 - y0)) / (4.0 * halfW * halfH);
     const double r = halfW;
