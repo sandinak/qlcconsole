@@ -175,6 +175,8 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "masklenswidget.h"
+#include "planmapwidget.h"
 #include "outputrulekeeper.h"
 #include "wledfixture.h"
 #include "contextmenus.h"
@@ -14398,6 +14400,54 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     });
     for (int i = 0; i < 4; ++i)
         connect(maskSpin[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
+    /* The mask lens: the beam seen from behind with the tape on it, in the
+       room beside Beam and Masking. The four Masking boxes drive it, and
+       dragging a band's edge sets them (applied live like a typed value;
+       Cancel puts them back). A laser shows its scan window instead. */
+    if (QWidget *lensSlot = aimBox->findChild<QWidget *>(QStringLiteral("fixtureMaskLensSlot")))
+    {
+        MaskLensWidget *maskLens = new MaskLensWidget(lensSlot);
+        maskLens->setObjectName(QStringLiteral("fixtureMaskLens"));
+        lensSlot->layout()->addWidget(maskLens);
+        const bool laserLens = fxi != nullptr && fxi->fixtureMode() != nullptr
+            && (fxi->fixtureMode()->physical().emission() == QLCPhysical::LaserEmission
+                || (fxi->fixtureDef() != nullptr && fxi->fixtureDef()->type() == QLCFixtureDef::Laser));
+        auto showLens = [lensSpin, lensByHand, laserLens, fxi, maskLens]() {
+            if (laserLens && fxi != nullptr && fxi->fixtureMode() != nullptr)
+            {
+                double h = 40.0, v = 40.0;
+                LightRays::laserWindow(fxi->fixtureMode()->physical(), h, v);
+                maskLens->setScanWindow(h, v);
+                return;
+            }
+            double angle = lensByHand ? lensSpin->value() : 0.0;
+            if (angle <= 0.0 && fxi != nullptr)
+                angle = fxi->effectiveLens().lensMax;       // the widest its definition gives
+            maskLens->setLensAngle(angle > 0.0 ? angle : 30.0);
+        };
+        auto showMask = [maskSpin, maskLens]() {
+            maskLens->setMask(float(maskSpin[0]->value()), float(maskSpin[1]->value()),
+                              float(maskSpin[2]->value()), float(maskSpin[3]->value()));
+        };
+        showLens();
+        showMask();
+        connect(lensSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), maskLens,
+                [showLens](double) { showLens(); });
+        for (int i = 0; i < 4; ++i)
+            connect(maskSpin[i], QOverload<double>::of(&QDoubleSpinBox::valueChanged), maskLens,
+                    [showMask](double) { showMask(); });
+        connect(maskLens, &MaskLensWidget::maskChanged, &dlg,
+                [&, maskSpin](float t, float b, float l, float r) {
+            const float v[4] = { t, b, l, r };
+            for (int i = 0; i < 4; ++i)
+            {
+                const QSignalBlocker blocker(maskSpin[i]);
+                maskSpin[i]->setValue(double(v[i]));
+            }
+            liveRigUpdate();
+        });
+        lensSlot->setVisible(!maskRow->isHidden());       // where the Masking row is
+    }
     connect(laserClassCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int){ liveRigUpdate(); });
     connect(panOffsetSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(tiltOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
@@ -14619,6 +14669,52 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     };
     for (QDoubleSpinBox *sp : { xSpin, ySpin })
         connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), &dlg, [&](double) { applyPosition(); });
+    /* The plan map: the stage seen from above in the room beside the Place
+       rows, with the fixture on it. X / Y here count from the plot's own
+       corner (world 0, 0: what the plot stores), not from the ruler's
+       origin, so the map counts from there too (PlanMapWidget::setOrigin).
+       Dragging the dot sets X / Y (live; Cancel puts them back); typing in
+       them moves the dot. On a truss, pipe or tower the mount decides where
+       it is, so the map shows where it really is and says so rather than
+       take a drag. Room is left in the slot for a mount view. */
+    if (QWidget *viewSlot = posBox->findChild<QWidget *>(QStringLiteral("fixturePlaceViewSlot")))
+    {
+        PlanMapWidget *planMap = new PlanMapWidget(viewSlot);
+        planMap->setObjectName(QStringLiteral("planMap"));
+        planMap->setFromProperties(m_props);
+        planMap->setOrigin(QPointF(0, 0));
+        viewSlot->layout()->addWidget(planMap);
+        auto refreshMap = [=, this]() {
+            const FixtureRigProps now = m_props->fixtureRigProps(fxId_dlg);
+            const bool held = now.trussId != Truss::invalidId() || now.pipeId != Pipe::invalidId()
+                || now.towerId != Tower::invalidId();
+            if (fxItem == nullptr)
+                planMap->setEditable(false, tr("Not on the plot: place it in the Lighting Studio"));
+            else if (held)
+                planMap->setEditable(false, tr("On its mount: its position follows what holds it"));
+            else
+                planMap->setEditable(true);
+            if (held)
+            {
+                const QVector3D w = fixtureWorldCentre(m_doc, fxId_dlg);      // metres
+                planMap->setPosition(double(w.x()) * 1000.0, double(w.y()) * 1000.0);
+            }
+            else
+            {
+                planMap->setPosition(xSpin->value() * fromDisp_fx * 1000.0,
+                                     ySpin->value() * fromDisp_fx * 1000.0);
+            }
+        };
+        refreshMap();
+        for (QDoubleSpinBox *sp : { xSpin, ySpin })
+            connect(sp, QOverload<double>::of(&QDoubleSpinBox::valueChanged), planMap,
+                    [refreshMap](double) { refreshMap(); });
+        connect(fields, &FixtureFields::edited, planMap, [refreshMap]() { refreshMap(); });
+        connect(planMap, &PlanMapWidget::positionChanged, &dlg, [=](double xMm, double yMm) {
+            xSpin->setValue(xMm / 1000.0 * toDisp_fx);       // each applies live, like a typed value
+            ySpin->setValue(yMm / 1000.0 * toDisp_fx);
+        });
+    }
     connect(rotSpin, QOverload<int>::of(&QSpinBox::valueChanged), &dlg, [&](int v) {
         if (fxItem == nullptr)
             return;

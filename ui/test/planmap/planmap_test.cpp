@@ -49,7 +49,7 @@ void PlanMap_Test::labelsInFeet()
     const double x = 10 * 304.8 + 12.7;                      // 10' 1/2"
     const double yFromPlaster = 12 * 304.8 + 6.35;           // 12' 1/4"
     w.setPosition(x, 6096 - yFromPlaster - 3048);
-    QCOMPARE(w.centreLineText(), MeasurementUnits::formatLength(x) + QStringLiteral(" from CL"));
+    QCOMPARE(w.centreLineText(), MeasurementUnits::formatLength(x) + QStringLiteral(" SL of CL"));
     QVERIFY2(w.centreLineText().startsWith(QStringLiteral("10' 1/2\"")), qPrintable(w.centreLineText()));
     QVERIFY2(w.plasterLineText().startsWith(QStringLiteral("12' 1/4\"")), qPrintable(w.plasterLineText()));
     QVERIFY(w.plasterLineText().endsWith(QStringLiteral("from plaster line")));
@@ -60,11 +60,12 @@ void PlanMap_Test::labelsInMetres()
     MeasurementUnits::setPreferredLength(MeasurementUnits::Metres);
     PlanMapWidget w;
     setup(w);
-    w.setPosition(-3000, 1000);                              // 3 m SL of CL, 2.048 m from the plaster line
+    w.setPosition(-3000, 1000);                              // 3 m SR of CL, 2.048 m from the plaster line
     QVERIFY2(w.centreLineText().startsWith(QStringLiteral("3 m")), qPrintable(w.centreLineText()));
     QCOMPARE(w.plasterLineText(), MeasurementUnits::formatLength(6096 - 4048)
                                       + QStringLiteral(" from plaster line"));
     QVERIFY(!w.centreLineText().contains(QLatin1Char('\'')));
+    QVERIFY2(w.centreLineText().endsWith(QStringLiteral("SR of CL")), qPrintable(w.centreLineText()));
 }
 
 void PlanMap_Test::onTheLinesSaysSo()

@@ -14,7 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
-- Fixture Properties: a plan mini-map widget (stage, centre line, plaster line, plot origin, the fixture as a draggable dot with "from CL" / "from plaster line" dimensions); not yet placed in the dialog.
+- **Fixture Properties shows two pictures.** **Place** has a plan map of the stage (centre line, plaster line, the fixture as a dot): drag the dot and X / Y follow, type X / Y and the dot moves; it reads how far the fixture is *SR* or *SL* of the centre line and from the plaster line, and on a truss, pipe or tower it is not draggable and says why. **Aim & Beam** has the mask lens, the beam seen from behind with the tape on it and how much gets through: the four Masking boxes draw it, and dragging a band's edge sets them (a laser shows its scan window).
 - **Fixture Properties fits a laptop's screen**: a moving head's rows
   (Fixture, Position, Aim & Mount, DMX Controls) scroll between its name
   and its OK / Cancel, which stay in view; it was over 1000 px tall and

@@ -177,6 +177,9 @@ private slots:
     /** The dial beside Front of device; its readout says where it points,
      *  as it is dragged, in the field's number and words. */
     void fixturePropertiesDialSaysWhereItPoints();
+    void fixturePropertiesMaskLensFollowsTheMaskingBoxes();
+    void fixturePropertiesPlanMapFollowsXY();
+    void fixturePropertiesPlanMapIsLockedOnAMount();
     /** The dial's symbol box and Match Front set Symbol turn. */
     void fixturePropertiesSymbolTurnsFromTheDial();
     /** Invert pan flips the dial's DMX-direction arrow; the seam is drawn. */

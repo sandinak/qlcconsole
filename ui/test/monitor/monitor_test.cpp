@@ -188,6 +188,9 @@
 #include "../common/dragpos.h"
 #include "blockingview.h"
 #include "blocking.h"
+#include "masklenswidget.h"
+#include "planmapwidget.h"
+#include "feetinchesspinbox.h"
 
 // Find a visible QPushButton by its exact text anywhere under a widget —
 // QMessageBox's extra buttons (confirmFeatureDelete's "Delete"/"Detach &&
@@ -34821,7 +34824,9 @@ void Monitor_Test::fixturePropertiesKeepsEveryControl()
         "fixturePanInvert", "fixtureTiltInvert", "fixtureTest", "fixtureLocate",
         // The relayout's (fp-relayout first cut): Find it, the dial's readout and legend, Match Front.
         "fixtureFindItRow", "fixtureAimReadout", "fixtureFacingLegend", "fixtureSymbolMatchFront",
-        "fixtureAimExplainer" };
+        "fixtureAimExplainer",
+        // The pictures: the mask lens on Aim & Beam, the plan map on Place.
+        "fixtureMaskLens", "planMap" };
     const QStringList severalBefore = {
         "colourReset", "colourSwatch", "fixtureAddress", "fixtureAim", "fixtureColour", "fixtureCopyPower",
         "fixtureFacingPreview", "fixtureIconRotation", "fixtureMaxAmps", "fixtureMeasure", "fixtureOrientation",
@@ -34961,6 +34966,179 @@ void Monitor_Test::fixturePropertiesDialSaysWhereItPoints()
     QCOMPARE(seen.during, QString::fromUtf8("%1° · stage right").arg(qRound(seen.field)));
     QCOMPARE(seen.after, seen.during);           // still said once let go
     QVERIFY2(seen.explained, "no line says what Front of device is");
+}
+
+/* The mask lens is on Aim & Beam and follows the four Masking boxes both
+   ways: typed, it shows the tape; an edge dragged sets the box (live), and
+   Cancel puts the tape back as it was. */
+void Monitor_Test::fixturePropertiesMaskLensFollowsTheMaskingBoxes()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    MonitorProperties *props = m_doc->monitorProperties();
+
+    struct Seen { bool found = false; QString tab; float typedTop = -1, typedLeft = -1; double halfW = 0;
+                  double dragged = -1, liveProp = -1; };
+    Seen seen;
+    driveDialog([&](QWidget *dlg) {
+        MaskLensWidget *lens = dlg->findChild<MaskLensWidget *>(QStringLiteral("fixtureMaskLens"));
+        QDoubleSpinBox *top = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureMaskTop"));
+        QDoubleSpinBox *left = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureMaskLeft"));
+        if (lens == nullptr || top == nullptr || left == nullptr)
+            return false;
+        seen.found = true;
+        seen.tab = fpTabOf(dlg, lens);
+        fpReachByClicks(dlg, lens);
+        seen.halfW = lens->halfWidth();
+        top->setValue(10.0);
+        left->setValue(5.0);
+        seen.typedTop = lens->mask().top;
+        seen.typedLeft = lens->mask().left;
+        // Drag the top edge further in: the box follows, applied live.
+        const QPoint at = lens->edgePoint(MaskLensWidget::Top).toPoint();
+        QTest::mousePress(lens, Qt::LeftButton, Qt::NoModifier, at);
+        for (int dy : { 6, 14 })
+        {
+            const QPointF to = QPointF(at) + QPointF(0, dy);
+            QMouseEvent ev(QEvent::MouseMove, to, lens->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(lens, &ev);
+        }
+        QTest::mouseRelease(lens, Qt::LeftButton, Qt::NoModifier, (at + QPoint(0, 14)));
+        seen.dragged = top->value();
+        seen.liveProp = double(props->fixtureRigProps(fid).maskTop);
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(seen.found);
+    QCOMPARE(seen.tab, QStringLiteral("aim"));
+    QVERIFY(seen.halfW > 0.0);
+    QCOMPARE(seen.typedTop, 10.0f);
+    QCOMPARE(seen.typedLeft, 5.0f);
+    QVERIFY2(seen.dragged > 10.0, "a drag of the top edge did not set the Top box");
+    QCOMPARE(seen.liveProp, seen.dragged);               // live, like a typed value
+    QCOMPARE(props->fixtureRigProps(fid).maskTop, 0.0f);  // Cancel put it back
+    QCOMPARE(props->fixtureRigProps(fid).maskLeft, 0.0f);
+}
+
+/* The plan map is on Place and follows X / Y both ways: typed, the dot
+   moves and its dimension reads SR or SL of the centre line; dragged, the
+   boxes follow (live) and Cancel puts the fixture back. */
+void Monitor_Test::fixturePropertiesPlanMapFollowsXY()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    MonitorProperties *props = m_doc->monitorProperties();
+    const double toDisp = FeetInchesSpinBox::valuesInFeet() ? 3.28084 : 1.0;
+    const double xBefore = props->fixtureItem(fid, 0, 0).m_position.x();
+
+    struct Seen { bool found = false, editable = false; QString tab, srText, slText;
+                  double mapX = -1, mapY = -1, dragX = -1, liveX = -1; };
+    Seen seen;
+    driveDialog([&](QWidget *dlg) {
+        PlanMapWidget *map = dlg->findChild<PlanMapWidget *>(QStringLiteral("planMap"));
+        QDoubleSpinBox *x = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureX"));
+        QDoubleSpinBox *y = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureY"));
+        if (map == nullptr || x == nullptr || y == nullptr)
+            return false;
+        seen.found = true;
+        seen.tab = fpTabOf(dlg, map);
+        fpReachByClicks(dlg, map);
+        seen.editable = map->isEditable();
+        x->setValue(15.0 * toDisp);                // 5 m stage right of the centre line (20 m)
+        y->setValue(10.0 * toDisp);
+        seen.mapX = map->position().x();
+        seen.mapY = map->position().y();
+        seen.srText = map->centreLineText();
+        x->setValue(24.0 * toDisp);
+        seen.slText = map->centreLineText();
+        // Drag the dot to the left: X follows, applied live.
+        const QPointF dot = map->dotPoint();
+        QTest::mousePress(map, Qt::LeftButton, Qt::NoModifier, dot.toPoint());
+        for (int dx : { -10, -30 })
+        {
+            const QPointF to = dot + QPointF(dx, 0);
+            QMouseEvent ev(QEvent::MouseMove, to, map->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(map, &ev);
+        }
+        QTest::mouseRelease(map, Qt::LeftButton, Qt::NoModifier, (dot + QPointF(-30, 0)).toPoint());
+        seen.dragX = x->value() / toDisp;
+        seen.liveX = props->fixtureItem(fid, 0, 0).m_position.x();
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(seen.found);
+    QCOMPARE(seen.tab, QStringLiteral("place"));
+    QVERIFY(seen.editable);
+    QCOMPARE(seen.mapX, 15000.0);
+    QCOMPARE(seen.mapY, 10000.0);
+    QVERIFY2(seen.srText.endsWith(QStringLiteral("SR of CL")), qPrintable(seen.srText));
+    QVERIFY2(seen.slText.endsWith(QStringLiteral("SL of CL")), qPrintable(seen.slText));
+    QVERIFY2(seen.dragX < 24.0 - 1.0, "dragging the dot left did not move X");
+    QVERIFY2(qAbs(seen.liveX - seen.dragX * 1000.0) < 1.0, "the drag was not applied live");
+    QCOMPARE(props->fixtureItem(fid, 0, 0).m_position.x(), xBefore);     // Cancel
+}
+
+/* A fixture hung on a truss: the mount decides where it is, so the map
+   will not take a drag and says why. */
+void Monitor_Test::fixturePropertiesPlanMapIsLockedOnAMount()
+{
+    fpForget();
+    auto forget = qScopeGuard([]() { fpForget(); });
+    TurnRig rig;
+    QVERIFY(rig.build(m_doc));
+    const quint32 fid = rig.head("Spot 1", 20.0f);
+    QVERIFY(fid != Fixture::invalidId());
+    MonitorProperties *props = m_doc->monitorProperties();
+    Truss *truss = props->addTruss();
+    truss->setOrigin(QVector3D(16.0f, 12.0f, 5.0f));
+    truss->setDirection(QPointF(1.0, 0.0));
+    truss->setLength(8.0f);
+    truss->setWidth(0.3f);
+    const quint32 trussId = truss->id();
+    const auto removeTruss = qScopeGuard([props, trussId]() { props->removeTruss(trussId); });
+    FixtureRigProps rp = props->fixtureRigProps(fid);
+    rp.trussId = trussId;
+    rp.trussOffset = 3.0f;
+    rp.mountingType = Truss::TopHung;
+    props->setFixtureRigProps(fid, rp);
+
+    bool found = false, editable = true;
+    QString reason, caption;
+    double dragX = 0, xBefore = 0;
+    driveDialog([&](QWidget *dlg) {
+        PlanMapWidget *map = dlg->findChild<PlanMapWidget *>(QStringLiteral("planMap"));
+        QDoubleSpinBox *x = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureX"));
+        if (map == nullptr || x == nullptr)
+            return false;
+        found = true;
+        fpReachByClicks(dlg, map);
+        editable = map->isEditable();
+        reason = map->reason();
+        caption = map->captionText();
+        xBefore = x->value();
+        const QPointF dot = map->dotPoint();
+        QTest::mousePress(map, Qt::LeftButton, Qt::NoModifier, dot.toPoint());
+        QMouseEvent ev(QEvent::MouseMove, dot + QPointF(-30, 0), map->mapToGlobal(dot + QPointF(-30, 0)),
+                       Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(map, &ev);
+        QTest::mouseRelease(map, Qt::LeftButton, Qt::NoModifier, (dot + QPointF(-30, 0)).toPoint());
+        dragX = x->value();
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(fid);
+    QVERIFY(found);
+    QVERIFY(!editable);
+    QVERIFY2(!reason.isEmpty(), "no reason said");
+    QCOMPARE(caption, reason);
+    QCOMPARE(dragX, xBefore);
 }
 
 /* The symbol's box on the dial turns the plot symbol (Symbol turn, was

@@ -94,10 +94,14 @@ void PlanMapWidget::setEditable(bool editable, const QString &reason)
 
 QString PlanMapWidget::centreLineText() const
 {
-    const double d = qAbs(worldPos().x() - m_clX);
+    const double dx = worldPos().x() - m_clX;
+    const double d = qAbs(dx);
     if (d < 0.5)
         return tr("on CL");
-    return tr("%1 from CL").arg(MeasurementUnits::formatLength(d));
+    /* Stage right and left are the performer's, facing the house: the plot
+       draws SR on its left, so less than the centre line is SR (as the
+       rulers and the readout say it). */
+    return (dx < 0 ? tr("%1 SR of CL") : tr("%1 SL of CL")).arg(MeasurementUnits::formatLength(d));
 }
 
 QString PlanMapWidget::plasterLineText() const
