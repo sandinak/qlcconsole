@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- Fixture Properties: a plan mini-map widget (stage, centre line, plaster line, plot origin, the fixture as a draggable dot with "from CL" / "from plaster line" dimensions); not yet placed in the dialog.
 - **Fixture Properties fits a laptop's screen**: a moving head's rows
   (Fixture, Position, Aim & Mount, DMX Controls) scroll between its name
   and its OK / Cancel, which stay in view; it was over 1000 px tall and
