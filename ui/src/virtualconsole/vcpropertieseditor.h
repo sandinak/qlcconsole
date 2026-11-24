@@ -25,6 +25,7 @@
 #include "ui_vcproperties.h"
 #include "vcwidgetproperties.h"
 #include "vcproperties.h"
+#include "controlowners.h"
 #include "universe.h"
 #include "qlcui_export.h"
 
@@ -116,6 +117,15 @@ private:
      *  another listener has it (the box says who). */
     void takeGrandMasterInput(quint32 universe, quint32 channel);
     ControlCollisionBox *m_gmCollision = nullptr;
+    /** Move It Here's owners, taken from them on OK (not before: Cancel
+     *  changes nothing). */
+    QList<ControlOwners::Owner> m_gmPendingMove;
+    quint32 m_gmPendingUniverse = 0;
+    quint32 m_gmPendingChannel = 0;
+
+public:
+    /** Test hook: what OK takes the Grand Master's control from. */
+    QList<ControlOwners::Owner> grandMasterPendingMove() const { return m_gmPendingMove; }
 };
 
 /** @} */

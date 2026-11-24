@@ -240,16 +240,37 @@ VCPropertiesEditor::VCPropertiesEditor(QWidget* parent, const VCProperties& prop
     m_gmCollision->setObjectName(QStringLiteral("gmCollision"));
     if (QGridLayout *gl = qobject_cast<QGridLayout *>(m_gmInputUniverseEdit->parentWidget()->layout()))
         gl->addWidget(m_gmCollision, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
+    m_gmCollision->setMovesOnOk(true);
     connect(m_gmCollision, &ControlCollisionBox::moveRequested, this, [this]() {
         VirtualConsole *vc = VirtualConsole::instance();
         Doc *doc = vc != nullptr ? vc->getDoc() : nullptr;
-        if (!ControlOwners::releaseAll(doc, m_gmCollision->owners()))
+        /* These properties apply only on OK, so the control is taken from
+           the others only then (Cancel leaves every one as it was). Asked
+           now whether they can let go. */
+        const QList<ControlOwners::Owner> owners = m_gmCollision->owners();
+        if (!ControlOwners::canMove(owners))
             return;
+        for (const ControlOwners::Owner &o : owners)
+            if (!ControlOwners::canRelease(doc, o))
+                return;
         const quint32 universe = m_gmCollision->universe();
         const quint32 channel = m_gmCollision->channel();
+        m_gmPendingMove = owners;
+        m_gmPendingUniverse = universe;
+        m_gmPendingChannel = channel;
         m_gmCollision->clear();
         m_properties.setGrandMasterInputSource(universe, channel);
         updateGrandMasterInputSource();
+    });
+    connect(this, &QDialog::accepted, this, [this]() {
+        const QList<ControlOwners::Owner> owners = m_gmPendingMove;
+        m_gmPendingMove.clear();
+        VirtualConsole *vc = VirtualConsole::instance();
+        // Chosen another control since (or none): nothing to take.
+        if (owners.isEmpty() || vc == nullptr || m_properties.grandMasterInputUniverse() != m_gmPendingUniverse
+            || m_properties.grandMasterInputChannel() != m_gmPendingChannel)
+            return;
+        ControlOwners::releaseAll(vc->getDoc(), owners);
     });
 
     updateGrandMasterInputSource();

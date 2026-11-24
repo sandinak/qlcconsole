@@ -118,6 +118,7 @@ private slots:
     void aTriggerWhosePlaceIsDeletedWidensAsAHitDoes();
     void aPlaceFromANewerVersionIsKeptAndNeverFires();
     void aHitsTriggerFollowsTheHitWhenItMoves();
+    void aPlaceThatGoesNeverWidensOntoATakenOne();
 
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,

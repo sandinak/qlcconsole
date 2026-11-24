@@ -41,7 +41,8 @@ class Doc;
  * stop); the reason is said instead. Two triggers at the same place on a
  * button may instead Step Through Them (Q303). Hidden until a refusal; the Learn
  * that owns it takes the control on moveRequested(), after
- * ControlOwners::releaseAll().
+ * ControlOwners::releaseAll() -- or, in a window that applies on OK, when
+ * that is accepted (setMovesOnOk()).
  */
 class QLC_UI_EXPORT ControlCollisionBox final : public QFrame
 {
@@ -61,6 +62,10 @@ public:
     void setStepThrough(bool offered);
     bool offersStepThrough() const { return m_stepOffered; }
     QPushButton *stepButton() const { return m_step; }
+    /** In a window that applies on OK, the note says Move It Here takes
+     *  the control only then (ControlOwners::moveOnOkNote()). */
+    void setMovesOnOk(bool onOk);
+    bool movesOnOk() const { return m_onOk; }
     /** Hides it and forgets the owners. */
     void clear();
 
@@ -88,6 +93,7 @@ private:
     QPushButton *m_cancel;
     QLabel *m_stepNote;
     bool m_stepOffered = false;
+    bool m_onOk = false;
     QList<ControlOwners::Owner> m_owners;
     quint32 m_universe = 0;
     quint32 m_channel = 0;

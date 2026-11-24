@@ -969,7 +969,22 @@ void ControlMapUi_Test::theEncoderLearnRefusesAndMoves()
         cm->handleInput(0, 18, 127);
         ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
         QVERIFY2(box->isRefusing() && box->text().contains("Encoder 3 (encoder bank)"), qPrintable(box->text()));
+        // A run: no Move It Here (it would take encoders 3-8 with it), and why.
+        QVERIFY(!box->moveButton()->isVisibleTo(&d));
+        QVERIFY2(box->text().contains("can't be moved one by one"), qPrintable(box->text()));
+        QVERIFY(!ControlOwners::releaseAll(m_doc, box->owners()));
+        QCOMPARE(enc->device().encoders, 16);
+        QCOMPARE(enc->device().encoderCount, 8);
+        QVERIFY(enc->isEnabled());
         d.reject();
+    }
+    // Every encoder of the run is so, the first too (it would turn the bank off).
+    {
+        const QList<ControlOwners::Owner> first = ControlOwners::owners(m_doc, 0, 16);
+        QCOMPARE(first.count(), 1);
+        QVERIFY(!first.first().movable);
+        QVERIFY(!ControlOwners::release(m_doc, first.first()));
+        QVERIFY(enc->isEnabled());
     }
 
     cm->setBinding({ 0, 40, ControlMap::function(a->id()), ControlMap::Toggle });
@@ -1053,7 +1068,64 @@ void ControlMapUi_Test::theInputPickersRefuseAndMove()
     QVERIFY(vcpe.properties().grandMasterInputUniverse() == InputOutputMap::invalidUniverse());
     gm->moveButton()->click();
     QCOMPARE(vcpe.properties().grandMasterInputChannel(), 61u);
+    // Taken on OK, not before (the window applies only then).
+    QVERIFY(gm->movesOnOk());
+    QVERIFY(!cm->isEmpty());
+    vcpe.accept();
     QVERIFY(cm->isEmpty());
+}
+
+/* Move It Here inside a window that applies on OK (a widget's Properties,
+   the Virtual Console's Properties): the control is taken from the other
+   listener on OK, never before -- Cancel leaves both as they were. */
+void ControlMapUi_Test::aMoveInAPropertiesWindowWaitsForOk()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    new VirtualConsole(nullptr, m_doc);
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    const ControlMap::Target warm = ControlMap::function(a->id());
+    cm->setBinding({ 0, 60, warm, ControlMap::Toggle });
+
+    for (const bool ok : { false, true })
+    {
+        QDialog dlg;
+        QVBoxLayout *lay = new QVBoxLayout(&dlg);
+        InputSelectionWidget *isw = new InputSelectionWidget(m_doc, &dlg);
+        lay->addWidget(isw);
+        isw->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 60, 127);
+        isw->m_autoDetectInputButton->setChecked(false);
+        QVERIFY(isw->collisionBox()->isRefusing());
+        QVERIFY(isw->collisionBox()->movesOnOk());
+        QVERIFY2(isw->collisionBox()->findChild<QLabel *>("collisionNote")->text().contains("when you press OK"),
+                 qPrintable(isw->collisionBox()->findChild<QLabel *>("collisionNote")->text()));
+        isw->collisionBox()->moveButton()->click();
+        QVERIFY(!isw->inputSource().isNull());
+        QCOMPARE(isw->inputSource()->channel(), 60u);
+        // Not yet: the trigger keeps it until OK.
+        QVERIFY2(cm->binding(warm) != nullptr, "Move It Here took the control before OK");
+        QCOMPARE(isw->pendingMove().count(), 1);
+        if (ok)
+            dlg.accept();
+        else
+            dlg.reject();
+        QCOMPARE(cm->binding(warm) == nullptr, ok);
+    }
+
+    // The Grand Master's input, Cancel: the trigger keeps its control.
+    cm->setBinding({ 0, 61, warm, ControlMap::Toggle });
+    {
+        VCPropertiesEditor vcpe(nullptr, VirtualConsole::instance()->properties(), iom);
+        QVERIFY(QMetaObject::invokeMethod(&vcpe, "slotGrandMasterInputValueChanged",
+                                          Q_ARG(quint32, 0), Q_ARG(quint32, 61)));
+        QVERIFY(vcpe.grandMasterCollision()->isRefusing());
+        vcpe.grandMasterCollision()->moveButton()->click();
+        QCOMPARE(vcpe.grandMasterPendingMove().count(), 1);
+        vcpe.reject();
+    }
+    QVERIFY(cm->binding(warm) != nullptr && cm->binding(warm)->channel == 61u);
 }
 
 /* The emergency stop: nothing takes its control (no Move It Here), and its
@@ -1555,6 +1627,26 @@ void ControlMapUi_Test::theLightFollowsWhatIsArmedNow()
     QCOMPARE(table->item(0, 4)->text(), QString("Ready"));
     QCOMPARE(cm->bindingOn(0, 60)->target, ControlMap::function(strobe->id()));
     cm->setSelectedTargets({});
+
+    // A hit's trigger everywhere (as every old show has it), alone on its
+    // control: dark because the hit's own cue is not live -- not "a narrower
+    // place has it", which nothing does.
+    const quint32 hit = m_doc->showTree()->addHit(ShowTree::HitScope::Cue, cues.at(1), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    cm->setBinding({ 0, 62, ControlMap::hit(hit), ControlMap::Toggle });
+    QCOMPARE(cm->binding(ControlMap::hit(hit))->place, ControlMap::everywhere());
+    m_doc->setMode(Doc::Operate);           // nothing running: cue 2 is not live
+    auto design = qScopeGuard([this]() { m_doc->setMode(Doc::Design); });
+    panel.refresh();
+    int row = -1;
+    const QList<ControlMap::Binding> all = cm->bindings();
+    for (int r = 0; r < all.count(); ++r)
+        if (all.at(r).target == ControlMap::hit(hit))
+            row = r;
+    QVERIFY(row >= 0);
+    QVERIFY(!cm->surfaceMayFire(ControlMap::hit(hit)));
+    QCOMPARE(cm->controlLamp(0, 62), ControlMap::LampOff);
+    QTRY_COMPARE(table->item(row, 4)->text(), QString("Dark (its hit is not live here)"));
 }
 
 /* With QLC_SHOT_DIR: Learn with Works and the line that says who has the

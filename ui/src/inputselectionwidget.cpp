@@ -28,6 +28,8 @@
 #include <QDial>
 #include <QSlider>
 #include <QCheckBox>
+#include <QDialog>
+#include <utility>
 
 #include "inputoutputmap.h"
 
@@ -126,8 +128,40 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
         // Take it from there, then set it here.
         const quint32 universe = m_collision->property("learnUniverse").toUInt();
         const quint32 channel = m_collision->property("learnChannel").toUInt();
-        if (!ControlOwners::releaseAll(m_doc, m_collision->owners()))
+        if (!ControlOwners::canMove(m_collision->owners()))
             return;
+        QList<ControlOwners::Owner> show;
+        QList<ControlOwners::Owner> local;
+        for (const ControlOwners::Owner &o : m_collision->owners())
+            (isLocal(o) ? local : show) << o;
+        QDialog *dlg = qobject_cast<QDialog *>(window());
+        if (dlg == nullptr)
+        {
+            // Not in a window with OK: taken now.
+            if (!show.isEmpty() && !ControlOwners::releaseAll(m_doc, show))
+                return;
+        }
+        else
+        {
+            /* A Properties window applies this source only on OK, so the
+               control is taken from the others only then: Cancel leaves
+               every one as it was. Asked now whether they can let go. */
+            for (const ControlOwners::Owner &o : std::as_const(show))
+                if (!ControlOwners::canRelease(m_doc, o))
+                    return;
+            m_pendingOwners = show;
+            m_pendingUniverse = universe;
+            m_pendingChannel = channel;
+            if (m_hooked != dlg)
+            {
+                m_hooked = dlg;
+                connect(dlg, &QDialog::accepted, this, &InputSelectionWidget::commitMove);
+            }
+        }
+        // Another picker of this window: it lets go here, in the window.
+        for (const ControlOwners::Owner &o : std::as_const(local))
+            if (m_local.release)
+                m_local.release(o);
         m_collision->clear();
         takeSource(universe, channel, m_pendingKeepFeedback);
         emit inputValueChanged(universe, channel);
@@ -307,17 +341,43 @@ bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage
     if (m_collision->isRefusing() && m_collision->property("learnUniverse").toUInt() == universe
         && m_collision->property("learnChannel").toUInt() == channelWithPage)
         return true;
-    const QList<ControlOwners::Owner> taken = ControlOwners::others(m_doc, universe, channelWithPage, m_self);
+    // The show's listeners, but those this window sets on OK as its other
+    // pickers hold them now (a speed master's own Tap, Rate and Pause).
+    QList<ControlOwners::Owner> taken;
+    for (const ControlOwners::Owner &o : ControlOwners::others(m_doc, universe, channelWithPage, m_self))
+        if (!isLocal(o))
+            taken << o;
+    if (m_local.owners)
+        for (const ControlOwners::Owner &o : m_local.owners(universe, channelWithPage & 0xFFFF))
+            if (ControlOwners::collides(m_self, o))
+                taken << o;
     if (taken.isEmpty())
     {
         m_collision->clear();
         return false;
     }
     m_pendingKeepFeedback = keepFeedback;
+    m_collision->setMovesOnOk(qobject_cast<QDialog *>(window()) != nullptr);
     m_collision->setProperty("learnUniverse", universe);
     m_collision->setProperty("learnChannel", channelWithPage);
     m_collision->refuse(m_doc, universe, channelWithPage, taken);
     return true;
+}
+
+bool InputSelectionWidget::isLocal(const ControlOwners::Owner &owner) const
+{
+    return m_local.covers && m_local.covers(owner);
+}
+
+void InputSelectionWidget::commitMove()
+{
+    const QList<ControlOwners::Owner> owners = m_pendingOwners;
+    m_pendingOwners.clear();
+    // Chosen something else since (or cleared it): nothing to take.
+    if (owners.isEmpty() || m_inputSource.isNull() || m_inputSource->universe() != m_pendingUniverse
+        || m_inputSource->channel() != m_pendingChannel)
+        return;
+    ControlOwners::releaseAll(m_doc, owners);
 }
 
 void InputSelectionWidget::takeSource(quint32 universe, quint32 channelWithPage, bool keepFeedback)

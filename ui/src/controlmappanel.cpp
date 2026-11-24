@@ -296,7 +296,14 @@ QString ControlMapPanel::lampText(const ControlMap::Binding &b) const
             return tr("Dark (place from a newer version)");
         if (!cm->isPlaceLive(b.place))
             return tr("Dark (not live here)");
-        return tr("Dark (a narrower place has it)");
+        // A hit fires only where its own place is live (its trigger may
+        // be learned wider, as every old show's is: everywhere).
+        if (b.target.type == ControlMap::HitTarget && !cm->surfaceMayFire(b.target))
+            return tr("Dark (its hit is not live here)");
+        // Only when one is: armed on the control at a narrower place.
+        if (!cm->armedOn(b.universe, b.channel).isEmpty())
+            return tr("Dark (a narrower place has it)");
+        return tr("Dark (not live here)");
     }
     if (lamp == ControlMap::LampStandby && !cm->dimWhenReady())
         return tr("Ready (dark)");

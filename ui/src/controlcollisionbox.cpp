@@ -115,6 +115,12 @@ void ControlCollisionBox::setStepThrough(bool offered)
     m_stepNote->setVisible(m_stepOffered);
 }
 
+void ControlCollisionBox::setMovesOnOk(bool onOk)
+{
+    m_onOk = onOk;
+    m_note->setText(onOk ? ControlOwners::moveOnOkNote() : ControlOwners::moveNote());
+}
+
 void ControlCollisionBox::clear()
 {
     m_owners.clear();

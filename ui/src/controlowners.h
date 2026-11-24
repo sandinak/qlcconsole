@@ -46,9 +46,11 @@ class Doc;
  *
  * One job per control: a control another listener has is refused at Learn,
  * naming it (refusal()), with Move It Here (release()) -- except where the
- * owner can't let go: the PMJ's controls come with its profile, and nothing
- * takes the emergency stop's control (its own Learn can take a control from
- * anything except the PMJ's controls and the encoder bank's runs).
+ * owner can't let go: the PMJ's controls come with its profile, the encoder
+ * bank's runs (its encoders, pushes and bank buttons) are set up together,
+ * and nothing takes the emergency stop's control (its own Learn can take a
+ * control from anything except those). In a window that applies on OK, Move
+ * It Here takes the control only when it is accepted.
  *
  * Every owner has a place. A Control Map trigger has its own (a cue, a cue
  * list, a production or everywhere: phase 3, Q295, Q296); every other
@@ -142,6 +144,10 @@ public:
     /** What Move It Here does on the undo side, in words: the app's undo
      *  doesn't cover inputs, so it says how to put it back. */
     static QString moveNote();
+    /** moveNote() in a window that applies on OK (a widget's Properties,
+     *  a speed master's Inputs…, the Virtual Console's Properties): the
+     *  control is taken only when it is accepted. */
+    static QString moveOnOkNote();
 
     /** Takes the control away from @a owner (it no longer reacts to it).
      *  false: it can't let go, or it is gone. */

@@ -31,9 +31,17 @@ emergency stop, the encoder bank (a Learn, a preset, Custom turned back on
 or another universe: each hands the bank a run of controls, and each
 taken one is named with its own control), a widget's External Input
 (auto-detect or Choose…), a speed master's Inputs…, the Grand Master's
-input and a channel group's input. Move It Here is not on Undo: to put a
-control back, learn it there again. Two exceptions, with no Move It Here:
-the PMJ Black 1's controls that do something come with its profile, and
+input and a channel group's input. In a window with **OK** (a widget's
+Properties, a speed master's Inputs…, the Virtual Console's Properties, a
+channel group) Move It Here takes the control when you press OK: Cancel on
+that window leaves it with its old owner. In a speed master's Inputs… its
+Tap, Rate and Pause are asked of each other as they stand in the window,
+so two of them never end up on one control. Move It Here is not on Undo:
+to put a control back, learn it there again. Three exceptions, with no
+Move It Here: the PMJ Black 1's controls that do something come with its
+profile; the encoder bank's encoders, pushes and bank buttons are set up
+as runs (one taken would take the rest of its run with it: change the
+bank's controls first -- its Next and Previous buttons can be moved); and
 nothing takes the **emergency stop's** control (the stop's own Learn can
 take a control from anything except the PMJ's controls and the encoder
 bank's runs). Two Virtual Console widgets on one input are Show Review's
@@ -251,8 +259,12 @@ effect key does nothing, in its place or out of it. Its light stays bright while
 **A place that goes.** Delete the cue, cue list or production a trigger
 works in and the trigger moves out, as a hit does: to its production, or
 everywhere when that is gone too (never onto a place another trigger on
-that control has while a wider one is free). A hit's trigger follows the
-hit when you move the hit to another place. **Control surfaces ▸ Triggers
+that control has while a wider one is free). When every place it could
+move to already has another trigger on that control, it stays where it
+was and never fires -- it is not made to step through with that one --
+and the note says so: choose a place in **Works**, or remove it. A hit's
+trigger follows the hit when you move the hit to another place, with the
+same rule. **Control surfaces ▸ Triggers
 by place** and the trigger's **Works** say what happened: *Scene: Strobe
 worked only in cue 2 Chorus, which was deleted: it works in production
 Show now.* Undo the delete and it goes back.
@@ -267,8 +279,9 @@ to use it here.
 **Lights and the hub follow what is armed now.** A control's light is the
 one of the trigger that would fire: when the GO leaves cue 2.3, a control
 learned there goes dark (or shows the everywhere one's light). The table's
-**Its light** says *Dark (not live here)* or *Dark (a narrower place has
-it)*. **Control surfaces ▸ Triggers by place** lists each control with a
+**Its light** says *Dark (not live here)*, *Dark (its hit is not live
+here)* (a hit's trigger whose hit's own place is not live) or *Dark (a
+narrower place has it)*. **Control surfaces ▸ Triggers by place** lists each control with a
 trigger at a place, what it does where and which trigger has it now
 (*Now: Scene: Strobe (in cue 2 Chorus)*).
 

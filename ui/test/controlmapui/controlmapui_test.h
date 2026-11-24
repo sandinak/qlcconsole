@@ -64,6 +64,7 @@ private slots:
     void aPmjControlIsRefusedWithNoMoveItHere();
     void theEncoderLearnRefusesAndMoves();
     void theInputPickersRefuseAndMove();
+    void aMoveInAPropertiesWindowWaitsForOk();
     void theStopIsNeverTakenButCanTake();
     void theHubListsControlsWithTwoJobs();
     void collisionShots();

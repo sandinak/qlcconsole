@@ -3055,3 +3055,65 @@ void ControlMap_Test::aHitsTriggerFollowsTheHitWhenItMoves()
     QCOMPARE(cm->binding(ControlMap::hit(hit))->place, ControlMap::inCue(cues.at(1)));
     QVERIFY(cm->placeNote(ControlMap::hit(hit)).isEmpty());
 }
+
+/* A place that goes never widens its trigger onto a place another trigger
+   on its control has: the two would step through each other, which nobody
+   chose (Learn and setPlace() refuse it). It is held, never fires, and is
+   said -- and widened once a place is free. */
+void ControlMap_Test::aPlaceThatGoesNeverWidensOntoATakenOne()
+{
+    QList<quint32> cues;
+    cueList(3, &cues);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 tour = st->addProduction("Tour");
+    QVERIFY(tour != ShowTree::invalidId());
+    Scene *warm = scene("Warm", 0);
+    Scene *strobe = scene("Strobe", 1);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, kNote, ControlMap::function(strobe->id()), ControlMap::Toggle,
+                     ControlMap::inProduction(tour) });
+
+    // Tour deleted: everywhere is Warm's, so Strobe is held, not put beside it.
+    QVERIFY(st->removeProduction(tour));
+    QCOMPARE(cm->binding(ControlMap::function(strobe->id()))->place, ControlMap::inProduction(tour));
+    QCOMPARE(cm->binding(ControlMap::function(warm->id()))->place, ControlMap::everywhere());
+    const QList<ControlMap::Binding> armed = cm->armedOn(0, kNote);
+    QCOMPARE(armed.count(), 1);
+    QCOMPARE(armed.first().target, ControlMap::function(warm->id()));
+    QString note = cm->placeNote(ControlMap::function(strobe->id()));
+    QVERIFY2(note.contains("which was deleted") && note.contains("never fires"), qPrintable(note));
+    // Every press is Warm's: on, off -- Strobe never.
+    m_doc->setMode(Doc::Operate);
+    send(kNote, 127); send(kNote, 0); tick();
+    QVERIFY(warm->isRunning());
+    QVERIFY(!strobe->isRunning());
+    send(kNote, 127); send(kNote, 0); tick(2);
+    QVERIFY(!warm->isRunning());
+    QVERIFY(!strobe->isRunning());
+    m_doc->setMode(Doc::Design);
+
+    // Warm removed: the next tree edit widens Strobe where it is free.
+    QVERIFY(cm->removeBinding(ControlMap::function(warm->id())));
+    st->addProduction("Other");
+    QCOMPARE(cm->binding(ControlMap::function(strobe->id()))->place, ControlMap::everywhere());
+    QVERIFY2(cm->placeNote(ControlMap::function(strobe->id())).contains("works everywhere now"),
+             qPrintable(cm->placeNote(ControlMap::function(strobe->id()))));
+
+    // A hit's trigger never follows the hit onto a place another trigger has.
+    Scene *cool = scene("Cool", 2);
+    const quint32 hit = st->addHit(ShowTree::HitScope::Cue, cues.at(1), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    cm->setBinding({ 0, 7, ControlMap::hit(hit), ControlMap::Toggle, ControlMap::inCue(cues.at(1)) });
+    cm->setBinding({ 0, 7, ControlMap::function(cool->id()), ControlMap::Toggle, ControlMap::inCue(cues.at(2)) });
+    QVERIFY(st->setHitScope({ hit }, ShowTree::HitScope::Cue, cues.at(2)));
+    QCOMPARE(cm->binding(ControlMap::hit(hit))->place, ControlMap::inCue(cues.at(1)));
+    note = cm->placeNote(ControlMap::hit(hit));
+    QVERIFY2(note.contains("where the hit is not any more") && note.contains("never fires"), qPrintable(note));
+    // Cue 3 selected: only Cool is armed on the control.
+    cm->setSelectedTargets({ ControlMap::cue(cues.at(2)) });
+    const QList<ControlMap::Binding> there = cm->armedOn(0, 7);
+    QCOMPARE(there.count(), 1);
+    QCOMPARE(there.first().target, ControlMap::function(cool->id()));
+    cm->setSelectedTargets({});
+}

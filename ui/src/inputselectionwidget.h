@@ -21,6 +21,9 @@
 #define INPUTSELECTIONWIDGET_H
 
 #include <QKeySequence>
+#include <QPointer>
+#include <QDialog>
+#include <functional>
 #include <QWidget>
 
 #include "ui_inputselectionwidget.h"
@@ -68,6 +71,27 @@ public:
     /** The refusal (hidden when there is none). */
     ControlCollisionBox *collisionBox() const { return m_collision; }
 
+    /** Listeners this window stands in for until OK: a speed master's
+     *  Inputs… sets all three of its inputs from its pickers, so its own
+     *  Tap, Rate and Pause are what the other pickers hold now, not what
+     *  the show has. */
+    struct LocalOwners
+    {
+        /** Whether the show's @a owner is one this window sets on OK (it is
+         *  then asked of owners(), not of the show). */
+        std::function<bool(const ControlOwners::Owner &owner)> covers;
+        /** Which of them hold @a channel of @a universe in this window now. */
+        std::function<QList<ControlOwners::Owner>(quint32 universe, quint32 channel)> owners;
+        /** Takes the control from one of them, in this window only. */
+        std::function<void(const ControlOwners::Owner &owner)> release;
+    };
+    void setLocalOwners(const LocalOwners &local) { m_local = local; }
+
+    /** The show's listeners Move It Here takes the control from when the
+     *  window this is in is accepted (empty: none waiting). Outside a
+     *  dialog it takes it at once. */
+    QList<ControlOwners::Owner> pendingMove() const { return m_pendingOwners; }
+
 protected slots:
     void slotAttachKey();
     void slotDetachKey();
@@ -97,6 +121,10 @@ protected:
     bool refuseTaken(quint32 universe, quint32 channelWithPage, bool keepFeedback);
     /** Sets the source to the control, as Choose… or auto-detect does. */
     void takeSource(quint32 universe, quint32 channelWithPage, bool keepFeedback);
+    /** The window was accepted: the control is taken from pendingMove(),
+     *  if this still has it. */
+    void commitMove();
+    bool isLocal(const ControlOwners::Owner &owner) const;
 
 private:
     Doc *m_doc;
@@ -120,6 +148,11 @@ private:
     ControlOwners::Owner m_self;
     ControlCollisionBox *m_collision;
     bool m_pendingKeepFeedback = false;
+    LocalOwners m_local;
+    QList<ControlOwners::Owner> m_pendingOwners;
+    quint32 m_pendingUniverse = 0;
+    quint32 m_pendingChannel = 0;
+    QPointer<QDialog> m_hooked;
 };
 
 #endif // INPUTSELECTIONWIDGET_H

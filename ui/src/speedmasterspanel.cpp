@@ -283,7 +283,7 @@ void SpeedMastersPanel::editInputs(int index)
     const SpeedMasters::Control controls[SpeedMasters::ControlCount] =
         { SpeedMasters::TapControl, SpeedMasters::RateControl, SpeedMasters::PauseControl };
     const QStringList titles = { tr("Tap"), tr("Rate"), tr("Pause") };
-    InputSelectionWidget *pick[SpeedMasters::ControlCount];
+    InputSelectionWidget *pick[SpeedMasters::ControlCount] = {};
     for (int c = 0; c < SpeedMasters::ControlCount; ++c)
     {
         pick[c] = new InputSelectionWidget(m_doc, &dlg);
@@ -296,6 +296,41 @@ void SpeedMastersPanel::editInputs(int index)
         self.index = index;
         self.part = int(controls[c]);
         pick[c]->setListener(self);
+        /* OK sets all three of this master's inputs from these pickers: its
+           own Tap, Rate and Pause are what the pickers hold now, not what
+           the show has -- one picker on another's control is refused, and
+           Move It Here clears that picker here (Cancel puts nothing back
+           because nothing was changed). */
+        InputSelectionWidget::LocalOwners local;
+        local.covers = [index](const ControlOwners::Owner &o) {
+            return o.kind == ControlOwners::SpeedMaster && o.index == index;
+        };
+        local.owners = [&pick, &controls, &titles, sm, index](quint32 u, quint32 ch) {
+            QList<ControlOwners::Owner> out;
+            for (int d = 0; d < SpeedMasters::ControlCount; ++d)
+            {
+                if (pick[d] == nullptr)
+                    continue;
+                const QSharedPointer<QLCInputSource> src = pick[d]->inputSource();
+                if (src.isNull() || !src->isValid() || src->universe() != u || (src->channel() & 0xFFFF) != ch)
+                    continue;
+                ControlOwners::Owner o;
+                o.kind = ControlOwners::SpeedMaster;
+                o.index = index;
+                o.part = int(controls[d]);
+                o.thing = tr("%1 %2").arg(sm->name(index), titles.at(d));
+                o.where = tr("Speed Masters");
+                o.fix = tr("Speed Masters ▸ Inputs…");
+                out << o;
+            }
+            return out;
+        };
+        local.release = [&pick, &controls](const ControlOwners::Owner &o) {
+            for (int d = 0; d < SpeedMasters::ControlCount; ++d)
+                if (int(controls[d]) == o.part && pick[d] != nullptr)
+                    pick[d]->setInputSource(QSharedPointer<QLCInputSource>());
+        };
+        pick[c]->setLocalOwners(local);
         quint32 u = 0, ch = 0;
         if (sm->input(index, controls[c], &u, &ch))
             pick[c]->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(u, ch)));

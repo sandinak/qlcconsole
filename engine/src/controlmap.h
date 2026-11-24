@@ -542,10 +542,15 @@ private:
     /** A trigger whose place is gone (its cue, list or production
      *  deleted) moves out, as a scoped hit does: to its production, else
      *  everywhere (a place another trigger on the control has is passed
-     *  over while a wider one is free). Said in placeNote(). A widened one
+     *  over while a wider one is free; with none free it is held where it
+     *  is, never armed, and not made to step through with that trigger).
+     *  Said in placeNote(). A widened one
      *  whose place comes back (Undo) goes back to it. Marks the show
      *  modified when it moved one. */
     void fixPlaces();
+    /** Whether a trigger @a b can ever work at @a place: it is in the show,
+     *  and for a hit, not apart from where the hit lives now. */
+    bool isPlaceUsable(const Binding &b, const Place &place) const;
     /** Remembers each live place's production and name, so a place that
      *  goes can still be widened and named. */
     void rememberPlaces();

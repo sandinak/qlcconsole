@@ -142,6 +142,17 @@ QList<QPair<quint64, ControlOwners::Owner>> ControlOwners::owned(Doc *doc)
                 o.index = i;
                 o.where = tr("encoder bank");
                 o.fix = tr("Control Map ▸ Encoder bank ▸ Learn More…");
+                /* The encoders, their pushes and the bank buttons are runs
+                   (a first control and a count): one of them can't be
+                   given up without the rest of its run, so none is moved.
+                   Next and Previous are single controls and can be. */
+                if (part == EncoderTurn || part == EncoderPush || part == BankDirect)
+                {
+                    o.movable = false;
+                    o.fixedWhy = tr("The encoder bank's encoders, pushes and bank buttons are set up as a "
+                                    "run and can't be moved one by one: change the bank's controls in "
+                                    "Control Map ▸ Encoder bank first.");
+                }
                 switch (part)
                 {
                     case EncoderTurn: o.thing = tr("Encoder %1").arg(i + 1); break;
@@ -396,6 +407,12 @@ QString ControlOwners::moveNote()
     return tr("Move It Here is not on Undo: to put it back, learn the control there again.");
 }
 
+QString ControlOwners::moveOnOkNote()
+{
+    return tr("Move It Here takes it when you press OK; Cancel leaves it where it is. "
+              "It is not on Undo: to put it back, learn the control there again.");
+}
+
 bool ControlOwners::release(Doc *doc, const Owner &owner)
 {
     if (doc == nullptr || !owner.movable)
@@ -413,22 +430,11 @@ bool ControlOwners::release(Doc *doc, const Owner &owner)
             EncoderBank::Device d = enc->device();
             switch (owner.part)
             {
-                case EncoderTurn:
-                    // The encoders are a run from the first: it ends before this one.
-                    if (owner.index > 0)
-                        d.encoderCount = owner.index;
-                    else
-                        d.encoders = -1;
-                    break;
-                case EncoderPush: d.pushes = -1; break;
                 case BankNext: d.bankNext = -1; break;
                 case BankPrevious: d.bankPrevious = -1; break;
-                case BankDirect:
-                    if (d.bankLamps == d.bankDirect)
-                        d.bankLamps = -1;
-                    d.bankDirect = -1;
-                    break;
                 default:
+                    // A run (the encoders, pushes, bank buttons): never one
+                    // control of it -- the rest of the run would go with it.
                     return false;
             }
             enc->setDevice(d, QStringLiteral("custom"));
@@ -479,8 +485,8 @@ bool ControlOwners::canRelease(Doc *doc, const Owner &owner)
         case Pmj:
             return false;
         case Encoder:
-            return doc->controlMap()->encoderBank()->isEnabled() && owner.part >= EncoderTurn
-                   && owner.part <= BankDirect;
+            return doc->controlMap()->encoderBank()->isEnabled()
+                   && (owner.part == BankNext || owner.part == BankPrevious);
         case VCInput:
             return qobject_cast<VCWidget *>(owner.widget.data()) != nullptr;
         case SpeedMaster:

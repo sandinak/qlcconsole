@@ -1584,18 +1584,7 @@ void ControlMap::fixPlaces()
     ShowTreeController *st = m_doc->showTree();
     bool moved = false;
     QList<QPair<quint32, quint32>> controls;
-    /* Whether a trigger can ever work at @a place: it is in the show, and a
-       hit's is not apart from where the hit lives now (a hit fires only
-       inside its own place: moved to another list, a trigger left at a cue
-       of the old one would be armed where the hit can never fire). */
-    auto usable = [this](const Binding &b, const Place &place) {
-        if (!placeExists(place))
-            return false;
-        if (b.target.type != HitTarget || !targetExists(b.target))
-            return true;
-        const Place own = placeOfHit(b.target.id);
-        return isPlaceWithin(place, own) || isPlaceWithin(own, place);
-    };
+    auto usable = [this](const Binding &b, const Place &place) { return isPlaceUsable(b, place); };
     for (int i = 0; i < m_bindings.count(); ++i)
     {
         Binding &b = m_bindings[i];
@@ -1628,6 +1617,13 @@ void ControlMap::fixPlaces()
         if (b.target.type != HitTarget && to.scope != Everywhere && isPlaceTaken(b, to)
             && !isPlaceTaken(b, Place()))
             to = Place();
+        /* Every place it could go has another trigger on its control: it
+           is held where it is (a place that is gone is never live, so it
+           never fires; it can still let go) rather than step through with
+           that one, which nobody chose and Learn and setPlace() refuse.
+           placeNote() says so; the next fix-up widens it once one is free. */
+        if (isPlaceTaken(b, to))
+            continue;
         Widened was;
         const auto had = m_widened.constFind(targetKey(b.target));
         if (had != m_widened.constEnd())
@@ -1657,6 +1653,20 @@ void ControlMap::fixPlaces()
         sendControlLamp(c.first, c.second, true);
 }
 
+bool ControlMap::isPlaceUsable(const Binding &b, const Place &place) const
+{
+    /* It is in the show, and a hit's is not apart from where the hit lives
+       now (a hit fires only inside its own place: moved to another list, a
+       trigger left at a cue of the old one would be armed where the hit
+       can never fire). */
+    if (!placeExists(place))
+        return false;
+    if (b.target.type != HitTarget || !targetExists(b.target))
+        return true;
+    const Place own = placeOfHit(b.target.id);
+    return isPlaceWithin(place, own) || isPlaceWithin(own, place);
+}
+
 QString ControlMap::placeNote(const Target &target) const
 {
     const Binding *b = binding(target);
@@ -1666,6 +1676,21 @@ QString ControlMap::placeNote(const Target &target) const
         return tr("%1: its place (%2) is from a newer version of qlcconsole, so it never fires here. "
                   "It is kept and saved as it was; choose a place in Works to use it here.")
                 .arg(targetName(target), b->place.newerScope);
+    // Held by fixPlaces(): its place went, and every place it could go has
+    // another trigger on its control.
+    if (b->place.scope != Everywhere && !isPlaceUsable(*b, b->place))
+    {
+        QString from = m_placeHomes.value(placeKey(b->place)).name;
+        if (from.isEmpty())
+            from = placeName(b->place);
+        if (placeExists(b->place))
+            return tr("%1 worked only %2, where the hit is not any more, and the hit's place already has "
+                      "another trigger on this control: it never fires now. Choose a place in Works, or "
+                      "remove it.").arg(targetName(target), from);
+        return tr("%1 worked only %2, which was deleted, and every place it could move to already has "
+                  "another trigger on this control: it never fires now. Choose a place in Works, or "
+                  "remove it.").arg(targetName(target), from);
+    }
     const auto w = m_widened.constFind(targetKey(target));
     if (w == m_widened.constEnd() || w->to != b->place)
         return QString();

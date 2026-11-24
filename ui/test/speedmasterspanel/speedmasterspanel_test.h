@@ -42,6 +42,7 @@ private slots:
     void theFooterShowsEachMastersTempo();
     void aMasterThatComesIntoUseIsShownAtItsWidth();
     void aMastersInputsAreMappedInItsWindow();
+    void itsPickersNeverShareAControl();
     void theBeatIsABlinkABarOrNothingAlwaysOrWhilePlaying();
     void doubleClickingAMasterChangesNothing();
 
