@@ -978,13 +978,11 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     QVERIFY(!gm.accept(150, 0));
     QVERIFY(!gm.accept(120, 255));          // the GM is back: no pull
     QVERIFY(gm.waiting(255));
-    // The control moved while the fader was below it: the run starts over
-    // at the first report under the new value; a hand's pull from there is
-    // still taken at once.
+    // Raised while the fader waits below it (feedback sends a motor up,
+    // never down): a pull down from there is still taken at once.
     gm.reset();
     QVERIFY(!gm.accept(100, 200));
-    QVERIFY(!gm.accept(90, 255));
-    QVERIFY(gm.accept(60, 255));
+    QVERIFY(gm.accept(90, 255));
 
     // Another fader drives the control: the old one's place is no guide.
     p.setSource(0, 11);

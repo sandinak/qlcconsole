@@ -47,7 +47,9 @@ class QString;
  * the safe way (an emergency fade-out must never wait), so a fader below
  * the control that is pulled down by more than Threshold is taken at once,
  * wherever it was. The pull is measured from where the fader stopped
- * following (or started to wait), so a parked fader's jitter never is one.
+ * following (or started to wait), so a parked fader's jitter never is one,
+ * and not over reports the fader made above the control, so a motor fader
+ * sent down by feedback (the control dipped on screen) never is one either.
  * Raising it still waits for the pick-up. Every master whose lowering is
  * the safe way uses it (the Grand Master, VC Grand / Sub / Group master
  * sliders).
