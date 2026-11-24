@@ -4002,6 +4002,82 @@ void Monitor_Test::aLensSetInFixturePropertiesIsTheLights()
     QCOMPARE(props->fixtureRigProps(rig.fxi->id()).lensDeg, 22.0f);
 }
 
+/* His laptop, 2026-11-23: Position & Orientation's X read "9 7," for
+   97' 4 1/8" on a 100' grid while Y read 27'. Qt sized the field by its
+   ends' text ("100'"), not its widest value; a Mac form keeps each field at
+   that size. Both lengths must show their whole text. */
+void Monitor_Test::fixturePropertiesLengthsShowTheirWholeValue()
+{
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(29670.4f, 8229.6f, 0.0f)));   // 97' 4 1/8", 27'
+    MonitorProperties *props = m_doc->monitorProperties();
+    const MonitorProperties::GridUnits oldUnits = props->gridUnits();
+    props->setGridUnits(MonitorProperties::Feet);
+    rig.gv->setGridSize(QSize(100, 60));                                // a 100' x 60' plot
+    QStringList texts, clipped;
+    driveDialog([&](QWidget *dlg) {
+        QDoubleSpinBox *x = dlg->findChild<QDoubleSpinBox *>("fixtureX");
+        QDoubleSpinBox *y = dlg->findChild<QDoubleSpinBox *>("fixtureY");
+        if (x == nullptr || y == nullptr)
+            return false;
+        // As a Mac lays the form out: every field at its own size.
+        for (QFormLayout *f : dlg->findChildren<QFormLayout *>())
+            if (f->indexOf(x) >= 0)
+                f->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
+        dlg->layout()->activate();
+        for (QDoubleSpinBox *sp : { x, y })
+        {
+            QLineEdit *le = sp->findChild<QLineEdit *>();
+            if (le == nullptr)
+                return false;
+            texts << le->text();
+            const int need = QFontMetrics(le->font()).horizontalAdvance(le->text());
+            const int room = le->contentsRect().width() - 4;   // QLineEdit's 2 px a side
+            if (need > room)
+                clipped << QStringLiteral("%1: \"%2\" needs %3 px, has %4")
+                               .arg(sp->objectName(), le->text()).arg(need).arg(room);
+        }
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    props->setGridUnits(oldUnits);
+    QCOMPARE(texts, QStringList({ QStringLiteral("97' 4 1/8\""), QStringLiteral("27'") }));
+    QVERIFY2(clipped.isEmpty(), qPrintable(clipped.join(QStringLiteral("; "))));
+}
+
+/* Fixture Properties is taller than a laptop's screen for a moving head:
+   its rows are in a scroller, the name above it and OK / Cancel below it
+   in view, the dialog no taller than its screen. */
+void Monitor_Test::fixturePropertiesRowsScrollButtonsStay()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
+    QString why;
+    driveDialog([&why](QWidget *dlg) {
+        QLineEdit *name = dlg->findChild<QLineEdit *>("fixtureNameEdit");
+        if (name == nullptr)
+            return false;
+        QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
+        QDialogButtonBox *buttons = dlg->findChild<QDialogButtonBox *>();
+        QWidget *x = dlg->findChild<QWidget *>("fixtureX");
+        const QRect room = dlg->screen()->availableGeometry();
+        if (scroll == nullptr)
+            why = "no scroller";
+        else if (x == nullptr || !scroll->isAncestorOf(x))
+            why = "the rows are not in the scroller";
+        else if (scroll->isAncestorOf(name))
+            why = "the name scrolls away";
+        else if (buttons == nullptr || scroll->isAncestorOf(buttons))
+            why = "the buttons scroll away";
+        else if (dlg->height() > room.height())
+            why = QString("%1 tall on a %2 screen").arg(dlg->height()).arg(room.height());
+        return true;
+    }, false);
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY2(why.isEmpty(), qPrintable(why));
+}
+
 /* "Fixture Properties edits every selected fixture: double-clicking one of
    several selected fixtures, on the plot or in Plot layers, opens the editor
    for all of them (... a double-click in the list kept only its own row)." */

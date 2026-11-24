@@ -28,6 +28,8 @@
 #include <QElapsedTimer>
 #include <QGraphicsScene>
 #include <QGraphicsView>
+#include <QImage>
+#include <QPainter>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
@@ -382,14 +384,9 @@ struct Known
 
 const QList<Known> &knownIssues()
 {
-    static const QList<Known> list = {
-        { "Fixture Properties", "1024x640", "runs off its screen",
-          "TODO.md 0.5.3: Fixture Properties needs its fit-to-screen scroller back (reverted on "
-          "fix/053-fixture-props-revert-fit because the whole window took no clicks)" },
-        { "Fixture Properties", "1024x640", "OK / Cancel are out of view", "the same" },
-        { "Fixture Properties", "1440x900", "runs off its screen", "the same: 1046 px tall" },
-        { "Fixture Properties", "1440x900", "OK / Cancel are out of view", "the same" },
-    };
+    /* Empty: Fixture Properties' overflow (1046 px tall at 1440x900) was
+       the last, fixed on fix/053-fixture-props-fit (its rows scroll). */
+    static const QList<Known> list = {};
     return list;
 }
 
@@ -702,6 +699,26 @@ QStringList checkAfterClose(App *app, int filtersBefore)
     return problems;
 }
 
+/** UX shots (QLC_SHOT_DIR): Fixture Properties as its screen shows it, over
+ *  the main window; what runs off the screen is cut off. */
+void shootOnScreen(App *app, const Row &r, QWidget *w)
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty() || !r.name.startsWith(QStringLiteral("Fixture Properties")))
+        return;
+    settle();
+    const QRect screen = app->screen()->geometry();
+    QImage img(screen.size(), QImage::Format_RGB32);
+    img.fill(QColor(40, 40, 46));
+    QPainter p(&img);
+    p.drawPixmap(app->mapToGlobal(QPoint(0, 0)) - screen.topLeft(), app->grab());
+    p.drawPixmap(w->mapToGlobal(QPoint(0, 0)) - screen.topLeft(), w->grab());
+    p.end();
+    QString name = r.name.toLower();
+    name.replace(QStringLiteral(", "), QStringLiteral("-")).replace(QLatin1Char(' '), QLatin1Char('-'));
+    img.save(QDir(dir).filePath(QStringLiteral("%1-%2x%3.png").arg(name).arg(screen.width()).arg(screen.height())));
+}
+
 /** Opens @p r with the main window where it is, checks what opened, and
  *  closes it. @p what: the window that came up. */
 QStringList runRow(App *app, const Row &r, QString *what = nullptr)
@@ -749,6 +766,7 @@ QStringList runRow(App *app, const Row &r, QString *what = nullptr)
         if (w->windowType() == Qt::Dialog && WindowSpace::keptCount() == keptBefore)
             problems << QStringLiteral("a dialog that does not stay on its main window's Space "
                                        "(WindowSpace keeps only a dialog with a parent widget)");
+        shootOnScreen(app, r, w);
         problems << checkOpen(app, r, w);
         closeThroughWindow(r, w, problems);
     });
