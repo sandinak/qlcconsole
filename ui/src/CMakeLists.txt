@@ -116,6 +116,7 @@ add_library(${module_name}
     monitor/focuscallsdialog.cpp monitor/focuscallsdialog.h
     monitor/structureduplicatedialog.cpp monitor/structureduplicatedialog.h
     monitor/focusmenu.cpp monitor/focusmenu.h
+    monitor/masklenswidget.cpp monitor/masklenswidget.h
     monitor/venuemenu.cpp monitor/venuemenu.h
     monitor/venuerigdialog.cpp monitor/venuerigdialog.h
     monitor/rolefilldialog.cpp monitor/rolefilldialog.h
