@@ -189,7 +189,7 @@ void MountInSituView::refresh()
     if (kind < 0)
     {
         clearView();
-        m_caption->setText(tr("Not on a structure \xe2\x80\x94 free on the plot"));
+        m_caption->setText(tr("Not on a structure ") + QChar(0x2014) + tr(" free on the plot"));
         return;
     }
 
@@ -225,7 +225,7 @@ void MountInSituView::refresh()
         m_heightText = tr("%1 above the %2").arg(MeasurementUnits::formatLength(mm), what);
     else
         m_heightText = tr("%1 below the %2").arg(MeasurementUnits::formatLength(-mm), what);
-    m_dim->text = qAbs(mm) < 0.5 ? tr("flush") : MeasurementUnits::formatLength(qAbs(mm)) + (mm > 0 ? QStringLiteral(" \xe2\x86\x91") : QStringLiteral(" \xe2\x86\x93"));
+    m_dim->text = qAbs(mm) < 0.5 ? tr("flush") : MeasurementUnits::formatLength(qAbs(mm)) + (mm > 0 ? QString(QChar(0x20)) + QChar(0x2191) : QString(QChar(0x20)) + QChar(0x2193));
     m_dim->setToolTip(m_heightText);
     m_dim->update();
 
@@ -251,8 +251,8 @@ void MountInSituView::refresh()
     if (!place.isEmpty())
         bits << place;
     if (!qFuzzyIsNull(rp.studioAngle))
-        bits << tr("angle %1\xc2\xb0").arg(double(rp.studioAngle), 0, 'f', 0);
+        bits << tr("angle %1").arg(double(rp.studioAngle), 0, 'f', 0) + QChar(0x00B0);
     if (!qFuzzyIsNull(rp.studioTilt))
-        bits << tr("tilt %1\xc2\xb0").arg(double(rp.studioTilt), 0, 'f', 0);
-    m_caption->setText(bits.join(QStringLiteral(" \xc2\xb7 ")));
+        bits << tr("tilt %1").arg(double(rp.studioTilt), 0, 'f', 0) + QChar(0x00B0);
+    m_caption->setText(bits.join(QString(QChar(0x20)) + QChar(0x00B7) + QChar(0x20)));
 }
