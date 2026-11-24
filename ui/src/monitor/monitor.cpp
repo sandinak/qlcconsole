@@ -12562,13 +12562,13 @@ static QWidget *facingDialColumn(QWidget *parent, FacingPreviewWidget *dial, boo
     QLabel *legend = new QLabel(col);
     legend->setObjectName(QStringLiteral("fixtureFacingLegend"));
     legend->setTextFormat(Qt::RichText);
-    QString text = QObject::tr("<span style=\"color:#50c878\">&#9644;</span> front (drag)");
+    QString text = QObject::tr("<span style=\"color:rgb(80,200,120)\">&#9644;</span> front (drag)");
     if (symbol)
-        text += QObject::tr("<br><span style=\"color:#5a96e6\">&#9644;</span> symbol (drag box)");
+        text += QObject::tr("<br><span style=\"color:rgb(90,150,230)\">&#9644;</span> symbol (drag box)");
     if (mover)
-        text += marks ? QObject::tr("<br><span style=\"color:#a078d2\">&#9644;</span> pan, &#8635; DMX up"
-                                    "<br><span style=\"color:#e65050\">&#10005;</span> pan seam")
-                      : QObject::tr("<br><span style=\"color:#a078d2\">&#9644;</span> pan range");
+        text += marks ? QObject::tr("<br><span style=\"color:rgb(160,120,210)\">&#9644;</span> pan, &#8635; DMX up"
+                                    "<br><span style=\"color:rgb(230,80,80)\">&#10005;</span> pan seam")
+                      : QObject::tr("<br><span style=\"color:rgb(160,120,210)\">&#9644;</span> pan range");
     legend->setText(text);
     QFont sf = legend->font();
     sf.setPointSizeF(sf.pointSizeF() * 0.85);
