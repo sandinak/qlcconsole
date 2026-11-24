@@ -25,6 +25,8 @@
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QGroupBox>
+#include <QStackedWidget>
+#include <QTabWidget>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -314,6 +316,24 @@ QString where(const QWidget *w)
     return w->objectName().isEmpty() ? QString::fromLatin1(w->metaObject()->className()) : w->objectName();
 }
 
+/* @p w is shown in @p top, or would be on its tab: a page of a tab widget
+   that is not the current one still counts (Fixture Properties' tabs), so
+   every tab's words are read. */
+bool shownOrOnATab(const QWidget *w, const QWidget *top)
+{
+    for (const QWidget *p = w; p != nullptr && p != top; p = p->parentWidget())
+    {
+        if (!p->isHidden())
+            continue;
+        const QWidget *stack = p->parentWidget();
+        if (qobject_cast<const QStackedWidget *>(stack) != nullptr
+            && qobject_cast<const QTabWidget *>(stack->parentWidget()) != nullptr)
+            continue;
+        return false;
+    }
+    return true;
+}
+
 /* Every word a person can read in @p top, and its length fields */
 Seen look(QWidget *top)
 {
@@ -327,7 +347,7 @@ Seen look(QWidget *top)
     all.prepend(top);
     for (QWidget *w : all)
     {
-        if (w != top && !w->isVisibleTo(top))
+        if (w != top && !shownOrOnATab(w, top))
             continue;
         if (!w->toolTip().isEmpty() && !isLengthHelp(w->toolTip()))
             add(w, w->toolTip());

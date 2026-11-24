@@ -94,6 +94,11 @@ public:
     /** Fixture Properties for several at once: the rows they share, "mixed"
      *  where they differ. */
     void editFixturesProperties(const QList<quint32> &fids);
+    /** Fixture Properties: brings @p row (one of its fields) into view --
+     *  its tab current, Aim & Mount's More unfolded if it is in it -- as a
+     *  click on them would, but not remembered as the person's choice.
+     *  False when it is not in Fixture Properties or still not shown. */
+    static bool revealFixtureEditorRow(QWidget *row);
 
     /** Constructed once as a permanent tab (see App::init()) — public like
      *  every other tab-hosted manager (FunctionManager, ShowManager, …);

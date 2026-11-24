@@ -104,6 +104,9 @@ selection here and on the plot.
 or pinch to zoom, right-click a fixture for **Fixture Properties…** or
 **LED Layout…**, ⇧⌘R or ⌘W to close.
 
+**In Fixture Properties:** Ctrl+Tab and Ctrl+Shift+Tab go to the next and
+previous tab (Fixture, Place, Aim & Mount, DMX Controls); Esc cancels.
+
 **Quick Focus** (⌘⌥F, or a tap of View + Menu on the controller in the Tools role) and **Venue
 focus**: ] / [ (or Tab / ⇧Tab) next and previous light, arrows nudge 0.1°
 (⇧ for 1°), + / − step size, , / . spot down / flood out (⇧ 5°), ; / '

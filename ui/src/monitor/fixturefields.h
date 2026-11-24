@@ -67,10 +67,25 @@ public:
     /** Hide every row (the panel shows something else -- a bar). */
     void hideAll();
 
+    /** Fixture Properties' Place tab: the rows that say where it is and how
+     *  it sits (Mounted on, its tower position, Orientation, Face,
+     *  Placement, Angle, Tilt) move from their form to @p to, in order.
+     *  They are shown and hidden there as before. */
+    void movePlaceRows(QFormLayout *to);
+
+    /** Fixture Properties: Max draw in two lines -- the field with a short
+     *  status ("not measured"), the buttons under it -- the note that said
+     *  what is measured in its status's and the field's tooltips. The
+     *  Studio inspector, narrower, keeps the long form (UX-36). */
+    void setPowerCompact();
+
     /** "mixed" on a spin box, for rows of the same kind beside these: its
      *  lowest value, one step below @p lowest, reads "mixed". */
     static void spinMixed(QDoubleSpinBox *sp, bool mixed, double lowest);
     static bool spinIsMixed(const QDoubleSpinBox *sp);
+    /** @p w reads "mixed" now: a choice, a spin box or a colour these
+     *  fixtures differ on (a "No limit" is not "mixed"). */
+    static bool showsMixed(const QWidget *w);
 
     /** Fill @p cb with the stage looks, in sections (Moving, Fixed
      *  conventional, Fixed LED) under "Auto (<what its type is>)" for
@@ -175,6 +190,11 @@ private:
     QLabel *m_wledWriteNote;    ///< a device write: busy, or what it did
     QDoubleSpinBox *m_maxAmps;  ///< the most it may draw (PowerProfile::maxAmps)
     QLabel *m_powerNote;        ///< what has been measured
+    QLabel *m_powerStatus = nullptr;    ///< setPowerCompact(): the note, short
+    QString m_maxAmpsTip;               ///< m_maxAmps' own tooltip
+    class QBoxLayout *m_powerRow = nullptr;
+    class QBoxLayout *m_powerBtns = nullptr;
+    QFormLayout *m_placeForm = nullptr; ///< movePlaceRows(): where those rows went
     class QToolButton *m_copyPower; ///< readings to every fixture like it
 };
 

@@ -21,6 +21,8 @@
 #define LENGTHSPINBOX_H
 
 #include <QDoubleSpinBox>
+#include <QFontMetrics>
+#include <cmath>
 
 #include "measurementunits.h"
 
@@ -76,7 +78,51 @@ public:
                                                                : QValidator::Intermediate;
     }
 
+    /** Wide enough for every value it can hold, not only its ends (off by
+     *  default: the studio editors are laid out to a laptop's width with
+     *  Qt's own sizes). Qt sizes a spin box by its minimum's and maximum's
+     *  text, and a range up to 100' showed 97' 4 1/8" as "97' 4" (Fixture
+     *  Properties' X); with this on, the longest text near each end -- an
+     *  eighth short of it, 99' 11 7/8" -- is measured too. */
+    void setFitsEveryValue(bool on)
+    {
+        m_fitsEveryValue = on;
+        updateGeometry();
+    }
+
+    QSize sizeHint() const override
+    {
+        return QDoubleSpinBox::sizeHint() + QSize(widthShort(), 0);
+    }
+
+    QSize minimumSizeHint() const override
+    {
+        return QDoubleSpinBox::minimumSizeHint() + QSize(widthShort(), 0);
+    }
+
 private:
+    /** How much wider than its ends' text its widest value's text is. */
+    int widthShort() const
+    {
+        if (!m_fitsEveryValue)
+            return 0;
+        const QFontMetrics fm(font());
+        auto wide = [&fm, this](double v) {
+            // As Qt measures it (QAbstractSpinBox::sizeHint): 18 characters at most.
+            return fm.horizontalAdvance(textFromValue(v).left(18) + prefix() + suffix() + QLatin1Char(' '));
+        };
+        const int ends = qMax(wide(minimum()), wide(maximum()));
+        // An eighth of an inch (a tape measure's step), or the field's own
+        // step when its numbers are coarser: in from each end.
+        const double step = qMax(3.175 / m_mmPerValue, std::pow(10.0, -decimals()));
+        int widest = ends;
+        for (double v : { maximum() - step, minimum() + step })
+            if (v >= minimum() && v <= maximum())
+                widest = qMax(widest, wide(v));
+        // And the line edit's own margins, 2 px a side, which Qt leaves out.
+        return widest > ends ? widest - ends + 6 : 0;
+    }
+
     /** Millimetres typed, a leading minus kept (an offset, below the deck) */
     double parse(const QString &text, bool *ok) const
     {
@@ -102,6 +148,7 @@ private:
 
     double m_mmPerValue;
     MeasurementUnits::LengthUnit m_unit;
+    bool m_fitsEveryValue = false;
 };
 
 /** @} */

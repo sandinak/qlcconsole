@@ -161,6 +161,19 @@ private slots:
      *  channel) has "Beam (lens set to)" in Fixture Properties; setting it
      *  sets the light's lens, which is what its beam is drawn at. */
     void aLensSetInFixturePropertiesIsTheLights();
+    void fixturePropertiesLengthsShowTheirWholeValue();
+    void fixturePropertiesRowsScrollButtonsStay();
+    /** Fixture Properties' tabs: Fixture the first time, then the tab last
+     *  used; Ctrl+Tab / Ctrl+Shift+Tab go round them, Tab stays on the page,
+     *  Esc cancels; a row brought into view is not remembered. */
+    void fixturePropertiesOpensOnTheTabLastUsed();
+    /** Several fixtures: a tab with a row they differ on is marked "•". */
+    void fixturePropertiesMarksTheTabTheyDifferOn();
+    /** Aim & Mount's More: folded by default and remembered; folded, a set
+     *  pan calibration shows in its summary line. */
+    void fixturePropertiesFoldedMoreSaysWhatIsSet();
+    /** Every control it showed before the tabs is still reached by clicks. */
+    void fixturePropertiesKeepsEveryControl();
     /** A WLED's string of LEDs shows what a string has, none of a hung
      *  light's aim rows; a mover keeps them (shots with QLC_SHOT_DIR). */
     void aWledStringIsNotAimedInFixtureProperties();
