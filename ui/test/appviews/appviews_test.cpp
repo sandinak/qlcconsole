@@ -51,6 +51,7 @@
 #include <QScopeGuard>
 #include <QTimer>
 #include <QMessageBox>
+#include "showfeatures.h"
 #include <QSettings>
 #include <QApplication>
 #include <QFileDialog>
