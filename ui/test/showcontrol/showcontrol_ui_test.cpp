@@ -674,12 +674,13 @@ void ShowControlUi_Test::theRowsInConnectionsDevices()
     QList<QTreeWidgetItem *> found = view->findItems("Show control & sync", Qt::MatchExactly, 0);
     QCOMPARE(found.count(), 1);
     QTreeWidgetItem *branch = found.first();
-    QCOMPARE(branch->childCount(), 5);
-    QCOMPARE(branch->child(0)->text(0), QString("OSC in"));
-    QCOMPARE(branch->child(0)->text(1), QString("Off"));
-    QCOMPARE(branch->child(2)->text(0), QString("MIDI timecode"));
-    QCOMPARE(branch->child(3)->text(0), QString("Web access"));
-    QCOMPARE(branch->child(3)->text(1), QString("Off"));
+    QCOMPARE(branch->childCount(), 6);
+    QCOMPARE(branch->child(0)->text(0), QString("Control surfaces"));
+    QCOMPARE(branch->child(1)->text(0), QString("OSC in"));
+    QCOMPARE(branch->child(1)->text(1), QString("Off"));
+    QCOMPARE(branch->child(3)->text(0), QString("MIDI timecode"));
+    QCOMPARE(branch->child(4)->text(0), QString("Web access"));
+    QCOMPARE(branch->child(4)->text(1), QString("Off"));
 
     // Pick MSC: only its box on the right.
     tree.selectShowControlRow("msc");
@@ -692,12 +693,12 @@ void ShowControlUi_Test::theRowsInConnectionsDevices()
 
     // Turning OSC on updates its row, without waiting for a rebuild.
     page.findChild<QCheckBox *>("scOscEnabled")->setChecked(true);
-    QTRY_VERIFY(branch->child(0)->text(1).startsWith(QString("Port %1").arg(port)));
+    QTRY_VERIFY(branch->child(1)->text(1).startsWith(QString("Port %1").arg(port)));
     listener.setOscEnabled(false);
 
     // Web access running: its row says where.
     m_doc->webAccess()->setStatus(ShowWebAccess::Running, QStringLiteral("http://127.0.0.1:9999/"));
-    QTRY_COMPARE(branch->child(3)->text(1), QString("Port 9999 · this computer only"));
+    QTRY_COMPARE(branch->child(4)->text(1), QString("Port 9999 · this computer only"));
     m_doc->webAccess()->setStatus(ShowWebAccess::Off, QString());
 }
 

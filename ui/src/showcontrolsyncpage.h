@@ -36,6 +36,7 @@ class QSpinBox;
 class QLabel;
 class QLineEdit;
 class Doc;
+class ControlSurfacesPanel;
 
 /** @addtogroup ui_io
  * @{
@@ -64,19 +65,29 @@ public:
      *  there is one, OSC and MSC can't be edited. */
     void setListener(ShowControlListener *listener);
 
-    /** Show only one link's settings: "osc", "msc", "mtc", "map" or "web"; empty for all
-     *  of them. Connections ▸ Devices calls it for the row picked. */
+    /** Show only one link's settings: "surfaces", "osc", "msc", "mtc", "map" or "web"; empty for all
+     *  of them ("surfaces": the Control surfaces hub). Connections ▸ Devices calls it for the row picked. */
     void showSection(const QString &key);
 
     /** One line per link for the Devices rows: {key, name, state}, e.g.
      *  {"osc", "OSC in", "Port 8000 · listening"}; "web" for web access. */
     QList<QStringList> summary() const;
 
+    /** The Control surfaces hub (every place a surface is set up). */
+    ControlSurfacesPanel *surfaces() const { return m_surfaces; }
+    /** Where a hub row's Set up… goes. */
+    void setUpSurface(const QString &key);
+
 signals:
     /** "Patch a MIDI input…": take the user to where inputs are patched. */
     void patchMidiInputRequested();
     /** What summary() returns has changed. */
     void summaryChanged();
+    /** A Control surfaces Set up… wants the row @p key ("map", "web") picked
+     *  in Connections ▸ Devices (the page also shows it itself). */
+    void sectionRequested(const QString &key);
+    /** The Control surfaces hub asks for the Virtual Console tab. */
+    void virtualConsoleRequested();
 
 protected:
     void showEvent(QShowEvent *ev) override;
@@ -100,6 +111,7 @@ private:
     QGroupBox *buildMtcGroup();
     QGroupBox *buildWebGroup();
     QGroupBox *buildMapGroup();
+    QGroupBox *buildSurfacesGroup();
     QGroupBox *buildOutGroup();
 
     /** Show control out: the boxes from the show's settings / the settings
@@ -158,6 +170,7 @@ private:
 
     // The Control Map's bindings
     class ControlMapPanel *m_controlMap = nullptr;
+    ControlSurfacesPanel *m_surfaces = nullptr;
 
     // MIDI timecode
     QComboBox *m_mtcSourceCombo;

@@ -225,6 +225,7 @@ add_library(${module_name}
     helpshots.cpp helpshots.h
     showcontrollistener.cpp showcontrollistener.h
     showcontrolsyncpage.cpp showcontrolsyncpage.h
+    controlsurfacespanel.cpp controlsurfacespanel.h
     qrencoder.cpp qrencoder.h
     controllearndialog.cpp controllearndialog.h
     keytriggers.cpp keytriggers.h

@@ -133,6 +133,12 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     });
     connect(m_devicesTree, &ConnectionsTree::showControlRowSelected,
             m_showControlPage, &ShowControlSyncPage::showSection);
+    connect(m_showControlPage, &ShowControlSyncPage::sectionRequested, this, [this](const QString &key) {
+        m_ioTabs->setCurrentWidget(m_devicesTree);
+        m_devicesTree->selectShowControlRow(key);
+    });
+    connect(m_showControlPage, &ShowControlSyncPage::virtualConsoleRequested,
+            this, &InputOutputManager::virtualConsoleRequested);
     connect(m_showControlPage, &ShowControlSyncPage::patchMidiInputRequested, this, [this]() {
         m_ioTabs->setCurrentWidget(m_devicesTree);
         m_devicesTree->clearShowControlSelection();

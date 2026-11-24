@@ -1583,6 +1583,9 @@ void App::initDoc()
     m_showControlListener = new ShowControlListener(m_doc, this);
     if (InputOutputManager::instance() != NULL)
         InputOutputManager::instance()->setShowControlListener(m_showControlListener);
+    if (InputOutputManager::instance() != NULL)
+        connect(InputOutputManager::instance(), &InputOutputManager::virtualConsoleRequested,
+                this, [this]() { showContext(tr("Virtual Console")); });
 
     /* Web access the show asked for and couldn't have (its port in use):
        in the footer until it runs or is turned off. */

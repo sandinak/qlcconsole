@@ -42,6 +42,13 @@
 #include "virtualconsole/vcbutton.h"
 #include "virtualconsole/vcframe.h"
 #include "controlmappanel.h"
+#include "controlsurfacespanel.h"
+#include "inputoutputmanager.h"
+#include "speedmasterspanel.h"
+#include "showfeatures.h"
+#include "showwebaccess.h"
+#include <QTreeWidget>
+#include <QScrollArea>
 #include <QGroupBox>
 #include "showtreeview.h"
 #include "keytriggers.h"
@@ -834,3 +841,160 @@ void ControlMapUi_Test::learnKeyShots()
 }
 
 QTEST_MAIN(ControlMapUi_Test)
+
+/* The Control surfaces hub (Connections ▸ Devices ▸ Show control & sync):
+   one row for every place a surface is set up. */
+void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
+{
+    InputOutputManager mgr(nullptr, m_doc);
+    QTreeWidget *view = mgr.findChild<QTreeWidget *>();
+    QVERIFY(view != nullptr);
+    const QList<QTreeWidgetItem *> found = view->findItems("Show control & sync", Qt::MatchExactly, 0);
+    QCOMPARE(found.count(), 1);
+    QCOMPARE(found.first()->child(0)->text(0), QString("Control surfaces"));
+
+    ShowControlSyncPage *page = mgr.findChild<ShowControlSyncPage *>();
+    QVERIFY(page != nullptr);
+    ControlSurfacesPanel *hub = page->surfaces();
+    QVERIFY(hub != nullptr);
+    QCOMPARE(ControlSurfacesPanel::keys(),
+             QStringList({ "map", "estop", "encoder", "vc", "masters", "pmj", "web", "pads" }));
+    for (const QString &key : ControlSurfacesPanel::keys())
+    {
+        QVERIFY2(hub->setUpButton(key) != nullptr, qPrintable(key));
+        QCOMPARE(hub->setUpButton(key)->text(), QString("Set up…"));
+        QVERIFY2(!hub->status(key).isEmpty(), qPrintable(key));
+    }
+    QCOMPARE(hub->status("map"), QString("No triggers learned"));
+    QCOMPARE(hub->status("estop"), QString("Emergency stop: not learned"));
+    QCOMPARE(hub->status("web"), QString("Companion: web access off"));
+    QCOMPARE(hub->status("pads"), QString("No pad connected"));
+}
+
+void ControlMapUi_Test::eachSetUpLandsOnItsPlace()
+{
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.resize(1100, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    ShowControlSyncPage *page = mgr.findChild<ShowControlSyncPage *>();
+    QTreeWidget *view = mgr.findChild<QTreeWidget *>();
+    ControlSurfacesPanel *hub = page->surfaces();
+    ControlMapPanel *map = page->findChild<ControlMapPanel *>();
+    auto picked = [&]() {
+        return view->currentItem() != nullptr ? view->currentItem()->text(0) : QString();
+    };
+
+    hub->setUpButton("map")->click();
+    QCOMPARE(picked(), QString("Control Map"));
+    QVERIFY(page->findChild<QWidget *>("scMapGroup")->isVisible());
+    QVERIFY(page->findChild<QWidget *>("scOscGroup")->isHidden());
+    QVERIFY(map->table()->isVisibleTo(page) || page->findChild<QWidget *>("controlMapEmpty")->isVisibleTo(page));
+
+    hub->setUpButton("web")->click();
+    QCOMPARE(picked(), QString("Web access"));
+    QVERIFY(page->findChild<QWidget *>("scWebGroup")->isVisible());
+    QVERIFY(page->findChild<QWidget *>("scMapGroup")->isHidden());
+
+    hub->setUpButton("estop")->click();
+    QCOMPARE(picked(), QString("Control Map"));
+    QVERIFY(map->stopButton()->isVisible());
+    QVERIFY(map->stopButton()->hasFocus() || map->stopButton()->isVisibleTo(page));
+
+    hub->setUpButton("encoder")->click();
+    QVERIFY(map->encoderBox()->isVisible());
+
+    // The Virtual Console is the App's tab: the hub asks for it.
+    QSignalSpy vc(&mgr, &InputOutputManager::virtualConsoleRequested);
+    hub->setUpButton("vc")->click();
+    QCOMPARE(vc.count(), 1);
+
+    // The masters: their own panel comes up.
+    hub->setUpButton("masters")->click();
+    SpeedMastersPanel *panel = nullptr;
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if (SpeedMastersPanel *p = qobject_cast<SpeedMastersPanel *>(w))
+            panel = p;
+    QVERIFY(panel != nullptr && panel->isVisible());
+    panel->close();
+
+    // The PMJ and the pads are patched in the wiring: nothing picked there.
+    hub->setUpButton("map")->click();
+    hub->setUpButton("pads")->click();
+    QVERIFY(view->selectedItems().isEmpty());
+    hub->setUpButton("map")->click();
+    hub->setUpButton("pmj")->click();
+    QVERIFY(view->selectedItems().isEmpty());
+}
+
+void ControlMapUi_Test::theSurfacesStatusFollowsTheShow()
+{
+    Scene *a = scene("Warm");
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    ControlMap *cm = m_doc->controlMap();
+    QSignalSpy changed(&page, &ShowControlSyncPage::summaryChanged);
+    QCOMPARE(hub->status("map"), QString("No triggers learned"));
+
+    cm->setBinding({ 0, 1, ControlMap::function(a->id()), ControlMap::Toggle });
+    QCOMPARE(hub->status("map"), QString("1 trigger learned"));
+    QVERIFY(changed.count() >= 1);
+    QCOMPARE(page.summary().first().at(0), QString("surfaces"));
+    QVERIFY(page.summary().first().at(2).startsWith("1 trigger learned"));
+
+    // The stop is not a trigger: it has its own line.
+    cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QCOMPARE(hub->status("map"), QString("1 trigger learned"));
+    QVERIFY(!hub->status("estop").contains("not learned"));
+    QVERIFY(hub->status("estop").startsWith("Emergency stop:"));
+
+    cm->setBinding({ 0, 2, ControlMap::function(a->id()), ControlMap::Toggle });
+    QCOMPARE(hub->status("map"), QString("1 trigger learned"));   // the same scene: moved, not added
+
+    m_doc->webAccess()->setStatus(ShowWebAccess::Running, QStringLiteral("http://127.0.0.1:9999/"));
+    QVERIFY(hub->status("web").startsWith("Web access on"));
+}
+
+void ControlMapUi_Test::surfacesOffKeepsTheStop()
+{
+    ShowControlSyncPage page(m_doc);
+    page.show();
+    ControlSurfacesPanel *hub = page.surfaces();
+    const auto restore = qScopeGuard([]() { ShowFeatures::instance()->reset(); });
+    ShowFeatures::instance()->setOn(ShowFeatures::ControlSurfaces, false);
+    QVERIFY(hub->findChild<QLabel *>("surfacesFeatureOff")->isVisibleTo(hub));
+    QVERIFY(hub->findChild<QLabel *>("surfacesFeatureOff")->text().contains("Tabs & Features"));
+    QCOMPARE(hub->status("map"), QString("Off for this show"));
+    QCOMPARE(hub->status("encoder"), QString("Off for this show"));
+    QVERIFY(!hub->setUpButton("map")->isEnabled());
+    QVERIFY(!hub->setUpButton("encoder")->isEnabled());
+    // The stop row stays, with its button.
+    QVERIFY(hub->setUpButton("estop")->isEnabled());
+    QVERIFY(hub->status("estop").startsWith("Emergency stop"));
+    QVERIFY(hub->findChild<QWidget *>("surfaceEmergencyStopSetUp")->isVisibleTo(hub));
+
+    ShowFeatures::instance()->setOn(ShowFeatures::ControlSurfaces, true);
+    QVERIFY(hub->setUpButton("map")->isEnabled());
+    QVERIFY(!hub->findChild<QLabel *>("surfacesFeatureOff")->isVisibleTo(hub));
+}
+
+/* With QLC_SHOT_DIR: the hub at three sizes (UX review). */
+void ControlMapUi_Test::surfacesShots()
+{
+    const QByteArray dir = qgetenv("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    QDir().mkpath(QString::fromLocal8Bit(dir));
+    InputOutputManager mgr(nullptr, m_doc);
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlPage();
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(QDir(QString::fromLocal8Bit(dir))
+                                    .absoluteFilePath(QString("surfaces-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
+}

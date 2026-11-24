@@ -75,6 +75,10 @@ public:
      *  (workspace/tabLabelMode) — mirrors Monitor::applyToolbarLabelMode(). */
     void applyToolbarLabelMode();
 
+signals:
+    /** Control surfaces ▸ Virtual console widgets ▸ Set up…: show the tab. */
+    void virtualConsoleRequested();
+
 private:
     static InputOutputManager* s_instance;
     InputOutputMap* m_ioMap;
