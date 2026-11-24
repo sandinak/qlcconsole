@@ -182,9 +182,13 @@ Per-computer setup is open Q7.
   nanoKONTROL2), so every fader waits alike, and when a wait starts the
   value is sent back once: a motor drives itself there and is picked up on
   arrival, a plain fader ignores it. After a start the fader's place is
-  unknown: a first value at the control is taken, and a first move *away*
-  from it (a GM thrown down) is taken as one that sat there; a move toward
-  it waits. The waiting state shows on the control itself (an arrow on the
+  unknown: a first value at the control is taken; any other waits,
+  whichever way it moves (a move away is not taken: the control never
+  jumps to a fader that was elsewhere). The Grand Master alone
+  (`setLowerAtOnce`) takes a pull down below it at once, by more than
+  Threshold from where the downward run began: lowering is the safe way
+  and an emergency fade-out never waits, even after the GM was raised from
+  the screen, the chip or the pad. Raising it waits. The waiting state shows on the control itself (an arrow on the
   GM chip and the speed button), the sentence in the tooltip.
 - **Feedback** lights only what is armed now: the existing Lamp states
   (`controlmap.h`: dark = a press would do nothing, dim = ready, bright =

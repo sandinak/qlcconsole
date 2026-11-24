@@ -891,12 +891,21 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     p.reset();
     QVERIFY(p.accept(253, 255));
 
-    // Thrown down from the top after a start (the emergency fade-out): the
-    // first value says where it is, the second, further away, is taken.
+    // A fader that was somewhere else and is pulled further away waits:
+    // the control never jumps to it (a VC slider on a new page at 200 with
+    // the fader left at 100; a Rate fader parked below the rate; one parked
+    // above and nudged up).
     p.reset();
-    QVERIFY(!p.accept(200, 255));
-    QVERIFY(p.accept(120, 255));
-    QVERIFY(p.accept(0, 120));             // the control now follows it
+    QVERIFY(!p.accept(99, 200));
+    QVERIFY(!p.accept(94, 200));
+    QVERIFY(!p.accept(60, 200));
+    QVERIFY(p.waiting(200));
+    p.reset();
+    QVERIFY(!p.accept(204, 128));
+    QVERIFY(!p.accept(206, 128));
+    QVERIFY(!p.accept(210, 128));
+    QVERIFY(!p.accept(214, 128));
+    QVERIFY(p.waiting(128));
 
     // Left at the bottom and nudged up: it waits, and once it has moved
     // toward the control it keeps waiting, even when pulled back down.
@@ -923,6 +932,31 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     QVERIFY(!sendBack);
     QVERIFY(p.accept(126, 128, &sendBack));
     QVERIFY(!sendBack);
+
+    // The Grand Master lowers at once: thrown down from the top after a
+    // start, it follows as soon as the pull is more than jitter...
+    FaderPickup gm;
+    gm.setLowerAtOnce(true);
+    QVERIFY(!gm.accept(200, 255));
+    QVERIFY(gm.accept(120, 255));
+    QVERIFY(gm.accept(0, 120));
+    // ...and a fader left low after the GM was raised elsewhere (screen,
+    // footer chip, pad) takes it down when pulled: lowering never waits.
+    QVERIFY(gm.accept(77, 0));
+    QVERIFY(!gm.accept(75, 255));           // jitter-sized: not yet
+    QVERIFY(gm.accept(70, 255));            // a pull: taken
+    QVERIFY(gm.accept(0, 70));
+    // Raising it still waits: parked above, nudged up, it stays.
+    gm.reset();
+    QVERIFY(!gm.accept(204, 128));
+    QVERIFY(!gm.accept(210, 128));
+    QVERIFY(!gm.accept(214, 128));
+    // Parked low and nudged up, then jittering: no blackout.
+    gm.reset();
+    QVERIFY(!gm.accept(3, 255));
+    QVERIFY(!gm.accept(6, 255));
+    QVERIFY(!gm.accept(2, 255));
+    QVERIFY(gm.waiting(255));
 
     // Another fader drives the control: the old one's place is no guide.
     p.setSource(0, 11);

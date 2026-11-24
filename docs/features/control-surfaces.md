@@ -44,10 +44,15 @@ fader gets there (or when you move the control on screen to where the fader
 is).
 
 Right after the show opens nobody knows where a fader is. A fader that is
-already at the control is taken at once, and so is one whose first move
-goes *away* from the control, the way you throw the Grand Master down to
-take the stage out: it must have been sitting at the top. A fader that
-first moves *toward* the control was somewhere else, and waits.
+already at the control is taken at once; one anywhere else waits, whichever
+way you move it, so a control never jumps to a fader that was somewhere
+else.
+
+The **Grand Master** has one exception: taking it **down** never waits.
+Pull its fader down from below the GM, by more than a nudge, and the GM
+follows at once, wherever the fader was and whoever raised the GM (the
+screen slider, the footer chip, the pad). Throwing it down in an emergency
+always takes the stage out. Raising it still waits for the pick-up.
 
 Giving a control another fader (Learn again, a new Grand Master input in
 the Virtual Console's properties) starts over: the new fader waits until it

@@ -783,9 +783,10 @@ void VCSlider_Test::grandMasterFaderIsPickedUp()
     QCOMPARE(int(iom->grandMasterValue()), 100);
 }
 
-/* After a start the fader's place is unknown. Thrown down from the top (an
-   emergency fade-out), it is taken on its second value; nudged up from the
-   bottom it waits (no blackout). */
+/* Lowering the GM never waits. After a start the fader's place is unknown:
+   thrown down from the top (an emergency fade-out), it is taken on its
+   second value; nudged up from the bottom it waits (no blackout). A fader
+   left low after the GM was raised elsewhere takes it down when pulled. */
 void VCSlider_Test::grandMasterThrownDownFollowsAtOnce()
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
@@ -798,6 +799,26 @@ void VCSlider_Test::grandMasterThrownDownFollowsAtOnce()
     QCOMPARE(int(iom->grandMasterValue()), 120);
     emit iom->inputValueChanged(0, 7, 0);
     QCOMPARE(int(iom->grandMasterValue()), 0);
+
+    // Raised on screen (or the footer chip, or the pad) while the fader
+    // sits at 30%: pulling the fader to 0 lowers the GM at once.
+    emit iom->inputValueChanged(0, 7, 77);
+    QCOMPARE(int(iom->grandMasterValue()), 77);
+    iom->setGrandMasterValue(255);
+    emit iom->inputValueChanged(0, 7, 60);
+    QCOMPARE(int(iom->grandMasterValue()), 60);
+    emit iom->inputValueChanged(0, 7, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+
+    // Raising it waits: the fader at 80%, the GM lowered to 50% elsewhere,
+    // and the fader nudged up.
+    iom->setGrandMasterValue(204);
+    emit iom->inputValueChanged(0, 7, 204);
+    iom->setGrandMasterValue(128);
+    emit iom->inputValueChanged(0, 7, 206);
+    emit iom->inputValueChanged(0, 7, 210);
+    emit iom->inputValueChanged(0, 7, 214);
+    QCOMPARE(int(iom->grandMasterValue()), 128);
 
     // Another fader learnt for the GM: where the old one was is no guide.
     // The new one sits at the bottom and is nudged up: the GM stays.
@@ -885,4 +906,20 @@ void VCSlider_Test::sliderCatchValuesAreUnchanged()
     emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 150);
     QCOMPARE(slider.sliderValue(), 150);     // crossed it: follows
     QVERIFY(slider.pickupHint().isEmpty());
+
+    // As before: a fader that was elsewhere and is moved further away waits
+    // (the slider on a new page at 200, the fader left at 100; then one
+    // parked above and nudged up).
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 99);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 94);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 60);
+    QCOMPARE(slider.sliderValue(), 200);
+    slider.setSliderValue(128, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 206);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 210);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 214);
+    QCOMPARE(slider.sliderValue(), 128);
 }

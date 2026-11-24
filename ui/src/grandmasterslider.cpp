@@ -36,10 +36,16 @@ namespace
 /* One Grand Master, one input: every GrandMasterSlider (Simple Desk's, the
    Virtual Console's) judges the fader with the same pick-up, so one that
    takes a value and moves the GM does not leave another with a stale view
-   of where the fader is (which flashed a wrong hint on the footer chip). */
+   of where the fader is (which flashed a wrong hint on the footer chip).
+   Lowering the GM is always the safe way, so a pull down below it is taken
+   at once (an emergency fade-out never waits); raising it waits. */
 FaderPickup &gmPickup()
 {
-    static FaderPickup pickup;
+    static FaderPickup pickup = []() {
+        FaderPickup p;
+        p.setLowerAtOnce(true);
+        return p;
+    }();
     return pickup;
 }
 }
@@ -257,7 +263,7 @@ void GrandMasterSlider::slotInputValueChanged(quint32 universe, quint32 channel,
         // A fader newly set to drive the GM: where the old one was is no guide
         gmPickup().setSource(gmUniverse, gmChannel);
         // Pick-up: the fader does nothing until it reaches the Grand Master
-        // (FaderPickup, Q299). When the wait starts the GM is sent back: a
+        // (FaderPickup, Q299), except a pull down, which lowers it at once. When the wait starts the GM is sent back: a
         // motor fader drives itself there, a plain one ignores it.
         bool sendBack = false;
         const bool take = gmPickup().accept(value, m_slider->value(), &sendBack);

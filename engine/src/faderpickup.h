@@ -37,15 +37,16 @@ class QString;
  * An external fader that is not where the control is does nothing until it
  * is moved to, or through, the control's current value; then it follows.
  * This is the rule the Virtual Console slider's "catch values" always had,
- * with two changes for a fader whose position is not known yet (after
- * reset(), so after every start):
+ * with one addition for a fader whose position is not known yet (after
+ * reset(), so after every start): a first value already within Threshold
+ * of the control is taken. A fader that is anywhere else waits, whichever
+ * way it moves: a fader pulled *away* from the control is not taken, so a
+ * control never jumps to a fader that was somewhere else.
  *
- * - a first value already within Threshold of the control is taken;
- * - a fader whose first move goes *away* from the control, by more than
- *   Threshold, is taken as one that sat at the control and is being pulled
- *   (a Grand Master thrown down in an emergency follows on its second
- *   value). A first move *toward* the control turns this off: that fader
- *   was not at the control, and it waits until it gets there.
+ * setLowerAtOnce() is the Grand Master's exception: lowering it is always
+ * the safe way (an emergency fade-out must never wait), so a fader below
+ * the control that is pulled down by more than Threshold is taken at once,
+ * wherever it was. Raising it still waits for the pick-up.
  *
  * Every fader follows this rule, motorised or not: whether a device's fader
  * has a motor cannot be told from its universe (a feedback line is mostly
@@ -63,10 +64,14 @@ public:
     void reset()
     {
         m_last = -1;
-        m_first = -1;
+        m_runTop = -1;
         m_waiting = false;
-        m_unsure = false;
     }
+
+    /** Take a downward pull below the control at once (the Grand Master:
+     *  lowering it never waits). Off by default. */
+    void setLowerAtOnce(bool on) { m_lowerAtOnce = on; }
+    bool lowerAtOnce() const { return m_lowerAtOnce; }
 
     /** The input that drives the control is @p universe / @p channel: a
      *  different one than before is a different fader, so start over. */
@@ -93,27 +98,25 @@ public:
             *sendBack = false;
         const int last = m_last;
         m_last = value;
+        // Where this downward run started (a rise starts a new one)
+        if (last == -1 || value > last)
+            m_runTop = value;
         bool take = false;
         if (last == -1)
         {
             // Where the fader is: taken only when it is already there
-            m_first = value;
-            m_unsure = true;
             take = absDiff(value - current) <= Threshold;
         }
         else if ((last < current - Threshold && value < current - Threshold) ||
                  (last > current + Threshold && value > current + Threshold))
         {
-            // Still on the same side of the control
-            if (m_unsure)
-            {
-                const int was = absDiff(last - current);
-                const int now = absDiff(value - current);
-                if (now < was)
-                    m_unsure = false;   // moving toward it: it was not there
-                else if (now - absDiff(m_first - current) > Threshold)
-                    take = true;        // pulled away from it: it was there
-            }
+            // Still on the same side of the control: it waits, except a
+            // pull down below a control that lowers at once (the GM). The
+            // run must fall by more than Threshold, so a parked fader's
+            // jitter is no move.
+            if (m_lowerAtOnce && value < current - Threshold &&
+                m_runTop - value > Threshold)
+                take = true;
         }
         else
         {
@@ -123,7 +126,6 @@ public:
         if (take)
         {
             m_waiting = false;
-            m_unsure = false;
             return true;
         }
         if (!m_waiting && sendBack != nullptr)
@@ -159,9 +161,9 @@ public:
 private:
     static int absDiff(int a) { return a < 0 ? -a : a; }
     int m_last = -1;
-    int m_first = -1;           //!< the first value after reset()
+    int m_runTop = -1;          //!< where the current downward run started
     bool m_waiting = false;
-    bool m_unsure = false;      //!< not known yet whether it sat at the control
+    bool m_lowerAtOnce = false; //!< a pull down below the control is taken at once
     quint64 m_source = ~quint64(0);
 };
 
