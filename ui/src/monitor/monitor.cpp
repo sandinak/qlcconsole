@@ -13679,6 +13679,8 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         shade.summary->setObjectName(QStringLiteral("fixtureAimMoreSummary"));
         ml->addWidget(shade.toggle);
         ml->addWidget(shade.summary, 1);
+        ml->addStretch(0);          // unfolded (no summary), More stays at the left
+        ml->setAlignment(shade.toggle, Qt::AlignLeft);
         rigForm->addRow(moreRow);
     }
     for (const auto &r : { std::make_pair(tr("Masking (tape):"), maskRow),
