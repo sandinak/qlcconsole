@@ -749,14 +749,14 @@ void ControlMapPanel::slotEncoderEdited()
     d.encoding = EncoderBank::Encoding(m_encEncoding->currentData().toInt());
     d.invert = m_encInvert->isChecked();
     // Another universe: other controls, asked as a Learn asks.
-    if (d.universe != was && enc->isEnabled())
+    const bool on = enc->isEnabled();
+    if (d.universe != was && on)
     {
         setEncoderDevice(d, enc->presetKey());
         return;
     }
     enc->setDevice(d, enc->presetKey());
-    if (!enc->isEnabled())
-        enc->setEnabled(false);
+    enc->setEnabled(on);        // off stays off (its controls are asked when it is turned on)
     refresh();
 }
 
