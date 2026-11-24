@@ -923,3 +923,158 @@ void VCSlider_Test::sliderCatchValuesAreUnchanged()
     emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 214);
     QCOMPARE(slider.sliderValue(), 128);
 }
+
+/* Review round 3, finding 1: a fader that followed the GM down and was left
+   there is not "pulled" by its jitter once the GM is raised elsewhere. The
+   downward run is measured from where the fader stopped following. */
+void VCSlider_Test::grandMasterLeftLowIsNotDroppedByJitter()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 6);
+    GrandMasterSlider gms(nullptr, iom);
+    iom->setGrandMasterValue(150);
+
+    // The fader is at the GM and follows it down to 39%
+    emit iom->inputValueChanged(0, 6, 150);
+    emit iom->inputValueChanged(0, 6, 130);
+    emit iom->inputValueChanged(0, 6, 100);
+    QCOMPARE(int(iom->grandMasterValue()), 100);
+
+    // Raised to full on screen; the parked fader jitters by one
+    iom->setGrandMasterValue(255);
+    emit iom->inputValueChanged(0, 6, 99);
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    emit iom->inputValueChanged(0, 6, 100);
+    emit iom->inputValueChanged(0, 6, 98);
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    QVERIFY(!gms.pickupHint().isEmpty());
+
+    // A real pull down from there still lowers it at once
+    emit iom->inputValueChanged(0, 6, 80);
+    QCOMPARE(int(iom->grandMasterValue()), 80);
+}
+
+/* Review round 3, finding 2: lowering a master never waits, on a Virtual
+   Console slider too (new sliders catch values). Grand, sub and group
+   masters lower at once; a speed master, a playback or a level slider do
+   not (pulling those down is not the safe way). */
+void VCSlider_Test::masterSlidersLowerAtOnce()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setCatchValues(true);
+    slider.setSliderMode(VCSlider::GrandMaster);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 22)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    iom->setGrandMasterValue(255);
+
+    // The fader parked at 60%, then pulled to 0: the GM goes down
+    emit iom->inputValueChanged(0, 22, 153);
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    emit iom->inputValueChanged(0, 22, 120);
+    emit iom->inputValueChanged(0, 22, 60);
+    emit iom->inputValueChanged(0, 22, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+
+    // Raising it still waits
+    iom->setGrandMasterValue(200);
+    emit iom->inputValueChanged(0, 22, 10);
+    emit iom->inputValueChanged(0, 22, 40);
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+
+    QVERIFY(slider.m_pickup.lowerAtOnce());
+    slider.setSliderMode(VCSlider::Submaster);
+    QVERIFY(slider.m_pickup.lowerAtOnce());
+    slider.setSliderMode(VCSlider::GroupMaster);
+    QVERIFY(slider.m_pickup.lowerAtOnce());
+    slider.setSliderMode(VCSlider::SpeedMaster);
+    QVERIFY(!slider.m_pickup.lowerAtOnce());
+    slider.setSliderMode(VCSlider::Playback);
+    QVERIFY(!slider.m_pickup.lowerAtOnce());
+    slider.setSliderMode(VCSlider::Level);
+    QVERIFY(!slider.m_pickup.lowerAtOnce());
+    m_doc->setMode(Doc::Design);
+
+    // A loaded Grand Master slider lowers at once too
+    QByteArray xml;
+    {
+        QXmlStreamWriter xw(&xml);
+        slider.setSliderMode(VCSlider::GrandMaster);
+        QVERIFY(slider.saveXML(&xw));
+    }
+    QXmlStreamReader xr(xml);
+    xr.readNextStartElement();
+    VCSlider loaded(&w, m_doc);
+    QVERIFY(loaded.loadXML(xr));
+    QCOMPARE(loaded.sliderMode(), VCSlider::GrandMaster);
+    QVERIFY(loaded.m_pickup.lowerAtOnce());
+}
+
+/* Review round 3, finding 3: an inverted slider reads its fader upside
+   down, and the pick-up judges the value it would take: at 0, its fader at
+   the top (raw 255) is at it, taken at once, and pulling it follows. */
+void VCSlider_Test::invertedSliderIsPickedUpWhereItsFaderIs()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setInvertedAppearance(true);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 23)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(0, false);
+
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 255);
+    QCOMPARE(slider.sliderValue(), 0);
+    QVERIFY(slider.pickupHint().isEmpty());          // taken, not waiting
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 200);
+    QCOMPARE(slider.sliderValue(), 55);              // follows, no snap to full
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 128);
+    QCOMPARE(slider.sliderValue(), 127);
+
+    // Waiting, its hint says where on the fader's travel: the slider at
+    // 200 is its fader at 22% (55 of 255)
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 23, 250);
+    QCOMPARE(slider.sliderValue(), 200);
+    QVERIFY2(slider.pickupHint().contains(QStringLiteral("move it to 22%")),
+             qPrintable(slider.pickupHint()));
+    m_doc->setMode(Doc::Design);
+}
+
+/* A level slider with limits takes its input scaled to its range, so the
+   pick-up compares the fader with the slider on the input's own scale:
+   limits 100..200 at 150 is the fader at its middle. */
+void VCSlider_Test::limitedSliderIsPickedUpOnItsOwnScale()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setLevelLowLimit(100);
+    slider.setLevelHighLimit(200);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 24)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(150, false);
+    QCOMPARE(slider.sliderValue(), 150);
+
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 128);   // at it
+    QVERIFY(slider.pickupHint().isEmpty());
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 100);
+    QVERIFY2(slider.sliderValue() >= 137 && slider.sliderValue() <= 141,
+             qPrintable(QString::number(slider.sliderValue())));
+
+    // Waiting, the hint is on the fader's travel: 150 is its middle
+    slider.setSliderValue(150, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 24, 10);
+    QCOMPARE(slider.sliderValue(), 150);
+    QVERIFY2(slider.pickupHint().contains(QStringLiteral("move it to 50%")),
+             qPrintable(slider.pickupHint()));
+    m_doc->setMode(Doc::Design);
+}

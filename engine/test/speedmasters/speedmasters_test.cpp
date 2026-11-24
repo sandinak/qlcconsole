@@ -957,6 +957,17 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     QVERIFY(!gm.accept(6, 255));
     QVERIFY(!gm.accept(2, 255));
     QVERIFY(gm.waiting(255));
+    // A fader that followed the GM down and was left there: the GM raised
+    // elsewhere, its jitter is no pull (the run starts where it stopped
+    // following), a real pull still is.
+    gm.reset();
+    QVERIFY(gm.accept(150, 150));
+    QVERIFY(gm.accept(130, 150));
+    QVERIFY(gm.accept(100, 130));
+    QVERIFY(!gm.accept(99, 255));
+    QVERIFY(!gm.accept(100, 255));
+    QVERIFY(!gm.accept(98, 255));
+    QVERIFY(gm.accept(80, 255));
 
     // Another fader drives the control: the old one's place is no guide.
     p.setSource(0, 11);

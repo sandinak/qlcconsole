@@ -48,11 +48,20 @@ already at the control is taken at once; one anywhere else waits, whichever
 way you move it, so a control never jumps to a fader that was somewhere
 else.
 
-The **Grand Master** has one exception: taking it **down** never waits.
-Pull its fader down from below the GM, by more than a nudge, and the GM
-follows at once, wherever the fader was and whoever raised the GM (the
-screen slider, the footer chip, the pad). Throwing it down in an emergency
-always takes the stage out. Raising it still waits for the pick-up.
+A **master** has one exception: taking it **down** never waits. Pull the
+fader down from below the master, by more than a nudge from where it was
+left, and the master follows at once, wherever the fader was and whoever
+raised the master (the screen slider, the footer chip, the pad). A fader
+left resting is not pulled by its own jitter. Throwing it down in an
+emergency always takes the stage out. Raising it still waits for the
+pick-up. This holds for the **Grand Master** and for a Virtual Console
+slider set to **Grand Master**, **Submaster** or **Group master**; a speed
+master, a playback or a level slider waits both ways.
+
+A Virtual Console slider with **Inverted appearance** reads its fader
+upside down, and so does its pick-up: a slider at 0 is picked up by a
+fader at the top. A level slider with limits is picked up where its value
+sits on the fader's travel, and its hint says that place.
 
 Giving a control another fader (Learn again, a new Grand Master input in
 the Virtual Console's properties) starts over: the new fader waits until it

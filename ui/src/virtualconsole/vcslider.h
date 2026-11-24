@@ -820,6 +820,12 @@ protected:
     int m_lastInputValue;
     FaderPickup m_pickup;
     void updatePickupHint();
+    /** Masters lower at once (FaderPickup::setLowerAtOnce), by slider mode */
+    void updatePickupMode();
+    /** An input value as the slider reads it (flipped when inverted) */
+    int pickupValue(uchar input) const;
+    /** The slider's value on the input's 0..255 scale */
+    int pickupCurrent() const;
 
     /*********************************************************************
      * Intensity

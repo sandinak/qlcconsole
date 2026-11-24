@@ -24,8 +24,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   the footer chip, an arrow on the speed master's button, and *"Grand Master
   fader: move it to 75% to take over"* in the tooltip. After a start, a
   fader already at the control follows at once; any other waits, whichever
-  way it moves. Pulling the Grand Master's fader down never waits: below
-  the GM, a pull down takes it down at once. A controller's feedback line is sent the value
+  way it moves. Pulling a master's fader down never waits (the Grand
+  Master, and a Virtual Console Grand, Sub or Group master slider): below
+  it, a pull down takes it down at once; a resting fader's jitter does not. A controller's feedback line is sent the value
   when a wait starts, so a motor fader drives itself there. Encoders are
   relative and unchanged.
 

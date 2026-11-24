@@ -37,6 +37,10 @@ private slots:
     void channelGroupFaderIsPickedUp();
     void addedSlidersCatchValues();
     void sliderCatchValuesAreUnchanged();
+    void grandMasterLeftLowIsNotDroppedByJitter();
+    void masterSlidersLowerAtOnce();
+    void invertedSliderIsPickedUpWhereItsFaderIs();
+    void limitedSliderIsPickedUpOnItsOwnScale();
     void speedMasterTempo();
     void speedMasterFollowsTheMaster();
     void speedMasterSavesAndLoads();

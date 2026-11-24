@@ -361,10 +361,12 @@ void VCSlider::hideEvent(QHideEvent *)
 
 QString VCSlider::pickupHint() const
 {
-    if (!catchValues() || !m_pickup.waiting(sliderValue()))
+    const int cur = pickupCurrent();
+    if (!catchValues() || !m_pickup.waiting(cur))
         return QString();
+    // Where on the fader's travel: an inverted slider's fader is upside down
     return FaderPickup::hintText(caption().isEmpty() ? tr("Slider") : caption(),
-                                 int(sliderValue() * 100.0 / UCHAR_MAX + 0.5));
+                                 int(pickupValue(uchar(cur)) * 100.0 / UCHAR_MAX + 0.5));
 }
 
 void VCSlider::updatePickupHint()
@@ -504,10 +506,41 @@ bool VCSlider::catchValues() const
 
 void VCSlider::setCatchValues(bool enable)
 {
+    updatePickupMode();
     if (enable == m_catchValues)
         return;
 
     m_catchValues = enable;
+}
+
+void VCSlider::updatePickupMode()
+{
+    /* Lowering a master never waits (Q299): the Grand Master, a submaster
+       (it scales its frame's widgets) and a group master only take light
+       out when pulled down, so an emergency pull-down on one is taken at
+       once. A speed master is not one (slower is not safer), nor is a
+       playback or level fader (pulling it down changes the look). */
+    m_pickup.setLowerAtOnce(m_sliderMode == GrandMaster || m_sliderMode == Submaster ||
+                            m_sliderMode == GroupMaster);
+}
+
+int VCSlider::pickupValue(uchar input) const
+{
+    // An inverted slider reads its fader upside down
+    return invertedAppearance() ? UCHAR_MAX - input : input;
+}
+
+int VCSlider::pickupCurrent() const
+{
+    // The slider's value on the input's 0..255 scale: a level slider with
+    // limits spans only part of it (the input is scaled to its range)
+    if (m_slider == nullptr)
+        return 0;
+    const int lo = m_slider->minimum(), hi = m_slider->maximum();
+    if (hi <= lo)
+        return 0;
+    return qBound(0, qRound(SCALE(double(m_slider->value()), double(lo), double(hi),
+                                  0.0, double(UCHAR_MAX))), int(UCHAR_MAX));
 }
 
 /*****************************************************************************
@@ -934,6 +967,8 @@ void VCSlider::setSliderMode(SliderMode mode)
         // Not a DMX source: it sets the effect when moved, nothing per tick.
         m_doc->masterTimer()->unregisterDMXSource(this);
     }
+
+    updatePickupMode();
 }
 
 /*****************************************************************************
@@ -2460,10 +2495,17 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             /* When 'values catching" is enabled, controllers that do not have motorized faders
              * can catch up with the current slider value by entering a certain threshold
              * or by 'surpassing' the current value */
+            /* An inverted slider reads its fader upside down: the pick-up
+             * judges the value the slider would take, against where the
+             * slider is on the same 0..255 scale (so lowering a master is
+             * lowering it, and an inverted slider at 0 is where its fader
+             * is at the top). */
+            value = uchar(pickupValue(value));
+
             if (catchValues())
             {
                 m_pickup.setSource(universe, pagedCh);   // another fader: start over
-                if (m_pickup.accept(value, sliderValue()) == false)
+                if (m_pickup.accept(value, pickupCurrent()) == false)
                 {
                     m_lastInputValue = value;
                     updatePickupHint();
@@ -2478,9 +2520,6 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
                 m_isOverriding = true;
                 updateOverrideFeedback(true);
             }
-
-            if (invertedAppearance())
-                value = UCHAR_MAX - value;
 
             setSliderValue(value, true, true);
             m_lastInputValue = value;

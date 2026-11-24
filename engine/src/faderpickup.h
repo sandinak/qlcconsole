@@ -46,7 +46,11 @@ class QString;
  * setLowerAtOnce() is the Grand Master's exception: lowering it is always
  * the safe way (an emergency fade-out must never wait), so a fader below
  * the control that is pulled down by more than Threshold is taken at once,
- * wherever it was. Raising it still waits for the pick-up.
+ * wherever it was. The pull is measured from where the fader stopped
+ * following (or started to wait), so a parked fader's jitter never is one.
+ * Raising it still waits for the pick-up. Every master whose lowering is
+ * the safe way uses it (the Grand Master, VC Grand / Sub / Group master
+ * sliders).
  *
  * Every fader follows this rule, motorised or not: whether a device's fader
  * has a motor cannot be told from its universe (a feedback line is mostly
@@ -125,11 +129,20 @@ public:
 
         if (take)
         {
+            // A downward run is measured from where the fader stopped
+            // following: one that followed the control down and was left
+            // there is not "pulled" by its jitter once the control is
+            // raised elsewhere.
+            m_runTop = value;
             m_waiting = false;
             return true;
         }
-        if (!m_waiting && sendBack != nullptr)
-            *sendBack = true;
+        if (!m_waiting)
+        {
+            m_runTop = value;           // the wait starts here
+            if (sendBack != nullptr)
+                *sendBack = true;
+        }
         m_waiting = true;
         return false;
     }
@@ -161,7 +174,7 @@ public:
 private:
     static int absDiff(int a) { return a < 0 ? -a : a; }
     int m_last = -1;
-    int m_runTop = -1;          //!< where the current downward run started
+    int m_runTop = -1;          //!< where the current downward run started (a take or a wait restarts it)
     bool m_waiting = false;
     bool m_lowerAtOnce = false; //!< a pull down below the control is taken at once
     quint64 m_source = ~quint64(0);
