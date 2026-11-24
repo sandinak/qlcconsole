@@ -12738,8 +12738,34 @@ private:
 };
 } // namespace
 
+/* Fixture Properties is taller than a laptop's screen for a moving head
+   (Fixture, Position, Aim & Mount, the DMX rows). Its rows are built in this
+   scroller from the start; the header above it and OK / Cancel below it are
+   the dialog's own, always in view. The body has its parent from birth. */
+static QVBoxLayout *fixtureEditorRows(QDialog &dlg, QVBoxLayout *vl)
+{
+    QWidget *body = new QWidget(&dlg);
+    body->setObjectName(QStringLiteral("fixturePropertiesBody"));
+    QVBoxLayout *rows = new QVBoxLayout(body);
+    rows->setContentsMargins(0, 0, 0, 0);
+    QScrollArea *scroll = AppUtil::verticalScroller(body, &dlg);
+    scroll->setObjectName(QStringLiteral("fixturePropertiesScroll"));
+    vl->addWidget(scroll, 1);
+    return rows;
+}
+
 int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32 &next)
 {
+    /* Its natural size, no taller than the screen it opens on: the rows
+       scroll. WindowPlacement (at show) then allows for the title bar. */
+    {
+        QWidget *anchor = dlg.parentWidget() != nullptr ? dlg.parentWidget()->window() : nullptr;
+        const QScreen *screen = anchor != nullptr ? anchor->screen() : dlg.screen();
+        QSize want = dlg.sizeHint();
+        if (screen != nullptr)
+            want = want.boundedTo(screen->availableGeometry().size());
+        dlg.resize(want.expandedTo(dlg.minimumSizeHint()));
+    }
     dlg.setModal(false);
     QEventLoop loop;
     connect(&dlg, &QDialog::finished, &loop, &QEventLoop::quit);
@@ -12794,8 +12820,9 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                                   .arg(fids.count()), &dlg);
         head->setWordWrap(true);
         vl->addWidget(head);
+        QVBoxLayout *rows = fixtureEditorRows(dlg, vl);
 
-        QGroupBox *box = new QGroupBox(tr("Fixture"), &dlg);
+        QGroupBox *box = new QGroupBox(tr("Fixture"), rows->parentWidget());
         QFormLayout *form = new QFormLayout(box);
         FixtureFields *fields = new FixtureFields(this, form, box);
         fields->setFixtures(fids, fids.first());
@@ -12924,7 +12951,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
                 form->addRow(tr("Pan works around:"), row);
             }
         }
-        vl->addWidget(box);
+        rows->addWidget(box);
 
         auto loadExtras = [this, fids, panZeroSpin, rotSpin]() {
             const float aim = m_props->fixtureRigProps(fids.first()).panZeroDir;
@@ -13138,10 +13165,13 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     sep2->setFrameShape(QFrame::HLine);
     sep2->setFrameShadow(QFrame::Sunken);
     vl->addWidget(sep2);
+    // Everything from here to the buttons scrolls.
+    QVBoxLayout *rows = fixtureEditorRows(dlg, vl);
+    QWidget *rowsBody = rows->parentWidget();
 
     /* What it is and how it sits: the studio inspector's rows (FixtureFields),
        live like the rest of this dialog. */
-    QGroupBox *fixtureBox = new QGroupBox(tr("Fixture"), &dlg);
+    QGroupBox *fixtureBox = new QGroupBox(tr("Fixture"), rowsBody);
     QFormLayout *fixtureForm = new QFormLayout(fixtureBox);
     FixtureFields *fields = new FixtureFields(this, fixtureForm, fixtureBox);
     fields->setFixtures({ fxId }, fxId);
@@ -13159,10 +13189,10 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         conn->setToolTip(tr("Definition & Mode… changes how it is reached"));
         fixtureForm->insertRow(0, tr("Connection:"), conn);
     }
-    vl->addWidget(fixtureBox);
+    rows->addWidget(fixtureBox);
 
     // Its mount's fine-tuning, its aim and calibration, testing it.
-    QGroupBox *rigBox = new QGroupBox(tr("Aim && Mount"), &dlg);
+    QGroupBox *rigBox = new QGroupBox(tr("Aim && Mount"), rowsBody);
     QFormLayout *rigForm = new QFormLayout(rigBox);
 
     const bool isFeet_fx = FeetInchesSpinBox::valuesInFeet();   // the fields' numbers; shown in Settings > Units
@@ -13495,7 +13525,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     bool aimTouched = rp.fixedAim;
     bool lensTouched = false;
 
-    vl->addWidget(rigBox);
+    rows->addWidget(rigBox);
 
     // --- Test orientation DMX source (owned by shared_ptr; cleaned up when dialog closes) ---
     const quint32 fxId_dlg = fxId;
@@ -13726,7 +13756,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
 
     // Position & Orientation  (placed above Rig Assignment, per user request).
     // Spinboxes on the left, live facing preview on the right to save height.
-    QGroupBox *posBox = new QGroupBox(tr("Position && Orientation"), &dlg);
+    QGroupBox *posBox = new QGroupBox(tr("Position && Orientation"), rowsBody);
     QHBoxLayout *posRow = new QHBoxLayout(posBox);
     QFormLayout *posForm = new QFormLayout;
     posRow->addLayout(posForm, 1);
@@ -13856,8 +13886,8 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     }
 
     // Insert the Position & Orientation box directly above Rig Assignment.
-    const int rigIdx = vl->indexOf(rigBox);
-    vl->insertWidget(rigIdx >= 0 ? rigIdx : vl->count(), posBox);
+    const int rigIdx = rows->indexOf(rigBox);
+    rows->insertWidget(rigIdx >= 0 ? rigIdx : rows->count(), posBox);
 
     // A Fixture-row edit: running scenes recompute, the stage position and a
     // running test follow.
@@ -13946,7 +13976,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
 
         if (resetCh >= 0 || identifyCh >= 0)
         {
-            QGroupBox *dmxBox = new QGroupBox(tr("DMX Controls"), &dlg);
+            QGroupBox *dmxBox = new QGroupBox(tr("DMX Controls"), rowsBody);
             QHBoxLayout *dmxHl = new QHBoxLayout(dmxBox);
 
             if (identifyCh >= 0)
@@ -13996,7 +14026,7 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
             }
 
             dmxHl->addStretch();
-            vl->addWidget(dmxBox);
+            rows->addWidget(dmxBox);
         }
     }
 
