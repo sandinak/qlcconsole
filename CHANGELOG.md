@@ -14,6 +14,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Turning Venues off with a venue applied no longer does nothing in
+  silence**: Tabs & Features asks (Clear the Venue and Turn Off, Keep It
+  Applied, Cancel), names the applied venue on its Venues row, and a kept
+  chip says "Venues off" and why; a test drives the dialog for every
+  feature, with and without a venue applied.
 - **A dialog fits on its screen**: one taller than a laptop's screen ran off
   the bottom with OK and Cancel out of reach; now it opens shrunk to fit
   where it can, centred over the main window. A dialog you put on another
