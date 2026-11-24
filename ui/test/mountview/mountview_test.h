@@ -26,6 +26,7 @@ private slots:
     void aFixtureOnATrussShowsTheTruss();
     void aFixtureOnAPipeShowsThePipe();
     void aFixtureOnATowerShowsTheTower();
+    void theMountIsFramedAroundTheFixtureWithoutChrome();
     void anUnmountedFixtureSaysSo();
     void refreshFollowsTheHeightOffsetInFeetAndMetres();
     void refreshMovesBetweenMountedAndFree();

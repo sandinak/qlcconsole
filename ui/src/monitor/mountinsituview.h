@@ -52,9 +52,10 @@ public:
     /** Height-offset label, e.g. "2' 3\" above the truss"; empty when unmounted. */
     QString heightText() const;
 
-    QSize sizeHint() const override { return QSize(260, 160); }
+    QSize sizeHint() const override { return QSize(260, 200); }
 
 protected:
+    void resizeEvent(QResizeEvent *ev) override;
     bool eventFilter(QObject *obj, QEvent *ev) override;
 
 private:
@@ -70,6 +71,7 @@ private:
     DimensionOverlay *m_dim = nullptr;
     QLabel *m_caption;
     QString m_heightText;
+    QString m_full;
 };
 
 /** @} */

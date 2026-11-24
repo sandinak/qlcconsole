@@ -147,7 +147,8 @@ void MountView_Test::aFixtureOnATrussShowsTheTruss()
     QCOMPARE(v.view()->highlighted(), QList<quint32>({ rig.onTruss }));
     QVERIFY2(v.caption().contains(QStringLiteral("truss TRUSS-1")), qPrintable(v.caption()));
     QVERIFY2(v.caption().contains(QStringLiteral("hung below")), qPrintable(v.caption()));
-    QCOMPARE(v.sizeHint(), QSize(260, 160));
+    QVERIFY2(v.toolTip().contains(QStringLiteral("face: Front")), qPrintable(v.toolTip()));
+    QCOMPARE(v.sizeHint(), QSize(260, 200));
 }
 
 void MountView_Test::aFixtureOnAPipeShowsThePipe()
@@ -165,8 +166,37 @@ void MountView_Test::aFixtureOnATowerShowsTheTower()
     MountInSituView v(rig.doc, rig.onTower);
     QVERIFY(v.isMounted());
     QVERIFY2(v.caption().contains(QStringLiteral("tower TOWER-1")), qPrintable(v.caption()));
-    QVERIFY2(v.caption().contains(QStringLiteral("tower top")), qPrintable(v.caption()));
+    QVERIFY2(v.toolTip().contains(QStringLiteral("tower top")), qPrintable(v.toolTip()));
     QCOMPARE(v.view()->highlighted(), QList<quint32>({ rig.onTower }));
+}
+
+/* The picture is framed on the fixture with the studio's chrome off: the fixture
+   sits in the middle, large enough to read, and the dimension runs between where
+   the mount and the fixture really are. */
+void MountView_Test::theMountIsFramedAroundTheFixtureWithoutChrome()
+{
+    Rig rig(this);
+    rig.setOffset(rig.onTruss, 0.6858f);
+    MountInSituView v(rig.doc, rig.onTruss);
+    v.resize(260, 200);
+    v.show();
+    QVERIFY(!v.view()->decorations());
+    const QVector3D at = rig.props->fixtureRigPosition(rig.onTruss);
+    const QPointF c = v.view()->worldToScreen(at);
+    QVERIFY2(qAbs(c.x() - v.view()->width() / 2.0) < 2.0, qPrintable(QString::number(c.x())));
+    QVERIFY2(qAbs(c.y() - v.view()->height() / 2.0) < 2.0, qPrintable(QString::number(c.y())));
+    // About a metre each side: 0.25 m of fixture is at least 20 px.
+    const double pxPerMetre = (v.view()->worldToScreen(at + QVector3D(1, 0, 0)) - c).x();
+    QVERIFY2(pxPerMetre > 80.0, qPrintable(QString::number(pxPerMetre)));
+    // The dimension's two ends are the offset apart on screen.
+    const QPointF m = v.view()->worldToScreen(at - QVector3D(0, 0, 0.6858f));
+    QVERIFY(qAbs(qAbs(m.y() - c.y()) - 0.6858 * pxPerMetre) < 1.0);
+    // Still framed after a resize and a refresh.
+    v.resize(300, 220);
+    v.refresh();
+    const QPointF c2 = v.view()->worldToScreen(at);
+    QVERIFY(qAbs(c2.x() - v.view()->width() / 2.0) < 2.0);
+    QVERIFY(v.caption().length() < 80);
 }
 
 void MountView_Test::anUnmountedFixtureSaysSo()
@@ -233,7 +263,7 @@ void MountView_Test::opensQuickly()
         QElapsedTimer t;
         t.start();
         MountInSituView v(rig.doc, fids[i]);
-        v.resize(260, 160);
+        v.resize(260, 200);
         v.show();
         QImage img(v.size(), QImage::Format_ARGB32);
         v.render(&img);
@@ -264,7 +294,7 @@ void MountView_Test::picturesForReview()
     for (const Shot &s : shots)
     {
         MountInSituView v(rig.doc, s.fid);
-        v.resize(260, 160);
+        v.resize(260, 200);
         v.show();
         QTest::qWait(30);
         v.grab();                  // the view fits itself to its size as it first paints

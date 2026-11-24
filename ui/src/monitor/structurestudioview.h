@@ -441,6 +441,19 @@ public:
     void setStandOnCentreStage(bool on) { m_standOnCentreStage = on; refit(); update(); }
     /** Back to the whole rig in view, after a zoom or a pan by hand. */
     void fitToRig() { m_zoomed = false; refit(); update(); }
+    /** Frame a small part of the rig instead of all of it: @p worldCentre in
+     *  the middle of the view and @p halfWidthM metres either side of it
+     *  across the screen. Kept across resizes and reload() until
+     *  clearFocus() or a zoom by hand. */
+    void setFocus(const QVector3D &worldCentre, double halfWidthM);
+    void clearFocus() { m_focusOn = false; m_zoomed = false; refit(); update(); }
+    /** The rulers, axis labels, stage-side words, plane badge, dimension
+     *  lines and cursor readout: on by default. A small look-only picture
+     *  (MountInSituView) turns them off. */
+    void setDecorations(bool on) { m_decorations = on; update(); }
+    bool decorations() const { return m_decorations; }
+    /** Where a world point is drawn, in this view's pixels. */
+    QPointF worldToScreen(const QVector3D &w) const { return w2s(w); }
 
     /** The follow-spot operator, drawn where they stand (the Rig Overview's
      *  Operator views): a chevron the way they face on the floor, @p label
@@ -1562,6 +1575,10 @@ private:
     mutable int m_lastOpCount = 0;   ///< primitives in the last angled frame
     bool     m_lookOnly = false;     ///< see setLookOnly()
     quint32  m_lookPick = UINT_MAX;  ///< the fixture a look-only press landed on
+    bool     m_focusOn = false;      ///< setFocus(): refit() frames m_focusCentre instead
+    QVector3D m_focusCentre;
+    double   m_focusHalfM = 1.0;
+    bool     m_decorations = true;
     bool     m_zoomed = false;       ///< zoomed or panned by hand: refit() must not stomp it
     bool     m_orbiting = false;     ///< dragging the empty canvas to swing the camera
     QPointF  m_orbitLast;

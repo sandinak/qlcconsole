@@ -2099,8 +2099,27 @@ void StructureStudioView::collectPointsFor(QList<QVector3D> &pts, Kind kind, qui
 /* Where centre stage stands in the angled view: this far down the window. */
 static const double kStageCentreDown = 0.6;
 
+void StructureStudioView::setFocus(const QVector3D &worldCentre, double halfWidthM)
+{
+    m_focusOn = true;
+    m_focusCentre = worldCentre;
+    m_focusHalfM = qMax(0.05, halfWidthM);
+    m_zoomed = false;
+    refit();
+    update();
+}
+
 void StructureStudioView::refit()
 {
+    if (m_focusOn)
+    {
+        const double half = (m_rotation & 1) ? height() / 2.0 : width() / 2.0;
+        m_scale = qBound(4.0, qMax(1.0, half - 6.0) / m_focusHalfM, 4000.0);
+        m_originPx = QPointF(0, 0);
+        m_originPx = QPointF(width() / 2.0, height() / 2.0)
+                     - planeToScreenVec(project(m_focusCentre));
+        return;
+    }
     QList<QVector3D> pts;
     collectPoints(pts);
 
@@ -11200,11 +11219,16 @@ void StructureStudioView::paintEvent(QPaintEvent *)
     drawUnsavedMarks(p);
     /* The rulers are read over the rig, so they go over it: painted before
        the geometry, a deck or truss reaching the edge covered them. */
-    drawRulers(p);
-    drawCursorReadout(p);
-    drawDimensions(p);   // selected fixture's own W/H, or the structure's
+    if (m_decorations)
+    {
+        drawRulers(p);
+        drawCursorReadout(p);
+        drawDimensions(p);   // selected fixture's own W/H, or the structure's
+    }
 
     // Plane badge.
+    if (m_decorations)
+    {
     p.setPen(QColor(160, 164, 175));
     // One entry per Plane -- adding Angled to the enum without adding it here
     // read off the end of the array.
@@ -11215,6 +11239,7 @@ void StructureStudioView::paintEvent(QPaintEvent *)
                : m_fromBehind      ? tr("2D — %1, looking downstage").arg(names[idx])
                                    : tr("2D — %1").arg(names[idx]));
     drawOrientationLabels(p);
+    }
 
     /* Never ask for frames faster than we can draw them.
      *

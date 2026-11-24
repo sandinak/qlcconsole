@@ -25,8 +25,8 @@
 #include "pipe.h"
 #include "doc.h"
 
-/* The dimension line: drawn over the picture, down its right edge, from the
-   mount to the fixture, with the formatted offset beside it. */
+/* The dimension line: drawn over the picture between the mount point and the
+   fixture, where they really are on screen, with the formatted offset beside it. */
 class MountInSituView::DimensionOverlay : public QWidget
 {
 public:
@@ -36,37 +36,50 @@ public:
         setAttribute(Qt::WA_NoSystemBackground);
     }
     QString text;
+    StructureStudioView *view = nullptr;
+    QVector3D fixturePos, mountPos;
+    bool flush = true;
 
 protected:
     void paintEvent(QPaintEvent *) override
     {
-        if (text.isEmpty())
+        if (view == nullptr || text.isEmpty())
             return;
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        const QColor ink = palette().color(QPalette::WindowText);
         QFont f = font();
         f.setPointSizeF(qMax(7.0, f.pointSizeF() - 1.0));
+        f.setBold(true);
         p.setFont(f);
         const QFontMetrics fm(f);
-        const int w = fm.horizontalAdvance(text) + 8;
-        const QRect box(width() - w - 14, 4, w, fm.height() + 2);
-        p.fillRect(box, QColor(0, 0, 0, 150));
-        p.setPen(QColor(255, 255, 255));
-        p.drawText(box, Qt::AlignCenter, text);
-        // The line: ticks top and bottom, arrow heads inward.
-        const int x = width() - 7;
-        const int y1 = box.bottom() + 4, y2 = height() - 8;
-        if (y2 - y1 < 12)
+        const QPointF fs = view->worldToScreen(fixturePos);
+        const QPointF ms = view->worldToScreen(mountPos);
+        const int tw = fm.horizontalAdvance(text) + 8;
+        const QColor line(255, 214, 90);
+        if (flush)
+        {
+            const QRectF box(width() - tw - 6, 6, tw, fm.height() + 2);
+            p.fillRect(box, QColor(0, 0, 0, 170));
+            p.setPen(line);
+            p.drawText(box, Qt::AlignCenter, text);
             return;
-        p.setPen(QPen(ink, 1.4));
-        p.drawLine(x, y1, x, y2);
-        p.drawLine(x - 4, y1, x + 4, y1);
-        p.drawLine(x - 4, y2, x + 4, y2);
-        p.drawLine(x, y1, x - 3, y1 + 5);
-        p.drawLine(x, y1, x + 3, y1 + 5);
-        p.drawLine(x, y2, x - 3, y2 - 5);
-        p.drawLine(x, y2, x + 3, y2 - 5);
+        }
+        const double x = qBound(10.0, fs.x() + 34.0, double(width() - tw - 16));
+        const double y1 = ms.y(), y2 = fs.y();
+        p.setPen(QPen(line, 1.5));
+        p.drawLine(QPointF(x, y1), QPointF(x, y2));
+        p.drawLine(QPointF(x - 5, y1), QPointF(x + 5, y1));
+        p.drawLine(QPointF(x - 5, y2), QPointF(x + 5, y2));
+        const double dir = (y2 > y1) ? 1.0 : -1.0;
+        p.drawLine(QPointF(x, y2), QPointF(x - 3, y2 - 5 * dir));
+        p.drawLine(QPointF(x, y2), QPointF(x + 3, y2 - 5 * dir));
+        // A leader from the dimension to the fixture's own height.
+        p.setPen(QPen(line, 1.0, Qt::DotLine));
+        p.drawLine(QPointF(fs.x() + 12, y2), QPointF(x, y2));
+        const QRectF box(x + 5, (y1 + y2) / 2.0 - fm.height() / 2.0 - 1, tw, fm.height() + 2);
+        p.fillRect(box, QColor(0, 0, 0, 170));
+        p.setPen(line);
+        p.drawText(box, Qt::AlignCenter, text);
     }
 };
 
@@ -101,8 +114,7 @@ MountInSituView::MountInSituView(Doc *doc, quint32 fixtureId, QWidget *parent)
     lay->addStretch(1);
     m_caption = new QLabel(this);
     m_caption->setObjectName(QStringLiteral("mountCaption"));
-    m_caption->setWordWrap(true);
-    m_caption->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
+    m_caption->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
     lay->addWidget(m_caption);
     refresh();
 }
@@ -139,6 +151,7 @@ void MountInSituView::clearView()
     m_kind = -1;
     m_structId = 0;
     m_heightText.clear();
+    m_full.clear();
 }
 
 void MountInSituView::refresh()
@@ -190,6 +203,7 @@ void MountInSituView::refresh()
     {
         clearView();
         m_caption->setText(tr("Not on a structure ") + QChar(0x2014) + tr(" free on the plot"));
+        setToolTip(QString());
         return;
     }
 
@@ -204,17 +218,23 @@ void MountInSituView::refresh()
         m_view->setLocked(true);
         m_view->setLookOnly(true);
         m_view->setBeams(false);
+        m_view->setDecorations(false);
         m_view->setMaxFrameRate(5);
         m_view->setFocusPolicy(Qt::NoFocus);
         m_view->setMinimumSize(40, 40);   // the picture gives way, the caption never does
         m_view->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
         static_cast<QVBoxLayout *>(layout())->insertWidget(0, m_view, 1);
         m_dim = new DimensionOverlay(m_view);
+        m_dim->view = m_view;
         m_dim->setGeometry(m_view->rect());
         m_view->installEventFilter(this);
         m_dim->show();
     }
     m_view->setHighlight({ m_fid });
+    // Frame the mount around the fixture: a metre or so of structure either
+    // side, the fixture big enough to read its face and which way up it is.
+    const QVector3D at = props->fixtureRigPosition(m_fid);
+    m_view->setFocus(at, 1.0);
     m_view->reload();
 
     // Height offset: a dimension line, in the person's unit.
@@ -225,6 +245,9 @@ void MountInSituView::refresh()
         m_heightText = tr("%1 above the %2").arg(MeasurementUnits::formatLength(mm), what);
     else
         m_heightText = tr("%1 below the %2").arg(MeasurementUnits::formatLength(-mm), what);
+    m_dim->fixturePos = at;
+    m_dim->mountPos = at - QVector3D(0, 0, rp.mountZOffset);
+    m_dim->flush = qAbs(mm) < 0.5;
     m_dim->text = qAbs(mm) < 0.5 ? tr("flush") : MeasurementUnits::formatLength(qAbs(mm)) + (mm > 0 ? QString(QChar(0x20)) + QChar(0x2191) : QString(QChar(0x20)) + QChar(0x2193));
     m_dim->setToolTip(m_heightText);
     m_dim->update();
@@ -246,13 +269,26 @@ void MountInSituView::refresh()
               : rp.towerMountSide == FixtureRigProps::TowerBottom ? tr("tower base")
               : tr("shelf %1").arg(rp.towerShelf + 1);
 
+    const QString sep = QString(QChar(0x20)) + QChar(0x00B7) + QChar(0x20);
     QStringList bits;
-    bits << tr("On %1 %2").arg(what, name) << orient << tr("face: %1").arg(faceName(rp.face()));
+    bits << tr("On %1 %2").arg(what, name) << orient;
+    QStringList more = bits;
+    more << tr("face: %1").arg(faceName(rp.face()));
     if (!place.isEmpty())
-        bits << place;
+        more << place;
     if (!qFuzzyIsNull(rp.studioAngle))
-        bits << tr("angle %1").arg(double(rp.studioAngle), 0, 'f', 0) + QChar(0x00B0);
+        more << tr("angle %1").arg(double(rp.studioAngle), 0, 'f', 0) + QChar(0x00B0);
     if (!qFuzzyIsNull(rp.studioTilt))
-        bits << tr("tilt %1").arg(double(rp.studioTilt), 0, 'f', 0) + QChar(0x00B0);
-    m_caption->setText(bits.join(QString(QChar(0x20)) + QChar(0x00B7) + QChar(0x20)));
+        more << tr("tilt %1").arg(double(rp.studioTilt), 0, 'f', 0) + QChar(0x00B0);
+    more << m_heightText;
+    m_full = bits.join(sep);
+    m_caption->setText(m_caption->fontMetrics().elidedText(m_full, Qt::ElideRight, qMax(60, width() - 4)));
+    setToolTip(more.join(QStringLiteral("\n")).replace(sep, QStringLiteral("\n")));
+}
+
+void MountInSituView::resizeEvent(QResizeEvent *ev)
+{
+    QWidget::resizeEvent(ev);
+    if (!m_full.isEmpty() && m_view != nullptr)
+        m_caption->setText(m_caption->fontMetrics().elidedText(m_full, Qt::ElideRight, qMax(60, width() - 4)));
 }
