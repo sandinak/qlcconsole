@@ -20,9 +20,9 @@
 #ifndef FADERPICKUP_H
 #define FADERPICKUP_H
 
-#include <cstdlib>
-#include <QString>
-#include <QCoreApplication>
+#include "qlcengine_export.h"
+
+class QString;
 
 /** @addtogroup engine Engine
  * @{
@@ -40,7 +40,7 @@
  * A motorised fader (one whose device takes feedback) is not made to wait:
  * the caller sends it the current value instead (see accept()).
  */
-class FaderPickup
+class QLC_ENGINE_EXPORT FaderPickup
 {
 public:
     /** +/- value range to catch the control, on the 0..255 scale */
@@ -67,7 +67,7 @@ public:
         if (motorised)
         {
             m_waiting = false;
-            if (last == -1 && std::abs(value - current) > Threshold)
+            if (last == -1 && absDiff(value - current) > Threshold)
             {
                 if (sendBack != nullptr)
                     *sendBack = true;
@@ -91,20 +91,17 @@ public:
      *  (on screen, say) to where the fader is. */
     bool waiting(int current) const
     {
-        return m_waiting && m_last >= 0 && std::abs(m_last - current) > Threshold;
+        return m_waiting && m_last >= 0 && absDiff(m_last - current) > Threshold;
     }
 
     /** Where the fader last said it was, 0..255; -1 when unknown */
     int last() const { return m_last; }
 
     /** "Grand Master fader: move it to 75% to take over" */
-    static QString hintText(const QString &name, int percent)
-    {
-        return QCoreApplication::translate("FaderPickup", "%1 fader: move it to %2% to take over")
-                   .arg(name).arg(percent);
-    }
+    static QString hintText(const QString &name, int percent);
 
 private:
+    static int absDiff(int a) { return a < 0 ? -a : a; }
     int m_last = -1;
     bool m_waiting = false;
 };

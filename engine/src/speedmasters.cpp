@@ -641,7 +641,7 @@ void SpeedMasters::sendRateFeedback(int index, bool force)
     if (u == UINT_MAX || !m_doc->inputOutputMap()->canSendFeedback(u))
         return;
     // Not an echo of the fader's own value
-    if (!force && std::abs(cur - int(last)) <= FaderPickup::Threshold)
+    if (!force && qAbs(cur - int(last)) <= FaderPickup::Threshold)
         return;
     m_doc->inputOutputMap()->sendFeedBack(u, c, uchar(cur), QVariant());
 }
