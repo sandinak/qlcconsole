@@ -19981,8 +19981,8 @@ void Monitor_Test::rotatingASelectionTurnsItAboutItsMiddle()
     rh.trussOffset = 1.0f;
     props->setFixtureRigProps(hung->id(), rh);
     Fixture *free = new Fixture(doc);
-    srBoom->setChannels(4);
-    srBoom->setAddress(10);
+    free->setChannels(4);
+    free->setAddress(10);
     QVERIFY(doc->addFixture(free));
     props->setFixturePosition(free->id(), 0, 0, QVector3D(4000.0f, 0.0f, 0.0f));
     const quint32 deckId = deck->id(), wallId = wall->id(), barId = bar->id();
