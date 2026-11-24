@@ -1212,6 +1212,16 @@ are in tabs. It opens on the tab you used last (Fixture the first time);
   above the truss, say), **Orientation**, **Face**, **Placement**,
   **Angle** and **Tilt**. A fixture not on the plot has X and Y greyed,
   *Not on the plot*.
+  Beside the rows is a **plan map**: the stage from above with the
+  centre line and plaster line dashed and the fixture as a dot. Drag the
+  dot and X and Y follow (live, like a typed value; **Cancel** puts it
+  back; Shift drags free of the grid); type X or Y and the dot moves. Its
+  dimension lines say how far it is from the plaster line and how far
+  *SR* or *SL* of the centre line (stage right and left as the performer
+  sees them), in your Settings ▸ Units. A fixture on a truss, pipe or
+  tower shows where its mount puts it and cannot be dragged: the map
+  says so. (With several fixtures selected there is no map: X and Y
+  differ.)
 - **Aim &amp; Beam** — where it points, what comes out, and calibrating
   it. At the left, the orientation diagram (below), with where it points
   under it in degrees and words (*270° · stage left*); beside it **Front
@@ -1226,7 +1236,11 @@ are in tabs. It opens on the tab you used last (Fixture the first time);
   Front of device is a setting of the rig, not a DMX value: the head moves
   only while a look or **Test** runs. Under them, **Beam (lens set to)**,
   the angle a lens zoomed by hand is set to (see [The beam](#the-beam)),
-  and **Masking (tape)**.
+  and **Masking (tape)**; at the left of those, the **mask lens** — the
+  beam seen from behind, the shaded bands what the tape covers and a
+  line under it the share of the beam still getting through. The four
+  Masking boxes draw it, and dragging a band's edge sets them (applied
+  live; **Cancel** puts them back). A laser shows its scan window.
   **Calibrate** folds away what is set once at the focus call: the
   [calibration offsets](#calibration-offsets), **Direction** (**Invert
   pan** / **Invert tilt**) and **Test orientation** — test it, see it go
