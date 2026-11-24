@@ -96,7 +96,7 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
     m_table->setTextElideMode(Qt::ElideNone);
     connect(m_table->horizontalHeader(), &QHeaderView::sectionResized, this, [this](int section) {
         if (section == TargetCol)
-            m_table->resizeRowsToContents();
+            fitRowHeights();
     });
     m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -335,7 +335,18 @@ void ControlMapPanel::fitRows()
     m_table->resizeColumnToContents(LampCol);
     if (m_table->columnWidth(LampCol) > cap)
         m_table->setColumnWidth(LampCol, cap);
+    fitRowHeights();
+}
+
+void ControlMapPanel::fitRowHeights()
+{
     m_table->resizeRowsToContents();
+    // Never lower than its pickers: Works and When pressed stay whole.
+    for (int r = 0; r < m_table->rowCount(); ++r)
+        for (int c : { int(PlaceCol), int(ModeCol) })
+            if (QWidget *w = m_table->cellWidget(r, c))
+                if (m_table->rowHeight(r) < w->sizeHint().height() + 2)
+                    m_table->setRowHeight(r, w->sizeHint().height() + 2);
 }
 
 QString ControlMapPanel::controlText(const ControlMap::Binding &b) const

@@ -105,6 +105,8 @@ private:
     /** What it fires and its light wrap, never cut (UX-36): the light's
      *  column is kept narrow, every row as tall as its words. */
     void fitRows();
+    /** Every row as tall as its words, never lower than its pickers. */
+    void fitRowHeights();
 
 private:
     Doc *m_doc;

@@ -1272,6 +1272,10 @@ void ControlMapUi_Test::theLearnDialogOffersThePlace()
         ControlLearnDialog d(m_doc, ControlMap::cue(cues.at(0)), nullptr, ControlMap::inCue(cues.at(0)));
         QComboBox *works = d.findChild<QComboBox *>("learnPlace");
         QVERIFY(works != nullptr && works->isEnabled());
+        // A jump to a cue: everywhere by default (it brings the cue live),
+        // the cue offered.
+        QVERIFY(d.place() == ControlMap::everywhere());
+        d.setPlace(ControlMap::inCue(cues.at(0)));
         QVERIFY(d.place() == ControlMap::inCue(cues.at(0)));
         // The cue, its list, its production, everywhere.
         QCOMPARE(works->count(), 4);
