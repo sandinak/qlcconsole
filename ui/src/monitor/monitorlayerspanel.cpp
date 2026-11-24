@@ -1777,6 +1777,23 @@ void MonitorLayersPanel::reload()
                     addItemLeaf(fgNodes.at(k), looseFixDesc.value(fid));
             }
         }
+        /* A row taken out and put back loses its full-width name (the view
+           keeps that by position): "Lantern A" under its hanger was cut to
+           "Lanter" at the eye/lock column. Every row in the layer that has
+           no eye/lock of its own spans again. */
+        for (QTreeWidgetItemIterator it(layerNode); *it != nullptr; ++it)
+        {
+            QTreeWidgetItem *row = *it;
+            if (row == layerNode)
+                continue;
+            bool mine = false;
+            for (QTreeWidgetItem *a = row->parent(); a != nullptr; a = a->parent())
+                if (a == layerNode) { mine = true; break; }
+            if (!mine)
+                break;      // past this layer's rows
+            if (m_tree->itemWidget(row, 1) == nullptr)
+                row->setFirstColumnSpanned(true);
+        }
         layerNodes.insert(lyr.id, layerNode);
 
         layerNode->setExpanded(!wasNodeCollapsed(NodeLayer, lyr.id));

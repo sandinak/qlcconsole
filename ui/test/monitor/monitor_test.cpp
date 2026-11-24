@@ -32067,6 +32067,7 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
 
     QHash<QString, QString> got;
     int spotsCount = -1, lanternsCount = -1;
+    QStringList cutShort;
     {
         MonitorGraphicsView view(doc);
         view.resize(900, 700);
@@ -32101,6 +32102,10 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
         spotsCount = spots == nullptr ? -1 : spots->childCount();
         QTreeWidgetItem *lanterns = layersRow(panel, "Lanterns");
         lanternsCount = lanterns == nullptr ? -1 : lanterns->childCount();
+        // A row moved under what it hangs on keeps its full-width name.
+        for (const QString &n : { "Lantern A", "Hung Pipe", "T1-S1" })
+            if (layersRow(panel, n) != nullptr && !layersRow(panel, n)->isFirstColumnSpanned())
+                cutShort << n;
     }
 
     // UX shots: the Plot layers panel beside the plot, at three sizes.
@@ -32137,6 +32142,7 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
     // The groups across the bars are still listed, with all their fixtures.
     QCOMPARE(spotsCount, 3);
     QCOMPARE(lanternsCount, 2);
+    QVERIFY2(cutShort.isEmpty(), qPrintable("cut at the eye/lock column: " + cutShort.join(", ")));
 }
 
 /* Q155-2: Branson's aprons are at floor height. Hiding the apron took its
