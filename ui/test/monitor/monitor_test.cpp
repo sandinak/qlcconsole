@@ -1,47 +1,3 @@
-/* Fixture Properties is taller than a laptop's screen for a moving head:
-   its rows are in tabs, each page's in a scroller (a safety net), the name
-   above them and OK / Cancel below them in view, the dialog no taller than
-   its screen. */
-void Monitor_Test::fixturePropertiesRowsScrollButtonsStay()
-{
-    DropRig rig;
-    QVERIFY(rig.build(m_doc, QVector3D(5000, 5000, 0)));
-    QString why;
-    driveDialog([&why](QWidget *dlg) {
-        QLineEdit *name = dlg->findChild<QLineEdit *>("fixtureNameEdit");
-        if (name == nullptr)
-            return false;
-        QTabWidget *tabs = dlg->findChild<QTabWidget *>("fixturePropertiesTabs");
-        QDialogButtonBox *buttons = dlg->findChild<QDialogButtonBox *>();
-        QWidget *x = dlg->findChild<QWidget *>("fixtureX");
-        QWidget *aim = dlg->findChild<QWidget *>("fixtureAim");
-        const QRect room = dlg->screen()->availableGeometry();
-        if (tabs == nullptr)
-            why = "no tabs";
-        else if (x == nullptr || aim == nullptr)
-            why = "no X or Aim row";
-        else if (tabs->isAncestorOf(name))
-            why = "the name is in a tab";
-        else if (buttons == nullptr || tabs->isAncestorOf(buttons))
-            why = "the buttons are in a tab";
-        else if (dlg->height() > room.height())
-            why = QString("%1 tall on a %2 screen").arg(dlg->height()).arg(room.height());
-        else
-            for (QWidget *row : { x, aim })
-            {
-                QScrollArea *page = nullptr;
-                for (int i = 0; i < tabs->count(); ++i)
-                    if (tabs->widget(i)->isAncestorOf(row))
-                        page = qobject_cast<QScrollArea *>(tabs->widget(i));
-                if (page == nullptr)
-                    why = row->objectName() + " is not in a page's scroller";
-            }
-        return true;
-    }, false);
-    rig.mon->showFixtureItemEditor(rig.fxi->id());
-    QVERIFY2(why.isEmpty(), qPrintable(why));
-}
-
 /*
   Q Light Controller Plus - Test Unit
   monitor_test.cpp
@@ -4096,8 +4052,9 @@ void Monitor_Test::fixturePropertiesLengthsShowTheirWholeValue()
 }
 
 /* Fixture Properties is taller than a laptop's screen for a moving head:
-   its rows are in a scroller, the name above it and OK / Cancel below it
-   in view, the dialog no taller than its screen. */
+   its rows are in tabs, each page's in a scroller (a safety net), the name
+   above them and OK / Cancel below them in view, the dialog no taller than
+   its screen. */
 void Monitor_Test::fixturePropertiesRowsScrollButtonsStay()
 {
     DropRig rig;
@@ -4107,20 +4064,31 @@ void Monitor_Test::fixturePropertiesRowsScrollButtonsStay()
         QLineEdit *name = dlg->findChild<QLineEdit *>("fixtureNameEdit");
         if (name == nullptr)
             return false;
-        QScrollArea *scroll = dlg->findChild<QScrollArea *>("fixturePropertiesScroll");
+        QTabWidget *tabs = dlg->findChild<QTabWidget *>("fixturePropertiesTabs");
         QDialogButtonBox *buttons = dlg->findChild<QDialogButtonBox *>();
         QWidget *x = dlg->findChild<QWidget *>("fixtureX");
+        QWidget *aim = dlg->findChild<QWidget *>("fixtureAim");
         const QRect room = dlg->screen()->availableGeometry();
-        if (scroll == nullptr)
-            why = "no scroller";
-        else if (x == nullptr || !scroll->isAncestorOf(x))
-            why = "the rows are not in the scroller";
-        else if (scroll->isAncestorOf(name))
-            why = "the name scrolls away";
-        else if (buttons == nullptr || scroll->isAncestorOf(buttons))
-            why = "the buttons scroll away";
+        if (tabs == nullptr)
+            why = "no tabs";
+        else if (x == nullptr || aim == nullptr)
+            why = "no X or Aim row";
+        else if (tabs->isAncestorOf(name))
+            why = "the name is in a tab";
+        else if (buttons == nullptr || tabs->isAncestorOf(buttons))
+            why = "the buttons are in a tab";
         else if (dlg->height() > room.height())
             why = QString("%1 tall on a %2 screen").arg(dlg->height()).arg(room.height());
+        else
+            for (QWidget *row : { x, aim })
+            {
+                QScrollArea *page = nullptr;
+                for (int i = 0; i < tabs->count(); ++i)
+                    if (tabs->widget(i)->isAncestorOf(row))
+                        page = qobject_cast<QScrollArea *>(tabs->widget(i));
+                if (page == nullptr)
+                    why = row->objectName() + " is not in a page's scroller";
+            }
         return true;
     }, false);
     rig.mon->showFixtureItemEditor(rig.fxi->id());
