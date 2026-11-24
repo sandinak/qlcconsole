@@ -63,7 +63,6 @@
 /** (the rule itself is FaderPickup::Threshold)
  *  +/- value range to catch the slider for external
  *  controllers with no feedback support */
-#define VALUE_CATCHING_THRESHOLD    4
 
 const quint8 VCSlider::sliderInputSourceId = 0;
 const quint8 VCSlider::overrideResetInputSourceId = 1;
@@ -111,7 +110,6 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
     , m_widgetMode(WSlider)
     , m_cngType(ClickAndGoWidget::None)
     , m_isOverriding(false)
-    , m_lastInputValue(-1)
 {
     /* Set the class name "VCSlider" as the object name as well */
     setObjectName(VCSlider::staticMetaObject.className());
@@ -351,14 +349,12 @@ void VCSlider::enableWidgetUI(bool enable)
         m_storeButton->setEnabled(enable);
     if (enable == false)
     {
-        m_lastInputValue = -1;
         m_pickup.reset();
     }
 }
 
 void VCSlider::hideEvent(QHideEvent *)
 {
-    m_lastInputValue = -1;
     m_pickup.reset();
 }
 
@@ -803,6 +799,7 @@ void VCSlider::setSliderMode(SliderMode mode)
                 this, &VCSlider::slotEffectTrackerChanged);
 
     m_sliderMode = mode;
+    m_pickup.reset();           // a different control: a fresh wait
 
     if (mode == Level)
     {
@@ -1193,6 +1190,7 @@ QList <VCSlider::LevelChannel> VCSlider::levelChannels()
 void VCSlider::setLevelLowLimit(uchar value)
 {
     m_levelLowLimit = value;
+    m_pickup.reset();
     if (m_cngWidget != NULL)
         m_cngWidget->setLevelLowLimit(value);
 }
@@ -1205,6 +1203,7 @@ uchar VCSlider::levelLowLimit() const
 void VCSlider::setLevelHighLimit(uchar value)
 {
     m_levelHighLimit = value;
+    m_pickup.reset();
     if (m_cngWidget != NULL)
         m_cngWidget->setLevelHighLimit(value);
 }
@@ -2517,7 +2516,6 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
                 m_pickup.setSource(universe, pagedCh);   // another fader: start over
                 if (m_pickup.accept(value, pickupCurrent()) == false)
                 {
-                    m_lastInputValue = value;
                     updatePickupHint();
                     return;
                 }
@@ -2532,7 +2530,6 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             }
 
             setSliderValue(value, true, true);
-            m_lastInputValue = value;
         }
     }
     else if (checkInputSource(universe, pagedCh, value, sender(), overrideResetInputSourceId))

@@ -204,7 +204,7 @@ private:
         quint32 inChannel[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
         uchar inLast[ControlCount] = { 0, 0, 0 };   //!< for a button's press
         FaderPickup ratePickup;     //!< the Rate fader's soft takeover
-            int held = 0;               //!< hold(): VC widgets driving it
+        int held = 0;               //!< hold(): VC widgets driving it
     };
 
     bool valid(int index) const { return index >= 0 && index < MaxCount; }

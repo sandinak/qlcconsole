@@ -240,7 +240,12 @@ void ConsoleChannel::slotInputValueChanged(quint32 channel, uchar value)
         m_pickup.setSource(src->universe(), src->channel());
     if (m_pickup.accept(value, m_slider->value()))
         setValue(value);
-    m_slider->setToolTip(pickupHint());
+    const QString hint = pickupHint();
+    if (!hint.isEmpty())
+        m_slider->setToolTip(hint);
+    else if (!m_slider->toolTip().isEmpty() && m_slider->toolTip() == m_lastHint)
+        m_slider->setToolTip(QString());
+    m_lastHint = hint;
 }
 
 QString ConsoleChannel::pickupHint() const

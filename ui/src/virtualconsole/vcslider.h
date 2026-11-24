@@ -817,7 +817,6 @@ protected slots:
     void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
 
 protected:
-    int m_lastInputValue;
     FaderPickup m_pickup;
     void updatePickupHint();
     /** Catch values is on and the mode is not a master (those never wait) */

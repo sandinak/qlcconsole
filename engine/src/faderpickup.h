@@ -112,7 +112,7 @@ public:
     /** Where the fader last said it was, 0..255; -1 when unknown */
     int last() const { return m_last; }
 
-    /** "Grand Master fader: move it to 75% to take over". @p percent is
+    /** "Rate fader: move it to 75% to take over". @p percent is
      *  where on the fader's travel the control is. */
     static QString hintText(const QString &name, int percent);
 

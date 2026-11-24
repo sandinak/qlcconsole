@@ -599,6 +599,11 @@ void SpeedMasters::setInput(int index, Control control, quint32 universe, quint3
 void SpeedMasters::clearInput(int index, Control control)
 {
     setInput(index, control, UINT_MAX, UINT_MAX);
+    if (control == RateControl && valid(index))
+    {
+        QMutexLocker locker(&m_mutex);
+        m_masters[index].ratePickup.reset();
+    }
 }
 
 bool SpeedMasters::input(int index, Control control, quint32 *universe, quint32 *channel) const
@@ -668,8 +673,7 @@ void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value
                 // A fader's middle is 100 %: snap there, so a fader parked
                 // near the centre detent runs the master at its tempo.
                 // Pick-up: a fader that is not where the rate is does
-                // nothing until it reaches it. When the wait starts the
-                // 
+                // nothing until it reaches it.
                 bool take = false;
                 {
                     QMutexLocker locker(&m_mutex);
