@@ -326,7 +326,8 @@ void MountView_Test::picturesForReview()
         QSKIP("QLC_SHOT_DIR not set");
     QDir().mkpath(dir);
     Rig rig(this);
-    rig.setOffset(rig.onTruss, 0.6858f);
+    rig.setOffset(rig.onTruss, -0.3f);      // hung a little below the truss
+    rig.setOffset(rig.onPipe, -0.15f);
     rig.setOffset(rig.onTower, 0.3f);
     struct Shot { const char *name; quint32 fid; } shots[] = {
         { "truss", rig.onTruss }, { "pipe", rig.onPipe }, { "boom", rig.onBoom },
