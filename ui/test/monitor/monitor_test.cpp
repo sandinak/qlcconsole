@@ -4028,15 +4028,18 @@ void Monitor_Test::fixturePropertiesLengthsShowTheirWholeValue()
         dlg->layout()->activate();
         for (QDoubleSpinBox *sp : { x, y })
         {
+            sp->resize(sp->sizeHint());     // what that form gives it, whatever the style
             QLineEdit *le = sp->findChild<QLineEdit *>();
             if (le == nullptr)
                 return false;
             texts << le->text();
             const int need = QFontMetrics(le->font()).horizontalAdvance(le->text());
             const int room = le->contentsRect().width() - 4;   // QLineEdit's 2 px a side
+            const QString say = QStringLiteral("%1: \"%2\" needs %3 px, has %4 (field %5 px)")
+                                    .arg(sp->objectName(), le->text()).arg(need).arg(room).arg(sp->width());
+            qInfo().noquote() << say;
             if (need > room)
-                clipped << QStringLiteral("%1: \"%2\" needs %3 px, has %4")
-                               .arg(sp->objectName(), le->text()).arg(need).arg(room);
+                clipped << say;
         }
         return true;
     }, false);
