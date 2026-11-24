@@ -32117,6 +32117,9 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
             mon.m_layersPanel->reload();
             mon.m_layersPanel->m_tree->expandAll();
             QCoreApplication::processEvents();
+            for (QTreeWidgetItemIterator it(mon.m_layersPanel->m_tree); *it != nullptr; ++it)
+                qInfo("SHOTROW %s:%u %s", qPrintable((*it)->data(0, Qt::UserRole + 2).toString()),
+                      (*it)->data(0, Qt::UserRole + 1).toUInt(), qPrintable((*it)->text(0)));
             mon.grab().save(QDir(shots).filePath(QStringLiteral("plot-layers-bar-nest-%1x%2.png")
                                                  .arg(sz.width()).arg(sz.height())));
         }
