@@ -23,6 +23,8 @@
 #include <QWidget>
 #include <QIcon>
 
+#include "qlcui_export.h"
+
 class InputOutputPatchEditor;
 class QListWidgetItem;
 class QListWidget;
@@ -43,7 +45,7 @@ class Doc;
  * @{
  */
 
-class InputOutputManager final : public QWidget
+class QLC_UI_EXPORT InputOutputManager final : public QWidget
 {
     Q_OBJECT
     Q_DISABLE_COPY(InputOutputManager)
