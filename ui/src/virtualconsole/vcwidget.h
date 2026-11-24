@@ -436,6 +436,9 @@ public:
      */
     QSharedPointer<QLCInputSource> inputSource(quint8 id = 0) const;
 
+    /** The ids of every external input set (ControlOwners asks who listens). */
+    QList<quint8> inputSourceIds() const { return m_inputs.keys(); }
+
     /**
      * When cloning a widget on a multipage frame, this function
      * will remap the original input source to respond to a new

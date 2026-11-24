@@ -43,6 +43,13 @@ class PMJOverlay : public QObject
 public:
     /** id this device registers under with the engine. */
     static const QString deviceId;
+    /** The name of the PMJ's control on input @p channel ("Ch 3",
+     *  "Enc 2"); empty when the PMJ has none there. Who listens to a
+     *  control asks it (ControlOwners): the overlay hears these on any
+     *  universe patched with the PMJ Black 1 profile. */
+    static QString controlName(quint32 channel);
+    /** Every input channel the overlay acts on (a control with a job). */
+    static QList<quint32> controlChannels();
 
     /** @p app is used to reach ProgrammingManager (findChild) for
      *  ProgrammingManager::currentPaletteId() — the ground truth for "what

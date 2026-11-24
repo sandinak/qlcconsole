@@ -33,6 +33,7 @@
 
 #include "customfeedbackdialog.h"
 #include "inputselectionwidget.h"
+#include "controlcollisionbox.h"
 #include "selectinputchannel.h"
 #include "qlcinputchannel.h"
 #include "qlcinputsource.h"
@@ -119,10 +120,29 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
     pl->addWidget(m_previewLabel, 1);
     rv->addLayout(pl);
 
+    m_self.kind = ControlOwners::VCInput;
+    m_collision = new ControlCollisionBox(this);
+    connect(m_collision, &ControlCollisionBox::moveRequested, this, [this]() {
+        // Take it from there, then set it here.
+        const quint32 universe = m_collision->property("learnUniverse").toUInt();
+        const quint32 channel = m_collision->property("learnChannel").toUInt();
+        if (!ControlOwners::releaseAll(m_doc, m_collision->owners()))
+            return;
+        m_collision->clear();
+        takeSource(universe, channel, m_pendingKeepFeedback);
+        emit inputValueChanged(universe, channel);
+    });
+
     if (QGridLayout *gl = qobject_cast<QGridLayout *>(layout()))
+    {
+        gl->addWidget(m_collision, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
         gl->addWidget(m_relativeGroup, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
+    }
     else if (layout() != NULL)
+    {
+        layout()->addWidget(m_collision);
         layout()->addWidget(m_relativeGroup);
+    }
 
     connect(m_behaviourCombo, SIGNAL(currentIndexChanged(int)), this, SLOT(slotBehaviourChanged()));
     connect(m_sensitivitySpin, SIGNAL(valueChanged(int)), this, SLOT(slotBehaviourChanged()));
@@ -236,6 +256,8 @@ void InputSelectionWidget::slotAutoDetectInputToggled(bool checked)
 void InputSelectionWidget::slotInputValueChanged(quint32 universe, quint32 channel)
 {
     const quint32 chWithPage = (m_widgetPage << 16) | channel;
+    if (refuseTaken(universe, chWithPage, false))
+        return;
 
     if (m_emitOdd == true && m_signalsReceived % 2)
     {
@@ -267,40 +289,73 @@ void InputSelectionWidget::slotChooseInputClicked()
     SelectInputChannel sic(this, m_doc->inputOutputMap());
     if (sic.exec() == QDialog::Accepted)
     {
-        uchar lowerValue = 0;
-        uchar upperValue = 0;
-        uchar monitorValue = 0;
-        QVariant extraLowerParams;
-        QVariant extraUpperParams;
-        QVariant extraMonitorParams;
-        if (!m_inputSource.isNull())
-        {
-            lowerValue = m_inputSource->feedbackValue(QLCInputFeedback::LowerValue);
-            upperValue = m_inputSource->feedbackValue(QLCInputFeedback::UpperValue);
-            monitorValue = m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue);
-            extraLowerParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::LowerValue);
-            extraUpperParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::UpperValue);
-            extraMonitorParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::MonitorValue);
-        }
-        m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(sic.universe(), (m_widgetPage << 16) | sic.channel()));
-        if (!m_inputSource.isNull())
-        {
-            if (lowerValue != m_inputSource->feedbackValue(QLCInputFeedback::LowerValue))
-                m_inputSource->setFeedbackValue(QLCInputFeedback::LowerValue, lowerValue);
-            if (upperValue != m_inputSource->feedbackValue(QLCInputFeedback::UpperValue))
-                m_inputSource->setFeedbackValue(QLCInputFeedback::UpperValue, upperValue);
-            if (monitorValue != m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue))
-                m_inputSource->setFeedbackValue(QLCInputFeedback::MonitorValue, monitorValue);
-            if (extraLowerParams.isValid())
-                m_inputSource->setFeedbackExtraParams(QLCInputFeedback::LowerValue, extraLowerParams);
-            if (extraUpperParams.isValid())
-                m_inputSource->setFeedbackExtraParams(QLCInputFeedback::UpperValue, extraUpperParams);
-            if (extraMonitorParams.isValid())
-                m_inputSource->setFeedbackExtraParams(QLCInputFeedback::MonitorValue, extraMonitorParams);
-        }
-        updateInputSource();
-        emit inputValueChanged(sic.universe(), (m_widgetPage << 16) | sic.channel());
+        const quint32 chWithPage = (m_widgetPage << 16) | sic.channel();
+        if (refuseTaken(sic.universe(), chWithPage, true))
+            return;
+        takeSource(sic.universe(), chWithPage, true);
+        emit inputValueChanged(sic.universe(), chWithPage);
     }
+}
+
+bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage, bool keepFeedback)
+{
+    // What it has already: nothing new to ask (auto-detect hears it on and on).
+    if (!m_inputSource.isNull() && m_inputSource->universe() == universe
+        && m_inputSource->channel() == channelWithPage)
+        return false;
+    // The same refusal still showing: not asked again on every value.
+    if (m_collision->isRefusing() && m_collision->property("learnUniverse").toUInt() == universe
+        && m_collision->property("learnChannel").toUInt() == channelWithPage)
+        return true;
+    const QList<ControlOwners::Owner> taken = ControlOwners::others(m_doc, universe, channelWithPage, m_self);
+    if (taken.isEmpty())
+    {
+        m_collision->clear();
+        return false;
+    }
+    m_pendingKeepFeedback = keepFeedback;
+    m_collision->setProperty("learnUniverse", universe);
+    m_collision->setProperty("learnChannel", channelWithPage);
+    m_collision->refuse(m_doc, universe, channelWithPage, taken);
+    return true;
+}
+
+void InputSelectionWidget::takeSource(quint32 universe, quint32 channelWithPage, bool keepFeedback)
+{
+    uchar lowerValue = 0;
+    uchar upperValue = 0;
+    uchar monitorValue = 0;
+    QVariant extraLowerParams;
+    QVariant extraUpperParams;
+    QVariant extraMonitorParams;
+    // As Choose… always did: the feedback values of what it had (none: 0).
+    const bool keep = keepFeedback;
+    if (keep && !m_inputSource.isNull())
+    {
+        lowerValue = m_inputSource->feedbackValue(QLCInputFeedback::LowerValue);
+        upperValue = m_inputSource->feedbackValue(QLCInputFeedback::UpperValue);
+        monitorValue = m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue);
+        extraLowerParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::LowerValue);
+        extraUpperParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::UpperValue);
+        extraMonitorParams = m_inputSource->feedbackExtraParams(QLCInputFeedback::MonitorValue);
+    }
+    m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(universe, channelWithPage));
+    if (keep)
+    {
+        if (lowerValue != m_inputSource->feedbackValue(QLCInputFeedback::LowerValue))
+            m_inputSource->setFeedbackValue(QLCInputFeedback::LowerValue, lowerValue);
+        if (upperValue != m_inputSource->feedbackValue(QLCInputFeedback::UpperValue))
+            m_inputSource->setFeedbackValue(QLCInputFeedback::UpperValue, upperValue);
+        if (monitorValue != m_inputSource->feedbackValue(QLCInputFeedback::MonitorValue))
+            m_inputSource->setFeedbackValue(QLCInputFeedback::MonitorValue, monitorValue);
+        if (extraLowerParams.isValid())
+            m_inputSource->setFeedbackExtraParams(QLCInputFeedback::LowerValue, extraLowerParams);
+        if (extraUpperParams.isValid())
+            m_inputSource->setFeedbackExtraParams(QLCInputFeedback::UpperValue, extraUpperParams);
+        if (extraMonitorParams.isValid())
+            m_inputSource->setFeedbackExtraParams(QLCInputFeedback::MonitorValue, extraMonitorParams);
+    }
+    updateInputSource();
 }
 
 void InputSelectionWidget::slotCustomFeedbackClicked()

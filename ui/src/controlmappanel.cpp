@@ -35,6 +35,8 @@
 #include "showfeatures.h"
 #include "controlmappanel.h"
 #include "controllearndialog.h"
+#include "controlcollisionbox.h"
+#include "controlowners.h"
 #include "inputoutputmap.h"
 #include "encoderbank.h"
 #include "controlmap.h"
@@ -438,7 +440,34 @@ void ControlMapPanel::buildEncoderBox(QVBoxLayout *lay)
     m_encNote->setWordWrap(true);
     m_encNote->setStyleSheet(QStringLiteral("color: gray;"));
     box->addWidget(m_encNote);
+    m_encCollision = new ControlCollisionBox(m_encoderBox);
+    m_encCollision->setObjectName(QStringLiteral("encoderCollision"));
+    box->addWidget(m_encCollision);
     lay->addWidget(m_encoderBox);
+    connect(m_encCollision, &ControlCollisionBox::moveRequested, this, [this]() {
+        // Take the controls from there, then set them here.
+        const int target = m_encPending;
+        const quint32 u = m_encCollision->property("learnUniverse").toUInt();
+        const quint32 ch = m_encCollision->property("learnChannel").toUInt();
+        if (target == LearnNone || !ControlOwners::releaseAll(m_doc, m_encCollision->owners()))
+            return;
+        m_encCollision->clear();
+        m_encPending = LearnNone;
+        applyEncoderLearn(target, u, ch);
+    });
+    connect(m_encCollision, &ControlCollisionBox::cancelled, this, [this]() { m_encPending = LearnNone; });
+    // The stop's control is refused by the Control Map itself while it
+    // listens: the same refusal here, with no Move It Here.
+    connect(m_doc->controlMap(), &ControlMap::refused, this, [this](const QString &) {
+        const ControlMap::Binding *stop = m_doc->controlMap()->binding(ControlMap::emergencyStop());
+        if (m_encLearning == LearnNone || stop == nullptr)
+            return;
+        ControlOwners::Owner self;
+        self.kind = ControlOwners::Encoder;
+        m_encPending = LearnNone;
+        m_encCollision->refuse(m_doc, stop->universe, stop->channel,
+                               ControlOwners::others(m_doc, stop->universe, stop->channel, self));
+    });
 
     connect(m_encPreset, QOverload<int>::of(&QComboBox::activated), this, &ControlMapPanel::slotEncoderPreset);
     connect(m_encUniverse, QOverload<int>::of(&QComboBox::activated), this, &ControlMapPanel::slotEncoderEdited);
@@ -610,6 +639,50 @@ void ControlMapPanel::slotEncoderHeard(quint32 universe, quint32 channel)
         return;
     const int target = m_encLearning;
     endEncoderLearn();
+    m_encCollision->clear();
+    m_encPending = LearnNone;
+
+    /* One job per control (Q297): every control the learn would hand the
+       bank -- a run of encoders, pushes or bank buttons from the one heard --
+       is asked who else listens to it. The rings are feedback lines: they
+       hear nothing. */
+    if (target != LearnRings)
+    {
+        const EncoderBank::Device d = m_doc->controlMap()->encoderBank()->device();
+        const int run = target == LearnEncoders || target == LearnPushes ? d.encoderCount
+                      : target == LearnDirect ? EncoderBank::bankCount() : 1;
+        ControlOwners::Owner self;
+        self.kind = ControlOwners::Encoder;
+        QList<ControlOwners::Owner> taken;
+        quint32 first = 0xFFFFFFFF;
+        for (int i = 0; i < run; ++i)
+        {
+            const QList<ControlOwners::Owner> o = ControlOwners::others(m_doc, universe, channel + quint32(i), self);
+            if (!o.isEmpty() && first == 0xFFFFFFFF)
+                first = channel + quint32(i);
+            for (const ControlOwners::Owner &one : o)
+            {
+                bool seen = false;
+                for (const ControlOwners::Owner &t : std::as_const(taken))
+                    seen = seen || t.sameAs(one);
+                if (!seen)
+                    taken << one;
+            }
+        }
+        if (!taken.isEmpty())
+        {
+            m_encPending = target;
+            m_encCollision->setProperty("learnUniverse", universe);
+            m_encCollision->setProperty("learnChannel", channel);
+            m_encCollision->refuse(m_doc, universe, first, taken);
+            return;
+        }
+    }
+    applyEncoderLearn(target, universe, channel);
+}
+
+void ControlMapPanel::applyEncoderLearn(int target, quint32 universe, quint32 channel)
+{
     EncoderBank *enc = m_doc->controlMap()->encoderBank();
     EncoderBank::Device d = enc->device();
     d.universe = universe;

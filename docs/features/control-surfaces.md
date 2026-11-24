@@ -18,9 +18,26 @@ settings of its own. With **Control Surfaces** off for the show (see the
 emergency stop below) the triggers and the encoder bank lines say so and
 their buttons are off; the emergency stop line stays.
 
-One control (a MIDI note or CC, an OSC message) can be heard by several
-parts of the program at once. Nothing warns you yet when two of them take
-the same control, so give each control one job.
+**One job per control.** A control (a MIDI note or CC, an OSC message, a
+computer key) that one part of the program already listens to is refused
+when you learn it for another, naming the owner: *Note 60 already does
+Button "House lights" (Virtual Console). One job per control.* Press
+**Move It Here** to take it from there and give it to what you are
+learning (the old owner stops reacting at once), or **Cancel** to leave it
+where it is. Every Learn says this the same way: Learn Trigger…, the
+emergency stop, the encoder bank, a widget's External Input (auto-detect or
+Choose…), a speed master's Inputs…, the Grand Master's input and a channel
+group's input. Move It Here is not on Undo: to put a control back, learn it
+there again. Two exceptions, with no Move It Here: the PMJ Black 1's
+controls that do something come with its profile, and nothing takes the
+**emergency stop's** control (the stop's own Learn can take a control from
+anything else). Two Virtual Console widgets on one input are Show Review's
+*Same input twice* (VC-06), not refused here.
+
+A show saved before this, or with two jobs on a control for any other
+reason, loads as it is. The **Who has it now** line at the bottom of
+Control surfaces lists every such control with what listens to it and where
+to fix it; the Devices line adds *1 control with two jobs*.
 
 | What | Where you set it (or **Set Up…** in Control surfaces) | What it does |
 |---|---|---|
@@ -255,7 +272,10 @@ after any build that changes a surface, and say which build.
    list GOes; press twice within a second and the second is held (*Second
    GO held*).
 7. Learn **Emergency Stop…** on a PMJ button: press, release, press. *Expect:*
-   the dialog asks you to press it again, then shows the control. Start the
+   the dialog asks you to press it again, then shows the control. (A PMJ
+   button that does something itself, such as **O** or a Select button, is
+   refused: *already does the PMJ Black 1's O (PMJ overlay)*. Use **Go**,
+   **Favorites** or a Down button.) Start the
    list and a scene, press the button in Design and then in Operate.
    *Expect:* everything stops each time, with *ALL OFF* in the Control
    Map's last-fired line.
@@ -277,9 +297,17 @@ after any build that changes a surface, and say which build.
     dark**; one GO after that, Go is dim or bright again and the stop is
     dim. The Control Map's **Its light** column says the
     same words throughout.
-12. **A hit's light.** Learn a hit that lives in one song on a PMJ button.
+12. **A hit's light.** Learn a hit that lives in one song on a free PMJ
+    button (a Down button or **Favorites**).
     *Expect:* dark while that song is not running, dim while it is, dark
     again after the list moves past it -- without touching anything.
+13. **One job per control.** Learn Trigger… on a scene and press **O**.
+    *Expect:* refused, *… already does the PMJ Black 1's O (PMJ overlay).
+    One job per control.*, the reason it can't be moved, and no **Move It
+    Here**. Then give a Virtual Console button's External Input the
+    **1-Down** button, and Learn Trigger… on a scene with the same button.
+    *Expect:* refused naming the VC button; **Move It Here** binds it to the
+    scene, and pressing it fires the scene and not the VC button.
 
 **Akai APC40 mk2**
 

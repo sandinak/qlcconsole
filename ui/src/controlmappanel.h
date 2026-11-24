@@ -25,6 +25,7 @@
 #include "controlmap.h"
 #include "qlcui_export.h"
 
+class ControlCollisionBox;
 class QTableWidget;
 class QVBoxLayout;
 class QGroupBox;
@@ -62,6 +63,8 @@ public:
      *  encoder, the pushes, the bank buttons and the rings, what it is
      *  mapped to. */
     QGroupBox *encoderBox() const { return m_encoderBox; }
+    /** The encoder learn's refusal (a control with another job). */
+    ControlCollisionBox *encoderCollision() const { return m_encCollision; }
     /** The Emergency Stop… button (always shown). */
     QPushButton *stopButton() const { return m_estop; }
 
@@ -122,6 +125,9 @@ private:
     void startEncoderLearn(int target);
     void endEncoderLearn();
     void refreshEncoder();
+    /** Sets what learn @a target heard (the control @a channel of
+     *  @a universe) on the encoder bank's device. */
+    void applyEncoderLearn(int target, quint32 universe, quint32 channel);
 
     QGroupBox *m_encoderBox = nullptr;
     QComboBox *m_encPreset = nullptr;
@@ -134,6 +140,10 @@ private:
     QLabel *m_encMap = nullptr;
     int m_encLearning = LearnNone;
     bool m_encShowing = false;
+    /** A learn refused (another listener has the control): it waits for
+     *  Move It Here or Cancel. */
+    ControlCollisionBox *m_encCollision = nullptr;
+    int m_encPending = LearnNone;
 };
 
 /** @} */

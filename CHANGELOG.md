@@ -67,6 +67,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **One job per control.** Learning a MIDI note or CC, an OSC message or a key that something else already listens to (a trigger, the emergency stop, the encoder bank, a Virtual Console widget's input, a speed master, the Grand Master, a channel group, the PMJ Black 1) is refused, naming it: *… already does Button "House lights" (Virtual Console). One job per control.*, with **Move It Here** to take it from there. The PMJ's own controls and the emergency stop's control are never taken. A show that already has two jobs on a control loads as it is, and **Control surfaces ▸ Who has it now** lists each with where to fix it.
+
 - **Fixture Properties in tabs**: **Fixture**, **Place**, **Aim & Mount**
   and **DMX Controls** between its name and OK / Cancel; it opens on the tab
   you used last, Ctrl+Tab / Ctrl+Shift+Tab go round them. Place has X / Y

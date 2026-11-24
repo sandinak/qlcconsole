@@ -243,6 +243,14 @@ VCProperties VirtualConsole::properties() const
     return m_properties;
 }
 
+void VirtualConsole::clearGrandMasterInput()
+{
+    if (m_properties.grandMasterInputUniverse() == InputOutputMap::invalidUniverse())
+        return;
+    m_properties.setGrandMasterInputSource(InputOutputMap::invalidUniverse(), QLCChannel::invalid());
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * Selected widget
  *****************************************************************************/

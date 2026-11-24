@@ -91,6 +91,9 @@ private:
 public:
     /** Get Virtual Console properties (read-only) */
     VCProperties properties() const;
+    /** The Grand Master listens to no input any more (Move It Here took
+     *  its control, ControlOwners). Marks the show modified. */
+    void clearGrandMasterInput();
 
 private:
     VCProperties m_properties;

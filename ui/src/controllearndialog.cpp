@@ -29,6 +29,7 @@
 #include <QMenu>
 
 #include "showfeatures.h"
+#include "controlcollisionbox.h"
 #include "controllearndialog.h"
 #include "inputoutputmap.h"
 #include "keytriggers.h"
@@ -100,6 +101,17 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     m_keyNote->hide();
     lay->addWidget(m_keyNote);
 
+    m_collision = new ControlCollisionBox(this);
+    lay->addWidget(m_collision);
+    connect(m_collision, &ControlCollisionBox::moveRequested, this, &ControlLearnDialog::slotMoveHere);
+    connect(m_collision, &ControlCollisionBox::cancelled, this, [this]() {
+        // Not taken: back to the control this had (none, or its own).
+        const ControlMap::Binding *b = m_doc->controlMap()->binding(m_target);
+        m_universe = b != nullptr ? b->universe : 0xFFFFFFFF;
+        m_channel = b != nullptr ? b->channel : 0xFFFFFFFF;
+        updateText();
+    });
+
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     m_ok = buttons->button(QDialogButtonBox::Ok);
     m_remove = buttons->addButton(tr("Remove trigger"), QDialogButtonBox::DestructiveRole);
@@ -128,8 +140,20 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
                            "controller in Connections ▸ Devices (or Inputs/Outputs), then learn."));
 
     connect(cm, &ControlMap::heard, this, &ControlLearnDialog::slotHeard);
-    // A control that is the emergency stop is refused, in words, by any learn.
-    connect(cm, &ControlMap::refused, this, [this](const QString &why) { m_note->setText(why); });
+    // A control that is the emergency stop is refused, in words, by any learn:
+    // the same refusal as every other owner's, with no Move It Here.
+    connect(cm, &ControlMap::refused, this, [this](const QString &why) {
+        const ControlMap::Binding *stop = m_doc->controlMap()->binding(ControlMap::emergencyStop());
+        if (m_target.type != ControlMap::EmergencyStopTarget && stop != nullptr)
+        {
+            m_collision->refuse(m_doc, stop->universe, stop->channel,
+                                ControlOwners::others(m_doc, stop->universe, stop->channel, self()));
+            m_ok->setEnabled(false);
+            if (m_collision->isRefusing())
+                return;
+        }
+        m_note->setText(why);
+    });
     if (estop)
     {
         connect(cm, &ControlMap::confirming, this, [this](quint32 u, quint32 c) {
@@ -201,6 +225,7 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
     m_keyNote->hide();
     m_note->clear();
     updateText();
+    checkOwners();
     // Still listening: another press takes its place.
     if (m_target.type == ControlMap::EmergencyStopTarget)
         m_doc->controlMap()->listenForButton();
@@ -249,7 +274,35 @@ bool ControlLearnDialog::learnKey(int key, Qt::KeyboardModifiers modifiers)
     m_universe = ControlMap::KeyboardUniverse;
     m_channel = channel;
     updateText();
+    checkOwners();
     return true;
+}
+
+ControlOwners::Owner ControlLearnDialog::self() const
+{
+    ControlOwners::Owner o;
+    o.kind = m_target.type == ControlMap::EmergencyStopTarget ? ControlOwners::EmergencyStop
+                                                              : ControlOwners::Trigger;
+    o.target = m_target;
+    return o;
+}
+
+void ControlLearnDialog::checkOwners()
+{
+    m_collision->refuse(m_doc, m_universe, m_channel,
+                        ControlOwners::others(m_doc, m_universe, m_channel, self()));
+    m_ok->setEnabled(hasControl() && !m_collision->isRefusing());
+}
+
+void ControlLearnDialog::slotMoveHere()
+{
+    if (!hasControl() || !m_collision->isRefusing())
+        return;
+    // Take it from there (it no longer reacts), then bind it here.
+    if (!ControlOwners::releaseAll(m_doc, m_collision->owners()))
+        return;
+    m_collision->clear();
+    accept();
 }
 
 void ControlLearnDialog::updateText()
@@ -270,17 +323,13 @@ void ControlLearnDialog::updateText()
         m_heard->setText(tr("Listening…"));
         return;
     }
-    QString text = tr("Control: <b>%1</b>").arg(cm->controlName(m_universe, m_channel).toHtmlEscaped());
-    const ControlMap::Binding *other = cm->bindingOn(m_universe, m_channel);
-    if (other != nullptr && other->target != m_target)
-        text += QStringLiteral("<br>") + tr("It fires %1 now; OK moves it here.")
-                    .arg(cm->targetName(other->target).toHtmlEscaped());
-    m_heard->setText(text);
+    m_heard->setText(tr("Control: <b>%1</b>").arg(cm->controlName(m_universe, m_channel).toHtmlEscaped()));
 }
 
 void ControlLearnDialog::accept()
 {
-    if (!hasControl())
+    // A control with another job is never taken by OK: Move It Here or Cancel.
+    if (!hasControl() || m_collision->isRefusing())
         return;
     ControlMap::Binding b;
     b.universe = m_universe;

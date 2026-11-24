@@ -18,8 +18,10 @@
 #include <QGridLayout>
 #include <QPushButton>
 #include <QLabel>
+#include <QShowEvent>
 
 #include "controlsurfacespanel.h"
+#include "controlowners.h"
 #include "virtualconsole.h"
 #include "vcwidget.h"
 #include "vcframe.h"
@@ -52,6 +54,7 @@ const Row kRows[] = {
     { "pmj",     "surfacePmj" },
     { "web",     "surfaceCompanion" },
     { "pads",    "surfacePads" },
+    { "collisions", "surfaceCollisions" },
 };
 }
 
@@ -107,6 +110,11 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             tr("Pad Run and the focus tools from a game controller."),
             tr("Set Up…"),
             tr("Go to the patch: right-click the pad for its test and jobs.") } },
+        { QStringLiteral("collisions"),
+          { tr("Who has it now"),
+            tr("A control that two of the above listen to does two jobs at once. One job per control: "
+               "each line says where to fix it."),
+            QString(), QString() } },
     };
 
     QGridLayout *grid = new QGridLayout(this);
@@ -132,15 +140,22 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
         QLabel *status = new QLabel(this);
         status->setObjectName(QString::fromLatin1(row.object) + QStringLiteral("Status"));
         status->setWordWrap(true);
+        grid->addWidget(what, r, 0);
+        m_status.insert(key, status);
+        // Who has it now is read only: each line says where its fix is.
+        if (t.button.isEmpty())
+        {
+            grid->addWidget(status, r, 1, 1, 2);
+            ++r;
+            continue;
+        }
         QPushButton *btn = new QPushButton(t.button, this);
         btn->setObjectName(QString::fromLatin1(row.object) + QStringLiteral("SetUp"));
         btn->setToolTip(t.tip);
         btn->setAccessibleName(tr("Set up %1").arg(t.name));
         connect(btn, &QPushButton::clicked, this, [this, key]() { emit setUpRequested(key); });
-        grid->addWidget(what, r, 0);
         grid->addWidget(status, r, 1);
         grid->addWidget(btn, r, 2, Qt::AlignTop);
-        m_status.insert(key, status);
         m_buttons.insert(key, btn);
         ++r;
     }
@@ -155,6 +170,7 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     connect(iom, &InputOutputMap::universeAdded, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::universeRemoved, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->speedMasters(), &SpeedMasters::changed, this, &ControlSurfacesPanel::refresh);
+    connect(cm->encoderBank(), &EncoderBank::deviceChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::settingsChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::statusChanged, this, &ControlSurfacesPanel::refresh);
     refresh();
@@ -175,7 +191,30 @@ QString ControlSurfacesPanel::status(const QString &key) const
 
 QString ControlSurfacesPanel::summary() const
 {
-    return triggersText() + QStringLiteral(" · ") + stopText();
+    QString text = triggersText() + QStringLiteral(" · ") + stopText();
+    const int n = ControlOwners::collisions(m_doc).count();
+    if (n > 0)
+        text += QStringLiteral(" · ") + (n == 1 ? tr("1 control with two jobs")
+                                                : tr("%1 controls with two jobs").arg(n));
+    return text;
+}
+
+QString ControlSurfacesPanel::collisionsText() const
+{
+    const QList<ControlOwners::Collision> all = ControlOwners::collisions(m_doc);
+    if (all.isEmpty())
+        return tr("Every control has one job");
+    QStringList lines;
+    for (const ControlOwners::Collision &c : all)
+        lines << ControlOwners::collisionText(m_doc, c);
+    return lines.join(QStringLiteral("\n"));
+}
+
+void ControlSurfacesPanel::showEvent(QShowEvent *event)
+{
+    // A Virtual Console input says nothing when it changes: read it again.
+    refresh();
+    QWidget::showEvent(event);
 }
 
 QString ControlSurfacesPanel::triggersText() const
@@ -296,6 +335,7 @@ void ControlSurfacesPanel::refresh()
     m_status["pmj"]->setText(pmjText());
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());
+    m_status["collisions"]->setText(collisionsText());
     // Triggers and the encoder bank are put away; the stop and the rest stay.
     m_buttons["map"]->setEnabled(on);
     m_buttons["encoder"]->setEnabled(on);

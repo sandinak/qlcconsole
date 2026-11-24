@@ -25,6 +25,8 @@
 
 #include "ui_inputselectionwidget.h"
 #include "qlcinputsource.h"
+#include "controlowners.h"
+#include "qlcui_export.h"
 
 class Doc;
 class QComboBox;
@@ -34,8 +36,9 @@ class QDial;
 class QLabel;
 class QCheckBox;
 class QSlider;
+class ControlCollisionBox;
 
-class InputSelectionWidget final : public QWidget, public Ui_InputSelectionWidget
+class QLC_UI_EXPORT InputSelectionWidget final : public QWidget, public Ui_InputSelectionWidget
 {
     Q_OBJECT
 
@@ -57,6 +60,13 @@ public:
 
     void setInputSource(QSharedPointer<QLCInputSource> const& source);
     QSharedPointer<QLCInputSource> inputSource() const;
+
+    /** Who this picks an input for (a Virtual Console widget unless said:
+     *  a speed master, a channel group). A control another listener has
+     *  is refused, naming it, with Move It Here (ControlOwners, Q297). */
+    void setListener(const ControlOwners::Owner &self) { m_self = self; }
+    /** The refusal (hidden when there is none). */
+    ControlCollisionBox *collisionBox() const { return m_collision; }
 
 protected slots:
     void slotAttachKey();
@@ -82,6 +92,11 @@ signals:
 
 protected:
     void updateInputSource();
+    /** Whether another listener has the control: refused (the box shows
+     *  it) and true. @a keepFeedback: Choose… keeps the feedback values. */
+    bool refuseTaken(quint32 universe, quint32 channelWithPage, bool keepFeedback);
+    /** Sets the source to the control, as Choose… or auto-detect does. */
+    void takeSource(quint32 universe, quint32 channelWithPage, bool keepFeedback);
 
 private:
     Doc *m_doc;
@@ -101,6 +116,10 @@ private:
     QSlider   *m_previewSlider;  //!< live fader preview (shown for Absolute inputs)
     QLabel    *m_previewLabel;   //!< raw value + decoded step readout
     int        m_previewAccum;   //!< accumulated preview position (relative modes)
+
+    ControlOwners::Owner m_self;
+    ControlCollisionBox *m_collision;
+    bool m_pendingKeepFeedback = false;
 };
 
 #endif // INPUTSELECTIONWIDGET_H

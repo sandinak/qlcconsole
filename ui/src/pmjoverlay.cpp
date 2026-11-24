@@ -158,6 +158,33 @@ int snapToSteadyLevel(int level)
 
 } // namespace
 
+QString PMJOverlay::controlName(quint32 channel)
+{
+    for (const PmjControl &pc : kPmjControls)
+        if (pc.channel == channel)
+            return QString::fromLatin1(pc.name);
+    return QString();
+}
+
+QList<quint32> PMJOverlay::controlChannels()
+{
+    /* Only the controls slotRoleActivated() acts on: a button with no role
+       (Favorites, the Down row), the transport (registered, not wired yet)
+       and the encoders past pan and tilt are free for a trigger or the
+       stop (control-surfaces.md, "Check it on the real device" 6-7). */
+    QList<quint32> out;
+    for (const PmjControl &pc : kPmjControls)
+    {
+        const ControlSurface::RoleType t = pc.role.type;
+        if (t == ControlSurface::RoleType::None || t == ControlSurface::RoleType::Transport)
+            continue;
+        if (t == ControlSurface::RoleType::Param && pc.role.index > 2)
+            continue;
+        out << pc.channel;
+    }
+    return out;
+}
+
 PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject *parent)
     : QObject(parent)
     , m_doc(doc)

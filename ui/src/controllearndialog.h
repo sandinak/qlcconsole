@@ -23,8 +23,10 @@
 #include <QDialog>
 
 #include "controlmap.h"
+#include "controlowners.h"
 #include "qlcui_export.h"
 
+class ControlCollisionBox;
 class QPushButton;
 class QComboBox;
 class QAction;
@@ -45,6 +47,11 @@ class Doc;
  * trigger takes an existing binding away. A key the app or the dialog needs
  * is refused, saying why (KeyTriggers::refusal()); Esc, Tab, Return, Space
  * and the arrows keep working the dialog.
+ *
+ * A control something else already listens to (another trigger, a Virtual
+ * Console widget, the encoder bank, a master, the PMJ...) is refused,
+ * naming it (ControlOwners, board Q297), with Move It Here: that takes it
+ * from there and binds it here in one go.
  */
 class QLC_UI_EXPORT ControlLearnDialog final : public QDialog
 {
@@ -80,9 +87,15 @@ protected:
 private slots:
     void slotHeard(quint32 universe, quint32 channel);
     void slotRemove();
+    /** Move It Here: the owners let go, then this binds it (accept()). */
+    void slotMoveHere();
 
 private:
     void updateText();
+    /** Who else listens to the control chosen now: refused when any. */
+    void checkOwners();
+    /** This dialog's own listener (excluded from the owners). */
+    ControlOwners::Owner self() const;
 
 private:
     Doc *m_doc;
@@ -95,6 +108,7 @@ private:
     QComboBox *m_mode;
     QPushButton *m_ok;
     QPushButton *m_remove;
+    ControlCollisionBox *m_collision;
 };
 
 /** @} */

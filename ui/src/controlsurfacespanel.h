@@ -47,7 +47,8 @@ public:
     explicit ControlSurfacesPanel(Doc *doc, QWidget *parent = nullptr);
 
     /** The row keys, in order: "map", "estop", "encoder", "vc", "masters",
-     *  "pmj", "web", "pads". */
+     *  "pmj", "web", "pads", "collisions" (Who has it now: every control
+     *  two listeners have, with how to fix it; it has no Set Up…). */
     static QStringList keys();
 
     /** The status line of row @p key, as the row shows it. */
@@ -76,6 +77,12 @@ private:
     QString webText() const;
     QString encoderText() const;
     QString stopText() const;
+    QString collisionsText() const;
+
+protected:
+    void showEvent(QShowEvent *event) override;
+
+private:
 
     Doc *m_doc;
     QLabel *m_featureOff = nullptr;

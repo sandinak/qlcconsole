@@ -84,7 +84,9 @@ modifiers), and pick how it behaves. It fires in **Operate**; in Design,
 only while it is armed: selected in the Show Tree, or in the Run tab's cue
 list. It never fires while a text field, the
 command line or an editor has the keyboard, and a key the app already uses
-is refused with the reason.
+is refused with the reason. One control does one job: a key or button
+that already fires something else is refused, naming what it does now,
+and **Move It Here** takes it over.
 
 Learn **F5** to **Red Stab**. In Operate, with the Verse up, press it.
 

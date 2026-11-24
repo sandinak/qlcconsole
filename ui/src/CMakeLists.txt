@@ -230,9 +230,11 @@ add_library(${module_name}
     showcontrolsyncpage.cpp showcontrolsyncpage.h
     controlsurfacespanel.cpp controlsurfacespanel.h
     qrencoder.cpp qrencoder.h
+    controlcollisionbox.cpp controlcollisionbox.h
     controllearndialog.cpp controllearndialog.h
     keytriggers.cpp keytriggers.h
     controlmappanel.cpp controlmappanel.h
+    controlowners.cpp controlowners.h
     shrinkablebar.h
     universecombo.cpp universecombo.h
     powerdistributiondialog.cpp powerdistributiondialog.h

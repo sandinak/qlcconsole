@@ -30,12 +30,19 @@
 #include <QLabel>
 #include <QTimer>
 #include <QMenu>
+#include <QXmlStreamReader>
 #include <QtTest>
 
 #include "controlmapui_test.h"
 #include "outputrulekeeper.h"
 #include "showcontrolsyncpage.h"
 #include "controllearndialog.h"
+#include "controlcollisionbox.h"
+#include "controlowners.h"
+#include "inputselectionwidget.h"
+#include "virtualconsole/vcpropertieseditor.h"
+#include "speedmasters.h"
+#include "encoderbank.h"
 #include "programmingoutline.h"
 #include "showtreecontroller.h"
 #include "virtualconsole/virtualconsole.h"
@@ -152,7 +159,11 @@ void ControlMapUi_Test::theLearnDialogBindsWhatItHears()
         // A control already in use: it says what it fires now.
         cm->handleInput(0, 5, 0);
         cm->handleInput(0, 190, 127);
-        QVERIFY(d2.findChild<QLabel *>("learnHeard")->text().contains("Warm"));
+        // ...refused, naming it (Q297): OK is off until Move It Here.
+        ControlCollisionBox *box = d2.findChild<ControlCollisionBox *>("controlCollision");
+        QVERIFY(box != nullptr && box->isRefusing());
+        QVERIFY2(box->text().contains("Warm"), qPrintable(box->text()));
+        QVERIFY(!d2.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
         d2.reject();
     }
     QVERIFY(!cm->isListening());
@@ -608,11 +619,13 @@ void ControlMapUi_Test::theLearnDialogLearnsAComputerKey()
     Scene *c = scene("Cool");
     ControlLearnDialog d2(m_doc, ControlMap::function(c->id()));
     QVERIFY(d2.learnKey(Qt::Key_F5, Qt::NoModifier));
-    QVERIFY(d2.findChild<QLabel *>("learnHeard")->text().contains("Warm"));
+    ControlCollisionBox *box = d2.findChild<ControlCollisionBox *>("controlCollision");
+    QVERIFY2(box->isRefusing() && box->text().contains("Warm"), qPrintable(box->text()));
     // A MIDI press after a key: the MIDI control, the key's note goes.
     cm->handleInput(0, 12, 127);
     QCOMPARE(d2.universe(), 0u);
     QVERIFY(d2.findChild<QLabel *>("learnKeyNote")->isHidden());
+    QVERIFY(!box->isRefusing());
 }
 
 /* Keys the dialog needs, the app's edit keys, a menu shortcut and a VC
@@ -841,6 +854,346 @@ void ControlMapUi_Test::learnKeyShots()
     }
 }
 
+/****************************************************************************
+ * One job per control (CONTROL_SCOPES.md §8 phase 1, board Q297)
+ ****************************************************************************/
+
+namespace
+{
+/** A Virtual Console with one button on input (0, @a channel). */
+VCButton *vcButtonOn(Doc *doc, quint32 channel, const QString &caption)
+{
+    if (VirtualConsole::instance() == nullptr)
+        new VirtualConsole(nullptr, doc);
+    VCButton *btn = new VCButton(VirtualConsole::instance()->contents(), doc);
+    btn->setCaption(caption);
+    btn->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, channel)));
+    return btn;
+}
+}
+
+/* Learn Trigger… on a control a Virtual Console button has: refused, naming
+   the button; Move It Here takes it from the button and binds it here. */
+void ControlMapUi_Test::aTriggerLearnRefusesAWidgetsControlAndMovesIt()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    VCButton *btn = vcButtonOn(m_doc, 60, "House lights");
+    QVERIFY(btn->checkInputSource(0, 60, 127, nullptr));
+
+    ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+    d.show();
+    cm->handleInput(0, 60, 127);
+    cm->handleInput(0, 60, 0);
+    ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+    QVERIFY(box != nullptr && box->isVisibleTo(&d));
+    QVERIFY2(box->text().contains("already does Button \"House lights\" (Virtual Console). One job per control."),
+             qPrintable(box->text()));
+    QPushButton *ok = d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok);
+    QVERIFY(!ok->isEnabled());
+    d.accept();                                     // OK can't take it either
+    QVERIFY(cm->isEmpty());
+    QCOMPARE(box->moveButton()->text(), QString("Move It Here"));
+    QVERIFY(box->moveButton()->isVisibleTo(&d));
+
+    QSignalSpy fired(cm, &ControlMap::fired);
+    box->moveButton()->click();
+    // The button no longer hears it; the trigger does.
+    QVERIFY(btn->inputSource(0).isNull());
+    QVERIFY(!btn->checkInputSource(0, 60, 127, nullptr));
+    const ControlMap::Binding *b = cm->binding(ControlMap::function(a->id()));
+    QVERIFY(b != nullptr && b->channel == 60u);
+    QVERIFY(!cm->isListening());
+    cm->handleInput(0, 60, 0);
+    cm->handleInput(0, 60, 127);
+    QCOMPARE(fired.count(), 1);
+}
+
+/* The PMJ's controls come with its profile: refused with the reason, and no
+   Move It Here. */
+void ControlMapUi_Test::aPmjControlIsRefusedWithNoMoveItHere()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    QVERIFY(!m_doc->ioPluginCache()->plugins().isEmpty());
+    QVERIFY(iom->setInputPatch(0, m_doc->ioPluginCache()->plugins().at(0)->name(), QString(), 0));
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("PMJ");
+    prof->setModel("Black 1");
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+    const quint32 ch3 = 32771;
+    QCOMPARE(ControlOwners::pmjControlName(ch3), QString("Ch 3"));
+
+    ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+    d.show();
+    cm->handleInput(0, ch3, 127);
+    ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+    QVERIFY2(box->isRefusing() && box->text().contains("the PMJ Black 1's Ch 3 (PMJ overlay)"),
+             qPrintable(box->text()));
+    QVERIFY2(box->text().contains("can't be moved"), qPrintable(box->text()));
+    QVERIFY(!box->moveButton()->isVisibleTo(&d));
+    QVERIFY(box->cancelButton()->isVisibleTo(&d));
+    QVERIFY(!ControlOwners::releaseAll(m_doc, box->owners()));
+    box->cancelButton()->click();
+    QVERIFY(!box->isRefusing());
+    QVERIFY(!d.hasControl());
+}
+
+/* The encoder bank's learn refuses a trigger's control (and Move It Here
+   moves it); a trigger's learn refuses an encoder's. */
+void ControlMapUi_Test::theEncoderLearnRefusesAndMoves()
+{
+    Scene *a = scene("Warm");
+    Scene *c = scene("Cool");
+    ControlMap *cm = m_doc->controlMap();
+    EncoderBank *enc = cm->encoderBank();
+    EncoderBank::Device dev;
+    dev.universe = 0;
+    dev.encoders = 16;
+    dev.encoderCount = 8;
+    enc->setDevice(dev, QStringLiteral("custom"));
+    QVERIFY(enc->isEnabled());
+
+    // A trigger on encoder 3's control: refused, naming the encoder.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(c->id()));
+        d.show();
+        cm->handleInput(0, 18, 127);
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+        QVERIFY2(box->isRefusing() && box->text().contains("Encoder 3 (encoder bank)"), qPrintable(box->text()));
+        d.reject();
+    }
+
+    cm->setBinding({ 0, 40, ControlMap::function(a->id()), ControlMap::Toggle });
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QAction *next = panel.findChild<QAction *>("encoderLearnNext");
+    QVERIFY(next != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderLearnMore", Q_ARG(QAction *, next)));
+    QVERIFY(cm->isListening());
+    cm->handleInput(0, 40, 127);
+    ControlCollisionBox *box = panel.encoderCollision();
+    QVERIFY2(box->isRefusing() && box->text().contains("Scene: Warm (Control Map)"), qPrintable(box->text()));
+    QCOMPARE(enc->device().bankNext, -1);            // not taken yet
+    box->moveButton()->click();
+    QVERIFY(cm->binding(ControlMap::function(a->id())) == nullptr);
+    QCOMPARE(enc->device().bankNext, 40);
+    QVERIFY(!box->isRefusing());
+    // The trigger no longer fires; the bank steps on it.
+    QSignalSpy fired(cm, &ControlMap::fired);
+    QSignalSpy bank(enc, &EncoderBank::bankChanged);
+    cm->handleInput(0, 40, 0);
+    cm->handleInput(0, 40, 127);
+    enc->handleInput(0, 40, 127);
+    QCOMPARE(fired.count(), 0);
+    QCOMPARE(bank.count(), 1);
+}
+
+/* A Virtual Console widget's External Input (auto-detect), a speed master's
+   Inputs… and the Grand Master's input refuse a control with another job,
+   with Move It Here. */
+void ControlMapUi_Test::theInputPickersRefuseAndMove()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    new VirtualConsole(nullptr, m_doc);
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    cm->setBinding({ 0, 60, ControlMap::function(a->id()), ControlMap::Toggle });
+
+    // A widget's External Input, auto-detected.
+    InputSelectionWidget isw(m_doc);
+    QSignalSpy picked(&isw, &InputSelectionWidget::inputValueChanged);
+    isw.m_autoDetectInputButton->setChecked(true);
+    emit iom->inputValueChanged(0, 60, 127);
+    QVERIFY(isw.collisionBox()->isRefusing());
+    QVERIFY2(isw.collisionBox()->text().contains("already does Scene: Warm (Control Map). One job per control."),
+             qPrintable(isw.collisionBox()->text()));
+    QVERIFY(isw.inputSource().isNull());
+    QCOMPARE(picked.count(), 0);
+    isw.collisionBox()->moveButton()->click();
+    QVERIFY(cm->binding(ControlMap::function(a->id())) == nullptr);
+    QVERIFY(!isw.inputSource().isNull());
+    QCOMPARE(isw.inputSource()->channel(), 60u);
+    QCOMPARE(picked.count(), 1);
+    isw.m_autoDetectInputButton->setChecked(false);
+
+    // A speed master's input on another master's control.
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(1, SpeedMasters::RateControl, 0, 70);
+    InputSelectionWidget tap(m_doc);
+    ControlOwners::Owner self;
+    self.kind = ControlOwners::SpeedMaster;
+    self.index = 0;
+    self.part = SpeedMasters::TapControl;
+    tap.setListener(self);
+    tap.m_autoDetectInputButton->setChecked(true);
+    emit iom->inputValueChanged(0, 70, 127);
+    QVERIFY2(tap.collisionBox()->isRefusing() && tap.collisionBox()->text().contains("Rate (Speed Masters)"),
+             qPrintable(tap.collisionBox()->text()));
+    tap.collisionBox()->moveButton()->click();
+    QVERIFY(!sm->input(1, SpeedMasters::RateControl, nullptr, nullptr));
+    tap.m_autoDetectInputButton->setChecked(false);
+
+    // The Grand Master's input on a trigger's control.
+    cm->setBinding({ 0, 61, ControlMap::function(a->id()), ControlMap::Toggle });
+    VCPropertiesEditor vcpe(nullptr, VirtualConsole::instance()->properties(), iom);
+    QVERIFY(QMetaObject::invokeMethod(&vcpe, "slotGrandMasterInputValueChanged",
+                                      Q_ARG(quint32, 0), Q_ARG(quint32, 61)));
+    ControlCollisionBox *gm = vcpe.grandMasterCollision();
+    QVERIFY2(gm->isRefusing() && gm->text().contains("Scene: Warm"), qPrintable(gm->text()));
+    QVERIFY(vcpe.properties().grandMasterInputUniverse() == InputOutputMap::invalidUniverse());
+    gm->moveButton()->click();
+    QCOMPARE(vcpe.properties().grandMasterInputChannel(), 61u);
+    QVERIFY(cm->isEmpty());
+}
+
+/* The emergency stop: nothing takes its control (no Move It Here), and its
+   own Learn takes a control from anything else, with Move It Here. */
+void ControlMapUi_Test::theStopIsNeverTakenButCanTake()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    VCButton *btn = vcButtonOn(m_doc, 88, "Blackout");
+    cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::StartOnly });
+
+    // A widget's input on the stop's control: refused, no Move It Here.
+    InputSelectionWidget isw(m_doc);
+    isw.m_autoDetectInputButton->setChecked(true);
+    emit iom->inputValueChanged(0, 9, 127);
+    QVERIFY2(isw.collisionBox()->isRefusing()
+             && isw.collisionBox()->text().contains("the emergency stop (Control Map)"),
+             qPrintable(isw.collisionBox()->text()));
+    QVERIFY(!isw.collisionBox()->moveButton()->isVisibleTo(&isw));
+    QVERIFY(!ControlOwners::releaseAll(m_doc, isw.collisionBox()->owners()));
+    QVERIFY(isw.inputSource().isNull());
+    isw.m_autoDetectInputButton->setChecked(false);
+
+    // A trigger's learn never hears it: the stop acts first, learning or not.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        cm->handleInput(0, 9, 0);
+        cm->handleInput(0, 9, 127);
+        QVERIFY(!d.hasControl());
+        d.reject();
+    }
+    QVERIFY(cm->binding(ControlMap::emergencyStop())->channel == 9u);
+
+    // The stop's own learn on the button's control: Move It Here takes it.
+    cm->removeBinding(ControlMap::emergencyStop());
+    ControlLearnDialog d(m_doc, ControlMap::emergencyStop());
+    d.show();
+    cm->handleInput(0, 88, 127);
+    cm->handleInput(0, 88, 0);
+    cm->handleInput(0, 88, 127);
+    ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+    QVERIFY2(box->isRefusing() && box->text().contains("Button \"Blackout\""), qPrintable(box->text()));
+    QVERIFY(box->moveButton()->isVisibleTo(&d));
+    box->moveButton()->click();
+    QVERIFY(btn->inputSource(0).isNull());
+    const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
+    QVERIFY(stop != nullptr && stop->channel == 88u);
+}
+
+/* A show that already has two jobs on a control (saved before the refusal)
+   loads as it is, and the hub's Who has it now lists it, with the fix. */
+void ControlMapUi_Test::theHubListsControlsWithTwoJobs()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    VCButton *btn = vcButtonOn(m_doc, 60, "House lights");
+    // As a show loads it: no Learn, so nothing refused.
+    QByteArray xml = QByteArrayLiteral("<ControlMap><Trigger Universe=\"0\" Channel=\"60\" Target=\"Function\" ID=\"")
+            + QByteArray::number(a->id()) + QByteArrayLiteral("\" Mode=\"Toggle\"/></ControlMap>");
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    QVERIFY(cm->loadXML(r));
+    QCOMPARE(cm->count(), 1);
+    QVERIFY(btn->checkInputSource(0, 60, 127, nullptr));
+
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    hub->refresh();
+    const QString text = hub->status("collisions");
+    QVERIFY2(text.contains("Scene: Warm (Control Map)") && text.contains("Button \"House lights\" (Virtual Console)"),
+             qPrintable(text));
+    QVERIFY2(text.contains("Move It Here") && text.contains("Control Map table ▸ Remove")
+             && text.contains("External Input"), qPrintable(text));
+    QVERIFY2(hub->summary().contains("1 control with two jobs"), qPrintable(hub->summary()));
+    QCOMPARE(ControlOwners::collisions(m_doc).count(), 1);
+    QCOMPARE(ControlOwners::collisions(m_doc).first().owners.first().place, ControlOwners::Everywhere);
+
+    // Fixed (the trigger removed): one job again.
+    cm->removeBinding(ControlMap::function(a->id()));
+    QCOMPARE(hub->status("collisions"), QString("Every control has one job"));
+}
+
+/* With QLC_SHOT_DIR: the refusal in the Learn dialog (movable and fixed)
+   and the hub's Who has it now row, at three sizes (UX review). */
+void ControlMapUi_Test::collisionShots()
+{
+    const QByteArray env = qgetenv("QLC_SHOT_DIR");
+    if (env.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    const QDir dir(QString::fromLocal8Bit(env));
+    QDir().mkpath(dir.absolutePath());
+    Scene *a = scene("Warm wash");
+    ControlMap *cm = m_doc->controlMap();
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 60, "House lights");
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        cm->handleInput(0, 60, 127);
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QVERIFY(d.grab().save(dir.absoluteFilePath("collision-learn.png")));
+        d.reject();
+    }
+    // A widget's External Input on the stop's control: refused, no Move It Here.
+    cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    {
+        QDialog d;
+        QVBoxLayout *lay = new QVBoxLayout(&d);
+        InputSelectionWidget *isw = new InputSelectionWidget(m_doc, &d);
+        lay->addWidget(isw);
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        isw->m_autoDetectInputButton->setChecked(true);
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 9, 127);
+        isw->m_autoDetectInputButton->setChecked(false);
+        QVERIFY(isw->collisionBox()->isRefusing());
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QVERIFY(d.grab().save(dir.absoluteFilePath("collision-input-stop.png")));
+    }
+    // A show that has two jobs on one control: the hub lists it.
+    cm->setBinding({ 0, 60, ControlMap::function(a->id()), ControlMap::Toggle });
+    InputOutputManager mgr(nullptr, m_doc);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlPage();
+        mgr.findChild<ConnectionsTree *>()->selectShowControlRow(QStringLiteral("surfaces"));
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(dir.absoluteFilePath(QString("collision-hub-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
+}
+
 QTEST_MAIN(ControlMapUi_Test)
 
 /* The Control surfaces hub (Connections ▸ Devices ▸ Show control & sync):
@@ -859,9 +1212,13 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     ControlSurfacesPanel *hub = page->surfaces();
     QVERIFY(hub != nullptr);
     QCOMPARE(ControlSurfacesPanel::keys(),
-             QStringList({ "map", "estop", "encoder", "vc", "masters", "pmj", "web", "pads" }));
+             QStringList({ "map", "estop", "encoder", "vc", "masters", "pmj", "web", "pads", "collisions" }));
+    QCOMPARE(hub->status("collisions"), QString("Every control has one job"));
+    QVERIFY(hub->setUpButton("collisions") == nullptr);     // read only
     for (const QString &key : ControlSurfacesPanel::keys())
     {
+        if (key == QLatin1String("collisions"))
+            continue;
         QVERIFY2(hub->setUpButton(key) != nullptr, qPrintable(key));
         QCOMPARE(hub->setUpButton(key)->text(), QString("Set Up…"));
         QVERIFY2(!hub->status(key).isEmpty(), qPrintable(key));

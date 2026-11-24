@@ -59,6 +59,14 @@ private slots:
     void theSurfacesStatusFollowsTheShow();
     void surfacesOffKeepsTheStop();
     void surfacesShots();
+    // One job per control (Q297)
+    void aTriggerLearnRefusesAWidgetsControlAndMovesIt();
+    void aPmjControlIsRefusedWithNoMoveItHere();
+    void theEncoderLearnRefusesAndMoves();
+    void theInputPickersRefuseAndMove();
+    void theStopIsNeverTakenButCanTake();
+    void theHubListsControlsWithTwoJobs();
+    void collisionShots();
 
 private:
     Scene *scene(const QString &name);

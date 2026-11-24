@@ -291,6 +291,11 @@ void SpeedMastersPanel::editInputs(int index)
         pick[c]->setTitle(titles.at(c));
         pick[c]->setKeyInputVisibility(false);
         pick[c]->setCustomFeedbackVisibility(false);
+        ControlOwners::Owner self;      // one job per control (Q297)
+        self.kind = ControlOwners::SpeedMaster;
+        self.index = index;
+        self.part = int(controls[c]);
+        pick[c]->setListener(self);
         quint32 u = 0, ch = 0;
         if (sm->input(index, controls[c], &u, &ch))
             pick[c]->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(u, ch)));
