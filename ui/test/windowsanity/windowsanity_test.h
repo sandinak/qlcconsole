@@ -55,6 +55,15 @@ private slots:
      *  window's screen. QLC_SHOT_DIR saves the banner at the three sizes. */
     void aHiddenEditorIsFoundFromTheBanner();
 
+    /** A dialog the person put on another screen stays there when it is
+     *  hidden and shown again (WindowPlacement leaves a placed dialog that
+     *  is wholly on a screen); one across two screens is pulled onto one. */
+    void aDialogPutOnAnotherScreenStaysThere();
+
+    /** The banner's filter runs ahead of the rig-view lock's: a click given
+     *  straight to Show It reaches it while the editor is open. */
+    void theBannerAnswersAheadOfTheLock();
+
     /** Every window at every screen size. */
     void everyWindowWorksThroughItsWindow_data();
     void everyWindowWorksThroughItsWindow();

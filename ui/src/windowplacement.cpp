@@ -18,6 +18,7 @@
 */
 
 #include <QApplication>
+#include <QGuiApplication>
 #include <QEvent>
 #include <QMargins>
 #include <QPointer>
@@ -41,7 +42,9 @@ public:
         /* Show comes before the window is put on the screen (and before
            QDialog centres one that was never moved): placed here, it never
            flashes up elsewhere. */
-        if (e->type() == QEvent::Show && obj->isWidgetType())
+        // A spontaneous show (un-minimised, the window system's own) is
+        // where the person left it.
+        if (e->type() == QEvent::Show && !e->spontaneous() && obj->isWidgetType())
             WindowPlacement::keepOnParentScreen(static_cast<QWidget *>(obj));
         return false;
     }
@@ -56,23 +59,42 @@ void WindowPlacement::install()
     qApp->installEventFilter(s_watcher);
 }
 
+QRect WindowPlacement::clampInto(QRect r, const QRect &room)
+{
+    r.moveLeft(qBound(room.left(), r.left(), qMax(room.left(), room.right() + 1 - r.width())));
+    r.moveTop(qBound(room.top(), r.top(), qMax(room.top(), room.bottom() + 1 - r.height())));
+    return r;
+}
+
 bool WindowPlacement::keepOnParentScreen(QWidget *w)
 {
     if (w == nullptr || !w->isWindow() || w->windowType() != Qt::Dialog || w->parentWidget() == nullptr)
         return false;
     QWidget *anchor = w->parentWidget()->window();
-    if (anchor == nullptr || !anchor->isVisible())
-        return false;
-    QScreen *screen = anchor->screen();
-    if (screen == nullptr)
+    if (anchor == nullptr || !anchor->isVisible() || anchor->screen() == nullptr)
         return false;
 
-    const QRect room = screen->availableGeometry();
     QRect frame = w->frameGeometry();
     if (w->windowHandle() != nullptr)
         frame = frame.united(w->geometry().marginsAdded(w->windowHandle()->frameMargins()));
-    const bool elsewhere = w->screen() != screen || !room.intersects(frame);
-    if (!elsewhere && room.contains(frame))
+    const bool neverPlaced = !w->testAttribute(Qt::WA_Moved);
+
+    /* Where it goes. One never placed: QDialog centres it over its main
+       window, on that window's screen; only its size is ours to check. One
+       placed (a saved place, a move, the person's own drag onto another
+       screen): it stays wherever it is wholly on a screen, and is only
+       pulled onto one when it is on none or across an edge. */
+    QScreen *screen = anchor->screen();
+    if (!neverPlaced)
+    {
+        for (QScreen *s : QGuiApplication::screens())
+            if (s->availableGeometry().contains(frame))
+                return false;
+        if (QScreen *under = QGuiApplication::screenAt(frame.center()))
+            screen = under;
+    }
+    const QRect room = screen->availableGeometry();
+    if (neverPlaced && frame.width() <= room.width() && frame.height() <= room.height())
         return false;
 
     /* The frame's own margins (title bar): the window's, which the platform
@@ -83,20 +105,18 @@ bool WindowPlacement::keepOnParentScreen(QWidget *w)
         const QMargins m = w->windowHandle()->frameMargins();
         margins = margins.expandedTo(QSize(m.left() + m.right(), m.top() + m.bottom()));
     }
-    const QSize most = room.size() - margins;
-    const QSize size = w->size().boundedTo(most).expandedTo(w->minimumSize());
+    const QSize size = w->size().boundedTo(room.size() - margins).expandedTo(w->minimumSize());
     if (size != w->size())
         w->resize(size);
 
     /* Placed here, which also keeps QDialog from centring it again by its
        own sums (they left a dialog as tall as the screen 2 px past its
-       bottom): one never put anywhere, or on another screen, is centred
-       over its main window, as QDialog would; then kept inside the room. */
+       bottom): one never placed is centred over its main window, as QDialog
+       would; one placed keeps its place as far as the room allows. */
     QRect r(frame.topLeft(), size + margins);
-    if (elsewhere || !w->testAttribute(Qt::WA_Moved))
+    if (neverPlaced)
         r.moveCenter(anchor->frameGeometry().center());
-    r.moveLeft(qBound(room.left(), r.left(), qMax(room.left(), room.right() + 1 - r.width())));
-    r.moveTop(qBound(room.top(), r.top(), qMax(room.top(), room.bottom() + 1 - r.height())));
+    r = clampInto(r, room);
     if (w->windowHandle() != nullptr && w->windowHandle()->screen() != screen)
         w->windowHandle()->setScreen(screen);
     w->move(r.topLeft());

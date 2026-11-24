@@ -40,6 +40,7 @@
 #include <QApplication>
 #include <QLabel>
 #include <QLineEdit>
+#include <QInputMethodEvent>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QAbstractSpinBox>
@@ -3539,6 +3540,80 @@ void Monitor_Test::theFixtureEditorTakesClicksAndKeysThroughItsWindow()
     QVERIFY2(!grabberAfterRelease, "the plot still held the press that opened the editor after its release");
     QVERIFY2(dbl.closedByAct, "after a double click opened it, a click on Cancel did not reach Cancel");
     QVERIFY(editor() == nullptr);
+}
+
+/* The other side of the window fix: what reaches the main window while
+   Fixture Properties is open is still held. Through the main window's own
+   window, as a real screen sends them: a click and a key on a field of the
+   main window type nothing, text an input method commits (dead keys, a
+   held accent, emoji, an IME) does not land there, a click on a toolbar
+   button does not press it, and an app-wide shortcut does not fire. After
+   the dropped click the keyboard is the editor's again. Without the lock
+   every one of these gets through. */
+void Monitor_Test::theFixtureEditorStillHoldsTheMainWindow()
+{
+    DropRig rig;
+    QVERIFY(rig.build(m_doc, QVector3D(8000, 8000, 0)));
+    rig.parent.resize(1230, 760);
+    QLineEdit *field = new QLineEdit(&rig.parent);
+    field->setObjectName(QStringLiteral("mainField"));
+    field->setGeometry(1000, 20, 200, 26);
+    int pressed = 0, fired = 0;
+    QToolButton *tool = new QToolButton(&rig.parent);
+    tool->setText(QStringLiteral("Tool"));
+    tool->setGeometry(1000, 60, 80, 26);
+    connect(tool, &QToolButton::clicked, this, [&pressed]() { ++pressed; });
+    QAction *shortcut = new QAction(QStringLiteral("Anywhere"), &rig.parent);
+    shortcut->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F9));
+    shortcut->setShortcutContext(Qt::ApplicationShortcut);
+    rig.parent.addAction(shortcut);
+    connect(shortcut, &QAction::triggered, this, [&fired]() { ++fired; });
+    rig.parent.show();
+    field->raise();
+    tool->raise();
+    QVERIFY(QTest::qWaitForWindowExposed(&rig.parent));
+    QWindow *mainWin = rig.parent.windowHandle();
+    QVERIFY(mainWin != nullptr);
+
+    bool opened = false, editorHasKeys = false;
+    QString typed;
+    QTimer::singleShot(0, this, [&]() {
+        QDialog *dlg = nullptr;
+        (void)QTest::qWaitFor([&]() {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (w->isVisible() && qobject_cast<QDialog *>(w) != nullptr
+                    && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+                    dlg = static_cast<QDialog *>(w);
+            return dlg != nullptr;
+        }, 3000);
+        if (dlg == nullptr)
+            return;
+        opened = true;
+        (void)QTest::qWaitForWindowExposed(dlg->windowHandle());
+
+        // A click on the main window's field, then a key, through its window.
+        QTest::mouseClick(mainWin, Qt::LeftButton, Qt::NoModifier, field->geometry().center());
+        QTest::keyClick(mainWin, Qt::Key_X);
+        // Text from an input method, to whatever has the focus there.
+        QInputMethodEvent ime;
+        ime.setCommitString(QStringLiteral("é"));
+        QApplication::sendEvent(field, &ime);
+        // A toolbar button, and an app-wide shortcut.
+        QTest::mouseClick(mainWin, Qt::LeftButton, Qt::NoModifier, tool->geometry().center());
+        QTest::keyClick(mainWin, Qt::Key_F9, Qt::ControlModifier | Qt::ShiftModifier);
+        QTest::qWait(20);
+        QApplication::processEvents();
+        typed = field->text();
+        QWidget *f = QApplication::focusWidget();
+        editorHasKeys = f != nullptr && (f == dlg || dlg->isAncestorOf(f));
+        dlg->reject();
+    });
+    rig.mon->showFixtureItemEditor(rig.fxi->id());
+    QVERIFY(opened);
+    QVERIFY2(typed.isEmpty(), qPrintable(QStringLiteral("the main window's field took \"%1\"").arg(typed)));
+    QCOMPARE(pressed, 0);
+    QCOMPARE(fired, 0);
+    QVERIFY2(editorHasKeys, "after a dropped click the keyboard was not the editor's");
 }
 
 /* Qt's Cocoa plugin makes every dialog an NSPanel that moves to the active

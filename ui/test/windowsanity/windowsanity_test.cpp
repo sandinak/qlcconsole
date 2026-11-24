@@ -235,6 +235,10 @@ enum RowFlag
     /** A free window (not a dialog) that reopens where it was put, on any
      *  screen: it must fit there, not on the main window's screen. */
     FreeWindow = 1 << 1,
+    /** Puts itself back where the person last had it (saved geometry): on
+     *  that screen if it is still there, the person's choice. It must be
+     *  wholly on a screen; the main window's only the first time. */
+    RemembersPlace = 1 << 2,
 };
 
 struct Row
@@ -286,16 +290,16 @@ QList<Row> windows()
          << row("ShowSettingsDialog", QStringLiteral("Show Settings"), [](App *a) { a->openShowSettings(); })
          << row("UnsavedChangesDialog", QStringLiteral("Unsaved changes"),
                 [](App *a) { a->slotShowUnsavedChanges(); })
-         << row("AddressTool", QStringLiteral("Address tool"), [](App *a) { a->slotAddressTool(); })
+         << row("AddressTool", QStringLiteral("Address tool"), [](App *a) { a->slotAddressTool(); }, RemembersPlace)
          << row("DmxMonitorWindow", QStringLiteral("DMX monitor"), [](App *a) { a->slotDmxMonitor(); },
                 ClosesByWindow | FreeWindow)
          << row("BugReportDialog", QStringLiteral("Report a Bug"), [](App *a) { a->reportBug(); })
          << row("TimecodeCalibrationDialog", QStringLiteral("Timecode calibration"),
                 [](App *a) { a->openTimecodeCalibration(); })
          << row("ShowStatusDialog", QStringLiteral("Show status"), [](App *a) { a->showStatusDetails(); })
-         << row("DmxDumpFactory", QStringLiteral("Dump DMX"), [](App *a) { a->slotDumpDmxIntoFunction(); })
+         << row("DmxDumpFactory", QStringLiteral("Dump DMX"), [](App *a) { a->slotDumpDmxIntoFunction(); }, RemembersPlace)
          << row("FunctionSelection", QStringLiteral("Live edit, pick a function"),
-                [](App *a) { a->slotFunctionLiveEdit(); })
+                [](App *a) { a->slotFunctionLiveEdit(); }, RemembersPlace)
          << row("app.cpp#Tabs & Features", QStringLiteral("Tabs and Features"),
                 [](App *a) { a->slotChooseTabs(); })
          << row("DefinitionUpdatesDialog", QStringLiteral("Definition Updates"),
@@ -338,11 +342,11 @@ QList<Row> windows()
                     QVERIFY(trigger(m->m_moreBtn->menu(), QStringLiteral("Patch List…")));
                 })
          << row("PowerDistributionDialog", QStringLiteral("Power distribution"),
-                [](App *a) { emit studio(a)->m_graphicsView->powerDoubleClicked(0); })
+                [](App *a) { emit studio(a)->m_graphicsView->powerDoubleClicked(0); }, RemembersPlace)
          << row("MonitorBackgroundSelection", QStringLiteral("Background"),
-                [](App *a) { studio(a)->slotSetBackground(); })
+                [](App *a) { studio(a)->slotSetBackground(); }, RemembersPlace)
          << row("FixtureSelection", QStringLiteral("Add fixture to the plot"),
-                [](App *a) { studio(a)->slotAddFixture(); });
+                [](App *a) { studio(a)->slotAddFixture(); }, RemembersPlace);
 
     // ---- Focus calls and venues ----
     list << row("FocusCallsDialog", QStringLiteral("Focus calls"),
@@ -564,10 +568,11 @@ QStringList checkOpen(App *app, const Row &r, QWidget *w)
                                    "behind it, on another screen or Space)");
 
     // On the main window's screen, and wholly on it.
-    if (w->screen() != app->screen() && !(r.flags & FreeWindow))
+    const bool ownPlace = (r.flags & (FreeWindow | RemembersPlace)) != 0;
+    if (w->screen() != app->screen() && !ownPlace)
         problems << QStringLiteral("opened on screen %1, its main window is on %2")
                         .arg(w->screen()->name(), app->screen()->name());
-    const QRect room = ((r.flags & FreeWindow) ? w->screen() : app->screen())->availableGeometry();
+    const QRect room = (ownPlace ? w->screen() : app->screen())->availableGeometry();
     const QRect frame = w->frameGeometry();
     if (!room.contains(frame))
         problems << QStringLiteral("runs off its screen: %1x%2 at (%3,%4), the screen has %5x%6 at (%7,%8)")
@@ -942,16 +947,8 @@ void WindowSanity_Test::theCheckerFindsWhatItShould()
                d->show();
            }), QStringLiteral("runs off its screen"));
 
-    /* A dialog put back where it was last time, on another screen than the
-       main window's now (a saved geometry), and one a little taller than
-       the laptop with room to shrink: WindowPlacement brings each onto the
-       main window's screen and fits it. */
-    QVERIFY(placeMain(m_app, screens.at(1)));
-    expect(QStringLiteral("a saved place on another screen"), row("", QStringLiteral("saved"), [](App *a) {
-               QDialog *d = goodDialog(a);
-               d->move(sizeScreens().first()->availableGeometry().topLeft() + QPoint(30, 30));
-               d->show();
-           }), QString());
+    /* A dialog a little taller than the laptop, with room to shrink:
+       WindowPlacement fits it on its main window's screen. */
     QVERIFY(placeMain(m_app, screens.first()));
     expect(QStringLiteral("taller than the laptop, can shrink"), row("", QStringLiteral("shrinks"), [](App *a) {
                QDialog *d = goodDialog(a);
@@ -1080,6 +1077,91 @@ void WindowSanity_Test::aHiddenEditorIsFoundFromTheBanner()
                  qPrintable(sizeName(s) + QStringLiteral(": ") + problems.join(QStringLiteral("; "))));
         QVERIFY2(BlockingWindowBanner::bannerOn(plot) == nullptr, "the banner stayed after the editor closed");
     }
+}
+
+void WindowSanity_Test::aDialogPutOnAnotherScreenStaysThere()
+{
+    const QList<QScreen *> screens = sizeScreens();
+    QVERIFY(placeMain(m_app, screens.first()));
+    QScreen *other = screens.last();
+
+    /* Kept and shown again, as the Show Tree's notes list is: the person
+       dragged it onto the second screen. Hidden and shown, it is still
+       there; the main window's screen does not pull it back. */
+    QDialog *d = goodDialog(m_app);
+    d->setAttribute(Qt::WA_DeleteOnClose, false);
+    d->show();
+    QVERIFY(QTest::qWaitForWindowExposed(d));
+    d->windowHandle()->setScreen(other);
+    const QPoint there = other->availableGeometry().topLeft() + QPoint(200, 150);
+    d->move(there);
+    settle();
+    QCOMPARE(d->screen(), other);
+    for (int round = 0; round < 2; ++round)
+    {
+        d->hide();
+        settle();
+        d->show();
+        settle();
+        QVERIFY2(d->screen() == other, qPrintable(QStringLiteral("round %1: pulled to %2")
+                                                     .arg(round).arg(d->screen()->name())));
+        QCOMPARE(d->frameGeometry().topLeft(), there);
+    }
+
+    /* Across the edge of two screens (wholly on neither): pulled onto the
+       one under its middle, wholly. */
+    d->hide();
+    const QRect edge = screens.at(1)->availableGeometry();
+    d->resize(300, 200);
+    d->move(edge.left() - 40, edge.top() + 50);            // mostly on the second screen
+    d->show();
+    settle();
+    bool wholly = false;
+    for (QScreen *s : QGuiApplication::screens())
+        wholly = wholly || s->availableGeometry().contains(d->frameGeometry());
+    QVERIFY2(wholly, "a dialog across two screens was left across them");
+    QCOMPARE(d->screen(), screens.at(1));
+    delete d;
+}
+
+void WindowSanity_Test::theBannerAnswersAheadOfTheLock()
+{
+    /* The banner's own filter is installed after the rig-view lock's and so
+       runs first: a click handed straight to Show It (not through the
+       window, where the lock lets everything by) reaches it although the
+       lock drops every other click on the plot. Swap the two lines in
+       Monitor::execFixtureEditor and this fails. */
+    const QList<quint32> ids = someFixtures(m_app->doc(), 1);
+    QVERIFY(!ids.isEmpty());
+    QVERIFY(placeMain(m_app, sizeScreens().first()));
+    Monitor *mon = studio(m_app);
+    QVERIFY(mon != nullptr);
+    bool ran = false, back = false;
+    QTimer::singleShot(0, this, [&]() {
+        QDialog *dlg = nullptr;
+        (void)QTest::qWaitFor([&]() {
+            for (QWidget *w : QApplication::topLevelWidgets())
+                if (w->isVisible() && w->windowTitle().startsWith(QStringLiteral("Fixture Properties")))
+                    dlg = qobject_cast<QDialog *>(w);
+            return dlg != nullptr;
+        }, kOpenTimeout);
+        if (dlg == nullptr)
+            return;
+        ran = true;
+        dlg->hide();
+        settle();
+        if (BlockingWindowBanner *b = BlockingWindowBanner::bannerOn(mon->m_graphicsView))
+        {
+            QTest::mouseClick(b->showButton(), Qt::LeftButton);
+            settle();
+            back = dlg->isVisible();
+        }
+        dlg->reject();
+    });
+    mon->showFixtureItemEditor(ids.first());
+    settle();
+    QVERIFY2(ran, "Fixture Properties did not open");
+    QVERIFY2(back, "a click on Show It did not get past the rig-view lock");
 }
 
 void WindowSanity_Test::everyWindowWorksThroughItsWindow_data()

@@ -103,7 +103,7 @@ check_source()
     counts=$(inline_counts "$root")
     while read -r f n; do
         [ -n "$f" ] || continue
-        rows=$(echo "$keys" | grep -cF "$f#")
+        rows=$(echo "$keys" | awk -v f="$f" 'index($0, f "#") == 1 { n++ } END { print n + 0 }')
         allowed=$(echo "$allow_inline" | awk -v f="$f" '$1 == f { s += $2 } END { print s + 0 }')
         if [ $((rows + allowed)) -lt "$n" ]; then
             echo "ui/src/$f: $n dialogs built in place, $rows with a row and $allowed allowed:"
@@ -145,7 +145,7 @@ print_missing()
         printf '%-32s not yet walked\n' "$c"
     done
     inline_counts "$root" | while read -r f n; do
-        rows=$(echo "$keys" | grep -cF "$f#")
+        rows=$(echo "$keys" | awk -v f="$f" 'index($0, f "#") == 1 { n++ } END { print n + 0 }')
         [ "$n" -gt "$rows" ] && printf 'inline %s %d  not yet walked\n' "$f" $((n - rows))
     done
 }
@@ -185,6 +185,15 @@ self_test()
     expect 1 "a new dialog built in place without a row" check_source "$r"
     printf 'row("monitor/plot.cpp#Box", x)\n' >> "$r/$TEST_REL"
     expect 0 "the new one given a row" check_source "$r"
+
+    printf 'void h()\n{\n    QDialog top(this);\n}\n' > "$r/ui/src/plot.cpp"
+    printf 'row("monitor/plot.cpp#Extra", x)\n' >> "$r/$TEST_REL"
+    printf 'inline monitor/plot.cpp 0  x\n' >> "$r/$ALLOW_REL"
+    expect 1 "a row for monitor/plot.cpp does not cover plot.cpp" check_source "$r"
+    rm "$r/ui/src/plot.cpp"
+    sed -i.bak -e '/#Extra/d' "$r/$TEST_REL" && rm -f "$r/$TEST_REL.bak"
+    sed -i.bak -e '/ 0  x$/d' "$r/$ALLOW_REL" && rm -f "$r/$ALLOW_REL.bak"
+    expect 0 "back as it was" check_source "$r"
 
     printf 'row("Beta", x)\n' >> "$r/$TEST_REL"
     expect 1 "a class with a row still on the allowlist" check_source "$r"

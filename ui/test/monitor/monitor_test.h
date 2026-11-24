@@ -142,6 +142,11 @@ private slots:
     /** Fixture Properties (and every parented dialog) stays on its main
      *  window's macOS Space on a Cmd-Tab back (WindowSpace). */
     void theFixtureEditorStaysOnItsMainWindowsSpace();
+    /** While Fixture Properties is open, a click, a key, input-method text,
+     *  a toolbar button and an app-wide shortcut sent through the main
+     *  window's own window are still held; the keyboard goes back to the
+     *  editor after a dropped click. Fails without the rig-view lock. */
+    void theFixtureEditorStillHoldsTheMainWindow();
     /** Fixture Properties' orientation diagram draws a fixed light where it
      *  throws: each of the six faces (Back upstage, Bottom down, Stage left
      *  SL), and a Pan/Tilt aim, following the aim as it is edited (RC5). */

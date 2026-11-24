@@ -12578,8 +12578,35 @@ public:
 
     bool eventFilter(QObject *obj, QEvent *e) override
     {
+        const bool drop = drops(obj, e);
+        /* Qt gives a click's focus (to a field of the main window, say)
+           before any filter sees the press: a dropped press still moved the
+           keyboard out of the editor, and what is typed by input method
+           (dead keys, accents held down, emoji, an IME) would land there.
+           The keyboard goes back to the editor. */
+        if (drop && (e->type() == QEvent::MouseButtonPress || e->type() == QEvent::MouseButtonDblClick))
+            QTimer::singleShot(0, this, [this]() { refocusEditor(); });
+        return drop;
+    }
+
+private:
+    void refocusEditor()
+    {
+        if (m_editor == nullptr || !m_editor->isVisible())
+            return;
+        m_editor->activateWindow();
+        if (QWidget *f = m_editor->focusWidget())
+            f->setFocus(Qt::OtherFocusReason);
+        else
+            m_editor->setFocus(Qt::OtherFocusReason);
+    }
+
+    bool drops(QObject *obj, QEvent *e)
+    {
         switch (e->type())
         {
+        case QEvent::InputMethod:          // typed text that is not a key press
+        case QEvent::InputMethodQuery:
         case QEvent::MouseButtonPress:
         case QEvent::MouseButtonRelease:
         case QEvent::MouseButtonDblClick:
@@ -12726,7 +12753,11 @@ int Monitor::execFixtureEditor(QDialog &dlg, const QList<quint32> &fids, quint32
     dlg.show();
     dlg.raise();
     dlg.activateWindow();
-    // The plot says what holds it, and brings the editor back if it is lost.
+    /* The plot says what holds it, and brings the editor back if it is lost.
+       AFTER the lock, on purpose: the application's event filters run last
+       installed first, so the banner sees a click on its Show It before the
+       lock drops it (windowsanity_test::theBannerAnswersAheadOfTheLock fails
+       if these two lines swap). */
     BlockingWindowBanner::whileOpen(m_graphicsView, &dlg);
     loop.exec();
     return dlg.result();

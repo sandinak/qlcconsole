@@ -14,13 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
-- **A dialog opens on the main window's screen, and fits on it**: with two
-  screens, a dialog that remembers its place (Address Tool, Dump DMX, the
-  function picker, Power Distribution, the plot's background and fixture
-  pickers) opened on the screen it was last on, not where you are working;
-  and one taller than a laptop's screen ran off the bottom. Now it opens
-  centred over the main window on that window's screen, shrunk to fit
-  where it can.
+- **A dialog fits on its screen**: one taller than a laptop's screen ran off
+  the bottom with OK and Cancel out of reach; now it opens shrunk to fit
+  where it can, centred over the main window. A dialog you put on another
+  screen stays there; one left across two screens is pulled onto one.
+- **Fixture Properties holds the rest of the window again, input methods
+  too**: with it open, a click on a field of the main window moved the
+  keyboard there, and accents, emoji or an input method typed into it.
 - **Fixture Properties takes clicks and keys again** (builds 4365 and
   4367 on a Mac): opened from the 2D plot, its title bar worked but nothing
   inside it took a click or a key, and moving the mouse dragged a selection

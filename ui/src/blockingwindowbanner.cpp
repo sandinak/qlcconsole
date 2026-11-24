@@ -28,6 +28,7 @@
 #include <QWindow>
 
 #include "blockingwindowbanner.h"
+#include "windowplacement.h"
 
 namespace
 {
@@ -160,8 +161,7 @@ void BlockingWindowBanner::bringBack(QWidget *window, QWidget *nextTo)
         if (window->screen() != screen || !room.contains(r))
         {
             r.moveCenter(anchor->frameGeometry().center());
-            r.moveLeft(qBound(room.left(), r.left(), qMax(room.left(), room.right() - r.width())));
-            r.moveTop(qBound(room.top(), r.top(), qMax(room.top(), room.bottom() - r.height())));
+            r = WindowPlacement::clampInto(r, room);
             if (window->windowHandle() != nullptr && window->windowHandle()->screen() != screen)
                 window->windowHandle()->setScreen(screen);
             window->move(r.topLeft());
@@ -203,10 +203,14 @@ bool BlockingWindowBanner::eventFilter(QObject *obj, QEvent *e)
         /* A real screen hands the click to the window first: answer it
            there, so nothing between the window and the button (a lock that
            drops clicks outside its editor) can keep it from Show It. */
-        if (m_show->window()->windowHandle() != obj)
+        QWidget *top = m_show->window();
+        if (top->windowHandle() != obj)
             return false;
-        const QPoint at = m_show->mapFrom(m_show->window(), me->position().toPoint());
-        over = m_show->rect().contains(at);
+        /* What the window would hand it to: the button only where it is
+           the widget on top there (not where it is clipped by a narrow
+           splitter or covered by another panel). */
+        QWidget *hit = top->childAt(me->position().toPoint());
+        over = hit != nullptr && (hit == m_show || m_show->isAncestorOf(hit));
         if (!over && !m_pressed)
             return false;
     }
