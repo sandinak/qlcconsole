@@ -32277,6 +32277,29 @@ void Monitor_Test::studioRulersReadInTheChosenUnit()
     QCOMPARE(StructureStudioView::rulerUnitSymbol(), MeasurementUnits::symbol(MeasurementUnits::Feet));
     QCOMPARE(StructureStudioView::rulerTickText(4), QString("4"));
     QCOMPARE(StructureStudioView::rulerStepMetres(), 0.3048);
+
+    // UX shots: the stand view with Settings > Units in mm, at three sizes.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (shots.isEmpty())
+        return;
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    Stand *stand = doc->monitorProperties()->addStand();
+    stand->setName("Stand");
+    QWidget parent;
+    Monitor *mon = new Monitor(&parent, doc);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        const QString file = QDir(shots).filePath(QStringLiteral("stand-rulers-mm-%1x%2.png")
+                                                  .arg(sz.width()).arg(sz.height()));
+        driveDialog([sz, file](QWidget *modal) {
+            modal->resize(sz.width() * 3 / 4, sz.height() * 3 / 4);
+            QCoreApplication::processEvents();
+            return modal->grab().save(file);
+        }, false);
+        mon->slotEditStand(stand->id());
+    }
 }
 
 /* Q155-2: Branson's aprons are at floor height. Hiding the apron took its
