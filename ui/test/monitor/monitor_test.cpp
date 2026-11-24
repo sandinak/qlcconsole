@@ -32050,6 +32050,10 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
     props->createGroup(gid, "T-1", lid, 0);
     props->setGroupAnchor(gid, "truss", t1->id());
     auto asHisFile = [&]() {
+        // Only T-1's folder (opening the plot makes one for each bar).
+        foreach (const MonitorProperties::MonitorGroup &g, props->groups())
+            if (g.id != gid)
+                props->removeGroup(g.id);
         t1->setGroupId(gid);
         foreach (Truss *t, QList<Truss *>({ bar1, t2, bar2 }))
             t->setGroupId(0);
@@ -32117,9 +32121,6 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
             mon.m_layersPanel->reload();
             mon.m_layersPanel->m_tree->expandAll();
             QCoreApplication::processEvents();
-            for (QTreeWidgetItemIterator it(mon.m_layersPanel->m_tree); *it != nullptr; ++it)
-                qInfo("SHOTROW %s:%u %s", qPrintable((*it)->data(0, Qt::UserRole + 2).toString()),
-                      (*it)->data(0, Qt::UserRole + 1).toUInt(), qPrintable((*it)->text(0)));
             mon.grab().save(QDir(shots).filePath(QStringLiteral("plot-layers-bar-nest-%1x%2.png")
                                                  .arg(sz.width()).arg(sz.height())));
         }
