@@ -1486,6 +1486,11 @@ ControlMap::Place ControlMap::placeOfHit(quint32 hitId) const
     return Place();
 }
 
+QList<ControlMap::Place> ControlMap::placeChoices(const Place &where) const
+{
+    return placeChoices(where, Target());
+}
+
 QList<ControlMap::Place> ControlMap::placeChoices(const Place &where, const Target &target) const
 {
     ShowTreeController *st = m_doc->showTree();

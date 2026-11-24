@@ -345,7 +345,8 @@ public:
      *  everywhere), then those around the cue live now (or selected in the
      *  Show Tree), each once. Everywhere is always one of them. For a hit
      *  @a target, only its own place and those inside it (placeOfHit()). */
-    QList<Place> placeChoices(const Place &where, const Target &target = Target()) const;
+    QList<Place> placeChoices(const Place &where) const;
+    QList<Place> placeChoices(const Place &where, const Target &target) const;
     /** Whether @a inner is @a outer or inside it (a cue in a list, a list
      *  in a production; everything is inside everywhere). */
     bool isPlaceWithin(const Place &inner, const Place &outer) const;
