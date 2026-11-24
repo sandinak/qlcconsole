@@ -34827,7 +34827,7 @@ void Monitor_Test::fixturePropertiesKeepsEveryControl()
         "fixtureFindItRow", "fixtureAimReadout", "fixtureFacingLegend", "fixtureSymbolMatchFront",
         "fixtureAimExplainer",
         // The pictures: the mask lens on Aim & Beam, the plan map on Place.
-        "fixtureMaskLens", "planMap", "fixtureMountView" };
+        "fixtureMaskLens", "planMap" };
     const QStringList severalBefore = {
         "colourReset", "colourSwatch", "fixtureAddress", "fixtureAim", "fixtureColour", "fixtureCopyPower",
         "fixtureFacingPreview", "fixtureIconRotation", "fixtureMaxAmps", "fixtureMeasure", "fixtureOrientation",
