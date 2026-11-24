@@ -1254,6 +1254,41 @@ void ControlMapUi_Test::collisionShots()
         d.adjustSize();
         QVERIFY(d.grab().save(dir.absoluteFilePath("collision-input-stop.png")));
     }
+    // ... on a trigger's control, in a window with OK: taken on OK, said.
+    cm->setBinding({ 0, 61, ControlMap::function(a->id()), ControlMap::Toggle });
+    {
+        QDialog d;
+        QVBoxLayout *lay = new QVBoxLayout(&d);
+        InputSelectionWidget *isw = new InputSelectionWidget(m_doc, &d);
+        lay->addWidget(isw);
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        isw->m_autoDetectInputButton->setChecked(true);
+        emit m_doc->inputOutputMap()->inputValueChanged(0, 61, 127);
+        isw->m_autoDetectInputButton->setChecked(false);
+        QVERIFY(isw->collisionBox()->isRefusing());
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QVERIFY(d.grab().save(dir.absoluteFilePath("collision-input-onok.png")));
+    }
+    cm->removeBinding(ControlMap::function(a->id()));
+    // An encoder of the bank's run: refused with no Move It Here, and why.
+    {
+        EncoderBank::Device dev;
+        dev.universe = 0;
+        dev.encoders = 16;
+        dev.encoderCount = 8;
+        cm->encoderBank()->setDevice(dev, QStringLiteral("custom"));
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        cm->handleInput(0, 18, 127);
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QVERIFY(d.grab().save(dir.absoluteFilePath("collision-learn-encoder.png")));
+        d.reject();
+        cm->encoderBank()->setEnabled(false);
+    }
     // A show that has two jobs on one control: the hub lists it.
     cm->setBinding({ 0, 60, ControlMap::function(a->id()), ControlMap::Toggle });
     InputOutputManager mgr(nullptr, m_doc);
