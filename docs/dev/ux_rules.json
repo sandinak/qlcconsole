@@ -851,7 +851,7 @@
     "enforced": true,
     "why": "2026-11-22/23: on his Mac, Fixture Properties took no click or key (the rig-view lock ate them at the window; every test sent them to widgets), a Venue prompt opened behind other windows, Fixture Properties moved to another Space on Cmd-Tab and left the main window locked, and a dialog taller than a laptop ran off the screen. Each time a window was open and blocking where he could not find or use it.",
     "example": {
-      "right": "Fixture Properties out of sight: the plot reads \"Fixture Properties is open. [Show it]\"; Show it brings it back in front",
+      "right": "Fixture Properties out of sight: the plot reads \"Fixture Properties is open. [Show It]\"; Show It brings it back in front",
       "wrong": "The plot ignores every click and nothing says why; the editor is on another Space"
     }
   },

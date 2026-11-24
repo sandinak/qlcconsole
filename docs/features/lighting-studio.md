@@ -1090,7 +1090,7 @@ closed, so **Cancel** puts back exactly what that editor did.
 
 While it is open the plot says so across its top: **Fixture Properties is
 open. This view waits until it closes.** If the editor went out of sight
-(behind another window, onto another desktop, minimised), click **Show it**
+(behind another window, onto another desktop, minimised), click **Show It**
 on that line: the editor comes back in front, on the screen the main window
 is on. The line goes away when the editor closes.
 

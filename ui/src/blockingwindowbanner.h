@@ -32,7 +32,7 @@ class QPushButton;
  *  locks the rig view while it is open) can end up out of sight: behind
  *  another window, on another macOS Space, minimised. The part it holds then
  *  just stops answering. This banner sits across the top of what is held:
- *  "Fixture Properties is open. [Show it]", and Show it brings that window
+ *  "Fixture Properties is open. [Show It]", and Show It brings that window
  *  back, in front, on the held area's screen.
  *
  *  It is shown for as long as the window is open, and takes itself away (and
@@ -62,7 +62,7 @@ public:
     QPushButton *showButton() const { return m_show; }
     QString text() const;
 
-    /** "Show it": bringBack(blocker, the held area). */
+    /** "Show It": bringBack(blocker, the held area). */
     void showBlocker();
 
 protected:

@@ -504,7 +504,7 @@ void checkInputThroughWindow(QWidget *w, QStringList &problems)
 }
 
 /** Out of sight while it holds something: the held area says so, and its
- *  Show it, clicked through the main window, brings it back in front. */
+ *  Show It, clicked through the main window, brings it back in front. */
 void checkHiddenBlocker(App *app, QWidget *w, QWidget *held, QStringList &problems)
 {
     if (held == nullptr || !held->isVisible())
@@ -531,7 +531,7 @@ void checkHiddenBlocker(App *app, QWidget *w, QWidget *held, QStringList &proble
     settle();
     if (!w->isVisible())
     {
-        problems << QStringLiteral("\"Show it\", clicked through the main window, did not bring it back");
+        problems << QStringLiteral("\"Show It\", clicked through the main window, did not bring it back");
         w->show();
         settle();
         return;
@@ -1063,7 +1063,7 @@ void WindowSanity_Test::aHiddenEditorIsFoundFromTheBanner()
                                   show->mapTo(m_app, show->rect().center()));
                 settle();
                 if (!dlg->isVisible())
-                    problems << QStringLiteral("Show it did not bring the editor back");
+                    problems << QStringLiteral("Show It did not bring the editor back");
                 if (!isActive(dlg))
                     problems << QStringLiteral("the editor is back but not active");
                 if (dlg->screen() != m_app->screen())

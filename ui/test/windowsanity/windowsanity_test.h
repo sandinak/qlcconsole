@@ -50,7 +50,7 @@ private slots:
     void theCheckerFindsWhatItShould();
 
     /** Fixture Properties hidden on another screen (as on another Space):
-     *  the plot it holds says so, "Fixture Properties is open", and Show it,
+     *  the plot it holds says so, "Fixture Properties is open", and Show It,
      *  clicked through the main window, brings it back in front on the main
      *  window's screen. QLC_SHOT_DIR saves the banner at the three sizes. */
     void aHiddenEditorIsFoundFromTheBanner();

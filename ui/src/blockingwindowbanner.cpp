@@ -82,7 +82,7 @@ BlockingWindowBanner::BlockingWindowBanner(QWidget *heldArea, QWidget *blocker)
                      .arg(titleOf(blocker).toHtmlEscaped()));
     m_label->setWordWrap(true);
     hl->addWidget(m_label, 1);
-    m_show = new QPushButton(tr("Show it"), this);
+    m_show = new QPushButton(tr("Show It"), this);
     m_show->setObjectName(QStringLiteral("blockingWindowShow"));
     m_show->setToolTip(tr("Bring %1 to the front, on this screen").arg(titleOf(blocker)));
     m_show->setFocusPolicy(Qt::NoFocus);       // a click; never a keyboard stop in a held view
@@ -93,7 +93,7 @@ BlockingWindowBanner::BlockingWindowBanner(QWidget *heldArea, QWidget *blocker)
         connect(dlg, &QDialog::finished, this, &BlockingWindowBanner::finish);
     connect(blocker, &QObject::destroyed, this, &BlockingWindowBanner::finish);
 
-    /* After the lock's filter, so this one runs first: a click on Show it
+    /* After the lock's filter, so this one runs first: a click on Show It
        must reach it while the lock drops every other click here. */
     qApp->installEventFilter(this);
     m_filtering = true;
@@ -202,7 +202,7 @@ bool BlockingWindowBanner::eventFilter(QObject *obj, QEvent *e)
     {
         /* A real screen hands the click to the window first: answer it
            there, so nothing between the window and the button (a lock that
-           drops clicks outside its editor) can keep it from Show it. */
+           drops clicks outside its editor) can keep it from Show It. */
         if (m_show->window()->windowHandle() != obj)
             return false;
         const QPoint at = m_show->mapFrom(m_show->window(), me->position().toPoint());
