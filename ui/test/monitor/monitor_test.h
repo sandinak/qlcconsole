@@ -1032,6 +1032,11 @@ private slots:
      *  Lantern, Truss > Bar > Spot, Stand > Truss, Boom > Crossbar; a
      *  fixture dropped on a hanger or a bar's row is hung there */
     void mountsNestInPlotLayers();
+    /** "why are T1-S1 and 2 .. which are on the bar on t1 .. not under
+     *  T1": fixtures on a bar nest under Truss > Bar even when the bar,
+     *  the fixtures and a fixture group across the bars have no folder;
+     *  a pipe hung from a truss nests under it */
+    void fixturesOnABarNestUnderItsTrussInPlotLayers();
     /** a0: "Always Start with the Plot Locked" (the user's, off by
      *  default) locks a show as it opens, without marking it changed */
     void alwaysStartLockedLocksAnOpenedShow();

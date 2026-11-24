@@ -31973,6 +31973,162 @@ void Monitor_Test::mountsNestInPlotLayers()
     }
 }
 
+/* "why are T1-S1 and 2 .. which are on the bar on t1 .. not under T1 ..
+   like the hanger is for the lantern?" His show: T-1 in its own folder,
+   Bar 1 on it with no folder of its own, T1-S1 and T1-S2 on the bar with no
+   folder either, and a fixture group (T-Spots) made across the bars of
+   every truss. The group was worked out over every loose fixture on the
+   layer before anything was nested, so it took the bar's fixtures and they
+   were listed at the top of the layer, never under T-1 > Bar 1. */
+void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
+{
+    QScopedPointer<Doc> owner(new Doc(this));
+    Doc *doc = owner.data();
+    MonitorProperties *props = doc->monitorProperties();
+    const quint32 lid = props->addLayer("Trusses");
+
+    auto upright = [props, lid](const QString &name, float x) {
+        Truss *t = props->addTruss();
+        t->setName(name);
+        t->setType(Truss::Vertical);
+        t->setOrigin(QVector3D(x, 3.6f, 0.0f));
+        t->setLength(3.0f);
+        t->setWidth(0.29f);
+        t->setLayerId(lid);
+        return t;
+    };
+    auto barOn = [props, lid](Truss *parent, const QString &name) {
+        Truss *b = props->addTruss();
+        b->setName(name);
+        b->setParentTrussId(parent->id());
+        b->setParentOffset(3.0f);
+        b->setBarFace(Truss::FaceDownstage);
+        b->setBarRun(Truss::RunAcross);
+        b->setLength(1.0f);
+        b->setLayerId(lid);
+        return b;
+    };
+    Truss *t1 = upright("T-1", 3.2f);
+    Truss *bar1 = barOn(t1, "Bar 1");
+    Truss *t2 = upright("T-2", 6.3f);           // a truss with no folder at all
+    Truss *bar2 = barOn(t2, "Bar 2");
+    Hanger *hookA = props->addHanger(Hanger::OnTruss, t1->id());
+    hookA->setName("Hook A");
+    hookA->setAlong(2.4f);
+    Hanger *hookB = props->addHanger(Hanger::OnTruss, t2->id());
+    hookB->setName("Hook B");
+    hookB->setAlong(2.4f);
+    Pipe *hung = props->addPipe();              // a pipe hung from a truss
+    hung->setName("Hung Pipe");
+    hung->setParentTrussId(t2->id());
+    hung->setLayerId(lid);
+    props->recomputeChildTrusses();
+    props->recomputeHangers();
+
+    Fixture *s1 = plainFixture(doc, "T1-S1", 0);
+    Fixture *s2 = plainFixture(doc, "T1-S2", 10);
+    Fixture *s3 = plainFixture(doc, "T2-S1", 20);
+    Fixture *lanA = plainFixture(doc, "Lantern A", 30);
+    Fixture *lanB = plainFixture(doc, "Lantern B", 40);
+
+    // A group made across the bars of both trusses, and one across both hangers.
+    auto fixtureGroup = [doc](const QString &name, const QList<Fixture *> &members) {
+        FixtureGroup *fg = new FixtureGroup(doc);
+        fg->setName(name);
+        fg->setSize(QSize(members.size(), 1));
+        doc->addFixtureGroup(fg);
+        for (int i = 0; i < members.size(); i++)
+            fg->assignFixture(members.at(i)->id(), QLCPoint(i, 0));
+        return fg;
+    };
+    fixtureGroup("T-Spots", { s1, s2, s3 });
+    fixtureGroup("Lanterns", { lanA, lanB });
+
+    /* As his file has them: T-1 in its folder, its bar and every fixture
+       in none, all on the one layer. */
+    const quint32 gid = props->nextGroupId();
+    props->createGroup(gid, "T-1", lid, 0);
+    props->setGroupAnchor(gid, "truss", t1->id());
+    auto asHisFile = [&]() {
+        t1->setGroupId(gid);
+        foreach (Truss *t, QList<Truss *>({ bar1, t2, bar2 }))
+            t->setGroupId(0);
+        hung->setGroupId(0);
+        foreach (Fixture *f, QList<Fixture *>({ s1, s2, s3, lanA, lanB }))
+        {
+            props->setFixtureLayer(f->id(), lid);
+            props->setFixtureGroup(f->id(), 0);
+        }
+    };
+
+    {
+        MonitorGraphicsView view(doc);
+        view.resize(900, 700);
+        view.setGridMetrics(1000.0);
+        view.setGridSize(QSize(12, 8));
+        view.updateTrusses();
+        foreach (Fixture *f, QList<Fixture *>({ s1, s2, s3, lanA, lanB }))
+            view.ensureFixtureOnPlot(f->id());
+        view.attachFixtureToTruss(s1->id(), bar1->id());
+        view.attachFixtureToTruss(s2->id(), bar1->id());
+        view.attachFixtureToTruss(s3->id(), bar2->id());
+        view.attachFixtureToHanger(lanA->id(), hookA->id());
+        view.attachFixtureToHanger(lanB->id(), hookB->id());
+
+        asHisFile();
+        QCOMPARE(props->fixtureRigProps(s1->id()).trussId, bar1->id());
+        QVERIFY(props->fixtureRigProps(lanA->id()).onHanger());
+
+        MonitorLayersPanel panel(doc, &view);
+        panel.reload();
+        auto chain = [&panel](const QString &name) {
+            QStringList out;
+            for (QTreeWidgetItem *r = layersRow(panel, name); r != nullptr; r = r->parent())
+                out.prepend(rowName(r));
+            return out.join(" > ");
+        };
+        QCOMPARE(chain("T1-S1"), QString("Trusses > T-1 > Bar 1 > T1-S1"));
+        QCOMPARE(chain("T1-S2"), QString("Trusses > T-1 > Bar 1 > T1-S2"));
+        QCOMPARE(chain("Lantern A"), QString("Trusses > T-1 > Hook A > Lantern A"));
+        // A bar whose truss has no folder: still under its truss.
+        QCOMPARE(chain("T2-S1"), QString("Trusses > T-2 > Bar 2 > T2-S1"));
+        QCOMPARE(chain("Lantern B"), QString("Trusses > T-2 > Hook B > Lantern B"));
+        // A pipe hung from a truss sits under it as a bar does.
+        QCOMPARE(chain("Hung Pipe"), QString("Trusses > T-2 > Hung Pipe"));
+
+        // The groups across the bars are still listed, with all their fixtures.
+        QTreeWidgetItem *spots = layersRow(panel, "T-Spots");
+        QVERIFY(spots != nullptr);
+        QCOMPARE(spots->childCount(), 3);
+        QTreeWidgetItem *lanterns = layersRow(panel, "Lanterns");
+        QVERIFY(lanterns != nullptr);
+        QCOMPARE(lanterns->childCount(), 2);
+    }
+
+    // UX shots: the Plot layers panel beside the plot, at three sizes.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+        foreach (const QSize &sz, sizes)
+        {
+            QWidget parent;
+            parent.resize(sz);
+            Monitor mon(&parent, doc);
+            mon.resize(sz);
+            parent.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&parent));
+            asHisFile();
+            mon.m_layersPanel->setVisible(true);
+            mon.m_layersPanel->reload();
+            mon.m_layersPanel->m_tree->expandAll();
+            QCoreApplication::processEvents();
+            mon.grab().save(QDir(shots).filePath(QStringLiteral("plot-layers-bar-nest-%1x%2.png")
+                                                 .arg(sz.width()).arg(sz.height())));
+        }
+    }
+}
+
 /* Q155-2: Branson's aprons are at floor height. Hiding the apron took its
    deck away and the lights on it dropped; hidden is only how it looks now,
    and its height (the deck's until set) can be the floor. */
