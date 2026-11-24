@@ -226,24 +226,28 @@ void MountView_Test::refreshMovesBetweenMountedAndFree()
 void MountView_Test::opensQuickly()
 {
     Rig rig(this);
-    qint64 worst = 0, total = 0;
-    const quint32 fids[] = { rig.onTruss, rig.onPipe, rig.onTower };
-    for (quint32 fid : fids)
+    const quint32 fids[] = { rig.onTruss, rig.onPipe, rig.onTower, rig.onTruss, rig.onPipe, rig.onTower };
+    qint64 cold = 0, warmWorst = 0;
+    for (int i = 0; i < 6; ++i)
     {
         QElapsedTimer t;
         t.start();
-        MountInSituView v(rig.doc, fid);
+        MountInSituView v(rig.doc, fids[i]);
         v.resize(260, 160);
         v.show();
         QImage img(v.size(), QImage::Format_ARGB32);
         v.render(&img);
         const qint64 ms = t.elapsed();
-        total += ms;
-        worst = qMax(worst, ms);
+        qInfo("MountInSituView open #%d: %lld ms", i, ms);
+        if (i == 0)
+            cold = ms;          // the first ever: fonts, caches, raster set-up
+        else
+            warmWorst = qMax(warmWorst, ms);
     }
-    qInfo("MountInSituView open + first paint: worst %lld ms, mean %lld ms (offscreen)",
-          worst, total / 3);
-    QVERIFY2(worst < 150, qPrintable(QStringLiteral("opened in %1 ms").arg(worst)));
+    qInfo("MountInSituView open + first paint (offscreen): first %lld ms, warm worst %lld ms",
+          cold, warmWorst);
+    QVERIFY2(warmWorst < 150, qPrintable(QStringLiteral("a warm open took %1 ms").arg(warmWorst)));
+    QVERIFY2(cold < 600, qPrintable(QStringLiteral("the first open took %1 ms").arg(cold)));
 }
 
 void MountView_Test::picturesForReview()
