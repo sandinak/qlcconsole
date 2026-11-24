@@ -19981,8 +19981,8 @@ void Monitor_Test::rotatingASelectionTurnsItAboutItsMiddle()
     rh.trussOffset = 1.0f;
     props->setFixtureRigProps(hung->id(), rh);
     Fixture *free = new Fixture(doc);
-    free->setChannels(4);
-    free->setAddress(10);
+    srBoom->setChannels(4);
+    srBoom->setAddress(10);
     QVERIFY(doc->addFixture(free));
     props->setFixturePosition(free->id(), 0, 0, QVector3D(4000.0f, 0.0f, 0.0f));
     const quint32 deckId = deck->id(), wallId = wall->id(), barId = bar->id();
@@ -32222,10 +32222,10 @@ void Monitor_Test::aBoomInAHandMadeFolderStaysThere()
     boom->setName("Boom SL");
     boom->setStandId(stand->id());
     boom->setLayerId(lid);
-    Pipe *free = props->addPipe();           // a stand-mounted pipe in no folder
-    free->setName("Boom SR");
-    free->setStandId(stand->id());
-    free->setLayerId(lid);
+    Pipe *srBoom = props->addPipe();           // a stand-mounted pipe in no folder
+    srBoom->setName("Boom SR");
+    srBoom->setStandId(stand->id());
+    srBoom->setLayerId(lid);
 
     Fixture *side = plainFixture(doc, "Side 1", 0);
 
@@ -32243,7 +32243,7 @@ void Monitor_Test::aBoomInAHandMadeFolderStaysThere()
     props->createGroup(booms, "Booms", lid, 0);
     stand->setGroupId(0);
     boom->setGroupId(booms);
-    free->setGroupId(0);
+    srBoom->setGroupId(0);
     props->setFixtureLayer(side->id(), lid);
     props->setFixtureGroup(side->id(), booms);
 
