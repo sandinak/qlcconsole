@@ -23,6 +23,8 @@
 #include <QFrame>
 
 #include "grandmaster.h"
+#include "faderpickup.h"
+#include "qlcui_export.h"
 
 class InputOutputMap;
 class QSlider;
@@ -32,7 +34,7 @@ class QLabel;
  * @{
  */
 
-class GrandMasterSlider final : public QFrame
+class QLC_UI_EXPORT GrandMasterSlider final : public QFrame
 {
     Q_OBJECT
     Q_DISABLE_COPY(GrandMasterSlider)
@@ -42,11 +44,20 @@ public:
     virtual ~GrandMasterSlider();
 
     bool invertedAppearance() const;
+
+    /** "Grand Master fader: move it to 75% to take over" while the external
+     *  fader waits to be picked up; empty otherwise. Also in the tooltip. */
+    QString pickupHint() const;
     void setInvertedAppearance(bool invert);
+
+signals:
+    /** The external fader started or stopped waiting to be picked up */
+    void pickupHintChanged(const QString &hint);
 
 private:
     void updateTooltip();
     void updateDisplayValue();
+    void updatePickupHint();
 
 protected slots:
     void slotValueChanged(int value);
@@ -58,6 +69,8 @@ protected:
     QSlider* m_slider;
     QLabel* m_nameLabel;
     InputOutputMap* m_ioMap;
+    FaderPickup m_pickup;
+    QString m_pickupHint;
 
     /*************************************************************************
      * External input

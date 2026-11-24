@@ -20,6 +20,8 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QtTest>
+#include <QDir>
+#include "qlcconfig.h"
 #include <QElapsedTimer>
 
 #include <cmath>
@@ -47,6 +49,10 @@
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
+#include "faderpickup.h"
+#include "iopluginstub.h"
+#include "inputoutputmap.h"
+#include "ioplugincache.h"
 
 #include "speedmasters_test.h"
 
@@ -736,7 +742,10 @@ void SpeedMasters_Test::aControlSurfaceDrivesAMaster()
     QCOMPARE(c, quint32(11));
     QVERIFY(!sm->input(0, SpeedMasters::RateControl, nullptr, nullptr));
 
-    // The fader: top is 200 %, the middle 100 %, the bottom stopped.
+    // The fader: top is 200 %, the middle 100 %, the bottom stopped. It has
+    // to be picked up first: a fader that says where it is, near the rate.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 128);
+    QCOMPARE(sm->rate(1), 1.0);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 255);
     QCOMPARE(sm->rate(1), 2.0);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 128);
@@ -857,3 +866,84 @@ void SpeedMasters_Test::onlyTheMastersSomethingIsOnAreUsed()
 }
 
 QTEST_MAIN(SpeedMasters_Test)
+
+/* Q299: an external fader is picked up (soft takeover), as a Virtual Console
+   slider's "catch values" always did. */
+void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
+{
+    FaderPickup p;
+    QVERIFY(!p.accept(10, 100));            // the first value only says where it is
+    QVERIFY(p.waiting(100));
+    QVERIFY(!p.accept(20, 100));            // still below
+    QVERIFY(p.waiting(100));
+    QVERIFY(!p.waiting(22));                // the control moved to where the fader is
+    QVERIFY(p.accept(98, 100));             // within the threshold: picked up
+    QVERIFY(!p.waiting(100));
+    QVERIFY(p.accept(200, 100));            // and it follows from here
+    p.reset();
+    QVERIFY(!p.accept(250, 100));           // above: waits too
+    QVERIFY(p.accept(90, 100));             // crossed through it
+}
+
+void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()
+{
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
+    sm->setRate(1, 1.0);
+    QVERIFY(sm->pickupHint(1).isEmpty());
+
+    // Below the rate: nothing happens, and the footer says where to go.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 30);
+    QCOMPARE(sm->rate(1), 1.0);
+    QVERIFY2(sm->pickupHint(1).contains(QStringLiteral("100%")), qPrintable(sm->pickupHint(1)));
+
+    // Through it: it follows, and the hint clears.
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 200);
+    QVERIFY(qAbs(sm->rate(1) - 200 / 127.5) < 1e-9);
+    QVERIFY(sm->pickupHint(1).isEmpty());
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 11, 60);
+    QVERIFY(qAbs(sm->rate(1) - 60 / 127.5) < 1e-9);
+}
+
+void SpeedMasters_Test::aMotorisedRateFaderIsSentTheValue()
+{
+    QDir dir(QStringLiteral("../iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    m_doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = nullptr;
+    foreach (QLCIOPlugin *pl, m_doc->ioPluginCache()->plugins())
+        if ((stub = dynamic_cast<IOPluginStub *>(pl)) != nullptr)
+            break;
+    QVERIFY(stub != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));
+    QVERIFY(iom->canSendFeedback(0));
+    QVERIFY(!iom->canSendFeedback(3) || iom->universesCount() <= 3);
+
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(1, SpeedMasters::RateControl, 0, 11);
+    sm->setRate(1, 1.0);
+    stub->m_feedback.clear();
+
+    // Touched far from the rate: the rate stays, the fader is sent it, and
+    // nothing is said to be waiting.
+    emit iom->inputValueChanged(0, 11, 20);
+    QCOMPARE(sm->rate(1), 1.0);
+    QVERIFY(sm->pickupHint(1).isEmpty());
+    QVERIFY(!stub->m_feedback.isEmpty());
+    QCOMPARE(stub->m_feedback.last().first, quint32(11));
+    QCOMPARE(int(stub->m_feedback.last().second), 128);   // 1.0 = 127.5, rounded
+
+    // Once the fader is there, it follows.
+    emit iom->inputValueChanged(0, 11, 128);
+    emit iom->inputValueChanged(0, 11, 60);
+    QVERIFY(qAbs(sm->rate(1) - 60 / 127.5) < 1e-9);
+
+    // Moved from the screen: the motor follows.
+    stub->m_feedback.clear();
+    sm->setRate(1, 2.0);
+    QVERIFY(!stub->m_feedback.isEmpty());
+    QCOMPARE(int(stub->m_feedback.last().second), 255);
+}

@@ -32,6 +32,8 @@ private slots:
 
     /* Speed master mode */
     void speedMasterRate();
+    void grandMasterFaderIsPickedUp();
+    void sliderCatchValuesAreUnchanged();
     void speedMasterTempo();
     void speedMasterFollowsTheMaster();
     void speedMasterSavesAndLoads();

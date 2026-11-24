@@ -48,6 +48,8 @@
 #include "efxfixture.h"
 #undef protected
 
+#include "grandmasterslider.h"
+#include "qlcinputsource.h"
 #include "vcslider_test.h"
 
 namespace
@@ -735,3 +737,60 @@ void VCSlider_Test::effectControlOnAnEfx()
 }
 
 QTEST_MAIN(VCSlider_Test)
+
+/* Q299: the Grand Master's external fader is picked up, and the footer chip
+   (the signal) says where to move it. */
+void VCSlider_Test::grandMasterFaderIsPickedUp()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    VirtualConsole::instance()->m_properties.setGrandMasterInputSource(0, 9);
+    GrandMasterSlider gms(nullptr, iom);
+    QSignalSpy hints(&gms, &GrandMasterSlider::pickupHintChanged);
+    iom->setGrandMasterValue(200);
+    QVERIFY(gms.pickupHint().isEmpty());
+
+    // Below the Grand Master: it does nothing, and says where to go.
+    emit iom->inputValueChanged(0, 9, 10);
+    emit iom->inputValueChanged(0, 9, 40);
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+    QVERIFY2(gms.pickupHint().contains(QStringLiteral("78%")), qPrintable(gms.pickupHint()));
+    QVERIFY(gms.toolTip().contains(QStringLiteral("move it to")));
+    QCOMPARE(hints.count(), 1);
+
+    // Moved through it: it follows and the hint clears.
+    emit iom->inputValueChanged(0, 9, 210);
+    QCOMPARE(int(iom->grandMasterValue()), 210);
+    QVERIFY(gms.pickupHint().isEmpty());
+    QVERIFY(!gms.toolTip().contains(QStringLiteral("move it to")));
+    QCOMPARE(hints.count(), 2);
+    QCOMPARE(hints.last().at(0).toString(), QString());
+
+    emit iom->inputValueChanged(0, 9, 100);
+    QCOMPARE(int(iom->grandMasterValue()), 100);
+}
+
+/* A slider keeps its saved "catch values"; new ones have it, and its hint
+   is said on the slider. */
+void VCSlider_Test::sliderCatchValuesAreUnchanged()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 20)),
+                          VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!slider.catchValues());          // as saved: no attribute, no catch
+    slider.setSliderValue(100, false);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    QCOMPARE(slider.sliderValue(), 10);      // not catching: it follows at once
+
+    slider.setCatchValues(true);
+    slider.setSliderValue(100, false);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 30);
+    QCOMPARE(slider.sliderValue(), 100);     // waits
+    QVERIFY(slider.pickupHint().contains(QStringLiteral("move it to")));
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 150);
+    QCOMPARE(slider.sliderValue(), 150);     // crossed it: follows
+    QVERIFY(slider.pickupHint().isEmpty());
+}

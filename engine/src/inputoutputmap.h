@@ -892,6 +892,10 @@ public:
      */
     bool sendFeedBack(quint32 universe, quint32 channel, uchar value, const QVariant &params);
 
+    /** True when @p universe has a feedback line patched: a motorised fader
+     *  on it can be sent a value (FaderPickup sends one instead of waiting). */
+    bool canSendFeedback(quint32 universe) const;
+
 private:
     /** In case of duplicate strings, append a number to make them unique */
     void removeDuplicates(QStringList &list);

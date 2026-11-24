@@ -60,7 +60,8 @@
  *  playback value change stable */
 #define PLAYBACK_CHANGE_THRESHOLD   5  // roughly this is 100ms
 
-/** +/- value range to catch the slider for external
+/** (the rule itself is FaderPickup::Threshold)
+ *  +/- value range to catch the slider for external
  *  controllers with no feedback support */
 #define VALUE_CATCHING_THRESHOLD    4
 
@@ -346,12 +347,32 @@ void VCSlider::enableWidgetUI(bool enable)
     if (m_storeButton)
         m_storeButton->setEnabled(enable);
     if (enable == false)
+    {
         m_lastInputValue = -1;
+        m_pickup.reset();
+    }
 }
 
 void VCSlider::hideEvent(QHideEvent *)
 {
     m_lastInputValue = -1;
+    m_pickup.reset();
+}
+
+QString VCSlider::pickupHint() const
+{
+    if (!catchValues() || !m_pickup.waiting(sliderValue()))
+        return QString();
+    return FaderPickup::hintText(caption().isEmpty() ? tr("Slider") : caption(),
+                                 int(sliderValue() * 100.0 / UCHAR_MAX + 0.5));
+}
+
+void VCSlider::updatePickupHint()
+{
+    if (m_slider == nullptr)
+        return;
+    // The slider's own tooltip: the widget's tooltip says what it drives
+    m_slider->setToolTip(pickupHint());
 }
 
 /*****************************************************************************
@@ -2441,16 +2462,13 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
              * or by 'surpassing' the current value */
             if (catchValues())
             {
-                uchar currentValue = sliderValue();
-
-                // filter 'out of threshold' cases
-                if (m_lastInputValue == -1 ||
-                    (m_lastInputValue < currentValue - VALUE_CATCHING_THRESHOLD && value < currentValue - VALUE_CATCHING_THRESHOLD) ||
-                    (m_lastInputValue > currentValue + VALUE_CATCHING_THRESHOLD && value > currentValue + VALUE_CATCHING_THRESHOLD))
+                if (m_pickup.accept(value, sliderValue()) == false)
                 {
                     m_lastInputValue = value;
+                    updatePickupHint();
                     return;
                 }
+                updatePickupHint();
             }
 
             if (m_monitorEnabled == true && m_isOverriding == false)

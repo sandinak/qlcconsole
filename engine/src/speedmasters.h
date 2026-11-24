@@ -23,6 +23,7 @@
 #include <QElapsedTimer>
 #include "qlcengine_export.h"
 #include <QObject>
+#include "faderpickup.h"
 #include <QString>
 #include <QMutex>
 #include <QAtomicInt>
@@ -162,6 +163,11 @@ public:
     void clearInput(int index, Control control);
     bool input(int index, Control control, quint32 *universe, quint32 *channel) const;
 
+    /** "Speed 1 fader: move it to 100% to take over" while the Rate fader
+     *  driving master @p index waits to be picked up (FaderPickup); empty
+     *  otherwise. */
+    QString pickupHint(int index) const;
+
 public slots:
     /** A value from an input universe (InputOutputMap::inputValueChanged). */
     void slotInputValue(quint32 universe, quint32 channel, uchar value);
@@ -192,9 +198,11 @@ private:
         quint32 inUniverse[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
         quint32 inChannel[ControlCount] = { UINT_MAX, UINT_MAX, UINT_MAX };
         uchar inLast[ControlCount] = { 0, 0, 0 };   //!< for a button's press
+        FaderPickup ratePickup;     //!< the Rate fader's soft takeover
         int held = 0;               //!< hold(): VC widgets driving it
     };
 
+    void sendRateFeedback(int index, bool force);
     bool valid(int index) const { return index >= 0 && index < MaxCount; }
     double positionLocked(int index, qint64 now, double mainPos, int depth = 0) const;
     double bpmLocked(int index, double mainBpm, int depth = 0) const;

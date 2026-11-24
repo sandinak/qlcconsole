@@ -67,6 +67,9 @@ public:
     /** Get the singleton instance */
     static SimpleDesk* instance();
 
+    /** The Grand Master fader (its external input has pick-up) */
+    GrandMasterSlider *grandMasterSlider() const { return m_grandMasterSlider; }
+
     /** Start from scratch; clear everything */
     void clearContents();
 

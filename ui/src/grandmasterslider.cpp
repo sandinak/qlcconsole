@@ -127,6 +127,8 @@ void GrandMasterSlider::slotValueChanged(int value)
 {
     // Update display value
     updateDisplayValue();
+    if (!m_pickupHint.isEmpty() || m_pickup.last() >= 0)
+        updatePickupHint();
 
     // Avoid double calls triggered by slotGrandMasterValueChanged
     int curval = m_ioMap->grandMasterValue();
@@ -163,6 +165,8 @@ void GrandMasterSlider::updateTooltip()
             break;
     }
 
+    if (!m_pickupHint.isEmpty())
+        tooltip = m_pickupHint + QStringLiteral("<br>") + tooltip;
     setToolTip(tooltip);
 }
 
@@ -190,6 +194,8 @@ void GrandMasterSlider::slotGrandMasterValueChanged(uchar value)
     m_slider->blockSignals(false);
 
     updateDisplayValue();
+    if (!m_pickupHint.isEmpty() || m_pickup.last() >= 0)
+        updatePickupHint();
 }
 
 void GrandMasterSlider::slotGrandMasterValueModeChanged(GrandMaster::ValueMode mode)
@@ -234,7 +240,34 @@ void GrandMasterSlider::slotInputValueChanged(quint32 universe, quint32 channel,
     if (universe == VirtualConsole::instance()->properties().grandMasterInputUniverse() &&
         channel == VirtualConsole::instance()->properties().grandMasterInputChannel())
     {
-        m_slider->setValue(value);
+        // Pick-up: the fader does nothing until it reaches the Grand Master;
+        // a motorised one is sent the value instead (FaderPickup, Q299).
+        bool sendBack = false;
+        const bool take = m_pickup.accept(value, m_slider->value(),
+                                          m_ioMap->canSendFeedback(universe), &sendBack);
+        if (sendBack)
+            sendFeedback();
+        if (take)
+            m_slider->setValue(value);
+        updatePickupHint();
     }
+}
+
+QString GrandMasterSlider::pickupHint() const
+{
+    const int cur = m_slider->value();
+    if (!m_pickup.waiting(cur))
+        return QString();
+    return FaderPickup::hintText(tr("Grand Master"), int(cur * 100.0 / UCHAR_MAX + 0.5));
+}
+
+void GrandMasterSlider::updatePickupHint()
+{
+    const QString hint = pickupHint();
+    if (hint == m_pickupHint)
+        return;
+    m_pickupHint = hint;
+    updateTooltip();
+    emit pickupHintChanged(hint);
 }
 

@@ -32,6 +32,9 @@
 #include "qlcchannel.h"
 #include "qlccapability.h"
 
+#include "inputoutputmap.h"
+#include "qlcinputsource.h"
+#include "channelsgroup.h"
 #include "doc.h"
 #include "fixture.h"
 #include "apputil.h"
@@ -229,7 +232,26 @@ void ConsoleChannel::setChannelsGroup(quint32 grpid)
 void ConsoleChannel::slotInputValueChanged(quint32 channel, uchar value)
 {
     Q_UNUSED(channel)
-    setValue(value);
+    // A channel group's external fader is picked up before it follows (Q299);
+    // a motorised one is sent the group's value instead.
+    ChannelsGroup *grp = m_doc->channelsGroup(m_group);
+    QSharedPointer<QLCInputSource> src = grp != NULL ? grp->inputSource() : QSharedPointer<QLCInputSource>();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    const bool motor = !src.isNull() && src->isValid() && iom->canSendFeedback(src->universe());
+    bool sendBack = false;
+    const bool take = m_pickup.accept(value, m_slider->value(), motor, &sendBack);
+    if (sendBack)
+        iom->sendFeedBack(src->universe(), src->channel(), uchar(m_slider->value()), QVariant());
+    if (take)
+        setValue(value);
+    m_slider->setToolTip(pickupHint());
+}
+
+QString ConsoleChannel::pickupHint() const
+{
+    if (!m_pickup.waiting(m_slider->value()))
+        return QString();
+    return FaderPickup::hintText(m_label->text(), int(m_slider->value() * 100.0 / UCHAR_MAX + 0.5));
 }
 
 /*****************************************************************************

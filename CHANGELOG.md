@@ -12,6 +12,19 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Changed
+
+- **A fader is picked up before it follows**: an external fader (MIDI,
+  OSC) that is not where the control is does nothing until you move it to,
+  or through, the current value, then it follows (soft takeover). It was
+  only Virtual Console sliders that could; now the Grand Master, the speed
+  masters' Rate faders and a channel group's fader do too, and a new
+  Virtual Console slider has it on (a slider in a saved show keeps its
+  setting). A fader waiting says so and where to move it: *"Grand Master
+  fader: move it to 75% to take over"* on the footer chip and the slider's
+  tooltip. A motorised fader (its device has a feedback line) is sent the
+  value instead of waiting. Encoders are relative and unchanged.
+
 ### Fixed
 
 - **Fixture Properties fits a laptop's screen**: a moving head's rows

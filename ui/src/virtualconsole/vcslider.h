@@ -22,6 +22,8 @@
 #define VCSLIDER_H
 
 #include <QToolButton>
+
+#include "faderpickup.h"
 #include <QMutex>
 #include <QList>
 #include <climits>
@@ -384,6 +386,10 @@ public:
      *********************************************************************/
 public:
     bool catchValues() const;
+
+    /** "Slider: move it to 75% to take over" while the external fader waits
+     *  to be picked up; empty otherwise. Shown on the slider's tooltip. */
+    QString pickupHint() const;
     void setCatchValues(bool enable);
 
 protected:
@@ -812,6 +818,7 @@ protected slots:
 
 protected:
     int m_lastInputValue;
+    FaderPickup m_pickup;
 
     /*********************************************************************
      * Intensity

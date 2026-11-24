@@ -220,9 +220,15 @@ void SpeedMastersFooter::tick()
         {
             wider = wider || b->text().size() != text.size();
             b->setText(text);
-            b->setToolTip(tr("%1: %2 BPM. Click for the speed masters.")
-                          .arg(sm->name(i)).arg(sm->bpm(i), 0, 'f', 1));
         }
+        // A Rate fader waiting to be picked up says so, and where to move it
+        QString tip = tr("%1: %2 BPM. Click for the speed masters.")
+                          .arg(sm->name(i)).arg(sm->bpm(i), 0, 'f', 1);
+        const QString hint = sm->pickupHint(i);
+        if (!hint.isEmpty())
+            tip = hint + QStringLiteral("\n") + tip;
+        if (b->toolTip() != tip)
+            b->setToolTip(tip);
         // The level (the rate, 0..200 %) shows only while it's being moved,
         // then fades: the blink is the beat.
         const qint64 now = m_clock.elapsed();

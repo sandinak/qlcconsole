@@ -51,6 +51,7 @@ add_library(${module_name} SHARED
     genericdmxsource.cpp genericdmxsource.h
     genericfader.cpp genericfader.h
     gradient.cpp gradient.h
+    faderpickup.h
     grandmaster.cpp grandmaster.h
     grouphead.cpp grouphead.h
     inputoutputmap.cpp inputoutputmap.h

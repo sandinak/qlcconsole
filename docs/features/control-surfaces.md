@@ -24,6 +24,27 @@ the same control, so give each control one job.
 | **Companion** | The qlcconsole module in Bitfocus Companion | A Stream Deck over the web access socket. See [Stream Deck](show-control.md#stream-deck-companion). |
 | **Game pads** | **Connections**, right-click the pad | Pad Run and the focus tools. See [Show control](show-control.md#go-from-the-game-controller-pad-run). |
 
+## A fader is picked up before it follows
+
+An external fader that is not where the control is does nothing until you
+move it to, or through, the current value; then it follows. This stops a
+fader that was left at the bottom from dropping the Grand Master to zero the
+moment you touch it. It holds for the **Grand Master**, a **speed master's
+Rate** fader, a **channel group's** fader and a **Virtual Console slider**
+with **Catch values** on (new sliders have it on; one in a saved show keeps
+its setting). Encoders are relative and need none of it.
+
+A fader that is waiting says so: the tooltip of the footer's **GM** chip,
+the speed master's footer button and the slider read *"Grand Master fader:
+move it to 75% to take over"*, and it clears when the fader gets there (or
+when you move the control on screen to where the fader is).
+
+A **motorised** fader, one whose controller has a feedback line patched
+(Connections, the universe's Feedback), is not made to wait: the first time
+you touch it away from the control it is sent the current value and moves
+there, then follows your hand. It is also sent the new value when the control
+is moved on screen.
+
 ## The rules for a surface
 
 These are the same rules the pad and the phone page follow, written so you
