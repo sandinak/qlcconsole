@@ -10440,6 +10440,23 @@ QVector3D StructureStudioView::axisWorldPoint(bool useB, double val) const
                              : QVector3D(v, 0, 0);
 }
 
+double StructureStudioView::rulerStepMetres()
+{
+    return MeasurementUnits::isImperial(MeasurementUnits::preferredLength()) ? 0.3048 : 1.0;
+}
+
+QString StructureStudioView::rulerUnitSymbol()
+{
+    return MeasurementUnits::symbol(MeasurementUnits::preferredLength());
+}
+
+QString StructureStudioView::rulerTickText(int k)
+{
+    const double v = double(k) * rulerStepMetres() * 1000.0
+                     / MeasurementUnits::mmPer(MeasurementUnits::preferredLength());
+    return QString::number(qRound(v));
+}
+
 void StructureStudioView::drawRulers(QPainter &p) const
 {
     /* The tick rulers measure ONE world axis along each screen edge, which only
@@ -10454,11 +10471,11 @@ void StructureStudioView::drawRulers(QPainter &p) const
     // Match the main-window ruler bars: dark band, 9px font, a number at every
     // sensibly-spaced unit, blue axis label, blue cursor.
     /* A tick a foot apart for feet or inches (Settings > Units), else a
-       metre; the ruler names that unit. Readings beside it are in the
-       preferred unit itself. */
-    const bool feet = MeasurementUnits::isImperial(MeasurementUnits::preferredLength());
-    const QString sfx = MeasurementUnits::symbol(feet ? MeasurementUnits::Feet : MeasurementUnits::Metres);
-    const double stepM = feet ? 0.3048 : 1.0;        // one ruler unit, in metres
+       metre; the numbers and the name are in the preferred unit itself,
+       as the readings beside them are (a millimetre show read "m" and
+       1, 2 beside fields in mm). */
+    const QString sfx = rulerUnitSymbol();
+    const double stepM = rulerStepMetres();          // one ruler unit, in metres
     const double pxPerUnit = stepM * m_scale;        // its width in pixels
     // Choose a label interval that keeps ~34 px between numbers.
     int lblEvery = 1;
@@ -10484,7 +10501,7 @@ void StructureStudioView::drawRulers(QPainter &p) const
             if (k % lblEvery == 0)
             {
                 p.setPen(textCol);
-                p.drawText(QRectF(0, sy - 8, GW - 8, 16), Qt::AlignRight | Qt::AlignVCenter, QString::number(k));
+                p.drawText(QRectF(0, sy - 8, GW - 8, 16), Qt::AlignRight | Qt::AlignVCenter, rulerTickText(k));
             }
         }
         p.setPen(axisCol); p.drawText(QRectF(2, 1, GW - 2, 12), Qt::AlignLeft | Qt::AlignTop, sfx);
@@ -10511,6 +10528,11 @@ void StructureStudioView::drawRulers(QPainter &p) const
     const double by = height() - GH;
     p.fillRect(QRectF(0, by, width(), GH), band);
     p.setPen(edge); p.drawLine(QPointF(0, by), QPointF(width(), by));
+    /* No number under the unit's name in the corner: "1000" in a
+       millimetre show ran into "↔ mm". */
+    const QFontMetricsF rfm(p.font());
+    const double nameRight = m_fromBehind ? 0.0
+                           : GW + 3 + rfm.horizontalAdvance(QString("↔ %1").arg(sfx)) + 4;
     for (int k = -200; k <= 200; ++k)
     {
         const double aVal = centreA + k * stepM;
@@ -10518,11 +10540,11 @@ void StructureStudioView::drawRulers(QPainter &p) const
         if (sx < GW || sx > width() + 20) continue;
         p.setPen((k == 0) ? QPen(roomInk(QColor(0, 190, 255)), 1.2) : QPen(tickCol, 1.0));
         p.drawLine(QPointF(sx, by), QPointF(sx, by + 6));
-        if (k % lblEvery == 0)
+        const QString tickText = (k == 0 && fromCl) ? QStringLiteral("CL") : rulerTickText(qAbs(k));
+        if (k % lblEvery == 0 && sx - rfm.horizontalAdvance(tickText) / 2.0 >= nameRight)
         {
             p.setPen((k == 0) ? roomInk(QColor(0, 190, 255)) : textCol);
-            p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter,
-                       (k == 0 && fromCl) ? QStringLiteral("CL") : QString::number(qAbs(k)));
+            p.drawText(QRectF(sx - 16, by + 6, 32, 14), Qt::AlignHCenter | Qt::AlignVCenter, tickText);
         }
     }
     /* From behind, the numbers still count out from the structure's centre

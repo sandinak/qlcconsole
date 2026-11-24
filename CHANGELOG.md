@@ -28,6 +28,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **A trigger that steps through reopens cleanly, and Move It Here lets go of preset buttons.** Reopening the Trigger… dialog of a trigger made with Step Through Them no longer refuses OK as a second job (and no longer offers a Move It Here that deleted its sibling); it keeps stepping while its control and place stay. Move It Here from a Speed Dial or XY Pad preset, a Matrix custom control or a Frame page shortcut now lets go of the sub-control's own input, so the old one stops answering, stays gone after save and reload, and the hub counts one job.
 - **Fixture Properties shows three pictures.** **Place** has a plan map of the stage (centre line, plaster line, the fixture as a dot): drag the dot and X / Y follow, type X / Y and the dot moves; it reads how far the fixture is *SR* or *SL* of the centre line and from the plaster line, and on a truss, pipe or tower it is not draggable and says why. **Aim & Beam** has the mask lens, the beam seen from behind with the tape on it and how much gets through: the four Masking boxes draw it, and dragging a band's edge sets them (a laser shows its scan window). A fixture on a truss, pipe or tower also has **On Its Mount** (a side view with its height offset, following the Place rows as you type): **Plan | On Its Mount** switches the one picture area. Mount view detail: the truss, pipe or tower a fixture hangs on, front-on with the fixture ringed, its face, hung or upright, angle and tilt, and the height offset on a dimension line in your unit.
+- **A bar's fixtures sit under its truss in Plot layers**: T1-S1 and
+  T1-S2 on Bar 1 of T-1 are listed T-1 ▸ Bar 1 ▸ T1-S1, as a lantern is
+  under its hanger, when the bar and its fixtures have no folder of their
+  own; a fixture group made across the bars of several trusses no longer
+  pulls them out to the top of the layer (it is still listed, under its
+  layer). A pipe hung from a truss or a stand sits under it too, and a
+  row nested under what it hangs on keeps its whole name ("Lantern A"
+  under its hanger was cut to "Lanter"). A bar left on its own layer
+  when its truss moves is listed there, and a boom in a folder made by
+  hand stays in it. The stand view's rulers read in Settings ▸ Units
+  (a millimetre show read "m" and 1, 2).
 - **Fixture Properties fits a laptop's screen**: a moving head's rows
   (Fixture, Position, Aim & Mount, DMX Controls) scroll between its name
   and its OK / Cancel, which stay in view; it was over 1000 px tall and

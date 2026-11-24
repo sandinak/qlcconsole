@@ -1830,8 +1830,10 @@ undo step takes the target and its palette away together.
    holding what you picked and scrolls to the first; a fixture is picked
    where it hangs, not again under each fixture group that lists it.
 3. **What hangs on what is a tree:** a bar under its truss or stand, a
-   crossbar under its boom, a fixture under the bar, hanger, tower or boom
-   it is on.
+   crossbar under its boom, a pipe under the truss it hangs from, a fixture
+   under the bar, hanger, tower or boom it is on -- even when the bar and
+   its fixtures are in no folder of their own (T-1 ▸ Bar 1 ▸ T1-S1). A
+   fixture group made across several bars is listed under the layer too.
 4. **Tower ▸ Hanger ▸ Lantern:** a hanger under its tower or truss, the
    lantern on it under the hanger. Drag a fixture onto a hanger's, bar's,
    tower's or boom's row -- or onto a fixture already hung there -- to hang

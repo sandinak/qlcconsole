@@ -756,6 +756,49 @@ QList<MonitorLayersPanel::ItemDesc> MonitorLayersPanel::gatherItems() const
             out << d;
         }
     }
+
+    /* A bar sits with what it hangs off, as a hanger does: a bar on T-1
+       (ParentTruss), a truss on a stand, a crossbar on a boom, a pipe hung
+       from a truss -- and a hanger on a bar. One with no folder of its own
+       takes the layer and folder of the structure it is on, up the chain,
+       so it is built inside T-1's folder ("T1-S1 and 2 .. which are on the
+       bar on t1 .. not under T1"). One put in a folder by hand stays there.
+       Only while it is on the same layer: a truss moved to another layer
+       takes its hangers with it but not its bars, so a bar left behind is
+       listed on the layer it is really on, where its eye works. */
+    QHash<QString, int> indexOf;
+    for (int i = 0; i < out.size(); i++)
+        indexOf.insert(out.at(i).kind + QLatin1Char(':') + QString::number(out.at(i).id), i);
+    QList<QPair<int, ItemDesc> > placed;
+    for (int i = 0; i < out.size(); i++)
+    {
+        const ItemDesc &d = out.at(i);
+        if (d.groupId != 0)
+            continue;
+        if (d.kind != QStringLiteral("truss") && d.kind != QStringLiteral("pipe")
+            && d.kind != QStringLiteral("hanger"))
+            continue;
+        QString up = mountParentKey(d.kind, d.id);
+        int at = -1;
+        for (int depth = 0; depth < 16 && indexOf.contains(up); depth++)
+        {
+            const ItemDesc &p = out.at(indexOf.value(up));
+            if (p.layerId != d.layerId)
+                break;      // the chain leaves this layer: stop below it
+            at = indexOf.value(up);
+            if (p.groupId != 0)
+                break;
+            up = mountParentKey(p.kind, p.id);
+        }
+        if (at < 0)
+            continue;
+        ItemDesc nd = d;
+        nd.layerId = out.at(at).layerId;
+        nd.groupId = out.at(at).groupId;
+        placed << qMakePair(i, nd);
+    }
+    for (int k = 0; k < placed.size(); k++)
+        out[placed.at(k).first] = placed.at(k).second;
     return out;
 }
 
@@ -1363,9 +1406,32 @@ QString MonitorLayersPanel::mountParentKey(const QString &kind, quint32 id) cons
         const Pipe *p = m_props->pipe(id);
         if (p != nullptr && p->isBarOnPipe())
             return key("pipe", p->parentPipeId());
+        if (p != nullptr && p->isTrussHung())
+            return key("truss", p->parentTrussId());
+        if (p != nullptr && p->isStandMounted())
+            return key("stand", p->standId());
         return QString();
     }
     return QString();
+}
+
+quint32 MonitorLayersPanel::handFolderOf(QTreeWidgetItem *row, const QString &kind, quint32 id) const
+{
+    /* A structure shown as its own folder ("T-1 · on truss"): the folder
+       that one sits in. */
+    if (row->data(0, NodeTypeRole).toInt() == NodeGroup)
+        return m_props->group(row->data(0, NodeIdRole).toUInt()).parentGroupId;
+    if (kind == QLatin1String("truss"))
+    {
+        const Truss *t = m_props->truss(id);
+        return t != nullptr ? t->groupId() : 0;
+    }
+    if (kind == QLatin1String("pipe"))
+    {
+        const Pipe *p = m_props->pipe(id);
+        return p != nullptr ? p->groupId() : 0;
+    }
+    return 0;       // fixtures and hangers nest as they always have
 }
 
 void MonitorLayersPanel::nestByMounts(QTreeWidgetItem *layerNode)
@@ -1429,6 +1495,20 @@ void MonitorLayersPanel::nestByMounts(QTreeWidgetItem *layerNode)
         QTreeWidgetItem *host = rowOf.value(mountParentKey(kind, id), nullptr);
         if (host == nullptr || host == up || host == row)
             continue;
+        /* A bar, pipe or boom put in a folder by hand stays in it: a boom
+           on its stand in a "Booms" folder is not pulled out under the
+           stand. Only a host inside that same folder takes it. */
+        const quint32 ownFolder = handFolderOf(row, kind, id);
+        if (ownFolder != 0)
+        {
+            bool hostInFolder = false;
+            for (QTreeWidgetItem *a = host; a != nullptr; a = a->parent())
+                if (a->data(0, NodeTypeRole).toInt() == NodeGroup
+                    && a->data(0, NodeIdRole).toUInt() == ownFolder)
+                    { hostInFolder = true; break; }
+            if (!hostInFolder)
+                continue;
+        }
         bool inside = false;     // never under itself
         for (QTreeWidgetItem *a = host; a != nullptr; a = a->parent())
             if (a == row) { inside = true; break; }
@@ -1673,28 +1753,85 @@ void MonitorLayersPanel::reload()
             if (grp.parentGroupId == 0 && grp.layerId == lyr.id)
                 buildGroupNode(layerNode, grp.id, items);
 
-        // Loose (un-foldered) fixtures on this layer, and any Fixture Group local
-        // to them — so a group made from loose fixtures (e.g. UST-1..8) is visible.
-        QSet<quint32> looseFix;
-        foreach (const ItemDesc &d, items)
-            if (d.groupId == 0 && d.layerId == lyr.id && d.kind == QStringLiteral("fixture"))
-                looseFix.insert(d.id);
-        QHash<quint32, QList<QTreeWidgetItem *> > looseFGNode;
-        addLocalFixtureGroups(layerNode, looseFix, looseFGNode);
-
+        // Loose (un-foldered) objects on this layer.
+        QHash<quint32, ItemDesc> looseFixDesc;
+        QList<QTreeWidgetItem *> looseRows;     // in the order they are listed
         foreach (const ItemDesc &d, items)
             if (d.groupId == 0 && d.layerId == lyr.id)
             {
-                if (d.kind == QStringLiteral("fixture") && looseFGNode.contains(d.id))
-                {
-                    foreach (QTreeWidgetItem *fgNode, looseFGNode.value(d.id))
-                        addItemLeaf(fgNode, d);
-                    continue;
-                }
                 addItemLeaf(layerNode, d);
+                looseRows << layerNode->child(layerNode->childCount() - 1);
+                if (d.kind == QStringLiteral("fixture"))
+                    looseFixDesc.insert(d.id, d);
             }
         // What is hung on what, within this layer.
         nestByMounts(layerNode);
+
+        /* Then any Fixture Group local to the loose fixtures where they now
+           hang -- so a group made from loose fixtures (e.g. UST-1..8) is
+           visible, under the bar when it is all on one bar. It was worked
+           out before the nesting, over every loose fixture on the layer: a
+           group spanning the bars of T-1 to T-4 took T1-S1 and T1-S2 out
+           of reach of their bar, and they were listed in the group at the
+           top of the layer, never under T-1 > Bar 1. A group across bars
+           is still listed, under its layer, by the pass after this loop. */
+        {
+            const QSet<QTreeWidgetItem *> isLoose(looseRows.begin(), looseRows.end());
+            QHash<QTreeWidgetItem *, QSet<quint32> > byHost;
+            foreach (QTreeWidgetItem *row, looseRows)
+            {
+                if (row->data(0, NodeKindRole).toString() != QStringLiteral("fixture"))
+                    continue;
+                const quint32 fid = row->data(0, NodeIdRole).toUInt();
+                byHost[row->parent()].insert(fid);
+            }
+            QHash<quint32, QList<QTreeWidgetItem *> > looseFGNode;
+            for (auto it = byHost.begin(); it != byHost.end(); ++it)
+            {
+                QTreeWidgetItem *host = it.key();
+                // The groups go above the loose rows there, as they did.
+                int at = host->childCount();
+                for (int c = 0; c < host->childCount(); c++)
+                    if (isLoose.contains(host->child(c))) { at = c; break; }
+                const int before = host->childCount();
+                addLocalFixtureGroups(host, it.value(), looseFGNode);
+                QList<QTreeWidgetItem *> made;
+                while (host->childCount() > before)
+                    made << host->takeChild(before);
+                for (int k = 0; k < made.size(); k++)
+                    host->insertChild(at + k, made.at(k));
+            }
+            foreach (QTreeWidgetItem *leaf, looseRows)
+            {
+                if (leaf->data(0, NodeKindRole).toString() != QStringLiteral("fixture"))
+                    continue;
+                const quint32 fid = leaf->data(0, NodeIdRole).toUInt();
+                const QList<QTreeWidgetItem *> fgNodes = looseFGNode.value(fid);
+                if (fgNodes.isEmpty())
+                    continue;
+                leaf->parent()->removeChild(leaf);
+                fgNodes.first()->addChild(leaf);
+                for (int k = 1; k < fgNodes.size(); k++)
+                    addItemLeaf(fgNodes.at(k), looseFixDesc.value(fid));
+            }
+        }
+        /* A row taken out and put back loses its full-width name (the view
+           keeps that by position): "Lantern A" under its hanger was cut to
+           "Lanter" at the eye/lock column. Every row in the layer that has
+           no eye/lock of its own spans again. */
+        for (QTreeWidgetItemIterator it(layerNode); *it != nullptr; ++it)
+        {
+            QTreeWidgetItem *row = *it;
+            if (row == layerNode)
+                continue;
+            bool mine = false;
+            for (QTreeWidgetItem *a = row->parent(); a != nullptr; a = a->parent())
+                if (a == layerNode) { mine = true; break; }
+            if (!mine)
+                break;      // past this layer's rows
+            if (m_tree->itemWidget(row, 1) == nullptr)
+                row->setFirstColumnSpanned(true);
+        }
         layerNodes.insert(lyr.id, layerNode);
 
         layerNode->setExpanded(!wasNodeCollapsed(NodeLayer, lyr.id));
