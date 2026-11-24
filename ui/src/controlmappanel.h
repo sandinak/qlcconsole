@@ -22,6 +22,8 @@
 
 #include <QWidget>
 
+#include "controlowners.h"
+#include "encoderbank.h"
 #include "controlmap.h"
 #include "qlcui_export.h"
 
@@ -125,7 +127,20 @@ private:
 
     /** What the next control heard is set as. */
     enum LearnTarget { LearnNone = 0, LearnEncoders, LearnPushes, LearnNext, LearnPrevious, LearnDirect,
-                       LearnRings };
+                       LearnRings, ApplyDevice };
+    /** Who else listens to @a channels of @a universe: (channel, owner),
+     *  each owner once (the bank's own controls are not in the way). */
+    QList<QPair<quint32, ControlOwners::Owner>> encoderTaken(quint32 universe,
+                                                            const QList<quint32> &channels) const;
+    /** Every control device @a d listens to (encoders, pushes, bank buttons). */
+    static QList<quint32> encoderChannels(const EncoderBank::Device &d);
+    /** Sets the bank's device (a preset, Custom on again, another universe)
+     *  unless a control of it has another job: then refused with the
+     *  learn's box, and set on Move It Here. False: refused. */
+    bool setEncoderDevice(const EncoderBank::Device &d, const QString &key);
+    void applyEncoderDevice(const EncoderBank::Device &d, const QString &key);
+    EncoderBank::Device m_encPendingDevice;
+    QString m_encPendingKey;
     void buildEncoderBox(QVBoxLayout *lay);
     void startEncoderLearn(int target);
     void endEncoderLearn();

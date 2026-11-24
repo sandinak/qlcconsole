@@ -18,6 +18,7 @@
 */
 
 #include <QStringList>
+#include <QHash>
 #include <QMap>
 
 #include "controlowners.h"
@@ -348,6 +349,48 @@ QString ControlOwners::refusal(Doc *doc, quint32 universe, quint32 channel, cons
     return text;
 }
 
+QString ControlOwners::runRefusal(Doc *doc, quint32 universe, const QList<QPair<quint32, Owner>> &taken)
+{
+    if (taken.isEmpty())
+        return QString();
+    // The controls in the order first seen, each with its own owners.
+    QList<quint32> channels;
+    QHash<quint32, QList<Owner>> byChannel;
+    QList<Owner> all;
+    for (const QPair<quint32, Owner> &t : taken)
+    {
+        if (!channels.contains(t.first))
+            channels << t.first;
+        byChannel[t.first] << t.second;
+        all << t.second;
+    }
+    if (channels.count() == 1)
+        return refusal(doc, universe, channels.first(), all);
+    QStringList lines;
+    for (quint32 ch : std::as_const(channels))
+    {
+        QStringList jobs;
+        for (const Owner &o : byChannel.value(ch))
+        {
+            const QString job = tr("%1 (%2)").arg(o.thing, o.where);
+            if (!jobs.contains(job))
+                jobs << job;
+        }
+        lines << tr("%1 already does %2").arg(controlName(doc, universe, ch), jobs.join(tr(" and ")));
+    }
+    // "CC 10 already does A (where); CC 12 already does B (where). One job per control."
+    QString text = tr("%1. One job per control.").arg(lines.join(QStringLiteral("; ")));
+    for (const Owner &o : std::as_const(all))
+    {
+        if (!o.movable)
+        {
+            text += QStringLiteral("\n") + o.fixedWhy;
+            break;
+        }
+    }
+    return text;
+}
+
 QString ControlOwners::moveNote()
 {
     return tr("Move It Here is not on Undo: to put it back, learn the control there again.");
@@ -424,14 +467,155 @@ bool ControlOwners::release(Doc *doc, const Owner &owner)
     return false;
 }
 
+bool ControlOwners::canRelease(Doc *doc, const Owner &owner)
+{
+    if (doc == nullptr || !owner.movable)
+        return false;
+    switch (owner.kind)
+    {
+        case Trigger:
+            return doc->controlMap()->binding(owner.target) != nullptr;
+        case EmergencyStop:
+        case Pmj:
+            return false;
+        case Encoder:
+            return doc->controlMap()->encoderBank()->isEnabled() && owner.part >= EncoderTurn
+                   && owner.part <= BankDirect;
+        case VCInput:
+            return qobject_cast<VCWidget *>(owner.widget.data()) != nullptr;
+        case SpeedMaster:
+        {
+            quint32 u = 0, ch = 0;
+            return doc->speedMasters() != nullptr && owner.part >= 0 && owner.part < SpeedMasters::ControlCount
+                   && doc->speedMasters()->input(owner.index, SpeedMasters::Control(owner.part), &u, &ch);
+        }
+        case GrandMaster:
+            return VirtualConsole::instance() != nullptr;
+        case ChannelGroup:
+            return doc->channelsGroup(quint32(owner.index)) != nullptr;
+    }
+    return false;
+}
+
+namespace
+{
+/* What one owner had before release() took it: enough to put it back. */
+struct Held
+{
+    ControlOwners::Owner owner;
+    ControlMap::Binding binding;
+    EncoderBank::Device device;
+    QString presetKey;
+    bool enabled = false;
+    QSharedPointer<QLCInputSource> source;
+    quint32 universe = 0;
+    quint32 channel = 0;
+};
+
+Held holdOf(Doc *doc, const ControlOwners::Owner &o)
+{
+    Held h;
+    h.owner = o;
+    switch (o.kind)
+    {
+        case ControlOwners::Trigger:
+            if (const ControlMap::Binding *b = doc->controlMap()->binding(o.target))
+                h.binding = *b;
+            break;
+        case ControlOwners::Encoder:
+        {
+            const EncoderBank *enc = doc->controlMap()->encoderBank();
+            h.device = enc->device();
+            h.presetKey = enc->presetKey();
+            h.enabled = enc->isEnabled();
+            break;
+        }
+        case ControlOwners::VCInput:
+            if (VCWidget *w = qobject_cast<VCWidget *>(o.widget.data()))
+                h.source = w->inputSource(o.inputId);
+            break;
+        case ControlOwners::SpeedMaster:
+            doc->speedMasters()->input(o.index, SpeedMasters::Control(o.part), &h.universe, &h.channel);
+            break;
+        case ControlOwners::GrandMaster:
+            if (VirtualConsole *vc = VirtualConsole::instance())
+            {
+                h.universe = vc->properties().grandMasterInputUniverse();
+                h.channel = vc->properties().grandMasterInputChannel();
+            }
+            break;
+        case ControlOwners::ChannelGroup:
+            if (ChannelsGroup *g = doc->channelsGroup(quint32(o.index)))
+                h.source = g->inputSource();
+            break;
+        case ControlOwners::EmergencyStop:
+        case ControlOwners::Pmj:
+            break;
+    }
+    return h;
+}
+
+void putBack(Doc *doc, const Held &h)
+{
+    switch (h.owner.kind)
+    {
+        case ControlOwners::Trigger:
+            // Beside whatever shares its place: as it was (stepping through, if it did).
+            doc->controlMap()->setBinding(h.binding, true);
+            break;
+        case ControlOwners::Encoder:
+        {
+            EncoderBank *enc = doc->controlMap()->encoderBank();
+            enc->setDevice(h.device, h.presetKey);
+            enc->setEnabled(h.enabled);
+            break;
+        }
+        case ControlOwners::VCInput:
+            if (VCWidget *w = qobject_cast<VCWidget *>(h.owner.widget.data()))
+                w->setInputSource(h.source, h.owner.inputId);
+            break;
+        case ControlOwners::SpeedMaster:
+            doc->speedMasters()->setInput(h.owner.index, SpeedMasters::Control(h.owner.part), h.universe, h.channel);
+            break;
+        case ControlOwners::GrandMaster:
+            if (VirtualConsole *vc = VirtualConsole::instance())
+                vc->restoreGrandMasterInput(h.universe, h.channel);
+            break;
+        case ControlOwners::ChannelGroup:
+            if (ChannelsGroup *g = doc->channelsGroup(quint32(h.owner.index)))
+                g->setInputSource(h.source);
+            break;
+        case ControlOwners::EmergencyStop:
+        case ControlOwners::Pmj:
+            break;
+    }
+}
+}
+
 bool ControlOwners::releaseAll(Doc *doc, const QList<Owner> &owners)
 {
     if (!canMove(owners))
         return false;
-    bool ok = true;
+    /* All or nothing: a control taken from some of its owners and not the
+       others would end with fewer jobs than it had and not the one asked
+       for -- or with none. Every one is asked first ... */
     for (const Owner &o : owners)
-        ok = release(doc, o) && ok;
-    return ok;
+        if (!canRelease(doc, o))
+            return false;
+    // ... and if one still fails, those already released get it back.
+    QList<Held> released;
+    for (const Owner &o : owners)
+    {
+        const Held h = holdOf(doc, o);
+        if (!release(doc, o))
+        {
+            for (int i = released.count() - 1; i >= 0; --i)
+                putBack(doc, released.at(i));
+            return false;
+        }
+        released << h;
+    }
+    return true;
 }
 
 QList<ControlOwners::Collision> ControlOwners::collisions(Doc *doc)

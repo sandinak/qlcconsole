@@ -76,6 +76,11 @@ private slots:
     void theLightFollowsWhatIsArmedNow();
     void placeShots();
     void theFiresColumnNeverCutsAName();
+    void cancelInTheCollisionBoxLeavesBothTriggers();
+    void theHubSaysAPlaceDeletedOrFromANewerVersion();
+    void moveItHereIsAllOrNothing();
+    void anEncoderPresetAsksWhoHasItsControls();
+    void anEncoderRefusalNamesEachOwnersControl();
 
 private:
     Scene *scene(const QString &name);

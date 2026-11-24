@@ -115,6 +115,9 @@ private slots:
     void twoPlacesOfOneScopeDoNotStepThrough();
     void aHitLearnedWiderThanItsPlaceDoesNotHoldTheControl();
     void aPlaceTakenIsNeverMovedOnto();
+    void aTriggerWhosePlaceIsDeletedWidensAsAHitDoes();
+    void aPlaceFromANewerVersionIsKeptAndNeverFires();
+    void aHitsTriggerFollowsTheHitWhenItMoves();
 
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,

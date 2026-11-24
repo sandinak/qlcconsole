@@ -251,6 +251,12 @@ void VirtualConsole::clearGrandMasterInput()
     m_doc->setModified();
 }
 
+void VirtualConsole::restoreGrandMasterInput(quint32 universe, quint32 channel)
+{
+    m_properties.setGrandMasterInputSource(universe, channel);
+    m_doc->setModified();
+}
+
 /*****************************************************************************
  * Selected widget
  *****************************************************************************/

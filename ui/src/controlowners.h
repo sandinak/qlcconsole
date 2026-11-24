@@ -48,7 +48,7 @@ class Doc;
  * naming it (refusal()), with Move It Here (release()) -- except where the
  * owner can't let go: the PMJ's controls come with its profile, and nothing
  * takes the emergency stop's control (its own Learn can take a control from
- * anything else).
+ * anything except the PMJ's controls and the encoder bank's runs).
  *
  * Every owner has a place. A Control Map trigger has its own (a cue, a cue
  * list, a production or everywhere: phase 3, Q295, Q296); every other
@@ -132,6 +132,11 @@ public:
     /** "<control> already does <thing> (<where>). One job per control.",
      *  one line per owner, and the reason when one of them can't let go. */
     static QString refusal(Doc *doc, quint32 universe, quint32 channel, const QList<Owner> &owners);
+    /** refusal() for a run of controls (the encoder bank's encoders,
+     *  pushes, bank buttons): each owner named with its own control
+     *  ("CC 10 already does A (where); CC 12 already does B (where)."),
+     *  owners of one control together. @a taken: (channel, owner). */
+    static QString runRefusal(Doc *doc, quint32 universe, const QList<QPair<quint32, Owner>> &taken);
     /** Whether Move It Here may take the control from all of @a owners. */
     static bool canMove(const QList<Owner> &owners);
     /** What Move It Here does on the undo side, in words: the app's undo
@@ -141,8 +146,12 @@ public:
     /** Takes the control away from @a owner (it no longer reacts to it).
      *  false: it can't let go, or it is gone. */
     static bool release(Doc *doc, const Owner &owner);
-    /** release() for each of @a owners; false when any can't let go
-     *  (nothing is released then). */
+    /** Whether release() of @a owner would work now: it can let go and it
+     *  is still there (the trigger, the widget, the channel group...). */
+    static bool canRelease(Doc *doc, const Owner &owner);
+    /** release() for each of @a owners, all or nothing: false when any
+     *  can't let go, and then every one keeps its control (none is
+     *  released, or those released before one failed are put back). */
     static bool releaseAll(Doc *doc, const QList<Owner> &owners);
 
     /** The control in words ("MIDI · CC 7, MIDI ch 1", "Key · F5"). */

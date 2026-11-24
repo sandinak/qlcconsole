@@ -90,7 +90,10 @@ class Doc;
  * can still let go of what it runs. The emergency stop is always
  * everywhere, alone on its control, and comes before all of it. Saved as
  * Scope= and ScopeOf= on the trigger, only when not everywhere: a show
- * saved before places loads with every trigger everywhere, as it was.
+ * saved before places loads with every trigger everywhere, as it was. A
+ * place that goes (its cue, list or production deleted) widens the trigger
+ * as a hit's is (fixPlaces()), said in placeNote(); a place from a newer
+ * version is kept, saved back as it was, and never armed.
  *
  * GUI thread only: input arrives queued from the input patches, feedback
  * follows the MasterTimer's started/stopped signals queued here. With no
@@ -155,16 +158,29 @@ public:
         Everywhere = 0, //!< always (the old behaviour, and every old show's)
         ProductionPlace,//!< while that production is current (or none is)
         ListPlace,      //!< while that cue list runs (or is its production's main list, nothing running)
-        CuePlace        //!< while that cue is the live cue of its list
+        CuePlace,       //!< while that cue is the live cue of its list
+        /** A place this build does not know (a show saved by a later one:
+         *  a layer, an effect), or one it cannot read: kept as it was
+         *  saved and never armed -- never widened to everywhere. */
+        NewerPlace = 100
     };
 
     struct Place
     {
         PlaceScope scope = Everywhere;
         quint32 id = 0xFFFFFFFF;    //!< the production, list or cue (not for Everywhere)
+        /** NewerPlace: the Scope= and ScopeOf= it was loaded with, saved back as they were. */
+        QString newerScope;
+        QString newerOf;
 
         bool operator==(const Place &o) const
-        { return scope == o.scope && (scope == Everywhere || id == o.id); }
+        {
+            if (scope != o.scope)
+                return false;
+            if (scope == NewerPlace)
+                return newerScope == o.newerScope && newerOf == o.newerOf;
+            return scope == Everywhere || id == o.id;
+        }
         bool operator!=(const Place &o) const { return !(*this == o); }
     };
 
@@ -357,7 +373,19 @@ public:
     Place placeOfHit(quint32 hitId) const;
 
     static QString placeScopeToString(PlaceScope scope);
+    /** NewerPlace for anything this build does not know (never everywhere). */
     static PlaceScope stringToPlaceScope(const QString &str);
+    /** Whether @a place is in the show now (everywhere always; a newer
+     *  version's place never). */
+    bool placeExists(const Place &place) const;
+    /** What happened to @a target's place, in words (empty: nothing to
+     *  say): its cue, list or production was deleted, so it was widened as
+     *  a hit is (ShowTreeController's scoped-hit fix-up: to its production,
+     *  else everywhere); or its place is from a newer version, so it never
+     *  fires here. */
+    QString placeNote(const Target &target) const;
+    /** placeNote() of every trigger that has one, each as a sentence. */
+    QStringList placeNotes() const;
 
     /*********************************************************************
      * Computer keys: where they may fire
@@ -496,6 +524,9 @@ private slots:
      *  MasterTimer thread holds while it steps. Queued twice over, in
      *  fact: the signals arrive on their own threads. */
     void slotLampsMayHaveChanged();
+    /** The Show Tree changed: a trigger whose place went away is widened
+     *  (fixPlaces()); not while a show loads (Doc::loaded does it then). */
+    void slotTreeChanged();
     /** The double-GO guard held a command on cue list @a chaserId: every
      *  control that GOes it blinks twice (ShowControl::commandHeld). */
     void slotGuardHeld(const QString &text, quint32 chaserId);
@@ -506,6 +537,18 @@ private slots:
 private:
     static quint64 key(quint32 universe, quint32 channel)
     { return (quint64(universe) << 32) | channel; }
+    static quint64 targetKey(const Target &t) { return (quint64(t.type) << 32) | t.id; }
+    static quint64 placeKey(const Place &p) { return (quint64(p.scope) << 32) | p.id; }
+    /** A trigger whose place is gone (its cue, list or production
+     *  deleted) moves out, as a scoped hit does: to its production, else
+     *  everywhere (a place another trigger on the control has is passed
+     *  over while a wider one is free). Said in placeNote(). A widened one
+     *  whose place comes back (Undo) goes back to it. Marks the show
+     *  modified when it moved one. */
+    void fixPlaces();
+    /** Remembers each live place's production and name, so a place that
+     *  goes can still be widened and named. */
+    void rememberPlaces();
     /** Rebuilds the lookups and (dis)connects input and feedback. */
     void changed(bool modified);
     void rebuild();
@@ -638,6 +681,23 @@ private:
     /** A control that is ready glows dim; off for a pad whose LEDs take a
      *  colour in the velocity (the APCs) and show nothing at a dim level. */
     bool m_dimWhenReady = true;
+    /** Each place a trigger has, while it is in the show: its production
+     *  and its name (placeKey()). */
+    struct PlaceHome
+    {
+        quint32 production = 0xFFFFFFFF;
+        QString name;
+    };
+    QHash<quint64, PlaceHome> m_placeHomes;
+    /** Triggers widened because their place went (targetKey()): where
+     *  they were and what it was called. */
+    struct Widened
+    {
+        Place from;
+        QString fromName;
+        Place to;
+    };
+    QHash<quint64, Widened> m_widened;
     /** The bindings blinking because the guard held a command on their
      *  cue list, how many steps of the blink are left (0: none), and
      *  whether a chain is in flight -- which the counter cannot say: it is

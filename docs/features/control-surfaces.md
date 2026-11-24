@@ -24,14 +24,19 @@ when you learn it for another, naming the owner: *Note 60 already does
 Button "House lights" (Virtual Console). One job per control.* Press
 **Move It Here** to take it from there and give it to what you are
 learning (the old owner stops reacting at once), or **Cancel** to leave it
-where it is. Every Learn says this the same way: Learn Trigger…, the
-emergency stop, the encoder bank, a widget's External Input (auto-detect or
-Choose…), a speed master's Inputs…, the Grand Master's input and a channel
-group's input. Move It Here is not on Undo: to put a control back, learn it
-there again. Two exceptions, with no Move It Here: the PMJ Black 1's
-controls that do something come with its profile, and nothing takes the
-**emergency stop's** control (the stop's own Learn can take a control from
-anything else). Two Virtual Console widgets on one input are Show Review's
+where it is -- Cancel changes nothing, on either side. Move It Here takes
+the control from every owner or from none: if one of them cannot let go,
+each keeps it. Every Learn says this the same way: Learn Trigger…, the
+emergency stop, the encoder bank (a Learn, a preset, Custom turned back on
+or another universe: each hands the bank a run of controls, and each
+taken one is named with its own control), a widget's External Input
+(auto-detect or Choose…), a speed master's Inputs…, the Grand Master's
+input and a channel group's input. Move It Here is not on Undo: to put a
+control back, learn it there again. Two exceptions, with no Move It Here:
+the PMJ Black 1's controls that do something come with its profile, and
+nothing takes the **emergency stop's** control (the stop's own Learn can
+take a control from anything except the PMJ's controls and the encoder
+bank's runs). Two Virtual Console widgets on one input are Show Review's
 *Same input twice* (VC-06), not refused here.
 
 **A trigger has a place.** A Control Map trigger works where you learned
@@ -242,6 +247,22 @@ now. Learned from a scene or effect in Build it starts at Everywhere. Under the 
 what it started (a Toggle press, a Momentary release): only a start is held
 back. A computer key keeps the key rule there too: in Design a scene or
 effect key does nothing, in its place or out of it. Its light stays bright while that runs, then goes dark.
+
+**A place that goes.** Delete the cue, cue list or production a trigger
+works in and the trigger moves out, as a hit does: to its production, or
+everywhere when that is gone too (never onto a place another trigger on
+that control has while a wider one is free). A hit's trigger follows the
+hit when you move the hit to another place. **Control surfaces ▸ Triggers
+by place** and the trigger's **Works** say what happened: *Scene: Strobe
+worked only in cue 2 Chorus, which was deleted: it works in production
+Show now.* Undo the delete and it goes back.
+
+**A place from a newer version.** A show saved by a later qlcconsole may
+have a trigger at a place this one does not know (a layer, an effect). It
+is kept, saved back exactly as it came, and never fires here: **Works**
+says *In a place from a newer version*, **Its light** *Dark (place from a
+newer version)*, and Triggers by place says so. Choose a place in Works
+to use it here.
 
 **Lights and the hub follow what is armed now.** A control's light is the
 one of the trigger that would fire: when the GO leaves cue 2.3, a control

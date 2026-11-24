@@ -89,8 +89,14 @@ ControlMap::ControlMap(Doc *doc)
        the same one-pass-per-turn queue (a show loading edits the tree
        thousands of times). */
     if (m_doc->showTree() != nullptr)
+    {
         connect(m_doc->showTree(), &ShowTreeController::changed, this,
                 &ControlMap::slotLampsMayHaveChanged);
+        // A trigger's place deleted: widened, as a scoped hit is.
+        connect(m_doc->showTree(), &ShowTreeController::changed, this, &ControlMap::slotTreeChanged);
+    }
+    // A show loaded: its tree and its triggers are both there now.
+    connect(m_doc, &Doc::loaded, this, &ControlMap::fixPlaces);
 }
 
 ControlMap::~ControlMap()
@@ -141,10 +147,12 @@ void ControlMap::setBinding(const Binding &in, bool stepThrough)
     // The emergency stop is everywhere, always (CONTROL_SCOPES §6).
     if (b.target.type == EmergencyStopTarget)
         b.place = Place();
-    if (b.place.scope != Everywhere && b.place.id == 0xFFFFFFFF)
+    if (b.place.scope != Everywhere && b.place.scope != NewerPlace && b.place.id == 0xFFFFFFFF)
         b.place = Place();
     if (m_bindings.contains(b))
         return;         // already so
+    // Set by hand: what fixPlaces() said about its old place is over.
+    m_widened.remove(targetKey(b.target));
     QList<QPair<quint32, quint32>> left;        // controls a replaced binding leaves
     for (int i = m_bindings.count() - 1; i >= 0; --i)
     {
@@ -179,6 +187,7 @@ bool ControlMap::removeBinding(const Target &target)
         if (target.type == EmergencyStopTarget)
             m_estopFlagged.clear();
         m_bindings.removeAt(i);
+        m_widened.remove(targetKey(target));
         changed(true);
         // Dark, or what another binding on the control says now.
         sendControlLamp(gone.universe, gone.channel, true);
@@ -194,6 +203,10 @@ bool ControlMap::setPlace(const Target &target, const Place &place)
         return false;
     if (b->place == place)
         return true;
+    // A newer version's place is only ever kept, never chosen: what it
+    // was cannot be written back from here.
+    if (place.scope == NewerPlace)
+        return false;
     // Another trigger on this control at that place: refused, never
     // replaced (Learn refuses it too, Q296/Q297). isPlaceTaken() says so.
     if (isPlaceTaken(*b, place))
@@ -240,6 +253,7 @@ void ControlMap::removeAll()
     m_bindings.clear();
     m_step.clear();
     m_estopFlagged.clear();
+    m_widened.clear();
     // Controls held keep what they pressed: their releases still let go.
     changed(true);
 }
@@ -279,6 +293,8 @@ void ControlMap::reset()
     const bool hadList = m_runTabList != 0xFFFFFFFF;
     m_runTabList = 0xFFFFFFFF;
     m_selected.clear();
+    m_widened.clear();
+    m_placeHomes.clear();
     if (had)
         changed(false);
     if (hadList)
@@ -288,6 +304,7 @@ void ControlMap::reset()
 void ControlMap::changed(bool modified)
 {
     rebuild();
+    rememberPlaces();
     updateConnections();
     if (modified)
         m_doc->setModified();
@@ -1164,25 +1181,51 @@ QString ControlMap::placeScopeToString(PlaceScope scope)
         case ProductionPlace: return QStringLiteral("Production");
         case ListPlace:       return QStringLiteral("List");
         case CuePlace:        return QStringLiteral("Cue");
+        case NewerPlace:      break;      // saved as it was loaded
     }
     return QString();
 }
 
 ControlMap::PlaceScope ControlMap::stringToPlaceScope(const QString &str)
 {
+    if (str == QLatin1String("Global"))
+        return Everywhere;
     if (str == QLatin1String("Production"))
         return ProductionPlace;
     if (str == QLatin1String("List"))
         return ListPlace;
     if (str == QLatin1String("Cue"))
         return CuePlace;
-    return Everywhere;
+    /* A place a later build has (phase 4: a layer, an effect): never read
+       as everywhere -- a trigger meant for one cue would fire all show. */
+    return NewerPlace;
+}
+
+bool ControlMap::placeExists(const Place &place) const
+{
+    ShowTreeController *st = m_doc->showTree();
+    switch (place.scope)
+    {
+        case Everywhere:
+            return true;
+        case ProductionPlace:
+            return st != nullptr && st->production(place.id) != nullptr;
+        case ListPlace:
+            return st != nullptr && st->cueList(place.id) != nullptr;
+        case CuePlace:
+            return st != nullptr && st->cue(place.id) != nullptr;
+        case NewerPlace:
+            return false;
+    }
+    return false;
 }
 
 bool ControlMap::isPlaceLive(const Place &place) const
 {
     if (place.scope == Everywhere)
         return true;
+    if (place.scope == NewerPlace)
+        return false;       // disarmed: this build cannot tell when it is live
     ShowTreeController *st = m_doc->showTree();
     if (st == nullptr)
         return false;
@@ -1201,6 +1244,7 @@ bool ControlMap::isPlaceLive(const Place &place) const
                 return false;
             break;
         case Everywhere:
+        case NewerPlace:
             break;
     }
     // The hits' own rule: the one answer for "is this place live".
@@ -1260,6 +1304,8 @@ bool ControlMap::isRunListPlace(const Place &place) const
             return place.id == run;
         case CuePlace:
             return listOfCueId(place.id) == run;
+        case NewerPlace:
+            return false;
     }
     return false;
 }
@@ -1388,7 +1434,8 @@ const ControlMap::Binding *ControlMap::runningOn(quint64 k) const
     for (int i : m_byControl.value(k))
     {
         const Binding &b = m_bindings.at(i);
-        if (b.target.type == EmergencyStopTarget)
+        // The stop, and a trigger at a newer version's place: never fire.
+        if (b.target.type == EmergencyStopTarget || b.place.scope == NewerPlace)
             continue;
         const quint32 fid = feedbackFunction(b);
         const Function *f = fid == 0xFFFFFFFF ? nullptr : m_doc->function(fid);
@@ -1424,6 +1471,8 @@ QString ControlMap::placeName(const Place &place) const
                 return tr("in a cue that is gone");
             return tr("in cue %1").arg(st->cueLabel(*l, l->indexOf(place.id)));
         }
+        case NewerPlace:
+            return tr("in a place from a newer version");
     }
     return QString();
 }
@@ -1486,6 +1535,163 @@ ControlMap::Place ControlMap::placeOfHit(quint32 hitId) const
     return Place();
 }
 
+void ControlMap::slotTreeChanged()
+{
+    // A show loading edits the tree thousands of times, before its
+    // triggers are in: Doc::loaded checks them once it is all there.
+    if (m_doc->loadStatus() == Doc::Loading)
+        return;
+    fixPlaces();
+}
+
+void ControlMap::rememberPlaces()
+{
+    ShowTreeController *st = m_doc->showTree();
+    if (st == nullptr)
+        return;
+    for (const Binding &b : std::as_const(m_bindings))
+    {
+        if (b.place.scope == Everywhere || b.place.scope == NewerPlace || !placeExists(b.place))
+            continue;
+        PlaceHome home;
+        home.name = placeName(b.place);
+        quint32 list = 0xFFFFFFFF;
+        switch (b.place.scope)
+        {
+            case ProductionPlace:
+                home.production = b.place.id;
+                break;
+            case ListPlace:
+                list = b.place.id;
+                break;
+            case CuePlace:
+                list = listOfCueId(b.place.id);
+                break;
+            case Everywhere:
+            case NewerPlace:
+                break;
+        }
+        if (list != 0xFFFFFFFF)
+            st->cueList(list, &home.production);
+        m_placeHomes.insert(placeKey(b.place), home);
+    }
+}
+
+void ControlMap::fixPlaces()
+{
+    if (m_bindings.isEmpty())
+        return;
+    ShowTreeController *st = m_doc->showTree();
+    bool moved = false;
+    QList<QPair<quint32, quint32>> controls;
+    /* Whether a trigger can ever work at @a place: it is in the show, and a
+       hit's is not apart from where the hit lives now (a hit fires only
+       inside its own place: moved to another list, a trigger left at a cue
+       of the old one would be armed where the hit can never fire). */
+    auto usable = [this](const Binding &b, const Place &place) {
+        if (!placeExists(place))
+            return false;
+        if (b.target.type != HitTarget || !targetExists(b.target))
+            return true;
+        const Place own = placeOfHit(b.target.id);
+        return isPlaceWithin(place, own) || isPlaceWithin(own, place);
+    };
+    for (int i = 0; i < m_bindings.count(); ++i)
+    {
+        Binding &b = m_bindings[i];
+        // Widened, and its place is back (an Undo of the delete): back there.
+        auto w = m_widened.find(targetKey(b.target));
+        if (w != m_widened.end() && b.place == w->to && usable(b, w->from) && !isPlaceTaken(b, w->from))
+        {
+            b.place = w->from;
+            m_widened.erase(w);
+            moved = true;
+            controls << qMakePair(b.universe, b.channel);
+            continue;
+        }
+        if (b.place.scope == Everywhere || b.place.scope == NewerPlace || usable(b, b.place))
+            continue;
+        /* Its cue, list or production is gone: as a scoped hit's (Q154,
+           ShowTreeController::normalizeLooks), it moves up to its
+           production, else everywhere -- never left at a place that can
+           never be live, where it would never fire again. A place another
+           trigger on the control has is passed over while a wider one is
+           free (they would step through, which nobody chose). */
+        const PlaceHome home = m_placeHomes.value(placeKey(b.place));
+        Place to;
+        if (b.target.type == HitTarget && targetExists(b.target))
+            to = placeOfHit(b.target.id);       // the hit's own place now
+        else if (b.place.scope != ProductionPlace && home.production != 0xFFFFFFFF && st != nullptr
+                 && st->production(home.production) != nullptr)
+            to = inProduction(home.production);
+        // (A hit stays at its own place: wider, it would hold the control where it cannot fire.)
+        if (b.target.type != HitTarget && to.scope != Everywhere && isPlaceTaken(b, to)
+            && !isPlaceTaken(b, Place()))
+            to = Place();
+        Widened was;
+        const auto had = m_widened.constFind(targetKey(b.target));
+        if (had != m_widened.constEnd())
+        {
+            was.from = had->from;          // widened twice: where it was first
+            was.fromName = had->fromName;
+        }
+        else
+        {
+            was.from = b.place;
+            was.fromName = home.name;
+        }
+        was.to = to;
+        m_widened.insert(targetKey(b.target), was);
+        b.place = to;
+        moved = true;
+        controls << qMakePair(b.universe, b.channel);
+    }
+    if (!moved)
+    {
+        rememberPlaces();
+        return;
+    }
+    m_step.clear();
+    changed(true);
+    for (const QPair<quint32, quint32> &c : std::as_const(controls))
+        sendControlLamp(c.first, c.second, true);
+}
+
+QString ControlMap::placeNote(const Target &target) const
+{
+    const Binding *b = binding(target);
+    if (b == nullptr)
+        return QString();
+    if (b->place.scope == NewerPlace)
+        return tr("%1: its place (%2) is from a newer version of qlcconsole, so it never fires here. "
+                  "It is kept and saved as it was; choose a place in Works to use it here.")
+                .arg(targetName(target), b->place.newerScope);
+    const auto w = m_widened.constFind(targetKey(target));
+    if (w == m_widened.constEnd() || w->to != b->place)
+        return QString();
+    const QString from = w->fromName.isEmpty()
+            ? (w->from.scope == CuePlace ? tr("in a cue") : w->from.scope == ListPlace ? tr("in a cue list")
+                                                                                      : tr("in a production"))
+            : w->fromName;
+    if (placeExists(w->from))
+        return tr("%1 worked only %2, where the hit is not any more: it works %3 now, where the hit is.")
+                .arg(targetName(target), from, placeName(b->place));
+    return tr("%1 worked only %2, which was deleted: it works %3 now.")
+            .arg(targetName(target), from, placeName(b->place));
+}
+
+QStringList ControlMap::placeNotes() const
+{
+    QStringList out;
+    for (const Binding &b : m_bindings)
+    {
+        const QString note = placeNote(b.target);
+        if (!note.isEmpty())
+            out << note;
+    }
+    return out;
+}
+
 QList<ControlMap::Place> ControlMap::placeChoices(const Place &where) const
 {
     return placeChoices(where, Target());
@@ -1501,7 +1707,7 @@ QList<ControlMap::Place> ControlMap::placeChoices(const Place &where, const Targ
     };
     // A place and the ones around it: a cue, its list, its production.
     auto around = [&](const Place &p) {
-        if (st == nullptr || p.scope == Everywhere)
+        if (st == nullptr || p.scope == Everywhere || p.scope == NewerPlace)
             return;
         quint32 list = 0xFFFFFFFF, prod = 0xFFFFFFFF;
         if (p.scope == CuePlace)
@@ -2125,7 +2331,14 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
             doc->writeAttribute(KXMLMode, modeToString(b.mode));
         // Its place, as a hit's (Scope=, ScopeOf=); everywhere says nothing,
         // so an older build loads it as it always was.
-        if (b.place.scope != Everywhere)
+        if (b.place.scope == NewerPlace)
+        {
+            // A newer version's place: back as it came, for that version.
+            doc->writeAttribute(KXMLScope, b.place.newerScope);
+            if (!b.place.newerOf.isNull())
+                doc->writeAttribute(KXMLScopeOf, b.place.newerOf);
+        }
+        else if (b.place.scope != Everywhere)
         {
             doc->writeAttribute(KXMLScope, placeScopeToString(b.place.scope));
             doc->writeAttribute(KXMLScopeOf, QString::number(b.place.id));
@@ -2159,6 +2372,8 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_blinking.clear();
     m_blinkLeft = 0;
     m_lampSent.clear();
+    m_widened.clear();
+    m_placeHomes.clear();
     m_encoderBank->reset();
     // The light a ready control shows; a file that says nothing: dim.
     m_dimWhenReady = root.attributes().value(KXMLLights).toString() != QStringLiteral("onoff");
@@ -2207,8 +2422,21 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
             bool okP = false;
             b.place.scope = stringToPlaceScope(attrs.value(KXMLScope).toString());
             b.place.id = attrs.value(KXMLScopeOf).toUInt(&okP);
-            if (b.place.scope == Everywhere || !okP)
+            if (b.place.scope == Everywhere)
+            {
                 b.place = Place();
+            }
+            else if (b.place.scope == NewerPlace || !okP)
+            {
+                /* A place this build does not know, or cannot read: kept,
+                   disarmed (never fires) and saved back as it was -- never
+                   everywhere, which would fire a one-cue trigger all show. */
+                b.place.scope = NewerPlace;
+                b.place.id = 0xFFFFFFFF;
+                b.place.newerScope = attrs.value(KXMLScope).toString();
+                if (attrs.hasAttribute(KXMLScopeOf))
+                    b.place.newerOf = attrs.value(KXMLScopeOf).toString();
+            }
         }
         root.skipCurrentElement();
         if (b.target.type == EmergencyStopTarget)
@@ -2230,6 +2458,10 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
             m_bindings.append(b);
     }
     changed(false);
+    // Loaded on its own (not as part of a show): its places are checked now;
+    // with a show, once the whole show is in (Doc::loaded).
+    if (m_doc->loadStatus() != Doc::Loading)
+        fixPlaces();
     resendFeedback();
     if (m_runTabList != wasList)
     {

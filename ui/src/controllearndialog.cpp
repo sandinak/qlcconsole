@@ -150,10 +150,20 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
         updateText();
     });
     connect(m_collision, &ControlCollisionBox::cancelled, this, [this]() {
-        // Not taken: back to the control this had (none, or its own).
+        /* Not taken: back to what this trigger had -- its control (none, or
+           its own) and its place. Left at the place that was refused, OK
+           would bind its own control there and replace the trigger that
+           has it, without a word. */
         const ControlMap::Binding *b = m_doc->controlMap()->binding(m_target);
         m_universe = b != nullptr ? b->universe : 0xFFFFFFFF;
         m_channel = b != nullptr ? b->channel : 0xFFFFFFFF;
+        m_stepThrough = false;
+        if (b != nullptr)
+        {
+            m_place->blockSignals(true);
+            setPlace(b->place);
+            m_place->blockSignals(false);
+        }
         updateText();
     });
 
@@ -267,20 +277,31 @@ void ControlLearnDialog::setMode(ControlMap::Mode mode)
     m_mode->setCurrentIndex(i);
 }
 
-ControlMap::Place ControlLearnDialog::place() const
+ControlMap::Place ControlLearnDialog::placeAt(int index) const
 {
-    const QVariantList v = m_place->currentData().toList();
+    const QVariantList v = m_place->itemData(index).toList();
     if (v.count() != 2)
         return ControlMap::Place();
-    return ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()), v.at(1).toUInt() };
+    const ControlMap::PlaceScope scope = ControlMap::PlaceScope(v.at(0).toInt());
+    if (scope == ControlMap::NewerPlace)
+    {
+        // Only ever its own (a newer version's place), kept exactly as it was.
+        const ControlMap::Binding *b = m_doc->controlMap()->binding(m_target);
+        return b != nullptr && b->place.scope == ControlMap::NewerPlace ? b->place : ControlMap::Place();
+    }
+    return ControlMap::Place{ scope, v.at(1).toUInt() };
+}
+
+ControlMap::Place ControlLearnDialog::place() const
+{
+    return placeAt(m_place->currentIndex());
 }
 
 void ControlLearnDialog::setPlace(const ControlMap::Place &place)
 {
     for (int i = 0; i < m_place->count(); ++i)
     {
-        const QVariantList v = m_place->itemData(i).toList();
-        if (v.count() == 2 && ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()), v.at(1).toUInt() } == place)
+        if (placeAt(i) == place)
         {
             m_place->setCurrentIndex(i);
             return;
@@ -414,7 +435,7 @@ void ControlLearnDialog::slotMoveHere()
 void ControlLearnDialog::updateText()
 {
     ControlMap *cm = m_doc->controlMap();
-    m_ok->setEnabled(hasControl());
+    m_ok->setEnabled(hasControl() && !m_collision->isRefusing());
     if (m_universe == ControlMap::KeyboardUniverse)
     {
         m_keyNote->setText(m_target.type == ControlMap::FunctionTarget
@@ -439,6 +460,14 @@ void ControlLearnDialog::accept()
     // A control with another job is never taken by OK: Move It Here or Cancel.
     if (!hasControl() || m_collision->isRefusing())
         return;
+    /* Asked again here, whatever led to OK: a binding is never replaced
+       without a word. Move It Here released the others already; Step
+       Through Them keeps them beside this one. */
+    if (!m_stepThrough && !ControlOwners::others(m_doc, m_universe, m_channel, self()).isEmpty())
+    {
+        checkOwners();
+        return;
+    }
     ControlMap::Binding b;
     b.universe = m_universe;
     b.channel = m_channel;

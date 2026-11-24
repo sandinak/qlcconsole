@@ -97,6 +97,17 @@ void ControlCollisionBox::refuse(Doc *doc, quint32 universe, quint32 channel,
     show();
 }
 
+void ControlCollisionBox::refuseRun(Doc *doc, quint32 universe,
+                                    const QList<QPair<quint32, ControlOwners::Owner>> &taken)
+{
+    QList<ControlOwners::Owner> owners;
+    for (const QPair<quint32, ControlOwners::Owner> &t : taken)
+        owners << t.second;
+    refuse(doc, universe, taken.isEmpty() ? 0 : taken.first().first, owners);
+    if (isRefusing())
+        m_text->setText(ControlOwners::runRefusal(doc, universe, taken));
+}
+
 void ControlCollisionBox::setStepThrough(bool offered)
 {
     m_stepOffered = offered && isRefusing();

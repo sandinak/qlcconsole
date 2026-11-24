@@ -52,6 +52,10 @@ public:
 
     /** Shows the refusal for @a owners of a control. */
     void refuse(Doc *doc, quint32 universe, quint32 channel, const QList<ControlOwners::Owner> &owners);
+    /** Shows the refusal for a run of controls (the encoder bank's): each
+     *  owner named with its own control (ControlOwners::runRefusal()).
+     *  @a taken: (channel, owner); channel() is the first taken one. */
+    void refuseRun(Doc *doc, quint32 universe, const QList<QPair<quint32, ControlOwners::Owner>> &taken);
     /** Offers Step Through Them (Q303): the owners are triggers at the same
      *  place and the control is a button, so it may fire each in turn. */
     void setStepThrough(bool offered);

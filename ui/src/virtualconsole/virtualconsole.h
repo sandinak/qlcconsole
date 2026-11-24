@@ -94,6 +94,9 @@ public:
     /** The Grand Master listens to no input any more (Move It Here took
      *  its control, ControlOwners). Marks the show modified. */
     void clearGrandMasterInput();
+    /** Puts the Grand Master's input back (a Move It Here that could not
+     *  finish, ControlOwners::releaseAll()). Marks the show modified. */
+    void restoreGrandMasterInput(quint32 universe, quint32 channel);
 
 private:
     VCProperties m_properties;

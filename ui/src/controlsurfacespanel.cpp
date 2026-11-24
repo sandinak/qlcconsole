@@ -242,6 +242,8 @@ QString ControlSurfacesPanel::placesText() const
                                                               cm->placeName(now->place))
                                  : tr("%1 Now: nothing (no place of it is live).").arg(line));
     }
+    // A trigger whose place was deleted (widened) or is from a newer version: said.
+    lines << cm->placeNotes();
     return lines.join(QStringLiteral("\n"));
 }
 

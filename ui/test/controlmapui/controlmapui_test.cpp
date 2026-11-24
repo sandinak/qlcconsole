@@ -1823,3 +1823,249 @@ void ControlMapUi_Test::surfacesShots()
                                     .absoluteFilePath(QString("surfaces-%1x%2.png").arg(sz.width()).arg(sz.height()))));
     }
 }
+
+/* Cancel in the collision box leaves both triggers exactly as they were.
+   It used to put the dialog back on its own control but leave Works at
+   the place that was refused: OK then bound it there and replaced the
+   trigger that had it, without a word. */
+void ControlMapUi_Test::cancelInTheCollisionBoxLeavesBothTriggers()
+{
+    QList<quint32> cues;
+    placesShow(m_doc, &cues);
+    Scene *warm = scene("Warm");
+    Scene *strobe = scene("Strobe");
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f6 = ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(strobe->id()), ControlMap::Toggle,
+                     ControlMap::inCue(cues.at(1)) });
+    const QList<ControlMap::Binding> before = cm->bindings();
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(strobe->id()));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+        // Works moved onto Warm's place: refused.
+        d.setPlace(ControlMap::everywhere());
+        QVERIFY(box->isRefusing());
+        QVERIFY2(box->text().contains("Warm"), qPrintable(box->text()));
+        QTest::mouseClick(box->cancelButton(), Qt::LeftButton);
+        QVERIFY(!box->isRefusing());
+        // Back where it was, and OK changes nothing.
+        QCOMPARE(d.place(), ControlMap::inCue(cues.at(1)));
+        QVERIFY(d.hasControl());
+        d.accept();
+    }
+    QCOMPARE(cm->bindings(), before);
+    // OK straight after a refused place (no Cancel) never takes it either.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(strobe->id()));
+        d.setPlace(ControlMap::everywhere());
+        QVERIFY(!d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        d.accept();
+        QVERIFY(d.result() != QDialog::Accepted);
+    }
+    QCOMPARE(cm->bindings(), before);
+}
+
+/* A trigger whose place was deleted, or whose place is from a newer
+   version: the hub's Triggers by place row and the table say so. */
+void ControlMapUi_Test::theHubSaysAPlaceDeletedOrFromANewerVersion()
+{
+    QList<quint32> cues;
+    placesShow(m_doc, &cues);
+    Scene *warm = scene("Warm");
+    Scene *strobe = scene("Strobe");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(strobe->id()), ControlMap::Toggle, ControlMap::inCue(cues.at(1)) });
+    QVERIFY(m_doc->showTree()->removeCue(cues.at(1)));
+    QCOMPARE(cm->binding(ControlMap::function(strobe->id()))->place.scope, ControlMap::ProductionPlace);
+    const QByteArray xml =
+        QString("<ControlMap><Trigger Universe=\"0\" Channel=\"61\" Target=\"Function\" ID=\"%1\" "
+                "Scope=\"Effect\" ScopeOf=\"3\"/></ControlMap>").arg(warm->id()).toUtf8();
+    // Loaded beside the first (as a show would have them both).
+    ControlMap::Binding strobeB = *cm->binding(ControlMap::function(strobe->id()));
+    QXmlStreamReader r(xml);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(cm->loadXML(r));
+    QCOMPARE(cm->binding(ControlMap::function(warm->id()))->place.scope, ControlMap::NewerPlace);
+    cm->setBinding(strobeB);
+    QVERIFY(m_doc->showTree()->removeCue(cues.at(0)));      // nothing of it to widen: still said
+
+    ShowControlSyncPage page(m_doc);
+    page.resize(1000, 800);
+    page.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&page));
+    ControlSurfacesPanel *hub = page.surfaces();
+    hub->refresh();
+    QVERIFY(!hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());
+    const QString text = hub->status("places");
+    QVERIFY2(text.contains("place from a newer version"), qPrintable(text));
+    QVERIFY2(text.contains("it never fires here"), qPrintable(text));
+
+    // The widened one: said in the table's Works and the hub (set again by
+    // loadXML above, so widened anew here).
+    QVERIFY(m_doc->showTree()->undo());
+    QVERIFY(m_doc->showTree()->undo());
+    QVERIFY(m_doc->showTree()->cue(cues.at(1)) != nullptr);
+    cm->setPlace(ControlMap::function(strobe->id()), ControlMap::inCue(cues.at(1)));
+    QVERIFY(m_doc->showTree()->removeCue(cues.at(1)));
+    hub->refresh();
+    QVERIFY2(hub->status("places").contains("which was deleted"), qPrintable(hub->status("places")));
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QTableWidget *table = panel.table();
+    bool saidWidened = false, saidNewer = false;
+    for (int row = 0; row < table->rowCount(); ++row)
+    {
+        QComboBox *works = qobject_cast<QComboBox *>(table->cellWidget(row, 2));
+        QVERIFY(works != nullptr);
+        saidWidened |= works->toolTip().contains("which was deleted");
+        saidNewer |= works->toolTip().contains("newer version");
+    }
+    QVERIFY(saidWidened);
+    QVERIFY(saidNewer);
+}
+
+/* Move It Here takes a control from all its owners or none: one that can't
+   let go leaves every one with its control (it used to release the first
+   ones, then fail, leaving the control with no owner at all). */
+void ControlMapUi_Test::moveItHereIsAllOrNothing()
+{
+    Scene *warm = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(warm->id()), ControlMap::Toggle });
+    QList<ControlOwners::Owner> owners = ControlOwners::owners(m_doc, 0, 60);
+    QCOMPARE(owners.count(), 1);
+    // A widget input whose widget is gone: it can't let go.
+    ControlOwners::Owner gone;
+    gone.kind = ControlOwners::VCInput;
+    gone.thing = QStringLiteral("Button");
+    QVERIFY(!ControlOwners::canRelease(m_doc, gone));
+    QVERIFY(!ControlOwners::releaseAll(m_doc, owners + QList<ControlOwners::Owner>{ gone }));
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) != nullptr);
+
+    // One fails half-way (the same trigger twice: gone by the second): the
+    // speed master released before it gets its control back, and the trigger.
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(0, SpeedMasters::TapControl, 0, 60);
+    owners = ControlOwners::owners(m_doc, 0, 60);
+    QCOMPARE(owners.count(), 2);
+    ControlOwners::Owner trigger;
+    for (const ControlOwners::Owner &o : std::as_const(owners))
+        if (o.kind == ControlOwners::Trigger)
+            trigger = o;
+    QVERIFY(!ControlOwners::releaseAll(m_doc, owners + QList<ControlOwners::Owner>{ trigger }));
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) != nullptr);
+    QCOMPARE(cm->binding(ControlMap::function(warm->id()))->channel, 60u);
+    quint32 u = 99, ch = 99;
+    QVERIFY(sm->input(0, SpeedMasters::TapControl, &u, &ch));
+    QCOMPARE(u, 0u);
+    QCOMPARE(ch, 60u);
+    // All can: all released.
+    QVERIFY(ControlOwners::releaseAll(m_doc, owners));
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) == nullptr);
+    QVERIFY(!sm->input(0, SpeedMasters::TapControl, &u, &ch));
+}
+
+/* The encoder bank's preset, Custom turned back on and another universe
+   hand it a whole run of controls: asked as a Learn asks, refused with the
+   same box (it used to take them without asking). */
+void ControlMapUi_Test::anEncoderPresetAsksWhoHasItsControls()
+{
+    Scene *warm = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    EncoderBank *enc = cm->encoderBank();
+    const QString key = EncoderBank::presetKeys().first();
+    EncoderBank::Device d;
+    d.universe = 0;
+    QVERIFY(EncoderBank::preset(key, &d));
+    QVERIFY(d.encoders >= 0 && d.encoderCount >= 3);
+    const quint32 taken = quint32(d.encoders) + 2;
+    cm->setBinding({ 0, taken, ControlMap::function(warm->id()), ControlMap::Toggle });
+
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QComboBox *preset = panel.findChild<QComboBox *>("encoderPreset");
+    const int at = preset->findData(key);
+    QVERIFY(at >= 0);
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderPreset", Q_ARG(int, at)));
+    ControlCollisionBox *box = panel.encoderCollision();
+    QVERIFY2(box->isRefusing() && box->text().contains("Scene: Warm (Control Map)"), qPrintable(box->text()));
+    QVERIFY(!enc->isEnabled());
+    QCOMPARE(enc->device().encoders, -1);
+    // Cancel: nothing changes.
+    box->cancelButton()->click();
+    QVERIFY(!enc->isEnabled());
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) != nullptr);
+    QCOMPARE(preset->currentData().toString(), QString());
+    // Again, Move It Here: the trigger lets go, the preset is set.
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderPreset", Q_ARG(int, at)));
+    QVERIFY(box->isRefusing());
+    box->moveButton()->click();
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) == nullptr);
+    QVERIFY(enc->isEnabled());
+    QCOMPARE(enc->presetKey(), key);
+
+    // Off, a trigger learned on one of its controls, then Custom on again: refused.
+    enc->setEnabled(false);
+    cm->setBinding({ 0, taken, ControlMap::function(warm->id()), ControlMap::Toggle });
+    const int custom = preset->findData(QStringLiteral("custom"));
+    QVERIFY(custom >= 0);
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderPreset", Q_ARG(int, custom)));
+    QVERIFY(box->isRefusing());
+    QVERIFY(!enc->isEnabled());
+    box->cancelButton()->click();
+    QVERIFY(!enc->isEnabled());
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) != nullptr);
+
+    // On, another universe where a trigger has one of its controls: refused.
+    cm->removeBinding(ControlMap::function(warm->id()));
+    enc->setEnabled(true);
+    QVERIFY(enc->isEnabled());
+    cm->setBinding({ 1, taken, ControlMap::function(warm->id()), ControlMap::Toggle });
+    panel.refresh();
+    QComboBox *universe = panel.findChild<QComboBox *>("encoderUniverse");
+    QVERIFY(universe->count() > 1);
+    universe->setCurrentIndex(1);
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderEdited"));
+    QVERIFY(box->isRefusing());
+    QCOMPARE(enc->device().universe, 0u);
+    box->cancelButton()->click();
+    QCOMPARE(enc->device().universe, 0u);
+    QCOMPARE(universe->currentIndex(), 0);
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) != nullptr);
+}
+
+/* A run refused for two owners on two of its controls names each with its
+   own control (it used to put both under the first taken control). */
+void ControlMapUi_Test::anEncoderRefusalNamesEachOwnersControl()
+{
+    Scene *warm = scene("Warm");
+    Scene *cool = scene("Cool");
+    ControlMap *cm = m_doc->controlMap();
+    EncoderBank *enc = cm->encoderBank();
+    EncoderBank::Device dev;
+    dev.universe = 0;
+    dev.encoders = 16;
+    dev.encoderCount = 8;
+    enc->setDevice(dev, QStringLiteral("custom"));
+    cm->setBinding({ 0, 41, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 44, ControlMap::function(cool->id()), ControlMap::Toggle });
+
+    ControlMapPanel panel(m_doc);
+    panel.show();
+    QAction *pushes = panel.findChild<QAction *>("encoderLearnPushes");
+    QVERIFY(pushes != nullptr);
+    QVERIFY(QMetaObject::invokeMethod(&panel, "slotEncoderLearnMore", Q_ARG(QAction *, pushes)));
+    cm->handleInput(0, 40, 127);
+    ControlCollisionBox *box = panel.encoderCollision();
+    QVERIFY(box->isRefusing());
+    const QString text = box->text();
+    const QString c41 = ControlOwners::controlName(m_doc, 0, 41);
+    const QString c44 = ControlOwners::controlName(m_doc, 0, 44);
+    QVERIFY2(text.contains(QString("%1 already does Scene: Warm (Control Map)").arg(c41)), qPrintable(text));
+    QVERIFY2(text.contains(QString("%1 already does Scene: Cool (Control Map)").arg(c44)), qPrintable(text));
+    QVERIFY2(!text.contains(QString("%1 already does Scene: Warm (Control Map) and").arg(c41)), qPrintable(text));
+    cm->handleInput(0, 40, 0);
+}

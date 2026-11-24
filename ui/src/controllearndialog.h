@@ -115,6 +115,8 @@ private:
     void checkOwners();
     /** This dialog's own listener (excluded from the owners). */
     ControlOwners::Owner self() const;
+    /** The place of Works' item @a index. */
+    ControlMap::Place placeAt(int index) const;
 
 private:
     Doc *m_doc;
