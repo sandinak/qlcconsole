@@ -111,7 +111,6 @@ MountInSituView::MountInSituView(Doc *doc, quint32 fixtureId, QWidget *parent)
     QVBoxLayout *lay = new QVBoxLayout(this);
     lay->setContentsMargins(0, 0, 0, 0);
     lay->setSpacing(2);
-    lay->addStretch(1);
     m_caption = new QLabel(this);
     m_caption->setObjectName(QStringLiteral("mountCaption"));
     m_caption->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);

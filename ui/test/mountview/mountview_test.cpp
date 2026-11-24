@@ -181,6 +181,8 @@ void MountView_Test::theMountIsFramedAroundTheFixtureWithoutChrome()
     v.resize(260, 200);
     v.show();
     QVERIFY(!v.view()->decorations());
+    // The picture takes the room; the caption is one line under it.
+    QVERIFY2(v.view()->height() > 150, qPrintable(QString::number(v.view()->height())));
     const QVector3D at = rig.props->fixtureRigPosition(rig.onTruss);
     const QPointF c = v.view()->worldToScreen(at);
     QVERIFY2(qAbs(c.x() - v.view()->width() / 2.0) < 2.0, qPrintable(QString::number(c.x())));
