@@ -43,6 +43,7 @@
 #include "virtualconsole/vcframe.h"
 #include "controlmappanel.h"
 #include "controlsurfacespanel.h"
+#include "connectionstree.h"
 #include "inputoutputmanager.h"
 #include "speedmasterspanel.h"
 #include "showfeatures.h"
@@ -847,7 +848,7 @@ QTEST_MAIN(ControlMapUi_Test)
 void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
 {
     InputOutputManager mgr(nullptr, m_doc);
-    QTreeWidget *view = mgr.findChild<QTreeWidget *>();
+    QTreeWidget *view = mgr.findChild<ConnectionsTree *>()->findChild<QTreeWidget *>();
     QVERIFY(view != nullptr);
     const QList<QTreeWidgetItem *> found = view->findItems("Show control & sync", Qt::MatchExactly, 0);
     QCOMPARE(found.count(), 1);
@@ -878,7 +879,7 @@ void ControlMapUi_Test::eachSetUpLandsOnItsPlace()
     mgr.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mgr));
     ShowControlSyncPage *page = mgr.findChild<ShowControlSyncPage *>();
-    QTreeWidget *view = mgr.findChild<QTreeWidget *>();
+    QTreeWidget *view = mgr.findChild<ConnectionsTree *>()->findChild<QTreeWidget *>();
     ControlSurfacesPanel *hub = page->surfaces();
     ControlMapPanel *map = page->findChild<ControlMapPanel *>();
     auto picked = [&]() {
@@ -993,6 +994,7 @@ void ControlMapUi_Test::surfacesShots()
         mgr.show();
         QVERIFY(QTest::qWaitForWindowExposed(&mgr));
         mgr.showShowControlPage();
+        mgr.findChild<ConnectionsTree *>()->selectShowControlRow(QStringLiteral("surfaces"));
         QCoreApplication::processEvents();
         QVERIFY(mgr.grab().save(QDir(QString::fromLocal8Bit(dir))
                                     .absoluteFilePath(QString("surfaces-%1x%2.png").arg(sz.width()).arg(sz.height()))));

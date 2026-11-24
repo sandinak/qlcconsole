@@ -289,16 +289,17 @@ void ShowControlUi_Test::thePageShowsTheCurrentSettings()
 
     // One line per link for Connections ▸ Devices; both off here.
     const QList<QStringList> rows = page.summary();
-    QCOMPARE(rows.count(), 5);
-    QCOMPARE(rows.at(0).at(0), QString("osc"));
-    QCOMPARE(rows.at(0).at(2), QString("Off"));
-    QCOMPARE(rows.at(1).at(1), QString("MIDI Show Control in"));
+    QCOMPARE(rows.count(), 6);
+    QCOMPARE(rows.at(0).at(0), QString("surfaces"));
+    QCOMPARE(rows.at(1).at(0), QString("osc"));
     QCOMPARE(rows.at(1).at(2), QString("Off"));
-    QCOMPARE(rows.at(2).at(0), QString("mtc"));
-    QCOMPARE(rows.at(3).at(0), QString("web"));
-    QCOMPARE(rows.at(3).at(2), QString("Off"));
-    QCOMPARE(rows.at(4).at(0), QString("map"));
-    QCOMPARE(rows.at(4).at(2), QString("None"));
+    QCOMPARE(rows.at(2).at(1), QString("MIDI Show Control in"));
+    QCOMPARE(rows.at(2).at(2), QString("Off"));
+    QCOMPARE(rows.at(3).at(0), QString("mtc"));
+    QCOMPARE(rows.at(4).at(0), QString("web"));
+    QCOMPARE(rows.at(4).at(2), QString("Off"));
+    QCOMPARE(rows.at(5).at(0), QString("map"));
+    QCOMPARE(rows.at(5).at(2), QString("None"));
     QVERIFY(page.findChild<QWidget *>("scQLabOutGroup") != nullptr);       // QLab out, in the show
 
     // With no listener yet (the page is built before it), nothing to edit.
@@ -738,15 +739,15 @@ void ShowControlUi_Test::theWebAccessBoxEditsTheShow()
     web->setStatus(ShowWebAccess::Failed, QString(), QStringLiteral("Port 8200 is in use by another program."));
     QCOMPARE(status->property("webState").toInt(), int(ShowWebAccess::Failed));
     QVERIFY(status->text().contains("in use"));
-    QCOMPARE(page.summary().value(3).value(2), QString("Port 8200 · could not start"));
+    QCOMPARE(page.summary().value(4).value(2), QString("Port 8200 · could not start"));
     web->setStatus(ShowWebAccess::Running, QStringLiteral("http://<this computer's address>:8200/"));
     QCOMPARE(status->text(), QString("Running on port 8200, reachable from the network."));
-    QCOMPARE(page.summary().value(3).value(2), QString("Port 8200 · network"));
+    QCOMPARE(page.summary().value(4).value(2), QString("Port 8200 · network"));
     // Started with -w on another port: the box says that one.
     web->setStatus(ShowWebAccess::CommandLine, QStringLiteral("http://127.0.0.1:8300/"), QStringLiteral("(-w)"));
     QCOMPARE(status->text(), QString("Running on port 8300, this computer only. (-w)"));
     QVERIFY2(where->text().contains("http://127.0.0.1:8300/"), qPrintable(where->text()));
-    QCOMPARE(page.summary().value(3).value(2), QString("Port 8300 · this computer only · from -w"));
+    QCOMPARE(page.summary().value(4).value(2), QString("Port 8300 · this computer only · from -w"));
 
     // Another show opened: the box follows it.
     m_doc->clearContents();
