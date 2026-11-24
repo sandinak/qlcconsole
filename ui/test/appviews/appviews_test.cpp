@@ -2907,6 +2907,9 @@ void AppViews_Test::aWaitingGrandMasterFaderShowsOnTheFooter()
     {
         QDir().mkpath(dir);
         const QSize was = m_app->size();
+        m_app->hideViewNotice();
+        m_app->show();
+        m_app->statusBar()->clearMessage();
         for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
         {
             m_app->resize(size);
