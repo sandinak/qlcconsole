@@ -48,7 +48,8 @@ public:
 
     /** The row keys, in order: "map", "estop", "encoder", "vc", "masters",
      *  "pmj", "web", "pads", "collisions" (Who has it now: every control
-     *  two listeners have, with how to fix it; it has no Set Up…). */
+     *  two listeners have, with how to fix it; no Set Up…, and shown only
+     *  while there is one). */
     static QStringList keys();
 
     /** The status line of row @p key, as the row shows it. */
@@ -87,6 +88,7 @@ private:
     Doc *m_doc;
     QLabel *m_featureOff = nullptr;
     QMap<QString, QLabel *> m_status;
+    QMap<QString, QLabel *> m_what;
     QMap<QString, QPushButton *> m_buttons;
     QString m_lastSummary;
 };

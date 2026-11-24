@@ -36,7 +36,7 @@ anything else). Two Virtual Console widgets on one input are Show Review's
 
 A show saved before this, or with two jobs on a control for any other
 reason, loads as it is. The **Who has it now** line at the bottom of
-Control surfaces lists every such control with what listens to it and where
+Control surfaces (there only while there is one) lists every such control with what listens to it and where
 to fix it; the Devices line adds *1 control with two jobs*.
 
 | What | Where you set it (or **Set Up…** in Control surfaces) | What it does |

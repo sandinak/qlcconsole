@@ -142,6 +142,7 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
         status->setWordWrap(true);
         grid->addWidget(what, r, 0);
         m_status.insert(key, status);
+        m_what.insert(key, what);
         // Who has it now is read only: each line says where its fix is.
         if (t.button.isEmpty())
         {
@@ -336,6 +337,10 @@ void ControlSurfacesPanel::refresh()
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());
     m_status["collisions"]->setText(collisionsText());
+    // Who has it now is there only while a control has two jobs.
+    const bool clash = !ControlOwners::collisions(m_doc).isEmpty();
+    m_status["collisions"]->setVisible(clash);
+    m_what["collisions"]->setVisible(clash);
     // Triggers and the encoder bank are put away; the stop and the rest stay.
     m_buttons["map"]->setEnabled(on);
     m_buttons["encoder"]->setEnabled(on);

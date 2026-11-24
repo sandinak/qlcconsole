@@ -1131,12 +1131,14 @@ void ControlMapUi_Test::theHubListsControlsWithTwoJobs()
     QVERIFY2(text.contains("Move It Here") && text.contains("Control Map table ▸ Remove")
              && text.contains("External Input"), qPrintable(text));
     QVERIFY2(hub->summary().contains("1 control with two jobs"), qPrintable(hub->summary()));
+    QVERIFY(!hub->findChild<QLabel *>("surfaceCollisionsStatus")->isHidden());
     QCOMPARE(ControlOwners::collisions(m_doc).count(), 1);
     QCOMPARE(ControlOwners::collisions(m_doc).first().owners.first().place, ControlOwners::Everywhere);
 
     // Fixed (the trigger removed): one job again.
     cm->removeBinding(ControlMap::function(a->id()));
     QCOMPARE(hub->status("collisions"), QString("Every control has one job"));
+    QVERIFY(hub->findChild<QLabel *>("surfaceCollisionsStatus")->isHidden());
 }
 
 /* With QLC_SHOT_DIR: the refusal in the Learn dialog (movable and fixed)
@@ -1215,6 +1217,7 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
              QStringList({ "map", "estop", "encoder", "vc", "masters", "pmj", "web", "pads", "collisions" }));
     QCOMPARE(hub->status("collisions"), QString("Every control has one job"));
     QVERIFY(hub->setUpButton("collisions") == nullptr);     // read only
+    QVERIFY(hub->findChild<QLabel *>("surfaceCollisionsStatus")->isHidden());   // nothing to say
     for (const QString &key : ControlSurfacesPanel::keys())
     {
         if (key == QLatin1String("collisions"))
