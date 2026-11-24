@@ -1438,8 +1438,12 @@ void ControlMapUi_Test::theTableAndTheHubShowEachPlace()
     cm->setPlace(ControlMap::function(strobe->id()), ControlMap::inCue(cues.at(1)));
 
     ShowControlSyncPage page(m_doc);
+    page.resize(1000, 800);
+    page.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&page));
     ControlSurfacesPanel *hub = page.surfaces();
     hub->refresh();
+    QVERIFY(hub->isVisible());
     QVERIFY(!hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());
     QString text = hub->status("places");
     QVERIFY2(text.contains("Scene: Warm everywhere, except Scene: Strobe in cue"), qPrintable(text));

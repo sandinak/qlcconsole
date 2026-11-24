@@ -82,6 +82,8 @@ private:
     QString stopText() const;
     QString collisionsText() const;
     QString placesText() const;
+    /** The Triggers by place row only (who has each control now). */
+    void refreshPlaces();
 
 protected:
     void showEvent(QShowEvent *event) override;

@@ -143,12 +143,12 @@ void ControlMap::setBinding(const Binding &in, bool stepThrough)
         b.place = Place();
     if (b.place.scope != Everywhere && b.place.id == 0xFFFFFFFF)
         b.place = Place();
+    if (m_bindings.contains(b))
+        return;         // already so
     QList<QPair<quint32, quint32>> left;        // controls a replaced binding leaves
     for (int i = m_bindings.count() - 1; i >= 0; --i)
     {
         const Binding &e = m_bindings.at(i);
-        if (e == b)
-            return;     // already so
         const bool sameControl = e.universe == b.universe && e.channel == b.channel;
         const bool stop = e.target.type == EmergencyStopTarget || b.target.type == EmergencyStopTarget;
         if (e.target == b.target || (sameControl && (stop || (!stepThrough && e.place == b.place))))

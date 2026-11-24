@@ -171,8 +171,13 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     ControlMap *cm = m_doc->controlMap();
     connect(cm, &ControlMap::bindingsChanged, this, &ControlSurfacesPanel::refresh);
     connect(cm, &ControlMap::stopStateChanged, this, &ControlSurfacesPanel::refresh);
-    // Who has a control now follows the GO, the mode and the selection (Q296).
-    connect(cm, &ControlMap::lampsChanged, this, &ControlSurfacesPanel::refresh);
+    /* Who has a control now follows the GO, the mode and the selection
+       (Q296): only that row, and only while it is shown (a light pass comes
+       with every GO and function start; showEvent() reads everything). */
+    connect(cm, &ControlMap::lampsChanged, this, [this]() {
+        if (isVisible())
+            refreshPlaces();
+    });
     connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &ControlSurfacesPanel::refresh);
     InputOutputMap *iom = m_doc->inputOutputMap();
     connect(iom, &InputOutputMap::inputPatchChanged, this, &ControlSurfacesPanel::refresh);
@@ -238,6 +243,15 @@ QString ControlSurfacesPanel::placesText() const
                                  : tr("%1 Now: nothing (no place of it is live).").arg(line));
     }
     return lines.join(QStringLiteral("\n"));
+}
+
+void ControlSurfacesPanel::refreshPlaces()
+{
+    // Triggers by place: there only while a trigger has a place (or a control has two).
+    const QString places = ShowFeatures::isOn(ShowFeatures::ControlSurfaces) ? placesText() : QString();
+    m_status["places"]->setText(places);
+    m_status["places"]->setVisible(!places.isEmpty());
+    m_what["places"]->setVisible(!places.isEmpty());
 }
 
 QString ControlSurfacesPanel::collisionsText() const
@@ -381,11 +395,7 @@ void ControlSurfacesPanel::refresh()
     const bool clash = !ControlOwners::collisions(m_doc).isEmpty();
     m_status["collisions"]->setVisible(clash);
     m_what["collisions"]->setVisible(clash);
-    // Triggers by place: there only while a trigger has a place (or a control has two).
-    const QString places = on ? placesText() : QString();
-    m_status["places"]->setText(places);
-    m_status["places"]->setVisible(!places.isEmpty());
-    m_what["places"]->setVisible(!places.isEmpty());
+    refreshPlaces();
     // Triggers and the encoder bank are put away; the stop and the rest stay.
     m_buttons["map"]->setEnabled(on);
     m_buttons["encoder"]->setEnabled(on);
