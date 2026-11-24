@@ -23,6 +23,8 @@
 #include <QRectF>
 #include <QString>
 
+#include "../qlcui_export.h"
+
 class MonitorProperties;
 
 /** A small top-down stage map for Fixture Properties: the stage outline,
@@ -37,7 +39,7 @@ class MonitorProperties;
  *  plaster line are WORLD positions (the plot's, +Y downstage); position()
  *  is what the X / Y fields hold, from the plot origin. Setters never emit;
  *  only a drag does. */
-class PlanMapWidget : public QWidget
+class QLC_UI_EXPORT PlanMapWidget : public QWidget
 {
     Q_OBJECT
 

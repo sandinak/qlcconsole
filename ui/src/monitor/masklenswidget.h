@@ -24,6 +24,7 @@
 #include <QPointF>
 
 #include "nolightzone.h"
+#include "../qlcui_export.h"
 
 /**
  * The beam seen from behind the light: a circle sized for the lens angle (a
@@ -32,7 +33,7 @@
  * through. Drag a band's edge in from any side to set that side's mask.
  * The setters do not emit; maskChanged() is the person's drag only.
  */
-class MaskLensWidget : public QWidget
+class QLC_UI_EXPORT MaskLensWidget : public QWidget
 {
     Q_OBJECT
 
