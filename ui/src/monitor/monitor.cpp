@@ -13718,6 +13718,11 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     QDoubleSpinBox *heightOffSpin = new FeetInchesSpinBox(isFeet_fx);
     heightOffSpin->setObjectName(QStringLiteral("fixtureHeightOffset"));
     heightOffSpin->setRange(-10 * toDisp_fx, 10 * toDisp_fx);
+    /* Finer than the field's default, so the value it holds is the stored one
+       to the thousandth of a millimetre: at 3 decimals of a foot a stored 154 mm
+       was held as 153.9 and read -6" while the picture beside it, formatting
+       the stored value, said 6 1/8". */
+    heightOffSpin->setDecimals(isFeet_fx ? 6 : 7);
     heightOffSpin->setToolTip(tr("Raise (+) or lower (−) the fixture relative to its "
                                  "mount — e.g. lift a followspot above the truss."));
     {

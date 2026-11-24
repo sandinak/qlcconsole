@@ -35199,6 +35199,38 @@ void Monitor_Test::fixturePropertiesMountViewFollowsHeightOffset()
     QVERIFY(planBack);
     QCOMPARE(props->fixtureRigProps(fid).mountZOffset, 0.0f);      // Cancel
 
+    /* The picture says what the field says: the same length, in the person's
+       units, and the direction matching the sign. 154 mm (the course show's
+       value, 6 1/16") sat on a rounding edge and read -6" beside "6 1/8"". */
+    const MeasurementUnits::LengthUnit unitBefore = MeasurementUnits::preferredLength();
+    const auto restoreUnits = qScopeGuard([unitBefore]() { MeasurementUnits::setPreferredLength(unitBefore); });
+    for (const auto &c : { std::make_pair(MeasurementUnits::Feet, -0.154), std::make_pair(MeasurementUnits::Feet, -0.1524),
+                           std::make_pair(MeasurementUnits::Metres, -0.154), std::make_pair(MeasurementUnits::Metres, 0.35) })
+    {
+        MeasurementUnits::setPreferredLength(c.first);
+        FixtureRigProps put = props->fixtureRigProps(fid);
+        put.mountZOffset = float(c.second);
+        props->setFixtureRigProps(fid, put);
+        QString fieldText, picture;
+        driveDialog([&](QWidget *dlg) {
+            MountInSituView *mv = dlg->findChild<MountInSituView *>(QStringLiteral("fixtureMountView"));
+            QDoubleSpinBox *h = dlg->findChild<QDoubleSpinBox *>(QStringLiteral("fixtureHeightOffset"));
+            if (mv == nullptr || h == nullptr)
+                return false;
+            fieldText = h->text();
+            picture = mv->heightText();
+            return true;
+        }, false);
+        rig.mon->showFixtureItemEditor(fid);
+        QString magnitude = fieldText;
+        if (magnitude.startsWith(QLatin1Char('-')) || magnitude.startsWith(QChar(0x2212)))
+            magnitude.remove(0, 1);
+        QVERIFY2(!fieldText.isEmpty() && picture.contains(magnitude),
+                 qPrintable(QStringLiteral("field \"%1\" vs picture \"%2\"").arg(fieldText, picture)));
+        QVERIFY2(picture.contains(c.second < 0 ? QStringLiteral("below") : QStringLiteral("above")),
+                 qPrintable(picture));
+    }
+
     // Not on a structure: no switch, the map has the room.
     bool freeFound = false, freeSwitch = true, freeMap = false;
     driveDialog([&](QWidget *dlg) {
