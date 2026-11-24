@@ -998,13 +998,19 @@ void VCSlider_Test::masterSlidersLowerAtOnce()
     m_doc->setMode(Doc::Design);
 
     // A loaded Grand Master slider lowers at once too
-    QByteArray xml;
-    {
-        QXmlStreamWriter xw(&xml);
-        slider.setSliderMode(VCSlider::GrandMaster);
-        QVERIFY(slider.saveXML(&xw));
-    }
-    QXmlStreamReader xr(xml);
+    slider.setSliderMode(VCSlider::GrandMaster);
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xw(&buffer);
+    xw.setAutoFormatting(true);
+    xw.writeStartDocument();
+    QVERIFY(slider.saveXML(&xw));
+    xw.writeEndDocument();
+    xw.setDevice(NULL);
+    buffer.close();
+    QVERIFY(buffer.buffer().contains(">GrandMaster</SliderMode>"));
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader xr(&buffer);
     xr.readNextStartElement();
     VCSlider loaded(&w, m_doc);
     QVERIFY(loaded.loadXML(xr));
