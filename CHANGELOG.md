@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Mount in situ view** (widget for Fixture Properties' Place tab): the truss, pipe or tower a fixture hangs on, front-on with the fixture ringed, its face, hung or upright, angle and tilt, and the height offset on a dimension line in your unit.
+
 ### Fixed
 
 - **Fixture Properties fits a laptop's screen**: a moving head's rows
