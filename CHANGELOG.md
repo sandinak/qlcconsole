@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Mount in situ view** (widget for Fixture Properties' Place tab): the truss, pipe or tower a fixture hangs on, front-on with the fixture ringed, its face, hung or upright, angle and tilt, and the height offset on a dimension line in your unit.
+
 ### Fixed
 
 - **Fixture Properties shows two pictures.** **Place** has a plan map of the stage (centre line, plaster line, the fixture as a dot): drag the dot and X / Y follow, type X / Y and the dot moves; it reads how far the fixture is *SR* or *SL* of the centre line and from the plaster line, and on a truss, pipe or tower it is not draggable and says why. **Aim & Beam** has the mask lens, the beam seen from behind with the tape on it and how much gets through: the four Masking boxes draw it, and dragging a band's edge sets them (a laser shows its scan window).

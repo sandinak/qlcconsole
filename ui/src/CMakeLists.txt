@@ -169,6 +169,7 @@ add_library(${module_name}
     monitor/lightcontrols.cpp monitor/lightcontrols.h
     monitor/rigeditsession.h
     monitor/fixturefields.cpp monitor/fixturefields.h
+    monitor/mountinsituview.cpp monitor/mountinsituview.h
     monitor/humanfigure.cpp monitor/humanfigure.h
     monitor/targetitem.cpp monitor/targetitem.h
     monitor/handprops.cpp monitor/handprops.h
