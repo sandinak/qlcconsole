@@ -179,9 +179,20 @@ QList<QPair<quint64, ControlOwners::Owner>> ControlOwners::owned(Doc *doc)
         widgets.prepend(vc->contents());
         for (VCWidget *w : std::as_const(widgets))
         {
-            for (quint8 id : w->inputSourceIds())
+            /* Every input id: the widget's own and its sub-controls' (a
+               preset, a custom control, a page shortcut), which fire through
+               their own source. */
+            QList<quint8> ids = w->inputSourceIds();
+            QHash<quint8, QSharedPointer<QLCInputSource>> sub;
+            for (const auto &p : w->subInputSources())
             {
-                const QSharedPointer<QLCInputSource> src = w->inputSource(id);
+                sub.insert(p.first, p.second);
+                if (!ids.contains(p.first))
+                    ids << p.first;
+            }
+            for (quint8 id : std::as_const(ids))
+            {
+                const QSharedPointer<QLCInputSource> src = sub.contains(id) ? sub.value(id) : w->inputSource(id);
                 if (src.isNull() || !src->isValid())
                     continue;
                 Owner o;
@@ -445,7 +456,7 @@ bool ControlOwners::release(Doc *doc, const Owner &owner)
             VCWidget *w = qobject_cast<VCWidget *>(owner.widget.data());
             if (w == nullptr)
                 return false;
-            w->setInputSource(QSharedPointer<QLCInputSource>(), owner.inputId);
+            w->setSubInputSource(QSharedPointer<QLCInputSource>(), owner.inputId);
             doc->setModified();
             return true;
         }
@@ -537,8 +548,7 @@ Held holdOf(Doc *doc, const ControlOwners::Owner &o)
             break;
         }
         case ControlOwners::VCInput:
-            if (VCWidget *w = qobject_cast<VCWidget *>(o.widget.data()))
-                h.source = w->inputSource(o.inputId);
+            h.source = o.source;
             break;
         case ControlOwners::SpeedMaster:
             doc->speedMasters()->input(o.index, SpeedMasters::Control(o.part), &h.universe, &h.channel);
@@ -578,7 +588,7 @@ void putBack(Doc *doc, const Held &h)
         }
         case ControlOwners::VCInput:
             if (VCWidget *w = qobject_cast<VCWidget *>(h.owner.widget.data()))
-                w->setInputSource(h.source, h.owner.inputId);
+                w->setSubInputSource(h.source, h.owner.inputId);
             break;
         case ControlOwners::SpeedMaster:
             doc->speedMasters()->setInput(h.owner.index, SpeedMasters::Control(h.owner.part), h.universe, h.channel);

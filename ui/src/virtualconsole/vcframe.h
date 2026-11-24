@@ -158,6 +158,8 @@ public:
     QList<VCFramePageShortcut *> shortcuts() const;
     void addShortcut();
     void setShortcuts(QList<VCFramePageShortcut *> shortcuts);
+    QList<QPair<quint8, QSharedPointer<QLCInputSource> > > subInputSources() const override;
+    void setSubInputSource(QSharedPointer<QLCInputSource> const& source, quint8 id) override;
     void resetShortcuts();
     void updatePageCombo();
 

@@ -439,6 +439,19 @@ public:
     /** The ids of every external input set (ControlOwners asks who listens). */
     QList<quint8> inputSourceIds() const { return m_inputs.keys(); }
 
+    /** The inputs a widget keeps in its own sub-controls (a Speed Dial or XY
+     *  Pad preset, a Matrix custom control, a Frame page shortcut): they fire
+     *  and save through that struct's own source, so they are listed here by
+     *  (id, source) too. ControlOwners reads them. */
+    virtual QList<QPair<quint8, QSharedPointer<QLCInputSource> > > subInputSources() const
+    { return QList<QPair<quint8, QSharedPointer<QLCInputSource> > >(); }
+
+    /** Set (or clear, with a null @a source) input @a id everywhere it is
+     *  kept: setInputSource(), and the sub-control's own source. Move It Here
+     *  and its put-back use this. */
+    virtual void setSubInputSource(QSharedPointer<QLCInputSource> const& source, quint8 id)
+    { setInputSource(source, id); }
+
     /**
      * When cloning a widget on a multipage frame, this function
      * will remap the original input source to respond to a new

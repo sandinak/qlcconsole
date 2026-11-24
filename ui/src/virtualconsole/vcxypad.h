@@ -220,6 +220,8 @@ private:
      *********************************************************************/
 public:
     void addPreset(VCXYPadPreset const& preset);
+    QList<QPair<quint8, QSharedPointer<QLCInputSource> > > subInputSources() const override;
+    void setSubInputSource(QSharedPointer<QLCInputSource> const& source, quint8 id) override;
     void resetPresets();
     QList<VCXYPadPreset *> presets() const;
     QMap<quint32,QString> presetsMap() const;

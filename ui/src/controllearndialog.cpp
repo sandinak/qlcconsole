@@ -164,6 +164,7 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
             setPlace(b->place);
             m_place->blockSignals(false);
         }
+        m_stepThrough = keepsStepping();
         updateText();
     });
 
@@ -184,6 +185,17 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
         setMode(b->mode);
     }
     m_remove->setVisible(hasControl());
+    if (const ControlMap::Binding *b = cm->binding(target))
+    {
+        for (const ControlMap::Binding &o : cm->bindingsOn(b->universe, b->channel))
+            if (o.target != target && o.place == b->place)
+                m_boundStepping = true;
+        m_boundUniverse = b->universe;
+        m_boundChannel = b->channel;
+        m_boundPlace = b->place;
+        m_stepThrough = m_boundStepping && target.type != ControlMap::EmergencyStopTarget;
+        m_boundStepping = m_stepThrough;
+    }
 
     // Nothing to hear it on: say where inputs are patched.
     bool anyInput = false;
@@ -398,9 +410,25 @@ ControlOwners::Owner ControlLearnDialog::self() const
     return o;
 }
 
+bool ControlLearnDialog::keepsStepping() const
+{
+    return m_boundStepping && hasControl() && m_universe == m_boundUniverse
+           && m_channel == m_boundChannel && place() == m_boundPlace;
+}
+
 void ControlLearnDialog::checkOwners()
 {
     m_stepThrough = false;
+    /* A trigger that already steps through with siblings at this control
+       and place keeps doing so: reopened, its own OK is not "another job". */
+    if (keepsStepping())
+    {
+        m_stepThrough = true;
+        m_collision->clear();
+        m_collision->setStepThrough(false);
+        m_ok->setEnabled(true);
+        return;
+    }
     const QList<ControlOwners::Owner> others = ControlOwners::others(m_doc, m_universe, m_channel, self());
     m_collision->refuse(m_doc, m_universe, m_channel, others);
     /* Triggers at this same place on a button: they may step through, one
@@ -463,6 +491,8 @@ void ControlLearnDialog::accept()
     /* Asked again here, whatever led to OK: a binding is never replaced
        without a word. Move It Here released the others already; Step
        Through Them keeps them beside this one. */
+    if (keepsStepping())
+        m_stepThrough = true;
     if (!m_stepThrough && !ControlOwners::others(m_doc, m_universe, m_channel, self()).isEmpty())
     {
         checkOwners();

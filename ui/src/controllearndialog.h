@@ -130,6 +130,12 @@ private:
     QComboBox *m_place;
     QLabel *m_placeNote;
     bool m_stepThrough = false;
+    // The binding as the dialog opened: stepping through with siblings there.
+    bool m_boundStepping = false;
+    quint32 m_boundUniverse = 0xFFFFFFFF;
+    quint32 m_boundChannel = 0xFFFFFFFF;
+    ControlMap::Place m_boundPlace;
+    bool keepsStepping() const;
     QPushButton *m_ok;
     QPushButton *m_remove;
     ControlCollisionBox *m_collision;

@@ -48,6 +48,11 @@
 #include "virtualconsole/virtualconsole.h"
 #include "virtualconsole/vcbutton.h"
 #include "virtualconsole/vcframe.h"
+#include "virtualconsole/vcframepageshortcut.h"
+#include "virtualconsole/vcspeeddial.h"
+#include "virtualconsole/vcspeeddialpreset.h"
+#include "virtualconsole/vcmatrix.h"
+#include "virtualconsole/vcmatrixcontrol.h"
 #include "controlmappanel.h"
 #include "controlsurfacespanel.h"
 #include "connectionstree.h"
@@ -1567,6 +1572,138 @@ void ControlMapUi_Test::onlyTheSamePlaceIsRefused()
         QVERIFY(box->isRefusing());
         QVERIFY(!box->offersStepThrough());
         cm->handleInput(0, 60, 0);
+    }
+}
+
+/* Two triggers step through one control at one place (Step Through Them).
+   Opening one's dialog again and changing only its mode is not "another job
+   on the control": OK is accepted, the sibling stays, they still step. */
+void ControlMapUi_Test::aSteppingTriggerReopensAndSavesOnItsOwnControl()
+{
+    Scene *warm = scene("Warm");
+    Scene *cool = scene("Cool");
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 f6 = ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier);
+    cm->setBinding({ ControlMap::KeyboardUniverse, f6, ControlMap::function(warm->id()), ControlMap::Toggle });
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(cool->id()));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        QVERIFY(d.learnKey(Qt::Key_F6, Qt::NoModifier));
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>();
+        QVERIFY(box->offersStepThrough());
+        QTest::mouseClick(box->stepButton(), Qt::LeftButton);
+    }
+    QCOMPARE(cm->armedOn(ControlMap::KeyboardUniverse, f6).count(), 2);
+
+    ControlLearnDialog d(m_doc, ControlMap::function(warm->id()));
+    d.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&d));
+    d.setMode(ControlMap::Momentary);
+    ControlCollisionBox *box = d.findChild<ControlCollisionBox *>();
+    QVERIFY2(!box->isRefusing(), qPrintable(box->text()));
+    d.accept();
+    QCOMPARE(d.result(), int(QDialog::Accepted));
+    QVERIFY(cm->binding(ControlMap::function(cool->id())) != nullptr);
+    QCOMPARE(cm->binding(ControlMap::function(warm->id()))->mode, ControlMap::Momentary);
+    QCOMPARE(cm->bindingsOn(ControlMap::KeyboardUniverse, f6).count(), 2);
+    QCOMPARE(cm->armedOn(ControlMap::KeyboardUniverse, f6).count(), 2);     // still stepping
+
+    // Another control is checked as usual: F7 is free, so it moves there.
+    ControlLearnDialog e(m_doc, ControlMap::function(warm->id()));
+    QVERIFY(e.learnKey(Qt::Key_F7, Qt::NoModifier));
+    e.accept();
+    QCOMPARE(cm->bindingsOn(ControlMap::KeyboardUniverse, f6).count(), 1);
+}
+
+/* Move It Here from a widget's own sub-control (a Speed Dial preset, a
+   Matrix custom control, a Frame page shortcut): the sub-control fires and
+   saves through its own source, so it is released there, is one job in the
+   hub, and stays released through save and reload. */
+void ControlMapUi_Test::moveItHereLetsGoOfASubControlsOwnInput()
+{
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    if (VirtualConsole::instance() == nullptr)
+        new VirtualConsole(nullptr, m_doc);
+    QWidget *parent = VirtualConsole::instance()->contents();
+    ControlMap *cm = m_doc->controlMap();
+
+    VCSpeedDial *dial = new VCSpeedDial(parent, m_doc);
+    VCSpeedDialPreset preset(1);
+    preset.m_name = "Half";
+    preset.m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(0, 60));
+    dial->addPreset(preset);
+
+    VCMatrix *matrix = new VCMatrix(parent, m_doc);
+    VCMatrixControl control(2);
+    control.m_type = VCMatrixControl::Color1;
+    control.m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(0, 61));
+    matrix->addCustomControl(control);
+
+    VCFrame *frame = new VCFrame(parent, m_doc);
+    frame->setMultipageMode(true);
+    frame->setTotalPagesNumber(2);
+    {
+        VCFramePageShortcut s0(0, VCFrame::shortcutsBaseInputSourceId);
+        VCFramePageShortcut s1(1, VCFrame::shortcutsBaseInputSourceId + 1);
+        s1.m_inputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(0, 62));
+        frame->setShortcuts({ &s0, &s1 });
+    }
+
+    struct Case { VCWidget *w; quint32 ch; QString scene; };
+    const QList<Case> cases = { { dial, 60, "Warm" }, { matrix, 61, "Cool" }, { frame, 62, "Strobe" } };
+    for (const Case &c : cases)
+    {
+        // Seen as one job, before.
+        const QList<ControlOwners::Owner> before = ControlOwners::owners(m_doc, 0, c.ch);
+        QCOMPARE(before.count(), 1);
+        QCOMPARE(before.first().kind, ControlOwners::VCInput);
+
+        Scene *s = scene(c.scene);
+        ControlLearnDialog d(m_doc, ControlMap::function(s->id()));
+        d.show();
+        cm->handleInput(0, c.ch, 127);
+        cm->handleInput(0, c.ch, 0);
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+        QVERIFY2(box != nullptr && box->isRefusing(), qPrintable(c.scene));
+        box->moveButton()->click();
+
+        // The sub-control's own source is gone: it no longer answers.
+        QVERIFY2(c.w->subInputSources().isEmpty(), qPrintable(c.scene));
+        const ControlMap::Binding *b = cm->binding(ControlMap::function(s->id()));
+        QVERIFY(b != nullptr && b->channel == c.ch);
+        // One job, in the hub and in the owners.
+        const QList<ControlOwners::Owner> after = ControlOwners::owners(m_doc, 0, c.ch);
+        QCOMPARE(after.count(), 1);
+        QCOMPARE(after.first().kind, ControlOwners::Trigger);
+
+        // Saved without it, and reloaded without it.
+        QString xml;
+        {
+            QXmlStreamWriter w(&xml);
+            QVERIFY(c.w->saveXML(&w));
+        }
+        QVERIFY2(!xml.contains(QString("Channel=\"%1\"").arg(c.ch)), qPrintable(xml));
+    }
+    QVERIFY(ControlOwners::collisions(m_doc).isEmpty());
+
+    // Reload each from its XML: nothing comes back.
+    VCSpeedDial *dial2 = new VCSpeedDial(parent, m_doc);
+    VCMatrix *matrix2 = new VCMatrix(parent, m_doc);
+    VCFrame *frame2 = new VCFrame(parent, m_doc);
+    for (VCWidget *w : QList<VCWidget *>{ dial, matrix, frame })
+    {
+        QString xml;
+        {
+            QXmlStreamWriter wr(&xml);
+            QVERIFY(w->saveXML(&wr));
+        }
+        VCWidget *fresh = w == dial ? static_cast<VCWidget *>(dial2)
+                          : w == matrix ? static_cast<VCWidget *>(matrix2) : static_cast<VCWidget *>(frame2);
+        QXmlStreamReader r(xml);
+        QVERIFY(r.readNextStartElement());
+        QVERIFY(fresh->loadXML(r));
+        QVERIFY(fresh->subInputSources().isEmpty());
     }
 }
 

@@ -73,6 +73,8 @@ private slots:
     void theShowTreeLearnsWhereYouRightClicked();
     void aGoLearnedFromTheTreeFiresInOperate();
     void onlyTheSamePlaceIsRefused();
+    void aSteppingTriggerReopensAndSavesOnItsOwnControl();
+    void moveItHereLetsGoOfASubControlsOwnInput();
     void theTableAndTheHubShowEachPlace();
     void theLightFollowsWhatIsArmedNow();
     void placeShots();

@@ -702,6 +702,23 @@ void VCXYPad::addPreset(const VCXYPadPreset &preset)
     }
 }
 
+QList<QPair<quint8, QSharedPointer<QLCInputSource> > > VCXYPad::subInputSources() const
+{
+    QList<QPair<quint8, QSharedPointer<QLCInputSource> > > out;
+    for (auto *s : m_presets.values())
+        if (!s->m_inputSource.isNull() && s->m_inputSource->isValid())
+            out << qMakePair(s->m_id, s->m_inputSource);
+    return out;
+}
+
+void VCXYPad::setSubInputSource(QSharedPointer<QLCInputSource> const& source, quint8 id)
+{
+    for (auto *s : m_presets.values())
+        if (s->m_id == id)
+            s->m_inputSource = source;
+    setInputSource(source, id);
+}
+
 void VCXYPad::resetPresets()
 {
     for (QHash<QWidget *, VCXYPadPreset *>::iterator it = m_presets.begin();
