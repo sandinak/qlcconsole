@@ -13763,7 +13763,8 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     // X / Y on the plot, as every length is entered (Settings > Units); the
     // grid's size is in its own cells.
     const double gridToDisp_fx = double(m_props->gridUnitMetres()) * toDisp_fx;
-    QDoubleSpinBox *xSpin = new FeetInchesSpinBox(isFeet_fx);
+    FeetInchesSpinBox *xSpin = new FeetInchesSpinBox(isFeet_fx);
+    xSpin->setFitsEveryValue(true);   // its whole value, as a Mac's form keeps it at its size
     xSpin->setObjectName(QStringLiteral("fixtureX"));
     xSpin->setMaximum(m_graphicsView->gridSize().width() * gridToDisp_fx);
     xSpin->setSingleStep(0.1);
@@ -13775,7 +13776,8 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     xSpin->setValue(plotPos.x() * toDisp_fx / 1000.0);
     posForm->addRow(tr("X:"), xSpin);
 
-    QDoubleSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
+    FeetInchesSpinBox *ySpin = new FeetInchesSpinBox(isFeet_fx);
+    ySpin->setFitsEveryValue(true);   // its whole value, as a Mac's form keeps it at its size
     ySpin->setObjectName(QStringLiteral("fixtureY"));
     ySpin->setMaximum(m_graphicsView->gridSize().height() * gridToDisp_fx);
     ySpin->setSingleStep(0.1);

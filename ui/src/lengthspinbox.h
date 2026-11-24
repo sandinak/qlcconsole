@@ -78,11 +78,18 @@ public:
                                                                : QValidator::Intermediate;
     }
 
-    /** Wide enough for every value it can hold, not only its ends: Qt sizes
-     *  a spin box by its minimum's and maximum's text, and a range up to
-     *  100' showed 97' 4 1/8" as "97' 4" (Fixture Properties' X). The
-     *  longest text near each end -- an eighth short of it, 99' 11 7/8" --
-     *  is measured too. */
+    /** Wide enough for every value it can hold, not only its ends (off by
+     *  default: the studio editors are laid out to a laptop's width with
+     *  Qt's own sizes). Qt sizes a spin box by its minimum's and maximum's
+     *  text, and a range up to 100' showed 97' 4 1/8" as "97' 4" (Fixture
+     *  Properties' X); with this on, the longest text near each end -- an
+     *  eighth short of it, 99' 11 7/8" -- is measured too. */
+    void setFitsEveryValue(bool on)
+    {
+        m_fitsEveryValue = on;
+        updateGeometry();
+    }
+
     QSize sizeHint() const override
     {
         return QDoubleSpinBox::sizeHint() + QSize(widthShort(), 0);
@@ -97,6 +104,8 @@ private:
     /** How much wider than its ends' text its widest value's text is. */
     int widthShort() const
     {
+        if (!m_fitsEveryValue)
+            return 0;
         const QFontMetrics fm(font());
         auto wide = [&fm, this](double v) {
             // As Qt measures it (QAbstractSpinBox::sizeHint): 18 characters at most.
@@ -139,6 +148,7 @@ private:
 
     double m_mmPerValue;
     MeasurementUnits::LengthUnit m_unit;
+    bool m_fitsEveryValue = false;
 };
 
 /** @} */

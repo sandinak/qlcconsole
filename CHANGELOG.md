@@ -18,8 +18,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   (Fixture, Position, Aim & Mount, DMX Controls) scroll between its name
   and its OK / Cancel, which stay in view; it was over 1000 px tall and
   Locate and OK ran off the bottom. Its X and Y fields show the whole
-  length (97' 4 1/8" read "97' 4" on a 100' plot), as does every length
-  field.
+  length (97' 4 1/8" read "97' 4" on a 100' plot).
 - **A dialog fits on its screen**: one taller than a laptop's screen ran off
   the bottom with OK and Cancel out of reach; now it opens shrunk to fit
   where it can, centred over the main window. A dialog you put on another
