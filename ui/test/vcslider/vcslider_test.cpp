@@ -862,6 +862,20 @@ void VCSlider_Test::sliderCatchValuesAreUnchanged()
     emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 210);
     emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 214);
     QCOMPARE(slider.sliderValue(), 128);
+
+    // A mode or limits change is a different control: the wait starts over
+    slider.setSliderValue(200, false);
+    slider.m_pickup.reset();
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 20);
+    QVERIFY(!slider.pickupHint().isEmpty());
+    slider.setLevelLowLimit(5);
+    QVERIFY(slider.pickupHint().isEmpty());
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 10);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 20, 20);
+    QVERIFY(!slider.pickupHint().isEmpty());
+    slider.setSliderMode(VCSlider::Level);
+    QVERIFY(slider.pickupHint().isEmpty());
 }
 
 /* Q313: a master never waits. The Grand Master, a submaster and a group

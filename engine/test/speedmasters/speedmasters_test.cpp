@@ -972,4 +972,18 @@ void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()
     QCOMPARE(sm->rate(1), 1.0);
     QVERIFY(!sm->pickupHint(1).isEmpty());
     sm->clearInput(1, SpeedMasters::RateControl);
+    QVERIFY(sm->pickupHint(1).isEmpty());   // no fader, no wait
+
+    // Learnt again, the same fader starts a fresh wait: its old position
+    // is not a crossing
+    sm->setRate(1, 1.0);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 12);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 250);
+    QCOMPARE(sm->rate(1), 1.0);
+    sm->clearInput(1, SpeedMasters::RateControl);
+    sm->setInput(1, SpeedMasters::RateControl, 0, 12);
+    emit m_doc->inputOutputMap()->inputValueChanged(0, 12, 10);
+    QCOMPARE(sm->rate(1), 1.0);             // first sight, far: waits
+    QVERIFY(!sm->pickupHint(1).isEmpty());
+    sm->clearInput(1, SpeedMasters::RateControl);
 }

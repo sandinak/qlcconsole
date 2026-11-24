@@ -963,7 +963,6 @@ void VCSlider::setSliderMode(SliderMode mode)
         // Not a DMX source: it sets the effect when moved, nothing per tick.
         m_doc->masterTimer()->unregisterDMXSource(this);
     }
-
 }
 
 /*****************************************************************************
