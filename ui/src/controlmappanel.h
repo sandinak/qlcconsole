@@ -62,6 +62,8 @@ public:
      *  encoder, the pushes, the bank buttons and the rings, what it is
      *  mapped to. */
     QGroupBox *encoderBox() const { return m_encoderBox; }
+    /** The Emergency Stop… button (always shown). */
+    QPushButton *stopButton() const { return m_estop; }
 
 public slots:
     void refresh();

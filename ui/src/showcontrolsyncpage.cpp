@@ -23,6 +23,7 @@
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QPushButton>
+#include <QTableWidget>
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -37,6 +38,8 @@
 #include "showcontrolsyncpage.h"
 #include "qrencoder.h"
 #include "controlmappanel.h"
+#include "controlsurfacespanel.h"
+#include "speedmasterspanel.h"
 #include "showcontrollistener.h"
 #include "timecodesource.h"
 #include "inputoutputmap.h"
@@ -120,13 +123,14 @@ ShowControlSyncPage::ShowControlSyncPage(Doc *doc, QWidget *parent)
                                 "Control), MIDI timecode, web access and the controls that fire things (the Control "
                                 "Map). Changes take effect at once."),
                              content));
+    m_groups.insert(QStringLiteral("surfaces"), buildSurfacesGroup());
     m_groups.insert(QStringLiteral("osc"), buildOscGroup());
     m_groups.insert(QStringLiteral("msc"), buildMscGroup());
     m_groups.insert(QStringLiteral("out"), buildOutGroup());
     m_groups.insert(QStringLiteral("mtc"), buildMtcGroup());
     m_groups.insert(QStringLiteral("web"), buildWebGroup());
     m_groups.insert(QStringLiteral("map"), buildMapGroup());
-    for (const QString &key : { QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("out"), QStringLiteral("mtc"),
+    for (const QString &key : { QStringLiteral("surfaces"), QStringLiteral("osc"), QStringLiteral("msc"), QStringLiteral("out"), QStringLiteral("mtc"),
                                 QStringLiteral("web"), QStringLiteral("map") })
         lay->addWidget(m_groups.value(key));
     lay->addStretch();
@@ -491,6 +495,49 @@ QGroupBox *ShowControlSyncPage::buildMapGroup()
     lay->addWidget(m_controlMap);
     connect(m_controlMap, &ControlMapPanel::summaryChanged, this, &ShowControlSyncPage::checkSummary);
     return box;
+}
+
+QGroupBox *ShowControlSyncPage::buildSurfacesGroup()
+{
+    // Every place a control surface is set up, with where to go (read live).
+    QGroupBox *box = new QGroupBox(tr("Control surfaces"), this);
+    box->setObjectName(QStringLiteral("scSurfacesGroup"));
+    QVBoxLayout *lay = new QVBoxLayout(box);
+    lay->addWidget(noteLabel(tr("A control surface is a desk, pad, app or Stream Deck that is not the "
+                                "mouse. Each line is a place one is set up; Set Up… takes you there."),
+                             box));
+    m_surfaces = new ControlSurfacesPanel(m_doc, box);
+    lay->addWidget(m_surfaces);
+    connect(m_surfaces, &ControlSurfacesPanel::summaryChanged, this, &ShowControlSyncPage::checkSummary);
+    connect(m_surfaces, &ControlSurfacesPanel::setUpRequested, this, &ShowControlSyncPage::setUpSurface);
+    return box;
+}
+
+void ShowControlSyncPage::setUpSurface(const QString &key)
+{
+    if (key == QLatin1String("map") || key == QLatin1String("estop") || key == QLatin1String("encoder"))
+    {
+        emit sectionRequested(QStringLiteral("map"));
+        showSection(QStringLiteral("map"));
+        QWidget *to = key == QLatin1String("estop") ? static_cast<QWidget *>(m_controlMap->stopButton())
+                    : key == QLatin1String("encoder") ? static_cast<QWidget *>(m_controlMap->encoderBox())
+                    : static_cast<QWidget *>(m_controlMap->table());
+        if (QScrollArea *scroll = findChild<QScrollArea *>())
+            scroll->ensureWidgetVisible(to);
+        if (key == QLatin1String("estop"))
+            m_controlMap->stopButton()->setFocus();
+    }
+    else if (key == QLatin1String("web"))
+    {
+        emit sectionRequested(QStringLiteral("web"));
+        showSection(QStringLiteral("web"));
+    }
+    else if (key == QLatin1String("vc"))
+        emit virtualConsoleRequested();
+    else if (key == QLatin1String("masters"))
+        SpeedMastersPanel::open(m_doc, this);
+    else if (key == QLatin1String("pmj") || key == QLatin1String("pads"))
+        emit patchMidiInputRequested();     // the wiring, where inputs are patched
 }
 
 QGroupBox *ShowControlSyncPage::buildWebGroup()
@@ -983,7 +1030,8 @@ QList<QStringList> ShowControlSyncPage::summary() const
             break;
     }
 
-    return { { QStringLiteral("osc"), tr("OSC in"), osc },
+    return { { QStringLiteral("surfaces"), tr("Control surfaces"), m_surfaces->summary() },
+             { QStringLiteral("osc"), tr("OSC in"), osc },
              { QStringLiteral("msc"), tr("MIDI Show Control in"), msc },
              { QStringLiteral("mtc"), tr("MIDI timecode"), m_mtcStatus->text() },
              { QStringLiteral("web"), tr("Web access"), web },

@@ -54,6 +54,11 @@ private slots:
     void thePanelSaysWhenAControlHasNoLight();
     void anEncoderLearnStopsListeningWhenThePanelHides();
     void learnKeyShots();
+    void theSurfacesHubListsEveryPlace();
+    void eachSetUpLandsOnItsPlace();
+    void theSurfacesStatusFollowsTheShow();
+    void surfacesOffKeepsTheStop();
+    void surfacesShots();
 
 private:
     Scene *scene(const QString &name);
