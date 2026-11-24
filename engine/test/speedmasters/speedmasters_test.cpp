@@ -21,7 +21,7 @@
 #include <QXmlStreamWriter>
 #include <QtTest>
 #include <QDir>
-#include "qlcconfig.h"
+#include "qlcfile.h"
 #include <QElapsedTimer>
 
 #include <cmath>
