@@ -277,3 +277,21 @@ A: refused. B: step through (Q157, as hits). C: fire together.
 Each phase ships with help in `docs/features/control-surfaces.md`, a course
 note, gate tests (a test per rule above that fails on today's code) and a
 CHANGELOG line.
+
+## 9. Decisions (2026-11-24)
+
+Branson took the recommendation on every question:
+
+| Board | Here | Decision |
+|---|---|---|
+| Q295 | Q-A | Mappings get a place (cue, layer, effect, everywhere), armed only while it is live: the rule hits follow. |
+| Q296 | Q-B | Two mappings on one control at different places are allowed; the narrowest armed one wins (cue > layer > list > production > effect > everywhere > this computer), said at Learn. |
+| Q297 | Q-C | A control another listener already uses is refused at Learn, naming the owner, with **Move It Here**. |
+| Q298 | Q-D | A scoped fader's value drops when its place ends (the GO); the cue plays as written; Store keeps it into the cue. |
+| Q299 | Q-E | Pick-up on for every scoped fader; motorised faders are sent the value. |
+| Q300 | Q-F | RGBW / pan / tilt faders are refused in Operate for now; group masters for levels. A ride bound to a fixed layer may come later. |
+| Q301 | Q-G | Both: the device setup per computer, the mappings per show. |
+| Q302 | Q-H | A control on an effect is armed wherever the effect plays; learn it on the cue to narrow it. |
+| Q303 | Q-I | Two things at the same place on one button step through (as hits); refused for faders. |
+
+Build order: §8, phase 1 first.
