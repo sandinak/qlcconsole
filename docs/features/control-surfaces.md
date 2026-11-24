@@ -12,7 +12,7 @@ the show except what is said to be the computer's.
 **All of them are listed in one place**: **Connections ▸ Devices ▸ Show
 control &amp; sync ▸ Control surfaces**. Each line says what it is and what is
 set up now (*3 triggers learned*, *Emergency stop: not learned*, *1 pad
-connected*, *Companion: web access off*), and its **Set up…** button takes you
+connected*, *Companion: web access off*), and its **Set Up…** button takes you
 to the place in the table below. It reads the show as it is and keeps no
 settings of its own. With **Control Surfaces** off for the show (see the
 emergency stop below) the triggers and the encoder bank lines say so and
@@ -22,7 +22,7 @@ One control (a MIDI note or CC, an OSC message) can be heard by several
 parts of the program at once. Nothing warns you yet when two of them take
 the same control, so give each control one job.
 
-| What | Where you set it (or **Set up…** in Control surfaces) | What it does |
+| What | Where you set it (or **Set Up…** in Control surfaces) | What it does |
 |---|---|---|
 | **Control Map** | Right-click a scene, effect, cue list, cue or hit ▸ **Learn Trigger…**; the table is **Connections ▸ Devices ▸ Show control &amp; sync ▸ Control Map** | One button fires one thing. See [Control Map](other-improvements.md#control-map-midi-and-osc-triggers). |
 | **Emergency stop** | The **Emergency Stop…** button under the Control Map table | One button is ALL OFF (below). |

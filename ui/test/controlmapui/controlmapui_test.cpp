@@ -863,7 +863,7 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     for (const QString &key : ControlSurfacesPanel::keys())
     {
         QVERIFY2(hub->setUpButton(key) != nullptr, qPrintable(key));
-        QCOMPARE(hub->setUpButton(key)->text(), QString("Set up…"));
+        QCOMPARE(hub->setUpButton(key)->text(), QString("Set Up…"));
         QVERIFY2(!hub->status(key).isEmpty(), qPrintable(key));
     }
     QCOMPARE(hub->status("map"), QString("No triggers learned"));

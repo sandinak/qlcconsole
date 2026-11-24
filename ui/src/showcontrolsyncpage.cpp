@@ -504,7 +504,7 @@ QGroupBox *ShowControlSyncPage::buildSurfacesGroup()
     box->setObjectName(QStringLiteral("scSurfacesGroup"));
     QVBoxLayout *lay = new QVBoxLayout(box);
     lay->addWidget(noteLabel(tr("A control surface is a desk, pad, app or Stream Deck that is not the "
-                                "mouse. Each line is a place one is set up; Set up… takes you there."),
+                                "mouse. Each line is a place one is set up; Set Up… takes you there."),
                              box));
     m_surfaces = new ControlSurfacesPanel(m_doc, box);
     lay->addWidget(m_surfaces);
