@@ -56,6 +56,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Fixture Properties in tabs**: **Fixture**, **Place**, **Aim & Mount**
+  and **DMX Controls** between its name and OK / Cancel; it opens on the tab
+  you used last, Ctrl+Tab / Ctrl+Shift+Tab go round them. Place has X / Y
+  with a one-line *On stage* position, Mounted on, Orientation, Placement and
+  Tilt. Aim & Mount's **More** folds away masking, calibration, direction and
+  the test pose (its fold remembered); folded, it says what in it is set
+  (*pan cal 5.0°*). Pan works around reads in two lines, the whole on hover;
+  Max draw says *not measured* on its row. With several fixtures a tab with
+  a row they differ on has a dot. Every tab fits a 1024x640 screen.
 - **The Show Tree says what is in it** (board Q266): its tab tooltip, its
   **Window** menu entry and its help title now read *cue lists, cues and
   hits*. The tab keeps its name, and no menu item was added.
