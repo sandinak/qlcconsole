@@ -234,7 +234,11 @@ void PlanMapWidget::paintEvent(QPaintEvent *)
     p.setPen(QColor(0x7d, 0xa8, 0xd8));
     p.drawText(QPointF(clx + 3, st.top() + 10), QStringLiteral("CL"));
     p.setPen(QColor(0xd8, 0xb0, 0x6a));
-    p.drawText(QPointF(st.left() + 3, ply - 3), tr("PL"));
+    {
+        // At the right, clear of the dot's labels; above DS when the line is the bottom edge.
+        const double y = ply > st.bottom() - 12 ? st.bottom() - 14 : ply - 3;
+        p.drawText(QPointF(st.right() - fm.horizontalAdvance(tr("PL")) - 3, y), tr("PL"));
+    }
     p.setPen(QColor(0x80, 0x84, 0x94));
     p.drawText(QPointF(st.right() - fm.horizontalAdvance(tr("US")) - 3, st.top() + 10), tr("US"));
     p.drawText(QPointF(st.right() - fm.horizontalAdvance(tr("DS")) - 3, st.bottom() - 3), tr("DS"));
@@ -252,20 +256,23 @@ void PlanMapWidget::paintEvent(QPaintEvent *)
     p.setPen(QPen(QColor(0xd8, 0xb0, 0x6a), 1));
     p.drawLine(d, QPointF(d.x(), ply));
 
-    auto label = [&](const QString &t, QPointF at, const QColor &c) {
+    auto label = [&](const QString &t, QPointF at, const QColor &c, const QRectF &avoid = QRectF()) -> QRectF {
         const QRectF r(at, QSizeF(fm.horizontalAdvance(t) + 4, fm.height()));
         QRectF q = r;
         q.moveLeft(qBound(2.0, q.left(), width() - q.width() - 2.0));
         q.moveTop(qBound(2.0, q.top(), double(height() - kCaptionH - q.height())));
+        if (q.intersects(avoid))
+            q.moveTop(avoid.bottom() + 1);      // below, not over the other label
         p.fillRect(q, QColor(0x1c, 0x1e, 0x26, 220));
         p.setPen(c);
         p.drawText(q, Qt::AlignCenter, t);
+        return q;
     };
     const double midX = (d.x() + clx) / 2;
-    label(centreLineText(), QPointF(midX - fm.horizontalAdvance(centreLineText()) / 2 - 2, d.y() - fm.height() - 1),
+    const QRectF clRect = label(centreLineText(), QPointF(midX - fm.horizontalAdvance(centreLineText()) / 2 - 2, d.y() - fm.height() - 1),
           QColor(0xa8, 0xc8, 0xee));
     const double midY = (d.y() + ply) / 2;
-    label(plasterLineText(), QPointF(d.x() + 4, midY - fm.height() / 2), QColor(0xee, 0xcc, 0x8a));
+    label(plasterLineText(), QPointF(d.x() + 4, midY - fm.height() / 2), QColor(0xee, 0xcc, 0x8a), clRect);
 
     // The fixture.
     p.setPen(QPen(Qt::white, 1.5));
