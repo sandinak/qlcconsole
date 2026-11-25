@@ -1230,6 +1230,8 @@ private:
     QCheckBox *m_cueBase;
     QCheckBox *m_cueMix;
     QCheckBox *m_cueSkip = nullptr;
+    /** Q328: Fast -- no double-GO guard after the cue (ShowTree::Cue::fast). */
+    QCheckBox *m_cueFast = nullptr;
     /** 0.4: a hit's Override (ShowTree::Cue::override). */
     QCheckBox *m_hitOverride = nullptr;
     /** Q38: "Don't move in black into this cue"; the list's Move in black. */

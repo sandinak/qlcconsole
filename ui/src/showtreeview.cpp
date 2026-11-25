@@ -2358,6 +2358,19 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
                                  "it. Use it for a cue you might cut."));
         f->addRow(QString(), m_cueSkip);
         connect(m_cueSkip, &QCheckBox::toggled, this, &ShowTreeView::slotCueSkipToggled);
+        /* Fast (Q328): no double-GO guard after this cue, for cues called
+           close together (ShowControl::run(), rule 1). */
+        m_cueFast = new QCheckBox(tr("Fast: Next GO Never Held"), inner);
+        m_cueFast->setObjectName("stCueFast");
+        m_cueFast->setToolTip(tr("The double-GO guard holds a second GO until a cue has begun (a quarter "
+                                 "second at least). Tick this for a cue the next one is called right on top "
+                                 "of: the GO after it always goes, from every GO."));
+        f->addRow(QString(), m_cueFast);
+        connect(m_cueFast, &QCheckBox::toggled, this, [this](bool on) {
+            if (m_inspectorUpdating || m_pageCue == invalidId())
+                return;
+            m_st->setCuesFast({ m_pageCue }, on);
+        });
         m_cueNoMib = new QCheckBox(tr("Don't move in black into this cue"), inner);
         m_cueNoMib->setObjectName("stCueNoMib");
         m_cueNoMib->setToolTip(tr("No head moves in black into this cue, whatever the list and show say. Use it "
@@ -3903,6 +3916,14 @@ void ShowTreeView::buildTree()
                                .join(QStringLiteral("\n\n")).trimmed();
                     ci->setData(FlagsCol, FollowPalettesRole, followPals);
                 }
+                // Q328: Fast -- the GO after it is never held.
+                if (!list.looks && !list.isSubCues() && cue.fast)
+                {
+                    badges << tr("fast");
+                    badgeTip = QStringList({ badgeTip, tr("Fast: the GO after this cue is never held by the "
+                                                          "double-GO guard.") })
+                               .join(QStringLiteral("\n\n")).trimmed();
+                }
                 if (!list.looks && cue.skip)
                     badges.prepend(tr("skip"));
                 ci->setText(FlagsCol, badges.join(QStringLiteral(", ")));
@@ -4932,6 +4953,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             m_cueBlockingRow })
             m_cueForm->setRowVisible(w, cueRows);
         m_cueForm->setRowVisible(m_cueTcRow, cueRows && !list.isSubCues());
+        m_cueForm->setRowVisible(m_cueFast, cueRows && !list.isSubCues());
         m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
         m_cueForm->setRowVisible(m_hitWhen, list.looks);
         m_cueForm->setRowVisible(m_hitOverride, list.looks);
@@ -5017,6 +5039,10 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     {
         QSignalBlocker block(m_cueNoMib);
         m_cueNoMib->setChecked(cue.noMoveInBlack);
+    }
+    {
+        QSignalBlocker block(m_cueFast);
+        m_cueFast->setChecked(cue.fast);
     }
     fillCueBlocking();
     {

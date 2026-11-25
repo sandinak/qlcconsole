@@ -50,9 +50,16 @@ private slots:
     /** Settings ▸ General ▸ Show Controls ▸ Double-GO guard: a longer
      *  window, and Off. */
     void theSettingChangesTheWindow();
+    /** Q328: a cue marked Fast -- the GO straight after it goes, from
+     *  the console's real GO paths; the cue after is guarded again. */
+    void aFastCueGoesOnAtOnce();
+    /** Q328: the cue page's Fast tick: a main cue's (not a hit's), one
+     *  undo step, the chaser step follows, "fast" in the row's flags. */
+    void theFastTickIsOnTheCuePage();
     /** Pictures for the visual check (QLC_SHOT_DIR set; else skipped): the
-     *  Run tab and the footer just after a second GO, at 1024, 1280 and
-     *  1920 wide, and Settings ▸ General. */
+     *  Run tab and the footer just after a second GO, and the Show Tree's
+     *  cue page with Fast ticked, at 1024x640, 1440x900 and 1920x1080, and
+     *  Settings ▸ General. */
     void pictures();
 
 private:

@@ -76,6 +76,24 @@ private slots:
      *  Show Tree) is held the same way, and opens the window for run(). */
     void aVcStepOnAPlainChaserIsHeld();
 
+    /** Q328, rule 1 follows the cue: after a 0-fade cue a GO 300 ms on
+     *  goes, one 100 ms on is held ("cue 1 still starting"); after a 2 s
+     *  fade a GO at 400 ms goes (its fade has begun). */
+    void theGuardFollowsTheCue();
+    /** Q328: a cue marked Fast has no guard after it -- the GO straight
+     *  after goes; the cue after it is guarded again. */
+    void aFastCueHasNoGuard();
+    /** Q328: a cue the runner has not begun is held up to the setting and
+     *  no longer; a setting under goBegunMs() caps that too; Fast and the
+     *  floor change nothing for Back (rule 3 keeps the whole window). */
+    void theCapHolds();
+    /** Q328: every route after every route follows the same one rule:
+     *  held at 100 ms, played at 300 ms, never held after a Fast cue. */
+    void everyRouteSharesTheCueRule();
+    /** Q328: Fast is saved with the show (the Show Tree cue and its chaser
+     *  step, Fast="1") and read back; a show without it reads Off. */
+    void fastIsSavedAndLoaded();
+
 private:
     Chaser *makeList(int steps, const QString &name);
     Chaser *makeSubCueList();

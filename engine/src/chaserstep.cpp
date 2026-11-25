@@ -32,6 +32,7 @@
 #define KXMLQLCStepSpeedMaster      QStringLiteral("SpeedMaster")
 #define KXMLQLCStepCue              QStringLiteral("Cue")
 #define KXMLQLCStepSkip             QStringLiteral("Skip")
+#define KXMLQLCStepFast             QStringLiteral("Fast")
 #define KXMLQLCStepSubCues          QStringLiteral("SubCues")
 
 QString ChaserStep::subCueModeToString(SubCueMode mode)
@@ -74,6 +75,7 @@ ChaserStep::ChaserStep(const ChaserStep& cs)
     , speedMaster(cs.speedMaster)
     , cueNumber(cs.cueNumber)
     , skip(cs.skip)
+    , fast(cs.fast)
     , subCues(cs.subCues)
 {
 }
@@ -92,6 +94,7 @@ ChaserStep &ChaserStep::operator=(const ChaserStep &step)
         speedMaster = step.speedMaster;
         cueNumber = step.cueNumber;
         skip = step.skip;
+        fast = step.fast;
         subCues = step.subCues;
     }
 
@@ -184,6 +187,7 @@ QVariant ChaserStep::toVariant() const
     list << cueNumber;
     list << skip;
     list << int(subCues);
+    list << fast;
     return list;
 }
 
@@ -191,7 +195,7 @@ ChaserStep ChaserStep::fromVariant(const QVariant& var)
 {
     ChaserStep cs;
     QList <QVariant> list(var.toList());
-    if (list.size() >= 6 && list.size() <= 10)
+    if (list.size() >= 6 && list.size() <= 11)
     {
         cs.fid = list.takeFirst().toUInt();
         cs.fadeIn = list.takeFirst().toUInt();
@@ -210,6 +214,8 @@ ChaserStep ChaserStep::fromVariant(const QVariant& var)
             const int m = list.takeFirst().toInt();
             cs.subCues = m == SubGo ? SubGo : m == SubGoFollow ? SubGoFollow : Auto;
         }
+        if (!list.isEmpty())
+            cs.fast = list.takeFirst().toBool();
     }
     return cs;
 }
@@ -245,6 +251,8 @@ bool ChaserStep::loadXML(QXmlStreamReader &root, int& stepNumber, Doc *doc)
         cueNumber = attrs.value(KXMLQLCStepCue).toString();
     if (attrs.hasAttribute(KXMLQLCStepSkip) == true)
         skip = attrs.value(KXMLQLCStepSkip).toString() == QLatin1String("1");
+    if (attrs.hasAttribute(KXMLQLCStepFast) == true)
+        fast = attrs.value(KXMLQLCStepFast).toString() == QLatin1String("1");
     if (attrs.hasAttribute(KXMLQLCStepSubCues) == true)
         subCues = stringToSubCueMode(attrs.value(KXMLQLCStepSubCues).toString());
 
@@ -338,6 +346,8 @@ bool ChaserStep::saveXML(QXmlStreamWriter *doc, int stepNumber, bool isSequence)
         doc->writeAttribute(KXMLQLCStepCue, cueNumber);
     if (skip)
         doc->writeAttribute(KXMLQLCStepSkip, QStringLiteral("1"));
+    if (fast)
+        doc->writeAttribute(KXMLQLCStepFast, QStringLiteral("1"));
     if (subCues != Auto)
         doc->writeAttribute(KXMLQLCStepSubCues, subCueModeToString(subCues));
 

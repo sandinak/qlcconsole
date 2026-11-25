@@ -353,10 +353,15 @@ QString ShowControl::sourceName(Route route)
     return tr("Another source");
 }
 
-QString ShowControl::heldText(Command held, Command taken, Route takenBy, qint64 agoMs)
+QString ShowControl::heldText(Command held, Command taken, Route takenBy, qint64 agoMs,
+                              const QString &startingCue)
 {
     // Tenths of a second; never "0.0 s", which reads as no time at all.
     const QString ago = QString::number(qMax<qint64>(agoMs, 100) / 1000.0, 'f', 1);
+    // Rule 1: a GO held while the cue the GO before started is starting.
+    if (held == taken && !startingCue.isEmpty())
+        return tr("Second %1 held: cue %2 still starting (%3's %4)")
+            .arg(commandName(held), startingCue, sourceName(takenBy), commandName(taken));
     if (held == taken)
         return tr("Second %1 held: %2's %3 took it %4 s ago")
             .arg(commandName(held), sourceName(takenBy), commandName(taken), ago);
@@ -387,6 +392,9 @@ bool ShowControl::holds(const Request &request, Route route, QString *text, quin
                                                       : cueList(request.list);
     if (chaser == nullptr)
         return false;
+    // Rule 1: where the list stands, read before the guard's lock.
+    const bool running = chaser->isRunning();
+    const int playing = running ? chaser->currentStepIndex() : -1;
 
     QMutexLocker lock(&m_guardMutex);
     const auto it = m_guardMarks.constFind(chaser->id());
@@ -394,17 +402,37 @@ bool ShowControl::holds(const Request &request, Route route, QString *text, quin
         return false;
     const qint64 now = guardNow();
     const qint64 ago = now - it->at;
+    // Capped at the setting, whatever the pair (rules 1 and 3).
     if (ago < 0 || ago >= m_goGuardMs)
         return false;
-    // Rule 1: held; the window stays where it was.
-    m_heldText = heldText(request.command, it->command, it->route, ago);
+    QString starting;
+    if (request.command == Go && it->command == Go)
+    {
+        /* Rule 1 (Q328): a GO after a GO waits only for the cue that GO
+           started to have begun -- its runner on it (a wait before its fade
+           counts as begun) and goBegunMs() gone; after a Fast cue, not at
+           all. A direct step (no step known) has begun once it ran. Begun:
+           the runner is on that cue -- or has left the one it was on (an
+           auto-follow already past it). */
+        if (it->fast)
+            return false;
+        const bool begun = it->step < 0
+                           || (running && playing >= 0 && (playing == it->step || playing != it->from));
+        if (begun && ago >= goBegunMs())
+            return false;
+        if (it->step >= 0)
+            starting = it->cue.isEmpty() ? QString::number(it->step + 1) : it->cue;
+    }
+    // Held; the window stays where it was.
+    m_heldText = heldText(request.command, it->command, it->route, ago, starting);
     m_heldAt = now;
     *text = m_heldText;
     *chaserId = chaser->id();
     return true;
 }
 
-void ShowControl::markTaken(quint32 chaserId, Command command)
+void ShowControl::markTaken(quint32 chaserId, Command command, int step, int from, bool fast,
+                            const QString &cue)
 {
     const Route route = t_runRoute;
     QMutexLocker lock(&m_guardMutex);
@@ -420,6 +448,13 @@ void ShowControl::markTaken(quint32 chaserId, Command command)
     mark.at = guardNow();
     mark.route = route;
     mark.command = command;
+    if (command == Go)
+    {
+        mark.step = step;
+        mark.from = from;
+        mark.fast = fast;
+        mark.cue = cue;
+    }
     m_guardMarks.insert(chaserId, mark);
 }
 
@@ -454,11 +489,16 @@ bool ShowControl::execute(const Request &request)
     if (!cue.isEmpty())
         what += tr(" cue %1").arg(cue);
     quint32 listId = UINT_MAX;          // the list it acts on, once found
+    // A GO's cue, for the guard (rule 1): the step it started, Fast, its name.
+    int goStep = -1;
+    int goFrom = -1;
+    bool goFast = false;
+    QString goCue;
 
     auto finish = [&](bool done, const QString &how) {
         // Carried out: the double-GO guard's window opens on its list.
         if (done)
-            markTaken(listId, request.command);
+            markTaken(listId, request.command, goStep, goFrom, goFast, goCue);
         const QString line = how.isEmpty() ? what : what + QStringLiteral(" — ") + how;
         emit commandHandled(line, done);
         emit commandFrom(m_source, m_sourceUniverse, line, done);
@@ -539,6 +579,13 @@ bool ShowControl::execute(const Request &request)
                 const bool fromCue = chaser->isRunning() && !chaser->holdsRemovedStep();
                 emit cueTaken(Go, chaser->id(), fromCue ? chaser->currentStepIndex() : -1,
                               fromCue ? chaser->currentSubCueIndex() : -1, sentStep, sub);
+            }
+            if (sentStep >= 0)
+            {
+                goStep = sentStep;
+                goFrom = chaser->isRunning() ? chaser->currentStepIndex() : -1;
+                goFast = chaser->isStepFast(sentStep);
+                goCue = cueName(chaser, sentStep, -1);
             }
             if (sub >= 0)
                 goSubCue(chaser, step, sub);

@@ -488,6 +488,12 @@ bool Chaser::isStepSkipped(int index) const
     return index >= 0 && index < m_steps.count() && m_steps.at(index).skip;
 }
 
+bool Chaser::isStepFast(int index) const
+{
+    QMutexLocker locker(&m_stepListMutex);
+    return index >= 0 && index < m_steps.count() && m_steps.at(index).fast;
+}
+
 void Chaser::setStepSkipped(int index, bool skip)
 {
     {
