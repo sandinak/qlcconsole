@@ -170,8 +170,9 @@ public:
         /* A constructor, not an aggregate: GCC's -Wmissing-field-initializers
            (the Linux leg's -Werror) rejects a brace list that leaves the
            newer-place strings out, and most places name only scope and id. */
-        Place(PlaceScope s = Everywhere, quint32 i = 0xFFFFFFFF,
-              const QString &ns = QString(), const QString &no = QString())
+        Place() {}
+        Place(PlaceScope s, quint32 i) : scope(s), id(i) {}
+        Place(PlaceScope s, quint32 i, const QString &ns, const QString &no)
             : scope(s), id(i), newerScope(ns), newerOf(no) {}
 
         PlaceScope scope = Everywhere;
@@ -195,8 +196,15 @@ public:
     {
         /* As Place: a binding written { universe, channel, target, mode }
            (every one from before places) means everywhere. */
-        Binding(quint32 u = 0xFFFFFFFF, quint32 c = 0xFFFFFFFF, Target t = Target(),
-                Mode m = Toggle, Place p = Place())
+        /* Overloads, not default arguments: GCC wants Target's and Place's
+           member initializers before ControlMap ends, so a default
+           argument of either type is refused here. */
+        Binding() {}
+        Binding(quint32 u, quint32 c) : universe(u), channel(c) {}
+        Binding(quint32 u, quint32 c, const Target &t) : universe(u), channel(c), target(t) {}
+        Binding(quint32 u, quint32 c, const Target &t, Mode m)
+            : universe(u), channel(c), target(t), mode(m) {}
+        Binding(quint32 u, quint32 c, const Target &t, Mode m, const Place &p)
             : universe(u), channel(c), target(t), mode(m), place(p) {}
 
         quint32 universe = 0xFFFFFFFF;
