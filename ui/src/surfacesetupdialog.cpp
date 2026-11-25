@@ -31,6 +31,7 @@
 #include <QTimer>
 
 #include "surfacesetupdialog.h"
+#include "apputil.h"
 #include "inputoutputmap.h"
 #include "doc.h"
 
@@ -263,7 +264,7 @@ void SurfaceSetupDialog::checkNow()
         updateState();
         return;
     }
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
     m_setup->check(u);
     QGuiApplication::restoreOverrideCursor();
     updateState();
@@ -275,7 +276,7 @@ void SurfaceSetupDialog::alignLamps()
     if (!confirmWrite(&confirmed))
         return;
     QString error;
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
     const bool ok = m_setup->align(universe(), confirmed, &error);
     QGuiApplication::restoreOverrideCursor();
     showError(ok ? QString() : error);
@@ -288,7 +289,7 @@ void SurfaceSetupDialog::undoAlign()
     if (!confirmWrite(&confirmed))
         return;
     QString error;
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
     const bool ok = m_setup->undoAlign(universe(), confirmed, &error);
     QGuiApplication::restoreOverrideCursor();
     showError(ok ? QString() : error);
@@ -309,7 +310,7 @@ void SurfaceSetupDialog::startIdentify()
     if (!confirmWrite(&confirmed))
         return;
     QString error;
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
     const bool ok = m_setup->beginIdentify(universe(), confirmed, &error);
     QGuiApplication::restoreOverrideCursor();
     if (!ok)
@@ -361,7 +362,7 @@ void SurfaceSetupDialog::finishIdentify()
     m_setup->flashLamp(universe(), m_lamp, false);
     m_identifying = false;
     QString error;
-    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(AppUtil::nativeCursorShape(Qt::WaitCursor));
     const bool ok = m_setup->endIdentify(universe(), m_found, &error);
     QGuiApplication::restoreOverrideCursor();
     m_identifyBox->hide();
