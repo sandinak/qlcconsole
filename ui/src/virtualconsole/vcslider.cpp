@@ -1815,10 +1815,10 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
 
     /* Let go of by the emergency stop and not moved since: nothing written,
        every channel but pan and tilt let go of, once (the move rebuilds
-       them: m_levelValueChanged). Pan and tilt stay where the slider has
-       them, as Stop ALL leaves every head (FixtureRest): let go of, a
-       Show-only one would fall to its safe value and the head would swing
-       across the stage. */
+       them: m_levelValueChanged). Pan and tilt are never let go of here,
+       as Stop ALL leaves every head (FixtureRest): the slider's position
+       channels stay where they are (an ordinary LTP one has normally left
+       the fader already, its value held by the universe). */
     const quint32 stopped = m_stopSession.load(std::memory_order_relaxed);
     if (stopped != 0)
     {
