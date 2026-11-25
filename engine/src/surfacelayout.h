@@ -136,6 +136,12 @@ public:
      *  has no colour table. */
     QColor lampColour(uchar sent) const;
     bool hasLampColours() const { return !m_lampColours.isEmpty(); }
+    /** "onOff": a light is on (any value above 0, at full) or off, and
+     *  nothing else -- its colour is set on the device (the APC64 in Custom
+     *  Mode: Akai's Project Editor); a blink is the app's, on and off by
+     *  turns. Empty: the value is a level or a colour. */
+    QString lampKind() const { return m_lampKind; }
+    bool lampsOnOff() const { return m_lampKind == QLatin1String("onOff"); }
 
     /** Reads a layout file. Invalid (and @p error says why) when it is not one. */
     static SurfaceLayout fromFile(const QString &path, QString *error = nullptr);
@@ -158,6 +164,7 @@ private:
     QString m_profile;
     QString m_name;
     QString m_short;
+    QString m_lampKind;
     QSizeF m_size;
     QList<Control> m_controls;
     QList<Section> m_sections;

@@ -704,7 +704,7 @@ QString apcFile()
 void SurfaceSim_Test::everyLayoutHoldsToItsProfile()
 {
     const QStringList files = SurfaceLayout::builtInFiles();
-    QVERIFY2(files.size() >= 3, qPrintable(files.join(", ")));
+    QVERIFY2(files.size() >= 4, qPrintable(files.join(", ")));
     // The profiles by name, from the source folder.
     QHash<QString, QString> byName;
     QDir dir(profileDir(), QStringLiteral("*.qxi"), QDir::Name, QDir::Files);
@@ -730,7 +730,8 @@ void SurfaceSim_Test::everyLayoutHoldsToItsProfile()
         seen << l.profileName();
         QVERIFY(SurfaceLayout::forProfile(l.profileName()).isValid());
     }
-    const QStringList needed = { kApc, kPmj, QStringLiteral("MaizeDMX Playback Controller") };
+    const QStringList needed = { kApc, kPmj, QStringLiteral("MaizeDMX Playback Controller"),
+                                 QStringLiteral("Akai APC64 Custom") };
     for (const QString &must : needed)
         QVERIFY2(seen.contains(must), qPrintable(must));
     QVERIFY(!SurfaceLayout::forProfile(QStringLiteral("Akai APC Mini")).isValid());
@@ -874,6 +875,31 @@ void SurfaceSim_Test::theMaizeDmxSeedsItsDefaults()
         return true;
     });
     QVERIFY(maize.tap(QStringLiteral("GO")));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+}
+
+void SurfaceSim_Test::theApc64SeedsItsDefaults()
+{
+    const QString name = QStringLiteral("Akai APC64 Custom");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64-Custom.qxi")) != nullptr);
+    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 Custom"), 0, name);
+    QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    // The bottom-right pad GO, the one to its left Back, the top-right STOP, strip 8 the GM.
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 31));
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(128 + 30));
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(128 + 87));
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32(23));
+    QVERIFY(SurfaceLayout::forProfile(name).lampsOnOff());
+    runList(m_doc);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    QVERIFY(apc64.tap(QStringLiteral("Pad 8-8")));
     settle();
     QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
 }

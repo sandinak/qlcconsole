@@ -20,6 +20,7 @@
 #include <QPainterPath>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHelpEvent>
@@ -95,6 +96,19 @@ QString ownerLine(Doc *doc, const ControlOwners::Owner &o)
     if (o.kind == ControlOwners::Trigger)
         line += QStringLiteral(" · ") + ControlOwners::placeName(doc, o.place);
     return line;
+}
+
+/** @p f made small enough (not under 8 px) that @p text's longest word
+ *  fits @p width: a long word is never cut off by the cell's edge. */
+QFont fitted(QFont f, const QString &text, double width)
+{
+    QString longest;
+    for (const QString &w : text.split(QLatin1Char(' '), Qt::SkipEmptyParts))
+        if (w.size() > longest.size())
+            longest = w;
+    while (f.pixelSize() > 8 && QFontMetricsF(f).horizontalAdvance(longest) > width)
+        f.setPixelSize(f.pixelSize() - 1);
+    return f;
 }
 
 bool isShowKind(ControlOwners::Kind k)
@@ -524,7 +538,9 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     if (c.lamp != SurfaceLayout::NoLamp && cell.lamp >= 0)
     {
         QColor led;
-        if (c.lamp == SurfaceLayout::Rgb && m_layout.hasLampColours())
+        if (m_layout.lampsOnOff())
+            led = cell.lamp > 0 ? QColor(0xe5, 0x39, 0x35) : QColor(0x20, 0x20, 0x20);   // on, as the device's own colour
+        else if (c.lamp == SurfaceLayout::Rgb && m_layout.hasLampColours())
             led = m_layout.lampColour(uchar(cell.lamp));
         else
             led = cell.lamp > 0 ? QColor::fromHsv(45, 200, qBound(90, 90 + cell.lamp * 165 / 255, 255))
@@ -546,6 +562,7 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     {
         f.setBold(true);
         f.setPixelSize(qMax(11, int(qMin(textRect.height() * 0.5, s * 0.34))));
+        f = fitted(f, words, textRect.width());
         p.setFont(f);
         p.drawText(textRect, Qt::AlignCenter, words);
         if (cell.group == Desk && cell.role == QLatin1String("gm") && m_doc->deskRecord() != nullptr
@@ -562,10 +579,22 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     }
     const int px = qMax(9, int(s * 0.2));
     f.setPixelSize(px);
-    p.setFont(f);
     const QString face = c.face;
+    if (c.turns())
+    {
+        // Under a knob: one line, its job if it has one, else its name.
+        const QString one = words.isEmpty() ? face : words;
+        f.setBold(!words.isEmpty());
+        f = fitted(f, one, textRect.width());
+        p.setFont(f);
+        p.drawText(textRect, Qt::AlignHCenter | Qt::AlignTop,
+                   QFontMetricsF(f).elidedText(one, Qt::ElideRight, textRect.width()));
+        return;
+    }
     if (words.isEmpty())
     {
+        f = fitted(f, face, textRect.width());
+        p.setFont(f);
         p.drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, face);
         return;
     }
@@ -577,6 +606,7 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     QRectF top(textRect.left(), textRect.top(), textRect.width(), sm.height());
     p.drawText(top, Qt::AlignLeft | Qt::AlignTop, sm.elidedText(face, Qt::ElideRight, top.width()));
     f.setBold(true);
+    f = fitted(f, words, textRect.width());
     p.setFont(f);
     const QRectF rest(textRect.left(), top.bottom(), textRect.width(), textRect.bottom() - top.bottom());
     const QFontMetricsF fm(f);
@@ -716,6 +746,21 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
             missing << r;
         }
     }
+    /* This board's own defaults that went to another board's learned role:
+       say they are free here (a board is set up once; Learn… moves one). */
+    QStringList yielded;
+    for (const SurfaceLayout::Role &lr : layout.roles())
+    {
+        bool ok = false;
+        const DeskRecord::Role r = roleOfKey(lr.role, &ok);
+        const DeskRecord::Binding b = desk->binding(r);
+        if (ok && lr.seed && b.isSet() && b.identity != here)
+        {
+            const QString face = faceOf(lr.channel);
+            yielded << (face.compare(roleWord(lr.role), Qt::CaseInsensitive) == 0
+                            ? face : tr("%1 (%2)").arg(face, roleWord(lr.role)));
+        }
+    }
     QLabel *roles = new QLabel(parts.join(QStringLiteral(" · ")), block);
     roles->setObjectName(QStringLiteral("surfaceMapRoles%1").arg(universe));
     roles->setWordWrap(true);
@@ -724,6 +769,15 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
     roles->setFont(bf);
     v->addWidget(roles);
     m_roleLines.insert(universe, roles);
+    if (!yielded.isEmpty())
+    {
+        QLabel *free = new QLabel(tr("This board's own %1 stay free here: this computer has those roles "
+                                     "on another board. Learn… above moves one here.")
+                                      .arg(yielded.join(QStringLiteral(", "))), block);
+        free->setObjectName(QStringLiteral("surfaceMapYielded%1").arg(universe));
+        free->setWordWrap(true);
+        v->addWidget(free);
+    }
 
     for (DeskRecord::Role r : std::as_const(missing))
     {
@@ -833,7 +887,9 @@ void SurfaceMaps::showMap(quint32 universe)
     for (QWidget *w = parentWidget(); w != nullptr; w = w->parentWidget())
         if (QScrollArea *scroll = qobject_cast<QScrollArea *>(w))
         {
-            scroll->ensureWidgetVisible(block, 0, 0);
+            // Its top at the top: the name, where GO is, the legend, then the board.
+            if (scroll->widget() != nullptr)
+                scroll->verticalScrollBar()->setValue(block->mapTo(scroll->widget(), QPoint(0, 0)).y());
             break;
         }
     if (SurfaceMapView *mv = m_views.value(universe))

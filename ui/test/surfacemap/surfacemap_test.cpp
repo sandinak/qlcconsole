@@ -350,6 +350,9 @@ void SurfaceMap_Test::shots()
     SimMidiDevice maize(m_doc, m_stub, QStringLiteral("USB2.0-MIDI Port 1"), 2, kMaize,
                         profile("MaizeDMX-Playback-Controller.qxi"));
     QVERIFY2(maize.plug(), qPrintable(maize.lastError()));
+    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 Custom"), 3, QStringLiteral("Akai APC64 Custom"),
+                        profile("Akai-APC64-Custom.qxi"));
+    QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
     settle();
     // A show with a few triggers, one only in a cue; a lit pad; a fader moved.
     ControlMap *cm = m_doc->controlMap();
@@ -366,7 +369,7 @@ void SurfaceMap_Test::shots()
 
     const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
     const QList<QPair<quint32, QString>> boards = { { 0, QStringLiteral("apc40") }, { 1, QStringLiteral("pmj") },
-                                                    { 2, QStringLiteral("maizedmx") } };
+                                                    { 2, QStringLiteral("maizedmx") }, { 3, QStringLiteral("apc64") } };
     for (const QSize &size : sizes)
     {
         QScrollArea scroll;
@@ -389,6 +392,8 @@ void SurfaceMap_Test::shots()
                 pmj.set(QStringLiteral("Ch 3"), 100);
             if (b.first == 2)
                 maize.press(QStringLiteral("X3"));
+            if (b.first == 3)
+                apc64.set(QStringLiteral("Touch strip 2"), 70);
             settle();
             const QString file = QStringLiteral("%1/%2-surfacemap-%3-%4x%5.png")
                                      .arg(dir, prefix, b.second).arg(size.width()).arg(size.height());

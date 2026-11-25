@@ -279,8 +279,9 @@ this computer's -- so nothing there is accepted or saved with the show.
 **Each board you patch is drawn as it is, every control where it sits,
 with what it does now.** It is under **This computer's desk** in
 **Connections ▸ Control surfaces**, one map per board, for the **Akai
-APC40 mk2**, the **PMJ Black 1** and the **MaizeDMX Playback Controller**.
-The footer has a chip per drawn board (**APC40**, **PMJ**, **MaizeDMX**):
+APC40 mk2**, the **Akai APC64** (in Custom Mode), the **PMJ Black 1** and the
+**MaizeDMX Playback Controller**. The footer has a chip per drawn board
+(**APC40**, **APC64**, **PMJ**, **MaizeDMX**):
 a click opens its map.
 
 - **Where GO is, at a glance.** The line over the map says this computer's
@@ -309,7 +310,9 @@ a click opens its map.
   first time an **APC40 mk2** is patched here, **PLAY** is GO, **RECORD**
   Back, **STOP ALL CLIPS** STOP and the **MASTER** fader the Grand Master;
   on the **MaizeDMX Playback Controller** its **GO** and **BACK** keys, **X10**
-  STOP and the **GM** fader. A role you have learned already (on any board)
+  STOP and the **GM** fader; on the **APC64** the bottom-right pad GO, the
+  pad to its left Back, the top-right pad STOP and touch strip 8 the Grand
+  Master. A role you have learned already (on any board)
   is never changed, and a board is set up once: a role you clear stays
   cleared. The PMJ Black 1's **Go**, **Back** and **Master** are its own
   (the board's overlay does them) and are drawn as GO, Back and GM.
@@ -668,6 +671,15 @@ The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
   Connections ▸ Devices): it sends the SysEx that puts the APC in Ableton
   mode each time the device is opened. Learn a clip pad on a cue, a hit or a scene; the
   encoder bank has an **APC40 (knobs)** preset.
+- **Akai APC64**: use it in **Custom Mode** (press **CUSTOM** on the board)
+  on its **APC64 Custom** MIDI port, with the input profile **Akai APC64
+  Custom**: its 64 pads (notes 24-87, the bottom row first) and 8 touch
+  strips. Its other buttons send next to nothing in Custom Mode and are not
+  in the profile; the Ableton-mode **APC64 DAW** port is not used. A pad's
+  light is on or off only: its colour comes from the pad's Custom Mode
+  setting in Akai's **Project Editor** (red by default), never from
+  qlcconsole, and a blink is the app turning it on and off. The STOP pad is
+  lit like the others; the map shows which one it is.
 - **MaizeDMX Playback Controller**: the input profile **MaizeDMX Playback
   Controller** (ten strips of three keys, an LED and a fader; the master
   column; ten X keys; GO and BACK). Its keys light by the note they send.
