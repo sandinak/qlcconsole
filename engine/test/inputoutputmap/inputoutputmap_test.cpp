@@ -1941,6 +1941,81 @@ void InputOutputMap_Test::universesWithInputOn()
     QVERIFY(iom.universesWithInputOn("Nonexistent", 0).isEmpty());
 }
 
+/* Two identical boards list two lines of one name; a patch asks for its own. */
+void InputOutputMap_Test::sameNameBoardsPatchTheirOwnLines()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugin("Stub"));
+    QVERIFY(stub != NULL);
+    const QStringList saved = stub->m_lineNames;
+    stub->m_lineNames = QStringList() << "APC MINI" << "APC MINI" << "Other";
+
+    InputOutputMap iom(m_doc, 4);
+    QVERIFY(iom.setInputPatch(0, stub->name(), "APC MINI", 0));
+    QVERIFY(iom.setInputPatch(1, stub->name(), "APC MINI", 1));
+    QCOMPARE(iom.inputPatch(0)->input(), quint32(0));
+    QCOMPARE(iom.inputPatch(1)->input(), quint32(1));
+    // The line number is a hint: a name that is not there falls to the name's first.
+    QVERIFY(iom.setInputPatch(2, stub->name(), "APC MINI", 2));
+    QCOMPARE(iom.inputPatch(2)->input(), quint32(0));
+    // The N-th of a name, asked for by name.
+    QCOMPARE(InputOutputMap::resolveInputUid(stub->m_lineNames, "APC MINI #2", 2), 1);
+    QCOMPARE(InputOutputMap::resolveInputUid(stub->m_lineNames, "APC MINI #3", 2), -1);
+    QCOMPARE(InputOutputMap::resolveInputUid(stub->m_lineNames, "Nope", 0), -1);
+    stub->m_lineNames = saved;
+}
+
+void InputOutputMap_Test::sameNameBoardsSurviveSaveLoad()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugin("Stub"));
+    QVERIFY(stub != NULL);
+    const QStringList saved = stub->m_lineNames;
+    stub->m_lineNames = QStringList() << "APC MINI" << "APC MINI";
+
+    QString xml;
+    {
+        InputOutputMap iom(m_doc, 2);
+        QVERIFY(iom.setInputPatch(0, stub->name(), "APC MINI", 0));
+        QVERIFY(iom.setInputPatch(1, stub->name(), "APC MINI", 1));
+        xml = saveIOMap(iom);
+    }
+    // Stock's attributes, nothing new: the name and the line number.
+    QVERIFY(xml.contains("UID=\"APC MINI\""));
+    QCOMPARE(xml.count("Line=\"1\""), 1);
+
+    InputOutputMap loaded(m_doc, 2);
+    QVERIFY(loadIOMap(loaded, xml));
+    QVERIFY(loaded.inputPatch(0) != NULL && loaded.inputPatch(1) != NULL);
+    QCOMPARE(loaded.inputPatch(0)->input(), quint32(0));
+    QCOMPARE(loaded.inputPatch(1)->input(), quint32(1));
+    stub->m_lineNames = saved;
+}
+
+/* A show saved with a name and no (or a wrong) line number, as QLC+ 4 writes
+   one: the first line of the name, as ever. */
+void InputOutputMap_Test::aNameOnlyShowOpensTheFirstOfTheName()
+{
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugin("Stub"));
+    QVERIFY(stub != NULL);
+    const QStringList saved = stub->m_lineNames;
+    stub->m_lineNames = QStringList() << "Other" << "APC MINI" << "APC MINI";
+
+    const QString xml = QStringLiteral(
+        "<InputOutputMap><Universe Name=\"U1\" ID=\"0\">"
+        "<Input Plugin=\"%1\" UID=\"APC MINI\" Line=\"0\"/></Universe>"
+        "<Universe Name=\"U2\" ID=\"1\">"
+        "<Input Plugin=\"%1\" UID=\"APC MINI\"/></Universe></InputOutputMap>").arg(stub->name());
+    InputOutputMap loaded(m_doc, 2);
+    QVERIFY(loadIOMap(loaded, xml));
+    QVERIFY(loaded.inputPatch(0) != NULL);
+    QCOMPARE(loaded.inputPatch(0)->input(), quint32(1));
+    QVERIFY(loaded.inputPatch(1) != NULL);
+    QCOMPARE(loaded.inputPatch(1)->input(), quint32(1));
+    // And a direct patch by name alone, as stock calls it.
+    QVERIFY(loaded.setInputPatch(0, stub->name(), "APC MINI", 0));
+    QCOMPARE(loaded.inputPatch(0)->input(), quint32(1));
+    stub->m_lineNames = saved;
+}
+
 void InputOutputMap_Test::aliasesAndTargetsSurviveSaveLoad()
 {
     QBuffer buffer;
