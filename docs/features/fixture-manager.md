@@ -880,6 +880,9 @@ opened — over the web while in Operate too). So:
 - **When a cue lets go**, its Show-only fixtures go to safe at once: they
   never fade out of a cue (a stopped cue is no longer the show), and no
   channel keeps the cue's level — a fogger's fog channel included.
+- **Stop All and Fade and stop** leave a Show-only head's **pan and tilt**
+  (fine channels too) where they are, through the fade and after it, as
+  the emergency stop does; its dimmer, colour and the rest go to safe.
 - **Blind**: a GO in Blind is checked on screen; GO again after Blind to
   fire it. Leaving Blind in Operate starts afresh, as switching to Operate
   does. Going into Blind, the rig keeps the look from before it (as in
@@ -928,7 +931,11 @@ opened — over the web while in Operate too). So:
   **Ignore Blackout** in the dialog, and says why.
 - **The emergency stop** (the pad's, the phone's or the laptop's **All
   Off**) cuts every Show-only fixture to its safe value at once, with no
-  fade, and starts afresh, as switching to Operate does: **nothing from
+  fade -- all but its **pan and tilt** (and their fine channels), which
+  stay exactly where they were, in every frame, so a Show-only head never
+  swings when you stop; its dimmer, colour and the rest go safe (the next
+  GO, or a pan or tilt you move, drives the head again). It starts
+  afresh, as switching to Operate does: **nothing from
   before the stop comes back**. A GO drives what it starts; a control
   drives once you move it again; an audio trigger or VC Clock once you
   switch it on or touch it again; timecode once you arm Follow again. A GO

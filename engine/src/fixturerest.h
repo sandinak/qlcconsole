@@ -75,6 +75,13 @@ namespace FixtureRest
      *  patch does and never waits for the MasterTimer. */
     QLC_ENGINE_EXPORT void restAfterStop(Doc *doc);
 
+    /** Q326, every stop (Stop ALL timed or not, the emergency stop): each
+     *  Show-only pan and tilt channel (holdsPosition()) held at what went
+     *  out there last (Universe::holdShowOnlyPositions()), so no Show-only
+     *  head moves; the next write there that counts drives it again. Safe
+     *  from any thread. */
+    QLC_ENGINE_EXPORT void holdShowOnlyHeads(Doc *doc);
+
     /** Stop ALL: every function stops (over @p fadeMs, 0 at once) and,
      *  once they have, every fixture is put at rest (putAllAtRest()), so a
      *  fog machine stops pumping and a gobo or WLED effect stops running.

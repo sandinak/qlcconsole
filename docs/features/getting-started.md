@@ -631,7 +631,8 @@ Steps, towers and booms usually come in sets that should all be the same:
 - **Stop All** (⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux)), or its menu's **Fade and stop** (hold the button),
   is the panic button. It stops everything and puts every fixture at
   rest: fog and haze off, gobos, prisms and WLED effects out, each channel
-  at its default; a mover's pan and tilt stay where they are. After **Fade and stop** that
+  at its default; a mover's pan and tilt stay where they are (a Show-only
+  mover's too, through the whole fade). After **Fade and stop** that
   happens once the fade is over, unless something was started meanwhile.
 - **From QLab**: QLab (or anything that speaks MIDI Show Control or OSC)
   can GO a chase's cues by number. See

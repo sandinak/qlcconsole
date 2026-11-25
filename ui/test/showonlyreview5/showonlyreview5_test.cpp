@@ -502,13 +502,13 @@ void ShowOnlyReview5_Test::sweepXYPad()
     QVERIFY(moved > 0);
     allOff();
     tickPad(3);
-    QCOMPARE(sent(30), 0);
+    QCOMPARE(sent(30), moved);                      // Q326: a head's pan holds where it is
     goUnrelated(60);
     tickPad(4);
-    QCOMPARE(sent(30), 0);
+    QCOMPARE(sent(30), moved);                      // still held there after an unrelated GO
     handAt(120, 80);                                // moved after the stop
     tickPad(3);
-    QVERIFY(sent(30) > 0);
+    QVERIFY(sent(30) > 0 && sent(30) != moved);
 }
 
 void ShowOnlyReview5_Test::sweepAudioFunctionBar()

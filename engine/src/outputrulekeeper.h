@@ -153,7 +153,10 @@ class QXmlStreamWriter;
  * The emergency stop (All Off, emergencyStop()):
  *  E1. Every Show-only channel goes to its safe value at once: no fade and
  *      no waiting on the function list before the cut (cut first, then
- *      the functions). Every function is stopped, queued ones too -- on
+ *      the functions) -- but a pan or tilt (coarse or fine:
+ *      FixtureRest::holdsPosition()) stays at what went out there last, in
+ *      every frame, so no head moves (Q326; Universe::holdShowOnlyPositions()).
+ *      The next write there that counts (E3) drives it again. Every function is stopped, queued ones too -- on
  *      the main thread, queued there when the stop came from another.
  *      From the cut on, nothing stamped before it counts (S0), stopped
  *      yet or not: a frame processed in the gap adds nothing.
@@ -276,6 +279,10 @@ public:
     /** The safe values of one universe's Show-only channels (UNIVERSE_SIZE
      *  bytes, 0 elsewhere) -- what rebuild() hands it */
     QByteArray safeValuesFor(quint32 universe) const;
+    /** Q326: one universe's Show-only pan and tilt channels
+     *  (FixtureRest::holdsPosition(); one byte each, 1 where it is) --
+     *  what the emergency stop holds where they are */
+    QByteArray positionsFor(quint32 universe) const;
 
     /** The channel indices of @p fx a rule of @p rule covers (see above) */
     static QList<quint32> coveredChannels(const Fixture *fx, Fixture::OutputRule rule);

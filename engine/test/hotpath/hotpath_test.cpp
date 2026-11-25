@@ -1390,6 +1390,31 @@ void HotPath_Test::cpuPerOperation()
         uni->processFaders();
     }, 200 * scale));
 
+    // 1b. The same frame live with 64 Show-only channels (S0's per-frame
+    // work): nothing held, and with 32 of them a head's pan and tilt held
+    // by a stop (Q326)
+    {
+        for (int c = 400; c < 464; ++c)
+            uni->markShowOnly(c, true, 0);
+        uni->setShowOnlyLive(true);
+        auto showOnlyFrame = [uni]() {
+            for (int ch = 0; ch < kFixturesPerUniverse * 3; ++ch)
+                uni->write(ch, uchar(ch & 0xff));
+            uni->processFaders();
+        };
+        results << qMakePair(QStringLiteral("universe_frame_showonly_64"), nsPerOp(showOnlyFrame, 200 * scale));
+        QByteArray pos(UNIVERSE_SIZE, char(0));
+        for (int c = 400; c < 432; ++c)
+            pos[c] = char(1);
+        uni->setShowOnlyPositions(pos);
+        uni->holdShowOnlyPositions();
+        results << qMakePair(QStringLiteral("universe_frame_showonly_64_held"), nsPerOp(showOnlyFrame, 200 * scale));
+        uni->setShowOnlyPositions(QByteArray());
+        uni->setShowOnlyLive(false);
+        for (int c = 400; c < 464; ++c)
+            uni->markShowOnly(c, false, 0);
+    }
+
     // 2. A fader writing 510 channels into a universe.
     {
         GenericFader fader;

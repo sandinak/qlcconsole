@@ -149,10 +149,24 @@ void restWhenFadedOut(Doc *doc, int triesLeft)
 }
 }
 
+void FixtureRest::holdShowOnlyHeads(Doc *doc)
+{
+    if (doc == nullptr || doc->inputOutputMap() == nullptr)
+        return;
+    // The universes' own snapshot: safe from the thread a stop comes on.
+    for (Universe *u : doc->inputOutputMap()->universesSnapshot())
+        if (u != nullptr && u->showOnlyChannelCount() > 0)
+            u->holdShowOnlyPositions();
+}
+
 void FixtureRest::stopAll(Doc *doc, int fadeMs)
 {
     if (doc == nullptr)
         return;
+    /* Q326: timed or at once, a Show-only head stays where it is -- held
+       before anything stops, so a fade out fades its pan and tilt to where
+       they are (nothing) while the rest fades to safe. */
+    holdShowOnlyHeads(doc);
     MasterTimer *mt = doc->masterTimer();
     // Both return once every function has stopped; their faders may still
     // be fading out (a scene's own fade out, or this one).

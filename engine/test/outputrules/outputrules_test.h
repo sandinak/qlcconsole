@@ -319,6 +319,23 @@ private slots:
      *  no focus light left on (E9). */
     void theEmergencyStopEndsTheFocusLight();
 
+    /* Q326: the emergency stop leaves a Show-only head where it is -- its
+       pan and tilt (and their fine channels) hold their last output value
+       in every frame; the rest goes to its safe value. Each stop source
+       (they share ShowControl::allOff() since F2). */
+    void showOnlyMoverHoldsPositionOnStop();
+    void showOnlyMoverHoldsOnScreenStopAll();
+    void showOnlyMoverHoldsOnControlMapStop();
+    void showOnlyMoverHoldsOnPhoneAllOff();
+    /** After the stop, a hand move or the next GO drives pan and tilt as
+     *  before; once it lets go, the channel rests at its safe value again */
+    void showOnlyMoverIsDrivenAgainAfterTheStop();
+    /** Fade and stop all over 1 s: pan and tilt never move in any frame,
+     *  during the fade or after it, while dimmer and colour fade to safe */
+    void showOnlyMoverHoldsThroughFadeAndStopAll();
+    /** Stop all at once (FixtureRest::stopAll(), no fade): the same */
+    void showOnlyMoverHoldsThroughStopAll();
+
 private:
     /** One processFaders() frame; the output value at @p address */
     int frame(int address);
@@ -340,6 +357,16 @@ private:
                                   const QList<QPair<QLCChannel::Group, QLCChannel::PrimaryColour> > &chans);
     class Chaser *listOf(class Function *step);
     void goList(class Chaser *c);
+    /** A Show-only mover at @p address: Dimmer, Pan, Pan fine, Tilt, Tilt
+     *  fine, Colour (each at default 0) */
+    class Fixture *addShowOnlyMover(const QString &name, int address);
+    /** The mover at 50 driven by a GO (dimmer 255, pan 128/40, tilt
+     *  100/7, colour 90), @p stop, then the stop's own send and the next
+     *  six frames: pan and tilt never move, dimmer and colour at safe */
+    void checkMoverHoldsThroughStop(const std::function<void()> &stop);
+    /** The mover at 50 driven by a GO, then FixtureRest::stopAll() over
+     *  @p fadeMs: every frame for @p fadeMs + 1 s checked */
+    void checkMoverHoldsThroughStopAll(int fadeMs);
     void sweep(int address, const std::function<void()> &tickOnce,
                const std::function<void()> &setUp, const std::function<void()> &again,
                const std::function<void()> &afterStop = std::function<void()>());
