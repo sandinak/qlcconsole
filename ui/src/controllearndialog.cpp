@@ -25,6 +25,8 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QHeaderView>
+#include <QFontMetrics>
+#include <QStyle>
 #include <QTreeWidget>
 #include <QKeyEvent>
 #include <QAction>
@@ -445,6 +447,24 @@ void ControlLearnDialog::updateRow(QTreeWidgetItem *row)
     f.setBold(hasControl() && u == m_universe && c == m_channel);
     row->setFont(0, f);
     row->setFont(1, f);
+    // Made bold after the column was sized (a press heard, a collision):
+    // the control still fits in full, never "Channe…" (UX-36).
+    if (f.bold())
+        fitControlColumn(row);
+}
+
+void ControlLearnDialog::fitControlColumn(QTreeWidgetItem *row)
+{
+    m_list->resizeColumnToContents(0);
+    if (row == nullptr)
+        return;
+    // The view sizes from the rows it has laid out; this one's own width
+    // (its bold font, the item's margins) is the floor.
+    const int need = QFontMetrics(row->font(0)).horizontalAdvance(row->text(0))
+                     + 2 * (m_list->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, m_list) + 1)
+                     + m_list->indentation() * (m_list->rootIsDecorated() ? 1 : 0) + 8;
+    if (m_list->columnWidth(0) < need)
+        m_list->setColumnWidth(0, need);
 }
 
 void ControlLearnDialog::selectControl(quint32 universe, quint32 channel)
@@ -460,7 +480,7 @@ void ControlLearnDialog::selectControl(quint32 universe, quint32 channel)
     if (was != nullptr && was != row)
         updateRow(was);
     // The pressed row is bold: its control fits in full, never "Channel...".
-    m_list->resizeColumnToContents(0);
+    fitControlColumn(row);
 }
 
 void ControlLearnDialog::updateCompanion()

@@ -3242,6 +3242,14 @@ void ProgrammerController::connectControllerInput()
             this, &ProgrammerController::focusControllerChanged);
     connect(m_doc->inputOutputMap(), &InputOutputMap::profileChanged,
             this, &ProgrammerController::focusControllerChanged);
+    /* Assign to Control… opened or closed: the pad hears nothing meanwhile,
+       and on the close each control moved is heard where it ended up (an
+       axis let go, a trigger at its last value). */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::assignListeningChanged, this, [this](bool on) {
+        const QVector<AssignInputGate::Replay> replays = m_assignGate.setListening(on);
+        for (const AssignInputGate::Replay &r : replays)
+            slotControllerInputChanged(quint32(r.key >> 32), quint32(r.key & 0xFFFFFFFFu), r.value, r.name);
+    });
     /* A pad kept offline coming back (or going) on the retry tick. */
     connect(m_doc->inputOutputMap(), &InputOutputMap::offlinePatchesChanged,
             this, &ProgrammerController::focusControllerChanged);
@@ -3413,7 +3421,7 @@ void ProgrammerController::updateFollowspotJsBindings()
 }
 
 void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 channel,
-                                                       uchar value, const QString &)
+                                                       uchar value, const QString &name)
 {
     /* The emergency stop first (CONTROLLER_JOBS.md 4, review 0.4.10): the
        four together, from any pad, in every state -- before any capture,
@@ -3439,10 +3447,15 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
     /* An Assign to Control… window is open: a press finds the control in
        its list and fires nothing -- not a pad's GO, Back, hit or tool
        either (review 053-a). The stop above still reads it. */
-    if (m_doc->inputOutputMap() != nullptr
-        && !m_assignGate.pass((quint64(universe) << 32) | channel, value,
-                              m_doc->inputOutputMap()->assignListening()))
-        return;
+    if (InputOutputMap *iom = m_doc->inputOutputMap())
+    {
+        const quint64 key = (quint64(universe) << 32) | channel;
+        if (m_assignGate.listening()
+            && !m_assignGate.pass(key, value, iom->controlKind(universe, channel), name))
+            return;
+        if (!m_assignGate.listening())
+            m_assignGate.pass(key, value);
+    }
     if (m_capturingPan)
     {
         // Bound by hand: what the old binding left pushed goes (H2).

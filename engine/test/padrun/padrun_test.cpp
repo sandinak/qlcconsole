@@ -585,7 +585,9 @@ void PadRun_Test::goNeedsTheArmAndItsTrigger()
 /* Review 053-a: while an Assign to Control… window is open a press finds
    the control in its list and fires nothing -- the pad's Run map included
    (it listens to the raw input, not the show's dispatch). A trigger held
-   across the opening is still let go of. Closed, GO goes again. */
+   across the opening is let go of when the window closes (round 2: each
+   control moved meanwhile is sent again where it ended up). Closed, GO
+   goes again. */
 void PadRun_Test::nothingFiresWhileAssigning()
 {
     IOPluginStub *stub = loadStub();
@@ -612,9 +614,10 @@ void PadRun_Test::nothingFiresWhileAssigning()
     iom->setAssignListening(true);
     press(kA);
     QVERIFY(m_runs.isEmpty());
-    axis(kLT, 0);              // its release still reaches the pad
+    axis(kLT, 0);              // let go: the pad hears it on the close
     iom->setAssignListening(false);
-    // Closed: LT was let go, so A alone fires nothing; LT + A is one GO.
+    // Closed: LT's release was sent again, so A alone fires nothing (LT
+    // still held would make it a GO); LT + A is one GO.
     press(kA);
     QVERIFY(m_runs.isEmpty());
     with(kLT, kA);

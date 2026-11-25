@@ -35,8 +35,9 @@ class Doc;
  *  - green "Desk": every role that is on reaches the program;
  *  - amber: a role is off, its device is not plugged in, two devices of one
  *    name can't be told apart, or the Grand Master waits to pick up;
- *  - red: a role's device is here but this show's patch lacks it -- a click
- *    is Patch It (named; the chip then offers Undo for a while).
+ *  - grey (NotPatched): a role's device is here but this show's patch lacks
+ *    it -- not set up yet, not a fault (UX-29) -- and a click is Patch It
+ *    (named; the chip then offers Undo for a while).
  * Its tooltip says each role and what GO plays now (the Run tab's list,
  * named). A click on green or amber opens Connections ▸ Control surfaces.
  */
@@ -45,7 +46,7 @@ class QLC_UI_EXPORT DeskChip final : public QToolButton
     Q_OBJECT
 
 public:
-    enum Colour { Hidden, Green, Amber, Red };
+    enum Colour { Hidden, Green, Amber, NotPatched };
     Q_ENUM(Colour)
 
     explicit DeskChip(Doc *doc, QWidget *parent = nullptr);

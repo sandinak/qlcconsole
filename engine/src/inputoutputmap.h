@@ -24,6 +24,8 @@
 #include "qlcengine_export.h"
 #include <QObject>
 #include <QSet>
+#include <QHash>
+#include <QVector>
 #include <QMutex>
 #include <QDir>
 
@@ -59,12 +61,19 @@ class Doc;
 #define KXMLIONetworkPassword   QStringLiteral("Password")
 
 /** What a listener hears of the controls while an Assign to Control… window
- *  is open: nothing that moves the show (board review 053-a, round 1). A
- *  press or a fader's move is dropped; so is the 0 that ends it, because on a
- *  fader a 0 is a position (a submaster or the Grand Master at the bottom),
- *  not a release. The one 0 that passes is the release of a control the
- *  listener heard held before the window opened and that has not moved
- *  since, so a button held across the opening is not left on.
+ *  is open: nothing that moves the show (board review 053-a). A press or a
+ *  fader's move is dropped, and so is a 0: on a fader a 0 is a position (a
+ *  submaster or the Grand Master at the bottom), not a release, and a fader
+ *  can jump straight there (an OSC fader, a slammed MIDI one). The one 0
+ *  that passes at once is the release of a control its profile calls a
+ *  button, held before the window opened (round 2).
+ *
+ *  When the window closes (setListening(false)) each control moved while it
+ *  was open is put back where it ended up, so no listener keeps a level the
+ *  hardware has left: a fader at its last value, a button let go at 0. A
+ *  press still held then is not replayed (it would fire on the close); only
+ *  a fader -- its profile says so, or it was heard at two different values
+ *  above 0 -- is replayed above 0.
  *
  *  Each listener keeps its own (the show's dispatch, a game pad's Run map)
  *  and feeds it every value it receives, listening or not, so it knows what
@@ -72,38 +81,84 @@ class Doc;
 class AssignInputGate
 {
 public:
-    /** True when @a value of the control @a key reaches the listener. */
-    bool pass(quint64 key, uchar value, bool listening)
+    /** What the profile says a control is. */
+    enum Kind { Unknown, Button, Fader };
+
+    /** A value to send again on the close: where @a key ended up. */
+    struct Replay
     {
-        if (listening != m_listening)
-        {
-            m_listening = listening;
-            m_moved.clear();
-        }
-        if (!listening)
-        {
-            if (value > 0)
-                m_held.insert(key);
-            else
-                m_held.remove(key);
-            return true;
-        }
+        quint64 key;
+        uchar value;
+        QString name;
+    };
+
+    bool listening() const { return m_listening; }
+
+    /** True when @a value of the control @a key reaches the listener now.
+     *  @a kind and @a name are read only while listening. */
+    bool pass(quint64 key, uchar value, Kind kind = Unknown, const QString &name = QString())
+    {
+        Control &c = m_controls[key];
         if (value > 0)
         {
-            m_moved.insert(key);
-            return false;
+            if (c.lastAbove > 0 && value != c.lastAbove)
+                c.varied = true;
+            c.lastAbove = value;
         }
-        if (m_held.contains(key) && !m_moved.contains(key))
+        c.last = value;
+        if (!m_listening)
         {
-            m_held.remove(key);
+            c.heard = value;
+            return true;
+        }
+        c.kind = kind;
+        c.name = name;
+        c.moved = true;
+        if (value == 0 && kind == Button && c.heard > 0)
+        {
+            c.heard = 0;
             return true;
         }
         return false;
     }
 
+    /** The window opened or closed. On the close: what to send again, so
+     *  each listener hears where the moved controls ended up. */
+    QVector<Replay> setListening(bool on)
+    {
+        QVector<Replay> out;
+        if (on == m_listening)
+            return out;
+        m_listening = on;
+        for (auto it = m_controls.begin(); it != m_controls.end(); ++it)
+        {
+            Control &c = it.value();
+            if (!c.moved)
+                continue;
+            c.moved = false;
+            if (on || c.last == c.heard)
+                continue;
+            const bool fader = c.kind == Fader || (c.kind != Button && c.varied);
+            if (c.last > 0 && !fader)
+                continue;       // a button still held: its press fires nothing
+            c.heard = c.last;
+            out.append({ it.key(), c.last, c.name });
+        }
+        return out;
+    }
+
 private:
-    QSet<quint64> m_held;       // last heard above 0
-    QSet<quint64> m_moved;      // moved while this window is open
+    struct Control
+    {
+        uchar last = 0;         // the last value the control sent
+        uchar heard = 0;        // the last value the listener heard
+        uchar lastAbove = 0;    // the last value above 0
+        bool varied = false;    // two different values above 0: a fader
+        bool moved = false;     // sent something while the window is open
+        Kind kind = Unknown;
+        QString name;
+    };
+    QHash<quint64, Control> m_controls;
     bool m_listening = false;
 };
 
@@ -1030,10 +1085,21 @@ public:
      *  no show listener hears any control move meanwhile -- a press or a
      *  fader finds the control in the window and fires nothing, in Design
      *  and Operate, a fader's 0 included (AssignInputGate). Only the release
-     *  of a button held before the window opened passes. The emergency stop
-     *  is the Control Map's and still stops. */
-    void setAssignListening(bool on) { m_assignListening = on; }
+     *  of a profile's button held before the window opened passes. On the
+     *  close each control moved meanwhile is sent again where it ended up
+     *  (showInputValueChanged()), so a fader pulled down to find it is not
+     *  left at its old level. The emergency stop is the Control Map's and
+     *  still stops. */
+    void setAssignListening(bool on);
     bool assignListening() const { return m_assignListening; }
+    /** What @a universe's profile says @a channel is (Unknown: no profile,
+     *  or not in it). */
+    AssignInputGate::Kind controlKind(quint32 universe, quint32 channel) const;
+
+signals:
+    /** setAssignListening() changed: a listener with its own gate (a pad's
+     *  Run map) opens or closes it, and sends again what it returns. */
+    void assignListeningChanged(bool on);
 
 private slots:
     /** inputValueChanged() again as showInputValueChanged(), without the

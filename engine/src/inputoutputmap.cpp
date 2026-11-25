@@ -3541,7 +3541,51 @@ void InputOutputMap::slotDispatchInput(quint32 universe, quint32 channel, uchar 
         return;
     if (m_deskLearning && value > 0)
         return;
-    if (!m_assignGate.pass((quint64(universe) << 32) | channel, value, m_assignListening))
-        return;
+    if (m_assignListening)
+    {
+        if (!m_assignGate.pass((quint64(universe) << 32) | channel, value, controlKind(universe, channel), key))
+            return;
+    }
+    else
+    {
+        m_assignGate.pass((quint64(universe) << 32) | channel, value);
+    }
     emit showInputValueChanged(universe, channel, value, key);
+}
+
+void InputOutputMap::setAssignListening(bool on)
+{
+    if (on == m_assignListening)
+        return;
+    m_assignListening = on;
+    const QVector<AssignInputGate::Replay> replays = m_assignGate.setListening(on);
+    emit assignListeningChanged(on);
+    // Closed: each control moved meanwhile, heard where it ended up.
+    for (const AssignInputGate::Replay &r : replays)
+        emit showInputValueChanged(quint32(r.key >> 32), quint32(r.key & 0xFFFFFFFFu), r.value, r.name);
+}
+
+AssignInputGate::Kind InputOutputMap::controlKind(quint32 universe, quint32 channel) const
+{
+    if (universe >= universesCount())
+        return AssignInputGate::Unknown;
+    InputPatch *ip = m_universeArray.at(universe)->inputPatch();
+    QLCInputProfile *profile = ip != nullptr ? ip->profile() : nullptr;
+    QLCInputChannel *ch = profile != nullptr ? profile->channel(channel) : nullptr;
+    if (ch == nullptr)
+        return AssignInputGate::Unknown;
+    switch (ch->type())
+    {
+        case QLCInputChannel::Button:
+        case QLCInputChannel::NextPage:
+        case QLCInputChannel::PrevPage:
+        case QLCInputChannel::PageSet:
+            return AssignInputGate::Button;
+        case QLCInputChannel::Slider:
+        case QLCInputChannel::Knob:
+        case QLCInputChannel::Encoder:
+            return AssignInputGate::Fader;
+        default:
+            return AssignInputGate::Unknown;
+    }
 }

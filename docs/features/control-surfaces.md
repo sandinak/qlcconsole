@@ -262,9 +262,9 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
 **The footer chip.** While a role is learned the status bar shows
 **Desk**: green when every role that is on works, amber when one is off,
 its device is not plugged in, two devices of one name can't be told apart
-or the Grand Master waits to pick up, and **red** when its device is here
-but this show's patch does not have it: *Desk: APC MINI not patched ·
-Patch It*. A click on red patches the device to the first universe with a
+or the Grand Master waits to pick up, and **grey** when its device is here
+but this show's patch does not have it yet -- not set up, not a fault: *Desk:
+APC MINI not patched · Patch It*. A click on grey patches the device to the first universe with a
 free input (never one with passthrough on) and says so (*Patched APC MINI
 to Universe 3's input.*); the chip then reads *Undo* for a moment, and a
 click takes it off the patch again. Opening another show ends the Undo:
@@ -450,8 +450,12 @@ The window is your desk as a list:
   (added if it was not listed) and **fires nothing**, in Design and in
   Operate: no trigger, Virtual Console widget, master, channel group,
   game pad's Run button or desk GO hears a press while the window is open,
-  and a fader pulled to the bottom stays where the show had it (a button
-  held down before you opened the window is still let go of). The **emergency stop**
+  and a fader pulled to the bottom stays where the show had it while the
+  window is open. When you close it (OK or Cancel) each control you moved
+  is heard once where you left it: a submaster or the Grand Master follows
+  its fader to where it now is, and a button held down before you opened
+  the window is let go of. A button pressed and let go in the window fires
+  nothing. The **emergency stop**
   (the show's and this computer's) still stops, and this computer's Grand
   Master still follows its fader. Clicking a row only finds it: the press
   on the device chooses.

@@ -3721,3 +3721,76 @@ void ControlMap_Test::aLearnHearsAFaderAndALatchingButton()
     QVERIFY(!cm->learnSawFader(0, 7));
     QVERIFY(!cm->learnSawLatching(0, 9));
 }
+
+/* Review 053-a round 2: a fader up at 50 that jumps straight to 0 while
+   Assign to Control… is open (an OSC fader, a slammed MIDI one) is not a
+   button's release: no show listener hears it while the window is open. On
+   the close it is heard where it ended up, so nothing keeps the old level. */
+void ControlMap_Test::assignGateHoldsAFadersJumpToZero()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy heard(iom, &InputOutputMap::showInputValueChanged);
+    emit iom->inputValueChanged(0, 7, 50);
+    QCOMPARE(heard.count(), 1);
+    iom->setAssignListening(true);
+    heard.clear();
+    emit iom->inputValueChanged(0, 7, 0);
+    QCOMPARE(heard.count(), 0);
+    iom->setAssignListening(false);
+    // Closed: the 0 is heard once, where the fader is now.
+    QCOMPARE(heard.count(), 1);
+    QCOMPARE(heard.at(0).at(1).toUInt(), 7u);
+    QCOMPARE(heard.at(0).at(2).toUInt(), 0u);
+    // Closed twice (done() and the destructor): nothing more.
+    iom->setAssignListening(false);
+    QCOMPARE(heard.count(), 1);
+
+    // A profile's button held across the opening: its release at once.
+    AssignInputGate gate;
+    const quint64 key = 61;
+    QVERIFY(gate.pass(key, 127));
+    gate.setListening(true);
+    QVERIFY(gate.pass(key, 0, AssignInputGate::Button));
+    QVERIFY(gate.setListening(false).isEmpty());
+    // A profile's fader at the same values: held for the close.
+    QVERIFY(gate.pass(8, 127));
+    gate.setListening(true);
+    QVERIFY(!gate.pass(8, 0, AssignInputGate::Fader));
+    const QVector<AssignInputGate::Replay> r = gate.setListening(false);
+    QCOMPARE(r.count(), 1);
+    QCOMPARE(r.at(0).key, quint64(8));
+    QCOMPARE(int(r.at(0).value), 0);
+}
+
+/* Review 053-a round 2: a fader moved while the window is open is heard
+   where it ended up when the window closes, without moving it again. A
+   button pressed and let go meanwhile fires nothing on the close, nor does
+   one still held. */
+void ControlMap_Test::assignGateReplaysWhereAControlEndedUp()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy heard(iom, &InputOutputMap::showInputValueChanged);
+    QSignalSpy toggled(iom, &InputOutputMap::assignListeningChanged);
+    emit iom->inputValueChanged(0, 7, 128);     // a submaster at 50%
+    iom->setAssignListening(true);
+    QCOMPARE(toggled.count(), 1);
+    heard.clear();
+    for (int v : { 100, 60, 30 })
+        emit iom->inputValueChanged(0, 7, uchar(v));
+    emit iom->inputValueChanged(0, 61, 127);    // pressed and let go
+    emit iom->inputValueChanged(0, 61, 0);
+    emit iom->inputValueChanged(0, 62, 127);    // pressed, still held
+    QCOMPARE(heard.count(), 0);
+    iom->setAssignListening(false);
+    QCOMPARE(toggled.count(), 2);
+    QCOMPARE(heard.count(), 1);
+    QCOMPARE(heard.at(0).at(1).toUInt(), 7u);
+    QCOMPARE(heard.at(0).at(2).toUInt(), 30u);
+    // Open and closed again with nothing moved: nothing sent.
+    iom->setAssignListening(true);
+    iom->setAssignListening(false);
+    QCOMPARE(heard.count(), 1);
+    // The held one let go after the close: heard as usual.
+    emit iom->inputValueChanged(0, 62, 0);
+    QCOMPARE(heard.count(), 2);
+}

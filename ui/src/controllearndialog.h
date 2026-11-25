@@ -155,6 +155,8 @@ private:
     void buildList();
     /** The row of a control, added when it was not listed; its text read again. */
     QTreeWidgetItem *ensureRow(quint32 universe, quint32 channel);
+    /** Column 0 wide enough for every control, @a row's (bold) in full. */
+    void fitControlColumn(QTreeWidgetItem *row);
     void updateRow(QTreeWidgetItem *row);
     /** A press or move heard (raw, before any listener): its row selected. */
     void selectControl(quint32 universe, quint32 channel);

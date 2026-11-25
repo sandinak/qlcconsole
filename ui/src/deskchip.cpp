@@ -103,12 +103,12 @@ void DeskChip::refresh()
     QString colour;
     if (!m_patched.isEmpty())
     {
-        m_colour = red.isEmpty() ? (amber.isEmpty() ? Green : Amber) : Red;
+        m_colour = red.isEmpty() ? (amber.isEmpty() ? Green : Amber) : NotPatched;
         text = tr("Desk: %1 · Undo").arg(m_patched);
     }
     else if (!red.isEmpty())
     {
-        m_colour = Red;
+        m_colour = NotPatched;
         text = tr("Desk: %1 not patched · Patch It").arg(red.join(QStringLiteral(", ")));
     }
     else if (!amber.isEmpty())
@@ -125,7 +125,8 @@ void DeskChip::refresh()
     {
         case Green: colour = QStringLiteral("#43a047"); setProperty("deskState", QStringLiteral("green")); break;
         case Amber: colour = QStringLiteral("#a06000"); setProperty("deskState", QStringLiteral("amber")); break;
-        case Red:   colour = QStringLiteral("#c62828"); setProperty("deskState", QStringLiteral("red")); break;
+        // Not set up yet, not a fault: the readiness chip's grey (UX-29).
+        case NotPatched: colour = QStringLiteral("#909090"); setProperty("deskState", QStringLiteral("notpatched")); break;
         case Hidden: break;
     }
     setStyleSheet(QStringLiteral("QToolButton { color: %1; font-weight: bold; padding: 0 6px; border: none; }")
@@ -140,7 +141,7 @@ void DeskChip::refresh()
         tip << line;
     if (!desk->isLive(DeskRecord::Go) && !desk->isLive(DeskRecord::Back))
         tip << desk->goTargetText();
-    if (m_colour == Red && m_patched.isEmpty())
+    if (m_colour == NotPatched && m_patched.isEmpty())
         tip << tr("Click to patch it into this show (Undo stays here for a moment).");
     else if (!m_patched.isEmpty())
         tip << tr("Click to take it off the patch again.");
@@ -166,7 +167,7 @@ void DeskChip::slotClicked()
         refresh();
         return;
     }
-    if (m_colour == Red)
+    if (m_colour == NotPatched)
     {
         const QStringList missing = desk->missingDevices();
         if (desk->patchIt(&what) != 0xFFFFFFFF)

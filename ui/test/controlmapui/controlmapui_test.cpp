@@ -64,6 +64,7 @@
 #include "showfeatures.h"
 #include "showwebaccess.h"
 #include <QTreeWidget>
+#include <QFontMetrics>
 #include <QScrollArea>
 #include <QGroupBox>
 #include "showtreeview.h"
@@ -3394,10 +3395,12 @@ void ControlMapUi_Test::pressSelectsFiresNothing()
 }
 
 /* Review 053-a: a fader's 0 is a position, not a release. Pulled to the
-   bottom while Assign to Control… is open, no show listener hears it (a
-   submaster or the Grand Master fallback would go to 0: a live blackout).
-   A button held before the window opened still has its release heard, so
-   nothing held is left on. */
+   bottom while Assign to Control… is open -- stepping down or in one jump --
+   no show listener hears it (a submaster or the Grand Master fallback would
+   go to 0: a live blackout). Round 2: when the window closes each control
+   moved meanwhile is heard where it ended up, without moving it again, so a
+   submaster is not left at its old level and a button held across the
+   opening is let go. */
 void ControlMapUi_Test::faderToZeroFiresNothing()
 {
     const quint32 hit = m_doc->showTree()->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
@@ -3409,14 +3412,25 @@ void ControlMapUi_Test::faderToZeroFiresNothing()
             n += args.at(1).toUInt() == channel ? 1 : 0;
         return n;
     };
-    // Up at 50 and a button held: both heard, before the window.
-    emit iom->inputValueChanged(0, 7, 50);
-    emit iom->inputValueChanged(0, 61, 127);
-    QCOMPARE(heardOn(7), 1);
-    QCOMPARE(heardOn(61), 1);
+    auto lastOn = [&heardByShow](quint32 channel) {
+        int v = -1;
+        for (const QList<QVariant> &args : std::as_const(heardByShow))
+            if (args.at(1).toUInt() == channel)
+                v = int(args.at(2).toUInt());
+        return v;
+    };
     for (Doc::Mode mode : { Doc::Operate, Doc::Design })
     {
         m_doc->setMode(mode);
+        const QString tag = mode == Doc::Design ? "Design" : "Operate";
+        // Up at 50, a fader at 50 and a button held: heard, before the window.
+        heardByShow.clear();
+        emit iom->inputValueChanged(0, 7, 50);
+        emit iom->inputValueChanged(0, 9, 50);
+        emit iom->inputValueChanged(0, 61, 127);
+        QCOMPARE(heardOn(7), 1);
+        QCOMPARE(heardOn(9), 1);
+        QCOMPARE(heardOn(61), 1);
         {
             ControlLearnDialog d(m_doc, ControlMap::hit(hit));
             d.show();
@@ -3426,26 +3440,64 @@ void ControlMapUi_Test::faderToZeroFiresNothing()
                 emit iom->inputValueChanged(0, 7, uchar(v));
             QCOMPARE(d.selectedChannel(), 7u);
             QCOMPARE(heardOn(7), 0);
+            // Slammed from 50 to 0 in one message: nothing either.
+            emit iom->inputValueChanged(0, 9, 0);
+            QCOMPARE(d.selectedChannel(), 9u);
+            QVERIFY2(heardOn(9) == 0, qPrintable(tag));
             // A fader flicked up from 0 and back: nothing either.
             emit iom->inputValueChanged(0, 8, 90);
             emit iom->inputValueChanged(0, 8, 0);
             QCOMPARE(heardOn(8), 0);
-            if (mode == Doc::Operate)
-            {
-                // The button held across the opening: its release is heard.
-                emit iom->inputValueChanged(0, 61, 0);
-                QCOMPARE(heardOn(61), 1);
-                QCOMPARE(heardByShow.last().at(2).toUInt(), 0u);
-            }
+            // The button held across the opening let go: not yet.
+            emit iom->inputValueChanged(0, 61, 0);
+            QCOMPARE(heardByShow.count(), 0);
             d.reject();
         }
-        // Closed: the fader is heard again where it is.
+        // Closed, nothing moved again: each is heard where it is now.
+        QVERIFY2(lastOn(7) == 0 && heardOn(7) == 1, qPrintable(tag));
+        QVERIFY2(lastOn(9) == 0 && heardOn(9) == 1, qPrintable(tag));
+        QVERIFY2(lastOn(61) == 0 && heardOn(61) == 1, qPrintable(tag));
+        QCOMPARE(heardOn(8), 0);       // up and down again: nothing changed
+        // And when it moves, as usual.
         heardByShow.clear();
-        emit iom->inputValueChanged(0, 7, 0);
         emit iom->inputValueChanged(0, 7, 30);
-        QCOMPARE(heardOn(7), 2);
+        QCOMPARE(heardOn(7), 1);
+        emit iom->inputValueChanged(0, 7, 0);
     }
     m_doc->setMode(Doc::Design);
+}
+
+/* Review 053-a round 2 (UX-36): a control pressed that something else has
+   is bold in the list (the collision shot), and its name is never cut:
+   "Universe 1 · Channe…" with room to spare in the next column. */
+void ControlMapUi_Test::aTakenControlFitsItsColumn()
+{
+    Scene *a = scene("Warm wash");
+    ControlMap *cm = m_doc->controlMap();
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 60, "House lights");
+    for (bool viaIom : { false, true })
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        if (viaIom)
+            emit m_doc->inputOutputMap()->inputValueChanged(0, 60, 127);
+        cm->handleInput(0, 60, 127);
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QCoreApplication::processEvents();
+        QTreeWidget *list = d.findChild<QTreeWidget *>("assignControls");
+        QVERIFY(list != nullptr);
+        QTreeWidgetItem *row = list->currentItem();
+        QVERIFY(row != nullptr);
+        QVERIFY2(row->font(0).bold(), qPrintable(row->text(0)));
+        const int text = QFontMetrics(row->font(0)).horizontalAdvance(row->text(0));
+        QVERIFY2(list->columnWidth(0) > text,
+                 qPrintable(QString("%1: column %2 < text %3").arg(row->text(0)).arg(list->columnWidth(0)).arg(text)));
+        d.reject();
+        cm->handleInput(0, 60, 0);
+    }
 }
 
 /* Before anything is pressed the list shows each control with who has it:
