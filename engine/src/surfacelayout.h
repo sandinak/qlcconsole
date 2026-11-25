@@ -118,10 +118,10 @@ public:
     QString shortName() const { return m_short.isEmpty() ? m_name : m_short; }
     QSizeF size() const { return m_size; }
 
-    QList<Control> controls() const { return m_controls; }
-    QList<Section> sections() const { return m_sections; }
-    QList<Role> roles() const { return m_roles; }
-    QList<Page> pages() const { return m_pages; }
+    const QList<Control> &controls() const { return m_controls; }
+    const QList<Section> &sections() const { return m_sections; }
+    const QList<Role> &roles() const { return m_roles; }
+    const QList<Page> &pages() const { return m_pages; }
 
     /** The index of the control that hears profile channel @p channel
      *  (its own, or one of "also"); -1: none. */
