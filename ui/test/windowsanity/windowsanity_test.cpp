@@ -83,6 +83,7 @@
 #include "venuefromshowdialog.h"
 #include "preshowcheck.h"
 #include "showreviewpanel.h"
+#include "pmjlamplogdialog.h"
 
 #include "windowsanity_test.h"
 
@@ -369,7 +370,13 @@ QList<Row> windows()
          << row("VenueRigDialog", QStringLiteral("Venue rig"),
                 [](App *a) { VenueRigDialog::open(a->doc(), a, g_venue); })
          << row("VenueFromShowDialog", QStringLiteral("New venue from a show"),
-                [](App *a) { VenueFromShowDialog::open(a->doc(), a); });
+                [](App *a) { VenueFromShowDialog::open(a->doc(), a); })
+         // Connections ▸ Control surfaces ▸ PMJ Black 1 ▸ Lamp Log… (ControlSurfacesPanel::openPmjLampLog()).
+         << row("PmjLampLogDialog", QStringLiteral("PMJ lamp log"), [](App *a) {
+                PmjLampLogDialog *d = new PmjLampLogDialog(a->m_pmjOverlay, a);
+                d->setAttribute(Qt::WA_DeleteOnClose);
+                d->show();
+            });
 
     return list;
 }
