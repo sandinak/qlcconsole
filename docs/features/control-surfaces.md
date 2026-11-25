@@ -254,7 +254,9 @@ that matter to a desk:
   GO or, with **When pressed** set to **Back**, its Back: two controls, one
   list. Back goes back one cue on each press (the release does nothing),
   through the same path and the same double-GO guard as the Run tab's Back,
-  and it is armed where the list's GO is.
+  and it is armed where the list's GO is. **Stop the list** stops it from
+  either control: chosen with the window on the Back, the Back becomes a
+  stop button (as the Control Map table's Back row allows) and stays one.
 - **A GO, a Back or a hit is never learned on a fader.** Learn hears what
   the control sends: a fader or knob (its profile says so, or it sends
   different values with no 0 between, the emergency stop's own test) is

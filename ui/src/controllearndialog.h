@@ -132,6 +132,9 @@ private:
     bool refusesFader() const;
     /** When pressed: each item's target type (a list's GO or Back). */
     static constexpr int kTypeRole = Qt::UserRole + 1;
+    /** kTypeRole of a list's Stop the list: the GO's or the Back's, whichever
+        the window is on (both may stop the list; Control Map table). */
+    static constexpr int kEitherListType = -1;
 
 private:
     Doc *m_doc;

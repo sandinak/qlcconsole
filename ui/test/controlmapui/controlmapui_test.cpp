@@ -2566,6 +2566,46 @@ void ControlMapUi_Test::aListLearnsItsGoAndItsBack()
         QCOMPARE(how->itemText(1), QString("Stop the list"));
     }
     QVERIFY(backRow);
+
+    /* A Back set to Stop the list (as the table allows) opens on Stop the
+       list and stays a Back that stops: OK with nothing changed keeps it,
+       never a Back that steps back a cue. */
+    QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
+    QVERIFY(cm->setMode(ControlMap::cueListBack(listId), ControlMap::StopOnly));
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QCOMPARE(d.mode(), ControlMap::StopOnly);
+        QCOMPARE(d.findChild<QComboBox *>("learnMode")->currentText(), QString("Stop the list"));
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), 12u);
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->mode, ControlMap::StopOnly);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 12u);
+    QVERIFY(cm->binding(ControlMap::cueList(listId)) == nullptr);
+
+    // A Back made a stop in the window: still the Back, on its own control.
+    QVERIFY(cm->setMode(ControlMap::cueListBack(listId), ControlMap::Toggle));
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QComboBox *mode = d.findChild<QComboBox *>("learnMode");
+        QCOMPARE(mode->currentText(), QString("Back"));
+        QVERIFY(chooseText(mode, "Stop the list"));
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), 12u);
+        QVERIFY(chooseText(mode, "Back"));
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QCOMPARE(d.mode(), ControlMap::Toggle);
+        QVERIFY(chooseText(mode, "Stop the list"));
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->mode, ControlMap::StopOnly);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 12u);
+    QVERIFY(cm->binding(ControlMap::cueList(listId)) == nullptr);
 }
 
 /* A GO (or a Back, or a hit) learned on a fader is refused at Learn: the

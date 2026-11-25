@@ -92,7 +92,12 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
                 m_mode->setItemData(m_mode->count() - 1, int(ControlMap::CueListBackTarget), kTypeRole);
             }
             m_mode->addItem(ControlMap::modeName(m, ControlMap::CueListTarget), int(m));
-            m_mode->setItemData(m_mode->count() - 1, int(ControlMap::CueListTarget), kTypeRole);
+            /* Stop the list: the GO's or the Back's, the one the window is
+               on. A Back set to stop the list (Control Map table) stays a
+               Back that stops it, not a Back that steps back. */
+            m_mode->setItemData(m_mode->count() - 1,
+                                m == ControlMap::StopOnly ? kEitherListType : int(ControlMap::CueListTarget),
+                                kTypeRole);
         }
     }
     else
@@ -317,9 +322,11 @@ void ControlLearnDialog::setMode(ControlMap::Mode mode)
     // Of this target's items (a list's GO and its Back share the box).
     auto find = [this](ControlMap::Mode m) {
         for (int i = 0; i < m_mode->count(); ++i)
-            if (m_mode->itemData(i).toInt() == int(m)
-                && m_mode->itemData(i, kTypeRole).toInt() == int(m_target.type))
+        {
+            const int type = m_mode->itemData(i, kTypeRole).toInt();
+            if (m_mode->itemData(i).toInt() == int(m) && (type == int(m_target.type) || type == kEitherListType))
                 return i;
+        }
         return -1;
     };
     // StartOnly on a list is a GO, as Toggle is.
@@ -332,9 +339,11 @@ void ControlLearnDialog::setMode(ControlMap::Mode mode)
 
 void ControlLearnDialog::slotModeChanged(int index)
 {
-    const ControlMap::TargetType type = ControlMap::TargetType(m_mode->itemData(index, kTypeRole).toInt());
-    if (type == m_target.type)
+    const int typeData = m_mode->itemData(index, kTypeRole).toInt();
+    // Stop the list stops it from the GO or the Back alike: the window stays where it is.
+    if (typeData == kEitherListType || typeData == int(m_target.type))
         return;
+    const ControlMap::TargetType type = ControlMap::TargetType(typeData);
     /* GO <-> Back: another target on the same list. Its own binding, if it
        has one, is what the window shows now; else a control just heard is
        kept, and the other one's control is not (it already GOes, or goes
