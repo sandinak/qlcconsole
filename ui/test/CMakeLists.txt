@@ -6,6 +6,9 @@ project(test)
 # engine/test/CMakeLists.txt).
 add_compile_definitions(QLC_TEST_RESOURCE_ROOT="${CMAKE_SOURCE_DIR}/resources/")
 
+# qlc_surfacesim(<test>): simulated MIDI boards and game pads (docs/dev/SURFACE_TESTS.md).
+include(../../engine/test/common/surfacesim/surfacesim.cmake)
+
 add_subdirectory(aboutbox)
 add_subdirectory(clinodisplay)
 add_subdirectory(addfixture)
@@ -78,6 +81,7 @@ add_subdirectory(officeshow)
 add_subdirectory(padbenchshow)
 add_subdirectory(padrunrules)
 add_subdirectory(padhit)
+add_subdirectory(pmjsim)
 add_subdirectory(goguardui)
 add_subdirectory(followspotcue)
 add_subdirectory(cuerunner)

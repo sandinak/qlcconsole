@@ -222,6 +222,10 @@ public:
     /** A value from the virtual pad (QLC_HID_VIRTUAL_PAD) on @p input, sent
      *  on as the pad's own reading would be. False if it is not one. */
     Q_INVOKABLE bool injectVirtualInput(quint32 input, quint32 channel, uint value);
+    /** What the app sent back to the virtual pad on @p input (its light,
+     *  rumble, triggers: sendFeedBack()'s params, in order), and cleared:
+     *  a surface test reads the pad's outputs here (docs/dev/SURFACE_TESTS.md). */
+    Q_INVOKABLE QVariantList takeVirtualFeedback(quint32 input);
 
 protected:
     HIDDevice* device(const QString& path) const;

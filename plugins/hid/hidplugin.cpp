@@ -1498,6 +1498,12 @@ bool HIDPlugin::injectVirtualInput(quint32 input, quint32 channel, uint value)
     return true;
 }
 
+QVariantList HIDPlugin::takeVirtualFeedback(quint32 input)
+{
+    HIDVirtualPad *pad = qobject_cast<HIDVirtualPad *>(device(input));
+    return pad == nullptr ? QVariantList() : pad->takeFeedback();
+}
+
 HIDDevice* HIDPlugin::device(const QString& path) const
 {
     QListIterator <HIDDevice*> it(m_devices);
@@ -1522,6 +1528,12 @@ void HIDPlugin::sendFeedBack(quint32 universe, quint32 inputLine, quint32 channe
     const QString what = p.value(QStringLiteral("gamepad")).toString();
     if (what.isEmpty())
         return;
+    // A pad that is not there keeps what it was sent, for a test to read.
+    if (HIDVirtualPad *virt = qobject_cast<HIDVirtualPad *>(device(inputLine)))
+    {
+        virt->keepFeedback(p);
+        return;
+    }
 #if defined(Q_OS_MACOS)
     HIDOSXJoystick *pad = qobject_cast<HIDOSXJoystick *>(device(inputLine));
     if (pad == nullptr)
