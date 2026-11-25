@@ -47,6 +47,16 @@ take a control from anything except the PMJ's controls and the encoder
 bank's runs). Two Virtual Console widgets on one input are Show Review's
 *Same input twice* (VC-06), not refused here.
 
+**This computer's own controls.** Two more owners are the computer's, not
+the show's, and can never be moved. A **game pad's** buttons and triggers
+are its Run map: a Control Map trigger or the emergency stop learned on
+one is refused, naming its job in the pad's own words -- *Cross on the
+pad: GO with L2 held (the pad's Run map)* -- because a trigger there would
+fire a cue on one press, without the arm and the safety. Hits from the
+pad are the right trigger's, by their place. A **computer key** the app
+already uses (a menu shortcut, an edit key, a Virtual Console key) is
+named the same way: *the shortcut for Save Show*.
+
 **A trigger has a place.** A Control Map trigger works where you learned
 it, as a hit does: **in a cue** (only while that cue is live), **in a cue
 list** (while it runs, or while it is the current production's main list
@@ -240,6 +250,28 @@ that matter to a desk:
   mode or armed something else in between.
 - A fader or a CC that goes on sending values is **one press** until it goes
   back to 0. Use a Virtual Console slider for a fader that sets a level.
+- **GO and Back on one list.** A cue list's **Learn Trigger…** learns its
+  GO or, with **When pressed** set to **Back**, its Back: two controls, one
+  list. Back goes back one cue on each press (the release does nothing),
+  through the same path and the same double-GO guard as the Run tab's Back,
+  and it is armed where the list's GO is. **Stop the list** stops it from
+  either control: chosen with the window on the Back, the Back becomes a
+  stop button (as the Control Map table's Back row allows) and stays one.
+- **A GO, a Back or a hit is never learned on a fader.** Learn hears what
+  the control sends: a fader or knob (its profile says so, or it sends
+  different values with no 0 between, the emergency stop's own test) is
+  refused, *CC 7 is a fader or knob (it sends a range of values): a GO fires
+  on a press, so it takes a button, pad or key.* A scene may still go on a
+  fader (one press until it is back at 0).
+- **A latching button is flagged.** A button that sends on at one press and
+  0 at the next (a toggle switch, a pad set to latch) reaches the show only
+  every other press. Learn hears it when you press it a few times (on, then
+  0 a press later, then on again; a momentary button let go within a
+  second and a half is never taken for one) and turns **Toggle** into
+  **Start only**, saying so. A mode you chose yourself is kept and the
+  note says so: **Stop only** still stops, **Momentary** follows the
+  latch (on, then off), and a list's **GO** or **Stop the list** stays
+  what it is. Set the button to momentary on the controller if it can be.
 
 ## Where a trigger works
 
@@ -376,8 +408,10 @@ the profile is patched on.
   profile is heard. If a second is patched, the footer says *A second PMJ
   Black 1 is patched on universe N: only universe M is heard. Unpatch one.*
 - Go, Back, Left, Right and the page buttons light nothing and do nothing
-  here. Bind **Go** and **Back** in the Control Map to GO and Back the list
-  (rule 6).
+  here. Learn **Go** and **Back** in the Control Map to GO and Back the list
+  (rule 6): right-click the cue list in the Show Tree ▸ **Learn Trigger…**,
+  press the PMJ's Go, OK; again with **When pressed** set to **Back**, and
+  press its Back.
 
 ## Other surfaces
 

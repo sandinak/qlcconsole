@@ -3117,3 +3117,204 @@ void ControlMap_Test::aPlaceThatGoesNeverWidensOntoATakenOne()
     QCOMPARE(there.first().target, ControlMap::function(cool->id()));
     cm->setSelectedTargets({});
 }
+
+/* Phase F: Back on a cue list is a target of its own (the help promised
+   one; ControlMap had none). A press goes back one cue through the one run
+   path, its place arms it as a GO's does, and it is saved with the show. */
+void ControlMap_Test::cueListBackStepsBack()
+{
+#ifdef CONTROLMAP_HAS_BACK
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    cm->setBinding({ 0, 12, ControlMap::cueListBack(listId), ControlMap::Toggle });
+    QCOMPARE(cm->targetName(ControlMap::cueListBack(listId)), QString("Back: Act 1"));
+    QCOMPARE(ControlMap::modeName(ControlMap::Toggle, ControlMap::CueListBackTarget), QString("Back"));
+
+    QList<ShowControl::Command> commands;
+    QList<ShowControl::Route> routes;
+    ShowControl *sc = m_doc->showControl();
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route route) {
+        commands << r.command;
+        routes << route;
+        return sc->execute(r);
+    });
+    auto unhook = qScopeGuard([sc]() { sc->setRunHandler(nullptr); });
+
+    // Nothing playing: Back's light is dark (no cue before).
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::cueListBack(listId))), ControlMap::LampOff);
+
+    // GO, GO: cue 2. Back: cue 1 -- through ShowControl::run(), as the Control Map's.
+    send(10, 127); send(10, 0); tick(2);
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QCOMPARE(cm->lamp(*cm->binding(ControlMap::cueListBack(listId))), ControlMap::LampRunning);
+    QSignalSpy fired(cm, &ControlMap::fired);
+    send(12, 127);
+    tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+    QVERIFY(chaser->isRunning());
+    QCOMPARE(commands.last(), ShowControl::Back);
+    QCOMPARE(routes.last(), ShowControl::RouteControlMap);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.first().first().toString(), QString("Back: Act 1"));
+    // The release does nothing: still cue 1, still playing, no Stop sent.
+    const int sent = commands.count();
+    send(12, 0);
+    tick(2);
+    QCOMPARE(commands.count(), sent);
+    QVERIFY(chaser->isRunning());
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+
+    // It works with places: in its own list it is armed while the list runs.
+    send(10, 127); send(10, 0); tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QVERIFY(cm->setPlace(ControlMap::cueListBack(listId), ControlMap::inList(listId)));
+    send(12, 127); send(12, 0); tick(2);
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+
+    // Armed as the list's GO is: another list on the Run tab, and Design refuses it.
+    const quint32 other = st->addCueList(st->addProduction("Other"), "Act 2");
+    cm->setPlace(ControlMap::cueListBack(listId), ControlMap::everywhere());
+    cm->setRunTabList(other);
+    QVERIFY(!cm->isArmed(ControlMap::cueListBack(listId)));
+    QVERIFY(!cm->surfaceMayFire(ControlMap::cueListBack(listId)));
+    cm->setSelectedTargets({ ControlMap::cueList(listId) });
+    QVERIFY(cm->isArmed(ControlMap::cueListBack(listId)));      // the list selected arms its Back
+    cm->setSelectedTargets({});
+
+    // Stop only on Back: a press stops the list.
+    QVERIFY(cm->setMode(ControlMap::cueListBack(listId), ControlMap::StopOnly));
+    send(12, 127); send(12, 0); tick(3);
+    QVERIFY(!chaser->isRunning());
+
+    // Saved with the show and loaded back as it was.
+    const QList<ControlMap::Binding> before = cm->bindings();
+    const QByteArray xml = saveShow(m_doc);
+    QVERIFY2(xml.contains("Target=\"CueListBack\""), xml.constData());
+    Doc *loaded = new Doc(this);
+    QVERIFY(loadShow(loaded, xml));
+    QCOMPARE(loaded->controlMap()->bindings(), before);
+    delete loaded;
+#else
+    QFAIL("this build has no Back on the Control Map");
+#endif
+}
+
+/* A GO and a Back on one list are two targets, so two controls: binding one
+   never replaces the other, each keeps its own modes, and removing one
+   leaves the other. On one control at one place they are two jobs. */
+void ControlMap_Test::backAndGoOnOneListCoexist()
+{
+#ifdef CONTROLMAP_HAS_BACK
+    const quint32 listId = cueList(2);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    cm->setBinding({ 0, 12, ControlMap::cueListBack(listId), ControlMap::Toggle });
+    QCOMPARE(cm->count(), 2);
+    QVERIFY(cm->binding(ControlMap::cueList(listId)) != nullptr);
+    QVERIFY(cm->binding(ControlMap::cueListBack(listId)) != nullptr);
+    QCOMPARE(cm->binding(ControlMap::cueList(listId))->channel, 10u);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 12u);
+
+    // Each its own modes: Back has no "while held" (its release does nothing).
+    QCOMPARE(ControlMap::modesFor(ControlMap::CueListBackTarget),
+             (QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::StopOnly }));
+    QCOMPARE(ControlMap::modesFor(ControlMap::CueListTarget),
+             (QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StopOnly }));
+    QVERIFY(cm->setMode(ControlMap::cueListBack(listId), ControlMap::StopOnly));
+    QCOMPARE(cm->binding(ControlMap::cueList(listId))->mode, ControlMap::Toggle);
+
+    // Back moved to another control: the GO stays where it is.
+    cm->setBinding({ 0, 14, ControlMap::cueListBack(listId), ControlMap::Toggle });
+    QCOMPARE(cm->count(), 2);
+    QCOMPARE(cm->binding(ControlMap::cueList(listId))->channel, 10u);
+
+    // GO taken away: Back keeps its control.
+    QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
+    QVERIFY(cm->binding(ControlMap::cueListBack(listId)) != nullptr);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 14u);
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+
+    // One control at one place: Back there replaces the GO (one job per
+    // control; Learn refuses it first, naming the GO).
+    cm->setBinding({ 0, 10, ControlMap::cueListBack(listId), ControlMap::Toggle });
+    QCOMPARE(cm->count(), 1);
+    QVERIFY(cm->binding(ControlMap::cueList(listId)) == nullptr);
+#else
+    QFAIL("this build has no Back on the Control Map");
+#endif
+}
+
+/* What a Learn hears says what kind of control it is: a run of values with
+   no 0 between is a fader (the emergency stop's own rule), and one value
+   per press -- on, then off a press later, then on -- is a latching button.
+   A momentary button (on, off at once) is neither. Forgotten when the
+   learn ends. */
+void ControlMap_Test::aLearnHearsAFaderAndALatchingButton()
+{
+    ControlMap *cm = m_doc->controlMap();
+    cm->setLatchGapMs(100);
+    cm->listen();
+    // A fader: CC 10, 20, 30.
+    for (int v : { 10, 20, 30 })
+    {
+        send(7, uchar(v));
+        cm->listen();
+    }
+    QVERIFY(cm->learnSawFader(0, 7));
+    QVERIFY(!cm->learnSawLatching(0, 7));
+
+    // A momentary button: on, off at once, on.
+    send(8, 127); cm->listen(); send(8, 0); send(8, 127); cm->listen();
+    QVERIFY(!cm->learnSawFader(0, 8));
+    QVERIFY(!cm->learnSawLatching(0, 8));
+
+    // A latching button: on, off a press later, on a press later.
+    cm->setLatchHoldMs(300);
+    send(9, 127); cm->listen();
+    QTest::qWait(350);
+    send(9, 0);
+    QVERIFY(!cm->learnSawLatching(0, 9));       // two values are not a run yet
+    QTest::qWait(150);
+    send(9, 127); cm->listen();
+    QVERIFY(cm->learnSawLatching(0, 9));
+    QVERIFY(!cm->learnSawFader(0, 9));
+
+    /* A momentary button held a while each press (past the gap, inside a
+       press's hold): on, 0, on -- still momentary, never a latch. */
+    send(10, 127); cm->listen();
+    QTest::qWait(150);
+    send(10, 0);
+    QTest::qWait(150);
+    send(10, 127); cm->listen();
+    QTest::qWait(150);
+    send(10, 0);
+    QVERIFY(!cm->learnSawLatching(0, 10));
+    cm->setLatchGapMs(400);
+    cm->setLatchHoldMs(1500);
+
+    /* The same at the real timings: a deliberate Learn press held half a
+       second, let go, pressed again half a second later. */
+    send(11, 127); cm->listen();
+    QTest::qWait(500);
+    send(11, 0);
+    QTest::qWait(500);
+    send(11, 127); cm->listen();
+    QVERIFY(!cm->learnSawLatching(0, 11));
+
+    // The same rule the stop has: a value the same as the last, or a 0 between, is no fader.
+    QVERIFY(ControlMap::movesLikeFader(false, 10, 10, 20, 1000));
+    QVERIFY(!ControlMap::movesLikeFader(true, 10, 10, 20, 1000));
+    QVERIFY(!ControlMap::movesLikeFader(false, 10, 127, 127, 1000));
+    QVERIFY(!ControlMap::movesLikeFader(false, 1500, 10, 20, 1000));
+
+    cm->stopListening();
+    QVERIFY(!cm->learnSawFader(0, 7));
+    QVERIFY(!cm->learnSawLatching(0, 9));
+}

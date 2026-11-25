@@ -86,6 +86,14 @@ private slots:
     void anEncoderRefusalNamesEachOwnersControl();
     void aMoveForEachPresetIsTakenOnOk();
     void anEncoderLearnOnAnotherUniverseAsksForTheWholeBank();
+    // Phase F (CONTROL_SURFACES_EVAL §6): Back, the kind of control a Learn
+    // hears, and this computer's own owners (the pad, the app's keys)
+    void aListLearnsItsGoAndItsBack();
+    void goOnFaderRefused();
+    void latchingButtonSuggestsStartOnly();
+    void padRunButtonRefused();
+    void keyboardOwnerNamesTheShortcut();
+    void phaseFShots();
 
 private:
     Scene *scene(const QString &name);

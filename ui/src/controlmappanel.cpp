@@ -198,15 +198,8 @@ void ControlMapPanel::refresh()
         // Narrow: what it fires keeps the room; the list shows every name in full.
         mode->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
         mode->setMinimumContentsLength(8);
-        const bool list = b.target.type == ControlMap::CueListTarget || b.target.type == ControlMap::CueTarget;
         const bool estop = b.target.type == ControlMap::EmergencyStopTarget;
-        const QList<ControlMap::Mode> modes = estop
-            ? QList<ControlMap::Mode>{ ControlMap::StartOnly }
-            : list
-            ? QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StopOnly }
-            : QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StartOnly,
-                                       ControlMap::StopOnly };
-        for (ControlMap::Mode m : modes)
+        for (ControlMap::Mode m : ControlMap::modesFor(b.target.type))
             mode->addItem(ControlMap::modeName(m, b.target.type), int(m));
         int at = mode->findData(int(b.mode));
         mode->setCurrentIndex(at < 0 ? 0 : at);

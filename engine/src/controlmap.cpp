@@ -526,7 +526,70 @@ void ControlMap::stopListening()
     m_learnButton = false;
     m_pending = false;
     m_notButtons.clear();
+    m_learnSeen.clear();
     updateConnections();
+}
+
+bool ControlMap::movesLikeFader(bool releasedSince, qint64 sinceLastMs, uchar last, uchar value, int windowMs)
+{
+    return !releasedSince && sinceLastMs < windowMs && value != last;
+}
+
+void ControlMap::observeLearn(quint64 k, uchar value)
+{
+    LearnSeen &s = m_learnSeen[k];
+    const qint64 since = s.any ? s.at.elapsed() : 0;
+    if (s.any)
+    {
+        // The stop's own rule: different values, no 0 between, under its window.
+        if (value != 0 && movesLikeFader(s.last == 0, since, s.last, value, m_estopDebounceMs))
+            s.fader = true;
+        if (value == s.last)
+            return;         // a held button repeating: not a step of anything
+        // Latching: one "on" value and 0, alternating, a press apart.
+        const bool onOff = value == 0 || s.on == 0 || value == s.on;
+        if (!onOff)
+            s.latchSteps = 0;
+        else if (value == 0 && since < m_latchHoldMs)
+        {
+            /* A release inside a press's hold: momentary. A latching
+               button's 0 is the next press, which comes later than a
+               deliberate press is held (a Learn press held half a second
+               is still a momentary button). */
+            s.quickRelease = true;
+            s.latchSteps = 0;
+        }
+        else if (since < m_latchGapMs)
+            s.latchSteps = 0;
+        else if (s.latchSteps > 0)
+            ++s.latchSteps;
+    }
+    if (value != 0)
+    {
+        if (s.on == 0)
+            s.on = value;
+        if (s.latchSteps == 0 && value == s.on)
+            s.latchSteps = 1;
+    }
+    s.any = true;
+    s.last = value;
+    s.at.start();
+}
+
+bool ControlMap::learnSawFader(quint32 universe, quint32 channel) const
+{
+    if (universe == KeyboardUniverse)
+        return false;
+    if (!isButtonControl(universe, channel))
+        return true;
+    const auto it = m_learnSeen.constFind(key(universe, channel));
+    return it != m_learnSeen.constEnd() && it->fader;
+}
+
+bool ControlMap::learnSawLatching(quint32 universe, quint32 channel) const
+{
+    const auto it = m_learnSeen.constFind(key(universe, channel));
+    return it != m_learnSeen.constEnd() && !it->fader && !it->quickRelease && it->latchSteps >= 3;
 }
 
 /*****************************************************************************
@@ -612,6 +675,7 @@ bool ControlMap::targetExists(const Target &target) const
         case FunctionTarget:
             return m_doc->function(target.id) != nullptr;
         case CueListTarget:
+        case CueListBackTarget:
             return m_doc->showTree()->cueList(target.id) != nullptr;
         case CueTarget:
         case HitTarget:
@@ -641,6 +705,13 @@ QString ControlMap::targetName(const Target &target) const
                 break;
             return tr("Cue list: %1").arg(l->name);
         }
+        case CueListBackTarget:
+        {
+            const ShowTree::CueList *l = st->cueList(target.id);
+            if (l == nullptr)
+                break;
+            return tr("Back: %1").arg(l->name);
+        }
         case CueTarget:
         {
             const ShowTree::Cue *c = st->cue(target.id);
@@ -666,9 +737,11 @@ QString ControlMap::targetName(const Target &target) const
 
 QString ControlMap::modeName(Mode mode, TargetType type)
 {
-    const bool list = type == CueListTarget || type == CueTarget;
+    const bool list = isListType(type);
     if (type == EmergencyStopTarget)
         return tr("ALL OFF (each press; never held)");
+    if (type == CueListBackTarget)
+        return mode == StopOnly ? tr("Stop the list") : tr("Back");
     switch (mode)
     {
         case Toggle:    return list ? tr("GO") : tr("Toggle");
@@ -677,6 +750,25 @@ QString ControlMap::modeName(Mode mode, TargetType type)
         case StopOnly:  return list ? tr("Stop the list") : tr("Stop only");
     }
     return QString();
+}
+
+QList<ControlMap::Mode> ControlMap::modesFor(TargetType type)
+{
+    switch (type)
+    {
+        case EmergencyStopTarget:
+            return { StartOnly };
+        case CueListBackTarget:
+            // Back acts on the press; held, the release does nothing.
+            return { Toggle, StopOnly };
+        case CueListTarget:
+        case CueTarget:
+            return { Toggle, Momentary, StopOnly };
+        case FunctionTarget:
+        case HitTarget:
+            break;
+    }
+    return { Toggle, Momentary, StartOnly, StopOnly };
 }
 
 QString ControlMap::typeToString(TargetType type)
@@ -688,6 +780,7 @@ QString ControlMap::typeToString(TargetType type)
         case CueTarget:      return QStringLiteral("Cue");
         case HitTarget:      return QStringLiteral("Hit");
         case EmergencyStopTarget: return QStringLiteral("EmergencyStop");
+        case CueListBackTarget: return QStringLiteral("CueListBack");
     }
     return QString();
 }
@@ -695,7 +788,7 @@ QString ControlMap::typeToString(TargetType type)
 bool ControlMap::stringToType(const QString &str, TargetType *type)
 {
     static const TargetType all[] = { FunctionTarget, CueListTarget, CueTarget, HitTarget,
-                                      EmergencyStopTarget };
+                                      EmergencyStopTarget, CueListBackTarget };
     for (TargetType t : all)
     {
         if (typeToString(t) == str)
@@ -740,6 +833,9 @@ bool ControlMap::stringToMode(const QString &str, Mode *mode)
 void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
 {
     const quint64 k = key(universe, channel);
+    // Learning: what the control sends says whether it is a fader or a latch.
+    if (m_listening && universe != KeyboardUniverse)
+        observeLearn(k, value);
     if (value == 0)
     {
         // A release: the stop's next non-zero is a new press, and what was
@@ -959,8 +1055,7 @@ void ControlMap::emergencyStop(const Binding &b, uchar value)
     }
     else
     {
-        const bool run = !it->released && it->last.elapsed() < m_estopDebounceMs;
-        differs = run && value != it->value;
+        differs = movesLikeFader(it->released, it->last.elapsed(), it->value, value, m_estopDebounceMs);
         press = it->released || !it->lastFired.isValid() || it->lastFired.elapsed() >= m_estopDebounceMs;
         it->value = value;
         it->last.start();
@@ -1039,6 +1134,7 @@ bool ControlMap::press(const Binding &b, bool placeLive)
         }
         case CueListTarget:
         case CueTarget:
+        case CueListBackTarget:
             if (b.mode == StopOnly)
             {
                 goList(b, true);
@@ -1075,6 +1171,7 @@ void ControlMap::release(const Binding &b)
         case CueTarget:
             goList(b, true);
             break;
+        case CueListBackTarget:     // Back is the press's; the release lets go of nothing
         case EmergencyStopTarget:
             break;
     }
@@ -1105,14 +1202,14 @@ Chaser *ControlMap::targetChaser(const Binding &b, int *step, int *subCue) const
     if (subCue != nullptr)
         *subCue = -1;
     ShowTreeController *st = m_doc->showTree();
-    if (st == nullptr || (b.target.type != CueListTarget && b.target.type != CueTarget))
+    if (st == nullptr || !isListType(b.target.type))
         return nullptr;
     // A cue bound and then made a sub-cue (Make Sub-cues): GO plays its
     // cue's step at that sub-cue, as /go 4.2 does.
     quint32 parent = 0xFFFFFFFF;
     const bool sub = b.target.type == CueTarget && st->isSubCue(b.target.id, &parent);
-    const ShowTree::CueList *list = b.target.type == CueListTarget ? st->cueList(b.target.id)
-                                                                   : st->listOfCue(sub ? parent : b.target.id);
+    const ShowTree::CueList *list = b.target.type != CueTarget ? st->cueList(b.target.id)
+                                                               : st->listOfCue(sub ? parent : b.target.id);
     if (list == nullptr || list->chaser == ShowTree::invalidId())
         return nullptr;
     Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(list->chaser));
@@ -1155,7 +1252,8 @@ void ControlMap::goList(const Binding &b, bool stop)
 
     ShowControl::Request r;
     r.chaser = chaser->id();
-    r.command = stop ? ShowControl::Stop : ShowControl::Go;
+    const bool back = b.target.type == CueListBackTarget;
+    r.command = stop ? ShowControl::Stop : back ? ShowControl::Back : ShowControl::Go;
     if (!stop && b.target.type == CueTarget)
     {
         if (step < 0)
@@ -1166,7 +1264,13 @@ void ControlMap::goList(const Binding &b, bool stop)
     }
     // The console's one run path (docs/design/RUN_COMMANDS.md).
     if (m_doc->showControl()->run(r, ShowControl::RouteControlMap))
-        emit fired(tr("%1 %2").arg(stop ? tr("Stop") : tr("GO"), targetName(b.target)));
+    {
+        if (back && !stop)
+            emit fired(targetName(b.target));       // "Back: Act 1"
+        else
+            emit fired(tr("%1 %2").arg(stop ? tr("Stop") : tr("GO"),
+                                       targetName(back ? cueList(b.target.id) : b.target)));
+    }
 }
 
 /*****************************************************************************
@@ -1937,6 +2041,9 @@ bool ControlMap::isArmed(const Target &target) const
     {
         case CueListTarget:
             return target.id == run;
+        case CueListBackTarget:
+            // Armed as the list's GO is: the run list, or the list selected.
+            return target.id == run || m_selected.contains(cueList(target.id));
         case CueTarget:
             return listArmed(listOf(target.id));
         case HitTarget:
@@ -1981,6 +2088,7 @@ bool ControlMap::surfaceMayFire(const Target &target) const
             return true;
         case CueListTarget:
         case CueTarget:
+        case CueListBackTarget:
             return operate || isArmed(target);
         case HitTarget:
             // Its place is live: the narrowest-place rule a VC button and
@@ -2002,6 +2110,7 @@ quint32 ControlMap::feedbackFunction(const Binding &b) const
         case FunctionTarget:
             return b.target.id;
         case CueListTarget:
+        case CueListBackTarget:
         {
             const ShowTree::CueList *l = st->cueList(b.target.id);
             return l == nullptr ? 0xFFFFFFFF : l->chaser;
@@ -2036,6 +2145,8 @@ ControlMap::Lamp ControlMap::lamp(const Binding &b) const
         return LampRunning;
     if (b.mode == StopOnly)
         return LampOff;         // a press of it does nothing while nothing runs
+    if (b.target.type == CueListBackTarget)
+        return LampOff;         // Back on a list that is not running: no cue before
     if (stopped)
         return LampOff;         // after ALL OFF, dark until the next GO
     // Its place is not live, or a narrower one has the control (Q296): a

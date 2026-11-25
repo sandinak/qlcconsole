@@ -49,7 +49,10 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     setWindowTitle(tr("Learn trigger"));
 
     QVBoxLayout *lay = new QVBoxLayout(this);
-    QLabel *what = new QLabel(tr("<b>%1</b>").arg(cm->targetName(target).toHtmlEscaped()), this);
+    if (target.type == ControlMap::CueListTarget && cm->binding(target) == nullptr
+        && cm->binding(ControlMap::cueListBack(target.id)) != nullptr)
+        m_target = ControlMap::cueListBack(target.id);   // only its Back is bound: open on it
+    QLabel *what = new QLabel(tr("<b>%1</b>").arg(cm->targetName(m_target).toHtmlEscaped()), this);
     what->setObjectName(QStringLiteral("learnTarget"));
     lay->addWidget(what);
     QLabel *how = new QLabel(tr("Press the key, pad or button on your MIDI controller (or send the OSC "
@@ -66,27 +69,58 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     QFormLayout *form = new QFormLayout();
     m_mode = new QComboBox(this);
     m_mode->setObjectName(QStringLiteral("learnMode"));
-    const bool list = target.type == ControlMap::CueListTarget || target.type == ControlMap::CueTarget;
+    /* A cue list's window learns its GO or its Back (phase F): one target
+       each, so both can be on one list; Back is chosen in When pressed. */
+    const bool list = ControlMap::isListType(target.type);
     const bool estop = target.type == ControlMap::EmergencyStopTarget;
     if (estop)
         how->setText(tr("Press the button on your MIDI controller (or send the OSC message) that should be "
                         "the emergency stop, then release it and press it again to confirm. It is one "
                         "button: a fader, knob or encoder is refused, and so is a computer key. Every "
                         "press is ALL OFF, from any mode, at any moment."));
-    const QList<ControlMap::Mode> modes = estop
-        ? QList<ControlMap::Mode>{ ControlMap::StartOnly }
-        : list
-        ? QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StopOnly }
-        : QList<ControlMap::Mode>{ ControlMap::Toggle, ControlMap::Momentary, ControlMap::StartOnly,
-                                   ControlMap::StopOnly };
-    for (ControlMap::Mode m : modes)
-        m_mode->addItem(ControlMap::modeName(m, target.type), int(m));
-    m_mode->setToolTip(list ? tr("GO: each press is a GO. GO while held: GO on the press, the list stops "
-                                 "on the release. Stop the list: a press stops it.")
+    const bool listGoOrBack = target.type == ControlMap::CueListTarget
+                              || target.type == ControlMap::CueListBackTarget;
+    if (listGoOrBack)
+    {
+        // GO, GO while held, Back, Stop the list: the GO's modes and the Back.
+        for (ControlMap::Mode m : ControlMap::modesFor(ControlMap::CueListTarget))
+        {
+            if (m == ControlMap::StopOnly)
+            {
+                m_mode->addItem(ControlMap::modeName(ControlMap::Toggle, ControlMap::CueListBackTarget),
+                                int(ControlMap::Toggle));
+                m_mode->setItemData(m_mode->count() - 1, int(ControlMap::CueListBackTarget), kTypeRole);
+            }
+            m_mode->addItem(ControlMap::modeName(m, ControlMap::CueListTarget), int(m));
+            /* Stop the list: the GO's or the Back's, the one the window is
+               on. A Back set to stop the list (Control Map table) stays a
+               Back that stops it, not a Back that steps back. */
+            m_mode->setItemData(m_mode->count() - 1,
+                                m == ControlMap::StopOnly ? kEitherListType : int(ControlMap::CueListTarget),
+                                kTypeRole);
+        }
+    }
+    else
+    {
+        for (ControlMap::Mode m : ControlMap::modesFor(target.type))
+        {
+            m_mode->addItem(ControlMap::modeName(m, target.type), int(m));
+            m_mode->setItemData(m_mode->count() - 1, int(target.type), kTypeRole);
+        }
+    }
+    m_mode->setToolTip(listGoOrBack ? tr("GO: each press is a GO. GO while held: GO on the press, the list "
+                                         "stops on the release. Back: each press goes back one cue. Stop "
+                                         "the list: a press stops it.")
+                       : list ? tr("GO: each press is a GO. GO while held: GO on the press, the list stops "
+                                   "on the release. Stop the list: a press stops it.")
                             : tr("Toggle: a press starts it, the next stops it. Momentary: on while "
                                  "held. Start only / Stop only: a press only starts, or only stops, it."));
     form->addRow(tr("When pressed"), m_mode);
     m_mode->setEnabled(!estop);
+    setMode(ControlMap::Toggle);        // this target's first item (a Back opens on Back)
+    if (listGoOrBack)
+        connect(m_mode, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+                &ControlLearnDialog::slotModeChanged);
 
     // Works: where it is armed (Q295). The stop is everywhere, always.
     m_place = new QComboBox(this);
@@ -94,9 +128,9 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     m_place->setToolTip(tr("Where this trigger works: only while that cue is live, that cue list runs or "
                            "that production is current -- or everywhere. One control can fire other "
                            "things in other places: the narrowest live place has it."));
-    const ControlMap::Binding *bound = cm->binding(target);
+    const ControlMap::Binding *bound = cm->binding(m_target);
     QList<ControlMap::Place> places = estop ? QList<ControlMap::Place>{ ControlMap::Place() }
-                                            : cm->placeChoices(where, target);
+                                            : cm->placeChoices(where, m_target);
     if (bound != nullptr && !places.contains(bound->place))
         places.prepend(bound->place);
     for (const ControlMap::Place &p : std::as_const(places))
@@ -110,7 +144,7 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     // there, it would work only once it is already live (never start the
     // list, never jump to the cue). Everywhere by default; the place is
     // offered. A hit or a scene works where it was learned.
-    const bool bringsItLive = target.type == ControlMap::CueListTarget || target.type == ControlMap::CueTarget;
+    const bool bringsItLive = list;
     // A hit fires only inside its own place: learned outside it, at its own.
     ControlMap::Place learnAt = where;
     if (target.type == ControlMap::HitTarget && !cm->isPlaceWithin(where, cm->placeOfHit(target.id)))
@@ -178,22 +212,22 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     lay->addWidget(buttons);
 
     // Bound already: that control and mode, until another is pressed.
-    if (const ControlMap::Binding *b = cm->binding(target))
+    if (const ControlMap::Binding *b = cm->binding(m_target))
     {
         m_universe = b->universe;
         m_channel = b->channel;
         setMode(b->mode);
     }
     m_remove->setVisible(hasControl());
-    if (const ControlMap::Binding *b = cm->binding(target))
+    if (const ControlMap::Binding *b = cm->binding(m_target))
     {
         for (const ControlMap::Binding &o : cm->bindingsOn(b->universe, b->channel))
-            if (o.target != target && o.place == b->place)
+            if (o.target != m_target && o.place == b->place)
                 m_boundStepping = true;
         m_boundUniverse = b->universe;
         m_boundChannel = b->channel;
         m_boundPlace = b->place;
-        m_stepThrough = m_boundStepping && target.type != ControlMap::EmergencyStopTarget;
+        m_stepThrough = m_boundStepping && m_target.type != ControlMap::EmergencyStopTarget;
         m_boundStepping = m_stepThrough;
     }
 
@@ -253,6 +287,9 @@ QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Targ
         && target.type != ControlMap::EmergencyStopTarget)
         return nullptr;
     const ControlMap::Binding *b = doc->controlMap()->binding(target);
+    // A cue list's one item learns its GO and its Back: either bound says so.
+    if (b == nullptr && target.type == ControlMap::CueListTarget)
+        b = doc->controlMap()->binding(ControlMap::cueListBack(target.id));
     QString text = tr("Learn Trigger…");
     if (b != nullptr)
     {
@@ -282,11 +319,72 @@ ControlMap::Mode ControlLearnDialog::mode() const
 
 void ControlLearnDialog::setMode(ControlMap::Mode mode)
 {
+    // Of this target's items (a list's GO and its Back share the box).
+    auto find = [this](ControlMap::Mode m) {
+        for (int i = 0; i < m_mode->count(); ++i)
+        {
+            const int type = m_mode->itemData(i, kTypeRole).toInt();
+            if (m_mode->itemData(i).toInt() == int(m) && (type == int(m_target.type) || type == kEitherListType))
+                return i;
+        }
+        return -1;
+    };
     // StartOnly on a list is a GO, as Toggle is.
-    int i = m_mode->findData(int(mode));
+    int i = find(mode);
     if (i < 0)
-        i = m_mode->findData(int(ControlMap::Toggle));
-    m_mode->setCurrentIndex(i);
+        i = find(ControlMap::Toggle);
+    if (i >= 0)
+        m_mode->setCurrentIndex(i);
+}
+
+void ControlLearnDialog::slotModeChanged(int index)
+{
+    const int typeData = m_mode->itemData(index, kTypeRole).toInt();
+    // Stop the list stops it from the GO or the Back alike: the window stays where it is.
+    if (typeData == kEitherListType || typeData == int(m_target.type))
+        return;
+    const ControlMap::TargetType type = ControlMap::TargetType(typeData);
+    /* GO <-> Back: another target on the same list. Its own binding, if it
+       has one, is what the window shows now; else a control just heard is
+       kept, and the other one's control is not (it already GOes, or goes
+       back: one job per control). */
+    ControlMap *cm = m_doc->controlMap();
+    const ControlMap::Binding *was = cm->binding(m_target);
+    const bool wasBound = was != nullptr && was->universe == m_universe && was->channel == m_channel;
+    m_target = ControlMap::Target{ type, m_target.id };
+    m_boundStepping = false;
+    m_stepThrough = false;
+    if (const ControlMap::Binding *b = cm->binding(m_target))
+    {
+        m_universe = b->universe;
+        m_channel = b->channel;
+        m_place->blockSignals(true);
+        setPlace(b->place);
+        m_place->blockSignals(false);
+    }
+    else if (wasBound)
+    {
+        m_universe = 0xFFFFFFFF;
+        m_channel = 0xFFFFFFFF;
+    }
+    if (QLabel *what = findChild<QLabel *>(QStringLiteral("learnTarget")))
+        what->setText(tr("<b>%1</b>").arg(cm->targetName(m_target).toHtmlEscaped()));
+    m_remove->setVisible(cm->binding(m_target) != nullptr);
+    m_collision->clear();
+    if (hasControl())
+        checkOwners();
+    updateText();
+}
+
+bool ControlLearnDialog::refusesFader() const
+{
+    // A GO, a Back, a cue's GO or a hit fires on a press: a fader's every move would be one.
+    return ControlMap::isListType(m_target.type) || m_target.type == ControlMap::HitTarget;
+}
+
+ControlMap::Target ControlLearnDialog::target() const
+{
+    return m_target;
 }
 
 ControlMap::Place ControlLearnDialog::placeAt(int index) const
@@ -342,12 +440,65 @@ QString ControlLearnDialog::placeText() const
 
 void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
 {
-    m_universe = universe;
-    m_channel = channel;
+    ControlMap *cm = m_doc->controlMap();
     m_keyNote->hide();
     m_note->clear();
+    /* A GO or a hit on a fader (its profile says so, or it moved like one:
+       the emergency stop's own rule): refused at Learn, saying why, and
+       still listening for a button. */
+    if (refusesFader() && cm->learnSawFader(universe, channel))
+    {
+        const ControlMap::Binding *b = cm->binding(m_target);
+        m_universe = b != nullptr ? b->universe : 0xFFFFFFFF;
+        m_channel = b != nullptr ? b->channel : 0xFFFFFFFF;
+        m_collision->clear();
+        updateText();
+        m_note->setText(tr("%1 is a fader or knob (it sends a range of values): %2 fires on a press, so it "
+                           "takes a button, pad or key. Press one.")
+                            .arg(cm->controlName(universe, channel),
+                                 m_target.type == ControlMap::HitTarget ? tr("a hit") : tr("a GO")));
+        cm->listen();
+        return;
+    }
+    m_universe = universe;
+    m_channel = channel;
     updateText();
     checkOwners();
+    /* A latching button sends on at one press and 0 at the next: only every
+       other press reaches the show. That breaks a Toggle (the 0 between
+       does nothing), so Toggle becomes Start only, once, and said. A mode
+       chosen by hand is kept (Stop only still stops; Momentary follows the
+       latch, on then off; a list's GO already is its press), said too. */
+    if (cm->learnSawLatching(universe, channel) && m_target.type != ControlMap::EmergencyStopTarget)
+    {
+        const QString name = cm->controlName(universe, channel);
+        if (!m_latchChose && mode() == ControlMap::Toggle
+            && ControlMap::modesFor(m_target.type).contains(ControlMap::StartOnly))
+        {
+            m_latchChose = true;
+            m_latchChoseChannel = quint64(universe) << 32 | channel;
+            setMode(ControlMap::StartOnly);
+            m_note->setText(tr("%1 looks like a latching button: it sends on at one press and off at the next, "
+                               "so only every other press reaches the show. %2 is chosen; set the button to "
+                               "momentary on the controller if it can be.")
+                                .arg(name, ControlMap::modeName(mode(), m_target.type)));
+        }
+        else
+        {
+            m_note->setText(tr("%1 looks like a latching button: it sends on at one press and off at the next. "
+                               "%2 is kept as chosen; set the button to momentary on the controller if it can be.")
+                                .arg(name, ControlMap::modeName(mode(), m_target.type)));
+        }
+    }
+    /* The guess is taken back: the same button showed a quick release (a
+       momentary one), so the Toggle it replaced is Toggle again. */
+    else if (m_latchChose && mode() == ControlMap::StartOnly && m_latchChoseChannel == (quint64(universe) << 32 | channel)
+             && m_target.type != ControlMap::EmergencyStopTarget)
+    {
+        m_latchChose = false;
+        setMode(ControlMap::Toggle);
+        m_note->clear();
+    }
     // Still listening: another press takes its place.
     if (m_target.type == ControlMap::EmergencyStopTarget)
         m_doc->controlMap()->listenForButton();

@@ -39,6 +39,7 @@
 #include "controllearndialog.h"
 #include "controlcollisionbox.h"
 #include "controlowners.h"
+#include "padrun.h"
 #include "inputselectionwidget.h"
 #include "virtualconsole/vcpropertieseditor.h"
 #include "speedmasters.h"
@@ -73,6 +74,7 @@
 #include <QDir>
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
+#include "programmercontroller.h"
 #include "controlmap.h"
 #include "scene.h"
 #include "doc.h"
@@ -174,11 +176,11 @@ void ControlMapUi_Test::theLearnDialogBindsWhatItHears()
     QVERIFY(!cm->isListening());
     QCOMPARE(cm->count(), 1);
 
-    // A cue list's modes: GO, GO while held, Stop.
+    // A cue list's modes: GO, GO while held, Back (its own target), Stop.
     ShowTreeController *st = m_doc->showTree();
     const quint32 list = st->addCueList(st->addProduction("Show"), "Act 1");
     ControlLearnDialog d3(m_doc, ControlMap::cueList(list));
-    QCOMPARE(d3.findChild<QComboBox *>("learnMode")->count(), 3);
+    QCOMPARE(d3.findChild<QComboBox *>("learnMode")->count(), 4);
     QCOMPARE(d3.findChild<QComboBox *>("learnMode")->itemText(0), QString("GO"));
 }
 
@@ -2448,4 +2450,503 @@ void ControlMapUi_Test::anEncoderLearnOnAnotherUniverseAsksForTheWholeBank()
     QCOMPARE(enc->device().universe, 1u);
     QCOMPARE(enc->device().bankNext, 50);
     cm->handleInput(0, 90, 0);
+}
+
+/****************************************************************************
+ * Phase F (CONTROL_SURFACES_EVAL.md §6, board Q324)
+ ****************************************************************************/
+
+namespace
+{
+/** The stub plugin as universe 0's input, as a game pad: @a roles by
+ *  channel, @a kind its family. Cleared by the guard it returns (the
+ *  plugin is one object for the whole test program). */
+IOPluginStub *padStub(Doc *doc, const QMap<quint32, QString> &roles, const QString &kind)
+{
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    doc->ioPluginCache()->load(dir);
+    if (doc->ioPluginCache()->plugins().isEmpty())
+        return nullptr;
+    IOPluginStub *stub = static_cast<IOPluginStub *>(doc->ioPluginCache()->plugins().at(0));
+    stub->m_channelRoles = roles;
+    stub->m_deviceKind = kind;
+    if (!doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0))
+        return nullptr;
+    return stub;
+}
+
+/** Selects the item of @a box whose text is @a text; false: none. */
+bool chooseText(QComboBox *box, const QString &text)
+{
+    const int i = box->findText(text);
+    if (i < 0)
+        return false;
+    box->setCurrentIndex(i);
+    return true;
+}
+}
+
+/* A cue list's one Learn Trigger… learns its GO or its Back (When pressed),
+   each a target of its own: both on one list, each on its own control. */
+void ControlMapUi_Test::aListLearnsItsGoAndItsBack()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    ControlMap *cm = m_doc->controlMap();
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QComboBox *mode = d.findChild<QComboBox *>("learnMode");
+        QStringList items;
+        for (int i = 0; i < mode->count(); ++i)
+            items << mode->itemText(i);
+        QCOMPARE(items, (QStringList{ "GO", "GO while held", "Back", "Stop the list" }));
+        QVERIFY(chooseText(mode, "Back"));
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QVERIFY(d.findChild<QLabel *>("learnTarget")->text().contains("Back: Act 1"));
+        cm->handleInput(0, 12, 127);
+        QVERIFY(d.hasControl());
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QVERIFY(cm->binding(ControlMap::cueListBack(listId)) != nullptr);
+    QVERIFY(cm->binding(ControlMap::cueList(listId)) == nullptr);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 12u);
+    cm->handleInput(0, 12, 0);
+
+    // Only the Back bound: the list's item says so, and the window opens on it.
+    QWidget owner;
+    QMenu menu;
+    QAction *a = ControlLearnDialog::addTo(&menu, m_doc, ControlMap::cueList(listId), &owner);
+    QVERIFY(a != nullptr);
+    QVERIFY2(a->text().startsWith("Trigger: "), qPrintable(a->text()));
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), 12u);
+        QComboBox *mode = d.findChild<QComboBox *>("learnMode");
+        QCOMPARE(mode->currentText(), QString("Back"));
+        // GO now: the Back's control is not offered for it (one job per control).
+        QVERIFY(chooseText(mode, "GO"));
+        QCOMPARE(d.target(), ControlMap::cueList(listId));
+        QVERIFY(!d.hasControl());
+        QVERIFY(!d.findChild<QPushButton *>("learnRemove")->isVisibleTo(&d));
+        // Pressed there anyway: refused, naming the Back.
+        cm->handleInput(0, 12, 127);
+        ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+        QVERIFY2(box->isRefusing() && box->text().contains("Back: Act 1"), qPrintable(box->text()));
+        box->cancelButton()->click();
+        cm->handleInput(0, 12, 0);
+        cm->handleInput(0, 10, 127);
+        QVERIFY(d.hasControl());
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    // Both, each on its own control.
+    QCOMPARE(cm->count(), 2);
+    QCOMPARE(cm->binding(ControlMap::cueList(listId))->channel, 10u);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 12u);
+
+    // The table offers Back's own modes on its row.
+    ControlMapPanel panel(m_doc);
+    panel.resize(900, 400);
+    panel.show();
+    bool backRow = false;
+    for (int r = 0; r < panel.table()->rowCount(); ++r)
+    {
+        QTableWidgetItem *t = panel.table()->item(r, 1);
+        if (t == nullptr || t->text() != "Back: Act 1")
+            continue;
+        backRow = true;
+        QComboBox *how = qobject_cast<QComboBox *>(panel.table()->cellWidget(r, 3));
+        QVERIFY(how != nullptr);
+        QCOMPARE(how->count(), 2);
+        QCOMPARE(how->itemText(0), QString("Back"));
+        QCOMPARE(how->itemText(1), QString("Stop the list"));
+    }
+    QVERIFY(backRow);
+
+    /* A Back set to Stop the list (as the table allows) opens on Stop the
+       list and stays a Back that stops: OK with nothing changed keeps it,
+       never a Back that steps back a cue. */
+    QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
+    QVERIFY(cm->setMode(ControlMap::cueListBack(listId), ControlMap::StopOnly));
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QCOMPARE(d.mode(), ControlMap::StopOnly);
+        QCOMPARE(d.findChild<QComboBox *>("learnMode")->currentText(), QString("Stop the list"));
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), 12u);
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->mode, ControlMap::StopOnly);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 12u);
+    QVERIFY(cm->binding(ControlMap::cueList(listId)) == nullptr);
+
+    // A Back made a stop in the window: still the Back, on its own control.
+    QVERIFY(cm->setMode(ControlMap::cueListBack(listId), ControlMap::Toggle));
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QComboBox *mode = d.findChild<QComboBox *>("learnMode");
+        QCOMPARE(mode->currentText(), QString("Back"));
+        QVERIFY(chooseText(mode, "Stop the list"));
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), 12u);
+        QVERIFY(chooseText(mode, "Back"));
+        QCOMPARE(d.target(), ControlMap::cueListBack(listId));
+        QCOMPARE(d.mode(), ControlMap::Toggle);
+        QVERIFY(chooseText(mode, "Stop the list"));
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->mode, ControlMap::StopOnly);
+    QCOMPARE(cm->binding(ControlMap::cueListBack(listId))->channel, 12u);
+    QVERIFY(cm->binding(ControlMap::cueList(listId)) == nullptr);
+}
+
+/* A GO (or a Back, or a hit) learned on a fader is refused at Learn: the
+   fader's every move would be a press. The emergency stop's own rule tells
+   it (different values with no 0 between); a scene may still have a fader. */
+void ControlMapUi_Test::goOnFaderRefused()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    ControlMap *cm = m_doc->controlMap();
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QPushButton *ok = d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok);
+        QLabel *note = d.findChild<QLabel *>("learnNote");
+        // CC 10, 20, 30 arrive: a fader moving.
+        for (int v : { 10, 20, 30 })
+            cm->handleInput(0, 7, uchar(v));
+        QVERIFY(!d.hasControl());
+        QVERIFY(!ok->isEnabled());
+        QVERIFY2(note->text().contains("fader") && note->text().contains("takes a button"),
+                 qPrintable(note->text()));
+        QVERIFY(cm->isListening());             // still waiting for a button
+        // A button is taken.
+        cm->handleInput(0, 188, 127);
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), 188u);
+        QVERIFY(ok->isEnabled());
+        QVERIFY(note->text().isEmpty());
+        d.reject();
+    }
+    QVERIFY(cm->isEmpty());
+    cm->handleInput(0, 188, 0);
+
+    // A hit too.
+    const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    {
+        ControlLearnDialog d(m_doc, ControlMap::hit(hit));
+        d.show();
+        for (int v : { 10, 20, 30 })
+            cm->handleInput(0, 8, uchar(v));
+        QVERIFY(!d.hasControl());
+        QVERIFY2(d.findChild<QLabel *>("learnNote")->text().contains("a hit fires on a press"),
+                 qPrintable(d.findChild<QLabel *>("learnNote")->text()));
+        d.reject();
+    }
+
+    // A scene may have a fader (a press starts it, the move is the one press).
+    Scene *a = scene("Warm");
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        for (int v : { 10, 20, 30 })
+            cm->handleInput(0, 9, uchar(v));
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), 9u);
+        d.reject();
+    }
+}
+
+/* A latching button sends one value per press (on, then 0 at the next):
+   heard at Learn, a Toggle becomes Start only, said. A mode chosen by hand
+   is kept (Stop only, Momentary, a list's Stop the list), said. A momentary
+   button -- let go at once, or held a while each press -- is not flagged. */
+void ControlMapUi_Test::latchingButtonSuggestsStartOnly()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setLatchGapMs(100);
+    cm->setLatchHoldMs(300);
+    auto gap = qScopeGuard([cm]() { cm->setLatchGapMs(400); cm->setLatchHoldMs(1500); });
+    // On, 0 a press later, on a press later.
+    auto latch = [cm](quint32 ch) {
+        cm->handleInput(0, ch, 127);
+        QTest::qWait(350);
+        cm->handleInput(0, ch, 0);
+        QTest::qWait(350);
+        cm->handleInput(0, ch, 127);
+    };
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        QLabel *note = d.findChild<QLabel *>("learnNote");
+        cm->handleInput(0, 50, 127);
+        QCOMPARE(d.mode(), ControlMap::Toggle);
+        QTest::qWait(350);
+        cm->handleInput(0, 50, 0);
+        QTest::qWait(350);
+        cm->handleInput(0, 50, 127);
+        QCOMPARE(d.mode(), ControlMap::StartOnly);
+        QVERIFY2(note->text().contains("latching button") && note->text().contains("Start only"),
+                 qPrintable(note->text()));
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QCOMPARE(cm->binding(ControlMap::function(a->id()))->mode, ControlMap::StartOnly);
+    QVERIFY(cm->removeBinding(ControlMap::function(a->id())));
+
+    // Stop only and Momentary, chosen first: kept, and said.
+    for (ControlMap::Mode chosen : { ControlMap::StopOnly, ControlMap::Momentary })
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        QVERIFY(chooseText(d.findChild<QComboBox *>("learnMode"),
+                           ControlMap::modeName(chosen, ControlMap::FunctionTarget)));
+        QCOMPARE(d.mode(), chosen);
+        latch(chosen == ControlMap::StopOnly ? 52 : 53);
+        QCOMPARE(d.mode(), chosen);
+        const QString text = d.findChild<QLabel *>("learnNote")->text();
+        QVERIFY2(text.contains("latching button") && text.contains("kept"), qPrintable(text));
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+        QCOMPARE(cm->binding(ControlMap::function(a->id()))->mode, chosen);
+        QVERIFY(cm->removeBinding(ControlMap::function(a->id())));
+    }
+
+    // A list's Stop the list: kept, never a GO.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QVERIFY(chooseText(d.findChild<QComboBox *>("learnMode"), "Stop the list"));
+        QCOMPARE(d.mode(), ControlMap::StopOnly);
+        latch(54);
+        QCOMPARE(d.mode(), ControlMap::StopOnly);
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QCOMPARE(cm->binding(ControlMap::cueList(listId))->mode, ControlMap::StopOnly);
+    QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
+
+    // A momentary button: on and off at once, then on -- nothing said.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        cm->handleInput(0, 51, 127);
+        cm->handleInput(0, 51, 0);
+        QTest::qWait(150);
+        cm->handleInput(0, 51, 127);
+        QCOMPARE(d.mode(), ControlMap::Toggle);
+        QVERIFY(!d.findChild<QLabel *>("learnNote")->text().contains("latching"));
+        d.reject();
+    }
+
+    // A momentary button held a while each press (past the gap): still Toggle.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        cm->handleInput(0, 55, 127);
+        QTest::qWait(150);
+        cm->handleInput(0, 55, 0);
+        QTest::qWait(150);
+        cm->handleInput(0, 55, 127);
+        QTest::qWait(150);
+        cm->handleInput(0, 55, 0);
+        QCOMPARE(d.mode(), ControlMap::Toggle);
+        QVERIFY(!d.findChild<QLabel *>("learnNote")->text().contains("latching"));
+        d.reject();
+    }
+}
+
+/* Q324: a game pad's buttons and triggers are its Run map. A single-press
+   show trigger there is refused, naming what the control does on the pad in
+   its own words; the pad cannot give it up. Nothing else on the pad's
+   controls is asked, and a show never lists them as two jobs. */
+void ControlMapUi_Test::padRunButtonRefused()
+{
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    const QMap<quint32, QString> roles = { { 6, "lb" }, { 7, "a" }, { 8, "b" }, { 11, "lt" }, { 12, "rt" },
+                                           { 20, "dpad_up" } };
+    IOPluginStub *stub = padStub(m_doc, roles, "dualsense");
+    QVERIFY2(stub != nullptr, "no I/O plugin stub");
+    auto clear = qScopeGuard([stub]() {
+        stub->m_channelRoles.clear();
+        stub->m_deviceKind.clear();
+    });
+    QVERIFY(m_doc->programmer()->isPadUniverse(0));
+
+    ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+    d.show();
+    cm->handleInput(0, 7, 255);
+    ControlCollisionBox *box = d.findChild<ControlCollisionBox *>("controlCollision");
+    QVERIFY2(box->isRefusing() && box->text().contains("Cross on the pad: GO with L2 held")
+             && box->text().contains("the pad's Run map"), qPrintable(box->text()));
+    QVERIFY2(box->text().contains("without the arm and the safety"), qPrintable(box->text()));
+    QVERIFY(!box->moveButton()->isVisibleTo(&d));      // the pad can't give it up
+    QVERIFY(!d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    QVERIFY(!ControlOwners::releaseAll(m_doc, box->owners()));
+    box->cancelButton()->click();
+    cm->handleInput(0, 7, 0);
+
+    // The safety, the arm, the hit and a tool's button, each named.
+    auto job = [this](quint32 ch) {
+        const QList<ControlOwners::Owner> o = ControlOwners::owners(m_doc, 0, ch);
+        return o.count() == 1 && o.first().kind == ControlOwners::Pad && !o.first().movable
+               ? o.first().thing : QString();
+    };
+    QVERIFY2(job(11).contains("L2 on the pad: the safety"), qPrintable(job(11)));
+    QVERIFY2(job(6).contains("L1 on the pad: the arm, with R1"), qPrintable(job(6)));
+    QVERIFY2(job(12).contains("R2 on the pad: the armed hit (hits fire by their place)"), qPrintable(job(12)));
+    QVERIFY2(job(8).contains("Circle on the pad: Back with L2 held"), qPrintable(job(8)));
+    QVERIFY2(!job(20).isEmpty(), "a D-pad button is the pad's too");
+    QVERIFY(job(30).isEmpty());                     // no role: not the pad's
+
+    // The stop is refused there too; a Virtual Console input is not asked.
+    ControlOwners::Owner stop;
+    stop.kind = ControlOwners::EmergencyStop;
+    stop.target = ControlMap::emergencyStop();
+    QCOMPARE(ControlOwners::others(m_doc, 0, 7, stop).count(), 1);
+    ControlOwners::Owner vc;
+    vc.kind = ControlOwners::VCInput;
+    QVERIFY(ControlOwners::others(m_doc, 0, 7, vc).isEmpty());
+    // Not the show's: never a collision in the hub.
+    QVERIFY(ControlOwners::collisions(m_doc).isEmpty());
+
+    // An Xbox pad says it in its own words.
+    stub->m_deviceKind = "xbox";
+    QVERIFY2(job(7).contains("A on the pad: GO with LT held"), qPrintable(job(7)));
+
+    // Windows runs no cues from the pad: no Run map, so no Pad owner and a
+    // trigger on a pad button is not refused.
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    auto restore = qScopeGuard([]() { PadRun::setPlatformForTest(PadRun::PlatformAuto); });
+    QVERIFY(job(7).isEmpty());
+    QVERIFY(ControlOwners::owners(m_doc, 0, 7).isEmpty());
+    QVERIFY(ControlOwners::others(m_doc, 0, 7, stop).isEmpty());
+}
+
+/* A computer key the app already uses has an owner too: named, never moved. */
+void ControlMapUi_Test::keyboardOwnerNamesTheShortcut()
+{
+    QWidget window;
+    QAction *save = new QAction("&Save Show", &window);
+    save->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_S));
+    window.addAction(save);
+    const quint32 ctrlS = ControlMap::keyChannel(Qt::Key_S, Qt::ControlModifier);
+    const QList<ControlOwners::Owner> owners = ControlOwners::owners(m_doc, ControlMap::KeyboardUniverse, ctrlS);
+    QCOMPARE(owners.count(), 1);
+    QCOMPARE(owners.first().kind, ControlOwners::Keyboard);
+    QVERIFY(!owners.first().movable);
+    QCOMPARE(owners.first().thing, QString("the shortcut for Save Show"));
+    const QString why = ControlOwners::refusal(m_doc, ControlMap::KeyboardUniverse, ctrlS, owners);
+    QVERIFY2(why.contains("already does the shortcut for Save Show") && why.contains("choose another key"),
+             qPrintable(why));
+    // An edit key, and a free key.
+    const quint32 del = ControlMap::keyChannel(Qt::Key_Delete, Qt::NoModifier);
+    QVERIFY(ControlOwners::owners(m_doc, ControlMap::KeyboardUniverse, del).first().thing.contains("edit key"));
+    QVERIFY(ControlOwners::owners(m_doc, ControlMap::KeyboardUniverse,
+                                  ControlMap::keyChannel(Qt::Key_F6, Qt::NoModifier)).isEmpty());
+    // A trigger is refused there; the refusal sentence the Learn shows is unchanged.
+    ControlOwners::Owner self;
+    self.kind = ControlOwners::Trigger;
+    self.target = ControlMap::function(1);
+    QCOMPARE(ControlOwners::others(m_doc, ControlMap::KeyboardUniverse, ctrlS, self).count(), 1);
+    QVERIFY(KeyTriggers::refusal(ctrlS).contains("already the shortcut for Save Show"));
+}
+
+void ControlMapUi_Test::phaseFShots()
+{
+    const QByteArray env = qgetenv("QLC_SHOT_DIR");
+    if (env.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    const QDir dir(QString::fromLocal8Bit(env));
+    QDir().mkpath(dir.absolutePath());
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setLatchGapMs(100);
+    cm->setLatchHoldMs(300);
+    auto gap = qScopeGuard([cm]() { cm->setLatchGapMs(400); cm->setLatchHoldMs(1500); });
+    IOPluginStub *stub = nullptr;
+    auto clear = qScopeGuard([&stub]() {
+        if (stub != nullptr)
+        {
+            stub->m_channelRoles.clear();
+            stub->m_deviceKind.clear();
+        }
+    });
+
+    // Each window as it sits on a screen of each size.
+    auto shoot = [&](const QString &name, const std::function<void(ControlLearnDialog &)> &drive,
+                     const ControlMap::Target &target) {
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            QWidget screen;
+            screen.resize(sz);
+            screen.setAutoFillBackground(true);
+            ControlLearnDialog d(m_doc, target, &screen);
+            d.setWindowFlags(Qt::Widget);
+            screen.show();
+            d.show();
+            if (!QTest::qWaitForWindowExposed(&screen))
+                return false;
+            drive(d);
+            QCoreApplication::processEvents();
+            d.adjustSize();
+            d.move((sz.width() - d.width()) / 2, (sz.height() - d.height()) / 3);
+            const bool ok = screen.grab().save(
+                dir.absoluteFilePath(QString("%1-%2x%3.png").arg(name).arg(sz.width()).arg(sz.height())));
+            d.reject();
+            cm->stopListening();
+            if (!ok)
+                return false;
+        }
+        return true;
+    };
+    // A list's Back chosen, its control heard.
+    QVERIFY(shoot("learn-back", [&](ControlLearnDialog &d) {
+        chooseText(d.findChild<QComboBox *>("learnMode"), "Back");
+        cm->handleInput(0, 12, 127);
+        cm->handleInput(0, 12, 0);
+    }, ControlMap::cueList(listId)));
+    // A GO on a fader: refused, said.
+    QVERIFY(shoot("learn-go-fader", [&](ControlLearnDialog &) {
+        for (int v : { 10, 20, 30 })
+            cm->handleInput(0, 7, uchar(v));
+    }, ControlMap::cueList(listId)));
+    // A latching button: Start only, said.
+    Scene *a = scene("Warm wash");
+    QVERIFY(shoot("learn-latching", [&](ControlLearnDialog &) {
+        cm->handleInput(0, 50, 127);
+        QTest::qWait(350);
+        cm->handleInput(0, 50, 0);
+        QTest::qWait(350);
+        cm->handleInput(0, 50, 127);
+    }, ControlMap::function(a->id())));
+    // A latching button on a Stop only chosen by hand: kept, said.
+    QVERIFY(shoot("learn-latching-kept", [&](ControlLearnDialog &d) {
+        chooseText(d.findChild<QComboBox *>("learnMode"), "Stop only");
+        cm->handleInput(0, 56, 127);
+        QTest::qWait(350);
+        cm->handleInput(0, 56, 0);
+        QTest::qWait(350);
+        cm->handleInput(0, 56, 127);
+    }, ControlMap::function(a->id())));
+    // A pad's Cross: refused, named as the pad's GO.
+    stub = padStub(m_doc, { { 7, "a" }, { 11, "lt" } }, "dualsense");
+    QVERIFY(stub != nullptr);
+    QVERIFY(shoot("learn-pad", [&](ControlLearnDialog &) {
+        cm->handleInput(0, 7, 255);
+        cm->handleInput(0, 7, 0);
+    }, ControlMap::function(a->id())));
 }

@@ -33,6 +33,9 @@
 #include "encoderbank.h"
 #include "pmjoverlay.h"
 #include "inputpatch.h"
+#include "programmercontroller.h"
+#include "keytriggers.h"
+#include "padrun.h"
 #include "doc.h"
 
 namespace
@@ -65,7 +68,10 @@ bool ControlOwners::Owner::sameAs(const Owner &o) const
             return true;
         case ChannelGroup:
         case Pmj:
+        case Pad:
             return index == o.index;
+        case Keyboard:
+            return true;
     }
     return false;
 }
@@ -89,6 +95,31 @@ QString ControlOwners::controlName(Doc *doc, quint32 universe, quint32 channel)
 QString ControlOwners::pmjControlName(quint32 channel)
 {
     return PMJOverlay::controlName(channel);
+}
+
+QString ControlOwners::padJob(int role, int family)
+{
+    const GamepadRole::Role r = GamepadRole::Role(role);
+    QString job;
+    switch (PadRun::actionFor(r))
+    {
+        case PadRun::Arm:
+            job = r == GamepadRole::LB ? tr("the arm, with {RB}") : tr("the arm, with {LB}");
+            break;
+        case PadRun::Safety:  job = tr("the safety for GO, Back, Sub GO and Sub Back"); break;
+        case PadRun::Go:      job = tr("GO with {LT} held"); break;
+        case PadRun::Back:    job = tr("Back with {LT} held"); break;
+        case PadRun::SubGo:   job = tr("Sub GO with {LT} held"); break;
+        case PadRun::SubBack: job = tr("Sub Back with {LT} held"); break;
+        case PadRun::FireHit: job = tr("the armed hit (hits fire by their place)"); break;
+        case PadRun::WhereAmI: job = tr("saying the list and what is next"); break;
+        case PadRun::Walk:    job = tr("walking the show"); break;
+        case PadRun::NoAction:
+        case PadRun::EmergencyStop:
+            job = tr("its tools (Focus, walking the show)");
+            break;
+    }
+    return PadNames::expand(job, PadNames::Family(family));
 }
 
 QList<QPair<quint64, ControlOwners::Owner>> ControlOwners::owned(Doc *doc)
@@ -290,6 +321,51 @@ QList<QPair<quint64, ControlOwners::Owner>> ControlOwners::owned(Doc *doc)
 QList<ControlOwners::Owner> ControlOwners::owners(Doc *doc, quint32 universe, quint32 channel)
 {
     QList<Owner> out;
+    if (doc == nullptr)
+        return out;
+    // A key the app already uses (this computer's; never the show's).
+    if (universe == ControlMap::KeyboardUniverse)
+    {
+        QString where;
+        const QString use = KeyTriggers::appUse(channel, &where);
+        if (!use.isEmpty())
+        {
+            Owner o;
+            o.kind = Keyboard;
+            o.thing = use;
+            o.where = where;
+            o.movable = false;
+            o.fixedWhy = tr("The app's own keys can't be moved: choose another key.");
+            o.fix = tr("choose another key");
+            out << o;
+        }
+    }
+    /* A game pad's button or trigger: its Run map (Q324). A trigger there
+       would fire a cue or a hit on one press, with no arm and no safety.
+       Where the pad runs no cues (Windows) there is no Run map: the pad's
+       buttons stay free for a Control Map trigger. */
+    else if (ProgrammerController *pc = PadRun::padRunSupported() ? doc->programmer() : nullptr)
+    {
+        const int role = pc->padRole(universe, channel & kPageMask);
+        if (role != GamepadRole::None)
+        {
+            const int family = int(pc->padFamilyOf(universe));
+            Owner o;
+            o.kind = Pad;
+            o.index = role;
+            o.thing = tr("%1 on the pad: %2")
+                          .arg(PadNames::name(GamepadRole::Role(role), PadNames::Family(family)),
+                               padJob(role, family));
+            o.where = tr("the pad's Run map");
+            o.movable = false;
+            o.fixedWhy = PadNames::expand(
+                tr("A game pad's buttons are its Run map: a show trigger there would fire on one press, "
+                   "without the arm and the safety. Hits fire from {RT} by their place; use a MIDI or "
+                   "OSC control or a computer key for this."), PadNames::Family(family));
+            o.fix = tr("use another controller's control");
+            out << o;
+        }
+    }
     const quint64 k = universe == ControlMap::KeyboardUniverse ? controlKey(universe, channel)
                                                               : controlKey(universe, channel & kPageMask);
     const QList<QPair<quint64, Owner>> all = owned(doc);
@@ -312,6 +388,13 @@ bool ControlOwners::collides(const Owner &a, const Owner &b)
 {
     if (a.sameAs(b))
         return false;
+    /* The pad's Run map and the app's keys refuse a show trigger and the
+       stop; what else listens to them is not asked here. */
+    auto isShowTrigger = [](const Owner &o) { return o.kind == Trigger || o.kind == EmergencyStop; };
+    if (a.kind == Pad || a.kind == Keyboard)
+        return isShowTrigger(b);
+    if (b.kind == Pad || b.kind == Keyboard)
+        return isShowTrigger(a);
     // Two widgets on one input: Show Review's VC-06, with its page and job rules.
     if (a.kind == VCInput && b.kind == VCInput)
         return false;
@@ -434,6 +517,8 @@ bool ControlOwners::release(Doc *doc, const Owner &owner)
             return doc->controlMap()->removeBinding(owner.target);
         case EmergencyStop:
         case Pmj:
+        case Pad:
+        case Keyboard:
             return false;
         case Encoder:
         {
@@ -494,6 +579,8 @@ bool ControlOwners::canRelease(Doc *doc, const Owner &owner)
             return doc->controlMap()->binding(owner.target) != nullptr;
         case EmergencyStop:
         case Pmj:
+        case Pad:
+        case Keyboard:
             return false;
         case Encoder:
             return doc->controlMap()->encoderBank()->isEnabled()
@@ -566,6 +653,8 @@ Held holdOf(Doc *doc, const ControlOwners::Owner &o)
             break;
         case ControlOwners::EmergencyStop:
         case ControlOwners::Pmj:
+        case ControlOwners::Pad:
+        case ControlOwners::Keyboard:
             break;
     }
     return h;
@@ -603,6 +692,8 @@ void putBack(Doc *doc, const Held &h)
             break;
         case ControlOwners::EmergencyStop:
         case ControlOwners::Pmj:
+        case ControlOwners::Pad:
+        case ControlOwners::Keyboard:
             break;
     }
 }
