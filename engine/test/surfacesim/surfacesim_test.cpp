@@ -536,40 +536,48 @@ void SurfaceSim_Test::aKeyHeldAcrossAReplugGoesOnlyAfterARelease()
     QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
     m_doc->showControl()->setGoGuardMs(0);      // not under test here
     const quint32 list = runList(m_doc);
-    QVERIFY(deskOn(m_doc, DeskRecord::Go, 0, kPmj, kGo));
     ControlMap *cm = m_doc->controlMap();
-    cm->setBinding({ 0, kBack, ControlMap::cueList(list), ControlMap::Toggle });
     cm->setDumpWindowMs(cm->dumpBurstMs() + 150);
-    QSignalSpy deskFired(m_doc->deskRecord(), &DeskRecord::fired);
-    QSignalSpy showFired(cm, &ControlMap::fired);
     const QString go = QStringLiteral("Go"), back = QStringLiteral("Back");
+    // The key held through the cable out and back (the dump says 127), and
+    // still held: resends inside the window, then past it.
+    auto heldAcross = [&](const QString &key) {
+        if (!SurfaceScenarios::unplugReplug(&pmj, { { key, 127 } }))
+            return false;
+        settle();
+        pmj.wait(cm->dumpBurstMs() + 50);
+        if (!pmj.set(key, 127))
+            return false;
+        pmj.wait(200);
+        const bool ok = pmj.set(key, 127) && pmj.set(key, 127);
+        settle();
+        return ok;
+    };
 
-    // Both keys held through the cable out and back: the dump says 127.
-    QVERIFY2(SurfaceScenarios::unplugReplug(&pmj, { { go, 127 }, { back, 127 } }), qPrintable(pmj.lastError()));
-    settle();
-    // Still held: resends inside the window, then past it.
-    pmj.wait(cm->dumpBurstMs() + 50);
-    QVERIFY(pmj.set(go, 127));
-    QVERIFY(pmj.set(back, 127));
-    pmj.wait(200);
-    QVERIFY(pmj.set(go, 127));
-    QVERIFY(pmj.set(back, 127));
-    QVERIFY(pmj.set(go, 127));
-    QVERIFY(pmj.set(back, 127));
-    settle();
+    // This computer's GO.
+    QVERIFY(deskOn(m_doc, DeskRecord::Go, 0, kPmj, kGo));
+    QSignalSpy deskFired(m_doc->deskRecord(), &DeskRecord::fired);
+    QVERIFY2(heldAcross(go), qPrintable(pmj.lastError()));
     QVERIFY2(deskFired.isEmpty(), "the desk's GO held across the replug GOed on a resend");
-    QVERIFY2(showFired.isEmpty(), "a show trigger held across the replug GOed on a resend");
-
-    // A release, then a press: one each.
     QVERIFY(pmj.set(go, 0));
     QVERIFY(pmj.set(go, 127));
     settle();
     QCOMPARE(deskFired.count(), 1);
+    QVERIFY(pmj.set(go, 0));
+    settle();
+
+    // A show trigger: the cue list's GO on Back (the desk's GO let go, so
+    // the show's trigger on the Run tab's list is armed).
+    QVERIFY(m_doc->deskRecord()->setOn(DeskRecord::Go, false));
+    cm->setBinding({ 0, kBack, ControlMap::cueList(list), ControlMap::Toggle });
+    settle();
+    QSignalSpy showFired(cm, &ControlMap::fired);
+    QVERIFY2(heldAcross(back), qPrintable(pmj.lastError()));
+    QVERIFY2(showFired.isEmpty(), "a show trigger held across the replug GOed on a resend");
     QVERIFY(pmj.set(back, 0));
     QVERIFY(pmj.set(back, 127));
     settle();
     QCOMPARE(showFired.count(), 1);
-    QVERIFY(pmj.set(go, 0));
     QVERIFY(pmj.set(back, 0));
     cm->setDumpWindowMs(500);
 }
