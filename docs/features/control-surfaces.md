@@ -82,6 +82,7 @@ to fix it; the Devices line adds *1 control with two jobs*.
 | What | Where you set it (or **Set Up…** in Control surfaces) | What it does |
 |---|---|---|
 | **Control Map** | Right-click a scene, effect, cue list, cue or hit ▸ **Learn Trigger…**; the table is **Connections ▸ Devices ▸ Show control &amp; sync ▸ Control Map** | One button fires one thing. See [Control Map](other-improvements.md#control-map-midi-and-osc-triggers). |
+| **This computer's desk** | The top of Control surfaces: **Learn…** per role | STOP, Grand Master, GO and Back for every show on this computer ([below](#this-computers-desk)). |
 | **Emergency stop** | The **Emergency Stop…** button under the Control Map table | One button is ALL OFF (below). |
 | **Encoder bank** | The section under the Control Map table | Endless encoders turn the Workbench selection in Design. See [Build](build.md#encoder-banks-a-midi-controller-turns-the-selection). |
 | **Virtual Console input** | A widget's **External Input** | A button, a slider (the one to use for a fader that sets a level) or a cue list, as in QLC+. |
@@ -173,6 +174,84 @@ can check a desk against them.
 After an emergency stop, one press of a GO button on a desk starts the list
 again. That is by design (rule 6); the pad needs two controls to come back,
 a desk does not.
+
+## This computer's desk
+
+**STOP, the Grand Master, GO and Back belong to this computer, not to the
+show.** Learn them once and they work in every show you open here: a lab
+computer, the show-day laptop and the bench Mac each keep their own. They
+sit at the top of **Connections ▸ Devices ▸ Show control &amp; sync ▸
+Control surfaces**, under **This computer's desk**, one row each: what the
+role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
+**Learn…**.
+
+- **Four learns, each for its own kind of control.** **STOP** takes a
+  button pressed, released and pressed again (the panel asks for the second
+  press). **GO** and **Back** take a button: one press and its release. The
+  **Grand Master** takes a fader: move it. The wrong kind is refused, in
+  words: a GO on a fader (*… sends a range of values: it is a fader or knob,
+  not a button*), the Grand Master on a button (*… is a button. The Grand
+  Master takes a fader.*). A control that is already another role's is
+  refused, naming it. **Cancel** stops a learn and keeps what was there.
+- **Kept on this computer, never in the show.** The record is in this
+  computer's settings, by the device's identity: a MIDI port by its name on
+  a Mac, by the *2-* Windows puts before a second unit of one name, by its
+  ALSA port (*20:0*) on Linux. Saving a show writes nothing of it, a show
+  from another computer does not change it, and **File ▸ New** keeps it.
+- **Through the show's own patch.** A role works where a universe's input
+  has its device. Move the device to another universe and the role follows
+  it; the universe number never matters. Two devices of one name that
+  nothing tells apart (two APC minis on a Mac) are said: the desk uses the
+  first one patched. Unplug one, or use another port.
+- **The desk wins its controls.** A show listener never hears them: a
+  Virtual Console button or slider, the show's Grand Master input, a channel
+  group, a speed master and the encoder bank all skip a control the desk
+  has. A show's Control Map trigger on one is **kept in the show, not armed
+  here**, and listed under **Who has it now** as *blocked on this computer*
+  with the reason; on a computer whose desk does not use that control it
+  works as before. Learn Trigger… on a desk control is refused, naming the
+  role.
+- **The show keeps its own stop, Grand Master and GO** (board Q314), so a
+  computer with no desk still has them. The show's Grand Master input and its
+  GO of the Run tab's list are fallbacks: they work only while this computer
+  has no Grand Master or GO of its own. **Both stops are live** (Q315): the
+  show's emergency stop and the desk's STOP each stop the show, unless the
+  show's sits on a control the desk uses for something else.
+- **STOP is ALL OFF, always**: in a show with no triggers, with Control
+  Surfaces off for the show, with a Learn open, in Design and Operate,
+  behind a dialog and while a show loads. Every press after a release is
+  ALL OFF; a held button that keeps sending stops the show about once a
+  second.
+- **GO is one press**, on the Run tab's list, with the double-GO guard (no
+  arm; the pad keeps its own). **Back** goes back on the same list. The
+  footer chip's tooltip says what GO plays now: *GO → Act 2 main*.
+- **The Grand Master waits to pick up** after a show loads, after its
+  device is plugged in again and after the computer wakes (board Q316). What
+  the device sends in the first half second is its own state dump and moves
+  nothing; then the fader does nothing until it reaches the Grand Master
+  (the row and the chip say *GM waiting: bring the fader to 100 %*), and
+  follows from there. A pull to 0 always applies at once.
+- **On** turns one role off on this computer (Q317): its control is the
+  show's again. The tick is kept with the computer.
+- **The show's PIN guards the desk** (board Q319): with a PIN set, every
+  change -- a learn, a tick, an import -- asks for it first.
+- **Export…** saves the record to a small file (*.qlcdesk*); **Import…** on
+  another computer sets that computer's desk from it, for a room of laptops
+  set up the same way.
+
+**The footer chip.** While a role is learned the status bar shows
+**Desk**: green when every role that is on works, amber when one is off,
+its device is not plugged in, two devices of one name can't be told apart
+or the Grand Master waits to pick up, and **red** when its device is here
+but this show's patch does not have it: *Desk: APC MINI not patched ·
+Patch It*. A click on red patches the device to the first universe with a
+free input and says so (*Patched APC MINI to Universe 3's input.*); the
+chip then reads *Undo* for a moment, and a click takes it off the patch
+again. A click on green or amber opens Control surfaces.
+
+**Show Review** has a **This computer** section: each role, and whether
+it reaches the program now. It is not a check of the file -- the roles are
+this computer's -- so nothing there is accepted or saved with the show.
 
 ## The emergency stop
 

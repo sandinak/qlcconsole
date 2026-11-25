@@ -369,7 +369,7 @@ void DeskRecord::rebind()
         was[r] = m_universes[r];
         m_universes[r] = kInvalid;
     }
-    if (iom != nullptr)
+    if (iom != nullptr && anySet())
     {
         // The identity on each universe's input, worked out once a pass.
         QHash<quint32, QString> ids;

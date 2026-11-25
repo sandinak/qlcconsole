@@ -22,6 +22,11 @@
 #include <QtTest>
 #include <QDir>
 
+#include "../../../engine/test/common/stdprelude.h"
+#define private public
+#include "mastertimer.h"
+#undef private
+
 #include "dispatch_test.h"
 #include "grandmasterslider.h"
 #include "functionparent.h"
@@ -34,7 +39,6 @@
 #include "showfeatures.h"
 #include "speedmasters.h"
 #include "encoderbank.h"
-#include "mastertimer.h"
 #include "deskrecord.h"
 #include "controlmap.h"
 #include "qlcioplugin.h"

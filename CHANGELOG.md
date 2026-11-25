@@ -14,6 +14,19 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **This computer's desk**: STOP, the Grand Master, GO and Back belong to
+  the computer, not the show. Learn them once at the top of Connections ▸
+  Control surfaces (STOP press, release, press; GO and Back a button; the
+  Grand Master a fader; the wrong kind refused) and they work in every show
+  opened here, through the show's own patch by the device's identity, never
+  saved in the show. No show listener hears the desk's controls; a show's
+  trigger on one is kept but not armed, listed as blocked. The footer's
+  **Desk** chip is green, amber or red (red: Patch It, with Undo) and names
+  what GO plays; the Grand Master waits to pick up after a load, a replug
+  or a wake; an On tick per role, the show's PIN guards changes, Export… /
+  Import… carry it to another computer, and Show Review has a This computer
+  section (Q305-Q309, Q314-Q319, Q322).
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

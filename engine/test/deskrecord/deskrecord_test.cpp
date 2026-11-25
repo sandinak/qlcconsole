@@ -26,6 +26,9 @@
 #include <QtTest>
 
 #include "../common/stdprelude.h"
+#define private public
+#include "mastertimer.h"
+#undef private
 
 #include "deskrecord_test.h"
 #include "controllerkeepalive.h"
@@ -39,7 +42,6 @@
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
 #include "fixturegroup.h"
-#include "mastertimer.h"
 #include "showcontrol.h"
 #include "showoperate.h"
 #include "showreview.h"
