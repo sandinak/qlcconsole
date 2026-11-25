@@ -66,7 +66,7 @@ public:
     SurfaceMapView(Doc *doc, quint32 universe, const SurfaceLayout &layout, QWidget *parent = nullptr);
 
     quint32 universe() const { return m_universe; }
-    SurfaceLayout layout() const { return m_layout; }
+    const SurfaceLayout &layout() const { return m_layout; }
 
     /* What each control shows (by any channel it hears); for the tests. */
     Group group(quint32 channel) const;
