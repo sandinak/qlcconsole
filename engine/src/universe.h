@@ -713,6 +713,9 @@ private:
      *  (rules lock held): its safe value, or where the emergency stop held
      *  a pan or tilt (holdShowOnlyPositions()) */
     uchar showOnlyRestLocked(int c) const;
+    /** Q326: @p c held where the stop left it or not (rules lock held),
+     *  keeping m_showOnlyHeldCount */
+    void setHoldingLocked(int c, bool on);
     /** m_showOnlyOut/m_showOnlyPre of @p c back to safe (rules lock held) */
     void setShowOnlyOutSafeLocked(int c);
     /** The live frame's end: a Show-only channel at its safe value goes out
@@ -1369,6 +1372,9 @@ private:
     QByteArray m_showOnlyHoldsPos = QByteArray(UNIVERSE_SIZE, char(0));
     QByteArray m_showOnlyHolding = QByteArray(UNIVERSE_SIZE, char(0));
     QByteArray m_showOnlyHoldValue = QByteArray(UNIVERSE_SIZE, char(0));
+    /** How many are held now: 0 (every frame until a stop) skips the hold
+     *  entirely, so a frame costs what it did before Q326 */
+    int m_showOnlyHeldCount = 0;
     /** writeFader(): the channels the fader writing now does not count on,
      *  and whether any (the universe thread, in the frame) */
     QByteArray m_showOnlyBlocked = QByteArray(UNIVERSE_SIZE, char(0));

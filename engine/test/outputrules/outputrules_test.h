@@ -330,6 +330,11 @@ private slots:
     /** After the stop, a hand move or the next GO drives pan and tilt as
      *  before; once it lets go, the channel rests at its safe value again */
     void showOnlyMoverIsDrivenAgainAfterTheStop();
+    /** Fade and stop all over 1 s: pan and tilt never move in any frame,
+     *  during the fade or after it, while dimmer and colour fade to safe */
+    void showOnlyMoverHoldsThroughFadeAndStopAll();
+    /** Stop all at once (FixtureRest::stopAll(), no fade): the same */
+    void showOnlyMoverHoldsThroughStopAll();
 
 private:
     /** One processFaders() frame; the output value at @p address */
@@ -359,6 +364,9 @@ private:
      *  100/7, colour 90), @p stop, then the stop's own send and the next
      *  six frames: pan and tilt never move, dimmer and colour at safe */
     void checkMoverHoldsThroughStop(const std::function<void()> &stop);
+    /** The mover at 50 driven by a GO, then FixtureRest::stopAll() over
+     *  @p fadeMs: every frame for @p fadeMs + 1 s checked */
+    void checkMoverHoldsThroughStopAll(int fadeMs);
     void sweep(int address, const std::function<void()> &tickOnce,
                const std::function<void()> &setUp, const std::function<void()> &again,
                const std::function<void()> &afterStop = std::function<void()>());

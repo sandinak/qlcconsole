@@ -22,6 +22,7 @@
 #include <QBuffer>
 #include <QElapsedTimer>
 #include <QtTest>
+#include <future>
 
 #include "../common/stdprelude.h"
 #define private public
@@ -4101,4 +4102,74 @@ void OutputRules_Test::showOnlyMoverIsDrivenAgainAfterTheStop()
     QCOMPARE(sent(Tilt), 30);
     QCOMPARE(sent(Pan), 200);
     QCOMPARE(sent(PanFine), 40);        // never moved: still held
+}
+
+void OutputRules_Test::checkMoverHoldsThroughStopAll(int fadeMs)
+{
+    enum { Dim = 50, Pan, PanFine, Tilt, TiltFine, Colour };
+    Fixture *mover = addShowOnlyMover(QStringLiteral("Faded mover"), Dim);
+    QVERIFY(mover != nullptr);
+    m_doc->setMode(Doc::Operate);
+    Scene *look = new Scene(m_doc);
+    const int values[] = { 255, 128, 40, 100, 7, 90 };
+    for (int i = 0; i < 6; i++)
+        look->setValue(mover->id(), quint32(i), uchar(values[i]));
+    m_doc->addFunction(look);
+    goList(listOf(look));
+    for (int i = 0; i < 4; i++)
+        tickFrame(Dim);
+    for (int i = 0; i < 6; i++)
+        QCOMPARE(sent(Dim + i), values[i]);
+
+    /* Stop all waits for the timer thread to stop the functions: here it
+       runs beside this thread, which plays the timer (as
+       MasterTimer_Test::fadeAndStopAllFadesTheOutputThenStops does). */
+    MasterTimer *mt = m_doc->masterTimer();
+    Doc *doc = m_doc;
+    std::future<void> done = std::async(std::launch::async, [doc, fadeMs]() {
+        FixtureRest::stopAll(doc, fadeMs);
+    });
+    QElapsedTimer guard;
+    guard.start();
+    while (!mt->m_stopAllFunctions && guard.elapsed() < 10000)
+        QThread::msleep(1);
+    QVERIFY(mt->m_stopAllFunctions);
+    tickFrame(Dim);                         // the functions stop on this tick
+    QVERIFY(done.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+    // Every frame of the fade and a second after it: the head never moves.
+    const int frames = (fadeMs + 1000) / int(MasterTimer::tick());
+    int dimMin = 255, dimPrev = 255;
+    bool dimRose = false;
+    for (int i = 0; i <= frames; i++)
+    {
+        if (i > 0)
+            tickFrame(Dim);
+        const QString at = QStringLiteral("frame %1 of the stop").arg(i);
+        QVERIFY2(sent(Pan) == 128, qPrintable(at + QStringLiteral(": pan %1").arg(sent(Pan))));
+        QVERIFY2(sent(PanFine) == 40, qPrintable(at + QStringLiteral(": pan fine %1").arg(sent(PanFine))));
+        QVERIFY2(sent(Tilt) == 100, qPrintable(at + QStringLiteral(": tilt %1").arg(sent(Tilt))));
+        QVERIFY2(sent(TiltFine) == 7, qPrintable(at + QStringLiteral(": tilt fine %1").arg(sent(TiltFine))));
+        dimRose = dimRose || sent(Dim) > dimPrev;
+        dimPrev = sent(Dim);
+        dimMin = qMin(dimMin, sent(Dim));
+    }
+    QVERIFY(dimRose == false);              // the dimmer only ever went down
+    // (A Show-only fixture never fades out of a stopped cue: its dimmer is
+    // at safe at once, fade or not.)
+    QCOMPARE(sent(Dim), 0);                 // the rest at its safe value
+    QCOMPARE(sent(Colour), 0);
+    QCOMPARE(dimMin, 0);
+    QVERIFY(m_uni->showOnlyHoldingPosition(Pan));
+    QVERIFY(m_uni->showOnlyHoldingPosition(Tilt));
+}
+
+void OutputRules_Test::showOnlyMoverHoldsThroughFadeAndStopAll()
+{
+    // Control ▸ Fade and stop all, over a second (App::slotFadeAndStopAll()).
+    checkMoverHoldsThroughStopAll(1000);
+}
+
+void OutputRules_Test::showOnlyMoverHoldsThroughStopAll()
+{
+    checkMoverHoldsThroughStopAll(0);
 }

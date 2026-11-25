@@ -380,10 +380,7 @@ void OutputRuleKeeper::emergencyStop()
     /* Q326: a Show-only head stays where it is -- its pan and tilt held at
        what went out last, before the new session, so no frame between
        sends it to its safe value. Only the rest goes safe. */
-    const QList<Universe *> held = m_doc->inputOutputMap()->universesSnapshot();
-    for (Universe *u : held)
-        if (u != nullptr && u->showOnlyChannelCount() > 0)
-            u->holdShowOnlyPositions();
+    FixtureRest::holdShowOnlyHeads(m_doc);
     // E2: a new live session -- every stamp from before is old now, so
     // every writer is held from its next write on (a function's gate at
     // its next tick: the generation moved).

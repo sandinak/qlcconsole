@@ -789,7 +789,7 @@ void Universe::setOutputRules(const QByteArray &bits)
             for (int c : std::as_const(newlyShowOnly))
             {
                 m_showOnlyMark[c] = mark;
-                m_showOnlyHolding[c] = char(0);
+                setHoldingLocked(c, false);
                 setShowOnlyOutSafeLocked(c);
             }
         }
@@ -872,7 +872,7 @@ void Universe::setShowOnlyPositions(const QByteArray &mask)
         const bool holds = c < mask.size() && mask.at(c) != 0;
         m_showOnlyHoldsPos[c] = char(holds ? 1 : 0);
         if (!holds)
-            m_showOnlyHolding[c] = char(0);
+            setHoldingLocked(c, false);
     }
 }
 
@@ -883,7 +883,7 @@ void Universe::setShowOnlyHoldsPosition(int channel, bool holds)
     QMutexLocker locker(&m_outputRulesMutex);
     m_showOnlyHoldsPos[channel] = char(holds ? 1 : 0);
     if (!holds)
-        m_showOnlyHolding[channel] = char(0);
+        setHoldingLocked(channel, false);
 }
 
 void Universe::holdShowOnlyPositions()
@@ -904,8 +904,16 @@ void Universe::holdShowOnlyPositions()
             continue;
         const char value = sent ? m_showOnlyPre.at(c) : char(showOnlyRestLocked(c));
         m_showOnlyHoldValue[c] = value;
-        m_showOnlyHolding[c] = char(1);
+        setHoldingLocked(c, true);
     }
+}
+
+void Universe::setHoldingLocked(int c, bool on)
+{
+    if (bool(m_showOnlyHolding.at(c)) == on)
+        return;
+    m_showOnlyHolding[c] = char(on ? 1 : 0);
+    m_showOnlyHeldCount += on ? 1 : -1;
 }
 
 bool Universe::showOnlyHoldingPosition(int channel)
@@ -918,6 +926,9 @@ bool Universe::showOnlyHoldingPosition(int channel)
 
 uchar Universe::showOnlyRestLocked(int c) const
 {
+    // Nothing held (every frame but after a stop): the safe value, one compare.
+    if (m_showOnlyHeldCount == 0)
+        return uchar(m_showOnlySafe.at(c));
     return uchar(m_showOnlyHolding.at(c) ? m_showOnlyHoldValue.at(c) : m_showOnlySafe.at(c));
 }
 
@@ -975,7 +986,7 @@ void Universe::markShowOnly(int channel, bool on, uchar safe, bool remark)
         }
         // A fresh mark or no longer Show only: no stop's position held.
         if (newlyOn || !on)
-            m_showOnlyHolding[channel] = char(0);
+            setHoldingLocked(channel, false);
         if (newlyOn)
         {
             m_showOnlyMark[channel] = GenericFader::newStamp();     // S0
@@ -1080,8 +1091,8 @@ void Universe::finishShowOnlyFrame()
             m_post[c] = char(showOnlySafeOut(c));
         // Q326: a head held by the stop is driven again once something
         // that counts moves it; let go, it rests at its safe value again.
-        else if (m_showOnlyHolding.at(c))
-            m_showOnlyHolding[c] = char(0);
+        else if (m_showOnlyHeldCount > 0)
+            setHoldingLocked(c, false);
         m_showOnlyPre[c] = pre;
     }
 }
@@ -1506,6 +1517,7 @@ void Universe::reset()
     {
         QMutexLocker locker(&m_outputRulesMutex);
         m_showOnlyHolding.fill(char(0));        // Q326: no stop's head held
+        m_showOnlyHeldCount = 0;
     }
     restoreShowOnlySafe(0, UNIVERSE_SIZE);
 }

@@ -880,6 +880,9 @@ opened — over the web while in Operate too). So:
 - **When a cue lets go**, its Show-only fixtures go to safe at once: they
   never fade out of a cue (a stopped cue is no longer the show), and no
   channel keeps the cue's level — a fogger's fog channel included.
+- **Stop All and Fade and stop** leave a Show-only head's **pan and tilt**
+  (fine channels too) where they are, through the fade and after it, as
+  the emergency stop does; its dimmer, colour and the rest go to safe.
 - **Blind**: a GO in Blind is checked on screen; GO again after Blind to
   fire it. Leaving Blind in Operate starts afresh, as switching to Operate
   does. Going into Blind, the rig keeps the look from before it (as in
