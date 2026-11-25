@@ -2312,7 +2312,10 @@ void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
     const Binding *owner = lampOwner(k);
     if (owner == nullptr)
     {
-        sendLampValue(at, 0, force);
+        // Nothing here would fire now (a hit whose place is not live): dark,
+        // or the dim level of a profile that has one (profileLampRange()).
+        uchar dim = 0;
+        sendLampValue(at, profileLampRange(universe, channel, &dim, nullptr) ? dim : 0, force);
         return;
     }
     sendLampValue(at, lampValueOn(*owner, lamp(*owner)), force);
