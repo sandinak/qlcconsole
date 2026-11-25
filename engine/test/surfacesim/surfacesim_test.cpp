@@ -168,12 +168,12 @@ void SurfaceSim_Test::theBoardSpeaksMidi()
 
     // Out: what MidiPlugin writes for the app's feedback, and the lamp it lights.
     pmj.takeOutput();
-    QVERIFY(iom->sendFeedBack(0, kGo, 254));
+    QVERIFY(iom->sendFeedBack(0, kGo, 254, QVariant()));
     const QList<SimMidiDevice::Out> out = pmj.takeOutput();
     QCOMPARE(out.size(), 1);
     QCOMPARE(hex(out.first().midi), QStringLiteral("98 00 7f"));
     QCOMPARE(pmj.lamp(QStringLiteral("Go")), 127);
-    QVERIFY(iom->sendFeedBack(0, kGo, 0));
+    QVERIFY(iom->sendFeedBack(0, kGo, 0, QVariant()));
     QCOMPARE(pmj.lamp(kGo), 0);
     QCOMPARE(pmj.lamp(QStringLiteral("Back")), -1);      // never sent one
 
@@ -297,7 +297,7 @@ void SurfaceSim_Test::everyProfileControlReachesTheApp()
                 dev.takeOutput();
                 for (const uchar level : { it.value()->upperValue(), it.value()->lowerValue() })
                 {
-                    if (!iom->sendFeedBack(0, ch, level))
+                    if (!iom->sendFeedBack(0, ch, level, QVariant()))
                     {
                         problems << what + QStringLiteral(": its lamp has no feedback line");
                         break;

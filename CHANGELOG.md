@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Control surfaces and pads are tested as the device**: the gate now drives every input profile, the PMJ Black 1 and the DualSense, DualShock 4 and Xbox pads the way the hardware does (its MIDI bytes, its USB reports, through the plugins' own decoders) and checks every lamp, MIDI message and pad light sent back; `tools/surface-capture.py` records a device on the bench for replay (docs/dev/SURFACE_TESTS.md).
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only
