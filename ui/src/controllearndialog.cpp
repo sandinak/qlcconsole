@@ -96,6 +96,8 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     m_list->setUniformRowHeights(true);
     m_list->setSelectionMode(QAbstractItemView::SingleSelection);
     m_list->setMinimumHeight(140);
+    // Wide enough for a control and its owner side by side (a MIDI note, a VC button).
+    m_list->setMinimumWidth(560);
     m_list->header()->setStretchLastSection(true);
     m_list->setToolTip(tr("Every control something has, and who has it. Press or move a control on the "
                           "device to find it here: a click only finds a row, the press chooses."));
