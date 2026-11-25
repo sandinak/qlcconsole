@@ -75,6 +75,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   the value they last sent, in every frame, instead of sending them to their safe value;
   its dimmer, colour and the rest still go safe. The next GO or a pan or
   tilt you move drives it again.
+- **Two identical boards are two controllers**: a patch asks for its own line, so a second board of the same MIDI name opens its own line instead of the first board's and is heard (found by the surface simulator); a show saved with just a name still opens the first of the name.
+
 - **Control surfaces and pads are tested as the device**: the gate now drives every input profile, the PMJ Black 1 and the DualSense, DualShock 4 and Xbox pads the way the hardware does (its MIDI bytes, its USB reports, through the plugins' own decoders) and checks every lamp, MIDI message and pad light sent back; `tools/surface-capture.py` records a device on the bench for replay (docs/dev/SURFACE_TESTS.md).
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…

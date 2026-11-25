@@ -54,6 +54,11 @@ private slots:
      *  mistaken for one and sent pending. */
     void noneSentinelDoesNotGoPending();
 
+    /* Two boards of one name are two lines (the name alone is not a line) */
+    void sameNameBoardsPatchTheirOwnLines();
+    void sameNameBoardsSurviveSaveLoad();
+    void aNameOnlyShowOpensTheFirstOfTheName();
+
     /* Patches follow the network, and are never lost offline */
     void offlineShowSavesPatchesByteIdentical();
     /** A network patch with no identity ("None" and a line number) is not

@@ -392,6 +392,11 @@ private:
 public:
     void flushInputs();
 
+    /** The line of @p lines that @p uid names: @p hint when that line has the
+     *  name (one of several of a name), else the first of that name, else
+     *  the "Name #N" N-th one; -1 for none. */
+    static int resolveInputUid(const QStringList &lines, const QString &uid, quint32 hint);
+
     /**
      * Patch the given universe to go through the given input plugin
      *

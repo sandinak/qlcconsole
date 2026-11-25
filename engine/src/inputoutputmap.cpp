@@ -618,6 +618,33 @@ void InputOutputMap::flushInputs()
         universe->flushInput();
 }
 
+int InputOutputMap::resolveInputUid(const QStringList &lines, const QString &uid, quint32 hint)
+{
+    /* The line the patch asked for, when it carries that name: two boards of
+       one model are two lines of one name, and the second must not open the
+       first (found 2026-11-25 by the surface simulator). */
+    if (hint < quint32(lines.count()) && lines.at(int(hint)) == uid)
+        return int(hint);
+    // A name only (stock QLC+ 4, an old show): the first line of it.
+    const int first = lines.indexOf(uid);
+    if (first != -1)
+        return first;
+    /* "Name #N": the N-th (from 2) line of that name, for a caller that
+       knows which of several it means. Never written to a show. */
+    const int hash = uid.lastIndexOf(QStringLiteral(" #"));
+    bool ok = false;
+    const int nth = hash > 0 ? uid.mid(hash + 2).toInt(&ok) : 0;
+    if (ok && nth >= 1)
+    {
+        const QString name = uid.left(hash);
+        int seen = 0;
+        for (int i = 0; i < lines.count(); i++)
+            if (lines.at(i) == name && ++seen == nth)
+                return i;
+    }
+    return -1;
+}
+
 bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
                                    const QString &inputUID, quint32 input,
                                    const QString &profileName)
@@ -673,12 +700,11 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
 
     if (!inputUID.isEmpty() && plugin != NULL)
     {
-        QStringList inputs = plugin->inputs();
-        int lIdx = inputs.indexOf(inputUID);
+        const int lIdx = resolveInputUid(plugin->inputs(), inputUID, input);
         if (lIdx != -1)
         {
             qDebug() << "[IOMAP] Found match on input by name on universe" << universe << "-" << input << "vs" << lIdx;
-            input = lIdx;
+            input = quint32(lIdx);
         }
         else
         {
