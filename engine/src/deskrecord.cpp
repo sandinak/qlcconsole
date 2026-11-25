@@ -69,7 +69,10 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
     , m_doc(doc)
 {
     for (int r = 0; r < RoleCount; ++r)
+    {
         m_universes[r] = kInvalid;
+        m_lastState[r] = NotSet;
+    }
     m_elapsed.start();
     m_learnTimer = new QTimer(this);
     m_learnTimer->setSingleShot(true);
@@ -402,11 +405,9 @@ void DeskRecord::rebind()
 {
     InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
     quint32 was[RoleCount];
-    State wasState[RoleCount];
     for (int r = 0; r < RoleCount; ++r)
     {
         was[r] = m_universes[r];
-        wasState[r] = state(Role(r));
         m_universes[r] = kInvalid;
     }
     if (iom != nullptr && anySet())
@@ -450,10 +451,16 @@ void DeskRecord::rebind()
     }
     m_gmLiveKey = gmKey;
 
-    // Moved, or plugged in / unplugged with no universe of its own (NotPatched <-> NotConnected).
+    /* Moved, or plugged in / unplugged with no universe of its own
+       (NotPatched <-> NotConnected): state() reads the devices live, so it
+       is compared with what the last pass said. */
     bool moved = false;
     for (int r = 0; r < RoleCount; ++r)
-        moved = moved || was[r] != m_universes[r] || wasState[r] != state(Role(r));
+    {
+        const State st = state(Role(r));
+        moved = moved || was[r] != m_universes[r] || m_lastState[r] != st;
+        m_lastState[r] = st;
+    }
     if (moved)
         emit changed();
 }

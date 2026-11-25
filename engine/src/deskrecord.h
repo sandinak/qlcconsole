@@ -312,6 +312,8 @@ private:
     Binding m_bindings[RoleCount];
     /** Where each role is live now (rebind()). */
     quint32 m_universes[RoleCount];
+    /** What each role's state() was at the last rebind(). */
+    State m_lastState[RoleCount];
     bool m_inputConnected = false;
     bool m_unlocked = false;
 
