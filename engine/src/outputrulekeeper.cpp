@@ -148,7 +148,10 @@ void OutputRuleKeeper::markNow(quint32 id)
             const quint32 abs = was.value().first + i;
             const int u = int(abs >> 9);
             if (!now.contains(abs) && u < ua.size() && ua.at(u) != nullptr)
+            {
                 ua.at(u)->markShowOnly(int(abs & 0x1ff), false, 0);
+                ua.at(u)->setShowOnlyHoldsPosition(int(abs & 0x1ff), false);
+            }
         }
     }
     if (showOnly)
@@ -165,7 +168,10 @@ void OutputRuleKeeper::markNow(quint32 id)
             const quint32 abs = fx->universeAddress() + i;
             const int u = int(abs >> 9);
             if (u < ua.size() && ua.at(u) != nullptr)
+            {
                 ua.at(u)->markShowOnly(int(abs & 0x1ff), true, safeValue(fx, i), moved);
+                ua.at(u)->setShowOnlyHoldsPosition(int(abs & 0x1ff), FixtureRest::holdsPosition(fx->channel(i)));
+            }
         }
         m_showOnlyAt.insert(id, qMakePair(fx->universeAddress(), fx->channels()));
         m_showOnlyMode.insert(id, fx->fixtureMode());
@@ -351,8 +357,33 @@ QByteArray OutputRuleKeeper::safeValuesFor(quint32 universe) const
     return safe;
 }
 
+QByteArray OutputRuleKeeper::positionsFor(quint32 universe) const
+{
+    // Q326: the one rule the Simple Desk and the VC sliders keep too.
+    QByteArray pos(UNIVERSE_SIZE, char(0));
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if ((fx->outputRules() & Fixture::ShowOnly) == 0 || fx->isPatched() == false)
+            continue;
+        for (quint32 i = 0; i < fx->channels(); i++)
+        {
+            const quint32 abs = fx->universeAddress() + i;
+            if ((abs >> 9) == universe && FixtureRest::holdsPosition(fx->channel(i)))
+                pos[int(abs & 0x1ff)] = char(1);
+        }
+    }
+    return pos;
+}
+
 void OutputRuleKeeper::emergencyStop()
 {
+    /* Q326: a Show-only head stays where it is -- its pan and tilt held at
+       what went out last, before the new session, so no frame between
+       sends it to its safe value. Only the rest goes safe. */
+    const QList<Universe *> held = m_doc->inputOutputMap()->universesSnapshot();
+    for (Universe *u : held)
+        if (u != nullptr && u->showOnlyChannelCount() > 0)
+            u->holdShowOnlyPositions();
     // E2: a new live session -- every stamp from before is old now, so
     // every writer is held from its next write on (a function's gate at
     // its next tick: the generation moved).
@@ -516,11 +547,12 @@ void OutputRuleKeeper::rebuild()
 
     InputOutputMap *io = m_doc->inputOutputMap();
     const int n = int(io->universesCount());
-    QVector<QByteArray> bits, safe;
+    QVector<QByteArray> bits, safe, positions;
     for (int i = 0; i < n; i++)
     {
         bits << bitsFor(quint32(i));
         safe << (showOnly.isEmpty() ? QByteArray() : safeValuesFor(quint32(i)));
+        positions << (showOnly.isEmpty() ? QByteArray() : positionsFor(quint32(i)));
     }
 
     const bool armed = onAtOpenArmed();
@@ -538,6 +570,7 @@ void OutputRuleKeeper::rebuild()
         // The safe values first: the bits make a channel Show only, and
         // the very next frame sends its safe value.
         u->setShowOnlySafeValues(i < safe.size() ? safe.at(i) : QByteArray());
+        u->setShowOnlyPositions(i < positions.size() ? positions.at(i) : QByteArray());
         u->setOutputRules(i < bits.size() ? bits.at(i) : QByteArray());
         u->setShowOnlyLive(m_doc->mode() == Doc::Operate);
     }

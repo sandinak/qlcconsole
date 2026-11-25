@@ -598,8 +598,8 @@ void Universe::processFaders()
         const QVector<int> &reset = keepShowOnly ? m_showOnlyChannels : m_showOnlyResetChannels;
         for (int c : reset)
         {
-            (*m_preGMValues)[c] = m_showOnlySafe.at(c);
-            (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
+            (*m_preGMValues)[c] = char(showOnlyRestLocked(c));
+            (*m_blackoutValues)[c] = char(showOnlyRestLocked(c));
             updatePostGMValue(c);
         }
         m_showOnlyResetChannels.clear();
@@ -789,6 +789,7 @@ void Universe::setOutputRules(const QByteArray &bits)
             for (int c : std::as_const(newlyShowOnly))
             {
                 m_showOnlyMark[c] = mark;
+                m_showOnlyHolding[c] = char(0);
                 setShowOnlyOutSafeLocked(c);
             }
         }
@@ -838,8 +839,8 @@ void Universe::setShowOnlyLive(bool live)
         QMutexLocker locker(&m_outputRulesMutex);
         for (int c : std::as_const(m_showOnlyChannels))
         {
-            (*m_preGMValues)[c] = m_showOnlySafe.at(c);
-            (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
+            (*m_preGMValues)[c] = char(showOnlyRestLocked(c));
+            (*m_blackoutValues)[c] = char(showOnlyRestLocked(c));
             updatePostGMValue(c);
             setShowOnlyOutSafeLocked(c);
         }
@@ -850,16 +851,74 @@ void Universe::setShowOnlyLive(bool live)
 void Universe::cutShowOnly()
 {
     /* The emergency stop (E1): what is stored on a Show-only channel goes
-       back to safe NOW, between two frames, as going live does. */
+       back to safe NOW, between two frames, as going live does -- a pan or
+       tilt held by holdShowOnlyPositions() to where it was. */
     QMutexLocker frameLocker(&m_frameMutex);
     QMutexLocker locker(&m_outputRulesMutex);
     for (int c : std::as_const(m_showOnlyChannels))
     {
-        (*m_preGMValues)[c] = m_showOnlySafe.at(c);
-        (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
+        (*m_preGMValues)[c] = char(showOnlyRestLocked(c));
+        (*m_blackoutValues)[c] = char(showOnlyRestLocked(c));
         updatePostGMValue(c);
         setShowOnlyOutSafeLocked(c);
     }
+}
+
+void Universe::setShowOnlyPositions(const QByteArray &mask)
+{
+    QMutexLocker locker(&m_outputRulesMutex);
+    for (int c = 0; c < UNIVERSE_SIZE; c++)
+    {
+        const bool holds = c < mask.size() && mask.at(c) != 0;
+        m_showOnlyHoldsPos[c] = char(holds ? 1 : 0);
+        if (!holds)
+            m_showOnlyHolding[c] = char(0);
+    }
+}
+
+void Universe::setShowOnlyHoldsPosition(int channel, bool holds)
+{
+    if (channel < 0 || channel >= UNIVERSE_SIZE)
+        return;
+    QMutexLocker locker(&m_outputRulesMutex);
+    m_showOnlyHoldsPos[channel] = char(holds ? 1 : 0);
+    if (!holds)
+        m_showOnlyHolding[channel] = char(0);
+}
+
+void Universe::holdShowOnlyPositions()
+{
+    /* Q326: the emergency stop leaves a Show-only head where it is. Each
+       pan and tilt channel (FixtureRest::holdsPosition(), marked by
+       OutputRuleKeeper) rests from now on at what went out there last --
+       what the last live frame built, or, held (Design, Blind), what the
+       held frames send already -- until something that counts moves it.
+       Taken before the stop's new session, so no frame between the two
+       sends a head to its safe value. */
+    QMutexLocker frameLocker(&m_frameMutex);
+    QMutexLocker locker(&m_outputRulesMutex);
+    const bool sent = showOnlyHeld() == false;
+    for (int c : std::as_const(m_showOnlyChannels))
+    {
+        if (m_showOnlyHoldsPos.at(c) == 0)
+            continue;
+        const char value = sent ? m_showOnlyPre.at(c) : char(showOnlyRestLocked(c));
+        m_showOnlyHoldValue[c] = value;
+        m_showOnlyHolding[c] = char(1);
+    }
+}
+
+bool Universe::showOnlyHoldingPosition(int channel)
+{
+    if (channel < 0 || channel >= UNIVERSE_SIZE)
+        return false;
+    QMutexLocker locker(&m_outputRulesMutex);
+    return m_showOnlyHolding.at(channel) != 0;
+}
+
+uchar Universe::showOnlyRestLocked(int c) const
+{
+    return uchar(m_showOnlyHolding.at(c) ? m_showOnlyHoldValue.at(c) : m_showOnlySafe.at(c));
 }
 
 void Universe::markShowOnly(int channel, bool on, uchar safe, bool remark)
@@ -914,6 +973,9 @@ void Universe::markShowOnly(int channel, bool on, uchar safe, bool remark)
                                               & ~(OnAtOpenOutput | BlackoutExempt));
             m_onAtOpenChannels.removeAll(channel);
         }
+        // A fresh mark or no longer Show only: no stop's position held.
+        if (newlyOn || !on)
+            m_showOnlyHolding[channel] = char(0);
         if (newlyOn)
         {
             m_showOnlyMark[channel] = GenericFader::newStamp();     // S0
@@ -999,13 +1061,13 @@ uchar Universe::showOnlySafeOut(int c)
 {
     // Through its modifier, as any value it sends (on an inverted channel a
     // raw 0 would be full on); never scaled by the Grand Master.
-    return applyModifiers(c, uchar(m_showOnlySafe.at(c)));
+    return applyModifiers(c, showOnlyRestLocked(c));
 }
 
 void Universe::setShowOnlyOutSafeLocked(int c)
 {
     m_showOnlyOut[c] = char(showOnlySafeOut(c));
-    m_showOnlyPre[c] = m_showOnlySafe.at(c);
+    m_showOnlyPre[c] = char(showOnlyRestLocked(c));
 }
 
 void Universe::finishShowOnlyFrame()
@@ -1013,9 +1075,14 @@ void Universe::finishShowOnlyFrame()
     QMutexLocker locker(&m_outputRulesMutex);
     for (int c : std::as_const(m_showOnlyChannels))
     {
-        if (m_preGMValues->at(c) == m_showOnlySafe.at(c))
+        const char pre = m_preGMValues->at(c);
+        if (uchar(pre) == showOnlyRestLocked(c))
             m_post[c] = char(showOnlySafeOut(c));
-        m_showOnlyPre[c] = m_preGMValues->at(c);
+        // Q326: a head held by the stop is driven again once something
+        // that counts moves it; let go, it rests at its safe value again.
+        else if (m_showOnlyHolding.at(c))
+            m_showOnlyHolding[c] = char(0);
+        m_showOnlyPre[c] = pre;
     }
 }
 
@@ -1436,6 +1503,10 @@ void Universe::reset()
     m_modifiers.fill(NULL, UNIVERSE_SIZE);
     m_modifiedZeroValues->fill(0);      // no modifier: every zero is 0
     m_passthrough = false; // not releasing m_passthroughValues, see comment in setPassthrough
+    {
+        QMutexLocker locker(&m_outputRulesMutex);
+        m_showOnlyHolding.fill(char(0));        // Q326: no stop's head held
+    }
     restoreShowOnlySafe(0, UNIVERSE_SIZE);
 }
 
@@ -1451,8 +1522,8 @@ void Universe::restoreShowOnlySafe(int address, int range)
     {
         if (c < address || c >= address + range)
             continue;
-        (*m_preGMValues)[c] = m_showOnlySafe.at(c);
-        (*m_blackoutValues)[c] = m_showOnlySafe.at(c);
+        (*m_preGMValues)[c] = char(showOnlyRestLocked(c));
+        (*m_blackoutValues)[c] = char(showOnlyRestLocked(c));
         updatePostGMValue(c);
         setShowOnlyOutSafeLocked(c);
     }
@@ -2247,7 +2318,7 @@ void Universe::setChannelDefaultValue(ushort channel, uchar value)
     if (uchar(m_channelsMask->at(channel)) & ShowOnlyOutput)
     {
         QMutexLocker locker(&m_outputRulesMutex);
-        value = uchar(m_showOnlySafe.at(channel));
+        value = showOnlyRestLocked(channel);
     }
 
     (*m_preGMValues)[channel] = value;

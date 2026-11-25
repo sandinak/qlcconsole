@@ -183,8 +183,9 @@ button under the Control Map table.
   **Stop All** (its button, Control ▸ Stop ALL Functions! and its key), a
   Virtual Console **Stop All** button with no fade, the pad's four-together
   stop, the phone page, Companion's ALL OFF and QLab's or MSC's ALL OFF.
-  Each does the same: every function stops, every Show-only fixture is cut,
-  every fixture goes to rest, and the Simple Desk and Virtual Console
+  Each does the same: every function stops, every Show-only fixture is cut
+  (but its pan and tilt, fine channels too, stay where they are: a
+  Show-only head never moves when you stop), every fixture goes to rest, and the Simple Desk and Virtual Console
   **Level** sliders let go of what they hold -- all but pan and tilt, which
   stay where they are, as Stop All leaves every head, so no head swings
   across the stage. None can drift from the others.

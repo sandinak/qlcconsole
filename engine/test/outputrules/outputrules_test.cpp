@@ -48,6 +48,8 @@
 #include "genericdmxsource.h"
 #include "channelmodifier.h"
 #include "outputrulekeeper.h"
+#include "fixturerest.h"
+#include "controlmap.h"
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "ioplugincache.h"
@@ -2577,7 +2579,9 @@ void OutputRules_Test::sweep(int address, const std::function<void()> &tickOnce,
                              const std::function<void()> &afterStop)
 {
     // Set up in Operate: it drives the Show-only channel.
-    const int safe = int(uchar(m_uni->m_showOnlySafe.at(address)));
+    int safe = int(uchar(m_uni->m_showOnlySafe.at(address)));
+    // Q326: a pan or tilt stays where the stop found it, not at safe.
+    const bool holds = FixtureRest::holdsPositionAt(m_doc, quint32(address));
     m_doc->setMode(Doc::Operate);
     setUp();
     int most = 0;
@@ -2587,6 +2591,8 @@ void OutputRules_Test::sweep(int address, const std::function<void()> &tickOnce,
         most = qMax(most, qAbs(sent(address) - safe));
     }
     QVERIFY2(most > 0, "the writer drove it before the stop");
+    if (holds)
+        safe = sent(address);
     // E1: All Off, cut at once.
     ShowControl::Request off;
     off.command = ShowControl::AllOff;
@@ -3926,4 +3932,167 @@ void OutputRules_Test::review10_aClosingLineInBlindGetsNoPreview()
     QCOMPARE(flame2, 0);
     QVERIFY2(wash2 == 0, qPrintable(QString("the closing frame in Blind sent the preview: the wash at %1")
                                     .arg(wash2)));
+}
+
+/****************************************************************************
+ * Q326: the emergency stop holds a Show-only head where it is
+ ****************************************************************************/
+
+Fixture *OutputRules_Test::addShowOnlyMover(const QString &name, int address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Q326"));
+    def->setModel(name);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("6ch"));
+    struct Ch { const char *name; QLCChannel::Group group; QLCChannel::ControlByte byte; };
+    const Ch chans[] = {
+        { "Dimmer", QLCChannel::Intensity, QLCChannel::MSB },
+        { "Pan", QLCChannel::Pan, QLCChannel::MSB },
+        { "Pan fine", QLCChannel::Pan, QLCChannel::LSB },
+        { "Tilt", QLCChannel::Tilt, QLCChannel::MSB },
+        { "Tilt fine", QLCChannel::Tilt, QLCChannel::LSB },
+        { "Colour", QLCChannel::Colour, QLCChannel::MSB },
+    };
+    quint32 i = 0;
+    for (const Ch &c : chans)
+    {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString::fromLatin1(c.name));
+        ch->setGroup(c.group);
+        ch->setControlByte(c.byte);
+        def->addChannel(ch);
+        mode->insertChannel(ch, i++);
+    }
+    def->addMode(mode);
+    mode->cacheHeads();
+    if (!m_doc->fixtureDefCache()->addFixtureDef(def))
+    {
+        delete def;
+        return nullptr;
+    }
+    Fixture *f = new Fixture(m_doc);
+    f->setName(name);
+    f->setFixtureDefinition(def, mode);
+    f->setUniverse(0);
+    f->setAddress(quint32(address));
+    f->setOutputRules(Fixture::ShowOnly);
+    if (!m_doc->addFixture(f))
+    {
+        delete f;
+        return nullptr;
+    }
+    m_doc->outputRuleKeeper()->rebuild();
+    return f;
+}
+
+void OutputRules_Test::checkMoverHoldsThroughStop(const std::function<void()> &stop)
+{
+    enum { Dim = 50, Pan, PanFine, Tilt, TiltFine, Colour };
+    Fixture *mover = addShowOnlyMover(QStringLiteral("Mover"), Dim);
+    QVERIFY(mover != nullptr);
+    for (int a = Dim; a <= Colour; a++)
+        QCOMPARE(int(uchar(m_uni->m_showOnlySafe.at(a))), 0);
+    m_doc->setMode(Doc::Operate);
+    Scene *look = new Scene(m_doc);
+    look->setValue(mover->id(), 0, 255);
+    look->setValue(mover->id(), 1, 128);
+    look->setValue(mover->id(), 2, 40);
+    look->setValue(mover->id(), 3, 100);
+    look->setValue(mover->id(), 4, 7);
+    look->setValue(mover->id(), 5, 90);
+    look->setFadeOutSpeed(2000);        // what it lets go of fades: held all the same
+    m_doc->addFunction(look);
+    goList(listOf(look));
+    auto drain = qScopeGuard([this]() {
+        for (int i = 0; i < 120; i++)
+            tickFrame(Dim);
+    });
+    for (int i = 0; i < 4; i++)
+        tickFrame(Dim);
+    QCOMPARE(sent(Dim), 255);
+    QCOMPARE(sent(Pan), 128);
+    QCOMPARE(sent(PanFine), 40);
+    QCOMPARE(sent(Tilt), 100);
+    QCOMPARE(sent(TiltFine), 7);
+    QCOMPARE(sent(Colour), 90);
+
+    m_stub->m_universe.fill(char(7));   // the stop's own send fills it in
+    stop();
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    // The stop's own send, then every frame after it: the head never moves.
+    for (int i = 0; i < 7; i++)
+    {
+        if (i > 0)
+            tickFrame(Dim);
+        const QString at = QStringLiteral("frame %1 after the stop").arg(i);
+        QVERIFY2(sent(Pan) == 128, qPrintable(at + QStringLiteral(": pan %1").arg(sent(Pan))));
+        QVERIFY2(sent(PanFine) == 40, qPrintable(at + QStringLiteral(": pan fine %1").arg(sent(PanFine))));
+        QVERIFY2(sent(Tilt) == 100, qPrintable(at + QStringLiteral(": tilt %1").arg(sent(Tilt))));
+        QVERIFY2(sent(TiltFine) == 7, qPrintable(at + QStringLiteral(": tilt fine %1").arg(sent(TiltFine))));
+        // The rest at its safe value, at once.
+        QVERIFY2(sent(Dim) == 0, qPrintable(at + QStringLiteral(": dimmer %1").arg(sent(Dim))));
+        QVERIFY2(sent(Colour) == 0, qPrintable(at + QStringLiteral(": colour %1").arg(sent(Colour))));
+    }
+    QVERIFY(m_uni->showOnlyHoldingPosition(Pan));
+    QVERIFY(m_uni->showOnlyHoldingPosition(TiltFine));
+    QVERIFY(m_uni->showOnlyHoldingPosition(Dim) == false);
+    QVERIFY(m_uni->showOnlyHoldingPosition(Colour) == false);
+}
+
+void OutputRules_Test::showOnlyMoverHoldsPositionOnStop()
+{
+    // The emergency stop itself (the pad's, OutputRuleKeeper's).
+    checkMoverHoldsThroughStop([this]() { m_doc->outputRuleKeeper()->emergencyStop(); });
+}
+
+void OutputRules_Test::showOnlyMoverHoldsOnScreenStopAll()
+{
+    // The top bar's Stop All (App::slotControlPanic()).
+    checkMoverHoldsThroughStop([this]() { QVERIFY(m_doc->showControl()->allOff(ShowControl::RouteKey)); });
+}
+
+void OutputRules_Test::showOnlyMoverHoldsOnControlMapStop()
+{
+    // A desk button bound as the Control Map's emergency stop, pressed.
+    ControlMap *cm = m_doc->controlMap();
+    QVERIFY(cm != nullptr);
+    cm->setBinding({ 0, 40, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    auto unbind = qScopeGuard([cm]() { cm->reset(); });
+    checkMoverHoldsThroughStop([cm]() {
+        cm->handleInput(0, 40, 0);
+        cm->handleInput(0, 40, 127);
+    });
+}
+
+void OutputRules_Test::showOnlyMoverHoldsOnPhoneAllOff()
+{
+    // The phone's ALL OFF (WebAccessRun: ShowControl::allOff(RouteWeb)).
+    checkMoverHoldsThroughStop([this]() { QVERIFY(m_doc->showControl()->allOff(ShowControl::RouteWeb)); });
+}
+
+void OutputRules_Test::showOnlyMoverIsDrivenAgainAfterTheStop()
+{
+    enum { Dim = 50, Pan, PanFine, Tilt };
+    checkMoverHoldsThroughStop([this]() { QVERIFY(m_doc->showControl()->allOff(ShowControl::RoutePad)); });
+    if (QTest::currentTestFailed())
+        return;
+    // A hand on the pan fader after the stop (E3): the head follows it.
+    put(Pan, 200);
+    tickFrame(Pan);
+    QCOMPARE(sent(Pan), 200);
+    QCOMPARE(sent(Tilt), 100);          // the rest of the head still held
+    QVERIFY(m_uni->showOnlyHoldingPosition(Pan) == false);
+    QVERIFY(m_uni->showOnlyHoldingPosition(Tilt));
+    // The next GO drives tilt as any cue does.
+    const quint32 fid = m_doc->fixtureForAddress(Dim);
+    Scene *next = new Scene(m_doc);
+    next->setValue(fid, 3, 30);
+    m_doc->addFunction(next);
+    goList(listOf(next));
+    for (int i = 0; i < 4; i++)
+        tickFrame(Tilt);
+    QCOMPARE(sent(Tilt), 30);
+    QCOMPARE(sent(Pan), 200);
+    QCOMPARE(sent(PanFine), 40);        // never moved: still held
 }

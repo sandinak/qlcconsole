@@ -643,6 +643,20 @@ public:
     /** The emergency stop (E1): every Show-only channel's stored values
      *  back to safe at once, under the frame lock */
     void cutShowOnly();
+    /** Q326: which Show-only channels are a head's pan or tilt (coarse or
+     *  fine: FixtureRest::holdsPosition()), one byte per channel, non-zero
+     *  where it is -- set by OutputRuleKeeper with the safe values */
+    void setShowOnlyPositions(const QByteArray &mask);
+    /** setShowOnlyPositions() for one channel (a fixture marked mid-show) */
+    void setShowOnlyHoldsPosition(int channel, bool holds);
+    /** Q326, the emergency stop: each Show-only pan and tilt channel rests
+     *  from now on at what went out there last, not at its safe value, so
+     *  no head moves; the next write that counts there (a GO, a hand on a
+     *  fader) drives it again and lets the hold go. Called before the
+     *  stop's new session starts, under the frame lock. */
+    void holdShowOnlyPositions();
+    /** Whether @p channel is held where the emergency stop left it */
+    bool showOnlyHoldingPosition(int channel);
     /** One channel made Show only (@p on, at @p safe) or not, at once --
      *  a Show-only fixture moved or patched mid-show, before the full
      *  rebuild (OutputRuleKeeper) catches up. @p remark: a fresh mark even
@@ -695,6 +709,10 @@ private:
      *  (m_showOnlyOut) -- never what @p frame carried */
     void buildShowOnly(QByteArray &frame, bool held, bool blackout);
     uchar showOnlySafeOut(int c);
+    /** What a Show-only channel rests at with nothing that counts on it
+     *  (rules lock held): its safe value, or where the emergency stop held
+     *  a pan or tilt (holdShowOnlyPositions()) */
+    uchar showOnlyRestLocked(int c) const;
     /** m_showOnlyOut/m_showOnlyPre of @p c back to safe (rules lock held) */
     void setShowOnlyOutSafeLocked(int c);
     /** The live frame's end: a Show-only channel at its safe value goes out
@@ -1346,6 +1364,11 @@ private:
      *  (fade starts); safe until a frame builds them */
     QByteArray m_showOnlyOut = QByteArray(UNIVERSE_SIZE, char(0));
     QByteArray m_showOnlyPre = QByteArray(UNIVERSE_SIZE, char(0));
+    /** Q326 (under m_outputRulesMutex): the Show-only channels that are a
+     *  head's pan or tilt, those the emergency stop holds now, and where */
+    QByteArray m_showOnlyHoldsPos = QByteArray(UNIVERSE_SIZE, char(0));
+    QByteArray m_showOnlyHolding = QByteArray(UNIVERSE_SIZE, char(0));
+    QByteArray m_showOnlyHoldValue = QByteArray(UNIVERSE_SIZE, char(0));
     /** writeFader(): the channels the fader writing now does not count on,
      *  and whether any (the universe thread, in the frame) */
     QByteArray m_showOnlyBlocked = QByteArray(UNIVERSE_SIZE, char(0));

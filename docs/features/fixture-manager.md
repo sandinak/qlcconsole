@@ -928,7 +928,11 @@ opened — over the web while in Operate too). So:
   **Ignore Blackout** in the dialog, and says why.
 - **The emergency stop** (the pad's, the phone's or the laptop's **All
   Off**) cuts every Show-only fixture to its safe value at once, with no
-  fade, and starts afresh, as switching to Operate does: **nothing from
+  fade -- all but its **pan and tilt** (and their fine channels), which
+  stay exactly where they were, in every frame, so a Show-only head never
+  swings when you stop; its dimmer, colour and the rest go safe (the next
+  GO, or a pan or tilt you move, drives the head again). It starts
+  afresh, as switching to Operate does: **nothing from
   before the stop comes back**. A GO drives what it starts; a control
   drives once you move it again; an audio trigger or VC Clock once you
   switch it on or touch it again; timecode once you arm Follow again. A GO

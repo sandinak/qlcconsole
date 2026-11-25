@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **A Show-only head holds still on the emergency stop** (Q326): Stop All,
+  the desk's or Control Map's stop, the pad's and the phone's ALL OFF leave
+  a Show-only fixture's pan and tilt (fine channels too) at the value they
+  last sent, in every frame, instead of sending them to their safe value;
+  its dimmer, colour and the rest still go safe. The next GO or a pan or
+  tilt you move drives it again.
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only
