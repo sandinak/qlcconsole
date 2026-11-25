@@ -489,10 +489,15 @@ and never surprises you when it comes back.
   releases, so everything that listens behaves as if each control were let
   go: a Control Map trigger held down (a Momentary) lets go, a Virtual Console
   button **flashing** goes off, a slider's **flash** button goes off, and a
-  slider forgets where its fader was. The level stays where it is; when the
-  desk is back, its fader is picked up (see above) before it follows, so a
-  fader moved meanwhile, or the state the desk sends when it is plugged in,
-  does not jump the level. A flash held with the mouse is not touched.
+  slider forgets where its fader was. The level stays where it is. When the
+  desk is back, a slider that picks up (**Catch values** on, in Playback,
+  Level or Speed master mode; see above) waits for its fader before it
+  follows, so a fader moved meanwhile, or the state the desk sends when it
+  is plugged in, does not jump the level. A slider with Catch values off,
+  and every master (Grand Master, Submaster, Group master), follows the
+  desk's first value at once, as it always does: set the fader where the
+  level is before you plug the desk back in. A flash held with the mouse is
+  not touched.
 - **The unplug says what stopped working.** The notice and the footer name
   the jobs the device had: *MIDI device 'APC MINI' disconnected — universe 2.
   Not working until it is back: Emergency Stop, Grand Master, GO of Main.*

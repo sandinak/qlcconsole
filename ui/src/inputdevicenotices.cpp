@@ -182,6 +182,7 @@ void InputDeviceNotices::noteWake(qint64 sleptMs)
     const qint64 s = qMax<qint64>(1, (sleptMs + 500) / 1000);
     const QString slept = s < 120 ? tr("%1 s").arg(s) : tr("%1 min").arg((s + 30) / 60);
     emit notice(tr("Slept %1, finding devices…").arg(slept), false);
+    m_resayMissing = true;
     // What comes back, or doesn't, is said once it has settled.
     schedule();
 }
@@ -267,7 +268,7 @@ void InputDeviceNotices::settleNow()
         if (d.connected == false && d.slotCount > 1)
         {
             // A controller slot with none of its devices here.
-            if (seen && was->connected == false)
+            if (seen && was->connected == false && m_resayMissing == false)
                 continue;
             said << (seen ? tr("%1 '%2' disconnected — universe %3: none of its %4 controllers is connected")
                                 .arg(kindName(d.plugin), was->name).arg(d.universe + 1).arg(d.slotCount)
@@ -287,6 +288,12 @@ void InputDeviceNotices::settleNow()
             said << withJobs(goneText(d, true), d.universe);
             warning = true;
         }
+        else if (d.connected == false && m_resayMissing)
+        {
+            // Still missing after a wake: said again, in amber.
+            said << withJobs(goneText(d, false), d.universe);
+            warning = true;
+        }
         else if (d.connected && d.slotCount > 1 && seen && (known == false || was->connected == false))
         {
             // A controller slot: which of its devices drives it now.
@@ -301,6 +308,7 @@ void InputDeviceNotices::settleNow()
         }
     }
     m_said = next;
+    m_resayMissing = false;
 
     updateStatus(now);
     if (said.isEmpty() == false)

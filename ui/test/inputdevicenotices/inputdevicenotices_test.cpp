@@ -526,4 +526,37 @@ void InputDeviceNotices_Test::wakeNoticeSaysSlept()
     QCOMPARE(said.count(), before);
 }
 
+void InputDeviceNotices_Test::aDeviceStillMissingAfterAWakeIsSaidAgain()
+{
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(50);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+
+    rescanned(m_stub, QStringList() << "Keyboard");      // the pad unplugged
+    notices.settleNow();
+    QCOMPARE(said.count(), 1);
+    QVERIFY(said.at(0).at(0).toString().contains("disconnected — universe 2"));
+    QCOMPARE(said.at(0).at(1).toBool(), true);
+
+    // Nothing changes: nothing more said.
+    notices.settleNow();
+    QCOMPARE(said.count(), 1);
+
+    // The laptop sleeps; the wake line takes the notice over...
+    notices.noteWake(40000);
+    QCOMPARE(said.count(), 2);
+    QCOMPARE(said.at(1).at(1).toBool(), false);
+    // ...and once it settles, the pad still missing is said again, in amber.
+    QTRY_COMPARE(said.count(), 3);
+    QVERIFY2(said.at(2).at(0).toString().contains(kPad) && said.at(2).at(0).toString().contains("universe 2"),
+             qPrintable(said.at(2).at(0).toString()));
+    QCOMPARE(said.at(2).at(1).toBool(), true);
+    QVERIFY(footerEntry().key.isEmpty() == false);
+
+    // Only once: the next settle with nothing changed says nothing.
+    notices.settleNow();
+    QCOMPARE(said.count(), 3);
+}
+
 QTEST_MAIN(InputDeviceNotices_Test)

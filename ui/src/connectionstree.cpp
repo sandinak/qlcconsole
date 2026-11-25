@@ -3539,6 +3539,13 @@ void ConnectionsTree::unpatchFromLine(quint32 universe, const QString &pluginNam
     if (iomap == NULL)
         return;
 
+    // What stops working with it, said first (phase R). The undo step is
+    // taken only once the change is going ahead: PatchUndo holds one step,
+    // and a Cancel must leave the previous one undoable.
+    if (output == false
+            && InputDeviceNotices::confirmRepatch(this, m_doc, universe, QString()) == false)
+        return;
+
     if (iomap->patchUndo() != NULL)
         iomap->patchUndo()->capture(QList<quint32>() << universe,
                                     tr("unpatch universe %1").arg(universe + 1));
@@ -3565,9 +3572,6 @@ void ConnectionsTree::unpatchFromLine(quint32 universe, const QString &pluginNam
     }
     else
     {
-        // What stops working with it, said first (phase R).
-        if (InputDeviceNotices::confirmRepatch(this, m_doc, universe, QString()) == false)
-            return;
         iomap->setInputPatch(universe, QString(), QString(), 0);
     }
     m_doc->setModified();

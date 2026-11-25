@@ -68,6 +68,7 @@
 #include "inputoutputmap.h"
 #include "outputpatch.h"
 #include "patchundo.h"
+#include "controlmap.h"
 #include "universe.h"
 #include "qlcfile.h"
 #include "doc.h"
@@ -2415,6 +2416,32 @@ static void answerNextMessageBox(QMessageBox::StandardButton button)
         if (box != nullptr)
             box->button(button)->click();
     });
+}
+
+void ConnectionsTree_Test::cancelledUnpatchKeepsThePreviousUndoStep()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::Toggle });
+    auto restore = qScopeGuard([cm]() { cm->removeAll(); });
+
+    ConnectionsTree tree(m_doc);
+    // A real change the operator can still undo.
+    iom->patchUndo()->capture(QList<quint32>() << 1, "repatch universe 2");
+    QVERIFY(iom->patchUndo()->canUndo());
+
+    answerNextMessageBox(QMessageBox::Cancel);
+    tree.unpatchFromLine(0, stub->name(), 0, false);
+    QVERIFY(iom->inputPatch(0) != nullptr);                     // nothing changed
+    QCOMPARE(iom->patchUndo()->summary(), QString("repatch universe 2"));
+
+    // With nothing on it to warn about, the unpatch is its own undo step.
+    cm->removeAll();
+    tree.unpatchFromLine(0, stub->name(), 0, false);
+    QVERIFY(iom->inputPatch(0) == nullptr);
+    QCOMPARE(iom->patchUndo()->summary(), QString("unpatch universe 1"));
 }
 
 void ConnectionsTree_Test::ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack()

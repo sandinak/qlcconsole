@@ -163,6 +163,10 @@ private:
     QSet<QString> m_offered;
     /** Controllers whose stick drift was said ("plugin\ndevice"). */
     QSet<QString> m_driftSaid;
+    /** A wake's "finding devices…" line replaced the notice: the next
+     *  settle says again what is still missing, so the standing amber line
+     *  (and what stops working with it) is never lost to the wake line. */
+    bool m_resayMissing = false;
 };
 
 #endif

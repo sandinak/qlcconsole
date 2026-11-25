@@ -628,10 +628,19 @@ static void ctl01(ReviewContext &ctx, QList<ReviewFinding> &out)
     ControlMap *cm = ctx.doc()->controlMap();
     if (cm == nullptr)
         return;
-    const QString missing = cm->stopDeviceMissing();
+    const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
+    if (stop == nullptr || ControlMap::isKey(*stop))
+        return;
+    QString missing;
+    if (ctx.options().outputsLoaded)
+        missing = cm->stopDeviceMissing();
+    // Headless (--review): no plugins and no live patch. The saved patch
+    // says whether the stop's universe has an input; which device is plugged
+    // in on the night isn't the file's to know.
+    else if (!ctx.universeHasInput(stop->universe))
+        missing = ControlMap::tr("universe %1 has no input patched").arg(stop->universe + 1);
     if (missing.isEmpty())
         return;
-    const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
     out << ReviewContext::make(QStringLiteral("CTL-01"), ReviewFinding::Warning,
         tr("The emergency stop (%1): %2, so pressing it stops nothing. Plug the device in, or "
            "learn the stop again on one that is here.")

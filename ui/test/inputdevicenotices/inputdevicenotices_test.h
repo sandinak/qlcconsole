@@ -53,6 +53,9 @@ private slots:
     void repatchWarnsAndLists();
     /** After a sleep: "Slept 40 s, finding devices…", once. */
     void wakeNoticeSaysSlept();
+    /** A device missing before the sleep is said again, in amber, once the
+     *  wake settles: the wake line never leaves the lost stop unsaid. */
+    void aDeviceStillMissingAfterAWakeIsSaidAgain();
 
 private:
     Doc *m_doc = nullptr;

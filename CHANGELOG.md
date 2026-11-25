@@ -16,7 +16,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Unplugged, replugged, asleep (control surfaces phase R)**: a desk that
   goes away lets go of everything it held (a held trigger, a VC flash, a
-  slider's flash; a slider's fader is picked up again when it is back); the
+  slider's flash; a slider with Catch values on picks its fader up again when
+  it is back, while a master follows the desk's first value at once); the
   notice names what stopped working (*Emergency Stop, Grand Master, GO of
   Main*); a stop's first 0 after a replug keeps the desk's state dump from
   firing ALL OFF; *Slept 40 s, finding devices…* after a sleep; a repatch in

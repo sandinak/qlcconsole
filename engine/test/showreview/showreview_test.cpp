@@ -2010,6 +2010,16 @@ void ShowReview_Test::stopDeviceMissing()
     QVERIFY2(f.message.contains("emergency stop") && f.message.contains("universe 1 has no input patched"),
              qPrintable(f.message));
     QCOMPARE(f.severity, ReviewFinding::Warning);
+    // Headless (--review, no plugins): the saved patch decides, not the
+    // live map, which has nothing patched there.
+    ShowReview::Options cli;
+    cli.outputsLoaded = false;
+    cli.universesWithInput = { 0 };
+    QVERIFY(quiet("CTL-01", cli));
+    cli.universesWithInput = { 1 };
+    QVERIFY(fires("CTL-01", cli));
+    QVERIFY2(findings("CTL-01", cli).first().message.contains("universe 1 has no input patched"),
+             qPrintable(findings("CTL-01", cli).first().message));
     // On a computer key: that is stopProblem()'s, not a missing device.
     cm->setBinding({ ControlMap::KeyboardUniverse, ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier),
                      ControlMap::emergencyStop(), ControlMap::Toggle });
