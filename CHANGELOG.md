@@ -16,7 +16,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
-  hit is refused on a fader, a latching button gets Start only, and a game
+  hit is refused on a fader, a latching button turns a Toggle into Start only
+  (a mode chosen by hand is kept; a held momentary press is no latch), and a game
   pad's buttons (its Run map) or a key the app already uses are refused,
   naming their job (Q324).
 

@@ -145,6 +145,8 @@ private:
     QComboBox *m_place;
     QLabel *m_placeNote;
     bool m_stepThrough = false;
+    /** a latching button heard made Toggle Start only (once) */
+    bool m_latchChose = false;
     // The binding as the dialog opened: stepping through with siblings there.
     bool m_boundStepping = false;
     quint32 m_boundUniverse = 0xFFFFFFFF;

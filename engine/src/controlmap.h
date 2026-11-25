@@ -358,12 +358,15 @@ public:
     bool learnSawFader(quint32 universe, quint32 channel) const;
     /** Whether it sent one value per press, as a latching button does: on,
      *  then 0 a press later, then on again (each a press apart, never a
-     *  quick release in between), and nothing else. A press on such a
-     *  button is a press only every other time. */
+     *  release inside a press's hold in between), and nothing else. A
+     *  press on such a button is a press only every other time. */
     bool learnSawLatching(quint32 universe, quint32 channel) const;
     /** Test hook: the shortest gap between two values of a latching
      *  button's run (a release quicker than it is a momentary button's). */
     void setLatchGapMs(int ms) { m_latchGapMs = ms; }
+    /** Test hook: the longest a press is held. A 0 sooner than this after
+     *  the on is a release (momentary), never a latching button's 0. */
+    void setLatchHoldMs(int ms) { m_latchHoldMs = ms; }
 
     /*********************************************************************
      * Names
@@ -715,10 +718,12 @@ private:
         bool fader = false;
         uchar on = 0;           //!< a latching run's one "on" value
         int latchSteps = 0;     //!< on, 0, on...: 3 is a latching button
-        bool quickRelease = false;  //!< a release under m_latchGapMs: momentary
+        bool quickRelease = false;  //!< a release under m_latchHoldMs: momentary
     };
     QHash<quint64, LearnSeen> m_learnSeen;
     int m_latchGapMs = 400;
+    /** a 0 this soon after the on is a press let go, not a latch's 0 */
+    int m_latchHoldMs = 1500;
     /** repeats of the emergency stop's press inside this are one */
     int m_estopDebounceMs = 1000;
     /** What a stop's control last sent: the value, when, whether a 0 (a

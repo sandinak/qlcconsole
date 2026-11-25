@@ -2628,22 +2628,33 @@ void ControlMapUi_Test::goOnFaderRefused()
 }
 
 /* A latching button sends one value per press (on, then 0 at the next):
-   heard at Learn, Start only is chosen and said. A momentary button is not. */
+   heard at Learn, a Toggle becomes Start only, said. A mode chosen by hand
+   is kept (Stop only, Momentary, a list's Stop the list), said. A momentary
+   button -- let go at once, or held a while each press -- is not flagged. */
 void ControlMapUi_Test::latchingButtonSuggestsStartOnly()
 {
     Scene *a = scene("Warm");
     ControlMap *cm = m_doc->controlMap();
     cm->setLatchGapMs(100);
-    auto gap = qScopeGuard([cm]() { cm->setLatchGapMs(400); });
+    cm->setLatchHoldMs(300);
+    auto gap = qScopeGuard([cm]() { cm->setLatchGapMs(400); cm->setLatchHoldMs(1500); });
+    // On, 0 a press later, on a press later.
+    auto latch = [cm](quint32 ch) {
+        cm->handleInput(0, ch, 127);
+        QTest::qWait(350);
+        cm->handleInput(0, ch, 0);
+        QTest::qWait(350);
+        cm->handleInput(0, ch, 127);
+    };
     {
         ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
         d.show();
         QLabel *note = d.findChild<QLabel *>("learnNote");
         cm->handleInput(0, 50, 127);
         QCOMPARE(d.mode(), ControlMap::Toggle);
-        QTest::qWait(150);
+        QTest::qWait(350);
         cm->handleInput(0, 50, 0);
-        QTest::qWait(150);
+        QTest::qWait(350);
         cm->handleInput(0, 50, 127);
         QCOMPARE(d.mode(), ControlMap::StartOnly);
         QVERIFY2(note->text().contains("latching button") && note->text().contains("Start only"),
@@ -2653,6 +2664,38 @@ void ControlMapUi_Test::latchingButtonSuggestsStartOnly()
     QCOMPARE(cm->binding(ControlMap::function(a->id()))->mode, ControlMap::StartOnly);
     QVERIFY(cm->removeBinding(ControlMap::function(a->id())));
 
+    // Stop only and Momentary, chosen first: kept, and said.
+    for (ControlMap::Mode chosen : { ControlMap::StopOnly, ControlMap::Momentary })
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        QVERIFY(chooseText(d.findChild<QComboBox *>("learnMode"),
+                           ControlMap::modeName(chosen, ControlMap::FunctionTarget)));
+        QCOMPARE(d.mode(), chosen);
+        latch(chosen == ControlMap::StopOnly ? 52 : 53);
+        QCOMPARE(d.mode(), chosen);
+        const QString text = d.findChild<QLabel *>("learnNote")->text();
+        QVERIFY2(text.contains("latching button") && text.contains("kept"), qPrintable(text));
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+        QCOMPARE(cm->binding(ControlMap::function(a->id()))->mode, chosen);
+        QVERIFY(cm->removeBinding(ControlMap::function(a->id())));
+    }
+
+    // A list's Stop the list: kept, never a GO.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    {
+        ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+        d.show();
+        QVERIFY(chooseText(d.findChild<QComboBox *>("learnMode"), "Stop the list"));
+        QCOMPARE(d.mode(), ControlMap::StopOnly);
+        latch(54);
+        QCOMPARE(d.mode(), ControlMap::StopOnly);
+        d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    }
+    QCOMPARE(cm->binding(ControlMap::cueList(listId))->mode, ControlMap::StopOnly);
+    QVERIFY(cm->removeBinding(ControlMap::cueList(listId)));
+
     // A momentary button: on and off at once, then on -- nothing said.
     {
         ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
@@ -2661,6 +2704,22 @@ void ControlMapUi_Test::latchingButtonSuggestsStartOnly()
         cm->handleInput(0, 51, 0);
         QTest::qWait(150);
         cm->handleInput(0, 51, 127);
+        QCOMPARE(d.mode(), ControlMap::Toggle);
+        QVERIFY(!d.findChild<QLabel *>("learnNote")->text().contains("latching"));
+        d.reject();
+    }
+
+    // A momentary button held a while each press (past the gap): still Toggle.
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        cm->handleInput(0, 55, 127);
+        QTest::qWait(150);
+        cm->handleInput(0, 55, 0);
+        QTest::qWait(150);
+        cm->handleInput(0, 55, 127);
+        QTest::qWait(150);
+        cm->handleInput(0, 55, 0);
         QCOMPARE(d.mode(), ControlMap::Toggle);
         QVERIFY(!d.findChild<QLabel *>("learnNote")->text().contains("latching"));
         d.reject();
@@ -2767,7 +2826,8 @@ void ControlMapUi_Test::phaseFShots()
     const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
     ControlMap *cm = m_doc->controlMap();
     cm->setLatchGapMs(100);
-    auto gap = qScopeGuard([cm]() { cm->setLatchGapMs(400); });
+    cm->setLatchHoldMs(300);
+    auto gap = qScopeGuard([cm]() { cm->setLatchGapMs(400); cm->setLatchHoldMs(1500); });
     IOPluginStub *stub = nullptr;
     auto clear = qScopeGuard([&stub]() {
         if (stub != nullptr)
@@ -2819,11 +2879,19 @@ void ControlMapUi_Test::phaseFShots()
     Scene *a = scene("Warm wash");
     QVERIFY(shoot("learn-latching", [&](ControlLearnDialog &) {
         cm->handleInput(0, 50, 127);
-        QTest::qWait(150);
+        QTest::qWait(350);
         cm->handleInput(0, 50, 0);
-        QTest::qWait(150);
+        QTest::qWait(350);
         cm->handleInput(0, 50, 127);
-        cm->handleInput(0, 50, 0);
+    }, ControlMap::function(a->id())));
+    // A latching button on a Stop only chosen by hand: kept, said.
+    QVERIFY(shoot("learn-latching-kept", [&](ControlLearnDialog &d) {
+        chooseText(d.findChild<QComboBox *>("learnMode"), "Stop only");
+        cm->handleInput(0, 56, 127);
+        QTest::qWait(350);
+        cm->handleInput(0, 56, 0);
+        QTest::qWait(350);
+        cm->handleInput(0, 56, 127);
     }, ControlMap::function(a->id())));
     // A pad's Cross: refused, named as the pad's GO.
     stub = padStub(m_doc, { { 7, "a" }, { 11, "lt" } }, "dualsense");

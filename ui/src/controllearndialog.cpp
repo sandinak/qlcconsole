@@ -456,15 +456,29 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
     updateText();
     checkOwners();
     /* A latching button sends on at one press and 0 at the next: only every
-       other press reaches the show, and a release that stops is a press
-       that stops. Start only (a GO on a list) is chosen, and said. */
+       other press reaches the show. That breaks a Toggle (the 0 between
+       does nothing), so Toggle becomes Start only, once, and said. A mode
+       chosen by hand is kept (Stop only still stops; Momentary follows the
+       latch, on then off; a list's GO already is its press), said too. */
     if (cm->learnSawLatching(universe, channel) && m_target.type != ControlMap::EmergencyStopTarget)
     {
-        setMode(ControlMap::StartOnly);
-        m_note->setText(tr("%1 looks like a latching button: it sends on at one press and off at the next, "
-                           "so only every other press reaches the show. %2 is chosen; set the button to "
-                           "momentary on the controller if it can be.")
-                            .arg(cm->controlName(universe, channel), ControlMap::modeName(mode(), m_target.type)));
+        const QString name = cm->controlName(universe, channel);
+        if (!m_latchChose && mode() == ControlMap::Toggle
+            && ControlMap::modesFor(m_target.type).contains(ControlMap::StartOnly))
+        {
+            m_latchChose = true;
+            setMode(ControlMap::StartOnly);
+            m_note->setText(tr("%1 looks like a latching button: it sends on at one press and off at the next, "
+                               "so only every other press reaches the show. %2 is chosen; set the button to "
+                               "momentary on the controller if it can be.")
+                                .arg(name, ControlMap::modeName(mode(), m_target.type)));
+        }
+        else
+        {
+            m_note->setText(tr("%1 looks like a latching button: it sends on at one press and off at the next. "
+                               "%2 is kept as chosen; set the button to momentary on the controller if it can be.")
+                                .arg(name, ControlMap::modeName(mode(), m_target.type)));
+        }
     }
     // Still listening: another press takes its place.
     if (m_target.type == ControlMap::EmergencyStopTarget)

@@ -550,12 +550,17 @@ void ControlMap::observeLearn(quint64 k, uchar value)
         const bool onOff = value == 0 || s.on == 0 || value == s.on;
         if (!onOff)
             s.latchSteps = 0;
-        else if (since < m_latchGapMs)
+        else if (value == 0 && since < m_latchHoldMs)
         {
-            if (value == 0)
-                s.quickRelease = true;      // let go at once: momentary
+            /* A release inside a press's hold: momentary. A latching
+               button's 0 is the next press, which comes later than a
+               deliberate press is held (a Learn press held half a second
+               is still a momentary button). */
+            s.quickRelease = true;
             s.latchSteps = 0;
         }
+        else if (since < m_latchGapMs)
+            s.latchSteps = 0;
         else if (s.latchSteps > 0)
             ++s.latchSteps;
     }

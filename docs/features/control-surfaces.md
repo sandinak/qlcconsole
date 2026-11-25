@@ -263,9 +263,13 @@ that matter to a desk:
   fader (one press until it is back at 0).
 - **A latching button is flagged.** A button that sends on at one press and
   0 at the next (a toggle switch, a pad set to latch) reaches the show only
-  every other press. Learn hears it when you press it a few times and
-  chooses **Start only** (**GO** on a list), saying so; set the button to
-  momentary on the controller if it can be.
+  every other press. Learn hears it when you press it a few times (on, then
+  0 a press later, then on again; a momentary button let go within a
+  second and a half is never taken for one) and turns **Toggle** into
+  **Start only**, saying so. A mode you chose yourself is kept and the
+  note says so: **Stop only** still stops, **Momentary** follows the
+  latch (on, then off), and a list's **GO** or **Stop the list** stays
+  what it is. Set the button to momentary on the controller if it can be.
 
 ## Where a trigger works
 

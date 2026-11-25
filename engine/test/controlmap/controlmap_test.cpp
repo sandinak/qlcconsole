@@ -3276,14 +3276,37 @@ void ControlMap_Test::aLearnHearsAFaderAndALatchingButton()
     QVERIFY(!cm->learnSawLatching(0, 8));
 
     // A latching button: on, off a press later, on a press later.
+    cm->setLatchHoldMs(300);
     send(9, 127); cm->listen();
-    QTest::qWait(150);
+    QTest::qWait(350);
     send(9, 0);
     QVERIFY(!cm->learnSawLatching(0, 9));       // two values are not a run yet
     QTest::qWait(150);
     send(9, 127); cm->listen();
     QVERIFY(cm->learnSawLatching(0, 9));
     QVERIFY(!cm->learnSawFader(0, 9));
+
+    /* A momentary button held a while each press (past the gap, inside a
+       press's hold): on, 0, on -- still momentary, never a latch. */
+    send(10, 127); cm->listen();
+    QTest::qWait(150);
+    send(10, 0);
+    QTest::qWait(150);
+    send(10, 127); cm->listen();
+    QTest::qWait(150);
+    send(10, 0);
+    QVERIFY(!cm->learnSawLatching(0, 10));
+    cm->setLatchGapMs(400);
+    cm->setLatchHoldMs(1500);
+
+    /* The same at the real timings: a deliberate Learn press held half a
+       second, let go, pressed again half a second later. */
+    send(11, 127); cm->listen();
+    QTest::qWait(500);
+    send(11, 0);
+    QTest::qWait(500);
+    send(11, 127); cm->listen();
+    QVERIFY(!cm->learnSawLatching(0, 11));
 
     // The same rule the stop has: a value the same as the last, or a 0 between, is no fader.
     QVERIFY(ControlMap::movesLikeFader(false, 10, 10, 20, 1000));
