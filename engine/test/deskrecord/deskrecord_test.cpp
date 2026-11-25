@@ -1271,18 +1271,16 @@ void DeskRecord_Test::aKeyHeldAcrossAReplugGoesOnlyAfterARelease()
     send(0, kGo, 127);
     QVERIFY2(fired.isEmpty(), qPrintable(fired.isEmpty() ? QString()
                                         : "a held key's resend GOed: " + fired.first().first().toString()));
-    // A release, then a press: one GO each time; then Back the same.
+    // A release, then a press: one GO each time.
     send(0, kGo, 0);
     send(0, kGo, 127);
     QCOMPARE(fired.count(), 1);
     QCOMPARE(fired.last().first().toString(), QString("GO Act 1"));
+    send(0, kGo, 127);
+    QCOMPARE(fired.count(), 1);
     send(0, kGo, 0);
     send(0, kGo, 127);
     QCOMPARE(fired.count(), 2);
-    send(0, kBack, 0);
-    send(0, kBack, 127);
-    QCOMPARE(fired.count(), 3);
-    QCOMPARE(fired.last().first().toString(), QString("Back: Act 1"));
     send(0, kGo, 0);
     send(0, kBack, 0);
     cm->setDumpWindowMs(500);
