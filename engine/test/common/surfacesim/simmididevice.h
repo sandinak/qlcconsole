@@ -292,11 +292,12 @@ public:
             uchar cmd = 0, d1 = 0, d2 = 0;
             const bool noteOff = profile() == nullptr || profile()->midiSendNoteOff();
             const QVariant params = m_stub->m_feedbackParams.value(i);
-            /* The feedback line's own MIDI channel (setFeedbackLineChannel():
-               a Mac's MIDI output with no saved setting is channel 1). */
-            int midiChannel = m_lineChannel;
-            if (params.isValid() && params.toInt() >= 0)
-                midiChannel += params.toInt();
+            /* As MidiPlugin::sendFeedBack(), by its own rule: the feedback
+               line's MIDI channel (setFeedbackLineChannel(): a Mac's MIDI
+               output with no saved setting is channel 1), unless the
+               control names its own. */
+            const int midiChannel = QLCMIDIProtocol::feedbackMidiChannel(
+                o.channel, m_lineChannel, params.isValid() ? params.toInt() : -1);
             if (QLCMIDIProtocol::feedbackToMidi(o.channel, o.value, uchar(midiChannel), noteOff, &cmd, &d1, &d2))
             {
                 o.midi.append(char(cmd));

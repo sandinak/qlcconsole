@@ -24,7 +24,9 @@
 #define PMJOVERLAY_H
 
 #include <QElapsedTimer>
+#include <QDateTime>
 #include <QObject>
+#include <QTimer>
 #include <QPointer>
 #include <QSet>
 #include <QHash>
@@ -61,6 +63,34 @@ public:
 signals:
     /** A fader or an encoder was refused (Operate): the words, as the footer shows them. */
     void refused(const QString &why);
+    /** A lamp went to the board (lampLog() has it). */
+    void lampLogged();
+    /** The lamp test moved on (lampTestStep() says to what; empty: over). */
+    void lampTestStepped(const QString &step);
+
+public:
+    /** The last lamps the app sent the board (the overlay's and the Control
+     *  Map's, everything on its feedback line), oldest first, one line
+     *  each: time, control, note and MIDI channel, velocity and what the
+     *  board shows for it, and the MIDI bytes. */
+    QStringList lampLog() const;
+    /** One lamp as lampLog() says it. */
+    static QString lampLine(const QDateTime &at, quint32 channel, uchar value, int profileChannel);
+    /** What OpenDeck shows for velocity @p velocity ("lit", "blinking every 500 ms"). */
+    static QString lampMeaning(int velocity);
+    /** The universe the board is on (-1: none patched). */
+    int universe() const { return m_universe; }
+    /** Lamp test: control @p channel's lamp is sent, in turn, every level
+     *  and blink OpenDeck has (lampTestLevels()), one a second and a half,
+     *  so a person at the board can say what each looks like -- a colour
+     *  means its LED is an RGB one. The board's own repaint leaves that lamp
+     *  alone until the test is over, then repaints it. */
+    void startLampTest(quint32 channel);
+    void stopLampTest();
+    bool lampTestRunning() const { return m_testStep >= 0; }
+    QString lampTestStep() const { return m_testText; }
+    static QList<int> lampTestLevels();
+    static int lampTestStepMs() { return 1500; }
 
 public:
     /** The last refusal's words (empty: none yet). */
@@ -172,6 +202,20 @@ private:
     QString m_lastRefusal;
     QSet<int> m_warnedSecond;   // second boards already named
     QElapsedTimer m_refusedAt[2];   // faders, encoders: each said once a second
+
+    struct LampEntry
+    {
+        QDateTime at;
+        quint32 channel = 0;
+        uchar value = 0;
+        int profileChannel = -1;
+    };
+    QList<LampEntry> m_lampLog;     ///< the last kLampLogSize, oldest first
+    QTimer m_testTimer;
+    quint32 m_testChannel = 0;
+    int m_testStep = -1;            ///< -1: no lamp test
+    QString m_testText;
+    void lampTestNext();
 };
 
 #endif // PMJOVERLAY_H

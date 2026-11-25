@@ -14,6 +14,19 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **The PMJ's lamps go out on its own MIDI channel, and say more**: a lamp
+  for a control that carries its MIDI channel (every PMJ Black 1 button:
+  channel 9) is sent there, whatever the MIDI plugin's feedback line is set
+  to -- an output with no saved setting is channel 1, so Go and Back were
+  never lit on the real board. The board's lamps follow one rule: lit = a
+  press does something now, blinking (the board's own 500 ms blink) = what
+  is in use now (the page, a selected strip, a running hit, Blackout or
+  Blind), dim = nothing to do. Connections ▸ Control surfaces ▸ PMJ Black 1
+  ▸ **Lamp Log…** shows the last lamps sent, byte for byte, with a **Lamp
+  Test**; the help says what to run when the board's LEDs don't listen on
+  its buttons' notes. `tools/surface-capture.py press` checks a profile
+  against the board, one control at a time.
+
 - **A replug never presses the desk**: this computer's STOP, GO and Back and
   the PMJ's Go and Back now ignore a controller's state dump after a replug,
   by the Control Map's own rules; every trigger ignores any press in the

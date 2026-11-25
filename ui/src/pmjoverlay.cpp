@@ -151,10 +151,28 @@ const PmjControl kPmjControls[] = {
 // accidentally sets a control blinking.
 const int kSteadyLevels[] = { 0, 15, 31, 47, 63, 79, 95, 111, 127 };
 
-// The profile's own lamp levels for Go and Back (PMJ-Black-1.qxi,
+// The profile's own lamp levels (PMJ-Black-1.qxi,
 // <Feedback LowerValue="15" UpperValue="127"/>): dim, and lit.
 const int kProfileDim = 15;
 const int kProfileLit = 127;
+/* OpenDeck reads a blink from the same value (qlcplus-midi-profiler's
+   README, "OpenDeck LED values are not just brightness"): at 16 and over,
+   (value % 16) / 4 is 0: 1000 ms, 1: 500 ms, 2: 250 ms, 3: steady. 119 is
+   near full brightness, blinking every 500 ms -- the board's own timer, so
+   every blinking lamp is in step and nothing is resent to make it blink. */
+const int kBlinkLevel = 119;
+
+int levelForState(ControlSurface::State st)
+{
+    switch (st)
+    {
+        case ControlSurface::State::Empty:    return 0;
+        case ControlSurface::State::Valid:    return kProfileDim;
+        case ControlSurface::State::Selected: return kProfileLit;
+        case ControlSurface::State::Active:   return kBlinkLevel;
+    }
+    return 0;
+}
 const quint32 kGoChannel = 32896;
 const quint32 kBackChannel = 32907;
 
@@ -289,8 +307,144 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
         m_engine->refreshDevice(deviceId);
     });
 
+    /* The lamp log: what went out on the board's feedback line, whoever
+       sent it (PMJ Lamp Log, docs/features/control-surfaces.md). */
+    connect(m_doc->inputOutputMap(), &InputOutputMap::feedbackSent, this,
+            [this](quint32 universe, quint32 channel, uchar value, const QVariant &params) {
+        if (int(universe) != m_universe)
+            return;
+        LampEntry e;
+        e.at = QDateTime::currentDateTime();
+        e.channel = channel;
+        e.value = value;
+        e.profileChannel = params.isValid() ? params.toInt() : -1;
+        m_lampLog << e;
+        while (m_lampLog.size() > 200)
+            m_lampLog.removeFirst();
+        emit lampLogged();
+    });
+    m_testTimer.setInterval(lampTestStepMs());
+    connect(&m_testTimer, &QTimer::timeout, this, &PMJOverlay::lampTestNext);
+
     findKnownUniverse();
     m_engine->refreshDevice(deviceId);
+}
+
+QString PMJOverlay::lampMeaning(int velocity)
+{
+    if (velocity == 0)
+        return tr("dark");
+    if (velocity < 16)
+        return tr("dim");
+    switch ((velocity % 16) / 4)
+    {
+        case 0: return tr("blinking every second");
+        case 1: return tr("blinking every 500 ms");
+        case 2: return tr("blinking every 250 ms");
+        default: break;
+    }
+    return velocity == kProfileLit ? tr("lit") : tr("steady");
+}
+
+QString PMJOverlay::lampLine(const QDateTime &at, quint32 channel, uchar value, int profileChannel)
+{
+    const quint32 c = channel & 0x0FFF;
+    const int bits = int(channel >> 12) & 0x0F;
+    const int velocity = int(value >> 1) & 0x7F;      // as the MIDI plugin sends it (DMX2MIDI)
+    QString name = controlName(channel);
+    if (name.isEmpty())
+        name = QStringLiteral("#%1").arg(channel);
+    /* The MIDI channel by the plugin's rule (QLCMIDIProtocol::
+       feedbackMidiChannel()): the control's own when it names one. */
+    QString where;
+    int midiCh = -1;
+    if (profileChannel < 0 && bits != 0)
+    {
+        midiCh = bits;
+        where = tr("ch %1").arg(bits + 1);
+    }
+    else
+        where = tr("the feedback line's channel");
+    QString what;
+    uchar status = 0, d1 = 0;
+    if (c >= 128 && c <= 255)
+    {
+        what = tr("note %1").arg(int(c) - 128);
+        status = 0x90;
+        d1 = uchar(c - 128);
+    }
+    else if (c <= 127)
+    {
+        what = tr("CC %1").arg(int(c));
+        status = 0xB0;
+        d1 = uchar(c);
+    }
+    else
+        what = tr("channel %1").arg(int(c));
+    QString bytes;
+    if (status != 0 && midiCh >= 0)
+        bytes = QStringLiteral("  [%1 %2 %3]").arg(int(status) | midiCh, 2, 16, QLatin1Char('0'))
+                    .arg(int(d1), 2, 16, QLatin1Char('0')).arg(velocity, 2, 16, QLatin1Char('0'));
+    return QStringLiteral("%1  %2  %3 %4  %5 %6%7")
+        .arg(at.toString(QStringLiteral("HH:mm:ss.zzz")), name, what, where)
+        .arg(velocity).arg(lampMeaning(velocity), bytes);
+}
+
+QStringList PMJOverlay::lampLog() const
+{
+    QStringList out;
+    for (const LampEntry &e : m_lampLog)
+        out << lampLine(e.at, e.channel, e.value, e.profileChannel);
+    return out;
+}
+
+QList<int> PMJOverlay::lampTestLevels()
+{
+    // Every steady level, then each of OpenDeck's three blinks, then dark.
+    return { 15, 31, 47, 63, 79, 95, 111, 127, 112, kBlinkLevel, 123, 0 };
+}
+
+void PMJOverlay::startLampTest(quint32 channel)
+{
+    if (m_universe < 0)
+    {
+        m_testText = tr("No PMJ Black 1 is patched: nothing to test.");
+        emit lampTestStepped(m_testText);
+        return;
+    }
+    m_testChannel = channel;
+    m_testStep = -1;
+    lampTestNext();
+    m_testTimer.start();
+}
+
+void PMJOverlay::stopLampTest()
+{
+    if (m_testStep < 0)
+        return;
+    m_testTimer.stop();
+    m_testStep = -1;
+    m_testText.clear();
+    emit lampTestStepped(QString());
+    if (!m_engine.isNull())
+        m_engine->refreshDevice(deviceId);   // its own lamp again
+}
+
+void PMJOverlay::lampTestNext()
+{
+    const QList<int> levels = lampTestLevels();
+    if (++m_testStep >= levels.size() || m_universe < 0)
+    {
+        stopLampTest();
+        return;
+    }
+    const int v = levels.at(m_testStep);
+    m_testText = tr("Lamp test %1 of %2: %3 at %4 -- it should be %5. A colour means its LED is RGB: "
+                    "say which.").arg(m_testStep + 1).arg(levels.size())
+                     .arg(controlName(m_testChannel)).arg(v).arg(lampMeaning(v));
+    m_doc->inputOutputMap()->sendFeedBack(quint32(m_universe), m_testChannel,
+                                          uchar(v >= 127 ? 255 : v * 2), QVariant());
+    emit lampTestStepped(m_testText);
 }
 
 bool PMJOverlay::isPmjUniverse(quint32 universe) const
@@ -326,15 +480,25 @@ void PMJOverlay::findKnownUniverse()
     // profile, and only that one: input from any other universe is not
     // the PMJ's, whatever its channel numbers.
     InputOutputMap *iom = m_doc->inputOutputMap();
+    const int was = m_universe;
+    m_universe = -1;
     for (quint32 u = 0; u < iom->universesCount(); u++)
     {
         if (isPmjUniverse(u))
         {
             m_universe = int(u);
-            return;
+            break;
         }
     }
-    m_universe = -1;
+    // A hit learned on the board blinks while it runs, as the board's own lamps.
+    ControlMap *cm = m_doc->controlMap();
+    if (cm != nullptr && was != m_universe)
+    {
+        if (was >= 0)
+            cm->setRunningLampValue(quint32(was), -1);
+        if (m_universe >= 0)
+            cm->setRunningLampValue(quint32(m_universe), kBlinkLevel * 2);
+    }
 }
 
 PMJOverlay::~PMJOverlay()
@@ -443,21 +607,17 @@ void PMJOverlay::registerDevice()
         return taken;
     };
 
-    /* Go and Back at the profile's own levels: lit (127) when the Run tab's
-       GO or Back would do something, dim (15) when there is a list but
-       nothing to GO or go back to. */
+    /* One lamp rule for the whole board (board Q327, 2026-11-25), at the
+       profile's own levels: LIT (127) = a press does something now, BLINK
+       = what is selected or running now, DIM (15) = a key with a job and
+       nothing to do, dark = no job. The blink is OpenDeck's own (a value
+       whose low bits are not 15, kBlinkLevel): the board blinks by itself,
+       every lamp in step, and the app sends one message per change. The
+       states mean that here: Selected = lit, Active = blinking. */
     dev.levelOf = [](const ControlSurface::Role &role, ControlSurface::State st) {
-        if (role.type != ControlSurface::RoleType::Transport
-            || (role.index != ControlSurface::Go && role.index != ControlSurface::Back))
-            return -1;
-        switch (st)
-        {
-            case ControlSurface::State::Empty:  return 0;
-            case ControlSurface::State::Valid:  return kProfileDim;
-            default:                            return kProfileLit;
-        }
+        Q_UNUSED(role)
+        return levelForState(st);
     };
-
     m_engine->registerDevice(dev);
     m_engine->setStateProvider([this](const ControlSurface::Role &role) {
         return stateFor(role);
@@ -474,7 +634,10 @@ void PMJOverlay::sendLed(const ControlSurface::Control &control, int level)
     // that halving intact.
     if (m_universe < 0)
         return;   // haven't seen real PMJ input yet, so don't know where to send this
-    int snapped = snapToSteadyLevel(level);
+    if (m_testStep >= 0 && quint32(control.ledId) == m_testChannel)
+        return;   // the lamp test has it
+    // The one blink on purpose passes; anything else is snapped steady.
+    int snapped = level == kBlinkLevel ? level : snapToSteadyLevel(level);
     uchar dmxValue = uchar(qMin(255, snapped * 2));
     m_doc->inputOutputMap()->sendFeedBack(quint32(m_universe), quint32(control.ledId), dmxValue, QVariant());
 }
@@ -764,22 +927,27 @@ void PMJOverlay::slotGrandMasterValueChanged(uchar value)
 
 ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) const
 {
+    /* The board's lamp rule (levelForState()): Selected = LIT, a press does
+       something now; Active = BLINK, what is selected or running now; Valid
+       = DIM, a job with nothing to do; Empty = dark, no job. The help's
+       "What the lamps mean" and the Control surfaces hub say the same. */
+    using St = ControlSurface::State;
     InputOutputMap *iom = m_doc->inputOutputMap();
 
     switch (role.type)
     {
+    // O and Set always do something: lit, blinking while Blackout / Blind is on.
     case ControlSurface::RoleType::Static:
         if (role.index == ControlSurface::Blackout)
-            return iom->blackout() ? ControlSurface::State::Active : ControlSurface::State::Valid;
+            return iom->blackout() ? St::Active : St::Selected;
         if (role.index == ControlSurface::Blind)
-            return iom->outputInhibited() ? ControlSurface::State::Active : ControlSurface::State::Valid;
-        return ControlSurface::State::Empty;   // Favorites/Tap: unbound this slice
+            return iom->outputInhibited() ? St::Active : St::Selected;
+        return St::Empty;   // Favorites/Tap: unbound this slice
 
-    // The mode buttons: the one lit is the page the strips are on
-    // (Effects until another is pressed). The help and the Control
-    // surfaces hub say so (control-surfaces.md, "What the lamps mean").
+    // The mode buttons: the page in use blinks, every other page is lit (a
+    // press switches to it).
     case ControlSurface::RoleType::Page:
-        return role.index == m_activePage ? ControlSurface::State::Active : ControlSurface::State::Empty;
+        return role.index == m_activePage ? St::Active : St::Selected;
 
     // Go and Back: lit when the Run tab's GO / Back would do something
     // (the rule its buttons are enabled on), dim when there is a list but
@@ -787,49 +955,43 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
     case ControlSurface::RoleType::Transport:
     {
         if (role.index != ControlSurface::Go && role.index != ControlSurface::Back)
-            return ControlSurface::State::Empty;
+            return St::Empty;
         const Chaser *ch = CueRunner::runTabChaser(m_doc);
         if (ch == nullptr)
-            return ControlSurface::State::Empty;
+            return St::Empty;
         const bool can = role.index == ControlSurface::Go ? CueRunner::canGo(m_doc, ch)
                                                           : CueRunner::canBack(ch);
-        return can ? ControlSurface::State::Active : ControlSurface::State::Valid;
+        return can ? St::Selected : St::Valid;
     }
 
     // Enc 3/4 have no job yet; Enc 1/2 have no LED.
     case ControlSurface::RoleType::Param:
-        return ControlSurface::State::Empty;
+        return St::Empty;
 
-    // Select/Load(1-10): lit whenever strip N has a real target in the open
-    // scene (P2 selection mode), brighter when that target is actually in
-    // the programmer selection right now — same "in use" rule Reset's LEDs
-    // follow above, just keyed on scene targets instead of the focused
-    // palette's type.
+    // Select/Load(1-10): lit when strip N has a fixture of the scene open in
+    // Build (a press selects it), blinking while that fixture is selected;
+    // dark with no scene open or past its last fixture.
     case ControlSurface::RoleType::Select:
     case ControlSurface::RoleType::Load:
     {
         if (role.index < 1 || role.index > 10)
-            return ControlSurface::State::Empty;
+            return St::Empty;
         const QList<quint32> targets = sceneTargetFixtures();
         if (role.index - 1 >= targets.size())
-            return ControlSurface::State::Empty;
+            return St::Empty;
         if (!m_doc->programmer())
-            return ControlSurface::State::Valid;
+            return St::Selected;
         quint32 fid = targets.at(role.index - 1);
-        return m_doc->programmer()->programmerSelection().contains(fid)
-                   ? ControlSurface::State::Selected
-                   : ControlSurface::State::Valid;
+        return m_doc->programmer()->programmerSelection().contains(fid) ? St::Active : St::Selected;
     }
 
     // "N-Up": lit whenever fader N actually controls something on the
-    // focused palette right now — the "highlight the faders in use" ask
-    // this doubles as, using the exact same rule the Level/Reset write
-    // paths gate on (faderInUse()), so the board never lights a fader that
-    // pressing/turning it wouldn't actually do anything to.
+    // focused palette right now (a press zeroes it) -- the same rule the
+    // Level/Reset write paths gate on (faderInUse()).
     case ControlSurface::RoleType::Reset:
-        return faderInUse(role.index) ? ControlSurface::State::Valid : ControlSurface::State::Empty;
+        return faderInUse(role.index) ? St::Selected : St::Empty;
 
     default:
-        return ControlSurface::State::Empty;
+        return St::Empty;
     }
 }

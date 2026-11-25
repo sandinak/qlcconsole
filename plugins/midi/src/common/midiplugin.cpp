@@ -311,9 +311,8 @@ void MidiPlugin::sendFeedBack(quint32 universe, quint32 output, quint32 channel,
         qDebug() << "[sendFeedBack] Dev:" << dev->name() << ", channel:" << channel << ", value:" << value << dev->sendNoteOff();
         uchar cmd = 0;
         uchar data1 = 0, data2 = 0;
-        int midiChannel = dev->midiChannel();
-        if (params.isValid() && params.toInt() >= 0)
-            midiChannel += params.toInt();
+        const int profileChannel = params.isValid() ? params.toInt() : -1;
+        const int midiChannel = QLCMIDIProtocol::feedbackMidiChannel(channel, dev->midiChannel(), profileChannel);
 
         if (QLCMIDIProtocol::feedbackToMidi(channel, value, midiChannel, dev->sendNoteOff(),
                                         &cmd, &data1, &data2) == true)

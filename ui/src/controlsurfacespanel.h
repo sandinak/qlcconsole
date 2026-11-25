@@ -64,6 +64,10 @@ public:
      *  (the stop that stops nothing: UX-32). */
     bool statusWarns(const QString &key) const;
     QPushButton *setUpButton(const QString &key) const { return m_buttons.value(key); }
+    /** The PMJ row's Lamp Log… button. */
+    QPushButton *pmjLampLogButton() const { return m_pmjLampLog; }
+    /** Open the PMJ's lamp log (PmjLampLogDialog). */
+    void openPmjLampLog();
     /** This computer's desk, at the top (DeskSetupPanel). */
     DeskSetupPanel *deskPanel() const { return m_desk; }
 
@@ -112,6 +116,7 @@ private:
     QMap<QString, QLabel *> m_status;
     QMap<QString, QLabel *> m_what;
     QMap<QString, QPushButton *> m_buttons;
+    QPushButton *m_pmjLampLog = nullptr;
     QString m_lastSummary;
 };
 

@@ -70,6 +70,26 @@ namespace QLCMIDIProtocol
                         uchar midiChannel, bool sendNoteOff,
                         uchar* cmd, uchar* data1,
                         uchar* data2);
+
+    /**
+     * The MIDI channel feedback for QLC+ channel @a channel goes out on,
+     * for feedbackToMidi()'s midiChannel.
+     *
+     * A profile's own MIDI channel for the control (@a profileChannel >= 0,
+     * its MidiChannel) is added to the line's, as ever. Otherwise a channel
+     * that carries its MIDI channel in bits 12-15 (a profile learned with
+     * the input on any channel: the PMJ Black 1's controls are all MIDI
+     * channel 9) is sent there, whatever the feedback line is set to: the
+     * board's light listens where its button sends, and an output line with
+     * no saved setting is channel 1 (qlcconsole: his PMJ's Go lamp went to
+     * channel 1, 2026-11-25). A channel with no such bits (MIDI channel 1,
+     * or a line pinned to one) goes out on the line's channel.
+     *
+     * @param channel QLC+ channel number (as the profile names the control)
+     * @param lineChannel the feedback line's MIDI channel (0-15, 16 = any)
+     * @param profileChannel the profile's MidiChannel for it, -1 = none
+     */
+    int feedbackMidiChannel(quint32 channel, int lineChannel, int profileChannel);
 }
 
 /****************************************************************************

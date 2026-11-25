@@ -607,6 +607,12 @@ public:
      *  never dimmed away by it: a panic button is always findable. */
     bool dimWhenReady() const { return m_dimWhenReady; }
     void setDimWhenReady(bool on);
+    /** The light a running hit or function shows on universe @a universe's
+     *  board, in place of its profile's lit level: a board that blinks by
+     *  the value it is sent (the PMJ Black 1's OpenDeck) blinks what runs
+     *  and keeps lit for what a press would fire (board Q327). @a value is
+     *  as sent (0-255, a MIDI velocity doubled); -1 = the profile's lit. */
+    void setRunningLampValue(quint32 universe, int value);
     /** Test hook: how long each step of the held blink lasts. */
     void setBlinkMs(int ms) { m_blinkMs = ms; }
     /** Whether the held blink is running on @a b now. */
@@ -892,6 +898,7 @@ private:
     /** A control that is ready glows dim; off for a pad whose LEDs take a
      *  colour in the velocity (the APCs) and show nothing at a dim level. */
     bool m_dimWhenReady = true;
+    QHash<quint32, uchar> m_runningLamp;     ///< setRunningLampValue()
     /** Each place a trigger has, while it is in the show: its production
      *  and its name (placeKey()). */
     struct PlaceHome

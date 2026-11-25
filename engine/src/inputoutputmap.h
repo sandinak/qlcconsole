@@ -897,6 +897,11 @@ public:
      */
     bool sendFeedBack(quint32 universe, quint32 channel, uchar value, const QVariant &params);
 
+signals:
+    /** Feedback went to @a universe's feedback line (sendFeedBack()): what
+     *  a lamp log shows (the PMJ's, ControlSurfacesPanel). */
+    void feedbackSent(quint32 universe, quint32 channel, uchar value, const QVariant &params);
+
 private:
     /** In case of duplicate strings, append a number to make them unique */
     void removeDuplicates(QStringList &list);

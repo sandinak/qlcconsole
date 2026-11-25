@@ -2131,6 +2131,7 @@ bool InputOutputMap::sendFeedBack(quint32 universe, quint32 channel, uchar value
     if (patch != NULL && patch->isPatched())
     {
         patch->plugin()->sendFeedBack(universe, patch->output(), channel, value, params);
+        emit feedbackSent(universe, channel, value, params);
         return true;
     }
     else

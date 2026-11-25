@@ -93,6 +93,43 @@ and play it. A pad can also be recorded by the plugin itself
 ([PAD_TRACES.md](PAD_TRACES.md)): those traces are values after the
 plugin's reading, these are the reports before it.
 
+### Checking a profile against the board: press every control
+
+The simulator proves the overlay's table is the profile; only the board
+proves the profile. `press` prompts for each control of a profile in turn
+("press Go"), records what arrives, and prints the profile's channel next
+to the one received, a mismatch marked:
+
+```sh
+tools/surface-capture.py press --port "OpenDeck | PMJ_BLACK_1" \
+    --profile resources/inputprofiles/PMJ-Black-1.qxi -o pmj-every.jsonl
+```
+
+Enter skips a control, `q` stops and prints the table so far. The
+`.jsonl` has every message, each control's under a `# Go` comment line,
+for the simulator to replay. It exits 1 when a control mismatched.
+(2026-11-25: the PMJ Black 1 profile matched the board's own learned map,
+all 69 controls; `engine/test/surfacesim/captures/pmj-back-favorites.jsonl`
+is written by hand, not a capture.)
+
+### A board's own LEDs
+
+A lamp the app sends is not a lamp the board shows: an OpenDeck board's
+setup says which note and MIDI channel each LED answers, and which button
+it sits under. `SimMidiDevice::setLeds()` takes that table
+(`SimMidiDevice::loadLeds()` reads it from JSON:
+`{"leds": [{"led", "ch", "note", "midi", "under"}]}`), and
+`lampUnder("Go")` is what the LED under Go shows. Two tables of the real
+PMJ Black 1 are in [captures/](../../engine/test/surfacesim/captures/):
+`pmj-leds-20261125.json` (factory order, every LED on channel 1: the app's
+lamps light none of their buttons) and `pmj-leds-aligned-20261125.json`
+(after `qlc-midi opendeck align`: each LED answers its button's note on
+channel 9). Both are read-only dumps (`qlc-midi opendeck dump … --raw`,
+qlcplus-midi-profiler), with `under` from its `opendeck identify` pairing.
+`setFeedbackLineChannel()` sets the MIDI plugin's feedback line channel
+(a Mac's output with no saved setting is channel 1); the bytes follow the
+plugin's own rule, `QLCMIDIProtocol::feedbackMidiChannel()`.
+
 ## A known bug
 
 Pin it with the branch that fixes it, so the test flips when it lands:

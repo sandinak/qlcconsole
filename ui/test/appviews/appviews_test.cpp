@@ -3130,15 +3130,16 @@ void AppViews_Test::pmjGoLampLitWhenReady()
                 return int(stub->m_feedback.at(i).second);
         return -1;
     };
-    const int lit = 254, dim = 30;
+    const int lit = 254, dim = 30, blink = 238;    // blink: 119, OpenDeck's 500 ms blink (board Q327)
 
     // No cue list: nothing to GO, ever -- dark.
     m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
     QCOMPARE(lastSent(go), 0);
     QCOMPARE(lastSent(back), 0);
-    // The page in use is lit: Effects until another is pressed.
-    QCOMPARE(lastSent(effects), lit);
-    QCOMPARE(lastSent(groups), 0);
+    // The page in use blinks (Effects until another is pressed); the
+    // others are lit, a page to switch to.
+    QCOMPARE(lastSent(effects), blink);
+    QCOMPARE(lastSent(groups), lit);
 
     // A list with a cue to GO: Go lit, Back dim (nothing to go back to).
     Chaser *list = mainList(doc, 2);
@@ -3166,11 +3167,11 @@ void AppViews_Test::pmjGoLampLitWhenReady()
     QTRY_COMPARE_WITH_TIMEOUT(lastSent(back), dim, 3000);
     QCOMPARE(lastSent(go), lit);
 
-    // Another page pressed: its lamp is the lit one.
+    // Another page pressed: it blinks, the one before is lit again.
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId,
                                            ControlSurface::Role(ControlSurface::RoleType::Page, 1), 127);
-    QCOMPARE(lastSent(groups), lit);
-    QCOMPARE(lastSent(effects), 0);
+    QCOMPARE(lastSent(groups), blink);
+    QCOMPARE(lastSent(effects), lit);
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId,
                                            ControlSurface::Role(ControlSurface::RoleType::Page, 0), 127);
 }

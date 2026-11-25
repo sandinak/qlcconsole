@@ -56,6 +56,7 @@
 #include "virtualconsole/vcmatrixcontrol.h"
 #include "controlmappanel.h"
 #include "controlsurfacespanel.h"
+#include "pmjlamplogdialog.h"
 #include "inputdevicenotices.h"
 #include <QMessageBox>
 #include "connectionstree.h"
@@ -2075,9 +2076,18 @@ void ControlMapUi_Test::pmjRowMatchesExactProfileOnly()
     QVERIFY2(status.startsWith("Patched on universe 1, with its feedback line\n"), qPrintable(status));
     // What its lit lamps mean, where it is set up (his 4612 test: a lit
     // Effects and a lit 10-Load with nothing saying why).
-    for (const char *word : { "Go lit", "Back lit", "Effects", "Fix Cont", "page in use", "Load", "scene open in Build" })
+    for (const char *word : { "Go lit", "Back lit", "Effects", "Fix Cont", "page in use", "Load", "scene open in Build",
+                              "Blinking", "opendeck align", "Lamp Log" })
         QVERIFY2(status.contains(QLatin1String(word)), qPrintable(QStringLiteral("%1: %2").arg(word, status)));
     QVERIFY(hub->findChild<QLabel *>("surfacePmjWhat")->text().contains("Run tab's GO and Back"));
+    // Its Lamp Log… opens the log of what was sent, with a lamp test.
+    QVERIFY(hub->pmjLampLogButton() != nullptr);
+    hub->pmjLampLogButton()->click();
+    PmjLampLogDialog *log = nullptr;
+    QTRY_VERIFY((log = hub->findChild<PmjLampLogDialog *>()) != nullptr);
+    QVERIFY(log->testButton() != nullptr);
+    QCOMPARE(log->buttonBox()->itemText(0), QString("Go"));
+    log->close();
 }
 
 /* The Grand Master's input is set in the Virtual Console's Settings: its
