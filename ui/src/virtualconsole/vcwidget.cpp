@@ -606,6 +606,8 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
                 this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
         connect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
                 this, SLOT(slotInputProfileChanged(quint32,QString)));
+        connect(m_doc->inputOutputMap(), SIGNAL(inputDeviceDisconnected(quint32,QString,QString)),
+                this, SLOT(slotInputDeviceDisconnected(quint32)));
     }
 
     // Clear previous source
@@ -691,6 +693,8 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
                    this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
         disconnect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
                    this, SLOT(slotInputProfileChanged(quint32,QString)));
+        disconnect(m_doc->inputOutputMap(), SIGNAL(inputDeviceDisconnected(quint32,QString,QString)),
+                   this, SLOT(slotInputDeviceDisconnected(quint32)));
     }
 }
 
@@ -751,6 +755,16 @@ void VCWidget::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
     Q_UNUSED(universe);
     Q_UNUSED(channel);
     Q_UNUSED(value);
+}
+
+void VCWidget::slotInputDeviceDisconnected(quint32 universe)
+{
+    inputDeviceLost(universe);
+}
+
+void VCWidget::inputDeviceLost(quint32 universe)
+{
+    Q_UNUSED(universe);
 }
 
 void VCWidget::slotInputProfileChanged(quint32 universe, const QString &profileName)

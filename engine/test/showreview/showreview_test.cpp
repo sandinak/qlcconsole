@@ -37,6 +37,7 @@
 #include "chaser.h"
 #include "efx.h"
 #include "showtreecontroller.h"
+#include "controlmap.h"
 #include "programmercontroller.h"
 #include "powerdistribution.h"
 #include "monitorproperties.h"
@@ -1996,6 +1997,34 @@ void ShowReview_Test::vc07()
     QVERIFY(fires("VC-07"));
     // No Virtual Console to ask.
     m_doc->showReview()->setVcXml(QByteArray());
+}
+
+void ShowReview_Test::stopDeviceMissing()
+{
+    ControlMap *cm = m_doc->controlMap();
+    QVERIFY(quiet("CTL-01"));                       // no stop learned
+    // Learned on universe 1, which has no input here: the stop does nothing.
+    cm->setBinding({ 0, 128 + 61, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QVERIFY(fires("CTL-01"));
+    const ReviewFinding f = findings("CTL-01").first();
+    QVERIFY2(f.message.contains("emergency stop") && f.message.contains("universe 1 has no input patched"),
+             qPrintable(f.message));
+    QCOMPARE(f.severity, ReviewFinding::Warning);
+    // Headless (--review, no plugins): the saved patch decides, not the
+    // live map, which has nothing patched there.
+    ShowReview::Options cli;
+    cli.outputsLoaded = false;
+    cli.universesWithInput = { 0 };
+    QVERIFY(quiet("CTL-01", cli));
+    cli.universesWithInput = { 1 };
+    QVERIFY(fires("CTL-01", cli));
+    QVERIFY2(findings("CTL-01", cli).first().message.contains("universe 1 has no input patched"),
+             qPrintable(findings("CTL-01", cli).first().message));
+    // On a computer key: that is stopProblem()'s, not a missing device.
+    cm->setBinding({ ControlMap::KeyboardUniverse, ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier),
+                     ControlMap::emergencyStop(), ControlMap::Toggle });
+    QVERIFY(quiet("CTL-01"));
+    cm->removeAll();
 }
 
 void ShowReview_Test::vc09()

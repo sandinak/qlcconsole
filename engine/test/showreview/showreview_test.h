@@ -130,6 +130,8 @@ private slots:
     void vc02();
     void vc07();
     void vc09();
+    /** Phase R: the stop's device missing (CTL-01). */
+    void stopDeviceMissing();
     void cue15();
     /** CUE-17: a press (the candles' Dim) that tracks; quiet released */
     void cue17();

@@ -327,6 +327,9 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
 - **VC-09** A VC Cue List still on the old chaser after Import in place: it
   plays a show that no longer matches the Show Tree list. Point it at the
   list.
+- **CTL-01** The emergency stop is learned on a desk that is not connected,
+  or on a universe with no input patched: pressing it stops nothing. Plug
+  the desk in, or learn the stop again on one that is here.
 
 The Virtual Console checks read what the console holds, not the console: in
 the app that is the open console, and `--review` reads it from the file, so

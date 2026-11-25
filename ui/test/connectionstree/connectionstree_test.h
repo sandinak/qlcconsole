@@ -95,6 +95,9 @@ private slots:
     void aRefreshKeepsTheSelectionAndThePlace();
     void noRefreshUnderAnOpenMenu();
     void bulkRetargetNumbersPortsUpwardAndIsOneUndoStep();
+    /** Unpatching the stop's input, then Cancel on the warning: the patch and
+     *  the previous undo step are both kept (PatchUndo holds one step). */
+    void cancelledUnpatchKeepsThePreviousUndoStep();
     /** Two universes may share a NIC, but not a node port. */
     void twoUniversesCannotTargetTheSameNodePort();
 

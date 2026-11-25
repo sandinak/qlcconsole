@@ -352,6 +352,27 @@ button under the Control Map table.
   missed one.
 - **A lost release at learn time** does not hold the first real press: the
   press that taught the stop is ignored until its release, until a second value arrives, or for one second.
+- **A device that comes back sends its whole state**, and that is not a press.
+  For half a second after a desk is plugged back in (or found again after a
+  sleep), a stop whose first value is 0 is at rest, and the one press value
+  that follows it in that half second is the desk's state dump: no ALL OFF,
+  and the notice says *Ignored STOP's first value after replug (state dump)*.
+  Only one value is ever ignored: a release and a press after it (a double
+  tap on STOP right after the replug) fire ALL OFF. A first value above 0 is
+  a press: one ALL OFF, however often the dump repeats it. After the half
+  second every press is a press again.
+- **Every other button is the other way round.** A GO, a Back, a hit, any
+  other trigger and a Virtual Console button act on a press in that half
+  second only when the same button sent a release (0) first: a "pressed" in
+  the desk's dump is ignored, and the notice says so (*Ignored GO of Main's
+  first value after replug (state dump)*). An unwanted GO is worse than a
+  missed one: if nothing happened, press again. Faders are not affected:
+  they pick up where they are, as before.
+- **When the stop's desk is missing, you are told.** The Control surfaces
+  hub's stop line turns amber and says *its device '…' is not connected, so it stops nothing
+  until it is back* (or that its universe has no input patched), and Show
+  Review's **CTL-01** says the same before the show. The screen's Stop All
+  still works.
 - It is saved with the show. A QLC+ 4 build opens the show and skips it.
 - **No switch hides it.** With **Control Surfaces** turned off for the show
   (View ▸ Workspace ▸ Tabs & Features…, see
@@ -568,6 +589,36 @@ the profile is patched on.
   inputs work on Windows. A pad's arm and MIDI timecode in are refused there
   (decided for the pad). Control surfaces on Windows are **not yet checked
   on a real Windows machine**.
+
+## Unplugged, replugged, asleep
+
+A cable pulled or a desk asleep mid-show never leaves anything stuck on,
+and never surprises you when it comes back.
+
+- **Whatever was held lets go.** A device that goes away never sends its
+  releases, so everything that listens behaves as if each control were let
+  go: a Control Map trigger held down (a Momentary) lets go, a Virtual Console
+  button **flashing** goes off, a slider's **flash** button goes off, and a
+  slider forgets where its fader was. The level stays where it is. When the
+  desk is back, a slider that picks up (**Catch values** on, in Playback,
+  Level or Speed master mode; see above) waits for its fader before it
+  follows, so a fader moved meanwhile, or the state the desk sends when it
+  is plugged in, does not jump the level. A slider with Catch values off,
+  and every master (Grand Master, Submaster, Group master), follows the
+  desk's first value at once, as it always does: set the fader where the
+  level is before you plug the desk back in. A flash held with the mouse is
+  not touched.
+- **The unplug says what stopped working.** The notice and the footer name
+  the jobs the device had: *MIDI device 'APC MINI' disconnected — universe 2.
+  Not working until it is back: Emergency Stop, Grand Master, GO of Main.*
+- **After a sleep**, the notice line says *Slept 40 s, finding devices…*
+  while the devices come back; each one back, or still missing, is said as
+  usual once it has settled.
+- **A repatch says what moves.** In Inputs/Outputs, changing which device a
+  universe's input is patched to (or unpatching it) while the show has
+  controls on it asks first: *Universe 2's controls move from 'APC MINI' to
+  'nanoKONTROL2': Emergency Stop, Grand Master, GO of Main. 'APC MINI' will
+  do none of them.* **Cancel** leaves the patch as it was.
 
 ## Check it on the real device
 

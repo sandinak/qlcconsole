@@ -46,6 +46,19 @@ private slots:
     void theDefaultSettleIsTwoAndAHalfSeconds();
     void aControllerSlotSaysWhichIsInUse();
     void anotherPadIsOfferedAndAdopted();
+    // Phase R (CONTROL_SURFACES_EVAL §7)
+    /** An unplug names what stops working with the device. */
+    void namesLostJobs();
+    /** A repatch says what moves first; Cancel leaves the patch. */
+    void repatchWarnsAndLists();
+    /** After a sleep: "Slept 40 s, finding devices…", once. */
+    void wakeNoticeSaysSlept();
+    /** A device missing before the sleep is said again, in amber, once the
+     *  wake settles: the wake line never leaves the lost stop unsaid. */
+    void aDeviceStillMissingAfterAWakeIsSaidAgain();
+    /** The stop's first value after a replug, ignored as the desk's state
+     *  dump, is said in the notices; a double tap after it is not ignored. */
+    void anIgnoredStopDumpIsSaid();
 
 private:
     Doc *m_doc = nullptr;

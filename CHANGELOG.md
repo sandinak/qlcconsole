@@ -39,6 +39,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Master hears nothing of the desk while a show loads and waits out its
   device's dump whenever its port is patched again (a load, Patch It), so
   a fader parked at 0 no longer blacks the stage out as the show opens.
+- **Unplugged, replugged, asleep (control surfaces phase R)**: a desk that
+  goes away lets go of everything it held (a held trigger, a VC flash, a
+  slider's flash; a slider with Catch values on picks its fader up again when
+  it is back, while a master follows the desk's first value at once); the
+  notice names what stopped working (*Emergency Stop, Grand Master, GO of
+  Main*); a stop's first 0 after a replug keeps the desk's state dump (one
+  value, never more, said in the notice) from firing ALL OFF, and a GO, hit,
+  other trigger or VC button acts in the replug's half second only after a
+  release from that button (the dump's "pressed" is ignored and said); *Slept 40 s, finding devices…* after a sleep; a repatch in
+  Inputs/Outputs says what moves first (Cancel leaves it); the hub (in amber) and
+  Show Review (CTL-01) say when the stop's desk is missing.
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or

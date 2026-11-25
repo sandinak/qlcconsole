@@ -56,6 +56,8 @@
 #include "virtualconsole/vcmatrixcontrol.h"
 #include "controlmappanel.h"
 #include "controlsurfacespanel.h"
+#include "inputdevicenotices.h"
+#include <QMessageBox>
 #include "connectionstree.h"
 #include "inputoutputmanager.h"
 #include "speedmasterspanel.h"
@@ -3210,4 +3212,68 @@ void ControlMapUi_Test::phaseFShots()
         cm->handleInput(0, 7, 255);
         cm->handleInput(0, 7, 0);
     }, ControlMap::function(a->id())));
+}
+
+/* Phase R: the stop learned on a universe with no input: the hub's stop line
+   says so, instead of the operator finding out by pressing it. */
+void ControlMapUi_Test::hubSaysTheStopsDeviceIsMissing()
+{
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QVERIFY2(hub->status("estop").contains("universe 1 has no input patched, so it stops nothing until it is back"),
+             qPrintable(hub->status("estop")));
+    QVERIFY(hub->statusWarns("estop"));             // amber, an open warning
+    cm->removeAll();
+    QCOMPARE(hub->status("estop"), QString("Emergency stop: not learned"));
+    QVERIFY(!hub->statusWarns("estop"));
+}
+
+/* With QLC_SHOT_DIR: the hub with the stop's device missing at three sizes,
+   and the repatch warning. */
+void ControlMapUi_Test::recoveryShots()
+{
+    const QByteArray env = qgetenv("QLC_SHOT_DIR");
+    if (env.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    const QDir dir(QString::fromLocal8Bit(env));
+    QDir().mkpath(dir.absolutePath());
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Main");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::Toggle });
+    cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
+    InputOutputManager mgr(nullptr, m_doc);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlPage();
+        mgr.findChild<ConnectionsTree *>()->selectShowControlRow(QStringLiteral("surfaces"));
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(dir.absoluteFilePath(QString("recovery-hub-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
+    // The repatch warning, over the window.
+    bool shot = false;
+    QTimer t;
+    t.setInterval(20);
+    connect(&t, &QTimer::timeout, &t, [&]() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+        {
+            QMessageBox *box = qobject_cast<QMessageBox *>(w);
+            if (box == nullptr || !box->isVisible())
+                continue;
+            shot = box->grab().save(dir.absoluteFilePath("recovery-repatch-warning.png"));
+            for (QAbstractButton *b : box->buttons())
+                if (box->buttonRole(b) == QMessageBox::RejectRole)
+                    b->click();
+            return;
+        }
+    });
+    t.start();
+    QVERIFY(!InputDeviceNotices::confirmRepatch(&mgr, m_doc, 0, QStringLiteral("nanoKONTROL2")));
+    QVERIFY(shot);
+    cm->removeAll();
 }

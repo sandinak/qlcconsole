@@ -63,6 +63,7 @@
 #include "deviceprofile.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
+#include "inputdevicenotices.h"
 #include "inputoutputmap.h"
 #include "patchundo.h"
 #include "inputoutputmanager.h"
@@ -3481,6 +3482,15 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
                 return;
             }
         }
+        /* Phase R: what the show's controls on this universe move to, said
+           before they move; Cancel leaves the patch. */
+        const QStringList lines = iomap->pluginInputs(pluginName);
+        const QString device = int(line) < lines.count() ? lines.at(int(line)) : pluginName;
+        if (InputDeviceNotices::confirmRepatch(this, m_doc, uniId, device) == false)
+        {
+            refresh();
+            return;
+        }
         done = iomap->setInputPatch(uniId, pluginName, QString(), line);
     }
 
@@ -3527,6 +3537,13 @@ void ConnectionsTree::unpatchFromLine(quint32 universe, const QString &pluginNam
 
     InputOutputMap *iomap = m_doc->inputOutputMap();
     if (iomap == NULL)
+        return;
+
+    // What stops working with it, said first (phase R). The undo step is
+    // taken only once the change is going ahead: PatchUndo holds one step,
+    // and a Cancel must leave the previous one undoable.
+    if (output == false
+            && InputDeviceNotices::confirmRepatch(this, m_doc, universe, QString()) == false)
         return;
 
     if (iomap->patchUndo() != NULL)

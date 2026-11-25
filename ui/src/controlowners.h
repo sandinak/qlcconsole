@@ -216,6 +216,14 @@ public:
      *  computer's desk roles. */
     static bool deskOwner(Doc *doc, quint32 universe, quint32 channel, Owner *out);
 
+    /** What the show's listeners on @a universe do, in words, for a notice
+     *  that names what an unplugged device or a repatch takes with it
+     *  (phase R): "Emergency Stop", "Grand Master", "GO of Main", then the
+     *  other triggers, the Virtual Console's controls (counted past two),
+     *  the encoder bank, the speed masters and the channel groups. The PMJ
+     *  overlay's own controls are not jobs of the show. */
+    static QStringList jobsOn(Doc *doc, quint32 universe);
+
 private:
     /** Every listener of the show with the control it hears, as
      *  (universe << 32 | channel): the one walk behind owners() and

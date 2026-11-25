@@ -60,6 +60,9 @@ public:
 
     /** The status line of row @p key, as the row shows it. */
     QString status(const QString &key) const;
+    /** True while row @p key's status is an open warning, drawn amber
+     *  (the stop that stops nothing: UX-32). */
+    bool statusWarns(const QString &key) const;
     QPushButton *setUpButton(const QString &key) const { return m_buttons.value(key); }
     /** This computer's desk, at the top (DeskSetupPanel). */
     DeskSetupPanel *deskPanel() const { return m_desk; }

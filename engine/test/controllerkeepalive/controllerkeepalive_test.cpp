@@ -17,6 +17,7 @@
 
 #include <QtTest>
 #include <QSignalSpy>
+#include <QDateTime>
 
 #include "controllerkeepalive_test.h"
 #include "controllerkeepalive.h"
@@ -235,6 +236,55 @@ void ControllerKeepAlive_Test::thePermissionHint()
     keep.requestInputMonitoring();
     QCOMPARE(keep.inputMonitoring(), ControllerKeepAlive::PermissionGranted);
     QVERIFY(keep.permissionHint().isEmpty());
+}
+
+void ControllerKeepAlive_Test::wakeNoticeOnce()
+{
+    int begun = 0, ended = 0, held = 0;
+    ControllerKeepAlive keep;
+    keep.setBackend(new FakeBackend(&begun, &ended, &held));
+    QSignalSpy woke(&keep, &ControllerKeepAlive::woke);
+    // The machine does not really sleep here: a steady/uptime clock (which
+    // stops while a Mac sleeps) would say ~0 ms. The sleep is the clock's.
+    qint64 clock = 1000000;
+    keep.setClock([&clock]() { return clock; });
+
+    // Nothing wants the controller: the wake is still said (a MIDI desk too).
+    // A 40-minute sleep, in no real time at all.
+    keep.setSystemState(ControllerKeepAlive::Asleep);
+    clock += 40 * 60 * 1000;
+    keep.setSystemState(ControllerKeepAlive::Waking);
+    QCOMPARE(woke.count(), 1);
+    QCOMPARE(woke.at(0).at(0).toLongLong(), qint64(40 * 60 * 1000));
+
+    // Found again, locked, unlocked, waking again without a sleep: not again.
+    keep.setSystemState(ControllerKeepAlive::Awake);
+    keep.setSystemState(ControllerKeepAlive::ScreenLocked);
+    keep.screenUnlocked();
+    keep.setSystemState(ControllerKeepAlive::Waking);
+    QCOMPARE(woke.count(), 1);
+
+    // The next sleep is said again; a clock set back while asleep is 0, not
+    // a negative figure.
+    keep.setSystemState(ControllerKeepAlive::Asleep);
+    clock -= 5000;
+    keep.setSystemState(ControllerKeepAlive::Awake);
+    QCOMPARE(woke.count(), 2);
+    QCOMPARE(woke.at(1).at(0).toLongLong(), qint64(0));
+}
+
+void ControllerKeepAlive_Test::wakeUsesWallClock()
+{
+    // The default clock counts the sleep (the wall clock), not uptime.
+    ControllerKeepAlive keep;
+    QSignalSpy woke(&keep, &ControllerKeepAlive::woke);
+    const qint64 before = QDateTime::currentMSecsSinceEpoch();
+    keep.setSystemState(ControllerKeepAlive::Asleep);
+    keep.setSystemState(ControllerKeepAlive::Waking);
+    QCOMPARE(woke.count(), 1);
+    const qint64 slept = woke.at(0).at(0).toLongLong();
+    QVERIFY(slept >= 0);
+    QVERIFY(slept <= QDateTime::currentMSecsSinceEpoch() - before);
 }
 
 QTEST_GUILESS_MAIN(ControllerKeepAlive_Test)

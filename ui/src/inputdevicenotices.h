@@ -27,6 +27,7 @@
 #include "qlcui_export.h"
 
 class QLCIOPlugin;
+class QWidget;
 class QTimer;
 class Doc;
 
@@ -96,6 +97,24 @@ public:
     /** "Controller", "MIDI device" or "Input device", for @p plugin. */
     static QString kindName(const QString &plugin);
 
+    /** What the show's controls on @p universe do, in words (phase R):
+     *  "Emergency Stop, Grand Master, GO of Main" (ControlOwners::jobsOn());
+     *  empty when nothing listens there. */
+    static QString jobsText(Doc *doc, quint32 universe);
+
+    /** The Mac woke after sleeping @p sleptMs (ControllerKeepAlive::woke):
+     *  "Slept 40 s, finding devices…" once, when a device input is patched.
+     *  The devices that come back (or not) are said as usual after it. */
+    void noteWake(qint64 sleptMs);
+
+    /** What moves when @p universe's input is repatched to @p newDevice
+     *  (empty: unpatched), in a sentence; empty when nothing would (no
+     *  control listens there, or it is the same device). */
+    static QString repatchText(Doc *doc, quint32 universe, const QString &newDevice);
+    /** Ask before a repatch that moves controls (repatchText()): true to go
+     *  on. Nothing asked (true) when nothing moves. */
+    static bool confirmRepatch(QWidget *parent, Doc *doc, quint32 universe, const QString &newDevice);
+
 signals:
     /** Show @p text; @p warning (a device went): amber, and it stays. */
     void notice(const QString &text, bool warning);
@@ -126,13 +145,22 @@ public:
      *  address in brackets. */
     static QString controllerName(QLCIOPlugin *plugin, quint32 input);
 
+    /** What is said when @p what's first value after universe
+     *  @p universe's device came back was ignored as its state dump
+     *  (ControlMap::stateDumpIgnored): "Ignored STOP's first value after
+     *  replug (state dump) — universe 2", "Ignored GO of Main's ...". */
+    static QString stateDumpText(const QString &what, quint32 universe);
+
 private slots:
+    void slotStateDumpIgnored(quint32 universe, quint32 channel, const QString &what);
     void slotStickDrift(quint32 input, int channel, double offset);
     void slotSticksCentred(quint32 input, int held);
 
 private:
     void schedule();
     void updateStatus(const QList<Device> &now) const;
+    /** @p text, then what stops working with universe @p universe's device. */
+    QString withJobs(const QString &text, quint32 universe) const;
 
     Doc *m_doc;
     QTimer *m_settle;
@@ -142,6 +170,10 @@ private:
     QSet<QString> m_offered;
     /** Controllers whose stick drift was said ("plugin\ndevice"). */
     QSet<QString> m_driftSaid;
+    /** A wake's "finding devices…" line replaced the notice: the next
+     *  settle says again what is still missing, so the standing amber line
+     *  (and what stops working with it) is never lost to the wake line. */
+    bool m_resayMissing = false;
 };
 
 #endif

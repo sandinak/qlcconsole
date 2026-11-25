@@ -338,12 +338,32 @@ public:
     void setConfirmMs(int ms) { m_confirmMs = ms; }
     bool isInputConnected() const { return m_inputConnected; }
     void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
+    /** How long after a device comes back (a replug, a wake) what it sends
+     *  may be its state dump (phase R): a stop whose first value then is 0
+     *  ignores the ONE non-zero that follows inside this (ms); a second
+     *  press, or any press after another 0, fires. */
+    void setDumpWindowMs(int ms) { m_dumpWindowMs = ms; }
+    /** The state-dump guard for a trigger or a VC button (phase R): inside
+     *  the dump window after @a universe's device came back, a non-zero
+     *  value acts only when a 0 from that same control came first (a real
+     *  release, then press). True: @a value is ignored (the device's dump
+     *  of "pressed"), said once per control and replug as @a what
+     *  (stateDumpIgnored()). The opposite of the stop's rule on purpose: an
+     *  unwanted GO is worse than a missed one, which the operator sees and
+     *  presses again. Never for the stop (its own rule) or a fader (pick-up
+     *  handles those). A 0 is never ignored; it arms the control. */
+    bool isTriggerDump(quint32 universe, quint32 channel, uchar value, const QString &what);
+    int dumpWindowMs() const { return m_dumpWindowMs; }
     /** What is wrong with the stop's control, in words (empty: nothing):
      *  its profile calls it a fader or knob (it still fires; said), it is a computer
      *  key (never works), or it has been seen moving like a fader (it still
      *  fires; shown loudly: the panel, one footer line). */
     QString stopProblem() const;
     bool stopHasProblem() const { return !stopProblem().isEmpty(); }
+    /** The stop's device, when its universe hears nothing now (phase R):
+     *  "'APC MINI' is not connected", "universe 3 has no input patched";
+     *  empty when it is there (or no stop is learned, or it is a key). */
+    QString stopDeviceMissing() const;
 
     /** The emergency stop's fader rule, for any run of values: a value
      *  that differs from the last one, with no 0 (a release) between them
@@ -565,6 +585,13 @@ signals:
     /** The stop's control was seen moving like a fader (or its state
      *  changed): the panel shows it. */
     void stopStateChanged();
+    /** A control's first value after its device came back (a replug, a
+     *  wake) on @a universe / @a channel was taken for the device's state
+     *  dump and ignored (phase R): the stop's (@a what "STOP", at most one
+     *  value per replug) or a trigger's or VC button's (@a what "GO of
+     *  Main", said once per control and replug; isTriggerDump()).
+     *  InputDeviceNotices says so. */
+    void stateDumpIgnored(quint32 universe, quint32 channel, const QString &what);
     /** What isArmed() says may have changed (the mode, the Run tab's
      *  list, the Show Tree's selection, a cue list moving on). */
     void armingChanged();
@@ -603,6 +630,8 @@ private slots:
     void slotInputDeviceConnected();
     /** A controller went away or came back: a press it held is let go. */
     void slotInputDeviceChanged(quint32 universe);
+    /** A controller came back: what it sends first may be its state dump. */
+    void slotInputDeviceBack(quint32 universe);
 
 private:
     static quint64 key(quint32 universe, quint32 channel)
@@ -746,6 +775,29 @@ private:
         QElapsedTimer lastFired;    //!< the last ALL OFF this control sent (invalid: none)
     };
     QHash<quint64, StopHold> m_estopHeld;
+    /** The state-dump guard (phase R): when each universe's device came
+     *  back, the stop controls heard since, and those whose first value
+     *  was 0 (a button at rest: the next value, if non-zero and inside the
+     *  window, is the device's dump, not a press; ignored once, then the
+     *  guard is off). */
+    QHash<quint32, QElapsedTimer> m_backAt;
+    QSet<quint64> m_backHeard;
+    QSet<quint64> m_backAtRest;
+    /** isTriggerDump(): the controls that sent a 0 since their device came
+     *  back (their next press is a press), and those whose ignored dump
+     *  was said. */
+    QSet<quint64> m_backReleased;
+    QSet<quint64> m_backSaid;
+    /** slotInputDeviceChanged() letting go of held controls: its 0s are
+     *  not the device's, and never arm a control (isTriggerDump()). */
+    bool m_releasingLost = false;
+    /** What a trigger dump on @a k is called: "GO of Main", "Back of Main",
+     *  else targetName(). */
+    QString dumpName(quint64 k) const;
+    int m_dumpWindowMs = 500;
+    /** Whether the stop's value @a value on @a k is part of a state dump
+     *  (and is ignored). */
+    bool isStateDump(quint64 k, uchar value);
     /** stop controls seen moving like a fader: shown loudly (the panel, one
      *  footer line) until the stop is bound again; never stops them firing */
     QSet<quint64> m_estopFlagged;

@@ -819,6 +819,11 @@ private:
     /*********************************************************************
      * External input
      *********************************************************************/
+public:
+    /** Phase R: the slider forgets where @p universe's fader was (the
+     *  replugged one picks up), and a flash held from it goes off. */
+    void inputDeviceLost(quint32 universe) override;
+
 protected slots:
     /** Called when an external input device produces input data */
     void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;

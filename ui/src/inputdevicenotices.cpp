@@ -17,14 +17,18 @@
 
 #include <QTimer>
 #include <QSet>
+#include <QMessageBox>
+#include <QPushButton>
 
 #include "inputdevicenotices.h"
+#include "controlowners.h"
 #include "inputoutputmap.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "inputpatch.h"
 #include "showstatus.h"
 #include "universe.h"
+#include "controlmap.h"
 #include "doc.h"
 
 #define STATUS_KEY QStringLiteral("input.devices")
@@ -47,6 +51,11 @@ InputDeviceNotices::InputDeviceNotices(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &InputDeviceNotices::schedule);
         connect(iom, &InputOutputMap::inputSlotChanged, this, &InputDeviceNotices::schedule);
     }
+    /* The stop's first value after a replug taken for the device's state
+       dump: said where the replug is said, never only in a debug log. */
+    ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr;
+    if (cm != nullptr)
+        connect(cm, &ControlMap::stateDumpIgnored, this, &InputDeviceNotices::slotStateDumpIgnored);
     schedule();
 }
 
@@ -166,10 +175,96 @@ QString InputDeviceNotices::goneText(const Device &d, bool disconnected)
         : tr("%1 '%2' not connected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1);
 }
 
+QString InputDeviceNotices::jobsText(Doc *doc, quint32 universe)
+{
+    return ControlOwners::jobsOn(doc, universe).join(QStringLiteral(", "));
+}
+
+QString InputDeviceNotices::stateDumpText(const QString &what, quint32 universe)
+{
+    return tr("Ignored %1's first value after replug (state dump) — universe %2").arg(what).arg(universe + 1);
+}
+
+void InputDeviceNotices::slotStateDumpIgnored(quint32 universe, quint32 channel, const QString &what)
+{
+    Q_UNUSED(channel);
+    emit notice(stateDumpText(what, universe), false);
+}
+
+void InputDeviceNotices::noteWake(qint64 sleptMs)
+{
+    // Nothing patched to a device: nothing to find.
+    if (devices().isEmpty())
+        return;
+    const qint64 s = qMax<qint64>(1, (sleptMs + 500) / 1000);
+    const QString slept = s < 120 ? tr("%1 s").arg(s) : tr("%1 min").arg((s + 30) / 60);
+    emit notice(tr("Slept %1, finding devices…").arg(slept), false);
+    m_resayMissing = true;
+    // What comes back, or doesn't, is said once it has settled.
+    schedule();
+}
+
+QString InputDeviceNotices::repatchText(Doc *doc, quint32 universe, const QString &newDevice)
+{
+    InputOutputMap *iom = doc != nullptr ? doc->inputOutputMap() : nullptr;
+    if (iom == nullptr)
+        return QString();
+    QString was;
+    if (InputPatch *ip = iom->inputPatch(universe))
+        was = ip->inputName();
+    else if (Universe *uni = iom->universe(universe))
+    {
+        foreach (const Universe::OfflinePatch &rec, uni->offlinePatches())
+        {
+            if (rec.tag == Universe::InputPatchTag && rec.uid.isEmpty() == false)
+                was = rec.uid;
+        }
+    }
+    if (was == newDevice)
+        return QString();
+    const QString jobs = jobsText(doc, universe);
+    if (jobs.isEmpty())
+        return QString();
+    if (newDevice.isEmpty())
+        return tr("Universe %1's controls stop working: %2.").arg(universe + 1).arg(jobs);
+    if (was.isEmpty())
+        return tr("Universe %1's controls move to '%2': %3.").arg(universe + 1).arg(newDevice, jobs);
+    return tr("Universe %1's controls move from '%2' to '%3': %4. '%2' will do none of them.")
+        .arg(universe + 1).arg(was, newDevice, jobs);
+}
+
+bool InputDeviceNotices::confirmRepatch(QWidget *parent, Doc *doc, quint32 universe, const QString &newDevice)
+{
+    const QString text = repatchText(doc, universe, newDevice);
+    if (text.isEmpty())
+        return true;
+    QMessageBox box(QMessageBox::Warning, tr("Change Input"), text, QMessageBox::Cancel, parent);
+    box.setInformativeText(tr("Each control keeps its job on the universe; the new device's "
+                              "controls with the same numbers do them."));
+    QPushButton *go = box.addButton(newDevice.isEmpty() ? tr("Unpatch") : tr("Patch"),
+                                    QMessageBox::AcceptRole);
+    box.setDefaultButton(QMessageBox::Cancel);
+    box.setObjectName(QStringLiteral("repatchWarning"));
+    box.exec();
+    return box.clickedButton() == go;
+}
+
 void InputDeviceNotices::schedule()
 {
     // Each change starts the wait again: a flap is one change, not two.
     m_settle->start();
+}
+
+QString InputDeviceNotices::withJobs(const QString &text, quint32 universe) const
+{
+    const QString jobs = jobsText(m_doc, universe);
+    if (jobs.isEmpty())
+        return text;
+    // Named, so the operator knows what is gone before reaching for it (phase R).
+    QString head = text;
+    if (head.endsWith(QLatin1Char('.')))
+        head.chop(1);
+    return tr("%1. Not working until it is back: %2.").arg(head, jobs);
 }
 
 void InputDeviceNotices::settleNow()
@@ -190,7 +285,7 @@ void InputDeviceNotices::settleNow()
         if (d.connected == false && d.slotCount > 1)
         {
             // A controller slot with none of its devices here.
-            if (seen && was->connected == false)
+            if (seen && was->connected == false && m_resayMissing == false)
                 continue;
             said << (seen ? tr("%1 '%2' disconnected — universe %3: none of its %4 controllers is connected")
                                 .arg(kindName(d.plugin), was->name).arg(d.universe + 1).arg(d.slotCount)
@@ -202,12 +297,18 @@ void InputDeviceNotices::settleNow()
         else if (d.connected == false && known == false)
         {
             // A show opened with it switched off, or asleep.
-            said << goneText(d, false);
+            said << withJobs(goneText(d, false), d.universe);
             warning = true;
         }
         else if (d.connected == false && was->connected)
         {
-            said << goneText(d, true);
+            said << withJobs(goneText(d, true), d.universe);
+            warning = true;
+        }
+        else if (d.connected == false && m_resayMissing)
+        {
+            // Still missing after a wake: said again, in amber.
+            said << withJobs(goneText(d, false), d.universe);
             warning = true;
         }
         else if (d.connected && d.slotCount > 1 && seen && (known == false || was->connected == false))
@@ -224,6 +325,7 @@ void InputDeviceNotices::settleNow()
         }
     }
     m_said = next;
+    m_resayMissing = false;
 
     updateStatus(now);
     if (said.isEmpty() == false)
@@ -282,7 +384,7 @@ void InputDeviceNotices::updateStatus(const QList<Device> &now) const
             : tr("%1 '%2' not connected — universe %3").arg(kindName(d.plugin), d.name).arg(d.universe + 1);
         if (first.isEmpty())
             first = line;
-        items << line;
+        items << withJobs(line, d.universe);
     }
 
     if (items.isEmpty())

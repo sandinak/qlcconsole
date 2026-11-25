@@ -63,6 +63,9 @@ private slots:
     void severalHitsSaveLoadAndDrop();
     void hitButtonMapAsksAndChecks();
     void input();
+    /** A replug's dump of "pressed" does not press the button (said once);
+     *  a release then press inside the window does. */
+    void aReplugDumpDoesNotPress();
     void paint();
 
     // https://github.com/mcallegari/qlcplus/issues/116

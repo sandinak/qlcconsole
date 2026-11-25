@@ -620,6 +620,36 @@ static void cue15(ReviewContext &ctx, QList<ReviewFinding> &out)
 }
 
 /****************************************************************************
+ * CTL-01 The emergency stop's device is missing (phase R)
+ ****************************************************************************/
+
+static void ctl01(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    ControlMap *cm = ctx.doc()->controlMap();
+    if (cm == nullptr)
+        return;
+    const ControlMap::Binding *stop = cm->binding(ControlMap::emergencyStop());
+    if (stop == nullptr || ControlMap::isKey(*stop))
+        return;
+    QString missing;
+    if (ctx.options().outputsLoaded)
+        missing = cm->stopDeviceMissing();
+    // Headless (--review): no plugins and no live patch. The saved patch
+    // says whether the stop's universe has an input; which device is plugged
+    // in on the night isn't the file's to know.
+    else if (!ctx.universeHasInput(stop->universe))
+        missing = ControlMap::tr("universe %1 has no input patched").arg(stop->universe + 1);
+    if (missing.isEmpty())
+        return;
+    out << ReviewContext::make(QStringLiteral("CTL-01"), ReviewFinding::Warning,
+        tr("The emergency stop (%1): %2, so pressing it stops nothing. Plug the device in, or "
+           "learn the stop again on one that is here.")
+            .arg(cm->controlName(stop->universe, stop->channel), missing),
+        { QStringLiteral("estop") },
+        missing.toUtf8());
+}
+
+/****************************************************************************
  * The list
  ****************************************************************************/
 
@@ -657,6 +687,10 @@ QList<ShowReview::Check> ShowReviewChecks::vcChecks()
         { QStringLiteral("VC-08"), tr("Cue Runner on no list"), S::Hits,
           tr("A Cue Runner that follows a cue list that was deleted, or follows the current "
              "production in a show with no cue list, shows nothing and GOes nothing."), vc08 },
+        { QStringLiteral("CTL-01"), tr("The emergency stop's device is missing"), S::ShowControl,
+          tr("The stop learned on a desk that is not connected, or on a universe with no input "
+             "patched, does nothing when it is pressed. The screen's Stop All still works; the "
+             "desk's does not until its device is back."), ctl01 },
         { QStringLiteral("VC-09"), tr("A Cue List on an upgraded chaser"), S::Hits,
           tr("After Import in place the Show Tree list plays the show. A VC Cue List still on the "
              "old chaser plays a show that no longer matches the list."), vc09 },

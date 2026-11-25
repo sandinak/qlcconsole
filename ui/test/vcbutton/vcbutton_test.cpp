@@ -61,6 +61,7 @@
 #include "universe.h"
 #undef private
 #undef protected
+#include "controlmap.h"
 
 static const QKeySequence keySequenceA(Qt::Key_A);
 static const QKeySequence keySequenceB(Qt::Key_B);
@@ -662,6 +663,48 @@ void VCButton_Test::flash()
 
     btn.slotFunctionFlashing(sc->id() + 1, true);
     QCOMPARE(btn.state(), VCButton::Inactive);
+
+    m_doc->setMode(Doc::Design);
+}
+
+/* Phase R: a desk that comes back may dump "pressed" for its buttons. Inside
+   the replug window a VC button acts only on a press that follows a 0 from
+   that same control (an unwanted press live is worse than a missed one). */
+void VCButton_Test::aReplugDumpDoesNotPress()
+{
+    QWidget w;
+    Scene *sc = new Scene(m_doc);
+    sc->setValue(0, 0, 255);
+    m_doc->addFunction(sc);
+
+    VCButton btn(&w, m_doc);
+    btn.setCaption("Blinder");
+    btn.setFunction(sc->id());
+    btn.setAction(VCButton::Flash);
+    btn.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 3)));
+    m_doc->setMode(Doc::Operate);
+
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(5000);                  // never over while the test runs
+    QSignalSpy ignored(cm, &ControlMap::stateDumpIgnored);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputDeviceConnected(0, QString("Stub"), QString("Desk"));
+
+    // The desk's dump: "pressed", twice, with no release first.
+    btn.slotInputValueChanged(0, 3, 255);
+    btn.slotInputValueChanged(0, 3, 255);
+    QCOMPARE(btn.state(), VCButton::Inactive);
+    QCOMPARE(ignored.count(), 1);
+    QCOMPARE(ignored.at(0).at(1).toUInt(), 3u);
+    QCOMPARE(ignored.at(0).at(2).toString(), QString("Blinder"));
+
+    // A release, then a press, inside the window: it flashes.
+    btn.slotInputValueChanged(0, 3, 0);
+    btn.slotInputValueChanged(0, 3, 255);
+    QCOMPARE(btn.state(), VCButton::Active);
+    btn.slotInputValueChanged(0, 3, 0);
+    QCOMPARE(btn.state(), VCButton::Inactive);
+    QCOMPARE(ignored.count(), 1);
 
     m_doc->setMode(Doc::Design);
 }

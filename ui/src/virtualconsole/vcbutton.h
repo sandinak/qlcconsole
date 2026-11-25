@@ -336,8 +336,16 @@ protected:
 public:
     void updateFeedback() override;
 
+    /** Phase R: a flash held from @p universe's device goes off. */
+    void inputDeviceLost(quint32 universe) override;
+
 protected slots:
     void slotInputValueChanged(quint32 universe, quint32 channel, uchar value) override;
+
+private:
+    /** A flash held down from an external input: the universe it came
+     *  from (0xFFFFFFFF: none). */
+    quint32 m_flashHeldFrom = 0xFFFFFFFF;
 
     /*********************************************************************
      * Button action
