@@ -271,9 +271,13 @@ QStringList WledDevicesDialog::suggestionsFor(Doc *doc, const QHash<QString, qui
     }
     // What the network says is there, in the show or not.
     if (WledDiscovery *found = WledDiscovery::instance())
+    {
         foreach (const WledDiscovery::Device &d, found->devices())
+        {
             if (!d.ip.isEmpty() && !elsewhere.contains(d.ip) && !out.contains(d.ip))
                 out << d.ip;
+        }
+    }
     out.sort();
     return out;
 }
