@@ -52,8 +52,8 @@ private slots:
     void theMasterFaderMovesTheGrandMaster();
     /** Go on the board in the Run tab GOes the list (bench: did nothing). */
     void goInTheRunTabGoesTheList();
-    /** A hit learned on a free key fires and lights its lamp (bench: it
-     *  fired, its lamp stayed dark). */
+    /** A hit learned on a free key fires and lights its lamp, which stays
+     *  lit through what repaints the board (bench: it stayed dark). */
     void aLearnedHitLightsItsLamp();
 
 private:

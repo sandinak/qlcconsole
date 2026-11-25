@@ -394,9 +394,27 @@ void PmjSim_Test::aLearnedHitLightsItsLamp()
     QVERIFY(f != nullptr);
     QTRY_VERIFY2(f->isRunning(), "the learned key did not fire the hit");
     settle(50);
-    const int lit = m_pmj->lamp(ch);
-    QEXPECT_FAIL("", "fix/053-pmj-run-buttons: a hit learned on a PMJ key fires, its lamp is not lit", Continue);
-    QVERIFY2(lit == 127, qPrintable(QStringLiteral("the hit plays, its key's lamp is %1").arg(lit)));
+    /* The bench saw the hit fire with its lamp dark. Through the board's
+       own path it lights here (2026-11-25), and stays lit through what
+       repaints the board -- a Master move, a page key, a full refresh --
+       so the bench case is not this one: see SURFACE_SIMULATOR.md. */
+    QCOMPARE(m_pmj->lamp(ch), 127);
+    QVERIFY(m_pmj->ramp(QStringLiteral("Master"), 127, 90, 30));
+    QVERIFY(m_pmj->set(QStringLiteral("Master"), 127));
+    QVERIFY(m_pmj->tap(QStringLiteral("Looks"), 20));
+    m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
+    settle(30);
+    QVERIFY2(m_pmj->lamp(ch) == 127,
+             qPrintable(QStringLiteral("the hit plays, its key's lamp went to %1").arg(m_pmj->lamp(ch))));
+    // Let go: its lamp goes back to standby (dim), not stays bright.
+    QVERIFY(m_pmj->tap(key, 60));
+    for (int i = 0; i < 3; ++i)
+    {
+        doc->masterTimer()->timerTick();
+        settle(20);
+    }
+    QTRY_VERIFY(!f->isRunning());
+    QTRY_VERIFY2(m_pmj->lamp(ch) < 127, qPrintable(QStringLiteral("let go, its lamp is %1").arg(m_pmj->lamp(ch))));
 
     cm->removeBinding(ControlMap::hit(m_breathe));
     doc->masterTimer()->stopAllFunctions();
