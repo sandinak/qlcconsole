@@ -117,6 +117,7 @@ public:
     bool plug()
     {
         m_fake->list(m_path, vendorId(), productId(), deviceName(), 0, ++m_instance);
+        QMetaObject::invokeMethod(m_hid, "rescanDevices", Qt::DirectConnection);
         if (!waitListed(true))
             return fail(QStringLiteral("the plugin did not open it"));
         InputOutputMap *iom = m_doc->inputOutputMap();
@@ -479,8 +480,10 @@ private:
         while (t.elapsed() < 5000)
         {
             int opening = 0;
+            bool scanning = false;
             QMetaObject::invokeMethod(m_hid, "openingCount", Qt::DirectConnection, Q_RETURN_ARG(int, opening));
-            if ((line() >= 0) == present && opening == 0)
+            QMetaObject::invokeMethod(m_hid, "isScanning", Qt::DirectConnection, Q_RETURN_ARG(bool, scanning));
+            if ((line() >= 0) == present && opening == 0 && !scanning)
                 return true;
             QTest::qWait(5);
         }

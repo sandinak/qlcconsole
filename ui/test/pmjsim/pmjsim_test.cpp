@@ -21,6 +21,9 @@
 #include <QSignalSpy>
 #include <QTabWidget>
 #include <QTemporaryDir>
+#include <QDialog>
+#include <QMessageBox>
+#include <QTimer>
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
@@ -76,6 +79,25 @@ void settle(int ms = 0)
         QTest::qWait(ms);
 }
 
+/* A window a press opened that waits for an answer would hang the test:
+   each is named in the log and answered No / Cancel. */
+QStringList s_dialogs;
+void closeDialogs()
+{
+    QWidget *w = QApplication::activeModalWidget();
+    if (w == nullptr)
+        return;
+    QString text = w->windowTitle();
+    if (QMessageBox *mb = qobject_cast<QMessageBox *>(w))
+        text += QStringLiteral(": ") + mb->text();
+    s_dialogs << text;
+    qWarning().noquote() << "[PmjSim] a press opened" << w->metaObject()->className() << text;
+    if (QDialog *d = qobject_cast<QDialog *>(w))
+        d->reject();
+    else
+        w->close();
+}
+
 bool hasLamp(const QLCInputChannel *ich)
 {
     return ich->type() == QLCInputChannel::Button && (ich->lowerValue() != 0 || ich->upperValue() != UCHAR_MAX);
@@ -88,6 +110,9 @@ void PmjSim_Test::initTestCase()
     m_pluginDir = new QTemporaryDir();
     QVERIFY(m_pluginDir->isValid());
     qputenv("QLC_IOPLUGIN_DIR", m_pluginDir->path().toLocal8Bit());
+    QTimer *closer = new QTimer(this);
+    connect(closer, &QTimer::timeout, this, &closeDialogs);
+    closer->start(50);
     m_app = new App();
     m_app->init();
     m_app->doc()->showControl()->setGoGuardMs(0);
@@ -227,6 +252,7 @@ void PmjSim_Test::everyControlReachesItsRole()
     {
         const QString name = it.value()->name();
         roles.clear();
+        qInfo().noquote() << "PMJ control" << it.key() << name;
         // A press and its release, as a person makes them (a fader: up and back).
         QVERIFY2(m_pmj->tap(name, 5), qPrintable(m_pmj->lastError()));
         bool reached = false;
@@ -250,6 +276,8 @@ void PmjSim_Test::everyControlReachesItsRole()
        so not a problem here; the scenario tests below say what each should
        do. Named so the log shows the gap. */
     qInfo().noquote() << "PMJ controls with a role and no action yet:" << notWired.join(QStringLiteral(", "));
+    if (!s_dialogs.isEmpty())
+        qInfo().noquote() << "PMJ presses opened:" << s_dialogs.join(QStringLiteral("; "));
     QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QStringLiteral("\n"))));
 }
 
@@ -382,6 +410,9 @@ int main(int argc, char **argv)
     QTemporaryDir home;
     qputenv("HOME", home.path().toUtf8());
     qputenv("QLC_NO_RECOVERY_PROMPT", "1");
+    // A hang says so in a minute, not five.
+    if (qEnvironmentVariableIsEmpty("QTEST_FUNCTION_TIMEOUT"))
+        qputenv("QTEST_FUNCTION_TIMEOUT", "60000");
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("qlcconsole-test"));
     PmjSim_Test test;

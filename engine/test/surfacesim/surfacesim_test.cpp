@@ -359,7 +359,8 @@ void SurfaceSim_Test::everyProfileControlReachesTheApp()
         };
         for (int a = 0; a < hp->axisCount(); ++a)
             check(quint32(a), hp->axisName(a), true);
-        for (int b = 0; b < hp->buttonCount(); ++b)
+        // Past the buttons, a touchpad finger's place and touch: values, not buttons.
+        for (int b = 0; b < qMin(hp->buttonCount(), int(GamepadLayout::ButtonCount)); ++b)
             if (!hp->buttonName(b).isEmpty())
                 check(quint32(GamepadLayout::AxisCount + b), hp->buttonName(b), false);
     }
@@ -413,6 +414,15 @@ void SurfaceSim_Test::twoIdenticalBoardsAreTwoControllers()
     QVERIFY2(two.plug(), qPrintable(two.lastError()));
     QCOMPARE(one.line(), 0);
     QCOMPARE(two.line(), 1);
+    /* Each universe on its own board's line. Found by this test
+       (2026-11-25): setInputPatch() looks the line up by its name and takes
+       the first of that name, so the second board's universe opens the
+       first board's line and the second board is heard nowhere. */
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->inputPatch(1) != nullptr);
+    QEXPECT_FAIL("", "a bug this test found, no fix branch yet: InputOutputMap::setInputPatch() resolves an "
+                     "input by name to the first line of that name (two identical boards)", Abort);
+    QCOMPARE(iom->inputPatch(1)->input(), quint32(two.line()));
 
     Fixture *fxi = new Fixture(m_doc);
     fxi->setName(QStringLiteral("Dim 1"));
