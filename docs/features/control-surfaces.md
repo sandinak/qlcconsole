@@ -160,9 +160,17 @@ a desk does not.
 A control surface can have **one emergency stop**: **Emergency Stop…**, the
 button under the Control Map table.
 
-- It is **ALL OFF** through the same path as the pad's four-together stop,
-  the phone page's STOP and QLab's ALL OFF: every function stops, every
-  Show-only fixture is cut.
+- It is **ALL OFF** through **the one path** every stop takes: the screen's
+  **Stop All** (its button, Control ▸ Stop ALL Functions! and its key), a
+  Virtual Console **Stop All** button with no fade, the pad's four-together
+  stop, the phone page, Companion's ALL OFF and QLab's or MSC's ALL OFF.
+  Each does the same: every function stops, every Show-only fixture is cut,
+  every fixture goes to rest. None can drift from the others.
+- **Stop All is never greyed.** Levels held with nothing running (a Simple
+  Desk level, a held master) are what it is for too, so it is always there.
+- Its key is **⌘⇧Esc** on a Mac and **Ctrl+Shift+Backspace** on Windows and
+  Linux (Ctrl+Shift+Esc opens the Task Manager on Windows, which would take
+  the press first).
 - It works in **Design and Operate**, at any moment, on Windows too, and
   needs no arm and no PIN (from the Control Map). It is never held by the double-GO guard.
 - **Every press is ALL OFF.** It does not toggle, and holding it down does
@@ -227,8 +235,9 @@ button under the Control Map table.
 
 On **Companion**, the **ALL OFF** preset needs the key **held for one
 second**, so a brush on the Stream Deck does not stop the show. It is not on
-any dial, and it works with *Allow GO from the phone Run page* off (it needs
-the PIN when the show has one).
+any dial, and it works with *Allow GO from the phone Run page* off and
+**needs no PIN** (board Q323): ALL OFF and Stop from Companion or the phone
+page never wait on the show's PIN; everything else does.
 
 ## The Control Map
 
@@ -501,10 +510,35 @@ after any build that changes a surface, and say which build.
 2. With *Allow GO from the phone Run page* **off** and a scene running, tap
    the key quickly. *Expect:* nothing stops.
 3. Hold the key for one second. *Expect:* everything stops, even with Allow
-   GO off. With a PIN set in the show, give it in the connection and expect
-   the same.
+   GO off. Set a PIN in the show and leave it **out** of the connection (or
+   type a wrong one): *Expect:* ALL OFF and **Stop** still work; GO, Back and
+   the hit keys do nothing and Companion's log says the show has a PIN.
 4. Fire a hit key in Design, then in Operate with the hit's place live and
    not live. *Expect:* it fires only in Operate with the place live.
+
+**Every stop, one path (phase F)**
+
+1. **Windows:** with a scene running, press **Ctrl+Shift+Backspace**.
+   *Expect:* everything stops, and the Task Manager does not open. Press
+   Ctrl+Shift+Esc: the Task Manager opens and the show is untouched (that
+   key is not Stop All on Windows). Control ▸ Stop ALL Functions! shows
+   Ctrl+Shift+Backspace. **Mac:** ⌘⇧Esc stops everything.
+2. **Held levels only:** stop every function, then raise a Simple Desk
+   channel (or a group master) so a light is up with nothing running.
+   *Expect:* **Stop All** is not greyed; pressing it takes the light out.
+3. **Desk STOP with the switch off:** learn **Emergency Stop…** on a desk
+   button, then turn **Control Surfaces** off (View ▸ Workspace ▸ Tabs &
+   Features…). Start a scene and press the button in Design, with a Learn
+   Trigger… dialog open, and in Operate. *Expect:* ALL OFF each time.
+4. **A locked phone:** set a show PIN, open the Run page on the phone and do
+   **not** unlock it. Start the list from the laptop. *Expect:* the PIN
+   screen shows **STOP**; two taps stop the list. Connect a pad to the
+   phone: LB + RB + LT + RT stops everything without the PIN. GO stays
+   greyed until the PIN is given.
+5. **Every route, the same stop:** for each of the screen's Stop All, a VC
+   Stop All button, the desk's stop, the pad and the phone, press it with a
+   Show-only fogger at full. *Expect:* the fogger cuts at once every time
+   and the footer says *held: emergency stop* until the next GO.
 
 ## See also
 

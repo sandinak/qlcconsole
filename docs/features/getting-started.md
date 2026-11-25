@@ -189,7 +189,7 @@ The measurements, charts and method are on the
 **Settings ▸ General ▸ Show Controls** can put the show controls in the status bar
 instead, at its right end beside Ready and the other show chips: the top
 is then the tab's own tools alone. It changes at once, no restart, and the
-shortcuts are the same either way (⌘⇧Esc Stop all, ⌘F12 Design / Operate).
+shortcuts are the same either way (⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux) Stop all, ⌘F12 Design / Operate).
 There, they are icons only (their tooltips name them) unless
 **Settings ▸ Appearance ▸ Toolbar style** is **Text only**, and the footer's own DESIGN and
 BLACKOUT chips step aside for them. A tab moved to a window of its own
@@ -628,7 +628,7 @@ Steps, towers and booms usually come in sets that should all be the same:
   Console faders and XY pads change in running scenes; **Store** opens
   the list of changes to write into those scenes, and **Undo Last Store**
   takes the last one back.
-- **Stop All** (⌘⇧Esc), or its menu's **Fade and stop** (hold the button),
+- **Stop All** (⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux)), or its menu's **Fade and stop** (hold the button),
   is the panic button. It stops everything and puts every fixture at
   rest: fog and haze off, gobos, prisms and WLED effects out, each channel
   at its default; a mover's pan and tilt stay where they are. After **Fade and stop** that

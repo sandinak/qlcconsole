@@ -14,6 +14,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **One ALL OFF, always there**: the screen's Stop All (button, menu and
+  key), a Virtual Console Stop All button, the desk's emergency stop, the
+  pad, the phone page and Companion now all take the same ALL OFF path, so
+  they stop exactly the same way. Stop All is never greyed (levels held with
+  nothing running can be stopped too). On Windows and Linux its key is
+  **Ctrl+Shift+Backspace** (Ctrl+Shift+Esc opened the Task Manager on
+  Windows); the Mac keeps ⌘⇧Esc. ALL OFF and Stop from the phone page or
+  Companion no longer need the show's PIN (Q323); the PIN screen has its own
+  STOP. A desk's stop still fires with Control Surfaces switched off.
 - **A fader is picked up before it follows**: an external fader (MIDI,
   OSC) that is not where the control is does nothing until you move it to,
   or through, the current value, then it follows (soft takeover). Virtual

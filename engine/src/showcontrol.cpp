@@ -270,6 +270,13 @@ bool ShowControl::run(const Request &request, Route route)
     return execute(request);
 }
 
+bool ShowControl::allOff(Route route)
+{
+    Request r;
+    r.command = AllOff;
+    return run(r, route);
+}
+
 /*****************************************************************************
  * The double-GO guard
  *****************************************************************************/

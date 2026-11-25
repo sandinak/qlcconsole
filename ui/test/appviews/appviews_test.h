@@ -184,6 +184,14 @@ private slots:
     /** Q293: with every feature off the emergency stop is still there and
      *  still fires ALL OFF; Control ▸ Panic too. */
     void theEmergencyStopSurvivesEverySwitchOff();
+    /** Phase F: one ALL OFF path (screen, VC, desk, pad) through ShowControl::allOff(). */
+    void everyAllOffTakesTheOnePath();
+    /** Phase F: Stop All is never greyed, so held levels can always be stopped. */
+    void stopAllIsNeverGreyed();
+    /** Phase F: no Ctrl+Shift+Esc on Windows (Task Manager); the Mac keeps ⌘⇧Esc. */
+    void theStopAllKeyIsSafeOnEveryPlatform();
+    /** Phase F: the desk STOP goes before every feature / mode / learn check. */
+    void theDeskStopGoesFirstPastEveryCheck();
     /** Q293 review: the GM below full or a speed master off its tempo is
      *  said in the footer while its chip is put away. */
     void aHeldMasterIsSaidWithItsChipPutAway();

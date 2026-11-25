@@ -77,7 +77,7 @@ arm and disarm, the left trigger is the safety, the right trigger the hit)
 | Armed, hold LT + X | Sub GO |
 | Armed, hold LT + Y | Sub Back |
 | Armed, pull RT | Fire the armed hit (named under ARMED: **Hit ▸ Breathe**) |
-| LB + RB + LT + RT | Emergency stop: everything off (the page says EMERGENCY STOP). The page says SENDING STOP until the console answers that it is done, then EMERGENCY STOP. The stop goes even with **Allow GO from the phone Run page** off; it needs only the show's PIN, when the show has one (with no PIN set it always goes). Before the PIN is given it says STOP NOT SENT and *Stop not sent: enter the PIN*, and asks for it; with the connection gone or the stop refused it says STOP NOT SENT and why (STOP NOT CONFIRMED when no answer came): stop from the laptop |
+| LB + RB + LT + RT | Emergency stop: everything off (the page says EMERGENCY STOP). The page says SENDING STOP until the console answers that it is done, then EMERGENCY STOP. The stop goes even with **Allow GO from the phone Run page** off, and needs no PIN: a page that has not been given the show's PIN still stops it. With the connection gone or the stop refused it says STOP NOT SENT and why (STOP NOT CONFIRMED when no answer came): stop from the laptop |
 | Armed, hold LT + View | Solo: the first layer of the cue in the preview, or the whole cue again |
 | Armed, hold LT + D-pad right / left | Solo the next / previous layer |
 | Armed, hold LT + LS (click) | Blind on / off |
@@ -180,9 +180,10 @@ Joystick** in the same layout.
 - **The Run page's rules.** Nothing is sent while **Allow GO from the
   phone Run page** is off -- except the emergency stop (LB + RB + LT + RT),
   which a page can always send. With a PIN, the page asks for it once per
-  session, even with GO from the phone off, and every command, the stop
-  too, needs it: a page without the PIN says *Stop not sent: enter the
-  PIN*. With logins (-wa), the account needs **Only Virtual Console**
+  session, even with GO from the phone off, and every command needs it
+  except the two stops: the emergency stop and the list's **STOP** never
+  need the PIN, and the PIN screen has its own **STOP** (tap twice). With
+  logins (-wa), the account needs **Only Virtual Console**
   or more.
 - **Moves, not positions.** The page sends how far a stick moved since
   its last message, at most 40 times a second. If the Deck drops off the

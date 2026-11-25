@@ -811,14 +811,16 @@ module (decided: can change); use it with the show's PIN instead.
 - **GO, Back, Stop, Sub GO, Hold/Resume, GO a cue** (a cue number on the
   main list or a numbered list) are run commands by the web route, so a GO
   holds the Design previews exactly as from the keys. Refused while **Allow
-  GO** is off, and until the PIN is given.
+  GO** is off, and -- all but **Stop** -- until the PIN is given. **Stop**
+  needs no PIN: a locked Companion or phone can always stop the list.
 - **Hits.** A key fires the hit as a Virtual Console button does: only a hit
   that is armed, the **narrowest** armed place wins, and only in Operate;
   press again to let it go. There are 32 numbered hit keys and one that
   fires "the armed hit". A key lights red while its hit is on and blue
   while it is armed.
 - **ALL OFF** (the **ALL OFF (hold 1 s)** key) stops everything, in any mode,
-  even with Allow GO off (the PIN still applies when the show has one). It
+  even with Allow GO off, and needs no PIN (Companion without the PIN, or
+  with a wrong one, still stops the show). It
   needs the key held for one second so a brush does not stop the show, and it
   is on no dial. See [Control surfaces](control-surfaces.md#the-emergency-stop).
 - **Blackout** toggles, and shows red while it is on.

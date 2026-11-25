@@ -189,7 +189,7 @@ Every left-hand column still works, in the Classic QLC+ view.
   QLC+'s name). Build was called Programming before 0.3.0.
 - **Show controls.** Stop all, Blackout and Design / Operate sit in the
   top bar (or the footer), and are in the **Control** menu too.
-- **Shortcuts.** GO is ⌘↩, Stop all ⌘⇧Esc, Design / Operate ⌘F12; plain
+- **Shortcuts.** GO is ⌘↩, Stop all ⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux), Design / Operate ⌘F12; plain
   Esc never stops playback. The VC button matrix and animation keys are
   ⇧⌘G and ⇧⌘N, and a new VC slider is ⇧⌘U (⇧⌘S is Save As). See
   [Keyboard and mouse](shortcuts.md).

@@ -2245,9 +2245,9 @@ void AppViews_Test::plainEscIsNoPlaybackAction()
     QVERIFY2(bothRunning(), "Esc in the Workbench stopped playback");
     QCOMPARE(int(outputAt(doc, 211)), 200);
 
-    // ⌘⇧Esc: Stop all.
-    QCOMPARE(m_app->m_controlPanicAction->shortcut(), QKeySequence("CTRL+SHIFT+ESC"));
-    QTest::keyClick(m_app, Qt::Key_Escape, Qt::ControlModifier | Qt::ShiftModifier);
+    // ⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux): Stop all.
+    QCOMPARE(m_app->m_controlPanicAction->shortcut(), App::stopAllShortcut());
+    QTest::keySequence(m_app, App::stopAllShortcut());
     QTRY_VERIFY_WITH_TIMEOUT(!busk->isRunning() && !list->isRunning(), 5000);
 }
 
@@ -4117,6 +4117,207 @@ void AppViews_Test::theEmergencyStopSurvivesEverySwitchOff()
     QCOMPARE(fired.first().first().toString(), QString("ALL OFF"));
     QTRY_VERIFY_WITH_TIMEOUT(!look->isRunning(), 3000);
     QVERIFY2(stop->text().startsWith("Emergency Stop: "), qPrintable(stop->text()));
+}
+
+/* Control surfaces phase F (CONTROL_SURFACES_EVAL §2, §4 #16, #17): one
+   ALL OFF path. The screen's Stop All (its button, its menu item and its
+   key), a VC Stop All button, the desk's stop, the pad's four together and
+   the phone page all reach ShowControl::allOff(): the run handler sees
+   ALL OFF from their route, and the emergency stop is struck (Show-only
+   cut, every function stopped). Before, Stop All and the VC button stopped
+   the MasterTimer on their own: no ALL OFF, no stop struck. */
+void AppViews_Test::everyAllOffTakesTheOnePath()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowControl *sc = doc->showControl();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    ControlMap *cm = doc->controlMap();
+    PadRun *pad = doc->programmer()->padRun();
+    QVERIFY(rules != nullptr && pad != nullptr);
+    QWidget host;
+    VCButton *vcStop = new VCButton(&host, doc);
+    vcStop->setAction(VCButton::StopAll);
+    auto back = qScopeGuard([&]() {
+        cm->removeBinding(ControlMap::emergencyStop());
+        pad->stopEnded();
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    doc->setMode(Doc::Operate);                     // a VC button presses in Operate
+    m_app->hideViewNotice();
+    Fixture *lamp = new Fixture(doc);
+    lamp->setName("Lamp");
+    lamp->setChannels(1);
+    lamp->setAddress(0);
+    QVERIFY(doc->addFixture(lamp));
+    Scene *look = new Scene(doc);
+    look->setName("Playing");
+    look->setValue(lamp->id(), 0, 255);
+    QVERIFY(doc->addFunction(look));
+    cm->setBinding({ 0, 189, ControlMap::emergencyStop(), ControlMap::StartOnly });
+
+    QSignalSpy handled(sc, &ShowControl::commandHandled);
+    struct Way { const char *name; ShowControl::Route route; std::function<void()> press; };
+    int deskPresses = 0;
+    const QList<Way> ways = {
+        { "Stop All (screen)", ShowControl::RouteKey, [this]() { m_app->m_controlPanicAction->trigger(); } },
+        { "VC Stop All button", ShowControl::RouteOther, [vcStop]() { vcStop->pressFunction(); } },
+        { "desk stop", ShowControl::RouteControlMap, [cm, &deskPresses]() {
+              cm->handleInput(0, 189, 0);       // a new press each time
+              cm->handleInput(0, 189, 127);
+              ++deskPresses; } },
+        { "pad four", ShowControl::RoutePad, [pad]() { pad->emergencyStop(); } },
+    };
+    for (const Way &w : ways)
+    {
+        rules->noteGo();                            // the last stop's mark gone
+        look->start(doc->masterTimer(), FunctionParent::master());
+        QTRY_VERIFY_WITH_TIMEOUT(look->isRunning(), 3000);
+        handled.clear();
+        const int before = m_app->m_runCommands;
+        w.press();
+        QVERIFY2(m_app->m_runCommands == before + 1, w.name);
+        QVERIFY2(m_app->m_lastRunRoute == w.route, w.name);
+        QVERIFY2(!handled.isEmpty() && handled.last().at(0).toString().startsWith("ALL OFF")
+                     && handled.last().at(1).toBool(), w.name);
+        QVERIFY2(rules->emergencyStopped(), w.name);
+        QTRY_VERIFY2_WITH_TIMEOUT(!look->isRunning(), w.name, 3000);
+        pad->stopEnded();
+    }
+    QCOMPARE(deskPresses, 1);
+    // A VC Stop All with a fade is a fade and stop, not the emergency stop.
+    vcStop->setStopAllFadeOutTime(1000);
+    rules->noteGo();
+    const int before = m_app->m_runCommands;
+    vcStop->pressFunction();
+    QCOMPARE(m_app->m_runCommands, before);
+    QVERIFY(!rules->emergencyStopped());
+}
+
+/* §2 mid-show trouble: Stop All was greyed while no function ran, so a level
+   held with nothing running (a Simple Desk level, a held master) had no
+   on-screen stop. Now never greyed: nothing running, it is enabled, and a
+   press is the emergency stop. */
+void AppViews_Test::stopAllIsNeverGreyed()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    auto back = qScopeGuard([this, doc]() {
+        doc->outputRuleKeeper()->noteGo();
+        m_app->clearDocument();
+    });
+    QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 3000);
+    QVERIFY(m_app->m_controlPanicAction->isEnabled());
+    QToolButton *button = m_app->findChild<QToolButton *>(QStringLiteral("showStopAll"));
+    QVERIFY(button != nullptr);
+    QVERIFY(button->isEnabled());
+    // UX-review shots (the pool's QLC_SHOT_DIR): Stop All lit with nothing running.
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        const QSize was = m_app->size();
+        m_app->setWorkspaceView(App::ConsoleView);
+        m_app->show();
+        for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            m_app->resize(size);
+            for (int i = 0; i < 6; ++i)
+            {
+                QCoreApplication::processEvents();
+                QTest::qWait(30);
+            }
+            QVERIFY(button->isVisible() && button->isEnabled());
+            QVERIFY(m_app->grab().save(QStringLiteral("%1/stopall-idle-%2x%3.png")
+                                       .arg(dir).arg(size.width()).arg(size.height())));
+        }
+        m_app->resize(was);
+    }
+    // A function started and stopped: still enabled after it.
+    Scene *look = new Scene(doc);
+    look->setName("Brief");
+    QVERIFY(doc->addFunction(look));
+    look->start(doc->masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(look->isRunning(), 3000);
+    look->stop(FunctionParent::master());
+    QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 3000);
+    QCoreApplication::processEvents();
+    QVERIFY(m_app->m_controlPanicAction->isEnabled());
+    // Pressed with nothing running: the emergency stop all the same.
+    m_app->m_controlPanicAction->trigger();
+    QVERIFY(doc->outputRuleKeeper()->emergencyStopped());
+}
+
+/* §4 #16: no Ctrl+Shift+Esc on Windows (it opens the Task Manager there,
+   and Stop All never runs). The Mac keeps ⌘⇧Esc. The menu, the tooltip
+   and the help say this computer's key. */
+void AppViews_Test::theStopAllKeyIsSafeOnEveryPlatform()
+{
+    const QKeySequence taskManager(QStringLiteral("CTRL+SHIFT+ESC"));
+    QCOMPARE(App::stopAllShortcut(true), taskManager);
+    QVERIFY(App::stopAllShortcut(false) != taskManager);
+    QVERIFY(!App::stopAllShortcut(false).isEmpty());
+    QCOMPARE(App::stopAllShortcut(false), QKeySequence(QStringLiteral("CTRL+SHIFT+Backspace")));
+    QCOMPARE(m_app->m_controlPanicAction->shortcut(), App::stopAllShortcut());
+#if !defined(Q_OS_MACOS)
+    QVERIFY(m_app->m_controlPanicAction->shortcut() != taskManager);
+#endif
+    QVERIFY2(m_app->m_controlPanicAction->toolTip().contains(
+                 App::stopAllShortcut().toString(QKeySequence::NativeText)),
+             qPrintable(m_app->m_controlPanicAction->toolTip()));
+    // No other action of the app's takes the key.
+    int holders = 0;
+    for (QAction *a : m_app->findChildren<QAction *>())
+        if (a->shortcuts().contains(App::stopAllShortcut()))
+            ++holders;
+    QCOMPARE(holders, 1);
+}
+
+/* §4 #16, decision 5: the desk's STOP is heard before any feature switch,
+   mode, place or learn: Control Surfaces off, a learn listening, in Design
+   and in Operate, in an otherwise empty show -- each press is ALL OFF. */
+void AppViews_Test::theDeskStopGoesFirstPastEveryCheck()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    Doc *doc = m_app->doc();
+    ControlMap *cm = doc->controlMap();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    auto back = qScopeGuard([this, cm, rules, doc]() {
+        cm->stopListening();
+        cm->removeBinding(ControlMap::emergencyStop());
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        QVERIFY(chooseFeatures(m_app, allFeatures(true)));
+        m_app->clearDocument();
+    });
+    cm->setBinding({ 0, 190, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QVERIFY(chooseFeatures(m_app, allFeatures(false)));
+    QVERIFY(!ShowFeatures::isOn(ShowFeatures::ControlSurfaces));
+    QSignalSpy fired(cm, &ControlMap::fired);
+    const Doc::Mode modes[] = { Doc::Design, Doc::Operate };
+    for (Doc::Mode mode : modes)
+    {
+        doc->setMode(mode);
+        for (int learning = 0; learning < 2; ++learning)
+        {
+            if (learning)
+                cm->listen();
+            rules->noteGo();
+            const int before = m_app->m_runCommands;
+            cm->handleInput(0, 190, 0);
+            cm->handleInput(0, 190, 127);
+            const QString what = QString("%1, %2").arg(mode == Doc::Operate ? "Operate" : "Design",
+                                                       learning ? "a learn listening" : "no learn");
+            QVERIFY2(m_app->m_runCommands == before + 1, qPrintable(what));
+            QVERIFY2(m_app->m_lastRunRoute == ShowControl::RouteControlMap, qPrintable(what));
+            QVERIFY2(rules->emergencyStopped(), qPrintable(what));
+            cm->stopListening();
+        }
+    }
+    QCOMPARE(fired.count(), 4);
 }
 
 void AppViews_Test::aHeldMasterIsSaidWithItsChipPutAway()

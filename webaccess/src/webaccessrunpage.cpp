@@ -66,7 +66,7 @@ button:disabled{opacity:.35}
 #go{min-height:30vh;min-height:30dvh;font-size:56px;background:var(--go);border-color:var(--go2);color:#fff;margin-bottom:10px}
 #go:active{background:var(--go2)}
 .row{display:flex;gap:10px;margin-bottom:10px}
-#stop.armed{background:var(--stop);border-color:#e57368;color:#fff}
+#stop.armed,#lockstop.armed{background:var(--stop);border-color:#e57368;color:#fff}
 .notes div{font-size:15px;padding:2px 0;color:var(--dim)}
 .notes b{color:var(--fg)}
 .notes .done{text-decoration:line-through}
@@ -129,9 +129,9 @@ button:disabled{opacity:.35}
 <div class="row" id="rigrow"><button id="blind" disabled title="Blind: the rig muted, the console's screens live (Design)">BLIND</button><button id="soloprev" disabled title="Solo the previous layer">&lsaquo;</button><button id="solo" disabled title="Solo: only one layer of the cue in the Show Tree preview plays">SOLO</button><button id="solonext" disabled title="Solo the next layer">&rsaquo;</button></div>
 <button id="testbtn" type="button">Controller test</button>
 </div>
-<div id="lock"><p id="lockwhy">This show asks for its PIN before the page can send GO or its emergency stop.</p>
+<div id="lock"><p id="lockwhy">This show asks for its PIN before the page can send GO. STOP and the pad's emergency stop work without it.</p>
 <input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="PIN">
-<div class="err" id="pinerr"></div><button id="pinok">Unlock</button></div>
+<div class="err" id="pinerr"></div><button id="pinok">Unlock</button><button id="lockstop" disabled>STOP</button></div>
 )HTML";
 
 static const char kScript[] = R"HTML(<script>
@@ -150,6 +150,8 @@ function cue(n,o,sub){
     b.textContent=e.kind+': ';d.appendChild(b);d.appendChild(document.createTextNode(e.text));
     if(e.done)d.className='done';h.appendChild(d)})}
 function canSend(){return st.remote&&st.hasList&&(unlocked||!st.pin)}
+/* STOP needs no PIN (board Q323): a locked page can always stop the list. */
+function canStop(){return st.remote&&st.hasList&&(unlocked||!st.pin||st.listStopNeedsPin===false)}
 /* Blind and Solo need no cue list: the remote's rules alone. */
 function canRig(){return st.remote&&(unlocked||!st.pin)}
 function paint(){
@@ -163,7 +165,8 @@ function paint(){
   var s=st.subNext;$('sub').textContent=s?'Sub next: '+s.num+(s.name?' '+s.name:''):'';
   $('subrow').style.display=st.hasSub?'flex':'none';
   var ok=canSend();
-  ['go','back','stop','subgo','subback'].forEach(function(i){$(i).disabled=!ok});
+  ['go','back','subgo','subback'].forEach(function(i){$(i).disabled=!ok});
+  $('stop').disabled=$('lockstop').disabled=!canStop();
   $('hold').disabled=!ok||!st.running;
   $('hold').textContent=st.paused?'RESUME':'HOLD';
   $('hold').className=st.paused?'paused':'';
@@ -174,7 +177,7 @@ function paint(){
   /* A second GO held by the double-GO guard, from anywhere: the console's words (st.goHeld). */
   if(st.goHeld){if(st.goHeld!==lastHeld&&navigator.vibrate)navigator.vibrate(300);msg(st.goHeld);lastHeld=st.goHeld}
   else if(lastHeld){if($('msg').textContent===lastHeld)msg('');lastHeld=''}
-  /* The PIN unlocks the emergency stop even with remote GO off (Q256). */
+  /* The PIN screen, while the show has one: STOP stays on it (Q323). */
   if(st.pin&&!unlocked&&$('lock').className!=='show')askPin('');
   $('go').textContent=st.paused?'GO (paused)':'GO';
   rig(canRig());statusList();padLabels();showHit()}
@@ -254,11 +257,13 @@ $('blind').onclick=function(){cmd('blind|toggle')};
 $('solo').onclick=function(){cmd('solo|toggle')};
 $('soloprev').onclick=function(){cmd('solo|prev')};
 $('solonext').onclick=function(){cmd('solo|next')};
-$('stop').onclick=function(){
-  var b=$('stop');
+/* Two taps, on the page or on its PIN screen (Q323: STOP needs no PIN). */
+function stopTap(b){
   if(b.className==='armed'){b.className='';b.textContent='STOP';clearTimeout(armedTimer);cmd('stop');return}
   b.className='armed';b.textContent='TAP AGAIN TO STOP';
-  armedTimer=setTimeout(function(){b.className='';b.textContent='STOP'},2000)};
+  armedTimer=setTimeout(function(){b.className='';b.textContent='STOP'},2000)}
+$('stop').onclick=function(){stopTap($('stop'))};
+$('lockstop').onclick=function(){stopTap($('lockstop'))};
 function statusList(){
   var list=st.status||[],box=$('slist');while(box.firstChild)box.removeChild(box.firstChild);
   list.forEach(function(e){var d=document.createElement('div');d.className=e.level;d.textContent=e.text;box.appendChild(d)});
@@ -306,9 +311,9 @@ function stopAck(answer){
     :'Stop not done: the console refused it. Stop from the laptop.')}
 /* Why the page may not send the emergency stop, in plain words; empty when
    it may. The page never shows a stop it did not send. The console says
-   what the stop needs (ShowControl's rule, board Q256): the show's PIN
-   when it has one (st.stopNeedsPin), never remote GO (st.stopNeedsRemote
-   false); the server checks the same rule, and its ack is what shows. */
+   what the stop needs (ShowControl's rules): never remote GO (Q256,
+   st.stopNeedsRemote false), never the PIN (Q323, st.stopNeedsPin false);
+   the server checks the same rules, and its ack is what shows. */
 function stopRefusal(){
   if(st.stopNeedsRemote===true&&!st.remote)return 'Stop not sent: GO from the phone is off on the laptop (Show Settings).';
   if(st.stopNeedsPin!==false&&st.pin&&!unlocked){askPin('');return 'Stop not sent: enter the PIN'}

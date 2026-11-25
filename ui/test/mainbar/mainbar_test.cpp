@@ -309,7 +309,7 @@ void MainBar_Test::theShowControlsWorkInBothPlacements()
         QCOMPARE(sc->stopAllButton()->defaultAction(), m_app->m_controlPanicAction);
         QCOMPARE(sc->blackoutButton()->defaultAction(), m_app->m_controlBlackoutAction);
         QCOMPARE(sc->blindButton()->defaultAction(), m_app->m_controlBlindAction);
-        QCOMPARE(m_app->m_controlPanicAction->shortcut(), QKeySequence("CTRL+SHIFT+ESC"));
+        QCOMPARE(m_app->m_controlPanicAction->shortcut(), App::stopAllShortcut());
         QCOMPARE(m_app->m_modeToggleAction->shortcut(), QKeySequence("CTRL+F12"));
         QCOMPARE(sc->stopAllButton()->text(), QStringLiteral("Stop All"));
         QCOMPARE(sc->blackoutButton()->text(), QStringLiteral("Blackout"));
@@ -1007,7 +1007,8 @@ void MainBar_Test::fadeOneSecondAndStopFadesTheLightOut()
     QVERIFY2(midFade >= halfTheFade,
              qPrintable(QString("out after %1 mid-fade frames, wanted at least %2; %3")
                         .arg(midFade).arg(halfTheFade).arg(trace)));
-    QTRY_VERIFY(!sc->stopAllButton()->isEnabled());         // nothing left running
+    // Nothing left running: still enabled (never greyed, phase F).
+    QVERIFY(sc->stopAllButton()->isEnabled());
 }
 
 void MainBar_Test::operateLocksProgrammingNotTheGrandMaster()

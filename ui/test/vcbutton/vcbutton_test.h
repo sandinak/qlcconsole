@@ -50,6 +50,7 @@ private slots:
     void customMenu();
     void toggle();
     void flash();
+    void stopAllIsTheOneAllOffPath();
     void stepButtonsOnATreeListGoThroughTheOneGoPath();
     void stepButtonsOnAPlainChaserStepDirectly();
     void flashPlaysAHit();

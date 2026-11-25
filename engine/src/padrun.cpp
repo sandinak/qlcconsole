@@ -715,11 +715,7 @@ void PadRun::emergencyStop()
     ShowControl *sc = m_doc != nullptr ? m_doc->showControl() : nullptr;
     bool done = false;
     if (sc != nullptr)
-    {
-        ShowControl::Request r;
-        r.command = ShowControl::AllOff;
-        done = sc->run(r, ShowControl::RoutePad);
-    }
+        done = sc->allOff(ShowControl::RoutePad);      // the one ALL OFF path
     m_stopping = false;
     m_struckNow = false;
     emit commandSent(ShowControl::AllOff, done);

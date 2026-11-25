@@ -116,9 +116,10 @@ public:
     /** Board Q256 (answered): what a command from the phone or Deck page
      *  (RouteWeb) needs. Every command needs GO from the phone on in Show
      *  Settings, except the emergency stop (ALL OFF): a page must always be
-     *  able to stop the show. Every command, the stop too, needs the page's
-     *  PIN when the show has one; with no PIN set the stop needs nothing.
-     *  WebAccessRun (the server's check and the page's stopNeedsRemote /
+     *  able to stop the show. Board Q323 (answered): ALL OFF and a list's
+     *  STOP never need the page's PIN (the phone or Companion must be able
+     *  to stop a locked show); every other command needs it when the show
+     *  has one. WebAccessRun (the server's check and the page's stopNeedsRemote /
      *  stopNeedsPin) and App::runCommand() all read these two, so they can
      *  never disagree ("shown but not done"). */
     static bool webNeedsRemoteGo(Command command)
@@ -127,8 +128,7 @@ public:
     }
     static bool webNeedsPin(Command command)
     {
-        Q_UNUSED(command)
-        return true;
+        return command != AllOff && command != Stop;
     }
 
     /** GO, Back, Sub GO and Sub Back put a cue on stage (RC8 holds the
@@ -204,6 +204,15 @@ public:
      *  anything as the show (OutputRuleKeeper); ALL OFF clears every
      *  window, so the first GO after it plays at once. */
     bool run(const Request &request, Route route);
+
+    /** THE emergency stop: ALL OFF through run(), from @a route. Every
+     *  ALL OFF, Stop All and panic calls this one function, so they can't
+     *  drift (control surfaces phase F): the screen's Stop All and its key,
+     *  a VC Stop All button, the desk's stop (ControlMap::emergencyStop()),
+     *  the pad's four together, the phone, Companion. OSC and MSC parse to
+     *  the same request and reach the same run(). Never held, never asks a
+     *  feature switch, a mode, a place or the PIN (Q323). True when it ran. */
+    bool allOff(Route route);
 
     /** A GO on a list already running (a command here, a VC step button):
      *  its source renewed, so it is the show for Show-only fixtures

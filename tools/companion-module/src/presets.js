@@ -44,7 +44,7 @@ export function buildPresets(step = 5) {
 	presets.alloff = {
 		type: 'simple',
 		name: 'ALL OFF (hold 1 s)',
-		notes: 'Hold for 1 second to stop everything. Works with remote GO off; needs the PIN when the show has one.',
+		notes: 'Hold for 1 second to stop everything. Works with remote GO off and needs no PIN.',
 		style: { text: 'ALL\nOFF\nhold 1 s', size: '14', color: WHITE, bgcolor: 0x990000 },
 		steps: [{ down: [], up: [], 1000: { options: { runWhileHeld: true }, actions: [act('alloff')] } }],
 		feedbacks: [],

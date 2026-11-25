@@ -1040,9 +1040,10 @@ void App::init()
     connect(m_doc->inputOutputMap(), SIGNAL(universeWritten(quint32, const QByteArray&)),
             this, SLOT(slotUniverseWritten(quint32, const QByteArray&)));
 
-    // Enable/Disable panic button
-    connect(m_doc->masterTimer(), SIGNAL(functionListChanged()), this, SLOT(slotRunningFunctionsChanged()));
-    slotRunningFunctionsChanged();
+    /* Stop All is never greyed (the e-stop always works): levels held with
+       nothing running -- a Simple Desk level, a held master, a Show-only
+       channel -- are what it is for too (CONTROL_SURFACES_EVAL §2). */
+    m_controlPanicAction->setEnabled(true);
 
     // Start up in non-modified state
     m_doc->resetModified();
@@ -2932,7 +2933,7 @@ void App::initActions()
     connect(m_dumpDmxAction, SIGNAL(triggered()), this, SLOT(slotDumpDmxIntoFunction()));
 
     m_controlPanicAction = new QAction(QIcon(":/panic.png"), tr("Stop ALL Functions!"), this);
-    m_controlPanicAction->setShortcut(QKeySequence("CTRL+SHIFT+ESC"));
+    m_controlPanicAction->setShortcut(stopAllShortcut());
     // The show controls' button says the short form (iconText); the Control
     // menu keeps the full name.
     m_controlPanicAction->setIconText(tr("Stop All"));
@@ -5464,9 +5465,12 @@ void App::slotFooterGrandMasterValueChanged(uchar value)
 
 void App::slotControlPanic()
 {
-    /* Stopped, and put at rest: a fog machine, a gobo or a WLED effect
-       kept the last value sent to it after its scene had stopped (UX-70). */
-    FixtureRest::stopAll(m_doc);
+    /* The one ALL OFF path, as the desk's stop, the pad, the phone and
+       Companion take: every function stopped, Show-only channels cut and
+       every fixture put at rest (a fogger, a gobo or a WLED effect kept the
+       last value sent to it after its scene had stopped, UX-70). */
+    if (m_doc != nullptr && m_doc->showControl() != nullptr)
+        m_doc->showControl()->allOff(ShowControl::RouteKey);
 }
 
 void App::slotFadeAndStopAll()
@@ -5475,14 +5479,6 @@ void App::slotFadeAndStopAll()
     int timeout = action->data().toInt();
 
     FixtureRest::stopAll(m_doc, timeout);
-}
-
-void App::slotRunningFunctionsChanged()
-{
-    if (m_doc->masterTimer()->runningFunctions() > 0)
-        m_controlPanicAction->setEnabled(true);
-    else
-        m_controlPanicAction->setEnabled(false);
 }
 
 void App::slotDumpDmxIntoFunction()
@@ -5788,6 +5784,26 @@ QString App::workspaceViewName(WorkspaceView view)
     case ConsoleView:
     default:             return tr("qlcconsole");
     }
+}
+
+QKeySequence App::stopAllShortcut(bool mac)
+{
+    /* CTRL is ⌘ on a Mac (Qt's mapping): ⌘⇧Esc, as it always was. Ctrl+
+       Shift+Esc opens the Task Manager on Windows (the system takes it
+       first: Stop All would never run) and a system monitor on some Linux
+       desktops; Ctrl+Shift+Backspace is taken by neither, and a text field
+       does not keep it. */
+    return mac ? QKeySequence(QStringLiteral("CTRL+SHIFT+ESC"))
+               : QKeySequence(QStringLiteral("CTRL+SHIFT+Backspace"));
+}
+
+QKeySequence App::stopAllShortcut()
+{
+#if defined(Q_OS_MACOS)
+    return stopAllShortcut(true);
+#else
+    return stopAllShortcut(false);
+#endif
 }
 
 QString App::newShowsClassicSettingKey()
