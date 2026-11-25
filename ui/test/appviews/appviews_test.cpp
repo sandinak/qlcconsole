@@ -41,6 +41,10 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSpinBox>
+#include <QPlainTextEdit>
+#include <QTextEdit>
+#include <QVBoxLayout>
 #include <QCheckBox>
 #include <QPushButton>
 #include <QGroupBox>
@@ -4378,6 +4382,156 @@ void AppViews_Test::theStopAllKeyIsSafeOnEveryPlatform()
         if (a->shortcuts().contains(App::stopAllShortcut()))
             ++holders;
     QCOMPARE(holders, 1);
+    // No text-editing key of this platform's is it (on X11 the Delete
+    // Complete Line key is Ctrl+U, Qt 6.8's table).
+    for (int k = QKeySequence::UnknownKey + 1; k <= QKeySequence::Cancel; ++k)
+        QVERIFY2(!QKeySequence::keyBindings(QKeySequence::StandardKey(k)).contains(App::stopAllShortcut()),
+                 qPrintable(QStringLiteral("standard key %1").arg(k)));
+
+    /* The real path: the key typed through the window with a text field
+       focused (a cue name, a level, a note) -- the field's ShortcutOverride
+       sees it first, and one that took it would eat the e-stop. Each one
+       fires Stop All, and the field keeps its text. */
+    Doc *doc = m_app->doc();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    QWidget *page = new QWidget(m_app);
+    auto back = qScopeGuard([page, rules]() {
+        delete page;
+        rules->noteGo();
+    });
+    QLineEdit *line = new QLineEdit(QStringLiteral("SS-01.1 Opening"), page);
+    QSpinBox *spin = new QSpinBox(page);
+    spin->setRange(0, 255);
+    spin->setValue(128);
+    QPlainTextEdit *plain = new QPlainTextEdit(QStringLiteral("a note"), page);
+    QTextEdit *rich = new QTextEdit(QStringLiteral("rich note"), page);
+    QVBoxLayout *lay = new QVBoxLayout(page);
+    for (QWidget *w : std::initializer_list<QWidget *>{ line, spin, plain, rich })
+        lay->addWidget(w);
+    page->setGeometry(0, 0, 300, 300);
+    page->show();
+    page->raise();
+    m_app->show();
+    m_app->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(m_app));
+    const struct { const char *name; QWidget *field; } fields[] = {
+        { "line edit", line }, { "spin box", spin }, { "plain text", plain }, { "rich text", rich } };
+    for (const auto &f : fields)
+    {
+        rules->noteGo();
+        QVERIFY(!rules->emergencyStopped());
+        f.field->setFocus(Qt::OtherFocusReason);
+        QTRY_VERIFY2_WITH_TIMEOUT(f.field->hasFocus() || f.field->isAncestorOf(QApplication::focusWidget()),
+                                  f.name, 2000);
+        const int before = m_app->m_runCommands;
+        QTest::keySequence(QApplication::focusWidget(), App::stopAllShortcut());
+        QVERIFY2(m_app->m_runCommands == before + 1, f.name);
+        QVERIFY2(rules->emergencyStopped(), f.name);
+    }
+    QCOMPARE(line->text(), QStringLiteral("SS-01.1 Opening"));
+    QCOMPARE(plain->toPlainText(), QStringLiteral("a note"));
+}
+
+/* Review of phase F part 2: Stop All lets go of what the Simple Desk and a
+   VC Level slider hold -- but never of pan or tilt (coarse or fine). Let
+   go of, the channel fell to its definition's default (0, one end of
+   travel) and the head swung across the stage: the rule Stop ALL keeps
+   for every head (FixtureRest::putAllAtRest). The dimmer goes out. */
+void AppViews_Test::stopAllLeavesAHeldHeadWhereItIs()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    auto back = qScopeGuard([this, doc, rules]() {
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef(QStringLiteral("Test"), QStringLiteral("Held Mover"));
+    if (def == nullptr)
+    {
+        def = new QLCFixtureDef();
+        def->setManufacturer(QStringLiteral("Test"));
+        def->setModel(QStringLiteral("Held Mover"));
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName(QStringLiteral("5ch"));
+        const struct { const char *name; QLCChannel::Group group; QLCChannel::ControlByte byte; } chans[] = {
+            { "Pan", QLCChannel::Pan, QLCChannel::MSB }, { "Pan fine", QLCChannel::Pan, QLCChannel::LSB },
+            { "Tilt", QLCChannel::Tilt, QLCChannel::MSB }, { "Tilt fine", QLCChannel::Tilt, QLCChannel::LSB },
+            { "Dimmer", QLCChannel::Intensity, QLCChannel::MSB } };
+        int i = 0;
+        for (const auto &c : chans)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString::fromLatin1(c.name));
+            ch->setGroup(c.group);
+            ch->setControlByte(c.byte);
+            def->addChannel(ch);
+            mode->insertChannel(ch, i++);
+        }
+        def->addMode(mode);
+        QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    }
+    auto mover = [doc, def](const QString &name, quint32 address) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setUniverse(0);
+        f->setAddress(address);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+    Fixture *deskHead = mover("Desk head", 20);      // 20..24
+    Fixture *sliderHead = mover("Slider head", 30);  // 30..34
+    QVERIFY(deskHead != nullptr && sliderHead != nullptr);
+    QVERIFY((doc->inputOutputMap()->universes().first()->channelCapabilities(20)
+             & Universe::ShowOnlyOutput) == 0);
+
+    SimpleDeskEngine eng(doc);
+    QWidget host;
+    VCSlider slider(&host, doc);
+    slider.setSliderMode(VCSlider::Level);
+    for (quint32 ch = 0; ch < 5; ++ch)
+        slider.addLevelChannel(sliderHead->id(), ch);
+    doc->setMode(Doc::Operate);
+    m_app->hideViewNotice();
+    eng.setValue(20, 128);
+    eng.setValue(21, 64);
+    eng.setValue(22, 100);
+    eng.setValue(23, 32);
+    eng.setValue(24, 255);
+    slider.setSliderValue(128, false, true);         // pushed up in Operate
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 24)), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 20)), 128, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 30)), 128, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 34)), 128, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 32)), 128, 5000);
+    int sliderHeld[4];
+    for (int i = 0; i < 4; ++i)
+        sliderHeld[i] = int(outputAt(doc, quint32(30 + i)));
+
+    m_app->m_controlPanicAction->trigger();
+    QVERIFY(rules->emergencyStopped());
+    // The dimmers go out...
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 24)), 0, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 34)), 0, 5000);
+    QVERIFY(!eng.hasChannel(24));
+    // ...the heads stay where they were, through later ticks too.
+    QTest::qWait(250);
+    QCOMPARE(int(outputAt(doc, 20)), 128);
+    QCOMPARE(int(outputAt(doc, 21)), 64);
+    QCOMPARE(int(outputAt(doc, 22)), 100);
+    QCOMPARE(int(outputAt(doc, 23)), 32);
+    for (int i = 0; i < 4; ++i)
+        QVERIFY2(int(outputAt(doc, quint32(30 + i))) == sliderHeld[i],
+                 qPrintable(QStringLiteral("slider head channel %1: %2, was %3")
+                            .arg(30 + i).arg(int(outputAt(doc, quint32(30 + i)))).arg(sliderHeld[i])));
+    QCOMPARE(sliderHeld[0], 128);
+    QVERIFY(eng.hasChannel(20) && eng.hasChannel(23));   // still the desk's
+    // Moved again after the stop: the slider drives the head and the dimmer.
+    slider.setSliderValue(90, false, true);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 30)), 90, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 34)), 90, 5000);
 }
 
 /* §4 #16, decision 5: the desk's STOP is heard before any feature switch,

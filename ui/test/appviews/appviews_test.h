@@ -189,6 +189,8 @@ private slots:
     /** Phase F: Stop All is never greyed, so held levels can always be stopped. */
     void stopAllIsNeverGreyed();
     void stopAllTakesOutAHeldLevel();
+    /** Review: ... but pan and tilt held by the desk or a slider stay put. */
+    void stopAllLeavesAHeldHeadWhereItIs();
     /** Phase F: no Ctrl+Shift+Esc on Windows (Task Manager); the Mac keeps ⌘⇧Esc. */
     void theStopAllKeyIsSafeOnEveryPlatform();
     /** Phase F: the desk STOP goes before every feature / mode / learn check. */
