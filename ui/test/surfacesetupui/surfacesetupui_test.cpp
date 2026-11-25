@@ -35,6 +35,7 @@
 #include "surfacesetup.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
+#include "qlcfile.h"
 #include "doc.h"
 
 namespace
