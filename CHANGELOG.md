@@ -257,6 +257,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   window stop going chunky while a spread runs.
 ### Added
 
+- **The surface map**: Connections ▸ Control surfaces draws each patched
+  APC40 mk2, PMJ Black 1 and MaizeDMX Playback Controller as it is, every
+  control labelled with its job now (this computer's GO, Back, STOP and GM
+  in their own colours; the board's own; the show's, dimmer where armed
+  elsewhere; free), lit live as you press and move it, its lights as last
+  sent; "GO is PLAY" says where the fixed jobs are, with Set Up… for one
+  missing. A footer chip per board opens its map. A board's type seeds this
+  computer's desk the first time it is patched (APC40 mk2: PLAY, RECORD,
+  STOP ALL CLIPS, MASTER), never over a role you learned. New input profile:
+  MaizeDMX Playback Controller.
 - **A lost window is easy to find**: while Fixture Properties holds the 2D
   plot still, the plot reads "Fixture Properties is open." with a **Show
   it** button that brings the editor back in front, on the main window's

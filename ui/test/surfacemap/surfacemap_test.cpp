@@ -39,6 +39,7 @@
 #include "controlmap.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
+#include "qlcfile.h"
 #include "scene.h"
 #include "doc.h"
 

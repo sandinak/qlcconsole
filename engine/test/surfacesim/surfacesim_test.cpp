@@ -730,7 +730,8 @@ void SurfaceSim_Test::everyLayoutHoldsToItsProfile()
         seen << l.profileName();
         QVERIFY(SurfaceLayout::forProfile(l.profileName()).isValid());
     }
-    for (const QString &must : { kApc, kPmj, QStringLiteral("MaizeDMX Playback Controller") })
+    const QStringList needed = { kApc, kPmj, QStringLiteral("MaizeDMX Playback Controller") };
+    for (const QString &must : needed)
         QVERIFY2(seen.contains(must), qPrintable(must));
     QVERIFY(!SurfaceLayout::forProfile(QStringLiteral("Akai APC Mini")).isValid());
 }
@@ -739,6 +740,7 @@ void SurfaceSim_Test::theLayoutSelfTestCatchesABrokenOne()
 {
     QLCInputProfile *p = QLCInputProfile::loader(apcFile());
     QVERIFY(p != nullptr);
+    QVERIFY(!SurfaceLayout::builtInFiles().isEmpty());     // the resource is there
     QFile f(QStringLiteral(":/surfacelayouts/Akai-APC40-mkII.layout.json"));
     QVERIFY(f.open(QIODevice::ReadOnly));
     const QByteArray good = f.readAll();

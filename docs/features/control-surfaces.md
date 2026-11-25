@@ -274,6 +274,56 @@ it never changes a show you did not patch. A click on green or amber opens Contr
 it reaches the program now. It is not a check of the file -- the roles are
 this computer's -- so nothing there is accepted or saved with the show.
 
+## The surface map
+
+**Each board you patch is drawn as it is, every control where it sits,
+with what it does now.** It is under **This computer's desk** in
+**Connections ▸ Control surfaces**, one map per board, for the **Akai
+APC40 mk2**, the **PMJ Black 1** and the **MaizeDMX Playback Controller**.
+The footer has a chip per drawn board (**APC40**, **PMJ**, **MaizeDMX**):
+a click opens its map.
+
+- **Where GO is, at a glance.** The line over the map says this computer's
+  fixed jobs on that board: *GO is PLAY · Back is RECORD · STOP is STOP ALL
+  CLIPS · GM is MASTER*. Those controls are drawn in their own colours, the
+  role's name on them: **GO** green, **Back** blue, **STOP** red, **GM**
+  amber. A role this computer has on another board says so (*GO is on APC
+  MINI*). A role it has nowhere says *No STOP on this computer yet.* with
+  **Set Up STOP…**, which starts that role's **Learn…** above.
+- **Four looks.** **This computer's desk** (STOP, GM, GO, Back, the same in
+  every show); **the board's own** (what the PMJ's own controls do: *Level
+  1*, *Select 1*, *Blackout*; dashed: they come with the board); **this
+  show** (a trigger, a hit by its place, a Virtual Console input, the
+  encoder bank, a speed master, the show's Grand Master or emergency stop:
+  the name on the control); **free**. A trigger or hit armed only at a
+  place that is not live now (another cue, another list) is drawn dimmer;
+  hover it for its place. Hover any control for what it does and where it
+  is set up.
+- **Live.** Press or move a control on the board: it lights on the map, a
+  fader or a knob with where it is now. The GM shows **Pick up** while it
+  waits for the fader (see [A fader is picked up before it follows](#a-fader-is-picked-up-before-it-follows)).
+- **The lights.** Each light on the map is what the app last sent the
+  board (its colour on the APC40's pads): if the map and the board differ,
+  the board did not take what it was sent.
+- **Default roles.** A board's type can come with this computer's roles: the
+  first time an **APC40 mk2** is patched here, **PLAY** is GO, **RECORD**
+  Back, **STOP ALL CLIPS** STOP and the **MASTER** fader the Grand Master;
+  on the **MaizeDMX Playback Controller** its **GO** and **BACK** keys, **X10**
+  STOP and the **GM** fader. A role you have learned already (on any board)
+  is never changed, and a board is set up once: a role you clear stays
+  cleared. The PMJ Black 1's **Go**, **Back** and **Master** are its own
+  (the board's overlay does them) and are drawn as GO, Back and GM.
+- **A board with no drawing** (an APC mini, a fader box) is named in one line
+  under the maps; what its controls do stays in the rows below.
+- The map reads; it changes nothing. Assign a free control from the thing
+  (right-click a scene, effect, cue or hit ▸ **Learn Trigger…**).
+
+The **MaizeDMX Playback Controller** shows up as **USB2.0-MIDI** (a name many
+USB MIDI boxes share): patch it with the profile **MaizeDMX Playback
+Controller**. The map and its default roles come from the profile, never the
+port's name. Its **BO** key is printed Blackout; it has no job yet in
+qlcconsole (the map says *Blackout (coming)*).
+
 ## The emergency stop
 
 A control surface can have **one emergency stop**: **Emergency Stop…**, the
@@ -618,6 +668,10 @@ The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
   Connections ▸ Devices): it sends the SysEx that puts the APC in Ableton
   mode each time the device is opened. Learn a clip pad on a cue, a hit or a scene; the
   encoder bank has an **APC40 (knobs)** preset.
+- **MaizeDMX Playback Controller**: the input profile **MaizeDMX Playback
+  Controller** (ten strips of three keys, an LED and a fader; the master
+  column; ten X keys; GO and BACK). Its keys light by the note they send.
+  See [The surface map](#the-surface-map) for its default roles.
 - **Behringer X-Touch Mini**: no input profile yet. Set the unit to
   *Standard* mode, layer A, encoders *Relative 1*; patch it as an input; the
   encoder bank has an **X-Touch Mini** preset.
