@@ -27,6 +27,7 @@
 #include <QHeaderView>
 #include <QFontMetrics>
 #include <QStyle>
+#include <QScreen>
 #include <QTreeWidget>
 #include <QKeyEvent>
 #include <QAction>
@@ -451,6 +452,24 @@ void ControlLearnDialog::updateRow(QTreeWidgetItem *row)
     // the control still fits in full, never "Channe…" (UX-36).
     if (f.bold())
         fitControlColumn(row);
+    fitOwnerText(row);
+}
+
+void ControlLearnDialog::fitOwnerText(QTreeWidgetItem *row)
+{
+    /* Who has it, in full (UX-36): the list grows to the longest owner text
+       ("Cross on the pad: GO with L2 held (the pad's Run map) · can't be
+       taken"), up to the screen's width; past that the tooltip has it. */
+    const int pad = 2 * (m_list->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, m_list) + 1) + 8;
+    const int need = m_list->columnWidth(0)
+                     + QFontMetrics(row->font(1)).horizontalAdvance(row->text(1)) + pad
+                     + 2 * m_list->frameWidth()
+                     + m_list->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, m_list);
+    const QScreen *scr = screen();
+    const int cap = scr != nullptr ? scr->availableGeometry().width() - 64 : 1000;
+    const int width = qMin(need, cap);
+    if (width > m_list->minimumWidth())
+        m_list->setMinimumWidth(width);
 }
 
 void ControlLearnDialog::fitControlColumn(QTreeWidgetItem *row)

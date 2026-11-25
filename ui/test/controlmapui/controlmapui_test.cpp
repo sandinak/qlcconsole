@@ -65,6 +65,7 @@
 #include "showwebaccess.h"
 #include <QTreeWidget>
 #include <QFontMetrics>
+#include <QHeaderView>
 #include <QScrollArea>
 #include <QGroupBox>
 #include "showtreeview.h"
@@ -3096,6 +3097,19 @@ void ControlMapUi_Test::padRunButtonRefused()
     QVERIFY(!box->moveButton()->isVisibleTo(&d));      // the pad can't give it up
     QVERIFY(!d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
     QVERIFY(!ControlOwners::releaseAll(m_doc, box->owners()));
+    {
+        // Who has it, in full (UX-36): "… · can't be taken", never "can't …".
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QCoreApplication::processEvents();
+        QTreeWidget *list = d.findChild<QTreeWidget *>("assignControls");
+        QTreeWidgetItem *row = list->currentItem();
+        QVERIFY(row != nullptr && row->text(1).endsWith("can't be taken"));
+        const int text = QFontMetrics(row->font(1)).horizontalAdvance(row->text(1));
+        QVERIFY2(list->header()->sectionSize(1) > text,
+                 qPrintable(QString("%1: column %2 < text %3").arg(row->text(1))
+                                .arg(list->header()->sectionSize(1)).arg(text)));
+    }
     box->cancelButton()->click();
     cm->handleInput(0, 7, 0);
 

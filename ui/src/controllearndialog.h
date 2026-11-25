@@ -157,6 +157,8 @@ private:
     QTreeWidgetItem *ensureRow(quint32 universe, quint32 channel);
     /** Column 0 wide enough for every control, @a row's (bold) in full. */
     void fitControlColumn(QTreeWidgetItem *row);
+    /** The list wide enough for @a row's owner text in full (to a cap). */
+    void fitOwnerText(QTreeWidgetItem *row);
     void updateRow(QTreeWidgetItem *row);
     /** A press or move heard (raw, before any listener): its row selected. */
     void selectControl(quint32 universe, quint32 channel);
