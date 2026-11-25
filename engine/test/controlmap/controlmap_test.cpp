@@ -466,17 +466,17 @@ void ControlMap_Test::aLightIsDarkWhereAPressWouldBeRefused()
     QCOMPARE(lastLight(m_stub, 20), 0);
 }
 
-/* The PMJ Black 1 (and any desk whose input profile gives a button a dim
-   level of its own) idles at that level: a ready light sent at MIDI 15 was
-   the board's idle glow, so a hit live in its place looked unlit. On such a
-   profile a press that would fire is lit at the profile's lit level, and
-   anything else is its dim level. Any profile, not only the PMJ's. */
+/* The PMJ Black 1 idles at its profile's dim level (15): a ready light
+   sent at MIDI 15 was the board's idle glow, so a hit live in its place
+   looked unlit. There a press that would fire is lit at the profile's lit
+   level, and anything else is its dim level. */
 void ControlMap_Test::hitLampLitOnlyInItsPlace()
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
     QLCInputProfile *desk = new QLCInputProfile();
-    desk->setManufacturer(QStringLiteral("Test"));
-    desk->setModel(QStringLiteral("Lamp Desk"));
+    // The PMJ Black 1's profile, the one desk that idles dim (ControlMap::idlesDim()).
+    desk->setManufacturer(QStringLiteral("PMJ"));
+    desk->setModel(QStringLiteral("Black 1"));
     desk->setType(QLCInputProfile::MIDI);
     QLCInputChannel *key = new QLCInputChannel();
     key->setName(QStringLiteral("Key"));
@@ -543,14 +543,103 @@ void ControlMap_Test::hitLampLitOnlyInItsPlace()
     QVERIFY(!st->isHitArmed(hit));
     QCOMPARE(lastLight(m_stub, 20), 30);
 
-    // The emergency stop on such a key: dim until the show is stopped, then lit.
+    // The emergency stop on such a key: lit at rest (it always works), then
+    // lit / dim after ALL OFF until the next GO.
+    cm->setBlinkMs(20);
     cm->setBinding({ 0, 41, ControlMap::emergencyStop(), ControlMap::StartOnly });
     QCoreApplication::processEvents();
-    QCOMPARE(lastLight(m_stub, 41), 30);
+    QCOMPARE(lastLight(m_stub, 41), 255);
+    const int before = m_stub->m_feedback.count();
     m_doc->outputRuleKeeper()->emergencyStop();
     tick(3);
-    QCOMPARE(lastLight(m_stub, 41), 255);
+    QTest::qWait(200);
+    QSet<int> seen;
+    for (int i = before; i < m_stub->m_feedback.count(); ++i)
+        if (m_stub->m_feedback.at(i).first == 41)
+            seen.insert(m_stub->m_feedback.at(i).second);
+    QVERIFY2(seen.contains(255) && seen.contains(30), "the stop did not blink lit / dim after ALL OFF");
     QCOMPARE(lastLight(m_stub, 20), 30);   // and nothing else is ready after ALL OFF
+    // The next GO ends it: lit and still.
+    QVERIFY(m_doc->showControl()->run(r, ShowControl::RouteOther));
+    tick(3);
+    QTRY_VERIFY_WITH_TIMEOUT(!m_doc->outputRuleKeeper()->emergencyStopped(), 2000);
+    QTest::qWait(100);
+    QCOMPARE(lastLight(m_stub, 41), 255);
+    const int still = m_stub->m_feedback.count();
+    QTest::qWait(100);
+    for (int i = still; i < m_stub->m_feedback.count(); ++i)
+        QVERIFY(m_stub->m_feedback.at(i).first != 41 || m_stub->m_feedback.at(i).second == 255);
+}
+
+/* Only the PMJ idles dim. The APC mini mk2 (Feedback 1/26) and the
+   Launchpad Mini MK3 (LowerValue 100) give a lower value too, but it is a
+   colour: their lamps are what 63dafbfa467c sent -- 30 ready, 0 ready with
+   Lights="onoff", 255 running, 0 for a press that would do nothing, the
+   stop 30 at rest whatever the switch and 255 stopped. Their real profiles. */
+void ControlMap_Test::padsWithALowerValueKeepTheirLamps()
+{
+    const struct { const char *file; quint32 channel; } pads[] = {
+        { "Akai-APCMini-mk2.qxi", 128 },
+        { "Novation-LaunchPadMiniMK3.qxi", 99 },
+    };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControlMap *cm = m_doc->controlMap();
+    Scene *a = scene("Warm", 0);
+    for (const auto &pad : pads)
+    {
+        const QString path = QStringLiteral(QLC_INPUT_PROFILES_DIR "/") + QLatin1String(pad.file);
+        QLCInputProfile *loaded = QLCInputProfile::loader(path);
+        QVERIFY2(loaded != nullptr, qPrintable(path));
+        QLCInputProfile *profile = iom->profile(loaded->name());
+        if (profile == nullptr)
+        {
+            QVERIFY(iom->addProfile(loaded));
+            profile = loaded;
+        }
+        else
+        {
+            delete loaded;      // the Doc has it already
+        }
+        QLCInputChannel *ich = profile->channel(pad.channel);
+        QVERIFY(ich != nullptr && ich->lowerValue() > 0);      // the case the rule must not take
+        QVERIFY(!ControlMap::idlesDim(profile->name()));
+        QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0, profile->name()));
+        QVERIFY(!cm->profileLampRange(0, pad.channel, nullptr, nullptr));
+        const quint32 ch = pad.channel;
+        const ControlMap::Target target = ControlMap::function(a->id());
+        cm->setBinding({ 0, ch, target, ControlMap::Toggle });
+        QCOMPARE(lastLight(m_stub, ch), 30);                // ready, dim
+        cm->setDimWhenReady(false);
+        QCOMPARE(lastLight(m_stub, ch), 0);                 // Lights="onoff"
+        cm->setDimWhenReady(true);
+        QCOMPARE(lastLight(m_stub, ch), 30);
+        send(ch, 127);
+        tick(3);
+        QVERIFY(a->isRunning());
+        QCOMPARE(lastLight(m_stub, ch), 255);               // running
+        send(ch, 0);
+        send(ch, 127);
+        send(ch, 0);
+        tick(3);
+        QVERIFY(!a->isRunning());
+        QVERIFY(cm->setMode(target, ControlMap::StopOnly));
+        QCOMPARE(lastLight(m_stub, ch), 0);                 // a press would do nothing
+        QVERIFY(cm->removeBinding(target));
+
+        cm->setBinding({ 0, ch, ControlMap::emergencyStop(), ControlMap::StartOnly });
+        cm->setDimWhenReady(false);
+        QCOMPARE(lastLight(m_stub, ch), 30);                // the stop: never dimmed away
+        cm->setDimWhenReady(true);
+        QCOMPARE(lastLight(m_stub, ch), 30);
+        m_doc->outputRuleKeeper()->emergencyStop();
+        tick(3);
+        QCOMPARE(lastLight(m_stub, ch), 255);               // stopped: lit and still
+        QTest::qWait(100);
+        QCOMPARE(lastLight(m_stub, ch), 255);
+        m_doc->outputRuleKeeper()->noteGo();
+        tick(3);
+        QVERIFY(cm->removeBinding(ControlMap::emergencyStop()));
+    }
 }
 
 /* After an emergency stop every light is dark until the next GO, and the

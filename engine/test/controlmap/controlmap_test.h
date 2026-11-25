@@ -49,6 +49,9 @@ private slots:
      *  15/127): a hit's key is lit only while its place is live, dim
      *  otherwise -- not dim at the board's idle glow when it is ready. */
     void hitLampLitOnlyInItsPlace();
+    /** APC mini mk2 / Launchpad Mini MK3 (a colour as their LowerValue):
+     *  their lamps exactly as before the PMJ rule. */
+    void padsWithALowerValueKeepTheirLamps();
     void theLightGoesDarkAfterTheStopUntilTheNextGo();
     void aHeldGoBlinksTheControlTwice();
     void aCueListWithNothingToGoIsDark();

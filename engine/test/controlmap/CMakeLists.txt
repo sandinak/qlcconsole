@@ -15,3 +15,7 @@ target_link_libraries(controlmap_test PRIVATE
     qlcplusengine
     iopluginstub   # its typeinfo, for UBSan vptr on static_cast
 )
+
+# The real input profiles, for padsWithALowerValueKeepTheirLamps.
+target_compile_definitions(controlmap_test PRIVATE
+    QLC_INPUT_PROFILES_DIR="${CMAKE_SOURCE_DIR}/resources/inputprofiles")

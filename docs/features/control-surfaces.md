@@ -405,14 +405,15 @@ pad read -- so no two surfaces can disagree.
 The same words are in the **Its light** column of the Control Map table, so
 a desk's lights can be read from the laptop with no desk plugged in.
 
-**A desk that glows dim by itself.** Some desks light every button at a low
-level when they are idle, and their input profile says so: it gives the
-button a dim level of its own (the PMJ Black 1's is 15, its lit level 127).
-There a dim light could not be told from a button that does nothing, so the
-desk shows the profile's two levels instead: **lit** when a press would fire
-it now (a hit only while its place is live) or what it fired is running,
-**dim** at every other moment. The emergency stop's button is dim until the
-show is stopped, then lit. Two blinks are still two blinks.
+**A desk that glows dim by itself: the PMJ Black 1.** The PMJ lights every
+button at a low level (15) when it is idle. There a dim light could not be
+told from a button that does nothing, so on the PMJ the show uses its
+profile's two levels instead: **lit** (127) when a press would fire it now
+(a hit only while its place is live) or what it fired is running, **dim** at
+every other moment. The emergency stop's button is **lit at every moment**
+-- it always works -- and after an ALL OFF it **blinks lit and dim** until
+the next GO. Two blinks are still two blinks. Pads whose low level is a
+colour (the APC mini mk2, the Launchpad Mini MK3) keep the table above.
 
 **A pad whose lights are colours, not brightnesses.** Some pads (the APCs)
 read the velocity of a light message as a *colour index*, so a dim level
@@ -470,6 +471,7 @@ the profile is patched on.
 | **1-Up…10-Up** | That fader edits the open palette now. |
 | **O**, **Set** | Dim: ready. Bright: Blackout or Blind is on. |
 | **A key you learned** | The Control Map's light: lit when a press would fire it or it is running, dim otherwise ([What a control's light says](#what-a-controls-light-says)). |
+| **The emergency stop's key** | Lit at every moment: it always works. Blinking lit and dim: the show is stopped (ALL OFF) until the next GO. |
 
 The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
 
@@ -545,9 +547,10 @@ after any build that changes a surface, and say which build.
     lit one. Then with **Go** learned on the main cue list (step 6) and the
     stop learned (step 7): *Expect:* Go **lit** while a GO would play a
     cue; it **blinks twice** when you press Go twice inside a second, then
-    lit again; the stop's button dim all along (it always works) and
-    **lit** when the show is stopped, and while it is lit **Go is dim**;
-    one GO after that, Go is lit again and the stop dim. The Control Map's
+    lit again; the stop's button **lit** all along (it always works) and
+    **blinking lit and dim** when the show is stopped, and while it blinks
+    **Go is dim**; one GO after that, Go is lit again and the stop lit and
+    still. The Control Map's
     **Its light** column says the same words throughout. Move the
     **Master** fader: *Expect:* Go and the stop's button keep their light.
 12. **A hit's light.** Learn a hit that lives in one song on a free PMJ
