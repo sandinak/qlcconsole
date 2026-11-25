@@ -58,6 +58,7 @@ private slots:
     /** A new set of armed hits starts at 1 of n, and so does the same set
      *  armed again (Q240). */
     void eachNewSetOfHitsStartsAtOneOfN();
+    void aSetReadBeforeSyncHitIsTakenAtOnce();
     /** A pull made the moment the cue changes, before the main thread has
      *  heard (a loaded machine): the new set still starts at 1 of n, and
      *  the turn that pull moved on is kept (CI's slow macOS runner). */

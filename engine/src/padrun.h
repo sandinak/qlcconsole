@@ -178,6 +178,7 @@ class QLC_ENGINE_EXPORT PadRun final : public QObject
     Q_OBJECT
     // The rules' tests clear a notice and read the arm a focus put by.
     friend class PadRunRules_Test;
+    friend class PadHit_Test;
 
 public:
     PadRun(Doc *doc, ProgrammerController *pc, QObject *parent = nullptr);
@@ -870,8 +871,8 @@ private:
     bool m_playing = false;
     bool m_blinkOn = false;
     /** The next hit a press takes among several at the narrowest place. */
-    int m_hitStep = 0;
-    QList<quint32> m_armedSet;     // the armed hits m_hitStep counts through
+    mutable int m_hitStep = 0;
+    mutable QList<quint32> m_armedSet;     // the armed hits m_hitStep counts through
     QTimer *m_oneShotTick = nullptr;
     QTimer *m_chord = nullptr;
     bool m_chordPending = false;    ///< both down, still timing

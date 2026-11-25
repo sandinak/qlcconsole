@@ -2082,7 +2082,15 @@ int PadRun::turnIn(const QList<quint32> &tier) const
        a moment late (functionStarted() and currentStepChanged() come queued
        from the MasterTimer's thread), and a pull in that moment -- a busy
        machine, a quick operator -- took the old set's turn. */
-    return tier == m_armedSet ? m_hitStep : 0;
+    if (tier != m_armedSet)
+    {
+        /* Taken now, not left to syncHit(): a set read here and not taken
+           would, if the old set came back before syncHit() ran (Back to the
+           first cue), still carry its old turn. */
+        m_armedSet = tier;
+        m_hitStep = 0;
+    }
+    return m_hitStep;
 }
 
 void PadRun::nextHitTurn()

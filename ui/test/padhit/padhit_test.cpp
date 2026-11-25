@@ -856,6 +856,23 @@ void PadHit_Test::eachNewSetOfHitsStartsAtOneOfN()
     QCOMPARE(st->cue(fired.last().at(0).toUInt())->name, QString("Staff Slam"));
 }
 
+void PadHit_Test::aSetReadBeforeSyncHitIsTakenAtOnce()
+{
+    /* Read while syncHit() has not run (the cue's signals come queued), a
+       new set starts at 1 of n and is taken: when the old set comes back
+       before syncHit() runs, it starts over too, not at its old turn. */
+    PadRun *run = m_app->doc()->programmer()->padRun();
+    const QList<quint32> a = {1001, 1002};
+    const QList<quint32> b = {1003};
+    run->m_armedSet = a;
+    run->m_hitStep = 1;
+    QCOMPARE(run->turnIn(a), 1);
+    QCOMPARE(run->turnIn(b), 0);
+    QCOMPARE(run->turnIn(a), 0);
+    run->m_armedSet.clear();
+    run->m_hitStep = 0;
+}
+
 void PadHit_Test::aPullAsTheCueChangesStartsAtOneOfN()
 {
     Doc *doc = m_app->doc();
