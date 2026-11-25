@@ -207,6 +207,12 @@ public:
     static WorkspaceView workspaceViewFromKey(const QString &key, bool *ok = nullptr);
     /** What the View menu calls @p view. */
     static QString workspaceViewName(WorkspaceView view);
+    /** Stop All's key (the panic, one ALL OFF path: ShowControl::allOff()).
+     *  ⌘⇧Esc on a Mac; never Ctrl+Shift+Esc on Windows, where it opens the
+     *  Task Manager (and on Linux desktops that copy it): Ctrl+Shift+Backspace
+     *  there. @p mac picks the Mac's; stopAllShortcut() is this computer's. */
+    static QKeySequence stopAllShortcut(bool mac);
+    static QKeySequence stopAllShortcut();
     /** A show saved without a view: Classic for an old QLC+ show (no Show
      *  Tree, not saved by qlcconsole), else qlcconsole. */
     WorkspaceView defaultViewForLoadedShow() const;
@@ -803,7 +809,6 @@ public slots:
     void slotClearLastLook();
     void slotControlPanic();
     void slotFadeAndStopAll();
-    void slotRunningFunctionsChanged();
     void slotDumpDmxIntoFunction();
     void slotFunctionLiveEdit();
     void slotLiveEditVirtualConsole();

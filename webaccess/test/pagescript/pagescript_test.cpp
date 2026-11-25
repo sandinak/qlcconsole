@@ -63,8 +63,8 @@ QJsonObject liveRun(const QJsonObject &extra = QJsonObject())
         { "now", QJsonObject{ { "num", "1" }, { "name", "Open" } } },
         { "next", QJsonObject{ { "num", "2" }, { "name", "Verse" } } },
         { "pad", WebAccessRun::padMap() },
-        // ShowControl's stop rule as the console sends it (board Q256)
-        { "stopNeedsRemote", false }, { "stopNeedsPin", true },
+        // ShowControl's stop rules as the console sends them (board Q256, Q323)
+        { "stopNeedsRemote", false }, { "stopNeedsPin", false }, { "listStopNeedsPin", false },
     }, extra);
 }
 
@@ -1000,6 +1000,38 @@ void PageScript_Test::focusShowsBlindAndTeaching()
     QVERIFY(text(QStringLiteral("held")).contains(QStringLiteral("Teaching holds real output")));
 }
 
+/* Board Q323: ALL OFF and STOP skip the show's PIN. The page is locked
+   (the PIN screen up, GO greyed) and still stops: STOP on the PIN screen
+   and on the page, the pad's four together. Before, STOP was greyed and the
+   PIN screen had no STOP. */
+void PageScript_Test::aLockedPageStillStops()
+{
+    loadPage(WebAccessRun::html());
+    js(QStringLiteral("__open()"));
+    sent();
+    runState(liveRun(QJsonObject{ { "pin", true } }));
+    QCOMPARE(js(QStringLiteral("document.getElementById('lock').className")).toString(), QStringLiteral("show"));
+    QVERIFY(!enabled(QStringLiteral("go")));
+    QVERIFY(!enabled(QStringLiteral("back")));
+    QVERIFY(enabled(QStringLiteral("stop")));
+    QVERIFY(enabled(QStringLiteral("lockstop")));
+    QVERIFY(text(QStringLiteral("lockwhy")).contains(QStringLiteral("STOP")));
+    // Two taps on the PIN screen's STOP: the list's stop, no PIN sent.
+    QVERIFY(click(QStringLiteral("lockstop")));
+    QCOMPARE(sent(), QStringList());
+    QCOMPARE(text(QStringLiteral("lockstop")), QStringLiteral("TAP AGAIN TO STOP"));
+    QVERIFY(click(QStringLiteral("lockstop")));
+    QCOMPARE(sent(), QStringList{ QStringLiteral("QLC+RUN|stop") });
+    // The pad's emergency stop goes too, and nothing asks for the PIN.
+    pad(QJsonObject{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } });
+    QVERIFY(sent().contains(QStringLiteral("QLC+RUN|alloff")));
+    QCOMPARE(text(QStringLiteral("msg")), QString());
+    pad(QJsonObject(), 50);
+    // No list: nothing to stop, so STOP is greyed there as here.
+    runState(liveRun(QJsonObject{ { "pin", true }, { "hasList", false } }));
+    QVERIFY(!enabled(QStringLiteral("lockstop")));
+}
+
 void PageScript_Test::noStopIsShownThatWasNotSent()
 {
     /* The show's PIN not given yet: the page's pad may not send the
@@ -1012,8 +1044,11 @@ void PageScript_Test::noStopIsShownThatWasNotSent()
     js(QStringLiteral("__open()"));
     sent();
     const QJsonObject four{ { "lb", 1 }, { "rb", 1 }, { "lt", 1 }, { "rt", 1 } };
-    const QList<QJsonObject> states = { liveRun(QJsonObject{ { "pin", true } }),
-                                        liveRun(QJsonObject{ { "pin", true }, { "remote", false } }) };
+    // A console from before Q323 still asks the PIN for the stop: the page
+    // follows what the console says.
+    const QJsonObject older{ { "pin", true }, { "stopNeedsPin", true } };
+    const QList<QJsonObject> states = { liveRun(older),
+                                        liveRun(merged(older, QJsonObject{ { "remote", false } })) };
     for (const QJsonObject &state : states)
     {
         runState(state);

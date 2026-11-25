@@ -50,6 +50,15 @@ namespace FixtureRest
      *  it is, so no head swings to its definition's default. */
     QLC_ENGINE_EXPORT bool holdsPosition(const QLCChannel *ch);
 
+    /** holdsPosition() for channel @p channel of fixture @p fixtureId:
+     *  what a stop that lets go of a held level (the Simple Desk's, a VC
+     *  slider's) keeps, so no head swings. False for no such fixture. */
+    QLC_ENGINE_EXPORT bool holdsPosition(const Doc *doc, quint32 fixtureId, quint32 channel);
+
+    /** holdsPosition() for the patched channel at @p universeAddress
+     *  (universe << 9 | address). False where nothing is patched. */
+    QLC_ENGINE_EXPORT bool holdsPositionAt(const Doc *doc, quint32 universeAddress);
+
     /** Every patched fixture's channels to their rest value, in the
      *  universes, for whatever no longer drives them: fog and haze off,
      *  effects stopped, gobos and colour wheels back to open; pan and tilt

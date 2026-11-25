@@ -82,6 +82,7 @@
 #include "chaser.h"
 #include "doc.h"
 #include "fixturerest.h"
+#include "showcontrol.h"
 #include "lastlookeffect.h"
 #include "showmanager.h"
 
@@ -1759,8 +1760,13 @@ void VCButton::pressFunction()
     }
     else if (m_action == StopAll)
     {
-        // Stopped and put at rest, as the main Stop ALL (UX-70).
-        FixtureRest::stopAll(m_doc, stopAllFadeTime());
+        /* No fade: the one ALL OFF path, as the main Stop All, the desk's
+           stop and the pad's take (ShowControl::allOff()). A fade is a
+           timed fade and stop, put at rest after it (UX-70). */
+        if (stopAllFadeTime() <= 0 && m_doc->showControl() != nullptr)
+            m_doc->showControl()->allOff(ShowControl::RouteOther);
+        else
+            FixtureRest::stopAll(m_doc, stopAllFadeTime());
     }
     else if (m_action == SelectFixtures)
     {

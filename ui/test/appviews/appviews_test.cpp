@@ -41,6 +41,10 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QSpinBox>
+#include <QPlainTextEdit>
+#include <QTextEdit>
+#include <QVBoxLayout>
 #include <QCheckBox>
 #include <QPushButton>
 #include <QGroupBox>
@@ -124,6 +128,8 @@
 #undef private
 #include "helpbrowser.h"
 #include "simpledesk.h"
+#include "simpledeskengine.h"
+#include "vcslider.h"
 #include "showmanager.h"
 #include "showconverter.h"
 #include <QToolButton>
@@ -2245,9 +2251,9 @@ void AppViews_Test::plainEscIsNoPlaybackAction()
     QVERIFY2(bothRunning(), "Esc in the Workbench stopped playback");
     QCOMPARE(int(outputAt(doc, 211)), 200);
 
-    // ⌘⇧Esc: Stop all.
-    QCOMPARE(m_app->m_controlPanicAction->shortcut(), QKeySequence("CTRL+SHIFT+ESC"));
-    QTest::keyClick(m_app, Qt::Key_Escape, Qt::ControlModifier | Qt::ShiftModifier);
+    // ⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux): Stop all.
+    QCOMPARE(m_app->m_controlPanicAction->shortcut(), App::stopAllShortcut());
+    QTest::keySequence(m_app, App::stopAllShortcut());
     QTRY_VERIFY_WITH_TIMEOUT(!busk->isRunning() && !list->isRunning(), 5000);
 }
 
@@ -4117,6 +4123,460 @@ void AppViews_Test::theEmergencyStopSurvivesEverySwitchOff()
     QCOMPARE(fired.first().first().toString(), QString("ALL OFF"));
     QTRY_VERIFY_WITH_TIMEOUT(!look->isRunning(), 3000);
     QVERIFY2(stop->text().startsWith("Emergency Stop: "), qPrintable(stop->text()));
+}
+
+/* Control surfaces phase F (CONTROL_SURFACES_EVAL §2, §4 #16, #17): one
+   ALL OFF path. The screen's Stop All (its button, its menu item and its
+   key), a VC Stop All button, the desk's stop, the pad's four together and
+   the phone page all reach ShowControl::allOff(): the run handler sees
+   ALL OFF from their route, and the emergency stop is struck (Show-only
+   cut, every function stopped). Before, Stop All and the VC button stopped
+   the MasterTimer on their own: no ALL OFF, no stop struck. */
+void AppViews_Test::everyAllOffTakesTheOnePath()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowControl *sc = doc->showControl();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    ControlMap *cm = doc->controlMap();
+    PadRun *pad = doc->programmer()->padRun();
+    QVERIFY(rules != nullptr && pad != nullptr);
+    QWidget host;
+    VCButton *vcStop = new VCButton(&host, doc);
+    vcStop->setAction(VCButton::StopAll);
+    auto back = qScopeGuard([&]() {
+        cm->removeBinding(ControlMap::emergencyStop());
+        pad->stopEnded();
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    doc->setMode(Doc::Operate);                     // a VC button presses in Operate
+    m_app->hideViewNotice();
+    Fixture *lamp = new Fixture(doc);
+    lamp->setName("Lamp");
+    lamp->setChannels(1);
+    lamp->setAddress(0);
+    QVERIFY(doc->addFixture(lamp));
+    Scene *look = new Scene(doc);
+    look->setName("Playing");
+    look->setValue(lamp->id(), 0, 255);
+    QVERIFY(doc->addFunction(look));
+    cm->setBinding({ 0, 189, ControlMap::emergencyStop(), ControlMap::StartOnly });
+
+    QSignalSpy handled(sc, &ShowControl::commandHandled);
+    struct Way { const char *name; ShowControl::Route route; std::function<void()> press; };
+    int deskPresses = 0;
+    const QList<Way> ways = {
+        { "Stop All (screen)", ShowControl::RouteKey, [this]() { m_app->m_controlPanicAction->trigger(); } },
+        { "VC Stop All button", ShowControl::RouteOther, [vcStop]() { vcStop->pressFunction(); } },
+        { "desk stop", ShowControl::RouteControlMap, [cm, &deskPresses]() {
+              cm->handleInput(0, 189, 0);       // a new press each time
+              cm->handleInput(0, 189, 127);
+              ++deskPresses; } },
+        { "pad four", ShowControl::RoutePad, [pad]() { pad->emergencyStop(); } },
+    };
+    for (const Way &w : ways)
+    {
+        rules->noteGo();                            // the last stop's mark gone
+        look->start(doc->masterTimer(), FunctionParent::master());
+        QTRY_VERIFY_WITH_TIMEOUT(look->isRunning(), 3000);
+        handled.clear();
+        const int before = m_app->m_runCommands;
+        w.press();
+        QVERIFY2(m_app->m_runCommands == before + 1, w.name);
+        QVERIFY2(m_app->m_lastRunRoute == w.route, w.name);
+        QVERIFY2(!handled.isEmpty() && handled.last().at(0).toString().startsWith("ALL OFF")
+                     && handled.last().at(1).toBool(), w.name);
+        QVERIFY2(rules->emergencyStopped(), w.name);
+        QTRY_VERIFY2_WITH_TIMEOUT(!look->isRunning(), w.name, 3000);
+        pad->stopEnded();
+    }
+    QCOMPARE(deskPresses, 1);
+    // A VC Stop All with a fade is a fade and stop, not the emergency stop.
+    vcStop->setStopAllFadeOutTime(1000);
+    rules->noteGo();
+    const int before = m_app->m_runCommands;
+    vcStop->pressFunction();
+    QCOMPARE(m_app->m_runCommands, before);
+    QVERIFY(!rules->emergencyStopped());
+}
+
+/* §2 mid-show trouble: Stop All was greyed while no function ran, so a level
+   held with nothing running (a Simple Desk level, a held master) had no
+   on-screen stop. Now never greyed: nothing running, it is enabled, and a
+   press is the emergency stop. */
+void AppViews_Test::stopAllIsNeverGreyed()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    auto back = qScopeGuard([this, doc]() {
+        doc->outputRuleKeeper()->noteGo();
+        m_app->clearDocument();
+    });
+    QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 3000);
+    QVERIFY(m_app->m_controlPanicAction->isEnabled());
+    QToolButton *button = m_app->findChild<QToolButton *>(QStringLiteral("showStopAll"));
+    QVERIFY(button != nullptr);
+    QVERIFY(button->isEnabled());
+    // UX-review shots (the pool's QLC_SHOT_DIR): Stop All lit with nothing running.
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!dir.isEmpty())
+    {
+        QDir().mkpath(dir);
+        const QSize was = m_app->size();
+        m_app->setWorkspaceView(App::ConsoleView);
+        m_app->show();
+        for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            m_app->resize(size);
+            for (int i = 0; i < 6; ++i)
+            {
+                QCoreApplication::processEvents();
+                QTest::qWait(30);
+            }
+            QVERIFY(button->isVisible() && button->isEnabled());
+            QVERIFY(m_app->grab().save(QStringLiteral("%1/stopall-idle-%2x%3.png")
+                                       .arg(dir).arg(size.width()).arg(size.height())));
+        }
+        m_app->resize(was);
+    }
+    // A function started and stopped: still enabled after it.
+    Fixture *lamp = new Fixture(doc);
+    lamp->setName("Lamp");
+    lamp->setChannels(1);
+    lamp->setAddress(0);
+    QVERIFY(doc->addFixture(lamp));
+    Scene *look = new Scene(doc);
+    look->setName("Brief");
+    look->setValue(lamp->id(), 0, 255);
+    QVERIFY(doc->addFunction(look));
+    look->start(doc->masterTimer(), FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(look->isRunning(), 3000);
+    look->stop(FunctionParent::master());
+    QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 3000);
+    QCoreApplication::processEvents();
+    QVERIFY(m_app->m_controlPanicAction->isEnabled());
+    // Pressed with nothing running: the emergency stop all the same.
+    m_app->m_controlPanicAction->trigger();
+    QVERIFY(doc->outputRuleKeeper()->emergencyStopped());
+}
+
+/* §2 and CONTROL_SURFACES_EVAL's stopAllEnabledWithHeldLevel: what Stop All
+   is lit for with nothing running. A Simple Desk channel and a VC Level
+   slider up on ordinary dimmers (not Show only) -- no function runs, the
+   light is up -- and Stop All takes both out. Before, the stop let go of
+   Show-only channels only: both dimmers stayed at full. They stay out
+   through later ticks, until their own fader is moved again. */
+void AppViews_Test::stopAllTakesOutAHeldLevel()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    auto back = qScopeGuard([this, doc, rules]() {
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    auto dimmer = [doc](const QString &name, quint32 address) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setAddress(address);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+    Fixture *desk = dimmer("Desk lamp", 10);
+    Fixture *fader = dimmer("Fader lamp", 11);
+    QVERIFY(desk != nullptr && fader != nullptr);
+    QVERIFY((doc->inputOutputMap()->universes().first()->channelCapabilities(10)
+             & Universe::ShowOnlyOutput) == 0);
+    SimpleDeskEngine eng(doc);
+    QWidget host;
+    VCSlider slider(&host, doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.addLevelChannel(fader->id(), 0);
+    doc->setMode(Doc::Operate);
+    m_app->hideViewNotice();
+    eng.setValue(10, 255);
+    slider.setSliderValue(200, false, true);        // pushed up in Operate
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 10)), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 200, 5000);
+    QCOMPARE(doc->masterTimer()->runningFunctions(), 0);   // nothing running
+    QVERIFY(m_app->m_controlPanicAction->isEnabled());
+
+    m_app->m_controlPanicAction->trigger();
+    QVERIFY(rules->emergencyStopped());
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 10)), 0, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 0, 5000);
+    QVERIFY(!eng.hasChannel(10));                   // the desk let go of it
+    // Stays out: nothing moved since.
+    QTest::qWait(200);
+    QCOMPARE(int(outputAt(doc, 10)), 0);
+    QCOMPARE(int(outputAt(doc, 11)), 0);
+    // A hand on each, after the stop: lit again.
+    eng.setValue(10, 120);
+    slider.setSliderValue(90, false, true);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 10)), 120, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 90, 5000);
+
+    // A Click & Go pick is a hand on it too (round 2): stopped again, a
+    // level picked from its menu lights it, and so does a colour pick.
+    // Without the stamp the pick moved the slider on screen and wrote
+    // nothing: dark until someone dragged the fader.
+    slider.setClickAndGoType(ClickAndGoWidget::Red);
+    auto stopAgain = [&]() {
+        rules->noteGo();
+        m_app->m_controlPanicAction->trigger();
+        QVERIFY(rules->emergencyStopped());
+        QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 0, 5000);
+        QTest::qWait(100);
+        QCOMPARE(int(outputAt(doc, 11)), 0);
+    };
+    stopAgain();
+    QVERIFY(QMetaObject::invokeMethod(&slider, "slotClickAndGoLevelChanged",
+                                      Qt::DirectConnection, Q_ARG(uchar, uchar(150))));
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 150, 5000);
+    stopAgain();
+    QVERIFY(QMetaObject::invokeMethod(&slider, "slotClickAndGoLevelAndPresetChanged",
+                                      Qt::DirectConnection, Q_ARG(uchar, uchar(170)),
+                                      Q_ARG(QImage, QImage())));
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 170, 5000);
+    stopAgain();
+    QVERIFY(QMetaObject::invokeMethod(&slider, "slotClickAndGoColorChanged",
+                                      Qt::DirectConnection, Q_ARG(QRgb, qRgb(255, 0, 0))));
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 128, 5000);
+}
+
+/* §4 #16: no Ctrl+Shift+Esc on Windows (it opens the Task Manager there,
+   and Stop All never runs). The Mac keeps ⌘⇧Esc. The menu, the tooltip
+   and the help say this computer's key. */
+void AppViews_Test::theStopAllKeyIsSafeOnEveryPlatform()
+{
+    const QKeySequence taskManager(QStringLiteral("CTRL+SHIFT+ESC"));
+    QCOMPARE(App::stopAllShortcut(true), taskManager);
+    QVERIFY(App::stopAllShortcut(false) != taskManager);
+    QVERIFY(!App::stopAllShortcut(false).isEmpty());
+    QCOMPARE(App::stopAllShortcut(false), QKeySequence(QStringLiteral("CTRL+SHIFT+Backspace")));
+    QCOMPARE(m_app->m_controlPanicAction->shortcut(), App::stopAllShortcut());
+#if !defined(Q_OS_MACOS)
+    QVERIFY(m_app->m_controlPanicAction->shortcut() != taskManager);
+#endif
+    QVERIFY2(m_app->m_controlPanicAction->toolTip().contains(
+                 App::stopAllShortcut().toString(QKeySequence::NativeText)),
+             qPrintable(m_app->m_controlPanicAction->toolTip()));
+    // The Run tab's Stop names this computer's key too, never the Mac's
+    // chord on Windows (read there as Ctrl+Shift+Esc: the Task Manager).
+    {
+        CueRunner run(m_app->doc(), CueRunner::Full);
+        QToolButton *stop = run.findChild<QToolButton *>(QStringLiteral("crStop"));
+        QVERIFY(stop != nullptr);
+        QVERIFY2(stop->toolTip().contains(App::stopAllShortcut().toString(QKeySequence::NativeText)),
+                 qPrintable(stop->toolTip()));
+#if !defined(Q_OS_MACOS)
+        QVERIFY2(!stop->toolTip().contains(QStringLiteral("Esc")), qPrintable(stop->toolTip()));
+#endif
+    }
+    // No other action of the app's takes the key.
+    int holders = 0;
+    for (QAction *a : m_app->findChildren<QAction *>())
+        if (a->shortcuts().contains(App::stopAllShortcut()))
+            ++holders;
+    QCOMPARE(holders, 1);
+    // No text-editing key of this platform's is it (on X11 the Delete
+    // Complete Line key is Ctrl+U, Qt 6.8's table).
+    for (int k = QKeySequence::UnknownKey + 1; k <= QKeySequence::Cancel; ++k)
+        QVERIFY2(!QKeySequence::keyBindings(QKeySequence::StandardKey(k)).contains(App::stopAllShortcut()),
+                 qPrintable(QStringLiteral("standard key %1").arg(k)));
+
+    /* The real path: the key typed through the window with a text field
+       focused (a cue name, a level, a note) -- the field's ShortcutOverride
+       sees it first, and one that took it would eat the e-stop. Each one
+       fires Stop All, and the field keeps its text. */
+    Doc *doc = m_app->doc();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    QWidget *page = new QWidget(m_app);
+    auto back = qScopeGuard([page, rules]() {
+        delete page;
+        rules->noteGo();
+    });
+    QLineEdit *line = new QLineEdit(QStringLiteral("SS-01.1 Opening"), page);
+    QSpinBox *spin = new QSpinBox(page);
+    spin->setRange(0, 255);
+    spin->setValue(128);
+    QPlainTextEdit *plain = new QPlainTextEdit(QStringLiteral("a note"), page);
+    QTextEdit *rich = new QTextEdit(QStringLiteral("rich note"), page);
+    QVBoxLayout *lay = new QVBoxLayout(page);
+    for (QWidget *w : std::initializer_list<QWidget *>{ line, spin, plain, rich })
+        lay->addWidget(w);
+    page->setGeometry(0, 0, 300, 300);
+    page->show();
+    page->raise();
+    m_app->show();
+    m_app->activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(m_app));
+    const struct { const char *name; QWidget *field; } fields[] = {
+        { "line edit", line }, { "spin box", spin }, { "plain text", plain }, { "rich text", rich } };
+    for (const auto &f : fields)
+    {
+        rules->noteGo();
+        QVERIFY(!rules->emergencyStopped());
+        f.field->setFocus(Qt::OtherFocusReason);
+        QTRY_VERIFY2_WITH_TIMEOUT(f.field->hasFocus() || f.field->isAncestorOf(QApplication::focusWidget()),
+                                  f.name, 2000);
+        const int before = m_app->m_runCommands;
+        QTest::keySequence(QApplication::focusWidget(), App::stopAllShortcut());
+        QVERIFY2(m_app->m_runCommands == before + 1, f.name);
+        QVERIFY2(rules->emergencyStopped(), f.name);
+    }
+    QCOMPARE(line->text(), QStringLiteral("SS-01.1 Opening"));
+    QCOMPARE(plain->toPlainText(), QStringLiteral("a note"));
+}
+
+/* Review of phase F part 2: Stop All lets go of what the Simple Desk and a
+   VC Level slider hold -- but never of pan or tilt (coarse or fine). Let
+   go of, the channel fell to its definition's default (0, one end of
+   travel) and the head swung across the stage: the rule Stop ALL keeps
+   for every head (FixtureRest::putAllAtRest). The dimmer goes out. */
+void AppViews_Test::stopAllLeavesAHeldHeadWhereItIs()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    auto back = qScopeGuard([this, doc, rules]() {
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    QLCFixtureDef *def = doc->fixtureDefCache()->fixtureDef(QStringLiteral("Test"), QStringLiteral("Held Mover"));
+    if (def == nullptr)
+    {
+        def = new QLCFixtureDef();
+        def->setManufacturer(QStringLiteral("Test"));
+        def->setModel(QStringLiteral("Held Mover"));
+        def->setType(QLCFixtureDef::MovingHead);
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        mode->setName(QStringLiteral("5ch"));
+        const struct { const char *name; QLCChannel::Group group; QLCChannel::ControlByte byte; } chans[] = {
+            { "Pan", QLCChannel::Pan, QLCChannel::MSB }, { "Pan fine", QLCChannel::Pan, QLCChannel::LSB },
+            { "Tilt", QLCChannel::Tilt, QLCChannel::MSB }, { "Tilt fine", QLCChannel::Tilt, QLCChannel::LSB },
+            { "Dimmer", QLCChannel::Intensity, QLCChannel::MSB } };
+        int i = 0;
+        for (const auto &c : chans)
+        {
+            QLCChannel *ch = new QLCChannel();
+            ch->setName(QString::fromLatin1(c.name));
+            ch->setGroup(c.group);
+            ch->setControlByte(c.byte);
+            def->addChannel(ch);
+            mode->insertChannel(ch, i++);
+        }
+        def->addMode(mode);
+        QVERIFY(doc->fixtureDefCache()->addFixtureDef(def));
+    }
+    auto mover = [doc, def](const QString &name, quint32 address) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setUniverse(0);
+        f->setAddress(address);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+    Fixture *deskHead = mover("Desk head", 20);      // 20..24
+    Fixture *sliderHead = mover("Slider head", 30);  // 30..34
+    QVERIFY(deskHead != nullptr && sliderHead != nullptr);
+    QVERIFY((doc->inputOutputMap()->universes().first()->channelCapabilities(20)
+             & Universe::ShowOnlyOutput) == 0);
+
+    SimpleDeskEngine eng(doc);
+    QWidget host;
+    VCSlider slider(&host, doc);
+    slider.setSliderMode(VCSlider::Level);
+    for (quint32 ch = 0; ch < 5; ++ch)
+        slider.addLevelChannel(sliderHead->id(), ch);
+    doc->setMode(Doc::Operate);
+    m_app->hideViewNotice();
+    eng.setValue(20, 128);
+    eng.setValue(21, 64);
+    eng.setValue(22, 100);
+    eng.setValue(23, 32);
+    eng.setValue(24, 255);
+    slider.setSliderValue(128, false, true);         // pushed up in Operate
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 24)), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 20)), 128, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 30)), 128, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 34)), 128, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 32)), 128, 5000);
+    int sliderHeld[4];
+    for (int i = 0; i < 4; ++i)
+        sliderHeld[i] = int(outputAt(doc, quint32(30 + i)));
+
+    m_app->m_controlPanicAction->trigger();
+    QVERIFY(rules->emergencyStopped());
+    // The dimmers go out...
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 24)), 0, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 34)), 0, 5000);
+    QVERIFY(!eng.hasChannel(24));
+    // ...the heads stay where they were, through later ticks too.
+    QTest::qWait(250);
+    QCOMPARE(int(outputAt(doc, 20)), 128);
+    QCOMPARE(int(outputAt(doc, 21)), 64);
+    QCOMPARE(int(outputAt(doc, 22)), 100);
+    QCOMPARE(int(outputAt(doc, 23)), 32);
+    for (int i = 0; i < 4; ++i)
+        QVERIFY2(int(outputAt(doc, quint32(30 + i))) == sliderHeld[i],
+                 qPrintable(QStringLiteral("slider head channel %1: %2, was %3")
+                            .arg(30 + i).arg(int(outputAt(doc, quint32(30 + i)))).arg(sliderHeld[i])));
+    QCOMPARE(sliderHeld[0], 128);
+    QVERIFY(eng.hasChannel(20) && eng.hasChannel(23));   // still the desk's
+    // Moved again after the stop: the slider drives the head and the dimmer.
+    slider.setSliderValue(90, false, true);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 30)), 90, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 34)), 90, 5000);
+}
+
+/* §4 #16, decision 5: the desk's STOP is heard before any feature switch,
+   mode, place or learn: Control Surfaces off, a learn listening, in Design
+   and in Operate, in an otherwise empty show -- each press is ALL OFF. */
+void AppViews_Test::theDeskStopGoesFirstPastEveryCheck()
+{
+    m_app->clearDocument();
+    m_app->setWorkspaceView(App::ConsoleView);
+    Doc *doc = m_app->doc();
+    ControlMap *cm = doc->controlMap();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    auto back = qScopeGuard([this, cm, rules, doc]() {
+        cm->stopListening();
+        cm->removeBinding(ControlMap::emergencyStop());
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        QVERIFY(chooseFeatures(m_app, allFeatures(true)));
+        m_app->clearDocument();
+    });
+    cm->setBinding({ 0, 190, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QVERIFY(chooseFeatures(m_app, allFeatures(false)));
+    QVERIFY(!ShowFeatures::isOn(ShowFeatures::ControlSurfaces));
+    QSignalSpy fired(cm, &ControlMap::fired);
+    const Doc::Mode modes[] = { Doc::Design, Doc::Operate };
+    for (Doc::Mode mode : modes)
+    {
+        doc->setMode(mode);
+        for (int learning = 0; learning < 2; ++learning)
+        {
+            if (learning)
+                cm->listen();
+            rules->noteGo();
+            const int before = m_app->m_runCommands;
+            cm->handleInput(0, 190, 0);
+            cm->handleInput(0, 190, 127);
+            const QString what = QString("%1, %2").arg(mode == Doc::Operate ? "Operate" : "Design",
+                                                       learning ? "a learn listening" : "no learn");
+            QVERIFY2(m_app->m_runCommands == before + 1, qPrintable(what));
+            QVERIFY2(m_app->m_lastRunRoute == ShowControl::RouteControlMap, qPrintable(what));
+            QVERIFY2(rules->emergencyStopped(), qPrintable(what));
+            cm->stopListening();
+        }
+    }
+    QCOMPARE(fired.count(), 4);
 }
 
 void AppViews_Test::aHeldMasterIsSaidWithItsChipPutAway()

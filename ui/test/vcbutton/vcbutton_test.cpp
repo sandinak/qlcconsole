@@ -45,6 +45,7 @@
 #include "functionparent.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "programmercontroller.h"
 #include "functionselection.h"
 #include "functionstreewidget.h"
@@ -739,6 +740,38 @@ void VCButton_Test::input()
     QTest::qWait(100);
     QCOMPARE(m_doc->masterTimer()->runningFunctions(), 0);
     m_doc->masterTimer()->stop();
+}
+
+/* Phase F: a VC Stop All button (no fade) is ALL OFF through the one path,
+   ShowControl::allOff(), as the main Stop All and the desk's stop are; with
+   a fade it is a fade and stop and never comes there. */
+void VCButton_Test::stopAllIsTheOneAllOffPath()
+{
+    ShowControl *sc = m_doc->showControl();
+    QList<ShowControl::Command> seen;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route) {
+        seen << r.command;
+        return sc->execute(r);
+    });
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        m_doc->outputRuleKeeper()->noteGo();
+        m_doc->setMode(Doc::Design);
+    });
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    VCButton stop(&w, m_doc);
+    stop.setAction(VCButton::StopAll);
+    stop.pressFunction();
+    QCOMPARE(seen, QList<ShowControl::Command>{ ShowControl::AllOff });
+    QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+
+    m_doc->outputRuleKeeper()->noteGo();
+    seen.clear();
+    stop.setStopAllFadeOutTime(500);
+    stop.pressFunction();
+    QVERIFY(seen.isEmpty());
+    QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
 }
 
 void VCButton_Test::stepButtonsOnATreeListGoThroughTheOneGoPath()

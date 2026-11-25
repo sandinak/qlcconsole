@@ -216,7 +216,7 @@ void ShowOnlyReview5_Test::goUnrelated(int level)
 }
 
 /* C2 / the Simple Desk: the stop lets go of the Simple Desk's Show-only
-   channels (SimpleDeskEngine::releaseShowOnlyChannels()), and its
+   channels (SimpleDeskEngine::releaseForStop()), and its
    ResetChannel command then writes the channel's DEFINITION default into
    the stored value (Universe::setChannelDefaultValue) -- after the stop
    reset it to safe. A laser's safe value is 0 (FixtureRest::restValue());

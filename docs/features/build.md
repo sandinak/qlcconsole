@@ -191,7 +191,7 @@ with the focus in the navigator or in the Workbench:
 
 What you changed stays changed. Palette and scene edits are made as you go,
 and **⌘Z** undoes them. Esc in a rename only cancels the rename. Esc never
-stops playback: that is **⌘⇧Esc**, Stop all.
+stops playback: that is **⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux)**, Stop all.
 
 ## The Workbench
 

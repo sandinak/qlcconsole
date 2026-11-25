@@ -2693,7 +2693,7 @@ called them looks; they open as they were.)
   **override** (hover for what it does).
   - **Two overrides on one channel:** the last fired wins; let it go and
     the earlier override is back. Firing one again puts it on top.
-  - **Stop All** (⌘⇧Esc) and **ALL OFF** (OSC or MSC show control) let go of
+  - **Stop All** (⌘⇧Esc; Ctrl+Shift+Backspace on Windows and Linux) and **ALL OFF** (OSC or MSC show control) let go of
     overrides with everything else.
   - **The Blind view** draws an override hit over the cue in edit only
     while the hit is live on stage, since it would win over that cue too;
@@ -2899,7 +2899,8 @@ Console widget is the same runner on a VC page.
   grey: there is nothing for them to play.
 - **Buttons:** **GO** (⌘↩; **Space** in the Run tab), **Sub GO** (⌥⌘↩),
   **Sub Back** (⌥⌘⇧↩), **Back** (⌘⇧↩), **Pause** / **Resume** (holds the
-  fade and an auto-follow's wait) and **Stop** (⌘⇧Esc stops everything).
+  fade and an auto-follow's wait) and **Stop** (⌘⇧Esc, or Ctrl+Shift+Backspace
+  on Windows and Linux, stops everything).
   Back and a jump land on the cue as GO from the top would
   ([Tracking](#tracking)).
 - **Click a cue: LOAD** — it becomes STANDBY, what the next GO plays.

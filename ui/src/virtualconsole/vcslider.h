@@ -529,6 +529,10 @@ protected:
 
     /** Show only: the live session it was last really moved in */
     std::atomic<quint32> m_liveEpoch { 0 };
+    /** The emergency stop that let go of it (0: none), until it is moved */
+    std::atomic<quint32> m_stopSession { 0 };
+    /** The stop whose let-go is done (m_levelValueMutex), so it is once */
+    quint32 m_stopLetGo = 0;
     QMutex m_levelValueMutex;
     bool m_levelValueChanged;
     uchar m_levelValue;
@@ -749,6 +753,9 @@ private slots:
     void slotClickAndGoLevelAndPresetChanged(uchar level, QImage img);
 
 protected:
+    /** A Click & Go pick moved it by hand: it is live again after ALL OFF */
+    void markPickedByHand();
+
     ClickAndGoWidget::ClickAndGo m_cngType;
     QHBoxLayout *m_cngBox;
     QToolButton *m_cngButton;

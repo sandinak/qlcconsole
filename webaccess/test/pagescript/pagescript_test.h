@@ -65,6 +65,7 @@ private slots:
     /** The page never shows EMERGENCY STOP for a stop it did not send
      *  (the PIN not given): it says STOP NOT SENT and why; with remote GO
      *  off and no PIN the stop goes (eval/0412; board Q256). */
+    void aLockedPageStillStops();
     void noStopIsShownThatWasNotSent();
     void theTestOpenedMidChordArmsNothing();
     void aPadGoneMidHoldDisarmsThePage();

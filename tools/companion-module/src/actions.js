@@ -16,10 +16,10 @@ export function actionDefinitions(ctx) {
 	return {
 		go: { name: 'GO', description: 'GO the main cue list (the next cue on standby)', options: [], callback: word('go') },
 		back: { name: 'Back', options: [], callback: word('back') },
-		stop: { name: 'Stop', options: [], callback: word('stop') },
+		stop: { name: 'Stop', description: 'Stop the main cue list. Needs no PIN, so a locked connection can always stop the list.', options: [], callback: word('stop') },
 		alloff: {
 			name: 'ALL OFF (emergency stop)',
-			description: 'Stops everything at once, in any mode, even with remote GO off (it needs the PIN when the show has one). Use the ALL OFF preset: it needs the key held for 1 second, so a brush does not stop the show. Never put it on a dial or a slider.',
+			description: 'Stops everything at once, in any mode, even with remote GO off, and needs no PIN. Use the ALL OFF preset: it needs the key held for 1 second, so a brush does not stop the show. Never put it on a dial or a slider.',
 			options: [],
 			callback: word('alloff'),
 		},

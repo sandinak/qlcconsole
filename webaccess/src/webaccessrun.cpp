@@ -175,9 +175,10 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
     else
         return Unknown;
 
-    /* ShowControl's rule (board Q256), as App's is: every command needs
-       remote GO but the emergency stop; every one, the stop too, the PIN
-       when the show has one. */
+    /* ShowControl's rules, as App's are: every command needs remote GO but
+       the emergency stop (board Q256); every one but ALL OFF and STOP needs
+       the PIN when the show has one (board Q323: a locked page and
+       Companion can always stop the show). */
     if (ShowControl::webNeedsRemoteGo(r.command) && !remoteAllowed())
         return Refused;
     if (ShowControl::webNeedsPin(r.command) && pinRequired() && !unlocked)
@@ -186,7 +187,7 @@ WebAccessRun::Result WebAccessRun::command(const QString &command, bool unlocked
     /* The emergency stop stops everything: it needs no cue list (a show run
        from hits or VC buttons has none, and the stop must still stop it). */
     if (r.command == ShowControl::AllOff)
-        return m_doc->showControl()->run(r, ShowControl::RouteWeb) ? Done : NothingToDo;
+        return m_doc->showControl()->allOff(ShowControl::RouteWeb) ? Done : NothingToDo;
 
     /* No list named: the one the console pad plays (the Run tab's pick,
        else the main one), so the page's pad and the console's play one
@@ -566,6 +567,8 @@ QByteArray WebAccessRun::stateJson() const
     // What the page's emergency stop needs, by ShowControl's rule (Q256).
     o[QStringLiteral("stopNeedsRemote")] = ShowControl::webNeedsRemoteGo(ShowControl::AllOff);
     o[QStringLiteral("stopNeedsPin")] = ShowControl::webNeedsPin(ShowControl::AllOff);
+    // The list's STOP button: no PIN either (Q323).
+    o[QStringLiteral("listStopNeedsPin")] = ShowControl::webNeedsPin(ShowControl::Stop);
     o[QStringLiteral("mode")] = m_doc->mode() == Doc::Operate ? QStringLiteral("LIVE") : QStringLiteral("DESIGN");
     const TeachingSettings *teach = m_doc->teachingSettings();
     o[QStringLiteral("teaching")] = teach != nullptr && teach->enabled();

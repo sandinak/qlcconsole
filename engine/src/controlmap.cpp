@@ -1072,10 +1072,8 @@ void ControlMap::emergencyStop(const Binding &b, uchar value)
     }
     if (!press)
         return;
-    ShowControl::Request r;
-    r.command = ShowControl::AllOff;
-    // The one path; ALL OFF is not one of the guarded commands.
-    if (m_doc->showControl()->run(r, ShowControl::RouteControlMap))
+    // The one ALL OFF path (ShowControl::allOff()); never held.
+    if (m_doc->showControl()->allOff(ShowControl::RouteControlMap))
     {
         // The second's wait starts only when ALL OFF ran: a refused one
         // must not hold back the next.

@@ -37,6 +37,7 @@
 #include <QMenu>
 #include <QSize>
 #include <QPen>
+#include <utility>
 
 #include "vcsliderproperties.h"
 #include "capturemanager.h"
@@ -51,6 +52,8 @@
 #include "universe.h"
 #include "speedmasters.h"
 #include "groupmasters.h"
+#include "outputrulekeeper.h"
+#include "fixturerest.h"
 #include "fixturegroup.h"
 #include "vcslider.h"
 #include "apputil.h"
@@ -183,6 +186,15 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
             this, SLOT(slotClickAndGoLevelAndPresetChanged(uchar, QImage)));
     connect(this, SIGNAL(monitorDMXValueChanged(int)),
             this, SLOT(slotMonitorDMXValueChanged(int)));
+    /* The emergency stop (ALL OFF, Stop All): a Level slider left up is let
+       go of, on every channel, until it is really moved again -- a level
+       held with nothing running is what Stop All is for. Only marked here,
+       on the thread the stop came on; the tick drops the faders. */
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        connect(rules, &OutputRuleKeeper::emergencyStopStruck, this, [this](quint32 session) {
+            if (m_sliderMode == Level && m_liveEpoch.load(std::memory_order_relaxed) < session)
+                m_stopSession.store(session, std::memory_order_relaxed);
+        }, Qt::DirectConnection);
 
     m_resetButton = NULL;
     m_flashButton = NULL;
@@ -1436,9 +1448,20 @@ void VCSlider::setClickAndGoWidgetFromLevel(uchar level)
         m_cngButton->setIcon(QPixmap::fromImage(m_cngWidget->getImageFromValue(level)));
 }
 
+void VCSlider::markPickedByHand()
+{
+    /* A Click & Go pick is a hand on the slider, like a drag: stamped after
+       the new value is in, so a stopped slider (ALL OFF) comes back with the
+       pick, never with the level it held before the stop. */
+    QMutexLocker locker(&m_levelValueMutex);
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
+    m_levelValueChanged = true;
+}
+
 void VCSlider::slotClickAndGoLevelChanged(uchar level)
 {
     setSliderValue(level, false, false);
+    markPickedByHand();
     updateFeedback();
 
     QColor col = m_cngWidget->getColorAt(level);
@@ -1458,6 +1481,7 @@ void VCSlider::slotClickAndGoColorChanged(QRgb color)
 
     // place the slider half way to reach white@255 and black@0
     setSliderValue(128);
+    markPickedByHand();
     updateFeedback();
 
     // let's force a value change to cover all the HTP/LTP cases
@@ -1467,6 +1491,7 @@ void VCSlider::slotClickAndGoColorChanged(QRgb color)
 void VCSlider::slotClickAndGoLevelAndPresetChanged(uchar level, QImage img)
 {
     setSliderValue(level, false, false);
+    markPickedByHand();
     updateFeedback();
 
     QPixmap px = QPixmap::fromImage(img);
@@ -1787,6 +1812,34 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
     Q_UNUSED(timer);
 
     QMutexLocker locker(&m_levelValueMutex);
+
+    /* Let go of by the emergency stop and not moved since: nothing written,
+       every channel but pan and tilt let go of, once (the move rebuilds
+       them: m_levelValueChanged). Pan and tilt are never let go of here,
+       as Stop ALL leaves every head (FixtureRest): the slider's position
+       channels stay where they are (an ordinary LTP one has normally left
+       the fader already, its value held by the universe). */
+    const quint32 stopped = m_stopSession.load(std::memory_order_relaxed);
+    if (stopped != 0)
+    {
+        if (m_liveEpoch.load(std::memory_order_relaxed) < stopped)
+        {
+            if (m_stopLetGo == stopped)
+                return;
+            m_stopLetGo = stopped;
+            Doc *doc = m_doc;
+            QMutexLocker fLocker(&m_fadersMapMutex);
+            for (const QSharedPointer<GenericFader> &fader : std::as_const(m_fadersMap))
+                if (!fader.isNull())
+                    fader->release([doc](const FadeChannel &fc) {
+                        return !FixtureRest::holdsPosition(doc, fc.fixture(), fc.channel());
+                    }, 0);
+            return;
+        }
+        m_stopSession.store(0, std::memory_order_relaxed);
+        m_stopLetGo = 0;
+        m_levelValueChanged = true;
+    }
 
     uchar modLevel = m_levelValue;
     int r = 0, g = 0, b = 0, c = 0, m = 0, y = 0;

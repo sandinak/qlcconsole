@@ -34,6 +34,7 @@
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "outputrulekeeper.h"
+#include "fixturerest.h"
 
 #define PROP_ID "id"
 
@@ -48,13 +49,14 @@ SimpleDeskEngine::SimpleDeskEngine(Doc* doc)
     qDebug() << Q_FUNC_INFO;
     Q_ASSERT(doc != NULL);
     doc->masterTimer()->registerDMXSource(this);
-    /* Show only, the emergency stop: what the Simple Desk had up on a
-       Show-only channel, and not moved since, is let go of (E7: told later
-       if the stop came from another thread, so a channel pushed again in
-       the meantime keeps its new value). */
+    /* The emergency stop (ALL OFF, Stop All): what the Simple Desk had up,
+       on any channel but pan and tilt, and not moved since, is let go of -- a level held
+       with nothing running is what Stop All is for (E7: told later if the
+       stop came from another thread, so a channel pushed again in the
+       meantime keeps its new value). */
     if (OutputRuleKeeper *rules = doc->outputRuleKeeper())
         connect(rules, &OutputRuleKeeper::emergencyStopStruck, this, [this](quint32 session) {
-            releaseShowOnlyChannels(session);
+            releaseForStop(session);
         });
     /* A fixture patched, moved or unpatched under a channel the desk holds:
        the desk's channel there was made for what was patched before (its
@@ -74,20 +76,21 @@ SimpleDeskEngine::SimpleDeskEngine(Doc* doc)
     connect(doc, &Doc::fixtureRemoved, this, repatched);
 }
 
-void SimpleDeskEngine::releaseShowOnlyChannels(quint32 session)
+void SimpleDeskEngine::releaseForStop(quint32 session)
 {
     QList<uint> drop;
     {
         QMutexLocker locker(&m_mutex);
-        const QList<Universe *> ua = m_doc->inputOutputMap()->universes();
         for (auto it = m_values.constBegin(); it != m_values.constEnd(); ++it)
         {
-            const int u = int(it.key() >> 9);
-            Universe *uni = u < ua.size() ? ua.at(u) : nullptr;
-            if (uni == nullptr || (uni->channelCapabilities(ushort(it.key() & 0x1FF)) & Universe::ShowOnlyOutput) == 0)
-                continue;
             if (m_channelEpochs.value(it.key()) >= session)
                 continue;           // pushed after the stop: the hand's
+            /* Pan and tilt stay where the desk has them, as Stop ALL leaves
+               every head (FixtureRest): let go of, the channel would fall
+               to its definition's default -- usually 0 -- and the head
+               would swing across the stage. */
+            if (FixtureRest::holdsPositionAt(m_doc, it.key()))
+                continue;
             drop << it.key();
         }
     }

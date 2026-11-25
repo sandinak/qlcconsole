@@ -173,8 +173,9 @@ class QXmlStreamWriter;
  *      (Universe::setChannelDefaultValue(), Universe::reset()), so no
  *      definition default can come back.
  *  E7. The cut happens on the calling thread, at once; only the footer is
- *      told later. What the Simple Desk lets go of is only what was not
- *      moved since the stop.
+ *      told later. The Simple Desk and every VC Level slider let go of what
+ *      they hold, on any channel, Show only or not, that was not moved
+ *      since the stop; it stays out until moved.
  *  E8. Once the functions are stopped, every fixture is put at rest, as
  *      Stop all does, through the same code (FixtureRest::restAfterStop()):
  *      a fogger, a hazer or a WLED effect not marked Show only stops too

@@ -58,6 +58,22 @@ bool FixtureRest::holdsPosition(const QLCChannel *ch)
         && (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt);
 }
 
+bool FixtureRest::holdsPosition(const Doc *doc, quint32 fixtureId, quint32 channel)
+{
+    const Fixture *fx = doc != nullptr ? doc->fixture(fixtureId) : nullptr;
+    return fx != nullptr && holdsPosition(fx->channel(channel));
+}
+
+bool FixtureRest::holdsPositionAt(const Doc *doc, quint32 universeAddress)
+{
+    if (doc == nullptr)
+        return false;
+    const Fixture *fx = doc->fixture(doc->fixtureForAddress(universeAddress));
+    if (fx == nullptr || universeAddress < fx->universeAddress())
+        return false;
+    return holdsPosition(fx->channel(universeAddress - fx->universeAddress()));
+}
+
 uchar FixtureRest::restValue(const Fixture *fx, quint32 channel)
 {
     const QLCChannel *ch = fx != nullptr ? fx->channel(channel) : nullptr;
