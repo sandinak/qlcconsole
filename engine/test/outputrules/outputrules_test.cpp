@@ -2665,7 +2665,11 @@ void OutputRules_Test::sweepEfx()
     QVERIFY(efx->addFixture(mover->id(), 0));
     m_doc->addFunction(efx);
     Chaser *a = listOf(efx);
-    sweep(30, [this]() { tickFrame(30); }, [this, a]() { goList(a); }, [this, a]() { goList(a); });
+    /* Tilt, not pan: the stop holds both where they are (Q326), and the
+       circle's pan (a cosine) barely moves over the first frames, so run
+       again it would read exactly where the stop held it. Tilt (a sine)
+       climbs from the first frame. */
+    sweep(31, [this]() { tickFrame(31); }, [this, a]() { goList(a); }, [this, a]() { goList(a); });
 }
 
 void OutputRules_Test::sweepRgbMatrix()
@@ -3941,8 +3945,10 @@ void OutputRules_Test::review10_aClosingLineInBlindGetsNoPreview()
 Fixture *OutputRules_Test::addShowOnlyMover(const QString &name, int address)
 {
     QLCFixtureDef *def = new QLCFixtureDef();
+    // One definition per call: the cache refuses a second of the same name.
+    static int made = 0;
     def->setManufacturer(QStringLiteral("Q326"));
-    def->setModel(name);
+    def->setModel(QStringLiteral("%1 %2").arg(name).arg(++made));
     QLCFixtureMode *mode = new QLCFixtureMode(def);
     mode->setName(QStringLiteral("6ch"));
     struct Ch { const char *name; QLCChannel::Group group; QLCChannel::ControlByte byte; };
