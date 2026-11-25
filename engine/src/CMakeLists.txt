@@ -32,6 +32,7 @@ add_library(${module_name} SHARED
     showwebaccess.cpp showwebaccess.h
     controlmap.cpp controlmap.h
     deskrecord.cpp deskrecord.h
+    surfacelayout.cpp surfacelayout.h
     grandmasterpickup.h
     encoderbank.cpp encoderbank.h
     encoderattributes.cpp encoderattributes.h
@@ -243,6 +244,10 @@ add_library(${module_name} SHARED
     universe.cpp universe.h
     video.cpp video.h
 )
+# The surface map's layouts (SurfaceLayout), built in.
+qt_add_resources(qlcplusengine_layout_files "surfacelayouts.qrc")
+target_sources(${module_name} PRIVATE ${qlcplusengine_layout_files})
+
 target_include_directories(${module_name} PUBLIC
     ../../plugins/interfaces
     ../audio/src

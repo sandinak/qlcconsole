@@ -29,6 +29,7 @@
 class QLabel;
 class QPushButton;
 class DeskSetupPanel;
+class SurfaceMaps;
 class Doc;
 
 /** @addtogroup ui_io
@@ -66,6 +67,8 @@ public:
     QPushButton *setUpButton(const QString &key) const { return m_buttons.value(key); }
     /** This computer's desk, at the top (DeskSetupPanel). */
     DeskSetupPanel *deskPanel() const { return m_desk; }
+    /** Each patched board drawn (SurfaceMaps). */
+    SurfaceMaps *surfaceMaps() const { return m_maps; }
 
     /** One line for the Devices row: "3 triggers · emergency stop not learned". */
     QString summary() const;
@@ -108,6 +111,7 @@ private:
 
     Doc *m_doc;
     DeskSetupPanel *m_desk = nullptr;
+    SurfaceMaps *m_maps = nullptr;
     QLabel *m_featureOff = nullptr;
     QMap<QString, QLabel *> m_status;
     QMap<QString, QLabel *> m_what;

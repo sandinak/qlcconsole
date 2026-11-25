@@ -25,6 +25,7 @@
 #include <QPointer>
 #include <QString>
 #include <QList>
+#include <QHash>
 #include <QSet>
 
 #include "controlmap.h"
@@ -138,6 +139,10 @@ public:
      *  (KeyboardUniverse: a computer key). A Virtual Console channel's
      *  page bits are left out: a widget on any page is the owner. */
     static QList<Owner> owners(Doc *doc, quint32 universe, quint32 channel);
+    /** owners() of each of @a channels of @a universe, with ONE walk of
+     *  the show however many are asked (the surface map draws a whole
+     *  board at once). */
+    static QHash<quint32, QList<Owner>> ownersOn(Doc *doc, quint32 universe, const QList<quint32> &channels);
     /** The channels of @a universe that a listener other than the PMJ
      *  overlay has now (a trigger, the stop, a widget...): the PMJ leaves
      *  their lamps to that listener (one lamp writer per control). One
@@ -236,6 +241,9 @@ private:
      *  (universe << 32 | channel): the one walk behind owners() and
      *  collisions(). */
     static QList<QPair<quint64, Owner>> owned(Doc *doc);
+    /** owners() of one control, from @a all (owned()). */
+    static QList<Owner> ownersFrom(Doc *doc, quint32 universe, quint32 channel,
+                                   const QList<QPair<quint64, Owner>> &all);
 };
 
 /** @} */

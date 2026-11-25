@@ -65,6 +65,25 @@ private slots:
      *  second is not the first's. */
     void twoIdenticalBoardsAreTwoControllers();
 
+    /** Every built-in surface layout holds to its profile: each control
+     *  placed exactly once, nothing overlapping, no channel the profile
+     *  lacks, its roles on a control of the right kind. */
+    void everyLayoutHoldsToItsProfile();
+    /** The self-test catches a broken layout (a channel missing, one
+     *  twice, an overlap, one the profile lacks, a role on nothing). */
+    void theLayoutSelfTestCatchesABrokenOne();
+    /** A fresh computer and an APC40 mk2: its default roles are this
+     *  computer's (PLAY GOes the Run tab's list; RECORD, STOP ALL CLIPS
+     *  and MASTER are Back, STOP and the Grand Master). */
+    void aNewBoardSeedsItsDefaultRoles();
+    /** A GO learned on another board wins: the default seeds the rest. */
+    void aLearnedRoleWinsOverTheDefault();
+    /** A default cleared stays cleared: a board is seeded once. */
+    void aClearedDefaultStaysCleared();
+    /** The MaizeDMX Playback Controller: GO, Back, the Grand Master and
+     *  STOP (X10) from its layout. */
+    void theMaizeDmxSeedsItsDefaults();
+
 private:
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;

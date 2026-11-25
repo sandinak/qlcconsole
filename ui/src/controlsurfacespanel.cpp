@@ -16,6 +16,7 @@
 */
 
 #include <QGridLayout>
+#include <QVBoxLayout>
 #include <QPushButton>
 #include <QLabel>
 #include <QShowEvent>
@@ -23,6 +24,7 @@
 
 #include "controlsurfacespanel.h"
 #include "desksetuppanel.h"
+#include "surfacemap.h"
 #include "deskrecord.h"
 #include "controlowners.h"
 #include "virtualconsole.h"
@@ -152,7 +154,17 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     /* On this computer first (CONTROL_SCOPES.md §3): the desk's static
        roles, the same in every show; then where this show sets things up. */
     m_desk = new DeskSetupPanel(m_doc, this);
-    grid->addWidget(m_desk, 0, 0, 1, 3);
+    // Each patched board drawn, under the desk (Q311; surfacemap.h).
+    m_maps = new SurfaceMaps(m_doc, this);
+    QVBoxLayout *top = new QVBoxLayout();
+    top->setContentsMargins(0, 0, 0, 0);
+    top->addWidget(m_desk);
+    top->addWidget(m_maps);
+    grid->addLayout(top, 0, 0, 1, 3);
+    connect(m_maps, &SurfaceMaps::deskLearnRequested, this, [this](int role) {
+        if (QPushButton *learn = m_desk->learnButton(DeskRecord::Role(role)))
+            learn->click();
+    });
     QFrame *rule = new QFrame(this);
     rule->setFrameShape(QFrame::HLine);
     rule->setFrameShadow(QFrame::Sunken);

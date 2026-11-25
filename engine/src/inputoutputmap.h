@@ -24,6 +24,7 @@
 #include "qlcengine_export.h"
 #include <QObject>
 #include <QSet>
+#include <QHash>
 #include <QMutex>
 #include <QDir>
 
@@ -896,6 +897,19 @@ public:
      * sliders & knobs, set indicator leds etc.
      */
     bool sendFeedBack(quint32 universe, quint32 channel, uchar value, const QVariant &params);
+
+    /** What sendFeedBack() last sent to @p channel of @p universe's
+     *  feedback line (what the board's light was told: the surface map
+     *  shows it). False: nothing was sent there yet. Any thread. */
+    bool lastFeedback(quint32 universe, quint32 channel, uchar *value) const;
+
+signals:
+    /** sendFeedBack() sent @p value to a control's light. */
+    void feedbackSent(quint32 universe, quint32 channel, uchar value);
+
+private:
+    mutable QMutex m_feedbackMutex;
+    QHash<quint64, uchar> m_lastFeedback;
 
 private:
     /** In case of duplicate strings, append a number to make them unique */
