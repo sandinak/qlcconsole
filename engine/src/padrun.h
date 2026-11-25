@@ -178,6 +178,7 @@ class QLC_ENGINE_EXPORT PadRun final : public QObject
     Q_OBJECT
     // The rules' tests clear a notice and read the arm a focus put by.
     friend class PadRunRules_Test;
+    friend class PadHit_Test;
 
 public:
     PadRun(Doc *doc, ProgrammerController *pc, QObject *parent = nullptr);
