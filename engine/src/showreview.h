@@ -258,6 +258,12 @@ public:
      *  landing in and the cues it tracks on into while it still lands. */
     static QList<quint32> findingCues(const ReviewFinding &finding);
 
+    /** The "This computer" section: this computer's desk (DeskRecord), one
+     *  line per role and whether it reaches the program now. Not a check:
+     *  the roles are this computer's, never the file's, so no acceptance
+     *  is kept for them and the command line (no I/O) has none. */
+    static QStringList thisComputer(Doc *doc);
+
     /** Whether target key @a key ("fx:7") still names something in @a doc. */
     static bool targetExists(const Doc *doc, const QString &key);
 

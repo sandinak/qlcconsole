@@ -229,6 +229,8 @@ add_library(${module_name}
     showcontrollistener.cpp showcontrollistener.h
     showcontrolsyncpage.cpp showcontrolsyncpage.h
     controlsurfacespanel.cpp controlsurfacespanel.h
+    desksetuppanel.cpp desksetuppanel.h
+    deskchip.cpp deskchip.h
     qrencoder.cpp qrencoder.h
     controlcollisionbox.cpp controlcollisionbox.h
     controllearndialog.cpp controllearndialog.h

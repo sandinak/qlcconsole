@@ -191,6 +191,7 @@ void ControllerKeepAlive::setSystemState(SystemState state)
     else
         m_wakeTimer->stop();
     updatePaused();
+    emit systemStateChanged(state);
 }
 
 void ControllerKeepAlive::screenUnlocked()

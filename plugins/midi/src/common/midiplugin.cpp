@@ -347,6 +347,21 @@ bool MidiPlugin::sendShowControl(quint32 output, const QByteArray &message,
     return true;
 }
 
+QString MidiPlugin::inputDeviceLocation(quint32 input) const
+{
+#if !defined(WIN32) && !defined(Q_OS_WIN) && !defined(__APPLE__) && !defined(Q_OS_MAC)
+    // ALSA: the uid is the sequencer address, client << 8 | port.
+    MidiInputDevice *dev = inputDevice(input);
+    if (dev == NULL || !dev->uid().isValid())
+        return QString();
+    const uint address = dev->uid().toUInt();
+    return QString("ALSA %1:%2").arg(address >> 8).arg(address & 0xFF);
+#else
+    Q_UNUSED(input);
+    return QString();
+#endif
+}
+
 MidiInputDevice* MidiPlugin::inputDevice(quint32 input) const
 {
     if (input < quint32(m_enumerator->inputDevices().size()))

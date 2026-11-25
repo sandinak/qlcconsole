@@ -251,6 +251,7 @@ private:
     class ShutterAutoOpen *m_shutterAutoOpen = nullptr;
     class ShowWebAccess *m_webAccess = nullptr;
     class ControlMap *m_controlMap = nullptr;
+    class DeskRecord *m_deskRecord = nullptr;
     class ShowOperate *m_operate = nullptr;
     class TeachingSettings *m_teaching = nullptr;
     class ShowReview *m_showReview = nullptr;
@@ -1268,6 +1269,10 @@ public:
     /** MIDI and OSC controls bound straight to functions, cue lists, cues
      *  and hits (the Control Map; saved with the show). Never null. */
     class ControlMap *controlMap() const { return m_controlMap; }
+    /** This computer's desk: its STOP, Grand Master, GO and Back, kept in
+     *  this computer's settings and never in the show (DeskRecord). A new
+     *  show keeps it. Never null. */
+    class DeskRecord *deskRecord() const { return m_deskRecord; }
 
     /** Whether opening the show goes to Operate, and the PIN that leaving
      *  Operate asks for (the show's settings; App acts on them) */

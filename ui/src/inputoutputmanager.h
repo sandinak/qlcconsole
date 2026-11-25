@@ -69,6 +69,9 @@ public:
 
     /** Devices, with the Show control & sync branch picked. */
     void showShowControlPage();
+    /** Connections ▸ Devices with one show-control section shown
+     *  ("surfaces": Control surfaces). */
+    void showShowControlSection(const QString &key);
 
     /** Hand the page the App's show-control listener (created after this). */
     void setShowControlListener(class ShowControlListener *listener);

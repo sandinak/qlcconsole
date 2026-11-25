@@ -24,6 +24,7 @@
 #include <algorithm>
 
 #include "showreview.h"
+#include "deskrecord.h"
 #include "blocking.h"
 #include "monitorproperties.h"
 #include "scenery.h"
@@ -709,4 +710,12 @@ ReviewFinding ReviewContext::make(const QString &check, ReviewFinding::Severity 
     f.jump = jump;
     f.jumpData = jumpData;
     return f;
+}
+
+QStringList ShowReview::thisComputer(Doc *doc)
+{
+    const DeskRecord *desk = doc != nullptr ? doc->deskRecord() : nullptr;
+    if (desk == nullptr)
+        return QStringList();
+    return desk->reviewLines();
 }

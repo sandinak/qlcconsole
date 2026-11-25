@@ -602,7 +602,7 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
     // Connect when the first valid input source is set
     if (m_inputs.isEmpty() == true && !source.isNull() && source->isValid() == true)
     {
-        connect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+        connect(m_doc->inputOutputMap(), SIGNAL(showInputValueChanged(quint32,quint32,uchar)),
                 this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
         connect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
                 this, SLOT(slotInputProfileChanged(quint32,QString)));
@@ -687,7 +687,7 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
     // Disconnect when there are no more input sources present
     if (m_inputs.isEmpty() == true)
     {
-        disconnect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+        disconnect(m_doc->inputOutputMap(), SIGNAL(showInputValueChanged(quint32,quint32,uchar)),
                    this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
         disconnect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
                    this, SLOT(slotInputProfileChanged(quint32,QString)));

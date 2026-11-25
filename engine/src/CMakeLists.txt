@@ -31,6 +31,8 @@ add_library(${module_name} SHARED
     shutterautoopen.cpp shutterautoopen.h
     showwebaccess.cpp showwebaccess.h
     controlmap.cpp controlmap.h
+    deskrecord.cpp deskrecord.h
+    grandmasterpickup.h
     encoderbank.cpp encoderbank.h
     encoderattributes.cpp encoderattributes.h
     showoperate.cpp showoperate.h

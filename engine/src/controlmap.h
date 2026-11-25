@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QString>
 #include <QList>
+#include <QPair>
 #include <QHash>
 #include <QSet>
 
@@ -408,6 +409,14 @@ public:
      *  the first in the table. More than one: they share that one place
      *  and step through. */
     QList<Binding> armedOn(quint32 universe, quint32 channel) const;
+    /** Why this computer's desk keeps @a b from its control (Q309: the
+     *  desk has the control, it is kept and not armed; Q314: the show's GO
+     *  of the Run tab's list while the desk has a GO); empty when it does
+     *  not. Both stops are live (Q315) unless the show's sits on a control
+     *  the desk uses for something else. */
+    QString deskBlockReason(const Binding &b) const;
+    /** Every binding the desk keeps from its control, with why. */
+    QList<QPair<Binding, QString>> deskBlocked() const;
     /** Whether @a b is one of the armed ones on its control (armedOn()). */
     bool isArmedOnControl(const Binding &b) const;
     /** The place in words, as a sentence ends: "everywhere", "in cue 2.3

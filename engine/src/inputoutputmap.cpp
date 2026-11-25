@@ -107,6 +107,9 @@ InputOutputMap::InputOutputMap(const Doc *doc, quint32 universes)
 
     m_patchUndo = new PatchUndo(this, this);
     m_grandMaster = new GrandMaster(this);
+    /* The one dispatch point: show listeners hear input without the desk's
+       controls (first connection, so before any raw listener). */
+    connect(this, &InputOutputMap::inputValueChanged, this, &InputOutputMap::slotDispatchInput);
     for (quint32 i = 0; i < universes; i++)
         addUniverse();
 
@@ -3492,4 +3495,20 @@ bool InputOutputMap::saveXML(QXmlStreamWriter *doc) const
     doc->writeEndElement();
 
     return true;
+}
+
+/*****************************************************************************
+ * The one dispatch point (This computer's desk)
+ *****************************************************************************/
+
+void InputOutputMap::setStaticControls(const QSet<quint64> &controls)
+{
+    m_staticControls = controls;
+}
+
+void InputOutputMap::slotDispatchInput(quint32 universe, quint32 channel, uchar value, const QString &key)
+{
+    if (isStaticControl(universe, channel))
+        return;
+    emit showInputValueChanged(universe, channel, value, key);
 }

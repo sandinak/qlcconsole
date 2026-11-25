@@ -44,6 +44,7 @@
 #include "placementcheck.h"
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
+#include "deskchip.h"
 #include "functionselection.h"
 #include "effectdesigner.h"
 #include "itemicons.h"
@@ -9429,6 +9430,22 @@ void App::initStatusBar()
     sb->addPermanentWidget(m_statusTestChip);
     updateTestChip();
 
+    /* This computer's desk (STOP, GM, GO, Back): green, amber or red, red
+       with Patch It when this show's patch lacks its device; hidden while
+       nothing is learned. A click opens Connections ▸ Control surfaces. */
+    m_statusDeskChip = new DeskChip(m_doc, this);
+    connect(m_statusDeskChip, &DeskChip::said, this, [this](const QString &text) {
+        statusBar()->showMessage(text, 8000);
+    });
+    connect(m_statusDeskChip, &DeskChip::setUpRequested, this, [this]() {
+        if (InputOutputManager *io = InputOutputManager::instance())
+        {
+            switchToTabContaining(io);
+            io->showShowControlSection(QStringLiteral("surfaces"));
+        }
+    });
+    sb->addPermanentWidget(m_statusDeskChip);
+
     // Persistent Design/Operate indicator — see app.h for why this is
     // separate from the mode-toggle button (which shows the destination
     // mode, not the current one). Always visible.
@@ -9516,6 +9533,7 @@ void App::initStatusBar()
     {
         const int h = fontMetrics().height() + 4;
         const QList<QWidget *> items = { m_statusSelectionLabel, m_statusPadModeLabel, m_statusOverridesChip, m_statusTestChip,
+                                         m_statusDeskChip,
                                          m_statusFollowLabel, m_statusModeChipLabel, m_statusStage,
                                          m_statusProgrammerLabel, m_statusDirtyLabel };
         for (QWidget *w : items)
