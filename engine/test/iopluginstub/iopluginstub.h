@@ -25,6 +25,10 @@
 #include <QList>
 #include <QPair>
 #include <QMap>
+#include <QByteArray>
+
+#include <functional>
+#include <climits>
 
 #include "qlcioplugin.h"
 
@@ -79,7 +83,9 @@ public:
     bool supportsOutputTargets() const override { return m_supportsTargets; }
 
     /** @reimp */
-    void rescan() override { m_rescanCalled++; }
+    void rescan() override { m_rescanCalled++; if (m_onRescan) m_onRescan(); }
+    /** What a rescan finds (a device that came on): run by rescan(). */
+    std::function<void()> m_onRescan;
 
     /** @reimp Records what was probed, so a test can assert on WHICH addresses
         were asked -- the interesting part is that already-heard ones are not. */
@@ -98,6 +104,26 @@ public:
     void sendFeedBack(quint32 universe, quint32 inputLine, quint32 channel, uchar value,
                       const QVariant &params) override
     { Q_UNUSED(universe) m_feedbackParams << params; m_feedbackLines << inputLine; m_feedback << qMakePair(channel, value); }
+
+    /** @reimp what was sent out of a line as one message (SysEx: a
+     *  controller's init, an OpenDeck request), kept in m_showControlSent;
+     *  m_onShowControl (a simulated board) answers it. Refused (false, as
+     *  the plugin's default) unless a board listens or m_acceptShowControl. */
+    bool sendShowControl(quint32 output, const QByteArray &message,
+                         const QString &address, quint16 port) override
+    {
+        Q_UNUSED(address) Q_UNUSED(port)
+        m_showControlSent << qMakePair(output, message);
+        if (m_onShowControl)
+            return m_onShowControl(output, message);
+        return m_acceptShowControl;
+    }
+    QList<QPair<quint32, QByteArray>> m_showControlSent;
+    std::function<bool(quint32, const QByteArray &)> m_onShowControl;
+    bool m_acceptShowControl = false;
+    /** A SysEx in from input line @p input, as the MIDI plugin hands it over. */
+    void emitSysEx(quint32 input, const QByteArray &sysEx)
+    { emit sysExReceived(UINT_MAX, input, sysEx); }
 
     /** @reimp m_channelRoles for @p channel, whatever the line */
     QString inputChannelRole(quint32 input, quint32 channel) const override

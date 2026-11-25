@@ -81,6 +81,7 @@
 #include "focuscallsdialog.h"
 #include "venuerigdialog.h"
 #include "venuefromshowdialog.h"
+#include "surfacesetupdialog.h"
 #include "preshowcheck.h"
 #include "showreviewpanel.h"
 
@@ -369,7 +370,10 @@ QList<Row> windows()
          << row("VenueRigDialog", QStringLiteral("Venue rig"),
                 [](App *a) { VenueRigDialog::open(a->doc(), a, g_venue); })
          << row("VenueFromShowDialog", QStringLiteral("New venue from a show"),
-                [](App *a) { VenueFromShowDialog::open(a->doc(), a); });
+                [](App *a) { VenueFromShowDialog::open(a->doc(), a); })
+         // Connections ▸ Control surfaces ▸ Controller setup ▸ Set Up…
+         << row("SurfaceSetupDialog", QStringLiteral("Controller setup"),
+                [](App *a) { SurfaceSetupDialog::open(a->doc(), a); });
 
     return list;
 }

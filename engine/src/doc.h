@@ -252,6 +252,7 @@ private:
     class ShowWebAccess *m_webAccess = nullptr;
     class ControlMap *m_controlMap = nullptr;
     class DeskRecord *m_deskRecord = nullptr;
+    class SurfaceSetup *m_surfaceSetup = nullptr;
     class ShowOperate *m_operate = nullptr;
     class TeachingSettings *m_teaching = nullptr;
     class ShowReview *m_showReview = nullptr;
@@ -1273,6 +1274,10 @@ public:
      *  this computer's settings and never in the show (DeskRecord). A new
      *  show keeps it. Never null. */
     class DeskRecord *deskRecord() const { return m_deskRecord; }
+    /** What each known control surface needs set on the device itself:
+     *  its init on connect, replug and wake, the lamp check and Align
+     *  (SurfaceSetup). */
+    class SurfaceSetup *surfaceSetup() const { return m_surfaceSetup; }
 
     /** Whether opening the show goes to Operate, and the PIN that leaving
      *  Operate asks for (the show's settings; App acts on them) */

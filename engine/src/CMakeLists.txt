@@ -32,6 +32,8 @@ add_library(${module_name} SHARED
     showwebaccess.cpp showwebaccess.h
     controlmap.cpp controlmap.h
     deskrecord.cpp deskrecord.h
+    opendecklink.cpp opendecklink.h
+    surfacesetup.cpp surfacesetup.h
     grandmasterpickup.h
     encoderbank.cpp encoderbank.h
     encoderattributes.cpp encoderattributes.h

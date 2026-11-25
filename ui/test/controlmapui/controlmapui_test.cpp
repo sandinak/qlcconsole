@@ -1944,7 +1944,7 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     ControlSurfacesPanel *hub = page->surfaces();
     QVERIFY(hub != nullptr);
     QCOMPARE(ControlSurfacesPanel::keys(),
-             QStringList({ "map", "estop", "encoder", "vc", "masters", "gm", "pmj", "web", "pads", "devices",
+             QStringList({ "map", "estop", "encoder", "vc", "masters", "gm", "pmj", "setup", "web", "pads", "devices",
                           "collisions", "places" }));
     QVERIFY(hub->setUpButton("places") == nullptr);         // read only
     QVERIFY(hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());       // no trigger at a place

@@ -70,6 +70,7 @@
 #include "changejournal.h"
 #include "wledfixture.h"
 #include "doc.h"
+#include "surfacesetup.h"
 #include "powerlimiter.h"
 #include "groupmasters.h"
 #include "shutterautoopen.h"
@@ -196,6 +197,8 @@ Doc::Doc(QObject* parent, int universes)
        per control) and arms the show's fallbacks by it (Q314). */
     connect(m_deskRecord, &DeskRecord::changed, m_controlMap, &ControlMap::slotDeskChanged);
     m_controlMap->slotDeskChanged();
+    // A controller's own settings: its init on connect, replug and wake.
+    m_surfaceSetup = new SurfaceSetup(this);
     /* The emergency stop ends the focus tools too (E9): queued to the main
        thread when it struck on another (an OSC or MSC plugin's). */
     connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopStruck,
@@ -322,6 +325,9 @@ Doc::Doc(QObject* parent, int universes)
 
 Doc::~Doc()
 {
+    // It hears the patch, which goes below.
+    delete m_surfaceSetup;
+    m_surfaceSetup = nullptr;
     // First: it hears the patch and the Control Map, which go below.
     delete m_deskRecord;
     m_deskRecord = nullptr;

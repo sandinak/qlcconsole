@@ -14,6 +14,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Setting up a controller**: Connections ▸ Control surfaces has a
+  Controller setup row. Set Up… reads a PMJ Black 1's lamp table and says
+  how many lamps aren't under their buttons; Align Lamps fixes it (a full
+  backup first, its path shown, Undo Align); Identify Lamps… pairs another
+  OpenDeck board's lamps by pressing. The APC40 mkII's Ableton mode and the
+  Launchpad Mini MK3's programmer mode are sent on patch, replug and wake.
+  Rescan says when the computer sees no new controller (power, cable, port).
+  Ported from qlcplus-midi-profiler.
 - **A replug never presses the desk**: this computer's STOP, GO and Back and
   the PMJ's Go and Back now ignore a controller's state dump after a replug,
   by the Control Map's own rules; every trigger ignores any press in the

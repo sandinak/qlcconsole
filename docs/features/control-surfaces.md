@@ -607,16 +607,59 @@ the profile is patched on.
 
 The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
 
+## Setting up a controller
+
+Some controllers need a setting on the device itself before their profile
+works: a mode, or lamps that listen on the notes their buttons send. That
+is part of setting the controller up, in **Connections ▸ Control surfaces ▸
+Controller setup ▸ Set Up…**. No other tool is needed. The row says what is
+known for each controller patched with a profile the app knows; **Set Up…**
+checks the device (a read only) and offers the fix.
+
+- **PMJ Black 1.** As it leaves the factory its lamps are in index order
+  (lamp 1 on note 1, MIDI channel 1), not under their buttons, so every lamp
+  the app lights is on another key. The check reads the board's lamp table
+  and says so plainly: *54 of 54 lamps aren't under their buttons*.
+  **Align Lamps** sets each lamp to its own button's note and channel
+  (which lamp sits under which button ships with the PMJ Black 1 profile).
+  Before anything is written the board's whole setup is backed up to a file,
+  and the dialog shows its path. **Undo Align** puts that backup back (what
+  the board had just before is backed up too, so the Align can be redone by
+  aligning again).
+- **Another OpenDeck board** (no pairing shipped): **Identify Lamps…**
+  flashes each lamp in turn; press the button under it, or **Skip** when
+  nothing flashes. **Finish** puts the board back as it was and keeps the
+  pairing on this computer; then **Align Lamps**. The keys you press still
+  do their jobs while you identify, so do it with nothing running.
+- **Akai APC40 mkII.** Its Ableton mode (the pads take the app's lights
+  and stop toggling their own) is sent when it is patched, again after a
+  replug and after the computer wakes. **Send Again** sends it now. The MIDI
+  plugin's **Initialization message** is no longer needed for it.
+- **Novation Launchpad Mini MK3.** Its programmer mode is sent the same way.
+
+Nothing is written to a device's memory unless you press **Align Lamps**,
+**Undo Align** or **Identify Lamps…**. In Operate the dialog asks first,
+since the board's buttons and lamps pause for a few seconds while it is
+written. The backups are in the app's data folder, under *Controller
+backups*, in the format of the
+[qlcplus-midi-profiler](https://github.com/sandinak/qlcplus-midi-profiler)
+tool this is ported from, so either one can restore the other's.
+
+**Rescan**, beside **Set Up…**, looks for a controller just plugged in or
+switched on. When it finds none it says so: *No new controller found. The
+computer itself doesn't see one: check its power (the APC40 mk2 and many
+pads need their own adapter), the cable (charge-only cables carry no data),
+and the port.*
+
 ## Other surfaces
 
 - **Akai APC40 mk2**: the input profile **Akai-APC40-mkII** gives the pads
   their LED feedback. Patch it on MIDI channel **Omni**: each track's fader
   and buttons send on that track's own MIDI channel (1-8, the master on 9),
   so on one channel only track 1 is heard. For the pads to take the lights
-  and stop toggling their own, set the device's **Initialization message**
-  to **APC40 Mk2 Ableton mode** (the MIDI plugin's **Configure** in
-  Connections ▸ Devices): it sends the SysEx that puts the APC in Ableton
-  mode each time the device is opened. Learn a clip pad on a cue, a hit or a scene; the
+  and stop toggling their own, the APC must be in Ableton mode: the app
+  sends it when the APC is patched, after a replug and a wake ([Setting up
+  a controller](#setting-up-a-controller)). Learn a clip pad on a cue, a hit or a scene; the
   encoder bank has an **APC40 (knobs)** preset.
 - **Behringer X-Touch Mini**: no input profile yet. Set the unit to
   *Standard* mode, layer A, encoders *Relative 1*; patch it as an input; the

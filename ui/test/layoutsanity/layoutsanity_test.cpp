@@ -109,6 +109,7 @@
 #include "collectioneditor.h"
 #include "connectioneditor.h"
 #include "controllertestdialog.h"
+#include "surfacesetupdialog.h"
 #include "controlmappanel.h"
 #include "createfixturegroup.h"
 #include "cuerunner.h"
@@ -1074,6 +1075,9 @@ QList<Screen> screens()
             })
          << screen(QStringLiteral("Controller test"), [](App *app) -> QWidget * {
                 return new ControllerTestDialog(docOf(app));
+            })
+         << screen(QStringLiteral("Controller setup"), [](App *app) -> QWidget * {
+                return new SurfaceSetupDialog(docOf(app));
             })
          << screen(QStringLiteral("Definition updates"), [](App *app) -> QWidget * {
                 return new DefinitionUpdatesDialog(docOf(app));

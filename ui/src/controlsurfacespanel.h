@@ -50,7 +50,8 @@ public:
     explicit ControlSurfacesPanel(Doc *doc, QWidget *parent = nullptr);
 
     /** The row keys, in order: "map", "estop", "encoder", "vc", "masters",
-     *  "gm", "pmj", "web", "pads", "devices" (a device plugged in that no
+     *  "gm", "pmj", "setup" (Controller setup: what a controller needs set
+     *  on the device itself, SurfaceSetup; with Rescan), "web", "pads", "devices" (a device plugged in that no
      *  input has), "collisions" (Who has it now: every control
      *  two listeners have, with how to fix it; no Set Up…, and shown only
      *  while there is one), "places" (Triggers by place: each control with
@@ -64,6 +65,7 @@ public:
      *  (the stop that stops nothing: UX-32). */
     bool statusWarns(const QString &key) const;
     QPushButton *setUpButton(const QString &key) const { return m_buttons.value(key); }
+    QPushButton *rescanButton() const { return m_rescan; }
     /** This computer's desk, at the top (DeskSetupPanel). */
     DeskSetupPanel *deskPanel() const { return m_desk; }
 
@@ -73,6 +75,8 @@ public:
 public slots:
     /** Read every status line again. */
     void refresh();
+    /** Look for controllers now; what came of it is said on the setup row. */
+    void rescan();
 
 signals:
     /** A Set up… was pressed. */
@@ -84,6 +88,7 @@ private:
     QString triggersText() const;
     QString padsText() const;
     QString pmjText() const;
+    QString setupText() const;
     /** What the PMJ's lit lamps mean (the help's "What the lamps mean"). */
     static QString pmjLampsText();
     QString vcText() const;
@@ -113,6 +118,9 @@ private:
     QMap<QString, QLabel *> m_what;
     QMap<QString, QPushButton *> m_buttons;
     QString m_lastSummary;
+    QPushButton *m_rescan = nullptr;
+    /** What the last Rescan found (cleared when a device connects). */
+    QString m_rescanNote;
 };
 
 /** @} */
