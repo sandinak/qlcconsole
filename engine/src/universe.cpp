@@ -596,10 +596,13 @@ void Universe::processFaders()
     {
         QMutexLocker locker(&m_outputRulesMutex);
         const QVector<int> &reset = keepShowOnly ? m_showOnlyChannels : m_showOnlyResetChannels;
+        // Q326: nothing held (every frame until a stop) reads the safe values only.
+        const bool anyHeld = m_showOnlyHeldCount > 0;
         for (int c : reset)
         {
-            (*m_preGMValues)[c] = char(showOnlyRestLocked(c));
-            (*m_blackoutValues)[c] = char(showOnlyRestLocked(c));
+            const char rest = anyHeld ? char(showOnlyRestLocked(c)) : m_showOnlySafe.at(c);
+            (*m_preGMValues)[c] = rest;
+            (*m_blackoutValues)[c] = rest;
             updatePostGMValue(c);
         }
         m_showOnlyResetChannels.clear();
@@ -1084,14 +1087,16 @@ void Universe::setShowOnlyOutSafeLocked(int c)
 void Universe::finishShowOnlyFrame()
 {
     QMutexLocker locker(&m_outputRulesMutex);
+    const bool anyHeld = m_showOnlyHeldCount > 0;
     for (int c : std::as_const(m_showOnlyChannels))
     {
         const char pre = m_preGMValues->at(c);
-        if (uchar(pre) == showOnlyRestLocked(c))
-            m_post[c] = char(showOnlySafeOut(c));
+        const char rest = anyHeld ? char(showOnlyRestLocked(c)) : m_showOnlySafe.at(c);
+        if (pre == rest)
+            m_post[c] = char(applyModifiers(c, uchar(rest)));     // showOnlySafeOut()
         // Q326: a head held by the stop is driven again once something
         // that counts moves it; let go, it rests at its safe value again.
-        else if (m_showOnlyHeldCount > 0)
+        else if (anyHeld)
             setHoldingLocked(c, false);
         m_showOnlyPre[c] = pre;
     }
