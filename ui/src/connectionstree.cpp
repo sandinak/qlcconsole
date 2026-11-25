@@ -260,6 +260,47 @@ private:
     ConnectionsTree *m_ct;
 };
 
+namespace
+{
+/** The bar's one-line hint, the first thing to give way when the bar is
+    narrower than its row (1024 wide: Rescan ran off the right edge, UX-34):
+    it shortens with "…" and goes when too little is left. All of it is on
+    hover either way. */
+class GivingHint final : public QLabel
+{
+public:
+    GivingHint(const QString &text, QWidget *parent)
+        : QLabel(text, parent), m_full(text)
+    {
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    }
+    QSize sizeHint() const override
+    {
+        return QSize(fontMetrics().horizontalAdvance(m_full) + 2 * margin() + 2,
+                     QLabel::sizeHint().height());
+    }
+    QSize minimumSizeHint() const override
+    {
+        return QSize(0, QLabel::minimumSizeHint().height());
+    }
+    QString fullText() const { return m_full; }
+
+protected:
+    void resizeEvent(QResizeEvent *e) override
+    {
+        QLabel::resizeEvent(e);
+        QString shown = fontMetrics().elidedText(m_full, Qt::ElideRight, width());
+        if (shown.size() < 8)          // a word and "…" or less: nothing, not a stub
+            shown.clear();
+        if (shown != text())
+            setText(shown);
+    }
+
+private:
+    const QString m_full;
+};
+}
+
 ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     : QWidget(parent)
     , m_doc(doc)
@@ -290,7 +331,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     /* One short line, the rest on hover: as a paragraph above everything it
        took the space the list needed ("wasting a lot of space in the
        connections view with the top panel"). */
-    QLabel *hint = new QLabel(tr("Right-click a row for what it can do"), this);
+    QLabel *hint = new GivingHint(tr("Right-click a row for what it can do"), this);
     hint->setObjectName(QStringLiteral("connectionsHint"));
     hint->setStyleSheet(QStringLiteral("QLabel { color: #8a8e99; }"));
     hint->setToolTip(

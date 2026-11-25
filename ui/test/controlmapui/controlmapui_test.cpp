@@ -67,6 +67,7 @@
 #include "keytriggers.h"
 #include "cuerunner.h"
 #include "inputoutputmap.h"
+#include "outputpatch.h"
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
 #include "qlcfile.h"
@@ -2106,6 +2107,90 @@ void ControlMapUi_Test::grandMasterSetUpOpensGrandMasterTab()
     hub->setUpButton("gm")->click();
     QCOMPARE(page_, QString("GrandMaster"));
     QVERIFY(over != nullptr && over->window() == page.window());   // over the hub, not the hidden console
+}
+
+/* The Grand Master row reads again once its own Set Up… is OK'd: the VC's
+   properties carry no signal the hub hears, and the hub stays visible
+   behind the dialog (it read "no input" with a fader just chosen). */
+void ControlMapUi_Test::grandMasterRowFollowsItsSetUp()
+{
+    new VirtualConsole(nullptr, m_doc);
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ShowControlSyncPage page(m_doc);
+    page.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&page));
+    ControlSurfacesPanel *hub = page.surfaces();
+    QCOMPARE(hub->status("gm"), QString("Grand Master: no input"));
+
+    bool chose = false;
+    QTimer driver;
+    driver.setInterval(10);
+    QObject::connect(&driver, &QTimer::timeout, [&]() {
+        VCPropertiesEditor *e = qobject_cast<VCPropertiesEditor *>(QApplication::activeModalWidget());
+        if (e == nullptr)
+            return;
+        driver.stop();
+        // Auto Detect, a fader moved, OK.
+        e->m_autoDetectGrandMasterInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, 7, 200);
+        chose = e->properties().grandMasterInputUniverse() == 0
+                && e->properties().grandMasterInputChannel() == 7;
+        e->accept();
+    });
+    driver.start();
+    QTimer::singleShot(5000, &driver, [&]() {
+        driver.stop();
+        if (QWidget *w = QApplication::activeModalWidget())
+            w->close();
+    });
+    hub->setUpButton("gm")->click();
+    QVERIFY(chose);
+    QCOMPARE(hub->status("gm"), QString("Grand Master: input set"));
+}
+
+/* An output dongle is not a controller waiting to be set up: the input
+   side of a DMX interface (DMX USB, Peperoni, uDMX) and a device patched
+   as an output or a feedback line are left off "Other connected devices"
+   (an Enttec DMX USB Pro driving universe 1 read "not set up"). */
+void ControlMapUi_Test::outputDevicesAreNotControllers()
+{
+    IOPluginStub *stub = loadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    auto restore = qScopeGuard([stub, iom]() {
+        for (quint32 u = 0; u < 2; ++u)
+        {
+            iom->setOutputPatch(u, KOutputNone, QString(), QLCIOPlugin::invalidLine(), true);
+            iom->setOutputPatch(u, KOutputNone, QString(), QLCIOPlugin::invalidLine(), false, 0);
+        }
+        stub->init();
+    });
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+
+    // A DMX USB Pro plugged in: its input line is no control surface.
+    stub->m_linesAreHardware = true;
+    stub->m_nameOverride = QStringLiteral("DMX USB");
+    stub->m_lineNames = QStringList({ "DMX USB Pro" });
+    emit stub->configurationChanged();
+    QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));
+
+    // A MIDI box, its input not patched: listed.
+    stub->m_nameOverride.clear();
+    stub->m_lineNames = QStringList({ "USB MIDI Device" });
+    emit stub->configurationChanged();
+    QCOMPARE(hub->status("devices"), QString("USB MIDI Device: not set up"));
+
+    // Patched as universe 1's feedback line: in use, not listed.
+    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));
+    QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));
+    QVERIFY(iom->setOutputPatch(0, KOutputNone, QString(), QLCIOPlugin::invalidLine(), true));
+    QCOMPARE(hub->status("devices"), QString("USB MIDI Device: not set up"));
+
+    // Patched as universe 2's output: in use, not listed.
+    QVERIFY(iom->setOutputPatch(1, stub->name(), QString(), 0, false, 0));
+    QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));
 }
 
 /* A controller plugged in that no universe has is named, with Set Up… to

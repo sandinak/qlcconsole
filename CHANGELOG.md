@@ -34,7 +34,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   patched; the Grand Master has its own line, whose Set Up… opens the
   Virtual Console's Settings on the Grand Master page; a pad or MIDI device
   plugged in but on no universe is named (*USB MIDI Device: not set up*)
-  with Set Up… to the patch, and the hub follows a plug or unplug at once.
+  with Set Up… to the patch, and the hub follows a plug or unplug at once
+  (a DMX interface's input, or a device used as an output or feedback line,
+  is not listed as one waiting); the Grand Master line reads again as soon
+  as its Set Up… is OK'd. Connections' bar fits at 1024 wide: its hint
+  shortens before Rescan is cut off.
   The help says the PMJ needs no restart, how to patch the APC40 mk2 (Omni,
   Ableton mode) and that the Allow GO switch covers Companion.
 

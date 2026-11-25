@@ -35,6 +35,7 @@
 #include "encoderbank.h"
 #include "controlmap.h"
 #include "inputpatch.h"
+#include "outputpatch.h"
 #include "universe.h"
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
@@ -208,11 +209,18 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::inputSlotChanged, this, &ControlSurfacesPanel::refresh);
-    // The PMJ line says whether a feedback line is patched: follow each universe's.
+    /* The PMJ line says whether a feedback line is patched, and a device
+       used as an output or feedback is not listed as one waiting to be set
+       up: follow each universe's output and feedback patches. */
     auto watch = [this](Universe *u) {
-        if (u != nullptr)
-            connect(u, &Universe::hasFeedbackChanged, this, &ControlSurfacesPanel::refresh,
-                    Qt::UniqueConnection);
+        if (u == nullptr)
+            return;
+        connect(u, &Universe::hasFeedbackChanged, this, &ControlSurfacesPanel::refresh,
+                Qt::UniqueConnection);
+        connect(u, &Universe::outputPatchChanged, this, &ControlSurfacesPanel::refresh,
+                Qt::UniqueConnection);
+        connect(u, &Universe::outputPatchesCountChanged, this, &ControlSurfacesPanel::refresh,
+                Qt::UniqueConnection);
     };
     for (quint32 u = 0; u < iom->universesCount(); ++u)
         watch(iom->universe(u));
@@ -414,6 +422,37 @@ bool isPad(QLCIOPlugin *plugin, quint32 line)
     return !plugin->inputDeviceKind(line).isEmpty()
         || !InputOutputMap::channelRoles(plugin, line).isEmpty();
 }
+
+/** Whether input line @p name of @p plugin is the input side of a DMX
+    interface (an Enttec DMX USB Pro, a Peperoni, a uDMX, an FX5 on HID):
+    an output dongle, not a control surface. */
+bool isDmxInterface(QLCIOPlugin *plugin, const QString &name)
+{
+    const QString p = plugin->name();
+    if (p == QLatin1String("DMX USB") || p == QLatin1String("Peperoni") || p == QLatin1String("uDMX"))
+        return true;
+    // HID: a joystick or pad is input only; a line that is also an output is a DMX interface.
+    return p == QLatin1String("HID") && plugin->outputs().contains(name);
+}
+
+/** Whether a line named @p name of @p plugin is patched as some universe's
+    output or feedback: a device in use (a MIDI box that only gets feedback). */
+bool usedAsOutput(InputOutputMap *iom, QLCIOPlugin *plugin, const QString &name)
+{
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        for (int i = 0; i < iom->outputPatchesCount(u); ++i)
+        {
+            const OutputPatch *op = iom->outputPatch(u, i);
+            if (op != nullptr && op->plugin() == plugin && op->outputName() == name)
+                return true;
+        }
+        const OutputPatch *fb = iom->feedbackPatch(u);
+        if (fb != nullptr && fb->plugin() == plugin && fb->outputName() == name)
+            return true;
+    }
+    return false;
+}
 }
 
 QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
@@ -437,6 +476,11 @@ QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
             const QString &name = lines.at(l);
             if (name.isEmpty())
                 continue;
+            // A DMX interface's input, or a device used as an output or
+            // feedback line, is not a control surface waiting to be set up.
+            const bool pad = isPad(plugin, quint32(l));
+            if (!pad && (isDmxInterface(plugin, name) || usedAsOutput(iom, plugin, name)))
+                continue;
             // The n-th line of a name is free when n of that name are.
             int taken = 0;
             for (quint32 u = 0; u < iom->universesCount(); ++u)
@@ -448,7 +492,7 @@ QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
             const int nth = seen.value(name) + 1;
             seen.insert(name, nth);
             if (nth > taken && iom->hasFreeInputDevice(plugin, name))
-                out << qMakePair(name, isPad(plugin, quint32(l)));
+                out << qMakePair(name, pad);
         }
     }
     return out;

@@ -58,7 +58,9 @@ private slots:
     void eachSetUpLandsOnItsPlace();
     void pmjRowMatchesExactProfileOnly();
     void grandMasterSetUpOpensGrandMasterTab();
+    void grandMasterRowFollowsItsSetUp();
     void unpatchedDeviceListedWithSetUp();
+    void outputDevicesAreNotControllers();
     void theSurfacesStatusFollowsTheShow();
     void surfacesOffKeepsTheStop();
     void surfacesShots();

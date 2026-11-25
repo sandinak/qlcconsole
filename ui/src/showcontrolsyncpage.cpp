@@ -542,7 +542,12 @@ void ShowControlSyncPage::setUpSurface(const QString &key)
         // The Grand Master's input is in the Virtual Console's Settings: open
         // them there, on its page, not on the console's first page.
         if (VirtualConsole *vc = VirtualConsole::instance())
+        {
             vc->editSettings(this, QStringLiteral("GrandMaster"));
+            // The VC's properties carry no signal the hub hears, and the hub
+            // stayed visible behind the dialog: read the row again now.
+            m_surfaces->refresh();
+        }
         else
             emit virtualConsoleRequested();
     }
