@@ -1,0 +1,7 @@
+# tools/surface-capture.py midi --port "PMJ Black 1" (format: docs/dev/SURFACE_TESTS.md)
+# device: PMJ Black 1 (OpenDeck), MIDI channel 9: Back tapped, then Favorites.
+# Written by hand in the capture format; a bench capture replaces it as is.
+{"t":0,"ev":"raw","bytes":"98 0b 7f"}
+{"t":96,"ev":"raw","bytes":"88 0b 00"}
+{"t":412,"ev":"raw","bytes":"98 30 7f"}
+{"t":530,"ev":"raw","bytes":"88 30 00"}

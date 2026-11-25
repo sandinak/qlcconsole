@@ -155,6 +155,9 @@ private:
     friend class ShowTree_Test;
     friend class SpeedMasters_Test;
     friend class PixelBoxes_Test;
+    friend class SurfaceSim_Test;   // the surface simulator's (docs/dev/SURFACE_TESTS.md)
+    friend class PadSim_Test;
+    friend class PmjSim_Test;
 
 private:
     /** The timer tick frequency in Hertz */

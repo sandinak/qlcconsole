@@ -6,6 +6,9 @@ project(test)
 # build/resources/ dir). Applies to every test target added below.
 add_compile_definitions(QLC_TEST_RESOURCE_ROOT="${CMAKE_SOURCE_DIR}/resources/")
 
+# qlc_surfacesim(<test>): simulated MIDI boards and game pads (docs/dev/SURFACE_TESTS.md).
+include(common/surfacesim/surfacesim.cmake)
+
 add_subdirectory(aimsolver)
 add_subdirectory(beamocclusion)
 add_subdirectory(blindeffects)
@@ -116,6 +119,8 @@ add_subdirectory(padnames)
 add_subdirectory(padrun)
 add_subdirectory(padrunrules)
 add_subdirectory(hidstuckpad)
+add_subdirectory(surfacesim)
+add_subdirectory(padsim)
 add_subdirectory(padtraces)
 add_subdirectory(iolock)
 add_subdirectory(legacysettings)

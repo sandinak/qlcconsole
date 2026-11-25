@@ -20,6 +20,9 @@
 #ifndef HIDVIRTUALPAD_H
 #define HIDVIRTUALPAD_H
 
+#include <QMutex>
+#include <QVariantList>
+
 #include "hiddevice.h"
 
 /**
@@ -67,6 +70,14 @@ public:
     /** A value as the pad's reading would give it. */
     void inject(quint32 channel, uchar value);
 
+    /** What the app sent the pad (HIDPlugin::sendFeedBack()'s params: its
+     *  light, rumble, triggers), kept for a test; takeFeedback() hands it
+     *  over and clears it. */
+    void keepFeedback(const QVariantMap &params)
+    { QMutexLocker l(&m_feedbackLock); m_feedback << params; }
+    QVariantList takeFeedback()
+    { QMutexLocker l(&m_feedbackLock); QVariantList out = m_feedback; m_feedback.clear(); return out; }
+
     /** "054c:09cc: DUALSHOCK 4 Wireless Controller (DE:4C:...)" pads,
      *  separated by ';', from QLC_HID_VIRTUAL_PAD; a name may end in
      *  "@<location>" (its port). */
@@ -78,6 +89,8 @@ private:
     bool m_open = false;
     QString m_location;
     std::function<void()> m_readHook;
+    QMutex m_feedbackLock;
+    QVariantList m_feedback;
 
     void run() override;
 };
