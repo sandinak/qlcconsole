@@ -188,6 +188,7 @@ private slots:
     void everyAllOffTakesTheOnePath();
     /** Phase F: Stop All is never greyed, so held levels can always be stopped. */
     void stopAllIsNeverGreyed();
+    void stopAllTakesOutAHeldLevel();
     /** Phase F: no Ctrl+Shift+Esc on Windows (Task Manager); the Mac keeps ⌘⇧Esc. */
     void theStopAllKeyIsSafeOnEveryPlatform();
     /** Phase F: the desk STOP goes before every feature / mode / learn check. */

@@ -165,9 +165,14 @@ button under the Control Map table.
   Virtual Console **Stop All** button with no fade, the pad's four-together
   stop, the phone page, Companion's ALL OFF and QLab's or MSC's ALL OFF.
   Each does the same: every function stops, every Show-only fixture is cut,
-  every fixture goes to rest. None can drift from the others.
-- **Stop All is never greyed.** Levels held with nothing running (a Simple
-  Desk level, a held master) are what it is for too, so it is always there.
+  every fixture goes to rest, and the Simple Desk and Virtual Console
+  **Level** sliders let go of what they hold. None can drift from the others.
+- **Stop All is never greyed.** A level held with nothing running (a Simple
+  Desk channel, a Level slider) is what it is for too, so it is always
+  there. A level let go of stays out, through a GO, until you move its
+  fader again; a fader left up on the screen does not light anything until
+  then. (A master, Grand or group, only scales what is lit: it lights
+  nothing of its own.)
 - Its key is **⌘⇧Esc** on a Mac and **Ctrl+Shift+Backspace** on Windows and
   Linux (Ctrl+Shift+Esc opens the Task Manager on Windows, which would take
   the press first).
@@ -524,8 +529,10 @@ after any build that changes a surface, and say which build.
    key is not Stop All on Windows). Control ▸ Stop ALL Functions! shows
    Ctrl+Shift+Backspace. **Mac:** ⌘⇧Esc stops everything.
 2. **Held levels only:** stop every function, then raise a Simple Desk
-   channel (or a group master) so a light is up with nothing running.
-   *Expect:* **Stop All** is not greyed; pressing it takes the light out.
+   channel on an ordinary dimmer (not Show only), or a Virtual Console
+   Level slider, so a light is up with nothing running. *Expect:* **Stop
+   All** is not greyed; pressing it takes the light out, and it stays out
+   through a GO until you move that fader again.
 3. **Desk STOP with the switch off:** learn **Emergency Stop…** on a desk
    button, then turn **Control Surfaces** off (View ▸ Workspace ▸ Tabs &
    Features…). Start a scene and press the button in Design, with a Learn

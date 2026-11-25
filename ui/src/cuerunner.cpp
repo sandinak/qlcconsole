@@ -44,6 +44,7 @@
 #include <functional>
 
 #include "showfeatures.h"
+#include "app.h"
 #include "showtreecontroller.h"
 #include "timecodesource.h"
 #include "timecodecues.h"
@@ -493,7 +494,9 @@ void CueRunner::makeButtons()
     m_subBack = makeButton(tr("Sub Back"), tr("Sub Back (⌥⌘⇧↩): the previous sub-cue"), "crSubBack");
     m_back = makeButton(tr("Back"), tr("Back (⌘⇧↩): the previous main cue (its sub-cues dropped)"), "crBack");
     m_pause = makeButton(tr("Pause"), tr("Pause / Resume: holds the fade and an auto-follow's wait"), "crPause");
-    m_stop = makeButton(tr("Stop"), tr("Stop this list (⌘⇧Esc stops everything)"), "crStop");
+    // This computer's Stop All key (never Ctrl+Shift+Esc on Windows).
+    m_stop = makeButton(tr("Stop"), tr("Stop this list (%1 stops everything)")
+                        .arg(App::stopAllShortcut().toString(QKeySequence::NativeText)), "crStop");
     // Teaching show: the terms a button names, defined on hover.
     TeachingTips::attach(m_doc, m_go, m_go->toolTip(), { QStringLiteral("go"), QStringLiteral("standby") });
     TeachingTips::attach(m_doc, m_subGo, m_subGo->toolTip(), { QStringLiteral("sub-cue") });

@@ -37,6 +37,7 @@
 #include <QMenu>
 #include <QSize>
 #include <QPen>
+#include <utility>
 
 #include "vcsliderproperties.h"
 #include "capturemanager.h"
@@ -51,6 +52,7 @@
 #include "universe.h"
 #include "speedmasters.h"
 #include "groupmasters.h"
+#include "outputrulekeeper.h"
 #include "fixturegroup.h"
 #include "vcslider.h"
 #include "apputil.h"
@@ -183,6 +185,15 @@ VCSlider::VCSlider(QWidget *parent, Doc *doc)
             this, SLOT(slotClickAndGoLevelAndPresetChanged(uchar, QImage)));
     connect(this, SIGNAL(monitorDMXValueChanged(int)),
             this, SLOT(slotMonitorDMXValueChanged(int)));
+    /* The emergency stop (ALL OFF, Stop All): a Level slider left up is let
+       go of, on every channel, until it is really moved again -- a level
+       held with nothing running is what Stop All is for. Only marked here,
+       on the thread the stop came on; the tick drops the faders. */
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        connect(rules, &OutputRuleKeeper::emergencyStopStruck, this, [this](quint32 session) {
+            if (m_sliderMode == Level && m_liveEpoch.load(std::memory_order_relaxed) < session)
+                m_stopSession.store(session, std::memory_order_relaxed);
+        }, Qt::DirectConnection);
 
     m_resetButton = NULL;
     m_flashButton = NULL;
@@ -1787,6 +1798,24 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
     Q_UNUSED(timer);
 
     QMutexLocker locker(&m_levelValueMutex);
+
+    /* Let go of by the emergency stop and not moved since: nothing written,
+       its faders gone (rebuilt by the move: m_levelValueChanged). */
+    const quint32 stopped = m_stopSession.load(std::memory_order_relaxed);
+    if (stopped != 0)
+    {
+        if (m_liveEpoch.load(std::memory_order_relaxed) < stopped)
+        {
+            QMutexLocker fLocker(&m_fadersMapMutex);
+            for (const QSharedPointer<GenericFader> &fader : std::as_const(m_fadersMap))
+                if (!fader.isNull())
+                    fader->requestDelete();
+            m_fadersMap.clear();
+            return;
+        }
+        m_stopSession.store(0, std::memory_order_relaxed);
+        m_levelValueChanged = true;
+    }
 
     uchar modLevel = m_levelValue;
     int r = 0, g = 0, b = 0, c = 0, m = 0, y = 0;

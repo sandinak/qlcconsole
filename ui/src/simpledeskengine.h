@@ -58,8 +58,8 @@ public:
     virtual ~SimpleDeskEngine();
 
     /** The emergency stop that started session @p session: let go of every
-     *  Show-only channel it holds that was not moved since */
-    void releaseShowOnlyChannels(quint32 session);
+     *  channel it holds (Show only or not) that was not moved since */
+    void releaseForStop(quint32 session);
 
     /** Start from scratch; clear everything */
     void clearContents();

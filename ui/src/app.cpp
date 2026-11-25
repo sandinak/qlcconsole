@@ -1041,8 +1041,9 @@ void App::init()
             this, SLOT(slotUniverseWritten(quint32, const QByteArray&)));
 
     /* Stop All is never greyed (the e-stop always works): levels held with
-       nothing running -- a Simple Desk level, a held master, a Show-only
-       channel -- are what it is for too (CONTROL_SURFACES_EVAL §2). */
+       nothing running -- a Simple Desk level, a VC Level slider, a Show-only
+       channel -- are what it is for too; each lets go on the stop
+       (CONTROL_SURFACES_EVAL §2). */
     m_controlPanicAction->setEnabled(true);
 
     // Start up in non-modified state

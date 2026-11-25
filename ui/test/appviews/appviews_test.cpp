@@ -124,6 +124,8 @@
 #undef private
 #include "helpbrowser.h"
 #include "simpledesk.h"
+#include "simpledeskengine.h"
+#include "vcslider.h"
 #include "showmanager.h"
 #include "showconverter.h"
 #include <QToolButton>
@@ -4256,6 +4258,64 @@ void AppViews_Test::stopAllIsNeverGreyed()
     QVERIFY(doc->outputRuleKeeper()->emergencyStopped());
 }
 
+/* §2 and CONTROL_SURFACES_EVAL's stopAllEnabledWithHeldLevel: what Stop All
+   is lit for with nothing running. A Simple Desk channel and a VC Level
+   slider up on ordinary dimmers (not Show only) -- no function runs, the
+   light is up -- and Stop All takes both out. Before, the stop let go of
+   Show-only channels only: both dimmers stayed at full. They stay out
+   through later ticks, until their own fader is moved again. */
+void AppViews_Test::stopAllTakesOutAHeldLevel()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    OutputRuleKeeper *rules = doc->outputRuleKeeper();
+    auto back = qScopeGuard([this, doc, rules]() {
+        rules->noteGo();
+        doc->setMode(Doc::Design);
+        m_app->clearDocument();
+    });
+    auto dimmer = [doc](const QString &name, quint32 address) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setAddress(address);
+        return doc->addFixture(f) ? f : nullptr;
+    };
+    Fixture *desk = dimmer("Desk lamp", 10);
+    Fixture *fader = dimmer("Fader lamp", 11);
+    QVERIFY(desk != nullptr && fader != nullptr);
+    QVERIFY((doc->inputOutputMap()->universes().first()->channelCapabilities(10)
+             & Universe::ShowOnlyOutput) == 0);
+    SimpleDeskEngine eng(doc);
+    QWidget host;
+    VCSlider slider(&host, doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.addLevelChannel(fader->id(), 0);
+    doc->setMode(Doc::Operate);
+    m_app->hideViewNotice();
+    eng.setValue(10, 255);
+    slider.setSliderValue(200, false, true);        // pushed up in Operate
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 10)), 255, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 200, 5000);
+    QCOMPARE(doc->masterTimer()->runningFunctions(), 0);   // nothing running
+    QVERIFY(m_app->m_controlPanicAction->isEnabled());
+
+    m_app->m_controlPanicAction->trigger();
+    QVERIFY(rules->emergencyStopped());
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 10)), 0, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 0, 5000);
+    QVERIFY(!eng.hasChannel(10));                   // the desk let go of it
+    // Stays out: nothing moved since.
+    QTest::qWait(200);
+    QCOMPARE(int(outputAt(doc, 10)), 0);
+    QCOMPARE(int(outputAt(doc, 11)), 0);
+    // A hand on each, after the stop: lit again.
+    eng.setValue(10, 120);
+    slider.setSliderValue(90, false, true);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 10)), 120, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 90, 5000);
+}
+
 /* §4 #16: no Ctrl+Shift+Esc on Windows (it opens the Task Manager there,
    and Stop All never runs). The Mac keeps ⌘⇧Esc. The menu, the tooltip
    and the help say this computer's key. */
@@ -4273,6 +4333,18 @@ void AppViews_Test::theStopAllKeyIsSafeOnEveryPlatform()
     QVERIFY2(m_app->m_controlPanicAction->toolTip().contains(
                  App::stopAllShortcut().toString(QKeySequence::NativeText)),
              qPrintable(m_app->m_controlPanicAction->toolTip()));
+    // The Run tab's Stop names this computer's key too, never the Mac's
+    // chord on Windows (read there as Ctrl+Shift+Esc: the Task Manager).
+    {
+        CueRunner run(m_app->doc(), CueRunner::Full);
+        QToolButton *stop = run.findChild<QToolButton *>(QStringLiteral("crStop"));
+        QVERIFY(stop != nullptr);
+        QVERIFY2(stop->toolTip().contains(App::stopAllShortcut().toString(QKeySequence::NativeText)),
+                 qPrintable(stop->toolTip()));
+#if !defined(Q_OS_MACOS)
+        QVERIFY2(!stop->toolTip().contains(QStringLiteral("Esc")), qPrintable(stop->toolTip()));
+#endif
+    }
     // No other action of the app's takes the key.
     int holders = 0;
     for (QAction *a : m_app->findChildren<QAction *>())

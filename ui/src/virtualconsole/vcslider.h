@@ -529,6 +529,8 @@ protected:
 
     /** Show only: the live session it was last really moved in */
     std::atomic<quint32> m_liveEpoch { 0 };
+    /** The emergency stop that let go of it (0: none), until it is moved */
+    std::atomic<quint32> m_stopSession { 0 };
     QMutex m_levelValueMutex;
     bool m_levelValueChanged;
     uchar m_levelValue;
