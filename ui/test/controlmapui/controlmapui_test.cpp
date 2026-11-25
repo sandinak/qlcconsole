@@ -2343,6 +2343,21 @@ void ControlMapUi_Test::surfacesShots()
     if (dir.isEmpty())
         QSKIP("QLC_SHOT_DIR is not set");
     QDir().mkpath(QString::fromLocal8Bit(dir));
+    // A PMJ patched with its feedback line: its row says what its lamps mean.
+    if (IOPluginStub *stub = loadStub(m_doc))
+    {
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+        if (pmj == nullptr)
+        {
+            pmj = new QLCInputProfile();
+            pmj->setManufacturer("PMJ");
+            pmj->setModel("Black 1");
+            QVERIFY(iom->addProfile(pmj));
+        }
+        QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0, pmj->name()));
+        QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));
+    }
     InputOutputManager mgr(nullptr, m_doc);
     const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
     for (const QSize &sz : sizes)

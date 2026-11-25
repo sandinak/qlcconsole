@@ -2971,6 +2971,7 @@ void AppViews_Test::pmjGoRunsTheRunTabList()
     QTest::qWait(50);
     QCOMPARE(list->currentStepIndex(), 1);
     sc->setGoGuardMs(0);
+    sc->setGuardClock(ShowControl::GuardClock());
 
     // The list the Run tab plays, not only the main one.
     const quint32 prod = doc->showTree()->productionOfChaser(list->id());
@@ -3059,10 +3060,10 @@ void AppViews_Test::pmjGoLampLitWhenReady()
     IOPluginStub *stub = patchPmj(m_app);
     QVERIFY(stub != nullptr);
     const quint32 go = 32896, back = 32907, effects = 32946, groups = 32947;
-    auto lastSent = [stub](quint32 ch) {
+    auto lastSent = [stub](quint32 ch) -> int {
         for (int i = stub->m_feedback.size() - 1; i >= 0; --i)
             if (stub->m_feedback.at(i).first == ch)
-                return stub->m_feedback.at(i).second;
+                return int(stub->m_feedback.at(i).second);
         return -1;
     };
     const int lit = 254, dim = 30;
