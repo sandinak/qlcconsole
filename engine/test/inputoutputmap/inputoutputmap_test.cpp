@@ -1944,7 +1944,7 @@ void InputOutputMap_Test::universesWithInputOn()
 /* Two identical boards list two lines of one name; a patch asks for its own. */
 void InputOutputMap_Test::sameNameBoardsPatchTheirOwnLines()
 {
-    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugin("Stub"));
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
     QVERIFY(stub != NULL);
     const QStringList saved = stub->m_lineNames;
     stub->m_lineNames = QStringList() << "APC MINI" << "APC MINI" << "Other";
@@ -1966,7 +1966,7 @@ void InputOutputMap_Test::sameNameBoardsPatchTheirOwnLines()
 
 void InputOutputMap_Test::sameNameBoardsSurviveSaveLoad()
 {
-    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugin("Stub"));
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
     QVERIFY(stub != NULL);
     const QStringList saved = stub->m_lineNames;
     stub->m_lineNames = QStringList() << "APC MINI" << "APC MINI";
@@ -1994,7 +1994,7 @@ void InputOutputMap_Test::sameNameBoardsSurviveSaveLoad()
    one: the first line of the name, as ever. */
 void InputOutputMap_Test::aNameOnlyShowOpensTheFirstOfTheName()
 {
-    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugin("Stub"));
+    IOPluginStub *stub = static_cast<IOPluginStub*>(m_doc->ioPluginCache()->plugins().at(0));
     QVERIFY(stub != NULL);
     const QStringList saved = stub->m_lineNames;
     stub->m_lineNames = QStringList() << "Other" << "APC MINI" << "APC MINI";
