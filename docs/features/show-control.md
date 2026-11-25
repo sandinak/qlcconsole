@@ -109,8 +109,9 @@ computer, not the show.
 > pad, in every state, whatever its role. The pad does not arm or run cues,
 > start the venue focus (LT + Menu), walk the show or Quiet Refine, or move
 > the follow spot: each press says *Running the show from a controller is
-> macOS/Linux for now.* on the footer's chip. A Virtual Console widget's
-> external input still works from the pad. The focus,
+> macOS/Linux for now.* on the footer's chip. Controls you bind yourself in
+> the Control Map or the Virtual Console still work from the pad (there is
+> no Run map there to keep a trigger off). The focus,
 > walk and follow spot tools on the screen, by mouse and keyboard, work as
 > everywhere. A Windows check on the bench comes first.
 

@@ -341,8 +341,10 @@ QList<ControlOwners::Owner> ControlOwners::owners(Doc *doc, quint32 universe, qu
         }
     }
     /* A game pad's button or trigger: its Run map (Q324). A trigger there
-       would fire a cue or a hit on one press, with no arm and no safety. */
-    else if (ProgrammerController *pc = doc->programmer())
+       would fire a cue or a hit on one press, with no arm and no safety.
+       Where the pad runs no cues (Windows) there is no Run map: the pad's
+       buttons stay free for a Control Map trigger. */
+    else if (ProgrammerController *pc = PadRun::padRunSupported() ? doc->programmer() : nullptr)
     {
         const int role = pc->padRole(universe, channel & kPageMask);
         if (role != GamepadRole::None)

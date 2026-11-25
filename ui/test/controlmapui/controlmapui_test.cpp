@@ -39,6 +39,7 @@
 #include "controllearndialog.h"
 #include "controlcollisionbox.h"
 #include "controlowners.h"
+#include "padrun.h"
 #include "inputselectionwidget.h"
 #include "virtualconsole/vcpropertieseditor.h"
 #include "speedmasters.h"
@@ -2824,6 +2825,14 @@ void ControlMapUi_Test::padRunButtonRefused()
     // An Xbox pad says it in its own words.
     stub->m_deviceKind = "xbox";
     QVERIFY2(job(7).contains("A on the pad: GO with LT held"), qPrintable(job(7)));
+
+    // Windows runs no cues from the pad: no Run map, so no Pad owner and a
+    // trigger on a pad button is not refused.
+    PadRun::setPlatformForTest(PadRun::PlatformWindows);
+    auto restore = qScopeGuard([]() { PadRun::setPlatformForTest(PadRun::PlatformAuto); });
+    QVERIFY(job(7).isEmpty());
+    QVERIFY(ControlOwners::owners(m_doc, 0, 7).isEmpty());
+    QVERIFY(ControlOwners::others(m_doc, 0, 7, stop).isEmpty());
 }
 
 /* A computer key the app already uses has an owner too: named, never moved. */

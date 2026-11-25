@@ -476,6 +476,7 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
             && ControlMap::modesFor(m_target.type).contains(ControlMap::StartOnly))
         {
             m_latchChose = true;
+            m_latchChoseChannel = quint64(universe) << 32 | channel;
             setMode(ControlMap::StartOnly);
             m_note->setText(tr("%1 looks like a latching button: it sends on at one press and off at the next, "
                                "so only every other press reaches the show. %2 is chosen; set the button to "
@@ -488,6 +489,15 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
                                "%2 is kept as chosen; set the button to momentary on the controller if it can be.")
                                 .arg(name, ControlMap::modeName(mode(), m_target.type)));
         }
+    }
+    /* The guess is taken back: the same button showed a quick release (a
+       momentary one), so the Toggle it replaced is Toggle again. */
+    else if (m_latchChose && mode() == ControlMap::StartOnly && m_latchChoseChannel == (quint64(universe) << 32 | channel)
+             && m_target.type != ControlMap::EmergencyStopTarget)
+    {
+        m_latchChose = false;
+        setMode(ControlMap::Toggle);
+        m_note->clear();
     }
     // Still listening: another press takes its place.
     if (m_target.type == ControlMap::EmergencyStopTarget)

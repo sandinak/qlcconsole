@@ -150,6 +150,7 @@ private:
     bool m_stepThrough = false;
     /** a latching button heard made Toggle Start only (once) */
     bool m_latchChose = false;
+    quint64 m_latchChoseChannel = 0;   //!< the control whose latch guess changed the mode
     // The binding as the dialog opened: stepping through with siblings there.
     bool m_boundStepping = false;
     quint32 m_boundUniverse = 0xFFFFFFFF;
