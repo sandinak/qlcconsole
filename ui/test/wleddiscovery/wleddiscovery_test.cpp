@@ -494,7 +494,7 @@ void WledDiscovery_Test::discoveredDeviceHasAddress()
     // In the show by its MAC alone: no IP was ever typed.
     Fixture *fx = showWled(m_doc, "WLED Mac", QString());
     QVERIFY(fx != nullptr);
-    fx->setMacAddress("e08cfef992e0");
+    fx->setMacAddress("E0:8C.fe f9-92:e0");      // dots, spaces, colons: one MAC
     QVERIFY(fx->ipAddress().isEmpty());
 
     WledDiscovery found(m_doc);
@@ -517,6 +517,38 @@ void WledDiscovery_Test::discoveredDeviceHasAddress()
     QVERIFY2(WledDevicesDialog::problem(start, QHash<QString, quint32>()).isEmpty(),
              qPrintable(WledDevicesDialog::problem(start, QHash<QString, quint32>())));
     QVERIFY(WledDevicesDialog::suggestionsFor(m_doc, QHash<QString, quint32>()).contains(ip));
+}
+
+void WledDiscovery_Test::severalCandidatesAreOnlySuggested()
+{
+    Fixture *a = showWled(m_doc, "WLED A", "172.18.2.50");
+    Fixture *b = showWled(m_doc, "WLED B", "172.18.2.51");
+    QVERIFY(a != nullptr && b != nullptr);
+    a->setUniverse(0);
+    b->setUniverse(0);
+    QList<WledDevicesDialog::Device> none;
+    none << WledDevicesDialog::Device();
+    none[0].address = 1;
+    none[0].channels = 15;
+    const QHash<QString, quint32> nowhere;
+    // Two on the universe: nothing is guessed, both are offered.
+    QCOMPARE(WledDevicesDialog::withKnownPrimary(m_doc, 0, none, nowhere), none);
+    const QStringList offered = WledDevicesDialog::suggestionsFor(m_doc, nowhere);
+    QVERIFY(offered.contains("172.18.2.50") && offered.contains("172.18.2.51"));
+
+    // One is already a backup: the other is the only candidate.
+    QList<WledDevicesDialog::Device> withBackup = none;
+    WledDevicesDialog::Device backup;
+    backup.ip = "172.18.2.50";
+    withBackup << backup;
+    const QList<WledDevicesDialog::Device> filled =
+        WledDevicesDialog::withKnownPrimary(m_doc, 0, withBackup, nowhere);
+    QCOMPARE(filled.first().ip, QString("172.18.2.51"));
+    QVERIFY(WledDevicesDialog::problem(filled, nowhere).isEmpty());
+    // A typed primary is never replaced.
+    QList<WledDevicesDialog::Device> typed = none;
+    typed[0].ip = "172.18.2.99";
+    QCOMPARE(WledDevicesDialog::withKnownPrimary(m_doc, 0, typed, nowhere), typed);
 }
 
 void WledDiscovery_Test::hostNameIsNotMissingIp()

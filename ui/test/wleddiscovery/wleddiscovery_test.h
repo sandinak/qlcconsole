@@ -48,6 +48,8 @@ private slots:
     /** A host name is an address; only a truly empty one is refused, and
      *  says why. */
     void hostNameIsNotMissingIp();
+    /** Two WLED fixtures on one universe: none is guessed as the primary. */
+    void severalCandidatesAreOnlySuggested();
     /** Its WLED answering at a new IP: a footer line, Follow It sends
      *  there, one undo. */
     void aWledAtANewAddressIsFollowed();

@@ -452,6 +452,11 @@ void WledDiscovery::takeInfo(const QString &ip, const QString &host, const QByte
  * What is found, against the show
  *********************************************************************/
 
+QString WledDiscovery::macKey(const QString &mac)
+{
+    return normalMac(mac);
+}
+
 QString WledDiscovery::keyOf(const Device &device)
 {
     return device.mac.isEmpty() ? device.ip : device.mac;

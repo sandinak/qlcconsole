@@ -129,6 +129,9 @@ public:
     QList<Device> notInShow() const;
     /** The one with hardware address (or, when it said none, IP) @p key. */
     Device device(const QString &key) const;
+    /** A MAC as the key it is compared by: letters and digits only, lower
+     *  case ("E0:8C.fe f9-92:e0" -> "e08cfef992e0"). */
+    static QString macKey(const QString &mac);
     /** A device's key: its MAC, else its IP. */
     static QString keyOf(const Device &device);
 

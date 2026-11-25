@@ -252,8 +252,7 @@ QString WledDevicesDialog::addressOf(Doc *doc, Fixture *fx)
     WledDiscovery *found = WledDiscovery::instance();
     if (found == nullptr || fx->macAddress().isEmpty() || doc == nullptr)
         return QString();
-    QString want = fx->macAddress().toLower();
-    want.remove(QLatin1Char(':')).remove(QLatin1Char('-'));
+    const QString want = WledDiscovery::macKey(fx->macAddress());
     foreach (const WledDiscovery::Device &d, found->devices())
         if (d.mac == want && !d.ip.isEmpty())
             return d.ip;
@@ -288,18 +287,23 @@ QList<WledDevicesDialog::Device> WledDevicesDialog::withKnownPrimary(
     QList<Device> out = devices;
     if (out.isEmpty() || !out.first().ip.trimmed().isEmpty())
         return out;
-    // The primary was never typed: the WLED fixture on this universe is it.
+    /* The primary was never typed: when exactly one WLED fixture on this
+       universe can be reached (and is not already a backup), it is that.
+       With several, nothing is guessed: they are offered as suggestions. */
+    QStringList candidates;
     foreach (Fixture *fx, doc->fixtures())
     {
         if (fx == nullptr || fx->universe() != universe)
             continue;
         const QString ip = addressOf(doc, fx);
-        if (!ip.isEmpty() && !elsewhere.contains(ip))
-        {
-            out[0].ip = ip;
-            break;
-        }
+        bool listed = false;
+        foreach (const Device &d, devices)
+            listed = listed || d.ip.trimmed().toLower() == ip.toLower();
+        if (!ip.isEmpty() && !listed && !elsewhere.contains(ip) && !candidates.contains(ip))
+            candidates << ip;
     }
+    if (candidates.count() == 1)
+        out[0].ip = candidates.first();
     return out;
 }
 
@@ -350,8 +354,8 @@ bool WledDevicesDialog::edit(Doc *doc, quint32 universe, quint32 line, QWidget *
     WledDevicesDialog dlg(before, suggestions, elsewhere, parent);
     dlg.setWindowTitle(tr("WLED devices — universe %1").arg(universe + 1));
     if (dlg.exec() != QDialog::Accepted
-        || dlg.devices() == fromParameters(op->getPluginParameters()))
-        return false;
+        || dlg.devices() == before)
+        return false;      // unchanged: no change, no undo step
 
     if (io->patchUndo() != nullptr)
         io->patchUndo()->capture(QList<quint32>() << universe,
