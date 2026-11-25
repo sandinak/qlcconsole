@@ -18,9 +18,10 @@
 #ifndef CONTROLLERKEEPALIVE_H
 #define CONTROLLERKEEPALIVE_H
 
-#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
+
+#include <functional>
 
 #include "qlcengine_export.h"
 
@@ -119,6 +120,12 @@ public:
      *  any input before that is no longer said (ms). */
     void setWakeGrace(int ms);
 
+    /** The clock the sleep is measured with (ms). The default is the wall
+     *  clock (QDateTime::currentMSecsSinceEpoch()): QElapsedTimer and
+     *  std::chrono::steady_clock stop while a Mac sleeps (CLOCK_UPTIME_RAW),
+     *  so they would say "Slept 1 s" after any sleep. A test's clock. */
+    void setClock(std::function<qint64()> clock);
+
     bool isPaused() const { return !m_reason.isEmpty(); }
     /** Why, for "Controller paused: <reason>"; empty when it is not. */
     QString pauseReason() const { return m_reason; }
@@ -142,6 +149,7 @@ signals:
 private:
     void updateHeld();
     void updatePaused();
+    qint64 now() const;
 
 private:
     Backend *m_backend = nullptr;
@@ -153,8 +161,9 @@ private:
     QString m_problem;
     SystemState m_system = Awake;
     QTimer *m_wakeTimer = nullptr;
-    /** Since the Mac went to sleep (valid while it is asleep). */
-    QElapsedTimer m_asleepFor;
+    std::function<qint64()> m_clock;
+    /** When the Mac went to sleep, by m_clock (-1 while it is not asleep). */
+    qint64 m_asleepAt = -1;
     QString m_reason;
 };
 

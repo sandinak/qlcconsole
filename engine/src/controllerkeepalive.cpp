@@ -15,6 +15,7 @@
   limitations under the License.
 */
 
+#include <QDateTime>
 #include <QPointer>
 #include <QTimer>
 #include <QDebug>
@@ -181,6 +182,16 @@ void ControllerKeepAlive::noteInput()
         setSystemState(Awake);
 }
 
+void ControllerKeepAlive::setClock(std::function<qint64()> clock)
+{
+    m_clock = std::move(clock);
+}
+
+qint64 ControllerKeepAlive::now() const
+{
+    return m_clock ? m_clock() : QDateTime::currentMSecsSinceEpoch();
+}
+
 void ControllerKeepAlive::setSystemState(SystemState state)
 {
     if (state == m_system)
@@ -188,11 +199,12 @@ void ControllerKeepAlive::setSystemState(SystemState state)
     const SystemState was = m_system;
     m_system = state;
     if (state == Asleep)
-        m_asleepFor.start();
-    if (was == Asleep && m_asleepFor.isValid())
+        m_asleepAt = now();
+    if (was == Asleep && m_asleepAt >= 0)
     {
-        emit woke(m_asleepFor.elapsed());
-        m_asleepFor.invalidate();
+        // The wall clock can be set back while asleep (NTP): never negative.
+        emit woke(qMax<qint64>(0, now() - m_asleepAt));
+        m_asleepAt = -1;
     }
     if (state == Waking)
         m_wakeTimer->start();

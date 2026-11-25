@@ -41,6 +41,7 @@ private slots:
     /** Phase R: a wake is said once per sleep, with how long it slept,
      *  whether or not anything wants the controller. */
     void wakeNoticeOnce();
+    void wakeUsesWallClock();
 };
 
 #endif
