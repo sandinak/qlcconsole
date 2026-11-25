@@ -167,6 +167,13 @@ public:
 
     struct Place
     {
+        /* A constructor, not an aggregate: GCC's -Wmissing-field-initializers
+           (the Linux leg's -Werror) rejects a brace list that leaves the
+           newer-place strings out, and most places name only scope and id. */
+        Place(PlaceScope s = Everywhere, quint32 i = 0xFFFFFFFF,
+              const QString &ns = QString(), const QString &no = QString())
+            : scope(s), id(i), newerScope(ns), newerOf(no) {}
+
         PlaceScope scope = Everywhere;
         quint32 id = 0xFFFFFFFF;    //!< the production, list or cue (not for Everywhere)
         /** NewerPlace: the Scope= and ScopeOf= it was loaded with, saved back as they were. */
@@ -186,6 +193,12 @@ public:
 
     struct Binding
     {
+        /* As Place: a binding written { universe, channel, target, mode }
+           (every one from before places) means everywhere. */
+        Binding(quint32 u = 0xFFFFFFFF, quint32 c = 0xFFFFFFFF, Target t = Target(),
+                Mode m = Toggle, Place p = Place())
+            : universe(u), channel(c), target(t), mode(m), place(p) {}
+
         quint32 universe = 0xFFFFFFFF;
         quint32 channel = 0xFFFFFFFF;
         Target target;

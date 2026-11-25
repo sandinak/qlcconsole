@@ -32112,14 +32112,14 @@ void Monitor_Test::fixturesOnABarNestUnderItsTrussInPlotLayers()
         };
         /* Read here, checked after the shots below, so the shots are
            taken whatever the tree says. */
-        for (const QString &n : { "T1-S1", "T1-S2", "Lantern A", "T2-S1", "Lantern B", "Hung Pipe" })
+        for (const QString &n : QStringList{ "T1-S1", "T1-S2", "Lantern A", "T2-S1", "Lantern B", "Hung Pipe" })
             got.insert(n, chain(n));
         QTreeWidgetItem *spots = layersRow(panel, "T-Spots");
         spotsCount = spots == nullptr ? -1 : spots->childCount();
         QTreeWidgetItem *lanterns = layersRow(panel, "Lanterns");
         lanternsCount = lanterns == nullptr ? -1 : lanterns->childCount();
         // A row moved under what it hangs on keeps its full-width name.
-        for (const QString &n : { "Lantern A", "Hung Pipe", "T1-S1" })
+        for (const QString &n : QStringList{ "Lantern A", "Hung Pipe", "T1-S1" })
             if (layersRow(panel, n) != nullptr && !layersRow(panel, n)->isFirstColumnSpanned())
                 cutShort << n;
     }
