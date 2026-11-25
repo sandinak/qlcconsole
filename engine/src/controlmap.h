@@ -529,6 +529,19 @@ public:
      *  it). @a dim false: a control that is ready stays dark, for a pad
      *  whose LEDs take a colour in the velocity and not a brightness. */
     static uchar lampValue(Lamp lamp, bool dim = true);
+    /** The lamp levels the input profile gives control @a channel of
+     *  @a universe, as sent (0..255: a MIDI profile's velocities doubled,
+     *  since the MIDI plugin halves them on the way out) -- only when the
+     *  profile gives the control a dim level of its own (a Feedback
+     *  LowerValue above 0: the PMJ Black 1's 15, its board's idle glow).
+     *  False: the profile gives none, and lampValue() is the light. */
+    bool profileLampRange(quint32 universe, quint32 channel, uchar *dim, uchar *lit) const;
+    /** The value @a lamp is sent as on @a owner's control: on a profile
+     *  with its own range (profileLampRange()) lit when a press would fire
+     *  it or what it fired runs, the profile's dim level otherwise (the
+     *  emergency stop: dim until the show is stopped, then lit); else
+     *  lampValue() with the Dim switch. */
+    uchar lampValueOn(const Binding &owner, Lamp lamp) const;
     /** Whether a control that is ready glows dim (the default) or stays
      *  dark. Saved with the show (Lights="onoff"). The emergency stop is
      *  never dimmed away by it: a panic button is always findable. */

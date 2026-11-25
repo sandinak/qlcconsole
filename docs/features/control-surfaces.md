@@ -405,6 +405,15 @@ pad read -- so no two surfaces can disagree.
 The same words are in the **Its light** column of the Control Map table, so
 a desk's lights can be read from the laptop with no desk plugged in.
 
+**A desk that glows dim by itself.** Some desks light every button at a low
+level when they are idle, and their input profile says so: it gives the
+button a dim level of its own (the PMJ Black 1's is 15, its lit level 127).
+There a dim light could not be told from a button that does nothing, so the
+desk shows the profile's two levels instead: **lit** when a press would fire
+it now (a hit only while its place is live) or what it fired is running,
+**dim** at every other moment. The emergency stop's button is dim until the
+show is stopped, then lit. Two blinks are still two blinks.
+
 **A pad whose lights are colours, not brightnesses.** Some pads (the APCs)
 read the velocity of a light message as a *colour index*, so a dim level
 there is another colour, or nothing at all. Switch **Dim a control that is
@@ -441,11 +450,28 @@ the profile is patched on.
   **Favorites**, a Down button: a GO, a hit, the stop) is lit by the Control
   Map only. Moving the Master or any other change on the board never sends
   that lamp dark.
-- Go, Back, Left, Right and the page buttons light nothing and do nothing
-  here. Learn **Go** and **Back** in the Control Map to GO and Back the list
-  (rule 6): right-click the cue list in the Show Tree ▸ **Learn Trigger…**,
-  press the PMJ's Go, OK; again with **When pressed** set to **Back**, and
-  press its Back.
+- **Go** and **Back** are the Run tab's GO and Back, on the list the Run
+  tab plays, in either mode: in Design they do what the Run tab's GO does
+  there. Two GOs inside the guard's window are held, as from the laptop
+  ([Two GOs at once](show-control.md#two-gos-at-once)). Learn a trigger on
+  either in the Control Map and that trigger is its job instead.
+- **Left**, **Right**, **Pre Page** and **Next Page** do nothing yet. The
+  mode buttons (**Effects**, **Groups**, **Looks**, **Macros**, **Fix Cont**)
+  choose the page; for now every page gives the strips the same job.
+
+### What the lamps mean
+
+| Lit | What it means |
+|---|---|
+| **Go** | The Run tab's GO would play a cue now. Dim: there is a cue list, but nothing left to GO. Dark: no cue list. |
+| **Back** | The list is running, so Back has a cue to go back to. Dim: the list is stopped. |
+| **One mode button** | The page in use: **Effects** until you press another (Groups, Looks, Macros, Fix Cont). |
+| **1-10**, **1-Load…10-Load** | That strip has a fixture of the scene open in Build (strip 1 the first). Brighter: that fixture is selected. Dark: the scene has no fixture for that strip. |
+| **1-Up…10-Up** | That fader edits the open palette now. |
+| **O**, **Set** | Dim: ready. Bright: Blackout or Blind is on. |
+| **A key you learned** | The Control Map's light: lit when a press would fire it or it is running, dim otherwise ([What a control's light says](#what-a-controls-light-says)). |
+
+The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
 
 ## Other surfaces
 
@@ -478,7 +504,9 @@ after any build that changes a surface, and say which build.
 
 1. Patch the PMJ as an input on any MIDI channel with the feedback line and
    the profile PMJ Black 1 (no restart). *Expect:* **O** and **Set** glow
-   dim at once; the other buttons stay dark.
+   dim at once and **Effects** is lit (the page in use); **Go** is lit when
+   the show has a cue list. The strip buttons light only with a scene open
+   in Build.
 2. In Design, open a Colour look in Build and move the faders. *Expect:* the
    palette changes (the faders in use are lit).
 3. Switch to **Operate** and move the same faders and turn Enc 1.
@@ -489,9 +517,11 @@ after any build that changes a surface, and say which build.
 5. Patch a second MIDI controller that can send channel 9 (or send CC 0 on
    channel 9 from a MIDI tool) on another universe. *Expect:* the Grand
    Master does not move.
-6. Learn **Go** on the main cue list (Control Map). Press it. *Expect:* the
-   list GOes; press twice within a second and the second is held (*Second
-   GO held*).
+6. Without learning anything, press **Go**. *Expect:* the Run tab's list
+   GOes (in Design too, as the Run tab's GO); press twice within a second
+   and the second is held (*Second GO held*). **Back** steps back. Then
+   learn **Go** on the main cue list (Control Map) and press it: *Expect:*
+   one GO a press, not two.
 7. Learn **Emergency Stop…** on a PMJ button: press, release, press. *Expect:*
    the dialog asks you to press it again, then shows the control. (A PMJ
    button that does something itself, such as **O** or a Select button, is
@@ -508,21 +538,23 @@ after any build that changes a surface, and say which build.
 10. Patch a second input on the PMJ Black 1 profile and move a PMJ control on
     it. *Expect:* the footer names the second universe and says only the
     first is heard.
-11. **The lights.** With **Go** learned on the main cue list (step 6) and
-    the stop learned (step 7), look at the board between each of these.
-    *Expect:* **Go** glows dim before the first GO (the same level the board
-    lights itself at when it is plugged in); bright while a cue runs; it
-    **blinks twice** when you press Go twice inside a second, and goes back
-    to bright; the stop's button glows dim all along (it always works) and
-    goes **lit** when the show is stopped, and while it is lit **Go is
-    dark**; one GO after that, Go is dim or bright again and the stop is
-    dim. The Control Map's **Its light** column says the
-    same words throughout. Move the **Master** fader: *Expect:* Go and the
-    stop's button keep their light.
+11. **The lights.** First with nothing learned on **Go**: *Expect:* with a
+    cue list in the show, **Go** is **lit** and **Back** dim; after a GO,
+    both lit; on the last cue Go goes dim; Stop the list and Back goes dim.
+    The lit mode button is **Effects**; press **Looks** and Looks is the
+    lit one. Then with **Go** learned on the main cue list (step 6) and the
+    stop learned (step 7): *Expect:* Go **lit** while a GO would play a
+    cue; it **blinks twice** when you press Go twice inside a second, then
+    lit again; the stop's button dim all along (it always works) and
+    **lit** when the show is stopped, and while it is lit **Go is dim**;
+    one GO after that, Go is lit again and the stop dim. The Control Map's
+    **Its light** column says the same words throughout. Move the
+    **Master** fader: *Expect:* Go and the stop's button keep their light.
 12. **A hit's light.** Learn a hit that lives in one song on a free PMJ
     button (a Down button or **Favorites**).
-    *Expect:* dark while that song is not running, dim while it is, dark
-    again after the list moves past it -- without touching anything.
+    *Expect:* dim while that song is not running, **lit** while it is (and
+    while the hit plays), dim again after the list moves past it -- without
+    touching anything.
 13. **One job per control.** Learn Trigger… on a scene and press **O**.
     *Expect:* refused, *… already does the PMJ Black 1's O (PMJ overlay).
     One job per control.*, the reason it can't be moved, and no **Move It

@@ -2069,7 +2069,13 @@ void ControlMapUi_Test::pmjRowMatchesExactProfileOnly()
     QVERIFY2(hub->status("pmj").startsWith("Patched on universe 1, no feedback line"), qPrintable(hub->status("pmj")));
 
     QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));   // the feedback line
-    QCOMPARE(hub->status("pmj"), QString("Patched on universe 1, with its feedback line"));
+    const QString status = hub->status("pmj");
+    QVERIFY2(status.startsWith("Patched on universe 1, with its feedback line\n"), qPrintable(status));
+    // What its lit lamps mean, where it is set up (his 4612 test: a lit
+    // Effects and a lit 10-Load with nothing saying why).
+    for (const char *word : { "Go lit", "Back lit", "Effects", "Fix Cont", "page in use", "Load", "scene open in Build" })
+        QVERIFY2(status.contains(QLatin1String(word)), qPrintable(QStringLiteral("%1: %2").arg(word, status)));
+    QVERIFY(hub->findChild<QLabel *>("surfacePmjWhat")->text().contains("Run tab's GO and Back"));
 }
 
 /* The Grand Master's input is set in the Virtual Console's Settings: its

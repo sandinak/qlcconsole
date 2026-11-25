@@ -14,6 +14,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **The PMJ's Go and Back work, and its lamps say why they are lit**: Go and
+  Back are the Run tab's GO and Back (the same GO, its double-GO guard, the
+  Run tab's list, in either mode), lit when there is a cue to GO or go back
+  to and dim when not; the lit mode button is the page in use (Effects at
+  first). On a desk whose profile glows dim by itself (the PMJ's 15/127) a
+  learned trigger is lit when a press would fire it (a hit only while its
+  place is live) and dim otherwise, so a ready key no longer looks unlit. The
+  Control surfaces hub and the help say what each lamp means.
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

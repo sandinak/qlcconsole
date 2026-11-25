@@ -45,6 +45,10 @@ private slots:
     // one place that owns the answer (docs/design/SCOPED_CONTROLS_2026-11-22.md)
     void theLightSaysReadyRunningAndDark();
     void aLightIsDarkWhereAPressWouldBeRefused();
+    /** A desk whose profile gives its buttons a dim level (the PMJ's
+     *  15/127): a hit's key is lit only while its place is live, dim
+     *  otherwise -- not dim at the board's idle glow when it is ready. */
+    void hitLampLitOnlyInItsPlace();
     void theLightGoesDarkAfterTheStopUntilTheNextGo();
     void aHeldGoBlinksTheControlTwice();
     void aCueListWithNothingToGoIsDark();

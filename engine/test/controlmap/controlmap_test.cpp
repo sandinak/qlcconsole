@@ -466,6 +466,93 @@ void ControlMap_Test::aLightIsDarkWhereAPressWouldBeRefused()
     QCOMPARE(lastLight(m_stub, 20), 0);
 }
 
+/* The PMJ Black 1 (and any desk whose input profile gives a button a dim
+   level of its own) idles at that level: a ready light sent at MIDI 15 was
+   the board's idle glow, so a hit live in its place looked unlit. On such a
+   profile a press that would fire is lit at the profile's lit level, and
+   anything else is its dim level. Any profile, not only the PMJ's. */
+void ControlMap_Test::hitLampLitOnlyInItsPlace()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QLCInputProfile *desk = new QLCInputProfile();
+    desk->setManufacturer(QStringLiteral("Test"));
+    desk->setModel(QStringLiteral("Lamp Desk"));
+    desk->setType(QLCInputProfile::MIDI);
+    QLCInputChannel *key = new QLCInputChannel();
+    key->setName(QStringLiteral("Key"));
+    key->setType(QLCInputChannel::Button);
+    key->setRange(15, 127);         // as PMJ-Black-1.qxi: <Feedback LowerValue="15" UpperValue="127"/>
+    QVERIFY(desk->insertChannel(20, key));
+    QLCInputChannel *stopKey = key->createCopy();
+    QVERIFY(desk->insertChannel(41, stopKey));
+    QVERIFY(iom->addProfile(desk));
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0, desk->name()));
+
+    ControlMap *cm = m_doc->controlMap();
+    uchar dim = 0, lit = 0;
+    QVERIFY(cm->profileLampRange(0, 20, &dim, &lit));
+    QCOMPARE(int(dim), 30);         // MIDI 15 after the plugin halves it
+    QCOMPARE(int(lit), 255);        // MIDI 127
+    QVERIFY(!cm->profileLampRange(0, 21, nullptr, nullptr));   // a control the profile does not light
+
+    ShowTreeController *st = m_doc->showTree();
+    QList<quint32> cues;
+    const quint32 listId = cueList(2, &cues);
+    const quint32 hit = st->addHit(ShowTree::HitScope::Cue, cues.at(0), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    ShowTree::Target t;
+    t.groups << m_doc->fixtureGroups().at(0)->id();
+    st->setLayerLook(hit, st->addLayer(hit, t), st->lookForPalette(m_doc->palettes().at(0)->id()));
+    cm->setBinding({ 0, 20, ControlMap::hit(hit), ControlMap::Toggle });
+    const ControlMap::Binding *b = cm->binding(ControlMap::hit(hit));
+    QVERIFY(b != nullptr);
+
+    // Operate, the list stopped: its place is not live -- dim, not lit.
+    m_doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    tick(2);
+    QVERIFY(!st->isHitArmed(hit));
+    QCOMPARE(cm->lamp(*b), ControlMap::LampOff);
+    QCOMPARE(lastLight(m_stub, 20), 30);
+
+    // Its cue live: lit (it was MIDI 15, the board's idle glow).
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    chaser->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
+    QVERIFY(st->isHitArmed(hit));
+    QCOMPARE(cm->lamp(*b), ControlMap::LampStandby);
+    QCOMPARE(lastLight(m_stub, 20), 255);
+
+    // Fired: lit while it runs.
+    send(20, 127);
+    send(20, 0);
+    tick(3);
+    QCOMPARE(cm->lamp(*b), ControlMap::LampRunning);
+    QCOMPARE(lastLight(m_stub, 20), 255);
+    send(20, 127);      // Toggle: let it go
+    send(20, 0);
+    tick(3);
+
+    // GO past its cue: dim again, with no press.
+    ShowControl::Request r;
+    r.chaser = chaser->id();
+    r.command = ShowControl::Go;
+    QVERIFY(m_doc->showControl()->run(r, ShowControl::RouteOther));
+    tick(3);
+    QVERIFY(!st->isHitArmed(hit));
+    QCOMPARE(lastLight(m_stub, 20), 30);
+
+    // The emergency stop on such a key: dim until the show is stopped, then lit.
+    cm->setBinding({ 0, 41, ControlMap::emergencyStop(), ControlMap::StartOnly });
+    QCoreApplication::processEvents();
+    QCOMPARE(lastLight(m_stub, 41), 30);
+    m_doc->outputRuleKeeper()->emergencyStop();
+    tick(3);
+    QCOMPARE(lastLight(m_stub, 41), 255);
+    QCOMPARE(lastLight(m_stub, 20), 30);   // and nothing else is ready after ALL OFF
+}
+
 /* After an emergency stop every light is dark until the next GO, and the
    stop's own control is lit: one status source with the footer and the pad
    (OutputRuleKeeper::emergencyStopped()). */

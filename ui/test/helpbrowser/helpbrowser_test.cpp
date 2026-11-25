@@ -273,6 +273,12 @@ void HelpBrowser_Test::controlSurfacesMatchesCode()
     QVERIFY(flat.contains(QStringLiteral("Companion's too")));
     QVERIFY(flat.contains(QStringLiteral("**Grand Master input**")));
     QVERIFY(flat.contains(QStringLiteral("not set up")));
+    // His 4612 test: Go and Back work now, and the lamps say why they are lit.
+    QVERIFY2(!flat.contains(QStringLiteral("page buttons light nothing and do nothing")),
+             "the PMJ's Go and Back are the Run tab's now");
+    QVERIFY(flat.contains(QStringLiteral("### What the lamps mean")));
+    QVERIFY(flat.contains(QStringLiteral("are the Run tab's GO and Back")));
+    QVERIFY(flat.contains(QStringLiteral("The page in use")));
 }
 
 QTEST_MAIN(HelpBrowser_Test)
