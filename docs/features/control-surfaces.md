@@ -676,9 +676,9 @@ The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
   port. Its 64 pads send on MIDI channel 7 and its buttons on channel 1 (the
   same note numbers, kept apart by channel), its 8 touch strips as pitch bend
   on channels 1-8, its encoder relative. A pad's light takes the Akai colour
-  palette by its value. Where its unnamed buttons sit on the map is not
-  checked on the board yet; PLAY, RECORD, STOP, STOP ALL CLIPS and SHIFT
-  are.
+  palette by its value. The encoder turns and pushes (one control on the
+  map, **Encoder (push)**, free for now); its screen shows three short
+  lines (*qlc*, *console*, then the page or role).
 - **MaizeDMX Playback Controller**: the input profile **MaizeDMX Playback
   Controller** (ten strips of three keys, an LED and a fader; the master
   column; ten X keys; GO and BACK). Its keys light by the note they send.

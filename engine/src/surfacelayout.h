@@ -143,6 +143,13 @@ public:
     QString lampKind() const { return m_lampKind; }
     bool lampsOnOff() const { return m_lampKind == QLatin1String("onOff"); }
 
+    /** The board's own screen, when it has one (the APC64's: 3 lines of 8
+     *  characters): its size, and what each line shows (device setup
+     *  writes them). 0 lines: no screen. */
+    int displayLines() const { return m_displayLines; }
+    int displayChars() const { return m_displayChars; }
+    QStringList displayShows() const { return m_displayShows; }
+
     /** Reads a layout file. Invalid (and @p error says why) when it is not one. */
     static SurfaceLayout fromFile(const QString &path, QString *error = nullptr);
     static SurfaceLayout fromJson(const QByteArray &json, QString *error = nullptr);
@@ -165,6 +172,9 @@ private:
     QString m_name;
     QString m_short;
     QString m_lampKind;
+    int m_displayLines = 0;
+    int m_displayChars = 0;
+    QStringList m_displayShows;
     QSizeF m_size;
     QList<Control> m_controls;
     QList<Section> m_sections;

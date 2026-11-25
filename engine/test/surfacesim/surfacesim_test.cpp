@@ -897,6 +897,11 @@ void SurfaceSim_Test::theApc64SeedsItsDefaults()
     QLCInputProfile *p = apc64.profile();
     QVERIFY(p->channel((6 << 12) | (128 + 23)) != nullptr);
     QVERIFY(p->channel(128 + 91) != nullptr);
+    const SurfaceLayout layout = SurfaceLayout::forProfile(name);
+    QCOMPARE(layout.displayLines(), 3);
+    QCOMPARE(layout.displayChars(), 8);
+    // The encoder and its push are one control.
+    QCOMPARE(layout.indexOf(90), layout.indexOf(128 + 90));
     runList(m_doc);
     QList<int> commands;
     m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {

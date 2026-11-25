@@ -131,6 +131,11 @@ SurfaceLayout SurfaceLayout::fromJson(const QByteArray &json, QString *error)
     l.m_name = root.value(QStringLiteral("name")).toString(l.m_profile);
     l.m_short = root.value(QStringLiteral("short")).toString();
     l.m_lampKind = root.value(QStringLiteral("lampKind")).toString();
+    const QJsonObject display = root.value(QStringLiteral("display")).toObject();
+    l.m_displayLines = display.value(QStringLiteral("lines")).toInt();
+    l.m_displayChars = display.value(QStringLiteral("chars")).toInt();
+    for (const QJsonValue &v : display.value(QStringLiteral("shows")).toArray())
+        l.m_displayShows << v.toString();
     l.m_size = QSizeF(root.value(QStringLiteral("width")).toDouble(), root.value(QStringLiteral("height")).toDouble());
 
     for (const QJsonValue &v : root.value(QStringLiteral("sections")).toArray())

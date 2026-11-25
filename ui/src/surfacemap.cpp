@@ -815,6 +815,15 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
     }
     legend->addStretch(1);
     v->addLayout(legend);
+    if (layout.displayLines() > 0)
+    {
+        QLabel *screen = new QLabel(tr("Its screen (%1 lines of %2 characters) shows: %3.")
+                                        .arg(layout.displayLines()).arg(layout.displayChars())
+                                        .arg(layout.displayShows().join(QStringLiteral(" / "))), block);
+        screen->setObjectName(QStringLiteral("surfaceMapScreen%1").arg(universe));
+        screen->setWordWrap(true);
+        v->addWidget(screen);
+    }
     QLabel *hint = new QLabel(tr("Press or move a control on the board: it lights here. Hover a control for "
                                  "what it does and where."), block);
     hint->setWordWrap(true);
