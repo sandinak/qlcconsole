@@ -204,6 +204,9 @@ void SurfaceSim_Test::cleanup()
     m_stub = nullptr;
     QSettings().remove(DeskRecord::settingsGroup());
     QSettings().remove(QStringLiteral("surfacesetup"));
+    // Each test's backups are its own.
+    QDir(m_backups.path()).removeRecursively();
+    QDir().mkpath(m_backups.path());
 }
 
 void SurfaceSim_Test::theBoardSpeaksMidi()

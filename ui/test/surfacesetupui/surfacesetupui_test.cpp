@@ -21,6 +21,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QLabel>
+#include <QScrollArea>
 #include <QDir>
 #include <QtTest>
 
@@ -288,6 +289,10 @@ void SurfaceSetupUi_Test::shots()
         settle();
         if (QPushButton *r = mgr.findChild<QPushButton *>("surfaceRescan"))
             r->click();
+        settle();
+        // The Controller setup row in view.
+        if (QScrollArea *scroll = mgr.findChild<ShowControlSyncPage *>()->findChild<QScrollArea *>())
+            scroll->ensureWidgetVisible(mgr.findChild<QWidget *>("surfaceRescan"), 50, 200);
         settle();
         QVERIFY(mgr.grab().save(dir.absoluteFilePath(QString("setup-hub-%1.png").arg(tag))));
     }
