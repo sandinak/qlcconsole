@@ -2665,11 +2665,11 @@ void OutputRules_Test::sweepEfx()
     QVERIFY(efx->addFixture(mover->id(), 0));
     m_doc->addFunction(efx);
     Chaser *a = listOf(efx);
-    /* The stop holds pan and tilt where they are (Q326): run again, the
-       circle must move off that point within the sweep's eight frames to be
-       seen driving it, so one round is 400 ms, not the default. */
-    efx->setDuration(400);
-    sweep(30, [this]() { tickFrame(30); }, [this, a]() { goList(a); }, [this, a]() { goList(a); });
+    /* The stop holds pan and tilt where they are (Q326), and run again
+       the circle starts from the same point it was at: moved off centre
+       after the stop (afterStop), its GO is seen driving the head. */
+    sweep(30, [this]() { tickFrame(30); }, [this, a]() { goList(a); }, [this, a]() { goList(a); },
+          [efx]() { efx->setXOffset(40); });
 }
 
 void OutputRules_Test::sweepRgbMatrix()
