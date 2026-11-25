@@ -26,6 +26,7 @@
 
 #include "wleddevicesdialog.h"
 #include "wledconfigcheck.h"
+#include "wleddiscovery.h"
 #include "inputoutputmap.h"
 #include "qlcioplugin.h"
 #include "outputpatch.h"
@@ -222,7 +223,7 @@ QString WledDevicesDialog::problem(const QList<Device> &devices,
         const QString ip = devices.at(i).ip.trimmed();
         const QString which = i == 0 ? tr("The primary") : tr("Backup %1").arg(i);
         if (ip.isEmpty())
-            return tr("%1 has no IP address: fill it in, or remove it.").arg(which);
+            return tr("%1 has no IP address or host name, and none was found on the network: type one in, or remove it.").arg(which);
         if (!validAddress(ip))
             return tr("%1: \"%2\" is not an IP address or host name.").arg(which, ip);
         if (seen.contains(ip.toLower()))
@@ -233,6 +234,77 @@ QString WledDevicesDialog::problem(const QList<Device> &devices,
                        .arg(ip).arg(usedElsewhere.value(ip) + 1);
     }
     return QString();
+}
+
+/*********************************************************************
+ * Where a WLED can be reached
+ *********************************************************************/
+
+QString WledDevicesDialog::addressOf(Doc *doc, Fixture *fx)
+{
+    if (fx == nullptr || fx->connection() != Fixture::Network
+        || fx->transport() != Fixture::WledTransport)
+        return QString();
+    if (!fx->ipAddress().trimmed().isEmpty())
+        return fx->ipAddress().trimmed();
+    /* Known by its hardware address (MAC) alone: the address it answers
+       at now is where it is. */
+    WledDiscovery *found = WledDiscovery::instance();
+    if (found == nullptr || fx->macAddress().isEmpty() || doc == nullptr)
+        return QString();
+    const QString want = WledDiscovery::macKey(fx->macAddress());
+    foreach (const WledDiscovery::Device &d, found->devices())
+        if (d.mac == want && !d.ip.isEmpty())
+            return d.ip;
+    return QString();
+}
+
+QStringList WledDevicesDialog::suggestionsFor(Doc *doc, const QHash<QString, quint32> &elsewhere)
+{
+    QStringList out;
+    foreach (Fixture *fx, doc->fixtures())
+    {
+        const QString ip = addressOf(doc, fx);
+        if (!ip.isEmpty() && !elsewhere.contains(ip) && !out.contains(ip))
+            out << ip;
+    }
+    // What the network says is there, in the show or not.
+    if (WledDiscovery *found = WledDiscovery::instance())
+    {
+        foreach (const WledDiscovery::Device &d, found->devices())
+        {
+            if (!d.ip.isEmpty() && !elsewhere.contains(d.ip) && !out.contains(d.ip))
+                out << d.ip;
+        }
+    }
+    out.sort();
+    return out;
+}
+
+QList<WledDevicesDialog::Device> WledDevicesDialog::withKnownPrimary(
+    Doc *doc, quint32 universe, const QList<Device> &devices, const QHash<QString, quint32> &elsewhere)
+{
+    QList<Device> out = devices;
+    if (out.isEmpty() || !out.first().ip.trimmed().isEmpty())
+        return out;
+    /* The primary was never typed: when exactly one WLED fixture on this
+       universe can be reached (and is not already a backup), it is that.
+       With several, nothing is guessed: they are offered as suggestions. */
+    QStringList candidates;
+    foreach (Fixture *fx, doc->fixtures())
+    {
+        if (fx == nullptr || fx->universe() != universe)
+            continue;
+        const QString ip = addressOf(doc, fx);
+        bool listed = false;
+        foreach (const Device &d, devices)
+            listed = listed || d.ip.trimmed().toLower() == ip.toLower();
+        if (!ip.isEmpty() && !listed && !elsewhere.contains(ip) && !candidates.contains(ip))
+            candidates << ip;
+    }
+    if (candidates.count() == 1)
+        out[0].ip = candidates.first();
+    return out;
 }
 
 /*********************************************************************
@@ -275,21 +347,15 @@ bool WledDevicesDialog::edit(Doc *doc, quint32 universe, quint32 line, QWidget *
         }
     }
 
-    /* WLED has no discovery of its own; what the show already knows of are
-       its WLED fixtures' addresses. */
-    QStringList suggestions;
-    foreach (Fixture *fx, doc->fixtures())
-        if (fx != nullptr && fx->connection() == Fixture::Network
-            && fx->transport() == Fixture::WledTransport && !fx->ipAddress().isEmpty()
-            && !elsewhere.contains(fx->ipAddress()) && !suggestions.contains(fx->ipAddress()))
-            suggestions << fx->ipAddress();
-    suggestions.sort();
+    const QStringList suggestions = suggestionsFor(doc, elsewhere);
 
-    const QList<Device> before = fromParameters(op->getPluginParameters());
+    const QList<Device> before = withKnownPrimary(doc, universe,
+                                                  fromParameters(op->getPluginParameters()), elsewhere);
     WledDevicesDialog dlg(before, suggestions, elsewhere, parent);
     dlg.setWindowTitle(tr("WLED devices — universe %1").arg(universe + 1));
-    if (dlg.exec() != QDialog::Accepted || dlg.devices() == before)
-        return false;
+    if (dlg.exec() != QDialog::Accepted
+        || dlg.devices() == before)
+        return false;      // unchanged: no change, no undo step
 
     if (io->patchUndo() != nullptr)
         io->patchUndo()->capture(QList<quint32>() << universe,

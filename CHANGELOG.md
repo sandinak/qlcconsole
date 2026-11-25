@@ -61,6 +61,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   lamps are unchanged. The Control surfaces hub and the help say what each
   lamp means.
 
+- **A WLED known by its MAC is not "missing its IP"**: a WLED fixture saved with a hardware address but no IP now takes the address the WLED answers at on the network, the WLED devices dialog starts from it (and offers every WLED found), and when there is truly none it says nothing was found on the network and to type an IP or host name.
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

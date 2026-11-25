@@ -452,6 +452,11 @@ void WledDiscovery::takeInfo(const QString &ip, const QString &host, const QByte
  * What is found, against the show
  *********************************************************************/
 
+QString WledDiscovery::macKey(const QString &mac)
+{
+    return normalMac(mac);
+}
+
 QString WledDiscovery::keyOf(const Device &device)
 {
     return device.mac.isEmpty() ? device.ip : device.mac;
@@ -542,6 +547,9 @@ void WledDiscovery::reconcile()
         Fixture *fx = fixtureFor(d);
         if (fx != nullptr && fx->macAddress().isEmpty())
             fx->setMacAddress(d.mac);
+        /* Known by its MAC alone: it is where it answers. */
+        else if (fx != nullptr && fx->ipAddress().trimmed().isEmpty() && !d.ip.isEmpty())
+            fx->setIPAddress(d.ip);
     }
     publish();
 }
