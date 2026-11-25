@@ -60,9 +60,9 @@ ControlMapPanel::ControlMapPanel(Doc *doc, QWidget *parent)
 
     QVBoxLayout *lay = new QVBoxLayout(this);
     lay->setContentsMargins(0, 0, 0, 0);
-    m_empty = new QLabel(tr("No triggers yet. Right-click a cue list, cue or hit in the Show Tree (or, in "
-                            "the Classic QLC+ view, a scene or effect), and choose Assign to "
-                            "Control…; then press the key, pad or button that should fire it."), this);
+    m_empty = new QLabel(tr("No triggers yet. Right-click a cue list, cue or hit in the Show Tree and "
+                            "choose Assign to Control…, then press the key, pad or button that "
+                            "should fire it."), this);
     m_empty->setObjectName(QStringLiteral("controlMapEmpty"));
     m_empty->setWordWrap(true);
     m_empty->setStyleSheet(QStringLiteral("color: gray;"));
