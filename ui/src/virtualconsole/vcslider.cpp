@@ -53,6 +53,7 @@
 #include "speedmasters.h"
 #include "groupmasters.h"
 #include "outputrulekeeper.h"
+#include "fixturerest.h"
 #include "fixturegroup.h"
 #include "vcslider.h"
 #include "apputil.h"
@@ -1813,20 +1814,30 @@ void VCSlider::writeDMXLevel(MasterTimer *timer, QList<Universe *> universes)
     QMutexLocker locker(&m_levelValueMutex);
 
     /* Let go of by the emergency stop and not moved since: nothing written,
-       its faders gone (rebuilt by the move: m_levelValueChanged). */
+       every channel but pan and tilt let go of, once (the move rebuilds
+       them: m_levelValueChanged). Pan and tilt stay where the slider has
+       them, as Stop ALL leaves every head (FixtureRest): let go of, a
+       Show-only one would fall to its safe value and the head would swing
+       across the stage. */
     const quint32 stopped = m_stopSession.load(std::memory_order_relaxed);
     if (stopped != 0)
     {
         if (m_liveEpoch.load(std::memory_order_relaxed) < stopped)
         {
+            if (m_stopLetGo == stopped)
+                return;
+            m_stopLetGo = stopped;
+            Doc *doc = m_doc;
             QMutexLocker fLocker(&m_fadersMapMutex);
             for (const QSharedPointer<GenericFader> &fader : std::as_const(m_fadersMap))
                 if (!fader.isNull())
-                    fader->requestDelete();
-            m_fadersMap.clear();
+                    fader->release([doc](const FadeChannel &fc) {
+                        return !FixtureRest::holdsPosition(doc, fc.fixture(), fc.channel());
+                    }, 0);
             return;
         }
         m_stopSession.store(0, std::memory_order_relaxed);
+        m_stopLetGo = 0;
         m_levelValueChanged = true;
     }
 

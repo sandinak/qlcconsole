@@ -531,6 +531,8 @@ protected:
     std::atomic<quint32> m_liveEpoch { 0 };
     /** The emergency stop that let go of it (0: none), until it is moved */
     std::atomic<quint32> m_stopSession { 0 };
+    /** The stop whose let-go is done (m_levelValueMutex), so it is once */
+    quint32 m_stopLetGo = 0;
     QMutex m_levelValueMutex;
     bool m_levelValueChanged;
     uchar m_levelValue;

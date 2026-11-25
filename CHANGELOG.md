@@ -20,7 +20,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   they stop exactly the same way. Stop All is never greyed: a Simple Desk
   level or a Virtual Console Level slider held with nothing running is
   taken out too, and stays out until its fader is moved again (a Click & Go
-  pick counts as a move). On Windows and Linux its key is
+  pick counts as a move); pan and tilt they hold stay where they are, so no
+  head swings. On Windows and Linux its key is
   **Ctrl+Shift+Backspace** (Ctrl+Shift+Esc opened the Task Manager on
   Windows); the Mac keeps ⌘⇧Esc. ALL OFF and Stop from the phone page or
   Companion no longer need the show's PIN (Q323); the PIN screen has its own

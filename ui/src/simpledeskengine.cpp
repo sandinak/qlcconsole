@@ -34,6 +34,7 @@
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "outputrulekeeper.h"
+#include "fixturerest.h"
 
 #define PROP_ID "id"
 
@@ -49,7 +50,7 @@ SimpleDeskEngine::SimpleDeskEngine(Doc* doc)
     Q_ASSERT(doc != NULL);
     doc->masterTimer()->registerDMXSource(this);
     /* The emergency stop (ALL OFF, Stop All): what the Simple Desk had up,
-       on any channel, and not moved since, is let go of -- a level held
+       on any channel but pan and tilt, and not moved since, is let go of -- a level held
        with nothing running is what Stop All is for (E7: told later if the
        stop came from another thread, so a channel pushed again in the
        meantime keeps its new value). */
@@ -84,6 +85,12 @@ void SimpleDeskEngine::releaseForStop(quint32 session)
         {
             if (m_channelEpochs.value(it.key()) >= session)
                 continue;           // pushed after the stop: the hand's
+            /* Pan and tilt stay where the desk has them, as Stop ALL leaves
+               every head (FixtureRest): let go of, the channel would fall
+               to its definition's default -- usually 0 -- and the head
+               would swing across the stage. */
+            if (FixtureRest::holdsPositionAt(m_doc, it.key()))
+                continue;
             drop << it.key();
         }
     }

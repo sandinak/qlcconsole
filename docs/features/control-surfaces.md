@@ -166,7 +166,9 @@ button under the Control Map table.
   stop, the phone page, Companion's ALL OFF and QLab's or MSC's ALL OFF.
   Each does the same: every function stops, every Show-only fixture is cut,
   every fixture goes to rest, and the Simple Desk and Virtual Console
-  **Level** sliders let go of what they hold. None can drift from the others.
+  **Level** sliders let go of what they hold -- all but pan and tilt, which
+  stay where they are, as Stop All leaves every head, so no head swings
+  across the stage. None can drift from the others.
 - **Stop All is never greyed.** A level held with nothing running (a Simple
   Desk channel, a Level slider) is what it is for too, so it is always
   there. A level let go of stays out, through a GO, until you move its
@@ -532,7 +534,8 @@ after any build that changes a surface, and say which build.
    channel on an ordinary dimmer (not Show only), or a Virtual Console
    Level slider, so a light is up with nothing running. *Expect:* **Stop
    All** is not greyed; pressing it takes the light out, and it stays out
-   through a GO until you move that fader again.
+   through a GO until you move that fader again. With a moving head's pan
+   held on the desk or a slider too: the head does not move.
 3. **Desk STOP with the switch off:** learn **Emergency Stop…** on a desk
    button, then turn **Control Surfaces** off (View ▸ Workspace ▸ Tabs &
    Features…). Start a scene and press the button in Design, with a Learn
