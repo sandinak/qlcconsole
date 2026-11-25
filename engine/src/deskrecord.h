@@ -32,6 +32,7 @@
 #include "qlcengine_export.h"
 
 class QLCIOPlugin;
+class QTimer;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -163,10 +164,19 @@ public:
 public:
     /** Listen for @p role's control: STOP a button pressed, released and
      *  pressed again; GO and Back a button; the Grand Master a fader. The
-     *  wrong kind is refused (learnRefused()). False while locked. */
+     *  wrong kind is refused (learnRefused()), and a control refused once
+     *  stays refused for this learn (a fader pulled to 0 is no press). The
+     *  show's emergency stop is refused for GO, Back and the Grand Master.
+     *  Another role's control still does its job meanwhile. A learn ends
+     *  by itself after learnTimeoutMs(), on a load and on a mode change
+     *  (learnCancelled()). False while locked. */
     bool learn(Role role);
+    /** Stop listening, nothing learned (learnCancelled() with no words). */
     void cancelLearn();
     bool isLearning() const { return m_learning; }
+    /** How long a learn listens before it gives up (ms; 30 s). */
+    int learnTimeoutMs() const { return m_learnTimeoutMs; }
+    void setLearnTimeoutMs(int ms) { m_learnTimeoutMs = ms; }
     Role learningRole() const { return m_learnRole; }
     /** STOP's two presses must come within this (ms). */
     void setConfirmMs(int ms) { m_confirmMs = ms; }
@@ -249,6 +259,9 @@ signals:
     void changed();
     void learned(DeskRecord::Role role);
     void learnRefused(const QString &why);
+    /** A learn ended with nothing learned: @p why says why (it ran out of
+     *  time, a show loaded, the mode changed); empty for cancelLearn(). */
+    void learnCancelled(const QString &why);
     /** STOP's first press heard: press it again. */
     void learnConfirming(DeskRecord::Role role);
     /** A role did its job ("ALL OFF", "GO Act 2 main"). */
@@ -267,8 +280,12 @@ private:
     void applyStatic();
     qint64 now() const { return m_clock ? m_clock() : m_elapsed.elapsed(); }
     void learnHeard(quint32 universe, quint32 channel, uchar value);
-    void finishLearn(quint32 universe, quint32 channel);
-    void refuseLearn(const QString &why);
+    void finishLearn(quint32 universe, quint32 channel, uchar value);
+    void refuseLearn(quint64 k, const QString &why);
+    /** End a learn with nothing learned; @p why for learnCancelled(). */
+    void endLearn(const QString &why);
+    /** Whether @p universe / @p channel holds the show's emergency stop. */
+    bool isShowStop(quint32 universe, quint32 channel) const;
     bool isFaderOnProfile(quint32 universe, quint32 channel, bool *known) const;
     QString controlName(quint32 universe, quint32 channel) const;
     void stopPressed(quint64 k, uchar value);
@@ -294,6 +311,10 @@ private:
     bool m_pendingReleased = false;
     int m_pendingPresses = 0;
     QElapsedTimer m_pendingAt;
+    /** Controls refused in this learn: never taken by it after. */
+    QSet<quint64> m_learnRefused;
+    int m_learnTimeoutMs = 30000;
+    QTimer *m_learnTimer = nullptr;
     /** Faders: the distinct values a control sent while learning. */
     QHash<quint64, QSet<int>> m_faderSeen;
     /** The press that taught a role, swallowed until its release. */

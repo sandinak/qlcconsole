@@ -3431,6 +3431,11 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
         if (m_padRun->watchStop(universe, GamepadRole::Role(role), value))
             return;
     }
+    /* Q309: a control this computer's desk has (its GO, Back, Grand
+       Master, STOP) is the desk's alone -- the emergency stop above still
+       reads it, nothing else on the pad does. */
+    if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->isStaticControl(universe, channel))
+        return;
     if (m_capturingPan)
     {
         // Bound by hand: what the old binding left pushed goes (H2).

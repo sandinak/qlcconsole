@@ -67,7 +67,8 @@ public:
     QString lastRefusal() const { return m_lastRefusal; }
 
 private slots:
-    /** Doc::inputOutputMap()'s raw per-line input feed. Filtered to just the
+    /** Doc::inputOutputMap()'s per-line input feed, without this
+     *  computer's desk controls (showInputValueChanged()). Filtered to just the
      *  channel numbers this overlay knows (the PMJ's, from its profile) so it
      *  doesn't need to know which universe the board happens to be patched
      *  to. */

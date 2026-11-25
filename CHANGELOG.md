@@ -27,6 +27,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Import… carry it to another computer, and Show Review has a This computer
   section (Q305-Q309, Q314-Q319, Q322).
 
+- **This computer's desk, safer learns**: a deleted universe takes its desk
+  roles off live; a learn never takes a fader pulled to 0 as a button nor
+  the show's emergency stop for GO, Back or the Grand Master, ends by itself
+  (30 s, leaving the panel, Operate, a load) and leaves the desk's other
+  roles working; a re-learned Grand Master waits to pick up; the PMJ
+  overlay and the pad no longer also act on a desk control.
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

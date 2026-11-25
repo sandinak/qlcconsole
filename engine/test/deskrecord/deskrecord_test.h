@@ -55,6 +55,11 @@ private slots:
     void patchItIsNamedAndUndoable();
     void grandMasterPicksUpAfterLoadReplugWake();
     void reviewLinesSayWhatIsReachable();
+    void removingThePatchedUniverseUnbinds();
+    void learnNeverTakesAFaderPulledToZero();
+    void anOpenLearnEndsAndTheDeskStillWorks();
+    void learnRefusesTheShowsEmergencyStop();
+    void reLearnedGrandMasterPicksUp();
 
 private:
     /** One input value, through the input map (the dispatch point). */

@@ -192,7 +192,14 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   words: a GO on a fader (*… sends a range of values: it is a fader or knob,
   not a button*), the Grand Master on a button (*… is a button. The Grand
   Master takes a fader.*). A control that is already another role's is
-  refused, naming it. **Cancel** stops a learn and keeps what was there.
+  refused, naming it, and still does its own job meanwhile (a GO pressed
+  while Back is learning still GOes). A control refused once stays refused
+  for that learn, so a fader pulled down to 0 never turns into a button.
+  GO, Back and the Grand Master refuse the show's emergency stop control
+  (*… is the show's emergency stop*): the show's stop would be blocked
+  there. **Cancel** stops a learn and keeps what was there; a learn also
+  ends by itself after 30 seconds with nothing pressed, when you leave the
+  panel, when the show goes to Operate and when another show loads.
 - **Kept on this computer, never in the show.** The record is in this
   computer's settings, by the device's identity: a MIDI port by its name on
   a Mac, by the *2-* Windows puts before a second unit of one name, by its
@@ -230,7 +237,9 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   the device sends in the first half second is its own state dump and moves
   nothing; then the fader does nothing until it reaches the Grand Master
   (the row and the chip say *GM waiting: bring the fader to 100 %*), and
-  follows from there. A pull to 0 always applies at once.
+  follows from there. A pull to 0 always applies at once. A Grand Master
+  learned again on another fader waits the same way, so the stage does not
+  jump to where the new fader sits.
 - **On** turns one role off on this computer (Q317): its control is the
   show's again. The tick is kept with the computer.
 - **The show's PIN guards the desk** (board Q319): with a PIN set, every

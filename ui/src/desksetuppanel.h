@@ -63,6 +63,10 @@ public:
 public slots:
     void refresh();
 
+protected:
+    /** Hidden (another tab, another page, the window): a learn ends. */
+    void hideEvent(QHideEvent *event) override;
+
 private:
     /** The PIN asked when the show has one; true when the change may go on. */
     bool unlocked(const QString &why);

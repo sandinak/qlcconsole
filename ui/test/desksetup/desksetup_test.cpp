@@ -149,6 +149,35 @@ void DeskSetup_Test::thePanelLearnsEachRole()
     QVERIFY(!desk->isSet(D::Back));
 }
 
+/* An open learn takes the next control touched, and the desk's other roles
+   went quiet while it listened: it ends with the panel, or by itself. */
+void DeskSetup_Test::anOpenLearnEndsWithThePanel()
+{
+    D *desk = m_doc->deskRecord();
+    QWidget host;
+    DeskSetupPanel *panel = new DeskSetupPanel(m_doc, &host);
+    host.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&host));
+    // Hidden (another tab, Operate's page): the learn ends, nothing learned.
+    panel->learnButton(D::Back)->click();
+    QVERIFY(desk->isLearning());
+    panel->hide();
+    QVERIFY2(!desk->isLearning(), "a learn stayed open on a hidden panel");
+    send(0, 203, 127);
+    send(0, 203, 0);
+    QVERIFY(!desk->isSet(D::Back));
+    // Left open on screen: it ends by itself, and the panel says so.
+    panel->show();
+    desk->setLearnTimeoutMs(50);
+    panel->learnButton(D::Back)->click();
+    QCOMPARE(panel->learnButton(D::Back)->text(), QStringLiteral("Cancel"));
+    QTRY_VERIFY(!desk->isLearning());
+    QVERIFY2(panel->learnLine()->text().contains("nothing was pressed"), qPrintable(panel->learnLine()->text()));
+    QVERIFY(!panel->learnLine()->isHidden());
+    QCOMPARE(panel->learnButton(D::Back)->text(), QStringLiteral("Learn…"));
+    desk->setLearnTimeoutMs(30000);
+}
+
 void DeskSetup_Test::theOnTickTurnsOneRoleOff()
 {
     learnGo();

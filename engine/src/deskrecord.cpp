@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QSettings>
+#include <QTimer>
 #include <QFile>
 #include <QUrl>
 
@@ -70,6 +71,13 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
     for (int r = 0; r < RoleCount; ++r)
         m_universes[r] = kInvalid;
     m_elapsed.start();
+    m_learnTimer = new QTimer(this);
+    m_learnTimer->setSingleShot(true);
+    connect(m_learnTimer, &QTimer::timeout, this, [this]() {
+        if (m_learning)
+            endLearn(tr("Learn stopped: nothing was pressed in %1 seconds.")
+                         .arg(qMax(1, m_learnTimeoutMs / 1000)));
+    });
     load();
 
     if (InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr)
@@ -81,6 +89,10 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, &DeskRecord::rebind);
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &DeskRecord::rebind);
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &DeskRecord::rebind);
+        /* A universe removed takes its patch with it (removeUniverse() says
+           only universeRemoved): a role there is no longer live. */
+        connect(iom, &InputOutputMap::universeAdded, this, &DeskRecord::rebind);
+        connect(iom, &InputOutputMap::universeRemoved, this, &DeskRecord::rebind);
         // A replug: found again, and the Grand Master waits to pick up (Q316).
         connect(iom, &InputOutputMap::inputDeviceConnected, this, [this]() {
             rebind();
@@ -92,8 +104,17 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
         // A load: another patch, and the Grand Master waits to pick up.
         connect(m_doc, &Doc::loaded, this, [this]() {
             m_unlocked = false;
+            if (m_learning)
+                endLearn(tr("Learn stopped: another show was loaded."));
             rebind();
             rearmGrandMaster();
+        });
+        /* A learn open while the operator goes to Operate (or back) would
+           take the next control touched: it ends with the mode. */
+        connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
+            if (m_learning)
+                endLearn(mode == Doc::Operate ? tr("Learn stopped: the show went to Operate.")
+                                              : tr("Learn stopped: the mode changed."));
         });
         if (ControlMap *cm = m_doc->controlMap())
             connect(cm, &ControlMap::runTabListChanged, this, [this]() { emit goTargetChanged(goTargetText()); });
@@ -761,18 +782,39 @@ bool DeskRecord::learn(Role role)
     m_pendingPresses = 0;
     m_pendingReleased = false;
     m_faderSeen.clear();
+    m_learnRefused.clear();
+    // Never open for good: an open learn takes the next control touched.
+    m_learnTimer->start(qMax(1, m_learnTimeoutMs));
     updateConnections();
     return true;
 }
 
 void DeskRecord::cancelLearn()
 {
-    if (!m_learning)
-        return;
+    if (m_learning)
+        endLearn(QString());
+}
+
+void DeskRecord::endLearn(const QString &why)
+{
     m_learning = false;
+    m_learnTimer->stop();
     m_faderSeen.clear();
+    m_learnRefused.clear();
     m_pendingKey = ~quint64(0);
     updateConnections();
+    emit learnCancelled(why);
+}
+
+bool DeskRecord::isShowStop(quint32 universe, quint32 channel) const
+{
+    ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr;
+    if (cm == nullptr)
+        return false;
+    for (const ControlMap::Binding &b : cm->bindingsOn(universe, channel))
+        if (b.target.type == ControlMap::EmergencyStopTarget)
+            return true;
+    return false;
 }
 
 bool DeskRecord::isFaderOnProfile(quint32 universe, quint32 channel, bool *known) const
@@ -806,14 +848,18 @@ QString DeskRecord::controlName(quint32 universe, quint32 channel) const
     return dot >= 0 ? name.mid(dot + 3) : name;
 }
 
-void DeskRecord::refuseLearn(const QString &why)
+void DeskRecord::refuseLearn(quint64 k, const QString &why)
 {
+    /* Refused once, refused for this learn: a fader's next values (down to
+       0) must not start a press of their own and be taken as a button. */
+    m_learnRefused.insert(k);
+    m_faderSeen.remove(k);
     m_pendingKey = ~quint64(0);
     m_pendingPresses = 0;
     emit learnRefused(why);
 }
 
-void DeskRecord::finishLearn(quint32 universe, quint32 channel)
+void DeskRecord::finishLearn(quint32 universe, quint32 channel, uchar value)
 {
     InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
     Binding b;
@@ -825,7 +871,9 @@ void DeskRecord::finishLearn(quint32 universe, quint32 channel)
     b.on = true;
     const Role role = m_learnRole;
     m_learning = false;
+    m_learnTimer->stop();
     m_faderSeen.clear();
+    m_learnRefused.clear();
     m_pendingKey = ~quint64(0);
     // A role learned on a control another role had: that one gives it up.
     for (Role r : roles())
@@ -835,6 +883,18 @@ void DeskRecord::finishLearn(quint32 universe, quint32 channel)
     m_bindings[role] = b;
     save();
     rebind();
+    /* Q316: a Grand Master learned on another fader picks up like one
+       found after a load: it waits until it reaches the master, from
+       where the learn left it, never jumping the stage there. */
+    if (role == GrandMaster)
+    {
+        m_gmPickup.rearmFromHand(value);
+        if (grandMasterWaiting() != m_gmWasWaiting)
+        {
+            m_gmWasWaiting = grandMasterWaiting();
+            emit grandMasterWaitingChanged(m_gmWasWaiting);
+        }
+    }
     emit learned(role);
     emit changed();
 }
@@ -843,8 +903,17 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
 {
     const quint64 k = controlKey(universe, channel);
     const QString name = controlName(universe, channel);
-    if (identityOfUniverse(universe).isEmpty())
+    if (identityOfUniverse(universe).isEmpty() || m_learnRefused.contains(k))
         return;
+    /* Q315: learned here, the show's emergency stop on this control would
+       be blocked, and the show's STOP would GO or move the master. */
+    if (m_learnRole != Stop && isShowStop(universe, channel))
+    {
+        if (value > 0)
+            refuseLearn(k, tr("%1 is the show's emergency stop. Choose another control for %2.")
+                               .arg(name, roleName(m_learnRole)));
+        return;
+    }
     bool known = false;
     const bool fader = isFaderOnProfile(universe, channel, &known);
 
@@ -853,12 +922,12 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
         if (known && !fader)
         {
             if (value > 0)
-                refuseLearn(tr("%1 is a button. The Grand Master takes a fader.").arg(name));
+                refuseLearn(k, tr("%1 is a button. The Grand Master takes a fader.").arg(name));
             return;
         }
         if (known && fader)
         {
-            finishLearn(universe, channel);
+            finishLearn(universe, channel, value);
             return;
         }
         /* No profile: a fader is told by moving. Two values above 0 with no
@@ -868,13 +937,14 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
         if (value == 0)
         {
             if (seen.count() == 1)
-                refuseLearn(tr("%1 is a button. The Grand Master takes a fader.").arg(name));
-            seen.clear();
+                refuseLearn(k, tr("%1 is a button. The Grand Master takes a fader.").arg(name));
+            else
+                seen.clear();
             return;
         }
         seen.insert(value);
         if (seen.count() >= 2)
-            finishLearn(universe, channel);
+            finishLearn(universe, channel, value);
         return;
     }
 
@@ -882,7 +952,7 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
     if (known && fader)
     {
         if (value > 0)
-            refuseLearn(tr("%1 is a fader, knob or encoder. %2 takes a button.").arg(name, roleName(m_learnRole)));
+            refuseLearn(k, tr("%1 is a fader, knob or encoder. %2 takes a button.").arg(name, roleName(m_learnRole)));
         return;
     }
     if (value == 0)
@@ -892,7 +962,7 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
         m_pendingReleased = true;
         // GO and Back: one press and its release.
         if (m_learnRole != Stop)
-            finishLearn(universe, channel);
+            finishLearn(universe, channel, value);
         return;
     }
     const bool fresh = k != m_pendingKey || !m_pendingAt.isValid() || m_pendingAt.elapsed() > m_confirmMs;
@@ -911,13 +981,13 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
     {
         // No release between: a held button repeats its value, a fader does not.
         if (value != m_pendingValue)
-            refuseLearn(tr("%1 sends a range of values: it is a fader or knob, not a button. "
+            refuseLearn(k, tr("%1 sends a range of values: it is a fader or knob, not a button. "
                            "%2 takes a button.").arg(name, roleName(m_learnRole)));
         return;
     }
     // STOP: pressed, released, pressed again. The second press is the learn's.
     m_swallow.insert(k);
-    finishLearn(universe, channel);
+    finishLearn(universe, channel, value);
 }
 
 /*****************************************************************************
@@ -970,15 +1040,20 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
 
     if (m_learning)
     {
-        // Another role's control is not a new choice (re-learning a role's own is).
-        if (desk && role != m_learnRole && value > 0)
+        /* Another role's control is not a new choice (re-learning a role's
+           own is), and it still does its job: a learn left open never
+           takes the desk's GO, Back or Grand Master away. */
+        if (!desk || role == m_learnRole)
         {
-            emit learnRefused(tr("%1 is already this computer's %2. Choose another control.")
-                                  .arg(controlName(universe, channel), roleName(role)));
+            learnHeard(universe, channel, value);
             return;
         }
-        learnHeard(universe, channel, value);
-        return;
+        if (value > 0 && !m_learnRefused.contains(k))
+        {
+            m_learnRefused.insert(k);   // said once, not on every value of a fader
+            emit learnRefused(tr("%1 is already this computer's %2. Choose another control.")
+                                  .arg(controlName(universe, channel), roleName(role)));
+        }
     }
 
     if (!desk)

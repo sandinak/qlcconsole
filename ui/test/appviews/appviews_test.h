@@ -379,6 +379,7 @@ private slots:
 
     /** CS1: the PMJ overlay hears only its own board, and edits nothing in Operate. */
     void aPmjOverlayHearsOnlyItsOwnBoard();
+    void aPmjControlTheDeskHasIsNotAlsoThePmjs();
     void aPmjFaderOrEncoderInOperateEditsNothing();
     void masterMoveKeepsShowLamps();
     void aSecondPmjBoardIsNamedNotIgnoredInSilence();

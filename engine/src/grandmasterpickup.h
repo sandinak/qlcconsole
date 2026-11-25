@@ -60,6 +60,16 @@ public:
         m_last = -1;
     }
 
+    /** A fader just learned for the master, last at @p last (0..255): it
+     *  waits to pick up as after a load, with no dump window (what follows
+     *  is a hand on it, and the hint says at once where to bring it). */
+    void rearmFromHand(int last)
+    {
+        m_rearmedAt = -1;
+        m_waiting = true;
+        m_last = last;
+    }
+
     /** Whether @p value, arriving at @p now while the master is at
      *  @p current (both 0..255), moves the master. */
     bool accept(int value, int current, qint64 now)

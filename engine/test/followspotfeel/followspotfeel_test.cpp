@@ -1261,6 +1261,50 @@ void FollowSpotFeel_Test::reviewAHandBoundStickHeldAsItsJobGoes()
                                            "%1 m in 20 frames: the last push stays in m_panNorm").arg(d)));
 }
 
+/* Q309, the one dispatch point: a control this computer's desk has is the
+   desk's alone. The pad's reader listened to the raw input, so a desk role
+   on a pad control also did that control's pad job. */
+void FollowSpotFeel_Test::aDeskControlIsNotAlsoThePads()
+{
+    Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };
+    IOPluginStub *stub = loadPadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControllerJobs *jobs = h.pc->controllerJobs();
+    jobs->resetAll();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    auto restore = qScopeGuard([&]() {
+        jobs->resetAll();
+        iom->setStaticControls({});
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    });
+    if (FollowSpotMover *m = h.pc->followSpotMover())
+        m->setFixedDt(MasterTimer::tick() / 1000.0);
+    h.pc->bindPanAxis();
+    h.pc->slotControllerInputChanged(0, 0, 127, QString());
+    h.pc->bindTiltAxis();
+    h.pc->slotControllerInputChanged(0, 1, 127, QString());
+    h.use(h.rig.targetScene);
+
+    auto pushed = [&h]() {
+        const QVector3D at = h.rig.subject->position();
+        h.pc->slotControllerInputChanged(0, 0, 220, QString());
+        for (int i = 0; i < 20; ++i)
+            h.tick();
+        h.pc->slotControllerInputChanged(0, 0, 127, QString());
+        for (int i = 0; i < 20; ++i)
+            h.tick();
+        return double((h.rig.subject->position() - at).length());
+    };
+    // The control case: the stick moves the subject.
+    const double moved = pushed();
+    QVERIFY2(moved > 0.01, qPrintable(QString("control: the stick moved the subject %1 m").arg(moved)));
+    // The stick's control is the desk's (its Grand Master, say): the pad does nothing with it.
+    iom->setStaticControls({ (quint64(0) << 32) | 0u });
+    const double d = pushed();
+    QVERIFY2(d < 0.005, qPrintable(QString("a desk control also moved the follow spot %1 m").arg(d)));
+}
+
 void FollowSpotFeel_Test::windowsAPadsStickMovesNoSpot()
 {
     Harness h { m_doc, makeRig(m_doc), m_doc->masterTimer(), m_doc->programmer() };

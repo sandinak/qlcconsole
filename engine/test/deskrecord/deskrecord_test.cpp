@@ -825,4 +825,166 @@ void DeskRecord_Test::reviewLinesSayWhatIsReachable()
     QVERIFY(desk->reviewNeedsAttention());
 }
 
+/*****************************************************************************
+ * Review round 1
+ *****************************************************************************/
+
+void DeskRecord_Test::removingThePatchedUniverseUnbinds()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // The APC on the last universe, GO learned there.
+    QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    const quint32 last = iom->universesCount() - 1;
+    QVERIFY(last > 0);
+    QVERIFY(iom->setInputPatch(last, m_stub->name(), QString(), 0));
+    learn(D::Go, last, kGo);
+    QCOMPARE(desk->universeOf(D::Go), last);
+    QVERIFY(iom->isStaticControl(last, kGo));
+    // That universe deleted (Connections): the GO is no longer live, and says so.
+    QVERIFY(iom->removeUniverse(int(last)));
+    QVERIFY2(desk->state(D::Go) != D::Live, "a GO on a deleted universe still reads live");
+    QCOMPARE(desk->state(D::Go), D::NotPatched);
+    QVERIFY(iom->staticControls().isEmpty());
+    QVERIFY(desk->reviewNeedsAttention());
+    // A universe added back and patched: live again.
+    QVERIFY(iom->addUniverse());
+    QVERIFY(iom->setInputPatch(iom->universesCount() - 1, m_stub->name(), QString(), 0));
+    QVERIFY(desk->isLive(D::Go));
+}
+
+void DeskRecord_Test::learnNeverTakesAFaderPulledToZero()
+{
+    D *desk = m_doc->deskRecord();
+    QSignalSpy refused(desk, &D::learnRefused);
+    // GO, no profile: a CC fader pulled down to 0 is refused, and stays refused.
+    QVERIFY(desk->learn(D::Go));
+    for (int v : { 5, 4, 3, 2, 1, 0 })
+        send(0, kGm, uchar(v));
+    QVERIFY(refused.count() >= 1);
+    QVERIFY2(!desk->isSet(D::Go), "GO was learned on a fader pulled to 0");
+    QVERIFY(desk->isLearning());
+    // A button after it is still taken.
+    send(0, kGo, 127);
+    send(0, kGo, 0);
+    QVERIFY(desk->isSet(D::Go));
+    QCOMPARE(desk->binding(D::Go).channel, kGo);
+
+    // STOP, no profile: 3, 2, 1, 0, 1 on a fader is no press, release, press.
+    QVERIFY(desk->learn(D::Stop));
+    for (int v : { 3, 2, 1, 0, 1 })
+        send(0, kGm, uchar(v));
+    QVERIFY2(!desk->isSet(D::Stop), "STOP was learned on a fader");
+    desk->cancelLearn();
+}
+
+void DeskRecord_Test::anOpenLearnEndsAndTheDeskStillWorks()
+{
+    D *desk = m_doc->deskRecord();
+    learn(D::Go, 0, kGo);
+    QSignalSpy refused(desk, &D::refused);
+    QSignalSpy cancelled(desk, &D::learnCancelled);
+    // A learn of Back open: the desk's GO still GOes (here: says the Run tab has no list).
+    QVERIFY(desk->learn(D::Back));
+    send(0, kGo, 127);
+    send(0, kGo, 0);
+    QCOMPARE(refused.count(), 1);
+    QVERIFY(refused.first().first().toString().contains("Run tab"));
+    QVERIFY(desk->isLearning());
+    QVERIFY(!desk->isSet(D::Back));
+    // Going to Operate ends it, in words.
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(!desk->isLearning());
+    QCOMPARE(cancelled.count(), 1);
+    QVERIFY(cancelled.first().first().toString().contains("Operate"));
+    m_doc->setMode(Doc::Design);
+    // A show loaded ends it.
+    QVERIFY(desk->learn(D::Back));
+    emit m_doc->loaded();
+    QVERIFY(!desk->isLearning());
+    QCOMPARE(cancelled.count(), 2);
+    // Left alone, it ends by itself; nothing pressed later is taken.
+    desk->setLearnTimeoutMs(50);
+    QVERIFY(desk->learn(D::Back));
+    QTRY_VERIFY(!desk->isLearning());
+    QCOMPARE(cancelled.count(), 3);
+    QVERIFY(cancelled.last().first().toString().contains("nothing was pressed"));
+    send(0, kBack, 127);
+    send(0, kBack, 0);
+    QVERIFY(!desk->isSet(D::Back));
+    // cancelLearn() says nothing.
+    desk->setLearnTimeoutMs(30000);
+    QVERIFY(desk->learn(D::Back));
+    desk->cancelLearn();
+    QCOMPARE(cancelled.count(), 4);
+    QVERIFY(cancelled.last().first().toString().isEmpty());
+}
+
+void DeskRecord_Test::learnRefusesTheShowsEmergencyStop()
+{
+    D *desk = m_doc->deskRecord();
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 red = 210;
+    cm->setBinding({ 0, red, ControlMap::emergencyStop(), ControlMap::Toggle });
+    QSignalSpy refused(desk, &D::learnRefused);
+    for (D::Role r : { D::Go, D::Back, D::GrandMaster })
+    {
+        refused.clear();
+        QVERIFY(desk->learn(r));
+        send(0, red, 127);
+        send(0, red, 0);
+        send(0, red, 60);
+        send(0, red, 90);
+        QVERIFY2(!desk->isSet(r), qPrintable(D::roleName(r)));
+        QVERIFY(refused.count() >= 1);
+        QVERIFY(refused.first().first().toString().contains("the show's emergency stop"));
+        desk->cancelLearn();
+    }
+    QVERIFY(cm->deskBlocked().isEmpty());
+    // The desk's own STOP may share it: both stop.
+    QVERIFY(desk->learn(D::Stop));
+    send(0, red, 127);
+    send(0, red, 0);
+    send(0, red, 127);
+    send(0, red, 0);
+    QVERIFY(desk->isSet(D::Stop));
+}
+
+void DeskRecord_Test::reLearnedGrandMasterPicksUp()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    learn(D::GrandMaster, 0, kGm);
+    iom->setGrandMasterValue(255);
+    // Fader A brought to the master: it follows.
+    send(0, kGm, 255);
+    send(0, kGm, 250);
+    QCOMPARE(int(iom->grandMasterValue()), 250);
+    send(0, kGm, 255);
+    QVERIFY(!desk->grandMasterWaiting());
+    // Re-learned on fader B, near the bottom: the stage stays at 100 % and the hint says so.
+    const quint32 faderB = kGm + 1;
+    QVERIFY(desk->learn(D::GrandMaster));
+    send(0, faderB, 10);
+    send(0, faderB, 20);
+    QCOMPARE(desk->binding(D::GrandMaster).channel, faderB);
+    send(0, faderB, 21);
+    QVERIFY2(iom->grandMasterValue() == 255, "a re-learned GM fader jumped the master");
+    QVERIFY(desk->grandMasterWaiting());
+    QVERIFY(desk->grandMasterHint().contains("100 %"));
+    // Brought up through the master: picked up.
+    send(0, faderB, 254);
+    send(0, faderB, 200);
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+    QVERIFY(!desk->grandMasterWaiting());
+    // A pull to 0 is never held back.
+    QVERIFY(desk->learn(D::GrandMaster));
+    send(0, kGm, 30);
+    send(0, kGm, 40);
+    send(0, kGm, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+}
+
 QTEST_MAIN(DeskRecord_Test)

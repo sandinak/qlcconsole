@@ -35,6 +35,7 @@ private slots:
     void cleanup();
 
     void thePanelLearnsEachRole();
+    void anOpenLearnEndsWithThePanel();
     void theOnTickTurnsOneRoleOff();
     void thePinGuardsThePanel();
     void exportAndImportFromThePanel();

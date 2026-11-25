@@ -151,6 +151,11 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
         m_learnLine->setText(why);
         m_learnLine->show();
     });
+    connect(m_desk, &DeskRecord::learnCancelled, this, [this](const QString &why) {
+        m_learnLine->setText(why);
+        m_learnLine->setVisible(!why.isEmpty());
+        refresh();
+    });
     connect(m_desk, &DeskRecord::learnConfirming, this, [this]() {
         m_learnLine->setText(tr("Release it and press it again."));
         m_learnLine->show();
@@ -163,6 +168,15 @@ DeskSetupPanel::~DeskSetupPanel()
 {
     if (m_desk != nullptr)
         m_desk->cancelLearn();
+}
+
+void DeskSetupPanel::hideEvent(QHideEvent *event)
+{
+    /* A learn left open on a panel no one sees would take the next control
+       touched (another tab, the Run tab, Operate): it ends with the panel. */
+    if (m_desk != nullptr && m_desk->isLearning())
+        m_desk->cancelLearn();
+    QWidget::hideEvent(event);
 }
 
 bool DeskSetupPanel::unlocked(const QString &why)
