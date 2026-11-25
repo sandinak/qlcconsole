@@ -301,7 +301,7 @@ ControlMap::Place ControlLearnDialog::placeAt(int index) const
         const ControlMap::Binding *b = m_doc->controlMap()->binding(m_target);
         return b != nullptr && b->place.scope == ControlMap::NewerPlace ? b->place : ControlMap::Place();
     }
-    return ControlMap::Place{ scope, v.at(1).toUInt() };
+    return ControlMap::Place{ scope, v.at(1).toUInt(), QString(), QString() };
 }
 
 ControlMap::Place ControlLearnDialog::place() const

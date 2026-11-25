@@ -208,9 +208,9 @@ public:
     static Target emergencyStop() { return Target{ EmergencyStopTarget, 0 }; }
 
     static Place everywhere() { return Place(); }
-    static Place inProduction(quint32 id) { return Place{ ProductionPlace, id }; }
-    static Place inList(quint32 id) { return Place{ ListPlace, id }; }
-    static Place inCue(quint32 id) { return Place{ CuePlace, id }; }
+    static Place inProduction(quint32 id) { return Place{ ProductionPlace, id, QString(), QString() }; }
+    static Place inList(quint32 id) { return Place{ ListPlace, id, QString(), QString() }; }
+    static Place inCue(quint32 id) { return Place{ CuePlace, id, QString(), QString() }; }
 
     /** The universe of a computer-keyboard key's binding (its channel:
      *  keyChannel()). No input universe has this number. */

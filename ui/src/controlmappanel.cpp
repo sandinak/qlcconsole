@@ -247,7 +247,7 @@ void ControlMapPanel::refresh()
             const QVariantList v = place->currentData().toList();
             if (v.count() == 2
                 && !m_doc->controlMap()->setPlace(target, ControlMap::Place{ ControlMap::PlaceScope(v.at(0).toInt()),
-                                                                             v.at(1).toUInt() }))
+                                                                             v.at(1).toUInt(), QString(), QString() }))
                 QTimer::singleShot(0, this, &ControlMapPanel::refresh);     // refused: back to where it is
         });
         m_table->setCellWidget(r, PlaceCol, place);

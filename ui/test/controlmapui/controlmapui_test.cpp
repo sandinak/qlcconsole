@@ -1452,14 +1452,14 @@ void ControlMapUi_Test::theShowTreeLearnsWhereYouRightClicked()
         bool seen = false;
         items.clear();
         if (!view.selectNode(id))
-            return ControlMap::Place{ ControlMap::Everywhere, 0 };
+            return ControlMap::Place{ ControlMap::Everywhere, 0, QString(), QString() };
         QTreeWidgetItem *item = view.tree()->currentItem();
         view.tree()->scrollToItem(item);
         const QPoint pos = view.tree()->visualItemRect(item).center();
         const ControlMap::Place p = placeLearnOffers([&]() {
             QMetaObject::invokeMethod(&view, "slotTreeContextMenu", Q_ARG(QPoint, pos));
         }, text, &seen, &items);
-        return seen ? p : ControlMap::Place{ ControlMap::ListPlace, 0 };
+        return seen ? p : ControlMap::Place{ ControlMap::ListPlace, 0, QString(), QString() };
     };
     QString text;
     // A GO on a list or a jump to a cue brings that place live: everywhere
