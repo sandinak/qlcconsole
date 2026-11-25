@@ -558,6 +558,27 @@ public:
      *  it). @a dim false: a control that is ready stays dark, for a pad
      *  whose LEDs take a colour in the velocity and not a brightness. */
     static uchar lampValue(Lamp lamp, bool dim = true);
+    /** Whether a desk on input profile @a profileName lights every button
+     *  at a dim level by itself when idle, so the show must light a ready
+     *  control at the profile's lit level to be seen. The one list of
+     *  them: only the PMJ Black 1 (its 15/127). A pad whose Feedback
+     *  LowerValue is a colour (APC mini mk2 1/26, Launchpad Mini MK3) is
+     *  not one: its lamps stay as lampValue() and the Lights switch say. */
+    static bool idlesDim(const QString &profileName);
+    /** The lamp levels the input profile gives control @a channel of
+     *  @a universe, as sent (0..255: a MIDI profile's velocities doubled,
+     *  since the MIDI plugin halves them on the way out) -- only on a desk
+     *  that idles dim (idlesDim()) and whose profile gives the control a
+     *  dim level (a Feedback LowerValue above 0: the PMJ's 15).
+     *  False: lampValue() is the light. */
+    bool profileLampRange(quint32 universe, quint32 channel, uchar *dim, uchar *lit) const;
+    /** The value @a lamp is sent as on @a owner's control: on a profile
+     *  with its own range (profileLampRange()) lit when a press would fire
+     *  it or what it fired runs, the profile's dim level otherwise (the
+     *  emergency stop: always lit -- it always works -- and blinking lit /
+     *  dim from an ALL OFF until the next GO); else lampValue() with the
+     *  Dim switch. */
+    uchar lampValueOn(const Binding &owner, Lamp lamp) const;
     /** Whether a control that is ready glows dim (the default) or stays
      *  dark. Saved with the show (Lights="onoff"). The emergency stop is
      *  never dimmed away by it: a panic button is always findable. */
@@ -852,6 +873,11 @@ private:
     int m_blinkLeft = 0;
     bool m_blinkRunning = false;
     int m_blinkMs = 150;
+    /** The stop's blink after an ALL OFF on a desk that idles dim: lit /
+     *  dim every m_blinkMs until the show runs again. */
+    class QTimer *m_stopBlink = nullptr;
+    bool m_stopBlinkLit = true;
+    void stopBlinkStep();
     /** A light pass is waiting: everything that can change a light (a
      *  function started or stopped, a GO, the arming, a tree edit) asks
      *  for one, and a whole batch of them is one pass. */

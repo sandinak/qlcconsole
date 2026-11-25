@@ -97,6 +97,44 @@ bool CueRunner::runCommand(Doc *doc, const ShowControl::Request &request, ShowCo
     return doc != nullptr && doc->showControl()->run(request, route);
 }
 
+Chaser *CueRunner::chaserOf(Doc *doc, quint32 listId)
+{
+    if (doc == nullptr)
+        return nullptr;
+    if (listId != invalidId())
+    {
+        const ShowTree::CueList *l = doc->showTree()->cueList(listId);
+        return l == nullptr ? nullptr : qobject_cast<Chaser *>(doc->function(l->chaser));
+    }
+    return doc->showControl()->cueList(QString());
+}
+
+Chaser *CueRunner::runTabChaser(Doc *doc)
+{
+    return doc == nullptr ? nullptr : chaserOf(doc, doc->controlMap()->runTabList());
+}
+
+bool CueRunner::canGo(Doc *doc, const Chaser *chaser)
+{
+    return doc != nullptr && chaser != nullptr && doc->showControl()->standbyStep(chaser) >= 0;
+}
+
+bool CueRunner::canBack(const Chaser *chaser)
+{
+    return chaser != nullptr && chaser->isRunning();
+}
+
+bool CueRunner::runTabCommand(Doc *doc, ShowControl::Command command)
+{
+    Chaser *ch = runTabChaser(doc);
+    if (ch == nullptr)
+        return false;
+    ShowControl::Request r;
+    r.command = command;
+    r.chaser = ch->id();
+    return runCommand(doc, r, ShowControl::RouteRunTab);
+}
+
 QAction *CueRunner::upgradeAction()
 {
     return s_upgradeAction.data();
@@ -1342,12 +1380,7 @@ void CueRunner::fillFollowBox()
 
 Chaser *CueRunner::chaser() const
 {
-    if (m_follow != invalidId())
-    {
-        const CueList *l = m_doc->showTree()->cueList(m_follow);
-        return l == nullptr ? nullptr : qobject_cast<Chaser *>(m_doc->function(l->chaser));
-    }
-    return m_doc->showControl()->cueList(QString());
+    return chaserOf(m_doc, m_follow);
 }
 
 quint32 CueRunner::listId() const
@@ -2011,10 +2044,10 @@ void CueRunner::updateStates()
         layoutPanel();
 
     // Buttons.
-    m_go->setEnabled(ch != nullptr && standby >= 0);
+    m_go->setEnabled(canGo(m_doc, ch));     // = ch && standby >= 0; a desk's Go lamp reads it too
     m_subGo->setEnabled(subNext >= 0);
     m_subBack->setEnabled(running && ch->isSubGoStep(cur) && ch->previousSubCueIndex() >= 0);
-    m_back->setEnabled(running);
+    m_back->setEnabled(canBack(ch));        // = running
     m_pause->setEnabled(running);
     m_pause->setText(running && ch->isPaused() ? tr("Resume") : tr("Pause"));
     m_stop->setEnabled(running);

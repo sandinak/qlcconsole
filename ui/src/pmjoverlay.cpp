@@ -6,6 +6,7 @@
 */
 
 #include <QStatusBar>
+#include <QTimer>
 
 #include "pmjoverlay.h"
 #include "controlowners.h"
@@ -23,6 +24,11 @@
 #include "fixture.h"
 #include "fixturegroup.h"
 #include "qlcchannel.h"
+#include "showcontrol.h"
+#include "showtreecontroller.h"
+#include "mastertimer.h"
+#include "cuerunner.h"
+#include "chaser.h"
 
 const QString PMJOverlay::deviceId = QStringLiteral("PMJ Black 1");
 
@@ -63,6 +69,8 @@ const PmjControl kPmjControls[] = {
     { 32781, "Enc 3",  CS::Kind::Encoder, false, CS::Role(CS::RoleType::Param, 3) },
     { 32782, "Enc 4",  CS::Kind::Encoder, false, CS::Role(CS::RoleType::Param, 4) },
 
+    // Go and Back are the Run tab's GO and Back (CueRunner::runTabCommand()),
+    // unless the show has learned a trigger on them (showOwns()).
     { 32896, "Go",         CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Go) },
     { 32907, "Back",       CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Back) },
     { 32932, "Left",       CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Left) },
@@ -142,6 +150,13 @@ const PmjControl kPmjControls[] = {
 // accidentally sets a control blinking.
 const int kSteadyLevels[] = { 0, 15, 31, 47, 63, 79, 95, 111, 127 };
 
+// The profile's own lamp levels for Go and Back (PMJ-Black-1.qxi,
+// <Feedback LowerValue="15" UpperValue="127"/>): dim, and lit.
+const int kProfileDim = 15;
+const int kProfileLit = 127;
+const quint32 kGoChannel = 32896;
+const quint32 kBackChannel = 32907;
+
 int snapToSteadyLevel(int level)
 {
     int best = kSteadyLevels[0];
@@ -171,9 +186,11 @@ QString PMJOverlay::controlName(quint32 channel)
 QList<quint32> PMJOverlay::controlChannels()
 {
     /* Only the controls slotRoleActivated() acts on: a button with no role
-       (Favorites, the Down row), the transport (registered, not wired yet)
-       and the encoders past pan and tilt are free for a trigger or the
-       stop (control-surfaces.md, "Check it on the real device" 6-7). */
+       (Favorites, the Down row), the transport and the encoders past pan
+       and tilt are free for a trigger or the stop (control-surfaces.md,
+       "Check it on the real device" 6-7). Go and Back GO and Back the Run
+       tab's list only while the show has learned nothing on them
+       (showOwns()): a trigger learned there is theirs instead. */
     QList<quint32> out;
     for (const PmjControl &pc : kPmjControls)
     {
@@ -225,6 +242,28 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
             this, [this]() { m_engine->refreshDevice(deviceId); });
     connect(m_doc->programmer(), &ProgrammerController::programmerSelectionChanged,
             this, [this]() { m_engine->refreshDevice(deviceId); });
+
+    /* Go and Back light on what the Run tab's GO and Back can do now
+       (CueRunner::canGo() / canBack()): follow every GO, stop, list change
+       and mode change -- once per turn of the event loop, and only when one
+       of the two lamps changed (scheduleTransportLamps()). Queued: a GO can
+       arrive on a plugin's thread, a function start on the MasterTimer's. */
+    ShowControl *sc = m_doc->showControl();
+    connect(sc, &ShowControl::cueTaken, this, &PMJOverlay::scheduleTransportLamps, Qt::QueuedConnection);
+    connect(sc, &ShowControl::cueListStopped, this, &PMJOverlay::scheduleTransportLamps, Qt::QueuedConnection);
+    connect(sc, &ShowControl::commandHandled, this, &PMJOverlay::scheduleTransportLamps, Qt::QueuedConnection);
+    connect(sc, &ShowControl::mainCueListChanged, this, &PMJOverlay::scheduleTransportLamps, Qt::QueuedConnection);
+    connect(m_doc->controlMap(), &ControlMap::runTabListChanged, this, &PMJOverlay::scheduleTransportLamps);
+    connect(m_doc, &Doc::modeChanged, this, &PMJOverlay::scheduleTransportLamps);
+    if (m_doc->showTree() != nullptr)
+        connect(m_doc->showTree(), &ShowTreeController::changed, this, &PMJOverlay::scheduleTransportLamps);
+    if (m_doc->masterTimer() != nullptr)
+    {
+        connect(m_doc->masterTimer(), &MasterTimer::functionStarted, this,
+                &PMJOverlay::scheduleTransportLamps, Qt::QueuedConnection);
+        connect(m_doc->masterTimer(), &MasterTimer::functionStopped, this,
+                &PMJOverlay::scheduleTransportLamps, Qt::QueuedConnection);
+    }
 
     /* The workspace is loaded AFTER App::startup() builds this overlay (see
        main.cpp), so at this point no universe has an input patch yet and the
@@ -387,6 +426,21 @@ void PMJOverlay::registerDevice()
             if (show.contains(it.value()))
                 taken.insert(it.key());
         return taken;
+    };
+
+    /* Go and Back at the profile's own levels: lit (127) when the Run tab's
+       GO or Back would do something, dim (15) when there is a list but
+       nothing to GO or go back to. */
+    dev.levelOf = [](const ControlSurface::Role &role, ControlSurface::State st) {
+        if (role.type != ControlSurface::RoleType::Transport
+            || (role.index != ControlSurface::Go && role.index != ControlSurface::Back))
+            return -1;
+        switch (st)
+        {
+            case ControlSurface::State::Empty:  return 0;
+            case ControlSurface::State::Valid:  return kProfileDim;
+            default:                            return kProfileLit;
+        }
     };
 
     m_engine->registerDevice(dev);
@@ -610,13 +664,49 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         break;
 
     case ControlSurface::RoleType::Transport:
-        // Registered and received, not yet wired to a real app action —
-        // needs the paged selection/navigation model from the next slice.
+        /* Go and Back: the Run tab's own GO and Back (one run path, the
+           double-GO guard; in Design what the Run tab's GO does there).
+           Not when the show has learned a trigger on the key: the Control
+           Map fires that, and a second GO here would be held. Left, Right
+           and the page arrows have no job yet. */
+        if (value == 0)
+            break;
+        if (role.index == ControlSurface::Go && !showOwns(kGoChannel))
+            CueRunner::runTabCommand(m_doc, ShowControl::Go);
+        else if (role.index == ControlSurface::Back && !showOwns(kBackChannel))
+            CueRunner::runTabCommand(m_doc, ShowControl::Back);
         break;
 
     default:
         break;
     }
+}
+
+bool PMJOverlay::showOwns(quint32 channel) const
+{
+    return m_universe >= 0
+           && ControlOwners::showControls(m_doc, quint32(m_universe)).contains(channel);
+}
+
+void PMJOverlay::scheduleTransportLamps()
+{
+    if (m_transportQueued)
+        return;
+    m_transportQueued = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_transportQueued = false;
+        if (m_engine.isNull())
+            return;
+        // Only a change of Go's or Back's lamp repaints the board: a chase
+        // stepping starts and stops functions many times a second.
+        const int now = int(stateFor(ControlSurface::Role(ControlSurface::RoleType::Transport, ControlSurface::Go)))
+                        | (int(stateFor(ControlSurface::Role(ControlSurface::RoleType::Transport,
+                                                             ControlSurface::Back))) << 4);
+        if (now == m_transportLamps)
+            return;
+        m_transportLamps = now;
+        m_engine->refreshDevice(deviceId);
+    });
 }
 
 void PMJOverlay::slotBlackoutChanged(bool state)
@@ -650,16 +740,29 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
             return iom->outputInhibited() ? ControlSurface::State::Active : ControlSurface::State::Valid;
         return ControlSurface::State::Empty;   // Favorites/Tap: unbound this slice
 
-    // Page/Param/Transport are registered and received (turning one does
-    // reach the engine — see slotRoleActivated()), but none of them drive
-    // anything a user can see or feel yet, which is the whole point of "the
-    // LEDs show what's useful right now": a control that does nothing
-    // observable isn't useful yet, so it stays dark rather than lighting for
-    // a press that goes nowhere. Light these up page-by-page as each one
-    // actually gets wired to something real, not before.
+    // The mode buttons: the one lit is the page the strips are on
+    // (Effects until another is pressed). The help and the Control
+    // surfaces hub say so (control-surfaces.md, "What the lamps mean").
     case ControlSurface::RoleType::Page:
-    case ControlSurface::RoleType::Param:
+        return role.index == m_activePage ? ControlSurface::State::Active : ControlSurface::State::Empty;
+
+    // Go and Back: lit when the Run tab's GO / Back would do something
+    // (the rule its buttons are enabled on), dim when there is a list but
+    // nothing to GO or go back to, dark with no cue list at all.
     case ControlSurface::RoleType::Transport:
+    {
+        if (role.index != ControlSurface::Go && role.index != ControlSurface::Back)
+            return ControlSurface::State::Empty;
+        const Chaser *ch = CueRunner::runTabChaser(m_doc);
+        if (ch == nullptr)
+            return ControlSurface::State::Empty;
+        const bool can = role.index == ControlSurface::Go ? CueRunner::canGo(m_doc, ch)
+                                                          : CueRunner::canBack(ch);
+        return can ? ControlSurface::State::Active : ControlSurface::State::Valid;
+    }
+
+    // Enc 3/4 have no job yet; Enc 1/2 have no LED.
+    case ControlSurface::RoleType::Param:
         return ControlSurface::State::Empty;
 
     // Select/Load(1-10): lit whenever strip N has a real target in the open

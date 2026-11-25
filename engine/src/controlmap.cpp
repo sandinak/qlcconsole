@@ -2401,6 +2401,63 @@ uchar ControlMap::lampValue(Lamp lamp, bool dim)
     return 0;
 }
 
+bool ControlMap::idlesDim(const QString &profileName)
+{
+    return profileName.compare(QStringLiteral("PMJ Black 1"), Qt::CaseInsensitive) == 0;
+}
+
+bool ControlMap::profileLampRange(quint32 universe, quint32 channel, uchar *dim, uchar *lit) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom == nullptr || universe == KeyboardUniverse ? nullptr : iom->inputPatch(universe);
+    QLCInputProfile *profile = ip == nullptr ? nullptr : ip->profile();
+    if (profile == nullptr || !idlesDim(profile->name()))
+        return false;
+    QLCInputChannel *ich = profile->channel(channel);
+    if (ich == nullptr || ich->lowerValue() == 0)
+        return false;
+    // A MIDI profile's levels are velocities (0..127): the plugin halves
+    // what it is sent (DMX2MIDI), so they go out doubled, 127 as 255.
+    auto wire = [profile](uchar v) -> uchar {
+        if (profile->type() != QLCInputProfile::MIDI)
+            return v;
+        return v >= 127 ? UCHAR_MAX : uchar(v * 2);
+    };
+    const uchar lo = wire(ich->lowerValue());
+    const uchar hi = wire(ich->upperValue());
+    if (hi <= lo)
+        return false;   // no lit level above the dim one: not a range to light by
+    if (dim != nullptr)
+        *dim = lo;
+    if (lit != nullptr)
+        *lit = hi;
+    return true;
+}
+
+uchar ControlMap::lampValueOn(const Binding &owner, Lamp lamp) const
+{
+    uchar dim = 0, lit = 0;
+    if (!profileLampRange(owner.universe, owner.channel, &dim, &lit))
+    {
+        /* The emergency stop is never dimmed away (review finding 3): the
+           switch is there for a pad whose lights are colours, and a panic
+           button that cannot be found is worse than an odd colour. Its ready
+           light is sent whatever the switch says. */
+        const bool glow = m_dimWhenReady || owner.target.type == EmergencyStopTarget;
+        return lampValue(lamp, glow);
+    }
+    /* The profile's own levels (the PMJ Black 1: 15 dim, 127 lit). Its
+       board idles at the dim level, so "ready" at that level could not be
+       told from a key that does nothing: a control lit at the profile's
+       level is one a press would fire, now (a hit only while its place is
+       live), or one whose thing runs; dim is everything else. The stop
+       always works, so it is always lit (findable on a dark stage); after
+       an ALL OFF it blinks lit / dim (stopBlinkStep()) until the next GO. */
+    if (owner.target.type == EmergencyStopTarget)
+        return lamp == LampStopped && !m_stopBlinkLit ? dim : lit;
+    return lamp == LampOff ? dim : lit;
+}
+
 bool ControlMap::isBlinking(const Binding &b) const
 {
     if (m_blinkLeft <= 0)
@@ -2463,15 +2520,29 @@ void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
     const Binding *owner = lampOwner(k);
     if (owner == nullptr)
     {
-        sendLampValue(at, 0, force);
+        // Nothing here would fire now (a hit whose place is not live): dark,
+        // or the dim level of a profile that has one (profileLampRange()).
+        uchar dim = 0;
+        sendLampValue(at, profileLampRange(universe, channel, &dim, nullptr) ? dim : 0, force);
         return;
     }
-    /* The emergency stop is never dimmed away (review finding 3): the
-       switch is there for a pad whose lights are colours, and a panic
-       button that cannot be found is worse than an odd colour. Its ready
-       light is sent whatever the switch says. */
-    const bool dim = m_dimWhenReady || owner->target.type == EmergencyStopTarget;
-    sendLampValue(at, lampValue(lamp(*owner), dim), force);
+    const Lamp now = lamp(*owner);
+    if (owner->target.type == EmergencyStopTarget && now == LampStopped
+        && profileLampRange(universe, channel, nullptr, nullptr))
+    {
+        // The stopped state is a blink there: lit is its everyday light.
+        if (m_stopBlink == nullptr)
+        {
+            m_stopBlink = new QTimer(this);
+            connect(m_stopBlink, &QTimer::timeout, this, &ControlMap::stopBlinkStep);
+        }
+        if (!m_stopBlink->isActive())
+        {
+            m_stopBlinkLit = true;
+            m_stopBlink->start(m_blinkMs);
+        }
+    }
+    sendLampValue(at, lampValueOn(*owner, now), force);
 }
 
 void ControlMap::sendLamps(bool force)
@@ -2598,9 +2669,34 @@ void ControlMap::blinkStep()
     }
     const bool on = (m_blinkLeft % 2) == 0;
     for (const Binding &b : std::as_const(m_blinking))
-        sendLampValue(b, on ? lampValue(LampHeld, m_dimWhenReady) : 0, true);
+    {
+        // Off is the profile's dim level on a desk that idles there.
+        uchar dim = 0;
+        const uchar off = profileLampRange(b.universe, b.channel, &dim, nullptr) ? dim : 0;
+        sendLampValue(b, on ? lampValueOn(b, LampHeld) : off, true);
+    }
     --m_blinkLeft;
     QTimer::singleShot(m_blinkMs, this, &ControlMap::blinkStep);
+}
+
+void ControlMap::stopBlinkStep()
+{
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    const bool stopped = rules != nullptr && rules->emergencyStopped();
+    m_stopBlinkLit = stopped ? !m_stopBlinkLit : true;
+    bool any = false;
+    for (const Binding &b : std::as_const(m_bindings))
+    {
+        if (b.target.type != EmergencyStopTarget || !profileLampRange(b.universe, b.channel, nullptr, nullptr))
+            continue;
+        any = true;
+        sendLampValue(b, lampValueOn(b, stopped ? LampStopped : lamp(b)), true);
+    }
+    if (!stopped || !any)
+    {
+        m_stopBlinkLit = true;
+        m_stopBlink->stop();
+    }
 }
 
 void ControlMap::slotFunctionStarted(quint32 id)

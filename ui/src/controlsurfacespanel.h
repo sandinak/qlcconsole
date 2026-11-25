@@ -84,6 +84,8 @@ private:
     QString triggersText() const;
     QString padsText() const;
     QString pmjText() const;
+    /** What the PMJ's lit lamps mean (the help's "What the lamps mean"). */
+    static QString pmjLampsText();
     QString vcText() const;
     QString mastersText() const;
     QString grandMasterText() const;

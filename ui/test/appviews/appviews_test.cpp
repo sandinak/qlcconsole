@@ -149,6 +149,7 @@
 #include "outputrulekeeper.h"
 #include "outputrulesdialog.h"
 #include "controlsurface.h"
+#include "controlsurfaceengine.h"
 #include "functionparent.h"
 #include "mastertimer.h"
 #include "showcontrol.h"
@@ -2890,7 +2891,9 @@ void AppViews_Test::masterMoveKeepsShowLamps()
                 v = stub->m_feedback.at(i).second;
         return v;
     };
-    QCOMPARE(lastSent(favorites, 0), int(ControlMap::lampValue(ControlMap::LampStandby)));   // ready: dim
+    const int ready = int(cm->lampValueOn(*cm->binding(ControlMap::function(s->id())), ControlMap::LampStandby));
+    QVERIFY(ready > 0);
+    QCOMPARE(lastSent(favorites, 0), ready);   // ready: dim, or the profile's lit
 
     // The Grand Master moves (the PMJ's Master, the footer, anything).
     const int before = stub->m_feedback.size();
@@ -2901,7 +2904,7 @@ void AppViews_Test::masterMoveKeepsShowLamps()
     for (int i = before; i < stub->m_feedback.size(); ++i)
         if (stub->m_feedback.at(i).first == favorites)
             QVERIFY2(stub->m_feedback.at(i).second != 0, "a Grand Master move sent the show's lamp dark");
-    QCOMPARE(lastSent(favorites, 0), int(ControlMap::lampValue(ControlMap::LampStandby)));
+    QCOMPARE(lastSent(favorites, 0), ready);
 
     // Let go by the show: the board lights (here: darkens) it again.
     QVERIFY(cm->removeBinding(ControlMap::function(s->id())));
@@ -2909,6 +2912,256 @@ void AppViews_Test::masterMoveKeepsShowLamps()
     iom->setGrandMasterValue(120);
     QCoreApplication::processEvents();
     QCOMPARE(lastSent(favorites, after), 0);
+}
+
+namespace
+{
+/** The I/O stub as universe 1's input with the PMJ Black 1 profile, and its
+ *  feedback line: the board as the overlay finds it. Null: no stub. */
+IOPluginStub *patchPmj(App *app)
+{
+    IOPluginCache *cache = app->doc()->ioPluginCache();
+    QLCIOPlugin *plug = cache->plugin(QStringLiteral("ArtNet"));
+    if (plug == nullptr)
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    if (plug == nullptr)
+    {
+        QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+        stubDir.setFilter(QDir::Files);
+        stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+        cache->load(stubDir);
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    }
+    IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
+    if (stub == nullptr)
+        return nullptr;
+    InputOutputMap *iom = app->doc()->inputOutputMap();
+    QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+    if (pmj == nullptr)
+    {
+        pmj = new QLCInputProfile();
+        pmj->setManufacturer(QStringLiteral("PMJ"));
+        pmj->setModel(QStringLiteral("Black 1"));
+        if (!iom->addProfile(pmj))
+            return nullptr;
+    }
+    if (!iom->setInputPatch(0, stub->name(), QString(), 0, pmj->name())
+        || !iom->setOutputPatch(0, stub->name(), QString(), 0, true))
+        return nullptr;
+    QCoreApplication::processEvents();
+    return stub;
+}
+
+void unpatchPmj(App *app)
+{
+    InputOutputMap *map = app->doc()->inputOutputMap();
+    map->setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), true, 0);
+    map->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine());
+}
+
+/** A main cue list of @a cues cues in a new production; its chaser. */
+Chaser *mainList(Doc *doc, int cues, quint32 *listId = nullptr)
+{
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction(QStringLiteral("PMJ Run"));
+    const quint32 lid = st->addCueList(prod, QStringLiteral("Main"), ShowTree::ListMode::NonTracking);
+    for (int i = 0; i < cues; ++i)
+        st->addCue(lid, i - 1, QStringLiteral("Cue %1").arg(i + 1));
+    Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(lid)->chaser));
+    if (list != nullptr)
+        doc->showControl()->setMainCueList(list->id());
+    if (listId != nullptr)
+        *listId = lid;
+    return list;
+}
+
+const ControlSurface::Role kPmjGo(ControlSurface::RoleType::Transport, ControlSurface::Go);
+const ControlSurface::Role kPmjBack(ControlSurface::RoleType::Transport, ControlSurface::Back);
+}
+
+/* (a) of his 4612 test: the PMJ's Go did nothing -- registered, never wired.
+   Now it is the Run tab's GO: the same function (CueRunner::runTabCommand(),
+   RouteRunTab), the double-GO guard with it, the Run tab's list. */
+void AppViews_Test::pmjGoRunsTheRunTabList()
+{
+    Doc *doc = m_app->doc();
+    ShowControl *sc = doc->showControl();
+    auto restore = qScopeGuard([this, doc, sc]() {
+        sc->setGoGuardMs(0);
+        sc->setGuardClock(ShowControl::GuardClock());
+        doc->masterTimer()->stopAllFunctions();
+        doc->setMode(Doc::Design);
+        unpatchPmj(m_app);
+        m_app->clearDocument();
+        m_app->hideViewNotice();
+        QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+    });
+    m_app->clearDocument();
+    QVERIFY(patchPmj(m_app) != nullptr);
+    quint32 listId = ShowTree::invalidId();
+    Chaser *list = mainList(doc, 3, &listId);
+    QVERIFY(list != nullptr);
+    doc->setMode(Doc::Operate);
+    PMJOverlay *pmj = m_app->m_pmjOverlay;
+
+    int count = m_app->m_runCommands;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QCOMPARE(m_app->m_runCommands, ++count);
+    QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteRunTab);
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    // Its release is not a second GO.
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);
+    QCOMPARE(m_app->m_runCommands, count);
+
+    // The double-GO guard: a second press inside the window is held.
+    qint64 now = 1000000;
+    sc->setGuardClock([&now]() { return now; });
+    sc->setGoGuardMs(1000);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
+    QSignalSpy held(sc, &ShowControl::commandHeld);
+    now += 300;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QCOMPARE(held.count(), 1);
+    QTest::qWait(50);
+    QCOMPARE(list->currentStepIndex(), 1);
+    sc->setGoGuardMs(0);
+    sc->setGuardClock(ShowControl::GuardClock());
+
+    // The list the Run tab plays, not only the main one.
+    const quint32 prod = doc->showTree()->productionOfChaser(list->id());
+    const quint32 other = doc->showTree()->addCueList(prod, QStringLiteral("Side"), ShowTree::ListMode::NonTracking);
+    doc->showTree()->addCue(other, -1, QStringLiteral("Side 1"));
+    Chaser *side = qobject_cast<Chaser *>(doc->function(doc->showTree()->cueList(other)->chaser));
+    QVERIFY(side != nullptr);
+    doc->controlMap()->setRunTabList(other);
+    QCOMPARE(CueRunner::runTabChaser(doc), side);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QTRY_VERIFY_WITH_TIMEOUT(side->isRunning(), 5000);
+    QCOMPARE(list->currentStepIndex(), 1);
+    doc->controlMap()->setRunTabList(ShowTree::invalidId());
+
+    // A trigger the show learned on Go is Go's job then: the overlay does not GO too.
+    Scene *warm = new Scene(doc);
+    warm->setName(QStringLiteral("Warm"));
+    QVERIFY(doc->addFunction(warm));
+    doc->controlMap()->setBinding({ 0, 32896, ControlMap::function(warm->id()), ControlMap::Toggle });
+    count = m_app->m_runCommands;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QCOMPARE(m_app->m_runCommands, count);
+
+    // In Design it does what the Run tab's GO does there.
+    QVERIFY(doc->controlMap()->removeBinding(ControlMap::function(warm->id())));
+    doc->masterTimer()->stopAllFunctions();
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    doc->setMode(Doc::Design);
+    CueRunner::runTabCommand(doc, ShowControl::Go);
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning(), 5000);
+    const bool runTabPlays = list->isRunning();
+    doc->masterTimer()->stopAllFunctions();
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteRunTab);
+    QTRY_COMPARE_WITH_TIMEOUT(list->isRunning(), runTabPlays, 5000);
+}
+
+void AppViews_Test::pmjBackStepsBack()
+{
+    Doc *doc = m_app->doc();
+    auto restore = qScopeGuard([this, doc]() {
+        doc->masterTimer()->stopAllFunctions();
+        doc->setMode(Doc::Design);
+        unpatchPmj(m_app);
+        m_app->clearDocument();
+        m_app->hideViewNotice();
+        QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+    });
+    m_app->clearDocument();
+    QVERIFY(patchPmj(m_app) != nullptr);
+    Chaser *list = mainList(doc, 3);
+    QVERIFY(list != nullptr);
+    doc->setMode(Doc::Operate);
+    PMJOverlay *pmj = m_app->m_pmjOverlay;
+
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
+    const int count = m_app->m_runCommands;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjBack, 127);
+    QCOMPARE(m_app->m_runCommands, count + 1);
+    QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteRunTab);
+    QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 0, 5000);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjBack, 0);     // the release
+    QCOMPARE(m_app->m_runCommands, count + 1);
+}
+
+/* (a) again: Go and Back never lit to say they were ready. Their lamps are
+   the Run tab's buttons' rule (CueRunner::canGo() / canBack()) at the
+   profile's own levels: 127 lit, 15 dim (sent doubled: the MIDI plugin
+   halves it). */
+void AppViews_Test::pmjGoLampLitWhenReady()
+{
+    Doc *doc = m_app->doc();
+    auto restore = qScopeGuard([this, doc]() {
+        doc->masterTimer()->stopAllFunctions();
+        doc->setMode(Doc::Design);
+        unpatchPmj(m_app);
+        m_app->clearDocument();
+        m_app->hideViewNotice();
+        QTRY_COMPARE_WITH_TIMEOUT(doc->masterTimer()->runningFunctions(), 0, 5000);
+    });
+    m_app->clearDocument();
+    IOPluginStub *stub = patchPmj(m_app);
+    QVERIFY(stub != nullptr);
+    const quint32 go = 32896, back = 32907, effects = 32946, groups = 32947;
+    auto lastSent = [stub](quint32 ch) -> int {
+        for (int i = stub->m_feedback.size() - 1; i >= 0; --i)
+            if (stub->m_feedback.at(i).first == ch)
+                return int(stub->m_feedback.at(i).second);
+        return -1;
+    };
+    const int lit = 254, dim = 30;
+
+    // No cue list: nothing to GO, ever -- dark.
+    m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
+    QCOMPARE(lastSent(go), 0);
+    QCOMPARE(lastSent(back), 0);
+    // The page in use is lit: Effects until another is pressed.
+    QCOMPARE(lastSent(effects), lit);
+    QCOMPARE(lastSent(groups), 0);
+
+    // A list with a cue to GO: Go lit, Back dim (nothing to go back to).
+    Chaser *list = mainList(doc, 2);
+    QVERIFY(list != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(lastSent(go), lit, 3000);
+    QCOMPARE(lastSent(back), dim);
+
+    // Running: Back lit too.
+    doc->setMode(Doc::Operate);
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QTRY_COMPARE_WITH_TIMEOUT(lastSent(back), lit, 3000);
+    QCOMPARE(lastSent(go), lit);
+
+    // On the last cue nothing is left to GO: Go dim.
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
+    QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(lastSent(go), dim, 3000);
+    QCOMPARE(lastSent(back), lit);
+
+    // Stopped: Back dim again, Go lit (GO starts it over).
+    list->stop(FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(lastSent(back), dim, 3000);
+    QCOMPARE(lastSent(go), lit);
+
+    // Another page pressed: its lamp is the lit one.
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId,
+                                           ControlSurface::Role(ControlSurface::RoleType::Page, 1), 127);
+    QCOMPARE(lastSent(groups), lit);
+    QCOMPARE(lastSent(effects), 0);
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId,
+                                           ControlSurface::Role(ControlSurface::RoleType::Page, 0), 127);
 }
 
 void AppViews_Test::aPmjFaderOrEncoderInOperateEditsNothing()

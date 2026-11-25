@@ -69,6 +69,7 @@ void ControlSurfaceEngine::pushDeviceLeds(const Device &dev)
         // Unbound control or no provider → State::Empty (dark).
         const State st = (r.isValid() && m_stateProvider) ? m_stateProvider(r)
                                                            : State::Empty;
-        dev.ledSink(c, brightness(st, dev.maxBrightness));
+        const int own = dev.levelOf ? dev.levelOf(r, st) : -1;
+        dev.ledSink(c, own >= 0 ? own : brightness(st, dev.maxBrightness));
     }
 }

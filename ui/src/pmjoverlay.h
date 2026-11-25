@@ -8,12 +8,12 @@
   feedback back out. See docs/design/CONTROL_SURFACE_DESIGN.md, "P1 — PMJ overlay + LED".
 
   P1 slice 1: full role table registered (so every control lights up
-  sensibly and every press/turn is at least received by the engine), but only
-  the clearest global static-core actions are wired to real app behaviour so
-  far — Master fader to Grand Master, O to Blackout, Set to Blind. Page
-  switching, Select/Load/Param, and Transport are logged but not yet wired to
-  real selection/navigation — that is the next slice, once the app-side
-  selection APIs they need exist. Favorites (proposed Tap) is left unbound —
+  sensibly and every press/turn is at least received by the engine). Wired:
+  Master fader to Grand Master, O to Blackout, Set to Blind, Go and Back to
+  the Run tab's GO and Back (CueRunner::runTabCommand()), Select/Load, the
+  faders and Enc 1/2. The mode buttons only say which page is open (its lamp);
+  per-page jobs, Left/Right and the page arrows are the next slice.
+  Favorites (proposed Tap) is left unbound —
   the only "tap tempo" in the codebase today is Programming-tab-local, not
   the global static-core action the design doc means.
 
@@ -82,6 +82,10 @@ private slots:
     void slotBlackoutChanged(bool state);
     void slotOutputInhibitedChanged(bool state);
     void slotGrandMasterValueChanged(uchar value);
+    /** Go's or Back's lamp may have changed (a GO, a stop, a list or mode
+     *  change): once per turn of the event loop, the board repainted only
+     *  when one of the two did. */
+    void scheduleTransportLamps();
 
 private:
     void registerDevice();
@@ -95,6 +99,9 @@ private:
      *  user to press something first. Sets m_universe if found. */
     void findKnownUniverse();
     ControlSurface::State stateFor(const ControlSurface::Role &role) const;
+    /** Whether the show (a Control Map trigger, a VC widget...) has learned
+     *  PMJ control @a channel: then that is its job, not the overlay's. */
+    bool showOwns(quint32 channel) const;
     void sendLed(const ControlSurface::Control &control, int level);
 
     /** ProgrammingManager doesn't exist yet when PMJOverlay is constructed
@@ -146,10 +153,12 @@ private:
      *  faders and encoder pushes have none). */
     QHash<int, quint32> m_ledChannel;
 
-    /** Which page button (Role::Page index) is currently the active page.
-     *  -1 = none selected yet. Drives State::Selected on the page buttons;
-     *  real per-page behaviour is the next slice. */
-    int m_activePage = -1;
+    /** Which page button (Role::Page index) is the active page: Effects
+     *  (0) until another is pressed. Its lamp is lit (State::Active); real
+     *  per-page behaviour is the next slice. */
+    int m_activePage = 0;
+    bool m_transportQueued = false;
+    int m_transportLamps = -1;      ///< Go's and Back's states last painted
 
     /** The universe real PMJ input has actually been observed arriving on —
      *  learned from the first matching inputValueChanged, since the overlay

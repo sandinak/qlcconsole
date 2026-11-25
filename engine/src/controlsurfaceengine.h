@@ -46,6 +46,10 @@ public:
          *  refresh can't blank them (one lamp writer per control). Unset:
          *  every lamp is the device's. */
         std::function<QSet<int>()> lampsTakenElsewhere;
+        /** The level a role's State is lit at on this board, when the board
+         *  has its own (the PMJ's profile: 15 dim, 127 lit, for Go and Back);
+         *  < 0, or unset: ControlSurface::brightness(). */
+        std::function<int(const ControlSurface::Role &, ControlSurface::State)> levelOf;
     };
 
     void registerDevice(const Device &dev);

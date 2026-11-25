@@ -382,6 +382,13 @@ private slots:
     void aPmjControlTheDeskHasIsNotAlsoThePmjs();
     void aPmjFaderOrEncoderInOperateEditsNothing();
     void masterMoveKeepsShowLamps();
+    /** The PMJ's Go and Back are the Run tab's GO and Back (one run path,
+     *  the double-GO guard), and leave a key the show learned to the show. */
+    void pmjGoRunsTheRunTabList();
+    void pmjBackStepsBack();
+    /** Go and Back lit (the profile's 127) when the Run tab's GO / Back
+     *  would do something, dim (15) when not, dark with no cue list. */
+    void pmjGoLampLitWhenReady();
     void aSecondPmjBoardIsNamedNotIgnoredInSilence();
     void aRefusedSurfacePressSaysSoOnTheFooter();
     /** Q313: the Grand Master follows its fader at once, nothing waits. */

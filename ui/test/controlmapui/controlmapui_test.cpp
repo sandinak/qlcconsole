@@ -2071,7 +2071,13 @@ void ControlMapUi_Test::pmjRowMatchesExactProfileOnly()
     QVERIFY2(hub->status("pmj").startsWith("Patched on universe 1, no feedback line"), qPrintable(hub->status("pmj")));
 
     QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));   // the feedback line
-    QCOMPARE(hub->status("pmj"), QString("Patched on universe 1, with its feedback line"));
+    const QString status = hub->status("pmj");
+    QVERIFY2(status.startsWith("Patched on universe 1, with its feedback line\n"), qPrintable(status));
+    // What its lit lamps mean, where it is set up (his 4612 test: a lit
+    // Effects and a lit 10-Load with nothing saying why).
+    for (const char *word : { "Go lit", "Back lit", "Effects", "Fix Cont", "page in use", "Load", "scene open in Build" })
+        QVERIFY2(status.contains(QLatin1String(word)), qPrintable(QStringLiteral("%1: %2").arg(word, status)));
+    QVERIFY(hub->findChild<QLabel *>("surfacePmjWhat")->text().contains("Run tab's GO and Back"));
 }
 
 /* The Grand Master's input is set in the Virtual Console's Settings: its
@@ -2339,6 +2345,21 @@ void ControlMapUi_Test::surfacesShots()
     if (dir.isEmpty())
         QSKIP("QLC_SHOT_DIR is not set");
     QDir().mkpath(QString::fromLocal8Bit(dir));
+    // A PMJ patched with its feedback line: its row says what its lamps mean.
+    if (IOPluginStub *stub = loadStub(m_doc))
+    {
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+        if (pmj == nullptr)
+        {
+            pmj = new QLCInputProfile();
+            pmj->setManufacturer("PMJ");
+            pmj->setModel("Black 1");
+            QVERIFY(iom->addProfile(pmj));
+        }
+        QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0, pmj->name()));
+        QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));
+    }
     InputOutputManager mgr(nullptr, m_doc);
     const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
     for (const QSize &sz : sizes)

@@ -128,6 +128,23 @@ public:
      *  App::runCommand() -- the guards, the preview hold (RC8), then
      *  ShowControl::execute(). */
     static bool runCommand(Doc *doc, const ShowControl::Request &request, ShowControl::Route route);
+    /** The chaser tree list @a listId plays (null: that list is gone);
+     *  invalid @a listId: the show's main cue list. The Run tab's chaser() and
+     *  runTabChaser() both read it. */
+    static Chaser *chaserOf(Doc *doc, quint32 listId);
+    /** The chaser the Run tab plays: the show's Run tab list
+     *  (ControlMap::runTabList()), else the main cue list. Null: none. */
+    static Chaser *runTabChaser(Doc *doc);
+    /** Whether a GO / a Back on @a chaser would do something now: the Run
+     *  tab's GO and Back buttons are enabled on exactly this, and a desk's Go
+     *  and Back lamps (the PMJ's) light on it. */
+    static bool canGo(Doc *doc, const Chaser *chaser);
+    static bool canBack(const Chaser *chaser);
+    /** @a command (GO, Back) on the Run tab's list, as its own buttons send
+     *  it (runCommand(), RouteRunTab: the double-GO guard, the preview
+     *  hold, the Operate offer after a GO in Design). A desk's Go and Back
+     *  call this, so there is one GO. False: no list, or not carried out. */
+    static bool runTabCommand(Doc *doc, ShowControl::Command command);
     /** The Run tab's empty state (no main cue list) shown now. */
     bool isEmptyStateShown() const;
     QPushButton *upgradeButton() const { return m_upgrade; }

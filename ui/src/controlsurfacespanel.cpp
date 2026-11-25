@@ -112,7 +112,8 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
                "Auto Detect, then move the fader.") } },
         { QStringLiteral("pmj"),
           { tr("PMJ Black 1"),
-            tr("Its faders, encoders and buttons work by themselves once it is patched with the PMJ Black 1 profile."),
+            tr("Its faders, encoders and buttons work by themselves once it is patched with the PMJ Black 1 "
+               "profile. Go and Back are the Run tab's GO and Back."),
             tr("Set Up…"),
             tr("Go to the patch: patch the PMJ as an input with the profile PMJ Black 1, and its "
                "output as the feedback line so its lamps light.") } },
@@ -413,12 +414,24 @@ QString ControlSurfacesPanel::pmjText() const
         InputPatch *ip = iom->inputPatch(u);
         if (ip == nullptr || ip->profileName().compare(PMJOverlay::deviceId, Qt::CaseInsensitive) != 0)
             continue;
-        return iom->feedbackPatch(u) != nullptr
-                ? tr("Patched on universe %1, with its feedback line").arg(u + 1)
-                : tr("Patched on universe %1, no feedback line: its lamps stay dark until its "
-                     "output is patched as feedback").arg(u + 1);
+        if (iom->feedbackPatch(u) == nullptr)
+            return tr("Patched on universe %1, no feedback line: its lamps stay dark until its "
+                      "output is patched as feedback").arg(u + 1);
+        /* What each lamp means, where the board is set up (his 4612 test:
+           a lit Effects and a lit 10-Load with nothing saying why). The
+           help's "What the lamps mean" table says the same. */
+        return tr("Patched on universe %1, with its feedback line").arg(u + 1) + QStringLiteral("\n")
+               + pmjLampsText();
     }
     return tr("Not patched (no input has the PMJ Black 1 profile)");
+}
+
+QString ControlSurfacesPanel::pmjLampsText()
+{
+    return tr("Its lamps: Go lit = a cue to GO, Back lit = the list is running (dim: nothing to do). "
+              "The lit mode button (Effects, Groups, Looks, Macros, Fix Cont) is the page in use. "
+              "A lit 1-10 or Load button: that strip has a fixture of the scene open in Build, "
+              "brighter when it is selected.");
 }
 
 QString ControlSurfacesPanel::webText() const

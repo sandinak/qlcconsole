@@ -50,6 +50,16 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   release from that button (the dump's "pressed" is ignored and said); *Slept 40 s, finding devices…* after a sleep; a repatch in
   Inputs/Outputs says what moves first (Cancel leaves it); the hub (in amber) and
   Show Review (CTL-01) say when the stop's desk is missing.
+- **The PMJ's Go and Back work, and its lamps say why they are lit**: Go and
+  Back are the Run tab's GO and Back (the same GO, its double-GO guard, the
+  Run tab's list, in either mode), lit when there is a cue to GO or go back
+  to and dim when not; the lit mode button is the page in use (Effects at
+  first). On the PMJ, which glows dim by itself, a learned trigger is lit
+  when a press would fire it (a hit only while its place is live) and dim
+  otherwise, so a ready key no longer looks unlit; its emergency stop key is
+  always lit and blinks after an ALL OFF until the next GO. Other pads'
+  lamps are unchanged. The Control surfaces hub and the help say what each
+  lamp means.
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
