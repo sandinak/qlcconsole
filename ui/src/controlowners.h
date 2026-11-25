@@ -143,6 +143,15 @@ public:
      *  their lamps to that listener (one lamp writer per control). One
      *  walk of the show, however many channels are asked about. */
     static QSet<quint32> showControls(Doc *doc, quint32 universe);
+    /** Every control a listener has now, as (universe << 32 | channel),
+     *  in universe and channel order (computer keys last): the show's
+     *  listeners and this computer's desk roles. What Assign to Control…
+     *  lists, each with its owners, before anything is pressed (phase A). */
+    static QList<quint64> controls(Doc *doc);
+    /** @a owners in words, for a list: "Scene: Warm (Control Map); Grand
+     *  Master (Virtual Console)", or "Free" when there are none. */
+    static QString ownersText(const QList<Owner> &owners);
+
     /** owners(), without @a self (the listener that is learning). */
     static QList<Owner> others(Doc *doc, quint32 universe, quint32 channel, const Owner &self);
 

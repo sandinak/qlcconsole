@@ -97,6 +97,13 @@ public:
     /** Set by whoever runs the server; emits statusChanged() on a change. */
     void setStatus(State state, const QString &url, const QString &message = QString());
 
+    /** How many Run clients (the phone or tablet Run page, Companion) are
+     *  connected now: Assign to Control… says a Stream Deck key is set in
+     *  Companion while there are some. Set by the server; emits
+     *  statusChanged() on a change. */
+    int runClients() const { return m_runClients; }
+    void setRunClients(int count);
+
 signals:
     void settingsChanged();
     void statusChanged();
@@ -114,6 +121,7 @@ private:
     State m_state = Off;
     QString m_url;
     QString m_message;
+    int m_runClients = 0;
 };
 
 /** @} */

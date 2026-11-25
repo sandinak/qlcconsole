@@ -82,8 +82,9 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
           { tr("Triggers (Control Map)"),
             tr("One button or pad fires one thing: a scene, an effect, a cue list, a cue or a hit."),
             tr("Set Up…"),
-            tr("Open the Control Map table. To add a trigger, right-click a scene, effect, cue list, "
-               "cue or hit and choose Learn Trigger…, then press the control.") } },
+            tr("Open the Control Map table. To add a trigger, right-click a cue list, cue or hit (a "
+               "scene or effect in the Classic QLC+ view) and choose Assign to Control…, then press "
+               "the control.") } },
         { QStringLiteral("estop"),
           { tr("Emergency stop"),
             tr("One button that is ALL OFF, from Design or Operate, at any moment."),
@@ -164,8 +165,18 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     m_featureOff->setWordWrap(true);
     m_featureOff->setStyleSheet(QStringLiteral("color: gray;"));
     grid->addWidget(m_featureOff, 2, 0, 1, 3);
+    /* Press or move any control (phase A): the line names who has it, so a
+       control is found by pressing it, not by reading the rows below. */
+    m_pressAny = new QLabel(this);
+    m_pressAny->setObjectName(QStringLiteral("surfacesPressAny"));
+    m_pressAny->setWordWrap(true);
+    m_pressAny->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_pressAny->setText(pressAnyIdleText());
+    grid->addWidget(m_pressAny, 3, 0, 1, 3);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged, this,
+            [this](quint32 universe, quint32 channel, uchar) { pressedAny(universe, channel); });
 
-    int r = 3;
+    int r = 4;
     for (const Row &row : kRows)
     {
         const QString key = QString::fromLatin1(row.key);
@@ -244,6 +255,30 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     connect(m_doc->webAccess(), &ShowWebAccess::settingsChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::statusChanged, this, &ControlSurfacesPanel::refresh);
     refresh();
+}
+
+QString ControlSurfacesPanel::pressAnyIdleText()
+{
+    return tr("Press or move any control on a connected device: this line names who has it.");
+}
+
+QString ControlSurfacesPanel::pressAnyText() const
+{
+    return m_pressAny != nullptr ? m_pressAny->text() : QString();
+}
+
+void ControlSurfacesPanel::pressedAny(quint32 universe, quint32 channel)
+{
+    // Only while it is shown; a fader's run of values is one control, said once.
+    if (!isVisible() || (m_pressedKey == ((quint64(universe) << 32) | channel)))
+        return;
+    m_pressedKey = (quint64(universe) << 32) | channel;
+    const QList<ControlOwners::Owner> owners = ControlOwners::owners(m_doc, universe, channel);
+    const QString control = ControlOwners::controlName(m_doc, universe, channel);
+    m_pressAny->setText(owners.isEmpty()
+        ? tr("%1: free, nothing has it. Right-click a cue list, cue or hit ▸ Assign to Control… to "
+             "give it a job.").arg(control)
+        : tr("%1: %2.").arg(control, ControlOwners::ownersText(owners)));
 }
 
 QStringList ControlSurfacesPanel::keys()
@@ -586,6 +621,8 @@ QString ControlSurfacesPanel::devicesText() const
 void ControlSurfacesPanel::refresh()
 {
     const bool on = ShowFeatures::isOn(ShowFeatures::ControlSurfaces);
+    // Owners may have changed: the next press of the same control is read again.
+    m_pressedKey = ~quint64(0);
     m_featureOff->setVisible(!on);
     const QString off = tr("Off for this show");
     m_status["map"]->setText(on ? triggersText() : off);

@@ -34,7 +34,7 @@ Button "House lights" (Virtual Console). One job per control.* Press
 learning (the old owner stops reacting at once), or **Cancel** to leave it
 where it is -- Cancel changes nothing, on either side. Move It Here takes
 the control from every owner or from none: if one of them cannot let go,
-each keeps it. Every Learn says this the same way: Learn Trigger…, the
+each keeps it. Every Learn says this the same way: Assign to Control…, the
 emergency stop, the encoder bank (a Learn, a preset, Custom turned back on
 or another universe: each hands the bank a run of controls, and each
 taken one is named with its own control), a widget's External Input
@@ -81,7 +81,7 @@ to fix it; the Devices line adds *1 control with two jobs*.
 
 | What | Where you set it (or **Set Up…** in Control surfaces) | What it does |
 |---|---|---|
-| **Control Map** | Right-click a scene, effect, cue list, cue or hit ▸ **Learn Trigger…**; the table is **Connections ▸ Devices ▸ Show control &amp; sync ▸ Control Map** | One button fires one thing. See [Control Map](other-improvements.md#control-map-midi-and-osc-triggers). |
+| **Control Map** | Right-click a cue list, cue or hit (a scene or effect in the Classic QLC+ view) ▸ **Assign to Control…** ([the window](#assign-to-control)); the table is **Connections ▸ Devices ▸ Show control &amp; sync ▸ Control Map** | One button fires one thing. See [Control Map](other-improvements.md#control-map-midi-and-osc-triggers). |
 | **This computer's desk** | The top of Control surfaces: **Learn…** per role | STOP, Grand Master, GO and Back for every show on this computer ([below](#this-computers-desk)). |
 | **Emergency stop** | The **Emergency Stop…** button under the Control Map table | One button is ALL OFF (below). |
 | **Encoder bank** | The section under the Control Map table | Endless encoders turn the Workbench selection in Design. See [Build](build.md#encoder-banks-a-midi-controller-turns-the-selection). |
@@ -221,7 +221,7 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   has. A show's Control Map trigger on one is **kept in the show, not armed
   here**, and listed under **Who has it now** as *blocked on this computer*
   with the reason; on a computer whose desk does not use that control it
-  works as before. Learn Trigger… on a desk control is refused, naming the
+  works as before. Assign to Control… on a desk control is refused, naming the
   role.
 - **The show keeps its own stop, Grand Master and GO** (board Q314), so a
   computer with no desk still has them. The show's Grand Master input and its
@@ -310,7 +310,7 @@ button under the Control Map table.
   cannot be told from a button. A computer key is refused (a key works only
   in Operate).
 - **It beats any learn.** A learn left waiting (an Encoder learn whose panel
-  was closed) or a Learn Trigger dialog that is open never eats a press of
+  was closed) or an Assign to Control window that is open never eats a press of
   the stop. Learn dialogs refuse the stop's own control.
 - **A stop is never lost for more than one press.** An extra ALL OFF is
   better than a missed one, so nothing marks a bound stop dead for good. Two
@@ -404,7 +404,7 @@ that matter to a desk:
   mode or armed something else in between.
 - A fader or a CC that goes on sending values is **one press** until it goes
   back to 0. Use a Virtual Console slider for a fader that sets a level.
-- **GO and Back on one list.** A cue list's **Learn Trigger…** learns its
+- **GO and Back on one list.** A cue list's **Assign to Control…** learns its
   GO or, with **When pressed** set to **Back**, its Back: two controls, one
   list. Back goes back one cue on each press (the release does nothing),
   through the same path and the same double-GO guard as the Run tab's Back,
@@ -427,6 +427,46 @@ that matter to a desk:
   latch (on, then off), and a list's **GO** or **Stop the list** stays
   what it is. Set the button to momentary on the controller if it can be.
 
+## Assign to Control
+
+Right-click a cue list, a cue or a hit and choose **Assign to Control…**
+(it was *Learn Trigger…*; one item per thing, and once assigned it reads
+*Trigger: Note 60 (C4), MIDI ch 1…*). A cue list's window assigns its GO
+or, with **When pressed** set to **Back**, its Back. In the qlcconsole and
+Everything views that is what a control fires: a cue, a list or a hit. A
+raw scene or effect is offered it only in the **Classic QLC+** view; an
+existing trigger on one keeps working and stays in the Control Map table.
+
+The window is your desk as a list:
+
+- **Who has each control, before you press.** Every control something
+  already listens to is listed with its owner: *Scene: Warm (Control
+  Map)*, *Button "House lights" (Virtual Console)*, the encoder bank, a
+  master. This computer's desk roles read *this computer's GO
+  (Connections ▸ Control surfaces) · can't be taken*, greyed: a show never
+  takes them. The controls of each patched profile are listed too, free
+  ones as **Free**.
+- **Press or move a control to find it.** The press selects its row
+  (added if it was not listed) and **fires nothing**, in Design and in
+  Operate: no trigger, Virtual Console widget, master, channel group or
+  desk GO hears a press while the window is open. The **emergency stop**
+  (the show's and this computer's) still stops, and this computer's Grand
+  Master still follows its fader. Clicking a row only finds it: the press
+  on the device chooses.
+- **A GO, a Back or a hit is refused on a fader**, said in the window and
+  on the fader's row (*a fader: a GO or a hit takes a button*).
+- **A latching button is flagged** on its row (*latching: set it to
+  momentary*), with the note below.
+- **A Stream Deck through Companion.** While a phone or Companion is on
+  this show's Run page, the window says a Stream Deck key is set in
+  Companion, not pressed here: a key there sends GO, Back, ALL OFF or a hit
+  through the qlcconsole module's presets.
+
+**Control surfaces** has the same finder for any control: the line
+**Press or move any control** under this computer's desk names who has
+the control you touched last, or says it is free. Unlike the window, the
+press there still does its job.
+
 ## Where a trigger works
 
 Every trigger has a place, chosen in **Works** when you learn it and
@@ -445,7 +485,7 @@ are looking at it: the cue selected in the Show Tree, or the list selected
 there or chosen in the Run tab. The Operate / Design rules above still
 apply on top.
 
-**Learn Trigger… offers the place.** From a hit's right-click it starts
+**Assign to Control… offers the place.** From a hit's right-click it starts
 at the hit's own place, and a hit is offered only its own place and the
 ones inside it: a hit fires only where its place is live, so a trigger
 wider than that would hold the control and fire nothing. (One left wider
@@ -720,14 +760,14 @@ after any build that changes a surface, and say which build.
     *Expect:* dim while that song is not running, **lit** while it is (and
     while the hit plays), dim again after the list moves past it -- without
     touching anything.
-13. **One job per control.** Learn Trigger… on a scene and press **O**.
+13. **One job per control.** Assign to Control… on a hit and press **O**.
     *Expect:* refused, *… already does the PMJ Black 1's O (PMJ overlay).
     One job per control.*, the reason it can't be moved, and no **Move It
     Here**. Then give a Virtual Console button's External Input the
-    **1-Down** button, and Learn Trigger… on a scene with the same button.
+    **1-Down** button, and Assign to Control… on a hit with the same button.
     *Expect:* refused naming the VC button; **Move It Here** binds it to the
-    scene, and pressing it fires the scene and not the VC button.
-14. **A trigger at a cue.** Right-click cue 2 ▸ **Learn Trigger…** on a
+    hit, and pressing it in Operate fires the hit and not the VC button.
+14. **A trigger at a cue.** Right-click cue 2 ▸ **Assign to Control…** on a
     hit (Works: *In cue 2 …*) and press **1-Down**. Learn a scene on the
     same button from Build (Works: *Everywhere*). *Expect:* Learn says
     *… everywhere, except … in cue 2*. In Operate: before cue 2, the button

@@ -33,6 +33,7 @@
 #include "function.h"
 #include "chaser.h"
 #include "doc.h"
+#include "showwebaccess.h"
 #include "padrun.h"
 #include "padnames.h"
 #include "showstatus.h"
@@ -87,6 +88,9 @@ WebAccessRun::WebAccessRun(Doc *doc, QObject *parent)
 void WebAccessRun::setClients(int count)
 {
     m_clients = count;
+    // Assign to Control… names Companion while a Run client is connected.
+    if (m_doc != nullptr && m_doc->webAccess() != nullptr)
+        m_doc->webAccess()->setRunClients(count);
     if (m_clients > 0 && !m_timer.isActive())
     {
         m_last.clear();

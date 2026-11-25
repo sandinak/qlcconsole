@@ -89,7 +89,7 @@ Each group reads three of their times against the song map. Where would the audi
 
 ## Extension (fast groups)
 
-Press **Learn** instead of typing: with a timecode source running, the box stamps the time coming in now onto the cue. Ask: "When would you rather learn a time than type it?" (*while the sound op plays the song once and the SM calls the cues*). Then a button on a MIDI controller: right-click the cue list, or a hit, in the Show Tree → **Learn Trigger…**, and press the control. Ask why a dedicated button beats a mouse in the dark.
+Press **Learn** instead of typing: with a timecode source running, the box stamps the time coming in now onto the cue. Ask: "When would you rather learn a time than type it?" (*while the sound op plays the song once and the SM calls the cues*). Then a button on a MIDI controller: right-click the cue list, or a hit, in the Show Tree → **Assign to Control…**, and press the control. The window lists every control with who has it, and a press there fires nothing, so a student can press around the desk to find a free button without setting off a cue. Ask why a dedicated button beats a mouse in the dark.
 
 ## Part 3 — On the real rig (with Branson)
 

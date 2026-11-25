@@ -873,13 +873,13 @@ surface (UX-44).
 
 Budget 6 clicks. From: course level 3 lesson 5; 2026-11-07 catch (UX-62). Rules: UX-62, UX-61.
 
-- **Student:** Right-click the hit, Learn Trigger…, press the key; select the hit and press it.
+- **Student:** Right-click the hit, Assign to Control…, press the key; select the hit and press it.
 - **Pro:** The same key fires it in Operate; the Control Map lists every trigger.
 
 | # | Screen | Control | You see | Clicks |
 |---|---|---|---|---|
 | 1 | any | Show Tree tab | the Show Tree | 1 |
-| 2 | Show Tree | right-click a hit ▸ Learn Trigger… | the learn dialog hears a computer key (F7) and names it | 3 |
+| 2 | Show Tree | right-click a hit ▸ Assign to Control… | the learn dialog hears a computer key (F7) and names it | 3 |
 | 3 | Show Tree | the hit's row (arms it) | the hit selected | 1 |
 | 4 | Show Tree, Design | F7 | the hit plays, in Design | 1 |
 

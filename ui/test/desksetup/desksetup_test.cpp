@@ -23,6 +23,8 @@
 #include <QCheckBox>
 #include <QSettings>
 #include <QLabel>
+#include <QTreeWidget>
+#include <QDialogButtonBox>
 #include <QtTest>
 #include <QDir>
 
@@ -41,6 +43,7 @@
 #include "deskrecord.h"
 #include "controlmap.h"
 #include "deskchip.h"
+#include "controllearndialog.h"
 #include "qlcfile.h"
 #include "doc.h"
 
@@ -497,6 +500,40 @@ void DeskSetup_Test::deskShots()
         QVERIFY(mgr.grab().save(out.absoluteFilePath(
             QString("desk-surfaces-live-%1x%2.png").arg(sz.width()).arg(sz.height()))));
     }
+}
+
+/* Assign to Control… (phase A): the list shows this computer's GO as this
+   computer's, greyed, before anything is pressed; a press of it selects
+   the row, can't be taken, and fires nothing (no GO, not even a refusal). */
+void DeskSetup_Test::assignShowsTheDeskAsThisComputers()
+{
+    learnGo();
+    send(0, 202, 0);
+    D *desk = m_doc->deskRecord();
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    QSignalSpy fired(desk, &DeskRecord::fired);
+    QSignalSpy refused(desk, &DeskRecord::refused);
+    {
+        ControlLearnDialog d(m_doc, ControlMap::hit(hit));
+        d.show();
+        QTreeWidgetItem *row = d.rowOf(0, 202);
+        QVERIFY(row != nullptr);
+        QVERIFY2(row->text(1).contains("this computer's GO") && row->text(1).contains("can't be taken"),
+                 qPrintable(row->text(1)));
+        send(0, 202, 127);
+        QCOMPARE(d.selectedChannel(), 202u);
+        QVERIFY(!d.hasControl());
+        QVERIFY(!d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        QCOMPARE(fired.count(), 0);
+        QCOMPARE(refused.count(), 0);
+        send(0, 202, 0);
+        d.reject();
+    }
+    // Closed: the desk's GO is a GO again (here: the Run tab has no list, said).
+    send(0, 202, 127);
+    send(0, 202, 0);
+    QCOMPARE(fired.count() + refused.count(), 1);
 }
 
 QTEST_MAIN(DeskSetup_Test)

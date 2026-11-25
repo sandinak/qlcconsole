@@ -45,7 +45,7 @@ class Doc;
  * Every Control Map binding of the show in one table (Connections ▸
  * Devices ▸ Show control & sync ▸ Control Map): the control, what it
  * fires, how a press acts (editable); Remove and Remove all. Bindings are
- * made where the thing is, with Learn trigger… (ControlLearnDialog).
+ * made where the thing is, with Assign to Control… (ControlLearnDialog).
  */
 class QLC_UI_EXPORT ControlMapPanel final : public QWidget
 {

@@ -258,7 +258,7 @@ choice is saved with the show, as the tabs are.
 | **Speed Masters** | The footer's speed masters (what follows them still does) |
 | **Engine Load** | The footer's Load chip |
 | **Show Review** | The Review chip, its marks on Show Tree cues, the re-check after each change, and the readiness list's **Show Review…** button |
-| **Control Surfaces** | The Control Map's triggers and encoder bank, **Learn Trigger…**, and the Run tab's **Pad** button while the pad has nothing to say |
+| **Control Surfaces** | The Control Map's triggers and encoder bank, **Assign to Control…**, and the Run tab's **Pad** button while the pad has nothing to say |
 | **Focus Calls** | **Venue Focus…** and **Edit Focus Calls…** (the Lighting Studio's Focus menu, the Run tab, the Show Tree's cue Focus menu) and **Make This a Venue Focus Cue** |
 
 Some things have no switch:

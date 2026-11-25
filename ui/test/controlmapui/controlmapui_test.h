@@ -36,7 +36,7 @@ private slots:
     void theLearnDialogBindsWhatItHears();
     void theLearnDialogShowsAndRemovesABinding();
     void theMenuActionSaysWhatIsBound();
-    void buildOffersLearnTrigger();
+    void buildOffersAssignOnlyInClassic();
     void theShowTreeOffersLearnTrigger();
     void thePanelListsChangesAndRemoves();
     void theShowControlPageHasTheMap();
@@ -101,6 +101,14 @@ private slots:
     void padRunButtonRefused();
     void keyboardOwnerNamesTheShortcut();
     void phaseFShots();
+    // Phase A (CONTROL_SURFACES_EVAL §6, §7): Assign to Control… (Q310, Q325)
+    void pressSelectsFiresNothing();
+    void ownerShownBeforePress();
+    void faderRefusedForGoAndHit();
+    void latchingButtonSuggestsMomentary();
+    void companionHintOnRunClient();
+    void pressAnyControlNamesOwners();
+    void phaseAShots();
     // Phase R (CONTROL_SURFACES_EVAL §6, §7): recovery
     void hubSaysTheStopsDeviceIsMissing();
     void recoveryShots();

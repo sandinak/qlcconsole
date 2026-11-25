@@ -402,8 +402,8 @@ the tab.
   **Save as Bundle…**, **Duplicate**, **Rename** (or F2), **Delete
   Palette…** (with several palettes selected: **Duplicate N Palettes**, one
   undo step) — and an EFX or RGB Matrix a function — **Open in Workbench**,
-  **Learn Trigger…**, **Runs ▸**, **Used By ▸**, **Move to Folder ▸**,
-  **Duplicate**, **Rename**, **Delete…**. Delete is last (⌫ too; it asks
+  **Assign to Control…** (Classic QLC+ view only), **Runs ▸**, **Used By ▸**,
+  **Move to Folder ▸**, **Duplicate**, **Rename**, **Delete…**. Delete is last (⌫ too; it asks
   first, and says where the effect is used). Right-click empty space for
   **New Effect**, **New EFX** and **New RGB Matrix** (or **+ New**).
 
@@ -620,7 +620,8 @@ there: remove from the scene, move a look up or down, show a palette in
 Build ▸ Palettes, Chaser from Selection, a new scene in that folder, open or
 close everything under it. Under them, the row's own menu, the same as
 everywhere ([right-click menus](fixture-manager.md#right-click-menus)): a
-scene's **Open in Workbench**, **Learn Trigger…**, **Used By ▸** (the
+scene's **Open in Workbench**, **Assign to Control…** (in the Classic QLC+
+view only: elsewhere a control fires a cue, a cue list or a hit), **Used By ▸** (the
 chasers and collections it is in), **Move to Folder ▸**, **Duplicate**,
 **Rename** and **Delete…**; a palette's **Edit Palette** to **Delete
 Palette…**.

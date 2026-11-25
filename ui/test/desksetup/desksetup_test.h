@@ -35,6 +35,9 @@ private slots:
     void initTestCase();
     void init();
     void cleanup();
+    /** Phase A: Assign to Control… shows this computer's desk roles as
+     *  this computer's, never taken; a press of one fires nothing */
+    void assignShowsTheDeskAsThisComputers();
 
     void thePanelLearnsEachRole();
     void anOpenLearnEndsWithThePanel();

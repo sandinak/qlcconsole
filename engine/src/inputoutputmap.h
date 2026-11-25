@@ -977,6 +977,13 @@ public:
      *  masters. Releases still pass, so nothing held is left on. */
     void setDeskLearning(bool on) { m_deskLearning = on; }
     bool deskLearning() const { return m_deskLearning; }
+    /** An Assign to Control… window is open (ControlLearnDialog, phase A):
+     *  as setDeskLearning(), no show listener hears a press of any control
+     *  meanwhile -- a press finds the control in the window and fires
+     *  nothing, in Design and Operate. Releases still pass. The emergency
+     *  stop is the Control Map's and still stops. */
+    void setAssignListening(bool on) { m_assignListening = on; }
+    bool assignListening() const { return m_assignListening; }
 
 private slots:
     /** inputValueChanged() again as showInputValueChanged(), without the
@@ -987,6 +994,7 @@ private:
     QSet<quint64> m_staticControls;
     bool m_deskGrandMaster = false;
     bool m_deskLearning = false;
+    bool m_assignListening = false;
 
 private:
     QTimer *m_offlineRetry;

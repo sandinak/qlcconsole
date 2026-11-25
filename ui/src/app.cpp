@@ -41,6 +41,7 @@
 #endif
 
 #include "controlmap.h"
+#include "controllearndialog.h"
 #include "placementcheck.h"
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
@@ -6244,6 +6245,8 @@ void App::setWorkspaceView(WorkspaceView view, bool markModified)
 {
     const bool changed = view != m_workspaceView;
     m_workspaceView = view;
+    // Raw scenes and effects are offered Assign to Control… only in Classic (Q325).
+    ControlLearnDialog::setClassicView(view == ClassicView);
     m_openTabs.clear();
     m_functionsWindowShown = (m_workspaceView != ClassicView && !m_customTabs.isEmpty()
                                   ? m_customTabs : workspaceViewTabs(view)).contains(tr("Functions"));
