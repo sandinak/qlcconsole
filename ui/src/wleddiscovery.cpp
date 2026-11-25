@@ -542,6 +542,9 @@ void WledDiscovery::reconcile()
         Fixture *fx = fixtureFor(d);
         if (fx != nullptr && fx->macAddress().isEmpty())
             fx->setMacAddress(d.mac);
+        /* Known by its MAC alone: it is where it answers. */
+        else if (fx != nullptr && fx->ipAddress().trimmed().isEmpty() && !d.ip.isEmpty())
+            fx->setIPAddress(d.ip);
     }
     publish();
 }

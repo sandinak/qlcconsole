@@ -42,6 +42,12 @@ private slots:
     /** A fixture learns its WLED's MAC from its IP, and keeps it in the
      *  show file. */
     void aFixtureLearnsItsWledsMacAndSavesIt();
+    /** A fixture known by its MAC alone gets the found IP, and the devices
+     *  dialog starts from it instead of saying "no IP address". */
+    void discoveredDeviceHasAddress();
+    /** A host name is an address; only a truly empty one is refused, and
+     *  says why. */
+    void hostNameIsNotMissingIp();
     /** Its WLED answering at a new IP: a footer line, Follow It sends
      *  there, one undo. */
     void aWledAtANewAddressIsFollowed();

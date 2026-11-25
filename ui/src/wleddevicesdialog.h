@@ -26,6 +26,7 @@ class QPushButton;
 class OutputPatch;
 class QLabel;
 class Doc;
+class Fixture;
 
 /** @addtogroup ui UI
  * @{
@@ -73,6 +74,16 @@ public:
     /** Is @p ip an address WLED can be reached at ("172.18.2.50",
      *  "lantern-2.local", either with ":port")? */
     static bool validAddress(const QString &ip);
+
+    /** Where @p fx can be reached: its IP, else the one its hardware
+     *  address (MAC) answers at on the network now; empty when neither. */
+    static QString addressOf(Doc *doc, Fixture *fx);
+    /** Addresses to offer: the show's WLED fixtures and what is found. */
+    static QStringList suggestionsFor(Doc *doc, const QHash<QString, quint32> &elsewhere);
+    /** @p devices with an empty primary filled from the WLED fixture on
+     *  @p universe. */
+    static QList<Device> withKnownPrimary(Doc *doc, quint32 universe, const QList<Device> &devices,
+                                          const QHash<QString, quint32> &elsewhere);
 
     /** Ask for the devices of @p universe's WLED patch on @p line and apply
      *  them, as one undo step. True if anything changed. */

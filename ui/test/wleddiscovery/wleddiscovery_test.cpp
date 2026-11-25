@@ -33,6 +33,7 @@
 #define private public
 #define protected public
 #include "wleddiscovery.h"
+#include "wleddevicesdialog.h"
 #include "wledconfigcheck.h"
 #include "fixturemanager.h"
 #include "fixturetreewidget.h"
@@ -483,6 +484,60 @@ void WledDiscovery_Test::aFixtureLearnsItsWledsMacAndSavesIt()
     QVERIFY(back.loadXML(r, m_doc, m_doc->fixtureDefCache()));
     QCOMPARE(back.macAddress(), QString("e08cfef992e0"));
     QCOMPARE(back.ipAddress(), wled.address());
+}
+
+void WledDiscovery_Test::discoveredDeviceHasAddress()
+{
+    FakeWled wled;
+    QVERIFY(wled.listen(QHostAddress::LocalHost));
+    wled.info = QJsonObject{ { "name", "WLED" }, { "mac", "e08cfef992e0" }, { "leds", QJsonObject{ { "count", 50 } } } };
+    // In the show by its MAC alone: no IP was ever typed.
+    Fixture *fx = showWled(m_doc, "WLED Mac", QString());
+    QVERIFY(fx != nullptr);
+    fx->setMacAddress("e08cfef992e0");
+    QVERIFY(fx->ipAddress().isEmpty());
+
+    WledDiscovery found(m_doc);
+    found.setSender([](const QByteArray &) {});
+    found.receive(answer("wled-f992e0", "127.0.0.1", wled.serverPort(), "e08cfef992e0"), QHostAddress::LocalHost);
+    QVERIFY(waitFor([&found]() { return found.devices().size() == 1; }));
+    const QString ip = found.devices().first().ip;
+    QVERIFY(!ip.isEmpty());
+    QCOMPARE(fx->ipAddress(), ip);
+    QCOMPARE(WledDevicesDialog::addressOf(m_doc, fx), ip);
+
+    // The devices dialog's empty primary starts from it: nothing to flag.
+    QList<WledDevicesDialog::Device> none;
+    none << WledDevicesDialog::Device();
+    none[0].address = 1;
+    none[0].channels = 15;
+    const QList<WledDevicesDialog::Device> start =
+        WledDevicesDialog::withKnownPrimary(m_doc, fx->universe(), none, QHash<QString, quint32>());
+    QCOMPARE(start.first().ip, ip);
+    QVERIFY2(WledDevicesDialog::problem(start, QHash<QString, quint32>()).isEmpty(),
+             qPrintable(WledDevicesDialog::problem(start, QHash<QString, quint32>())));
+    QVERIFY(WledDevicesDialog::suggestionsFor(m_doc, QHash<QString, quint32>()).contains(ip));
+}
+
+void WledDiscovery_Test::hostNameIsNotMissingIp()
+{
+    QList<WledDevicesDialog::Device> one;
+    one << WledDevicesDialog::Device();
+    one[0].address = 1;
+    one[0].channels = 15;
+    one[0].ip = "wled-f992e0.local";
+    QVERIFY(WledDevicesDialog::problem(one, QHash<QString, quint32>()).isEmpty());
+    // Truly nothing: still refused, and the words say what to do.
+    one[0].ip.clear();
+    const QString why = WledDevicesDialog::problem(one, QHash<QString, quint32>());
+    QVERIFY(why.contains("no IP address or host name"));
+    QVERIFY(why.contains("none was found on the network"));
+    // A fixture with neither IP nor MAC has nothing to offer.
+    Fixture *fx = showWled(m_doc, "WLED Bare", QString());
+    QVERIFY(fx != nullptr);
+    QVERIFY(WledDevicesDialog::addressOf(m_doc, fx).isEmpty());
+    QCOMPARE(WledDevicesDialog::withKnownPrimary(m_doc, fx->universe(), one, QHash<QString, quint32>())
+                 .first().ip, QString());
 }
 
 void WledDiscovery_Test::aWledAtANewAddressIsFollowed()
