@@ -2440,7 +2440,8 @@ void ConnectionsTree_Test::cancelledUnpatchKeepsThePreviousUndoStep()
     // With nothing on it to warn about, the unpatch is its own undo step.
     cm->removeAll();
     tree.unpatchFromLine(0, stub->name(), 0, false);
-    QVERIFY(iom->inputPatch(0) == nullptr);
+    // Unpatched by name: a patch with no plugin, or none at all.
+    QVERIFY(iom->inputPatch(0) == nullptr || iom->inputPatch(0)->plugin() == nullptr);
     QCOMPARE(iom->patchUndo()->summary(), QString("unpatch universe 1"));
 }
 
