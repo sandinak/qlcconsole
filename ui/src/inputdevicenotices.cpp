@@ -195,9 +195,13 @@ QString InputDeviceNotices::repatchText(Doc *doc, quint32 universe, const QStrin
     if (InputPatch *ip = iom->inputPatch(universe))
         was = ip->inputName();
     else if (Universe *uni = iom->universe(universe))
+    {
         foreach (const Universe::OfflinePatch &rec, uni->offlinePatches())
+        {
             if (rec.tag == Universe::InputPatchTag && rec.uid.isEmpty() == false)
                 was = rec.uid;
+        }
+    }
     if (was == newDevice)
         return QString();
     const QString jobs = jobsText(doc, universe);
