@@ -19,8 +19,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   slider's flash; a slider with Catch values on picks its fader up again when
   it is back, while a master follows the desk's first value at once); the
   notice names what stopped working (*Emergency Stop, Grand Master, GO of
-  Main*); a stop's first 0 after a replug keeps the desk's state dump from
-  firing ALL OFF; *Slept 40 s, finding devices…* after a sleep; a repatch in
+  Main*); a stop's first 0 after a replug keeps the desk's state dump (one
+  value, never more, said in the notice) from firing ALL OFF; *Slept 40 s, finding devices…* after a sleep; a repatch in
   Inputs/Outputs says what moves first (Cancel leaves it); the hub (in amber) and
   Show Review (CTL-01) say when the stop's desk is missing.
 

@@ -339,7 +339,8 @@ public:
     void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
     /** How long after a device comes back (a replug, a wake) what it sends
      *  may be its state dump (phase R): a stop whose first value then is 0
-     *  ignores the non-zero ones that follow inside this (ms). */
+     *  ignores the ONE non-zero that follows inside this (ms); a second
+     *  press, or any press after another 0, fires. */
     void setDumpWindowMs(int ms) { m_dumpWindowMs = ms; }
     int dumpWindowMs() const { return m_dumpWindowMs; }
     /** What is wrong with the stop's control, in words (empty: nothing):
@@ -565,6 +566,11 @@ signals:
     /** The stop's control was seen moving like a fader (or its state
      *  changed): the panel shows it. */
     void stopStateChanged();
+    /** The stop's first non-zero value after its device came back (a
+     *  replug, a wake) on @a universe / @a channel was taken for the
+     *  device's state dump and ignored: once per replug at most (phase R).
+     *  InputDeviceNotices says so. */
+    void stopDumpIgnored(quint32 universe, quint32 channel);
     /** What isArmed() says may have changed (the mode, the Run tab's
      *  list, the Show Tree's selection, a cue list moving on). */
     void armingChanged();
@@ -750,8 +756,9 @@ private:
     QHash<quint64, StopHold> m_estopHeld;
     /** The state-dump guard (phase R): when each universe's device came
      *  back, the stop controls heard since, and those whose first value
-     *  was 0 (a button at rest: a non-zero inside the window is the
-     *  device's dump, not a press). */
+     *  was 0 (a button at rest: the next value, if non-zero and inside the
+     *  window, is the device's dump, not a press; ignored once, then the
+     *  guard is off). */
     QHash<quint32, QElapsedTimer> m_backAt;
     QSet<quint64> m_backHeard;
     QSet<quint64> m_backAtRest;

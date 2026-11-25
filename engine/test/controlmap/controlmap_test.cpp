@@ -2399,15 +2399,54 @@ void ControlMap_Test::stopStateDumpOnReplug()
     InputOutputMap *iom = m_doc->inputOutputMap();
     cm->setDumpWindowMs(400);
 
-    // First 0, then the dump (twice over): nothing stops.
-    a->start(m_doc->masterTimer(), FunctionParent::master());
-    tick(2);
-    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
-    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
-    sendAll(kStopNote, { 0, 127, 0, 127 });
+    QSignalSpy ignored(cm, &ControlMap::stopDumpIgnored);
+    auto replug = [&]() {
+        a->start(m_doc->masterTimer(), FunctionParent::master());
+        tick(2);
+        emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+        emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    };
+
+    // First 0, then the dump: nothing stops, and it is said.
+    replug();
+    sendAll(kStopNote, { 0, 127 });
     tick(3);
     QCOMPARE(handled.count(), 0);
     QVERIFY2(a->isRunning(), "the device's state dump after a replug fired ALL OFF");
+    QCOMPARE(ignored.count(), 1);
+    QCOMPARE(ignored.at(0).at(0).toUInt(), 0u);
+    QCOMPARE(ignored.at(0).at(1).toUInt(), kStopNote);
+    send(kStopNote, 0);
+    QTest::qWait(cm->dumpWindowMs() + 100);
+    handled.clear();
+    ignored.clear();
+
+    // First 0, the dump, then a real release and press inside the window
+    // (the operator double-taps STOP right after the replug): at most ONE
+    // value is ignored per replug, so the press after it stops the show.
+    replug();
+    sendAll(kStopNote, { 0, 127, 0, 127 });
+    tick(3);
+    QCOMPARE(handled.count(), 1);
+    QVERIFY2(!a->isRunning(), "a real press inside the replug window was swallowed as the state dump");
+    QCOMPARE(ignored.count(), 1);
+    send(kStopNote, 0);
+    QTest::qWait(cm->dumpWindowMs() + 100);
+    handled.clear();
+    ignored.clear();
+
+    // First 0, then another 0 (a release): the guard is off, the press fires.
+    replug();
+    sendAll(kStopNote, { 0, 0, 127 });
+    tick(3);
+    QCOMPARE(handled.count(), 1);
+    QVERIFY(!a->isRunning());
+    QCOMPARE(ignored.count(), 0);
+    send(kStopNote, 0);
+    QTest::qWait(cm->dumpWindowMs() + 100);
+    handled.clear();
+    a->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(2);
 
     // The window over: a real press stops the show.
     QTest::qWait(cm->dumpWindowMs() + 100);
@@ -2419,6 +2458,7 @@ void ControlMap_Test::stopStateDumpOnReplug()
     send(kStopNote, 0);
 
     // First 127 after a replug: one ALL OFF, the dump repeating it is not a second.
+    // (The 1 s stop debounce, not the dump guard, holds the repeats.)
     a->start(m_doc->masterTimer(), FunctionParent::master());
     tick(2);
     emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));

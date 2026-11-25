@@ -559,4 +559,38 @@ void InputDeviceNotices_Test::aDeviceStillMissingAfterAWakeIsSaidAgain()
     QCOMPARE(said.count(), 3);
 }
 
+void InputDeviceNotices_Test::anIgnoredStopDumpIsSaid()
+{
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    cm->setBinding({ 1, 5, ControlMap::emergencyStop(), ControlMap::Toggle });
+    auto unbind = qScopeGuard([cm]() { cm->removeBinding(ControlMap::emergencyStop()); });
+    cm->setDumpWindowMs(5000);      // never over while the test runs
+
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(60000);   // the replug's own notice: not in this test
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+
+    // The desk comes back, its stop at rest, and its dump presses it: ignored,
+    // and said where the replug is said (never only in a debug log).
+    emit iom->inputDeviceConnected(1, m_stub->name(), kPad);
+    cm->handleInput(1, 5, 0);
+    cm->handleInput(1, 5, 127);
+    QCOMPARE(said.count(), 1);
+    QCOMPARE(said.at(0).at(0).toString(),
+             QString("Ignored STOP's first value after replug (state dump) — universe 2"));
+    QCOMPARE(said.at(0).at(0).toString(), InputDeviceNotices::stopDumpText(1));
+    QCOMPARE(said.at(0).at(1).toBool(), false);
+
+    // A release and a press after it (a double tap): it fires, nothing said.
+    QSignalSpy fired(cm, &ControlMap::fired);
+    cm->handleInput(1, 5, 0);
+    cm->handleInput(1, 5, 127);
+    QCOMPARE(said.count(), 1);
+    QCOMPARE(fired.count(), 1);
+    cm->handleInput(1, 5, 0);
+    cm->setDumpWindowMs(500);
+}
+
 QTEST_MAIN(InputDeviceNotices_Test)

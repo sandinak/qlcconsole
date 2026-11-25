@@ -855,7 +855,8 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
     // held, is swallowed below.
     /* A device that came back sends its whole state (phase R): a stop that
        said 0 first is at rest, and a non-zero right after it is the dump,
-       not a press. A first non-zero is a press (it fires, once). */
+       not a press -- ignored once, never more (isStateDump()). A first
+       non-zero is a press (it fires, once). */
     if (universe != KeyboardUniverse && !m_backAt.isEmpty() && stopOn(k) != nullptr
         && isStateDump(k, value))
         return;
@@ -1065,12 +1066,17 @@ bool ControlMap::isStateDump(quint64 k, uchar value)
             m_backAtRest.insert(k);
         return false;
     }
-    if (value > 0 && m_backAtRest.contains(k))
-    {
-        qDebug() << "[ControlMap] stop value" << value << "ignored: the device's state dump after it came back";
-        return true;
-    }
-    return false;
+    if (!m_backAtRest.contains(k))
+        return false;
+    /* At most ONE value is ignored per replug (the e-stop rule: a bound stop
+       is never lost for more than one press). That one, or the next 0 (a
+       real release), turns the guard off: the press after it fires. */
+    m_backAtRest.remove(k);
+    if (value == 0)
+        return false;
+    qDebug() << "[ControlMap] stop value" << value << "ignored: the device's state dump after it came back";
+    emit stopDumpIgnored(universe, quint32(k & 0xFFFFFFFF));
+    return true;
 }
 
 QString ControlMap::stopDeviceMissing() const

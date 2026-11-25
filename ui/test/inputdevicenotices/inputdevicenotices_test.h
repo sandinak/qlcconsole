@@ -56,6 +56,9 @@ private slots:
     /** A device missing before the sleep is said again, in amber, once the
      *  wake settles: the wake line never leaves the lost stop unsaid. */
     void aDeviceStillMissingAfterAWakeIsSaidAgain();
+    /** The stop's first value after a replug, ignored as the desk's state
+     *  dump, is said in the notices; a double tap after it is not ignored. */
+    void anIgnoredStopDumpIsSaid();
 
 private:
     Doc *m_doc = nullptr;

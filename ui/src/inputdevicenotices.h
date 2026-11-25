@@ -145,7 +145,13 @@ public:
      *  address in brackets. */
     static QString controllerName(QLCIOPlugin *plugin, quint32 input);
 
+    /** What is said when the stop's first value after universe
+     *  @p universe's device came back was ignored as its state dump
+     *  (ControlMap::stopDumpIgnored; once per replug at most). */
+    static QString stopDumpText(quint32 universe);
+
 private slots:
+    void slotStopDumpIgnored(quint32 universe, quint32 channel);
     void slotStickDrift(quint32 input, int channel, double offset);
     void slotSticksCentred(quint32 input, int held);
 

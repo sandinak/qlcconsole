@@ -28,6 +28,7 @@
 #include "inputpatch.h"
 #include "showstatus.h"
 #include "universe.h"
+#include "controlmap.h"
 #include "doc.h"
 
 #define STATUS_KEY QStringLiteral("input.devices")
@@ -50,6 +51,11 @@ InputDeviceNotices::InputDeviceNotices(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &InputDeviceNotices::schedule);
         connect(iom, &InputOutputMap::inputSlotChanged, this, &InputDeviceNotices::schedule);
     }
+    /* The stop's first value after a replug taken for the device's state
+       dump: said where the replug is said, never only in a debug log. */
+    ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr;
+    if (cm != nullptr)
+        connect(cm, &ControlMap::stopDumpIgnored, this, &InputDeviceNotices::slotStopDumpIgnored);
     schedule();
 }
 
@@ -172,6 +178,17 @@ QString InputDeviceNotices::goneText(const Device &d, bool disconnected)
 QString InputDeviceNotices::jobsText(Doc *doc, quint32 universe)
 {
     return ControlOwners::jobsOn(doc, universe).join(QStringLiteral(", "));
+}
+
+QString InputDeviceNotices::stopDumpText(quint32 universe)
+{
+    return tr("Ignored STOP's first value after replug (state dump) — universe %1").arg(universe + 1);
+}
+
+void InputDeviceNotices::slotStopDumpIgnored(quint32 universe, quint32 channel)
+{
+    Q_UNUSED(channel);
+    emit notice(stopDumpText(universe), false);
 }
 
 void InputDeviceNotices::noteWake(qint64 sleptMs)

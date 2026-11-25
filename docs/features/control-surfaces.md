@@ -254,10 +254,13 @@ button under the Control Map table.
   press that taught the stop is ignored until its release, until a second value arrives, or for one second.
 - **A device that comes back sends its whole state**, and that is not a press.
   For half a second after a desk is plugged back in (or found again after a
-  sleep), a stop whose first value is 0 is at rest, and any press value that
-  follows in that half second is the desk's state dump: no ALL OFF. A first
-  value above 0 is a press: one ALL OFF, however often the dump repeats it.
-  After the half second every press is a press again.
+  sleep), a stop whose first value is 0 is at rest, and the one press value
+  that follows it in that half second is the desk's state dump: no ALL OFF,
+  and the notice says *Ignored STOP's first value after replug (state dump)*.
+  Only one value is ever ignored: a release and a press after it (a double
+  tap on STOP right after the replug) fire ALL OFF. A first value above 0 is
+  a press: one ALL OFF, however often the dump repeats it. After the half
+  second every press is a press again.
 - **When the stop's desk is missing, you are told.** The Control surfaces
   hub's stop line turns amber and says *its device '…' is not connected, so it stops nothing
   until it is back* (or that its universe has no input patched), and Show
