@@ -2449,7 +2449,8 @@ void ControlMap_Test::stopDeviceMissingSaysWhich()
     cm->setBinding({ 0, kStopNote, ControlMap::emergencyStop(), ControlMap::Toggle });
     QVERIFY(cm->stopDeviceMissing().isEmpty());     // patched and here
     InputOutputMap *iom = m_doc->inputOutputMap();
-    QVERIFY(iom->setInputPatch(0, QString(), QString(), 0));
+    QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    QVERIFY(iom->inputPatch(0) == nullptr);
     QVERIFY2(cm->stopDeviceMissing().contains(QStringLiteral("universe 1 has no input patched")),
              qPrintable(cm->stopDeviceMissing()));
     cm->setBinding({ ControlMap::KeyboardUniverse, ControlMap::keyChannel(Qt::Key_F5, Qt::NoModifier),

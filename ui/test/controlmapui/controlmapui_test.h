@@ -101,6 +101,9 @@ private slots:
     void padRunButtonRefused();
     void keyboardOwnerNamesTheShortcut();
     void phaseFShots();
+    // Phase R (CONTROL_SURFACES_EVAL §6, §7): recovery
+    void hubSaysTheStopsDeviceIsMissing();
+    void recoveryShots();
 
 private:
     Scene *scene(const QString &name);

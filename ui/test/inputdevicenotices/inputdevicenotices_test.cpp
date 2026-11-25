@@ -480,10 +480,10 @@ void InputDeviceNotices_Test::repatchWarnsAndLists()
     QTreeWidgetItem *keyboard = nullptr;
     for (int i = 0; i < tree->topLevelItemCount() && keyboard == nullptr; ++i)
     {
-        QTreeWidgetItem *top = tree->topLevelItem(i);
-        for (int c = 0; c < top->childCount(); ++c)
-            if (top->text(0) == m_stub->name() && top->child(c)->text(6) == QLatin1String("0"))
-                keyboard = top->child(c);
+        // One row per plugin line: the plugin's name, then the line's number (hidden).
+        QTreeWidgetItem *row = tree->topLevelItem(i);
+        if (row->text(0) == m_stub->name() && row->text(6) == QLatin1String("0"))
+            keyboard = row;
     }
     QVERIFY2(keyboard != nullptr, "the stub's first line is not in the editor");
     int answered = 0;
