@@ -73,6 +73,7 @@
 #include <QDir>
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
+#include "programmercontroller.h"
 #include "controlmap.h"
 #include "scene.h"
 #include "doc.h"
