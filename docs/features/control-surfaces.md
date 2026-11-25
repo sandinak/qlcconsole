@@ -170,8 +170,8 @@ button under the Control Map table.
 - **Stop All is never greyed.** A level held with nothing running (a Simple
   Desk channel, a Level slider) is what it is for too, so it is always
   there. A level let go of stays out, through a GO, until you move its
-  fader again; a fader left up on the screen does not light anything until
-  then. (A master, Grand or group, only scales what is lit: it lights
+  fader again (or pick a level or colour from its Click & Go); a fader left
+  up on the screen does not light anything until then. (A master, Grand or group, only scales what is lit: it lights
   nothing of its own.)
 - Its key is **⌘⇧Esc** on a Mac and **Ctrl+Shift+Backspace** on Windows and
   Linux (Ctrl+Shift+Esc opens the Task Manager on Windows, which would take

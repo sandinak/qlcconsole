@@ -751,6 +751,9 @@ private slots:
     void slotClickAndGoLevelAndPresetChanged(uchar level, QImage img);
 
 protected:
+    /** A Click & Go pick moved it by hand: it is live again after ALL OFF */
+    void markPickedByHand();
+
     ClickAndGoWidget::ClickAndGo m_cngType;
     QHBoxLayout *m_cngBox;
     QToolButton *m_cngButton;

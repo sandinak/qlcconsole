@@ -4314,6 +4314,33 @@ void AppViews_Test::stopAllTakesOutAHeldLevel()
     slider.setSliderValue(90, false, true);
     QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 10)), 120, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 90, 5000);
+
+    // A Click & Go pick is a hand on it too (round 2): stopped again, a
+    // level picked from its menu lights it, and so does a colour pick.
+    // Without the stamp the pick moved the slider on screen and wrote
+    // nothing: dark until someone dragged the fader.
+    slider.setClickAndGoType(ClickAndGoWidget::Red);
+    auto stopAgain = [&]() {
+        rules->noteGo();
+        m_app->m_controlPanicAction->trigger();
+        QVERIFY(rules->emergencyStopped());
+        QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 0, 5000);
+        QTest::qWait(100);
+        QCOMPARE(int(outputAt(doc, 11)), 0);
+    };
+    stopAgain();
+    QVERIFY(QMetaObject::invokeMethod(&slider, "slotClickAndGoLevelChanged",
+                                      Qt::DirectConnection, Q_ARG(uchar, uchar(150))));
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 150, 5000);
+    stopAgain();
+    QVERIFY(QMetaObject::invokeMethod(&slider, "slotClickAndGoLevelAndPresetChanged",
+                                      Qt::DirectConnection, Q_ARG(uchar, uchar(170)),
+                                      Q_ARG(QImage, QImage())));
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 170, 5000);
+    stopAgain();
+    QVERIFY(QMetaObject::invokeMethod(&slider, "slotClickAndGoColorChanged",
+                                      Qt::DirectConnection, Q_ARG(QRgb, qRgb(255, 0, 0))));
+    QTRY_COMPARE_WITH_TIMEOUT(int(outputAt(doc, 11)), 128, 5000);
 }
 
 /* §4 #16: no Ctrl+Shift+Esc on Windows (it opens the Task Manager there,

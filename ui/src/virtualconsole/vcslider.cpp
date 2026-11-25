@@ -1447,9 +1447,20 @@ void VCSlider::setClickAndGoWidgetFromLevel(uchar level)
         m_cngButton->setIcon(QPixmap::fromImage(m_cngWidget->getImageFromValue(level)));
 }
 
+void VCSlider::markPickedByHand()
+{
+    /* A Click & Go pick is a hand on the slider, like a drag: stamped after
+       the new value is in, so a stopped slider (ALL OFF) comes back with the
+       pick, never with the level it held before the stop. */
+    QMutexLocker locker(&m_levelValueMutex);
+    m_liveEpoch.store(GenericFader::stampEpoch(), std::memory_order_relaxed);
+    m_levelValueChanged = true;
+}
+
 void VCSlider::slotClickAndGoLevelChanged(uchar level)
 {
     setSliderValue(level, false, false);
+    markPickedByHand();
     updateFeedback();
 
     QColor col = m_cngWidget->getColorAt(level);
@@ -1469,6 +1480,7 @@ void VCSlider::slotClickAndGoColorChanged(QRgb color)
 
     // place the slider half way to reach white@255 and black@0
     setSliderValue(128);
+    markPickedByHand();
     updateFeedback();
 
     // let's force a value change to cover all the HTP/LTP cases
@@ -1478,6 +1490,7 @@ void VCSlider::slotClickAndGoColorChanged(QRgb color)
 void VCSlider::slotClickAndGoLevelAndPresetChanged(uchar level, QImage img)
 {
     setSliderValue(level, false, false);
+    markPickedByHand();
     updateFeedback();
 
     QPixmap px = QPixmap::fromImage(img);
