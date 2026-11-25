@@ -3005,6 +3005,7 @@ void AppViews_Test::pmjGoRunsTheRunTabList()
     PMJOverlay *pmj = m_app->m_pmjOverlay;
 
     int count = m_app->m_runCommands;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QCOMPARE(m_app->m_runCommands, ++count);
     QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteRunTab);
@@ -3017,10 +3018,12 @@ void AppViews_Test::pmjGoRunsTheRunTabList()
     qint64 now = 1000000;
     sc->setGuardClock([&now]() { return now; });
     sc->setGoGuardMs(1000);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
     QSignalSpy held(sc, &ShowControl::commandHeld);
     now += 300;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QCOMPARE(held.count(), 1);
     QTest::qWait(50);
@@ -3036,6 +3039,7 @@ void AppViews_Test::pmjGoRunsTheRunTabList()
     QVERIFY(side != nullptr);
     doc->controlMap()->setRunTabList(other);
     QCOMPARE(CueRunner::runTabChaser(doc), side);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QTRY_VERIFY_WITH_TIMEOUT(side->isRunning(), 5000);
     QCOMPARE(list->currentStepIndex(), 1);
@@ -3047,6 +3051,7 @@ void AppViews_Test::pmjGoRunsTheRunTabList()
     QVERIFY(doc->addFunction(warm));
     doc->controlMap()->setBinding({ 0, 32896, ControlMap::function(warm->id()), ControlMap::Toggle });
     count = m_app->m_runCommands;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QCOMPARE(m_app->m_runCommands, count);
 
@@ -3060,6 +3065,7 @@ void AppViews_Test::pmjGoRunsTheRunTabList()
     const bool runTabPlays = list->isRunning();
     doc->masterTimer()->stopAllFunctions();
     QTRY_VERIFY_WITH_TIMEOUT(!list->isRunning(), 5000);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteRunTab);
     QTRY_COMPARE_WITH_TIMEOUT(list->isRunning(), runTabPlays, 5000);
@@ -3083,11 +3089,14 @@ void AppViews_Test::pmjBackStepsBack()
     doc->setMode(Doc::Operate);
     PMJOverlay *pmj = m_app->m_pmjOverlay;
 
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QTRY_VERIFY_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0, 5000);
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
     const int count = m_app->m_runCommands;
+    pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjBack, 0);
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjBack, 127);
     QCOMPARE(m_app->m_runCommands, count + 1);
     QCOMPARE(m_app->m_lastRunRoute, ShowControl::RouteRunTab);
@@ -3139,11 +3148,13 @@ void AppViews_Test::pmjGoLampLitWhenReady()
 
     // Running: Back lit too.
     doc->setMode(Doc::Operate);
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QTRY_COMPARE_WITH_TIMEOUT(lastSent(back), lit, 3000);
     QCOMPARE(lastSent(go), lit);
 
     // On the last cue nothing is left to GO: Go dim.
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
     QTRY_COMPARE_WITH_TIMEOUT(lastSent(go), dim, 3000);

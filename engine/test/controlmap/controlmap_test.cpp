@@ -1823,6 +1823,7 @@ void ControlMap_Test::aControllerGoneLetsGoOfWhatItHeld()
     tick(3);
     QVERIFY2(!a->isRunning(), "a controller that went away left its held button on");
     emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    QTest::qWait(cm->dumpBurstMs() + 50);       // past the replug's dump burst
     send(kNote, 0);                             // the replugged button at rest...
     send(kNote, 127);                           // ...and pressed again
     tick(2);
@@ -2745,7 +2746,7 @@ void ControlMap_Test::aTriggerIgnoresTheReplugBurst()
     const QList<QList<int>> shapes = { { 127 }, { 0, 127, 0 } };
     for (const QList<int> &dump : shapes)
     {
-        m_doc->masterTimer()->stopAllFunctions();
+        chaser->stop(FunctionParent::master());
         tick(3);
         QVERIFY(!chaser->isRunning());
         ignored.clear();
