@@ -524,6 +524,56 @@ void SurfaceSim_Test::aStateDumpFiresNoDeskRole()
     cm->setDumpWindowMs(500);
 }
 
+/* Phase R through the PMJ's own bytes: a key really held across the
+   replug (aftertouch, an axis used as GO) keeps resending 127. The dump's
+   press is ignored and the key counts as held, so the resends after the
+   window are that one press: no GO until a release then a press. The
+   desk's GO on Go, a show trigger (a cue list's GO) on Back. */
+void SurfaceSim_Test::aKeyHeldAcrossAReplugGoesOnlyAfterARelease()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    m_doc->showControl()->setGoGuardMs(0);      // not under test here
+    const quint32 list = runList(m_doc);
+    QVERIFY(deskOn(m_doc, DeskRecord::Go, 0, kPmj, kGo));
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kBack, ControlMap::cueList(list), ControlMap::Toggle });
+    cm->setDumpWindowMs(cm->dumpBurstMs() + 150);
+    QSignalSpy deskFired(m_doc->deskRecord(), &DeskRecord::fired);
+    QSignalSpy showFired(cm, &ControlMap::fired);
+    const QString go = QStringLiteral("Go"), back = QStringLiteral("Back");
+
+    // Both keys held through the cable out and back: the dump says 127.
+    QVERIFY2(SurfaceScenarios::unplugReplug(&pmj, { { go, 127 }, { back, 127 } }), qPrintable(pmj.lastError()));
+    settle();
+    // Still held: resends inside the window, then past it.
+    pmj.wait(cm->dumpBurstMs() + 50);
+    QVERIFY(pmj.set(go, 127));
+    QVERIFY(pmj.set(back, 127));
+    pmj.wait(200);
+    QVERIFY(pmj.set(go, 127));
+    QVERIFY(pmj.set(back, 127));
+    QVERIFY(pmj.set(go, 127));
+    QVERIFY(pmj.set(back, 127));
+    settle();
+    QVERIFY2(deskFired.isEmpty(), "the desk's GO held across the replug GOed on a resend");
+    QVERIFY2(showFired.isEmpty(), "a show trigger held across the replug GOed on a resend");
+
+    // A release, then a press: one each.
+    QVERIFY(pmj.set(go, 0));
+    QVERIFY(pmj.set(go, 127));
+    settle();
+    QCOMPARE(deskFired.count(), 1);
+    QVERIFY(pmj.set(back, 0));
+    QVERIFY(pmj.set(back, 127));
+    settle();
+    QCOMPARE(showFired.count(), 1);
+    QVERIFY(pmj.set(go, 0));
+    QVERIFY(pmj.set(back, 0));
+    cm->setDumpWindowMs(500);
+}
+
 /* This computer's STOP and GO on a feedback surface get their lamps from
    the Control Map's one lamp writer, with the show's stop's and GO's rules:
    on the PMJ (a board that idles dim) STOP lit always and blinking after an

@@ -1001,10 +1001,15 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         return;
     /* After a replug the device dumps its state: a "pressed" with no
        release first is not the operator's, and an unwanted GO is worse
-       than a missed one (phase R). The stop has its own rule above. */
+       than a missed one (phase R). The stop has its own rule above. The
+       control counts as held: one really held across the replug and
+       resending fires only after a release then a press. */
     if (!m_backAt.isEmpty() && stopOn(k) == nullptr
         && isTriggerDump(universe, channel, value, dumpName(k)))
+    {
+        m_down.insert(k);
         return;
+    }
     m_down.insert(k);
     /* The narrowest armed place has the control (Q296); several there step
        through, one per press (Q303). None armed: one whose function runs
