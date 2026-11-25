@@ -88,15 +88,24 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::inputSlotChanged, this, &DeskRecord::rebind);
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, &DeskRecord::rebind);
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &DeskRecord::rebind);
-        connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &DeskRecord::rebind);
+        connect(iom, &InputOutputMap::inputDeviceDisconnected, this, [this](quint32 universe) {
+            forgetHeld(universe);
+            rebind();
+        });
         /* A universe removed takes its patch with it (removeUniverse() says
            only universeRemoved): a role there is no longer live. */
         connect(iom, &InputOutputMap::universeAdded, this, &DeskRecord::rebind);
         connect(iom, &InputOutputMap::universeRemoved, this, &DeskRecord::rebind);
-        // A replug: found again, and the Grand Master waits to pick up (Q316).
-        connect(iom, &InputOutputMap::inputDeviceConnected, this, [this]() {
+        // Passthrough on: the desk can't hear the universe (its input goes to DMX).
+        connect(iom, &InputOutputMap::universePassthroughChanged, this, &DeskRecord::rebind);
+        /* A replug: found again. Q316: the Grand Master waits to pick up
+           only when its own device came back, never for a pad or another
+           box on another universe (that would freeze a fade mid-show). */
+        connect(iom, &InputOutputMap::inputDeviceConnected, this, [this](quint32 universe) {
+            forgetHeld(universe);
             rebind();
-            rearmGrandMaster();
+            if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
+                rearmGrandMaster();
         });
     }
     if (m_doc != nullptr)
@@ -106,9 +115,14 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
             m_unlocked = false;
             if (m_learning)
                 endLearn(tr("Learn stopped: another show was loaded."));
+            forgetPatchUndo();
             rebind();
             rearmGrandMaster();
         });
+        /* Patch It's Undo is of the show it patched: never run against
+           another one (it would clear that show's input, or remove its
+           last universe). */
+        connect(m_doc, &Doc::cleared, this, &DeskRecord::forgetPatchUndo);
         /* A learn open while the operator goes to Operate (or back) would
            take the next control touched: it ends with the mode. */
         connect(m_doc, &Doc::modeChanged, this, [this](Doc::Mode mode) {
@@ -127,8 +141,8 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
                                 rearmGrandMaster();
                         });
     }
-    rearmGrandMaster();     // the app starting is a load
     rebind();
+    rearmGrandMaster();     // the app starting is a load
 }
 
 DeskRecord::~DeskRecord()
@@ -280,6 +294,9 @@ QString DeskRecord::stateText(Role role) const
             return tr("%1 · %2 · on %3").arg(b.device, b.control, uni);
         }
         case NotPatched:
+            if (isOnPassthrough(role))
+                return tr("%1 is on a universe that passes its input through to DMX: "
+                          "turn passthrough off there").arg(b.device);
             return tr("%1 is not patched in this show").arg(b.device);
         case NotConnected:
             return tr("%1 is not connected").arg(b.device);
@@ -385,9 +402,11 @@ void DeskRecord::rebind()
 {
     InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
     quint32 was[RoleCount];
+    State wasState[RoleCount];
     for (int r = 0; r < RoleCount; ++r)
     {
         was[r] = m_universes[r];
+        wasState[r] = state(Role(r));
         m_universes[r] = kInvalid;
     }
     if (iom != nullptr && anySet())
@@ -401,10 +420,12 @@ void DeskRecord::rebind()
             const Binding &b = m_bindings[r];
             if (!b.isSet())
                 continue;
-            // The first universe with its device (two of one name: the first, and warned).
+            /* The first universe with its device (two of one name: the
+               first, and warned). A universe passing its input through to
+               DMX never says inputValueChanged: the desk can't hear it there. */
             for (quint32 u = 0; u < iom->universesCount(); ++u)
             {
-                if (ids.value(u) == b.identity)
+                if (ids.value(u) == b.identity && !iom->getUniversePassthrough(int(u)))
                 {
                     m_universes[r] = u;
                     break;
@@ -414,11 +435,90 @@ void DeskRecord::rebind()
     }
     applyStatic();
     updateConnections();
+
+    /* Q316: a Grand Master that becomes live here (an import, the On tick,
+       a repatch, another fader) waits to pick up, as a learned one does:
+       it never jumps the stage from where its fader sits. */
+    QString gmKey;
+    if (isLive(GrandMaster))
+        gmKey = QStringLiteral("%1|%2|%3").arg(m_bindings[GrandMaster].identity)
+                    .arg(m_universes[GrandMaster]).arg(m_bindings[GrandMaster].channel);
+    if (!gmKey.isEmpty() && gmKey != m_gmLiveKey)
+    {
+        m_gmPickup.rearmFromHand(-1);
+        notifyGrandMasterWaiting();
+    }
+    m_gmLiveKey = gmKey;
+
+    // Moved, or plugged in / unplugged with no universe of its own (NotPatched <-> NotConnected).
     bool moved = false;
     for (int r = 0; r < RoleCount; ++r)
-        moved = moved || was[r] != m_universes[r];
+        moved = moved || was[r] != m_universes[r] || wasState[r] != state(Role(r));
     if (moved)
         emit changed();
+}
+
+bool DeskRecord::isOnPassthrough(Role role) const
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    const Binding &b = m_bindings[role];
+    if (iom == nullptr || !b.isSet() || state(role) != NotPatched)
+        return false;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+        if (iom->getUniversePassthrough(int(u)) && identityOfUniverse(u) == b.identity)
+            return true;
+    return false;
+}
+
+void DeskRecord::forgetPatchUndo()
+{
+    if (m_patchedUniverse == kInvalid && !m_patchAddedUniverse)
+        return;
+    m_patchedUniverse = kInvalid;
+    m_patchAddedUniverse = false;
+    m_patchedDevice.clear();
+    emit changed();
+}
+
+void DeskRecord::forgetHeld(quint32 universe)
+{
+    // The device went away or came back: a press it held never lets go.
+    for (const quint64 k : m_swallow.values())
+        if (quint32(k >> 32) == universe)
+            endSwallow(k);
+    for (auto it = m_stopHold.begin(); it != m_stopHold.end(); ++it)
+        if (quint32(it.key() >> 32) == universe)
+            it->released = true;
+    for (const quint64 k : m_down.values())
+        if (quint32(k >> 32) == universe)
+            m_down.remove(k);
+}
+
+void DeskRecord::endSwallow(quint64 k)
+{
+    m_swallow.remove(k);
+    m_swallowAt.remove(k);
+    m_swallowSeen.remove(k);
+}
+
+void DeskRecord::notifyGrandMasterWaiting()
+{
+    if (grandMasterWaiting() != m_gmWasWaiting)
+    {
+        m_gmWasWaiting = grandMasterWaiting();
+        emit grandMasterWaitingChanged(m_gmWasWaiting);
+    }
+}
+
+void DeskRecord::setLearning(bool on)
+{
+    m_learning = on;
+    /* A press heard by a learn is not a press of anything else: no show
+       listener (a Virtual Console widget, a trigger, a speed master) hears
+       it while the desk listens, as the Control Map's own Learn fires
+       nothing. Releases still go through, so nothing held is left on. */
+    if (InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr)
+        iom->setDeskLearning(on);
 }
 
 void DeskRecord::applyStatic()
@@ -458,7 +558,7 @@ QStringList DeskRecord::missingDevices() const
 {
     QStringList out;
     for (Role r : roles())
-        if (state(r) == NotPatched && !out.contains(m_bindings[r].device))
+        if (state(r) == NotPatched && !isOnPassthrough(r) && !out.contains(m_bindings[r].device))
             out << m_bindings[r].device;
     return out;
 }
@@ -470,18 +570,20 @@ quint32 DeskRecord::patchIt(QString *what)
         return kInvalid;
     for (Role r : roles())
     {
-        if (state(r) != NotPatched)
+        if (state(r) != NotPatched || isOnPassthrough(r))
             continue;
         const QList<QPair<QLCIOPlugin *, quint32>> lines = linesOf(m_bindings[r].identity);
         if (lines.isEmpty())
             continue;
-        // A universe whose input is free: no patch, no controller slot, nothing kept offline.
+        /* A universe whose input is free: no patch, no controller slot,
+           nothing kept offline, and no passthrough (it would send the desk's
+           presses to DMX, and the desk would never hear them). */
         quint32 target = kInvalid;
         const QList<Universe *> unis = iom->universes();
         for (int u = 0; u < unis.size() && target == kInvalid; ++u)
         {
             Universe *uni = unis.at(u);
-            if (uni->inputPatch() != nullptr || uni->hasInputSlot())
+            if (uni->inputPatch() != nullptr || uni->hasInputSlot() || uni->passthrough())
                 continue;
             bool kept = false;
             for (const Universe::OfflinePatch &p : uni->offlinePatches())
@@ -569,6 +671,7 @@ QString DeskRecord::grandMasterHint() const
 void DeskRecord::rearmGrandMaster()
 {
     m_gmPickup.rearm(now());
+    notifyGrandMasterWaiting();
 }
 
 void DeskRecord::grandMaster(uchar value)
@@ -577,11 +680,7 @@ void DeskRecord::grandMaster(uchar value)
     const int current = iom->grandMasterValue();
     if (m_gmPickup.accept(value, current, now()) && value != current)
         iom->setGrandMasterValue(value);
-    if (grandMasterWaiting() != m_gmWasWaiting)
-    {
-        m_gmWasWaiting = grandMasterWaiting();
-        emit grandMasterWaitingChanged(m_gmWasWaiting);
-    }
+    notifyGrandMasterWaiting();
 }
 
 void DeskRecord::goPressed(bool back)
@@ -776,7 +875,7 @@ bool DeskRecord::learn(Role role)
 {
     if (!changeAllowed())
         return false;
-    m_learning = true;
+    setLearning(true);
     m_learnRole = role;
     m_pendingKey = ~quint64(0);
     m_pendingPresses = 0;
@@ -797,7 +896,7 @@ void DeskRecord::cancelLearn()
 
 void DeskRecord::endLearn(const QString &why)
 {
-    m_learning = false;
+    setLearning(false);
     m_learnTimer->stop();
     m_faderSeen.clear();
     m_learnRefused.clear();
@@ -870,7 +969,7 @@ void DeskRecord::finishLearn(quint32 universe, quint32 channel, uchar value)
     b.control = controlName(universe, channel);
     b.on = true;
     const Role role = m_learnRole;
-    m_learning = false;
+    setLearning(false);
     m_learnTimer->stop();
     m_faderSeen.clear();
     m_learnRefused.clear();
@@ -889,11 +988,7 @@ void DeskRecord::finishLearn(quint32 universe, quint32 channel, uchar value)
     if (role == GrandMaster)
     {
         m_gmPickup.rearmFromHand(value);
-        if (grandMasterWaiting() != m_gmWasWaiting)
-        {
-            m_gmWasWaiting = grandMasterWaiting();
-            emit grandMasterWaitingChanged(m_gmWasWaiting);
-        }
+        notifyGrandMasterWaiting();
     }
     emit learned(role);
     emit changed();
@@ -987,6 +1082,8 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
     }
     // STOP: pressed, released, pressed again. The second press is the learn's.
     m_swallow.insert(k);
+    m_swallowAt.insert(k, now());
+    m_swallowSeen.remove(k);
     finishLearn(universe, channel, value);
 }
 
@@ -1024,17 +1121,32 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
     Role role = Stop;
     const bool desk = isDeskControl(universe, channel, &role);
 
-    // The desk's STOP comes before anything, a learn included.
-    if (desk && role == Stop && value > 0 && !m_swallow.contains(k))
-    {
-        stopPressed(k, value);
-        return;
-    }
-    // The press that taught a role is not a press of it.
+    /* The press that taught a role is not a press of it, until its release.
+       A release that was lost (a cable pulled, a toggle-mode button) must
+       not swallow the first real press for long: the first value after it
+       may be the held press repeating; a second one, or a second of quiet,
+       is a real press (as ControlMap's emergency stop). */
     if (m_swallow.contains(k))
     {
         if (value == 0)
-            m_swallow.remove(k);
+        {
+            endSwallow(k);
+            return;
+        }
+        if (m_swallowSeen.contains(k) || now() - m_swallowAt.value(k, now()) > 1000)
+        {
+            endSwallow(k);
+        }
+        else
+        {
+            m_swallowSeen.insert(k);
+            return;
+        }
+    }
+    // The desk's STOP comes before anything, a learn included.
+    if (desk && role == Stop && value > 0)
+    {
+        stopPressed(k, value);
         return;
     }
 

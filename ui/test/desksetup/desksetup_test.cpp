@@ -46,6 +46,13 @@
 
 using D = DeskRecord;
 
+void DeskSetup_Test::initTestCase()
+{
+    QVERIFY(m_settings.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
+}
+
 void DeskSetup_Test::init()
 {
     QSettings().remove(DeskRecord::settingsGroup());
@@ -261,12 +268,22 @@ void DeskSetup_Test::theChipIsGreenAmberOrRed()
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, m_stub->name(), QString(), 1));
     QCOMPARE(chip.colour(), DeskChip::Red);
     QCOMPARE(chip.text(), QStringLiteral("Desk: APC MINI not patched · Patch It"));
-    // Unplugged altogether: amber (Patch It can't help).
+    // Unplugged altogether: amber (Patch It can't help), at once.
     m_stub->m_lineNames = QStringList() << QStringLiteral("nanoKONTROL2");
     desk->rebind();
-    chip.refresh();
     QCOMPARE(chip.colour(), DeskChip::Amber);
     QVERIFY(chip.text().contains("not connected"));
+    // Plugged in again: red with Patch It, with nothing else to refresh it.
+    m_stub->m_lineNames = QStringList() << QStringLiteral("APC MINI") << QStringLiteral("nanoKONTROL2");
+    desk->rebind();
+    QCOMPARE(chip.colour(), DeskChip::Red);
+    // On a universe passing its input through to DMX: amber, Patch It can't help.
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(1, m_stub->name(), QString(), 0));
+    m_doc->inputOutputMap()->setUniversePassthrough(1, true);
+    QCOMPARE(chip.colour(), DeskChip::Amber);
+    QVERIFY(chip.text().contains("passthrough"));
+    m_doc->inputOutputMap()->setUniversePassthrough(1, false);
+    QCOMPARE(chip.colour(), DeskChip::Green);
 }
 
 void DeskSetup_Test::patchItFromTheChipIsNamedAndUndone()
@@ -297,6 +314,20 @@ void DeskSetup_Test::patchItFromTheChipIsNamedAndUndone()
     chip.click();
     QCOMPARE(setUp.count(), 1);
     QVERIFY(desk->isLive(D::Go));
+
+    // Patch It, then another show loaded: its Undo is gone, never run on that show.
+    chip.setUndoMs(15000);
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    QCOMPARE(chip.colour(), DeskChip::Red);
+    chip.click();
+    QVERIFY(chip.text().endsWith(QStringLiteral("Undo")));
+    const quint32 count = m_doc->inputOutputMap()->universesCount();
+    emit m_doc->loaded();
+    QVERIFY2(!chip.text().contains(QStringLiteral("Undo")), "the chip offered Undo in another show");
+    chip.click();
+    QVERIFY(desk->isLive(D::Go));
+    QCOMPARE(m_doc->inputOutputMap()->universesCount(), count);
+    QCOMPARE(setUp.count(), 2);
 }
 
 void DeskSetup_Test::theChipNamesWhatGoPlays()

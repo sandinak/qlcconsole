@@ -63,13 +63,23 @@ void DeskChip::refresh()
         return;
     }
 
+    // Patch It's Undo belongs to the show it patched: another show loaded, it is gone.
+    if (!m_patched.isEmpty() && !desk->canUndoPatch())
+    {
+        m_undoTimer->stop();
+        m_patched.clear();
+    }
+
     QStringList red, amber;
     for (DeskRecord::Role r : DeskRecord::roles())
     {
         switch (desk->state(r))
         {
             case DeskRecord::NotPatched:
-                if (!red.contains(desk->binding(r).device))
+                // Passthrough is the show's to turn off: Patch It can't help.
+                if (desk->isOnPassthrough(r))
+                    amber << tr("%1 passthrough on").arg(desk->binding(r).device);
+                else if (!red.contains(desk->binding(r).device))
                     red << desk->binding(r).device;
                 break;
             case DeskRecord::NotConnected:

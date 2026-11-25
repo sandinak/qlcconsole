@@ -18,6 +18,7 @@
 #ifndef SHOWREVIEWPANEL_TEST_H
 #define SHOWREVIEWPANEL_TEST_H
 
+#include <QTemporaryDir>
 #include <QObject>
 
 class Doc;
@@ -27,6 +28,7 @@ class ShowReviewPanel_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void init();
     void cleanup();
 
@@ -62,6 +64,9 @@ private slots:
 
 private:
     Doc *m_doc = nullptr;
+    /** This test's own settings (never the person's, nor another leg's
+     *  copy of this test running at the same time in the gate). */
+    QTemporaryDir m_settings;
 };
 
 #endif

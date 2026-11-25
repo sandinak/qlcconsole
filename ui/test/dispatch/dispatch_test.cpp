@@ -56,6 +56,13 @@ namespace
 const quint32 kCh = 42;
 }
 
+void Dispatch_Test::initTestCase()
+{
+    QVERIFY(m_settings.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
+}
+
 void Dispatch_Test::init()
 {
     QSettings().remove(DeskRecord::settingsGroup());

@@ -18,6 +18,7 @@
 #ifndef DISPATCH_TEST_H
 #define DISPATCH_TEST_H
 
+#include <QTemporaryDir>
 #include <QObject>
 
 class IOPluginStub;
@@ -33,6 +34,7 @@ class Dispatch_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void init();
     void cleanup();
 
@@ -47,6 +49,9 @@ private:
     void deskOn(quint32 channel, bool on);
 
     Doc *m_doc = nullptr;
+    /** This test's own settings (never the person's, nor another leg's
+     *  copy of this test running at the same time in the gate). */
+    QTemporaryDir m_settings;
     IOPluginStub *m_stub = nullptr;
 };
 

@@ -966,6 +966,12 @@ public:
      *  is false. */
     void setDeskGrandMaster(bool live) { m_deskGrandMaster = live; }
     bool deskGrandMaster() const { return m_deskGrandMaster; }
+    /** This computer's desk is learning a role: while it listens no show
+     *  listener hears a press (a value above 0) of any control, so the
+     *  presses of a learn never fire the show's triggers, widgets or
+     *  masters. Releases still pass, so nothing held is left on. */
+    void setDeskLearning(bool on) { m_deskLearning = on; }
+    bool deskLearning() const { return m_deskLearning; }
 
 private slots:
     /** inputValueChanged() again as showInputValueChanged(), without the
@@ -975,6 +981,7 @@ private slots:
 private:
     QSet<quint64> m_staticControls;
     bool m_deskGrandMaster = false;
+    bool m_deskLearning = false;
 
 private:
     QTimer *m_offlineRetry;
@@ -999,6 +1006,8 @@ signals:
      *  @p pluginName) went away; the patch is kept offline. */
     void inputDeviceDisconnected(quint32 universe, const QString &pluginName,
                                  const QString &device);
+    /** setUniversePassthrough() turned @p universe's passthrough on or off. */
+    void universePassthroughChanged(quint32 universe);
     /** A kept input patch's device came back and the patch reopened on it. */
     void inputDeviceConnected(quint32 universe, const QString &pluginName,
                               const QString &device);

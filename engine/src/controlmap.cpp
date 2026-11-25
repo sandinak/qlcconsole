@@ -888,6 +888,13 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         }
     }
 
+    /* This computer's desk is learning a role: its presses fire nothing of
+       the show's (as this map's own Learn fires nothing). The emergency
+       stop above still stops; releases still let go. */
+    if (value > 0 && universe != KeyboardUniverse && m_doc->deskRecord() != nullptr
+        && m_doc->deskRecord()->isLearning())
+        return;
+
     // A computer key is learned by the dialog itself, never from here.
     if (m_listening && m_learnButton && m_pending && value == 0 && k == m_pendingKey)
         m_pendingReleased = true;

@@ -437,7 +437,10 @@ void InputOutputMap::setUniversePassthrough(int index, bool enable)
 {
     if (index < 0 || index >= m_universeArray.count())
         return;
+    if (m_universeArray.at(index)->passthrough() == enable)
+        return;
     m_universeArray.at(index)->setPassthrough(enable);
+    emit universePassthroughChanged(quint32(index));
 }
 
 bool InputOutputMap::getUniversePassthrough(int index)
@@ -3509,6 +3512,8 @@ void InputOutputMap::setStaticControls(const QSet<quint64> &controls)
 void InputOutputMap::slotDispatchInput(quint32 universe, quint32 channel, uchar value, const QString &key)
 {
     if (isStaticControl(universe, channel))
+        return;
+    if (m_deskLearning && value > 0)
         return;
     emit showInputValueChanged(universe, channel, value, key);
 }

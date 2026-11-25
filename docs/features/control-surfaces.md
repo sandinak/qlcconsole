@@ -199,7 +199,9 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   (*… is the show's emergency stop*): the show's stop would be blocked
   there. **Cancel** stops a learn and keeps what was there; a learn also
   ends by itself after 30 seconds with nothing pressed, when you leave the
-  panel, when the show goes to Operate and when another show loads.
+  panel, when the show goes to Operate and when another show loads. While
+  a learn listens, the presses it hears fire nothing of the show's: no
+  trigger, Virtual Console button or slider, only the stops.
 - **Kept on this computer, never in the show.** The record is in this
   computer's settings, by the device's identity: a MIDI port by its name on
   a Mac, by the *2-* Windows puts before a second unit of one name, by its
@@ -209,7 +211,10 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   has its device. Move the device to another universe and the role follows
   it; the universe number never matters. Two devices of one name that
   nothing tells apart (two APC minis on a Mac) are said: the desk uses the
-  first one patched. Unplug one, or use another port.
+  first one patched. Unplug one, or use another port. A universe with
+  **passthrough** on sends its input straight to DMX, so the desk can't
+  hear a device patched there: the row says so, and the role is not live
+  until passthrough is off.
 - **The desk wins its controls.** A show listener never hears them: a
   Virtual Console button or slider, the show's Grand Master input, a channel
   group, a speed master and the encoder bank all skip a control the desk
@@ -238,8 +243,10 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   nothing; then the fader does nothing until it reaches the Grand Master
   (the row and the chip say *GM waiting: bring the fader to 100 %*), and
   follows from there. A pull to 0 always applies at once. A Grand Master
-  learned again on another fader waits the same way, so the stage does not
-  jump to where the new fader sits.
+  learned again on another fader, ticked **On** again, imported or
+  repatched waits the same way, so the stage does not jump to where the
+  fader sits. Another device coming back (a pad, a second box) does not
+  make it wait.
 - **On** turns one role off on this computer (Q317): its control is the
   show's again. The tick is kept with the computer.
 - **The show's PIN guards the desk** (board Q319): with a PIN set, every
@@ -254,9 +261,10 @@ its device is not plugged in, two devices of one name can't be told apart
 or the Grand Master waits to pick up, and **red** when its device is here
 but this show's patch does not have it: *Desk: APC MINI not patched ·
 Patch It*. A click on red patches the device to the first universe with a
-free input and says so (*Patched APC MINI to Universe 3's input.*); the
-chip then reads *Undo* for a moment, and a click takes it off the patch
-again. A click on green or amber opens Control surfaces.
+free input (never one with passthrough on) and says so (*Patched APC MINI
+to Universe 3's input.*); the chip then reads *Undo* for a moment, and a
+click takes it off the patch again. Opening another show ends the Undo:
+it never changes a show you did not patch. A click on green or amber opens Control surfaces.
 
 **Show Review** has a **This computer** section: each role, and whether
 it reaches the program now. It is not a check of the file -- the roles are

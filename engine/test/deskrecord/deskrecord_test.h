@@ -20,6 +20,7 @@
 #ifndef DESKRECORD_TEST_H
 #define DESKRECORD_TEST_H
 
+#include <QTemporaryDir>
 #include <QObject>
 
 class IOPluginStub;
@@ -35,6 +36,7 @@ class DeskRecord_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void init();
     void cleanup();
 
@@ -60,6 +62,13 @@ private slots:
     void anOpenLearnEndsAndTheDeskStillWorks();
     void learnRefusesTheShowsEmergencyStop();
     void reLearnedGrandMasterPicksUp();
+    void patchUndoIsForgottenWithTheShow();
+    void grandMasterRearmsOnlyForItsOwnDevice();
+    void plugInAndOutSayChanged();
+    void aLostStopReleaseNeverSwallowsTheNextPress();
+    void learnPressesFireNothingOfTheShows();
+    void aGrandMasterMadeLiveWaitsToPickUp();
+    void passthroughUniverseIsNotLive();
 
 private:
     /** One input value, through the input map (the dispatch point). */
@@ -73,6 +82,9 @@ private:
     quint32 twoLists(quint32 *act2);
 
     Doc *m_doc = nullptr;
+    /** This test's own settings (never the person's, nor another leg's
+     *  copy of this test running at the same time in the gate). */
+    QTemporaryDir m_settings;
     IOPluginStub *m_stub = nullptr;
 };
 

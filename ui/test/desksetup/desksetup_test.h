@@ -18,6 +18,7 @@
 #ifndef DESKSETUP_TEST_H
 #define DESKSETUP_TEST_H
 
+#include <QTemporaryDir>
 #include <QObject>
 
 class IOPluginStub;
@@ -31,6 +32,7 @@ class DeskSetup_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void init();
     void cleanup();
 
@@ -50,6 +52,9 @@ private:
     void learnGo();
 
     Doc *m_doc = nullptr;
+    /** This test's own settings (never the person's, nor another leg's
+     *  copy of this test running at the same time in the gate). */
+    QTemporaryDir m_settings;
     IOPluginStub *m_stub = nullptr;
 };
 

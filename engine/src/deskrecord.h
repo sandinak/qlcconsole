@@ -198,7 +198,13 @@ public:
      *  it ("Patched APC MINI to Universe 3's input."). Invalid when there
      *  was nothing to patch. Undo with undoPatchIt(). */
     quint32 patchIt(QString *what = nullptr);
+    /** Whether patchIt() can be undone: only in the show it patched (a
+     *  load or clearContents() forgets it, and says changed()). */
     bool canUndoPatch() const { return m_patchedUniverse != 0xFFFFFFFF; }
+    /** @p role's device sits on a universe whose input passes through to
+     *  DMX: the desk can't hear it there (NotPatched, and Patch It leaves
+     *  it alone: passthrough is the show's to turn off). */
+    bool isOnPassthrough(Role role) const;
     /** The device patchIt() patched off again (and the universe it added
      *  removed). @p what says it. */
     bool undoPatchIt(QString *what = nullptr);
@@ -291,6 +297,13 @@ private:
     void stopPressed(quint64 k, uchar value);
     void goPressed(bool back);
     void grandMaster(uchar value);
+    void notifyGrandMasterWaiting();
+    /** A learn listens (or no longer): the show's listeners hear no press meanwhile. */
+    void setLearning(bool on);
+    void endSwallow(quint64 k);
+    /** @p universe's device went away or came back: what it held lets go. */
+    void forgetHeld(quint32 universe);
+    void forgetPatchUndo();
     /** Lines of every input plugin with @p identity: (plugin, line). */
     QList<QPair<QLCIOPlugin *, quint32>> linesOf(const QString &identity) const;
 
@@ -317,8 +330,11 @@ private:
     QTimer *m_learnTimer = nullptr;
     /** Faders: the distinct values a control sent while learning. */
     QHash<quint64, QSet<int>> m_faderSeen;
-    /** The press that taught a role, swallowed until its release. */
+    /** The press that taught a role, swallowed until its release (or, its
+     *  release lost, a second value or a second of quiet). */
     QSet<quint64> m_swallow;
+    QHash<quint64, qint64> m_swallowAt;
+    QSet<quint64> m_swallowSeen;
 
     // STOP: a held press resends; ALL OFF again only once a second.
     struct StopHold
@@ -332,6 +348,8 @@ private:
     // The Grand Master
     GrandMasterPickup m_gmPickup;
     bool m_gmWasWaiting = false;
+    /** The live Grand Master's identity|universe|channel, last rebind(). */
+    QString m_gmLiveKey;
     QElapsedTimer m_elapsed;
     std::function<qint64()> m_clock;
 

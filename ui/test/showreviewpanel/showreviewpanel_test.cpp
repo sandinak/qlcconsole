@@ -138,6 +138,13 @@ int topCount(QTreeWidget *tree, const QString &prefix)
 }
 }
 
+void ShowReviewPanel_Test::initTestCase()
+{
+    QVERIFY(m_settings.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
+}
+
 void ShowReviewPanel_Test::init()
 {
     m_doc = new Doc(this);

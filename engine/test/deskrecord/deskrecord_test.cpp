@@ -64,6 +64,13 @@ const quint32 kBack = 203;
 const quint32 kGm = 7;          // a CC: the GM fader
 }
 
+void DeskRecord_Test::initTestCase()
+{
+    QVERIFY(m_settings.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
+}
+
 void DeskRecord_Test::init()
 {
     QSettings().remove(DeskRecord::settingsGroup());
@@ -985,6 +992,232 @@ void DeskRecord_Test::reLearnedGrandMasterPicksUp()
     send(0, kGm, 40);
     send(0, kGm, 0);
     QCOMPARE(int(iom->grandMasterValue()), 0);
+}
+
+/*****************************************************************************
+ * Review round 2
+ *****************************************************************************/
+
+void DeskRecord_Test::patchUndoIsForgottenWithTheShow()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    learn(D::Go, 0, kGo);
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 1));
+    QCOMPARE(desk->patchIt(), 1u);
+    QVERIFY(desk->canUndoPatch());
+    // Another show loaded: its patch is never undone by this one's Patch It.
+    QSignalSpy changed(desk, &D::changed);
+    const quint32 count = iom->universesCount();
+    emit m_doc->loaded();
+    QVERIFY2(!desk->canUndoPatch(), "Patch It's Undo outlived its show");
+    QVERIFY(changed.count() >= 1);
+    QVERIFY(!desk->undoPatchIt());
+    QVERIFY(iom->inputPatch(1) != nullptr);
+    QCOMPARE(iom->universesCount(), count);
+    // A show cleared forgets it too.
+    QVERIFY(iom->setInputPatch(1, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    QCOMPARE(desk->patchIt(), 1u);
+    QVERIFY(desk->canUndoPatch());
+    emit m_doc->cleared();
+    QVERIFY(!desk->canUndoPatch());
+}
+
+void DeskRecord_Test::grandMasterRearmsOnlyForItsOwnDevice()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    learn(D::GrandMaster, 0, kGm);
+    iom->setGrandMasterValue(255);
+    send(0, kGm, 255);
+    send(0, kGm, 250);
+    QCOMPARE(int(iom->grandMasterValue()), 250);
+    // Another device came back on another universe (a pad): the fade goes on.
+    emit iom->inputDeviceConnected(1, m_stub->name(), "nanoKONTROL2");
+    now += 100;
+    send(0, kGm, 240);
+    QVERIFY2(iom->grandMasterValue() == 240, "another device's replug froze the desk GM");
+    send(0, kGm, 200);
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+    QVERIFY(!desk->grandMasterWaiting());
+    // Its own device came back: it waits to pick up (Q316).
+    emit iom->inputDeviceConnected(0, m_stub->name(), "APC MINI");
+    now += 100;
+    send(0, kGm, 120);
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+}
+
+void DeskRecord_Test::plugInAndOutSayChanged()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    learn(D::Go, 0, kGo);
+    QVERIFY(iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
+    QCOMPARE(desk->state(D::Go), D::NotPatched);
+    QSignalSpy changed(desk, &D::changed);
+    // Unplugged (no universe before or after): still a change of what it says.
+    m_stub->m_lineNames = QStringList() << "nanoKONTROL2";
+    desk->rebind();
+    QCOMPARE(desk->state(D::Go), D::NotConnected);
+    QCOMPARE(changed.count(), 1);
+    // Plugged in again: Patch It can help now.
+    m_stub->m_lineNames = QStringList() << "APC MINI" << "nanoKONTROL2";
+    desk->rebind();
+    QCOMPARE(desk->state(D::Go), D::NotPatched);
+    QCOMPARE(changed.count(), 2);
+    // Nothing moved: nothing said.
+    desk->rebind();
+    QCOMPARE(changed.count(), 2);
+}
+
+void DeskRecord_Test::aLostStopReleaseNeverSwallowsTheNextPress()
+{
+    D *desk = m_doc->deskRecord();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    // STOP learned, the release of its second press lost (a cable pulled).
+    QVERIFY(desk->learn(D::Stop));
+    send(0, kStop, 127);
+    send(0, kStop, 0);
+    send(0, kStop, 127);
+    QVERIFY(desk->isSet(D::Stop));
+    QSignalSpy fired(desk, &D::fired);
+    // A second of quiet later, a press is a press.
+    now += 1500;
+    send(0, kStop, 127);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.first().first().toString(), QString("ALL OFF"));
+    send(0, kStop, 0);
+
+    // Learned again on another button: the held press repeating at once is
+    // still the learn's; the value after it is a real press.
+    const quint32 other = kStop + 5;
+    QVERIFY(desk->learn(D::Stop));
+    send(0, other, 127);
+    send(0, other, 0);
+    send(0, other, 127);
+    QCOMPARE(desk->binding(D::Stop).channel, other);
+    fired.clear();
+    send(0, other, 127);
+    QCOMPARE(fired.count(), 0);
+    send(0, other, 127);
+    QCOMPARE(fired.count(), 1);
+}
+
+void DeskRecord_Test::learnPressesFireNothingOfTheShows()
+{
+    D *desk = m_doc->deskRecord();
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Scene *s = scene("Warm");
+    const quint32 ch = 220;
+    cm->setBinding({ 0, ch, ControlMap::function(s->id()), ControlMap::Toggle });
+    QList<int> heard;
+    connect(iom, &InputOutputMap::showInputValueChanged, this,
+            [&heard, ch](quint32 u, quint32 c, uchar v) { if (u == 0 && c == ch) heard << v; });
+    // STOP learned on the scene's control: press, release, press.
+    QVERIFY(desk->learn(D::Stop));
+    send(0, ch, 127);
+    tick();
+    QVERIFY2(!s->isRunning(), "a learn press fired the show's trigger");
+    send(0, ch, 0);
+    send(0, ch, 127);
+    tick();
+    QVERIFY(desk->isSet(D::Stop));
+    QVERIFY(!s->isRunning());
+    send(0, ch, 0);
+    for (int v : heard)
+        QVERIFY2(v == 0, "a show listener heard a learn press");
+    QVERIFY(!iom->deskLearning());
+
+    // GO learned the same way; once done, the show's controls work again.
+    QVERIFY(desk->learn(D::Go));
+    QVERIFY(iom->deskLearning());
+    send(0, kGo, 127);
+    send(0, kGo, 0);
+    QVERIFY(desk->isSet(D::Go));
+    QVERIFY(!iom->deskLearning());
+    heard.clear();
+    send(0, ch + 1, 64);
+    QVERIFY(desk->learn(D::Back));
+    desk->cancelLearn();
+    QVERIFY(!iom->deskLearning());
+}
+
+void DeskRecord_Test::aGrandMasterMadeLiveWaitsToPickUp()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    learn(D::GrandMaster, 0, kGm);
+    iom->setGrandMasterValue(255);
+    send(0, kGm, 255);
+    QVERIFY(!desk->grandMasterWaiting());
+
+    // Ticked off and on again, its fader parked at 20 %: the stage stays.
+    QVERIFY(desk->setOn(D::GrandMaster, false));
+    QVERIFY(desk->setOn(D::GrandMaster, true));
+    send(0, kGm, 50);
+    QVERIFY2(iom->grandMasterValue() == 255, "the On tick jumped the master");
+    QVERIFY(desk->grandMasterWaiting());
+    send(0, kGm, 253);
+    send(0, kGm, 255);
+    QVERIFY(!desk->grandMasterWaiting());
+
+    // Another fader set (as an import does): it waits too.
+    const quint32 faderB = kGm + 1;
+    D::Binding b = desk->binding(D::GrandMaster);
+    b.channel = faderB;
+    QVERIFY(desk->setBinding(D::GrandMaster, b));
+    send(0, faderB, 50);
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    send(0, faderB, 255);
+    QVERIFY(!desk->grandMasterWaiting());
+    QTemporaryDir dir;
+    const QString file = dir.filePath("desk.qlcdesk");
+    QVERIFY(desk->exportTo(file));
+    b.channel = kGm;
+    QVERIFY(desk->setBinding(D::GrandMaster, b));
+    send(0, kGm, 255);
+    QVERIFY(!desk->grandMasterWaiting());
+    // The import brings fader B back, parked low: the stage stays.
+    QVERIFY(desk->importFrom(file));
+    QCOMPARE(desk->binding(D::GrandMaster).channel, faderB);
+    send(0, faderB, 20);
+    QVERIFY2(iom->grandMasterValue() == 255, "an imported GM fader jumped the master");
+    // A pull to 0 is never held back.
+    send(0, faderB, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+}
+
+void DeskRecord_Test::passthroughUniverseIsNotLive()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    learn(D::Go, 0, kGo);
+    // Patch It never picks a universe passing its input through to DMX.
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 1));
+    iom->setUniversePassthrough(1, true);
+    QCOMPARE(desk->state(D::Go), D::NotPatched);
+    const quint32 u = desk->patchIt();
+    QVERIFY2(u != 1u, "Patch It patched the desk to a passthrough universe");
+    QCOMPARE(u, 2u);
+    QVERIFY(desk->isLive(D::Go));
+    QVERIFY(desk->undoPatchIt());
+    // Patched there by hand: not live (the desk would never hear it), and says why.
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 0));
+    QVERIFY(desk->state(D::Go) != D::Live);
+    QVERIFY(desk->isOnPassthrough(D::Go));
+    QVERIFY(desk->stateText(D::Go).contains("passes its input through"));
+    QVERIFY(iom->staticControls().isEmpty());
+    QVERIFY(desk->missingDevices().isEmpty());
+    QCOMPARE(desk->patchIt(), 0xFFFFFFFFu);
+    // Passthrough off: live there.
+    iom->setUniversePassthrough(1, false);
+    QCOMPARE(desk->universeOf(D::Go), 1u);
 }
 
 QTEST_MAIN(DeskRecord_Test)
