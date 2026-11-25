@@ -312,3 +312,23 @@ Branson took the recommendation on every question:
 | Q313 | Q-R | Pick-up ships for non-master faders only; the GM and VC master sliders follow at once until their type declares them; motor "send the value" waits for declared facts. |
 
 Build order: §10, phase 0 first.
+
+## 12. Decisions after the evaluation (2026-11-24)
+
+From docs/design/CONTROL_SURFACES_EVAL.md:
+
+| Board | Decision |
+|---|---|
+| Q314 | A show keeps its own fallback STOP, GM and GO, armed only for a role this computer lacks. |
+| Q315 | Both stops live, unless the show's stop sits on a control the desk uses for anything else. |
+| Q316 | The Grand Master waits to pick up after load, replug and wake; a pull to 0 always applies at once; otherwise it follows. (Amends Q313.) |
+| Q317 | Desk GO is one press with the double-GO guard, plus a per-computer tick to turn a single static role off. |
+| Q318 | First key tables as proposed; the physical keys confirmed on the bench. |
+| Q319 | The show PIN guards desk changes (no separate teacher lock). |
+| Q320 | No backup computer in February; "listen only" stays later. |
+| Q321 | Fader rides drop at GO for every place (Q298 stands). |
+| Q322 | February: this computer's desk reaches the program through the show's own patch, by device identity, with a red chip and Patch It; the computer-owned line (Q305) after February if touring or the pro desk needs it. |
+| Q323 | ALL OFF and STOP from Companion or the phone skip the show PIN; everything else keeps it. |
+| Q324 | Single-press show triggers on pad buttons are refused until an arm+button chord is designed; RT hits by place stay the pad's show control. |
+
+Build order (EVALUATION §6): 0 (train 053j), F, D, A, R before February.
