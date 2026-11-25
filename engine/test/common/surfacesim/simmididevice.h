@@ -365,10 +365,7 @@ public:
 
     void settle() override
     {
-        simProcessEvents();
-        // The input flush every MasterTimer tick runs (Universe::processFaders()).
-        m_doc->inputOutputMap()->flushInputs();
-        simProcessEvents();
+        simFlushInputs(m_doc->inputOutputMap());
     }
 
     static int messageLength(uchar cmd)

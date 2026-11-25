@@ -336,9 +336,7 @@ public:
 
     void settle() override
     {
-        simProcessEvents();
-        m_doc->inputOutputMap()->flushInputs();
-        simProcessEvents();
+        simFlushInputs(m_doc->inputOutputMap());
     }
 
     /** A stick that does not centre: it rests @p offset off centre

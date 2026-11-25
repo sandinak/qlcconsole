@@ -331,9 +331,9 @@ void SurfaceSim_Test::everyProfileControlReachesTheApp()
         {
             in.clear();
             m_stub->emitValueChanged(UINT_MAX, 0, it.key(), 255);
-            iom->flushInputs();
+            simFlushInputs(iom);
             m_stub->emitValueChanged(UINT_MAX, 0, it.key(), 0);
-            iom->flushInputs();
+            simFlushInputs(iom);
             QCoreApplication::processEvents();
             if (!arrived(it.key(), 255) || !arrived(it.key(), 0))
                 problems << QStringLiteral("%1 '%2': never reached the app").arg(it.key()).arg(it.value()->name());

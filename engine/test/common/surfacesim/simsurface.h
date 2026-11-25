@@ -29,6 +29,9 @@
 #include <QStringList>
 #include <QtTest>
 
+#include "inputoutputmap.h"
+#include "inputpatch.h"
+
 /**
  * A simulated control surface (docs/design/SURFACE_SIMULATOR.md): a device
  * that is not there, entering the app where the real one does -- a MIDI
@@ -158,6 +161,20 @@ inline void simProcessEvents()
         QCoreApplication::sendPostedEvents();
         QCoreApplication::processEvents();
     }
+}
+
+/** What every MasterTimer tick does for input (Universe::processFaders()
+ *  -> InputPatch::flush()), patch by patch, then the posted events. Not
+ *  InputOutputMap::flushInputs(): that holds the universes' lock while the
+ *  values go out, and a listener that takes it (Blackout, a re-patch)
+ *  would lock up -- the app never flushes that way. */
+inline void simFlushInputs(InputOutputMap *iom)
+{
+    simProcessEvents();
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+        if (InputPatch *ip = iom->inputPatch(u))
+            ip->flush(u);
+    simProcessEvents();
 }
 
 #endif
