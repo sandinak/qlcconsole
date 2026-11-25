@@ -254,7 +254,7 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
 
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     m_ok = buttons->button(QDialogButtonBox::Ok);
-    m_remove = buttons->addButton(tr("Remove trigger"), QDialogButtonBox::DestructiveRole);
+    m_remove = buttons->addButton(tr("Remove Trigger"), QDialogButtonBox::DestructiveRole);
     m_remove->setObjectName(QStringLiteral("learnRemove"));
     connect(buttons, &QDialogButtonBox::accepted, this, &ControlLearnDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &ControlLearnDialog::reject);

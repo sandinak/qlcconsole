@@ -55,6 +55,8 @@ private slots:
      *  is one GO through run() with RoutePad, LT + B Back, LT + X Sub GO,
      *  LT + Y Sub Back. Another pad's presses are refused. */
     void goNeedsTheArmAndItsTrigger();
+    /** Review 053-a: Assign to Control… open, the pad fires nothing. */
+    void nothingFiresWhileAssigning();
     /** LB + RB + LT + RT: ALL OFF through run(), armed or not, once a
      *  chord; the arm drops, the state is Stopped (red) until armed again
      *  or the show is run from elsewhere. */

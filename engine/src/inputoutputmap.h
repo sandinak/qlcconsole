@@ -58,6 +58,55 @@ class Doc;
 #define KXMLIONetworkName       QStringLiteral("Name")
 #define KXMLIONetworkPassword   QStringLiteral("Password")
 
+/** What a listener hears of the controls while an Assign to Control… window
+ *  is open: nothing that moves the show (board review 053-a, round 1). A
+ *  press or a fader's move is dropped; so is the 0 that ends it, because on a
+ *  fader a 0 is a position (a submaster or the Grand Master at the bottom),
+ *  not a release. The one 0 that passes is the release of a control the
+ *  listener heard held before the window opened and that has not moved
+ *  since, so a button held across the opening is not left on.
+ *
+ *  Each listener keeps its own (the show's dispatch, a game pad's Run map)
+ *  and feeds it every value it receives, listening or not, so it knows what
+ *  that listener last heard. Header-only: no signals, nothing to export. */
+class AssignInputGate
+{
+public:
+    /** True when @a value of the control @a key reaches the listener. */
+    bool pass(quint64 key, uchar value, bool listening)
+    {
+        if (listening != m_listening)
+        {
+            m_listening = listening;
+            m_moved.clear();
+        }
+        if (!listening)
+        {
+            if (value > 0)
+                m_held.insert(key);
+            else
+                m_held.remove(key);
+            return true;
+        }
+        if (value > 0)
+        {
+            m_moved.insert(key);
+            return false;
+        }
+        if (m_held.contains(key) && !m_moved.contains(key))
+        {
+            m_held.remove(key);
+            return true;
+        }
+        return false;
+    }
+
+private:
+    QSet<quint64> m_held;       // last heard above 0
+    QSet<quint64> m_moved;      // moved while this window is open
+    bool m_listening = false;
+};
+
 class QLC_ENGINE_EXPORT InputOutputMap final : public QObject
 {
     Q_OBJECT
@@ -978,10 +1027,11 @@ public:
     void setDeskLearning(bool on) { m_deskLearning = on; }
     bool deskLearning() const { return m_deskLearning; }
     /** An Assign to Control… window is open (ControlLearnDialog, phase A):
-     *  as setDeskLearning(), no show listener hears a press of any control
-     *  meanwhile -- a press finds the control in the window and fires
-     *  nothing, in Design and Operate. Releases still pass. The emergency
-     *  stop is the Control Map's and still stops. */
+     *  no show listener hears any control move meanwhile -- a press or a
+     *  fader finds the control in the window and fires nothing, in Design
+     *  and Operate, a fader's 0 included (AssignInputGate). Only the release
+     *  of a button held before the window opened passes. The emergency stop
+     *  is the Control Map's and still stops. */
     void setAssignListening(bool on) { m_assignListening = on; }
     bool assignListening() const { return m_assignListening; }
 
@@ -995,6 +1045,7 @@ private:
     bool m_deskGrandMaster = false;
     bool m_deskLearning = false;
     bool m_assignListening = false;
+    AssignInputGate m_assignGate;
 
 private:
     QTimer *m_offlineRetry;

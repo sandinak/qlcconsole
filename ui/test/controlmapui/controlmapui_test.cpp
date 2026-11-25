@@ -3393,6 +3393,61 @@ void ControlMapUi_Test::pressSelectsFiresNothing()
     m_doc->setMode(Doc::Design);
 }
 
+/* Review 053-a: a fader's 0 is a position, not a release. Pulled to the
+   bottom while Assign to Control… is open, no show listener hears it (a
+   submaster or the Grand Master fallback would go to 0: a live blackout).
+   A button held before the window opened still has its release heard, so
+   nothing held is left on. */
+void ControlMapUi_Test::faderToZeroFiresNothing()
+{
+    const quint32 hit = m_doc->showTree()->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy heardByShow(iom, &InputOutputMap::showInputValueChanged);
+    auto heardOn = [&heardByShow](quint32 channel) {
+        int n = 0;
+        for (const QList<QVariant> &args : std::as_const(heardByShow))
+            n += args.at(1).toUInt() == channel ? 1 : 0;
+        return n;
+    };
+    // Up at 50 and a button held: both heard, before the window.
+    emit iom->inputValueChanged(0, 7, 50);
+    emit iom->inputValueChanged(0, 61, 127);
+    QCOMPARE(heardOn(7), 1);
+    QCOMPARE(heardOn(61), 1);
+    for (Doc::Mode mode : { Doc::Operate, Doc::Design })
+    {
+        m_doc->setMode(mode);
+        {
+            ControlLearnDialog d(m_doc, ControlMap::hit(hit));
+            d.show();
+            heardByShow.clear();
+            // Pulled to the bottom: found in the list, nothing hears it.
+            for (int v : { 40, 20, 5, 0 })
+                emit iom->inputValueChanged(0, 7, uchar(v));
+            QCOMPARE(d.selectedChannel(), 7u);
+            QCOMPARE(heardOn(7), 0);
+            // A fader flicked up from 0 and back: nothing either.
+            emit iom->inputValueChanged(0, 8, 90);
+            emit iom->inputValueChanged(0, 8, 0);
+            QCOMPARE(heardOn(8), 0);
+            if (mode == Doc::Operate)
+            {
+                // The button held across the opening: its release is heard.
+                emit iom->inputValueChanged(0, 61, 0);
+                QCOMPARE(heardOn(61), 1);
+                QCOMPARE(heardByShow.last().at(2).toUInt(), 0u);
+            }
+            d.reject();
+        }
+        // Closed: the fader is heard again where it is.
+        heardByShow.clear();
+        emit iom->inputValueChanged(0, 7, 0);
+        emit iom->inputValueChanged(0, 7, 30);
+        QCOMPARE(heardOn(7), 2);
+    }
+    m_doc->setMode(Doc::Design);
+}
+
 /* Before anything is pressed the list shows each control with who has it:
    a trigger, a Virtual Console widget; this one's own control as this one's. */
 void ControlMapUi_Test::ownerShownBeforePress()
@@ -3618,16 +3673,40 @@ void ControlMapUi_Test::phaseAShots()
                   ControlMap::cueList(listId)));
     web->setRunClients(0);
 
+    /* In its real host (review 053-a): the hub sits in the I/O manager's
+       scrolling Show control page. A bare panel squeezed to the window's
+       height drew the desk's rows over each other, which no one ever sees. */
+    InputOutputManager mgr(nullptr, m_doc);
     for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
     {
-        ControlSurfacesPanel panel(m_doc);
-        panel.resize(sz);
-        panel.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&panel));
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlPage();
+        mgr.findChild<ConnectionsTree *>()->selectShowControlRow(QStringLiteral("surfaces"));
+        QCoreApplication::processEvents();
         emit iom->inputValueChanged(0, 61, 127);
         emit iom->inputValueChanged(0, 61, 0);
         QCoreApplication::processEvents();
-        QVERIFY(panel.grab().save(
+        ControlSurfacesPanel *panel = mgr.findChild<ControlSurfacesPanel *>();
+        QVERIFY(panel != nullptr);
+        QVERIFY2(panel->pressAnyText().contains("House lights"), qPrintable(panel->pressAnyText()));
+        // The desk's rows: each whole (no wrapped line cut) and none over the next.
+        int below = -1;
+        for (const char *base : { "deskStop", "deskGrandMaster", "deskGo", "deskBack" })
+        {
+            QLabel *what = panel->findChild<QLabel *>(QString::fromLatin1(base) + "What");
+            QVERIFY(what != nullptr);
+            const QString tag = QString("%1 at %2x%3").arg(base).arg(sz.width()).arg(sz.height());
+            QVERIFY2(what->height() >= what->heightForWidth(what->width()), qPrintable(tag));
+            const QRect g(what->mapTo(panel, QPoint(0, 0)), what->size());
+            QVERIFY2(g.top() >= below, qPrintable(tag));
+            below = g.bottom();
+        }
+        if (QScrollArea *scroll = mgr.findChild<QScrollArea *>())
+            scroll->ensureWidgetVisible(panel->findChild<QLabel *>("surfacesPressAny"));
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(
             dir.absoluteFilePath(QString("hub-press-any-%1x%2.png").arg(sz.width()).arg(sz.height()))));
     }
 }

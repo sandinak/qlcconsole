@@ -582,6 +582,46 @@ void PadRun_Test::goNeedsTheArmAndItsTrigger()
     QCOMPARE(m_runs.size(), 6);
 }
 
+/* Review 053-a: while an Assign to Control… window is open a press finds
+   the control in its list and fires nothing -- the pad's Run map included
+   (it listens to the raw input, not the show's dispatch). A trigger held
+   across the opening is still let go of. Closed, GO goes again. */
+void PadRun_Test::nothingFiresWhileAssigning()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    ProgrammerController *pc = m_doc->programmer();
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true);
+    with(kLT, kA);
+    QCOMPARE(m_runs.size(), 1);
+    m_runs.clear();
+
+    iom->setAssignListening(true);
+    with(kLT, kA);
+    with(kLT, kB);
+    with(kRT, kX);
+    press(kA);
+    QVERIFY(m_runs.isEmpty());
+    // LT held before the window, A pressed in it: nothing.
+    iom->setAssignListening(false);
+    axis(kLT, 255);
+    iom->setAssignListening(true);
+    press(kA);
+    QVERIFY(m_runs.isEmpty());
+    axis(kLT, 0);              // its release still reaches the pad
+    iom->setAssignListening(false);
+    // Closed: LT was let go, so A alone fires nothing; LT + A is one GO.
+    press(kA);
+    QVERIFY(m_runs.isEmpty());
+    with(kLT, kA);
+    QCOMPARE(m_runs.size(), 1);
+    QCOMPARE(m_runs.at(0).first.command, ShowControl::Go);
+}
+
 void PadRun_Test::theEmergencyStop()
 {
     IOPluginStub *stub = loadStub();

@@ -14,7 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
-- **Assign to Control…** (was Learn Trigger…; Q310, Q325): one item per cue list, cue and hit (scenes and effects in the Classic QLC+ view only). The window lists every control with who has it before you press, this computer's desk roles as this computer's; a press or move selects its row and fires nothing, in Design and Operate (the emergency stop still stops); a fader is refused for a GO, Back or hit and a latching button is told to go momentary on its row; with a phone or Companion on the Run page it says Stream Deck keys are set in Companion. Control surfaces gains a **Press or move any control** line that names the owners.
+- **Assign to Control…** (was Learn Trigger…; Q310, Q325): one item per cue list, cue and hit (scenes and effects in the Classic QLC+ view only). The window lists every control with who has it before you press, this computer's desk roles as this computer's; a press or move selects its row and fires nothing, in Design and Operate -- a fader pulled to 0 and a game pad's Run buttons included (the emergency stop still stops); a fader is refused for a GO, Back or hit and a latching button is told to go momentary on its row; with a phone or Companion on the Run page it says Stream Deck keys are set in Companion. Control surfaces gains a **Press or move any control** line that names the owners.
 - **A replug never presses the desk**: this computer's STOP, GO and Back and
   the PMJ's Go and Back now ignore a controller's state dump after a replug,
   by the Control Map's own rules; every trigger ignores any press in the

@@ -3436,6 +3436,13 @@ void ProgrammerController::slotControllerInputChanged(quint32 universe, quint32 
        reads it, nothing else on the pad does. */
     if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->isStaticControl(universe, channel))
         return;
+    /* An Assign to Control… window is open: a press finds the control in
+       its list and fires nothing -- not a pad's GO, Back, hit or tool
+       either (review 053-a). The stop above still reads it. */
+    if (m_doc->inputOutputMap() != nullptr
+        && !m_assignGate.pass((quint64(universe) << 32) | channel, value,
+                              m_doc->inputOutputMap()->assignListening()))
+        return;
     if (m_capturingPan)
     {
         // Bound by hand: what the old binding left pushed goes (H2).

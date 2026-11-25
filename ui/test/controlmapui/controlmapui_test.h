@@ -103,6 +103,7 @@ private slots:
     void phaseFShots();
     // Phase A (CONTROL_SURFACES_EVAL §6, §7): Assign to Control… (Q310, Q325)
     void pressSelectsFiresNothing();
+    void faderToZeroFiresNothing();
     void ownerShownBeforePress();
     void faderRefusedForGoAndHit();
     void latchingButtonSuggestsMomentary();

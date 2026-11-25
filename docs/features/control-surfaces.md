@@ -448,8 +448,10 @@ The window is your desk as a list:
   ones as **Free**.
 - **Press or move a control to find it.** The press selects its row
   (added if it was not listed) and **fires nothing**, in Design and in
-  Operate: no trigger, Virtual Console widget, master, channel group or
-  desk GO hears a press while the window is open. The **emergency stop**
+  Operate: no trigger, Virtual Console widget, master, channel group,
+  game pad's Run button or desk GO hears a press while the window is open,
+  and a fader pulled to the bottom stays where the show had it (a button
+  held down before you opened the window is still let go of). The **emergency stop**
   (the show's and this computer's) still stops, and this computer's Grand
   Master still follows its fader. Clicking a row only finds it: the press
   on the device chooses.
