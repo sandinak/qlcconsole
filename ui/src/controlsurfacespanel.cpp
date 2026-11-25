@@ -35,7 +35,10 @@
 #include "encoderbank.h"
 #include "controlmap.h"
 #include "inputpatch.h"
+#include "universe.h"
 #include "qlcioplugin.h"
+#include "ioplugincache.h"
+#include "pmjoverlay.h"
 #include "doc.h"
 
 namespace
@@ -51,9 +54,11 @@ const Row kRows[] = {
     { "encoder", "surfaceEncoderBank" },
     { "vc",      "surfaceVirtualConsole" },
     { "masters", "surfaceMasters" },
+    { "gm",      "surfaceGrandMaster" },
     { "pmj",     "surfacePmj" },
     { "web",     "surfaceCompanion" },
     { "pads",    "surfacePads" },
+    { "devices", "surfaceDevices" },
     { "collisions", "surfaceCollisions" },
     { "places",  "surfacePlaces" },
 };
@@ -91,16 +96,22 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             tr("Set Up…"),
             tr("Open the Virtual Console. Right-click a widget, choose Properties, then External Input.") } },
         { QStringLiteral("masters"),
-          { tr("Speed masters and Grand Master"),
-            tr("A fader or button for a master."),
+          { tr("Speed masters"),
+            tr("A fader or button for a speed master: tap, rate or pause."),
             tr("Set Up…"),
-            tr("Open Speed Masters: each master has an Inputs… button. The Grand Master's input is in "
-               "Virtual Console ▸ Properties ▸ Grand Master.") } },
+            tr("Open Speed Masters: each master has an Inputs… button.") } },
+        { QStringLiteral("gm"),
+          { tr("Grand Master"),
+            tr("One fader for the level of the whole show."),
+            tr("Set Up…"),
+            tr("Open the Virtual Console's Settings on the Grand Master page: press Choose or "
+               "Auto Detect, then move the fader.") } },
         { QStringLiteral("pmj"),
           { tr("PMJ Black 1"),
             tr("Its faders, encoders and buttons work by themselves once it is patched with the PMJ Black 1 profile."),
             tr("Set Up…"),
-            tr("Go to the patch: patch the PMJ as an input with the profile PMJ Black 1 and its feedback line.") } },
+            tr("Go to the patch: patch the PMJ as an input with the profile PMJ Black 1, and its "
+               "output as the feedback line so its lamps light.") } },
         { QStringLiteral("web"),
           { tr("Companion and Stream Deck"),
             tr("A Stream Deck through Bitfocus Companion, over this show's web access."),
@@ -110,7 +121,14 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
           { tr("Game pads"),
             tr("Pad Run and the focus tools from a game controller."),
             tr("Set Up…"),
-            tr("Go to the patch: right-click the pad for its test and jobs.") } },
+            tr("Go to the patch: patch the pad to a universe's input, then right-click it for its "
+               "test and jobs.") } },
+        { QStringLiteral("devices"),
+          { tr("Other connected devices"),
+            tr("A MIDI or USB controller that is plugged in but no universe's input has. Nothing "
+               "hears it until it is patched."),
+            tr("Set Up…"),
+            tr("Go to the patch: patch the device to a universe's input, with its profile.") } },
         { QStringLiteral("collisions"),
           { tr("Who has it now"),
             tr("A control that two of the above listen to does two jobs at once. One job per control: "
@@ -181,8 +199,24 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &ControlSurfacesPanel::refresh);
     InputOutputMap *iom = m_doc->inputOutputMap();
     connect(iom, &InputOutputMap::inputPatchChanged, this, &ControlSurfacesPanel::refresh);
+    connect(iom, &InputOutputMap::profileChanged, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::universeAdded, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::universeRemoved, this, &ControlSurfacesPanel::refresh);
+    // A device plugged in or pulled out: what is connected and set up changed.
+    connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &ControlSurfacesPanel::refresh);
+    connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlSurfacesPanel::refresh);
+    connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlSurfacesPanel::refresh);
+    connect(iom, &InputOutputMap::offlinePatchesChanged, this, &ControlSurfacesPanel::refresh);
+    connect(iom, &InputOutputMap::inputSlotChanged, this, &ControlSurfacesPanel::refresh);
+    // The PMJ line says whether a feedback line is patched: follow each universe's.
+    auto watch = [this](Universe *u) {
+        if (u != nullptr)
+            connect(u, &Universe::hasFeedbackChanged, this, &ControlSurfacesPanel::refresh,
+                    Qt::UniqueConnection);
+    };
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+        watch(iom->universe(u));
+    connect(iom, &InputOutputMap::universeAdded, this, [iom, watch](quint32 id) { watch(iom->universe(id)); });
     connect(m_doc->speedMasters(), &SpeedMasters::changed, this, &ControlSurfacesPanel::refresh);
     connect(cm->encoderBank(), &EncoderBank::deviceChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::settingsChanged, this, &ControlSurfacesPanel::refresh);
@@ -326,22 +360,32 @@ QString ControlSurfacesPanel::mastersText() const
     for (int i = 0; i < SpeedMasters::MaxCount; ++i)
         for (int c = 0; c < SpeedMasters::ControlCount; ++c)
             n += sm->input(i, SpeedMasters::Control(c), nullptr, nullptr) ? 1 : 0;
-    QString text = n == 0 ? tr("Speed masters: no input") : tr("Speed masters: %1 inputs").arg(n);
+    return n == 0 ? tr("Speed masters: no input") : tr("Speed masters: %1 inputs").arg(n);
+}
+
+QString ControlSurfacesPanel::grandMasterText() const
+{
     VirtualConsole *vc = VirtualConsole::instance();
     const bool gm = vc != nullptr
             && vc->properties().grandMasterInputUniverse() != InputOutputMap::invalidUniverse();
-    return text + QStringLiteral("\n") + (gm ? tr("Grand Master: input set") : tr("Grand Master: no input"));
+    return gm ? tr("Grand Master: input set") : tr("Grand Master: no input");
 }
 
 QString ControlSurfacesPanel::pmjText() const
 {
+    /* The overlay hears only a universe whose input has exactly the PMJ
+       Black 1 profile (PMJOverlay::isPmjUniverse()): another profile with
+       "PMJ" in its name is not the board, and is not said to be. */
     InputOutputMap *iom = m_doc->inputOutputMap();
     for (quint32 u = 0; u < iom->universesCount(); ++u)
     {
         InputPatch *ip = iom->inputPatch(u);
-        if (ip != nullptr && ip->profile() != nullptr
-            && ip->profile()->name().contains(QLatin1String("PMJ")))
-            return tr("Patched on universe %1").arg(u + 1);
+        if (ip == nullptr || ip->profileName().compare(PMJOverlay::deviceId, Qt::CaseInsensitive) != 0)
+            continue;
+        return iom->feedbackPatch(u) != nullptr
+                ? tr("Patched on universe %1, with its feedback line").arg(u + 1)
+                : tr("Patched on universe %1, no feedback line: its lamps stay dark until its "
+                     "output is patched as feedback").arg(u + 1);
     }
     return tr("Not patched (no input has the PMJ Black 1 profile)");
 }
@@ -362,6 +406,54 @@ QString ControlSurfacesPanel::webText() const
     }
 }
 
+namespace
+{
+/** Whether line @p line of @p plugin is a game controller. */
+bool isPad(QLCIOPlugin *plugin, quint32 line)
+{
+    return !plugin->inputDeviceKind(line).isEmpty()
+        || !InputOutputMap::channelRoles(plugin, line).isEmpty();
+}
+}
+
+QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
+{
+    /* Every hardware input line plugged in now that no universe's input
+       has (InputOutputMap::hasFreeInputDevice(): by device, so one of two
+       pads of one name is told apart), once per free device. */
+    QList<QPair<QString, bool>> out;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (m_doc->ioPluginCache() == nullptr)
+        return out;
+    for (QLCIOPlugin *plugin : m_doc->ioPluginCache()->plugins())
+    {
+        if (plugin == nullptr || !plugin->linesAreHardware()
+            || (plugin->capabilities() & QLCIOPlugin::Input) == 0)
+            continue;
+        const QStringList lines = plugin->inputs();
+        QHash<QString, int> seen;
+        for (int l = 0; l < lines.size(); ++l)
+        {
+            const QString &name = lines.at(l);
+            if (name.isEmpty())
+                continue;
+            // The n-th line of a name is free when n of that name are.
+            int taken = 0;
+            for (quint32 u = 0; u < iom->universesCount(); ++u)
+            {
+                InputPatch *ip = iom->inputPatch(u);
+                if (ip != nullptr && ip->plugin() == plugin && ip->inputName() == name)
+                    ++taken;
+            }
+            const int nth = seen.value(name) + 1;
+            seen.insert(name, nth);
+            if (nth > taken && iom->hasFreeInputDevice(plugin, name))
+                out << qMakePair(name, isPad(plugin, quint32(l)));
+        }
+    }
+    return out;
+}
+
 QString ControlSurfacesPanel::padsText() const
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
@@ -369,14 +461,30 @@ QString ControlSurfacesPanel::padsText() const
     for (quint32 u = 0; u < iom->universesCount(); ++u)
     {
         InputPatch *ip = iom->inputPatch(u);
-        if (ip != nullptr && ip->plugin() != nullptr
-            && (!ip->plugin()->inputDeviceKind(ip->input()).isEmpty()
-                || !InputOutputMap::channelRoles(ip->plugin(), ip->input()).isEmpty()))
+        if (ip != nullptr && ip->plugin() != nullptr && isPad(ip->plugin(), ip->input()))
             ++n;
     }
-    if (n == 0)
+    QStringList lines;
+    if (n > 0)
+        lines << (n == 1 ? tr("1 pad connected and set up") : tr("%1 pads connected and set up").arg(n));
+    // One plugged in that no universe has: connected, and said so.
+    for (const QPair<QString, bool> &d : unpatchedDevices())
+        if (d.second)
+            lines << tr("%1: connected, not set up").arg(d.first);
+    if (lines.isEmpty())
         return tr("No pad connected");
-    return n == 1 ? tr("1 pad connected") : tr("%1 pads connected").arg(n);
+    return lines.join(QStringLiteral("\n"));
+}
+
+QString ControlSurfacesPanel::devicesText() const
+{
+    QStringList lines;
+    for (const QPair<QString, bool> &d : unpatchedDevices())
+        if (!d.second)
+            lines << tr("%1: not set up").arg(d.first);
+    if (lines.isEmpty())
+        return tr("Every connected device is set up");
+    return lines.join(QStringLiteral("\n"));
 }
 
 void ControlSurfacesPanel::refresh()
@@ -389,9 +497,11 @@ void ControlSurfacesPanel::refresh()
     m_status["encoder"]->setText(on ? encoderText() : off);
     m_status["vc"]->setText(vcText());
     m_status["masters"]->setText(mastersText());
+    m_status["gm"]->setText(grandMasterText());
     m_status["pmj"]->setText(pmjText());
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());
+    m_status["devices"]->setText(devicesText());
     m_status["collisions"]->setText(collisionsText());
     // Who has it now is there only while a control has two jobs.
     const bool clash = !ControlOwners::collisions(m_doc).isEmpty();

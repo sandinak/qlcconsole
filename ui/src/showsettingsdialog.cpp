@@ -80,7 +80,8 @@ ShowSettingsDialog::ShowSettingsDialog(Doc *doc, QWidget *parent)
     m_remoteGo->setObjectName(QStringLiteral("showSettingsRemoteGo"));
     m_remoteGo->setToolTip(tr("Web access serves a Run page (address/run) with GO, Back and Stop for a "
                               "phone or tablet. Off by default. With a PIN set, the page asks for it "
-                              "once per session."));
+                              "once per session. Companion (a Stream Deck) uses the same commands and "
+                              "follows this switch too; only its ALL OFF works with it off."));
     m_remoteGo->setChecked(op->remoteGo());
     vl->addWidget(m_remoteGo);
     root->addWidget(box);

@@ -1259,7 +1259,15 @@ void VirtualConsole::slotAddProgrammerFrame()
 
 void VirtualConsole::slotToolsSettings()
 {
-    VCPropertiesEditor vcpe(this, m_properties, m_doc->inputOutputMap());
+    editSettings(this, QString());
+}
+
+void VirtualConsole::editSettings(QWidget *parent, const QString &page)
+{
+    VCPropertiesEditor vcpe(parent != nullptr ? parent : this, m_properties, m_doc->inputOutputMap());
+    if (!page.isEmpty())
+        if (QWidget *w = vcpe.m_tab->findChild<QWidget *>(page))
+            vcpe.m_tab->setCurrentWidget(w);
     if (vcpe.exec() == QDialog::Accepted)
     {
         m_properties = vcpe.properties();

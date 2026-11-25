@@ -2764,6 +2764,88 @@ void AppViews_Test::aPmjOverlayHearsOnlyItsOwnBoard()
     iom->setGrandMasterValue(255);
 }
 
+/* One lamp writer (CONTROL_SURFACES_EVAL §4): a free PMJ key the show
+   learned (a GO, a hit, the stop on Favorites) is lit by the Control Map.
+   The overlay repainted every key on each Grand Master change and sent the
+   ones with no job of its own dark, blanking that lamp. */
+void AppViews_Test::masterMoveKeepsShowLamps()
+{
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    QLCIOPlugin *plug = cache->plugin(QStringLiteral("ArtNet"));
+    if (plug == nullptr)
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    if (plug == nullptr)
+    {
+        QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+        stubDir.setFilter(QDir::Files);
+        stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+        cache->load(stubDir);
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    }
+    IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    auto restore = qScopeGuard([this]() {
+        m_app->doc()->inputOutputMap()->setGrandMasterValue(255);
+        m_app->clearDocument();
+    });
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    ControlMap *cm = doc->controlMap();
+    cm->setDimWhenReady(true);
+
+    QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+    if (pmj == nullptr)
+    {
+        pmj = new QLCInputProfile();
+        pmj->setManufacturer(QStringLiteral("PMJ"));
+        pmj->setModel(QStringLiteral("Black 1"));
+        QVERIFY(iom->addProfile(pmj));
+    }
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0, pmj->name()));
+    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));     // the feedback line
+    QCoreApplication::processEvents();
+
+    // A scene learned on Favorites, a key the PMJ gives no job.
+    const quint32 favorites = 32944;
+    const quint32 blackoutKey = 32918;      // O: the board's own
+    Scene *s = new Scene(doc);
+    s->setName(QStringLiteral("Warm"));
+    QVERIFY(doc->addFunction(s));
+    cm->setBinding({ 0, favorites, ControlMap::function(s->id()), ControlMap::Toggle });
+    for (int i = 0; i < 5; ++i)
+    {
+        QCoreApplication::processEvents();
+        QTest::qWait(20);
+    }
+    auto lastSent = [stub](quint32 ch, int from) {
+        int v = -1;
+        for (int i = from; i < stub->m_feedback.size(); ++i)
+            if (stub->m_feedback.at(i).first == ch)
+                v = stub->m_feedback.at(i).second;
+        return v;
+    };
+    QCOMPARE(lastSent(favorites, 0), int(ControlMap::lampValue(ControlMap::LampStandby)));   // ready: dim
+
+    // The Grand Master moves (the PMJ's Master, the footer, anything).
+    const int before = stub->m_feedback.size();
+    iom->setGrandMasterValue(100);
+    iom->setGrandMasterValue(180);
+    QCoreApplication::processEvents();
+    QVERIFY2(lastSent(blackoutKey, before) >= 0, "the board stopped lighting its own keys");
+    for (int i = before; i < stub->m_feedback.size(); ++i)
+        if (stub->m_feedback.at(i).first == favorites)
+            QVERIFY2(stub->m_feedback.at(i).second != 0, "a Grand Master move sent the show's lamp dark");
+    QCOMPARE(lastSent(favorites, 0), int(ControlMap::lampValue(ControlMap::LampStandby)));
+
+    // Let go by the show: the board lights (here: darkens) it again.
+    QVERIFY(cm->removeBinding(ControlMap::function(s->id())));
+    const int after = stub->m_feedback.size();
+    iom->setGrandMasterValue(120);
+    QCoreApplication::processEvents();
+    QCOMPARE(lastSent(favorites, after), 0);
+}
+
 void AppViews_Test::aPmjFaderOrEncoderInOperateEditsNothing()
 {
     /* CS1 / F5: the PMJ's faders and encoders edited palettes and live

@@ -21,6 +21,8 @@
 #include <QWidget>
 #include <QStringList>
 #include <QMap>
+#include <QList>
+#include <QPair>
 
 #include "qlcui_export.h"
 
@@ -47,7 +49,8 @@ public:
     explicit ControlSurfacesPanel(Doc *doc, QWidget *parent = nullptr);
 
     /** The row keys, in order: "map", "estop", "encoder", "vc", "masters",
-     *  "pmj", "web", "pads", "collisions" (Who has it now: every control
+     *  "gm", "pmj", "web", "pads", "devices" (a device plugged in that no
+     *  input has), "collisions" (Who has it now: every control
      *  two listeners have, with how to fix it; no Set Up…, and shown only
      *  while there is one), "places" (Triggers by place: each control with
      *  a trigger at a place, what it does where and which trigger has it
@@ -77,6 +80,11 @@ private:
     QString pmjText() const;
     QString vcText() const;
     QString mastersText() const;
+    QString grandMasterText() const;
+    QString devicesText() const;
+    /** Each hardware input device plugged in that no universe's input
+     *  has: its name, and whether it is a game pad. */
+    QList<QPair<QString, bool>> unpatchedDevices() const;
     QString webText() const;
     QString encoderText() const;
     QString stopText() const;

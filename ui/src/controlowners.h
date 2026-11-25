@@ -25,6 +25,7 @@
 #include <QPointer>
 #include <QString>
 #include <QList>
+#include <QSet>
 
 #include "controlmap.h"
 #include "qlcui_export.h"
@@ -118,6 +119,11 @@ public:
      *  (KeyboardUniverse: a computer key). A Virtual Console channel's
      *  page bits are left out: a widget on any page is the owner. */
     static QList<Owner> owners(Doc *doc, quint32 universe, quint32 channel);
+    /** The channels of @a universe that a listener other than the PMJ
+     *  overlay has now (a trigger, the stop, a widget...): the PMJ leaves
+     *  their lamps to that listener (one lamp writer per control). One
+     *  walk of the show, however many channels are asked about. */
+    static QSet<quint32> showControls(Doc *doc, quint32 universe);
     /** owners(), without @a self (the listener that is learning). */
     static QList<Owner> others(Doc *doc, quint32 universe, quint32 channel, const Owner &self);
 

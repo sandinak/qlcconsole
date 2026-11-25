@@ -369,6 +369,7 @@ private slots:
     /** CS1: the PMJ overlay hears only its own board, and edits nothing in Operate. */
     void aPmjOverlayHearsOnlyItsOwnBoard();
     void aPmjFaderOrEncoderInOperateEditsNothing();
+    void masterMoveKeepsShowLamps();
     void aSecondPmjBoardIsNamedNotIgnoredInSilence();
     void aRefusedSurfacePressSaysSoOnTheFooter();
     /** Q313: the Grand Master follows its fader at once, nothing waits. */

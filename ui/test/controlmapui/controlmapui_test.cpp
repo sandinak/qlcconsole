@@ -1939,8 +1939,8 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     ControlSurfacesPanel *hub = page->surfaces();
     QVERIFY(hub != nullptr);
     QCOMPARE(ControlSurfacesPanel::keys(),
-             QStringList({ "map", "estop", "encoder", "vc", "masters", "pmj", "web", "pads", "collisions",
-                          "places" }));
+             QStringList({ "map", "estop", "encoder", "vc", "masters", "gm", "pmj", "web", "pads", "devices",
+                          "collisions", "places" }));
     QVERIFY(hub->setUpButton("places") == nullptr);         // read only
     QVERIFY(hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());       // no trigger at a place
     QCOMPARE(hub->status("collisions"), QString("Every control has one job"));
@@ -1958,6 +1958,9 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     QCOMPARE(hub->status("estop"), QString("Emergency stop: not learned"));
     QCOMPARE(hub->status("web"), QString("Companion: web access off"));
     QCOMPARE(hub->status("pads"), QString("No pad connected"));
+    QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));
+    QCOMPARE(hub->status("gm"), QString("Grand Master: no input"));
+    QCOMPARE(hub->status("masters"), QString("Speed masters: no input"));
 }
 
 void ControlMapUi_Test::eachSetUpLandsOnItsPlace()
@@ -2014,6 +2017,134 @@ void ControlMapUi_Test::eachSetUpLandsOnItsPlace()
     hub->setUpButton("map")->click();
     hub->setUpButton("pmj")->click();
     QVERIFY(view->selectedItems().isEmpty());
+    hub->setUpButton("map")->click();
+    hub->setUpButton("devices")->click();
+    QVERIFY(view->selectedItems().isEmpty());
+}
+
+namespace
+{
+/** The I/O plugin stub, loaded into @p doc's cache (nullptr: not built). */
+IOPluginStub *loadStub(Doc *doc)
+{
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    doc->ioPluginCache()->load(dir);
+    if (doc->ioPluginCache()->plugins().isEmpty())
+        return nullptr;
+    return static_cast<IOPluginStub *>(doc->ioPluginCache()->plugins().at(0));
+}
+}
+
+/* The PMJ line is the board the overlay hears: an input with exactly the
+   PMJ Black 1 profile (it used to take any profile with "PMJ" in its name),
+   and it says whether the feedback line is patched (no lamps without it). */
+void ControlMapUi_Test::pmjRowMatchesExactProfileOnly()
+{
+    IOPluginStub *stub = loadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    const QString none = QStringLiteral("Not patched (no input has the PMJ Black 1 profile)");
+    QCOMPARE(hub->status("pmj"), none);
+
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QLCInputProfile *other = new QLCInputProfile();
+    other->setManufacturer("PMJ");
+    other->setModel("9 Faders");
+    QVERIFY(iom->addProfile(other));
+    QVERIFY(iom->setInputProfile(0, other->name()));
+    QCOMPARE(hub->status("pmj"), none);     // another PMJ profile is not the board
+
+    QLCInputProfile *pmj = new QLCInputProfile();
+    pmj->setManufacturer("PMJ");
+    pmj->setModel("Black 1");
+    QVERIFY(iom->addProfile(pmj));
+    QVERIFY(iom->setInputProfile(0, pmj->name()));
+    QVERIFY2(hub->status("pmj").startsWith("Patched on universe 1, no feedback line"), qPrintable(hub->status("pmj")));
+
+    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 0, true));   // the feedback line
+    QCOMPARE(hub->status("pmj"), QString("Patched on universe 1, with its feedback line"));
+}
+
+/* The Grand Master's input is set in the Virtual Console's Settings: its
+   own line, and Set Up… opens them on the Grand Master page (it opened
+   Speed Masters, which has no Grand Master). */
+void ControlMapUi_Test::grandMasterSetUpOpensGrandMasterTab()
+{
+    new VirtualConsole(nullptr, m_doc);
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    ShowControlSyncPage page(m_doc);
+    page.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&page));
+    ControlSurfacesPanel *hub = page.surfaces();
+    QVERIFY(hub->setUpButton("gm") != nullptr);
+    QCOMPARE(hub->status("gm"), QString("Grand Master: no input"));
+    QVERIFY(!hub->status("masters").contains("Grand Master"));
+
+    QString page_;
+    QWidget *over = nullptr;
+    QTimer driver;
+    driver.setInterval(10);
+    QObject::connect(&driver, &QTimer::timeout, [&]() {
+        VCPropertiesEditor *e = qobject_cast<VCPropertiesEditor *>(QApplication::activeModalWidget());
+        if (e == nullptr)
+            return;
+        driver.stop();
+        page_ = e->m_tab->currentWidget()->objectName();
+        over = e->parentWidget();
+        e->reject();
+    });
+    driver.start();
+    QTimer::singleShot(5000, &driver, [&]() {
+        driver.stop();
+        if (QWidget *w = QApplication::activeModalWidget())
+            w->close();
+    });
+    hub->setUpButton("gm")->click();
+    QCOMPARE(page_, QString("GrandMaster"));
+    QVERIFY(over != nullptr && over->window() == page.window());   // over the hub, not the hidden console
+}
+
+/* A controller plugged in that no universe has is named, with Set Up… to
+   the patch (the hub said "No pad connected" with a pad in the hand), and
+   the hub follows a plug or unplug at once. */
+void ControlMapUi_Test::unpatchedDeviceListedWithSetUp()
+{
+    IOPluginStub *stub = loadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    auto restore = qScopeGuard([stub]() { stub->init(); });
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    QVERIFY(hub->setUpButton("devices") != nullptr);
+    QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));   // the stub's lines: not hardware
+    QCOMPARE(hub->status("pads"), QString("No pad connected"));
+
+    // A MIDI box and a pad are plugged in.
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList({ "USB MIDI Device", "DualSense Wireless Controller" });
+    stub->m_lineDeviceKind.insert(1, QStringLiteral("dualsense"));
+    emit stub->configurationChanged();
+    QCOMPARE(hub->status("devices"), QString("USB MIDI Device: not set up"));
+    QCOMPARE(hub->status("pads"), QString("DualSense Wireless Controller: connected, not set up"));
+
+    // The pad pulled out: gone at once.
+    stub->m_lineNames = QStringList({ "USB MIDI Device" });
+    emit stub->configurationChanged();
+    QCOMPARE(hub->status("pads"), QString("No pad connected"));
+    QCOMPARE(hub->status("devices"), QString("USB MIDI Device: not set up"));
+
+    // Back, and patched: set up. The MIDI box still is not.
+    stub->m_lineNames = QStringList({ "USB MIDI Device", "DualSense Wireless Controller" });
+    emit stub->configurationChanged();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 1));
+    QCOMPARE(hub->status("pads"), QString("1 pad connected and set up"));
+    QCOMPARE(hub->status("devices"), QString("USB MIDI Device: not set up"));
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 0));
+    QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));
 }
 
 void ControlMapUi_Test::theSurfacesStatusFollowsTheShow()

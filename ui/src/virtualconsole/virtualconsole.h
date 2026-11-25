@@ -291,6 +291,12 @@ public slots:
     void slotWizard();
     void slotToolsSettings();
 
+public:
+    /** The Virtual Console's Settings, over @p parent, open on the page
+     *  named @p page ("GrandMaster": where the Grand Master's input is
+     *  set up; empty: the first). Applies them on OK. */
+    void editSettings(QWidget *parent, const QString &page);
+
     /*********************************************************************
      * Edit menu callbacks
      *********************************************************************/

@@ -111,4 +111,27 @@ void ControlSurface_Test::twoDevicesShareRoles()
     QVERIFY(pmjLeds.value(1) > 0);
 }
 
+void ControlSurface_Test::aLampTakenElsewhereIsNeverWritten()
+{
+    ControlSurfaceEngine eng;
+    QHash<int, int> leds;
+    eng.setStateProvider(provider);
+    ControlSurfaceEngine::Device dev = makeBoard("pmj", &leds);
+    QSet<int> taken = { 2 };    // strip 2's key: a show's trigger has it
+    dev.lampsTakenElsewhere = [&taken]() { return taken; };
+    eng.registerDevice(dev);
+    QVERIFY(leds.contains(1));
+    QVERIFY(!leds.contains(2));
+
+    leds.clear();
+    eng.refresh();
+    QVERIFY(leds.contains(100));
+    QVERIFY(!leds.contains(2));
+
+    // Given back: the board lights it again.
+    taken.clear();
+    eng.refreshDevice("pmj");
+    QVERIFY(leds.contains(2));
+}
+
 QTEST_GUILESS_MAIN(ControlSurface_Test)

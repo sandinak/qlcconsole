@@ -8,6 +8,8 @@
 #include <QStatusBar>
 
 #include "pmjoverlay.h"
+#include "controlowners.h"
+#include "controlmap.h"
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -216,6 +218,9 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
             this, &PMJOverlay::slotOutputInhibitedChanged);
     connect(m_doc->inputOutputMap(), &InputOutputMap::grandMasterValueChanged,
             this, &PMJOverlay::slotGrandMasterValueChanged);
+    // A key the show learns or lets go of changes who lights it.
+    connect(m_doc->controlMap(), &ControlMap::bindingsChanged,
+            this, [this]() { m_engine->refreshDevice(deviceId); });
     connect(m_doc->programmer(), &ProgrammerController::programmerSelectionChanged,
             this, [this]() { m_engine->refreshDevice(deviceId); });
 
@@ -364,6 +369,22 @@ void PMJOverlay::registerDevice()
 
     dev.ledSink = [this](const ControlSurface::Control &control, int level) {
         sendLed(control, level);
+    };
+    /* One lamp writer per control: a key the show has learned (a GO, a hit,
+       the stop on Favorites or a Down key) is lit by the Control Map, never
+       sent dark by the board's next refresh (a Grand Master move used to
+       blank it). */
+    dev.lampsTakenElsewhere = [this]() {
+        QSet<int> taken;
+        if (m_universe < 0)
+            return taken;
+        const QSet<quint32> show = ControlOwners::showControls(m_doc, quint32(m_universe));
+        if (show.isEmpty())
+            return taken;
+        for (auto it = m_ledChannel.constBegin(); it != m_ledChannel.constEnd(); ++it)
+            if (show.contains(it.value()))
+                taken.insert(it.key());
+        return taken;
     };
 
     m_engine->registerDevice(dev);

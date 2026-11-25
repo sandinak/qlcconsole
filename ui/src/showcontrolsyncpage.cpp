@@ -40,6 +40,7 @@
 #include "controlmappanel.h"
 #include "controlsurfacespanel.h"
 #include "speedmasterspanel.h"
+#include "virtualconsole.h"
 #include "showcontrollistener.h"
 #include "timecodesource.h"
 #include "inputoutputmap.h"
@@ -536,7 +537,16 @@ void ShowControlSyncPage::setUpSurface(const QString &key)
         emit virtualConsoleRequested();
     else if (key == QLatin1String("masters"))
         SpeedMastersPanel::open(m_doc, this);
-    else if (key == QLatin1String("pmj") || key == QLatin1String("pads"))
+    else if (key == QLatin1String("gm"))
+    {
+        // The Grand Master's input is in the Virtual Console's Settings: open
+        // them there, on its page, not on the console's first page.
+        if (VirtualConsole *vc = VirtualConsole::instance())
+            vc->editSettings(this, QStringLiteral("GrandMaster"));
+        else
+            emit virtualConsoleRequested();
+    }
+    else if (key == QLatin1String("pmj") || key == QLatin1String("pads") || key == QLatin1String("devices"))
         emit patchMidiInputRequested();     // the wiring, where inputs are patched
 }
 
