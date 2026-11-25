@@ -126,6 +126,7 @@
 #include "fixture.h"
 #include "qlcchannel.h"
 #include "programmercontroller.h"
+#include "controllerkeepalive.h"
 #include "padrun.h"
 #include "refinepanel.h"
 #include "qxwimporter.h"
@@ -1017,6 +1018,11 @@ void App::init()
         });
     connect(m_inputNotices, &InputDeviceNotices::notice,
             this, &App::showInputDeviceNotice);
+    /* After a sleep: "Slept 40 s, finding devices…" while they come back
+       (phase R); each one back, or not, is said as usual after it. */
+    if (m_doc->programmer() != nullptr && m_doc->programmer()->controllerKeepAlive() != nullptr)
+        connect(m_doc->programmer()->controllerKeepAlive(), &ControllerKeepAlive::woke,
+                m_inputNotices, &InputDeviceNotices::noteWake);
     /* Another pad where the show's is missing: one click uses it here and
        remembers it with the show (controller slots). */
     connect(m_inputNotices, &InputDeviceNotices::stickOffer, this,

@@ -19,8 +19,17 @@
 #include <QSignalSpy>
 #include <QScopeGuard>
 
+#include <QApplication>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QTreeWidget>
+
 #include "inputdevicenotices_test.h"
 #include "inputdevicenotices.h"
+#include "inputoutputpatcheditor.h"
+#include "showtreecontroller.h"
+#include "virtualconsole.h"
+#include "controlmap.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
 #include "ioplugincache.h"
@@ -39,6 +48,32 @@ void rescanned(IOPluginStub *stub, const QStringList &lines)
 {
     stub->m_lineNames = lines;
     stub->configure();      // emits configurationChanged()
+}
+
+/** Answers the repatch warning when it comes up: Patch or Cancel. Returns
+ *  how many it answered (by the next turn of the event loop that finds one). */
+QTimer *answerRepatch(bool patch, int *answered)
+{
+    QTimer *t = new QTimer;
+    t->setInterval(10);
+    QObject::connect(t, &QTimer::timeout, t, [patch, answered]() {
+        for (QWidget *w : QApplication::topLevelWidgets())
+        {
+            QMessageBox *box = qobject_cast<QMessageBox *>(w);
+            if (box == nullptr || box->objectName() != QLatin1String("repatchWarning") || !box->isVisible())
+                continue;
+            for (QAbstractButton *b : box->buttons())
+                if ((patch && box->buttonRole(b) == QMessageBox::AcceptRole)
+                    || (!patch && box->buttonRole(b) == QMessageBox::RejectRole))
+                {
+                    ++*answered;
+                    b->click();
+                    return;
+                }
+        }
+    });
+    t->start();
+    return t;
 }
 
 ShowStatus::Entry footerEntry()
@@ -374,6 +409,121 @@ void InputDeviceNotices_Test::anotherPadIsOfferedAndAdopted()
     QVERIFY(m_doc->isModified());
     notices.settleNow();
     QCOMPARE(offered.count(), 1);
+}
+
+namespace
+{
+/** The show's controls on universe 2 (where the pad is): the stop, the
+ *  Grand Master and GO of the list "Main". Taken away again when it goes. */
+struct DeskJobs
+{
+    explicit DeskJobs(Doc *doc) : m_doc(doc)
+    {
+        ShowTreeController *st = doc->showTree();
+        const quint32 prod = st->addProduction(QStringLiteral("Show"));
+        const quint32 main = st->addCueList(prod, QStringLiteral("Main"));
+        ControlMap *cm = doc->controlMap();
+        cm->setBinding({ 1, 10, ControlMap::emergencyStop(), ControlMap::Toggle });
+        cm->setBinding({ 1, 11, ControlMap::cueList(main), ControlMap::Toggle });
+        m_vc = new VirtualConsole(nullptr, doc);
+        m_vc->restoreGrandMasterInput(1, 12);
+    }
+    ~DeskJobs()
+    {
+        m_doc->controlMap()->removeAll();
+        delete m_vc;
+    }
+    Doc *m_doc;
+    VirtualConsole *m_vc = nullptr;
+};
+}
+
+void InputDeviceNotices_Test::namesLostJobs()
+{
+    DeskJobs jobs(m_doc);
+    QCOMPARE(InputDeviceNotices::jobsText(m_doc, 1), QString("Emergency Stop, Grand Master, GO of Main"));
+    QVERIFY(InputDeviceNotices::jobsText(m_doc, 2).isEmpty());     // nothing listens there
+
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(100);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+    rescanned(m_stub, QStringList() << "Keyboard");                 // the pad goes
+    QTRY_COMPARE(said.count(), 1);
+    QCOMPARE(said.at(0).at(0).toString(),
+             QString("Input device '%1' disconnected — universe 2. Not working until it is back: "
+                     "Emergency Stop, Grand Master, GO of Main.").arg(kPad));
+    QCOMPARE(said.at(0).at(1).toBool(), true);
+    // The footer's line says it too.
+    const ShowStatus::Entry e = footerEntry();
+    QVERIFY2(e.items.join("\n").contains("Emergency Stop, Grand Master, GO of Main"),
+             qPrintable(e.items.join("\n")));
+}
+
+void InputDeviceNotices_Test::repatchWarnsAndLists()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QCOMPARE(InputDeviceNotices::repatchText(m_doc, 1, QStringLiteral("Keyboard")), QString());   // nothing listens
+    DeskJobs jobs(m_doc);
+
+    const QString moves = InputDeviceNotices::repatchText(m_doc, 1, QStringLiteral("Keyboard"));
+    QCOMPARE(moves, QString("Universe 2's controls move from '%1' to 'Keyboard': Emergency Stop, Grand Master, "
+                            "GO of Main. '%1' will do none of them.").arg(kPad));
+    QVERIFY(InputDeviceNotices::repatchText(m_doc, 1, kPad).isEmpty());   // the same device
+    QVERIFY(InputDeviceNotices::repatchText(m_doc, 1, QString()).contains("stop working: Emergency Stop"));
+    QVERIFY(InputDeviceNotices::repatchText(m_doc, 2, QStringLiteral("Keyboard")).isEmpty());
+
+    // In Inputs/Outputs: ticking another line asks; Cancel leaves the patch.
+    InputOutputPatchEditor editor(nullptr, 1, iom, m_doc);
+    QTreeWidget *tree = editor.findChild<QTreeWidget *>(QStringLiteral("m_mapTree"));
+    QVERIFY(tree != nullptr);
+    QTreeWidgetItem *keyboard = nullptr;
+    for (int i = 0; i < tree->topLevelItemCount() && keyboard == nullptr; ++i)
+    {
+        QTreeWidgetItem *top = tree->topLevelItem(i);
+        for (int c = 0; c < top->childCount(); ++c)
+            if (top->text(0) == m_stub->name() && top->child(c)->text(6) == QLatin1String("0"))
+                keyboard = top->child(c);
+    }
+    QVERIFY2(keyboard != nullptr, "the stub's first line is not in the editor");
+    int answered = 0;
+    {
+        QScopedPointer<QTimer> no(answerRepatch(false, &answered));
+        keyboard->setCheckState(2, Qt::Checked);
+    }
+    QCOMPARE(answered, 1);
+    QVERIFY(iom->inputPatch(1) != nullptr);
+    QCOMPARE(iom->inputPatch(1)->input(), quint32(1));              // still the pad
+    QCOMPARE(keyboard->checkState(2), Qt::Unchecked);
+
+    // Patch: it moves.
+    {
+        QScopedPointer<QTimer> yes(answerRepatch(true, &answered));
+        keyboard->setCheckState(2, Qt::Checked);
+    }
+    QCOMPARE(answered, 2);
+    QVERIFY(iom->inputPatch(1) != nullptr);
+    QCOMPARE(iom->inputPatch(1)->input(), quint32(0));
+}
+
+void InputDeviceNotices_Test::wakeNoticeSaysSlept()
+{
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(100);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+    notices.noteWake(40200);
+    QCOMPARE(said.count(), 1);
+    QCOMPARE(said.at(0).at(0).toString(), QString("Slept 40 s, finding devices…"));
+    QCOMPARE(said.at(0).at(1).toBool(), false);
+    notices.noteWake(5 * 60 * 1000);
+    QCOMPARE(said.last().at(0).toString(), QString("Slept 5 min, finding devices…"));
+
+    // Nothing patched to a device: nothing to find, nothing said.
+    m_doc->inputOutputMap()->setInputPatch(1, KInputNone, QString(), QLCIOPlugin::invalidLine());
+    const int before = said.count();
+    notices.noteWake(40000);
+    QCOMPARE(said.count(), before);
 }
 
 QTEST_MAIN(InputDeviceNotices_Test)

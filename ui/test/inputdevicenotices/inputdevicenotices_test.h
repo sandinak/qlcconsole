@@ -46,6 +46,13 @@ private slots:
     void theDefaultSettleIsTwoAndAHalfSeconds();
     void aControllerSlotSaysWhichIsInUse();
     void anotherPadIsOfferedAndAdopted();
+    // Phase R (CONTROL_SURFACES_EVAL §7)
+    /** An unplug names what stops working with the device. */
+    void namesLostJobs();
+    /** A repatch says what moves first; Cancel leaves the patch. */
+    void repatchWarnsAndLists();
+    /** After a sleep: "Slept 40 s, finding devices…", once. */
+    void wakeNoticeSaysSlept();
 
 private:
     Doc *m_doc = nullptr;

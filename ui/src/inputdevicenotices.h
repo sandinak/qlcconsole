@@ -27,6 +27,7 @@
 #include "qlcui_export.h"
 
 class QLCIOPlugin;
+class QWidget;
 class QTimer;
 class Doc;
 
@@ -96,6 +97,24 @@ public:
     /** "Controller", "MIDI device" or "Input device", for @p plugin. */
     static QString kindName(const QString &plugin);
 
+    /** What the show's controls on @p universe do, in words (phase R):
+     *  "Emergency Stop, Grand Master, GO of Main" (ControlOwners::jobsOn());
+     *  empty when nothing listens there. */
+    static QString jobsText(Doc *doc, quint32 universe);
+
+    /** The Mac woke after sleeping @p sleptMs (ControllerKeepAlive::woke):
+     *  "Slept 40 s, finding devices…" once, when a device input is patched.
+     *  The devices that come back (or not) are said as usual after it. */
+    void noteWake(qint64 sleptMs);
+
+    /** What moves when @p universe's input is repatched to @p newDevice
+     *  (empty: unpatched), in a sentence; empty when nothing would (no
+     *  control listens there, or it is the same device). */
+    static QString repatchText(Doc *doc, quint32 universe, const QString &newDevice);
+    /** Ask before a repatch that moves controls (repatchText()): true to go
+     *  on. Nothing asked (true) when nothing moves. */
+    static bool confirmRepatch(QWidget *parent, Doc *doc, quint32 universe, const QString &newDevice);
+
 signals:
     /** Show @p text; @p warning (a device went): amber, and it stays. */
     void notice(const QString &text, bool warning);
@@ -133,6 +152,8 @@ private slots:
 private:
     void schedule();
     void updateStatus(const QList<Device> &now) const;
+    /** @p text, then what stops working with universe @p universe's device. */
+    QString withJobs(const QString &text, quint32 universe) const;
 
     Doc *m_doc;
     QTimer *m_settle;

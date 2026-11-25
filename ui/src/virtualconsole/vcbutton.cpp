@@ -787,9 +787,16 @@ void VCButton::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             // Keep the button depressed only while the external button is kept down.
             // Raise the button when the external button is raised.
             if (state() == Inactive && value > 0)
+            {
                 pressFunction();
+                if (state() == Active)
+                    m_flashHeldFrom = universe;
+            }
             else if (state() == Active && value == 0)
+            {
                 releaseFunction();
+                m_flashHeldFrom = 0xFFFFFFFF;
+            }
         }
         else
         {
@@ -806,6 +813,17 @@ void VCButton::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             }
         }
     }
+}
+
+void VCButton::inputDeviceLost(quint32 universe)
+{
+    /* Its release will never come: the flash goes off as if the button
+       were let go (phase R). */
+    if (m_flashHeldFrom != universe)
+        return;
+    m_flashHeldFrom = 0xFFFFFFFF;
+    if (m_action == Flash && state() == Active)
+        releaseFunction();
 }
 
 /*****************************************************************************
@@ -1877,6 +1895,7 @@ void VCButton::releaseFunction()
     /* Don't allow operation during design mode */
     if (mode() == Doc::Design)
         return;
+    m_flashHeldFrom = 0xFFFFFFFF;
 
     if (m_action == Flash && state() == Active)
     {

@@ -237,4 +237,31 @@ void ControllerKeepAlive_Test::thePermissionHint()
     QVERIFY(keep.permissionHint().isEmpty());
 }
 
+void ControllerKeepAlive_Test::wakeNoticeOnce()
+{
+    int begun = 0, ended = 0, held = 0;
+    ControllerKeepAlive keep;
+    keep.setBackend(new FakeBackend(&begun, &ended, &held));
+    QSignalSpy woke(&keep, &ControllerKeepAlive::woke);
+
+    // Nothing wants the controller: the wake is still said (a MIDI desk too).
+    keep.setSystemState(ControllerKeepAlive::Asleep);
+    QTest::qWait(60);
+    keep.setSystemState(ControllerKeepAlive::Waking);
+    QCOMPARE(woke.count(), 1);
+    QVERIFY2(woke.at(0).at(0).toLongLong() >= 50, qPrintable(QString::number(woke.at(0).at(0).toLongLong())));
+
+    // Found again, locked, unlocked, waking again without a sleep: not again.
+    keep.setSystemState(ControllerKeepAlive::Awake);
+    keep.setSystemState(ControllerKeepAlive::ScreenLocked);
+    keep.screenUnlocked();
+    keep.setSystemState(ControllerKeepAlive::Waking);
+    QCOMPARE(woke.count(), 1);
+
+    // The next sleep is said again.
+    keep.setSystemState(ControllerKeepAlive::Asleep);
+    keep.setSystemState(ControllerKeepAlive::Awake);
+    QCOMPARE(woke.count(), 2);
+}
+
 QTEST_GUILESS_MAIN(ControllerKeepAlive_Test)

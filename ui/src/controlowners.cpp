@@ -36,6 +36,7 @@
 #include "programmercontroller.h"
 #include "keytriggers.h"
 #include "padrun.h"
+#include "showtreecontroller.h"
 #include "doc.h"
 
 namespace
@@ -781,4 +782,64 @@ QString ControlOwners::collisionText(Doc *doc, const Collision &c)
     return tr("%1: %2. Keep one: learn it again on the one that should have it and choose Move It "
               "Here, or clear the other (%3).")
             .arg(controlName(doc, c.universe, c.channel), jobs.join(tr(" and ")), fixes.join(QStringLiteral("; ")));
+}
+
+QStringList ControlOwners::jobsOn(Doc *doc, quint32 universe)
+{
+    QStringList stop, gm, triggers, vc, rest;
+    bool encoder = false;
+    ShowTreeController *st = doc != nullptr ? doc->showTree() : nullptr;
+    for (const QPair<quint64, Owner> &p : owned(doc))
+    {
+        if (quint32(p.first >> 32) != universe)
+            continue;
+        const Owner &o = p.second;
+        switch (o.kind)
+        {
+            case EmergencyStop:
+                if (stop.isEmpty())
+                    stop << tr("Emergency Stop");
+                break;
+            case GrandMaster:
+                if (gm.isEmpty())
+                    gm << tr("Grand Master");
+                break;
+            case Trigger:
+            {
+                QString what = o.thing;
+                const ShowTree::CueList *l = st != nullptr ? st->cueList(o.target.id) : nullptr;
+                if (o.target.type == ControlMap::CueListTarget && l != nullptr)
+                    what = tr("GO of %1").arg(l->name);
+                else if (o.target.type == ControlMap::CueListBackTarget && l != nullptr)
+                    what = tr("Back of %1").arg(l->name);
+                if (!what.isEmpty() && !triggers.contains(what))
+                    triggers << what;
+                break;
+            }
+            case VCInput:
+                vc << o.thing;
+                break;
+            case Encoder:
+                encoder = true;
+                break;
+            case SpeedMaster:
+            case ChannelGroup:
+                if (!rest.contains(o.thing))
+                    rest << o.thing;
+                break;
+            case Pmj:
+            case Pad:
+            case Keyboard:
+                break;
+        }
+    }
+    QStringList out = stop + gm + triggers;
+    if (vc.count() > 2)
+        out << tr("%1 Virtual Console controls").arg(vc.count());
+    else
+        out << vc;
+    if (encoder)
+        out << tr("the encoder bank");
+    out << rest;
+    return out;
 }

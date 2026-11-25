@@ -38,6 +38,9 @@ private slots:
     void unlockingIsNotWaking();
     /** What is said about Input Monitoring. */
     void thePermissionHint();
+    /** Phase R: a wake is said once per sleep, with how long it slept,
+     *  whether or not anything wants the controller. */
+    void wakeNoticeOnce();
 };
 
 #endif

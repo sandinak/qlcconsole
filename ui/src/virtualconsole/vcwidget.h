@@ -500,6 +500,21 @@ protected slots:
      */
     virtual void slotInputProfileChanged(quint32 universe, const QString& profileName);
 
+    /** The device input @p universe is patched to went away (phase R):
+     *  inputDeviceLost(). */
+    void slotInputDeviceDisconnected(quint32 universe);
+
+public:
+    /**
+     * The device behind input @p universe went away (unplugged, a pad
+     * asleep): whatever this widget holds from it behaves as if it were
+     * released, since that release will never come (phase R; operator
+     * rule: nothing surprises the operator live). A flash goes off; a
+     * fader forgets where it was, so the replugged one picks up. The
+     * default does nothing.
+     */
+    virtual void inputDeviceLost(quint32 universe);
+
 protected:
     QHash <quint8, QSharedPointer<QLCInputSource> > m_inputs;
 

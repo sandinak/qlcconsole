@@ -18,6 +18,7 @@
 #ifndef CONTROLLERKEEPALIVE_H
 #define CONTROLLERKEEPALIVE_H
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 
@@ -133,6 +134,10 @@ public:
 signals:
     void heldChanged(bool held);
     void pausedChanged(bool paused, const QString &reason);
+    /** The Mac woke after sleeping @p sleptMs: once per sleep, whoever
+     *  wants the controller (phase R: InputDeviceNotices says it while the
+     *  devices are found again). */
+    void woke(qint64 sleptMs);
 
 private:
     void updateHeld();
@@ -148,6 +153,8 @@ private:
     QString m_problem;
     SystemState m_system = Awake;
     QTimer *m_wakeTimer = nullptr;
+    /** Since the Mac went to sleep (valid while it is asleep). */
+    QElapsedTimer m_asleepFor;
     QString m_reason;
 };
 

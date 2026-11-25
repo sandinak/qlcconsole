@@ -2595,6 +2595,22 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
     }
 }
 
+void VCSlider::inputDeviceLost(quint32 universe)
+{
+    QSharedPointer<QLCInputSource> src = inputSource(sliderInputSourceId);
+    if (!src.isNull() && src->universe() == universe)
+    {
+        /* Where the fader is now is not known: a replugged fader (and the
+           state it dumps) waits to be picked up instead of jumping the
+           level to wherever it was left. The level stays where it is. */
+        m_pickup.reset();
+        updatePickupHint();
+    }
+    QSharedPointer<QLCInputSource> flash = inputSource(flashButtonInputSourceId);
+    if (!flash.isNull() && flash->universe() == universe && m_playbackIsFlashing)
+        flashPlayback(false);
+}
+
 void VCSlider::adjustIntensity(qreal val)
 {
     VCWidget::adjustIntensity(val);

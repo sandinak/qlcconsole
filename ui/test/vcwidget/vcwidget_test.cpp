@@ -34,6 +34,10 @@
 #include "stubwidget.h"
 #include "vcwidget.h"
 #include "vcframe.h"
+#include "vcbutton.h"
+#include "vcslider.h"
+#include "inputoutputmap.h"
+#include "scene.h"
 #include "doc.h"
 #undef private
 #undef protected
@@ -977,6 +981,67 @@ void VCWidget_Test::acceptInput()
     QVERIFY(stub.acceptsInput() == false);
     stub.setEnabled(true);
     QVERIFY(stub.acceptsInput() == true);
+}
+
+/* Phase R (CONTROL_SURFACES_EVAL §7): a device unplugged while a control
+   is held never sends its release. Each Virtual Console listener behaves as
+   if it were released: a flash goes off, a fader forgets where it was (so
+   the replugged fader, and the state it dumps, picks up instead of jumping
+   the level). Another universe's device going leaves them alone. */
+void VCWidget_Test::releasedOnDisconnect()
+{
+    QWidget w;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    Scene *sc = new Scene(m_doc);
+    sc->setValue(0, 0, 255);
+    m_doc->addFunction(sc);
+
+    VCButton btn(&w, m_doc);
+    btn.setFunction(sc->id());
+    btn.setAction(VCButton::Flash);
+    btn.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 5)));
+
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    slider.setCatchValues(true);
+    slider.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 6)),
+                          VCSlider::sliderInputSourceId);
+
+    m_doc->setMode(Doc::Operate);
+
+    // The flash held from the desk; the fader at 200 with the slider.
+    emit iom->inputValueChanged(0, 5, 255);
+    QCOMPARE(btn.state(), VCButton::Active);
+    slider.setSliderValue(0, false);
+    emit iom->inputValueChanged(0, 6, 0);
+    emit iom->inputValueChanged(0, 6, 200);
+    QCOMPARE(slider.sliderValue(), 200);
+
+    // Another universe's device goes: nothing changes.
+    emit iom->inputDeviceDisconnected(1, QStringLiteral("MIDI"), QStringLiteral("Other"));
+    QCOMPARE(btn.state(), VCButton::Active);
+
+    // The desk is unplugged with both held.
+    emit iom->inputDeviceDisconnected(0, QStringLiteral("MIDI"), QStringLiteral("Desk"));
+    QVERIFY2(btn.state() == VCButton::Inactive, "the flash stayed on after its desk went away");
+    QCOMPARE(slider.sliderValue(), 200);            // the level stays where it is
+
+    // Replugged, the fader was moved meanwhile: its dump does not jump the level.
+    emit iom->inputValueChanged(0, 6, 30);
+    QVERIFY2(slider.sliderValue() == 200, "the replugged fader jumped the level");
+    // Moved up through the level, it picks up and follows.
+    emit iom->inputValueChanged(0, 6, 210);
+    QCOMPARE(slider.sliderValue(), 210);
+
+    // A flash pressed on screen is not let go by a device going.
+    btn.pressFunction();
+    QCOMPARE(btn.state(), VCButton::Active);
+    emit iom->inputDeviceDisconnected(0, QStringLiteral("MIDI"), QStringLiteral("Desk"));
+    QCOMPARE(btn.state(), VCButton::Active);
+    btn.releaseFunction();
+
+    m_doc->setMode(Doc::Design);
 }
 
 QTEST_MAIN(VCWidget_Test)

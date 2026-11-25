@@ -103,6 +103,9 @@ private slots:
     void aStopOnAKeyDoesNothingAndSaysSo();
     void aHeldRefusedPressSaysItOnce();
     void aReplugFreesThePressThatTaughtTheStop();
+    // Phase R (CONTROL_SURFACES_EVAL §7): recovery
+    void stopStateDumpOnReplug();
+    void stopDeviceMissingSaysWhich();
     void aReleaseActsOnWhatWasPressed();
     // Places for triggers (Q295, Q296, Q303; CONTROL_SCOPES phase 3)
     void aTriggerAtACueIsArmedOnlyWhileItIsLive();

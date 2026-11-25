@@ -337,12 +337,21 @@ public:
     void setConfirmMs(int ms) { m_confirmMs = ms; }
     bool isInputConnected() const { return m_inputConnected; }
     void setStopDebounceMs(int ms) { m_estopDebounceMs = ms; }
+    /** How long after a device comes back (a replug, a wake) what it sends
+     *  may be its state dump (phase R): a stop whose first value then is 0
+     *  ignores the non-zero ones that follow inside this (ms). */
+    void setDumpWindowMs(int ms) { m_dumpWindowMs = ms; }
+    int dumpWindowMs() const { return m_dumpWindowMs; }
     /** What is wrong with the stop's control, in words (empty: nothing):
      *  its profile calls it a fader or knob (it still fires; said), it is a computer
      *  key (never works), or it has been seen moving like a fader (it still
      *  fires; shown loudly: the panel, one footer line). */
     QString stopProblem() const;
     bool stopHasProblem() const { return !stopProblem().isEmpty(); }
+    /** The stop's device, when its universe hears nothing now (phase R):
+     *  "'APC MINI' is not connected", "universe 3 has no input patched";
+     *  empty when it is there (or no stop is learned, or it is a key). */
+    QString stopDeviceMissing() const;
 
     /** The emergency stop's fader rule, for any run of values: a value
      *  that differs from the last one, with no 0 (a release) between them
@@ -594,6 +603,8 @@ private slots:
     void slotInputDeviceConnected();
     /** A controller went away or came back: a press it held is let go. */
     void slotInputDeviceChanged(quint32 universe);
+    /** A controller came back: what it sends first may be its state dump. */
+    void slotInputDeviceBack(quint32 universe);
 
 private:
     static quint64 key(quint32 universe, quint32 channel)
@@ -737,6 +748,17 @@ private:
         QElapsedTimer lastFired;    //!< the last ALL OFF this control sent (invalid: none)
     };
     QHash<quint64, StopHold> m_estopHeld;
+    /** The state-dump guard (phase R): when each universe's device came
+     *  back, the stop controls heard since, and those whose first value
+     *  was 0 (a button at rest: a non-zero inside the window is the
+     *  device's dump, not a press). */
+    QHash<quint32, QElapsedTimer> m_backAt;
+    QSet<quint64> m_backHeard;
+    QSet<quint64> m_backAtRest;
+    int m_dumpWindowMs = 500;
+    /** Whether the stop's value @a value on @a k is part of a state dump
+     *  (and is ignored). */
+    bool isStateDump(quint64 k, uchar value);
     /** stop controls seen moving like a fader: shown loudly (the panel, one
      *  footer line) until the stop is bound again; never stops them firing */
     QSet<quint64> m_estopFlagged;

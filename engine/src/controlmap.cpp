@@ -36,6 +36,7 @@
 #include "controlmap.h"
 #include "encoderbank.h"
 #include "inputpatch.h"
+#include "universe.h"
 #include "qlcioplugin.h"
 #include "function.h"
 #include "chaser.h"
@@ -341,6 +342,7 @@ void ControlMap::updateConnections()
             connect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
             connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
             connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
+            connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceBack);
         }
         else
         {
@@ -349,6 +351,7 @@ void ControlMap::updateConnections()
             disconnect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
             disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
             disconnect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
+            disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceBack);
         }
         m_inputConnected = wantInput;
     }
@@ -850,6 +853,13 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
     // learn that is left listening (a panel closed, a dialog open) must never
     // eat the press that stops the show. Only the press that taught it, still
     // held, is swallowed below.
+    /* A device that came back sends its whole state (phase R): a stop that
+       said 0 first is at rest, and a non-zero right after it is the dump,
+       not a press. A first non-zero is a press (it fires, once). */
+    if (universe != KeyboardUniverse && !m_backAt.isEmpty() && stopOn(k) != nullptr
+        && isStateDump(k, value))
+        return;
+
     if (value > 0 && universe != KeyboardUniverse)
     {
         const Binding *stop = stopOn(k);
@@ -1007,6 +1017,7 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
     // The controller went away or came back: whatever it held is let go (its
     // release never comes), and a first press waiting for its second is dropped.
     m_pending = false;
+    m_backAt.remove(universe);      // gone again: no dump to wait for yet
     for (const quint64 k : m_swallow.values())
         if (quint32(k >> 32) == universe)
             endSwallow(k);
@@ -1022,6 +1033,62 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
             held << quint32(k & 0xFFFFFFFF);
     for (quint32 ch : held)
         handleInput(universe, ch, 0);
+}
+
+void ControlMap::slotInputDeviceBack(quint32 universe)
+{
+    m_backAt[universe].start();
+    for (const quint64 k : m_backHeard.values())
+        if (quint32(k >> 32) == universe)
+            m_backHeard.remove(k);
+    for (const quint64 k : m_backAtRest.values())
+        if (quint32(k >> 32) == universe)
+            m_backAtRest.remove(k);
+}
+
+bool ControlMap::isStateDump(quint64 k, uchar value)
+{
+    const quint32 universe = quint32(k >> 32);
+    auto at = m_backAt.find(universe);
+    if (at == m_backAt.end())
+        return false;
+    if (at->elapsed() >= m_dumpWindowMs)
+    {
+        // The window is over: everything from here is the operator's.
+        m_backAt.erase(at);
+        return false;
+    }
+    if (!m_backHeard.contains(k))
+    {
+        m_backHeard.insert(k);
+        if (value == 0)
+            m_backAtRest.insert(k);
+        return false;
+    }
+    if (value > 0 && m_backAtRest.contains(k))
+    {
+        qDebug() << "[ControlMap] stop value" << value << "ignored: the device's state dump after it came back";
+        return true;
+    }
+    return false;
+}
+
+QString ControlMap::stopDeviceMissing() const
+{
+    const Binding *b = binding(emergencyStop());
+    if (b == nullptr || isKey(*b))
+        return QString();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return QString();
+    if (iom->inputPatch(b->universe) != nullptr)
+        return QString();
+    Universe *uni = iom->universe(b->universe);
+    if (uni != nullptr)
+        for (const Universe::OfflinePatch &rec : uni->offlinePatches())
+            if (rec.tag == Universe::InputPatchTag && !rec.uid.isEmpty())
+                return tr("its device '%1' is not connected").arg(rec.uid);
+    return tr("universe %1 has no input patched").arg(b->universe + 1);
 }
 
 void ControlMap::emergencyStop(const Binding &b, uchar value)

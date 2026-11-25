@@ -185,7 +185,15 @@ void ControllerKeepAlive::setSystemState(SystemState state)
 {
     if (state == m_system)
         return;
+    const SystemState was = m_system;
     m_system = state;
+    if (state == Asleep)
+        m_asleepFor.start();
+    if (was == Asleep && m_asleepFor.isValid())
+    {
+        emit woke(m_asleepFor.elapsed());
+        m_asleepFor.invalidate();
+    }
     if (state == Waking)
         m_wakeTimer->start();
     else

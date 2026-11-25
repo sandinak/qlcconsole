@@ -34,6 +34,7 @@
 #include <QTimer>
 
 #include "connectioneditor.h"
+#include "inputdevicenotices.h"
 #include "wleddevicesdialog.h"
 #include "wledconfigcheck.h"
 #include "ioplugincache.h"
@@ -1197,6 +1198,31 @@ bool ConnectionEditor::apply()
     m_error = validate(address, portAddress, fbAddress, fbPort);
     if (m_error.isEmpty() == false)
         return false;
+
+    /* Phase R: an input repatch that moves the show's controls on this
+       universe (the stop, the Grand Master, GO...) says what moves before
+       anything changes; Cancel leaves everything as it was. */
+    {
+        const QString inPlugin = m_inputCombo->currentData(ROLE_PLUGIN).toString();
+        const quint32 inLine = m_inputCombo->currentData(ROLE_LINE).toUInt();
+        InputPatch *ip = u->inputPatch();
+        const bool inSame = (ip == nullptr || ip->plugin() == nullptr)
+            ? inPlugin.isEmpty()
+            : (ip->plugin()->name() == inPlugin && ip->input() == inLine);
+        if (inSame == false)
+        {
+            const QStringList lines = inPlugin.isEmpty() ? QStringList() : iom->pluginInputs(inPlugin);
+            const QString device = inPlugin.isEmpty() ? QString()
+                                 : int(inLine) < lines.count() ? lines.at(int(inLine)) : inPlugin;
+            if (InputDeviceNotices::confirmRepatch(this, m_doc, m_universe, device) == false)
+            {
+                if (m_pane)
+                    load();
+                m_error = tr("The input was left as it was.");
+                return false;
+            }
+        }
+    }
 
     // One step for all of it.
     if (iom->patchUndo() != nullptr)

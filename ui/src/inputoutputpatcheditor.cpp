@@ -38,6 +38,7 @@
 
 #include "qlcinputprofile.h"
 #include "qlcioplugin.h"
+#include "inputdevicenotices.h"
 #include "qlcfile.h"
 
 #include "inputoutputpatcheditor.h"
@@ -692,6 +693,29 @@ void InputOutputPatchEditor::slotMapItemChanged(QTreeWidgetItem* item, int col)
             connect(m_mapTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
                     this, SLOT(slotMapItemChanged(QTreeWidgetItem*, int)));
             QMessageBox::warning(this, tr("Show only"), refusal);
+            return;
+        }
+    }
+
+    /* Phase R: a repatch that moves the controls the show has on this
+       universe (the stop, the Grand Master, GO...) says what moves first;
+       Cancel leaves the patch as it was. */
+    if (col == KMapColumnHasInput && m_ioMap != NULL && m_doc != NULL)
+    {
+        QString device;
+        if (item->checkState(col) == Qt::Checked)
+        {
+            const QStringList lines = m_ioMap->pluginInputs(item->text(KMapColumnPluginName));
+            const int line = item->text(KMapColumnInputLine).toInt();
+            device = line >= 0 && line < lines.count() ? lines.at(line) : item->text(KMapColumnPluginName);
+        }
+        if (InputDeviceNotices::confirmRepatch(this, m_doc, m_universe, device) == false)
+        {
+            disconnect(m_mapTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+                       this, SLOT(slotMapItemChanged(QTreeWidgetItem*, int)));
+            item->setCheckState(col, item->checkState(col) == Qt::Checked ? Qt::Unchecked : Qt::Checked);
+            connect(m_mapTree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
+                    this, SLOT(slotMapItemChanged(QTreeWidgetItem*, int)));
             return;
         }
     }
