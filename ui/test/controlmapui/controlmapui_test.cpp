@@ -175,11 +175,11 @@ void ControlMapUi_Test::theLearnDialogBindsWhatItHears()
     QVERIFY(!cm->isListening());
     QCOMPARE(cm->count(), 1);
 
-    // A cue list's modes: GO, GO while held, Stop.
+    // A cue list's modes: GO, GO while held, Back (its own target), Stop.
     ShowTreeController *st = m_doc->showTree();
     const quint32 list = st->addCueList(st->addProduction("Show"), "Act 1");
     ControlLearnDialog d3(m_doc, ControlMap::cueList(list));
-    QCOMPARE(d3.findChild<QComboBox *>("learnMode")->count(), 3);
+    QCOMPARE(d3.findChild<QComboBox *>("learnMode")->count(), 4);
     QCOMPARE(d3.findChild<QComboBox *>("learnMode")->itemText(0), QString("GO"));
 }
 
@@ -2515,8 +2515,9 @@ void ControlMapUi_Test::aListLearnsItsGoAndItsBack()
     cm->handleInput(0, 12, 0);
 
     // Only the Back bound: the list's item says so, and the window opens on it.
+    QWidget owner;
     QMenu menu;
-    QAction *a = ControlLearnDialog::addTo(&menu, m_doc, ControlMap::cueList(listId), nullptr);
+    QAction *a = ControlLearnDialog::addTo(&menu, m_doc, ControlMap::cueList(listId), &owner);
     QVERIFY(a != nullptr);
     QVERIFY2(a->text().startsWith("Trigger: "), qPrintable(a->text()));
     {
