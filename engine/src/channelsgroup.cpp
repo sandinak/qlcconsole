@@ -152,14 +152,14 @@ QList <SceneValue> ChannelsGroup::getChannels() const
 void ChannelsGroup::setInputSource(QSharedPointer<QLCInputSource> const& source)
 {
     if (!m_input.isNull() && m_input->isValid())
-        disconnect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+        disconnect(m_doc->inputOutputMap(), SIGNAL(showInputValueChanged(quint32,quint32,uchar)),
                 this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
 
     m_input = source;
 
     // Connect when the first valid input source is set
     if (!source.isNull() && source->isValid())
-        connect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+        connect(m_doc->inputOutputMap(), SIGNAL(showInputValueChanged(quint32,quint32,uchar)),
                 this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
 }
 

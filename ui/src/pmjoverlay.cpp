@@ -199,7 +199,9 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
 
     registerDevice();
 
-    connect(m_doc->inputOutputMap(), SIGNAL(inputValueChanged(quint32,quint32,uchar,QString)),
+    /* A show listener (Q309): never a control this computer's desk has,
+       so a desk role on a PMJ control is not also the overlay's. */
+    connect(m_doc->inputOutputMap(), SIGNAL(showInputValueChanged(quint32,quint32,uchar,QString)),
             this, SLOT(slotInputValueChanged(quint32,quint32,uchar,QString)));
     connect(m_engine, &ControlSurfaceEngine::roleActivated,
             this, &PMJOverlay::slotRoleActivated);

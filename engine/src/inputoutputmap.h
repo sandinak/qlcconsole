@@ -946,6 +946,43 @@ private slots:
 
     void slotRetryOfflinePatches();
 
+    /*********************************************************************
+     * The one dispatch point (This computer's desk)
+     *********************************************************************/
+public:
+    /** The controls (universe << 32 | channel) THIS COMPUTER's desk has
+     *  now (DeskRecord: its STOP, Grand Master, GO and Back, by the
+     *  device's identity; docs/design/CONTROL_SURFACES_EVAL.md risk 3).
+     *  No show listener hears them: they listen to showInputValueChanged(),
+     *  which drops them, so a static control can never also fire a Virtual
+     *  Console widget, the show's Grand Master input, a channel group, a
+     *  speed master or the encoder bank. */
+    void setStaticControls(const QSet<quint64> &controls);
+    QSet<quint64> staticControls() const { return m_staticControls; }
+    bool isStaticControl(quint32 universe, quint32 channel) const
+    { return !m_staticControls.isEmpty() && m_staticControls.contains((quint64(universe) << 32) | channel); }
+    /** This computer's desk has a live Grand Master (board Q314): the
+     *  show's own Grand Master input is a fallback, armed only while this
+     *  is false. */
+    void setDeskGrandMaster(bool live) { m_deskGrandMaster = live; }
+    bool deskGrandMaster() const { return m_deskGrandMaster; }
+    /** This computer's desk is learning a role: while it listens no show
+     *  listener hears a press (a value above 0) of any control, so the
+     *  presses of a learn never fire the show's triggers, widgets or
+     *  masters. Releases still pass, so nothing held is left on. */
+    void setDeskLearning(bool on) { m_deskLearning = on; }
+    bool deskLearning() const { return m_deskLearning; }
+
+private slots:
+    /** inputValueChanged() again as showInputValueChanged(), without the
+     *  desk's controls. */
+    void slotDispatchInput(quint32 universe, quint32 channel, uchar value, const QString &key);
+
+private:
+    QSet<quint64> m_staticControls;
+    bool m_deskGrandMaster = false;
+    bool m_deskLearning = false;
+
 private:
     QTimer *m_offlineRetry;
     QString m_lastPatchRefusal;
@@ -969,6 +1006,8 @@ signals:
      *  @p pluginName) went away; the patch is kept offline. */
     void inputDeviceDisconnected(quint32 universe, const QString &pluginName,
                                  const QString &device);
+    /** setUniversePassthrough() turned @p universe's passthrough on or off. */
+    void universePassthroughChanged(quint32 universe);
     /** A kept input patch's device came back and the patch reopened on it. */
     void inputDeviceConnected(quint32 universe, const QString &pluginName,
                               const QString &device);
@@ -980,8 +1019,15 @@ signals:
      *  hand or by its controller slot. */
     void inputPatchChanged(quint32 universe);
 
-    /** Everyone interested in input data should connect to this signal */
+    /** Every input value, the desk's controls included: for what reads
+     *  raw input (Learn, the activity lights, the desk itself). A show
+     *  listener connects to showInputValueChanged() instead. */
     void inputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = 0);
+    /** inputValueChanged() without the controls this computer's desk has
+     *  (setStaticControls()): what every show listener hears (a Virtual
+     *  Console widget, the Grand Master input, a channel group, the speed
+     *  masters, the encoder bank). */
+    void showInputValueChanged(quint32 universe, quint32 channel, uchar value, const QString& key = QString());
 
     /** Emitted when an input line delivers an absolute timeline position
      *  (e.g. MIDI Time Code). Consumed by the Doc's timecode source. */

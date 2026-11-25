@@ -690,6 +690,8 @@ public:
     /** The footer chip "Testing channels: N held" (Connections' Test mode);
      *  hidden while Test is off. */
     QToolButton *testChannelsChip() const { return m_statusTestChip; }
+    /** The footer's chip for this computer's desk (DeskChip). */
+    class DeskChip *deskChip() const { return m_statusDeskChip; }
     /** The game controller's role, beside it: "Pad: Run", "Pad: ARMED",
      *  "Pad: Walk" while the Run role is on (as the Run tab's Pad: button
      *  says), hidden in Tools (docs/features/show-control.md). */
@@ -1361,6 +1363,7 @@ private:
     /** "Testing channels: N held": Test mode on Connections' DMX map is on
      *  (hidden otherwise); a click turns it off. */
     class QToolButton* m_statusTestChip = nullptr;
+    class DeskChip* m_statusDeskChip = nullptr;
     void updateTestChip();
     class QTimer* m_overridesPoll = nullptr;
     /** Compact footer Grand Master fader — GM previously lived only inside

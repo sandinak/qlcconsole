@@ -98,9 +98,10 @@ GrandMasterSlider::GrandMasterSlider(QWidget* parent, InputOutputMap *ioMap)
     connect(m_ioMap, SIGNAL(grandMasterValueModeChanged(GrandMaster::ValueMode)),
             this, SLOT(slotGrandMasterValueModeChanged(GrandMaster::ValueMode)));
 
-    /* External input connection */
-    connect(m_ioMap, SIGNAL(inputValueChanged(quint32, quint32, uchar)),
-            this, SLOT(slotInputValueChanged(quint32, quint32, uchar)));
+    /* External input connection: the show's Grand Master input, a show
+       listener (never this computer's desk's controls) */
+    connect(m_ioMap, SIGNAL(showInputValueChanged(quint32,quint32,uchar)),
+            this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
 
     updateTooltip();
     updateDisplayValue();
@@ -231,6 +232,10 @@ void GrandMasterSlider::sendFeedback()
 
 void GrandMasterSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar value)
 {
+    /* Board Q314: the show's Grand Master input is a fallback, armed only
+       while this computer's desk has no Grand Master of its own. */
+    if (m_ioMap->deskGrandMaster())
+        return;
     if (universe == VirtualConsole::instance()->properties().grandMasterInputUniverse() &&
         channel == VirtualConsole::instance()->properties().grandMasterInputChannel())
     {

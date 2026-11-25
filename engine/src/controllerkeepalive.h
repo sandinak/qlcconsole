@@ -132,6 +132,9 @@ public:
 
 signals:
     void heldChanged(bool held);
+    /** setSystemState() changed it (Waking: this computer's desk waits
+     *  for its Grand Master to be picked up, Q316). */
+    void systemStateChanged(ControllerKeepAlive::SystemState state);
     void pausedChanged(bool paused, const QString &reason);
 
 private:

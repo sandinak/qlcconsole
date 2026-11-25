@@ -75,6 +75,7 @@
 #include "shutterautoopen.h"
 #include "showwebaccess.h"
 #include "controlmap.h"
+#include "deskrecord.h"
 #include "showoperate.h"
 #include "teachingsettings.h"
 #include "showreview.h"
@@ -144,7 +145,8 @@ Doc::Doc(QObject* parent, int universes)
 
     // Speed masters read the main beat clock, so after m_masterTimer too.
     m_speedMasters = new SpeedMasters(this, this);
-    connect(m_ioMap, &InputOutputMap::inputValueChanged,
+    // A show listener: never hears this computer's desk (the one dispatch point).
+    connect(m_ioMap, &InputOutputMap::showInputValueChanged,
             m_speedMasters, &SpeedMasters::slotInputValue);
 
     // Cues fired from outside (QLab): MSC arrives as SysEx on a patched
@@ -185,6 +187,11 @@ Doc::Doc(QObject* parent, int universes)
     m_goLog->attach();
     // Relays, house and work lights: Blackout / GM exempt, switch, on at open.
     m_outputRuleKeeper = new OutputRuleKeeper(this);
+    /* This computer's desk (STOP, GM, GO, Back): this computer's settings,
+       reached through the show's patch by device identity (Q322). After the
+       Control Map, Show Control, the Show Tree and the Operate settings it
+       asks. */
+    m_deskRecord = new DeskRecord(this);
     /* The emergency stop ends the focus tools too (E9): queued to the main
        thread when it struck on another (an OSC or MSC plugin's). */
     connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopStruck,
@@ -311,6 +318,9 @@ Doc::Doc(QObject* parent, int universes)
 
 Doc::~Doc()
 {
+    // First: it hears the patch and the Control Map, which go below.
+    delete m_deskRecord;
+    m_deskRecord = nullptr;
     delete m_powerLimiter;
     m_powerLimiter = nullptr;
     delete m_shutterAutoOpen;

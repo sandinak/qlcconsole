@@ -364,13 +364,13 @@ void EncoderBank::updateConnection()
         return;
     if (m_enabled)
     {
-        connect(iom, &InputOutputMap::inputValueChanged, this, &EncoderBank::handleInput);
+        connect(iom, &InputOutputMap::showInputValueChanged, this, &EncoderBank::handleInput);
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &EncoderBank::slotInputDeviceConnected);
         connect(iom, &InputOutputMap::profileChanged, this, &EncoderBank::slotInputDeviceConnected);
     }
     else
     {
-        disconnect(iom, &InputOutputMap::inputValueChanged, this, &EncoderBank::handleInput);
+        disconnect(iom, &InputOutputMap::showInputValueChanged, this, &EncoderBank::handleInput);
         disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &EncoderBank::slotInputDeviceConnected);
         disconnect(iom, &InputOutputMap::profileChanged, this, &EncoderBank::slotInputDeviceConnected);
     }

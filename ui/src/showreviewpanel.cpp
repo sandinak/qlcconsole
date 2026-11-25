@@ -30,6 +30,7 @@
 #include <QMenu>
 
 #include "showreviewpanel.h"
+#include "deskrecord.h"
 #include "showtreecontroller.h"
 #include "preshowcheck.h"
 #include "monitorproperties.h"
@@ -45,7 +46,8 @@ namespace
     {
         IndexRole = Qt::UserRole,   ///< the finding's index in m_findings (-1: none)
         FooterKeyRole,              ///< a footer row: its ShowStatus key
-        FooterDataRole              ///< and its items' data
+        FooterDataRole,             ///< and its items' data
+        ThisComputerRole            ///< the "This computer" section (this computer's desk)
     };
 }
 
@@ -154,6 +156,9 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     {
         connect(m_doc->showReview(), &ShowReview::reviewed, this, &ShowReviewPanel::rebuild);
         connect(m_doc->showReview(), &ShowReview::acceptancesChanged, this, &ShowReviewPanel::rebuild);
+        // This computer: the desk's roles and whether they reach the program now.
+        if (m_doc->deskRecord() != nullptr)
+            connect(m_doc->deskRecord(), &DeskRecord::changed, this, &ShowReviewPanel::rebuild);
     }
     connect(ShowStatus::instance(), &ShowStatus::changed, this, &ShowReviewPanel::rebuild);
 
@@ -390,6 +395,35 @@ void ShowReviewPanel::rebuild()
         m_tree->addTopLevelItem(accepted);
         accepted->setFirstColumnSpanned(true);
         accepted->setExpanded(true);
+    }
+
+    /* This computer (the eval's risk 20): the desk's roles exist only at run
+       time and never in the show, so the file's checks can't see them; each
+       role here, and whether it reaches the program now. */
+    if (DeskRecord *desk = m_doc->deskRecord())
+    {
+        QTreeWidgetItem *computer = new QTreeWidgetItem();
+        computer->setData(0, IndexRole, -1);
+        computer->setData(0, ThisComputerRole, true);
+        computer->setFlags(computer->flags() & ~Qt::ItemIsSelectable);
+        QFont font = computer->font(0);
+        font.setBold(true);
+        computer->setFont(0, font);
+        computer->setText(0, desk->reviewNeedsAttention() ? tr("This computer (look at it)") : tr("This computer"));
+        const QStringList lines = desk->anySet()
+            ? desk->reviewLines()
+            : QStringList{ tr("No desk learned on this computer: the show's own stop and the keyboard's "
+                              "Stop All are the stops (Connections ▸ Control surfaces).") };
+        for (const QString &line : lines)
+        {
+            QTreeWidgetItem *item = new QTreeWidgetItem(computer);
+            item->setData(0, IndexRole, -1);
+            item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
+            item->setText(1, line);
+        }
+        m_tree->addTopLevelItem(computer);
+        computer->setFirstColumnSpanned(true);
+        computer->setExpanded(true);
     }
 
     QTreeWidgetItemIterator it(m_tree);

@@ -34,6 +34,7 @@
 #include "showcontrol.h"
 #include "mastertimer.h"
 #include "controlmap.h"
+#include "deskrecord.h"
 #include "encoderbank.h"
 #include "inputpatch.h"
 #include "qlcioplugin.h"
@@ -833,6 +834,21 @@ bool ControlMap::stringToMode(const QString &str, Mode *mode)
 void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
 {
     const quint64 k = key(universe, channel);
+    /* This computer's desk has the control (Q309, Q315): its STOP, GM, GO or
+       Back. No trigger here is armed on it, the show's stop included (on the
+       desk's STOP the desk stops the show itself; on another role it is
+       blocked), and a Learn is told whose it is. A press held from before
+       the desk took it still lets go. */
+    DeskRecord::Role role = DeskRecord::Stop;
+    if (universe != KeyboardUniverse && m_doc->deskRecord() != nullptr
+        && m_doc->deskRecord()->isDeskControl(universe, channel, &role)
+        && !(value == 0 && m_down.contains(k)))
+    {
+        if (m_listening && value > 0)
+            emit refused(tr("%1 is this computer's %2 (Connections ▸ Control surfaces). Choose another control.")
+                             .arg(controlName(universe, channel), DeskRecord::roleName(role)));
+        return;
+    }
     // Learning: what the control sends says whether it is a fader or a latch.
     if (m_listening && universe != KeyboardUniverse)
         observeLearn(k, value);
@@ -871,6 +887,13 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
             return;
         }
     }
+
+    /* This computer's desk is learning a role: its presses fire nothing of
+       the show's (as this map's own Learn fires nothing). The emergency
+       stop above still stops; releases still let go. */
+    if (value > 0 && universe != KeyboardUniverse && m_doc->deskRecord() != nullptr
+        && m_doc->deskRecord()->isLearning())
+        return;
 
     // A computer key is learned by the dialog itself, never from here.
     if (m_listening && m_learnButton && m_pending && value == 0 && k == m_pendingKey)
@@ -1371,9 +1394,45 @@ bool ControlMap::holdsControl(const Binding &b) const
 {
     if (b.target.type == EmergencyStopTarget || !isPlaceLive(b.place))
         return false;
+    if (!deskBlockReason(b).isEmpty())
+        return false;
     // A hit only while it may fire itself: learned at a place wider than
     // its own, it does not take the control from a wider trigger that would.
     return b.target.type != HitTarget || surfaceMayFire(b.target);
+}
+
+QString ControlMap::deskBlockReason(const Binding &b) const
+{
+    const DeskRecord *desk = m_doc->deskRecord();
+    if (desk == nullptr || isKey(b))
+        return QString();
+    // Q309: on a control that is static here, the desk wins; kept, never armed.
+    DeskRecord::Role role = DeskRecord::Stop;
+    if (desk->isDeskControl(b.universe, b.channel, &role))
+    {
+        if (b.target.type == EmergencyStopTarget && role == DeskRecord::Stop)
+            return tr("the same control as this computer's STOP, which stops the show itself");
+        return tr("blocked on this computer: %1 is this computer's %2")
+            .arg(controlName(b.universe, b.channel), DeskRecord::roleName(role));
+    }
+    /* Q314: the show's own GO of the Run tab's list is a fallback, armed
+       only while this computer has no GO of its own. */
+    if (b.target.type == CueListTarget && b.mode != StopOnly && b.place.scope == Everywhere
+        && desk->isLive(DeskRecord::Go) && b.target.id == runList())
+        return tr("not used on this computer: its desk has a GO (the show's GO is the fallback)");
+    return QString();
+}
+
+QList<QPair<ControlMap::Binding, QString>> ControlMap::deskBlocked() const
+{
+    QList<QPair<Binding, QString>> out;
+    for (const Binding &b : m_bindings)
+    {
+        const QString why = deskBlockReason(b);
+        if (!why.isEmpty())
+            out << qMakePair(b, why);
+    }
+    return out;
 }
 
 quint32 ControlMap::listOfCueId(quint32 cueId) const

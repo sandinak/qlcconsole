@@ -38,6 +38,12 @@ private slots:
     void valueMode();
     void value();
 
+    /** Board Q316: after a load, a replug or a wake the Grand Master
+     *  fader waits to pick up; a pull to 0 always applies at once. */
+    void pickupAfterLoadReplugWake();
+    /** A device's dump in the first 500 ms moves nothing, even a 0. */
+    void deviceDumpIgnored();
+
 private:
 
     GrandMaster *m_gm;

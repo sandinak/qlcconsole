@@ -2770,6 +2770,61 @@ void AppViews_Test::aPmjOverlayHearsOnlyItsOwnBoard()
     iom->setGrandMasterValue(255);
 }
 
+/* Q309, the one dispatch point: a PMJ control this computer's desk has
+   (here its master fader) is the desk's alone; the overlay listened to the
+   raw input and did its own job on it as well. */
+void AppViews_Test::aPmjControlTheDeskHasIsNotAlsoThePmjs()
+{
+    IOPluginCache *cache = m_app->doc()->ioPluginCache();
+    QLCIOPlugin *plug = cache->plugin(QStringLiteral("ArtNet"));
+    if (plug == nullptr)
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    if (plug == nullptr)
+    {
+        QDir stubDir(QStringLiteral("../../../engine/test/iopluginstub"));
+        stubDir.setFilter(QDir::Files);
+        stubDir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+        cache->load(stubDir);
+        plug = cache->plugin(QStringLiteral("I/O Plugin Stub"));
+    }
+    IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    auto restore = qScopeGuard([this, iom]() {
+        iom->setStaticControls({});
+        iom->setInputPatch(1, KInputNone, QString(), QLCIOPlugin::invalidLine());
+        iom->setGrandMasterValue(255);
+        m_app->clearDocument();
+    });
+    m_app->clearDocument();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    QLCInputProfile *pmj = iom->profile(QStringLiteral("PMJ Black 1"));
+    if (pmj == nullptr)
+    {
+        pmj = new QLCInputProfile();
+        pmj->setManufacturer(QStringLiteral("PMJ"));
+        pmj->setModel(QStringLiteral("Black 1"));
+        QVERIFY(iom->addProfile(pmj));
+    }
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 1, pmj->name()));
+    QCoreApplication::processEvents();
+    const quint32 gmChannel = 32768;            // PMJ Master: MIDI ch 9, CC 0
+
+    // The control case: the board's master, through the input map, moves the GM.
+    iom->setGrandMasterValue(200);
+    emit iom->inputValueChanged(1, gmChannel, 80);
+    QCoreApplication::processEvents();
+    QVERIFY2(int(iom->grandMasterValue()) != 200, "the PMJ's master fader did not move the Grand Master");
+
+    // The same control is the desk's: the overlay does not hear it.
+    iom->setGrandMasterValue(200);
+    iom->setStaticControls({ (quint64(1) << 32) | gmChannel });
+    emit iom->inputValueChanged(1, gmChannel, 40);
+    QCoreApplication::processEvents();
+    QVERIFY2(int(iom->grandMasterValue()) == 200, "a desk control also drove the PMJ overlay's role");
+}
+
 /* One lamp writer (CONTROL_SURFACES_EVAL §4): a free PMJ key the show
    learned (a GO, a hit, the stop on Favorites) is lit by the Control Map.
    The overlay repainted every key on each Grand Master change and sent the

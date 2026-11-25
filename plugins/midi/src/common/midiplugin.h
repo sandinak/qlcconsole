@@ -118,6 +118,13 @@ public:
     /** @reimp */
     QString inputInfo(quint32 input) override;
 
+    /** @reimp This computer's desk tells two ports of one name apart by it
+     *  (board Q322): ALSA's sequencer address ("ALSA 20:0"). Empty on
+     *  macOS (CoreMIDI's names are what a person sees, and the desk goes by
+     *  them) and on Windows (a repeat's name carries its "2- " unit
+     *  number: ControllerJobs::midiIdentityFor() reads it). */
+    QString inputDeviceLocation(quint32 input) const override;
+
     /** @reimp */
     void sendFeedBack(quint32 universe, quint32 output, quint32 channel, uchar value, const QVariant &params) override;
 

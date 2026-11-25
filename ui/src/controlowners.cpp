@@ -36,6 +36,7 @@
 #include "programmercontroller.h"
 #include "keytriggers.h"
 #include "padrun.h"
+#include "deskrecord.h"
 #include "doc.h"
 
 namespace
@@ -72,6 +73,8 @@ bool ControlOwners::Owner::sameAs(const Owner &o) const
             return index == o.index;
         case Keyboard:
             return true;
+        case Desk:
+            return index == o.index;
     }
     return false;
 }
@@ -366,6 +369,13 @@ QList<ControlOwners::Owner> ControlOwners::owners(Doc *doc, quint32 universe, qu
             out << o;
         }
     }
+    // This computer's desk (Q309): static here, never the show's to take.
+    if (universe != ControlMap::KeyboardUniverse)
+    {
+        Owner o;
+        if (deskOwner(doc, universe, channel & kPageMask, &o))
+            out << o;
+    }
     const quint64 k = universe == ControlMap::KeyboardUniverse ? controlKey(universe, channel)
                                                               : controlKey(universe, channel & kPageMask);
     const QList<QPair<quint64, Owner>> all = owned(doc);
@@ -401,6 +411,9 @@ bool ControlOwners::collides(const Owner &a, const Owner &b)
     /* The pad's Run map and the app's keys refuse a show trigger and the
        stop; what else listens to them is not asked here. */
     auto isShowTrigger = [](const Owner &o) { return o.kind == Trigger || o.kind == EmergencyStop; };
+    // This computer's desk: nothing of the show shares its controls (Q309).
+    if (a.kind == Desk || b.kind == Desk)
+        return true;
     if (a.kind == Pad || a.kind == Keyboard)
         return isShowTrigger(b);
     if (b.kind == Pad || b.kind == Keyboard)
@@ -529,6 +542,7 @@ bool ControlOwners::release(Doc *doc, const Owner &owner)
         case Pmj:
         case Pad:
         case Keyboard:
+        case Desk:
             return false;
         case Encoder:
         {
@@ -591,6 +605,7 @@ bool ControlOwners::canRelease(Doc *doc, const Owner &owner)
         case Pmj:
         case Pad:
         case Keyboard:
+        case Desk:
             return false;
         case Encoder:
             return doc->controlMap()->encoderBank()->isEnabled()
@@ -665,6 +680,7 @@ Held holdOf(Doc *doc, const ControlOwners::Owner &o)
         case ControlOwners::Pmj:
         case ControlOwners::Pad:
         case ControlOwners::Keyboard:
+        case ControlOwners::Desk:
             break;
     }
     return h;
@@ -704,6 +720,7 @@ void putBack(Doc *doc, const Held &h)
         case ControlOwners::Pmj:
         case ControlOwners::Pad:
         case ControlOwners::Keyboard:
+        case ControlOwners::Desk:
             break;
     }
 }
@@ -765,11 +782,64 @@ QList<ControlOwners::Collision> ControlOwners::collisions(Doc *doc)
         if (c.owners.count() >= 2)
             out << c;
     }
+    /* A show's trigger on a control this computer's desk has (Q309): kept in
+       the show, never armed here, listed as blocked. */
+    if (doc != nullptr && doc->controlMap() != nullptr)
+    {
+        for (const QPair<ControlMap::Binding, QString> &p : doc->controlMap()->deskBlocked())
+        {
+            const ControlMap::Binding &b = p.first;
+            Owner desk;
+            if (!deskOwner(doc, b.universe, b.channel, &desk))
+                continue;
+            Collision c;
+            c.universe = b.universe;
+            c.channel = b.channel;
+            c.owners << desk;
+            for (const QPair<quint64, Owner> &o : all)
+                if (o.second.kind == Trigger || o.second.kind == EmergencyStop)
+                    if (o.second.target == b.target)
+                        c.owners << o.second;
+            if (c.owners.count() >= 2)
+                out << c;
+        }
+    }
     return out;
+}
+
+bool ControlOwners::deskOwner(Doc *doc, quint32 universe, quint32 channel, Owner *out)
+{
+    DeskRecord *desk = doc != nullptr ? doc->deskRecord() : nullptr;
+    DeskRecord::Role role = DeskRecord::Stop;
+    if (desk == nullptr || !desk->isDeskControl(universe, channel, &role))
+        return false;
+    Owner o;
+    o.kind = Desk;
+    o.index = int(role);
+    o.thing = tr("this computer's %1").arg(DeskRecord::roleName(role));
+    o.where = tr("Connections ▸ Control surfaces");
+    o.movable = false;
+    o.fixedWhy = tr("That is this computer's %1: a show can't take it. Pick a free control, or change "
+                    "this computer's desk in Connections ▸ Control surfaces.").arg(DeskRecord::roleName(role));
+    o.fix = tr("learn the show's trigger on another control");
+    *out = o;
+    return true;
 }
 
 QString ControlOwners::collisionText(Doc *doc, const Collision &c)
 {
+    for (const Owner &d : c.owners)
+    {
+        if (d.kind != Desk)
+            continue;
+        QStringList kept;
+        for (const Owner &o : c.owners)
+            if (o.kind != Desk)
+                kept << tr("%1 (%2)").arg(o.thing, o.where);
+        return tr("%1: %2 is blocked on this computer: it is %3. It stays in the show and works on "
+                  "a computer whose desk doesn't use it; learn it on another control to use it here.")
+                .arg(controlName(doc, c.universe, c.channel), kept.join(tr(" and ")), d.thing);
+    }
     QStringList jobs;
     QStringList fixes;
     for (const Owner &o : c.owners)

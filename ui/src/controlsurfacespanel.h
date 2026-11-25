@@ -28,6 +28,7 @@
 
 class QLabel;
 class QPushButton;
+class DeskSetupPanel;
 class Doc;
 
 /** @addtogroup ui_io
@@ -60,6 +61,8 @@ public:
     /** The status line of row @p key, as the row shows it. */
     QString status(const QString &key) const;
     QPushButton *setUpButton(const QString &key) const { return m_buttons.value(key); }
+    /** This computer's desk, at the top (DeskSetupPanel). */
+    DeskSetupPanel *deskPanel() const { return m_desk; }
 
     /** One line for the Devices row: "3 triggers · emergency stop not learned". */
     QString summary() const;
@@ -99,6 +102,7 @@ protected:
 private:
 
     Doc *m_doc;
+    DeskSetupPanel *m_desk = nullptr;
     QLabel *m_featureOff = nullptr;
     QMap<QString, QLabel *> m_status;
     QMap<QString, QLabel *> m_what;

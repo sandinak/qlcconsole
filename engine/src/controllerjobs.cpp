@@ -32,6 +32,7 @@ namespace
 const QLatin1String kMac("mac:");
 const QLatin1String kPort("port:");
 const QLatin1String kName("name:");
+const QLatin1String kMidi("midi:");
 
 /* A settings key holds no '/' or '\' (QSettings' separators): a Linux
    port ("usb-0000:00:14.0-2/input0") or a Windows path would split it. */
@@ -176,8 +177,61 @@ QString ControllerJobs::identityOfUniverse(quint32 universe) const
     return k.identity;
 }
 
+QString ControllerJobs::midiModelName(const QString &name)
+{
+    // Windows numbers a second port of one name "2- APC MINI".
+    static const QRegularExpression unit(QStringLiteral("^(\\d+)- (.+)$"));
+    const QRegularExpressionMatch m = unit.match(name.trimmed());
+    return m.hasMatch() ? m.captured(2).trimmed() : name.trimmed();
+}
+
+QString ControllerJobs::midiIdentityFor(const QString &name, const QString &location)
+{
+    static const QRegularExpression unit(QStringLiteral("^(\\d+)- (.+)$"));
+    const QString trimmed = name.trimmed();
+    const QRegularExpressionMatch m = unit.match(trimmed);
+    const QString model = m.hasMatch() ? m.captured(2).trimmed() : trimmed;
+    QString loc = location.trimmed();
+    if (loc.startsWith(QLatin1String("ALSA "), Qt::CaseInsensitive))
+        loc = loc.mid(5).trimmed();
+    if (!loc.isEmpty())
+        return kMidi + model + QLatin1Char('@') + loc;
+    if (m.hasMatch() && m.captured(1).toInt() > 1)
+        return kMidi + model + QLatin1Char('#') + m.captured(1);
+    return kMidi + model;
+}
+
+QString ControllerJobs::deskIdentityFor(const QString &plugin, const QString &name,
+                                        const QString &location)
+{
+    if (plugin == QLatin1String("MIDI"))
+        return midiIdentityFor(name, location);
+    return identityFor(plugin, name, location);
+}
+
+QString ControllerJobs::deskIdentityOf(QLCIOPlugin *plugin, quint32 input)
+{
+    if (plugin == nullptr)
+        return QString();
+    const QStringList inputs = plugin->inputs();
+    if (input >= quint32(inputs.size()))
+        return QString();
+    return deskIdentityFor(plugin->name(), inputs.at(int(input)), plugin->inputDeviceLocation(input));
+}
+
 QString ControllerJobs::describe(const QString &identity)
 {
+    if (identity.startsWith(kMidi))
+    {
+        const QString rest = identity.mid(kMidi.size());
+        const int at = rest.lastIndexOf(QLatin1Char('@'));
+        if (at > 0)
+            return tr("MIDI port %1").arg(rest.mid(at + 1));
+        const int hash = rest.lastIndexOf(QLatin1Char('#'));
+        if (hash > 0)
+            return tr("MIDI unit %1").arg(rest.mid(hash + 1));
+        return tr("by name only (two of this model can't be told apart)");
+    }
     if (identity.startsWith(kMac))
         return tr("Bluetooth %1").arg(identity.mid(kMac.size()).toUpper());
     if (identity.startsWith(kPort))
@@ -196,6 +250,8 @@ QString ControllerJobs::describe(const QString &identity)
 
 bool ControllerJobs::isNameOnly(const QString &identity)
 {
+    if (identity.startsWith(kMidi))
+        return !identity.contains(QLatin1Char('@')) && !identity.contains(QLatin1Char('#'));
     return identity.startsWith(kName);
 }
 

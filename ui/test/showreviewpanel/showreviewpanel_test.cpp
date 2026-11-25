@@ -18,6 +18,7 @@
 */
 
 #include <QtTest>
+#include <QScopeGuard>
 #include <functional>
 #include <QTreeWidget>
 #include <QPushButton>
@@ -48,6 +49,8 @@
 #include "showstatus.h"
 #include "showreview.h"
 #include "qlcchannel.h"
+#include "deskrecord.h"
+#include <QSettings>
 #include "fixture.h"
 #include "doc.h"
 
@@ -133,6 +136,13 @@ int topCount(QTreeWidget *tree, const QString &prefix)
             return tree->topLevelItem(i)->childCount();
     return -1;
 }
+}
+
+void ShowReviewPanel_Test::initTestCase()
+{
+    QVERIFY(m_settings.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
 }
 
 void ShowReviewPanel_Test::init()
@@ -554,6 +564,45 @@ void ShowReviewPanel_Test::showTreeMarksBreachingCues()
     QVERIFY(rowOfCue(cues.first())->text(ShowTreeView::FlagsCol).contains(QStringLiteral("⚠ cyc")));
     delete panel;
     ShowReviewPanel::setShared(nullptr, nullptr);
+}
+
+void ShowReviewPanel_Test::thisComputerSection()
+{
+    QSettings().remove(DeskRecord::settingsGroup());
+    auto unset = qScopeGuard([]() { QSettings().remove(DeskRecord::settingsGroup()); });
+    auto section = [](QTreeWidget *tree) -> QTreeWidgetItem * {
+        for (int i = 0; i < tree->topLevelItemCount(); ++i)
+            if (tree->topLevelItem(i)->text(0).startsWith("This computer"))
+                return tree->topLevelItem(i);
+        return nullptr;
+    };
+    ShowReviewPanel panel(m_doc);
+    m_doc->showReview()->run();
+    QTreeWidgetItem *s = section(panel.tree());
+    QVERIFY(s != nullptr);
+    QCOMPARE(s->text(0), QString("This computer"));
+    QCOMPARE(s->childCount(), 1);
+    QVERIFY(s->child(0)->text(1).startsWith("No desk learned on this computer"));
+    QVERIFY(!(s->flags() & Qt::ItemIsSelectable));
+
+    // A desk whose device is not plugged in here: each role, and what to look at.
+    DeskRecord::Binding b;
+    b.identity = "midi:APC MINI";
+    b.device = "APC MINI";
+    b.plugin = "MIDI";
+    b.channel = 200;
+    b.control = "Note 72";
+    QVERIFY(m_doc->deskRecord()->setBinding(DeskRecord::Stop, b));
+    s = section(panel.tree());
+    QVERIFY(s != nullptr);
+    QCOMPARE(s->text(0), QString("This computer (look at it)"));
+    QCOMPARE(s->childCount(), 4);
+    QCOMPARE(s->child(0)->text(1), QString("STOP: APC MINI is not connected"));
+    QVERIFY(s->child(1)->text(1).startsWith("Grand Master: not set"));
+    QVERIFY(!(s->child(0)->flags() & Qt::ItemIsSelectable));
+    // The show's own findings are still there beside it.
+    QVERIFY(topCount(panel.tree(), "Blocker") >= 1 || topCount(panel.tree(), "Must fix") >= 1
+            || panel.tree()->topLevelItemCount() >= 2);
 }
 
 QTEST_MAIN(ShowReviewPanel_Test)

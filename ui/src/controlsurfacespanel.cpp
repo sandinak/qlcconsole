@@ -19,8 +19,11 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QShowEvent>
+#include <QFrame>
 
 #include "controlsurfacespanel.h"
+#include "desksetuppanel.h"
+#include "deskrecord.h"
 #include "controlowners.h"
 #include "virtualconsole.h"
 #include "vcwidget.h"
@@ -145,15 +148,23 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     QGridLayout *grid = new QGridLayout(this);
     grid->setContentsMargins(0, 0, 0, 0);
     grid->setColumnStretch(1, 1);
+    /* On this computer first (CONTROL_SCOPES.md §3): the desk's static
+       roles, the same in every show; then where this show sets things up. */
+    m_desk = new DeskSetupPanel(m_doc, this);
+    grid->addWidget(m_desk, 0, 0, 1, 3);
+    QFrame *rule = new QFrame(this);
+    rule->setFrameShape(QFrame::HLine);
+    rule->setFrameShadow(QFrame::Sunken);
+    grid->addWidget(rule, 1, 0, 1, 3);
     m_featureOff = new QLabel(tr("Control surfaces are off for this show: triggers and the encoder "
                                  "bank are put away. Turn them on in View ▸ Workspace ▸ Tabs & "
                                  "Features…. The emergency stop is always here."), this);
     m_featureOff->setObjectName(QStringLiteral("surfacesFeatureOff"));
     m_featureOff->setWordWrap(true);
     m_featureOff->setStyleSheet(QStringLiteral("color: gray;"));
-    grid->addWidget(m_featureOff, 0, 0, 1, 3);
+    grid->addWidget(m_featureOff, 2, 0, 1, 3);
 
-    int r = 1;
+    int r = 3;
     for (const Row &row : kRows)
     {
         const QString key = QString::fromLatin1(row.key);
@@ -198,6 +209,8 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             refreshPlaces();
     });
     connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &ControlSurfacesPanel::refresh);
+    // The desk's roles are owners: Who has it now follows them.
+    connect(m_doc->deskRecord(), &DeskRecord::changed, this, &ControlSurfacesPanel::refresh);
     InputOutputMap *iom = m_doc->inputOutputMap();
     connect(iom, &InputOutputMap::inputPatchChanged, this, &ControlSurfacesPanel::refresh);
     connect(iom, &InputOutputMap::profileChanged, this, &ControlSurfacesPanel::refresh);

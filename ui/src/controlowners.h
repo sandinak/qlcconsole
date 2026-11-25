@@ -92,7 +92,11 @@ public:
         /** A computer key the app already uses: a menu shortcut, an edit
          *  key, a dialog's key, a Virtual Console widget's key. Never moved;
          *  refuses a Control Map trigger. */
-        Keyboard
+        Keyboard,
+        /** This computer's desk: its STOP, Grand Master, GO or Back
+         *  (DeskRecord, Q309). Never moved; refuses everything of the show
+         *  -- a trigger there is kept in the show but not armed here. */
+        Desk
     };
 
     /** The encoder bank's parts that listen (its rings and lamps are
@@ -118,7 +122,7 @@ public:
         /* Which one: per kind */
         ControlMap::Target target;      //!< Trigger, EmergencyStop
         int part = -1;                  //!< Encoder: EncoderPart; SpeedMaster: its Control
-        int index = -1;                 //!< Encoder: slot; SpeedMaster: master; ChannelGroup: id; Pad: its role
+        int index = -1;                 //!< Encoder: slot; SpeedMaster: master; ChannelGroup: id; Pad: its role; Desk: DeskRecord::Role
         QPointer<QObject> widget;       //!< VCInput: the VCWidget
         quint8 inputId = 0;             //!< VCInput
         QSharedPointer<QLCInputSource> source;   //!< VCInput: the widget's source itself
@@ -207,6 +211,10 @@ public:
      *  pad, in @a family's words (PadNames::Family): "GO with L2 held",
      *  "the arm, with R1", "the armed hit (hits fire by their place)". */
     static QString padJob(int role, int family);
+
+    /** The desk owner of @a universe / @a channel when it is one of this
+     *  computer's desk roles. */
+    static bool deskOwner(Doc *doc, quint32 universe, quint32 channel, Owner *out);
 
 private:
     /** Every listener of the show with the control it hears, as

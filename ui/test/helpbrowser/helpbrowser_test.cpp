@@ -273,6 +273,13 @@ void HelpBrowser_Test::controlSurfacesMatchesCode()
     QVERIFY(flat.contains(QStringLiteral("Companion's too")));
     QVERIFY(flat.contains(QStringLiteral("**Grand Master input**")));
     QVERIFY(flat.contains(QStringLiteral("not set up")));
+    // This computer's desk (phase D): kept with the computer, the chip, the PIN.
+    QVERIFY(flat.contains(QStringLiteral("## This computer's desk")));
+    QCOMPARE(HelpBrowser::headingSlug(QStringLiteral("This computer's desk")), QStringLiteral("this-computers-desk"));
+    QVERIFY(flat.contains(QStringLiteral("Kept on this computer, never in the show.")));
+    QVERIFY(flat.contains(QStringLiteral("Patch It")));
+    QVERIFY(flat.contains(QStringLiteral("The show's PIN guards the desk")));
+    QVERIFY(flat.contains(QStringLiteral("A pull to 0 always applies at once")));
 }
 
 QTEST_MAIN(HelpBrowser_Test)

@@ -49,6 +49,10 @@ private slots:
      *  (has() asks on every event; Linux reads /sys for the port), and
      *  again after a patch or a hot-plug. */
     void anIdentityIsWorkedOutOncePerDevice();
+    /** This computer's desk (Q322): a MIDI port's identity on macOS (its
+     *  name), Windows (a repeat's "2- " unit) and ALSA (client:port). */
+    void midiLocationIdentity_data();
+    void midiLocationIdentity();
 
 private:
     Doc *m_doc = nullptr;

@@ -96,7 +96,8 @@ public:
      *  DE:4C:09:77:77:93", "USB port 14200000", or that it can't be
      *  (by name only). */
     static QString describe(const QString &identity);
-    /** True when @p identity is only a name: two pads of one model share it. */
+    /** True when @p identity is only a name: two of one model share it
+     *  (a pad by name, or a MIDI port with no unit or location). */
     static bool isNameOnly(const QString &identity);
     /** A pad's own name without its serial ("DUALSHOCK 4 Wireless
      *  Controller (DE:4C:...)" is "DUALSHOCK 4 Wireless Controller"). */
@@ -107,6 +108,24 @@ public:
     static QString shortName(const QString &name, const QString &identity);
     /** shortName() of the controller on @p universe; empty: none there. */
     QString nameOfUniverse(quint32 universe) const;
+
+    /** A MIDI port's identity for this computer's desk (board Q322), from
+     *  its name and the MIDI plugin's location (inputDeviceLocation()):
+     *    macOS (CoreMIDI): the name only        "midi:APC MINI"
+     *    Windows: a repeat's "2- " is its unit   "midi:APC MINI#2"
+     *    ALSA: the client:port ("ALSA 20:0")     "midi:APC MINI@20:0"
+     *  So the first of two Windows APC minis is "midi:APC MINI" and the
+     *  second "midi:APC MINI#2", as Windows names them. */
+    static QString midiIdentityFor(const QString &name, const QString &location);
+    /** The model a MIDI port's name is of: the name without a Windows
+     *  unit prefix ("2- APC MINI" is "APC MINI"). */
+    static QString midiModelName(const QString &name);
+    /** The desk's identity of a device: midiIdentityFor() for the MIDI
+     *  plugin, identityFor() for any other. */
+    static QString deskIdentityFor(const QString &plugin, const QString &name,
+                                   const QString &location);
+    /** deskIdentityFor() of @p plugin's input line @p input. */
+    static QString deskIdentityOf(QLCIOPlugin *plugin, quint32 input);
 
     /*********************************************************************
      * The jobs

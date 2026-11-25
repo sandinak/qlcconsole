@@ -105,6 +105,13 @@ has its own switch, and its own PIN.
   off a stool moves no cue. The pad never picks the list: the Run tab does.
 - **The phone page.** It shows the cues and GO, Back and Stop. Stop takes
   two taps.
+- **This computer's desk.** A MIDI desk's STOP, Grand Master, GO and Back
+  belong to the computer, not the show: learn them once at the top of
+  **Connections ▸ Control surfaces** and they work in every show opened
+  there. GO is one press on the Run tab's list. If the show you open does not
+  patch the desk, the footer's **Desk** chip turns red: click it to patch
+  it. The show keeps its own stop too, so a computer with no desk learned
+  can still stop the show.
 
 ## Exit ticket
 

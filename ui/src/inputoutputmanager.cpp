@@ -387,6 +387,12 @@ void InputOutputManager::showShowControlPage()
     m_devicesTree->selectShowControlRow(QString());
 }
 
+void InputOutputManager::showShowControlSection(const QString &key)
+{
+    m_ioTabs->setCurrentWidget(m_devicesTree);
+    m_devicesTree->selectShowControlRow(key);
+}
+
 void InputOutputManager::setShowControlListener(ShowControlListener *listener)
 {
     m_showControlPage->setListener(listener);
