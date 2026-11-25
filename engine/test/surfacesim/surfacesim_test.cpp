@@ -399,8 +399,6 @@ void SurfaceSim_Test::aStateDumpAfterAReplugFiresNoAllOff()
              qPrintable(pmj.lastError()));
     QTest::qWait(20);
     QCoreApplication::processEvents();
-    QEXPECT_FAIL("", "Phase R's state-dump guard (feat/053-r-recovery, ControlMap::isStateDump()) is not on main yet: "
-                     "the dump's note on is taken as a press", Continue);
     QCOMPARE(stops(), 1);
 }
 

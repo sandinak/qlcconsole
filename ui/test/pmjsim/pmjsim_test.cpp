@@ -359,10 +359,7 @@ void PmjSim_Test::goInTheRunTabGoesTheList()
     QVERIFY(m_pmj->tap(QStringLiteral("Go"), 60));
     doc->masterTimer()->timerTick();
     settle(30);
-    QEXPECT_FAIL("", "fix/053-pmj-run-buttons wires the PMJ's Go and Back: PMJOverlay registers Transport "
-                     "but its slotRoleActivated() does nothing with it", Continue);
     QVERIFY2(list->isRunning(), "Go on the PMJ did not GO the Run tab's list");
-    QEXPECT_FAIL("", "fix/053-pmj-run-buttons (as above)", Continue);
     QVERIFY2(handled.count() >= 1, "no command reached ShowControl");
 
     doc->masterTimer()->stopAllFunctions();
