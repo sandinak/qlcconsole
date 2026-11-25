@@ -337,7 +337,7 @@ void DeskRecord_Test::neverWrittenToShow()
     m_doc->deskRecord()->setOn(D::Back, false);
     const QString after = save();
     QCOMPARE(after, before);
-    QVERIFY(!after.contains("APC MINI"));
+    QVERIFY(!after.contains("midi:"));      // no identity (the patch names its own device)
     QVERIFY(!after.contains("thisComputersDesk", Qt::CaseInsensitive));
     // Kept with this computer: another show (a new Doc) has it.
     Doc other(nullptr);
@@ -435,6 +435,8 @@ void DeskRecord_Test::goTargetsRunTabListAndNamesIt()
     QCOMPARE(desk->goTargetText(), QString::fromUtf8("GO → Act 1"));
     send(0, kGo, 127);
     QCOMPARE(fired.last().first().toString(), QString("GO Act 1"));
+    send(0, kGo, 0);
+    send(0, kGo, 127);          // cue 2: there is a cue to go back to
     send(0, kBack, 127);
     QCOMPARE(fired.last().first().toString(), QString("Back: Act 1"));
 }

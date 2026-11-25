@@ -538,7 +538,7 @@ QString DeskRecord::goTargetText() const
 
 QString DeskRecord::grandMasterHint() const
 {
-    if (!m_gmPickup.waiting() || m_doc == nullptr || m_doc->inputOutputMap() == nullptr)
+    if (!grandMasterWaiting() || m_doc == nullptr || m_doc->inputOutputMap() == nullptr)
         return QString();
     const int current = m_doc->inputOutputMap()->grandMasterValue();
     const int percent = qRound(current * 100.0 / 255.0);
@@ -556,9 +556,9 @@ void DeskRecord::grandMaster(uchar value)
     const int current = iom->grandMasterValue();
     if (m_gmPickup.accept(value, current, now()) && value != current)
         iom->setGrandMasterValue(value);
-    if (m_gmPickup.waiting() != m_gmWasWaiting)
+    if (grandMasterWaiting() != m_gmWasWaiting)
     {
-        m_gmWasWaiting = m_gmPickup.waiting();
+        m_gmWasWaiting = grandMasterWaiting();
         emit grandMasterWaitingChanged(m_gmWasWaiting);
     }
 }

@@ -200,8 +200,10 @@ public:
     /** What GO plays: "GO → Act 2 main" (the Run tab's list), or that the
      *  Run tab has none. */
     QString goTargetText() const;
-    /** The Grand Master waits to pick up (after a load, a replug, a wake). */
-    bool grandMasterWaiting() const { return m_gmPickup.waiting(); }
+    /** The Grand Master waits to pick up (after a load, a replug, a wake):
+     *  its fader spoke after the dump and is not at the master yet. */
+    bool grandMasterWaiting() const
+    { return isLive(GrandMaster) && m_gmPickup.waiting() && m_gmPickup.last() >= 0; }
     /** "GM waiting: bring the fader to 100 %"; empty when not waiting. */
     QString grandMasterHint() const;
     /** Wait to pick up again: a load, a replug, a wake. */
