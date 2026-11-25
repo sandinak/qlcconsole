@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
+  learns its Back as well as its GO (two controls, one list); a GO, Back or
+  hit is refused on a fader, a latching button gets Start only, and a game
+  pad's buttons (its Run map) or a key the app already uses are refused,
+  naming their job (Q324).
+
 - **A fader is picked up before it follows**: an external fader (MIDI,
   OSC) that is not where the control is does nothing until you move it to,
   or through, the current value, then it follows (soft takeover). Virtual

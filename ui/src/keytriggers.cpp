@@ -148,15 +148,27 @@ QString KeyTriggers::focusBlocks(QWidget *focus)
     return QString();
 }
 
-QString KeyTriggers::refusal(quint32 channel, bool *dialogKey)
+namespace
 {
-    if (dialogKey != nullptr)
-        *dialogKey = false;
+/** What the app already uses a key for (KeyTriggers::refusal() and
+ *  appUse() say it in their own words). */
+struct KeyUse
+{
+    enum Kind { Free, NoKey, DialogKey, EditKey, Shortcut, VCKey } kind = Free;
+    QString what;       //!< Shortcut: the action's text; VCKey: the widget's type
+    QString caption;    //!< VCKey: the widget's caption
+};
+
+KeyUse keyUse(quint32 channel)
+{
+    KeyUse use;
     if (channel == 0)
-        return tr("Hold the modifiers and press a key.");
+    {
+        use.kind = KeyUse::NoKey;
+        return use;
+    }
     const QKeyCombination combo = QKeyCombination::fromCombined(int(channel));
     const Qt::KeyboardModifiers mods = combo.keyboardModifiers();
-    const QString name = ControlMap::keyName(channel);
 
     // The dialog's own keys (and every dialog's): they work the dialog.
     if (mods == Qt::NoModifier || mods == Qt::ShiftModifier)
@@ -166,10 +178,8 @@ QString KeyTriggers::refusal(quint32 channel, bool *dialogKey)
             case Qt::Key_Escape: case Qt::Key_Tab: case Qt::Key_Backtab: case Qt::Key_Return:
             case Qt::Key_Enter: case Qt::Key_Space: case Qt::Key_Up: case Qt::Key_Down:
             case Qt::Key_Left: case Qt::Key_Right:
-                if (dialogKey != nullptr)
-                    *dialogKey = true;
-                return tr("%1 works this dialog (and every list and dialog), so it can't be a trigger.")
-                        .arg(name);
+                use.kind = KeyUse::DialogKey;
+                return use;
             default:
                 break;
         }
@@ -185,8 +195,10 @@ QString KeyTriggers::refusal(quint32 channel, bool *dialogKey)
     };
     for (const QKeyCombination &k : editKeys)
         if (quint32(k.toCombined()) == channel)
-            return tr("%1 is one of the app's edit keys (Delete, Rename, Copy, Help…), so it can't be "
-                      "a trigger.").arg(name);
+        {
+            use.kind = KeyUse::EditKey;
+            return use;
+        }
 
     // A menu shortcut, or any other registered one.
     const QWidgetList tops = QApplication::topLevelWidgets();
@@ -198,14 +210,17 @@ QString KeyTriggers::refusal(quint32 channel, bool *dialogKey)
             for (const QKeySequence &seq : a->shortcuts())
                 if (channelOf(seq) == channel)
                 {
-                    const QString what = plainText(a->text());
-                    return what.isEmpty() ? tr("%1 is already a shortcut of the app.").arg(name)
-                                          : tr("%1 is already the shortcut for %2.").arg(name, what);
+                    use.kind = KeyUse::Shortcut;
+                    use.what = plainText(a->text());
+                    return use;
                 }
-        for (QShortcut *s : top->findChildren<QShortcut *>())
-            for (const QKeySequence &seq : s->keys())
+        for (QShortcut *sc : top->findChildren<QShortcut *>())
+            for (const QKeySequence &seq : sc->keys())
                 if (channelOf(seq) == channel)
-                    return tr("%1 is already a shortcut of the app.").arg(name);
+                {
+                    use.kind = KeyUse::Shortcut;
+                    return use;
+                }
     }
 
     // A Virtual Console widget's key (a press there drops ⌘, as VC does).
@@ -217,9 +232,65 @@ QString KeyTriggers::refusal(quint32 channel, bool *dialogKey)
             {
                 const quint32 c = channelOf(seq);
                 if (c != 0 && (c == channel || c == noCtrl))
-                    return tr("%1 is already used by Virtual Console %2 \"%3\".")
-                            .arg(name, VCWidget::typeToString(w->type()), w->caption());
+                {
+                    use.kind = KeyUse::VCKey;
+                    use.what = VCWidget::typeToString(w->type());
+                    use.caption = w->caption();
+                    return use;
+                }
             }
+    }
+    return use;
+}
+}
+
+QString KeyTriggers::refusal(quint32 channel, bool *dialogKey)
+{
+    if (dialogKey != nullptr)
+        *dialogKey = false;
+    const KeyUse use = keyUse(channel);
+    const QString name = ControlMap::keyName(channel);
+    switch (use.kind)
+    {
+        case KeyUse::Free:
+            break;
+        case KeyUse::NoKey:
+            return tr("Hold the modifiers and press a key.");
+        case KeyUse::DialogKey:
+            if (dialogKey != nullptr)
+                *dialogKey = true;
+            return tr("%1 works this dialog (and every list and dialog), so it can't be a trigger.")
+                    .arg(name);
+        case KeyUse::EditKey:
+            return tr("%1 is one of the app's edit keys (Delete, Rename, Copy, Help…), so it can't be "
+                      "a trigger.").arg(name);
+        case KeyUse::Shortcut:
+            return use.what.isEmpty() ? tr("%1 is already a shortcut of the app.").arg(name)
+                                      : tr("%1 is already the shortcut for %2.").arg(name, use.what);
+        case KeyUse::VCKey:
+            return tr("%1 is already used by Virtual Console %2 \"%3\".").arg(name, use.what, use.caption);
+    }
+    return QString();
+}
+
+QString KeyTriggers::appUse(quint32 channel, QString *where)
+{
+    const KeyUse use = keyUse(channel);
+    if (where != nullptr)
+        *where = use.kind == KeyUse::VCKey ? tr("Virtual Console") : tr("the app's keys");
+    switch (use.kind)
+    {
+        case KeyUse::Free:
+        case KeyUse::NoKey:
+            break;
+        case KeyUse::DialogKey:
+            return tr("working every list and dialog");
+        case KeyUse::EditKey:
+            return tr("an edit key (Delete, Rename, Copy, Help…)");
+        case KeyUse::Shortcut:
+            return use.what.isEmpty() ? tr("a shortcut of the app") : tr("the shortcut for %1").arg(use.what);
+        case KeyUse::VCKey:
+            return tr("%1 \"%2\"").arg(use.what, use.caption);
     }
     return QString();
 }

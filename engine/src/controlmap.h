@@ -53,6 +53,8 @@ class Doc;
 #define CONTROLMAP_HAS_LAMP_STATES 1
 /** ... and a place on each trigger (Place, Q295). */
 #define CONTROLMAP_HAS_PLACES 1
+/** ... and a Back on a cue list (CueListBackTarget, phase F). */
+#define CONTROLMAP_HAS_BACK 1
 
 /**
  * The Control Map: a MIDI note or CC, or an OSC message -- any control on
@@ -114,12 +116,17 @@ public:
         CueListTarget,  //!< a Show Tree cue list, by its id: GO
         CueTarget,      //!< a Show Tree cue, by its id: GO that cue
         HitTarget,      //!< a Show Tree hit (a Looks section's cue), by its id
-        EmergencyStopTarget //!< ALL OFF (id 0): the surface's emergency stop, one button
+        EmergencyStopTarget, //!< ALL OFF (id 0): the surface's emergency stop, one button
+        /** A Show Tree cue list, by its id: Back (the cue before). A target
+         *  of its own, so a GO and a Back on one list are two controls. */
+        CueListBackTarget
     };
 
     /** How a press acts. On a cue list or a cue, Toggle and Start only GO,
      *  Momentary GOes on the press and stops the list on the release, and
-     *  Stop only stops the list. */
+     *  Stop only stops the list. On a list's Back, Toggle and Start only go
+     *  back one cue (each press; the release does nothing) and Stop only
+     *  stops the list. */
     enum Mode
     {
         Toggle,     //!< a press starts it, the next press stops it
@@ -222,6 +229,12 @@ public:
 
     static Target function(quint32 id) { return Target{ FunctionTarget, id }; }
     static Target cueList(quint32 id) { return Target{ CueListTarget, id }; }
+    /** Back on cue list @a id (ShowControl's Back, through run()). */
+    static Target cueListBack(quint32 id) { return Target{ CueListBackTarget, id }; }
+    /** Whether @a type plays a cue list (GO, a cue's GO, Back): its modes
+     *  are the list's (modesFor()), and it is armed as the list is. */
+    static bool isListType(TargetType type)
+    { return type == CueListTarget || type == CueTarget || type == CueListBackTarget; }
     static Target cue(quint32 id) { return Target{ CueTarget, id }; }
     static Target hit(quint32 id) { return Target{ HitTarget, id }; }
     /** The emergency stop (ALL OFF through ShowControl::run(), the one path).
@@ -331,6 +344,27 @@ public:
     QString stopProblem() const;
     bool stopHasProblem() const { return !stopProblem().isEmpty(); }
 
+    /** The emergency stop's fader rule, for any run of values: a value
+     *  that differs from the last one, with no 0 (a release) between them
+     *  and under @a windowMs after it, is a fader moving -- a button sends
+     *  the same value again, or a 0 first. */
+    static bool movesLikeFader(bool releasedSince, qint64 sinceLastMs, uchar last, uchar value,
+                               int windowMs);
+    /** What learning heard a control send, since the Learn window began
+     *  (kept across its presses -- listen() again after heard() -- and
+     *  forgotten by stopListening()). Whether it is a fader for a GO or a
+     *  hit: its profile calls it a fader, knob or encoder, or it moved
+     *  like one (movesLikeFader()). A computer key never is. */
+    bool learnSawFader(quint32 universe, quint32 channel) const;
+    /** Whether it sent one value per press, as a latching button does: on,
+     *  then 0 a press later, then on again (each a press apart, never a
+     *  quick release in between), and nothing else. A press on such a
+     *  button is a press only every other time. */
+    bool learnSawLatching(quint32 universe, quint32 channel) const;
+    /** Test hook: the shortest gap between two values of a latching
+     *  button's run (a release quicker than it is a momentary button's). */
+    void setLatchGapMs(int ms) { m_latchGapMs = ms; }
+
     /*********************************************************************
      * Names
      *********************************************************************/
@@ -346,6 +380,9 @@ public:
     bool targetExists(const Target &target) const;
     /** The mode in words, as it acts on a target of @a type. */
     static QString modeName(Mode mode, TargetType type = FunctionTarget);
+    /** The modes a target of @a type is offered, in the order the Learn
+     *  window and the table list them. */
+    static QList<Mode> modesFor(TargetType type);
 
     static QString typeToString(TargetType type);
     static bool stringToType(const QString &str, TargetType *type);
@@ -611,6 +648,9 @@ private:
     void say(quint64 k, const QString &why);
     /** listenForButton(): one control heard while learning. */
     bool learnButtonHeard(quint32 universe, quint32 channel, uchar value);
+    /** Every value heard while learning: what learnSawFader() and
+     *  learnSawLatching() read. */
+    void observeLearn(quint64 k, uchar value);
     /** Starts, stops or toggles (start: 1, stop: 0, toggle: -1) a function. */
     void actOnFunction(quint32 fid, int how, const QString &what);
     void goList(const Binding &b, bool stop);
@@ -666,6 +706,19 @@ private:
     QSet<quint64> m_notButtons;
     /** how long a first press waits for its second */
     int m_confirmMs = 15000;
+    /** What a control sent while learning (observeLearn()). */
+    struct LearnSeen
+    {
+        uchar last = 0;
+        bool any = false;
+        QElapsedTimer at;
+        bool fader = false;
+        uchar on = 0;           //!< a latching run's one "on" value
+        int latchSteps = 0;     //!< on, 0, on...: 3 is a latching button
+        bool quickRelease = false;  //!< a release under m_latchGapMs: momentary
+    };
+    QHash<quint64, LearnSeen> m_learnSeen;
+    int m_latchGapMs = 400;
     /** repeats of the emergency stop's press inside this are one */
     int m_estopDebounceMs = 1000;
     /** What a stop's control last sent: the value, when, whether a 0 (a

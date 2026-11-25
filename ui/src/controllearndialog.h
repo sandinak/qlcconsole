@@ -61,6 +61,12 @@ class Doc;
  * already live); the place right-clicked is offered. A line under it says what the control does
  * where once it is learned ("Scene: Warm everywhere, except Hit: Stab in cue
  * 2.3"): the narrowest live place has it (Q296).
+ *
+ * A cue list's window learns its GO or its Back (When pressed: GO, GO while
+ * held, Back, Stop the list), each a target of its own, so one list can
+ * have both. A GO, a Back or a hit is refused on a fader (its profile says
+ * so, or it moved like one: ControlMap::learnSawFader()); a latching button
+ * (ControlMap::learnSawLatching()) gets Start only, said.
  */
 class QLC_UI_EXPORT ControlLearnDialog final : public QDialog
 {
@@ -82,6 +88,9 @@ public:
     quint32 universe() const { return m_universe; }
     quint32 channel() const { return m_channel; }
     ControlMap::Mode mode() const;
+    /** What OK binds: the target the window opened on -- or, on a cue
+     *  list, its GO or its Back, as When pressed says. */
+    ControlMap::Target target() const;
     void setMode(ControlMap::Mode mode);
     /** Works: the place chosen. */
     ControlMap::Place place() const;
@@ -108,6 +117,8 @@ private slots:
     void slotMoveHere();
     /** Step Through Them: kept beside the one(s) at this place (Q303). */
     void slotStepThrough();
+    /** When pressed moved between a list's GO and its Back. */
+    void slotModeChanged(int index);
 
 private:
     void updateText();
@@ -117,6 +128,10 @@ private:
     ControlOwners::Owner self() const;
     /** The place of Works' item @a index. */
     ControlMap::Place placeAt(int index) const;
+    /** Whether a fader is refused for this target (a GO, a Back, a hit). */
+    bool refusesFader() const;
+    /** When pressed: each item's target type (a list's GO or Back). */
+    static constexpr int kTypeRole = Qt::UserRole + 1;
 
 private:
     Doc *m_doc;

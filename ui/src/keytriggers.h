@@ -67,6 +67,11 @@ public:
      *  Tab, Return, Space, the arrows), the app uses it (a menu shortcut, an
      *  edit key, Help), or a Virtual Console widget has it. */
     static QString refusal(quint32 channel, bool *dialogKey = nullptr);
+    /** What the app already uses key @a channel for, as a thing ("the
+     *  shortcut for Save", "an edit key (Delete, Rename, Copy, Help…)",
+     *  "Button \"GO\""), and @a where (empty: nothing). The Keyboard owner
+     *  ControlOwners names (refusal() says the same as a sentence). */
+    static QString appUse(quint32 channel, QString *where = nullptr);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;

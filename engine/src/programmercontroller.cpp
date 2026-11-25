@@ -3821,6 +3821,28 @@ void ProgrammerController::centreSticks(quint32 universe)
     tellOperator(tr("Centring the sticks: let go of them."), ControllerScheme::ConfirmPriority);
 }
 
+int ProgrammerController::padRole(quint32 universe, quint32 channel) const
+{
+    if (!isPadUniverse(universe))
+        return GamepadRole::None;
+    // Asked live: a Learn's question never fills the input path's role cache.
+    return liveControllerRole(universe, channel);
+}
+
+PadNames::Family ProgrammerController::padFamilyOf(quint32 universe) const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    if (ip != nullptr && ip->plugin() != nullptr)
+    {
+        const QString kind = ip->plugin()->inputDeviceKind(ip->input());
+        if (!kind.isEmpty())
+            return PadNames::familyFrom(kind);
+    }
+    const FocusController c = focusController(universe);
+    return c.present ? c.family : PadNames::Xbox;
+}
+
 bool ProgrammerController::isPadUniverse(quint32 universe) const
 {
     // A game controller's input: a HID profile, a pad kind, or any gamepad role.

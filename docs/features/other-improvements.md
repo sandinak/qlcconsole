@@ -1288,8 +1288,11 @@ list (GO), one cue of a list (a jump to it) or a hit.
   next press stops it. **Momentary**: on while held. **Start only** and
   **Stop only**: a press only starts, or only stops, it. On a cue list or
   a cue: **GO**, **GO while held** (the list stops on the release) or
-  **Stop the list**. A fader or a CC that goes on sending values counts as
-  one press until it goes back to 0.
+  **Stop the list**; a cue list also has **Back** (a second control, so
+  one list can have a GO and a Back). A fader or a CC that goes on sending
+  values counts as one press until it goes back to 0; a GO, a Back or a hit
+  is never learned on a fader, and a latching button gets **Start only**
+  ([Control surfaces](control-surfaces.md#the-control-map)).
 - **One control, one thing in one place.** A trigger has a place
   (**Works**: a cue, a cue list, a production or everywhere), and one
   control may have a trigger at each place: the narrowest live one fires

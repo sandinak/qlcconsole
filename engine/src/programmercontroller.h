@@ -275,6 +275,13 @@ public:
     /** @p universe's input is a game controller's (a HID profile, a pad
      *  kind, or any control with a gamepad role). */
     bool isPadUniverse(quint32 universe) const;
+    /** The gamepad role (GamepadRole::Role) of @p channel of @p universe
+     *  when that input is a game controller's (isPadUniverse()); None
+     *  otherwise. What the pad's owner in ControlOwners names (Q324). */
+    int padRole(quint32 universe, quint32 channel) const;
+    /** What the pad on @p universe calls its controls: the plugin's kind,
+     *  else focusController()'s guess for it (Xbox with none). */
+    PadNames::Family padFamilyOf(quint32 universe) const;
     /** Pads are connected and none has the Follow spot job: said where the
      *  follow spot is set up ("No controller has the Follow spot job.");
      *  empty otherwise. */

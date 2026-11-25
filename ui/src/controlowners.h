@@ -59,6 +59,12 @@ class Doc;
  * and those may step through instead (Q303). A trigger and any other
  * listener always collide.
  *
+ * Two owners are this computer's, not the show's, and are asked only for
+ * one control at a time (owners(), never collisions()): a game pad's
+ * buttons and triggers are its Run map (Pad: "Cross is GO with L2 held on
+ * the pad"; RT fires hits by their place), and a computer key the app
+ * already uses (Keyboard). Neither can be moved.
+ *
  * Reads the models live and keeps nothing (GUI thread only).
  */
 class QLC_UI_EXPORT ControlOwners final
@@ -76,7 +82,16 @@ public:
         SpeedMaster,    //!< a speed master's Tap, Rate or Pause input
         GrandMaster,    //!< the Grand Master's input
         ChannelGroup,   //!< a channel group's input
-        Pmj             //!< the PMJ Black 1 overlay (fixed by its profile)
+        Pmj,            //!< the PMJ Black 1 overlay (fixed by its profile)
+        /** A game pad's control: the pad's Run map (board Q324). This
+         *  computer's, not the show's; never moved. Refuses a Control Map
+         *  trigger and the stop only -- a one-press show trigger on a pad
+         *  would skip the arm and the safety. */
+        Pad,
+        /** A computer key the app already uses: a menu shortcut, an edit
+         *  key, a dialog's key, a Virtual Console widget's key. Never moved;
+         *  refuses a Control Map trigger. */
+        Keyboard
     };
 
     /** The encoder bank's parts that listen (its rings and lamps are
@@ -102,7 +117,7 @@ public:
         /* Which one: per kind */
         ControlMap::Target target;      //!< Trigger, EmergencyStop
         int part = -1;                  //!< Encoder: EncoderPart; SpeedMaster: its Control
-        int index = -1;                 //!< Encoder: slot; SpeedMaster: master; ChannelGroup: id
+        int index = -1;                 //!< Encoder: slot; SpeedMaster: master; ChannelGroup: id; Pad: its role
         QPointer<QObject> widget;       //!< VCInput: the VCWidget
         quint8 inputId = 0;             //!< VCInput
         QSharedPointer<QLCInputSource> source;   //!< VCInput: the widget's source itself
@@ -181,6 +196,11 @@ public:
     /** Test hook: the PMJ channel names, so owners() can be checked
      *  without an overlay. Empty when @a channel isn't the PMJ's. */
     static QString pmjControlName(quint32 channel);
+
+    /** What a game pad's control @a role (GamepadRole::Role) does on the
+     *  pad, in @a family's words (PadNames::Family): "GO with L2 held",
+     *  "the arm, with R1", "the armed hit (hits fire by their place)". */
+    static QString padJob(int role, int family);
 
 private:
     /** Every listener of the show with the control it hears, as

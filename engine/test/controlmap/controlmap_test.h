@@ -119,6 +119,11 @@ private slots:
     void aPlaceFromANewerVersionIsKeptAndNeverFires();
     void aHitsTriggerFollowsTheHitWhenItMoves();
     void aPlaceThatGoesNeverWidensOntoATakenOne();
+    // Phase F (CONTROL_SURFACES_EVAL §6): a cue list's Back, and what a
+    // Learn hears (a fader, a latching button)
+    void cueListBackStepsBack();
+    void backAndGoOnOneListCoexist();
+    void aLearnHearsAFaderAndALatchingButton();
 
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,
