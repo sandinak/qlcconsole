@@ -459,6 +459,8 @@ void ControlLearnDialog::selectControl(quint32 universe, quint32 channel)
     m_list->scrollToItem(row);
     if (was != nullptr && was != row)
         updateRow(was);
+    // The pressed row is bold: its control fits in full, never "Channel...".
+    m_list->resizeColumnToContents(0);
 }
 
 void ControlLearnDialog::updateCompanion()
