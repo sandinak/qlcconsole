@@ -3794,3 +3794,86 @@ void ControlMap_Test::assignGateReplaysWhereAControlEndedUp()
     emit iom->inputValueChanged(0, 62, 0);
     QCOMPARE(heard.count(), 2);
 }
+
+/* Review 053-a round 3: a control read as steps is never sent again on the
+   close -- its value is a turn, not a place. A profile's encoder, a knob
+   whose movement is relative, a control a listener claims as deltas, and a
+   control with no profile that sent the same step twice: each is handed
+   back as a baseline (where it is), nothing heard. A profile's fader, and
+   a knob that sends its position, are still heard where they ended up. */
+void ControlMap_Test::assignGateNeverReplaysASteppedControl()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QLCInputProfile *desk = new QLCInputProfile();
+    desk->setManufacturer(QStringLiteral("Test"));
+    desk->setModel(QStringLiteral("Encoders"));
+    desk->setType(QLCInputProfile::MIDI);
+    QLCInputChannel *enc = new QLCInputChannel();
+    enc->setName(QStringLiteral("Encoder"));
+    enc->setType(QLCInputChannel::Encoder);
+    QVERIFY(desk->insertChannel(30, enc));
+    QLCInputChannel *relKnob = new QLCInputChannel();
+    relKnob->setName(QStringLiteral("Relative knob"));
+    relKnob->setType(QLCInputChannel::Knob);
+    relKnob->setMovementType(QLCInputChannel::Relative);
+    QVERIFY(desk->insertChannel(31, relKnob));
+    QLCInputChannel *knob = new QLCInputChannel();
+    knob->setName(QStringLiteral("Knob"));
+    knob->setType(QLCInputChannel::Knob);
+    QVERIFY(desk->insertChannel(32, knob));
+    QLCInputChannel *fader = new QLCInputChannel();
+    fader->setName(QStringLiteral("Fader"));
+    fader->setType(QLCInputChannel::Slider);
+    QVERIFY(desk->insertChannel(33, fader));
+    QVERIFY(iom->addProfile(desk));
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0, desk->name()));
+    QCOMPARE(int(iom->controlKind(0, 30)), int(AssignInputGate::Relative));
+    QCOMPARE(int(iom->controlKind(0, 31)), int(AssignInputGate::Relative));
+    QCOMPARE(int(iom->controlKind(0, 32)), int(AssignInputGate::Fader));
+    QCOMPARE(int(iom->controlKind(0, 33)), int(AssignInputGate::Fader));
+
+    QSignalSpy heard(iom, &InputOutputMap::showInputValueChanged);
+    QSignalSpy based(iom, &InputOutputMap::showInputBaseline);
+    iom->setAssignListening(true);
+    for (quint32 ch : { 30u, 31u, 32u, 33u, 34u })
+    {
+        emit iom->inputValueChanged(0, ch, 2);       // +1 (TwosComplement)
+        emit iom->inputValueChanged(0, ch, 6);       // +3
+    }
+    emit iom->inputValueChanged(0, 35, 2);           // no profile, one step twice
+    emit iom->inputValueChanged(0, 35, 2);
+    emit iom->inputValueChanged(0, 35, 4);
+    QCOMPARE(heard.count(), 0);
+    iom->setAssignListening(false);
+    // Heard again: the knob, the fader, and 34 (no profile, moved like a fader).
+    QSet<quint32> replayed;
+    for (const QList<QVariant> &args : heard)
+    {
+        replayed.insert(args.at(1).toUInt());
+        QCOMPARE(args.at(2).toUInt(), 6u);
+    }
+    QCOMPARE(replayed, QSet<quint32>({ 32u, 33u, 34u }));
+    // The encoder and the relative knob: only where they are now.
+    QSet<quint32> baselines;
+    for (const QList<QVariant> &args : based)
+        baselines.insert(args.at(1).toUInt());
+    QCOMPARE(baselines, QSet<quint32>({ 30u, 31u }));
+
+    // A control a listener claims as deltas: a baseline, never heard.
+    AssignInputGate gate;
+    QVERIFY(gate.pass(9, 128));
+    gate.setListening(true);
+    QVERIFY(!gate.pass(9, 140, AssignInputGate::Fader));
+    QVERIFY(!gate.pass(9, 150, AssignInputGate::Fader));
+    QVector<AssignInputGate::Replay> base;
+    QVERIFY(gate.setListening(false, QSet<quint64>({ 9 }), &base).isEmpty());
+    QCOMPARE(base.count(), 1);
+    QCOMPARE(int(base.at(0).value), 150);
+    // Not claimed the next time: a fader again, heard where it ended up.
+    gate.setListening(true);
+    QVERIFY(!gate.pass(9, 100, AssignInputGate::Fader));
+    const QVector<AssignInputGate::Replay> r = gate.setListening(false);
+    QCOMPARE(r.count(), 1);
+    QCOMPARE(int(r.at(0).value), 100);
+}
+

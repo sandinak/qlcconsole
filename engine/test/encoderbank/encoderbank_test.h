@@ -41,6 +41,8 @@ private slots:
     void decodeBinaryOffset();
     void decodeAgreesWithTheInputSource();
     void absoluteKnobsReadTheirChange();
+    void aTurnInAssignToControlIsNotReplayed();
+    void anAbsoluteKnobAfterAssignToControlCountsFromWhereItIs();
     void invertTurnsItAround();
     void turnsAreGatheredIntoOne();
     void theInputPathDoesNotAllocate();

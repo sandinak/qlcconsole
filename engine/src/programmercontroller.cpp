@@ -3246,7 +3246,9 @@ void ProgrammerController::connectControllerInput()
        and on the close each control moved is heard where it ended up (an
        axis let go, a trigger at its last value). */
     connect(m_doc->inputOutputMap(), &InputOutputMap::assignListeningChanged, this, [this](bool on) {
-        const QVector<AssignInputGate::Replay> replays = m_assignGate.setListening(on);
+        // A control read as steps (an encoder) is never sent again.
+        const QVector<AssignInputGate::Replay> replays = m_assignGate.setListening(
+                on, on ? QSet<quint64>() : m_doc->inputOutputMap()->assignDeltaControls());
         for (const AssignInputGate::Replay &r : replays)
             slotControllerInputChanged(quint32(r.key >> 32), quint32(r.key & 0xFFFFFFFFu), r.value, r.name);
     });

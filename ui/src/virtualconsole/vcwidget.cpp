@@ -604,6 +604,8 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
     {
         connect(m_doc->inputOutputMap(), SIGNAL(showInputValueChanged(quint32,quint32,uchar)),
                 this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
+        connect(m_doc->inputOutputMap(), &InputOutputMap::collectAssignDeltas,
+                this, &VCWidget::slotCollectAssignDeltas, Qt::DirectConnection);
         connect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
                 this, SLOT(slotInputProfileChanged(quint32,QString)));
         connect(m_doc->inputOutputMap(), SIGNAL(inputDeviceDisconnected(quint32,QString,QString)),
@@ -691,6 +693,8 @@ void VCWidget::setInputSource(QSharedPointer<QLCInputSource> const& source, quin
     {
         disconnect(m_doc->inputOutputMap(), SIGNAL(showInputValueChanged(quint32,quint32,uchar)),
                    this, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
+        disconnect(m_doc->inputOutputMap(), &InputOutputMap::collectAssignDeltas,
+                   this, &VCWidget::slotCollectAssignDeltas);
         disconnect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
                    this, SLOT(slotInputProfileChanged(quint32,QString)));
         disconnect(m_doc->inputOutputMap(), SIGNAL(inputDeviceDisconnected(quint32,QString,QString)),
@@ -755,6 +759,18 @@ void VCWidget::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
     Q_UNUSED(universe);
     Q_UNUSED(channel);
     Q_UNUSED(value);
+}
+
+void VCWidget::slotCollectAssignDeltas(QSet<quint64> *keys) const
+{
+    if (keys == nullptr)
+        return;
+    for (const QSharedPointer<QLCInputSource> &source : m_inputs)
+    {
+        if (!source.isNull() && source->isValid()
+            && source->workingMode() != QLCInputSource::Absolute)
+            keys->insert((quint64(source->universe()) << 32) | (source->channel() & 0xFFFF));
+    }
 }
 
 void VCWidget::slotInputDeviceDisconnected(quint32 universe)

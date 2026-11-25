@@ -73,7 +73,17 @@ class Doc;
  *  hardware has left: a fader at its last value, a button let go at 0. A
  *  press still held then is not replayed (it would fire on the close); only
  *  a fader -- its profile says so, or it was heard at two different values
- *  above 0 -- is replayed above 0.
+ *  above 0 and never the same one twice running -- is replayed above 0.
+ *
+ *  A control read as steps is never replayed (review 053-a round 3): its
+ *  value is a turn, not a place, so sending it again turns the parameter
+ *  again on the close. That is a profile's encoder or a channel whose
+ *  movement is relative (Kind Relative), and any control a listener reads
+ *  as deltas (the @a deltas of setListening(): the encoder bank's encoders,
+ *  a Virtual Console input in Relative or Encoder mode). Such a control is
+ *  handed back in @a baselines instead: where it is now, for a listener
+ *  that reads a change from the last position (the encoder bank's
+ *  AbsoluteDelta) to take silently, so the next real turn counts from there.
  *
  *  Each listener keeps its own (the show's dispatch, a game pad's Run map)
  *  and feeds it every value it receives, listening or not, so it knows what
@@ -81,8 +91,9 @@ class Doc;
 class AssignInputGate
 {
 public:
-    /** What the profile says a control is. */
-    enum Kind { Unknown, Button, Fader };
+    /** What the profile says a control is: Relative is an encoder, or a
+     *  channel whose movement is relative (its value is a step). */
+    enum Kind { Unknown, Button, Fader, Relative };
 
     /** A value to send again on the close: where @a key ended up. */
     struct Replay
@@ -103,6 +114,8 @@ public:
         {
             if (c.lastAbove > 0 && value != c.lastAbove)
                 c.varied = true;
+            if (m_listening && c.moved && value == c.last)
+                c.repeated = true;      // a step sent again: an encoder's
             c.lastAbove = value;
         }
         c.last = value;
@@ -123,8 +136,11 @@ public:
     }
 
     /** The window opened or closed. On the close: what to send again, so
-     *  each listener hears where the moved controls ended up. */
-    QVector<Replay> setListening(bool on)
+     *  each listener hears where the moved controls ended up. @a deltas are
+     *  the controls a listener reads as steps (never sent again); each of
+     *  them that moved, and each Relative one, goes to @a baselines. */
+    QVector<Replay> setListening(bool on, const QSet<quint64> &deltas = QSet<quint64>(),
+                                 QVector<Replay> *baselines = nullptr)
     {
         QVector<Replay> out;
         if (on == m_listening)
@@ -133,14 +149,28 @@ public:
         for (auto it = m_controls.begin(); it != m_controls.end(); ++it)
         {
             Control &c = it.value();
+            if (on)
+                c.repeated = false;     // judged on what the window sees
             if (!c.moved)
                 continue;
             c.moved = false;
-            if (on || c.last == c.heard)
+            if (on)
                 continue;
-            const bool fader = c.kind == Fader || (c.kind != Button && c.varied);
+            if (c.kind == Relative || deltas.contains(it.key()))
+            {
+                // A turn, not a place: nothing sent; the listener's last
+                // position is moved to where the control is now.
+                c.heard = c.last;
+                if (baselines != nullptr)
+                    baselines->append({ it.key(), c.last, c.name });
+                continue;
+            }
+            if (c.last == c.heard)
+                continue;
+            const bool fader = c.kind == Fader
+                    || (c.kind == Unknown && c.varied && !c.repeated);
             if (c.last > 0 && !fader)
-                continue;       // a button still held: its press fires nothing
+                continue;       // a button still held, or steps: nothing fires
             c.heard = c.last;
             out.append({ it.key(), c.last, c.name });
         }
@@ -154,6 +184,7 @@ private:
         uchar heard = 0;        // the last value the listener heard
         uchar lastAbove = 0;    // the last value above 0
         bool varied = false;    // two different values above 0: a fader
+        bool repeated = false;  // the same value above 0 twice running in the window: steps
         bool moved = false;     // sent something while the window is open
         Kind kind = Unknown;
         QString name;
@@ -1093,13 +1124,26 @@ public:
     void setAssignListening(bool on);
     bool assignListening() const { return m_assignListening; }
     /** What @a universe's profile says @a channel is (Unknown: no profile,
-     *  or not in it). */
+     *  or not in it; Relative: an encoder, or a relative movement). */
     AssignInputGate::Kind controlKind(quint32 universe, quint32 channel) const;
+    /** The controls (universe << 32 | channel) a listener reads as steps
+     *  now (collectAssignDeltas()): never sent again on the close. */
+    QSet<quint64> assignDeltaControls();
 
 signals:
     /** setAssignListening() changed: a listener with its own gate (a pad's
      *  Run map) opens or closes it, and sends again what it returns. */
     void assignListeningChanged(bool on);
+    /** Asked on the close: a listener that reads a control's values as
+     *  steps (the encoder bank's encoders, a Virtual Console input in
+     *  Relative or Encoder mode) adds its key (universe << 32 | channel).
+     *  Connect it directly: the set is filled before the emit returns. */
+    void collectAssignDeltas(QSet<quint64> *keys);
+    /** On the close, for a control read as steps that moved while the
+     *  window was open: where it is now. Nothing is sent to the show; a
+     *  listener that reads a change from the last position takes it as
+     *  that position, so its next turn counts from here. */
+    void showInputBaseline(quint32 universe, quint32 channel, uchar value);
 
 private slots:
     /** inputValueChanged() again as showInputValueChanged(), without the

@@ -365,12 +365,17 @@ void EncoderBank::updateConnection()
     if (m_enabled)
     {
         connect(iom, &InputOutputMap::showInputValueChanged, this, &EncoderBank::handleInput);
+        connect(iom, &InputOutputMap::collectAssignDeltas, this, &EncoderBank::collectAssignDeltas,
+                Qt::DirectConnection);
+        connect(iom, &InputOutputMap::showInputBaseline, this, &EncoderBank::handleBaseline);
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &EncoderBank::slotInputDeviceConnected);
         connect(iom, &InputOutputMap::profileChanged, this, &EncoderBank::slotInputDeviceConnected);
     }
     else
     {
         disconnect(iom, &InputOutputMap::showInputValueChanged, this, &EncoderBank::handleInput);
+        disconnect(iom, &InputOutputMap::collectAssignDeltas, this, &EncoderBank::collectAssignDeltas);
+        disconnect(iom, &InputOutputMap::showInputBaseline, this, &EncoderBank::handleBaseline);
         disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &EncoderBank::slotInputDeviceConnected);
         disconnect(iom, &InputOutputMap::profileChanged, this, &EncoderBank::slotInputDeviceConnected);
     }
@@ -441,6 +446,23 @@ void EncoderBank::handleInput(quint32 universe, quint32 channel, uchar value)
         stepBank(-1);
     else if ((i = indexIn(channel, m_device.bankDirect, bankCount())) >= 0)
         setBank(i);
+}
+
+void EncoderBank::collectAssignDeltas(QSet<quint64> *keys) const
+{
+    if (keys == nullptr || !m_enabled || m_device.encoders < 0)
+        return;
+    for (int i = 0; i < m_device.encoderCount; ++i)
+        keys->insert((quint64(m_device.universe) << 32) | quint32(m_device.encoders + i));
+}
+
+void EncoderBank::handleBaseline(quint32 universe, quint32 channel, uchar value)
+{
+    if (!m_enabled || universe != m_device.universe || m_device.encoding != AbsoluteDelta)
+        return;
+    const int i = indexIn(channel, m_device.encoders, m_device.encoderCount);
+    if (i >= 0 && i < int(sizeof(m_last) / sizeof(m_last[0])))
+        m_last[i] = value >> 1;
 }
 
 void EncoderBank::turn(int slot, uchar value)

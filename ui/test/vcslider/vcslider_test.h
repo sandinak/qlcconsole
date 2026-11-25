@@ -33,6 +33,7 @@ private slots:
     /* Speed master mode */
     void speedMasterRate();
     void encoderKnobIsNeverPickedUp();
+    void encoderTurnedInAssignToControlIsNotReplayed();
     void channelGroupFaderIsPickedUp();
     void addedSlidersCatchValues();
     void sliderCatchValuesAreUnchanged();

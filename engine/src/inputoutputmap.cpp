@@ -3558,11 +3558,24 @@ void InputOutputMap::setAssignListening(bool on)
     if (on == m_assignListening)
         return;
     m_assignListening = on;
-    const QVector<AssignInputGate::Replay> replays = m_assignGate.setListening(on);
+    QVector<AssignInputGate::Replay> baselines;
+    const QVector<AssignInputGate::Replay> replays =
+            m_assignGate.setListening(on, on ? QSet<quint64>() : assignDeltaControls(), &baselines);
     emit assignListeningChanged(on);
-    // Closed: each control moved meanwhile, heard where it ended up.
+    // Closed: a control read as steps fires nothing, its listener only
+    // learns where it is now ...
+    for (const AssignInputGate::Replay &r : baselines)
+        emit showInputBaseline(quint32(r.key >> 32), quint32(r.key & 0xFFFFFFFFu), r.value);
+    // ... and each other control moved meanwhile is heard where it ended up.
     for (const AssignInputGate::Replay &r : replays)
         emit showInputValueChanged(quint32(r.key >> 32), quint32(r.key & 0xFFFFFFFFu), r.value, r.name);
+}
+
+QSet<quint64> InputOutputMap::assignDeltaControls()
+{
+    QSet<quint64> keys;
+    emit collectAssignDeltas(&keys);
+    return keys;
 }
 
 AssignInputGate::Kind InputOutputMap::controlKind(quint32 universe, quint32 channel) const
@@ -3574,6 +3587,8 @@ AssignInputGate::Kind InputOutputMap::controlKind(quint32 universe, quint32 chan
     QLCInputChannel *ch = profile != nullptr ? profile->channel(channel) : nullptr;
     if (ch == nullptr)
         return AssignInputGate::Unknown;
+    if (ch->movementType() == QLCInputChannel::Relative)
+        return AssignInputGate::Relative;
     switch (ch->type())
     {
         case QLCInputChannel::Button:
@@ -3581,9 +3596,10 @@ AssignInputGate::Kind InputOutputMap::controlKind(quint32 universe, quint32 chan
         case QLCInputChannel::PrevPage:
         case QLCInputChannel::PageSet:
             return AssignInputGate::Button;
+        case QLCInputChannel::Encoder:
+            return AssignInputGate::Relative;
         case QLCInputChannel::Slider:
         case QLCInputChannel::Knob:
-        case QLCInputChannel::Encoder:
             return AssignInputGate::Fader;
         default:
             return AssignInputGate::Unknown;

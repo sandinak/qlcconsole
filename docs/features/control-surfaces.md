@@ -455,7 +455,9 @@ The window is your desk as a list:
   is heard once where you left it: a submaster or the Grand Master follows
   its fader to where it now is, and a button held down before you opened
   the window is let go of. A button pressed and let go in the window fires
-  nothing. The **emergency stop**
+  nothing, and so does an encoder turned in it: an encoder sends turns,
+  not a place, so nothing it drives moves on the close, and its next turn
+  counts from where it is now. The **emergency stop**
   (the show's and this computer's) still stops, and this computer's Grand
   Master still follows its fader. Clicking a row only finds it: the press
   on the device chooses.
