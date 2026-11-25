@@ -436,7 +436,10 @@ void DeskRecord_Test::goTargetsRunTabListAndNamesIt()
     send(0, kGo, 127);
     QCOMPARE(fired.last().first().toString(), QString("GO Act 1"));
     send(0, kGo, 0);
+    tick(3);                    // the list runs (Back needs a running list)
     send(0, kGo, 127);          // cue 2: there is a cue to go back to
+    send(0, kGo, 0);
+    tick(3);
     send(0, kBack, 127);
     QCOMPARE(fired.last().first().toString(), QString("Back: Act 1"));
 }
