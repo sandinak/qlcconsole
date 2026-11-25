@@ -4236,8 +4236,14 @@ void AppViews_Test::stopAllIsNeverGreyed()
         m_app->resize(was);
     }
     // A function started and stopped: still enabled after it.
+    Fixture *lamp = new Fixture(doc);
+    lamp->setName("Lamp");
+    lamp->setChannels(1);
+    lamp->setAddress(0);
+    QVERIFY(doc->addFixture(lamp));
     Scene *look = new Scene(doc);
     look->setName("Brief");
+    look->setValue(lamp->id(), 0, 255);
     QVERIFY(doc->addFunction(look));
     look->start(doc->masterTimer(), FunctionParent::master());
     QTRY_VERIFY_WITH_TIMEOUT(look->isRunning(), 3000);
