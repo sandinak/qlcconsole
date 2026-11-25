@@ -35,6 +35,7 @@ private slots:
     void keysAreSpelledForTheComputerYouAreOn();
     void aPictureFitsThePageAndOpensFullSize();
     void noGuideSendsYouToScenesClassic();
+    void controlSurfacesMatchesCode();
 };
 
 #endif

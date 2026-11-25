@@ -28,6 +28,7 @@ class ConnectionsTree_Test final : public QObject
 
 private slots:
     void theListTakesTheHeightNotTheHeader();
+    void theHintGivesWayBeforeRescan();
     void initTestCase();
     void cleanupTestCase();
     void init();

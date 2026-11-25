@@ -18,6 +18,7 @@
 #include <QObject>
 #include "qlcengine_export.h"
 #include <QHash>
+#include <QSet>
 #include <QList>
 #include <functional>
 
@@ -39,6 +40,12 @@ public:
         QHash<int, ControlSurface::Role> roleOf;
         int maxBrightness = 15;
         std::function<void(const ControlSurface::Control &, int level)> ledSink;
+        /** The controls (indexes into `controls`) whose lamp another writer
+         *  owns now -- a show's trigger or stop learned on a free key of the
+         *  board. Asked once per push; those lamps are never written, so a
+         *  refresh can't blank them (one lamp writer per control). Unset:
+         *  every lamp is the device's. */
+        std::function<QSet<int>()> lampsTakenElsewhere;
     };
 
     void registerDevice(const Device &dev);

@@ -23,6 +23,8 @@ private slots:
     void inputRoutesToRole();
     /** Two devices share one role vocabulary + provider (generic across boards). */
     void twoDevicesShareRoles();
+    /** A lamp another writer owns is never written by a refresh. */
+    void aLampTakenElsewhereIsNeverWritten();
 };
 
 #endif // CONTROLSURFACE_TEST_H

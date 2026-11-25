@@ -56,6 +56,13 @@ private slots:
     void learnKeyShots();
     void theSurfacesHubListsEveryPlace();
     void eachSetUpLandsOnItsPlace();
+    void pmjRowMatchesExactProfileOnly();
+    void grandMasterSetUpOpensGrandMasterTab();
+    void grandMasterRowFollowsItsSetUp();
+    void unpatchedDeviceListedWithSetUp();
+    void outputDevicesAreNotControllers();
+    void virtualPortsAreNotControllers();
+    void otherDevicesRowHidesWhenNothingWaits();
     void theSurfacesStatusFollowsTheShow();
     void surfacesOffKeepsTheStop();
     void surfacesShots();

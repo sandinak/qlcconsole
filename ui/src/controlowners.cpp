@@ -375,6 +375,16 @@ QList<ControlOwners::Owner> ControlOwners::owners(Doc *doc, quint32 universe, qu
     return out;
 }
 
+QSet<quint32> ControlOwners::showControls(Doc *doc, quint32 universe)
+{
+    QSet<quint32> out;
+    const QList<QPair<quint64, Owner>> all = owned(doc);
+    for (const QPair<quint64, Owner> &p : all)
+        if (p.second.kind != Pmj && quint32(p.first >> 32) == universe)
+            out.insert(quint32(p.first & 0xFFFFFFFFu));
+    return out;
+}
+
 QList<ControlOwners::Owner> ControlOwners::others(Doc *doc, quint32 universe, quint32 channel, const Owner &self)
 {
     QList<Owner> out;

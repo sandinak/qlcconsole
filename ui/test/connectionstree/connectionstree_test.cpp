@@ -1734,6 +1734,40 @@ void ConnectionsTree_Test::theListTakesTheHeightNotTheHeader()
              qPrintable(QString("the list is %1 px of 900").arg(tree.m_tree->height())));
 }
 
+/* UX-34: at 1024 wide the bar ran past the page -- Rescan read "Resca" and
+   a scroll bar came in over the list. The hint gives way first (shortened,
+   then gone; all of it on hover), so the buttons stay whole. */
+void ConnectionsTree_Test::theHintGivesWayBeforeRescan()
+{
+    ConnectionsTree tree(m_doc);
+    QLabel *hint = tree.findChild<QLabel *>("connectionsHint");
+    QVERIFY(hint != nullptr);
+    QWidget *barRow = tree.m_rescan->parentWidget();
+    QScrollArea *bar = qobject_cast<QScrollArea *>(barRow->parentWidget()->parentWidget());
+    QVERIFY(bar != nullptr);
+    // Narrower than the whole row by half the hint: only the hint can give.
+    const int rowWidth = barRow->sizeHint().width();
+    const int width = rowWidth - hint->sizeHint().width() / 2 + 12;
+    tree.resize(width, 700);
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    QCoreApplication::processEvents();
+    QVERIFY2(bar->horizontalScrollBar()->maximum() == 0,
+             qPrintable(QString("the bar scrolls by %1 px at %2 wide (row %3)")
+                        .arg(bar->horizontalScrollBar()->maximum()).arg(width).arg(rowWidth)));
+    const QRect rescan(tree.m_rescan->mapTo(bar->viewport(), QPoint(0, 0)), tree.m_rescan->size());
+    QVERIFY2(bar->viewport()->rect().contains(rescan),
+             qPrintable(QString("Rescan at %1..%2 of %3").arg(rescan.left()).arg(rescan.right())
+                        .arg(bar->viewport()->width())));
+    QVERIFY(hint->text() != QString("Right-click a row for what it can do"));   // it gave way
+    QVERIFY(hint->toolTip().contains("following the signal outward"));
+
+    // Wide enough again: the hint whole.
+    tree.resize(rowWidth + 100, 700);
+    QCoreApplication::processEvents();
+    QTRY_COMPARE(hint->text(), QString("Right-click a row for what it can do"));
+}
+
 /* "for universes can we have a way to refactor the layout to remove
    universes that aren't used .. or .. an 'active' only view?" */
 void ConnectionsTree_Test::byUniverseShowsOnlyTheUniversesInUse()

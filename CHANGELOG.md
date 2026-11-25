@@ -33,6 +33,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Windows); the Mac keeps ⌘⇧Esc. ALL OFF and Stop from the phone page or
   Companion no longer need the show's PIN (Q323); the PIN screen has its own
   STOP. A desk's stop still fires with Control Surfaces switched off.
+- **Other connected devices ignores software ports and hides when empty**: Midi Through, IAC Driver, PipeWire/JACK bridges and loopMIDI/RtMidi virtual ports are not controllers waiting to be set up, and the row and its Set Up… are put away when nothing waits.
 - **A fader is picked up before it follows**: an external fader (MIDI,
   OSC) that is not where the control is does nothing until you move it to,
   or through, the current value, then it follows (soft takeover). Virtual
@@ -44,6 +45,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   their surface type declares them (Q313).
 
 ### Fixed
+
+- **Control surfaces hub and the PMJ's lamps**: moving the Grand Master no
+  longer sends a PMJ key the show learned (a GO, a hit, the stop on
+  Favorites or a Down key) dark: the Control Map is its one lamp writer. In
+  Connections ▸ Show control & sync ▸ Control surfaces, the PMJ line counts
+  only the PMJ Black 1 profile and says whether its feedback line is
+  patched; the Grand Master has its own line, whose Set Up… opens the
+  Virtual Console's Settings on the Grand Master page; a pad or MIDI device
+  plugged in but on no universe is named (*USB MIDI Device: not set up*)
+  with Set Up… to the patch, and the hub follows a plug or unplug at once
+  (a DMX interface's input, or a device used as an output or feedback line,
+  is not listed as one waiting); the Grand Master line reads again as soon
+  as its Set Up… is OK'd. Connections' bar fits at 1024 wide: its hint
+  shortens before Rescan is cut off.
+  The help says the PMJ needs no restart, how to patch the APC40 mk2 (Omni,
+  Ableton mode) and that the Allow GO switch covers Companion.
 
 - **A trigger that steps through reopens cleanly, and Move It Here lets go of preset buttons.** Reopening the Trigger… dialog of a trigger made with Step Through Them no longer refuses OK as a second job (and no longer offers a Move It Here that deleted its sibling); it keeps stepping while its control and place stay. Move It Here from a Speed Dial or XY Pad preset, a Matrix custom control or a Frame page shortcut now lets go of the sub-control's own input, so the old one stops answering, stays gone after save and reload, and the hub counts one job.
 - **Fixture Properties shows three pictures.** **Place** has a plan map of the stage (centre line, plaster line, the fixture as a dot): drag the dot and X / Y follow, type X / Y and the dot moves; it reads how far the fixture is *SR* or *SL* of the centre line and from the plaster line, and on a truss, pipe or tower it is not draggable and says why. **Aim & Beam** has the mask lens, the beam seen from behind with the tape on it and how much gets through: the four Masking boxes draw it, and dragging a band's edge sets them (a laser shows its scan window). A fixture on a truss, pipe or tower also has **On Its Mount** (a side view with its height offset, following the Place rows as you type): **Plan | On Its Mount** switches the one picture area. Mount view detail: the truss, pipe or tower a fixture hangs on, front-on with the fixture ringed, its face, hung or upright, angle and tilt, and the height offset on a dimension line in your unit.

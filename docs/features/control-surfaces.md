@@ -12,9 +12,17 @@ the show except what is said to be the computer's.
 **All of them are listed in one place**: **Connections ▸ Devices ▸ Show
 control &amp; sync ▸ Control surfaces**. Each line says what it is and what is
 set up now (*3 triggers learned*, *Emergency stop: not learned*, *1 pad
-connected*, *Companion: web access off*), and its **Set Up…** button takes you
+connected and set up*, *Companion: web access off*), and its **Set Up…** button takes you
 to the place in the table below. It reads the show as it is and keeps no
-settings of its own. With **Control Surfaces** off for the show (see the
+settings of its own, and it follows a device plugged in or pulled out at
+once. A controller that is plugged in but on no universe's input is named:
+a pad on the **Game pads** line (*DualSense: connected, not set up*), any
+other MIDI or USB device on **Other connected devices** (*USB MIDI Device:
+not set up*); **Set Up…** there goes to the patch. The row is there only while one is waiting, and software ports (Midi Through, IAC Driver, PipeWire and JACK bridges, loopMIDI) are not counted. The **PMJ Black 1** line
+counts only an input with exactly that profile, and says whether its
+feedback line is patched (without it the board's lamps stay dark). The
+**Grand Master** line's **Set Up…** opens the Virtual Console's Settings on
+the Grand Master page, where its input is chosen. With **Control Surfaces** off for the show (see the
 emergency stop below) the triggers and the encoder bank lines say so and
 their buttons are off; the emergency stop line stays.
 
@@ -77,7 +85,8 @@ to fix it; the Devices line adds *1 control with two jobs*.
 | **Emergency stop** | The **Emergency Stop…** button under the Control Map table | One button is ALL OFF (below). |
 | **Encoder bank** | The section under the Control Map table | Endless encoders turn the Workbench selection in Design. See [Build](build.md#encoder-banks-a-midi-controller-turns-the-selection). |
 | **Virtual Console input** | A widget's **External Input** | A button, a slider (the one to use for a fader that sets a level) or a cue list, as in QLC+. |
-| **Speed master and Grand Master inputs** | The master's **Inputs…** | A fader or button for a master. |
+| **Speed master inputs** | The master's **Inputs…** | A fader or button for a speed master. |
+| **Grand Master input** | Virtual Console ▸ Settings ▸ **Grand Master** (the Grand Master line's **Set Up…**) | One fader for the whole show's level. |
 | **PMJ overlay** | Automatic, for the PMJ Black 1 only | The PMJ's faders, encoders and buttons (below). |
 | **Companion** | The qlcconsole module in Bitfocus Companion | A Stream Deck over the web access socket. See [Stream Deck](show-control.md#stream-deck-companion). |
 | **Game pads** | **Connections**, right-click the pad | Pad Run and the focus tools. See [Show control](show-control.md#go-from-the-game-controller-pad-run). |
@@ -254,7 +263,10 @@ On **Companion**, the **ALL OFF** preset needs the key **held for one
 second**, so a brush on the Stream Deck does not stop the show. It is not on
 any dial, and it works with *Allow GO from the phone Run page* off and
 **needs no PIN** (board Q323): ALL OFF and Stop from Companion or the phone
-page never wait on the show's PIN; everything else does.
+page never wait on the show's PIN; everything else does. That switch (File ▸
+Show Settings…) is Companion's too: GO, Back, Stop and every other run
+command from a Stream Deck follow it as the phone does; only ALL OFF does
+not.
 
 ## The Control Map
 
@@ -408,6 +420,8 @@ feedback line: the table says so on that row.
 The PMJ's faders, encoders and buttons work only on an input patched with
 the **PMJ Black 1** input profile, and only there. Patch it as an input on
 **any MIDI channel**, with the feedback line, and the profile **PMJ Black 1**.
+No restart: the board is found as soon as it is patched (or its profile is
+set), and its lamps light then.
 Any other controller that happens to send the same MIDI channel 9 notes or
 CCs does nothing to it, and the PMJ's lights are sent only to the universe
 the profile is patched on.
@@ -423,6 +437,10 @@ the profile is patched on.
 - **Two boards.** Only the first universe patched with the PMJ Black 1
   profile is heard. If a second is patched, the footer says *A second PMJ
   Black 1 is patched on universe N: only universe M is heard. Unpatch one.*
+- **One lamp writer.** A free button you learn for the show (**Go**,
+  **Favorites**, a Down button: a GO, a hit, the stop) is lit by the Control
+  Map only. Moving the Master or any other change on the board never sends
+  that lamp dark.
 - Go, Back, Left, Right and the page buttons light nothing and do nothing
   here. Learn **Go** and **Back** in the Control Map to GO and Back the list
   (rule 6): right-click the cue list in the Show Tree ▸ **Learn Trigger…**,
@@ -432,7 +450,13 @@ the profile is patched on.
 ## Other surfaces
 
 - **Akai APC40 mk2**: the input profile **Akai-APC40-mkII** gives the pads
-  their LED feedback. Learn a clip pad on a cue, a hit or a scene; the
+  their LED feedback. Patch it on MIDI channel **Omni**: each track's fader
+  and buttons send on that track's own MIDI channel (1-8, the master on 9),
+  so on one channel only track 1 is heard. For the pads to take the lights
+  and stop toggling their own, set the device's **Initialization message**
+  to **APC40 Mk2 Ableton mode** (the MIDI plugin's **Configure** in
+  Connections ▸ Devices): it sends the SysEx that puts the APC in Ableton
+  mode each time the device is opened. Learn a clip pad on a cue, a hit or a scene; the
   encoder bank has an **APC40 (knobs)** preset.
 - **Behringer X-Touch Mini**: no input profile yet. Set the unit to
   *Standard* mode, layer A, encoders *Relative 1*; patch it as an input; the
@@ -453,8 +477,8 @@ after any build that changes a surface, and say which build.
 **PMJ Black 1**
 
 1. Patch the PMJ as an input on any MIDI channel with the feedback line and
-   the profile PMJ Black 1, then restart. *Expect:* **O** and **Set** glow
-   dim; the other buttons stay dark.
+   the profile PMJ Black 1 (no restart). *Expect:* **O** and **Set** glow
+   dim at once; the other buttons stay dark.
 2. In Design, open a Colour look in Build and move the faders. *Expect:* the
    palette changes (the faders in use are lit).
 3. Switch to **Operate** and move the same faders and turn Enc 1.
@@ -493,7 +517,8 @@ after any build that changes a surface, and say which build.
     goes **lit** when the show is stopped, and while it is lit **Go is
     dark**; one GO after that, Go is dim or bright again and the stop is
     dim. The Control Map's **Its light** column says the
-    same words throughout.
+    same words throughout. Move the **Master** fader: *Expect:* Go and the
+    stop's button keep their light.
 12. **A hit's light.** Learn a hit that lives in one song on a free PMJ
     button (a Down button or **Favorites**).
     *Expect:* dark while that song is not running, dim while it is, dark
@@ -514,8 +539,10 @@ after any build that changes a surface, and say which build.
 
 **Akai APC40 mk2**
 
-1. Patch with the **Akai-APC40-mkII** profile and the feedback line.
-   *Expect:* the pads light when idle.
+1. Patch on MIDI channel **Omni** with the **Akai-APC40-mkII** profile and
+   the feedback line, and the Initialization message **APC40 Mk2 Ableton
+   mode**. *Expect:* the pads light when idle, and all eight track faders
+   are heard.
 2. Learn a clip pad on a **hit** whose place is idle. Press it in Operate.
    *Expect:* nothing starts and the footer says *Its place is not live.*
    Start the list that is its place and press again: *Expect:* it fires.
@@ -548,7 +575,8 @@ after any build that changes a surface, and say which build.
 **Stream Deck with Companion**
 
 1. Add the **ALL OFF (hold 1 s)** preset from **Run the show** to a key.
-2. With *Allow GO from the phone Run page* **off** and a scene running, tap
+2. With *Allow GO from the phone Run page* **off** (it covers Companion too)
+   and a scene running, tap
    the key quickly. *Expect:* nothing stops.
 3. Hold the key for one second. *Expect:* everything stops, even with Allow
    GO off. Set a PIN in the show and leave it **out** of the connection (or

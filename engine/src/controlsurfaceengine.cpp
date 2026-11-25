@@ -59,10 +59,11 @@ void ControlSurfaceEngine::pushDeviceLeds(const Device &dev)
 {
     if (!dev.ledSink)
         return;
+    const QSet<int> taken = dev.lampsTakenElsewhere ? dev.lampsTakenElsewhere() : QSet<int>();
     for (int i = 0; i < dev.controls.size(); ++i)
     {
         const Control &c = dev.controls.at(i);
-        if (!c.hasLed())
+        if (!c.hasLed() || taken.contains(i))
             continue;
         const Role r = dev.roleOf.value(i, Role());
         // Unbound control or no provider → State::Empty (dark).

@@ -257,4 +257,22 @@ void HelpBrowser_Test::noGuideSendsYouToScenesClassic()
     }
 }
 
+/* Control surfaces says what the code does (CONTROL_SURFACES_EVAL §6
+   phase F): the PMJ is found when it is patched, no restart; the APC40
+   mk2 needs Omni and Ableton mode; the Allow GO switch is Companion's too;
+   the Grand Master's input has its own line. */
+void HelpBrowser_Test::controlSurfacesMatchesCode()
+{
+    const QString text = guideText(QStringLiteral("control-surfaces.md"));
+    QVERIFY(!text.isEmpty());
+    const QString flat = QString(text).replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
+    QVERIFY2(!flat.contains(QStringLiteral("PMJ Black 1, then restart")), "the PMJ needs no restart");
+    QVERIFY(flat.contains(QStringLiteral("No restart")));
+    QVERIFY(flat.contains(QStringLiteral("MIDI channel **Omni**")));
+    QVERIFY(flat.contains(QStringLiteral("APC40 Mk2 Ableton mode")));     // the MIDI template's name
+    QVERIFY(flat.contains(QStringLiteral("Companion's too")));
+    QVERIFY(flat.contains(QStringLiteral("**Grand Master input**")));
+    QVERIFY(flat.contains(QStringLiteral("not set up")));
+}
+
 QTEST_MAIN(HelpBrowser_Test)
