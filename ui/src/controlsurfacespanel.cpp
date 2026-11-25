@@ -245,6 +245,11 @@ QString ControlSurfacesPanel::status(const QString &key) const
     return m_status.contains(key) ? m_status.value(key)->text() : QString();
 }
 
+bool ControlSurfacesPanel::statusWarns(const QString &key) const
+{
+    return m_status.contains(key) && m_status.value(key)->property("warns").toBool();
+}
+
 QString ControlSurfacesPanel::summary() const
 {
     QString text = triggersText() + QStringLiteral(" · ") + stopText();
@@ -559,6 +564,21 @@ void ControlSurfacesPanel::refresh()
     const QString off = tr("Off for this show");
     m_status["map"]->setText(on ? triggersText() : off);
     m_status["estop"]->setText(stopText());
+    {
+        // A stop that stops nothing is an open warning: amber, as the footer
+        // draws one, readable in every theme (UX-32, UX-37).
+        ControlMap *cm = m_doc->controlMap();
+        const bool warns = cm->binding(ControlMap::emergencyStop()) != nullptr
+                && (!cm->stopProblem().isEmpty() || !cm->stopDeviceMissing().isEmpty());
+        QLabel *estop = m_status["estop"];
+        if (estop->property("warns").toBool() != warns)
+        {
+            estop->setProperty("warns", warns);
+            estop->setStyleSheet(warns ? QStringLiteral("QLabel { color:#000000; background:#f5a623; "
+                                                        "padding:1px 6px; border-radius:3px; }")
+                                       : QString());
+        }
+    }
     m_status["encoder"]->setText(on ? encoderText() : off);
     m_status["vc"]->setText(vcText());
     m_status["masters"]->setText(mastersText());

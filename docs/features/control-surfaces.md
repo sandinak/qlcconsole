@@ -259,7 +259,7 @@ button under the Control Map table.
   value above 0 is a press: one ALL OFF, however often the dump repeats it.
   After the half second every press is a press again.
 - **When the stop's desk is missing, you are told.** The Control surfaces
-  hub's stop line says *its device '…' is not connected, so it stops nothing
+  hub's stop line turns amber and says *its device '…' is not connected, so it stops nothing
   until it is back* (or that its universe has no input patched), and Show
   Review's **CTL-01** says the same before the show. The screen's Stop All
   still works.

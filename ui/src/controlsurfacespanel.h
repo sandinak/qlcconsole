@@ -59,6 +59,9 @@ public:
 
     /** The status line of row @p key, as the row shows it. */
     QString status(const QString &key) const;
+    /** True while row @p key's status is an open warning, drawn amber
+     *  (the stop that stops nothing: UX-32). */
+    bool statusWarns(const QString &key) const;
     QPushButton *setUpButton(const QString &key) const { return m_buttons.value(key); }
 
     /** One line for the Devices row: "3 triggers · emergency stop not learned". */

@@ -21,8 +21,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   notice names what stopped working (*Emergency Stop, Grand Master, GO of
   Main*); a stop's first 0 after a replug keeps the desk's state dump from
   firing ALL OFF; *Slept 40 s, finding devices…* after a sleep; a repatch in
-  Inputs/Outputs says what moves first (Cancel leaves it); the hub and Show
-  Review (CTL-01) say when the stop's desk is missing.
+  Inputs/Outputs says what moves first (Cancel leaves it); the hub (in amber) and
+  Show Review (CTL-01) say when the stop's desk is missing.
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or

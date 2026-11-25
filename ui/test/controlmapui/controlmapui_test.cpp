@@ -3224,8 +3224,10 @@ void ControlMapUi_Test::hubSaysTheStopsDeviceIsMissing()
     cm->setBinding({ 0, 9, ControlMap::emergencyStop(), ControlMap::Toggle });
     QVERIFY2(hub->status("estop").contains("universe 1 has no input patched, so it stops nothing until it is back"),
              qPrintable(hub->status("estop")));
+    QVERIFY(hub->statusWarns("estop"));             // amber, an open warning
     cm->removeAll();
     QCOMPARE(hub->status("estop"), QString("Emergency stop: not learned"));
+    QVERIFY(!hub->statusWarns("estop"));
 }
 
 /* With QLC_SHOT_DIR: the hub with the stop's device missing at three sizes,
