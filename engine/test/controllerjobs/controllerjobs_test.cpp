@@ -275,4 +275,43 @@ void ControllerJobs_Test::anIdentityIsWorkedOutOncePerDevice()
     QCOMPARE(jobs->identityOfUniverse(0), QString());
 }
 
+void ControllerJobs_Test::midiLocationIdentity_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QString>("location");
+    QTest::addColumn<QString>("identity");
+    QTest::addColumn<QString>("model");
+    QTest::addColumn<bool>("nameOnly");
+    QTest::newRow("macOS") << "APC MINI" << "" << "midi:APC MINI" << "APC MINI" << true;
+    QTest::newRow("macOS, spaces") << " PMJ Black 1 " << "" << "midi:PMJ Black 1" << "PMJ Black 1" << true;
+    QTest::newRow("Windows, the first") << "APC MINI" << "" << "midi:APC MINI" << "APC MINI" << true;
+    QTest::newRow("Windows, the second") << "2- APC MINI" << "" << "midi:APC MINI#2" << "APC MINI" << false;
+    QTest::newRow("Windows, the third") << "3- APC MINI" << "" << "midi:APC MINI#3" << "APC MINI" << false;
+    QTest::newRow("a name with a dash") << "X-Touch MINI" << "" << "midi:X-Touch MINI" << "X-Touch MINI" << true;
+    QTest::newRow("ALSA") << "APC MINI:APC MINI MIDI 1 20:0" << "ALSA 20:0"
+                          << "midi:APC MINI:APC MINI MIDI 1 20:0@20:0" << "APC MINI:APC MINI MIDI 1 20:0" << false;
+    QTest::newRow("ALSA, another port") << "APC MINI" << "ALSA 24:0" << "midi:APC MINI@24:0" << "APC MINI" << false;
+}
+
+void ControllerJobs_Test::midiLocationIdentity()
+{
+    QFETCH(QString, name);
+    QFETCH(QString, location);
+    QFETCH(QString, identity);
+    QFETCH(QString, model);
+    QFETCH(bool, nameOnly);
+    QCOMPARE(J::midiIdentityFor(name, location), identity);
+    QCOMPARE(J::deskIdentityFor("MIDI", name, location), identity);
+    QCOMPARE(J::midiModelName(name), model);
+    QCOMPARE(J::isNameOnly(identity), nameOnly);
+    // Another plugin keeps the controller jobs' identity.
+    QCOMPARE(J::deskIdentityFor("HID", name, location), J::identityFor("HID", name, location));
+    // Two ALSA ports of one name, or two Windows units, are two identities.
+    QVERIFY(J::midiIdentityFor("APC MINI", "ALSA 20:0") != J::midiIdentityFor("APC MINI", "ALSA 24:0"));
+    QVERIFY(J::midiIdentityFor("APC MINI", "") != J::midiIdentityFor("2- APC MINI", ""));
+    QVERIFY(J::describe(J::midiIdentityFor("2- APC MINI", "")).contains("unit 2"));
+    QVERIFY(J::describe(J::midiIdentityFor("APC MINI", "ALSA 20:0")).contains("20:0"));
+    QVERIFY(J::describe(J::midiIdentityFor("APC MINI", "")).contains("can't be told apart"));
+}
+
 QTEST_MAIN(ControllerJobs_Test)

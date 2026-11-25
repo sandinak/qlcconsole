@@ -32,6 +32,9 @@ private slots:
 
     /** Findings by severity; the summary counts them */
     void listsBySeverity();
+    /** "This computer": each of this computer's desk roles and whether
+     *  it reaches the program now (the eval's risk 20). */
+    void thisComputerSection();
     /** A definition that says 0 for its lens / range is one FIX-18 note */
     void aZeroLensDefinitionIsOneNote();
     /** Accept stores the note and moves it to Accepted; Reopen puts it back */
