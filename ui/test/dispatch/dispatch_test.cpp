@@ -189,7 +189,8 @@ void Dispatch_Test::staticControlSkipsShowListeners()
         g->setName(QStringLiteral("Group"));
         QVERIFY(m_doc->addChannelsGroup(g));
         g->setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(1, kCh)));
-        QSignalSpy heard(g, &ChannelsGroup::valueChanged);
+        // by name: ChannelsGroup is not exported from the engine DLL (dllsignals_test)
+        QSignalSpy heard(g, SIGNAL(valueChanged(quint32,uchar)));
         send(kCh, 90);
         QCOMPARE(heard.count() > 0, fires);
     }
