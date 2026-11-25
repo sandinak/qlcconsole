@@ -220,14 +220,43 @@ void DeskSetup_Test::thePinGuardsThePanel()
     QCOMPARE(asked, 2);
     QVERIFY(panel.onBox(D::Go)->isChecked());
     QVERIFY(desk->isLive(D::Go));
-    // The PIN: the change goes through, and is asked once.
+    // The PIN: the change goes through. One PIN, one change: the next asks again.
     answer = true;
     panel.onBox(D::Go)->click();
     QCOMPARE(asked, 3);
     QCOMPARE(desk->state(D::Go), D::Off);
+    QVERIFY2(desk->isLocked(), "the PIN stayed open after the tick");
     panel.onBox(D::Go)->click();
-    QCOMPARE(asked, 3);
+    QCOMPARE(asked, 4);
     QVERIFY(desk->isLive(D::Go));
+
+    // A learn, then another change: each asks.
+    panel.learnButton(D::Stop)->click();
+    QCOMPARE(asked, 5);
+    QVERIFY(desk->isLearning());
+    send(0, 200, 127);
+    send(0, 200, 0);
+    send(0, 200, 127);
+    send(0, 200, 0);
+    QVERIFY(desk->isSet(D::Stop));
+    QVERIFY2(desk->isLocked(), "the PIN stayed open after the learn");
+    answer = false;
+    panel.learnButton(D::Back)->click();
+    QCOMPARE(asked, 6);
+    QVERIFY(!desk->isLearning());
+    panel.onBox(D::Go)->click();
+    QCOMPARE(asked, 7);
+    QVERIFY(desk->isLive(D::Go));
+    // An import cancelled at its file dialog leaves it locked.
+    answer = true;
+    DeskSetupPanel::setFileAsker([](QWidget *, bool) { return QString(); });
+    panel.importButton()->click();
+    QCOMPARE(asked, 8);
+    QVERIFY2(desk->isLocked(), "a cancelled import left the PIN open");
+    DeskSetupPanel::setFileAsker(nullptr);
+    answer = false;
+    panel.importButton()->click();
+    QCOMPARE(asked, 9);
 }
 
 void DeskSetup_Test::exportAndImportFromThePanel()
@@ -413,6 +442,60 @@ void DeskSetup_Test::deskShots()
         QCOMPARE(chip->colour(), DeskChip::Red);
         QVERIFY(chip->isVisible());
         QVERIFY(win.grab().save(out.absoluteFilePath(QString("desk-footer-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
+    win.hide();
+
+    /* Amber: the GM's box patched on a universe passing its input through
+       to DMX (the panel's row says why); green: passthrough off, all live. */
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setUniversePassthrough(1, true);
+    QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 1));
+    QVERIFY(desk->isOnPassthrough(D::GrandMaster));
+    QCOMPARE(chip->colour(), DeskChip::Amber);
+    QVERIFY(chip->text().contains("passthrough"));
+    for (const QSize &sz : sizes)
+    {
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlSection(QStringLiteral("surfaces"));
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(out.absoluteFilePath(
+            QString("desk-surfaces-passthrough-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
+    mgr.hide();
+    for (const QSize &sz : sizes)
+    {
+        win.resize(sz);
+        win.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&win));
+        QCoreApplication::processEvents();
+        QCOMPARE(chip->colour(), DeskChip::Amber);
+        QVERIFY(win.grab().save(out.absoluteFilePath(
+            QString("desk-footer-amber-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
+    iom->setUniversePassthrough(1, false);
+    QVERIFY(desk->isLive(D::GrandMaster));
+    QCOMPARE(chip->colour(), DeskChip::Green);
+    for (const QSize &sz : sizes)
+    {
+        win.resize(sz);
+        win.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&win));
+        QCoreApplication::processEvents();
+        QCOMPARE(chip->colour(), DeskChip::Green);
+        QVERIFY(win.grab().save(out.absoluteFilePath(
+            QString("desk-footer-green-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
+    for (const QSize &sz : sizes)
+    {
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlSection(QStringLiteral("surfaces"));
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(out.absoluteFilePath(
+            QString("desk-surfaces-live-%1x%2.png").arg(sz.width()).arg(sz.height()))));
     }
 }
 

@@ -87,20 +87,23 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
     {
         /* Where each role is follows the patch and the devices: a repatch
            moves it with its device (by identity, never by universe). */
-        connect(iom, &InputOutputMap::inputPatchChanged, this, &DeskRecord::rebind);
-        connect(iom, &InputOutputMap::inputSlotChanged, this, &DeskRecord::rebind);
-        connect(iom, &InputOutputMap::offlinePatchesChanged, this, &DeskRecord::rebind);
-        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, &DeskRecord::rebind);
+        /* Q316: a port (re)opened or rebound -- a patch, a slot, Patch It,
+           a show's IOMap -- may dump where its controls sit: the Grand
+           Master's own one waits out the dump and picks up (portChanged()). */
+        connect(iom, &InputOutputMap::inputPatchChanged, this, [this](quint32 u) { portChanged(u); });
+        connect(iom, &InputOutputMap::inputSlotChanged, this, [this](quint32 u) { portChanged(u); });
+        connect(iom, &InputOutputMap::offlinePatchesChanged, this, [this]() { portChanged(kInvalid); });
+        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, [this]() { portChanged(kInvalid); });
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, [this](quint32 universe) {
             forgetHeld(universe);
             rebind();
         });
         /* A universe removed takes its patch with it (removeUniverse() says
            only universeRemoved): a role there is no longer live. */
-        connect(iom, &InputOutputMap::universeAdded, this, &DeskRecord::rebind);
-        connect(iom, &InputOutputMap::universeRemoved, this, &DeskRecord::rebind);
+        connect(iom, &InputOutputMap::universeAdded, this, [this]() { portChanged(kInvalid); });
+        connect(iom, &InputOutputMap::universeRemoved, this, [this]() { portChanged(kInvalid); });
         // Passthrough on: the desk can't hear the universe (its input goes to DMX).
-        connect(iom, &InputOutputMap::universePassthroughChanged, this, &DeskRecord::rebind);
+        connect(iom, &InputOutputMap::universePassthroughChanged, this, [this]() { portChanged(kInvalid); });
         /* A replug: found again. Q316: the Grand Master waits to pick up
            only when its own device came back, never for a pad or another
            box on another universe (that would freeze a fade mid-show). */
@@ -113,6 +116,13 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
     }
     if (m_doc != nullptr)
     {
+        /* A load opens the show's ports while it reads the file (the IOMap
+           first), and the app paints meanwhile: the Grand Master hears
+           nothing of the desk until it ends (grandMaster()), then waits. */
+        connect(m_doc, &Doc::loading, this, [this]() {
+            m_unlocked = false;
+            rearmGrandMaster();
+        });
         // A load: another patch, and the Grand Master waits to pick up.
         connect(m_doc, &Doc::loaded, this, [this]() {
             m_unlocked = false;
@@ -133,6 +143,9 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
                 endLearn(mode == Doc::Operate ? tr("Learn stopped: the show went to Operate.")
                                               : tr("Learn stopped: the mode changed."));
         });
+        // Q319: a PIN set, changed or removed asks again for the next change.
+        if (ShowOperate *op = m_doc->operateSettings())
+            connect(op, &ShowOperate::settingsChanged, this, &DeskRecord::relock);
         if (ControlMap *cm = m_doc->controlMap())
             connect(cm, &ControlMap::runTabListChanged, this, [this]() { emit goTargetChanged(goTargetText()); });
         // A wake: the devices are found again; the Grand Master waits too.
@@ -336,10 +349,14 @@ QString DeskRecord::lockedText() const
 
 bool DeskRecord::changeAllowed()
 {
-    if (!isLocked())
-        return true;
-    emit refused(lockedText());
-    return false;
+    if (isLocked())
+    {
+        emit refused(lockedText());
+        return false;
+    }
+    // Q319: one PIN, one change; the next one asks again.
+    m_unlocked = false;
+    return true;
 }
 
 bool DeskRecord::setBinding(Role role, const Binding &binding)
@@ -463,6 +480,19 @@ void DeskRecord::rebind()
     }
     if (moved)
         emit changed();
+}
+
+void DeskRecord::portChanged(quint32 universe)
+{
+    const QString was = m_gmLiveKey;
+    rebind();
+    /* The Grand Master's port (re)opened, or it moved to another: the
+       device may dump its fader where it sits (a parked 0 would black the
+       stage out), so it waits out the dump and picks up. Another
+       universe's port leaves it alone (a pad replugged mid-fade). */
+    if (isLive(GrandMaster)
+        && (m_gmLiveKey != was || (universe != kInvalid && universe == m_universes[GrandMaster])))
+        rearmGrandMaster();
 }
 
 bool DeskRecord::isOnPassthrough(Role role) const
@@ -683,6 +713,10 @@ void DeskRecord::rearmGrandMaster()
 
 void DeskRecord::grandMaster(uchar value)
 {
+    /* Q316: while a show loads its ports open and dump (the app paints
+       between items): none of it is a hand on the fader. Picked up after. */
+    if (m_doc->loadStatus() == Doc::Loading)
+        return;
     InputOutputMap *iom = m_doc->inputOutputMap();
     const int current = iom->grandMasterValue();
     if (m_gmPickup.accept(value, current, now()) && value != current)
@@ -819,6 +853,7 @@ bool DeskRecord::importFrom(const QString &path, QString *error)
         emit refused(lockedText());
         return false;
     }
+    m_unlocked = false;     // Q319: one PIN, one change
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly))
     {

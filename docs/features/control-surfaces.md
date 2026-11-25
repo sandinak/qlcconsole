@@ -238,7 +238,9 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   arm; the pad keeps its own). **Back** goes back on the same list. The
   footer chip's tooltip says what GO plays now: *GO → Act 2 main*.
 - **The Grand Master waits to pick up** after a show loads, after its
-  device is plugged in again and after the computer wakes (board Q316). What
+  device is plugged in again, after its port is patched again (by hand or
+  by Patch It) and after the computer wakes (board Q316). While a show
+  loads it hears nothing of the desk at all. What
   the device sends in the first half second is its own state dump and moves
   nothing; then the fader does nothing until it reaches the Grand Master
   (the row and the chip say *GM waiting: bring the fader to 100 %*), and
@@ -250,7 +252,9 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
 - **On** turns one role off on this computer (Q317): its control is the
   show's again. The tick is kept with the computer.
 - **The show's PIN guards the desk** (board Q319): with a PIN set, every
-  change -- a learn, a tick, an import -- asks for it first.
+  change -- a learn, a tick, an import -- asks for it first. One PIN opens
+  one change: the next one asks again, and so does any change after the
+  PIN itself is set or changed.
 - **Export…** saves the record to a small file (*.qlcdesk*); **Import…** on
   another computer sets that computer's desk from it, for a room of laptops
   set up the same way.

@@ -34,6 +34,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   roles working; a re-learned Grand Master waits to pick up; the PMJ
   overlay and the pad no longer also act on a desk control.
 
+- **This computer's desk, PIN and load safety**: one PIN opens one change
+  (a learn, a tick, an import) and a PIN change locks it again; the Grand
+  Master hears nothing of the desk while a show loads and waits out its
+  device's dump whenever its port is patched again (a load, Patch It), so
+  a fader parked at 0 no longer blacks the stage out as the show opens.
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

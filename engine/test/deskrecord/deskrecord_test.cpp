@@ -20,6 +20,7 @@
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
 #include <QTemporaryDir>
+#include <QBuffer>
 #include <QSignalSpy>
 #include <QScopeGuard>
 #include <QSettings>
@@ -682,10 +683,55 @@ void DeskRecord_Test::teacherLockFreezesRecord()
     QVERIFY(desk->isLocked());
     QVERIFY(desk->unlock("1234"));
     QVERIFY(desk->setOn(D::Go, false));
+    // One PIN, one change: the next one asks again.
+    QVERIFY(desk->isLocked());
+    QVERIFY(!desk->setOn(D::Go, true));
     // Another show (File > New) never changes the record.
     m_doc->clearContents();
     QVERIFY(desk->isSet(D::Go));
     QVERIFY(!desk->binding(D::Go).on);
+}
+
+void DeskRecord_Test::onePinUnlocksOneChange()
+{
+    // Q319: the PIN opens one change -- a learn, a tick, an import -- never the desk for good.
+    D *desk = m_doc->deskRecord();
+    learn(D::Go, 0, kGo);
+    QTemporaryDir dir;
+    const QString file = dir.filePath("desk.qlcdesk");
+    QVERIFY(desk->exportTo(file));
+    QVERIFY(m_doc->operateSettings()->setPin("1234"));
+    QVERIFY(desk->isLocked());
+
+    // Unlocked: one learn, and it is learned.
+    QVERIFY(desk->unlock("1234"));
+    learn(D::Stop, 0, kStop);
+    QVERIFY(desk->isSet(D::Stop));
+    // The second change asks again: a learn, the On tick, an import.
+    QVERIFY2(desk->isLocked(), "the PIN stayed open after its one change");
+    QVERIFY(!desk->learn(D::Back));
+    QVERIFY(!desk->isLearning());
+    QVERIFY(!desk->setOn(D::Go, false));
+    QVERIFY(desk->binding(D::Go).on);
+    QString error;
+    QVERIFY(!desk->importFrom(file, &error));
+    QVERIFY(error.contains("PIN"));
+    QVERIFY(desk->isSet(D::Stop));       // the import never ran
+
+    // As the panel does it (ShowSettingsDialog::askForPin): one change too.
+    desk->setUnlocked(true);
+    QVERIFY(desk->setOn(D::Go, false));
+    QVERIFY(!desk->setOn(D::Go, true));
+    QVERIFY(!desk->binding(D::Go).on);
+
+    // A PIN changed (or set again) locks it again, unused.
+    QVERIFY(desk->unlock("1234"));
+    QVERIFY(!desk->isLocked());
+    QVERIFY(m_doc->operateSettings()->setPin("5678"));
+    QVERIFY2(desk->isLocked(), "a PIN change left the desk open");
+    QVERIFY(!desk->setOn(D::Go, true));
+    QVERIFY(desk->unlock("5678"));
+    QVERIFY(desk->setOn(D::Go, true));
 }
 
 void DeskRecord_Test::exportImportRoundTrip()
@@ -1190,6 +1236,94 @@ void DeskRecord_Test::aGrandMasterMadeLiveWaitsToPickUp()
     QVERIFY2(iom->grandMasterValue() == 255, "an imported GM fader jumped the master");
     // A pull to 0 is never held back.
     send(0, faderB, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+}
+
+void DeskRecord_Test::aPortDumpAsAShowLoadsNeverMovesTheGrandMaster()
+{
+    /* Q316: a real load opens the desk's port while it reads the show (the
+       IOMap first) and the app paints between items (App::slotLoadProgress):
+       the box's dump of a parked fader (0) must not black the stage out. */
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    learn(D::GrandMaster, 0, kGm);
+    send(0, kGm, 255);
+    iom->setGrandMasterValue(255);
+    QVERIFY(desk->isLive(D::GrandMaster));
+    // Enough fixtures after the IOMap for the load to say its progress.
+    for (int i = 0; i < 24; ++i)
+    {
+        Fixture *fxi = new Fixture(m_doc);
+        fxi->setName(QString("Par %1").arg(i + 1));
+        fxi->setAddress(quint32(10 + i));
+        fxi->setUniverse(0);
+        fxi->setChannels(1);
+        m_doc->addFixture(fxi);
+    }
+    QByteArray show;
+    {
+        QBuffer buf(&show);
+        QVERIFY(buf.open(QIODevice::WriteOnly));
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        QVERIFY(m_doc->saveXML(&w));
+        w.writeEndDocument();
+    }
+    QVERIFY(show.contains("APC MINI"));
+
+    // The box dumps its GM fader, parked at 0, the moment its port opens.
+    m_stub->m_dumpOnOpen[0] = { qMakePair(kGm, uchar(0)) };
+    int painted = 0;
+    // As the app: it paints while it loads, and the universes flush their input.
+    QMetaObject::Connection c = connect(m_doc, &Doc::loadProgress, this, [&]() {
+        ++painted;
+        iom->flushInputs();
+        QCoreApplication::processEvents();
+    });
+    auto done = qScopeGuard([&]() { disconnect(c); m_stub->m_dumpOnOpen.clear(); });
+    m_doc->clearContents();
+    QCOMPARE(int(iom->grandMasterValue()), 255);
+    QXmlStreamReader xml(show);
+    QVERIFY(xml.readNextStartElement());
+    QVERIFY(m_doc->loadXML(xml));
+    QVERIFY2(painted > 0, "the load never said its progress (the dump was never heard mid-load)");
+    iom->flushInputs();
+    QCoreApplication::processEvents();
+    QVERIFY(desk->isLive(D::GrandMaster));
+    QVERIFY2(iom->grandMasterValue() == 255, "the desk's dump as the show loaded blacked the stage out");
+
+    // After the window, a pull to 0 by hand applies at once.
+    now += 600;
+    send(0, kGm, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+}
+
+void DeskRecord_Test::aPortDumpOnPatchItNeverMovesTheGrandMaster()
+{
+    // Q316: Patch It opens the desk's port: its dump is no hand on the fader.
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    learn(D::GrandMaster, 0, kGm);
+    send(0, kGm, 255);
+    iom->setGrandMasterValue(255);
+    // A show that patches the other box, not the APC.
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 1));
+    QCOMPARE(desk->state(D::GrandMaster), D::NotPatched);
+    m_stub->m_dumpOnOpen[0] = { qMakePair(kGm, uchar(0)) };
+    auto done = qScopeGuard([&]() { m_stub->m_dumpOnOpen.clear(); });
+    now += 5000;
+    QCOMPARE(desk->patchIt(), 1u);
+    QVERIFY(desk->isLive(D::GrandMaster));
+    iom->flushInputs();
+    QCoreApplication::processEvents();
+    QVERIFY2(iom->grandMasterValue() == 255, "Patch It's port dump blacked the stage out");
+    // A hand on it after the window: down to 0 at once.
+    now += 600;
+    send(1, kGm, 0);
     QCOMPARE(int(iom->grandMasterValue()), 0);
 }
 

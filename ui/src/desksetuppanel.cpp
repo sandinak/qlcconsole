@@ -16,6 +16,7 @@
 */
 
 #include <QFileDialog>
+#include <QScopeGuard>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -110,6 +111,7 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
                 return;
             }
             m_desk->setOn(role, on);
+            m_desk->relock();   // Q319: one PIN, one change
         });
         ++r;
     }
@@ -201,7 +203,9 @@ void DeskSetupPanel::startLearn(DeskRecord::Role role)
     }
     if (!unlocked(tr("Enter the show's PIN to change this computer's desk.")))
         return;
-    if (!m_desk->learn(role))
+    const bool started = m_desk->learn(role);
+    m_desk->relock();       // Q319: one PIN, one change (the learn is it)
+    if (!started)
         return;
     m_learnLine->setText(DeskRecord::takesFader(role)
                              ? tr("Move the fader for %1. Press Cancel to stop.").arg(DeskRecord::roleName(role))
@@ -252,6 +256,8 @@ void DeskSetupPanel::slotImport()
 {
     if (!unlocked(tr("Enter the show's PIN to change this computer's desk.")))
         return;
+    // Q319: one PIN, one change -- the import, or none if it is cancelled.
+    auto relock = qScopeGuard([this]() { m_desk->relock(); });
     const QString path = s_fileAsker ? s_fileAsker(this, false)
                                      : QFileDialog::getOpenFileName(this, tr("Import This Computer's Desk"),
                                                                     QString(), tr("Desk files (*.qlcdesk)"));

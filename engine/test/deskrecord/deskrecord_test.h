@@ -53,6 +53,7 @@ private slots:
     void showFallbackOnlyForARoleThisComputerLacks();
     void perComputerTickTurnsOneRoleOff();
     void teacherLockFreezesRecord();
+    void onePinUnlocksOneChange();
     void exportImportRoundTrip();
     void patchItIsNamedAndUndoable();
     void grandMasterPicksUpAfterLoadReplugWake();
@@ -69,6 +70,8 @@ private slots:
     void learnPressesFireNothingOfTheShows();
     void aGrandMasterMadeLiveWaitsToPickUp();
     void passthroughUniverseIsNotLive();
+    void aPortDumpAsAShowLoadsNeverMovesTheGrandMaster();
+    void aPortDumpOnPatchItNeverMovesTheGrandMaster();
 
 private:
     /** One input value, through the input map (the dispatch point). */

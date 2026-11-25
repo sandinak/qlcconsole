@@ -68,8 +68,9 @@ class Doc;
  *  - GO / Back: one press GOes / goes back on the Run tab's list
  *    (ControlMap::runList()), through ShowControl::run() and its
  *    double-GO guard (Q317). Learned on a button; a fader is refused.
- *  - Grand Master: the fader, with GrandMasterPickup after a load, a
- *    replug and a wake (Q316). Learned on a fader; a button is refused.
+ *  - Grand Master: the fader, with GrandMasterPickup after a load (deaf
+ *    while it loads), a replug, a wake and its port (re)patched (Q316).
+ *    Learned on a fader; a button is refused.
  *
  * Each role can be turned off on this computer (setOn(), Q317). Every
  * change asks for the show's PIN when it has one (Q319: isLocked()).
@@ -143,9 +144,11 @@ public:
 
     /** Q319: a change asks for the show's PIN while one is set. */
     bool isLocked() const;
-    /** The PIN: changes allowed until relock() or another show. */
+    /** The PIN: the next change is allowed (one PIN, one change: a learn,
+     *  a tick, an import); relock(), a PIN change or a load lock it again. */
     bool unlock(const QString &pin);
-    /** The UI asked for the PIN itself (ShowSettingsDialog::askForPin()). */
+    /** The UI asked for the PIN itself (ShowSettingsDialog::askForPin()):
+     *  as unlock(), for the next change only. */
     void setUnlocked(bool on) { m_unlocked = on; }
     void relock();
 
@@ -298,6 +301,9 @@ private:
     void goPressed(bool back);
     void grandMaster(uchar value);
     void notifyGrandMasterWaiting();
+    /** A port opened, closed or moved (@p universe, or any): rebind(), and
+     *  the Grand Master waits out its dump if it was its port (Q316). */
+    void portChanged(quint32 universe);
     /** A learn listens (or no longer): the show's listeners hear no press meanwhile. */
     void setLearning(bool on);
     void endSwallow(quint64 k);

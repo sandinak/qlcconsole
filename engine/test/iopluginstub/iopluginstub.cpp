@@ -162,6 +162,9 @@ bool IOPluginStub::openInput(quint32 input, quint32 universe)
         if (m_openInputs.contains(input) == false)
             m_openInputs.append(input);
         addToMap(universe, input, Input);
+        // A device that says where its controls sit as its port opens.
+        for (const QPair<quint32, uchar> &v : m_dumpOnOpen.value(input))
+            emit valueChanged(universe, input, v.first, v.second);
     }
     return true;
 }

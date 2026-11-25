@@ -186,6 +186,9 @@ public:
     QStringList m_lineNames;
     /** When set, name() returns this (e.g. "ArtNet", to load real show XML). */
     QString m_nameOverride;
+    /** Per input line, the (channel, value) pairs openInput() sends at once,
+     *  as a MIDI box dumps where its faders sit when its port opens. */
+    QMap<quint32, QList<QPair<quint32, uchar>>> m_dumpOnOpen;
 
     /** @reimp Like a network plugin: each line's rig network gate decision,
      *  cached by line name (the line's address) and counted. */
