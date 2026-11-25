@@ -350,8 +350,8 @@ void SurfaceMap_Test::shots()
     SimMidiDevice maize(m_doc, m_stub, QStringLiteral("USB2.0-MIDI Port 1"), 2, kMaize,
                         profile("MaizeDMX-Playback-Controller.qxi"));
     QVERIFY2(maize.plug(), qPrintable(maize.lastError()));
-    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 Custom"), 3, QStringLiteral("Akai APC64 Custom"),
-                        profile("Akai-APC64-Custom.qxi"));
+    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 DAW"), 3, QStringLiteral("Akai APC64"),
+                        profile("Akai-APC64.qxi"));
     QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
     settle();
     // A show with a few triggers, one only in a cue; a lit pad; a fader moved.

@@ -731,7 +731,7 @@ void SurfaceSim_Test::everyLayoutHoldsToItsProfile()
         QVERIFY(SurfaceLayout::forProfile(l.profileName()).isValid());
     }
     const QStringList needed = { kApc, kPmj, QStringLiteral("MaizeDMX Playback Controller"),
-                                 QStringLiteral("Akai APC64 Custom") };
+                                 QStringLiteral("Akai APC64") };
     for (const QString &must : needed)
         QVERIFY2(seen.contains(must), qPrintable(must));
     QVERIFY(!SurfaceLayout::forProfile(QStringLiteral("Akai APC Mini")).isValid());
@@ -881,25 +881,33 @@ void SurfaceSim_Test::theMaizeDmxSeedsItsDefaults()
 
 void SurfaceSim_Test::theApc64SeedsItsDefaults()
 {
-    const QString name = QStringLiteral("Akai APC64 Custom");
-    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64-Custom.qxi")) != nullptr);
-    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 Custom"), 0, name);
+    const QString name = QStringLiteral("Akai APC64");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64.qxi")) != nullptr);
+    // Session mode, its DAW port: everything on one port.
+    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 DAW"), 0, name);
     QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
     settle();
     DeskRecord *desk = m_doc->deskRecord();
-    // The bottom-right pad GO, the one to its left Back, the top-right STOP, strip 8 the GM.
-    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 31));
-    QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(128 + 30));
-    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(128 + 87));
-    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32(23));
-    QVERIFY(SurfaceLayout::forProfile(name).lampsOnOff());
+    // As the APC40's (Q329): PLAY, RECORD, STOP ALL CLIPS; the GM touch strip 8.
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 91));
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(128 + 92));
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(128 + 119));
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32((7 << 12) | 513));
+    // Pads on MIDI channel 7 and buttons on 1 share note numbers: two channels.
+    QLCInputProfile *p = apc64.profile();
+    QVERIFY(p->channel((6 << 12) | (128 + 23)) != nullptr);
+    QVERIFY(p->channel(128 + 91) != nullptr);
     runList(m_doc);
     QList<int> commands;
     m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
         commands << int(r.command);
         return true;
     });
-    QVERIFY(apc64.tap(QStringLiteral("Pad 8-8")));
+    QVERIFY(apc64.tap(QStringLiteral("Play")));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+    // Pad 23 (channel 7) is not PLAY's neighbour on channel 1: no GO.
+    QVERIFY(apc64.tap(QStringLiteral("#%1").arg((6 << 12) | (128 + 23))));
     settle();
     QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
 }

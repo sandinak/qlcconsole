@@ -83,8 +83,9 @@ private slots:
     /** The MaizeDMX Playback Controller: GO, Back, the Grand Master and
      *  STOP (X10) from its layout. */
     void theMaizeDmxSeedsItsDefaults();
-    /** The APC64 in Custom Mode: GO the bottom-right pad, Back the one to
-     *  its left, STOP the top-right, the GM touch strip 8. */
+    /** The APC64 in Session mode (its DAW port): PLAY GO, RECORD Back,
+     *  STOP ALL CLIPS STOP, touch strip 8 the GM; pads on MIDI channel 7
+     *  apart from the buttons on 1. */
     void theApc64SeedsItsDefaults();
 
 private:
