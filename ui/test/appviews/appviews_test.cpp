@@ -2785,7 +2785,11 @@ void AppViews_Test::masterMoveKeepsShowLamps()
     IOPluginStub *stub = static_cast<IOPluginStub *>(plug);
     QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
     auto restore = qScopeGuard([this]() {
-        m_app->doc()->inputOutputMap()->setGrandMasterValue(255);
+        InputOutputMap *map = m_app->doc()->inputOutputMap();
+        map->setGrandMasterValue(255);
+        // The patch outlives the show: the next PMJ test wants no board on universe 1.
+        map->setOutputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine(), true, 0);
+        map->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine());
         m_app->clearDocument();
     });
     m_app->clearDocument();

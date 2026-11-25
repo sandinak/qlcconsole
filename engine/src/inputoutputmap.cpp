@@ -731,7 +731,15 @@ bool InputOutputMap::setInputProfile(quint32 universe, const QString &profileNam
 
     InputPatch *currInPatch = m_universeArray.at(universe)->inputPatch();
     if (currInPatch != NULL)
+    {
+        const QLCInputProfile *was = currInPatch->profile();
         currInPatch->set(profile(profileName));
+        /* A profile chosen on its own (Connections, the patch editor) is a
+           profile change too: the PMJ overlay and the Control surfaces
+           hub find the board by it. */
+        if (currInPatch->profile() != was)
+            emit profileChanged(universe, currInPatch->profileName());
+    }
 
     /* if no input patch is set, then setting a profile is useless,
        but there's no reason to cause an error here */
