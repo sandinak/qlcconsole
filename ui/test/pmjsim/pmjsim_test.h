@@ -61,6 +61,16 @@ private slots:
     /** This computer's STOP and GO on PMJ keys are lit by the Control Map
      *  (STOP lit always, blinking after ALL OFF); the overlay leaves them. */
     void theDesksStopIsLitOnThePmj();
+    /** His rig (build 4667, 2026-11-25): the PMJ's input on any MIDI
+     *  channel, its feedback line on the MIDI plugin's default (channel 1)
+     *  and a DMX output on the same universe. Go and Back light on the
+     *  board's channel 9, byte for byte, under Go and Back on his aligned
+     *  board's LED table. */
+    void hisRigLightsGoAndBackOnChannelNine();
+    /** His board before the align (LEDs on channel 1 in factory order):
+     *  no lamp the app sends lights its own button, and the channel-1
+     *  lamps build 4667 sent lit the wrong ones (Effects under 1-Load). */
+    void anUnalignedBoardLightsNoButtonOfItsOwn();
 
 private:
     void makeShow();

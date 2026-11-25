@@ -138,7 +138,14 @@ void PmjSim_Test::initTestCase()
     m_pmj = new SimMidiDevice(m_app->doc(), m_stub, kPmj, 0, kPmj,
                               QStringLiteral(QLC_TEST_RESOURCE_ROOT) + QStringLiteral("inputprofiles/PMJ-Black-1.qxi"));
     QVERIFY2(m_pmj->profile() != nullptr, "the PMJ Black 1 profile did not load");
+    /* His patch (2026-11-25): the feedback line on the MIDI plugin's own
+       default for an output, channel 1 (dink's saved setting), and a DMX
+       output on the board's universe beside it. */
+    m_pmj->setFeedbackLineChannel(0);
     QVERIFY2(m_pmj->plug(), qPrintable(m_pmj->lastError()));
+    m_stub->m_lineNames << QStringLiteral("ArtNet 172.18.2.17");
+    QVERIFY(m_app->doc()->inputOutputMap()->setOutputPatch(0, m_stub->name(), QStringLiteral("ArtNet 172.18.2.17"),
+                                                           quint32(m_stub->m_lineNames.size() - 1)));
     makeShow();
     CueRunner *runTab = m_app->findChild<CueRunner *>(QStringLiteral("runTab"));
     QVERIFY(runTab != nullptr);
@@ -564,6 +571,98 @@ void PmjSim_Test::theDesksStopIsLitOnThePmj()
     settle(30);
     QTRY_COMPARE(m_pmj->lamp(fav), 0);
     QCOMPARE(cm->deskLamps().count(), 0);
+}
+
+namespace
+{
+QString hex(const QByteArray &b)
+{
+    return QString::fromLatin1(b.toHex(' '));
+}
+QString ledFile(const char *name)
+{
+    return QStringLiteral(QLC_TEST_RESOURCE_ROOT) + QStringLiteral("../engine/test/surfacesim/captures/") + QLatin1String(name);
+}
+}
+
+void PmjSim_Test::hisRigLightsGoAndBackOnChannelNine()
+{
+    Doc *doc = m_app->doc();
+    QString err;
+    const QList<SimMidiDevice::Led> leds = SimMidiDevice::loadLeds(ledFile("pmj-leds-aligned-20261125.json"), &err);
+    QVERIFY2(!leds.isEmpty(), qPrintable(err));
+    m_pmj->setLeds(leds);
+    auto restore = qScopeGuard([this]() { m_pmj->setLeds({}); });
+    QVERIFY(doc->inputOutputMap()->universe(0)->outputPatchesCount() >= 1);     // DMX beside it, as his
+    Function *list = doc->function(doc->showTree()->cueList(m_list)->chaser);
+    QVERIFY(list != nullptr);
+    doc->masterTimer()->stopAllFunctions();
+    doc->masterTimer()->timerTick();
+    doc->setMode(Doc::Operate);
+    settle(50);
+    QVERIFY(!list->isRunning());
+    bool ok = false;
+    const quint32 go = m_pmj->channelOf(QStringLiteral("Go"), &ok);
+    QVERIFY(ok);
+    const quint32 back = m_pmj->channelOf(QStringLiteral("Back"), &ok);
+    QVERIFY(ok);
+    auto lastBytes = [&](quint32 ch) { return m_pmj->lastMidi(ch); };
+    m_pmj->forgetLamps();
+    m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
+    settle(30);
+    // A list that can GO: Go lit, note 0 on MIDI channel 9 (0x98), velocity 127.
+    QCOMPARE(hex(lastBytes(go)), QStringLiteral("98 00 7f"));
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Go")), 127);
+
+    // GO from the board, as he does: the list runs, Back can go back.
+    QVERIFY(m_pmj->tap(QStringLiteral("Go"), 60));
+    doc->masterTimer()->timerTick();
+    settle(50);
+    QVERIFY2(list->isRunning(), "Go on the PMJ did not GO the Run tab's list");
+    QTRY_COMPARE(m_pmj->lampUnder(QStringLiteral("Back")), 127);
+    QCOMPARE(hex(lastBytes(back)), QStringLiteral("98 0b 7f"));
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Go")), 127);     // the next cue can GO
+
+    doc->masterTimer()->stopAllFunctions();
+    doc->masterTimer()->timerTick();
+    doc->setMode(Doc::Design);
+    settle(30);
+}
+
+void PmjSim_Test::anUnalignedBoardLightsNoButtonOfItsOwn()
+{
+    Doc *doc = m_app->doc();
+    QString err;
+    const QList<SimMidiDevice::Led> leds = SimMidiDevice::loadLeds(ledFile("pmj-leds-20261125.json"), &err);
+    QVERIFY2(!leds.isEmpty(), qPrintable(err));
+    m_pmj->setLeds(leds);
+    auto restore = qScopeGuard([this]() { m_pmj->setLeds({}); });
+    doc->setMode(Doc::Operate);
+    settle(30);
+    m_pmj->forgetLamps();
+    m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
+    settle(30);
+    // Every lamp goes out on its button's own address (channel 9): none of
+    // this board's LEDs listens there, so no button lights.
+    QStringList lit;
+    for (const SimMidiDevice::Led &l : leds)
+        if (!l.under.isEmpty() && m_pmj->lampUnder(l.under) > 0)
+            lit << l.under;
+    QVERIFY2(lit.isEmpty(), qPrintable(QStringLiteral("lit on an unaligned board: ") + lit.join(QStringLiteral(", "))));
+    QVERIFY(m_pmj->lamp(QStringLiteral("Go")) > 0);       // sent all the same
+    // His 4667 symptoms, as the board takes channel-1 lamps: the Effects
+    // page lamp (note 50) lights the LED under 1-Load, Set's (49) the one
+    // under Effects, O's (22) the one under 10-Load; Go's (0) none.
+    m_pmj->boardReceives(QByteArray::fromHex("90327f"));
+    m_pmj->boardReceives(QByteArray::fromHex("90317f"));
+    m_pmj->boardReceives(QByteArray::fromHex("90167f"));
+    m_pmj->boardReceives(QByteArray::fromHex("90007f"));
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("1-Load")), 127);
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Effects")), 127);
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("10-Load")), 127);
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Go")), 0);
+    doc->setMode(Doc::Design);
+    settle(20);
 }
 
 int main(int argc, char **argv)

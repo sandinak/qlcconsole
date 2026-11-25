@@ -20,6 +20,10 @@
 #ifndef SIMMIDIDEVICE_H
 #define SIMMIDIDEVICE_H
 
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMap>
 
 #include "simsurface.h"
@@ -265,6 +269,11 @@ public:
 
     /* ---- out ---- */
 
+    /** The MIDI channel the feedback line is set to (0..15, or kOmni), as
+     *  the MIDI plugin's Configure dialog keeps it per device (a Mac with
+     *  no saved setting: channel 1, MidiDevice::loadSettings()). */
+    void setFeedbackLineChannel(int channel) { m_lineChannel = channel; }
+
     /** What the app sent the board since the last take, in order. */
     QList<Out> takeOutput()
     {
@@ -282,8 +291,10 @@ public:
             // the one the channel carries), note off for 0 when the profile says.
             uchar cmd = 0, d1 = 0, d2 = 0;
             const bool noteOff = profile() == nullptr || profile()->midiSendNoteOff();
-            int midiChannel = kOmni;
             const QVariant params = m_stub->m_feedbackParams.value(i);
+            /* The feedback line's own MIDI channel (setFeedbackLineChannel():
+               a Mac's MIDI output with no saved setting is channel 1). */
+            int midiChannel = m_lineChannel;
             if (params.isValid() && params.toInt() >= 0)
                 midiChannel += params.toInt();
             if (QLCMIDIProtocol::feedbackToMidi(o.channel, o.value, uchar(midiChannel), noteOff, &cmd, &d1, &d2))
@@ -293,8 +304,10 @@ public:
                 if (messageLength(cmd) > 2)
                     o.midi.append(char(d2));
             }
+            boardReceives(o.midi);
             out << o;
             m_lamps.insert(o.channel, o.midi.size() > 2 ? int(uchar(o.midi.at(2))) : -1);
+            m_lastMidi.insert(o.channel, o.midi);
             m_lampCount[o.channel]++;
         }
         m_seen = n;
@@ -326,11 +339,110 @@ public:
         takeOutput();
         return m_lampCount.value(channel);
     }
+    /** The MIDI bytes last sent for @p channel's lamp (empty: none). */
+    QByteArray lastMidi(quint32 channel)
+    {
+        takeOutput();
+        return m_lastMidi.value(channel);
+    }
     void forgetLamps()
     {
         takeOutput();
+        m_lastMidi.clear();
         m_lamps.clear();
         m_lampCount.clear();
+    }
+
+    /* ---- the board's own LEDs ---- */
+
+    /** One LED of the board: it answers @c note on MIDI channel @c channel
+     *  (1..16) when @c midi, and sits under button @c under (a profile
+     *  name; empty: under none). */
+    struct Led
+    {
+        int index = 0;
+        int channel = 1;
+        int note = 0;
+        bool midi = true;
+        QString under;
+    };
+    /** The board's LED table, as OpenDeck stores it: which message each
+     *  LED answers. Without one (the default) lamp() is what was sent. */
+    void setLeds(const QList<Led> &leds)
+    {
+        m_leds = leds;
+        m_ledLevel.clear();
+    }
+    QList<Led> leds() const { return m_leds; }
+    /** An LED table from a JSON file (engine/test/surfacesim/captures/
+     *  pmj-leds-*.json: {"leds": [{"led", "ch", "note", "midi", "under"}]}). */
+    static QList<Led> loadLeds(const QString &file, QString *error = nullptr)
+    {
+        QList<Led> out;
+        QFile f(file);
+        if (!f.open(QIODevice::ReadOnly))
+        {
+            if (error) *error = QStringLiteral("cannot read %1").arg(file);
+            return out;
+        }
+        const QJsonArray arr = QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("leds")).toArray();
+        for (const QJsonValue &v : arr)
+        {
+            const QJsonObject o = v.toObject();
+            Led l;
+            l.index = o.value(QStringLiteral("led")).toInt();
+            l.channel = o.value(QStringLiteral("ch")).toInt(1);
+            l.note = o.value(QStringLiteral("note")).toInt();
+            l.midi = o.value(QStringLiteral("midi")).toBool(true);
+            l.under = o.value(QStringLiteral("under")).toString();
+            out << l;
+        }
+        if (out.isEmpty() && error) *error = QStringLiteral("no LEDs in %1").arg(file);
+        return out;
+    }
+    /** @p leds as `qlc-midi opendeck align` leaves them: each LED under a
+     *  button answers that button's own note on its own MIDI channel. */
+    QList<Led> aligned(QList<Led> leds) const
+    {
+        for (Led &l : leds)
+        {
+            if (l.under.isEmpty())
+                continue;
+            bool ok = false;
+            const quint32 ch = channelOf(l.under, &ok);
+            if (!ok || (ch & 0x0FFF) < CHANNEL_OFFSET_NOTE || (ch & 0x0FFF) > CHANNEL_OFFSET_NOTE_MAX)
+                continue;
+            l.channel = int(ch >> 12) + 1;
+            l.note = int((ch & 0x0FFF) - CHANNEL_OFFSET_NOTE);
+            l.midi = true;
+        }
+        return leds;
+    }
+    /** MIDI the board receives (what the app sent, or a test's own): each
+     *  LED that answers a note takes its velocity (a note off: 0). */
+    void boardReceives(const QByteArray &midi)
+    {
+        if (m_leds.isEmpty() || midi.size() < 3)
+            return;
+        const uchar cmd = uchar(midi.at(0));
+        if (MIDI_CMD(cmd) != MIDI_NOTE_ON && MIDI_CMD(cmd) != MIDI_NOTE_OFF)
+            return;
+        const int ch = MIDI_CH(cmd) + 1;
+        const int note = uchar(midi.at(1));
+        const int vel = MIDI_CMD(cmd) == MIDI_NOTE_OFF ? 0 : uchar(midi.at(2));
+        for (const Led &l : std::as_const(m_leds))
+            if (l.midi && l.channel == ch && l.note == note)
+                m_ledLevel.insert(l.index, vel);
+    }
+    /** The LED under @p button as the board shows it: its last velocity, 0
+     *  if never sent one, -1 if no LED is under that button. */
+    int lampUnder(const QString &button)
+    {
+        takeOutput();
+        for (const Led &l : std::as_const(m_leds))
+            if (l.under.compare(button, Qt::CaseInsensitive) == 0)
+                return m_ledLevel.value(l.index, 0);
+        return -1;
     }
 
     /* ---- the cable ---- */
@@ -403,6 +515,10 @@ private:
     QList<QPair<quint32, uchar>> m_sent;
     QMap<quint32, int> m_lamps;
     QMap<quint32, int> m_lampCount;
+    QMap<quint32, QByteArray> m_lastMidi;
+    int m_lineChannel = kOmni;
+    QList<Led> m_leds;
+    QMap<int, int> m_ledLevel;
 };
 
 #endif
