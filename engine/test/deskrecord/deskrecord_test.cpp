@@ -1342,7 +1342,9 @@ void DeskRecord_Test::passthroughUniverseIsNotLive()
     QVERIFY(desk->isLive(D::Go));
     QVERIFY(desk->undoPatchIt());
     // Patched there by hand: not live (the desk would never hear it), and says why.
+    QSignalSpy changed(desk, &D::changed);
     QVERIFY(iom->setInputPatch(1, m_stub->name(), QString(), 0));
+    QVERIFY2(changed.count() >= 1, "on a passthrough universe now, but the chip was never told");
     QVERIFY(desk->state(D::Go) != D::Live);
     QVERIFY(desk->isOnPassthrough(D::Go));
     QVERIFY(desk->stateText(D::Go).contains("passes its input through"));

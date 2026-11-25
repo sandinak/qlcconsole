@@ -320,6 +320,8 @@ private:
     quint32 m_universes[RoleCount];
     /** What each role's state() was at the last rebind(). */
     State m_lastState[RoleCount];
+    /** Whether each role was on a passthrough universe at the last rebind(). */
+    bool m_lastPassthrough[RoleCount];
     bool m_inputConnected = false;
     bool m_unlocked = false;
 

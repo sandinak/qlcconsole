@@ -72,6 +72,7 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
     {
         m_universes[r] = kInvalid;
         m_lastState[r] = NotSet;
+        m_lastPassthrough[r] = false;
     }
     m_elapsed.start();
     m_learnTimer = new QTimer(this);
@@ -475,8 +476,12 @@ void DeskRecord::rebind()
     for (int r = 0; r < RoleCount; ++r)
     {
         const State st = state(Role(r));
-        moved = moved || was[r] != m_universes[r] || m_lastState[r] != st;
+        /* Not patched, then on a passthrough universe (or off it again):
+           one state, but what it says (and the chip's colour) changed. */
+        const bool pass = isOnPassthrough(Role(r));
+        moved = moved || was[r] != m_universes[r] || m_lastState[r] != st || m_lastPassthrough[r] != pass;
         m_lastState[r] = st;
+        m_lastPassthrough[r] = pass;
     }
     if (moved)
         emit changed();
