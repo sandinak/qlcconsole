@@ -2193,6 +2193,51 @@ void ControlMapUi_Test::outputDevicesAreNotControllers()
     QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));
 }
 
+/* Software MIDI ports are not controllers waiting to be set up: Midi
+   Through (ALSA), IAC Driver (macOS), PipeWire / JACK bridges, loopMIDI and
+   RtMidi virtual ports (Windows). A real device beside them is still listed. */
+void ControlMapUi_Test::virtualPortsAreNotControllers()
+{
+    IOPluginStub *stub = loadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    auto restore = qScopeGuard([stub]() { stub->init(); });
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList({ "Midi Through Port-0", "IAC Driver Bus 1", "PipeWire-System",
+                                      "PipeWire-RaopDiscover", "JACK-Bridge", "loopMIDI Port",
+                                      "RtMidi Input" });
+    emit stub->configurationChanged();
+    QCOMPARE(hub->status("devices"), QString("Every connected device is set up"));
+    QVERIFY(hub->setUpButton("devices")->isHidden());
+    stub->m_lineNames.append(QStringLiteral("USB MIDI Device"));
+    emit stub->configurationChanged();
+    QCOMPARE(hub->status("devices"), QString("USB MIDI Device: not set up"));
+}
+
+/* With nothing waiting, Other connected devices and its Set Up… are put
+   away like the other rows that have nothing to say; they return with one. */
+void ControlMapUi_Test::otherDevicesRowHidesWhenNothingWaits()
+{
+    IOPluginStub *stub = loadStub(m_doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../../../engine/test/iopluginstub");
+    auto restore = qScopeGuard([stub]() { stub->init(); });
+    ShowControlSyncPage page(m_doc);
+    ControlSurfacesPanel *hub = page.surfaces();
+    QLabel *status = hub->findChild<QLabel *>("surfaceDevicesStatus");
+    QLabel *what = hub->findChild<QLabel *>("surfaceDevicesWhat");
+    QVERIFY(status != nullptr && what != nullptr);
+    QVERIFY(status->isHidden());
+    QVERIFY(what->isHidden());
+    QVERIFY(hub->setUpButton("devices")->isHidden());
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList({ "USB MIDI Device" });
+    emit stub->configurationChanged();
+    QVERIFY(!status->isHidden());
+    QVERIFY(!what->isHidden());
+    QVERIFY(!hub->setUpButton("devices")->isHidden());
+}
+
 /* A controller plugged in that no universe has is named, with Set Up… to
    the patch (the hub said "No pad connected" with a pad in the hand), and
    the hub follows a plug or unplug at once. */

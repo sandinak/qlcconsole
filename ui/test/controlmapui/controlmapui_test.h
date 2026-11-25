@@ -61,6 +61,8 @@ private slots:
     void grandMasterRowFollowsItsSetUp();
     void unpatchedDeviceListedWithSetUp();
     void outputDevicesAreNotControllers();
+    void virtualPortsAreNotControllers();
+    void otherDevicesRowHidesWhenNothingWaits();
     void theSurfacesStatusFollowsTheShow();
     void surfacesOffKeepsTheStop();
     void surfacesShots();

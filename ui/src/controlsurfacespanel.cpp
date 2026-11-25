@@ -435,6 +435,22 @@ bool isDmxInterface(QLCIOPlugin *plugin, const QString &name)
     return p == QLatin1String("HID") && plugin->outputs().contains(name);
 }
 
+/** A software MIDI port, not a controller: the ALSA "Midi Through" loopback
+    (every Linux box and the Pi), macOS IAC Driver buses, PipeWire and JACK
+    bridges, and the RtMidi / loopMIDI virtual ports on Windows. One list. */
+bool isVirtualPort(const QString &name)
+{
+    static const QStringList kVirtual = {
+        QStringLiteral("Midi Through"), QStringLiteral("IAC Driver"),
+        QStringLiteral("PipeWire"), QStringLiteral("JACK"),
+        QStringLiteral("RtMidi"), QStringLiteral("loopMIDI"),
+    };
+    for (const QString &v : kVirtual)
+        if (name.contains(v, Qt::CaseInsensitive))
+            return true;
+    return false;
+}
+
 /** Whether a line named @p name of @p plugin is patched as some universe's
     output or feedback: a device in use (a MIDI box that only gets feedback). */
 bool usedAsOutput(InputOutputMap *iom, QLCIOPlugin *plugin, const QString &name)
@@ -474,7 +490,7 @@ QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
         for (int l = 0; l < lines.size(); ++l)
         {
             const QString &name = lines.at(l);
-            if (name.isEmpty())
+            if (name.isEmpty() || isVirtualPort(name))
                 continue;
             // A DMX interface's input, or a device used as an output or
             // feedback line, is not a control surface waiting to be set up.
@@ -546,6 +562,13 @@ void ControlSurfacesPanel::refresh()
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());
     m_status["devices"]->setText(devicesText());
+    // Other connected devices is there only while one is waiting to be set up.
+    bool waiting = false;
+    for (const QPair<QString, bool> &d : unpatchedDevices())
+        waiting = waiting || !d.second;
+    m_status["devices"]->setVisible(waiting);
+    m_what["devices"]->setVisible(waiting);
+    m_buttons["devices"]->setVisible(waiting);
     m_status["collisions"]->setText(collisionsText());
     // Who has it now is there only while a control has two jobs.
     const bool clash = !ControlOwners::collisions(m_doc).isEmpty();

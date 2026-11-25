@@ -18,7 +18,7 @@ settings of its own, and it follows a device plugged in or pulled out at
 once. A controller that is plugged in but on no universe's input is named:
 a pad on the **Game pads** line (*DualSense: connected, not set up*), any
 other MIDI or USB device on **Other connected devices** (*USB MIDI Device:
-not set up*); **Set Up…** there goes to the patch. The **PMJ Black 1** line
+not set up*); **Set Up…** there goes to the patch. The row is there only while one is waiting, and software ports (Midi Through, IAC Driver, PipeWire and JACK bridges, loopMIDI) are not counted. The **PMJ Black 1** line
 counts only an input with exactly that profile, and says whether its
 feedback line is patched (without it the board's lamps stay dark). The
 **Grand Master** line's **Set Up…** opens the Virtual Console's Settings on

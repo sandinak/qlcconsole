@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Other connected devices ignores software ports and hides when empty**: Midi Through, IAC Driver, PipeWire/JACK bridges and loopMIDI/RtMidi virtual ports are not controllers waiting to be set up, and the row and its Set Up… are put away when nothing waits.
 - **A fader is picked up before it follows**: an external fader (MIDI,
   OSC) that is not where the control is does nothing until you move it to,
   or through, the current value, then it follows (soft takeover). Virtual
