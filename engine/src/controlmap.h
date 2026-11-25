@@ -342,6 +342,16 @@ public:
      *  ignores the ONE non-zero that follows inside this (ms); a second
      *  press, or any press after another 0, fires. */
     void setDumpWindowMs(int ms) { m_dumpWindowMs = ms; }
+    /** The state-dump guard for a trigger or a VC button (phase R): inside
+     *  the dump window after @a universe's device came back, a non-zero
+     *  value acts only when a 0 from that same control came first (a real
+     *  release, then press). True: @a value is ignored (the device's dump
+     *  of "pressed"), said once per control and replug as @a what
+     *  (stateDumpIgnored()). The opposite of the stop's rule on purpose: an
+     *  unwanted GO is worse than a missed one, which the operator sees and
+     *  presses again. Never for the stop (its own rule) or a fader (pick-up
+     *  handles those). A 0 is never ignored; it arms the control. */
+    bool isTriggerDump(quint32 universe, quint32 channel, uchar value, const QString &what);
     int dumpWindowMs() const { return m_dumpWindowMs; }
     /** What is wrong with the stop's control, in words (empty: nothing):
      *  its profile calls it a fader or knob (it still fires; said), it is a computer
@@ -566,11 +576,13 @@ signals:
     /** The stop's control was seen moving like a fader (or its state
      *  changed): the panel shows it. */
     void stopStateChanged();
-    /** The stop's first non-zero value after its device came back (a
-     *  replug, a wake) on @a universe / @a channel was taken for the
-     *  device's state dump and ignored: once per replug at most (phase R).
+    /** A control's first value after its device came back (a replug, a
+     *  wake) on @a universe / @a channel was taken for the device's state
+     *  dump and ignored (phase R): the stop's (@a what "STOP", at most one
+     *  value per replug) or a trigger's or VC button's (@a what "GO of
+     *  Main", said once per control and replug; isTriggerDump()).
      *  InputDeviceNotices says so. */
-    void stopDumpIgnored(quint32 universe, quint32 channel);
+    void stateDumpIgnored(quint32 universe, quint32 channel, const QString &what);
     /** What isArmed() says may have changed (the mode, the Run tab's
      *  list, the Show Tree's selection, a cue list moving on). */
     void armingChanged();
@@ -762,6 +774,17 @@ private:
     QHash<quint32, QElapsedTimer> m_backAt;
     QSet<quint64> m_backHeard;
     QSet<quint64> m_backAtRest;
+    /** isTriggerDump(): the controls that sent a 0 since their device came
+     *  back (their next press is a press), and those whose ignored dump
+     *  was said. */
+    QSet<quint64> m_backReleased;
+    QSet<quint64> m_backSaid;
+    /** slotInputDeviceChanged() letting go of held controls: its 0s are
+     *  not the device's, and never arm a control (isTriggerDump()). */
+    bool m_releasingLost = false;
+    /** What a trigger dump on @a k is called: "GO of Main", "Back of Main",
+     *  else targetName(). */
+    QString dumpName(quint64 k) const;
     int m_dumpWindowMs = 500;
     /** Whether the stop's value @a value on @a k is part of a state dump
      *  (and is ignored). */

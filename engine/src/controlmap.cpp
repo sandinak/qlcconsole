@@ -76,6 +76,14 @@ ControlMap::ControlMap(Doc *doc)
 {
     Q_ASSERT(doc != nullptr);
     m_encoderBank = new EncoderBank(doc);
+    /* A device coming back is heard always, not only while something is
+       bound here: a VC button asks isTriggerDump() too (phase R). */
+    if (InputOutputMap *iom = m_doc->inputOutputMap())
+    {
+        connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceBack);
+        connect(iom, &InputOutputMap::inputDeviceDisconnected, this,
+                [this](quint32 universe) { m_backAt.remove(universe); });     // gone: no dump to wait for yet
+    }
     m_encoderBank->setParent(this);
     // A function deleted takes its binding with it.
     connect(m_doc, &Doc::functionRemoved, this, &ControlMap::slotFunctionRemoved);
@@ -342,7 +350,6 @@ void ControlMap::updateConnections()
             connect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
             connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
             connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
-            connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceBack);
         }
         else
         {
@@ -351,7 +358,6 @@ void ControlMap::updateConnections()
             disconnect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
             disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
             disconnect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
-            disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceBack);
         }
         m_inputConnected = wantInput;
     }
@@ -847,6 +853,9 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
         if (h != m_estopHeld.end())
             h->released = true;
         m_blockedHeld.remove(k);
+        // A real release arms a trigger after a replug (isTriggerDump()).
+        if (!m_backAt.isEmpty())
+            isTriggerDump(universe, channel, 0, QString());
     }
 
     // The emergency stop comes before anything else, learning included: a
@@ -954,6 +963,12 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
     // sending values is still the one press.
     if (m_down.contains(k))
         return;
+    /* After a replug the device dumps its state: a "pressed" with no
+       release first is not the operator's, and an unwanted GO is worse
+       than a missed one (phase R). The stop has its own rule above. */
+    if (!m_backAt.isEmpty() && stopOn(k) == nullptr
+        && isTriggerDump(universe, channel, value, dumpName(k)))
+        return;
     m_down.insert(k);
     /* The narrowest armed place has the control (Q296); several there step
        through, one per press (Q303). None armed: one whose function runs
@@ -1018,7 +1033,6 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
     // The controller went away or came back: whatever it held is let go (its
     // release never comes), and a first press waiting for its second is dropped.
     m_pending = false;
-    m_backAt.remove(universe);      // gone again: no dump to wait for yet
     for (const quint64 k : m_swallow.values())
         if (quint32(k >> 32) == universe)
             endSwallow(k);
@@ -1032,8 +1046,10 @@ void ControlMap::slotInputDeviceChanged(quint32 universe)
     for (quint64 k : std::as_const(m_down))
         if (quint32(k >> 32) == universe)
             held << quint32(k & 0xFFFFFFFF);
+    m_releasingLost = true;
     for (quint32 ch : held)
         handleInput(universe, ch, 0);
+    m_releasingLost = false;
 }
 
 void ControlMap::slotInputDeviceBack(quint32 universe)
@@ -1045,6 +1061,58 @@ void ControlMap::slotInputDeviceBack(quint32 universe)
     for (const quint64 k : m_backAtRest.values())
         if (quint32(k >> 32) == universe)
             m_backAtRest.remove(k);
+    for (const quint64 k : m_backReleased.values())
+        if (quint32(k >> 32) == universe)
+            m_backReleased.remove(k);
+    for (const quint64 k : m_backSaid.values())
+        if (quint32(k >> 32) == universe)
+            m_backSaid.remove(k);
+}
+
+bool ControlMap::isTriggerDump(quint32 universe, quint32 channel, uchar value, const QString &what)
+{
+    if (universe == KeyboardUniverse || m_releasingLost)
+        return false;
+    auto at = m_backAt.find(universe);
+    if (at == m_backAt.end())
+        return false;
+    if (at->elapsed() >= m_dumpWindowMs)
+    {
+        // The window is over: everything from here is the operator's.
+        m_backAt.erase(at);
+        return false;
+    }
+    const quint64 k = key(universe, channel);
+    if (value == 0)
+    {
+        m_backReleased.insert(k);       // a release: its next press is one
+        return false;
+    }
+    if (m_backReleased.contains(k))
+        return false;
+    // "Pressed" with no release first: the device's dump. Ignored, said once.
+    if (!m_backSaid.contains(k))
+    {
+        m_backSaid.insert(k);
+        qDebug() << "[ControlMap]" << what << "value" << value << "ignored: the device's state dump after it came back";
+        emit stateDumpIgnored(universe, channel, what);
+    }
+    return true;
+}
+
+QString ControlMap::dumpName(quint64 k) const
+{
+    const auto on = m_byControl.value(k);
+    if (on.isEmpty())
+        return QString();
+    const Target &t = m_bindings.at(on.first()).target;
+    ShowTreeController *st = m_doc->showTree();
+    const ShowTree::CueList *l = st != nullptr ? st->cueList(t.id) : nullptr;
+    if (t.type == CueListTarget && l != nullptr)
+        return tr("GO of %1").arg(l->name);
+    if (t.type == CueListBackTarget && l != nullptr)
+        return tr("Back of %1").arg(l->name);
+    return targetName(t);
 }
 
 bool ControlMap::isStateDump(quint64 k, uchar value)
@@ -1075,7 +1143,7 @@ bool ControlMap::isStateDump(quint64 k, uchar value)
     if (value == 0)
         return false;
     qDebug() << "[ControlMap] stop value" << value << "ignored: the device's state dump after it came back";
-    emit stopDumpIgnored(universe, quint32(k & 0xFFFFFFFF));
+    emit stateDumpIgnored(universe, quint32(k & 0xFFFFFFFF), tr("STOP"));
     return true;
 }
 

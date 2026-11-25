@@ -77,6 +77,7 @@
 #include "teachinglog.h"
 #include "effectscriptrunner.h"
 #include "vcbutton.h"
+#include "controlmap.h"
 #include "function.h"
 #include "apputil.h"
 #include "chaser.h"
@@ -782,6 +783,15 @@ void VCButton::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
 
     if (checkInputSource(universe, (page() << 16) | channel, value, sender()))
     {
+        /* A device that came back dumps its state: a "pressed" with no
+           release from this control first is not the operator's (phase R;
+           an unwanted press live is worse than a missed one). */
+        ControlMap *cm = m_doc->controlMap();
+        if (cm != nullptr
+            && cm->isTriggerDump(universe, channel, value,
+                                 caption().isEmpty() ? tr("a Virtual Console button") : caption()))
+            return;
+
         if (m_action == Flash)
         {
             // Keep the button depressed only while the external button is kept down.

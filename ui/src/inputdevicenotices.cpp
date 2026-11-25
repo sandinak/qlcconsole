@@ -55,7 +55,7 @@ InputDeviceNotices::InputDeviceNotices(Doc *doc, QObject *parent)
        dump: said where the replug is said, never only in a debug log. */
     ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr;
     if (cm != nullptr)
-        connect(cm, &ControlMap::stopDumpIgnored, this, &InputDeviceNotices::slotStopDumpIgnored);
+        connect(cm, &ControlMap::stateDumpIgnored, this, &InputDeviceNotices::slotStateDumpIgnored);
     schedule();
 }
 
@@ -180,15 +180,15 @@ QString InputDeviceNotices::jobsText(Doc *doc, quint32 universe)
     return ControlOwners::jobsOn(doc, universe).join(QStringLiteral(", "));
 }
 
-QString InputDeviceNotices::stopDumpText(quint32 universe)
+QString InputDeviceNotices::stateDumpText(const QString &what, quint32 universe)
 {
-    return tr("Ignored STOP's first value after replug (state dump) — universe %1").arg(universe + 1);
+    return tr("Ignored %1's first value after replug (state dump) — universe %2").arg(what).arg(universe + 1);
 }
 
-void InputDeviceNotices::slotStopDumpIgnored(quint32 universe, quint32 channel)
+void InputDeviceNotices::slotStateDumpIgnored(quint32 universe, quint32 channel, const QString &what)
 {
     Q_UNUSED(channel);
-    emit notice(stopDumpText(universe), false);
+    emit notice(stateDumpText(what, universe), false);
 }
 
 void InputDeviceNotices::noteWake(qint64 sleptMs)

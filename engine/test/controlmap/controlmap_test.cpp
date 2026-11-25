@@ -636,7 +636,9 @@ void ControlMap_Test::theLightsComeBackWhenTheControllerDoes()
     tick(3);
     m_stub->m_feedback.clear();
 
-    // Back -- as another device behind the same patch.
+    // Back -- as another device behind the same patch. (The replug's dump
+    // guard is triggerIgnoresTheReplugDump's: not under test here.)
+    cm->setDumpWindowMs(0);
     emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake 2"));
     QCoreApplication::processEvents();
     QCOMPARE(m_stub->m_feedback.count(), 2);        // both lights, not only what changed
@@ -1645,7 +1647,8 @@ void ControlMap_Test::aControllerGoneLetsGoOfWhatItHeld()
     tick(3);
     QVERIFY2(!a->isRunning(), "a controller that went away left its held button on");
     emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
-    send(kNote, 127);                           // the replugged button, pressed again
+    send(kNote, 0);                             // the replugged button at rest...
+    send(kNote, 127);                           // ...and pressed again
     tick(2);
     QVERIFY2(a->isRunning(), "the press after a replug was swallowed");
     send(kNote, 0);
@@ -2399,7 +2402,7 @@ void ControlMap_Test::stopStateDumpOnReplug()
     InputOutputMap *iom = m_doc->inputOutputMap();
     cm->setDumpWindowMs(400);
 
-    QSignalSpy ignored(cm, &ControlMap::stopDumpIgnored);
+    QSignalSpy ignored(cm, &ControlMap::stateDumpIgnored);
     auto replug = [&]() {
         a->start(m_doc->masterTimer(), FunctionParent::master());
         tick(2);
@@ -2416,6 +2419,7 @@ void ControlMap_Test::stopStateDumpOnReplug()
     QCOMPARE(ignored.count(), 1);
     QCOMPARE(ignored.at(0).at(0).toUInt(), 0u);
     QCOMPARE(ignored.at(0).at(1).toUInt(), kStopNote);
+    QCOMPARE(ignored.at(0).at(2).toString(), QString("STOP"));
     send(kStopNote, 0);
     QTest::qWait(cm->dumpWindowMs() + 100);
     handled.clear();
@@ -2479,6 +2483,64 @@ void ControlMap_Test::stopStateDumpOnReplug()
     tick(3);
     QCOMPARE(handled.count(), 3);
     QVERIFY(!a->isRunning());
+}
+
+/* Phase R: a desk that comes back may dump "pressed" for its buttons. For a
+   trigger an unwanted GO is worse than a missed one (the operator sees
+   nothing happened and presses again), so inside the replug window a value
+   acts only after a 0 from that same control. The opposite of the stop. */
+void ControlMap_Test::triggerIgnoresTheReplugDump()
+{
+    ShowTreeController *st = m_doc->showTree();
+    m_doc->showControl()->setGoGuardMs(0);      // not under test here
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::cueList(listId), ControlMap::Toggle });
+    cm->setDumpWindowMs(5000);                  // never over while the test runs
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    QSignalSpy ignored(cm, &ControlMap::stateDumpIgnored);
+    QSignalSpy fired(cm, &ControlMap::fired);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    // The desk is replugged and dumps 127 for the GO: nothing GOes, said once.
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    sendAll(kNote, { 127, 127 });
+    tick(3);
+    QVERIFY2(!chaser->isRunning(), "the desk's state dump after a replug fired a GO");
+    QCOMPARE(fired.count(), 0);
+    QCOMPARE(ignored.count(), 1);
+    QCOMPARE(ignored.at(0).at(0).toUInt(), 0u);
+    QCOMPARE(ignored.at(0).at(1).toUInt(), kNote);
+    QCOMPARE(ignored.at(0).at(2).toString(), QString("GO of Act 1"));
+
+    // A release, then a press, inside the window: one GO.
+    send(kNote, 0);
+    send(kNote, 127);
+    tick(3);
+    QVERIFY2(chaser->isRunning(), "a real press inside the replug window was ignored");
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+    QCOMPARE(ignored.count(), 1);
+    send(kNote, 0);
+
+    // A control that sent 0 first after the replug: its first press GOes.
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    sendAll(kNote, { 0, 127 });
+    tick(3);
+    QCOMPARE(st->runningCue(listId), cues.at(1));
+    QCOMPARE(ignored.count(), 1);
+    send(kNote, 0);
+
+    // After the window every press is a press.
+    cm->setDumpWindowMs(0);
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    send(kNote, 127);
+    tick(3);
+    QCOMPARE(st->runningCue(listId), cues.at(2));
+    QCOMPARE(ignored.count(), 1);
 }
 
 /* Phase R: the stop's missing device, in words, for the hub and Show Review. */

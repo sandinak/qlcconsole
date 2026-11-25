@@ -261,6 +261,13 @@ button under the Control Map table.
   tap on STOP right after the replug) fire ALL OFF. A first value above 0 is
   a press: one ALL OFF, however often the dump repeats it. After the half
   second every press is a press again.
+- **Every other button is the other way round.** A GO, a Back, a hit, any
+  other trigger and a Virtual Console button act on a press in that half
+  second only when the same button sent a release (0) first: a "pressed" in
+  the desk's dump is ignored, and the notice says so (*Ignored GO of Main's
+  first value after replug (state dump)*). An unwanted GO is worse than a
+  missed one: if nothing happened, press again. Faders are not affected:
+  they pick up where they are, as before.
 - **When the stop's desk is missing, you are told.** The Control surfaces
   hub's stop line turns amber and says *its device '…' is not connected, so it stops nothing
   until it is back* (or that its universe has no input patched), and Show

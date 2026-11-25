@@ -105,6 +105,9 @@ private slots:
     void aReplugFreesThePressThatTaughtTheStop();
     // Phase R (CONTROL_SURFACES_EVAL §7): recovery
     void stopStateDumpOnReplug();
+    /** A replug's dump of "pressed" on a learned GO fires nothing (said);
+     *  a release then press inside the window fires one GO. */
+    void triggerIgnoresTheReplugDump();
     void stopDeviceMissingSaysWhich();
     void aReleaseActsOnWhatWasPressed();
     // Places for triggers (Q295, Q296, Q303; CONTROL_SCOPES phase 3)
