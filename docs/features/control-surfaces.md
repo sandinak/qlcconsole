@@ -363,12 +363,16 @@ button under the Control Map table.
   a press: one ALL OFF, however often the dump repeats it. After the half
   second every press is a press again.
 - **Every other button is the other way round.** A GO, a Back, a hit, any
-  other trigger and a Virtual Console button act on a press in that half
-  second only when the same button sent a release (0) first: a "pressed" in
-  the desk's dump is ignored, and the notice says so (*Ignored GO of Main's
-  first value after replug (state dump)*). An unwanted GO is worse than a
-  missed one: if nothing happened, press again. Faders are not affected:
-  they pick up where they are, as before.
+  other trigger, a Virtual Console button, this computer's GO and Back and
+  the PMJ's Go and Back ignore every press value in the first quarter
+  second after the desk comes back (that is the desk's burst, never a hand:
+  some desks dump a key as release, press, release). For the rest of the
+  half second they act only on a press that follows a release (0) from the
+  same button: a "pressed" in the desk's dump is ignored, and the notice
+  says so (*Ignored GO of Main's first value after replug (state dump)*).
+  An unwanted GO is worse than a missed one: if nothing happened, press
+  again. This computer's STOP keeps the stop's rule above. Faders are not
+  affected: they pick up where they are, as before.
 - **When the stop's desk is missing, you are told.** The Control surfaces
   hub's stop line turns amber and says *its device '…' is not connected, so it stops nothing
   until it is back* (or that its universe has no input patched), and Show
@@ -526,6 +530,12 @@ pad read -- so no two surfaces can disagree.
 
 The same words are in the **Its light** column of the Control Map table, so
 a desk's lights can be read from the laptop with no desk plugged in.
+
+**This computer's STOP, GO and Back light the same way.** On a desk with a
+feedback line, this computer's STOP has the emergency stop's light, and its
+GO and Back the light of the show's GO and Back of the Run tab's list
+(they are always armed, in Design and Operate). A board's own overlay (the
+PMJ's) leaves those buttons to them.
 
 **A desk that glows dim by itself: the PMJ Black 1.** The PMJ lights every
 button at a low level (15) when it is idle. There a dim light could not be

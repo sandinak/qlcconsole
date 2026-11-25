@@ -1356,4 +1356,70 @@ void DeskRecord_Test::passthroughUniverseIsNotLive()
     QCOMPARE(desk->universeOf(D::Go), 1u);
 }
 
+/* Phase R on this computer's desk: a device that came back dumps its state,
+   and the desk's STOP, GO and Back judge it by the Control Map's own rules
+   (one rule, never a copy). Before, forgetHeld() made the dump's first
+   non-zero a fresh press: a replug GOed, or blacked the show out. */
+void DeskRecord_Test::aReplugDumpPressesNothingOfTheDesk()
+{
+    D *desk = m_doc->deskRecord();
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_doc->showControl()->setGoGuardMs(0);
+    quint32 act2 = 0;
+    const quint32 act1 = twoLists(&act2);
+    cm->setRunTabList(act1);
+    learn(D::Stop, 0, kStop);
+    learn(D::Go, 0, kGo);
+    learn(D::Back, 0, kBack);
+    cm->setDumpWindowMs(5000);          // never over while the test runs
+    QSignalSpy fired(desk, &D::fired);
+    QSignalSpy ignored(cm, &ControlMap::stateDumpIgnored);
+    auto replug = [&]() {
+        emit iom->inputDeviceDisconnected(0, m_stub->name(), "APC MINI");
+        emit iom->inputDeviceConnected(0, m_stub->name(), "APC MINI");
+        QVERIFY(desk->isLive(D::Stop) && desk->isLive(D::Go));
+    };
+    auto sendAll = [&](quint32 channel, const QList<int> &values) {
+        for (int v : values)
+            send(0, channel, uchar(v));
+    };
+
+    // The STOP at rest, then the dump's press (either shape): no ALL OFF.
+    replug();
+    sendAll(kStop, { 0, 127 });
+    QCOMPARE(fired.count(), 0);
+    QCOMPARE(ignored.count(), 1);
+    QCOMPARE(ignored.last().at(2).toString(), QString("STOP"));
+    replug();
+    sendAll(kStop, { 0, 127, 0 });
+    QCOMPARE(fired.count(), 0);
+
+    // GO and Back: the dump's "pressed" ({127}, and OpenDeck's {0, 127, 0}) GOes nothing.
+    replug();
+    sendAll(kGo, { 127 });
+    sendAll(kBack, { 0, 127, 0 });
+    QCOMPARE(fired.count(), 0);
+    replug();
+    sendAll(kGo, { 0, 127, 0 });
+    QCOMPARE(fired.count(), 0);
+    QVERIFY2(ignored.last().at(2).toString() == QString("this computer's GO"),
+             qPrintable(ignored.last().at(2).toString()));
+    // 300 ms on, a release and a press: one GO.
+    QTest::qWait(300);
+    send(0, kGo, 0);
+    send(0, kGo, 127);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.last().first().toString(), QString("GO Act 1"));
+    send(0, kGo, 0);
+
+    // The STOP's first value a press: ALL OFF once (an extra one beats a missed one).
+    replug();
+    sendAll(kStop, { 127 });
+    QCOMPARE(fired.count(), 2);
+    QCOMPARE(fired.last().first().toString(), QString("ALL OFF"));
+    send(0, kStop, 0);
+    cm->setDumpWindowMs(500);
+}
+
 QTEST_MAIN(DeskRecord_Test)

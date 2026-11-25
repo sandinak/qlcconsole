@@ -159,6 +159,9 @@ private:
     int m_activePage = 0;
     bool m_transportQueued = false;
     int m_transportLamps = -1;      ///< Go's and Back's states last painted
+    /** Go and Back held down (ControlSurface::Go / Back): a press is the
+     *  edge from 0, never a repeat of a held key. */
+    QSet<int> m_transportDown;
 
     /** The universe real PMJ input has actually been observed arriving on —
      *  learned from the first matching inputValueChanged, since the overlay

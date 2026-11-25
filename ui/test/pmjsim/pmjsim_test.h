@@ -55,6 +55,12 @@ private slots:
     /** A hit learned on a free key fires and lights its lamp, which stays
      *  lit through what repaints the board (bench: it stayed dark). */
     void aLearnedHitLightsItsLamp();
+    /** Phase R: the board's dump after a replug (both shapes) GOes
+     *  nothing; a release and press after the burst is one GO. */
+    void theReplugDumpGoesNothingOnThePmj();
+    /** This computer's STOP and GO on PMJ keys are lit by the Control Map
+     *  (STOP lit always, blinking after ALL OFF); the overlay leaves them. */
+    void theDesksStopIsLitOnThePmj();
 
 private:
     void makeShow();

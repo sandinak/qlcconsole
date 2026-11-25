@@ -223,6 +223,9 @@ private slots:
      *  tick, not once per value: a busy Art-Net input landed there too and
      *  rebuilt it ~90,000 times a second on the GUI thread (pb5). */
     void midiDataIsPublishedOncePerTick();
+    /** A control this computer's desk has (a static control) never reaches
+     *  a MIDI-reactive script: the runner hears the one dispatch point. */
+    void deskControlsNeverReachScripts();
     /** Runs and length from a show file are clamped before they become ints:
      *  1e30, -1e30 and NaN were cast straight to int (undefined). */
     void outOfRangeRunSettingsAreClamped();

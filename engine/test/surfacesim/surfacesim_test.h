@@ -21,6 +21,7 @@
 #define SURFACESIM_TEST_H
 
 #include <QObject>
+#include <QTemporaryDir>
 
 class Doc;
 class IOPluginStub;
@@ -36,6 +37,7 @@ class SurfaceSim_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void init();
     void cleanup();
 
@@ -52,6 +54,13 @@ private slots:
 
     /** Phase R: a board's state dump after a replug fires no ALL OFF. */
     void aStateDumpAfterAReplugFiresNoAllOff();
+    /** Phase R: the same dump fires no desk STOP or GO (both dump shapes). */
+    void aStateDumpFiresNoDeskRole();
+    /** The desk's STOP and GO lamps are the Control Map's (PMJ, APC). */
+    void deskLampsAreTheControlMaps_data();
+    void deskLampsAreTheControlMaps();
+    /** Q314: the show's GO's lamp follows the desk's GO going live or off. */
+    void theShowsGoLampFollowsTheDesk();
     /** Two identical boards are two universes: a key learned on the
      *  second is not the first's. */
     void twoIdenticalBoardsAreTwoControllers();
@@ -59,6 +68,7 @@ private slots:
 private:
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;
+    QTemporaryDir m_settings;
 };
 
 #endif

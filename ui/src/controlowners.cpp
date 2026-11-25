@@ -854,25 +854,28 @@ QString ControlOwners::collisionText(Doc *doc, const Collision &c)
             .arg(controlName(doc, c.universe, c.channel), jobs.join(tr(" and ")), fixes.join(QStringLiteral("; ")));
 }
 
-QStringList ControlOwners::jobsOn(Doc *doc, quint32 universe)
+QStringList ControlOwners::deskJobsOn(Doc *doc, quint32 universe)
+{
+    QStringList out;
+    DeskRecord *dr = doc != nullptr ? doc->deskRecord() : nullptr;
+    if (dr == nullptr)
+        return out;
+    for (DeskRecord::Role role : dr->rolesOn(universe))
+        out << tr("this computer's %1").arg(DeskRecord::roleName(role));
+    return out;
+}
+
+QStringList ControlOwners::jobsOn(Doc *doc, quint32 universe, bool withDesk)
 {
     QStringList stop, gm, triggers, vc, rest;
     bool encoder = false;
     ShowTreeController *st = doc != nullptr ? doc->showTree() : nullptr;
 
     /* This computer's desk roles on that universe come first: losing the
-       desk's STOP or Grand Master is what the operator must hear about. */
-    QStringList desk;
-    DeskRecord *dr = doc != nullptr ? doc->deskRecord() : nullptr;
-    if (dr != nullptr)
-    {
-        for (int r = DeskRecord::Stop; r <= DeskRecord::Back; r++)
-        {
-            DeskRecord::Role role = DeskRecord::Role(r);
-            if (dr->isSet(role) && dr->universeOf(role) == universe)
-                desk << tr("this computer's %1").arg(DeskRecord::roleName(role));
-        }
-    }
+       desk's STOP or Grand Master is what the operator must hear about.
+       Matched by the device, never by where the role is live now: an
+       unplug has made it not live before the notice is said. */
+    const QStringList desk = withDesk ? deskJobsOn(doc, universe) : QStringList();
     for (const QPair<quint64, Owner> &p : owned(doc))
     {
         if (quint32(p.first >> 32) != universe)

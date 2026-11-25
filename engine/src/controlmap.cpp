@@ -347,25 +347,38 @@ void ControlMap::updateConnections()
         if (wantInput)
         {
             connect(iom, &InputOutputMap::inputValueChanged, this, &ControlMap::handleInput);
-            connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceConnected);
-            connect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
             connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
             connect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
         }
         else
         {
             disconnect(iom, &InputOutputMap::inputValueChanged, this, &ControlMap::handleInput);
-            disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceConnected);
-            disconnect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
             disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceChanged);
             disconnect(iom, &InputOutputMap::inputDeviceDisconnected, this, &ControlMap::slotInputDeviceChanged);
         }
         m_inputConnected = wantInput;
     }
+    /* A device back (or its profile changed) gets every light again: the
+       bindings' and the desk's (whose controls this map lights too). */
+    const bool wantResend = wantInput || !m_deskLamps.isEmpty();
+    if (wantResend != m_deviceResendConnected)
+    {
+        if (wantResend)
+        {
+            connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceConnected);
+            connect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
+        }
+        else
+        {
+            disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceConnected);
+            disconnect(iom, &InputOutputMap::profileChanged, this, &ControlMap::slotInputDeviceConnected);
+        }
+        m_deviceResendConnected = wantResend;
+    }
 
     // Feedback: what runs, from the timer thread (queued here).
     MasterTimer *timer = m_doc->masterTimer();
-    const bool wantFeedback = !m_bindings.isEmpty();
+    const bool wantFeedback = hasLamps();
     if (timer != nullptr && wantFeedback != m_feedbackConnected)
     {
         if (wantFeedback)
@@ -1106,12 +1119,17 @@ bool ControlMap::isTriggerDump(quint32 universe, quint32 channel, uchar value, c
         return false;
     }
     const quint64 k = key(universe, channel);
+    /* The first kDumpBurstMs is the device's burst, never a hand: OpenDeck
+       dumps a key as 0, 127, 0, and its leading 0 is no release. Anything
+       non-zero in it is the dump; a 0 in it arms nothing. */
+    const bool burst = at->elapsed() < m_dumpBurstMs;
     if (value == 0)
     {
-        m_backReleased.insert(k);       // a release: its next press is one
+        if (!burst)
+            m_backReleased.insert(k);   // a release: its next press is one
         return false;
     }
-    if (m_backReleased.contains(k))
+    if (!burst && m_backReleased.contains(k))
         return false;
     // "Pressed" with no release first: the device's dump. Ignored, said once.
     if (!m_backSaid.contains(k))
@@ -2347,14 +2365,19 @@ ControlMap::Lamp ControlMap::lamp(const Binding &b) const
         return LampOff;         // Back on a list that is not running: no cue before
     if (stopped)
         return LampOff;         // after ALL OFF, dark until the next GO
-    // Its place is not live, or a narrower one has the control (Q296): a
-    // press would not fire it.
-    if (!isArmedOnControl(b))
-        return LampOff;
-    // The press rule itself (board Q269): a press that would be refused is
-    // dark, so the desk says "not now" before anyone presses it.
-    if (!surfaceMayFire(b.target))
-        return LampOff;
+    /* The desk's GO and Back are always armed: they play the Run tab's
+       list in either mode (DeskRecord::goPressed()). */
+    if (!b.desk)
+    {
+        // Its place is not live, or a narrower one has the control (Q296): a
+        // press would not fire it.
+        if (!isArmedOnControl(b))
+            return LampOff;
+        // The press rule itself (board Q269): a press that would be refused is
+        // dark, so the desk says "not now" before anyone presses it.
+        if (!surfaceMayFire(b.target))
+            return LampOff;
+    }
     if (b.target.type == CueListTarget)
     {
         /* A plain GO on the list: only while there is something left to
@@ -2512,7 +2535,7 @@ void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
     at.universe = universe;
     at.channel = channel;
     const quint64 k = key(universe, channel);
-    if (!m_byControl.contains(k))
+    if (!m_byControl.contains(k) && deskLampOn(k) == nullptr)
     {
         darkenLamp(at);     // nothing is bound there any more
         return;
@@ -2547,8 +2570,11 @@ void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
 
 void ControlMap::sendLamps(bool force)
 {
+    refreshDeskTargets();
     QSet<quint64> done;
-    for (const Binding &b : std::as_const(m_bindings))
+    // The desk's first: its controls are its own (Q309), whatever is bound there.
+    const QList<Binding> all = m_deskLamps + m_bindings;
+    for (const Binding &b : all)
     {
         const quint64 k = key(b.universe, b.channel);
         if (done.contains(k))
@@ -2560,8 +2586,28 @@ void ControlMap::sendLamps(bool force)
     }
 }
 
+void ControlMap::refreshDeskTargets()
+{
+    // The desk's GO and Back play the Run tab's list, whichever it is now.
+    const quint32 list = m_deskLamps.isEmpty() ? 0xFFFFFFFF : runList();
+    for (Binding &b : m_deskLamps)
+        if (b.target.type != EmergencyStopTarget)
+            b.target.id = list;
+}
+
+const ControlMap::Binding *ControlMap::deskLampOn(quint64 k) const
+{
+    for (const Binding &b : m_deskLamps)
+        if (key(b.universe, b.channel) == k)
+            return &b;
+    return nullptr;
+}
+
 const ControlMap::Binding *ControlMap::lampOwner(quint64 k) const
 {
+    // This computer's desk has its controls (Q309): a show trigger there is blocked.
+    if (const Binding *desk = deskLampOn(k))
+        return desk;
     if (const Binding *stop = stopOn(k))
         return stop;
     Binding next;
@@ -2603,12 +2649,12 @@ void ControlMap::slotLampsMayHaveChanged()
        holds while it steps on the MasterTimer thread. Thirty passes would
        contend with the DMX tick for no gain: the lights are the same
        either way, so they are worked out once, after the batch. */
-    if (m_bindings.isEmpty() || m_lampsQueued)
+    if (!hasLamps() || m_lampsQueued)
         return;
     m_lampsQueued = true;
     QTimer::singleShot(0, this, [this]() {
         m_lampsQueued = false;
-        if (m_bindings.isEmpty())
+        if (!hasLamps())
             return;
         sendLamps(false);
         emit lampsChanged();
@@ -2621,14 +2667,16 @@ void ControlMap::slotGuardHeld(const QString &text, quint32 chaserId)
     /* The guard held a GO (or a Back, a Stop...) on this list: every
        control that GOes it blinks twice, so the surface says what the Run
        tab, the footer and the pad say (rule 2 of the double-GO guard). */
+    refreshDeskTargets();
     QList<Binding> blinking;
-    for (const Binding &b : std::as_const(m_bindings))
+    const QList<Binding> all = m_deskLamps + m_bindings;
+    for (const Binding &b : all)
     {
         const Chaser *chaser = targetChaser(b);
         // Only where the control is this binding's now (Q296).
         const Binding *owner = lampOwner(key(b.universe, b.channel));
         if (chaser != nullptr && chaser->id() == chaserId && !isKey(b)
-            && owner != nullptr && owner->target == b.target)
+            && owner != nullptr && owner->target == b.target && owner->desk == b.desk)
             blinking.append(b);
     }
     if (blinking.isEmpty())
@@ -2685,10 +2733,13 @@ void ControlMap::stopBlinkStep()
     const bool stopped = rules != nullptr && rules->emergencyStopped();
     m_stopBlinkLit = stopped ? !m_stopBlinkLit : true;
     bool any = false;
-    for (const Binding &b : std::as_const(m_bindings))
+    const QList<Binding> all = m_deskLamps + m_bindings;
+    for (const Binding &b : all)
     {
         if (b.target.type != EmergencyStopTarget || !profileLampRange(b.universe, b.channel, nullptr, nullptr))
             continue;
+        if (!b.desk && deskLampOn(key(b.universe, b.channel)) != nullptr)
+            continue;   // the desk has that control
         any = true;
         sendLampValue(b, lampValueOn(b, stopped ? LampStopped : lamp(b)), true);
     }
@@ -2721,6 +2772,44 @@ void ControlMap::slotFunctionRemoved(quint32 id)
 void ControlMap::slotInputDeviceConnected()
 {
     resendFeedback();
+}
+
+void ControlMap::slotDeskChanged()
+{
+    const DeskRecord *desk = m_doc->deskRecord();
+    QList<Binding> lamps;
+    if (desk != nullptr)
+    {
+        const quint32 list = runList();
+        for (DeskRecord::Role role : { DeskRecord::Stop, DeskRecord::Go, DeskRecord::Back })
+        {
+            if (!desk->isLive(role))
+                continue;   // not set, off here, or not reachable: no light of ours
+            Target t = emergencyStop();
+            if (role == DeskRecord::Go)
+                t = cueList(list);
+            else if (role == DeskRecord::Back)
+                t = cueListBack(list);
+            Binding b(desk->universeOf(role), desk->binding(role).channel, t);
+            b.desk = true;
+            lamps << b;
+        }
+    }
+    /* A control the desk let go of: dark, unless the show binds it (its
+       light is the show's again). */
+    const QList<Binding> was = m_deskLamps;
+    m_deskLamps = lamps;
+    for (const Binding &b : was)
+    {
+        const quint64 k = key(b.universe, b.channel);
+        if (deskLampOn(k) == nullptr)
+            sendControlLamp(b.universe, b.channel, true);
+    }
+    updateConnections();
+    for (const Binding &b : std::as_const(m_deskLamps))
+        sendControlLamp(b.universe, b.channel, true);
+    // Q314: the show's GO of the Run tab's list is armed again, or not.
+    emit armingChanged();
 }
 
 /*****************************************************************************

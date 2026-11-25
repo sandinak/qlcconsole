@@ -2692,7 +2692,8 @@ void ControlMap_Test::triggerIgnoresTheReplugDump()
     QCOMPARE(ignored.at(0).at(1).toUInt(), kNote);
     QCOMPARE(ignored.at(0).at(2).toString(), QString("GO of Act 1"));
 
-    // A release, then a press, inside the window: one GO.
+    // A release, then a press, inside the window (after its burst): one GO.
+    QTest::qWait(cm->dumpBurstMs() + 50);
     send(kNote, 0);
     send(kNote, 127);
     tick(3);
@@ -2701,9 +2702,10 @@ void ControlMap_Test::triggerIgnoresTheReplugDump()
     QCOMPARE(ignored.count(), 1);
     send(kNote, 0);
 
-    // A control that sent 0 first after the replug: its first press GOes.
+    // A control that sent 0 first after the burst: its first press GOes.
     emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
     emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    QTest::qWait(cm->dumpBurstMs() + 50);
     sendAll(kNote, { 0, 127 });
     tick(3);
     QCOMPARE(st->runningCue(listId), cues.at(1));
@@ -2717,6 +2719,54 @@ void ControlMap_Test::triggerIgnoresTheReplugDump()
     tick(3);
     QCOMPARE(st->runningCue(listId), cues.at(2));
     QCOMPARE(ignored.count(), 1);
+}
+
+/* Phase R, the dump's two shapes: a key dumped as "pressed" ({127}) and
+   OpenDeck's at rest, lamp echo, at rest ({0, 127, 0}). Inside the burst
+   after the device came back (ControlMap::kDumpBurstMs) no value is a hand:
+   neither GOes, though the second's leading 0 looks like a release. After
+   the burst, still inside the window, a release then a press is one GO. */
+void ControlMap_Test::aTriggerIgnoresTheReplugBurst()
+{
+    ShowTreeController *st = m_doc->showTree();
+    m_doc->showControl()->setGoGuardMs(0);      // not under test here
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::cueList(listId), ControlMap::Toggle });
+    cm->setDumpWindowMs(5000);                  // never over while the test runs
+    QCOMPARE(cm->dumpBurstMs(), ControlMap::kDumpBurstMs);
+    QCOMPARE(ControlMap::kDumpBurstMs, 250);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy ignored(cm, &ControlMap::stateDumpIgnored);
+
+    const QList<QList<int>> shapes = { { 127 }, { 0, 127, 0 } };
+    for (const QList<int> &dump : shapes)
+    {
+        m_doc->masterTimer()->stopAllFunctions();
+        tick(3);
+        QVERIFY(!chaser->isRunning());
+        ignored.clear();
+        emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+        emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+        sendAll(kNote, dump);
+        tick(3);
+        QVERIFY2(!chaser->isRunning(), qPrintable(QString("the replug's dump %1 fired a GO")
+                                                      .arg(dump.count())));
+        QCOMPARE(ignored.count(), 1);
+
+        // 300 ms on, still in the window: a release and a press are one GO.
+        QTest::qWait(300);
+        send(kNote, 0);
+        send(kNote, 127);
+        tick(3);
+        QVERIFY2(chaser->isRunning(), "a release and press after the burst did not GO");
+        send(kNote, 0);
+        QCOMPARE(ignored.count(), 1);
+    }
+    cm->setDumpWindowMs(500);
 }
 
 /* Phase R: the stop's missing device, in words, for the hub and Show Review. */

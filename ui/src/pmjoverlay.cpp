@@ -11,6 +11,7 @@
 #include "pmjoverlay.h"
 #include "controlowners.h"
 #include "controlmap.h"
+#include "deskrecord.h"
 #include "doc.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
@@ -240,6 +241,18 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
     // A key the show learns or lets go of changes who lights it.
     connect(m_doc->controlMap(), &ControlMap::bindingsChanged,
             this, [this]() { m_engine->refreshDevice(deviceId); });
+    // ...and one this computer's desk takes or lets go of.
+    if (m_doc->deskRecord() != nullptr)
+        connect(m_doc->deskRecord(), &DeskRecord::changed,
+                this, [this]() { m_engine->refreshDevice(deviceId); });
+    /* The board went away or came back: a Go or Back it held never lets
+       go, so its next press is a press (the dump guard judges it). */
+    auto forgetHeld = [this](quint32 universe) {
+        if (int(universe) == m_universe)
+            m_transportDown.clear();
+    };
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceConnected, this, forgetHeld);
+    connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceDisconnected, this, forgetHeld);
     connect(m_doc->programmer(), &ProgrammerController::programmerSelectionChanged,
             this, [this]() { m_engine->refreshDevice(deviceId); });
 
@@ -415,15 +428,17 @@ void PMJOverlay::registerDevice()
        the stop on Favorites or a Down key) is lit by the Control Map, never
        sent dark by the board's next refresh (a Grand Master move used to
        blank it). */
+    /* This computer's desk's STOP, GO and Back too: the Control Map lights
+       them (ControlMap::deskLamps()), with the show's stop's and GO's rules. */
     dev.lampsTakenElsewhere = [this]() {
         QSet<int> taken;
         if (m_universe < 0)
             return taken;
         const QSet<quint32> show = ControlOwners::showControls(m_doc, quint32(m_universe));
-        if (show.isEmpty())
-            return taken;
+        const DeskRecord *desk = m_doc->deskRecord();
         for (auto it = m_ledChannel.constBegin(); it != m_ledChannel.constEnd(); ++it)
-            if (show.contains(it.value()))
+            if (show.contains(it.value())
+                || (desk != nullptr && desk->isDeskControl(quint32(m_universe), it.value())))
                 taken.insert(it.key());
         return taken;
     };
@@ -669,12 +684,32 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
            Not when the show has learned a trigger on the key: the Control
            Map fires that, and a second GO here would be held. Left, Right
            and the page arrows have no job yet. */
-        if (value == 0)
-            break;
-        if (role.index == ControlSurface::Go && !showOwns(kGoChannel))
-            CueRunner::runTabCommand(m_doc, ShowControl::Go);
-        else if (role.index == ControlSurface::Back && !showOwns(kBackChannel))
-            CueRunner::runTabCommand(m_doc, ShowControl::Back);
+        if (role.index == ControlSurface::Go || role.index == ControlSurface::Back)
+        {
+            const bool go = role.index == ControlSurface::Go;
+            const quint32 channel = go ? kGoChannel : kBackChannel;
+            /* A board that came back dumps its keys (phase R): the Control
+               Map's one rule, as a VC button and the desk's GO ask it. */
+            ControlMap *cm = m_doc->controlMap();
+            const bool dump = m_universe >= 0 && cm != nullptr
+                              && cm->isTriggerDump(quint32(m_universe), channel, value,
+                                                   go ? tr("the PMJ's Go") : tr("the PMJ's Back"));
+            // One press, the edge from 0: a held key resending is the one press.
+            if (value == 0)
+            {
+                m_transportDown.remove(role.index);
+                break;
+            }
+            if (m_transportDown.contains(role.index))
+                break;
+            m_transportDown.insert(role.index);
+            if (dump)
+                break;
+            if (go && !showOwns(kGoChannel))
+                CueRunner::runTabCommand(m_doc, ShowControl::Go);
+            else if (!go && !showOwns(kBackChannel))
+                CueRunner::runTabCommand(m_doc, ShowControl::Back);
+        }
         break;
 
     default:

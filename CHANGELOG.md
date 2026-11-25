@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **A replug never presses the desk**: this computer's STOP, GO and Back and
+  the PMJ's Go and Back now ignore a controller's state dump after a replug,
+  by the Control Map's own rules; every trigger ignores any press in the
+  first quarter second (a desk's dump burst, even one that starts with a
+  release); the desk's STOP, GO and Back get their lamps like the show's
+  stop and GO; notices name this computer's roles when their device goes,
+  and a repatch says they stay with their device.
 - **This computer's desk**: STOP, the Grand Master, GO and Back belong to
   the computer, not the show. Learn them once at the top of Connections ▸
   Control surfaces (STOP press, release, press; GO and Back a button; the

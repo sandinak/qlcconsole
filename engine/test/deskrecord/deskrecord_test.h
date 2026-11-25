@@ -70,6 +70,8 @@ private slots:
     void learnPressesFireNothingOfTheShows();
     void aGrandMasterMadeLiveWaitsToPickUp();
     void passthroughUniverseIsNotLive();
+    /** Phase R: a replug's state dump fires no desk STOP, GO or Back. */
+    void aReplugDumpPressesNothingOfTheDesk();
     void aPortDumpAsAShowLoadsNeverMovesTheGrandMaster();
     void aPortDumpOnPatchItNeverMovesTheGrandMaster();
 

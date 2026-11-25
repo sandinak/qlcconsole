@@ -115,6 +115,9 @@ private slots:
     /** A replug's dump of "pressed" on a learned GO fires nothing (said);
      *  a release then press inside the window fires one GO. */
     void triggerIgnoresTheReplugDump();
+    /** The dump's two shapes ({127}, OpenDeck's {0, 127, 0}) inside the
+     *  burst GO nothing; a release and press after it, one GO. */
+    void aTriggerIgnoresTheReplugBurst();
     void stopDeviceMissingSaysWhich();
     void aReleaseActsOnWhatWasPressed();
     // Places for triggers (Q295, Q296, Q303; CONTROL_SCOPES phase 3)

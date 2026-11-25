@@ -220,6 +220,10 @@ public:
         Target target;
         Mode mode = Toggle;
         Place place;
+        /** One of this computer's desk's roles (its STOP, GO or Back), as
+         *  this map lights it (deskLamps()): never in bindings(), never
+         *  saved, never compared. */
+        bool desk = false;
 
         bool operator==(const Binding &o) const
         {
@@ -343,16 +347,35 @@ public:
      *  ignores the ONE non-zero that follows inside this (ms); a second
      *  press, or any press after another 0, fires. */
     void setDumpWindowMs(int ms) { m_dumpWindowMs = ms; }
-    /** The state-dump guard for a trigger or a VC button (phase R): inside
-     *  the dump window after @a universe's device came back, a non-zero
-     *  value acts only when a 0 from that same control came first (a real
-     *  release, then press). True: @a value is ignored (the device's dump
-     *  of "pressed"), said once per control and replug as @a what
+    /** The first part of the dump window, in ms: what a device sends this
+     *  soon after it came back is a burst (its state dump), never a hand.
+     *  OpenDeck dumps a key as 0, 127, 0 (at rest, then its lamp echoed as
+     *  a note on): its leading 0 is no release. */
+    static constexpr int kDumpBurstMs = 250;
+    /** Test hook: the burst's length (kDumpBurstMs). */
+    void setDumpBurstMs(int ms) { m_dumpBurstMs = ms; }
+    int dumpBurstMs() const { return m_dumpBurstMs; }
+    /** The state-dump guard for a trigger, a VC button, the desk's GO and
+     *  Back and the PMJ's Go and Back (phase R): inside the dump window
+     *  after @a universe's device came back, any non-zero inside the first
+     *  dumpBurstMs() is ignored (the burst), and after it a non-zero acts
+     *  only when a 0 from that same control came first, after the burst (a
+     *  real release, then press). True: @a value is ignored (the device's
+     *  dump of "pressed"), said once per control and replug as @a what
      *  (stateDumpIgnored()). The opposite of the stop's rule on purpose: an
      *  unwanted GO is worse than a missed one, which the operator sees and
-     *  presses again. Never for the stop (its own rule) or a fader (pick-up
-     *  handles those). A 0 is never ignored; it arms the control. */
+     *  presses again. Never for a stop (isStateDump()) or a fader (pick-up
+     *  handles those). A 0 is never ignored; after the burst it arms the
+     *  control. */
     bool isTriggerDump(quint32 universe, quint32 channel, uchar value, const QString &what);
+    /** The stop's state-dump guard (phase R), for the show's stop and this
+     *  computer's desk's STOP alike: a stop whose first value after a
+     *  replug is 0 ignores the ONE non-zero that follows inside the dump
+     *  window (at most one per replug: an extra ALL OFF beats a missed
+     *  one). Call it with every value of the stop's control, 0s included.
+     *  True: @a value is ignored. */
+    bool isStateDump(quint32 universe, quint32 channel, uchar value)
+    { return isStateDump(key(universe, channel), value); }
     int dumpWindowMs() const { return m_dumpWindowMs; }
     /** What is wrong with the stop's control, in words (empty: nothing):
      *  its profile calls it a fader or knob (it still fires; said), it is a computer
@@ -588,6 +611,18 @@ public:
     void setBlinkMs(int ms) { m_blinkMs = ms; }
     /** Whether the held blink is running on @a b now. */
     bool isBlinking(const Binding &b) const;
+    /** This computer's desk's STOP, GO and Back where they are live, as
+     *  this map lights them: the one lamp writer of every control (an
+     *  overlay leaves them alone). The STOP's light is the show's stop's,
+     *  GO's and Back's the show's GO and Back of the Run tab's list, but
+     *  always armed (the desk works in either mode). */
+    QList<Binding> deskLamps() const { return m_deskLamps; }
+
+public slots:
+    /** This computer's desk changed (DeskRecord::changed: a role learned,
+     *  live, unplugged, turned off): its lamps, the show's fallbacks'
+     *  arming (Q314) and their lights follow. */
+    void slotDeskChanged();
 
 signals:
     /** A binding was added, removed or changed. */
@@ -816,6 +851,16 @@ private:
      *  else targetName(). */
     QString dumpName(quint64 k) const;
     int m_dumpWindowMs = 500;
+    int m_dumpBurstMs = kDumpBurstMs;
+    /** slotDeskChanged(): the desk's roles as lamps (deskLamps()). */
+    QList<Binding> m_deskLamps;
+    /** The desk's lamp on control @a k (null: none). */
+    const Binding *deskLampOn(quint64 k) const;
+    /** The desk's GO and Back aim at the Run tab's list as it is now. */
+    void refreshDeskTargets();
+    /** Whether anything here has a light: a binding or a desk role. */
+    bool hasLamps() const { return !m_bindings.isEmpty() || !m_deskLamps.isEmpty(); }
+    bool m_deviceResendConnected = false;
     /** Whether the stop's value @a value on @a k is part of a state dump
      *  (and is ignored). */
     bool isStateDump(quint64 k, uchar value);

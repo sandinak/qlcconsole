@@ -19,6 +19,7 @@
 
 #include <QApplication>
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QDialog>
@@ -40,6 +41,9 @@
 #include "ioplugincache.h"
 #include "showcontrol.h"
 #include "controlmap.h"
+#include "deskrecord.h"
+#include "outputrulekeeper.h"
+#include "surfacescenarios.h"
 #include "mastertimer.h"
 #include "cuerunner.h"
 #include "qlcfile.h"
@@ -267,7 +271,10 @@ void PmjSim_Test::everyControlReachesItsRole()
         if (reached && !acted.contains(it.key()))
             notWired << name;
     }
-    // What the presses toggled, back as it was.
+    // What the presses toggled, back as it was. Go GOes the Run tab's list
+    // now (in Design too, as the Run tab's GO): stopped again.
+    doc->masterTimer()->stopAllFunctions();
+    doc->masterTimer()->timerTick();
     iom->setBlackout(false);
     iom->setOutputInhibited(false);
     iom->setGrandMasterValue(255);
@@ -353,6 +360,10 @@ void PmjSim_Test::goInTheRunTabGoesTheList()
     settle(20);
     Function *list = doc->function(doc->showTree()->cueList(m_list)->chaser);
     QVERIFY(list != nullptr);
+    // From a stopped list, whatever an earlier press played.
+    doc->masterTimer()->stopAllFunctions();
+    doc->masterTimer()->timerTick();
+    settle(20);
     QVERIFY(!list->isRunning());
     QSignalSpy handled(doc->showControl(), &ShowControl::commandHandled);
 
@@ -379,7 +390,12 @@ void PmjSim_Test::aLearnedHitLightsItsLamp()
     cm->setBinding({ 0, ch, ControlMap::hit(m_breathe), ControlMap::Toggle });
     doc->setMode(Doc::Operate);
     settle(50);
-    m_pmj->forgetLamps();
+    /* On the PMJ a key a press would fire now is lit (127), and stays lit
+       while what it fired runs: the board idles dim (15), so "ready" at
+       that level could not be told from a key that does nothing. The
+       light is what the board was last sent (never forgotten here: a lamp
+       that does not change is not sent again). */
+    QTRY_COMPARE(m_pmj->lamp(ch), 127);
 
     QVERIFY(m_pmj->tap(key, 60));
     for (int i = 0; i < 3; ++i)
@@ -403,7 +419,7 @@ void PmjSim_Test::aLearnedHitLightsItsLamp()
     settle(30);
     QVERIFY2(m_pmj->lamp(ch) == 127,
              qPrintable(QStringLiteral("the hit plays, its key's lamp went to %1").arg(m_pmj->lamp(ch))));
-    // Let go: its lamp goes back to standby (dim), not stays bright.
+    // Let go: still lit, a press would fire it again (its place is live).
     QVERIFY(m_pmj->tap(key, 60));
     for (int i = 0; i < 3; ++i)
     {
@@ -411,12 +427,143 @@ void PmjSim_Test::aLearnedHitLightsItsLamp()
         settle(20);
     }
     QTRY_VERIFY(!f->isRunning());
-    QTRY_VERIFY2(m_pmj->lamp(ch) < 127, qPrintable(QStringLiteral("let go, its lamp is %1").arg(m_pmj->lamp(ch))));
+    QCOMPARE(m_pmj->lamp(ch), 127);
 
+    // Unlearned: a free key again, dark.
     cm->removeBinding(ControlMap::hit(m_breathe));
+    settle(20);
+    QTRY_COMPARE(m_pmj->lamp(ch), 0);
     doc->masterTimer()->stopAllFunctions();
     doc->setMode(Doc::Design);
     settle(20);
+}
+
+/* Phase R on the PMJ's own Go: after a replug the board dumps its keys,
+   in either shape ({127}, and OpenDeck's at rest / lamp echo / at rest),
+   and the overlay GOes nothing (it asks the Control Map's one rule); a
+   release and a press 300 ms on is one GO, and a held key resending is
+   still the one press. */
+void PmjSim_Test::theReplugDumpGoesNothingOnThePmj()
+{
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Operate);
+    ControlMap *cm = doc->controlMap();
+    cm->setDumpWindowMs(5000);          // never over while the test runs
+    Function *list = doc->function(doc->showTree()->cueList(m_list)->chaser);
+    QVERIFY(list != nullptr);
+    QSignalSpy handled(doc->showControl(), &ShowControl::commandHandled);
+    auto stopped = [&]() {
+        doc->masterTimer()->stopAllFunctions();
+        doc->masterTimer()->timerTick();
+        settle(20);
+        return !list->isRunning();
+    };
+    const QString go = QStringLiteral("Go");
+    const QList<QList<QPair<QString, int>>> shapes = { { { go, 127 } }, { { go, 0 }, { go, 127 }, { go, 0 } } };
+    for (const auto &dump : shapes)
+    {
+        QVERIFY(stopped());
+        handled.clear();
+        QVERIFY2(SurfaceScenarios::unplugReplug(m_pmj, dump), qPrintable(m_pmj->lastError()));
+        doc->masterTimer()->timerTick();
+        settle(20);
+        QVERIFY2(!list->isRunning(), qPrintable(QStringLiteral("the PMJ's dump of %1 values GOed the list")
+                                                    .arg(dump.count())));
+        QCOMPARE(handled.count(), 0);
+
+        // 300 ms on, a hand: a release and a press, one GO.
+        QTest::qWait(300);
+        QVERIFY(m_pmj->set(go, 0));
+        QVERIFY(m_pmj->tap(go, 60));
+        doc->masterTimer()->timerTick();
+        settle(30);
+        QVERIFY2(list->isRunning(), "a press after the burst did not GO");
+        QCOMPARE(handled.count(), 1);
+    }
+    // Held, the key resending: one press.
+    QVERIFY(stopped());
+    handled.clear();
+    QVERIFY(m_pmj->set(go, 127));
+    QVERIFY(m_pmj->set(go, 127));
+    QVERIFY(m_pmj->set(go, 127));
+    QVERIFY(m_pmj->set(go, 0));
+    doc->masterTimer()->timerTick();
+    settle(30);
+    QCOMPARE(handled.count(), 1);
+
+    cm->setDumpWindowMs(500);
+    QVERIFY(stopped());
+    doc->setMode(Doc::Design);
+    settle(20);
+}
+
+/* This computer's STOP on a PMJ key: the Control Map lights it, with the
+   show's stop's rule on a board that idles dim -- lit at every moment,
+   blinking lit and dim after an ALL OFF -- and the overlay's own repaint
+   (a full refresh, a Master move) never writes it. Its GO on the Go key
+   likewise. */
+void PmjSim_Test::theDesksStopIsLitOnThePmj()
+{
+    Doc *doc = m_app->doc();
+    ControlMap *cm = doc->controlMap();
+    DeskRecord *desk = doc->deskRecord();
+    QVERIFY(desk != nullptr);
+    bool ok = false;
+    const quint32 fav = m_pmj->channelOf(QStringLiteral("Favorites"), &ok);
+    QVERIFY(ok);
+    const quint32 goKey = m_pmj->channelOf(QStringLiteral("Go"), &ok);
+    QVERIFY(ok);
+    auto bind = [&](DeskRecord::Role role, quint32 channel) {
+        DeskRecord::Binding b;
+        b.identity = desk->identityOfUniverse(0);
+        b.device = kPmj;
+        b.plugin = QStringLiteral("MIDI");
+        b.channel = channel;
+        b.control = QStringLiteral("#%1").arg(channel);
+        return desk->setBinding(role, b) && desk->isLive(role);
+    };
+    auto unbind = qScopeGuard([desk]() {
+        desk->clear(DeskRecord::Stop);
+        desk->clear(DeskRecord::Go);
+    });
+    doc->masterTimer()->stopAllFunctions();
+    doc->masterTimer()->timerTick();
+    settle(20);
+    QVERIFY(bind(DeskRecord::Stop, fav));
+    QVERIFY(bind(DeskRecord::Go, goKey));
+    settle(30);
+    QCOMPARE(m_pmj->lamp(fav), 127);
+    QCOMPARE(m_pmj->lamp(goKey), 127);      // a GO would play the list
+
+    // The overlay repaints the board: those two keys are not its to write.
+    const int favSent = m_pmj->lampMessages(fav);
+    m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
+    QVERIFY(m_pmj->ramp(QStringLiteral("Master"), 127, 100, 30));
+    QVERIFY(m_pmj->set(QStringLiteral("Master"), 127));
+    settle(30);
+    QCOMPARE(m_pmj->lampMessages(fav), favSent);
+    QCOMPARE(m_pmj->lamp(fav), 127);
+    QCOMPARE(m_pmj->lamp(goKey), 127);
+
+    // The desk's STOP pressed: ALL OFF, and its key blinks lit and dim.
+    QVERIFY(m_pmj->tap(QStringLiteral("Favorites"), 30));
+    settle(30);
+    QTRY_VERIFY(doc->outputRuleKeeper()->emergencyStopped());
+    QTRY_COMPARE(m_pmj->lamp(fav), 15);
+    QTRY_COMPARE(m_pmj->lamp(fav), 127);
+    QTRY_COMPARE(m_pmj->lamp(goKey), 15);   // nothing is ready after ALL OFF
+    doc->outputRuleKeeper()->noteGo();
+    settle(30);
+    QTRY_COMPARE(m_pmj->lamp(fav), 127);
+    QTRY_COMPARE(m_pmj->lamp(goKey), 127);
+
+    // Let go of: the overlay's own lamps again (Favorites is a free key: dark).
+    unbind.dismiss();
+    QVERIFY(desk->clear(DeskRecord::Stop));
+    QVERIFY(desk->clear(DeskRecord::Go));
+    settle(30);
+    QTRY_COMPARE(m_pmj->lamp(fav), 0);
+    QCOMPARE(cm->deskLamps().count(), 0);
 }
 
 int main(int argc, char **argv)

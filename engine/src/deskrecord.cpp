@@ -71,6 +71,7 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
     for (int r = 0; r < RoleCount; ++r)
     {
         m_universes[r] = kInvalid;
+        m_lastUniverses[r] = kInvalid;
         m_lastState[r] = NotSet;
         m_lastPassthrough[r] = false;
     }
@@ -130,6 +131,9 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
             if (m_learning)
                 endLearn(tr("Learn stopped: another show was loaded."));
             forgetPatchUndo();
+            // Another show's patch: where a role was in the last one says nothing here.
+            for (int r = 0; r < RoleCount; ++r)
+                m_lastUniverses[r] = kInvalid;
             rebind();
             rearmGrandMaster();
         });
@@ -277,6 +281,37 @@ quint32 DeskRecord::universeOf(Role role) const
     return state(role) == Live ? m_universes[role] : kInvalid;
 }
 
+QList<DeskRecord::Role> DeskRecord::rolesOn(quint32 universe) const
+{
+    QList<Role> out;
+    const QString here = identityOfUniverse(universe);
+    QString waitsFor;
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    if (here.isEmpty() && iom != nullptr)
+        if (Universe *uni = iom->universe(universe))
+            for (const Universe::OfflinePatch &rec : uni->offlinePatches())
+                if (rec.tag == Universe::InputPatchTag && !rec.uid.isEmpty())
+                    waitsFor = rec.uid;
+    for (Role r : roles())
+    {
+        const Binding &b = m_bindings[r];
+        if (!b.isSet() || !b.on)
+            continue;
+        if (m_universes[r] == universe)
+        {
+            out << r;
+            continue;
+        }
+        /* Not live: its device gone, the universe waiting for it (no device
+           of its own now). Its universe was this one, or the universe waits
+           for a device of its name. */
+        if (m_universes[r] == kInvalid && here.isEmpty()
+            && (m_lastUniverses[r] == universe || (!waitsFor.isEmpty() && waitsFor == b.device)))
+            out << r;
+    }
+    return out;
+}
+
 bool DeskRecord::isDeskControl(quint32 universe, quint32 channel, Role *role) const
 {
     for (Role r : roles())
@@ -364,6 +399,8 @@ bool DeskRecord::setBinding(Role role, const Binding &binding)
 {
     if (!changeAllowed() || m_bindings[role] == binding)
         return false;
+    if (m_bindings[role].identity != binding.identity)
+        m_lastUniverses[role] = kInvalid;
     m_bindings[role] = binding.isSet() ? binding : Binding();
     save();
     rebind();
@@ -452,6 +489,9 @@ void DeskRecord::rebind()
             }
         }
     }
+    for (int r = 0; r < RoleCount; ++r)
+        if (m_universes[r] != kInvalid)
+            m_lastUniverses[r] = m_universes[r];
     applyStatic();
     updateConnections();
 
@@ -1190,6 +1230,13 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             return;
         }
     }
+    /* A device that came back dumps its state (phase R): the Control Map's
+       one rule for each, never a copy. The STOP: at most one value ignored
+       per replug (an extra ALL OFF beats a missed one); GO and Back below:
+       its burst, then a release before a press. */
+    ControlMap *cm = m_doc->controlMap();
+    if (desk && role == Stop && cm != nullptr && cm->isStateDump(universe, channel, value))
+        return;
     // The desk's STOP comes before anything, a learn included.
     if (desk && role == Stop && value > 0)
     {
@@ -1224,6 +1271,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             break;
         case Go:
         case Back:
+            // The device's dump after a replug is no press (an unwanted GO is worse than a missed one).
+            if (cm != nullptr
+                && cm->isTriggerDump(universe, channel, value, tr("this computer's %1").arg(roleName(role))))
+                break;
             // One press, the edge from 0 (a held button resending is the one press).
             if (value == 0)
             {

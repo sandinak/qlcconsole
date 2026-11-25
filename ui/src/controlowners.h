@@ -221,8 +221,15 @@ public:
      *  (phase R): "Emergency Stop", "Grand Master", "GO of Main", then the
      *  other triggers, the Virtual Console's controls (counted past two),
      *  the encoder bank, the speed masters and the channel groups. The PMJ
-     *  overlay's own controls are not jobs of the show. */
-    static QStringList jobsOn(Doc *doc, quint32 universe);
+     *  overlay's own controls are not jobs of the show. This computer's
+     *  desk roles whose device is the universe's come first (deskJobsOn()),
+     *  unless @a withDesk is false. */
+    static QStringList jobsOn(Doc *doc, quint32 universe, bool withDesk = true);
+    /** This computer's desk roles whose device is @a universe's, live or
+     *  waiting for it (DeskRecord::rolesOn(): matched by the device, so a
+     *  role whose device was just unplugged is still named):
+     *  "this computer's STOP", ... */
+    static QStringList deskJobsOn(Doc *doc, quint32 universe);
 
 private:
     /** Every listener of the show with the control it hears, as

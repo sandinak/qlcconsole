@@ -698,7 +698,15 @@ void VCButton_Test::aReplugDumpDoesNotPress()
     QCOMPARE(ignored.at(0).at(1).toUInt(), 3u);
     QCOMPARE(ignored.at(0).at(2).toString(), QString("Blinder"));
 
-    // A release, then a press, inside the window: it flashes.
+    // The burst's 0 is no release (OpenDeck dumps 0, 127, 0): still nothing.
+    btn.slotInputValueChanged(0, 3, 0);
+    btn.slotInputValueChanged(0, 3, 255);
+    btn.slotInputValueChanged(0, 3, 0);
+    QCOMPARE(btn.state(), VCButton::Inactive);
+    QCOMPARE(ignored.count(), 1);
+
+    // A release, then a press, inside the window after its burst: it flashes.
+    QTest::qWait(cm->dumpBurstMs() + 50);
     btn.slotInputValueChanged(0, 3, 0);
     btn.slotInputValueChanged(0, 3, 255);
     QCOMPARE(btn.state(), VCButton::Active);

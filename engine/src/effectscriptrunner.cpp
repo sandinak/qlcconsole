@@ -74,11 +74,13 @@ EffectScriptRunner::EffectScriptRunner(Doc *doc)
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit,
             this, &EffectScriptRunner::slotPrepareQuit);
 
-    // Subscribe to all input value changes
+    /* Every input value the show hears: through the one dispatch point, so
+       this computer's desk controls (its STOP, GO, Back, Grand Master) never
+       reach a MIDI-reactive script (InputOutputMap::setStaticControls()). */
     if (m_doc->inputOutputMap())
     {
         connect(m_doc->inputOutputMap(),
-                SIGNAL(inputValueChanged(quint32, quint32, uchar, const QString&)),
+                SIGNAL(showInputValueChanged(quint32, quint32, uchar, const QString&)),
                 this,
                 SLOT(slotInputValueChanged(quint32, quint32, uchar, const QString&)));
     }

@@ -11,6 +11,7 @@
 */
 
 #include <QtTest>
+#include <QScopeGuard>
 #include <QElapsedTimer>
 #include <QTemporaryDir>
 #include <QXmlStreamReader>
@@ -6956,6 +6957,27 @@ void EffectInstance_Test::midiDataIsPublishedOncePerTick()
     QCOMPARE(midi.value(QStringLiteral("held")).toList().at(2).toBool(), true);
     QCOMPARE(midi.value(QStringLiteral("velocity")).toList().at(2).toInt(), 100);
     QVERIFY(midi.value(QStringLiteral("universes")).toMap().contains(QStringLiteral("1")));
+}
+
+void EffectInstance_Test::deskControlsNeverReachScripts()
+{
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QVERIFY(runner != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    // Note 2 (channel 130) is this computer's (its GO, say); note 3 is not.
+    iom->setStaticControls({ (quint64(5) << 32) | 130 });
+    auto restore = qScopeGuard([iom]() { iom->setStaticControls({}); });
+    emit iom->inputValueChanged(5, 130, 200);
+    emit iom->inputValueChanged(5, 131, 200);
+    QCoreApplication::processEvents();
+    QVERIFY(QMetaObject::invokeMethod(runner, "slotTick", Qt::DirectConnection));
+    const QVariantMap all = runner->dataChannel(QStringLiteral("midi"));
+    const QVariantMap midi = all.value(QStringLiteral("universes")).toMap().value(QStringLiteral("6")).toMap();
+    QVERIFY2(!midi.isEmpty(), "the show's note never reached the runner");
+    QCOMPARE(midi.value(QStringLiteral("held")).toList().at(3).toBool(), true);
+    QVERIFY2(!midi.value(QStringLiteral("held")).toList().at(2).toBool(),
+             "this computer's desk control reached a MIDI-reactive script");
+    emit iom->inputValueChanged(5, 131, 0);
 }
 
 void EffectInstance_Test::outOfRangeRunSettingsAreClamped()

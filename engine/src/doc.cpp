@@ -192,6 +192,10 @@ Doc::Doc(QObject* parent, int universes)
        Control Map, Show Control, the Show Tree and the Operate settings it
        asks. */
     m_deskRecord = new DeskRecord(this);
+    /* The Control Map lights the desk's STOP, GO and Back (one lamp writer
+       per control) and arms the show's fallbacks by it (Q314). */
+    connect(m_deskRecord, &DeskRecord::changed, m_controlMap, &ControlMap::slotDeskChanged);
+    m_controlMap->slotDeskChanged();
     /* The emergency stop ends the focus tools too (E9): queued to the main
        thread when it struck on another (an OSC or MSC plugin's). */
     connect(m_outputRuleKeeper, &OutputRuleKeeper::emergencyStopStruck,

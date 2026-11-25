@@ -19,6 +19,7 @@
 #define INPUTDEVICENOTICES_TEST_H
 
 #include <QObject>
+#include <QTemporaryDir>
 
 class IOPluginStub;
 class Doc;
@@ -59,10 +60,16 @@ private slots:
     /** The stop's first value after a replug, ignored as the desk's state
      *  dump, is said in the notices; a double tap after it is not ignored. */
     void anIgnoredStopDumpIsSaid();
+    /** This computer's STOP on the unplugged device is named, though the
+     *  unplug made it not live before the notice; again after a wake. */
+    void namesThisComputersStopWhenItsDeviceGoes();
+    /** A repatch says the desk roles stay with their device, not move. */
+    void repatchSaysTheDeskStaysWithItsDevice();
 
 private:
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;
+    QTemporaryDir m_settings;
 };
 
 #endif

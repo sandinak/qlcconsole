@@ -22,6 +22,7 @@
 #include <QApplication>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSettings>
 #include <QTreeWidget>
 
 #include "inputdevicenotices_test.h"
@@ -30,6 +31,7 @@
 #include "showtreecontroller.h"
 #include "virtualconsole.h"
 #include "controlmap.h"
+#include "deskrecord.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
 #include "ioplugincache.h"
@@ -87,6 +89,11 @@ ShowStatus::Entry footerEntry()
 
 void InputDeviceNotices_Test::initTestCase()
 {
+    // This computer's desk lives in the settings: the test's own, never the user's.
+    QVERIFY(m_settings.isValid());
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
+    QSettings().remove(DeskRecord::settingsGroup());
     m_doc = new Doc(this);
     QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
     dir.setFilter(QDir::Files);
@@ -601,6 +608,77 @@ void InputDeviceNotices_Test::anIgnoredStopDumpIsSaid()
     cm->handleInput(1, 11, 127);
     QCOMPARE(said.count(), 2);
     cm->handleInput(1, 11, 0);
+}
+
+namespace
+{
+/** This computer's STOP on the pad of universe 2, channel 20; cleared when it goes. */
+struct DeskStop
+{
+    explicit DeskStop(Doc *doc) : m_desk(doc->deskRecord())
+    {
+        DeskRecord::Binding b;
+        b.identity = m_desk->identityOfUniverse(1);
+        b.device = kPad;
+        b.plugin = QStringLiteral("HID");
+        b.channel = 20;
+        b.control = QStringLiteral("Button 1");
+        m_desk->setBinding(DeskRecord::Stop, b);
+    }
+    ~DeskStop() { m_desk->clear(DeskRecord::Stop); }
+    DeskRecord *m_desk;
+};
+}
+
+void InputDeviceNotices_Test::namesThisComputersStopWhenItsDeviceGoes()
+{
+    DeskStop stop(m_doc);
+    QVERIFY(m_doc->deskRecord()->isLive(DeskRecord::Stop));
+    QCOMPARE(InputDeviceNotices::jobsText(m_doc, 1), QString("this computer's STOP"));
+    QVERIFY(InputDeviceNotices::jobsText(m_doc, 2).isEmpty());
+
+    InputDeviceNotices notices(m_doc);
+    notices.setSettleTime(50);
+    notices.settleNow();
+    QSignalSpy said(&notices, &InputDeviceNotices::notice);
+    rescanned(m_stub, QStringList() << "Keyboard");      // the pad unplugged
+    QVERIFY(!m_doc->deskRecord()->isLive(DeskRecord::Stop));
+    notices.settleNow();
+    QCOMPARE(said.count(), 1);
+    QCOMPARE(said.at(0).at(0).toString(),
+             QString("Input device '%1' disconnected — universe 2. Not working until it is back: "
+                     "this computer's STOP.").arg(kPad));
+    QVERIFY2(footerEntry().items.join("\n").contains("this computer's STOP"),
+             qPrintable(footerEntry().items.join("\n")));
+
+    // Still missing after a wake: said again, with the STOP named.
+    notices.noteWake(40000);
+    QTRY_COMPARE(said.count(), 3);
+    QVERIFY2(said.at(2).at(0).toString().contains("Not working until it is back: this computer's STOP."),
+             qPrintable(said.at(2).at(0).toString()));
+
+    // Back: live there again.
+    rescanned(m_stub, QStringList() << "Keyboard" << kPad);
+    QTRY_VERIFY(m_doc->deskRecord()->isLive(DeskRecord::Stop));
+}
+
+void InputDeviceNotices_Test::repatchSaysTheDeskStaysWithItsDevice()
+{
+    DeskStop stop(m_doc);
+    QVERIFY(m_doc->deskRecord()->isLive(DeskRecord::Stop));
+    // Only the desk on that universe: it does not move to the new device.
+    QCOMPARE(InputDeviceNotices::repatchText(m_doc, 1, QStringLiteral("Keyboard")),
+             QString("This computer's STOP stops working until '%1' is patched again.").arg(kPad));
+    QCOMPARE(InputDeviceNotices::repatchText(m_doc, 1, QString()),
+             QString("This computer's STOP stops working until '%1' is patched again.").arg(kPad));
+    QVERIFY(InputDeviceNotices::repatchText(m_doc, 1, kPad).isEmpty());     // the same device
+
+    // With the show's jobs: they move, the desk's STOP has its own sentence.
+    DeskJobs jobs(m_doc);
+    QCOMPARE(InputDeviceNotices::repatchText(m_doc, 1, QStringLiteral("Keyboard")),
+             QString("Universe 2's controls move from '%1' to 'Keyboard': Emergency Stop, Grand Master, "
+                     "GO of Main. '%1' will do none of them. This computer's STOP stops working until "
+                     "'%1' is patched again.").arg(kPad));
 }
 
 QTEST_MAIN(InputDeviceNotices_Test)

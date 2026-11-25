@@ -222,15 +222,33 @@ QString InputDeviceNotices::repatchText(Doc *doc, quint32 universe, const QStrin
     }
     if (was == newDevice)
         return QString();
-    const QString jobs = jobsText(doc, universe);
+    /* The show's jobs stay on the universe and move to the new device.
+       This computer's desk roles do not: they follow their device (Q322),
+       which is no longer patched once it is repatched away. */
+    const QString jobs = ControlOwners::jobsOn(doc, universe, false).join(QStringLiteral(", "));
+    const QStringList deskJobs = ControlOwners::deskJobsOn(doc, universe);
+    QString desk;
+    const QString roles = deskJobs.join(tr(" and "));
+    const QString device = was.isEmpty() ? tr("its device") : QStringLiteral("'%1'").arg(was);
+    if (deskJobs.count() == 1)
+        desk = tr("%1 stops working until %2 is patched again.").arg(roles, device);
+    else if (deskJobs.count() > 1)
+        desk = tr("%1 stop working until %2 is patched again.").arg(roles, device);
+    if (!desk.isEmpty())
+        desk[0] = desk.at(0).toUpper();     // a sentence of its own
+    QString show;
     if (jobs.isEmpty())
-        return QString();
-    if (newDevice.isEmpty())
-        return tr("Universe %1's controls stop working: %2.").arg(universe + 1).arg(jobs);
-    if (was.isEmpty())
-        return tr("Universe %1's controls move to '%2': %3.").arg(universe + 1).arg(newDevice, jobs);
-    return tr("Universe %1's controls move from '%2' to '%3': %4. '%2' will do none of them.")
-        .arg(universe + 1).arg(was, newDevice, jobs);
+        show = QString();
+    else if (newDevice.isEmpty())
+        show = tr("Universe %1's controls stop working: %2.").arg(universe + 1).arg(jobs);
+    else if (was.isEmpty())
+        show = tr("Universe %1's controls move to '%2': %3.").arg(universe + 1).arg(newDevice, jobs);
+    else
+        show = tr("Universe %1's controls move from '%2' to '%3': %4. '%2' will do none of them.")
+            .arg(universe + 1).arg(was, newDevice, jobs);
+    if (show.isEmpty())
+        return desk;
+    return desk.isEmpty() ? show : show + QLatin1Char(' ') + desk;
 }
 
 bool InputDeviceNotices::confirmRepatch(QWidget *parent, Doc *doc, quint32 universe, const QString &newDevice)

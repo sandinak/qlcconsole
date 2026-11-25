@@ -136,6 +136,11 @@ public:
     bool isLive(Role role) const { return state(role) == Live; }
     /** The universe @p role reaches the program on now; invalid when not live. */
     quint32 universeOf(Role role) const;
+    /** The roles whose device is @p universe's: live there, or (not live)
+     *  waiting on it -- their device unplugged from it, or the universe
+     *  waiting for a device of their device's name. What a notice of that
+     *  universe's device going names (ControlOwners::jobsOn()). */
+    QList<Role> rolesOn(quint32 universe) const;
     /** Whether @p universe / @p channel is a live role here (and which). */
     bool isDeskControl(quint32 universe, quint32 channel, Role *role = nullptr) const;
     /** "APC MINI · Note 82 · on Universe 3", "not set", "off on this
@@ -318,6 +323,8 @@ private:
     Binding m_bindings[RoleCount];
     /** Where each role is live now (rebind()). */
     quint32 m_universes[RoleCount];
+    /** Where each role was last live (kept while its device is away). */
+    quint32 m_lastUniverses[RoleCount];
     /** What each role's state() was at the last rebind(). */
     State m_lastState[RoleCount];
     /** Whether each role was on a passthrough universe at the last rebind(). */
