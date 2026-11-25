@@ -3338,6 +3338,7 @@ QString selectedRow(ControlLearnDialog &d)
 void ControlMapUi_Test::pressSelectsFiresNothing()
 {
     ShowTreeController *st = m_doc->showTree();
+    st->addProduction("Show");
     const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
     QVERIFY(hit != ShowTree::invalidId());
     Scene *warm = scene("Warm");
@@ -3470,7 +3471,9 @@ void ControlMapUi_Test::faderRefusedForGoAndHit()
 void ControlMapUi_Test::latchingButtonSuggestsMomentary()
 {
     ShowTreeController *st = m_doc->showTree();
+    st->addProduction("Show");
     const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
     ControlMap *cm = m_doc->controlMap();
     cm->setLatchGapMs(100);
     cm->setLatchHoldMs(300);

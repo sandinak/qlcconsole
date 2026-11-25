@@ -511,7 +511,9 @@ void DeskSetup_Test::assignShowsTheDeskAsThisComputers()
     send(0, 202, 0);
     D *desk = m_doc->deskRecord();
     ShowTreeController *st = m_doc->showTree();
+    st->addProduction("Show");
     const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
     QSignalSpy fired(desk, &DeskRecord::fired);
     QSignalSpy refused(desk, &DeskRecord::refused);
     {
