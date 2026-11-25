@@ -45,6 +45,7 @@
 #include "functionparent.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "programmercontroller.h"
 #include "functionselection.h"
 #include "functionstreewidget.h"
