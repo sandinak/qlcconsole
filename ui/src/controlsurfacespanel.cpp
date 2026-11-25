@@ -292,7 +292,7 @@ QString ControlSurfacesPanel::setupText() const
         for (quint32 u : setup->universes())
             lines << tr("%1: %2").arg(setup->title(u), setup->lastCheck(u).text);
     if (lines.isEmpty())
-        lines << tr("No patched controller needs a setting of its own");
+        lines << tr("All patched controllers are set up · Rescan to look for a new one");
     if (!m_rescanNote.isEmpty())
         lines << m_rescanNote;
     return lines.join(QStringLiteral("\n"));

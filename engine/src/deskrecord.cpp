@@ -1264,6 +1264,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
 
     if (!desk)
         return;
+    /* A controller's setup is listening to this board (Identify Lamps):
+       its presses pair lamps, they do no job. The STOP went above. */
+    if (value > 0 && m_doc != nullptr && m_doc->inputOutputMap()->isSetupHeld(universe))
+        return;
     switch (role)
     {
         case GrandMaster:

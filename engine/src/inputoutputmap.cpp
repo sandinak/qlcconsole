@@ -3539,7 +3539,7 @@ void InputOutputMap::slotDispatchInput(quint32 universe, quint32 channel, uchar 
 {
     if (isStaticControl(universe, channel))
         return;
-    if (m_deskLearning && value > 0)
+    if ((m_deskLearning || isSetupHeld(universe)) && value > 0)
         return;
     emit showInputValueChanged(universe, channel, value, key);
 }

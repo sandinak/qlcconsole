@@ -71,6 +71,7 @@ public slots:
     void alignLamps();
     void undoAlign();
     void sendAgain();
+    void checkMode();
     void startIdentify();
     void skipLamp();
     void finishIdentify();
@@ -96,6 +97,7 @@ private:
     QPushButton *m_undo = nullptr;
     QPushButton *m_identify = nullptr;
     QPushButton *m_send = nullptr;
+    QPushButton *m_mode = nullptr;
     QWidget *m_identifyBox = nullptr;
     QLabel *m_identifyText = nullptr;
     QPushButton *m_skip = nullptr;

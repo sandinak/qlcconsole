@@ -30,6 +30,7 @@
 #include <QList>
 #include <QMap>
 #include <QHash>
+#include <QSet>
 
 #include "qlcengine_export.h"
 #include "opendecklink.h"
@@ -81,12 +82,20 @@ public:
         QString initText;               ///< what the init does ("Ableton mode")
         bool openDeck = false;          ///< its config is read and written over SysEx
         QList<LampPair> pairing;        ///< shipped: which lamp is under which button
+        /** Sent when the app lets go of it (it closes): the display back. */
+        QList<QByteArray> release;
+        /** A mode the board must be in that no message sets: checked by a
+         *  pad press, which comes on this MIDI channel (1-16) in it. 0: none. */
+        int modeChannel = 0;
+        QString modeName;               ///< "Session"
+        QString modeHint;               ///< "Press SESSION on the APC64"
     };
 
     /** A check's answer. */
     struct Check
     {
-        enum State { NotChecked, NoAnswer, NoPairing, Aligned, Misplaced, NoInit, InitOnly };
+        enum State { NotChecked, NoAnswer, NoPairing, Aligned, Misplaced, NoInit, InitOnly,
+                     WaitingForPress, InMode, WrongMode };
         State state = NotChecked;
         int lamps = 0;                  ///< lamps paired to a button
         int misplaced = 0;              ///< of those, not listening on their button
@@ -124,6 +133,24 @@ public:
      *  computer, else the one shipped with the profile. */
     QList<LampPair> pairing(quint32 universe) const;
     bool hasPairing(quint32 universe) const { return !pairing(universe).isEmpty(); }
+
+    /* ---- a mode checked by a press (the APC64's Session mode) ---- */
+
+    /** Ask for a pad press on @p universe's board to see its mode. Until
+     *  it comes (or cancelModeCheck()) the board's presses do no job. */
+    bool beginModeCheck(quint32 universe);
+    void cancelModeCheck(quint32 universe);
+    bool isWaitingForPress(quint32 universe) const { return m_modeWait.contains(universe); }
+
+    /* ---- held presses ---- */
+
+    /** While a setup step listens to @p universe's board for presses
+     *  (Identify, a mode check), its presses do no job: no trigger, no
+     *  overlay key, no desk GO or Back. The stops still stop. */
+    void holdPresses(quint32 universe, bool on);
+
+    /** The APC64's display text message for @p line (0-2). */
+    static QByteArray apc64Text(int line, const QString &text);
 
     /* ---- writes: only from a button a person pressed ---- */
 
@@ -178,6 +205,7 @@ private slots:
     void slotSysEx(quint32 universe, const QByteArray &sysEx);
     void slotPatchChanged(quint32 universe);
     void slotWoke();
+    void slotInput(quint32 universe, quint32 channel, uchar value);
 
 private:
     bool sendTo(quint32 universe, const QByteArray &msg);
@@ -191,6 +219,8 @@ private:
     QHash<quint32, Check> m_checks;
     QHash<quint32, int> m_lampCount;
     QHash<quint32, QString> m_identifyBackup;
+    QSet<quint32> m_modeWait;
+    QSet<quint32> m_holds;
 };
 
 /** @} */

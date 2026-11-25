@@ -613,7 +613,8 @@ Some controllers need a setting on the device itself before their profile
 works: a mode, or lamps that listen on the notes their buttons send. That
 is part of setting the controller up, in **Connections ▸ Control surfaces ▸
 Controller setup ▸ Set Up…**. No other tool is needed. The row says what is
-known for each controller patched with a profile the app knows; **Set Up…**
+known for each controller patched with a profile the app knows (with none,
+*All patched controllers are set up*); **Set Up…**
 checks the device (a read only) and offers the fix.
 
 - **PMJ Black 1.** As it leaves the factory its lamps are in index order
@@ -629,13 +630,21 @@ checks the device (a read only) and offers the fix.
 - **Another OpenDeck board** (no pairing shipped): **Identify Lamps…**
   flashes each lamp in turn; press the button under it, or **Skip** when
   nothing flashes. **Finish** puts the board back as it was and keeps the
-  pairing on this computer; then **Align Lamps**. The keys you press still
-  do their jobs while you identify, so do it with nothing running.
+  pairing on this computer; then **Align Lamps**. While it listens, the
+  board's keys do no job (no GO, no Back, no trigger); the emergency stop
+  and this computer's STOP still stop.
 - **Akai APC40 mkII.** Its Ableton mode (the pads take the app's lights
   and stop toggling their own) is sent when it is patched, again after a
   replug and after the computer wakes. **Send Again** sends it now. The MIDI
   plugin's **Initialization message** is no longer needed for it.
 - **Novation Launchpad Mini MK3.** Its programmer mode is sent the same way.
+- **Akai APC64** (on its *APC64 DAW* port). When it is patched, after a
+  replug and after a wake the app takes its display and writes *qlc* and
+  *console* on it; when the app closes the display is given back. Its pads
+  match the profile only in **Session** mode, which no message can set:
+  **Check Mode** says *Press SESSION on the APC64, then press any pad*, and
+  the pad's MIDI channel tells (channel 7 is Session). That press does no
+  job.
 
 Nothing is written to a device's memory unless you press **Align Lamps**,
 **Undo Align** or **Identify Lamps…**. In Operate the dialog asks first,

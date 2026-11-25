@@ -110,6 +110,8 @@ SurfaceSetupDialog::SurfaceSetupDialog(Doc *doc, QWidget *parent)
     m_send = button(tr("Send Again"), "surfaceSetupSend",
                     tr("Send its mode again now. It is sent by itself when it connects, after a "
                        "replug and after the computer wakes."));
+    m_mode = button(tr("Check Mode"), "surfaceSetupMode",
+                    tr("Checks the mode its pads are in: press any pad when asked. Nothing is written."));
     row->addStretch(1);
     lay->addWidget(m_buttons);
     connect(m_check, &QPushButton::clicked, this, &SurfaceSetupDialog::checkNow);
@@ -117,6 +119,12 @@ SurfaceSetupDialog::SurfaceSetupDialog(Doc *doc, QWidget *parent)
     connect(m_undo, &QPushButton::clicked, this, &SurfaceSetupDialog::undoAlign);
     connect(m_identify, &QPushButton::clicked, this, &SurfaceSetupDialog::startIdentify);
     connect(m_send, &QPushButton::clicked, this, &SurfaceSetupDialog::sendAgain);
+    connect(m_mode, &QPushButton::clicked, this, &SurfaceSetupDialog::checkMode);
+    // A mode check's press arrives in the engine: what it found is shown here.
+    connect(m_setup, &SurfaceSetup::changed, this, [this](quint32 u) {
+        if (u == universe() && !m_identifying)
+            updateState();
+    });
 
     m_identifyBox = new QWidget(this);
     m_identifyBox->setObjectName(QStringLiteral("surfaceSetupIdentifyBox"));
@@ -173,6 +181,9 @@ SurfaceSetupDialog::SurfaceSetupDialog(Doc *doc, QWidget *parent)
 
 SurfaceSetupDialog::~SurfaceSetupDialog()
 {
+    // Closed while waiting for a pad: the board's presses work again.
+    if (m_device->count() > 0)
+        m_setup->cancelModeCheck(universe());
     // Closed in the middle of Identify: the board is put back.
     if (m_identifying)
     {
@@ -230,6 +241,8 @@ void SurfaceSetupDialog::updateState()
     m_undo->setVisible(spec->openDeck);
     m_identify->setVisible(spec->openDeck);
     m_send->setVisible(!spec->init.isEmpty());
+    m_mode->setVisible(spec->modeChannel != 0);
+    m_mode->setEnabled(c.state != SurfaceSetup::Check::WaitingForPress);
     m_align->setEnabled(c.state == SurfaceSetup::Check::Misplaced);
     m_identify->setEnabled(c.state != SurfaceSetup::Check::NoAnswer && c.state != SurfaceSetup::Check::NotChecked);
     const QString backup = m_setup->lastBackup(u);
@@ -302,6 +315,13 @@ void SurfaceSetupDialog::sendAgain()
     showError(ok ? QString() : tr("It could not be sent: patch its output as the feedback line."));
     if (ok)
         m_status->setText(tr("Sent. %1").arg(m_setup->lastCheck(universe()).text));
+}
+
+void SurfaceSetupDialog::checkMode()
+{
+    showError(QString());
+    m_setup->beginModeCheck(universe());
+    updateState();
 }
 
 void SurfaceSetupDialog::startIdentify()

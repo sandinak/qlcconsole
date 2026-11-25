@@ -19,7 +19,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   how many lamps aren't under their buttons; Align Lamps fixes it (a full
   backup first, its path shown, Undo Align); Identify Lamps… pairs another
   OpenDeck board's lamps by pressing. The APC40 mkII's Ableton mode and the
-  Launchpad Mini MK3's programmer mode are sent on patch, replug and wake.
+  Launchpad Mini MK3's programmer mode are sent on patch, replug and wake;
+  the APC64's display is named and given back on exit, and Check Mode
+  asks for a pad press to see it is in Session mode. While a setup step
+  listens for presses, the board's keys do no job (the stops still stop).
   Rescan says when the computer sees no new controller (power, cable, port).
   Ported from qlcplus-midi-profiler.
 - **A replug never presses the desk**: this computer's STOP, GO and Back and

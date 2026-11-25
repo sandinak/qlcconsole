@@ -25,6 +25,8 @@
 #include "surfacesim_test.h"
 #include "simmididevice.h"
 #include "simopendeck.h"
+#include "simapc64.h"
+#include "qlcinputchannel.h"
 #include "surfacesetup.h"
 #include "opendecklink.h"
 #include "controllerkeepalive.h"
@@ -930,6 +932,143 @@ void SurfaceSim_Test::aRescanThatFindsNothingSaysSo()
     const QString text = SurfaceSetup::rescanControllers(m_doc, &found);
     QCOMPARE(found, QStringList() << QStringLiteral("APC40 mkII"));
     QCOMPARE(text, QStringLiteral("Found APC40 mkII."));
+}
+
+void SurfaceSim_Test::identifyHoldsTheKeysJobs()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    runList(m_doc);
+    QVERIFY(deskOn(m_doc, DeskRecord::Stop, 0, kPmj, kFavorites));
+    QVERIFY(deskOn(m_doc, DeskRecord::Go, 0, kPmj, kGo));
+    QVERIFY(deskOn(m_doc, DeskRecord::Back, 0, kPmj, kBack));
+    // A show trigger on 1-Down (note 1): a scene.
+    Fixture *fxi = m_doc->fixtures().isEmpty() ? nullptr : m_doc->fixtures().first();
+    QVERIFY(fxi != nullptr);
+    Scene *sc = new Scene(m_doc);
+    sc->setName(QStringLiteral("Warm"));
+    sc->addFixture(fxi->id());
+    sc->setValue(fxi->id(), 0, 255);
+    m_doc->addFunction(sc);
+    const quint32 down1 = pmj.channelOf(QStringLiteral("1-Down"));
+    m_doc->controlMap()->setBinding({ 0, down1, ControlMap::function(sc->id()), ControlMap::Toggle });
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(0);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    auto count = [&commands](ShowControl::Command c) { return int(commands.count(int(c))); };
+    QTest::qWait(300);      // past a fresh patch's dump window
+
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QString error;
+    QVERIFY2(setup->beginIdentify(0, false, &error), qPrintable(error));
+    QCOMPARE(m_doc->inputOutputMap()->setupListening(), quint32(0));
+    // The presses still reach what pairs them (raw input)...
+    QSignalSpy raw(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged);
+    QVERIFY(pmj.tap(QStringLiteral("Go")));
+    QVERIFY(pmj.tap(QStringLiteral("Back")));
+    QVERIFY(pmj.tap(QStringLiteral("1-Down")));
+    settle();
+    m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    bool heardGo = false;
+    for (const QList<QVariant> &a : std::as_const(raw))
+        heardGo = heardGo || (a.at(1).toUInt() == kGo && a.at(2).toUInt() > 0);
+    QVERIFY(heardGo);
+    SurfaceSetup::LampPair pair;
+    QVERIFY(SurfaceSetup::pairFromChannel(kGo, 17, &pair));
+    // ...and do no job: no GO, no Back, no scene.
+    QCOMPARE(count(ShowControl::Go), 0);
+    QCOMPARE(count(ShowControl::Back), 0);
+    QVERIFY2(!sc->isRunning(), "1-Down played its scene during Identify");
+    // The desk's STOP still stops.
+    QVERIFY(pmj.tap(QStringLiteral("Favorites")));
+    settle();
+    QCOMPARE(count(ShowControl::AllOff), 1);
+
+    QVERIFY2(setup->endIdentify(0, { pair }, &error), qPrintable(error));
+    QCOMPARE(m_doc->inputOutputMap()->setupListening(), UINT_MAX);
+    // Identify over: Go is the desk's GO again.
+    QTest::qWait(300);
+    QVERIFY(pmj.tap(QStringLiteral("Go")));
+    settle();
+    QCOMPARE(count(ShowControl::Go), 1);
+    m_doc->showControl()->setRunHandler(ShowControl::RunHandler());
+    cm->setDumpWindowMs(500);
+}
+
+void SurfaceSim_Test::theApc64IsNamedAndItsModeChecked()
+{
+    // The profile as feat/053-surface-map names it: Akai APC64, its pads on channel 7.
+    QLCInputProfile *p = new QLCInputProfile();
+    p->setManufacturer(QStringLiteral("Akai"));
+    p->setModel(QStringLiteral("APC64"));
+    for (int i = 0; i < 64; ++i)
+    {
+        QLCInputChannel *ch = new QLCInputChannel();
+        ch->setName(QStringLiteral("Pad %1").arg(i + 1));
+        ch->setType(QLCInputChannel::Button);
+        p->insertChannel(quint32((6 << 12) | (128 + i)), ch);
+    }
+    QVERIFY(m_doc->inputOutputMap()->addProfile(p));
+    const QString name = QStringLiteral("Akai APC64");
+    QCOMPARE(p->name(), name);
+
+    SimMidiDevice board(m_doc, m_stub, QStringLiteral("APC64 DAW"), 0, name);
+    SimApc64 apc(m_stub, &board);
+    QVERIFY2(board.plug(), qPrintable(board.lastError()));
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QCOMPARE(setup->universes(), QList<quint32>() << 0);
+    // Patched: the display is the app's, and says what it is.
+    QVERIFY(apc.owned());
+    QCOMPARE(apc.text(0), QStringLiteral("qlc"));
+    QCOMPARE(apc.text(1), QStringLiteral("console"));
+    QCOMPARE(apc.text(2), QString());
+    QCOMPARE(apc.malformed(), 0);
+    QCOMPARE(hex(SurfaceSetup::apc64Text(0, QStringLiteral("qlc"))),
+             QStringLiteral("f0 47 00 53 10 00 05 00 71 6c 63 00 f7"));
+    QCOMPARE(hex(SurfaceSetup::apc64Text(2, QString())), QStringLiteral("f0 47 00 53 10 00 02 02 00 f7"));
+
+    // Its power cut and back (a replug): named again.
+    QVERIFY(board.unplug());
+    apc.powerCycle();
+    QVERIFY(board.replug());
+    QTRY_VERIFY(apc.owned());
+    QCOMPARE(apc.text(1), QStringLiteral("console"));
+
+    // Session mode: asked for by a press. A pad on channel 1 is another mode.
+    QVERIFY(setup->lastCheck(0).text.contains(QStringLiteral("Session mode: not checked yet")));
+    Scene *sc = new Scene(m_doc);
+    m_doc->addFunction(sc);
+    const quint32 pad1 = quint32((6 << 12) | 128);
+    m_doc->controlMap()->setBinding({ 0, pad1, ControlMap::function(sc->id()), ControlMap::Toggle });
+    QVERIFY(setup->beginModeCheck(0));
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::WaitingForPress);
+    QVERIFY(setup->lastCheck(0).text.startsWith(QStringLiteral("Press SESSION on the APC64")));
+    QVERIFY(board.noteOn(1, 0, 127));
+    QVERIFY(board.noteOff(1, 0));
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::WrongMode);
+    QVERIFY2(setup->lastCheck(0).text.contains(QStringLiteral("channel 1")), qPrintable(setup->lastCheck(0).text));
+    QTRY_COMPARE(m_doc->inputOutputMap()->setupListening(), UINT_MAX);
+    QVERIFY(setup->beginModeCheck(0));
+    QVERIFY(board.noteOn(7, 0, 127));
+    QVERIFY(board.noteOff(7, 0));
+    m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::InMode);
+    QVERIFY2(!sc->isRunning(), "the pad that answered the mode check played its trigger");
+    QVERIFY(!setup->isWaitingForPress(0));
+
+    // The app lets go: the display is the APC64's again.
+    {
+        SurfaceSetup leaving(m_doc);
+    }
+    QVERIFY(!apc.owned());
 }
 
 QTEST_MAIN(SurfaceSim_Test)

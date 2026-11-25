@@ -83,6 +83,12 @@ private slots:
     void theInitIsSentOnPatchReplugAndWake();
     /** Rescan says when the computer sees no new controller. */
     void aRescanThatFindsNothingSaysSo();
+    /** While Identify listens, the board's keys do no job (no GO, no
+     *  Back, no trigger); the desk's STOP still stops. */
+    void identifyHoldsTheKeysJobs();
+    /** The APC64: its display taken and named on patch and replug, given
+     *  back on exit; Session mode checked by a pad press. */
+    void theApc64IsNamedAndItsModeChecked();
 
 private:
     Doc *m_doc = nullptr;

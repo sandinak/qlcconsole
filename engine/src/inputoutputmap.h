@@ -977,6 +977,16 @@ public:
      *  masters. Releases still pass, so nothing held is left on. */
     void setDeskLearning(bool on) { m_deskLearning = on; }
     bool deskLearning() const { return m_deskLearning; }
+    /** A controller's setup is listening for presses on @p universe
+     *  (Identify Lamps, a mode check: SurfaceSetup; invalidUniverse() =
+     *  none): as during a desk learn, no show listener hears a press of
+     *  that universe, the Control Map fires nothing from it and the desk's
+     *  GO, Back and Grand Master ignore it. The show's emergency stop and
+     *  the desk's STOP still stop. Releases pass. */
+    void setSetupListening(quint32 universe) { m_setupUniverse = universe; }
+    quint32 setupListening() const { return m_setupUniverse; }
+    bool isSetupHeld(quint32 universe) const
+    { return m_setupUniverse != UINT_MAX && universe == m_setupUniverse; }
 
 private slots:
     /** inputValueChanged() again as showInputValueChanged(), without the
@@ -987,6 +997,7 @@ private:
     QSet<quint64> m_staticControls;
     bool m_deskGrandMaster = false;
     bool m_deskLearning = false;
+    quint32 m_setupUniverse = UINT_MAX;
 
 private:
     QTimer *m_offlineRetry;

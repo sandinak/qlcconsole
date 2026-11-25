@@ -216,6 +216,7 @@ void SurfaceSetupUi_Test::anInitOnlySurfaceOffersSendAgain()
     QVERIFY2(d.statusText().contains("Ableton mode is sent when it connects"), qPrintable(d.statusText()));
     QVERIFY(button(&d, "surfaceSetupAlign")->isHidden());
     QVERIFY(button(&d, "surfaceSetupIdentify")->isHidden());
+    QVERIFY(button(&d, "surfaceSetupMode")->isHidden());      // no mode to press for
     QPushButton *send = button(&d, "surfaceSetupSend");
     QVERIFY(send->isVisible());
     m_stub->m_showControlSent.clear();
@@ -228,7 +229,7 @@ void SurfaceSetupUi_Test::anInitOnlySurfaceOffersSendAgain()
 void SurfaceSetupUi_Test::theHubRowAndRescan()
 {
     ControlSurfacesPanel hub(m_doc);
-    QCOMPARE(hub.status("setup"), QString("No patched controller needs a setting of its own"));
+    QCOMPARE(hub.status("setup"), QString("All patched controllers are set up · Rescan to look for a new one"));
     QVERIFY(hub.setUpButton("setup") != nullptr);
     QCOMPARE(hub.setUpButton("setup")->text(), QString("Set Up…"));
     QVERIFY(hub.rescanButton() != nullptr);

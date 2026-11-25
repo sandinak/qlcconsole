@@ -85,6 +85,24 @@ QList<SurfaceSetup::Spec> buildSpecs()
         list << s;
     }
     {
+        /* The APC64 (identity model 0x53) on its "APC64 DAW" port: its
+           display taken and named, given back on exit (bench-confirmed on
+           his APC64, 2026-11-25). Session mode has no known message (Live's
+           mode id 0x19, values unknown): a pad press on channel 7 shows it. */
+        SurfaceSetup::Spec s;
+        s.profile = QStringLiteral("Akai APC64");
+        s.init << hex("F0 47 00 53 1C 00 01 01 F7")
+               << SurfaceSetup::apc64Text(0, QStringLiteral("qlc"))
+               << SurfaceSetup::apc64Text(1, QStringLiteral("console"))
+               << SurfaceSetup::apc64Text(2, QString());
+        s.release << hex("F0 47 00 53 1C 00 01 00 F7");
+        s.initText = QObject::tr("Its display");
+        s.modeChannel = 7;
+        s.modeName = QObject::tr("Session");
+        s.modeHint = QObject::tr("Press SESSION on the APC64");
+        list << s;
+    }
+    {
         // Novation-LaunchPadMiniMK3.qxm's first message: the pads as notes 11-88.
         SurfaceSetup::Spec s;
         s.profile = QStringLiteral("Novation Launchpad Mini MK3");
@@ -136,6 +154,8 @@ SurfaceSetup::SurfaceSetup(Doc *doc)
     connect(iom, &InputOutputMap::universeRemoved, this, [this](quint32 universe) {
         m_checks.remove(universe);
     });
+    connect(iom, &InputOutputMap::inputValueChanged, this,
+            [this](quint32 u, quint32 ch, uchar v, const QString &) { slotInput(u, ch, v); });
     if (ProgrammerController *pc = m_doc->programmer())
         if (ControllerKeepAlive *ka = pc->controllerKeepAlive())
             connect(ka, &ControllerKeepAlive::woke, this, &SurfaceSetup::slotWoke);
@@ -143,7 +163,104 @@ SurfaceSetup::SurfaceSetup(Doc *doc)
 
 SurfaceSetup::~SurfaceSetup()
 {
+    // The app lets go: a board whose display it took gets it back.
+    for (quint32 u : universes())
+        if (const Spec *sp = specOf(u))
+            for (const QByteArray &m : sp->release)
+                sendTo(u, m);
+    for (quint32 u : std::as_const(m_holds))
+        if (m_doc->inputOutputMap()->isSetupHeld(u))
+            m_doc->inputOutputMap()->setSetupListening(UINT_MAX);
     qDeleteAll(m_links);
+}
+
+QByteArray SurfaceSetup::apc64Text(int line, const QString &text)
+{
+    // F0 47 00 53 10 <len hi> <len lo> <line> <ASCII, up to 8> 00 F7; len = 1 + text + 1.
+    const QByteArray ascii = text.toLatin1().left(8);
+    const int len = 1 + int(ascii.size()) + 1;
+    QByteArray m = hex("F0 47 00 53 10");
+    m.append(char((len >> 7) & 0x7F));
+    m.append(char(len & 0x7F));
+    m.append(char(line & 0x7F));
+    for (char c : ascii)
+        m.append(char(c & 0x7F));
+    m.append(char(0x00));
+    m.append(char(0xF7));
+    return m;
+}
+
+void SurfaceSetup::holdPresses(quint32 universe, bool on)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (on)
+    {
+        m_holds.insert(universe);
+        iom->setSetupListening(universe);
+    }
+    else
+    {
+        m_holds.remove(universe);
+        if (iom->isSetupHeld(universe))
+            iom->setSetupListening(UINT_MAX);
+    }
+}
+
+bool SurfaceSetup::beginModeCheck(quint32 universe)
+{
+    const Spec *s = specOf(universe);
+    if (s == nullptr || s->modeChannel == 0)
+        return false;
+    m_modeWait.insert(universe);
+    holdPresses(universe, true);
+    Check c;
+    c.state = Check::WaitingForPress;
+    c.text = tr("%1, then press any pad.").arg(s->modeHint);
+    m_checks.insert(universe, c);
+    emit changed(universe);
+    return true;
+}
+
+void SurfaceSetup::cancelModeCheck(quint32 universe)
+{
+    if (!m_modeWait.remove(universe))
+        return;
+    holdPresses(universe, false);
+    m_checks.remove(universe);
+    emit changed(universe);
+}
+
+void SurfaceSetup::slotInput(quint32 universe, quint32 channel, uchar value)
+{
+    if (value == 0 || !m_modeWait.contains(universe))
+        return;
+    const Spec *s = specOf(universe);
+    const quint32 c = channel & 0x0FFF;
+    // A pad is a note; a fader or knob moved meanwhile says nothing of the mode.
+    if (s == nullptr || c < 128 || c > 255)
+        return;
+    m_modeWait.remove(universe);
+    /* Let go once every listener has had this press (a trigger connected
+       after this one must still find it held), unless another check began. */
+    QTimer::singleShot(0, this, [this, universe]() {
+        if (!m_modeWait.contains(universe))
+            holdPresses(universe, false);
+    });
+    const int midiChannel = int(channel >> 12) + 1;
+    Check r;
+    if (midiChannel == s->modeChannel)
+    {
+        r.state = Check::InMode;
+        r.text = tr("It is in %1 mode: its pads are what its profile expects.").arg(s->modeName);
+    }
+    else
+    {
+        r.state = Check::WrongMode;
+        r.text = tr("That pad came on MIDI channel %1, so it is not in %2 mode: its pads won't "
+                    "match. %3, then check again.").arg(midiChannel).arg(s->modeName, s->modeHint);
+    }
+    m_checks.insert(universe, r);
+    emit changed(universe);
 }
 
 const QList<SurfaceSetup::Spec> &SurfaceSetup::specs()
@@ -230,6 +347,8 @@ bool SurfaceSetup::sendInit(quint32 universe)
 void SurfaceSetup::slotPatchChanged(quint32 universe)
 {
     // Another device or profile there: what was read of the last one says nothing.
+    if (m_modeWait.remove(universe))
+        holdPresses(universe, false);
     m_checks.remove(universe);
     sendInit(universe);
     emit changed(universe);
@@ -296,6 +415,9 @@ SurfaceSetup::Check SurfaceSetup::lastCheck(quint32 universe) const
     {
         c.state = Check::InitOnly;
         c.text = tr("%1 is sent when it connects, after a replug and a wake.").arg(s->initText);
+        if (s->modeChannel != 0)
+            c.text += QLatin1Char(' ')
+                    + tr("%1 mode: not checked yet (Check Mode asks for a pad press).").arg(s->modeName);
     }
     else
         c.text = tr("Not checked yet.");
@@ -529,6 +651,8 @@ bool SurfaceSetup::beginIdentify(quint32 universe, bool confirmed, QString *erro
     if (path.isEmpty())
         return false;
     m_identifyBackup.insert(universe, path);
+    // The presses that pair lamps do no job meanwhile.
+    holdPresses(universe, true);
     OpenDeckLink *l = link(universe);
     const int n = int(l->readSection(OpenDeckLink::LedBlock, OpenDeckLink::LedActivationId).size());
     m_lampCount.insert(universe, n);
@@ -568,6 +692,7 @@ bool SurfaceSetup::pairFromChannel(quint32 channel, int led, LampPair *pair)
 bool SurfaceSetup::endIdentify(quint32 universe, const QList<LampPair> &pairs, QString *error)
 {
     const QString path = m_identifyBackup.take(universe);
+    holdPresses(universe, false);
     bool ok = true;
     if (!path.isEmpty())
     {
