@@ -1865,6 +1865,36 @@ void SpreadEffects_Test::theStepBarsTickCost()
     QCOMPARE(bars.size(), 96);
 
     struct Cost { QString what; double tickMs = 0, scriptMs = 0; };
+    /* An effect kept ready to be timed again: its instance and the arguments
+       the host makes for its script. */
+    struct Rig
+    {
+        std::unique_ptr<EffectInstance> inst;
+        qint64 fromMs = 0;
+        QJSValue fixtures, inputs, palettes, params, state, data;
+    };
+    // The whole host tick, per tick, over @p n ticks from the rig's clock.
+    auto timeTick = [](Rig &r, int n) {
+        QElapsedTimer t;
+        t.start();
+        for (int i = 1; i <= n; ++i)
+        {
+            r.inst->setOffStageClock(r.fromMs + i * 20);
+            r.inst->runTick();
+        }
+        return double(t.nsecsElapsed()) / 1e6 / n;
+    };
+    // The script alone, per tick, over the same ticks.
+    auto timeScript = [](Rig &r, int n) {
+        QElapsedTimer t;
+        t.start();
+        for (int i = 1; i <= n; ++i)
+        {
+            r.inputs.setProperty("_time", double(r.fromMs + i * 20) / 1000.0);
+            r.inst->m_script.callTick(r.fixtures, r.inputs, r.palettes, r.params, r.state, r.data);
+        }
+        return double(t.nsecsElapsed()) / 1e6 / n;
+    };
     QList<Cost> costs;
 #ifdef QT_NO_DEBUG
     const int ticks = qMax(20, qEnvironmentVariableIntValue("QLC_RIG_TICKS"));
@@ -1884,7 +1914,7 @@ void SpreadEffects_Test::theStepBarsTickCost()
                 " return e; })()");
     }
     auto measure = [&](const QString &what, const QString &path, const QVariantMap &set, qint64 fromMs,
-                       bool ownColour) {
+                       bool ownColour, std::shared_ptr<Rig> *keep = nullptr) {
         QLCPalette *p = new QLCPalette(QLCPalette::Effect, m_doc);
         p->setScriptPath(path);
         for (auto it = set.constBegin(); it != set.constEnd(); ++it)
@@ -1898,21 +1928,17 @@ void SpreadEffects_Test::theStepBarsTickCost()
         scene->addPalette(p->id());
         if (ownColour)
             scene->addPalette(colourPalette(m_doc, QColor(200, 0, 0))->id());
-        EffectInstance inst(m_doc, scene->id(), p->id());
+        auto rig = std::make_shared<Rig>();
+        rig->inst.reset(new EffectInstance(m_doc, scene->id(), p->id()));
+        rig->fromMs = fromMs;
+        EffectInstance &inst = *rig->inst;
         if (!inst.isValid())
             return false;
         frameAt(inst, fromMs);                       // the first: cells and places
         const quint64 places = inst.placesWorkedOut();
         Cost c;
         c.what = what;
-        QElapsedTimer clock;
-        clock.start();
-        for (int i = 1; i <= ticks; ++i)
-        {
-            inst.setOffStageClock(fromMs + i * 20);
-            inst.runTick();
-        }
-        c.tickMs = double(clock.nsecsElapsed()) / 1e6 / ticks;
+        c.tickMs = timeTick(*rig, ticks);
         // Its places stay worked out at this size.
         if (path.endsWith("spread.js") && inst.placesWorkedOut() != places)
             return false;
@@ -1921,37 +1947,34 @@ void SpreadEffects_Test::theStepBarsTickCost()
         const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
         if (cells.size() != 96 * 64)
             return false;
-        const QJSValue fixtures = inst.buildFixturesArray(cells, cols, rows);
-        QJSValue inputs = inst.buildInputsObject();
-        const QJSValue palettes = inst.buildPalettesObject();
-        const QJSValue params = inst.buildParamsObject();
-        QJSValue state = inst.m_script.newState();
-        const QJSValue data = inst.m_script.engine()->newObject();
+        rig->fixtures = inst.buildFixturesArray(cells, cols, rows);
+        rig->inputs = inst.buildInputsObject();
+        rig->palettes = inst.buildPalettesObject();
+        rig->params = inst.buildParamsObject();
+        rig->state = inst.m_script.newState();
+        rig->data = inst.m_script.engine()->newObject();
         // Its first tick works out what it keeps; the rest are timed.
-        inputs.setProperty("_time", double(fromMs) / 1000.0);
-        inst.m_script.callTick(fixtures, inputs, palettes, params, state, data);
-        clock.restart();
-        for (int i = 1; i <= ticks; ++i)
-        {
-            inputs.setProperty("_time", double(fromMs + i * 20) / 1000.0);
-            inst.m_script.callTick(fixtures, inputs, palettes, params, state, data);
-        }
-        c.scriptMs = double(clock.nsecsElapsed()) / 1e6 / ticks;
+        rig->inputs.setProperty("_time", double(fromMs) / 1000.0);
+        inst.m_script.callTick(rig->fixtures, rig->inputs, rig->palettes, rig->params, rig->state, rig->data);
+        c.scriptMs = timeScript(*rig, ticks);
         costs << c;
+        if (keep)
+            *keep = rig;
         return true;
     };
     const QVariantMap fireSet = { { "edge", 0.3 }, { "spreadTime", 8.0 } };
     const QVariantMap spellSet = { { "edge", 0.2 }, { "spreadTime", 8.0 } };
     QVERIFY(measure("nothing (the host alone)", dir.filePath("nothing.js"), {}, 4000, false));
-    QVERIFY(measure("Fire Spread, spreading", kScripts + "fire-spread.js", fireSet, 4000, false));
+    std::shared_ptr<Rig> fireRig, burstRig, genRig;
+    QVERIFY(measure("Fire Spread, spreading", kScripts + "fire-spread.js", fireSet, 4000, false, &fireRig));
     QVERIFY(measure("Fire Spread, all burning", kScripts + "fire-spread.js", fireSet, 20000, false));
     QVERIFY(measure("Spell Spread, spreading", kScripts + "spell-spread.js", spellSet, 4000, true));
     QVERIFY(measure("Spell Spread, all reached", kScripts + "spell-spread.js", spellSet, 20000, true));
     const QVariantMap boltSet = { { "edge", 0.4 }, { "spreadTime", 8.0 }, { "decay", 8.0 } };
     const QVariantMap genSet = { { "mode", 1 }, { "reach", 100 }, { "rate", 8 } };
-    QVERIFY(measure("Lightning Spread, bursting", kScripts + "lightning-spread.js", boltSet, 4000, false));
+    QVERIFY(measure("Lightning Spread, bursting", kScripts + "lightning-spread.js", boltSet, 4000, false, &burstRig));
     QVERIFY(measure("Lightning Spread, at rest", kScripts + "lightning-spread.js", boltSet, 20000, false));
-    QVERIFY(measure("Lightning Spread, generator", kScripts + "lightning-spread.js", genSet, 4000, false));
+    QVERIFY(measure("Lightning Spread, generator", kScripts + "lightning-spread.js", genSet, 4000, false, &genRig));
 
 #ifdef QT_NO_DEBUG
     const QString build = QStringLiteral("release");
@@ -1966,20 +1989,42 @@ void SpreadEffects_Test::theStepBarsTickCost()
         qInfo().noquote() << l;
     // Lightning Spread costs no more than twice what Fire Spread does as it
     // spreads, its script or the whole tick, bursting or generating.
-    auto costOf = [&costs](const QString &what) {
-        for (const Cost &c : costs)
-            if (c.what == what)
-                return c;
-        return Cost();
-    };
-    const Cost fireCost = costOf("Fire Spread, spreading");
-    for (const char *what : { "Lightning Spread, bursting", "Lightning Spread, generator" })
+    /* The comparison. One timing of each, taken once, is at the mercy of
+       whatever else a shared runner does in those milliseconds (Windows CI
+       read Lightning at 4.65 ms against Fire's 1.98 ms, twice, on a script
+       that costs about the same). So each is timed again in rounds that go
+       Fire, Lightning burst, Lightning generator, Fire ... -- a slow patch
+       hits all three -- over the very same ticks (the scripts are seeded
+       hashes of the clock, so a round does the same work as the last), and
+       the least of the rounds is read: that is the cost with the machine
+       out of the way, and a script that really costs more than twice
+       Fire's costs more in every round. */
+    const int rounds = 5;
+    struct Best { double scriptMs = 1e9, tickMs = 1e9; };
+    Best fireBest, burstBest, genBest;
+    const std::shared_ptr<Rig> order[] = { fireRig, burstRig, genRig };
+    Best *bests[] = { &fireBest, &burstBest, &genBest };
+    for (int round = 0; round < rounds; ++round)
+        for (int k = 0; k < 3; ++k)
+        {
+            bests[k]->scriptMs = qMin(bests[k]->scriptMs, timeScript(*order[k], ticks));
+            bests[k]->tickMs = qMin(bests[k]->tickMs, timeTick(*order[k], ticks));
+        }
+    qInfo().noquote() << QString("least of %1 interleaved rounds: Fire Spread script %2 ms tick %3 ms;"
+                                 " Lightning bursting script %4 ms tick %5 ms; generator script %6 ms tick %7 ms")
+                             .arg(rounds).arg(fireBest.scriptMs, 0, 'f', 2).arg(fireBest.tickMs, 0, 'f', 2)
+                             .arg(burstBest.scriptMs, 0, 'f', 2).arg(burstBest.tickMs, 0, 'f', 2)
+                             .arg(genBest.scriptMs, 0, 'f', 2).arg(genBest.tickMs, 0, 'f', 2);
+    const struct { const char *what; Best b; } lightning[] = { { "Lightning Spread, bursting", burstBest },
+                                                              { "Lightning Spread, generator", genBest } };
+    for (const auto &l : lightning)
     {
-        const Cost c = costOf(what);
-        QVERIFY2(c.scriptMs <= 2.0 * fireCost.scriptMs + 0.5,
-                 qPrintable(QString("%1: script %2 ms, Fire Spread's %3 ms").arg(what).arg(c.scriptMs).arg(fireCost.scriptMs)));
-        QVERIFY2(c.tickMs <= 2.0 * fireCost.tickMs + 0.5,
-                 qPrintable(QString("%1: tick %2 ms, Fire Spread's %3 ms").arg(what).arg(c.tickMs).arg(fireCost.tickMs)));
+        QVERIFY2(l.b.scriptMs <= 2.0 * fireBest.scriptMs + 0.5,
+                 qPrintable(QString("%1: script %2 ms, Fire Spread's %3 ms (least of %4 rounds)")
+                                .arg(l.what).arg(l.b.scriptMs).arg(fireBest.scriptMs).arg(rounds)));
+        QVERIFY2(l.b.tickMs <= 2.0 * fireBest.tickMs + 0.5,
+                 qPrintable(QString("%1: tick %2 ms, Fire Spread's %3 ms (least of %4 rounds)")
+                                .arg(l.what).arg(l.b.tickMs).arg(fireBest.tickMs).arg(rounds)));
     }
     // The numbers, brought back from the pool (check-all.sh --shots).
     const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
