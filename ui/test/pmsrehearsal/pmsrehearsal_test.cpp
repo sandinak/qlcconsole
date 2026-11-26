@@ -35,6 +35,15 @@
 #include <QtTest>
 #include <cmath>
 
+#include "../../../engine/test/common/stdprelude.h"
+/* The tick by hand, as the engine tests drive it. */
+#define protected public
+#define private public
+#include "mastertimer.h"
+#include "universe.h"
+#undef private
+#undef protected
+
 #include "pmsrehearsal_test.h"
 #include "programmercontroller.h"
 #include "showtreecontroller.h"
@@ -55,7 +64,6 @@
 #include "showembedding.h"
 #include "iopluginstub.h"
 #include "fixturegroup.h"
-#include "mastertimer.h"
 #include "stageplatform.h"
 #include "stagetarget.h"
 #include "venueimport.h"
@@ -65,7 +73,6 @@
 #include "grouphead.h"
 #include "houserole.h"
 #include "rigowner.h"
-#include "universe.h"
 #include "function.h"
 #include "fixture.h"
 #include "qlcfile.h"
