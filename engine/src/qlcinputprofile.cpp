@@ -49,9 +49,9 @@ QLCInputProfile::QLCInputProfile()
     , m_model(QString())
     , m_path(QString())
     , m_type(MIDI)
-    , m_midiSendNoteOff(true)
     , m_surfaceVersion(0)
     , m_surfaceColumns(0)
+    , m_midiSendNoteOff(true)
 {
 }
 
