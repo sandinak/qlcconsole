@@ -3532,6 +3532,254 @@ void EffectInstance_Test::aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour()
              qPrintable(QString("a dim blue should keep the wheel on blue, not %1").arg(wheelOut)));
 }
 
+namespace
+{
+/* A one-head fixture of @p chans (made here), patched at @p address. */
+Fixture *handBuilt(Doc *doc, const QString &model, const QList<QLCChannel *> &chans, int address)
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Test"); def->setModel(model);
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    QLCFixtureHead head;
+    for (int c = 0; c < chans.size(); c++)
+    {
+        def->addChannel(chans.at(c));
+        mode->insertChannel(chans.at(c), c);
+        head.addChannel(quint32(c));
+    }
+    mode->insertHead(-1, head);
+    mode->cacheHeads();
+    def->addMode(mode);
+    Fixture *f = new Fixture(doc);
+    f->setFixtureDefinition(def, mode);
+    f->setUniverse(0); f->setAddress(address);
+    return doc->addFixture(f) ? f : nullptr;
+}
+
+QLCChannel *presetChannel(const QString &name, QLCChannel::Preset p)
+{
+    QLCChannel *ch = new QLCChannel();
+    ch->setName(name);
+    ch->setPreset(p);
+    return ch;
+}
+
+QJSValue rgbIntent(QJSEngine *js, int r, int g, int b)
+{
+    QJSValue intents = js->newArray(1);
+    QJSValue o = js->newObject();
+    o.setProperty("r", r); o.setProperty("g", g); o.setProperty("b", b);
+    intents.setProperty(0, o);
+    return intents;
+}
+}
+
+void EffectInstance_Test::aRainbowMixesOnCmy()
+{
+    // Pan, a master dimmer, cyan (+ fine), magenta, yellow: no red, green or blue.
+    Fixture *cmy = handBuilt(m_doc, "CmySpot", {
+        presetChannel("Pan", QLCChannel::PositionPan),
+        presetChannel("Dimmer", QLCChannel::IntensityMasterDimmer),
+        presetChannel("Cyan", QLCChannel::IntensityCyan),
+        presetChannel("Cyan fine", QLCChannel::IntensityCyanFine),
+        presetChannel("Magenta", QLCChannel::IntensityMagenta),
+        presetChannel("Yellow", QLCChannel::IntensityYellow) }, 0);
+    QVERIFY(cmy != nullptr);
+    Fixture *par = handBuilt(m_doc, "RgbPar", {
+        presetChannel("Red", QLCChannel::IntensityRed),
+        presetChannel("Green", QLCChannel::IntensityGreen),
+        presetChannel("Blue", QLCChannel::IntensityBlue) }, 20);
+    QVERIFY(par != nullptr);
+
+    QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
+    rainbow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/rainbow.js");
+    QVERIFY(m_doc->addPalette(rainbow));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(cmy->id());
+    scene->addFixture(par->id());
+    scene->addPalette(rainbow->id());
+    EffectInstance inst(m_doc, scene->id(), rainbow->id());
+    QVERIFY(inst.isValid());
+    QVERIFY(inst.m_script.fixtureTypes().contains("rgb"));
+
+    // The CMY spot is one of its fixtures now (it was left out: "rgb" only).
+    QVERIFY(inst.effectiveFixtureIds().contains(cmy->id()));
+    QVERIFY(inst.effectiveFixtureIds().contains(par->id()));
+
+    int cols = 0, rows = 0;
+    QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QList<EffectInstance::EffectCell> spotCells, parCells;
+    for (const EffectInstance::EffectCell &c : cells)
+        (c.fixtureId == cmy->id() ? spotCells : parCells) << c;
+    QCOMPARE(spotCells.size(), 1);
+    QCOMPARE(parCells.size(), 1);
+
+    QJSEngine *js = inst.m_script.engine();
+    bool merged = false;                    // a filter is set, not merged highest-wins
+    auto written = [&](const QList<EffectInstance::EffectCell> &on, int r, int g, int b) {
+        QMap<quint32, int> out;
+        for (const EffectInstance::DmxWrite &w : inst.parseIntents(rgbIntent(js, r, g, b), on))
+        {
+            out.insert(w.channel, w.value);
+            if (w.channel >= 2 && w.fixtureId == cmy->id() && !w.replace)
+                merged = true;
+        }
+        return out;
+    };
+
+    QMap<quint32, int> out = written(spotCells, 255, 0, 0);           // red
+    QCOMPARE(out.value(2, -1), 0);          // no cyan
+    QCOMPARE(out.value(4, -1), 255);        // all the magenta
+    QCOMPARE(out.value(5, -1), 255);        // all the yellow
+    QVERIFY2(!out.contains(3), "the cyan fine channel took a coarse value");
+    QVERIFY(!out.contains(0) && !out.contains(1));
+
+    out = written(spotCells, 0, 128, 255);                            // azure
+    QCOMPARE(out.value(2, -1), 255);
+    QCOMPARE(out.value(4, -1), 127);
+    QCOMPARE(out.value(5, -1), 0);
+    QVERIFY(!merged);
+
+    // Black says nothing: the filters are the look's.
+    QVERIFY(written(spotCells, 0, 0, 0).isEmpty());
+
+    // The effect at half: the filters half in, toward open white.
+    inst.m_envelope = 0.5f;
+    out = written(spotCells, 255, 0, 0);
+    QCOMPARE(out.value(2, -1), 0);
+    QCOMPARE(out.value(4, -1), 128);
+    inst.m_envelope = 1.0f;
+
+    // The RGB par: red, green and blue as they always were, nothing else.
+    out = written(parCells, 255, 40, 7);
+    QCOMPARE(out.size(), 3);
+    QCOMPARE(out.value(0), 255);
+    QCOMPARE(out.value(1), 40);
+    QCOMPARE(out.value(2), 7);
+
+    /* The real script, a tick of it: a full-saturation hue on the spot is
+       one filter out and one all the way in. */
+    inst.m_depthFade = true;                // envelope full, not the scene's
+    inst.runTick();
+    QMap<quint32, int> tick;
+    for (const EffectInstance::DmxWrite &w : inst.dmxWrites())
+        if (w.fixtureId == cmy->id())
+            tick.insert(w.channel, w.value);
+    QVERIFY2(tick.contains(2) && tick.contains(4) && tick.contains(5),
+             qPrintable(QString("CMY written: %1").arg(tick.size())));
+    const int lo = qMin(tick.value(2), qMin(tick.value(4), tick.value(5)));
+    const int hi = qMax(tick.value(2), qMax(tick.value(4), tick.value(5)));
+    QCOMPARE(lo, 0);
+    QCOMPARE(hi, 255);
+}
+
+void EffectInstance_Test::aRainbowStepsAWheelToTheNearestSlot()
+{
+    QLCChannel *wheel = new QLCChannel();
+    wheel->setName("Color wheel");
+    wheel->setGroup(QLCChannel::Colour);
+    const struct { int lo, hi; QColor c; const char *n; } wheelSlots[] = {
+        { 0, 9, QColor(255, 255, 255), "Open" }, { 10, 19, QColor(255, 0, 0), "Red" },
+        { 20, 29, QColor(255, 255, 0), "Yellow" }, { 30, 39, QColor(0, 255, 0), "Green" },
+        { 40, 49, QColor(0, 0, 255), "Blue" } };
+    for (const auto &sl : wheelSlots)
+    {
+        QLCCapability *cap = new QLCCapability(uchar(sl.lo), uchar(sl.hi), sl.n);
+        cap->setResource(0, sl.c);
+        wheel->addCapability(cap);
+    }
+    Fixture *spot = handBuilt(m_doc, "WheelSpot", {
+        presetChannel("Pan", QLCChannel::PositionPan),
+        presetChannel("Dimmer", QLCChannel::IntensityMasterDimmer), wheel }, 0);
+    QVERIFY(spot != nullptr);
+
+    QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
+    rainbow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/rainbow.js");
+    QVERIFY(m_doc->addPalette(rainbow));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(spot->id());
+    scene->addPalette(rainbow->id());
+    EffectInstance inst(m_doc, scene->id(), rainbow->id());
+    QVERIFY(inst.isValid());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QCOMPARE(cells.size(), 1);              // a wheel-only mover runs it now
+
+    QJSEngine *js = inst.m_script.engine();
+    auto slotFor = [&](int r, int g, int b) {
+        int v = -1, n = 0;
+        for (const EffectInstance::DmxWrite &w : inst.parseIntents(rgbIntent(js, r, g, b), cells))
+            if (w.channel == 2)
+            {
+                v = w.value;
+                ++n;
+                if (!w.snap)
+                    return -2;              // a slot is written whole
+            }
+        return n == 1 ? v : -3;
+    };
+    // The hue running from red to green: red, then yellow once it crosses.
+    QCOMPARE(slotFor(255, 0, 0), 14);
+    QCOMPARE(slotFor(255, 100, 0), 14);
+    QCOMPARE(slotFor(255, 180, 0), 24);     // crossed: nearer yellow
+    QCOMPARE(slotFor(255, 255, 0), 24);
+    QCOMPARE(slotFor(100, 255, 0), 34);     // and on to green
+    QCOMPARE(slotFor(0, 0, 90), 44);        // a dim blue is blue, not open
+    QCOMPARE(slotFor(0, 0, 0), -3);         // black leaves the wheel be
+
+    // The slots are read once for the fixture's mode.
+    QCOMPARE(inst.m_wheelSlots.size(), 1);
+    QCOMPARE(inst.m_wheelSlots.value(spot->id()).second.size(), 1);
+    QCOMPARE(inst.m_wheelSlots.value(spot->id()).second.first().slots.size(), 5);
+}
+
+void EffectInstance_Test::aRainbowRunsOnTheRivaleProfile()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    QCOMPARE(def->loadXML(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures/Ayrton/Ayrton-Rivale-Profile.qxf"),
+             QFile::NoError);
+    QLCFixtureMode *mode = def->mode("Standard");
+    QVERIFY(mode != nullptr);
+    Fixture *rivale = new Fixture(m_doc);
+    rivale->setFixtureDefinition(def, mode);
+    rivale->setAddress(0);
+    QVERIFY(m_doc->addFixture(rivale));
+    int cyan = -1, magenta = -1, yellow = -1, wheel = -1;
+    for (quint32 c = 0; c < rivale->channels(); ++c)
+    {
+        const QString n = rivale->channel(c)->name();
+        if (n == "Cyan") cyan = int(c);
+        else if (n == "Magenta") magenta = int(c);
+        else if (n == "Yellow") yellow = int(c);
+        else if (n == "Color Wheel") wheel = int(c);
+    }
+    QVERIFY(cyan >= 0 && magenta >= 0 && yellow >= 0 && wheel >= 0);
+
+    QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
+    rainbow->setScriptPath(QString(QLC_TEST_RESOURCE_ROOT) + "effectscripts/rainbow.js");
+    QVERIFY(m_doc->addPalette(rainbow));
+    Scene *scene = new Scene(m_doc);
+    m_doc->addFunction(scene);
+    scene->addFixture(rivale->id());
+    scene->addPalette(rainbow->id());
+    EffectInstance inst(m_doc, scene->id(), rainbow->id());
+    int cols = 0, rows = 0;
+    const QList<EffectInstance::EffectCell> cells = inst.effectiveCells(cols, rows);
+    QCOMPARE(cells.size(), 1);
+
+    QMap<int, int> out;
+    for (const EffectInstance::DmxWrite &w :
+         inst.parseIntents(rgbIntent(inst.m_script.engine(), 0, 255, 0), cells))
+        out.insert(int(w.channel), w.value);
+    QCOMPARE(out.value(cyan, -1), 255);
+    QCOMPARE(out.value(magenta, -1), 0);
+    QCOMPARE(out.value(yellow, -1), 255);
+    QVERIFY2(!out.contains(wheel), "CMY mixes it: the wheel is the look's");
+}
+
 void EffectInstance_Test::aSharedDimmerTakesItsBrightestHead()
 {
     /* A two-arm beam: one master dimmer outside its heads, an RGB set in

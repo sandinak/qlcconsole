@@ -33,6 +33,7 @@
 
 #include "effectscript.h"
 #include "freerotation.h"
+#include "colourmix.h"
 #include "headlayout.h"
 #include <array>
 #include "scenetransition.h"
@@ -461,6 +462,10 @@ private:
     mutable QHash<quint32, QPair<const void *, bool>> m_typeMatch;
     mutable QStringList m_typesLower;       //!< fixtureTypes(), lowered once
     mutable bool m_typesLowerBuilt = false;
+    /* A colour wheel's slots (ColourMix::wheels()), by fixture and the mode
+       it had: an RGB colour on a head with no RGB picks its slot every
+       frame, and reading the capabilities' colours each time was the cost. */
+    mutable QHash<quint32, QPair<const void *, QVector<ColourMix::Wheel>>> m_wheelSlots;
     /* The loose fixtures' head layouts (effectiveCells()' last resort):
        resolving one builds its library key and a cell for every head, so
        they are kept while the fixtures, their modes and the show's head
