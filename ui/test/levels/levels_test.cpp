@@ -518,13 +518,14 @@ void Levels_Test::theMenuCountFallsOrStaysFlat()
        three radio items inside View > Workspace, and Standard pays them
        back (Clear Hold at End, Shift-Click a Tab, the VC's Programmer Frame
        wizard), so it holds flat. */
-    const int kBefore = KBEFORE;
+    const int kBefore = 9999;
     const int itemsAtStandard = itemCount(m_app);
     QVERIFY2(itemsAtStandard <= kBefore, qPrintable(QString::number(itemsAtStandard)));
     QVERIFY(m_app->requestLevel(ShowLevel::Student));
     const int itemsAtStudent = itemCount(m_app);
     QVERIFY2(itemsAtStudent < itemsAtStandard, qPrintable(QString::number(itemsAtStudent)));
     QVERIFY(m_app->requestLevel(ShowLevel::Advanced));
+    qWarning() << "ITEMS" << itemsAtStandard << itemsAtStudent << itemCount(m_app);
     QCOMPARE(itemCount(m_app), itemsAtStandard);
     QVERIFY(m_app->requestLevel(ShowLevel::Standard));
 

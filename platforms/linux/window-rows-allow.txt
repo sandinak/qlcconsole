@@ -54,7 +54,6 @@ PositionTool                     not yet walked
 PowerMeasureDialog               deep
 PowerProfileDialog               not yet walked
 PreferencesDialog                not yet walked
-ProgrammerFrameWizard            not yet walked
 RiserFaceEditor                  deep
 RoleFillDialog                   deep
 ScriptCuesDialog                 not yet walked
