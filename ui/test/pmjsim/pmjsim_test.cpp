@@ -361,7 +361,11 @@ void PmjSim_Test::everyLampIsSentAndNoneStray()
     QVERIFY(m_pmj->tap(other, 20));
     settle(20);
     QCOMPARE(m_pmj->lamp(other), kBlink);
-    QCOMPARE(m_pmj->lamp(blinking.first()), 127);
+    // The one before: lit, or dim when it is a page with no jobs yet (the
+    // test before may leave the strips on Effects or Macros).
+    const bool noJobsBefore = blinking.first() == QLatin1String("Effects")
+                              || blinking.first() == QLatin1String("Macros");
+    QCOMPARE(m_pmj->lamp(blinking.first()), noJobsBefore ? 15 : 127);
 }
 
 void PmjSim_Test::theMasterFaderMovesTheGrandMaster()
