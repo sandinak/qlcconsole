@@ -401,8 +401,11 @@ void ShowLevel::offerMenu(QMenu *menu)
             names << t;
         }
     const QString where = menu->title().remove(QLatin1Char('&'));
-    emit switchOffered(int(level), where.isEmpty()
-                       ? tr("At the %1 level this menu also has: %2.").arg(name(level), names.join(QStringLiteral(", ")))
-                       : tr("At the %1 level, %2 also has: %3.").arg(name(level), where,
-                                                                     names.join(QStringLiteral(", "))));
+    QString text = where.isEmpty()
+        ? tr("At the %1 level this menu also has: %2.").arg(name(level), names.join(QStringLiteral(", ")))
+        : tr("At the %1 level, %2 also has: %3.").arg(name(level), where, names.join(QStringLiteral(", ")));
+    // "Upgrade This Show…." reads as a typo: the ellipsis ends it.
+    if (text.endsWith(QString::fromUtf8("\342\200\246.")))
+        text.chop(1);
+    emit switchOffered(int(level), text);
 }
