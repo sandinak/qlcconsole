@@ -199,7 +199,6 @@ protected:
     QAction* m_addCueRunnerAction = nullptr;
     QAction* m_editSwapAction = nullptr;
     QAction* m_addAnimationAction;
-    QAction* m_addProgrammerFrameAction;
 
     QAction* m_toolsSettingsAction;
     QAction* m_functionWizardAction;
@@ -282,7 +281,6 @@ public slots:
     void slotAddShowControl();
     void slotAddCueRunner();
     void slotAddAnimation();
-    void slotAddProgrammerFrame();
 
     /*********************************************************************
      * Tools menu callbacks

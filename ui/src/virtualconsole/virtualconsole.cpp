@@ -66,7 +66,6 @@
 #include "showtreecontroller.h"
 #include "showreview.h"
 #include "functionwizard.h"
-#include "programmerframewizard.h"
 #include "doc.h"
 
 #define SETTINGS_VC_SIZE "virtualconsole/size"
@@ -106,7 +105,6 @@ VirtualConsole::VirtualConsole(QWidget* parent, Doc* doc)
     , m_addAudioTriggersAction(NULL)
     , m_addClockAction(NULL)
     , m_addAnimationAction(NULL)
-    , m_addProgrammerFrameAction(NULL)
     , m_toolsSettingsAction(NULL)
     , m_functionWizardAction(NULL)
     , m_editCutAction(NULL)
@@ -406,13 +404,6 @@ void VirtualConsole::initActions()
     m_addLabelAction = new QAction(QIcon(":/label.png"), tr("New Label"), this);
     connect(m_addLabelAction, SIGNAL(triggered(bool)), this, SLOT(slotAddLabel()), Qt::QueuedConnection);
 
-    m_addProgrammerFrameAction = new QAction(QIcon(":/wizard.png"),
-        tr("New Programmer Frame from Input Profile…"), this);
-    m_addProgrammerFrameAction->setToolTip(
-        tr("Auto-generate a programmer frame for a MIDI control surface"));
-    connect(m_addProgrammerFrameAction, SIGNAL(triggered(bool)),
-            this, SLOT(slotAddProgrammerFrame()));
-
     m_addAudioTriggersAction = new QAction(QIcon(":/audioinput.png"), tr("New Audio Triggers"), this);
     connect(m_addAudioTriggersAction, SIGNAL(triggered(bool)), this, SLOT(slotAddAudioTriggers()), Qt::QueuedConnection);
 
@@ -600,8 +591,6 @@ void VirtualConsole::initMenuBar()
     m_addMenu->addAction(m_addLabelAction);
     m_addMenu->addAction(m_addClockAction);
     m_addMenu->addAction(m_addShowControlAction);
-    m_addMenu->addSeparator();
-    m_addMenu->addAction(m_addProgrammerFrameAction);
 
     /* Edit menu */
     m_editMenu = new QMenu(this);
@@ -1245,12 +1234,6 @@ VCWidget *VirtualConsole::swapWidget(VCWidget *widget)
     setWidgetSelected(made, true);
     m_doc->setModified();
     return made;
-}
-
-void VirtualConsole::slotAddProgrammerFrame()
-{
-    ProgrammerFrameWizard wiz(m_doc, this);
-    wiz.exec();
 }
 
 /*****************************************************************************

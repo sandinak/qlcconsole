@@ -108,7 +108,6 @@ add_library(${module_name}
     livecapturedialog.cpp livecapturedialog.h
     timecodecalibrationdialog.cpp timecodecalibrationdialog.h
     virtualconsole/programmermap.cpp virtualconsole/programmermap.h
-    virtualconsole/programmerframewizard.cpp virtualconsole/programmerframewizard.h
     monitor/monitor.cpp monitor/monitor.h
     monitor/planmapwidget.cpp monitor/planmapwidget.h
     monitor/performersdialog.cpp monitor/performersdialog.h

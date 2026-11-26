@@ -843,7 +843,6 @@ public slots:
     void slotFollowTimecodeToggled(bool checked);
     void slotFollowTimecodeChanged(bool enabled);
     void slotLastLookToggled(bool checked);
-    void slotClearLastLook();
     void slotControlPanic();
     void slotFadeAndStopAll();
     void slotDumpDmxIntoFunction();
@@ -983,7 +982,6 @@ private:
     QAction* m_followMtcAction;
     /** Last-look persistence: toggle (enable) + momentary clear of a held look. */
     QAction* m_lastLookAction;
-    QAction* m_clearLastLookAction;
     QAction* m_controlPanicAction;
     QAction* m_cueGoAction = nullptr;       ///< the main cue list's GO
     QAction* m_cueBackAction = nullptr;

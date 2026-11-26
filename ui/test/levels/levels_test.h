@@ -58,6 +58,7 @@ private slots:
     void theMenuCountFallsOrStaysFlat();
     /** Build, Functions, Simple Desk and the Timeline leave the tab bar at
      *  Student; the Window menu's More Tabs line names them and switches. */
+    void aStudentShowSavedOnFunctionsOpensQuietly();
     void aHiddenTabIsInTheWindowMenuSwitchLine();
     /** Stop All, GO, Back, Blackout, Blind, the Grand Master and the
      *  readiness footer stay at every level; bind() refuses them. */
