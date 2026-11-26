@@ -25,6 +25,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   chip names it; in Operate the controls are the show's again. Page sets
   are .pageset.json files: Export… and Import… on the map, chosen per
   computer by the device, and a show offers the set it was built with.
+- **Edit Live**: in Operate, the board's page controls trim the running
+  cue on the selected fixtures (only what you move sits over the cue), and
+  Store writes just those attributes into the look that sets them, in this
+  cue or the one it tracks from, as one undo step. A red footer chip lists
+  the trims (Store, Drop, Turn Off); GO never waits: unstored trims drop
+  with the cue and Store to Cue N stays offered 30 s. Run tab and footer,
+  the show's PIN asked; off in Design, on close and at the emergency stop.
 
 ### Changed
 

@@ -2,6 +2,7 @@
 <qresource>
     <file alias="help/README.md">../../docs/features/README.md</file>
     <file alias="help/control-surfaces.md">../../docs/features/control-surfaces.md</file>
+    <file alias="help/edit-live.md">../../docs/features/edit-live.md</file>
     <file alias="help/definition-updates.md">../../docs/features/definition-updates.md</file>
     <file alias="help/effects.md">../../docs/features/effects.md</file>
     <file alias="help/fixture-manager.md">../../docs/features/fixture-manager.md</file>

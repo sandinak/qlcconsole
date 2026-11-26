@@ -52,6 +52,7 @@ const char *const kTopics[] = {
     "build.md", "show-tree.md", "fixture-manager.md", "definition-updates.md",
     "stage-targets.md", "focus-calls.md", "gamepad-remote.md", "venues.md", "refine.md", "shows.md", "teaching.md",
     "show-review.md", "dress-rehearsal.md", "ai-assist.md", "show-control.md", "control-surfaces.md",
+    "edit-live.md",
     "other-improvements.md", "effects.md", "shortcuts.md", "troubleshooting.md", "system-tuning.md", "updates.md",
     "EFFECTSCRIPT_API.md"
 };

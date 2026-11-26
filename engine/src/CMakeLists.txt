@@ -35,6 +35,7 @@ add_library(${module_name} SHARED
     surfacelayout.cpp surfacelayout.h
     pageset.cpp pageset.h
     surfacepages.cpp surfacepages.h
+    editlive.cpp editlive.h
     grandmasterpickup.h
     encoderbank.cpp encoderbank.h
     encoderattributes.cpp encoderattributes.h

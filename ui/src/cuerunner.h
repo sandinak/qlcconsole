@@ -196,6 +196,7 @@ public:
     QWidget *infoHandle() const;
     QWidget *goHandle() const;
     QToolButton *goButton() const { return m_go; }
+    QToolButton *editLiveButton() const { return m_editLiveBtn; }
     QToolButton *subGoButton() const { return m_subGo; }
     /** The upcoming lines shown now. */
     QStringList upcomingTexts() const;
@@ -341,9 +342,11 @@ private:
     /** The Venue focus button: greyed, with why, with nothing to focus. */
     void refreshFocusCalls();
     void refreshPadRun();
+    void refreshEditLive();
     QToolButton *m_focusCallsBtn = nullptr;
     /** The pad's Run role (0.4): on / off, and armed while LB is held. */
     QToolButton *m_padRunBtn = nullptr;
+    QToolButton *m_editLiveBtn = nullptr;
     CueRunnerFrame *m_padFrame = nullptr;
     QWidget *m_focusArmed = nullptr;
     QLabel *m_focusArmedLabel = nullptr;

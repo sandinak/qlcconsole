@@ -93,9 +93,16 @@ public:
     /** Whether the page has the control that hears @p channel now (Design,
      *  its job or one of its keys): the map draws it as the page's. */
     bool owns(quint32 universe, quint32 channel) const;
-    /** The board's pages act now: Design, and the show's encoder bank is
-     *  not on this board. */
+    /** The board's pages act now: Design (or Operate with Edit Live on),
+     *  and the show's encoder bank is not on this board. */
     bool isActive(quint32 universe) const;
+
+    /** Edit Live (docs/features/edit-live.md): in Operate the pages' knobs
+     *  and faders trim the running stage (liveAdjusted(), liveLevelSet())
+     *  instead of going back to the show. Every knob's last position is
+     *  forgotten, so the first move after a switch reads as no step. */
+    void setLive(bool live);
+    bool isLive() const { return m_live; }
 
     /*********************************************************************
      * The set, per computer
@@ -149,6 +156,10 @@ signals:
     void levelSet(quint32 universe, quint32 channel, int bank, int slot, uchar value);
     /** A board, its set or the show's offer changed. */
     void setsChanged();
+    /** Edit Live: a turning control on a page, in Operate. */
+    void liveAdjusted(int bank, int slot, int detents, bool fine);
+    /** Edit Live: a fader on a page moved, in Operate. */
+    void liveLevelSet(quint32 universe, quint32 channel, int bank, int slot, uchar value);
 
 private:
     struct Board
@@ -176,6 +187,7 @@ private:
     QSet<quint64> m_down;
     QHash<QString, QString> m_showSets;     //!< profile -> set name
     QSet<quint32> m_declined;
+    bool m_live = false;
 };
 
 /** @} */

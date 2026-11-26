@@ -37,6 +37,7 @@
 #include "deskrecord.h"
 #include "encoderbank.h"
 #include "surfacepages.h"
+#include "editlive.h"
 #include "inputpatch.h"
 #include "universe.h"
 #include "qlcioplugin.h"
@@ -89,6 +90,7 @@ ControlMap::ControlMap(Doc *doc)
     m_encoderBank->setParent(this);
     m_surfacePages = new SurfacePages(doc);
     m_surfacePages->setParent(this);
+    m_editLive = new EditLive(doc, m_surfacePages, this);
     // The show's encoder bank on a board rests that board's pages.
     connect(m_encoderBank, &EncoderBank::deviceChanged, m_surfacePages, &SurfacePages::rescan);
     // A function deleted takes its binding with it.

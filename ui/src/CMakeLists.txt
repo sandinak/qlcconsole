@@ -232,6 +232,7 @@ add_library(${module_name}
     desksetuppanel.cpp desksetuppanel.h
     deskchip.cpp deskchip.h
     surfacechips.cpp surfacechips.h
+    editlivechip.cpp editlivechip.h
     surfacemap.cpp surfacemap.h
     qrencoder.cpp qrencoder.h
     controlcollisionbox.cpp controlcollisionbox.h

@@ -58,6 +58,8 @@
 #include "padrun.h"
 #include "controllerjobs.h"
 #include "cuerunner.h"
+#include "editlivechip.h"
+#include "editlive.h"
 #include "controlmap.h"
 #include "groupmasterstrip.h"
 #include "teachingsettings.h"
@@ -669,6 +671,27 @@ void CueRunner::buildFullLayout()
             this, &CueRunner::refreshPadRun);
     head->addWidget(m_padRunBtn);
     refreshPadRun();
+    /* Edit Live (Q337-Q339): the board's page controls trim the running
+       cue; the footer's red chip lists the trims and stores them. Asks
+       the show's PIN when it has one. Operate only. */
+    m_editLiveBtn = new QToolButton(this);
+    m_editLiveBtn->setObjectName(QStringLiteral("crEditLive"));
+    m_editLiveBtn->setText(tr("Edit Live"));
+    m_editLiveBtn->setCheckable(true);
+    m_editLiveBtn->setProperty("helpTopic", QStringLiteral("edit-live.md"));
+    connect(m_editLiveBtn, &QToolButton::toggled, this, [this](bool on) {
+        EditLive *el = m_doc->controlMap()->editLive();
+        if (on)
+            EditLiveChip::turnOn(m_doc, window());
+        else
+            el->setOn(false);
+        refreshEditLive();
+    });
+    if (EditLive *el = m_doc->controlMap()->editLive())
+        connect(el, &EditLive::onChanged, this, &CueRunner::refreshEditLive);
+    connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshEditLive);
+    head->addWidget(m_editLiveBtn);
+    refreshEditLive();
     m_mode = new QLabel(this);
     m_mode->setObjectName(QStringLiteral("crMode"));
     m_mode->setFont(hf);
@@ -1417,6 +1440,26 @@ void CueRunner::refreshFocusCalls()
     FocusMenu::setAvailable(m_focusCallsBtn, FocusMenu::venueFocusBlocked(m_doc),
                             tr("Pre-show: focus the rig for this venue, call by call, on the controller "
                                "(Design mode)"));
+}
+
+void CueRunner::refreshEditLive()
+{
+    if (m_editLiveBtn == nullptr)
+        return;
+    EditLive *el = m_doc->controlMap()->editLive();
+    const bool on = el != nullptr && el->isOn();
+    {
+        const QSignalBlocker block(m_editLiveBtn);
+        m_editLiveBtn->setChecked(on);
+    }
+    m_editLiveBtn->setEnabled(on || m_doc->mode() == Doc::Operate);
+    m_editLiveBtn->setStyleSheet(on ? QStringLiteral("QToolButton { color: #ffffff; background: #c62828; "
+                                                     "font-weight: bold; }")
+                                    : QString());
+    m_editLiveBtn->setToolTip(m_doc->mode() == Doc::Operate
+        ? tr("Edit Live: the board's page controls trim the running cue; the footer's red chip "
+             "stores or drops the trims. GO never waits for them.")
+        : tr("Edit Live is for Operate: it trims the running cue."));
 }
 
 void CueRunner::refreshPadRun()
