@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QSet>
 #include <QHash>
+#include <QVector>
 #include <QMutex>
 #include <QDir>
 
@@ -58,6 +59,139 @@ class Doc;
 #define KXMLIONetworkAutoStart  QStringLiteral("AutoStart")
 #define KXMLIONetworkName       QStringLiteral("Name")
 #define KXMLIONetworkPassword   QStringLiteral("Password")
+
+/** What a listener hears of the controls while an Assign to Control… window
+ *  is open: nothing that moves the show (board review 053-a). A press or a
+ *  fader's move is dropped, and so is a 0: on a fader a 0 is a position (a
+ *  submaster or the Grand Master at the bottom), not a release, and a fader
+ *  can jump straight there (an OSC fader, a slammed MIDI one). The one 0
+ *  that passes at once is the release of a control its profile calls a
+ *  button, held before the window opened (round 2).
+ *
+ *  When the window closes (setListening(false)) each control moved while it
+ *  was open is put back where it ended up, so no listener keeps a level the
+ *  hardware has left: a fader at its last value, a button let go at 0. A
+ *  press still held then is not replayed (it would fire on the close); only
+ *  a fader -- its profile says so, or it was heard at two different values
+ *  above 0 and never the same one twice running -- is replayed above 0.
+ *
+ *  A control read as steps is never replayed (review 053-a round 3): its
+ *  value is a turn, not a place, so sending it again turns the parameter
+ *  again on the close. That is a profile's encoder or a channel whose
+ *  movement is relative (Kind Relative), and any control a listener reads
+ *  as deltas (the @a deltas of setListening(): the encoder bank's encoders,
+ *  a Virtual Console input in Relative or Encoder mode). Such a control is
+ *  handed back in @a baselines instead: where it is now, for a listener
+ *  that reads a change from the last position (the encoder bank's
+ *  AbsoluteDelta) to take silently, so the next real turn counts from there.
+ *
+ *  Each listener keeps its own (the show's dispatch, a game pad's Run map)
+ *  and feeds it every value it receives, listening or not, so it knows what
+ *  that listener last heard. Header-only: no signals, nothing to export. */
+class AssignInputGate
+{
+public:
+    /** What the profile says a control is: Relative is an encoder, or a
+     *  channel whose movement is relative (its value is a step). */
+    enum Kind { Unknown, Button, Fader, Relative };
+
+    /** A value to send again on the close: where @a key ended up. */
+    struct Replay
+    {
+        quint64 key;
+        uchar value;
+        QString name;
+    };
+
+    bool listening() const { return m_listening; }
+
+    /** True when @a value of the control @a key reaches the listener now.
+     *  @a kind and @a name are read only while listening. */
+    bool pass(quint64 key, uchar value, Kind kind = Unknown, const QString &name = QString())
+    {
+        Control &c = m_controls[key];
+        if (value > 0)
+        {
+            if (c.lastAbove > 0 && value != c.lastAbove)
+                c.varied = true;
+            if (m_listening && c.moved && value == c.last)
+                c.repeated = true;      // a step sent again: an encoder's
+            c.lastAbove = value;
+        }
+        c.last = value;
+        if (!m_listening)
+        {
+            c.heard = value;
+            return true;
+        }
+        c.kind = kind;
+        c.name = name;
+        c.moved = true;
+        if (value == 0 && kind == Button && c.heard > 0)
+        {
+            c.heard = 0;
+            return true;
+        }
+        return false;
+    }
+
+    /** The window opened or closed. On the close: what to send again, so
+     *  each listener hears where the moved controls ended up. @a deltas are
+     *  the controls a listener reads as steps (never sent again); each of
+     *  them that moved, and each Relative one, goes to @a baselines. */
+    QVector<Replay> setListening(bool on, const QSet<quint64> &deltas = QSet<quint64>(),
+                                 QVector<Replay> *baselines = nullptr)
+    {
+        QVector<Replay> out;
+        if (on == m_listening)
+            return out;
+        m_listening = on;
+        for (auto it = m_controls.begin(); it != m_controls.end(); ++it)
+        {
+            Control &c = it.value();
+            if (on)
+                c.repeated = false;     // judged on what the window sees
+            if (!c.moved)
+                continue;
+            c.moved = false;
+            if (on)
+                continue;
+            if (c.kind == Relative || deltas.contains(it.key()))
+            {
+                // A turn, not a place: nothing sent; the listener's last
+                // position is moved to where the control is now.
+                c.heard = c.last;
+                if (baselines != nullptr)
+                    baselines->append({ it.key(), c.last, c.name });
+                continue;
+            }
+            if (c.last == c.heard)
+                continue;
+            const bool fader = c.kind == Fader
+                    || (c.kind == Unknown && c.varied && !c.repeated);
+            if (c.last > 0 && !fader)
+                continue;       // a button still held, or steps: nothing fires
+            c.heard = c.last;
+            out.append({ it.key(), c.last, c.name });
+        }
+        return out;
+    }
+
+private:
+    struct Control
+    {
+        uchar last = 0;         // the last value the control sent
+        uchar heard = 0;        // the last value the listener heard
+        uchar lastAbove = 0;    // the last value above 0
+        bool varied = false;    // two different values above 0: a fader
+        bool repeated = false;  // the same value above 0 twice running in the window: steps
+        bool moved = false;     // sent something while the window is open
+        Kind kind = Unknown;
+        QString name;
+    };
+    QHash<quint64, Control> m_controls;
+    bool m_listening = false;
+};
 
 class QLC_ENGINE_EXPORT InputOutputMap final : public QObject
 {
@@ -1003,6 +1137,38 @@ public:
     quint32 setupListening() const { return m_setupUniverse; }
     bool isSetupHeld(quint32 universe) const
     { return m_setupUniverse != UINT_MAX && universe == m_setupUniverse; }
+    /** An Assign to Control… window is open (ControlLearnDialog, phase A):
+     *  no show listener hears any control move meanwhile -- a press or a
+     *  fader finds the control in the window and fires nothing, in Design
+     *  and Operate, a fader's 0 included (AssignInputGate). Only the release
+     *  of a profile's button held before the window opened passes. On the
+     *  close each control moved meanwhile is sent again where it ended up
+     *  (showInputValueChanged()), so a fader pulled down to find it is not
+     *  left at its old level. The emergency stop is the Control Map's and
+     *  still stops. */
+    void setAssignListening(bool on);
+    bool assignListening() const { return m_assignListening; }
+    /** What @a universe's profile says @a channel is (Unknown: no profile,
+     *  or not in it; Relative: an encoder, or a relative movement). */
+    AssignInputGate::Kind controlKind(quint32 universe, quint32 channel) const;
+    /** The controls (universe << 32 | channel) a listener reads as steps
+     *  now (collectAssignDeltas()): never sent again on the close. */
+    QSet<quint64> assignDeltaControls();
+
+signals:
+    /** setAssignListening() changed: a listener with its own gate (a pad's
+     *  Run map) opens or closes it, and sends again what it returns. */
+    void assignListeningChanged(bool on);
+    /** Asked on the close: a listener that reads a control's values as
+     *  steps (the encoder bank's encoders, a Virtual Console input in
+     *  Relative or Encoder mode) adds its key (universe << 32 | channel).
+     *  Connect it directly: the set is filled before the emit returns. */
+    void collectAssignDeltas(QSet<quint64> *keys);
+    /** On the close, for a control read as steps that moved while the
+     *  window was open: where it is now. Nothing is sent to the show; a
+     *  listener that reads a change from the last position takes it as
+     *  that position, so its next turn counts from here. */
+    void showInputBaseline(quint32 universe, quint32 channel, uchar value);
 
 private slots:
     /** inputValueChanged() again as showInputValueChanged(), without the
@@ -1014,6 +1180,8 @@ private:
     bool m_deskGrandMaster = false;
     bool m_deskLearning = false;
     quint32 m_setupUniverse = UINT_MAX;
+    bool m_assignListening = false;
+    AssignInputGate m_assignGate;
 
 private:
     QTimer *m_offlineRetry;

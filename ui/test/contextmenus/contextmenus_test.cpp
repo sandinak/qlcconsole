@@ -27,6 +27,7 @@
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QTimer>
 #include <QMenu>
 #include <QtTest>
@@ -54,6 +55,7 @@
 
 #include "contextmenus_test.h"
 #include "contextmenus.h"
+#include "controllearndialog.h"
 #include "createfixturegroup.h"
 #include "fixturetreewidget.h"
 #include "fixturegroup.h"
@@ -1397,6 +1399,84 @@ void ContextMenus_Test::theShowTreeMenusFollowTheCanon()
     view.fillTreeMenu(&empty, nullptr);
     VERIFY_CANON(&empty);
     QVERIFY(texts(&empty).startsWith("+ Production…"));
+}
+
+/* Q310: Learn Trigger… became Assign to Control…, one item per thing, the
+   menus no longer for it. Q325: in the qlcconsole and Everything views it is
+   on cue lists, cues and hits; a raw scene has it only in Classic QLC+. */
+void ContextMenus_Test::oneAssignItemPerThing()
+{
+    m_doc->setMode(Doc::Design);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 list = st->addCueList(prod, "Act 1");
+    const quint32 cue = st->addCue(list, -1, "Top");
+    const quint32 hit = st->addLook(prod, "Stab");
+    QVERIFY(!ControlLearnDialog::classicView());
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    view.m_tree->expandAll();
+    QSet<quint32> offered;
+    for (QTreeWidgetItemIterator it(view.m_tree); *it; ++it)
+    {
+        QMenu menu;
+        view.fillTreeMenu(&menu, *it);
+        int assign = 0;
+        for (QAction *a : menu.findChildren<QAction *>())
+        {
+            QVERIFY2(!a->text().startsWith("Learn Trigger"), qPrintable(texts(&menu)));
+            if (a->objectName() == QLatin1String("assignToControl") && !a->text().isEmpty())
+                ++assign;
+        }
+        QVERIFY2(assign <= 1, qPrintable((*it)->text(0) + ": " + texts(&menu)));
+        if (assign == 1)
+        {
+            offered.insert((*it)->data(0, ShowTreeView::IdRole).toUInt());
+            const QList<QAction *> top = menu.actions();
+            bool named = false;
+            for (QAction *a : top)
+                named |= a->objectName() == QLatin1String("assignToControl") && a->text() == "Assign to Control…";
+            QVERIFY2(named, qPrintable(texts(&menu)));
+        }
+    }
+    for (quint32 id : { list, cue, hit })
+        QVERIFY2(offered.contains(id), qPrintable(QString::number(id)));
+
+    // A raw scene in Build: none in the qlcconsole view, the one in Classic.
+    Scene *s = new Scene(m_doc);
+    s->setName("Warm");
+    m_doc->addFunction(s);
+    ProgrammingManager pm(nullptr, m_doc);
+    pm.resize(1500, 900);
+    pm.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&pm));
+    ProgrammingOutline *outline = pm.m_outline;
+    outline->rebuild();
+    outline->expandAll();
+    QTreeWidgetItem *scene = outline->sceneItem(s->id());
+    QVERIFY(scene != nullptr);
+    selectOnly(outline, scene);
+    QStringList console;
+    {
+        QMenu menu;
+        outline->fillContextMenu(&menu, scene);
+        console = ContextMenu::kindBlock(&menu);
+    }
+    QVERIFY2(!console.contains("assignToControl"), qPrintable(console.join(", ")));
+    ControlLearnDialog::setClassicView(true);
+    auto back = qScopeGuard([]() { ControlLearnDialog::setClassicView(false); });
+    QStringList classic;
+    {
+        QMenu menu;
+        outline->fillContextMenu(&menu, scene);
+        VERIFY_CANON(&menu);
+        classic = ContextMenu::kindBlock(&menu);
+    }
+    QCOMPARE(classic.count("assignToControl"), 1);
+    QCOMPARE(classic.count(), console.count() + 1);
 }
 
 void ContextMenus_Test::theRigViewFollowsTheCanon()

@@ -283,7 +283,7 @@ This section covers 0.4.5 through 0.4.12.
   fixtures that are in no group; drag one onto a cue for a layer on just
   that fixture. **Blocking** and **Formation** have their own headings. See
   [The Library](show-tree.md#the-library).
-- **A key fires a hit.** **Learn Trigger…** now learns a computer key
+- **A key fires a hit.** **Assign to Control…** now learns a computer key
   ("Key · F5") as it does a MIDI control, with the same press modes. A key
   fires in Operate, and in Design while what it fires is armed; never while
   a text field has the keyboard. See [Hits](show-tree.md#hits-busking).

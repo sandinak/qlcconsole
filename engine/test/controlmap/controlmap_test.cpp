@@ -3767,3 +3767,159 @@ void ControlMap_Test::aLearnHearsAFaderAndALatchingButton()
     QVERIFY(!cm->learnSawFader(0, 7));
     QVERIFY(!cm->learnSawLatching(0, 9));
 }
+
+/* Review 053-a round 2: a fader up at 50 that jumps straight to 0 while
+   Assign to Control… is open (an OSC fader, a slammed MIDI one) is not a
+   button's release: no show listener hears it while the window is open. On
+   the close it is heard where it ended up, so nothing keeps the old level. */
+void ControlMap_Test::assignGateHoldsAFadersJumpToZero()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy heard(iom, &InputOutputMap::showInputValueChanged);
+    emit iom->inputValueChanged(0, 7, 50);
+    QCOMPARE(heard.count(), 1);
+    iom->setAssignListening(true);
+    heard.clear();
+    emit iom->inputValueChanged(0, 7, 0);
+    QCOMPARE(heard.count(), 0);
+    iom->setAssignListening(false);
+    // Closed: the 0 is heard once, where the fader is now.
+    QCOMPARE(heard.count(), 1);
+    QCOMPARE(heard.at(0).at(1).toUInt(), 7u);
+    QCOMPARE(heard.at(0).at(2).toUInt(), 0u);
+    // Closed twice (done() and the destructor): nothing more.
+    iom->setAssignListening(false);
+    QCOMPARE(heard.count(), 1);
+
+    // A profile's button held across the opening: its release at once.
+    AssignInputGate gate;
+    const quint64 key = 61;
+    QVERIFY(gate.pass(key, 127));
+    gate.setListening(true);
+    QVERIFY(gate.pass(key, 0, AssignInputGate::Button));
+    QVERIFY(gate.setListening(false).isEmpty());
+    // A profile's fader at the same values: held for the close.
+    QVERIFY(gate.pass(8, 127));
+    gate.setListening(true);
+    QVERIFY(!gate.pass(8, 0, AssignInputGate::Fader));
+    const QVector<AssignInputGate::Replay> r = gate.setListening(false);
+    QCOMPARE(r.count(), 1);
+    QCOMPARE(r.at(0).key, quint64(8));
+    QCOMPARE(int(r.at(0).value), 0);
+}
+
+/* Review 053-a round 2: a fader moved while the window is open is heard
+   where it ended up when the window closes, without moving it again. A
+   button pressed and let go meanwhile fires nothing on the close, nor does
+   one still held. */
+void ControlMap_Test::assignGateReplaysWhereAControlEndedUp()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy heard(iom, &InputOutputMap::showInputValueChanged);
+    QSignalSpy toggled(iom, &InputOutputMap::assignListeningChanged);
+    emit iom->inputValueChanged(0, 7, 128);     // a submaster at 50%
+    iom->setAssignListening(true);
+    QCOMPARE(toggled.count(), 1);
+    heard.clear();
+    for (int v : { 100, 60, 30 })
+        emit iom->inputValueChanged(0, 7, uchar(v));
+    emit iom->inputValueChanged(0, 61, 127);    // pressed and let go
+    emit iom->inputValueChanged(0, 61, 0);
+    emit iom->inputValueChanged(0, 62, 127);    // pressed, still held
+    QCOMPARE(heard.count(), 0);
+    iom->setAssignListening(false);
+    QCOMPARE(toggled.count(), 2);
+    QCOMPARE(heard.count(), 1);
+    QCOMPARE(heard.at(0).at(1).toUInt(), 7u);
+    QCOMPARE(heard.at(0).at(2).toUInt(), 30u);
+    // Open and closed again with nothing moved: nothing sent.
+    iom->setAssignListening(true);
+    iom->setAssignListening(false);
+    QCOMPARE(heard.count(), 1);
+    // The held one let go after the close: heard as usual.
+    emit iom->inputValueChanged(0, 62, 0);
+    QCOMPARE(heard.count(), 2);
+}
+
+/* Review 053-a round 3: a control read as steps is never sent again on the
+   close -- its value is a turn, not a place. A profile's encoder, a knob
+   whose movement is relative, a control a listener claims as deltas, and a
+   control with no profile that sent the same step twice: each is handed
+   back as a baseline (where it is), nothing heard. A profile's fader, and
+   a knob that sends its position, are still heard where they ended up. */
+void ControlMap_Test::assignGateNeverReplaysASteppedControl()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QLCInputProfile *desk = new QLCInputProfile();
+    desk->setManufacturer(QStringLiteral("Test"));
+    desk->setModel(QStringLiteral("Encoders"));
+    desk->setType(QLCInputProfile::MIDI);
+    QLCInputChannel *enc = new QLCInputChannel();
+    enc->setName(QStringLiteral("Encoder"));
+    enc->setType(QLCInputChannel::Encoder);
+    QVERIFY(desk->insertChannel(30, enc));
+    QLCInputChannel *relKnob = new QLCInputChannel();
+    relKnob->setName(QStringLiteral("Relative knob"));
+    relKnob->setType(QLCInputChannel::Knob);
+    relKnob->setMovementType(QLCInputChannel::Relative);
+    QVERIFY(desk->insertChannel(31, relKnob));
+    QLCInputChannel *knob = new QLCInputChannel();
+    knob->setName(QStringLiteral("Knob"));
+    knob->setType(QLCInputChannel::Knob);
+    QVERIFY(desk->insertChannel(32, knob));
+    QLCInputChannel *fader = new QLCInputChannel();
+    fader->setName(QStringLiteral("Fader"));
+    fader->setType(QLCInputChannel::Slider);
+    QVERIFY(desk->insertChannel(33, fader));
+    QVERIFY(iom->addProfile(desk));
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0, desk->name()));
+    QCOMPARE(int(iom->controlKind(0, 30)), int(AssignInputGate::Relative));
+    QCOMPARE(int(iom->controlKind(0, 31)), int(AssignInputGate::Relative));
+    QCOMPARE(int(iom->controlKind(0, 32)), int(AssignInputGate::Fader));
+    QCOMPARE(int(iom->controlKind(0, 33)), int(AssignInputGate::Fader));
+
+    QSignalSpy heard(iom, &InputOutputMap::showInputValueChanged);
+    QSignalSpy based(iom, &InputOutputMap::showInputBaseline);
+    iom->setAssignListening(true);
+    for (quint32 ch : { 30u, 31u, 32u, 33u, 34u })
+    {
+        emit iom->inputValueChanged(0, ch, 2);       // +1 (TwosComplement)
+        emit iom->inputValueChanged(0, ch, 6);       // +3
+    }
+    emit iom->inputValueChanged(0, 35, 2);           // no profile, one step twice
+    emit iom->inputValueChanged(0, 35, 2);
+    emit iom->inputValueChanged(0, 35, 4);
+    QCOMPARE(heard.count(), 0);
+    iom->setAssignListening(false);
+    // Heard again: the knob, the fader, and 34 (no profile, moved like a fader).
+    QSet<quint32> replayed;
+    for (const QList<QVariant> &args : heard)
+    {
+        replayed.insert(args.at(1).toUInt());
+        QCOMPARE(args.at(2).toUInt(), 6u);
+    }
+    QCOMPARE(replayed, QSet<quint32>({ 32u, 33u, 34u }));
+    // The encoder and the relative knob: only where they are now.
+    QSet<quint32> baselines;
+    for (const QList<QVariant> &args : based)
+        baselines.insert(args.at(1).toUInt());
+    QCOMPARE(baselines, QSet<quint32>({ 30u, 31u }));
+
+    // A control a listener claims as deltas: a baseline, never heard.
+    AssignInputGate gate;
+    QVERIFY(gate.pass(9, 128));
+    gate.setListening(true);
+    QVERIFY(!gate.pass(9, 140, AssignInputGate::Fader));
+    QVERIFY(!gate.pass(9, 150, AssignInputGate::Fader));
+    QVector<AssignInputGate::Replay> base;
+    QVERIFY(gate.setListening(false, QSet<quint64>({ 9 }), &base).isEmpty());
+    QCOMPARE(base.count(), 1);
+    QCOMPARE(int(base.at(0).value), 150);
+    // Not claimed the next time: a fader again, heard where it ended up.
+    gate.setListening(true);
+    QVERIFY(!gate.pass(9, 100, AssignInputGate::Fader));
+    const QVector<AssignInputGate::Replay> r = gate.setListening(false);
+    QCOMPARE(r.count(), 1);
+    QCOMPARE(int(r.at(0).value), 100);
+}
+

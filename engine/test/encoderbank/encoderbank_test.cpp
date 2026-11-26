@@ -314,6 +314,52 @@ void EncoderBank_Test::absoluteKnobsReadTheirChange()
     QCOMPARE(spy.count(), 2);
 }
 
+/* Review 053-a round 3: an encoder turned to find it in Assign to
+   Control… turns nothing, and nothing more when the window closes -- its
+   value is a step, and sending it again would turn the parameter again. */
+void EncoderBank_Test::aTurnInAssignToControlIsNotReplayed()
+{
+    EncoderBank *b = bank();
+    b->setCoalesceMs(0);
+    b->setDevice(generic(EncoderBank::TwosComplement));
+    QSignalSpy spy(b, &EncoderBank::adjusted);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setAssignListening(true);
+    send(kTurn, dmx(1));
+    send(kTurn, dmx(3));
+    send(kTurn + 1, dmx(2));
+    QCOMPARE(spy.count(), 0);
+    iom->setAssignListening(false);         // Cancel
+    QCOMPARE(spy.count(), 0);
+    // The next real turn is that turn alone.
+    send(kTurn, dmx(1));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.last().at(2).toInt(), 1);
+}
+
+/* An APC40's knob sends where it is (AbsoluteDelta): turned inside the
+   window, its next real turn after the close is that turn alone -- not
+   the whole turn made while the window was open. */
+void EncoderBank_Test::anAbsoluteKnobAfterAssignToControlCountsFromWhereItIs()
+{
+    EncoderBank *b = bank();
+    b->setCoalesceMs(0);
+    b->setDevice(generic(EncoderBank::AbsoluteDelta));
+    QSignalSpy spy(b, &EncoderBank::adjusted);
+    send(kTurn, dmx(60));
+    send(kTurn, dmx(62));
+    QCOMPARE(spy.count(), 1);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setAssignListening(true);
+    send(kTurn, dmx(70));
+    send(kTurn, dmx(80));
+    iom->setAssignListening(false);
+    QCOMPARE(spy.count(), 1);
+    send(kTurn, dmx(81));
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.last().at(2).toInt(), 1);
+}
+
 void EncoderBank_Test::invertTurnsItAround()
 {
     EncoderBank *b = bank();

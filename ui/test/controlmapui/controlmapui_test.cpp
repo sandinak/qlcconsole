@@ -65,6 +65,8 @@
 #include "showfeatures.h"
 #include "showwebaccess.h"
 #include <QTreeWidget>
+#include <QFontMetrics>
+#include <QHeaderView>
 #include <QScrollArea>
 #include <QGroupBox>
 #include "showtreeview.h"
@@ -462,12 +464,15 @@ void ControlMapUi_Test::anEncoderLearnStopsListeningWhenThePanelHides()
 
 void ControlMapUi_Test::theMenuActionSaysWhatIsBound()
 {
+    // A raw scene is offered it in the Classic QLC+ view only (Q325).
+    ControlLearnDialog::setClassicView(true);
+    auto back = qScopeGuard([]() { ControlLearnDialog::setClassicView(false); });
     Scene *a = scene("Warm");
     QMenu menu;
     QAction *learn = ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(a->id()), nullptr);
     QVERIFY(learn != nullptr);
-    QCOMPARE(learn->text(), QString("Learn Trigger…"));
-    QCOMPARE(learn->objectName(), QString("learnTrigger"));
+    QCOMPARE(learn->text(), QString("Assign to Control…"));
+    QCOMPARE(learn->objectName(), QString("assignToControl"));
     m_doc->controlMap()->setBinding({ 0, 7, ControlMap::function(a->id()), ControlMap::Toggle });
     QAction *bound = ControlLearnDialog::addTo(&menu, m_doc, ControlMap::function(a->id()), nullptr);
     QVERIFY2(bound->text().startsWith("Trigger: ") && bound->text().contains("Channel 8"),
@@ -476,7 +481,10 @@ void ControlMapUi_Test::theMenuActionSaysWhatIsBound()
     QVERIFY(ControlLearnDialog::addTo(&menu, m_doc, ControlMap::Target(), nullptr) == nullptr);
 }
 
-void ControlMapUi_Test::buildOffersLearnTrigger()
+/* Q325: a raw scene in Build is offered Assign to Control… only in the
+   Classic QLC+ view; the qlcconsole and Everything views assign controls to
+   hits, cues and cue lists. */
+void ControlMapUi_Test::buildOffersAssignOnlyInClassic()
 {
     Scene *a = scene("Warm");
     ProgrammingOutline outline(m_doc);
@@ -486,10 +494,20 @@ void ControlMapUi_Test::buildOffersLearnTrigger()
     QTreeWidgetItem *item = outline.sceneItem(a->id());
     QVERIFY(item != nullptr);
     outline.scrollToItem(item);
-    const QStringList names = menuActions([&]() {
-        emit outline.customContextMenuRequested(outline.visualItemRect(item).center());
-    });
-    QVERIFY2(names.contains("learnTrigger"), qPrintable(names.join(", ")));
+    auto names = [&]() {
+        return menuActions([&]() {
+            emit outline.customContextMenuRequested(outline.visualItemRect(item).center());
+        });
+    };
+    QVERIFY(!ControlLearnDialog::classicView());
+    const QStringList console = names();
+    QVERIFY2(!console.contains("assignToControl"), qPrintable(console.join(", ")));
+    ControlLearnDialog::setClassicView(true);
+    auto back = qScopeGuard([]() { ControlLearnDialog::setClassicView(false); });
+    const QStringList classic = names();
+    QVERIFY2(classic.contains("assignToControl"), qPrintable(classic.join(", ")));
+    // The one item more; nothing else changes.
+    QCOMPARE(classic.count(), console.count() + 1);
 }
 
 void ControlMapUi_Test::theShowTreeOffersLearnTrigger()
@@ -520,11 +538,11 @@ void ControlMapUi_Test::theShowTreeOffersLearnTrigger()
     for (quint32 id : { list, cue, hit })
     {
         const QStringList names = namesOn(id);
-        QVERIFY2(names.contains("learnTrigger"), qPrintable(QString::number(id) + ": " + names.join(", ")));
+        QVERIFY2(names.contains("assignToControl"), qPrintable(QString::number(id) + ": " + names.join(", ")));
     }
     // A sub-cue: its cue's GO plays it, so no trigger of its own.
     const QStringList subNames = namesOn(sub);
-    QVERIFY2(!subNames.contains("learnTrigger"), qPrintable(subNames.join(", ")));
+    QVERIFY2(!subNames.contains("assignToControl"), qPrintable(subNames.join(", ")));
 }
 
 void ControlMapUi_Test::thePanelListsChangesAndRemoves()
@@ -1333,7 +1351,7 @@ quint32 placesShow(Doc *doc, QList<quint32> *cues, quint32 *prod = nullptr)
     return list;
 }
 
-/** Opens a context menu (@a open), chooses Learn Trigger… on it and returns
+/** Opens a context menu (@a open), chooses Assign to Control… on it and returns
  *  the place its dialog offers first (Works), and its text. */
 ControlMap::Place placeLearnOffers(const std::function<void()> &open, QString *text, bool *seen,
                                    QStringList *items = nullptr)
@@ -1364,7 +1382,7 @@ ControlMap::Place placeLearnOffers(const std::function<void()> &open, QString *t
             return;
         driver.stop();
         for (QAction *a : menu->actions())
-            if (a->objectName() == QLatin1String("learnTrigger"))
+            if (a->objectName() == QLatin1String("assignToControl"))
             {
                 dialogWatch.start();
                 a->trigger();
@@ -3089,6 +3107,19 @@ void ControlMapUi_Test::padRunButtonRefused()
     QVERIFY(!box->moveButton()->isVisibleTo(&d));      // the pad can't give it up
     QVERIFY(!d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
     QVERIFY(!ControlOwners::releaseAll(m_doc, box->owners()));
+    {
+        // Who has it, in full (UX-36): "… · can't be taken", never "can't …".
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QCoreApplication::processEvents();
+        QTreeWidget *list = d.findChild<QTreeWidget *>("assignControls");
+        QTreeWidgetItem *row = list->currentItem();
+        QVERIFY(row != nullptr && row->text(1).endsWith("can't be taken"));
+        const int text = QFontMetrics(row->font(1)).horizontalAdvance(row->text(1));
+        QVERIFY2(list->header()->sectionSize(1) > text,
+                 qPrintable(QString("%1: column %2 < text %3").arg(row->text(1))
+                                .arg(list->header()->sectionSize(1)).arg(text)));
+    }
     box->cancelButton()->click();
     cm->handleInput(0, 7, 0);
 
@@ -3307,4 +3338,451 @@ void ControlMapUi_Test::recoveryShots()
     QVERIFY(!InputDeviceNotices::confirmRepatch(&mgr, m_doc, 0, QStringLiteral("nanoKONTROL2")));
     QVERIFY(shot);
     cm->removeAll();
+}
+
+/****************************************************************************
+ * Phase A: Assign to Control… (CONTROL_SURFACES_EVAL §6, §7; Q310, Q325)
+ ****************************************************************************/
+
+namespace
+{
+/** The row of the Assign window's list that is selected, as "control | who". */
+QString selectedRow(ControlLearnDialog &d)
+{
+    QTreeWidget *list = d.findChild<QTreeWidget *>("assignControls");
+    if (list == nullptr || list->currentItem() == nullptr)
+        return QString();
+    return list->currentItem()->text(0) + " | " + list->currentItem()->text(1);
+}
+}
+
+/* The window is Draw the Desk's, as a list: a press or a move of a control
+   selects its row and fires NOTHING -- no trigger, no widget, no master
+   hears it while the window is open -- in Design and in Operate. Closed,
+   presses reach the show again. */
+void ControlMapUi_Test::pressSelectsFiresNothing()
+{
+    ShowTreeController *st = m_doc->showTree();
+    st->addProduction("Show");
+    const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    Scene *warm = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(warm->id()), ControlMap::Toggle });
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 61, "House lights");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy heardByShow(iom, &InputOutputMap::showInputValueChanged);
+    QSignalSpy fired(cm, &ControlMap::fired);
+    auto pressesHeard = [&heardByShow]() {
+        int n = 0;
+        for (const QList<QVariant> &args : std::as_const(heardByShow))
+            n += args.at(2).toUInt() > 0 ? 1 : 0;
+        return n;
+    };
+    for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        m_doc->setMode(mode);
+        const QString tag = mode == Doc::Design ? "Design" : "Operate";
+        {
+            ControlLearnDialog d(m_doc, ControlMap::hit(hit));
+            d.show();
+            heardByShow.clear();
+            fired.clear();
+            // The scene's control: its row selected, the scene not started.
+            emit iom->inputValueChanged(0, 60, 127);
+            QCOMPARE(d.selectedChannel(), 60u);
+            QVERIFY2(selectedRow(d).contains("Warm"), qPrintable(tag + ": " + selectedRow(d)));
+            emit iom->inputValueChanged(0, 60, 0);
+            // The widget's control: selected; the widget hears no press.
+            emit iom->inputValueChanged(0, 61, 127);
+            QCOMPARE(d.selectedChannel(), 61u);
+            QVERIFY2(selectedRow(d).contains("House lights"), qPrintable(tag + ": " + selectedRow(d)));
+            emit iom->inputValueChanged(0, 61, 0);
+            // A fader moving: one row, selected, nothing hears it.
+            for (int v : { 10, 20, 30 })
+                emit iom->inputValueChanged(0, 7, uchar(v));
+            QCOMPARE(d.selectedChannel(), 7u);
+            QCOMPARE(pressesHeard(), 0);
+            QCOMPARE(fired.count(), 0);
+            QVERIFY2(!warm->isRunning(), qPrintable(tag));
+            d.reject();
+        }
+        cm->handleInput(0, 7, 0);
+        // Closed: a press reaches the show's listeners again.
+        heardByShow.clear();
+        emit iom->inputValueChanged(0, 61, 127);
+        emit iom->inputValueChanged(0, 61, 0);
+        QCOMPARE(pressesHeard(), 1);
+    }
+    m_doc->setMode(Doc::Design);
+}
+
+/* Review 053-a: a fader's 0 is a position, not a release. Pulled to the
+   bottom while Assign to Control… is open -- stepping down or in one jump --
+   no show listener hears it (a submaster or the Grand Master fallback would
+   go to 0: a live blackout). Round 2: when the window closes each control
+   moved meanwhile is heard where it ended up, without moving it again, so a
+   submaster is not left at its old level and a button held across the
+   opening is let go. */
+void ControlMapUi_Test::faderToZeroFiresNothing()
+{
+    const quint32 hit = m_doc->showTree()->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QSignalSpy heardByShow(iom, &InputOutputMap::showInputValueChanged);
+    auto heardOn = [&heardByShow](quint32 channel) {
+        int n = 0;
+        for (const QList<QVariant> &args : std::as_const(heardByShow))
+            n += args.at(1).toUInt() == channel ? 1 : 0;
+        return n;
+    };
+    auto lastOn = [&heardByShow](quint32 channel) {
+        int v = -1;
+        for (const QList<QVariant> &args : std::as_const(heardByShow))
+            if (args.at(1).toUInt() == channel)
+                v = int(args.at(2).toUInt());
+        return v;
+    };
+    for (Doc::Mode mode : { Doc::Operate, Doc::Design })
+    {
+        m_doc->setMode(mode);
+        const QString tag = mode == Doc::Design ? "Design" : "Operate";
+        // Up at 50, a fader at 50 and a button held: heard, before the window.
+        heardByShow.clear();
+        emit iom->inputValueChanged(0, 7, 50);
+        emit iom->inputValueChanged(0, 9, 50);
+        emit iom->inputValueChanged(0, 61, 127);
+        QCOMPARE(heardOn(7), 1);
+        QCOMPARE(heardOn(9), 1);
+        QCOMPARE(heardOn(61), 1);
+        {
+            ControlLearnDialog d(m_doc, ControlMap::hit(hit));
+            d.show();
+            heardByShow.clear();
+            // Pulled to the bottom: found in the list, nothing hears it.
+            for (int v : { 40, 20, 5, 0 })
+                emit iom->inputValueChanged(0, 7, uchar(v));
+            QCOMPARE(d.selectedChannel(), 7u);
+            QCOMPARE(heardOn(7), 0);
+            // Slammed from 50 to 0 in one message: nothing either.
+            emit iom->inputValueChanged(0, 9, 0);
+            QCOMPARE(d.selectedChannel(), 9u);
+            QVERIFY2(heardOn(9) == 0, qPrintable(tag));
+            // A fader flicked up from 0 and back: nothing either.
+            emit iom->inputValueChanged(0, 8, 90);
+            emit iom->inputValueChanged(0, 8, 0);
+            QCOMPARE(heardOn(8), 0);
+            // The button held across the opening let go: not yet.
+            emit iom->inputValueChanged(0, 61, 0);
+            QCOMPARE(heardByShow.count(), 0);
+            d.reject();
+        }
+        // Closed, nothing moved again: each is heard where it is now.
+        QVERIFY2(lastOn(7) == 0 && heardOn(7) == 1, qPrintable(tag));
+        QVERIFY2(lastOn(9) == 0 && heardOn(9) == 1, qPrintable(tag));
+        QVERIFY2(lastOn(61) == 0 && heardOn(61) == 1, qPrintable(tag));
+        QCOMPARE(heardOn(8), 0);       // up and down again: nothing changed
+        // And when it moves, as usual.
+        heardByShow.clear();
+        emit iom->inputValueChanged(0, 7, 30);
+        QCOMPARE(heardOn(7), 1);
+        emit iom->inputValueChanged(0, 7, 0);
+    }
+    m_doc->setMode(Doc::Design);
+}
+
+/* Review 053-a round 2 (UX-36): a control pressed that something else has
+   is bold in the list (the collision shot), and its name is never cut:
+   "Universe 1 · Channe…" with room to spare in the next column. */
+void ControlMapUi_Test::aTakenControlFitsItsColumn()
+{
+    Scene *a = scene("Warm wash");
+    ControlMap *cm = m_doc->controlMap();
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 60, "House lights");
+    for (bool viaIom : { false, true })
+    {
+        ControlLearnDialog d(m_doc, ControlMap::function(a->id()));
+        d.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&d));
+        if (viaIom)
+            emit m_doc->inputOutputMap()->inputValueChanged(0, 60, 127);
+        cm->handleInput(0, 60, 127);
+        QCoreApplication::processEvents();
+        d.adjustSize();
+        QCoreApplication::processEvents();
+        QTreeWidget *list = d.findChild<QTreeWidget *>("assignControls");
+        QVERIFY(list != nullptr);
+        QTreeWidgetItem *row = list->currentItem();
+        QVERIFY(row != nullptr);
+        QVERIFY2(row->font(0).bold(), qPrintable(row->text(0)));
+        const int text = QFontMetrics(row->font(0)).horizontalAdvance(row->text(0));
+        QVERIFY2(list->columnWidth(0) > text,
+                 qPrintable(QString("%1: column %2 < text %3").arg(row->text(0)).arg(list->columnWidth(0)).arg(text)));
+        d.reject();
+        cm->handleInput(0, 60, 0);
+    }
+}
+
+/* Before anything is pressed the list shows each control with who has it:
+   a trigger, a Virtual Console widget; this one's own control as this one's. */
+void ControlMapUi_Test::ownerShownBeforePress()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 cue = st->addCue(listId, -1, "Top");
+    Scene *warm = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 70, ControlMap::cue(cue), ControlMap::Toggle });
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 61, "House lights");
+
+    ControlLearnDialog d(m_doc, ControlMap::cue(cue));
+    d.show();
+    QTreeWidget *list = d.findChild<QTreeWidget *>("assignControls");
+    QVERIFY(list != nullptr && list->isVisibleTo(&d));
+    QCOMPARE(d.windowTitle(), QString("Assign to Control"));
+    QTreeWidgetItem *scene60 = d.rowOf(0, 60);
+    QTreeWidgetItem *vc61 = d.rowOf(0, 61);
+    QTreeWidgetItem *mine = d.rowOf(0, 70);
+    QVERIFY(scene60 != nullptr && vc61 != nullptr && mine != nullptr);
+    QVERIFY2(scene60->text(1).contains("Scene: Warm") && scene60->text(1).contains("Control Map"),
+             qPrintable(scene60->text(1)));
+    QVERIFY2(vc61->text(1).contains("House lights") && vc61->text(1).contains("Virtual Console"),
+             qPrintable(vc61->text(1)));
+    QVERIFY2(mine->text(1).startsWith("This one"), qPrintable(mine->text(1)));
+    QVERIFY(mine->font(0).bold());
+    // In universe and channel order.
+    QVERIFY(list->indexOfTopLevelItem(scene60) < list->indexOfTopLevelItem(vc61));
+    QVERIFY(list->indexOfTopLevelItem(vc61) < list->indexOfTopLevelItem(mine));
+    // A click only finds a row: the press on the device chooses.
+    list->setCurrentItem(scene60);
+    QCOMPARE(d.channel(), 70u);
+    d.reject();
+}
+
+/* A GO (or Back) on a cue list and a hit fire on a press: a fader is refused
+   in words and its row says so; the window still listens for a button. A
+   scene may still have one. (Phase F's refusal, now said in the list too.) */
+void ControlMapUi_Test::faderRefusedForGoAndHit()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    ControlMap *cm = m_doc->controlMap();
+    for (const ControlMap::Target &t : { ControlMap::cueList(listId), ControlMap::cueListBack(listId),
+                                         ControlMap::hit(hit) })
+    {
+        ControlLearnDialog d(m_doc, t);
+        d.show();
+        for (int v : { 10, 20, 30 })
+            cm->handleInput(0, 7, uchar(v));
+        QVERIFY(!d.hasControl());
+        QVERIFY(!d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        QLabel *note = d.findChild<QLabel *>("learnNote");
+        QVERIFY2(note->text().contains("fader") && note->text().contains("takes a button"),
+                 qPrintable(note->text()));
+        QVERIFY(d.rowOf(0, 7) != nullptr);
+        QVERIFY2(d.rowOf(0, 7)->text(1).contains("a fader"), qPrintable(d.rowOf(0, 7)->text(1)));
+        QCOMPARE(d.selectedChannel(), 7u);
+        QVERIFY(cm->isListening());
+        cm->handleInput(0, 188, 127);
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.selectedChannel(), 188u);
+        d.reject();
+        cm->handleInput(0, 188, 0);
+        cm->handleInput(0, 7, 0);
+    }
+    QVERIFY(cm->isEmpty());
+}
+
+/* A latching button (on at one press, off at the next) heard on a hit: the
+   window suggests setting it to momentary, in the note and on its row. */
+void ControlMapUi_Test::latchingButtonSuggestsMomentary()
+{
+    ShowTreeController *st = m_doc->showTree();
+    st->addProduction("Show");
+    const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    ControlMap *cm = m_doc->controlMap();
+    cm->setLatchGapMs(100);
+    cm->setLatchHoldMs(300);
+    auto gap = qScopeGuard([cm]() { cm->setLatchGapMs(400); cm->setLatchHoldMs(1500); });
+    ControlLearnDialog d(m_doc, ControlMap::hit(hit));
+    d.show();
+    cm->handleInput(0, 50, 127);
+    QTest::qWait(350);
+    cm->handleInput(0, 50, 0);
+    QTest::qWait(350);
+    cm->handleInput(0, 50, 127);
+    QVERIFY(d.hasControl());
+    QLabel *note = d.findChild<QLabel *>("learnNote");
+    QVERIFY2(note->text().contains("latching button") && note->text().contains("momentary"),
+             qPrintable(note->text()));
+    QVERIFY2(d.rowOf(0, 50)->text(1).contains("latching: set it to momentary"),
+             qPrintable(d.rowOf(0, 50)->text(1)));
+    d.reject();
+    cm->handleInput(0, 50, 0);
+}
+
+/* A phone or Companion on the Run page: the window says a Stream Deck key is
+   set in Companion (no key press will ever arrive here). Gone with it. */
+void ControlMapUi_Test::companionHintOnRunClient()
+{
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Act 1");
+    ShowWebAccess *web = m_doc->webAccess();
+    auto none = qScopeGuard([web]() { web->setRunClients(0); });
+    ControlLearnDialog d(m_doc, ControlMap::cueList(listId));
+    d.show();
+    QLabel *hint = d.findChild<QLabel *>("learnCompanionHint");
+    QVERIFY(hint != nullptr);
+    QVERIFY(!hint->isVisibleTo(&d));
+    web->setRunClients(1);
+    QVERIFY(hint->isVisibleTo(&d));
+    QVERIFY2(hint->text().contains("Companion") && hint->text().contains("Stream Deck"),
+             qPrintable(hint->text()));
+    web->setRunClients(0);
+    QVERIFY(!hint->isVisibleTo(&d));
+    d.reject();
+    // Opened with a client already there: said at once.
+    web->setRunClients(2);
+    ControlLearnDialog d2(m_doc, ControlMap::cueList(listId));
+    d2.show();
+    QVERIFY(d2.findChild<QLabel *>("learnCompanionHint")->isVisibleTo(&d2));
+    d2.reject();
+}
+
+/* The Control surfaces hub: "Press or move any control" names who has it --
+   or that it is free -- and presses there fire as usual (it is no learn). */
+void ControlMapUi_Test::pressAnyControlNamesOwners()
+{
+    Scene *warm = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(warm->id()), ControlMap::Toggle });
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 61, "House lights");
+    ControlSurfacesPanel panel(m_doc);
+    panel.resize(1000, 900);
+    panel.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&panel));
+    QLabel *line = panel.findChild<QLabel *>("surfacesPressAny");
+    QVERIFY(line != nullptr && line->isVisibleTo(&panel));
+    QVERIFY2(panel.pressAnyText().startsWith("Press or move any control"), qPrintable(panel.pressAnyText()));
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    emit iom->inputValueChanged(0, 61, 127);
+    QVERIFY2(panel.pressAnyText().contains("House lights") && panel.pressAnyText().contains("Virtual Console"),
+             qPrintable(panel.pressAnyText()));
+    emit iom->inputValueChanged(0, 61, 0);
+    emit iom->inputValueChanged(0, 60, 127);
+    QVERIFY2(panel.pressAnyText().contains("Scene: Warm"), qPrintable(panel.pressAnyText()));
+    emit iom->inputValueChanged(0, 60, 0);
+    emit iom->inputValueChanged(0, 99, 127);
+    QVERIFY2(panel.pressAnyText().contains("free") && panel.pressAnyText().contains("Assign to Control…"),
+             qPrintable(panel.pressAnyText()));
+    emit iom->inputValueChanged(0, 99, 0);
+    QVERIFY(cm->binding(ControlMap::function(warm->id())) != nullptr);
+}
+
+/* With QLC_SHOT_DIR: the Assign window (its list before a press, a press
+   selecting a taken control, the Companion line) and the hub's press line,
+   at three sizes (UX review). */
+void ControlMapUi_Test::phaseAShots()
+{
+    const QByteArray env = qgetenv("QLC_SHOT_DIR");
+    if (env.isEmpty())
+        QSKIP("QLC_SHOT_DIR is not set");
+    const QDir dir(QString::fromLocal8Bit(env));
+    QDir().mkpath(dir.absolutePath());
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 prod = st->addProduction("Show");
+    const quint32 listId = st->addCueList(prod, "Act 1");
+    const quint32 cue = st->addCue(listId, -1, "Top");
+    const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Staff slam");
+    Scene *warm = scene("Warm wash");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(warm->id()), ControlMap::Toggle });
+    cm->setBinding({ 0, 62, ControlMap::cue(cue), ControlMap::Toggle });
+    cm->setBinding({ 0, 64, ControlMap::cueListBack(listId), ControlMap::Toggle });
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    vcButtonOn(m_doc, 61, "House lights");
+    ShowWebAccess *web = m_doc->webAccess();
+    auto none = qScopeGuard([web]() { web->setRunClients(0); });
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    auto shoot = [&](const QString &name, const std::function<void(ControlLearnDialog &)> &drive,
+                     const ControlMap::Target &target) {
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            QWidget screen;
+            screen.resize(sz);
+            screen.setAutoFillBackground(true);
+            ControlLearnDialog d(m_doc, target, &screen);
+            d.setWindowFlags(Qt::Widget);
+            screen.show();
+            d.show();
+            if (!QTest::qWaitForWindowExposed(&screen))
+                return false;
+            drive(d);
+            QCoreApplication::processEvents();
+            d.adjustSize();
+            d.resize(qMin(d.width(), sz.width() - 40), qMin(d.height(), sz.height() - 40));
+            d.move((sz.width() - d.width()) / 2, (sz.height() - d.height()) / 3);
+            const bool ok = screen.grab().save(
+                dir.absoluteFilePath(QString("%1-%2x%3.png").arg(name).arg(sz.width()).arg(sz.height())));
+            d.reject();
+            cm->stopListening();
+            if (!ok)
+                return false;
+        }
+        return true;
+    };
+    QVERIFY(shoot("assign-list", [](ControlLearnDialog &) {}, ControlMap::hit(hit)));
+    QVERIFY(shoot("assign-press-taken", [&](ControlLearnDialog &) {
+        emit iom->inputValueChanged(0, 61, 127);
+        cm->handleInput(0, 61, 127);
+        emit iom->inputValueChanged(0, 61, 0);
+        cm->handleInput(0, 61, 0);
+    }, ControlMap::hit(hit)));
+    QVERIFY(shoot("assign-companion", [&](ControlLearnDialog &) { web->setRunClients(1); },
+                  ControlMap::cueList(listId)));
+    web->setRunClients(0);
+
+    /* In its real host (review 053-a): the hub sits in the I/O manager's
+       scrolling Show control page. A bare panel squeezed to the window's
+       height drew the desk's rows over each other, which no one ever sees. */
+    InputOutputManager mgr(nullptr, m_doc);
+    for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        mgr.resize(sz);
+        mgr.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+        mgr.showShowControlPage();
+        mgr.findChild<ConnectionsTree *>()->selectShowControlRow(QStringLiteral("surfaces"));
+        QCoreApplication::processEvents();
+        emit iom->inputValueChanged(0, 61, 127);
+        emit iom->inputValueChanged(0, 61, 0);
+        QCoreApplication::processEvents();
+        ControlSurfacesPanel *panel = mgr.findChild<ControlSurfacesPanel *>();
+        QVERIFY(panel != nullptr);
+        QVERIFY2(panel->pressAnyText().contains("House lights"), qPrintable(panel->pressAnyText()));
+        // The desk's rows: each whole (no wrapped line cut) and none over the next.
+        int below = -1;
+        for (const char *base : { "deskStop", "deskGrandMaster", "deskGo", "deskBack" })
+        {
+            QLabel *what = panel->findChild<QLabel *>(QString::fromLatin1(base) + "What");
+            QVERIFY(what != nullptr);
+            const QString tag = QString("%1 at %2x%3").arg(base).arg(sz.width()).arg(sz.height());
+            QVERIFY2(what->height() >= what->heightForWidth(what->width()), qPrintable(tag));
+            const QRect g(what->mapTo(panel, QPoint(0, 0)), what->size());
+            QVERIFY2(g.top() >= below, qPrintable(tag));
+            below = g.bottom();
+        }
+        if (QScrollArea *scroll = mgr.findChild<QScrollArea *>())
+            scroll->ensureWidgetVisible(panel->findChild<QLabel *>("surfacesPressAny"));
+        QCoreApplication::processEvents();
+        QVERIFY(mgr.grab().save(
+            dir.absoluteFilePath(QString("hub-press-any-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+    }
 }

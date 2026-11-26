@@ -771,6 +771,36 @@ void VCSlider_Test::encoderKnobIsNeverPickedUp()
     m_doc->setMode(Doc::Design);
 }
 
+/* Review 053-a round 3: a slider whose input is relative (Encoder mode),
+   turned while Assign to Control… is open, moves nothing -- and nothing
+   when the window closes: the turn is a step, not a place to go back to. */
+void VCSlider_Test::encoderTurnedInAssignToControlIsNotReplayed()
+{
+    QWidget w;
+    VCSlider slider(&w, m_doc);
+    slider.setSliderMode(VCSlider::Level);
+    QSharedPointer<QLCInputSource> src(new QLCInputSource(0, 25));
+    src->setWorkingMode(QLCInputSource::Encoder);
+    src->setSensitivity(8);
+    slider.setInputSource(src, VCSlider::sliderInputSourceId);
+    connect(src.data(), SIGNAL(inputValueChanged(quint32,quint32,uchar)),
+            &slider, SLOT(slotInputValueChanged(quint32,quint32,uchar)));
+    m_doc->setMode(Doc::Operate);
+    slider.setSliderValue(100, false);
+    slider.updateFeedback();
+
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setAssignListening(true);
+    emit iom->inputValueChanged(0, 25, 2);      // +1
+    emit iom->inputValueChanged(0, 25, 4);      // +2
+    QCOMPARE(slider.sliderValue(), 100);
+    iom->setAssignListening(false);             // Cancel
+    QCOMPARE(slider.sliderValue(), 100);
+    emit iom->inputValueChanged(0, 25, 2);      // the next real turn: +1
+    QCOMPARE(slider.sliderValue(), 108);
+    m_doc->setMode(Doc::Design);
+}
+
 /* A channel group's external fader (Simple Desk) is picked up, and a
    re-learnt one starts over. */
 void VCSlider_Test::channelGroupFaderIsPickedUp()

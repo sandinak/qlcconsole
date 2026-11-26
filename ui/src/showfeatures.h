@@ -54,7 +54,7 @@ public:
         SpeedMasters,       ///< the footer's speed masters
         EngineLoad,         ///< the footer's engine load
         Review,             ///< Show Review: its chip, its marks, its live re-check
-        ControlSurfaces,    ///< the Control Map's triggers, encoder bank, Learn Trigger…, Pad Run's button
+        ControlSurfaces,    ///< the Control Map's triggers, encoder bank, Assign to Control…, Pad Run's button
         FocusCalls,         ///< Venue Focus, Edit Focus Calls, a venue focus cue
         FeatureCount
     };

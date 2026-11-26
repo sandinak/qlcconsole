@@ -76,6 +76,10 @@ public:
     /** Each patched board drawn (SurfaceMaps). */
     SurfaceMaps *surfaceMaps() const { return m_maps; }
 
+    /** The "Press or move any control" line: who has the control pressed
+     *  last (phase A), or how to use it before a press. */
+    QString pressAnyText() const;
+
     /** One line for the Devices row: "3 triggers · emergency stop not learned". */
     QString summary() const;
 
@@ -92,6 +96,9 @@ signals:
     void summaryChanged();
 
 private:
+    static QString pressAnyIdleText();
+    /** A control was pressed or moved: the line names its owners. */
+    void pressedAny(quint32 universe, quint32 channel);
     QString triggersText() const;
     QString padsText() const;
     QString pmjText() const;
@@ -122,6 +129,9 @@ private:
     DeskSetupPanel *m_desk = nullptr;
     SurfaceMaps *m_maps = nullptr;
     QLabel *m_featureOff = nullptr;
+    QLabel *m_pressAny = nullptr;
+    /** the control the line names (universe << 32 | channel) */
+    quint64 m_pressedKey = ~quint64(0);
     QMap<QString, QLabel *> m_status;
     QMap<QString, QLabel *> m_what;
     QMap<QString, QPushButton *> m_buttons;

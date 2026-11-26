@@ -27,6 +27,8 @@
 #include "qlcui_export.h"
 
 class ControlCollisionBox;
+class QTreeWidgetItem;
+class QTreeWidget;
 class QPushButton;
 class QComboBox;
 class QAction;
@@ -39,7 +41,7 @@ class Doc;
  */
 
 /**
- * Learn trigger…: listens for the next MIDI note or CC, or OSC message, on
+ * Assign to Control… (board Q310; it was Learn Trigger…): listens for the next MIDI note or CC, or OSC message, on
  * any input universe -- or a key on the computer keyboard, with its
  * modifiers -- and binds that control to fire a function, a Show Tree cue
  * list, cue or hit (the Control Map, ControlMap). Pressing another control
@@ -66,7 +68,22 @@ class Doc;
  * held, Back, Stop the list), each a target of its own, so one list can
  * have both. A GO, a Back or a hit is refused on a fader (its profile says
  * so, or it moved like one: ControlMap::learnSawFader()); a latching button
- * (ControlMap::learnSawLatching()) gets Start only, said.
+ * (ControlMap::learnSawLatching()) gets Start only, said, and the
+ * window suggests setting it to momentary.
+ *
+ * The window is a list (Draw the Desk's, phase A): every control something
+ * has, each with who has it, shown before anything is pressed -- this
+ * computer's desk roles as this computer's, never taken -- and the free
+ * controls of each patched profile. A press or a move of a control selects
+ * its row (added when it was not listed) and fires NOTHING, in Design and
+ * Operate: no trigger, widget, master or channel group hears a press while
+ * the window is open (InputOutputMap::setAssignListening()); the emergency
+ * stop still stops. A click on a row only finds it: the press on the
+ * device chooses. While a Run client (the phone page, Companion) is
+ * connected, a line says a Stream Deck key is set in Companion.
+ *
+ * Offered (Q325) on cue lists (GO and Back), cues and hits in every view;
+ * on raw scenes and effects only in the Classic QLC+ view (setClassicView()).
  */
 class QLC_UI_EXPORT ControlLearnDialog final : public QDialog
 {
@@ -78,8 +95,9 @@ public:
                        const ControlMap::Place &where = ControlMap::Place());
     ~ControlLearnDialog();
 
-    /** Adds "Learn trigger…" (or, bound, "Trigger: <control>…") for
-     *  @a target to @a menu; choosing it opens the dialog. */
+    /** Adds "Assign to Control…" (or, bound, "Trigger: <control>…") for
+     *  @a target to @a menu; choosing it opens the dialog. Nothing for a
+     *  scene or effect outside the Classic QLC+ view (Q325). */
     static QAction *addTo(QMenu *menu, Doc *doc, const ControlMap::Target &target, QWidget *parent,
                           const ControlMap::Place &where = ControlMap::Place());
 
@@ -97,6 +115,16 @@ public:
     void setPlace(const ControlMap::Place &place);
     /** What the control will do where, once learned (empty: no control yet). */
     QString placeText() const;
+
+    /** The Classic QLC+ view is showing (App::setWorkspaceView()): only
+     *  there are raw scenes and effects offered Assign to Control… (Q325). */
+    static void setClassicView(bool classic);
+    static bool classicView();
+
+    /** The list's row of a control (nullptr: not listed). */
+    QTreeWidgetItem *rowOf(quint32 universe, quint32 channel) const;
+    /** The control the list has selected (0xFFFFFFFF: none). */
+    quint32 selectedChannel() const;
 
 public slots:
     void accept() override;
@@ -122,6 +150,20 @@ private slots:
 
 private:
     void updateText();
+    /** The list: every control with an owner and every patched profile's
+     *  controls, each with who has it. */
+    void buildList();
+    /** The row of a control, added when it was not listed; its text read again. */
+    QTreeWidgetItem *ensureRow(quint32 universe, quint32 channel);
+    /** Column 0 wide enough for every control, @a row's (bold) in full. */
+    void fitControlColumn(QTreeWidgetItem *row);
+    /** The list wide enough for @a row's owner text in full (to a cap). */
+    void fitOwnerText(QTreeWidgetItem *row);
+    void updateRow(QTreeWidgetItem *row);
+    /** A press or move heard (raw, before any listener): its row selected. */
+    void selectControl(quint32 universe, quint32 channel);
+    /** The Companion line, shown while a Run client is connected. */
+    void updateCompanion();
     /** Who else listens to the control chosen now: refused when any. */
     void checkOwners();
     /** This dialog's own listener (excluded from the owners). */
@@ -144,6 +186,8 @@ private:
     QLabel *m_heard;
     QLabel *m_note;
     QLabel *m_keyNote;
+    QLabel *m_companion;
+    QTreeWidget *m_list;
     QComboBox *m_mode;
     QComboBox *m_place;
     QLabel *m_placeNote;

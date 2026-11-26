@@ -2383,7 +2383,9 @@ menus](fixture-manager.md#right-click-menus)):
   Down** (they move as a block), **Delete 3 Cues**. Items that work on one
   thing (Rename, Record as New Cue, Make Reusable, Focus This Cue…) appear
   when one is selected;
-- a cue: **Open in Workbench** | **Learn Trigger…**, **Skip Cue**, **Don't
+- a cue: **Open in Workbench** | **Assign to Control…** (a MIDI or OSC control or a key
+  fires it: [the window](control-surfaces.md#assign-to-control) lists
+  who has each control, and a press there fires nothing), **Skip Cue**, **Don't
   Move in Black into This Cue**, **Mode ▸**, **Colour ▸**, **Record as New
   Cue**, **Copy to a Hit** (what it puts on stage, as a new hit),
   **Renumber This Level…** ([Reordering and
@@ -2403,7 +2405,7 @@ menus](fixture-manager.md#right-click-menus)):
   **Detach to Plain Scene** | **Make Reusable…** (or **Unlink Here**) |
   **Cut**, **Copy**, **Paste After This Layer** (a cut: **Move Here, After
   This Layer**), **Duplicate**, **Rename…** | **Delete Layer**;
-- a cue list: **Learn Trigger…**, **Convert to Tracking…**, **Colour ▸**,
+- a cue list: **Assign to Control…**, **Convert to Tracking…**, **Colour ▸**,
   **Move in Black ▸**, **Make Main List**, **Play on GO**, **Detach to
   Plain Chaser…**, **Restore Original…** | **Copy**, **Paste**,
   **Duplicate**, **Rename…** | **Delete Cue List…**;

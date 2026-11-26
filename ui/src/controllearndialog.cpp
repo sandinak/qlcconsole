@@ -18,11 +18,17 @@
 */
 
 #include <QDialogButtonBox>
+#include <algorithm>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QFormLayout>
 #include <QApplication>
 #include <QComboBox>
+#include <QHeaderView>
+#include <QFontMetrics>
+#include <QStyle>
+#include <QScreen>
+#include <QTreeWidget>
 #include <QKeyEvent>
 #include <QAction>
 #include <QLabel>
@@ -34,7 +40,28 @@
 #include "inputoutputmap.h"
 #include "keytriggers.h"
 #include "inputpatch.h"
+#include "qlcinputprofile.h"
+#include "showwebaccess.h"
 #include "doc.h"
+
+namespace
+{
+/** Q325: raw scenes and effects are offered Assign to Control… only in the
+    Classic QLC+ view (App::setWorkspaceView() says which one shows). */
+bool s_classicView = false;
+constexpr int kUniverseRole = Qt::UserRole;
+constexpr int kChannelRole = Qt::UserRole + 1;
+}
+
+void ControlLearnDialog::setClassicView(bool classic)
+{
+    s_classicView = classic;
+}
+
+bool ControlLearnDialog::classicView()
+{
+    return s_classicView;
+}
 
 ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &target, QWidget *parent,
                                        const ControlMap::Place &where)
@@ -45,8 +72,8 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     Q_ASSERT(doc != nullptr);
     ControlMap *cm = m_doc->controlMap();
     setObjectName(QStringLiteral("controlLearnDialog"));
-    setProperty("helpTopic", QStringLiteral("other-improvements.md#control-map-midi-and-osc-triggers"));
-    setWindowTitle(tr("Learn trigger"));
+    setProperty("helpTopic", QStringLiteral("control-surfaces.md#assign-to-control"));
+    setWindowTitle(tr("Assign to Control"));
 
     QVBoxLayout *lay = new QVBoxLayout(this);
     if (target.type == ControlMap::CueListTarget && cm->binding(target) == nullptr
@@ -57,9 +84,28 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     lay->addWidget(what);
     QLabel *how = new QLabel(tr("Press the key, pad or button on your MIDI controller (or send the OSC "
                                 "message), or a key on the computer keyboard, that should fire it. "
-                                "Press another one to change your mind."), this);
+                                "The list finds it and says who has it; nothing fires while this "
+                                "window is open. Press another one to change your mind."), this);
     how->setWordWrap(true);
     lay->addWidget(how);
+
+    /* Draw the Desk's window as a list (phase A): every control with a job,
+       and who has it, before anything is pressed. A press selects its row. */
+    m_list = new QTreeWidget(this);
+    m_list->setObjectName(QStringLiteral("assignControls"));
+    m_list->setColumnCount(2);
+    m_list->setHeaderLabels({ tr("Control"), tr("Who Has It") });
+    m_list->setRootIsDecorated(false);
+    m_list->setUniformRowHeights(true);
+    m_list->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_list->setMinimumHeight(140);
+    // Wide enough for a control and its owner side by side (a MIDI note, a VC button).
+    m_list->setMinimumWidth(560);
+    m_list->header()->setStretchLastSection(true);
+    m_list->setToolTip(tr("Every control something has, and who has it. Press or move a control on the "
+                          "device to find it here: a click only finds a row, the press chooses."));
+    m_list->setAccessibleName(tr("Controls and who has them"));
+    lay->addWidget(m_list, 1);
 
     m_heard = new QLabel(this);
     m_heard->setObjectName(QStringLiteral("learnHeard"));
@@ -173,6 +219,13 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
     m_keyNote->hide();
     lay->addWidget(m_keyNote);
 
+    m_companion = new QLabel(this);
+    m_companion->setObjectName(QStringLiteral("learnCompanionHint"));
+    m_companion->setWordWrap(true);
+    m_companion->setStyleSheet(QStringLiteral("color: gray;"));
+    m_companion->hide();
+    lay->addWidget(m_companion);
+
     m_collision = new ControlCollisionBox(this);
     lay->addWidget(m_collision);
     connect(m_collision, &ControlCollisionBox::moveRequested, this, &ControlLearnDialog::slotMoveHere);
@@ -204,7 +257,7 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
 
     QDialogButtonBox *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     m_ok = buttons->button(QDialogButtonBox::Ok);
-    m_remove = buttons->addButton(tr("Remove trigger"), QDialogButtonBox::DestructiveRole);
+    m_remove = buttons->addButton(tr("Remove Trigger"), QDialogButtonBox::DestructiveRole);
     m_remove->setObjectName(QStringLiteral("learnRemove"));
     connect(buttons, &QDialogButtonBox::accepted, this, &ControlLearnDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &ControlLearnDialog::reject);
@@ -263,6 +316,19 @@ ControlLearnDialog::ControlLearnDialog(Doc *doc, const ControlMap::Target &targe
         });
     }
     estop ? cm->listenForButton() : cm->listen();
+    /* Nothing fires while the window is open, in Design and Operate: no
+       show listener hears a press (the Control Map's own presses are the
+       learn's). Each press or move selects its row in the list. */
+    if (iom != nullptr)
+    {
+        iom->setAssignListening(true);
+        connect(iom, &InputOutputMap::inputValueChanged, this,
+                [this](quint32 universe, quint32 channel, uchar) { selectControl(universe, channel); });
+    }
+    if (ShowWebAccess *web = m_doc->webAccess())
+        connect(web, &ShowWebAccess::statusChanged, this, &ControlLearnDialog::updateCompanion);
+    buildList();
+    updateCompanion();
     // Computer keys: every key pressed in the dialog, before its buttons
     // and the mode box see it.
     qApp->installEventFilter(this);
@@ -274,6 +340,177 @@ ControlLearnDialog::~ControlLearnDialog()
     qApp->removeEventFilter(this);
     if (m_doc != nullptr && m_doc->controlMap() != nullptr)
         m_doc->controlMap()->stopListening();
+    if (m_doc != nullptr && m_doc->inputOutputMap() != nullptr)
+        m_doc->inputOutputMap()->setAssignListening(false);
+}
+
+void ControlLearnDialog::buildList()
+{
+    QList<quint64> keys = ControlOwners::controls(m_doc);
+    // Each patched profile's controls, free ones too: the desk, drawn as a list.
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; iom != nullptr && u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || ip->profile() == nullptr)
+            continue;
+        const QList<quint32> chans = ip->profile()->channels().keys();
+        for (quint32 c : chans)
+            keys << ((quint64(u) << 32) | c);
+    }
+    if (hasControl())
+        keys << ((quint64(m_universe) << 32) | m_channel);
+    std::sort(keys.begin(), keys.end());
+    keys.erase(std::unique(keys.begin(), keys.end()), keys.end());
+    m_list->clear();
+    for (quint64 k : std::as_const(keys))
+        ensureRow(quint32(k >> 32), quint32(k & 0xFFFFFFFFu));
+    if (hasControl())
+        selectControl(m_universe, m_channel);
+    m_list->resizeColumnToContents(0);
+}
+
+QTreeWidgetItem *ControlLearnDialog::rowOf(quint32 universe, quint32 channel) const
+{
+    for (int i = 0; i < m_list->topLevelItemCount(); ++i)
+    {
+        QTreeWidgetItem *it = m_list->topLevelItem(i);
+        if (it->data(0, kUniverseRole).toUInt() == universe && it->data(0, kChannelRole).toUInt() == channel)
+            return it;
+    }
+    return nullptr;
+}
+
+quint32 ControlLearnDialog::selectedChannel() const
+{
+    QTreeWidgetItem *it = m_list->currentItem();
+    return it == nullptr ? 0xFFFFFFFF : it->data(0, kChannelRole).toUInt();
+}
+
+QTreeWidgetItem *ControlLearnDialog::ensureRow(quint32 universe, quint32 channel)
+{
+    QTreeWidgetItem *row = rowOf(universe, channel);
+    if (row == nullptr)
+    {
+        row = new QTreeWidgetItem();
+        row->setData(0, kUniverseRole, universe);
+        row->setData(0, kChannelRole, channel);
+        // In universe and channel order (computer keys last).
+        const quint64 k = (quint64(universe) << 32) | channel;
+        int at = m_list->topLevelItemCount();
+        for (int i = 0; i < m_list->topLevelItemCount(); ++i)
+        {
+            QTreeWidgetItem *it = m_list->topLevelItem(i);
+            const quint64 ik = (quint64(it->data(0, kUniverseRole).toUInt()) << 32)
+                               | it->data(0, kChannelRole).toUInt();
+            if (ik > k)
+            {
+                at = i;
+                break;
+            }
+        }
+        m_list->insertTopLevelItem(at, row);
+    }
+    updateRow(row);
+    return row;
+}
+
+void ControlLearnDialog::updateRow(QTreeWidgetItem *row)
+{
+    if (row == nullptr)
+        return;
+    ControlMap *cm = m_doc->controlMap();
+    const quint32 u = row->data(0, kUniverseRole).toUInt();
+    const quint32 c = row->data(0, kChannelRole).toUInt();
+    row->setText(0, cm->controlName(u, c));
+    const QList<ControlOwners::Owner> others = ControlOwners::others(m_doc, u, c, self());
+    const ControlMap::Binding *mine = cm->binding(m_target);
+    const bool isMine = mine != nullptr && mine->universe == u && mine->channel == c;
+    QString who = others.isEmpty() && isMine ? tr("This one, now") : ControlOwners::ownersText(others);
+    if (isMine && !others.isEmpty())
+        who = tr("This one, and %1").arg(who);
+    bool fixed = false;
+    for (const ControlOwners::Owner &o : others)
+        fixed |= !o.movable;
+    if (fixed)
+        who = tr("%1 · can't be taken").arg(who);
+    // What a press told: the kind of control it is.
+    if (u != ControlMap::KeyboardUniverse && refusesFader() && cm->learnSawFader(u, c))
+        who = tr("%1 · a fader: a GO or a hit takes a button").arg(who);
+    else if (u != ControlMap::KeyboardUniverse && cm->learnSawLatching(u, c))
+        who = tr("%1 · latching: set it to momentary").arg(who);
+    row->setText(1, who);
+    row->setToolTip(1, who);
+    // This computer's (the desk, the pad, the app's keys): greyed, never taken.
+    row->setForeground(1, fixed ? palette().brush(QPalette::Disabled, QPalette::Text)
+                                : palette().brush(QPalette::Active, QPalette::Text));
+    QFont f = row->font(0);
+    f.setBold(hasControl() && u == m_universe && c == m_channel);
+    row->setFont(0, f);
+    row->setFont(1, f);
+    // Made bold after the column was sized (a press heard, a collision):
+    // the control still fits in full, never "Channe…" (UX-36).
+    if (f.bold())
+        fitControlColumn(row);
+    fitOwnerText(row);
+}
+
+void ControlLearnDialog::fitOwnerText(QTreeWidgetItem *row)
+{
+    /* Who has it, in full (UX-36): the list grows to the longest owner text
+       ("Cross on the pad: GO with L2 held (the pad's Run map) · can't be
+       taken"), up to the screen's width; past that the tooltip has it. */
+    const int pad = 2 * (m_list->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, m_list) + 1) + 8;
+    const int need = m_list->columnWidth(0)
+                     + QFontMetrics(row->font(1)).horizontalAdvance(row->text(1)) + pad
+                     + 2 * m_list->frameWidth()
+                     + m_list->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, m_list);
+    const QScreen *scr = screen();
+    const int cap = scr != nullptr ? scr->availableGeometry().width() - 64 : 1000;
+    const int width = qMin(need, cap);
+    if (width > m_list->minimumWidth())
+        m_list->setMinimumWidth(width);
+}
+
+void ControlLearnDialog::fitControlColumn(QTreeWidgetItem *row)
+{
+    m_list->resizeColumnToContents(0);
+    if (row == nullptr)
+        return;
+    // The view sizes from the rows it has laid out; this one's own width
+    // (its bold font, the item's margins) is the floor.
+    const int need = QFontMetrics(row->font(0)).horizontalAdvance(row->text(0))
+                     + 2 * (m_list->style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, m_list) + 1)
+                     + m_list->indentation() * (m_list->rootIsDecorated() ? 1 : 0) + 8;
+    if (m_list->columnWidth(0) < need)
+        m_list->setColumnWidth(0, need);
+}
+
+void ControlLearnDialog::selectControl(quint32 universe, quint32 channel)
+{
+    QTreeWidgetItem *row = rowOf(universe, channel);
+    // A fader moving sends many values: its row once, not per value.
+    if (row != nullptr && row == m_list->currentItem())
+        return;
+    QTreeWidgetItem *was = m_list->currentItem();
+    row = ensureRow(universe, channel);
+    m_list->setCurrentItem(row);
+    m_list->scrollToItem(row);
+    if (was != nullptr && was != row)
+        updateRow(was);
+    // The pressed row is bold: its control fits in full, never "Channel...".
+    fitControlColumn(row);
+}
+
+void ControlLearnDialog::updateCompanion()
+{
+    ShowWebAccess *web = m_doc->webAccess();
+    const bool client = web != nullptr && web->runClients() > 0;
+    m_companion->setText(client ? tr("A phone or Companion is on this show's Run page. A Stream Deck key "
+                                     "is set in Companion, not pressed here: give the key a GO, Back, "
+                                     "ALL OFF or hit preset of the qlcconsole module there.")
+                                : QString());
+    m_companion->setVisible(client);
 }
 
 QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Target &target, QWidget *parent,
@@ -286,11 +523,16 @@ QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Targ
     if (!ShowFeatures::isOn(ShowFeatures::ControlSurfaces)
         && target.type != ControlMap::EmergencyStopTarget)
         return nullptr;
+    /* Q325: in the qlcconsole and Everything views a control is assigned
+       to a hit, a cue or a cue list (its GO or Back); a raw scene or effect
+       is offered it only in the Classic QLC+ view. */
+    if (target.type == ControlMap::FunctionTarget && !s_classicView)
+        return nullptr;
     const ControlMap::Binding *b = doc->controlMap()->binding(target);
     // A cue list's one item learns its GO and its Back: either bound says so.
     if (b == nullptr && target.type == ControlMap::CueListTarget)
         b = doc->controlMap()->binding(ControlMap::cueListBack(target.id));
-    QString text = tr("Learn Trigger…");
+    QString text = tr("Assign to Control…");
     if (b != nullptr)
     {
         QString control = doc->controlMap()->controlName(b->universe, b->channel);
@@ -306,7 +548,7 @@ QAction *ControlLearnDialog::addTo(QMenu *menu, Doc *doc, const ControlMap::Targ
         ControlLearnDialog d(doc, target, parent, where);
         d.exec();
     });
-    a->setObjectName(QStringLiteral("learnTrigger"));
+    a->setObjectName(QStringLiteral("assignToControl"));
     a->setToolTip(tr("Fire this from a MIDI or OSC control or a computer key: choose this, then press "
                      "the key, pad or button (Control Map)"));
     return a;
@@ -453,6 +695,8 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
         m_channel = b != nullptr ? b->channel : 0xFFFFFFFF;
         m_collision->clear();
         updateText();
+        updateRow(ensureRow(universe, channel));
+        selectControl(universe, channel);
         m_note->setText(tr("%1 is a fader or knob (it sends a range of values): %2 fires on a press, so it "
                            "takes a button, pad or key. Press one.")
                             .arg(cm->controlName(universe, channel),
@@ -460,10 +704,13 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
         cm->listen();
         return;
     }
+    QTreeWidgetItem *was = rowOf(m_universe, m_channel);
     m_universe = universe;
     m_channel = channel;
     updateText();
     checkOwners();
+    selectControl(universe, channel);
+    updateRow(was);
     /* A latching button sends on at one press and 0 at the next: only every
        other press reaches the show. That breaks a Toggle (the 0 between
        does nothing), so Toggle becomes Start only, once, and said. A mode
@@ -499,6 +746,7 @@ void ControlLearnDialog::slotHeard(quint32 universe, quint32 channel)
         setMode(ControlMap::Toggle);
         m_note->clear();
     }
+    updateRow(rowOf(universe, channel));
     // Still listening: another press takes its place.
     if (m_target.type == ControlMap::EmergencyStopTarget)
         m_doc->controlMap()->listenForButton();
@@ -544,10 +792,14 @@ bool ControlLearnDialog::learnKey(int key, Qt::KeyboardModifiers modifiers)
         m_keyNote->show();
         return !dialogKey;
     }
+    QTreeWidgetItem *was = rowOf(m_universe, m_channel);
     m_universe = ControlMap::KeyboardUniverse;
     m_channel = channel;
     updateText();
     checkOwners();
+    selectControl(m_universe, m_channel);
+    updateRow(rowOf(m_universe, m_channel));
+    updateRow(was);
     return true;
 }
 
@@ -668,12 +920,14 @@ void ControlLearnDialog::accept()
 void ControlLearnDialog::done(int r)
 {
     m_doc->controlMap()->stopListening();
+    m_doc->inputOutputMap()->setAssignListening(false);
     QDialog::done(r);
 }
 
 void ControlLearnDialog::slotRemove()
 {
     m_doc->controlMap()->stopListening();
+    m_doc->inputOutputMap()->setAssignListening(false);
     m_doc->controlMap()->removeBinding(m_target);
     QDialog::reject();
 }

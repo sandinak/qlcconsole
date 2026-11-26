@@ -1377,6 +1377,11 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             }
             if (m_down.contains(k))
                 break;
+            /* Assign to Control… is open: a press finds the control there
+               and fires nothing (phase A). The STOP above still stops; the
+               Grand Master still follows its fader. */
+            if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->assignListening())
+                break;
             m_down.insert(k);
             goPressed(role == Back);
             break;

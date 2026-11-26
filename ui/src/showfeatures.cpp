@@ -125,7 +125,7 @@ QString ShowFeatures::description(Feature f)
         return tr("Show Review's footer chip, its marks on cues, its re-check after each change, "
                   "and the readiness dialog's Show Review… button");
     case ControlSurfaces:
-        return tr("The Control Map's triggers and encoder bank, Learn Trigger…, and the Run tab's "
+        return tr("The Control Map's triggers and encoder bank, Assign to Control…, and the Run tab's "
                   "Pad button while the pad has nothing to say. The emergency stop always stays");
     case FocusCalls:
         return tr("Venue Focus…, Edit Focus Calls… and a venue focus cue, in the Lighting Studio, "

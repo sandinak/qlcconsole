@@ -964,7 +964,7 @@ void ContextMenus::function(ContextMenu &menu, Doc *doc, const QList<quint32> &f
     if (fids.size() == 1 && menu.menu() != nullptr)
     {
         QMenu *staging = new QMenu(menu.menu());
-        // Its own name (learnTrigger), the same on every menu that offers it.
+        // Its own name (assignToControl), the same on every menu that offers it; Classic only (Q325).
         if (QAction *learn = ControlLearnDialog::addTo(staging, doc, ControlMap::function(fid), parent))
             menu.add(ContextMenu::Kind, learn);
         if (editable)

@@ -3557,5 +3557,67 @@ void InputOutputMap::slotDispatchInput(quint32 universe, quint32 channel, uchar 
         return;
     if ((m_deskLearning || isSetupHeld(universe)) && value > 0)
         return;
+    if (m_assignListening)
+    {
+        if (!m_assignGate.pass((quint64(universe) << 32) | channel, value, controlKind(universe, channel), key))
+            return;
+    }
+    else
+    {
+        m_assignGate.pass((quint64(universe) << 32) | channel, value);
+    }
     emit showInputValueChanged(universe, channel, value, key);
+}
+
+void InputOutputMap::setAssignListening(bool on)
+{
+    if (on == m_assignListening)
+        return;
+    m_assignListening = on;
+    QVector<AssignInputGate::Replay> baselines;
+    const QVector<AssignInputGate::Replay> replays =
+            m_assignGate.setListening(on, on ? QSet<quint64>() : assignDeltaControls(), &baselines);
+    emit assignListeningChanged(on);
+    // Closed: a control read as steps fires nothing, its listener only
+    // learns where it is now ...
+    for (const AssignInputGate::Replay &r : baselines)
+        emit showInputBaseline(quint32(r.key >> 32), quint32(r.key & 0xFFFFFFFFu), r.value);
+    // ... and each other control moved meanwhile is heard where it ended up.
+    for (const AssignInputGate::Replay &r : replays)
+        emit showInputValueChanged(quint32(r.key >> 32), quint32(r.key & 0xFFFFFFFFu), r.value, r.name);
+}
+
+QSet<quint64> InputOutputMap::assignDeltaControls()
+{
+    QSet<quint64> keys;
+    emit collectAssignDeltas(&keys);
+    return keys;
+}
+
+AssignInputGate::Kind InputOutputMap::controlKind(quint32 universe, quint32 channel) const
+{
+    if (universe >= universesCount())
+        return AssignInputGate::Unknown;
+    InputPatch *ip = m_universeArray.at(universe)->inputPatch();
+    QLCInputProfile *profile = ip != nullptr ? ip->profile() : nullptr;
+    QLCInputChannel *ch = profile != nullptr ? profile->channel(channel) : nullptr;
+    if (ch == nullptr)
+        return AssignInputGate::Unknown;
+    if (ch->movementType() == QLCInputChannel::Relative)
+        return AssignInputGate::Relative;
+    switch (ch->type())
+    {
+        case QLCInputChannel::Button:
+        case QLCInputChannel::NextPage:
+        case QLCInputChannel::PrevPage:
+        case QLCInputChannel::PageSet:
+            return AssignInputGate::Button;
+        case QLCInputChannel::Encoder:
+            return AssignInputGate::Relative;
+        case QLCInputChannel::Slider:
+        case QLCInputChannel::Knob:
+            return AssignInputGate::Fader;
+        default:
+            return AssignInputGate::Unknown;
+    }
 }

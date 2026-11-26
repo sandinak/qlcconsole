@@ -4152,6 +4152,8 @@ void AppViews_Test::eachFeatureSwitchHidesWhatItOwns()
     Scene *scene = new Scene(doc);
     scene->setName("Look");
     QVERIFY(doc->addFunction(scene));
+    // Assign to Control… is offered on a cue list in this view (Q325).
+    const quint32 assignList = doc->showTree()->addCueList(doc->showTree()->addProduction("Show"), "Act 1");
     doc->resetModified();
 
     // What a feature owns, as the person sees it.
@@ -4195,7 +4197,7 @@ void AppViews_Test::eachFeatureSwitchHidesWhatItOwns()
         // Show Review: its chip after a run
         doc->showReview()->run();
         QCOMPARE(review->isHidden(), !on);
-        // Control surfaces: the triggers and the encoder bank; Learn Trigger…
+        // Control surfaces: the triggers and the encoder bank; Assign to Control…
         {
             ControlMapPanel panel(doc);
             panel.resize(800, 500);
@@ -4205,7 +4207,7 @@ void AppViews_Test::eachFeatureSwitchHidesWhatItOwns()
             QCOMPARE(panel.findChild<QPushButton *>("controlMapRemoveAll")->isVisibleTo(&panel), on);
             QVERIFY(panel.findChild<QPushButton *>("controlMapEmergencyStop")->isVisibleTo(&panel));
             QMenu m;
-            QCOMPARE(ControlLearnDialog::addTo(&m, doc, ControlMap::function(scene->id()), m_app) != nullptr, on);
+            QCOMPARE(ControlLearnDialog::addTo(&m, doc, ControlMap::cueList(assignList), m_app) != nullptr, on);
         }
         QCOMPARE(runPad->isHidden(), !on);
         // Focus calls: the Focus menu and the Run tab
@@ -4263,6 +4265,8 @@ void AppViews_Test::everyFeatureSwitchRespondsThroughTheDialog()
     Scene *scene = new Scene(doc);
     scene->setName("Look");
     QVERIFY(doc->addFunction(scene));
+    // Assign to Control… is offered on a cue list in this view (Q325).
+    const quint32 assignList = doc->showTree()->addCueList(doc->showTree()->addProduction("Show"), "Act 1");
     VenueChip *venueChip = m_app->m_venueChip;
     QAction *viewVenue = m_app->findChild<QAction *>(QStringLiteral("viewVenueAction"));
     QLabel *review = m_app->findChild<QLabel *>("footerReview");
@@ -4309,7 +4313,7 @@ void AppViews_Test::everyFeatureSwitchRespondsThroughTheDialog()
         {
             QMenu m;
             return !runPad->isHidden()
-                   && ControlLearnDialog::addTo(&m, doc, ControlMap::function(scene->id()), m_app) != nullptr;
+                   && ControlLearnDialog::addTo(&m, doc, ControlMap::cueList(assignList), m_app) != nullptr;
         }
         if (row == "Focus Calls")
             return focusShown("focusVenue") && focusShown("focusEditCalls") && !runFocus->isHidden();

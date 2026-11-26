@@ -143,6 +143,10 @@ private slots:
     void cueListBackStepsBack();
     void backAndGoOnOneListCoexist();
     void aLearnHearsAFaderAndALatchingButton();
+    // Review 053-a round 2: Assign to Control…'s gate
+    void assignGateHoldsAFadersJumpToZero();
+    void assignGateReplaysWhereAControlEndedUp();
+    void assignGateNeverReplaysASteppedControl();
 
 private:
     /** A press (value) or a release (0) on @a channel of input universe 0,

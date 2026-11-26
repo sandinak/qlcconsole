@@ -23,6 +23,8 @@
 #include <QCheckBox>
 #include <QSettings>
 #include <QLabel>
+#include <QTreeWidget>
+#include <QDialogButtonBox>
 #include <QtTest>
 #include <QDir>
 
@@ -41,6 +43,7 @@
 #include "deskrecord.h"
 #include "controlmap.h"
 #include "deskchip.h"
+#include "controllearndialog.h"
 #include "qlcfile.h"
 #include "doc.h"
 
@@ -293,19 +296,23 @@ void DeskSetup_Test::theChipIsGreenAmberOrRed()
     QCOMPARE(chip.text(), QStringLiteral("Desk: GO off"));
     QVERIFY(desk->setOn(D::Go, true));
     QCOMPARE(chip.colour(), DeskChip::Green);
-    // The device not in this show's patch: red, with Patch It.
+    // The device not in this show's patch: grey, with Patch It.
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, m_stub->name(), QString(), 1));
-    QCOMPARE(chip.colour(), DeskChip::Red);
+    QCOMPARE(chip.colour(), DeskChip::NotPatched);
     QCOMPARE(chip.text(), QStringLiteral("Desk: APC MINI not patched · Patch It"));
+    // Not patched yet is not set up, not a fault: grey, never red (UX-29).
+    QCOMPARE(chip.property("deskState").toString(), QStringLiteral("notpatched"));
+    QVERIFY2(chip.styleSheet().contains("#909090") && !chip.styleSheet().contains("#c62828"),
+             qPrintable(chip.styleSheet()));
     // Unplugged altogether: amber (Patch It can't help), at once.
     m_stub->m_lineNames = QStringList() << QStringLiteral("nanoKONTROL2");
     desk->rebind();
     QCOMPARE(chip.colour(), DeskChip::Amber);
     QVERIFY(chip.text().contains("not connected"));
-    // Plugged in again: red with Patch It, with nothing else to refresh it.
+    // Plugged in again: grey with Patch It, with nothing else to refresh it.
     m_stub->m_lineNames = QStringList() << QStringLiteral("APC MINI") << QStringLiteral("nanoKONTROL2");
     desk->rebind();
-    QCOMPARE(chip.colour(), DeskChip::Red);
+    QCOMPARE(chip.colour(), DeskChip::NotPatched);
     // On a universe passing its input through to DMX: amber, Patch It can't help.
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(1, m_stub->name(), QString(), 0));
     m_doc->inputOutputMap()->setUniversePassthrough(1, true);
@@ -323,7 +330,7 @@ void DeskSetup_Test::patchItFromTheChipIsNamedAndUndone()
     QSignalSpy setUp(&chip, &DeskChip::setUpRequested);
     D *desk = m_doc->deskRecord();
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
-    QCOMPARE(chip.colour(), DeskChip::Red);
+    QCOMPARE(chip.colour(), DeskChip::NotPatched);
     chip.click();
     QVERIFY(desk->isLive(D::Go));
     QCOMPARE(said.count(), 1);
@@ -335,7 +342,7 @@ void DeskSetup_Test::patchItFromTheChipIsNamedAndUndone()
     QCOMPARE(desk->state(D::Go), D::NotPatched);
     QCOMPARE(said.count(), 2);
     QVERIFY(said.last().first().toString().contains("APC MINI"));
-    QCOMPARE(chip.colour(), DeskChip::Red);
+    QCOMPARE(chip.colour(), DeskChip::NotPatched);
     // Patch It again; once the Undo time is over, a click opens the page.
     chip.setUndoMs(10);
     chip.click();
@@ -347,7 +354,7 @@ void DeskSetup_Test::patchItFromTheChipIsNamedAndUndone()
     // Patch It, then another show loaded: its Undo is gone, never run on that show.
     chip.setUndoMs(15000);
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine()));
-    QCOMPARE(chip.colour(), DeskChip::Red);
+    QCOMPARE(chip.colour(), DeskChip::NotPatched);
     chip.click();
     QVERIFY(chip.text().endsWith(QStringLiteral("Undo")));
     const quint32 count = m_doc->inputOutputMap()->universesCount();
@@ -426,7 +433,7 @@ void DeskSetup_Test::deskShots()
     }
     mgr.hide();
 
-    // The footer: the chip red, with Patch It, at the right of a status bar.
+    // The footer: the chip grey (not patched), with Patch It, at the right of a status bar.
     QMainWindow win;
     DeskChip *chip = new DeskChip(m_doc, &win);
     QLabel *mode = new QLabel(QStringLiteral("DESIGN"), &win);
@@ -439,7 +446,7 @@ void DeskSetup_Test::deskShots()
         win.show();
         QVERIFY(QTest::qWaitForWindowExposed(&win));
         QCoreApplication::processEvents();
-        QCOMPARE(chip->colour(), DeskChip::Red);
+        QCOMPARE(chip->colour(), DeskChip::NotPatched);
         QVERIFY(chip->isVisible());
         QVERIFY(win.grab().save(out.absoluteFilePath(QString("desk-footer-%1x%2.png").arg(sz.width()).arg(sz.height()))));
     }
@@ -497,6 +504,42 @@ void DeskSetup_Test::deskShots()
         QVERIFY(mgr.grab().save(out.absoluteFilePath(
             QString("desk-surfaces-live-%1x%2.png").arg(sz.width()).arg(sz.height()))));
     }
+}
+
+/* Assign to Control… (phase A): the list shows this computer's GO as this
+   computer's, greyed, before anything is pressed; a press of it selects
+   the row, can't be taken, and fires nothing (no GO, not even a refusal). */
+void DeskSetup_Test::assignShowsTheDeskAsThisComputers()
+{
+    learnGo();
+    send(0, 202, 0);
+    D *desk = m_doc->deskRecord();
+    ShowTreeController *st = m_doc->showTree();
+    st->addProduction("Show");
+    const quint32 hit = st->addHit(ShowTree::HitScope::Global, ShowTree::invalidId(), "Stab");
+    QVERIFY(hit != ShowTree::invalidId());
+    QSignalSpy fired(desk, &DeskRecord::fired);
+    QSignalSpy refused(desk, &DeskRecord::refused);
+    {
+        ControlLearnDialog d(m_doc, ControlMap::hit(hit));
+        d.show();
+        QTreeWidgetItem *row = d.rowOf(0, 202);
+        QVERIFY(row != nullptr);
+        QVERIFY2(row->text(1).contains("this computer's GO") && row->text(1).contains("can't be taken"),
+                 qPrintable(row->text(1)));
+        send(0, 202, 127);
+        QCOMPARE(d.selectedChannel(), 202u);
+        QVERIFY(!d.hasControl());
+        QVERIFY(!d.findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        QCOMPARE(fired.count(), 0);
+        QCOMPARE(refused.count(), 0);
+        send(0, 202, 0);
+        d.reject();
+    }
+    // Closed: the desk's GO is a GO again (here: the Run tab has no list, said).
+    send(0, 202, 127);
+    send(0, 202, 0);
+    QCOMPARE(fired.count() + refused.count(), 1);
 }
 
 QTEST_MAIN(DeskSetup_Test)

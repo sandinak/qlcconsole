@@ -1277,9 +1277,9 @@ message, can fire something straight away, with no Virtual Console
 button in between: a scene, an effect or any function, a Show Tree cue
 list (GO), one cue of a list (a jump to it) or a hit.
 
-- **Learn it where the thing is.** Right-click a scene in Build (the
-  navigator, or a layer in the Workbench), an effect in Build ▸ Effects,
-  or a cue list, cue or hit in the Show Tree → **Learn Trigger…**. Press
+- **Learn it where the thing is.** Right-click a cue list, cue or hit in
+  the Show Tree (in the Classic QLC+ view also a scene or an effect) →
+  **Assign to Control…** ([the window](control-surfaces.md#assign-to-control)). Press
   the control; the dialog names it (*"MIDI · Note 60 (C4), MIDI ch 1"*).
   Press another to change your mind, pick how a press acts, then **OK**.
   Any patched input universe is heard. A sub-cue has no trigger of its
@@ -1301,7 +1301,7 @@ list (GO), one cue of a list (a jump to it) or a hit.
   Learning a control that already fires something at the same place is
   refused, naming it, with **Move It Here** (or **Step Through Them** on a
   button); a thing has one control: learning again replaces it. Once bound, the menu reads
-  **Trigger:** and the control's name; the dialog's **Remove trigger**
+  **Trigger:** and the control's name; the dialog's **Remove Trigger**
   takes it off.
 - **The light follows.** The control's LED is on while what it fires
   runs (a cue's while that cue is on stage), however it was started, as a
@@ -1335,10 +1335,10 @@ list (GO), one cue of a list (a jump to it) or a hit.
 
 ### Keys on the computer keyboard
 
-**Learn Trigger…** also takes a key on the computer keyboard: press it
+**Assign to Control…** also takes a key on the computer keyboard: press it
 (with ⇧, ⌥, ⌘ or ⌃ if you like) while the dialog listens. The same choices
 of how a press acts, the same **one control, one thing in one place**, the same
-**Remove trigger**; the Control Map table lists the key (*Key · F5*); it is
+**Remove Trigger**; the Control Map table lists the key (*Key · F5*); it is
 saved with the show, and deleting a scene takes its key with it. Holding
 a key is one press (auto-repeat is ignored); letting go is the release,
 so **Momentary** and **GO while held** work. A hit's key fires and lets

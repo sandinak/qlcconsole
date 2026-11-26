@@ -43,6 +43,7 @@
 #include "followspotoperator.h"
 #include "scenevalue.h"
 #include "doc.h"
+#include "inputoutputmap.h"
 
 class ProgrammerFlasher;
 class HighlightEffect;
@@ -992,6 +993,8 @@ private:
     quint32 m_padTriggersTarget = UINT_MAX;
     /** The pad whose input is being handled now (UINT_MAX: none). */
     quint32 m_actingUniverse = UINT_MAX;
+    /** What the pad hears while Assign to Control… is open. */
+    AssignInputGate m_assignGate;
     int m_padRumbles = 0;
     /** To @p universe's pad (UINT_MAX: statePad(), else the tools' pad,
      *  focusController(); kAllPads: every pad, once each). */

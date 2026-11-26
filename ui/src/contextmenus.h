@@ -254,7 +254,7 @@ namespace ContextMenus
         std::function<void()> changed;
     };
     /** The canon's function menu for @p functionIds (the first is the one
-     *  clicked): Open in Workbench | Learn Trigger…, Runs ▸, Send to Show
+     *  clicked): Open in Workbench | Assign to Control… (Classic QLC+ view only, Q325), Runs ▸, Send to Show
      *  Tree…, Used By ▸ | Move to Folder ▸ | Duplicate, Rename | Delete…. */
     QLC_UI_EXPORT void function(ContextMenu &menu, Doc *doc, const QList<quint32> &functionIds,
                                 const FunctionPlace &place);

@@ -126,3 +126,12 @@ void ShowWebAccess::setStatus(State state, const QString &url, const QString &me
     m_message = message;
     emit statusChanged();
 }
+
+void ShowWebAccess::setRunClients(int count)
+{
+    count = qMax(0, count);
+    if (count == m_runClients)
+        return;
+    m_runClients = count;
+    emit statusChanged();
+}

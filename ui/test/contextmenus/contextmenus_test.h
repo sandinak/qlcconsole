@@ -58,6 +58,8 @@ private slots:
     void aLayerHasOneMenuEverywhere();
     void aCarriedInLayerOffersTheTrackOps();
     void theShowTreeMenusFollowTheCanon();
+    /** Q310/Q325: Assign to Control…, one item per thing */
+    void oneAssignItemPerThing();
     void theRigViewFollowsTheCanon();
     void testFixtureNeverDoesNothing();
     void everyMenuKeepsTheLaws();

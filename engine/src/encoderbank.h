@@ -23,6 +23,7 @@
 #include <QElapsedTimer>
 #include <QStringList>
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 #include <QString>
 
@@ -164,6 +165,13 @@ public slots:
     /** One input value (InputOutputMap::inputValueChanged). Public for the
      *  tests: it is what the controller does. */
     void handleInput(quint32 universe, quint32 channel, uchar value);
+    /** Assign to Control… closing: the encoders are read as steps, never
+     *  sent again (InputOutputMap::collectAssignDeltas()). */
+    void collectAssignDeltas(QSet<quint64> *keys) const;
+    /** Assign to Control… closed with encoder @a channel turned meanwhile:
+     *  an AbsoluteDelta knob's last position becomes where it is, nothing
+     *  else (InputOutputMap::showInputBaseline()). */
+    void handleBaseline(quint32 universe, quint32 channel, uchar value);
 
 public:
     /** How long turns are gathered before they are sent on, in ms (the

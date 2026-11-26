@@ -144,7 +144,7 @@
       ],
       "budget": 6,
       "levels": {
-        "student": "Right-click the hit, Learn Trigger…, press the key; select the hit and press it.",
+        "student": "Right-click the hit, Assign to Control…, press the key; select the hit and press it.",
         "pro": "The same key fires it in Operate; the Control Map lists every trigger."
       },
       "steps": [
@@ -158,12 +158,12 @@
         },
         {
           "screen": "Show Tree",
-          "control": "right-click a hit ▸ Learn Trigger…",
+          "control": "right-click a hit ▸ Assign to Control…",
           "expect": "the learn dialog hears a computer key (F7) and names it",
           "clicks": 3,
           "do": {
             "context": "hit",
-            "item": "^(Learn Trigger|Trigger:)"
+            "item": "^(Assign to Control|Trigger:)"
           },
           "dialog": [
             {

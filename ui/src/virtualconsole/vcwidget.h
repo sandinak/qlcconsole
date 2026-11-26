@@ -491,6 +491,11 @@ protected slots:
      */
     virtual void slotInputValueChanged(quint32 universe, quint32 channel, uchar value);
 
+    /** Assign to Control… closing (InputOutputMap::collectAssignDeltas()):
+     *  each input in Relative or Encoder mode reads its control as steps,
+     *  so it is never sent again on the close. */
+    void slotCollectAssignDeltas(QSet<quint64> *keys) const;
+
     /**
      * Slot called when an input profile has been changed and
      * at least one input source has been set

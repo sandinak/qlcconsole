@@ -380,7 +380,7 @@ trigger is the armed hit; the pad has an emergency stop and no "stop the
 list"; the pad never picks the list. A hold of 1 s is the role chord.
 
 **No show trigger on a pad button** (board Q324). The pad's buttons and
-triggers are its Run map, so **Learn Trigger…** (and the emergency stop's
+triggers are its Run map, so **Assign to Control…** (and the emergency stop's
 Learn) refuses one, naming what it does on the pad: *Channel 7 already does
 Cross on the pad: GO with L2 held (the pad's Run map).* A trigger there
 would fire on one press, without the arm and the safety. Hits fire from the

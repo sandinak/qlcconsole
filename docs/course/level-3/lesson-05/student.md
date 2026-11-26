@@ -109,7 +109,7 @@ has its own switch, and its own PIN.
   belong to the computer, not the show: learn them once at the top of
   **Connections ▸ Control surfaces** and they work in every show opened
   there. GO is one press on the Run tab's list. If the show you open does not
-  patch the desk, the footer's **Desk** chip turns red: click it to patch
+  patch the desk, the footer's **Desk** chip turns grey and says *Patch It*: click it to patch
   it. The show keeps its own stop too, so a computer with no desk learned
   can still stop the show.
 - **A desk that needs its own setting.** Some desks must be set on the

@@ -18,6 +18,7 @@
 */
 
 #include <QStringList>
+#include <algorithm>
 #include <QHash>
 #include <QMap>
 
@@ -401,6 +402,35 @@ QList<ControlOwners::Owner> ControlOwners::ownersFrom(Doc *doc, quint32 universe
         if (p.first == k)
             out << p.second;
     return out;
+}
+
+QList<quint64> ControlOwners::controls(Doc *doc)
+{
+    QSet<quint64> keys;
+    const QList<QPair<quint64, Owner>> all = owned(doc);
+    for (const QPair<quint64, Owner> &p : all)
+        keys.insert(p.first);
+    // This computer's desk roles (static here, Q309).
+    if (doc != nullptr && doc->inputOutputMap() != nullptr)
+        for (quint64 k : doc->inputOutputMap()->staticControls())
+            keys.insert(k);
+    QList<quint64> out(keys.cbegin(), keys.cend());
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+QString ControlOwners::ownersText(const QList<Owner> &owners)
+{
+    if (owners.isEmpty())
+        return tr("Free");
+    QStringList jobs;
+    for (const Owner &o : owners)
+    {
+        const QString job = o.where.isEmpty() ? o.thing : tr("%1 (%2)").arg(o.thing, o.where);
+        if (!jobs.contains(job))
+            jobs << job;
+    }
+    return jobs.join(QStringLiteral("; "));
 }
 
 QSet<quint32> ControlOwners::showControls(Doc *doc, quint32 universe)
