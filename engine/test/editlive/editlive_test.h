@@ -76,11 +76,14 @@ private slots:
        guards: an unbound control was never the page's) */
     void aWholeFanMovedAsOneMovesTheFan();
     void someHeadsWithOneResultAreOneException();
-    void twoKindsOfMoverMovedAsOneMoveTheLook();
+    void twoKindsOfMoverStoreEachTheirOwnAngle();
     void theFirstTouchStartsFromTheStage();
     void undoingASecondStoreKeepsTheFirstHeld();
     void undoThenRedoHoldsAgain();
     void anUnboundFaderStaysTheShows();
+
+    /* The review of c79f0e553: each fails there */
+    void anUnsetFocusStoresWhatTheStageShows();
 
 private:
     bool show();

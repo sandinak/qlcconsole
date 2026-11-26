@@ -66,8 +66,10 @@ from → to* (**Front 1 · Red · 100% → 50%**), and:
   written into the layer that sets that attribute on the fixture (a layer
   that sets only the level is not given a colour). When every head of the
   layer moved by the same amount, the layer's look moves by it, its fan or
-  formation kept (for movers of different kinds, the same move of each
-  kind). Some of the layer's heads with one result get one exception (a
+  formation kept (movers of different kinds: only when every kind moved
+  the same angle; else each kind keeps its own). An attribute the cue does
+  not set at all (a focus left at the fixture's default) is stored as what
+  the stage shows. Some of the layer's heads with one result get one exception (a
   child layer) on just those heads. Only heads that now truly differ get
   one each, so the next GO plays exactly what was on stage. All of it is
   **one undo step**, and the status line names what was stored where

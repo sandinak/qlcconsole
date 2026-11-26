@@ -830,10 +830,16 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
     auto lookWas = [&snap](quint32 fid, quint32 ch) -> int {
         return ch == QLCChannel::invalid() ? -1 : snap.look.value(chanKey(fid, ch));
     };
+    /* A key the cue does not set (no layer has it: a focus left at the
+       fixture's default): its look is what the stage shows, trim and all,
+       not 0 plus the move. Set per group below. */
+    bool unsetKey = false;
     auto lookNow = [&](quint32 fid, quint32 ch) -> int {
         if (ch == QLCChannel::invalid())
             return -1;
         const quint64 k = chanKey(fid, ch);
+        if (unsetKey)
+            return int(snap.values.value(k));
         const int delta = int(snap.values.value(k)) - int(snap.base.value(k));
         const qreal s0 = snap.scale.value(fid, 1.0);
         const qreal d = isIntensity(fid, ch) && s0 > 0.0 ? delta / s0 : delta;
@@ -1124,7 +1130,9 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
     for (const Group &g : std::as_const(groups))
     {
         const ResolvedLayer &rl = rc.layers.at(g.layer);
-        const Look was = rl.values.value(g.key).look;
+        const auto setHere = rl.values.constFind(g.key);
+        unsetKey = setHere == rl.values.constEnd() || setHere->look.none;
+        const Look was = unsetKey ? Look() : setHere->look;
         // Where the value is set now: this cue's layer, or the cue it tracks from.
         quint32 placeCue = snap.cue, placeLayer = rl.layerId;
         quint32 srcCue = kInvalid, srcLayer = kInvalid;
@@ -1194,6 +1202,24 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
             for (int i = 0; i < d.size() && even; ++i)
                 even = qAbs(d.at(i) - ref.value(i)) <= tol;
         }
+        /* Kinds of mover move different angles for one step of a knob (a
+           540 and a 630 degree pan): the look moves only when every kind
+           moved the same angle. */
+        bool oneAngle = true;
+        QHash<QString, QPair<float, float>> angleOf;
+        if (g.key == KeyPosition)
+            for (quint32 fid : std::as_const(mine))
+            {
+                Fixture *f = m_doc->fixture(fid);
+                if (f == nullptr || angleOf.contains(typeOf(f)))
+                    continue;
+                angleOf.insert(typeOf(f), qMakePair(degrees(f, QLCChannel::Pan, true) - degrees(f, QLCChannel::Pan, false),
+                                                    degrees(f, QLCChannel::Tilt, true) - degrees(f, QLCChannel::Tilt, false)));
+            }
+        for (const auto &a : std::as_const(angleOf))
+            oneAngle = oneAngle && qAbs(a.first - angleOf.constBegin()->first) <= 0.5f
+                       && qAbs(a.second - angleOf.constBegin()->second) <= 0.5f;
+        even = even && oneAngle;
         bool movableLook = false;
         for (quint32 pid : was.palettes)
             if (const QLCPalette *p = m_doc->palette(pid))
@@ -1234,8 +1260,26 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
             if (same)
                 parts << qMakePair(values.keys(), values.first());
             else
+            {
+                /* Per kind of fixture: one exception for a kind whose heads
+                   end the same (two kinds of mover, each moved as one),
+                   else one per head. */
+                QMap<QString, QList<quint32>> kinds;
                 for (auto it = values.constBegin(); it != values.constEnd(); ++it)
-                    parts << qMakePair(QList<quint32>({ it.key() }), it.value());
+                    if (Fixture *f = m_doc->fixture(it.key()))
+                        kinds[typeOf(f)] << it.key();
+                for (const QList<quint32> &heads : std::as_const(kinds))
+                {
+                    bool alike = true;
+                    for (quint32 fid : heads)
+                        alike = alike && values.value(fid) == values.value(heads.first());
+                    if (alike && heads.size() > 1 && heads.size() < values.size())
+                        parts << qMakePair(heads, values.value(heads.first()));
+                    else
+                        for (quint32 fid : heads)
+                            parts << qMakePair(QList<quint32>({ fid }), values.value(fid));
+                }
+            }
             for (const auto &part : std::as_const(parts))
             {
                 Target t;

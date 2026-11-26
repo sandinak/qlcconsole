@@ -717,22 +717,59 @@ void EditLive_Test::someHeadsWithOneResultAreOneException()
     QVERIFY(qAbs(lookValue(child, KeyColour, 0) - 128) <= 3);
 }
 
-void EditLive_Test::twoKindsOfMoverMovedAsOneMoveTheLook()
+void EditLive_Test::twoKindsOfMoverStoreEachTheirOwnAngle()
 {
     m_doc->setMode(Doc::Operate);
     go();
     QVERIFY(m_live->setOn(true));
+    // One knob turn: the 540 degree Sharpy and the 450 degree Alpha move
+    // different angles; each kind keeps its own.
     m_selection = { m_spot4, m_alpha };
     QVERIFY(m_apc->set(QStringLiteral("#16"), 60));
-    QVERIFY(m_apc->set(QStringLiteral("#16"), 66));
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 70));
     QString why;
     QVERIFY2(m_live->store(&why), qPrintable(why));
     const ShowTree::Layer *mixed = layerOn(m_doc->showTree()->cue(m_c1), groupTarget(m_mixed));
-    QVERIFY(mixed->look(KeyPosition)->palettes.first() != m_front);
-    QVERIFY(lookValue(mixed, KeyPosition, 0) > 90);
-    QCOMPARE(lookValue(mixed, KeyPosition, 1), 45);
-    QVERIFY(childOf(m_c1, m_mixed, m_spot4) == nullptr);
-    QVERIFY(childOf(m_c1, m_mixed, m_alpha) == nullptr);
+    QCOMPARE(mixed->look(KeyPosition)->palettes, QList<quint32>({ m_front }));
+    const int sharpy = lookValue(childOf(m_c1, m_mixed, m_spot4), KeyPosition, 0);
+    const int alpha = lookValue(childOf(m_c1, m_mixed, m_alpha), KeyPosition, 0);
+    QVERIFY2(sharpy > 90 && alpha > 90, qPrintable(QStringLiteral("%1 %2").arg(sharpy).arg(alpha)));
+    QVERIFY2(sharpy > alpha, qPrintable(QStringLiteral("%1 %2").arg(sharpy).arg(alpha)));
+    QCOMPARE(lookValue(childOf(m_c1, m_mixed, m_alpha), KeyPosition, 1), 45);
+}
+
+void EditLive_Test::anUnsetFocusStoresWhatTheStageShows()
+{
+    // The cue sets no focus on the Alpha: something else has it at 127.
+    Fixture *a = m_doc->fixture(m_alpha);
+    quint32 focusCh = QLCChannel::invalid();
+    for (quint32 ch = 0; ch < a->channels(); ++ch)
+        if (a->channel(ch)->preset() == QLCChannel::BeamFocusFarNear
+            || a->channel(ch)->preset() == QLCChannel::BeamFocusNearFar)
+            focusCh = ch;
+    QVERIFY(focusCh != QLCChannel::invalid());
+    Scene *over = new Scene(m_doc);
+    over->setValue(m_alpha, focusCh, 127);
+    QVERIFY(m_doc->addFunction(over));
+    m_doc->setMode(Doc::Operate);
+    go();
+    over->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(5);
+    const int addr = int(a->address() + focusCh);
+    QCOMPARE(uchar(frame().at(addr)), uchar(127));
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_alpha };
+    // Device knob 3 on the Move page is focus.
+    QVERIFY(m_apc->set(QStringLiteral("#18"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#18"), 63));
+    const int stage = uchar(frame().at(addr));
+    QVERIFY2(stage != 127, qPrintable(QString::number(stage)));
+    QString why;
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    // What the stage showed, not 0 plus the move.
+    const int stored = lookValue(childOf(m_c1, m_mixed, m_alpha), KeyBeam, 0);
+    const int expected = a->channel(focusCh)->preset() == QLCChannel::BeamFocusFarNear ? 255 - stage : stage;
+    QVERIFY2(qAbs(stored - expected) <= 1, qPrintable(QStringLiteral("%1 %2").arg(stored).arg(expected)));
 }
 
 void EditLive_Test::theFirstTouchStartsFromTheStage()
