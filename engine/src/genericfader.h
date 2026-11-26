@@ -270,8 +270,8 @@ public:
       * Enabling fade out also resumes a paused fader */
     void setFadeOut(bool enable, uint fadeTime);
     /** Let go over @p fadeTime: every channel, intensity too, travels from
-     *  where it is to what the faders under this one put there (taken at
-     *  the next write), then the fader goes. Stage machinery a layer held
+     *  where it is to what the faders under this one write, frame by frame
+     *  (releaseOverrideMix()), then the fader goes. Stage machinery a layer held
      *  (OutputRuleKeeper::releaseMachineryForEdit()): never a jump. */
     void glideOut(uint fadeTime);
 

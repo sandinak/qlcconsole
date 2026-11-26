@@ -732,22 +732,11 @@ bool GenericFader::isFadingOut() const
 
 void GenericFader::glideOut(uint fadeTime)
 {
-    m_fadeOut = true;
-    m_paused = false;
-    std::lock_guard<ChannelsLock> l(m_channelsLock);
-    QMutableHashIterator <quint32,FadeChannel> it(m_channels);
-    while (it.hasNext() == true)
-    {
-        FadeChannel& fc(it.next().value());
-        fc.addFlag(FadeChannel::CanFade);
-        fc.removeFlag(FadeChannel::Flashing);
-        fc.setStart(fc.current());
-        fc.setTarget(fc.current());
-        fc.addFlag(FadeChannel::SetTarget);     // what is under it, at the next write
-        fc.setElapsed(0);
-        fc.setReady(false);
-        fc.setFadeTime(fadeTime);
-    }
+    /* As an override hit lets go: from its own levels to what the faders
+       under it write -- each frame's, so a cue still fading in under it is
+       followed, never snapshotted -- then the fader goes. */
+    startOverrideMix(0);
+    releaseOverrideMix(fadeTime);
 }
 
 void GenericFader::setFadeOut(bool enable, uint fadeTime)
