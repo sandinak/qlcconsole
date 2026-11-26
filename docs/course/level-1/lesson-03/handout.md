@@ -161,7 +161,7 @@ Switch roles after each part.
 |---|---|
 | You can't find the targets | They're in the Library under **All → Targets**, or type `Center` in **Filter the Library**. |
 | The Solo still shows the red scream | Set its **Mode** to **Block**. |
-| The spots are dark at Full | Check that **Settings → Advanced → Auto-open shutters** is on. |
+| The spots are dark at Full | Ask your teacher: auto-open shutters is in Settings ▸ Advanced, at the Standard level. |
 | The spots light the floor by the towers | They need a position: drop **Soloist DS** on their row. |
 | The spots swing in when the Solo plays | Mark them: step 12, in the Pose. |
 | The spots are hard to see | In the Rig Overview, set **Room** to **Dim**. |

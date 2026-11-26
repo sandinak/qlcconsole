@@ -3076,16 +3076,6 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             lv->bind(w, QStringLiteral("showtree.focuscue"));
         for (QWidget *w : { static_cast<QWidget *>(m_listConvert), static_cast<QWidget *>(m_listDetach) })
             lv->bind(w, QStringLiteral("showtree.reuse"));
-        // + Production leaves More for its "More at Standard…" line.
-        if (QToolButton *more = findChild<QToolButton *>(QStringLiteral("stMore")))
-            if (QMenu *menu = more->menu())
-                for (QAction *a : menu->actions())
-                    if (a->objectName() == m_newProduction->objectName() + QStringLiteral("Action"))
-                    {
-                        lv->bind(a, QStringLiteral("showtree.production"));
-                        menu->addSeparator();
-                        lv->addMoreLine(menu);
-                    }
     }
 
     mirrorFormTips(m_listForm);

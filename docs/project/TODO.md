@@ -17,11 +17,14 @@ L1 is built (docs/design/WORKSPACE_LEVELS.md §6: the model, the registry
 Teaching's reset and PIN unlock, Classic's rule, the menus and tabs, the
 script editor at Advanced, Clear Hold at End and Shift-Click a Tab moved).
 Still to do:
-- **L2, the course path**: the Show Tree, Run, Lighting Studio and Fixtures
-  rows (§2); command-line and shortcut answers for a hidden item; the
-  course test at each lesson's level; the course text changes (§5) and
-  start files re-saved at their levels; the focus report's Teaching line
-  gets the level; `menuwords_test::noStudentTextSendsYouToAHiddenPlace`.
+- ~~**L2, the course path**~~ built on feat/053-levels-l2: the Show Tree,
+  Fixtures and Lighting Studio rows (Run has none: its items are all
+  Student's), command-line and shortcut answers, the lesson-level course test,
+  the §5 course text, start files re-saved at their levels, the focus report's
+  Teaching line, `menuwords_test::noStudentTextSendsYouToAHiddenPlace`. Left
+  for L3: the Show Tree's layer-page raw channel values, the production
+  switcher, the head-layout grid editor's own Grey, Output rules in the
+  shared rig menu, a click on a greyed control opening the notice.
 - **L3, the rest**: Connections and the hub, the VC, Simple Desk, the
   Settings pages (Settings ▸ Advanced ▸ Scripts moves up with the script
   editor), Show Review's fix buttons.

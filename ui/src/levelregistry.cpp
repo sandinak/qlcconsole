@@ -65,7 +65,6 @@ const QList<LevelRegistry::Row> &LevelRegistry::rows()
            lesson of course Levels 0-2 (levels_test, courseshow_test). */
         // Show Tree
         makeRow("showtree.workbench",   L::Standard, L::Grey, tr("The Workbench, the stock editors for scenes, effects and matrices")),
-        makeRow("showtree.production",  L::Standard, L::Fold, tr("More than one production in a show")),
         makeRow("showtree.mib",         L::Standard, L::Grey, tr("Automatic move in black")),
         makeRow("showtree.cue.mix",     L::Standard, L::Grey, tr("Overlapping layers mixing, as a chaser does")),
         makeRow("showtree.cue.textcolour", L::Standard, L::Grey, tr("A cue's text colour")),

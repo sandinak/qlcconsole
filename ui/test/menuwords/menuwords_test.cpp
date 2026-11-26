@@ -26,6 +26,7 @@
 
 #include "menuwords_test.h"
 #include "contextmenus.h"
+#include "levelregistry.h"
 
 namespace
 {
@@ -435,6 +436,69 @@ void MenuWords_Test::noTextSendsYouToAHiddenBuild()
         }
     }
     QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("\nsends you to Build, hidden in the qlcconsole view:\n  ")
+                                           + bad.join(QStringLiteral("\n  "))));
+}
+
+void MenuWords_Test::noStudentTextSendsYouToAHiddenPlace()
+{
+    /* A place a Student-level text may not send you to, and the registry row
+       that hides it (a tab row names its tab). The row must exist and sit
+       above Student: a place with no row is a place nobody has decided. */
+    struct Place { QString phrase; QString key; };
+    QList<Place> places = {
+        { QStringLiteral("Workbench"), QStringLiteral("showtree.workbench") },
+        { QStringLiteral("Overlapping layers"), QStringLiteral("showtree.cue.mix") },
+        { QStringLiteral("At timecode"), QStringLiteral("showtree.timecode") },
+        { QStringLiteral("Follow timecode"), QStringLiteral("showtree.timecode") },
+        { QStringLiteral("Focus This Cue"), QStringLiteral("showtree.focuscue") },
+        { QStringLiteral("Convert to Tracking"), QStringLiteral("showtree.reuse") },
+        { QStringLiteral("Detach to Plain"), QStringLiteral("showtree.reuse") },
+        { QStringLiteral("Patch Inventory"), QStringLiteral("fixtures.inventory") },
+        { QStringLiteral("Add to Inventory"), QStringLiteral("fixtures.inventory") },
+        { QStringLiteral("Print Labels"), QStringLiteral("fixtures.patchlist") },
+        { QStringLiteral("Plot Symbol"), QStringLiteral("fixtures.rules") },
+        { QStringLiteral("Edit Focus Calls"), QStringLiteral("studio.venues") },
+        { QStringLiteral("Add Truss"), QStringLiteral("studio.structures") },
+    };
+    for (const LevelRegistry::Row &r : LevelRegistry::rows())
+        if (r.treatment == ShowLevel::Tab)
+            places << Place{ r.tab + QStringLiteral(" tab"), r.key };
+    for (const Place &p : places)
+    {
+        const LevelRegistry::Row *row = LevelRegistry::row(p.key);
+        QVERIFY2(row != nullptr, qPrintable(p.key + " has no registry row"));
+        QVERIFY2(row->level > ShowLevel::Student, qPrintable(p.key));
+    }
+
+    // Student-level text: the glossary, the Teaching tips, the Run tab. Any
+    // string literal (tr() or a translate-noop) counts.
+    static const QRegularExpression literal(QStringLiteral("\"((?:[^\"\\\\]|\\\\.)*)\""));
+    const QStringList files = { QStringLiteral(UI_SRC_DIR "/teachingtips.cpp"),
+                                QStringLiteral(UI_SRC_DIR "/cuerunner.cpp"),
+                                QStringLiteral(UI_SRC_DIR "/../../engine/src/teachingglossary.cpp") };
+    QStringList bad;
+    int scanned = 0;
+    for (const QString &path : files)
+    {
+        QFile f(path);
+        QVERIFY2(f.open(QIODevice::ReadOnly), qPrintable(path));
+        const QStringList lines = QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'));
+        for (int i = 0; i < lines.size(); ++i)
+        {
+            QRegularExpressionMatchIterator it = literal.globalMatch(lines.at(i));
+            while (it.hasNext())
+            {
+                const QString text = unescape(it.next().captured(1));
+                ++scanned;
+                for (const Place &p : places)
+                    if (text.contains(p.phrase))
+                        bad << QStringLiteral("%1:%2  \"%3\" names %4 (hidden at Student: %5)")
+                                   .arg(QFileInfo(path).fileName()).arg(i + 1).arg(text, p.phrase, p.key);
+            }
+        }
+    }
+    QVERIFY2(scanned > 200, qPrintable(QString::number(scanned)));
+    QVERIFY2(bad.isEmpty(), qPrintable(QStringLiteral("\nsends a Student to a hidden place:\n  ")
                                            + bad.join(QStringLiteral("\n  "))));
 }
 

@@ -72,6 +72,19 @@ private slots:
     /** Classic acts as Advanced; a Student show there switches to the
      *  qlcconsole view and offers Back to Classic QLC+ (Q344). */
     void classicActsAsAdvancedAndStudentLeavesIt();
+    /** L2, the course path: the Show Tree's, Fixtures' and the Lighting
+     *  Studio's rows grey at Student with the level's words and come back at
+     *  Standard, whatever re-enables them in between. */
+    void theL2RowsGreyAndSayTheirLevel();
+    /** A command-line word, a double-click and a shortcut for a hidden item
+     *  answer in the notice line with the level's words, never silently. */
+    void aHiddenItemReachedByCommandOrShortcutAnswersOnScreen();
+    /** The focus report's Teaching line names the level. */
+    void theFocusReportsTeachingLineNamesTheLevel();
+    /** Every course start and finish file is saved at its lesson's level;
+     *  what the lesson's student page names is not hidden at that level;
+     *  and what 3.5 and 3.6 need is reachable at Standard. */
+    void everyLessonOpensAtItsLevelAndItsStepsAreReachable();
     /** The window at each level, at three sizes (QLC_SHOT_DIR). */
     void levelShots();
 

@@ -170,8 +170,9 @@ lands the same either way.
    Prop** ▸ **Candle**. Each gets one in the hand, in one Undo step. Do it
    in a blocking set, and only the cues using that set have them.
 
-The candles are lit by a cue, not by the prop. Patch one **IR Candle
-Remote** fixture (every candle hears the same remote); a look in the cue
+The candles are lit by a cue, not by the prop. The show needs one **IR Candle
+Remote** fixture, patched by your teacher at the Standard level (every
+candle hears the same remote); a look in the cue
 sets its **Select**: **On**, **Off**, **Candle** (flicker), **Light**
 (steady), **Dim** or **Brighten**. **Dim** and **Brighten** are button
 presses, one step each, not a level; the blaster repeats a button for the
