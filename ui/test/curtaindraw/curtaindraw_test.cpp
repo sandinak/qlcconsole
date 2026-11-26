@@ -34,8 +34,24 @@
 #include "monitorgraphicsview.h"
 #include "sceneryitem.h"
 #include "structurestudioview.h"
+#include "fixturemanager.h"
 #undef protected
 #undef private
+#include <QComboBox>
+#include <QListWidget>
+#include <QMenu>
+#include <QPushButton>
+#include <QTreeWidget>
+#include "../common/fixtureeditor.h"
+#include "monitorfixtureitem.h"
+#include "fixturetreewidget.h"
+#include "fixturefields.h"
+#include "contextmenus.h"
+#include "cuerunner.h"
+#include "qlcpalette.h"
+#include "fixturegroup.h"
+#include "fixturerest.h"
+#include "programmercontroller.h"
 #include "doc.h"
 #include "chaser.h"
 #include "chaseraction.h"
@@ -371,6 +387,246 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     QVERIFY(!markShown(sid));
     stopAll();
     doc->setMode(Doc::Design);
+}
+
+void CurtainDraw_Test::behavesAsAndParkOnScreen()
+{
+    Doc *doc = m_app->doc();
+    stopAll();
+    m_app->clearDocument();
+    doc->setMode(Doc::Design);
+    auto dimmer = [&](const QString &name, quint32 address, float x) {
+        Fixture *f = new Fixture(doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setUniverse(0);
+        f->setAddress(address);
+        doc->addFixture(f);
+        doc->monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(x, 3000.0f, 0));
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setName(name);
+        doc->addFixtureGroup(g);
+        g->assignFixture(f->id());
+        return f;
+    };
+    Fixture *wash = dimmer("Stage wash", 0, 2000.0f);
+    Fixture *relay = dimmer("House relay", 1, 4000.0f);
+    relay->setOutputRules(Fixture::Switch);
+    Fixture *drop = dimmer("Kabuki drop", 2, 6000.0f);
+    Fixture *jet = dimmer("CO2 jet", 3, 8000.0f);
+    Fixture *laser = dimmer("Sky laser", 4, 10000.0f);
+    {
+        // Its label says Class 3B (Fixture Properties' Laser class).
+        FixtureRigProps rp = doc->monitorProperties()->fixtureRigProps(laser->id());
+        rp.laserClass = 4;
+        doc->monitorProperties()->setFixtureRigProps(laser->id(), rp);
+    }
+    auto group = [&](const Fixture *f) {
+        for (FixtureGroup *g : doc->fixtureGroups())
+            if (g->fixtureList() == QList<quint32>() << f->id())
+                return g->id();
+        return FixtureGroup::invalidId();
+    };
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, doc);
+    full->setName("Full");
+    full->setValue(255);
+    doc->addPalette(full);
+    ShowTreeController *st = doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("Show"), "Show list");
+    const quint32 c1 = st->addCue(listId, -1, "Preset");
+    const quint32 c2 = st->addCue(listId, 0, "The drop");
+    for (const Fixture *f : { wash, relay, drop, jet })
+    {
+        Target t = Target();
+        t.groups << group(f);
+        QVERIFY(st->setTargetLook(c2, t, st->lookForPalette(full->id())));
+    }
+    Q_UNUSED(c1);
+    doc->outputRuleKeeper()->rebuild();
+    QCOMPARE(FixtureRest::behaviour(relay), Fixture::SwitchBehaviour);
+    QCOMPARE(FixtureRest::behaviour(drop), Fixture::OneShotBehaviour);
+    QCOMPARE(FixtureRest::behaviour(jet), Fixture::HazardBehaviour);
+    QCOMPARE(FixtureRest::behaviour(laser), Fixture::HazardBehaviour);
+
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    m_app->m_tab->setCurrentIndex(m_app->m_tab->indexOf(mon));
+    mon->updateView();
+    settle(300);
+    MonitorGraphicsView *gv = mon->m_graphicsView;
+    QVERIFY(gv != nullptr);
+    MonitorFixtureItem *relayItem = gv->fixtureItemForId(relay->id());
+    MonitorFixtureItem *dropItem = gv->fixtureItemForId(drop->id());
+    MonitorFixtureItem *washItem = gv->fixtureItemForId(wash->id());
+    QVERIFY(relayItem != nullptr && dropItem != nullptr && washItem != nullptr);
+
+    // A cue picked while editing: the relay and the drop held, marked held,
+    // drawn where the cue puts them; the wash previews; nothing fires the jet.
+    st->pickCue(c2);
+    QTRY_VERIFY_WITH_TIMEOUT(relayItem->isHeldForEdit(), 2000);
+    QVERIFY(dropItem->isHeldForEdit());
+    QVERIFY(!washItem->isHeldForEdit());
+    settle(400);
+    QCOMPARE(onWire(relay->id(), 0), 0);
+    QCOMPARE(onWire(drop->id(), 0), 0);
+    QCOMPARE(onWire(jet->id(), 0), 0);
+    QCOMPARE(onWire(wash->id(), 0), 255);
+    {
+        QByteArray drawn;
+        QVERIFY(doc->outputRuleKeeper()->heldForEdit(relay->id(), &drawn));
+        QCOMPARE(drawn, QByteArray(1, char(255)));
+    }
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    auto shoot = [&](QWidget *w, const QString &name, bool sized) {
+        if (shots.isEmpty())
+            return;
+        QDir().mkpath(shots);
+        if (!sized)
+        {
+            w->grab().save(QDir(shots).filePath(name + QStringLiteral(".png")));
+            return;
+        }
+        for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            m_app->resize(size);
+            settle(300);
+            if (w == gv)
+                gv->centerOn(relayItem);
+            settle(100);
+            m_app->grab().save(QDir(shots).filePath(
+                QStringLiteral("%1-%2x%3.png").arg(name).arg(size.width()).arg(size.height())));
+        }
+        m_app->resize(1280, 800);
+    };
+
+    // Park Here, from the fixture's own menu (the plot's, the Fixture
+    // Manager's, Build's: one menu): a P on the plot.
+    {
+        QMenu menu;
+        ContextMenu cm(&menu);
+        ContextMenus::RigPlace place;
+        ContextMenus::fixture(cm, doc, { relay->id() }, place);
+        QAction *park = menu.findChild<QAction *>(QStringLiteral("ctxParkHere"));
+        QVERIFY(park != nullptr);
+        QVERIFY(menu.findChild<QAction *>(QStringLiteral("ctxUnpark")) == nullptr);
+        park->trigger();
+    }
+    QVERIFY(doc->programmer()->isFixtureParked(relay->id()));
+    QTRY_VERIFY_WITH_TIMEOUT(relayItem->isParked(), 1000);
+    QVERIFY(!dropItem->isParked());
+    // Park wins: no longer held for the edit, it stays where it is.
+    QVERIFY(!doc->outputRuleKeeper()->heldForEdit(relay->id()));
+    shoot(gv, QStringLiteral("behaves-plot-held-and-parked"), true);
+
+    // The Fixture Manager: Behaves as, guessed in italics, Parked said.
+    FixtureManager *fm = FixtureManager::instance();
+    QVERIFY(fm != nullptr);
+    m_app->m_tab->setCurrentIndex(m_app->m_tab->indexOf(fm));
+    fm->updateView();
+    settle(200);
+    int col = -1;
+    QTreeWidgetItem *head = fm->m_fixtures_tree->headerItem();
+    for (int i = 0; i < head->columnCount(); ++i)
+        if (head->text(i) == QStringLiteral("Behaves as"))
+            col = i;
+    QVERIFY2(col > 0, "a Behaves as column");
+    QHash<quint32, QString> says;
+    QHash<quint32, bool> italic;
+    for (QTreeWidgetItemIterator it(fm->m_fixtures_tree); *it; ++it)
+    {
+        const QVariant v = (*it)->data(0, PROP_ID);
+        if (v.isValid() && !(*it)->data(0, PROP_HEAD).isValid())
+        {
+            says.insert(v.toUInt(), (*it)->text(col));
+            italic.insert(v.toUInt(), (*it)->font(col).italic());
+        }
+    }
+    QCOMPARE(says.value(wash->id()), QStringLiteral("Light"));
+    QCOMPARE(says.value(relay->id()), QStringLiteral("Switch · Parked"));
+    QCOMPARE(says.value(drop->id()), QStringLiteral("One-shot"));
+    QCOMPARE(says.value(jet->id()), QStringLiteral("Hazard"));
+    QVERIFY(italic.value(drop->id()));
+    shoot(fm, QStringLiteral("behaves-fixture-manager"), true);
+
+    // The Run tab: a Parked list, no count; Unpark lets it go.
+    CueRunner *run = m_app->findChild<CueRunner *>(QStringLiteral("runTab"));
+    QVERIFY(run != nullptr);
+    m_app->m_tab->setCurrentIndex(m_app->m_tab->indexOf(run));
+    settle(200);
+    QWidget *box = run->findChild<QWidget *>(QStringLiteral("crParkedBox"));
+    QListWidget *parked = run->findChild<QListWidget *>(QStringLiteral("crParked"));
+    QPushButton *unpark = run->findChild<QPushButton *>(QStringLiteral("crUnpark"));
+    QVERIFY(box != nullptr && parked != nullptr && unpark != nullptr);
+    QVERIFY(box->isVisible());
+    QCOMPARE(parked->count(), 1);
+    QCOMPARE(parked->item(0)->text(), relay->name());
+    shoot(run, QStringLiteral("behaves-run-parked"), true);
+    unpark->click();
+    settle(100);
+    QVERIFY(!doc->programmer()->isFixtureParked(relay->id()));
+    QVERIFY(!box->isVisible());
+    QTRY_VERIFY_WITH_TIMEOUT(!relayItem->isParked(), 1000);
+    st->stopPreview();
+    settle(200);
+
+    // Fixture Properties: Behaves as; a 3B laser as a Light needs "3B" typed.
+    m_app->m_tab->setCurrentIndex(m_app->m_tab->indexOf(mon));
+    settle(200);
+    QStringList asked;
+    QString answer;
+    FixtureFields::setLaserConfirm([&](const QString &cls) { asked << cls; return answer; });
+    QString autoText;
+    bool shotDialog = false;
+    int step = 0;
+    QTimer watch;
+    watch.setInterval(20);
+    QObject::connect(&watch, &QTimer::timeout, [&]() {
+        QDialog *d = qobject_cast<QDialog *>(modalOrFixtureEditor());
+        if (d == nullptr)
+            return;
+        QComboBox *cb = d->findChild<QComboBox *>(QStringLiteral("fixtureBehavesAs"));
+        if (cb == nullptr)
+        {
+            d->reject();
+            return;
+        }
+        if (step == 0)
+        {
+            autoText = cb->itemText(0);
+            if (!shots.isEmpty() && !shotDialog)
+            {
+                QDir().mkpath(shots);
+                if (!fixtureRowShown(d, cb))
+                    qWarning() << "Behaves as not on the tab shown";
+                d->grab().save(QDir(shots).filePath(QStringLiteral("behaves-fixture-properties.png")));
+                shotDialog = true;
+            }
+            answer = QStringLiteral("3");               // the wrong class: refused
+            cb->setCurrentIndex(cb->findData(int(Fixture::LightBehaviour)));
+            step = 1;
+            return;
+        }
+        if (step == 1)
+        {
+            answer = QStringLiteral("3b");              // its class: taken
+            cb->setCurrentIndex(cb->findData(int(Fixture::LightBehaviour)));
+            step = 2;
+            return;
+        }
+        d->accept();
+        watch.stop();
+    });
+    watch.start();
+    mon->editFixtureProperties(laser->id());
+    QTRY_VERIFY_WITH_TIMEOUT(!watch.isActive(), 10000);
+    settle(200);
+    FixtureFields::setLaserConfirm(nullptr);
+    QCOMPARE(autoText, QStringLiteral("Auto (Hazard)"));
+    QCOMPARE(asked, QStringList({ QStringLiteral("3B"), QStringLiteral("3B") }));
+    QCOMPARE(laser->behaviourSetting(), int(Fixture::LightBehaviour));
+    QVERIFY(FixtureRest::isHazardousLaserAsLight(laser));
+    laser->setBehaviourSetting(-1);
+    doc->resetModified();
 }
 
 QString CurtainDraw_Test::travels(quint32 fixtureId, quint32 ch, int to, int notBefore, int within)

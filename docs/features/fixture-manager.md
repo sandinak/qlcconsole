@@ -1012,6 +1012,84 @@ output, can still reach a laser that way, and nothing checks that chain.
 Don't route a Show-only universe's channels through a passthrough or
 Loopback chain to a USB interface.
 
+## Behaves as
+
+Every fixture says what it is on stage, which decides **when it may move**
+and **what a stop does to it**. The **Behaves as** column in the Fixtures
+list shows it, and a letter on its icon: **M**, **1**, **S** or **H** (a
+light has none). A guess is in grey italics; one you set is in plain type.
+
+| Behaves as | For | Moves when | A stop (Stop all, Fade and stop, the emergency stop) |
+|---|---|---|---|
+| **Light** | every light | anything plays it: a GO, a cue you pick, a preview, Locate | puts it at rest |
+| **Machinery** | a curtain, a drape, a turntable, a winch, a flown piece | only a run: **GO**, **Back** or a jump, in Design or Operate | freezes it where it is until the next GO |
+| **One-shot** | a kabuki drop, a dropping scrim | as Machinery; **Back never fires it again** — dropped stays dropped | holds its state |
+| **Switch** | a relay, house or work lights on when not in use | as Machinery | holds its state |
+| **Hazard** | fog, haze, flame, CO₂, confetti, sparks, a Class 3R or stronger laser | never fired by an edit, a preview or Locate | off at once |
+
+**Hazards don't fire from a run yet.** Arming a hazard (a hold-to-fire
+deadman, a laser safety officer's key) is the next step. Until it's in,
+a Hazard stays off even when a GO plays a cue that sends it: the footer
+says **Hazard — needs arming (coming)**, and its tooltip names which one.
+If a fogger or a laser should fire from your cues today, set it to
+**Light** (see below) — and know that previews and edits can fire it too.
+
+**Picking a cue in Design holds them.** Click from cue to cue in the Show
+Tree while you build and Machinery, One-shots and Switches stay where they
+are on stage; the plot draws each one where the cue you picked puts it,
+with an amber dashed outline and a **held** badge (a curtain gets its
+**held while editing** mark). A GO from the Run moves them for real,
+over the cue's fade. **Blind** changes only what is drawn.
+
+**The guess.** Absent from the show file, it is worked out from the
+definition and the plot symbol, so a show from before this loads and
+plays as it did — apart from hazards, which now stay off. A curtain
+(the Stage Curtain definition, the **Curtain** plot symbol, or the
+fixture driving a drape on the plot), a turntable, winch or hoist is
+Machinery; a kabuki or a dropping scrim One-shot; a hazer or smoke
+machine, anything named for fog, haze, flame, CO₂, confetti or sparks,
+and a laser of class 3R, 3B, 4 or Unknown a Hazard (a **silk flame** is a
+light); a fixture with the **Switch (relay)** or **On when not in use**
+output rule, or named a relay, a Switch; everything else a Light.
+
+**Setting it.** Open **Fixture Properties** (double-click the fixture)
+and pick **Behaves as** — **Auto (…)** names the guess and goes back to
+it. With several fixtures picked, it sets them all. Show Review lists
+every fixture set to something other than its guess (**FIX-20**), so the
+next person to run the show knows.
+
+**Lasers.** A laser's class comes from its label: **Laser class** in
+Fixture Properties for the unit, or the definition's **Physical** tab in
+the fixture editor. Class 1, 1M, 2 and 2M behave as a light; 3R, 3B, 4
+and **Unknown** as a hazard. A laser with no class given behaves as a
+light, as it always has. Setting a 3R or stronger laser to **Light**
+asks you to type its class (`3B`) to confirm, and Show Review lists it
+as a warning (**FIX-21**): accept it with the note naming who approved
+it.
+
+### Park
+
+**Park Here** holds a fixture exactly where it is now, over every cue, a
+cue you pick, the emergency stop and the GO after it, until you
+**Unpark** it. Right-click it — on the plot, in the Fixtures list, in
+Build or the Show Tree — for **Park Here** or **Unpark**. A parked fixture
+has a **P** beside it on the plot and on its icon, the Fixtures list says
+**· Parked**, and the **Run** tab lists every parked fixture under
+**Parked** (double-click one, or pick and **Unpark**; none picked unparks
+all). Parks are saved with the show. A hazard parks **off**, whatever it
+is doing.
+
+**Check it.** In a show with a relay, a curtain or a hazer:
+
+1. In Design, click a cue that switches the relay on. It stays off; the
+   plot draws it on, with the held badge.
+2. GO that cue from the Run. It switches on.
+3. Right-click the relay → **Park Here**. GO the next cue that turns it
+   off: it stays on. The Run tab lists it under **Parked**.
+4. **Unpark** it there. The next GO drives it again.
+5. GO a cue that sends the hazer. It stays off; the footer says
+   **Hazard — needs arming (coming)**.
+
 ## Context menu
 
 ### Right-click menus

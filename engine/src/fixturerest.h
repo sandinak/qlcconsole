@@ -66,7 +66,8 @@ namespace FixtureRest
      *  fogger, flame, CO2, confetti or spark effect -- anything gas
      *  powered -- and a laser of class 3R, 3B, 4 or Unknown a Hazard (a
      *  silk flame is a light); a relay (the Switch output rule, or named
-     *  so) and house lights (On at open, or named so) a Switch; the rest,
+     *  so) and house or work lights on when not in use (the On at open
+     *  rule) a Switch; the rest -- house dimmers by name too --,
      *  lasers of class 1 to 2M or none said too, a Light. */
     QLC_ENGINE_EXPORT Fixture::Behaviour guessBehaviour(const Fixture *fx);
 

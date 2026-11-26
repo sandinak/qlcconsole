@@ -151,7 +151,7 @@ Fixture::Behaviour FixtureRest::guessBehaviour(const Fixture *fx)
 
     // A relay, house lights: a switch.
     const Fixture::OutputRules rules = fx->outputRules();
-    if ((rules & Fixture::Switch) || (rules & Fixture::OnAtOpen) || hasAny(names, { "relay", "house" }))
+    if ((rules & Fixture::Switch) || (rules & Fixture::OnAtOpen) || hasAny(names, { "relay" }))
         return Fixture::SwitchBehaviour;
     return Fixture::LightBehaviour;
 }
@@ -201,14 +201,29 @@ bool FixtureRest::holdsPositionAt(const Doc *doc, quint32 universeAddress)
     return holdsPosition(fx->channel(universeAddress - fx->universeAddress()));
 }
 
-uchar FixtureRest::restValue(const Fixture *fx, quint32 channel)
+namespace
+{
+/** restValue() with whether @p fx is a hazard worked out once (a stop
+ *  walks every channel of every fixture). */
+uchar restValueOf(const Fixture *fx, quint32 channel, bool off)
 {
     const QLCChannel *ch = fx != nullptr ? fx->channel(channel) : nullptr;
     if (ch == nullptr)
         return 0;
-    if (makesAtmosphere(fx) || isLaser(fx) || isAtmosphereChannel(ch) || isHazard(fx))
+    if (off || FixtureRest::isAtmosphereChannel(ch))
         return 0;
     return ch->defaultValue();
+}
+
+bool restsOff(const Fixture *fx)
+{
+    return FixtureRest::makesAtmosphere(fx) || FixtureRest::isLaser(fx) || FixtureRest::isHazard(fx);
+}
+}
+
+uchar FixtureRest::restValue(const Fixture *fx, quint32 channel)
+{
+    return restValueOf(fx, channel, fx != nullptr && restsOff(fx));
 }
 
 int FixtureRest::putAllAtRest(Doc *doc)
@@ -227,6 +242,7 @@ int FixtureRest::putAllAtRest(Doc *doc)
         if (freezesOnStop(fx))
             continue;
         const quint32 base = fx->universeAddress();
+        const bool off = restsOff(fx);
         for (quint32 i = 0; i < fx->channels(); ++i)
         {
             const quint32 abs = base + i;
@@ -238,7 +254,7 @@ int FixtureRest::putAllAtRest(Doc *doc)
                swing every head across the stage. */
             if (holdsPosition(fx->channel(i)))
                 continue;
-            unis.at(uni)->setChannelDefaultValue(ushort(abs & 511), restValue(fx, i));
+            unis.at(uni)->setChannelDefaultValue(ushort(abs & 511), restValueOf(fx, i, off));
             ++written;
         }
     }

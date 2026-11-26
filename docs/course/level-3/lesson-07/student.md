@@ -19,6 +19,8 @@ words:
     means: "The one fader over everything: the **GM** slider in the footer."
   - term: Output rules
     means: "Per fixture: **Ignore Blackout**, **Ignore the Grand Master**, **Switch (relay)**, **On when not in use**."
+  - term: Behaves as
+    means: "What a fixture is on stage: **Light**, **Machinery**, **One-shot**, **Switch** or **Hazard**. It decides whether building the show may move it and what a stop does to it."
 ---
 
 ## Why
@@ -56,6 +58,12 @@ Roles: Driver, Navigator, Designer. Switch after each fixture.
 
    ![The Output Rules dialog for Stage Power](../../images/lesson-3-7/output-rules.png)
 
+   Its icon gets an **S**: it now *behaves as* a **Switch**. A switch, a
+   curtain or a kabuki drop moves only when the show runs (GO, Back),
+   never because you clicked a cue while building, and a stop leaves it
+   as it is. Fog, flame and strong lasers are **Hazards**: a click never
+   fires them.
+
 8. **Settings** (⌘,) → **Advanced**: leave **"On when not in use"
    fixtures come on** at **When you switch to Operate**. Close Settings.
 9. Click the **Show Tree** tab (⇧⌘5), click the **Command** line, and type
@@ -88,7 +96,8 @@ on, or the GM is down.
 
 1. What are **house lights** and **work lights** for?
 2. Which output rules did you give the house lights, and why?
-3. Why is a power **relay** a switch and not a dimmer?
+3. Why is a power **relay** a switch and not a dimmer? Why shouldn't
+   clicking a cue while you build switch it?
 4. When does our Stage Power relay come on by itself, and where is that
    set?
 

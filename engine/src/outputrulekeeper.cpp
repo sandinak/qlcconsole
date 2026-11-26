@@ -853,8 +853,9 @@ void OutputRuleKeeper::layHazards()
         if (fx == nullptr || !fx->isPatched() || !FixtureRest::isHazard(fx) || isParked(fx->id()))
             continue;
         hazards.insert(fx->id(), qMakePair(fx->universeAddress(), fx->channels()));
+        // Off: a hazard's every channel rests at 0 (FixtureRest::restValue()).
         for (quint32 i = 0; i < fx->channels(); ++i)
-            levels << OutputLayer::Level { fx->id(), i, safeValue(fx, i) };
+            levels << OutputLayer::Level { fx->id(), i, uchar(0) };
     }
     m_hazards = hazards;
     if (levels.isEmpty())
@@ -885,7 +886,7 @@ void OutputRuleKeeper::checkHazardsRefused()
             const int u = int(abs >> 9);
             if (u >= ua.size() || ua.at(u) == nullptr)
                 continue;
-            const uchar safe = safeValue(fx, i);
+            const uchar safe = 0;           // as layHazards() holds it
             for (const QSharedPointer<GenericFader> &f : ua.at(u)->faders())
             {
                 if (f.isNull() || f->priority() >= int(Universe::Park))

@@ -242,6 +242,7 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
         Doc *doc = m_monitor->m_doc;
         /* A 3R+ laser as a Light: its class typed, for each such laser. */
         if (b == int(Fixture::LightBehaviour))
+        {
             foreach (quint32 fid, m_fids)
             {
                 const Fixture *fx = doc->fixture(fid);
@@ -253,6 +254,7 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
                     return;
                 }
             }
+        }
         emit aboutToEdit(QStringLiteral("behavesAs"));
         foreach (quint32 fid, m_fids)
             if (Fixture *fx = doc->fixture(fid))

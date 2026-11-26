@@ -1293,12 +1293,10 @@ void TrackBack_Test::aStopLeavesACurtainWhereItIs()
         tick(5);
         still(QStringLiteral("a look let go of"));
         m_doc->deleteFunction(other->id());
-        /* The lights are out, the flame off; the house (a Switch, board
-           Q350/Q351) holds what it had when the stop came. */
+        // The lights are out, the flame off.
         const QByteArray dark = settle(60);
-        if (value(dark, house1, 0) != value(before, house1, 0))
-            bad << QStringLiteral("%1: the house at %2, was %3").arg(m.name).arg(value(dark, house1, 0))
-                   .arg(value(before, house1, 0));
+        if (value(dark, house1, 0) != 0)
+            bad << QStringLiteral("%1: the house at %2").arg(m.name).arg(value(dark, house1, 0));
         if (value(dark, flame, 0) != 0)
             bad << QStringLiteral("%1: the flame at %2").arg(m.name).arg(value(dark, flame, 0));
 
@@ -1353,9 +1351,9 @@ void TrackBack_Test::theFooterSaysWhereTheCurtainStopped()
     ShowControl::Request off;
     off.command = ShowControl::AllOff;
     m_doc->showControl()->execute(off);
-    // The house (two dimmers and a relay: Switch) is held too.
+    // The house relay (a Switch, board Q351) is held too.
     QCOMPARE(rules->stageMachineryHeldText(),
-             QStringLiteral("Curtain stopped at %1% · 3 more held — GO to carry on").arg(qRound(open * 100.0 / 255.0)));
+             QStringLiteral("Curtain stopped at %1% · 1 more held — GO to carry on").arg(qRound(open * 100.0 / 255.0)));
     QVERIFY(rules->stageMachineryHeldText().startsWith(QStringLiteral("Curtain stopped at 4")));
     // The next GO: gone.
     ShowControl::Request go;
