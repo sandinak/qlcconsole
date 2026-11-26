@@ -6570,13 +6570,15 @@ bool App::requestLevel(int level)
     ShowLevel *sl = ShowLevel::instance();
     const ShowLevel::Level want = ShowLevel::Level(level);
     const TeachingSettings *teach = m_doc != NULL ? m_doc->teachingSettings() : nullptr;
-    if (teach != nullptr && teach->enabled() && want > sl->level())
+    if (teach != nullptr && teach->enabled())
     {
-        /* A Teaching show opens at its saved level; going up asks the
-           instructor's PIN once, and lasts until the show is closed --
-           never saved (Q341, Q342). With no PIN set, nothing is asked. */
+        /* A Teaching show opens at its saved level, and a pick here never
+           changes it: up or down lasts until the show is closed (Q341,
+           Q342), so a student who goes down can always come back. Going
+           above the saved level asks the instructor's PIN once; with no
+           PIN set, nothing is asked. */
         ShowOperate *op = m_doc->operateSettings();
-        if (want > sl->chosenLevel() && op != nullptr && op->hasPin() && !sl->unlocked())
+        if (want > sl->level() && op != nullptr && op->hasPin() && !sl->unlocked())
         {
             if (!ShowSettingsDialog::askForPin(this, op->pinHash(),
                     tr("This is a Teaching show. The instructor's PIN opens the %1 level until "

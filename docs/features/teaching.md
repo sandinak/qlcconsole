@@ -104,7 +104,9 @@ be saved at **Standard** (Make Student Handout's **Level** box, below).
 - **An unlock lasts until the show is closed, and is never saved.** The
   student copy reopens at its own level, whatever was unlocked while it
   was open.
-- **Going down never asks.**
+- **Going down never asks, and is never saved either**: a student who
+  steps down from a Standard copy can step back up to Standard without
+  the PIN, and the copy still reopens at Standard.
 - With **no PIN set**, Teaching still sets Student, and going up asks
   for nothing, as Teaching's other switches do.
 - **Classic QLC+** shows QLC+'s tabs in full, so a Student show opens

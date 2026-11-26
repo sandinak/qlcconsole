@@ -81,7 +81,7 @@ public:
     /** The level saved in the show. */
     Level level() const { return m_level; }
     /** The level the show is at now: the saved one, or this session's
-     *  raise (a Teaching show's PIN unlock). */
+     *  pick (a Teaching show's: a PIN unlock up, or any step down). */
     Level chosenLevel() const { return m_session >= 0 ? Level(m_session) : m_level; }
     /** What the window shows: chosenLevel(), or Advanced where levels don't
      *  apply (Classic QLC+). */
@@ -89,9 +89,9 @@ public:
     /** False in Classic QLC+. */
     bool applies() const { return !m_classic; }
 
-    /** The saved level; clears a session raise. */
+    /** The saved level; clears a session pick. */
     void setLevel(Level level);
-    /** A raise for this session only (never saved). */
+    /** A level for this session only, up or down (never saved). */
     void setSessionLevel(Level level);
     bool hasSessionLevel() const { return m_session >= 0; }
     /** A Teaching show's PIN was given: until the show is closed. */

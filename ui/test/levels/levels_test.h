@@ -43,6 +43,10 @@ private slots:
     /** Turning Teaching on sets Student; going up asks the PIN once, lasts
      *  until the show is closed and is never saved (Q341, Q342). */
     void teachingSetsStudentAndThePinUnlocksForTheSession();
+    /** In a Teaching show going down is for the session too: the saved
+     *  level stays, the doc is not modified, and going back up to the
+     *  saved level asks nothing (round 1 review). */
+    void aTeachingShowsSavedLevelSurvivesGoingDown();
     /** Make Student Handout writes the level its Level box says. */
     void theHandoutCarriesItsLevel();
     /** The menu bar's top-level count: Student <= 52, Standard <= 68

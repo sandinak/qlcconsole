@@ -18,7 +18,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   saved with the show, absent = Standard): Student puts away Build, Functions,
   Simple Desk, the Timeline and the menu items a class doesn't use, each with a
   **More at Standard…** line and a Switch; Teaching and Make Student Handout set
-  Student, and going up asks the PIN until the show closes; the effect script
+  Student, and going up asks the PIN until the show closes (going down there
+  is for the session too, never saved); the effect script
   editor moves to Advanced; Clear Hold at End folds into Hold at End, and
   Shift-click a tab moves to Settings ▸ Appearance (Q249, Q340–Q344).
 

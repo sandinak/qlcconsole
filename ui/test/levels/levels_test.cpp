@@ -230,6 +230,47 @@ void Levels_Test::anOldShowOpensAtStandard()
     m_app->doc()->resetModified();
 }
 
+void Levels_Test::aTeachingShowsSavedLevelSurvivesGoingDown()
+{
+    // A Level 3 handout: Teaching, saved at Standard, with a PIN.
+    m_app->doc()->teachingSettings()->setEnabled(true);
+    QVERIFY(m_app->doc()->operateSettings()->setPin(QStringLiteral("2468")));
+    ShowLevel::instance()->setLevel(ShowLevel::Standard);
+    m_app->doc()->resetModified();
+
+    // The student steps down: for this session only, nothing to save.
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Student);
+    QCOMPARE(ShowLevel::instance()->level(), ShowLevel::Standard);
+    QVERIFY(!m_app->doc()->isModified());
+    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Shows")));
+
+    // And back up to the saved level without the PIN (no answer queued:
+    // a prompt would read as Cancel).
+    ShowSettingsDialog::testAnswers().clear();
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Standard);
+    QVERIFY(!ShowLevel::instance()->hasSessionLevel());
+    QVERIFY(!ShowLevel::instance()->unlocked());
+
+    // Above it still asks.
+    QVERIFY(!m_app->requestLevel(ShowLevel::Advanced));
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Standard);
+
+    // Saved while down, the copy reopens at Standard.
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("handout.qxw"));
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    bool present = true;
+    workspaceAttr(path, QStringLiteral("Level"), &present);
+    QVERIFY(!present);
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QVERIFY(m_app->doc()->teachingSettings()->enabled());
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Standard);
+    m_app->doc()->resetModified();
+}
+
 void Levels_Test::teachingSetsStudentAndThePinUnlocksForTheSession()
 {
     TeachingSettings *teach = m_app->doc()->teachingSettings();
