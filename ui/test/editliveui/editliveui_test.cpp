@@ -54,6 +54,7 @@
 #include "cuerunner.h"
 #include "qlcpalette.h"
 #include "editlive.h"
+#include "encoderbank.h"
 #include "qlcfile.h"
 #include "fixture.h"
 #include "chaser.h"
@@ -194,14 +195,6 @@ void EditLiveUi_Test::go()
     tick(10);
     settle();
     m_doc->controlMap()->editLive()->checkCue();
-    settle();
-}
-
-void EditLiveUi_Test::trimRed2()
-{
-    // From the held 50%: down to 25%.
-    QVERIFY(m_apc->set(QStringLiteral("#7"), 64));
-    QVERIFY(m_apc->set(QStringLiteral("#7"), 32));
     settle();
 }
 
@@ -378,7 +371,8 @@ void EditLiveUi_Test::shots()
         // Off, then on with trims and its popup, then Store to Cue after a GO.
         QVERIFY(win.grab().save(base.arg(QStringLiteral("off")).arg(size.width()).arg(size.height())));
         QVERIFY(el->setOn(true));
-        trimRed();
+        // Red down a little on all four (each size's store moved the look).
+        QVERIFY(el->adjust(EncoderBank::ColourBank, 2, -4, false));
         settle();
         QMenu *menu = chip->buildMenu();
         menu->popup(chip->mapToGlobal(QPoint(0, 0)) - QPoint(0, menu->sizeHint().height()));
@@ -396,7 +390,8 @@ void EditLiveUi_Test::shots()
         QVERIFY(el->store());
         settle();
         QVERIFY(win.grab().save(base.arg(QStringLiteral("held")).arg(size.width()).arg(size.height())));
-        trimRed2();
+        QVERIFY(el->adjust(EncoderBank::ColourBank, 2, -4, false));
+        settle();
         go();
         settle();
         QVERIFY(win.grab().save(base.arg(QStringLiteral("storetocue")).arg(size.width()).arg(size.height())));
