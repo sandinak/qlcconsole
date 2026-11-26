@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **The PMS visit rehearsed**: a test walks New Venue from a Show, Fill Roles, the six house cues, a save and reopen and the switch back to the office, on a made-up show and room and (on the developer's Mac) on copies of the real files; the on-site checklist for 2026-12-08 is docs/project/PMS_ONSITE_CHECKLIST.md.
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

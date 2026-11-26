@@ -599,6 +599,8 @@ void PmsRehearsal_Test::rehearseTheVisit()
     }
     QVERIFY2(placeErrors.isEmpty(), qPrintable(placeErrors.join('\n')));
     QVERIFY(placed > 0);
+    report << QStringLiteral("the venue's own patch: %1 universes (started from the venue applied before)")
+                  .arg(pms.rig.patch.size());
     report << QStringLiteral("house fixtures: %1, all House on U%2, %3 checked at their plot places")
                   .arg(byName.size()).arg(roomU + 1).arg(placed);
     if (!offPlot.isEmpty())
@@ -718,7 +720,7 @@ void PmsRehearsal_Test::rehearseTheVisit()
     report << QStringLiteral("House to half: house lights at %1-%2 of 255").arg(half.first).arg(half.second);
     if (half.second < 255)
         rough << QStringLiteral("House to half sends %1 to the house circuits: no Switch rule on them, so a relay "
-                                "there sees 50%% and its own threshold decides").arg(half.second);
+                                "there sees 50% and its own threshold decides").arg(half.second);
     stopAll(doc);
     fire(QStringLiteral("house-full"));
     QCOMPARE(levels(doc, house).first, 255);
@@ -786,13 +788,22 @@ void PmsRehearsal_Test::rehearseTheVisit()
             if (!bad.isEmpty())
                 targetNotes << QStringLiteral("%1: %2").arg(t->name(), bad.join(QStringLiteral(", ")));
         }
-        // The show's deck against the room's curtain.
+        // The show's deck (what stands inside the room's opening) against the room's curtain.
         double deckFront = -1.0;
+        QString deckPiece;
         for (const StagePlatform *p : props->platforms())
-            deckFront = qMax(deckFront, double(p->originY() + p->depth()) * 1000.0);
+        {
+            const double left = double(p->originX()) * 1000.0, right = left + double(p->width()) * 1000.0;
+            const double front = double(p->originY() + p->depth()) * 1000.0;
+            if (right > opening.left() && left < opening.right() && front > deckFront)
+            {
+                deckFront = front;
+                deckPiece = p->name();
+            }
+        }
         if (deckFront > curtain.y())
-            rough << QStringLiteral("the show's platforms reach %1 downstage of the room's %2")
-                         .arg(len(deckFront - curtain.y()), curtainPiece);
+            rough << QStringLiteral("the show's deck (%1) reaches %2 downstage of the room's %3")
+                         .arg(deckPiece, len(deckFront - curtain.y()), curtainPiece);
     }
     report << QStringLiteral("stage targets: %1, %2 outside the room").arg(props->stageTargets().size())
                   .arg(targetNotes.size());

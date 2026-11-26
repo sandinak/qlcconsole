@@ -35,7 +35,7 @@ Contents:
   (VENUE_FROM_SHOW.md §4). World 0,0 is the corner of each file's own stage
   grid (`MonitorProperties::stageCentre()`), so the two rigs only line up
   by luck. PMS's grid is 70 ft wide, DH's is 50 ft: PMS's FOH truss lands
-  10 ft stage left and 6' 9" downstage of where it belongs relative to DH.
+  10 ft stage left and 6' 4" downstage of where it belongs relative to DH.
 - **Cues can't reach the house rig.** Fills work by group (VENUES.md §4),
   but name matching found 0 of PMS's 16 groups in DH, so all 16 wait as
   room groups and every house light needs hand work.
@@ -386,7 +386,7 @@ a proscenium 36' wide, a main drape, a cyclorama, a back wall, no decks.
 its proscenium is 4" stage left of that (said, not used). Its drape is
 **Cyclorama 2**, 18' 9" upstage of the main drape. DH's centre line is the
 middle of its 50 ft grid and its upstage line is its **Cyclorama 1**. The
-offset is 10' 0" toward stage right and 6' 9" upstage; every PMS light
+offset is 10' 0" toward stage right and 6' 4" upstage; every PMS light
 moves by it, nothing of DH's moves.
 
 **The roles** (fixture names and models from the file):
