@@ -1518,6 +1518,58 @@ void VCCueList_Test::goStepsPastASectionRow()
     QVERIFY(!ch->isRunning());
 }
 
+void VCCueList_Test::keysAndClicksOnASectionRowKeepTheCueSelected()
+{
+    const quint32 list = threeSongs(m_doc);
+    QVERIFY(list != ShowTree::invalidId());
+    ShowTreeController *st = m_doc->showTree();
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(ch != NULL);
+
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    w.resize(600, 500);
+    VCCueList cl(&w, m_doc);
+    cl.resize(600, 500);
+    cl.setChaser(ch->id());
+    w.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&w));
+    QTreeWidget *tree = cl.m_tree;
+    tree->setFocus();
+    // # Song 1, 0, 1, # Song 2, 2, 3, # Song 3, 4, 5
+    QVERIFY(isSectionRow(tree->topLevelItem(3)));
+
+    auto onlySelected = [tree]() -> QTreeWidgetItem * {
+        const QList<QTreeWidgetItem *> sel = tree->selectedItems();
+        return sel.size() == 1 ? sel.first() : NULL;
+    };
+
+    // Down from the last cue of the first song, onto the next song's header:
+    // its first cue is current and highlighted.
+    tree->setCurrentItem(cl.stepItem(1));
+    QCOMPARE(onlySelected(), cl.stepItem(1));
+    QTest::keyClick(tree, Qt::Key_Down);
+    QCOMPARE(tree->currentItem(), cl.stepItem(2));
+    QTRY_COMPARE(onlySelected(), cl.stepItem(2));
+
+    // Up from the first cue onto the header in row 0: it stays, highlighted.
+    tree->setCurrentItem(cl.stepItem(0));
+    QCOMPARE(onlySelected(), cl.stepItem(0));
+    QTest::keyClick(tree, Qt::Key_Up);
+    QCOMPARE(tree->currentItem(), cl.stepItem(0));
+    QTRY_COMPARE(onlySelected(), cl.stepItem(0));
+
+    // A click on the third song's header: its first cue, highlighted.
+    tree->setCurrentItem(cl.stepItem(1));
+    QTreeWidgetItem *header = tree->topLevelItem(6);
+    QVERIFY(isSectionRow(header));
+    tree->scrollToItem(header);
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      tree->visualItemRect(header).center());
+    QCOMPARE(tree->currentItem(), cl.stepItem(4));
+    QTRY_COMPARE(onlySelected(), cl.stepItem(4));
+}
+
 void VCCueList_Test::aListWithNoSectionsLooksAsBefore()
 {
     // A Show Tree list with no scheme, and a plain chaser: rows are steps.
