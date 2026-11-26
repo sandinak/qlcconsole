@@ -346,14 +346,6 @@ QString len(double mm)
     return MeasurementUnits::formatLength(mm);
 }
 
-FixtureGroup *groupNamed(Doc *doc, const QString &name)
-{
-    for (FixtureGroup *g : doc->fixtureGroups())
-        if (g->name() == name)
-            return g;
-    return nullptr;
-}
-
 /* The show as it stands, for "unchanged": every fixture's XML, every
    group's heads, every universe's output, the targets. */
 QMap<QString, QByteArray> snapshot(Doc *doc)
