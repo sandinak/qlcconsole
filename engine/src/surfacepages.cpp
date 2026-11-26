@@ -23,6 +23,7 @@
 #include <QUrl>
 
 #include "surfacepages.h"
+#include "editlive.h"
 #include "inputoutputmap.h"
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
@@ -295,11 +296,22 @@ void SurfacePages::applyStatic()
     {
         if (!isActive(it.key()) || m_overlaid.contains(it->profile))
             continue;
+        const bool live = m_doc->mode() != Doc::Design;
         for (quint32 ch : it->set.controlsOn(it->page))
         {
             // Never the desk's GO, Back, STOP or GM, whatever a set says.
             if (!it->layout.roleOn(ch).isEmpty())
                 continue;
+            /* Edit Live (Operate) takes only what it trims; a wheel, a
+               strobe or an overlay's rule stays the show's. */
+            if (live)
+            {
+                const PageSet::Binding *bind = it->set.binding(it->page, ch);
+                int bank = 0, slot = 0;
+                if (bind != nullptr && (!PageSet::bankSlot(bind->param, &bank, &slot)
+                                        || !EditLive::canTrim(bank, slot)))
+                    continue;
+            }
             controls.insert(keyOf(it.key(), ch));
             const int i = it->layout.indexOf(ch);
             if (i >= 0)
@@ -416,8 +428,10 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
     const bool live = !design && m_live;
     const bool overlaid = m_overlaid.contains(b->profile);
     // Operate: the controls are the show's (the PMJ's keys are its overlay's),
-    // unless Edit Live has the page trim the running stage.
-    if (!design && !live)
+    // unless Edit Live has the page trim the running stage. A board whose
+    // overlay reads its faders (the PMJ) never trims: its faders are the
+    // overlay's and the show's, and would act twice.
+    if (!design && (!live || overlaid))
         return;
 
     if (own == b->set.stepper())
@@ -442,6 +456,9 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
     int bank = 0, slot = 0;
     if (bind == nullptr || !PageSet::bankSlot(bind->param, &bank, &slot))
         return;     // nothing here, or one of the overlay's rules
+    // Edit Live leaves what it doesn't trim to the show (applyStatic()).
+    if (live && !EditLive::canTrim(bank, slot))
+        return;
     if (c.isFader())
     {
         if (live)

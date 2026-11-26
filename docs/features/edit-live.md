@@ -33,8 +33,19 @@ Only the channels you moved sit over the cue (at the Simple Desk's place in
 the output, under Highlight, Locate, Focus and Park; the Grand Master and
 Blackout still apply). The show file does not change until you Store.
 
+A trim starts from the look's own level, not from what the output shows:
+with the cue list's master at 50%, a fader picks up at the look's 100%, and
+a trim to 60% is stored as 60%. On stage the trimmed intensities follow the
+list master (60% shows at 30%), so what Edit Live puts up is never brighter
+than the cue would play, and a master pulled down takes the trims with it.
+
 Edit Live trims intensity, colour, position (pan and tilt), zoom, focus,
-iris and frost. Gobo and prism wheels and strobe are set in Design.
+iris and frost. Gobo and prism wheels and strobe are set in Design: their
+controls stay the show's while Edit Live is on (a trigger on them still
+works).
+
+A cue with sub-cues: the sub-cue playing is the one trimmed, and a Sub GO
+drops its trims as GO does.
 
 The Grand Master, STOP, GO and Back are this computer's desk and never
 part of a page: they work as always.
@@ -47,13 +58,21 @@ from → to* (**Front 1 · Red · 100% → 50%**), and:
 - **Store to Cue N**: for each setting, finds the look setting it in the
   running cue -- the cue's own layer, or the earlier cue it tracks from --
   and writes the trimmed value there. Only the touched attributes: the
-  colour of a layer changes, its intensity and position do not. Trimmed
-  fixtures that are only some of a layer's get their own exception (a
-  child layer) for it. All of it is **one undo step**, and the status line
-  names what was stored where (*Stored Position of Spot in cue 1 Open (it
-  tracks into cue 2 Blue)*). The running cue plays the stored look from
-  its next GO, so the trims stay on stage until then.
-- **Drop**: the trims go at once; the cue's own values are back.
+  colour of a layer changes, its intensity and position do not. It is
+  written into the layer that sets that attribute on the fixture (a layer
+  that sets only the level is not given a colour). When every head of the
+  layer was trimmed and ends the same, the layer's look changes; a
+  position moved evenly across a fan keeps the fan. Otherwise -- some of
+  the layer's heads, or heads that now differ (a fan, a formation, mixed
+  levels) -- each trimmed head gets its own exception (a child layer) with
+  its own value, so the next GO plays exactly what was on stage. All of it
+  is **one undo step**, and the status line names what was stored where
+  (*Stored Position of Spot in cue 1 Open (it tracks into cue 2 Blue)*).
+  The running cue plays the stored look from its next GO, so the stored
+  values stay on stage until then: the chip says **EDIT LIVE · Held Until
+  GO**. **Drop** lets go of them, and undoing the Store does too.
+- **Drop**: the trims go at once; the cue's own values are back (with
+  nothing pending, the stored ones held until GO go).
 - **Turn Edit Live Off**.
 
 ## GO with trims not stored

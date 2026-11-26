@@ -302,6 +302,18 @@ void EditLiveUi_Test::theChipIsRedAndListsTheTrims()
     QVERIFY(drop != nullptr && drop->isEnabled());
     store->trigger();
     QVERIFY(!el->hasTrims());
+    // Stored, and held on stage until GO: Drop can still let go of it.
+    QCOMPARE(chip.chip()->text(), QStringLiteral("EDIT LIVE · Held Until GO"));
+    {
+        QScopedPointer<QMenu> again(chip.buildMenu());
+        QAction *drop2 = nullptr;
+        for (QAction *a : again->actions())
+            if (a->objectName() == QLatin1String("editLiveDrop"))
+                drop2 = a;
+        QVERIFY(drop2 != nullptr && drop2->isEnabled());
+        drop2->trigger();
+    }
+    QVERIFY(!el->isHolding());
     QCOMPARE(chip.chip()->text(), QStringLiteral("EDIT LIVE"));
     QVERIFY(el->lastNote().contains(QStringLiteral("Colour")));
 }

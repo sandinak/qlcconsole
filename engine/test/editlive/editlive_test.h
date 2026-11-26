@@ -25,6 +25,7 @@
 #include <QList>
 
 class Doc;
+namespace ShowTree { struct Layer; }
 class Chaser;
 class EditLive;
 class IOPluginStub;
@@ -52,12 +53,34 @@ private slots:
     void theEmergencyStopClearsIt();
     void designTurnsItOff();
 
+    /* The review of d01a79bfb (each fails there) */
+    void aPartOfALayerGetsItsOwnException();
+    void anEvenMoveOfAFanKeepsTheFan();
+    void anUnevenMoveOfAFanStoresEachHead();
+    void oneHeadOfAFanStoresWhereItIs();
+    void mixedLevelsStoreEachHead();
+    void theLayerThatSetsTheKeyIsTheOneStored();
+    void theListMasterScalesTheTrimsAndNotTheStore();
+    void theGrandMasterStillAppliesOverTrims();
+    void stopAllDropsTheTrims();
+    void closingTheShowTurnsItOff();
+    void undoOfAStoreLetsGoOfTheStage();
+    void dropAfterStoreLetsGoOfTheStage();
+    void thePmjsFadersNeverTrim();
+    void aSubCueGoDropsTheTrims();
+    void anAttributeMovedBackIsNotPending();
+    void aRefusedControlStaysTheShows();
+
 private:
     bool show();
     void go();
     void tick(int n = 1);
     QByteArray frame();
     QList<int> spotPan() const;
+    QByteArray postFrame();
+    const ShowTree::Layer *childOf(quint32 cue, quint32 group, quint32 fixture) const;
+    int lookValue(const ShowTree::Layer *layer, const QString &key, int index = 0) const;
+    void trimRed(int from, int to);
 
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;
@@ -66,10 +89,10 @@ private:
     QTemporaryDir m_settings;
     QList<quint32> m_selection;
     Chaser *m_chaser = nullptr;
-    quint32 m_spot = 0, m_par1 = 0, m_par2 = 0;
-    quint32 m_pars = 0, m_spots = 0;
-    quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0;
-    quint32 m_red = 0, m_blue = 0, m_full = 0, m_front = 0;
+    quint32 m_spot = 0, m_par1 = 0, m_par2 = 0, m_spot2 = 0, m_spot3 = 0;
+    quint32 m_pars = 0, m_spots = 0, m_movers = 0, m_par1Only = 0;
+    quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0, m_c4 = 0, m_s1 = 0, m_s2 = 0;
+    quint32 m_red = 0, m_blue = 0, m_full = 0, m_front = 0, m_half = 0, m_fan = 0, m_dimFan = 0;
 };
 
 #endif

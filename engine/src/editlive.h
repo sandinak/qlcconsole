@@ -33,6 +33,7 @@
 #include "qlcengine_export.h"
 
 class SurfacePages;
+class QTimer;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -95,6 +96,16 @@ public:
     /** The pending settings, in the order they were first touched. */
     QList<Trim> trims() const;
     bool hasTrims() const { return !m_pending.isEmpty(); }
+    /** Stored trims still held on the rig until the cue changes (the
+     *  running cue plays the stored looks from its next GO). Drop lets go
+     *  of them; an undo of the Store does too. */
+    bool isHolding() const;
+    /** Drop has something to let go of: pending trims, or held ones. */
+    bool canDrop() const { return hasTrims() || isHolding(); }
+    /** What the cue list plays its intensity at now (its master, 0-1):
+     *  the trims' intensity channels follow it, so what Edit Live puts on
+     *  stage is never brighter than the cue would play. */
+    qreal listIntensity() const;
     /** "Spot 1 · Red · 40% → 62%" */
     QString trimText(const Trim &t) const;
 
@@ -124,7 +135,8 @@ public:
      *  until the cue changes (the running cue plays the stored look from
      *  its next GO). False (@p why): nothing stored. */
     bool store(QString *why = nullptr);
-    /** The pending trims go at once (no fade). */
+    /** The pending trims go at once (no fade); with none pending, the held
+     *  (stored) ones go back to what the cue plays. */
     void drop();
 
     /** After a GO: the trims that went with the old cue, for leftBehindMs(). */
@@ -172,6 +184,11 @@ private:
     bool storeSnapshot(const Snapshot &snap, QString *why);
     void clearAll();
     void connectSources();
+    void recomputePending();
+    void releaseHeld(bool keepPending);
+    void treeChanged();
+    void follow();
+    uchar seedValue(quint32 fixture, quint32 channel, const QByteArray &frame) const;
 
 private:
     Doc *m_doc;
@@ -190,6 +207,21 @@ private:
     QSet<quint32> m_seeded;
     /** (fixture, bank, slot) pending, in the order first touched. */
     QList<quint64> m_pending;
+    /** The channels each (fixture, bank, slot) moved: an attribute moved
+     *  back to where it was is no longer pending, whatever else moved. */
+    QHash<quint64, QSet<quint32>> m_slotChannels;
+    /** What the running cue puts on stage, as look levels (before the list
+     *  master and the layers over it): what a trim starts from. */
+    QHash<quint32, QByteArray> m_levels;
+    bool m_levelsRead = false;
+    /** The Show Tree's undo depth right after a Store (-1: none held). */
+    int m_heldSteps = -1;
+    /** The list intensity the layer was last pushed at. */
+    qreal m_pushedScale = 1.0;
+    QTimer *m_follow = nullptr;
+    /** A Store to Cue offer's generation: an old offer's timer is not the
+     *  new one's. */
+    quint32 m_leftGeneration = 0;
     QHash<quint64, FaderPickup> m_pickups;
     Snapshot m_left;
     QString m_note;

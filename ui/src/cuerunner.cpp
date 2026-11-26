@@ -60,6 +60,7 @@
 #include "cuerunner.h"
 #include "editlivechip.h"
 #include "editlive.h"
+#include "surfacepages.h"
 #include "controlmap.h"
 #include "groupmasterstrip.h"
 #include "teachingsettings.h"
@@ -673,7 +674,7 @@ void CueRunner::buildFullLayout()
     refreshPadRun();
     /* Edit Live (Q337-Q339): the board's page controls trim the running
        cue; the footer's red chip lists the trims and stores them. Asks
-       the show's PIN when it has one. Shown in Operate only. */
+       the show's PIN when it has one. Shown in Operate with a paged board. */
     m_editLiveBtn = new QToolButton(this);
     m_editLiveBtn->setObjectName(QStringLiteral("crEditLive"));
     m_editLiveBtn->setText(tr("Edit Live"));
@@ -689,6 +690,8 @@ void CueRunner::buildFullLayout()
     });
     if (EditLive *el = m_doc->controlMap()->editLive())
         connect(el, &EditLive::onChanged, this, &CueRunner::refreshEditLive);
+    // Shown only with a board that has pages (as the footer's chip).
+    connect(m_doc->controlMap()->surfacePages(), &SurfacePages::setsChanged, this, &CueRunner::refreshEditLive);
     connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshEditLive);
     head->addWidget(m_editLiveBtn);
     refreshEditLive();
@@ -1453,7 +1456,9 @@ void CueRunner::refreshEditLive()
         m_editLiveBtn->setChecked(on);
     }
     // Operate only (as the footer's chip): the Design header keeps its room.
-    m_editLiveBtn->setVisible(on || m_doc->mode() == Doc::Operate);
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    m_editLiveBtn->setVisible(on || (m_doc->mode() == Doc::Operate && pages != nullptr
+                                     && !pages->universes().isEmpty()));
     m_editLiveBtn->setStyleSheet(on ? QStringLiteral("QToolButton { color: #ffffff; background: #c62828; "
                                                      "font-weight: bold; }")
                                     : QString());

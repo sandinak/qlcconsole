@@ -144,11 +144,12 @@ void EditLiveChip::refresh()
     if (on)
     {
         const int n = el->trims().size();
-        m_chip->setText(n == 0 ? tr("EDIT LIVE") : n == 1 ? tr("EDIT LIVE · 1 Trim")
-                                                          : tr("EDIT LIVE · %1 Trims").arg(n));
+        m_chip->setText(n == 0 ? (el->isHolding() ? tr("EDIT LIVE · Held Until GO") : tr("EDIT LIVE"))
+                               : n == 1 ? tr("EDIT LIVE · 1 Trim") : tr("EDIT LIVE · %1 Trims").arg(n));
         m_chip->setStyleSheet(QLatin1String(kOnStyle));
         m_chip->setToolTip(tr("Edit Live is on: the board's page controls trim the running cue. "
-                              "Click to see the trims, Store or Drop them, or turn it off."));
+                              "Click to see the trims, Store or Drop them, or turn it off. Stored trims "
+                              "stay on stage until GO; Drop lets go of them."));
     }
     else
     {
@@ -178,7 +179,9 @@ QMenu *EditLiveChip::buildMenu()
         return menu;
     const QList<EditLive::Trim> trims = el->trims();
     const QString cue = el->cueText(el->cue());
-    if (trims.isEmpty())
+    if (trims.isEmpty() && el->isHolding())
+        menu->addAction(tr("Stored, Held Until GO"))->setEnabled(false);
+    else if (trims.isEmpty())
         menu->addAction(cue.isEmpty() ? tr("No Cue Running") : tr("No Trims Yet on Cue %1").arg(cue))
             ->setEnabled(false);
     for (const EditLive::Trim &t : trims)
@@ -193,7 +196,7 @@ QMenu *EditLiveChip::buildMenu()
     });
     QAction *drop = menu->addAction(tr("Drop"));
     drop->setObjectName(QStringLiteral("editLiveDrop"));
-    drop->setEnabled(!trims.isEmpty());
+    drop->setEnabled(el->canDrop());
     connect(drop, &QAction::triggered, el, &EditLive::drop);
     QAction *off = menu->addAction(tr("Turn Edit Live Off"));
     off->setObjectName(QStringLiteral("editLiveOff"));
