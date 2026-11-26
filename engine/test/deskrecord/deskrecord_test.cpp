@@ -865,6 +865,78 @@ void DeskRecord_Test::grandMasterPicksUpAfterLoadReplugWake()
     QCOMPARE(int(iom->grandMasterValue()), 0);
 }
 
+/* A desk Grand Master on a fader its type declares Motorised (the
+   FaderPort 2's): the motor is sent where the master is -- when it waits to
+   pick up (a load, a replug, a wake) and whenever the master moves from
+   elsewhere -- but never echoed what the fader itself just set. A plain
+   fader (no profile, Absolute) is sent nothing, as before. */
+void DeskRecord_Test::aMotorGrandMasterIsSentWhereTheMasterIs()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    QVERIFY(iom->setOutputPatch(0, m_stub->name(), QString(), 0, true));
+    learn(D::GrandMaster, 0, kGm);
+    QVERIFY(desk->isLive(D::GrandMaster));
+
+    auto sentToGm = [&](QSignalSpy &spy) {
+        QList<int> values;
+        for (const QList<QVariant> &a : spy)
+            if (a.at(0).toUInt() == 0 && a.at(1).toUInt() == kGm)
+                values << int(a.at(2).toUInt());
+        return values;
+    };
+
+    // No surface type: a plain fader, nothing sent to it.
+    {
+        QSignalSpy spy(iom, &InputOutputMap::feedbackSent);
+        iom->setGrandMasterValue(200);
+        desk->rearmGrandMaster();
+        QVERIFY2(sentToGm(spy).isEmpty(), "a plain fader has no motor");
+    }
+
+    // Its type says the fader is a motor fader.
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("Test");
+    prof->setModel("Motor Box");
+    QLCInputChannel *ich = new QLCInputChannel();
+    ich->setName("Fader");
+    ich->setType(QLCInputChannel::Slider);
+    ich->setDeclaredFaderFact(FaderFact::Motorised);
+    QVERIFY(prof->insertChannel(kGm, ich));
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+    QCOMPARE(iom->faderFact(0, kGm), FaderFact::Motorised);
+    desk->rebind();
+    QVERIFY(desk->isLive(D::GrandMaster));
+
+    // Waiting to pick up (a load): the motor is sent to the master.
+    {
+        QSignalSpy spy(iom, &InputOutputMap::feedbackSent);
+        emit m_doc->loaded();
+        QVERIFY2(sentToGm(spy).contains(200), "the motor is sent where the master is when it waits");
+    }
+    // The master moved from elsewhere (the footer, a VC slider): it follows.
+    {
+        QSignalSpy spy(iom, &InputOutputMap::feedbackSent);
+        iom->setGrandMasterValue(90);
+        QCOMPARE(sentToGm(spy), QList<int>() << 90);
+    }
+    // The fader itself moves the master: picked up at 90, then never echoed.
+    now += 1000;
+    {
+        QSignalSpy spy(iom, &InputOutputMap::feedbackSent);
+        send(0, kGm, 90);
+        send(0, kGm, 40);
+        QCOMPARE(int(iom->grandMasterValue()), 40);
+        QVERIFY2(sentToGm(spy).isEmpty(), "the fader's own move is not sent back to it");
+    }
+    // A pull to 0 is still at once.
+    send(0, kGm, 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+}
+
 void DeskRecord_Test::reviewLinesSayWhatIsReachable()
 {
     D *desk = m_doc->deskRecord();

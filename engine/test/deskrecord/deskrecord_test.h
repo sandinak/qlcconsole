@@ -57,6 +57,7 @@ private slots:
     void exportImportRoundTrip();
     void patchItIsNamedAndUndoable();
     void grandMasterPicksUpAfterLoadReplugWake();
+    void aMotorGrandMasterIsSentWhereTheMasterIs();
     void reviewLinesSayWhatIsReachable();
     void removingThePatchedUniverseUnbinds();
     void learnNeverTakesAFaderPulledToZero();
