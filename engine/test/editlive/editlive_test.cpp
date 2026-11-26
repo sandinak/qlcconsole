@@ -302,7 +302,7 @@ int EditLive_Test::lookValue(const ShowTree::Layer *layer, const QString &key, i
     if (look == nullptr || look->palettes.isEmpty())
         return -1000;
     const QLCPalette *p = m_doc->palette(look->palettes.first());
-    if (p == nullptr || p->values().size() <= index)
+    if (p == nullptr || p->values().isEmpty())
         return -1000;
     if (p->type() == QLCPalette::Color)
     {
@@ -310,6 +310,8 @@ int EditLive_Test::lookValue(const ShowTree::Layer *layer, const QString &key, i
         QLCPalette::stringToColor(p->values().at(0).toString(), rgb, wauv);
         return index == 0 ? rgb.red() : index == 1 ? rgb.green() : rgb.blue();
     }
+    if (p->values().size() <= index)
+        return -1000;
     return p->values().at(index).toInt();
 }
 
@@ -735,7 +737,10 @@ void EditLive_Test::stopAllDropsTheTrims()
     m_selection = { m_par1 };
     trimRed(0, 64);
     QVERIFY(m_live->hasTrims());
-    m_doc->masterTimer()->stopAllFunctions();
+    // Stop All, as the tests can (MasterTimer::stopAllFunctions() waits on a
+    // timer thread these tests don't run): every function stopped.
+    for (Function *f : m_doc->functions())
+        f->stop(FunctionParent::master());
     tick(5);
     m_live->checkCue();
     QVERIFY(!m_live->hasTrims());
