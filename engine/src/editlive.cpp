@@ -111,7 +111,9 @@ EditLive::EditLive(Doc *doc, SurfacePages *pages, QObject *parent)
     if (ShowTreeController *st = m_doc->showTree())
     {
         connect(st, &ShowTreeController::hitArmingChanged, this, &EditLive::checkCue);
-        connect(st, &ShowTreeController::changed, this, &EditLive::treeChanged);
+        /* Queued: a redo announces the tree before its step is back in the
+           undo history, which is what says a Store is held. */
+        connect(st, &ShowTreeController::changed, this, &EditLive::treeChanged, Qt::QueuedConnection);
     }
 }
 
