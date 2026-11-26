@@ -31,8 +31,8 @@ Still to do:
   marked follow-up; build the settings themselves: the engine frame rate,
   real-time universe threads, output thread priority, DMX values beside
   palette names, and the diagnostics in Help ▸ Troubleshooting.
-- CS10 (retiring New Programmer Frame from Input Profile…) is not part of
-  L1; the menu count reached 68 without it.
+- CS10 (retiring New Programmer Frame from Input Profile…) is done with the
+  L1 cleanups: the counted-item-by-item total now holds.
 
 ## Perf re-check (from the 0.5.0 release)
 
