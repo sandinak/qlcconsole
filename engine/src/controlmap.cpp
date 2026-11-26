@@ -89,6 +89,8 @@ ControlMap::ControlMap(Doc *doc)
     m_encoderBank->setParent(this);
     m_surfacePages = new SurfacePages(doc);
     m_surfacePages->setParent(this);
+    // The show's encoder bank on a board rests that board's pages.
+    connect(m_encoderBank, &EncoderBank::deviceChanged, m_surfacePages, &SurfacePages::rescan);
     // A function deleted takes its binding with it.
     connect(m_doc, &Doc::functionRemoved, this, &ControlMap::slotFunctionRemoved);
     // Where a key may fire follows the mode and the show's cue lists.
@@ -875,6 +877,12 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
                              .arg(controlName(universe, channel), DeskRecord::roleName(role)));
         return;
     }
+    /* A surface page has it in Design (SurfacePages, Q332 a): the show's
+       trigger on it waits for Operate. A Learn still hears it, so a key can
+       be given its Operate job from Design. */
+    if (!m_listening && universe != KeyboardUniverse && m_doc->inputOutputMap() != nullptr
+        && m_doc->inputOutputMap()->isPageControl(universe, channel) && !(value == 0 && m_down.contains(k)))
+        return;
     // Learning: what the control sends says whether it is a fader or a latch.
     if (m_listening && universe != KeyboardUniverse)
         observeLearn(k, value);

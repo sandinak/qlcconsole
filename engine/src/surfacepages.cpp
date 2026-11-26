@@ -63,6 +63,7 @@ SurfacePages::SurfacePages(Doc *doc)
         });
     }
     connect(m_doc, &Doc::loaded, this, &SurfacePages::rescan);
+
     connect(m_doc, &Doc::modeChanged, this, [this]() {
         applyStatic();
         for (quint32 u : m_boards.keys())
@@ -287,8 +288,11 @@ int SurfacePages::turnDetents(Board &b, quint32 universe, quint32 channel, uchar
     {
         // A knob sends where it is (the APC40's): the change from the last.
         const int midi = value == 255 ? 127 : value >> 1;
-        const int last = b.last.value(channel, -1);
-        b.last.insert(channel, midi);
+        // One knob on any track's MIDI channel: one position.
+        const int at = b.layout.indexOf(channel);
+        const quint32 own = at >= 0 ? b.layout.controls().at(at).channel : channel;
+        const int last = b.last.value(own, -1);
+        b.last.insert(own, midi);
         detents = last < 0 ? 0 : midi - last;
     }
     return b.set.invertTurns() ? -detents : detents;
