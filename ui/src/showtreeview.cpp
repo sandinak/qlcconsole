@@ -3065,7 +3065,8 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         ShowLevel *lv = ShowLevel::instance();
         connect(lv, &ShowLevel::changed, this, &ShowTreeView::updateBridgeBanner);
         lv->bind(findChild<QWidget *>(QStringLiteral("stOpenWorkbench")), QStringLiteral("showtree.workbench"));
-        for (QWidget *w : { static_cast<QWidget *>(m_listMib), static_cast<QWidget *>(m_cueNoMib) })
+        for (QWidget *w : { static_cast<QWidget *>(m_listMib), static_cast<QWidget *>(m_cueNoMib),
+                            static_cast<QWidget *>(m_moveInBlack) })
             lv->bind(w, QStringLiteral("showtree.mib"));
         lv->bind(m_cueMix, QStringLiteral("showtree.cue.mix"));
         lv->bind(m_cueColour, QStringLiteral("showtree.cue.textcolour"));

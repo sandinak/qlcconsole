@@ -2655,6 +2655,9 @@ void Monitor::initGraphicsToolbar()
         QSettings().setValue(QStringLiteral("monitor/showInventory"), on);
     });
 
+    // Staging fixtures is the patch's side of the rig: Standard's.
+    ShowLevel::instance()->bind(m_inventoryAction, QStringLiteral("fixtures.inventory"));
+
     // One undo for the rig: moves, pastes, and every edit dialog's OK.
     // (Connected to the view in initGraphicsView(), which comes after.)
     m_undoAction = m_graphicsToolBar->addAction(QIcon(":/undo.png"), tr("Undo"));
