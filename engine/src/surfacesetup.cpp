@@ -168,9 +168,11 @@ SurfaceSetup::~SurfaceSetup()
         if (const Spec *sp = specOf(u))
             for (const QByteArray &m : sp->release)
                 sendTo(u, m);
+    // Let go without asking the lamp owners to repaint: the show is
+    // going too (Doc's destructor deletes this first).
     for (quint32 u : std::as_const(m_holds))
         if (m_doc->inputOutputMap()->isSetupHeld(u))
-            m_doc->inputOutputMap()->setSetupListening(UINT_MAX);
+            m_doc->inputOutputMap()->setSetupListening(UINT_MAX, false);
     qDeleteAll(m_links);
 }
 

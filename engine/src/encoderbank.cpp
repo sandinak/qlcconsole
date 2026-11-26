@@ -370,6 +370,7 @@ void EncoderBank::updateConnection()
         connect(iom, &InputOutputMap::showInputBaseline, this, &EncoderBank::handleBaseline);
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &EncoderBank::slotInputDeviceConnected);
         connect(iom, &InputOutputMap::profileChanged, this, &EncoderBank::slotInputDeviceConnected);
+        connect(iom, &InputOutputMap::boardLampsReleased, this, &EncoderBank::slotInputDeviceConnected);
     }
     else
     {
@@ -378,6 +379,7 @@ void EncoderBank::updateConnection()
         disconnect(iom, &InputOutputMap::showInputBaseline, this, &EncoderBank::handleBaseline);
         disconnect(iom, &InputOutputMap::inputDeviceConnected, this, &EncoderBank::slotInputDeviceConnected);
         disconnect(iom, &InputOutputMap::profileChanged, this, &EncoderBank::slotInputDeviceConnected);
+        disconnect(iom, &InputOutputMap::boardLampsReleased, this, &EncoderBank::slotInputDeviceConnected);
     }
     m_connected = m_enabled;
 }

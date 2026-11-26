@@ -1292,6 +1292,51 @@ void SurfaceSim_Test::identifyHoldsTheKeysJobs()
     cm->setDumpWindowMs(500);
 }
 
+void SurfaceSim_Test::identifyHasTheLampsThenGivesThemBack()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    // A show trigger on 1-Down: the Control Map owns its lamp.
+    Scene *sc = new Scene(m_doc);
+    m_doc->addFunction(sc);
+    const quint32 down1 = pmj.channelOf(QStringLiteral("1-Down"));
+    m_doc->controlMap()->setBinding({ 0, down1, ControlMap::function(sc->id()), ControlMap::Toggle });
+    settle();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    auto sentTo = [this](quint32 channel) {
+        int n = 0;
+        for (const QPair<quint32, uchar> &f : std::as_const(m_stub->m_feedback))
+            n += f.first == channel ? 1 : 0;
+        return n;
+    };
+
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QString error;
+    QVERIFY2(setup->beginIdentify(0, false, &error), qPrintable(error));
+    m_stub->m_feedback.clear();
+    // Identify flashes lamp after lamp: nothing else lights the board meanwhile.
+    QVERIFY(!iom->sendFeedBack(0, down1, 255, QVariant()));
+    m_doc->controlMap()->resendFeedback();
+    QCOMPARE(sentTo(down1), 0);
+    // Its own flashes still go out.
+    setup->flashLamp(0, 3, true);
+    QCOMPARE(sentTo(128 + 3), 1);
+
+    // Identify over: each owner sends its own lamp again, recorded as sent.
+    m_stub->m_feedback.clear();
+    QVERIFY2(setup->endIdentify(0, {}, &error), qPrintable(error));
+    QCOMPARE(iom->setupListening(), UINT_MAX);
+    QVERIFY2(sentTo(down1) >= 1, "1-Down's lamp was not sent again after Identify");
+    uchar last = 0, wire = 0;
+    for (const QPair<quint32, uchar> &f : std::as_const(m_stub->m_feedback))
+        if (f.first == down1)
+            wire = f.second;
+    QVERIFY(iom->lastFeedback(0, down1, &last));
+    QCOMPARE(last, wire);
+}
+
 void SurfaceSim_Test::theApc64IsNamedAndItsModeChecked()
 {
     // The shipped profile (resources/inputprofiles/Akai-APC64.qxi): its pads on channel 7.

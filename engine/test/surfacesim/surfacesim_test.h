@@ -112,6 +112,9 @@ private slots:
     /** While Identify listens, the board's keys do no job (no GO, no
      *  Back, no trigger); the desk's STOP still stops. */
     void identifyHoldsTheKeysJobs();
+    /** While Identify flashes the board's lamps no other lamp writer
+     *  reaches it; when it ends, the show's lamps are sent again. */
+    void identifyHasTheLampsThenGivesThemBack();
     /** The APC64: its display taken and named on patch and replug, given
      *  back on exit; Session mode checked by a pad press. */
     void theApc64IsNamedAndItsModeChecked();

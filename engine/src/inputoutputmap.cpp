@@ -2136,6 +2136,10 @@ bool InputOutputMap::sendFeedBack(quint32 universe, quint32 channel, uchar value
 {
     if (universe >= universesCount())
         return false;
+    // A controller's setup has this board's lights (Identify): it is the
+    // one writer until it lets go (setSetupListening()).
+    if (isSetupHeld(universe))
+        return false;
 
     OutputPatch* patch = m_universeArray.at(universe)->feedbackPatch();
 
@@ -3567,6 +3571,14 @@ void InputOutputMap::slotDispatchInput(quint32 universe, quint32 channel, uchar 
         m_assignGate.pass((quint64(universe) << 32) | channel, value);
     }
     emit showInputValueChanged(universe, channel, value, key);
+}
+
+void InputOutputMap::setSetupListening(quint32 universe, bool repaint)
+{
+    const quint32 was = m_setupUniverse;
+    m_setupUniverse = universe;
+    if (repaint && was != UINT_MAX && was != universe)
+        emit boardLampsReleased(was);
 }
 
 void InputOutputMap::setAssignListening(bool on)

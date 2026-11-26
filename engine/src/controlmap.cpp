@@ -82,6 +82,8 @@ ControlMap::ControlMap(Doc *doc)
     if (InputOutputMap *iom = m_doc->inputOutputMap())
     {
         connect(iom, &InputOutputMap::inputDeviceConnected, this, &ControlMap::slotInputDeviceBack);
+        // A controller's setup gave the board's lights back: ours again.
+        connect(iom, &InputOutputMap::boardLampsReleased, this, &ControlMap::resendFeedback);
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this,
                 [this](quint32 universe) { m_backAt.remove(universe); });     // gone: no dump to wait for yet
     }

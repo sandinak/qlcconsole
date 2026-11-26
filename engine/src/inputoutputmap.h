@@ -1038,6 +1038,11 @@ public:
     bool lastFeedback(quint32 universe, quint32 channel, uchar *value) const;
 
 signals:
+    /** A controller's setup let go of @a universe's lights
+     *  (setSetupListening()): what it flashed is not what the show's lamps
+     *  say, so each lamp owner sends its own again. */
+    void boardLampsReleased(quint32 universe);
+
     /** Feedback went to @a universe's feedback line (sendFeedBack()): what
      *  a lamp log shows (the PMJ's, ControlSurfacesPanel) and what the
      *  surface map's lamp column reads. */
@@ -1132,8 +1137,15 @@ public:
      *  none): as during a desk learn, no show listener hears a press of
      *  that universe, the Control Map fires nothing from it and the desk's
      *  GO, Back and Grand Master ignore it. The show's emergency stop and
-     *  the desk's STOP still stop. Releases pass. */
-    void setSetupListening(quint32 universe) { m_setupUniverse = universe; }
+     *  the desk's STOP still stop. Releases pass.
+     *
+     *  The board's lights are the setup's meanwhile (one lamp writer:
+     *  Identify flashes lamp after lamp and pairs each by a press):
+     *  sendFeedBack() to that universe sends nothing. When the hold ends,
+     *  boardLampsReleased() asks each lamp owner (the Control Map and the
+     *  desk, the encoder bank, the PMJ's overlay) to send its own again;
+     *  not when @p repaint is false (the setup going with the show). */
+    void setSetupListening(quint32 universe, bool repaint = true);
     quint32 setupListening() const { return m_setupUniverse; }
     bool isSetupHeld(quint32 universe) const
     { return m_setupUniverse != UINT_MAX && universe == m_setupUniverse; }

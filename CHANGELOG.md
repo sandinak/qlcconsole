@@ -43,6 +43,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   the APC64's display is named and given back on exit, and Check Mode
   asks for a pad press to see it is in Session mode. While a setup step
   listens for presses, the board's keys do no job (the stops still stop).
+  While Identify flashes the board's lamps nothing else lights it, and when
+  it ends the show's lamps (triggers, the desk, the PMJ's own) come back.
   Rescan says when the computer sees no new controller (power, cable, port).
   Ported from qlcplus-midi-profiler.
 - **Assign to Control…** (was Learn Trigger…; Q310, Q325): one item per cue list, cue and hit (scenes and effects in the Classic QLC+ view only). The window lists every control with who has it before you press, this computer's desk roles as this computer's; a press or move selects its row and fires nothing, in Design and Operate -- a fader pulled to 0, in steps or in one jump, and a game pad's Run buttons included (the emergency stop still stops); on closing the window each control moved meanwhile is heard where it ended up, so a submaster or the Grand Master never keeps a level its fader has left, while an encoder turned in it (the encoder bank's, a Virtual Console relative input) turns nothing on the close and its next turn counts from where it is; a fader is refused for a GO, Back or hit and a latching button is told to go momentary on its row; with a phone or Companion on the Run page it says Stream Deck keys are set in Companion. Control surfaces gains a **Press or move any control** line that names the owners.

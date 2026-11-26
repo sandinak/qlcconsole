@@ -770,7 +770,8 @@ checks the device (a read only) and offers the fix.
   nothing flashes. **Finish** puts the board back as it was and keeps the
   pairing on this computer; then **Align Lamps**. While it listens, the
   board's keys do no job (no GO, no Back, no trigger); the emergency stop
-  and this computer's STOP still stop.
+  and this computer's STOP still stop. Only Identify lights the board
+  meanwhile; when it ends, the show's lamps come back.
 - **Akai APC40 mkII.** Its Ableton mode (the pads take the app's lights
   and stop toggling their own) is sent when it is patched, again after a
   replug and after the computer wakes. **Send Again** sends it now. The MIDI

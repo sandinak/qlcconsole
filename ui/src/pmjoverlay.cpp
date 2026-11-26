@@ -271,6 +271,11 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
     };
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceConnected, this, forgetHeld);
     connect(m_doc->inputOutputMap(), &InputOutputMap::inputDeviceDisconnected, this, forgetHeld);
+    // A controller's setup (Identify) gave the board's lights back: ours again.
+    connect(m_doc->inputOutputMap(), &InputOutputMap::boardLampsReleased, this, [this](quint32 universe) {
+        if (int(universe) == m_universe && !m_engine.isNull())
+            m_engine->refreshDevice(deviceId);
+    });
     connect(m_doc->programmer(), &ProgrammerController::programmerSelectionChanged,
             this, [this]() { m_engine->refreshDevice(deviceId); });
 
