@@ -1869,6 +1869,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setMacAddress(fixture->macAddress());
         newFixture->setTransport(fixture->transport());
         newFixture->setStageLook(fixture->stageLook());
+        newFixture->setBehaviourSetting(fixture->behaviourSetting());
         newFixture->setOwner(fixture->owner());
         newFixture->setPowerProfile(fixture->powerProfile());
         newFixture->setOutputRules(fixture->outputRules());

@@ -1007,6 +1007,58 @@ void Fixture::setStageLook(StageLook look)
     emit changed(m_id);
 }
 
+/*****************************************************************************
+ * Behaves as
+ *****************************************************************************/
+
+void Fixture::setBehaviourSetting(int behaviour)
+{
+    if (behaviour < int(LightBehaviour) || behaviour > int(HazardBehaviour))
+        behaviour = -1;
+    if (m_behaviour.exchange(behaviour, std::memory_order_relaxed) == behaviour)
+        return;
+    emit changed(m_id);
+}
+
+QList<Fixture::Behaviour> Fixture::behaviours()
+{
+    return { LightBehaviour, MachineryBehaviour, OneShotBehaviour, SwitchBehaviour, HazardBehaviour };
+}
+
+QString Fixture::behaviourToString(Behaviour behaviour)
+{
+    switch (behaviour)
+    {
+        case MachineryBehaviour: return QStringLiteral("Machinery");
+        case OneShotBehaviour: return QStringLiteral("OneShot");
+        case SwitchBehaviour: return QStringLiteral("Switch");
+        case HazardBehaviour: return QStringLiteral("Hazard");
+        case LightBehaviour:
+        default: return QStringLiteral("Light");
+    }
+}
+
+int Fixture::stringToBehaviour(const QString &key)
+{
+    for (Behaviour b : behaviours())
+        if (key == behaviourToString(b))
+            return int(b);
+    return -1;
+}
+
+QString Fixture::behaviourName(Behaviour behaviour)
+{
+    switch (behaviour)
+    {
+        case MachineryBehaviour: return tr("Machinery");
+        case OneShotBehaviour: return tr("One-shot");
+        case SwitchBehaviour: return tr("Switch");
+        case HazardBehaviour: return tr("Hazard");
+        case LightBehaviour:
+        default: return tr("Light");
+    }
+}
+
 void Fixture::setOwner(RigOwner::Owner owner)
 {
     if (int(owner) < int(RigOwner::Unset) || int(owner) > int(RigOwner::Rental))
@@ -1706,6 +1758,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     QList<int> forcedHTP;
     QList<int> forcedLTP;
     OutputRules outputRules;
+    int behaviour = -1;     // absent: guessed, as before there was one
     QList<quint32>modifierIndices;
     QList<ChannelModifier *>modifierPointers;
 
@@ -1818,6 +1871,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         else if (xmlDoc.name() == KXMLFixtureOutputRules)
         {
             outputRules = stringToOutputRules(xmlDoc.readElementText());
+        }
+        else if (xmlDoc.name() == KXMLFixtureBehavesAs)
+        {
+            behaviour = stringToBehaviour(xmlDoc.readElementText().trimmed());
         }
         else if (xmlDoc.name() == KXMLFixtureOwner)
         {
@@ -2015,6 +2072,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setForcedHTPChannels(forcedHTP);
     setForcedLTPChannels(forcedLTP);
     m_outputRules.storeRelaxed(int(outputRules));
+    m_behaviour.store(behaviour, std::memory_order_relaxed);
     for (int i = 0; i < modifierIndices.count(); i++)
         setChannelModifier(modifierIndices.at(i), modifierPointers.at(i));
     setID(id);
@@ -2165,6 +2223,9 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
        reader that does not know the tag skips it (it did before this). */
     if (outputRules() != OutputRules())
         doc->writeTextElement(KXMLFixtureOutputRules, outputRulesToString(outputRules()));
+    /* Only when the LD said: guessed, it stays guessed on the next load */
+    if (behaviourOverridden())
+        doc->writeTextElement(KXMLFixtureBehavesAs, behaviourToString(Behaviour(behaviourSetting())));
 
     /* End the <Fixture> tag */
     doc->writeEndElement();

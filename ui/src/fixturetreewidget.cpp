@@ -34,6 +34,8 @@
 #include "patchlist.h"
 #include "treekeepview.h"
 #include "fixturetreewidget.h"
+#include "fixturerest.h"
+#include "programmercontroller.h"
 #include "monitor.h"
 #include "fixturemanager.h"
 #include "monitor/fixturevisualtraits.h"
@@ -659,6 +661,28 @@ FixtureTreeWidget::FixtureTreeWidget(Doc *doc, quint32 flags, QWidget *parent)
     }
 }
 
+void FixtureTreeWidget::updateBehavesColumn(QTreeWidgetItem *item, const Fixture *fixture)
+{
+    /* Behaves as: the LD's word in plain type; a guess in grey italics,
+       saying so. Parked says so too (its icon has the P). */
+    if (m_behavesColumn <= 0 || item == NULL || fixture == NULL)
+        return;
+    const Fixture::Behaviour b = FixtureRest::behaviour(fixture);
+    const bool parked = m_doc->programmer() != nullptr && m_doc->programmer()->isFixtureParked(fixture->id());
+    QString text = Fixture::behaviourName(b);
+    if (parked)
+        text = tr("%1 · Parked").arg(text);
+    item->setText(m_behavesColumn, text);
+    QFont f = item->font(m_behavesColumn);
+    f.setItalic(!fixture->behaviourOverridden());
+    item->setFont(m_behavesColumn, f);
+    item->setForeground(m_behavesColumn, fixture->behaviourOverridden() ? palette().text()
+                                                                         : palette().placeholderText());
+    item->setToolTip(m_behavesColumn, fixture->behaviourOverridden()
+        ? tr("Set in Fixture Properties: %1").arg(Fixture::behaviourName(b))
+        : tr("Guessed from its definition and plot symbol -- change it in Fixture Properties"));
+}
+
 void FixtureTreeWidget::refreshStageLookIcons()
 {
     const bool was = blockSignals(true);      // not an edit: no itemChanged
@@ -672,6 +696,7 @@ void FixtureTreeWidget::refreshStageLookIcons()
                 continue;
             item->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
             item->setData(KColumnName, PROP_LOOK, int(drawnStageLook(fxi)));
+            updateBehavesColumn(item, fxi);
         }
         else if (item->data(KColumnName, PROP_GROUP).isValid()
                  && !item->data(KColumnName, PROP_ID).isValid())
@@ -719,6 +744,11 @@ void FixtureTreeWidget::setFlags(quint32 flags)
     {
         m_modelColumn = columnIdx++;
         labels << tr("Model");
+    }
+    if (flags & BehavesAs)
+    {
+        m_behavesColumn = columnIdx++;
+        labels << tr("Behaves as");
     }
     if (flags & ShowGroups)
         m_showGroups = true;
@@ -809,6 +839,7 @@ void FixtureTreeWidget::refreshFixtureName(quint32 id)
             item->setIcon(KColumnName, ItemIcons::fixtureIcon(fxi));
             item->setData(KColumnName, PROP_LOOK, int(drawnStageLook(fxi)));
         }
+        updateBehavesColumn(item, fxi);
     }
     blockSignals(was);
 }
@@ -946,6 +977,8 @@ void FixtureTreeWidget::updateFixtureItem(QTreeWidgetItem* item, Fixture* fixtur
         else
             item->setText(m_modelColumn, fixture->fixtureDef()->model());
     }
+
+    updateBehavesColumn(item, fixture);
 
     if (m_showHeads == true)
     {

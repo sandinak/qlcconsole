@@ -44,6 +44,8 @@
 #include "itemicons.h"
 #include "monitor/fixturevisualtraits.h"
 #include "fixture.h"
+#include "fixturerest.h"
+#include "programmercontroller.h"
 #include "doc.h"
 
 namespace
@@ -173,6 +175,73 @@ public:
 
 private:
     QIcon m_base;
+};
+
+/** A fixture's behaviour (board Q351) and Park, as letters on its icon:
+ *  M (machinery), 1 (one-shot), S (switch), H (hazard) in a square at the
+ *  bottom left; P (parked) at the top right. Letters, so they read without
+ *  colour vision too. */
+class LetterBadgeEngine : public QIconEngine
+{
+public:
+    LetterBadgeEngine(const QIcon &base, QChar letter, const QColor &fill, bool parked)
+        : m_base(base), m_letter(letter), m_fill(fill), m_parked(parked) {}
+
+    static void badge(QPainter *p, const QRectF &box, QChar letter, const QColor &fill)
+    {
+        p->setPen(QPen(QColor(20, 20, 20), qMax(1.0, box.width() / 12.0)));
+        p->setBrush(fill);
+        p->drawRoundedRect(box.adjusted(0.5, 0.5, -0.5, -0.5), box.width() / 5.0, box.width() / 5.0);
+        QFont f = p->font();
+        f.setBold(true);
+        f.setPixelSize(qMax(6, int(box.height() * 0.78)));
+        p->setFont(f);
+        p->setPen(Qt::white);
+        p->drawText(box, Qt::AlignCenter, QString(letter));
+    }
+
+    void paint(QPainter *p, const QRect &rect, QIcon::Mode mode, QIcon::State state) override
+    {
+        m_base.paint(p, rect, Qt::AlignCenter, mode, state);
+        const qreal side = qMin(rect.width(), rect.height());
+        if (side <= 0)
+            return;
+        const qreal d = side * 0.46;
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing);
+        if (mode == QIcon::Disabled)
+            p->setOpacity(p->opacity() * 0.4);
+        if (!m_letter.isNull())
+            badge(p, QRectF(rect.left(), rect.bottom() + 1 - d, d, d), m_letter, m_fill);
+        if (m_parked)
+            badge(p, QRectF(rect.right() + 1 - d, rect.top(), d, d), QLatin1Char('P'), QColor(50, 110, 200));
+        p->restore();
+    }
+
+    QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) override
+    {
+        return scaledPixmap(size, mode, state, 1.0);
+    }
+
+    QPixmap scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::State state, qreal scale) override
+    {
+        QPixmap pm(size * scale);
+        pm.setDevicePixelRatio(scale);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        paint(&p, QRect(QPoint(0, 0), size), mode, state);
+        return pm;
+    }
+
+    QSize actualSize(const QSize &size, QIcon::Mode, QIcon::State) override { return size; }
+    QIconEngine *clone() const override { return new LetterBadgeEngine(m_base, m_letter, m_fill, m_parked); }
+    QString key() const override { return QStringLiteral("ItemIconsLetterBadged"); }
+
+private:
+    QIcon m_base;
+    QChar m_letter;
+    QColor m_fill;
+    bool m_parked;
 };
 
 /** The one icon for @p key, drawn by @p draw the first time it is asked for. */
@@ -755,9 +824,32 @@ QIcon fixtureIcon(const Fixture *fixture)
         icon = QIcon(Fixture::stageLookIconResource(look));
     else
         icon = unlookedIcon(fixture);
-    if (fixture->outputRules() == Fixture::OutputRules())
-        return icon;
-    return outputRulesBadged(icon);
+    if (fixture->outputRules() != Fixture::OutputRules())
+        icon = outputRulesBadged(icon);
+    return behaviourBadged(icon, fixture);
+}
+
+QIcon behaviourBadged(const QIcon &base, const Fixture *fixture)
+{
+    if (fixture == nullptr)
+        return base;
+    QChar letter;
+    QColor fill;
+    switch (FixtureRest::behaviour(fixture))
+    {
+        case Fixture::MachineryBehaviour: letter = QLatin1Char('M'); fill = QColor(110, 110, 130); break;
+        case Fixture::OneShotBehaviour:   letter = QLatin1Char('1'); fill = QColor(140, 70, 170); break;
+        case Fixture::SwitchBehaviour:    letter = QLatin1Char('S'); fill = QColor(40, 140, 80); break;
+        case Fixture::HazardBehaviour:    letter = QLatin1Char('H'); fill = QColor(200, 50, 40); break;
+        case Fixture::LightBehaviour:
+        default: break;
+    }
+    const Doc *doc = qobject_cast<const Doc *>(fixture->parent());
+    const bool parked = doc != nullptr && doc->programmer() != nullptr
+                        && doc->programmer()->isFixtureParked(fixture->id());
+    if (letter.isNull() && !parked)
+        return base;
+    return QIcon(new LetterBadgeEngine(base, letter, fill, parked));
 }
 
 QIcon autoLookIcon(const Fixture *fixture)

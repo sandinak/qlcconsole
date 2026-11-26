@@ -312,6 +312,29 @@ public:
         update();
     }
     bool isShowOnlyHeld() const { return m_showOnlyHeld; }
+    /** Q350: machinery, a one-shot or a switch held where it is while a
+     *  cue is picked in Design (OutputRuleKeeper::heldForEdit()): drawn
+     *  where the cue puts it, with the same "held" outline and badge. */
+    void setHeldForEdit(bool b)
+    {
+        if (b == m_editHeld)
+            return;
+        prepareGeometryChange();
+        m_editHeld = b;
+        slotUpdateValues();
+        update();
+    }
+    bool isHeldForEdit() const { return m_editHeld; }
+    /** Parked (Park here): a "P" badge off its top right corner. */
+    void setParked(bool b)
+    {
+        if (b == m_parked)
+            return;
+        prepareGeometryChange();
+        m_parked = b;
+        update();
+    }
+    bool isParked() const { return m_parked; }
 
     /** Set the fixture's pan-zero facing (degrees clockwise from downstage),
      *  i.e. FixtureRigProps::panZeroDir. Drives the facing arrow on the icon.
@@ -471,6 +494,8 @@ private:
     bool m_buried        = false;
     bool m_offRow        = false;
     bool m_showOnlyHeld  = false;
+    bool m_editHeld = false;
+    bool m_parked = false;
 
     /** True if any head has a Pan channel (i.e. a moving head): only these
      *  show a facing arrow and accept Alt-drag rotation. */

@@ -132,6 +132,19 @@ EditPhysical::EditPhysical(QLCPhysical physical, QWidget *parent)
     m_glassCombo->setToolTip(tr("What the light is seen through: diffusing glass glows, "
                                 "the LEDs a blur behind it; clear glass shows every LED."));
     lookLay->addRow(tr("Glass"), m_glassCombo);
+    /* A laser's hazard class, as its label says (board Q351): 1 to 2M
+       behave as a light, 3R and up -- or Unknown -- as a hazard. */
+    m_laserClassCombo = new QComboBox(look);
+    m_laserClassCombo->setObjectName(QStringLiteral("physLaserClass"));
+    for (QLCPhysical::LaserClass c : QLCPhysical::laserClasses())
+        m_laserClassCombo->addItem(c == QLCPhysical::NoLaserClass ? tr("None (not a laser)")
+                                   : c == QLCPhysical::LaserClassUnknown ? tr("Unknown")
+                                   : tr("Class %1").arg(QLCPhysical::laserClassToString(c)), int(c));
+    m_laserClassCombo->setCurrentIndex(qMax(0, m_laserClassCombo->findData(int(m_physical.laserClass()))));
+    m_laserClassCombo->setToolTip(tr("The laser's class from its label (IEC 60825-1). Class 1 to 2M behave as "
+                                     "a light; 3R, 3B, 4 and Unknown as a Hazard: never fired by an edit or a "
+                                     "preview, off at a stop."));
+    lookLay->addRow(tr("Laser class"), m_laserClassCombo);
     if (QGridLayout *grid = qobject_cast<QGridLayout *>(layout()))
         grid->addWidget(look, grid->rowCount(), 0, 1, qMax(1, grid->columnCount()));
 
@@ -172,6 +185,7 @@ QLCPhysical EditPhysical::physical()
     m_physical.setLeds(m_ledsSpin->value());
     m_physical.setLedLayout(QLCPhysical::LedLayout(m_ledLayoutCombo->currentData().toInt()));
     m_physical.setClearGlass(m_glassCombo->currentData().toInt() == 1);
+    m_physical.setLaserClass(QLCPhysical::LaserClass(m_laserClassCombo->currentData().toInt()));
 
     return m_physical;
 }
@@ -233,4 +247,5 @@ void EditPhysical::pasteFromClipboard(QLCPhysical clipboard)
     m_ledsSpin->setValue(clipboard.leds());
     m_ledLayoutCombo->setCurrentIndex(qMax(0, m_ledLayoutCombo->findData(int(clipboard.ledLayout()))));
     m_glassCombo->setCurrentIndex(clipboard.clearGlass() ? 1 : 0);
+    m_laserClassCombo->setCurrentIndex(qMax(0, m_laserClassCombo->findData(int(clipboard.laserClass()))));
 }

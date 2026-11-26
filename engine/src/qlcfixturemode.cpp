@@ -427,6 +427,8 @@ QLCPhysical QLCFixtureMode::physical() const
         p.setLedLayout(g.ledLayout());
         p.setClearGlass(g.clearGlass());
     }
+    if (p.laserClass() == QLCPhysical::NoLaserClass)
+        p.setLaserClass(g.laserClass());
     return p;
 }
 

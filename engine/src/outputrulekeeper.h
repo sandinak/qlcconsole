@@ -32,10 +32,10 @@
 
 #include "fixture.h"
 #include "doc.h"
+#include "outputlayer.h"
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
-class OutputLayer;
 class QXmlStreamWriter;
 
 #define KXMLQLCOutputRuleSettings QStringLiteral("OutputRuleSettings")
@@ -322,6 +322,33 @@ public:
      *  ones before it) never drives it: drawn where it is. Any thread. */
     bool heldForEdit(quint32 fixtureId, QByteArray *drawn = nullptr) const;
 
+    /** Q350 (Fixture::OneShotBehaviour): a Back from a run. Each one-shot
+     *  (a kabuki, a dropping scrim) is held where it is -- dropped stays
+     *  dropped -- until the next GO, so going back never fires it again.
+     *  Called after the Back's own noteGo(). Main thread. */
+    void noteBack();
+    bool oneShotsHeldForBack() const;
+
+    /** Hazards (FixtureRest::isHazard(): fog, haze, flame, CO2, confetti,
+     *  a 3R+ laser): held at their safe value (off) on the output, over
+     *  everything that plays, in Design and Operate -- an edit pick, a
+     *  preview, a GO and a stop alike -- until arming lands (Q352/Q353).
+     *  A parked one is the Park's (parked at off). Main thread. */
+    QList<quint32> heldHazards() const;
+    /** The hazards the last GO's cue would have fired (main thread): what
+     *  the footer says "Hazard — needs arming (coming)" for. Cleared by a
+     *  GO that fires none, a stop, a mode change, another show. */
+    QList<quint32> hazardsRefused() const;
+    /** "Hazard — needs arming (coming)" while hazardsRefused() has any,
+     *  else empty. For the footer. */
+    QString hazardRefusedText() const;
+
+    /** The Park changed (ProgrammerController::parkChanged()): Park wins
+     *  over every hold here -- a stop's, an edit's, a Back's -- and over
+     *  the hazards' hold, so a parked fixture is let go of by each. Main
+     *  thread. */
+    void parkChanged();
+
     /** A Show-only channel's safe value: 0 for an intensity channel, and
      *  where nothing drives it (FixtureRest::restValue()) for the rest: a
      *  laser, fogger or hazer all 0, a gobo or colour wheel open. */
@@ -400,11 +427,22 @@ private:
         quint32 base = 0;       //!< absolute address (universe << 9 | address)
         quint32 channels = 0;
         bool showOnly = false;
+        Fixture::Behaviour behaviour = Fixture::MachineryBehaviour;
         /** Per channel, 1 where it is intensity (HTP): a Show-only one's
          *  hold there is let go at the GO, as a 0 is no write there */
         QByteArray intensity;
     };
     QVector<Machine> machinesNow() const;
+    /** What each of @p machines has on the output now (the faders' last
+     *  frame, before the Grand Master), and the levels holding it there */
+    QHash<quint32, QByteArray> capture(const QVector<Machine> &machines,
+                                       QList<OutputLayer::Level> *levels) const;
+    static QList<OutputLayer::Level> levelsOf(const QHash<quint32, QByteArray> &held);
+    bool isParked(quint32 fixtureId) const;
+    /** The hazards' hold laid again as the rig and the Park are now */
+    void layHazards();
+    /** A GO a few frames on: what the hazards' hold kept off */
+    void checkHazardsRefused();
     void emitMachineryChanged();
     mutable QMutex m_machineMutex;
     QVector<Machine> m_machines;
@@ -422,6 +460,15 @@ private:
     QHash<quint32, QByteArray> m_editHeld;
     QHash<quint32, QByteArray> m_editDrawn;
     std::unique_ptr<OutputLayer> m_editLayer;
+    /** One-shots held by a Back until the next GO (guarded) */
+    QHash<quint32, QByteArray> m_backHeld;
+    quint32 m_backGen = 0;
+    std::unique_ptr<OutputLayer> m_backLayer;
+    /** Hazards held off (main thread): fixture -> where (base, channels) */
+    QHash<quint32, QPair<quint32, quint32> > m_hazards;
+    std::unique_ptr<OutputLayer> m_hazardLayer;
+    /** hazardsRefused() (main thread) */
+    QList<quint32> m_hazardsRefused;
 };
 
 /** @} */

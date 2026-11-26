@@ -11560,9 +11560,13 @@ void App::updateShowOnlyFooter()
     // A curtain a stop left where it was comes first: the operator's next
     // move (GO) depends on it.
     const QString machinery = k->stageMachineryHeldText();
+    // A GO that would have fired a hazard: arming is the next step (Q352).
+    const QString hazard = k->hazardRefusedText();
     QString text = k->showOnlyHeldText();
     if (!machinery.isEmpty())
         text = text.isEmpty() ? machinery : machinery + QStringLiteral(" · ") + text;
+    if (!hazard.isEmpty())
+        text = text.isEmpty() ? hazard : hazard + QStringLiteral(" · ") + text;
     if (text.isEmpty())
     {
         if (!m_statusShowOnlyLabel->isHidden())
@@ -11595,6 +11599,20 @@ void App::updateShowOnlyFooter()
         tip = QStringList() << tr("A stop leaves a curtain where it is, mid-move too: it could be dragging "
                                   "a set piece. The next GO carries on from there.")
                             << (names.isEmpty() ? QStringList() : (QStringList() << QString() << tip));
+    if (!hazard.isEmpty())
+    {
+        QStringList refused;
+        foreach (quint32 id, k->hazardsRefused())
+            if (const Fixture *fx = m_doc->fixture(id))
+                refused << fx->name();
+        if (names.isEmpty() && machinery.isEmpty())
+            tip.clear();
+        else
+            tip.prepend(QString());
+        tip.prepend(tr("This cue would fire %1. A Hazard (fog, flame, CO2, confetti, a 3R+ laser) "
+                       "only fires once armed, and arming is coming in the next release: for now "
+                       "it stays off.").arg(refused.join(QStringLiteral(", "))));
+    }
     m_statusShowOnlyLabel->setToolTip(tip.join(QLatin1Char('\n')));
     if (m_statusShowOnlyLabel->isHidden())
     {

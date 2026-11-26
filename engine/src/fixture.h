@@ -69,6 +69,7 @@ class Doc;
 #define KXMLFixtureForcedLTP        QStringLiteral("ForcedLTP")
 #define KXMLFixtureStageLook        QStringLiteral("StageLook")
 #define KXMLFixtureOutputRules      QStringLiteral("OutputRules")
+#define KXMLFixtureBehavesAs        QStringLiteral("BehavesAs")
 #define KXMLFixtureOwner            QStringLiteral("Owner")
 
 #define KXMLFixtureChannelModifier  QStringLiteral("Modifier")
@@ -694,6 +695,53 @@ protected:
     /** hasDimmer(), cached by setFixtureDefinition(). */
     std::atomic<bool> m_hasDimmer { false };
     bool computeHasDimmer() const;
+
+    /*********************************************************************
+     * Behaves as (board Q350, Q351)
+     *********************************************************************/
+public:
+    /** What the fixture is on stage, for when it may move and what a stop
+     *  does to it (FixtureRest::behaviour()):
+     *  - Light: a light. Every preview, edit and stop drives it.
+     *  - Machinery: moves scenery (a curtain, a drape, a turntable, a flown
+     *    piece). Only a run (GO, Back, a jump) moves it; held where it is
+     *    while editing; a stop freezes it where it is until the next GO.
+     *  - OneShot: does something once that cannot be undone (a kabuki drop,
+     *    a dropping scrim). As Machinery, and never fired again by a Back.
+     *  - Switch: a relay, house or work lights. As Machinery: holds its
+     *    state while editing and through a stop.
+     *  - Hazard: confetti, CO2, flame, fog and haze, a 3R+ laser. Never
+     *    fired by an edit or a preview; a stop sends it to off at once.
+     *    Until arming lands (Q352/Q353) a run does not fire it either. */
+    enum Behaviour
+    {
+        LightBehaviour = 0,
+        MachineryBehaviour,
+        OneShotBehaviour,
+        SwitchBehaviour,
+        HazardBehaviour
+    };
+    Q_ENUM(Behaviour)
+
+    /** The LD's word for it, or -1: guessed from the definition and the
+     *  plot symbol (FixtureRest::guessBehaviour()) -- what an old show
+     *  loads as. Read on any thread. */
+    int behaviourSetting() const { return m_behaviour.load(std::memory_order_relaxed); }
+    /** Set it (-1: guess again); emits changed() when it differs */
+    void setBehaviourSetting(int behaviour);
+    bool behaviourOverridden() const { return behaviourSetting() >= 0; }
+
+    /** Every behaviour, in the order a picker lists them */
+    static QList<Behaviour> behaviours();
+    /** The XML key ("Light", "Machinery", "OneShot", "Switch", "Hazard") */
+    static QString behaviourToString(Behaviour behaviour);
+    /** The behaviour for @p key; -1 for anything else (a newer file) */
+    static int stringToBehaviour(const QString &key);
+    /** Its name for people ("One-shot"), translated */
+    static QString behaviourName(Behaviour behaviour);
+
+protected:
+    std::atomic<int> m_behaviour { -1 };
 
     /*********************************************************************
      * Owner (board Q137, docs/design/VENUES.md)

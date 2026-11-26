@@ -1140,6 +1140,9 @@ void VCCueList::slotPreviousCue()
             action.m_fadeMode = getFadeMode();
             ch->setAction(action);
             claimRunning(ch);
+            // A Back never fires a one-shot again (board Q350).
+            if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+                rules->noteBack();
         }
     }
     else

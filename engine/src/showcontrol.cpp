@@ -673,6 +673,10 @@ bool ShowControl::execute(const Request &request)
             }
             chaser->setAction(action);
             claim(chaser);
+            // A Back never fires a one-shot again (board Q350): each is
+            // held where it is (dropped stays dropped) until the next GO.
+            if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+                rules->noteBack();
             m_loaded.remove(chaser->id());
             return finish(true, name);
         }

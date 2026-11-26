@@ -317,6 +317,12 @@ private:
     QLabel *m_next = nullptr;
     QLabel *m_subNext = nullptr;
     QLabel *m_tcNext = nullptr;         //!< the next cue at a timecode (TimecodeCues)
+    /** Board Q351, Full only: what is parked -- held over every cue -- by
+     *  name, with Unpark; hidden while nothing is. No count. */
+    QWidget *m_parkedBox = nullptr;
+    class QListWidget *m_parked = nullptr;
+    QPushButton *m_unpark = nullptr;
+    void refreshParked();
     QToolButton *m_go = nullptr;
     QToolButton *m_subGo = nullptr;
     QToolButton *m_subBack = nullptr;

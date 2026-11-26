@@ -232,7 +232,9 @@ public:
         ShowGroups       = 1 << 6,
         ShowHeads        = 1 << 7,
         ChannelSelection = 1 << 8,
-        ShowPower        = 1 << 9
+        ShowPower        = 1 << 9,
+        /** A "Behaves as" column (Fixture::Behaviour, board Q351) */
+        BehavesAs        = 1 << 10
     };
 
     void setFlags(quint32 flags);
@@ -246,6 +248,9 @@ private:
     int m_headsColumn;
     int m_manufColumn;
     int m_modelColumn;
+    int m_behavesColumn = -1;
+    /** The Behaves as column of fixture @p fixture's row (BehavesAs) */
+    void updateBehavesColumn(QTreeWidgetItem *item, const Fixture *fixture);
     bool m_showGroups;
     bool m_showFound = false;
     bool m_showHeads;

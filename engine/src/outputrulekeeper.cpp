@@ -23,6 +23,7 @@
 #include <QThread>
 #include <QHash>
 #include <QSet>
+#include <algorithm>
 
 #include "outputrulekeeper.h"
 #include "inputoutputmap.h"
@@ -37,6 +38,7 @@
 #include "outputlayer.h"
 #include "fadechannel.h"
 #include "scenery.h"
+#include "programmercontroller.h"
 
 #define KXMLQLCOutputRuleOnAtOpen QStringLiteral("OnAtOpen")
 
@@ -45,7 +47,13 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     , m_doc(doc)
     , m_machineLayer(new OutputLayer(doc, Universe::Park, FadeChannel::Override, QStringLiteral("Curtain stopped")))
     , m_editLayer(new OutputLayer(doc, Universe::Park, FadeChannel::Override, QStringLiteral("Curtain held while editing")))
+    , m_backLayer(new OutputLayer(doc, Universe::Park, FadeChannel::Override, QStringLiteral("One-shot held after Back")))
+    , m_hazardLayer(new OutputLayer(doc, Universe::Park, FadeChannel::Override | FadeChannel::PastGM,
+                                    QStringLiteral("Hazard held: needs arming")))
 {
+    // Park wins over every hold here (board Q351).
+    if (doc->programmer() != nullptr)
+        connect(doc->programmer(), &ProgrammerController::parkChanged, this, &OutputRuleKeeper::parkChanged);
     /* A Show-only fixture added, moved or (re)patched -- mid-show too: its
        new address is held at once, not after the event loop comes round
        (one frame there could fire it). Anything else waits, coalesced. */
@@ -70,6 +78,14 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         const bool wasStopped = m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0;
         releaseStageMachinery();
         releaseMachineryForEdit();
+        {
+            QMutexLocker locker(&m_machineMutex);
+            m_backHeld.clear();
+            ++m_backGen;
+        }
+        m_backLayer->clear();
+        m_editLayer->clear();
+        m_hazardsRefused.clear();
         Function::clearAutoSources();
         startSession();
         m_onAtOpenWhen = defaultOnAtOpenWhen();
@@ -85,6 +101,11 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
            universes live. Before anything else hears of Operate. */
         if (mode == Doc::Operate)
             startSession();
+        if (!m_hazardsRefused.isEmpty())
+        {
+            m_hazardsRefused.clear();
+            emitMachineryChanged();
+        }
         pushShowOnlyLive();
         if (mode == Doc::Operate && m_seenOperate == false)
         {
@@ -465,10 +486,11 @@ void OutputRuleKeeper::noteGo()
        frames later, so the cue it starts writes first: let go before it,
        a curtain on a relay (intensity) would drop for a frame. A stop in
        between holds them again, and that hold stays. */
-    quint32 gen = 0;
+    quint32 gen = 0, backGen = 0;
     {
         QMutexLocker locker(&m_machineMutex);
         gen = m_machineHeld.isEmpty() ? 0 : m_machineGen;
+        backGen = m_backHeld.isEmpty() ? 0 : m_backGen;
     }
     if (gen != 0)
         QMetaObject::invokeMethod(this, [this, gen]() {
@@ -478,9 +500,37 @@ void OutputRuleKeeper::noteGo()
                     if (m_machineGen != gen)
                         return;
                 }
+                /* An edit's let-go still gliding when the stop came (the
+                   053p review): the GO drops what is left of it, so the
+                   cue owns the fixture from where the stop froze it --
+                   not a glide fader still mixing over the cue. */
+                if (!machineryHeldForEdit())
+                    m_editLayer->clear();
                 releaseStageMachinery();
             });
         }, Qt::QueuedConnection);
+    // A Back's one-shots: this GO plays them again (a Back's own noteGo()
+    // comes before its noteBack(), which holds them anew).
+    if (backGen != 0)
+        QMetaObject::invokeMethod(this, [this, backGen]() {
+            QTimer::singleShot(4 * int(MasterTimer::tick()), this, [this, backGen]() {
+                {
+                    QMutexLocker locker(&m_machineMutex);
+                    if (m_backGen != backGen)
+                        return;
+                    m_backHeld.clear();
+                    ++m_backGen;
+                }
+                m_backLayer->clear();
+                emitMachineryChanged();
+            });
+        }, Qt::QueuedConnection);
+    // What the hazards' hold kept off, once the GO's cue is writing.
+    QMetaObject::invokeMethod(this, [this]() {
+        if (m_hazards.isEmpty() && m_hazardsRefused.isEmpty())
+            return;
+        QTimer::singleShot(4 * int(MasterTimer::tick()), this, [this]() { checkHazardsRefused(); });
+    }, Qt::QueuedConnection);
     if (m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0)
         QMetaObject::invokeMethod(this, [this]() {
             m_lastHeldBy = showOnlyHeldBy();
@@ -498,10 +548,11 @@ QVector<OutputRuleKeeper::Machine> OutputRuleKeeper::machinesNow() const
     QVector<Machine> out;
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx == nullptr || !fx->isPatched() || !FixtureRest::freezesOnStop(fx))
+        if (fx == nullptr || !fx->isPatched() || !FixtureRest::freezesOnStop(fx) || isParked(fx->id()))
             continue;
         Machine m;
         m.fixture = fx->id();
+        m.behaviour = FixtureRest::behaviour(fx);
         m.base = fx->universeAddress();
         m.channels = fx->channels();
         m.showOnly = (fx->outputRules() & Fixture::ShowOnly) != 0;
@@ -517,26 +568,15 @@ QVector<OutputRuleKeeper::Machine> OutputRuleKeeper::machinesNow() const
     return out;
 }
 
-void OutputRuleKeeper::holdStageMachinery()
+QHash<quint32, QByteArray> OutputRuleKeeper::capture(const QVector<Machine> &machines,
+                                                     QList<OutputLayer::Level> *levels) const
 {
-    QVector<Machine> machines;
-    {
-        QMutexLocker locker(&m_machineMutex);
-        // The rig as it is now, when the fixture list is ours to read.
-        if (thread() == QThread::currentThread())
-            m_machines = machinesNow();
-        machines = m_machines;
-    }
-    if (machines.isEmpty())
-        return;
-
     /* Where each one is now: what the faders built last frame (its cue's
-       fade part way, or what it was left at). Before anything stops. */
+       fade part way, a hold, or what it was left at). */
     const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
     QHash<int, QByteArray> pre;
     QHash<quint32, QByteArray> held;
-    QList<OutputLayer::Level> levels;
-    for (const Machine &m : std::as_const(machines))
+    for (const Machine &m : machines)
     {
         QByteArray values(int(m.channels), char(0));
         for (quint32 i = 0; i < m.channels; ++i)
@@ -553,10 +593,48 @@ void OutputRuleKeeper::holdStageMachinery()
                 values[int(i)] = it.value().at(a);
             // Over everything that plays, a Show-only one too (held as its
             // pan and tilt are as well: Universe::holdShowOnlyPositions()).
-            levels << OutputLayer::Level { m.fixture, i, uchar(values.at(int(i))) };
+            if (levels != nullptr)
+                *levels << OutputLayer::Level { m.fixture, i, uchar(values.at(int(i))) };
         }
         held.insert(m.fixture, values);
     }
+    return held;
+}
+
+QList<OutputLayer::Level> OutputRuleKeeper::levelsOf(const QHash<quint32, QByteArray> &held)
+{
+    QList<OutputLayer::Level> levels;
+    for (auto it = held.constBegin(); it != held.constEnd(); ++it)
+        for (int i = 0; i < it.value().size(); ++i)
+            levels << OutputLayer::Level { it.key(), quint32(i), uchar(it.value().at(i)) };
+    return levels;
+}
+
+bool OutputRuleKeeper::isParked(quint32 fixtureId) const
+{
+    const ProgrammerController *pc = m_doc->programmer();
+    return pc != nullptr && pc->isFixtureParked(fixtureId);
+}
+
+void OutputRuleKeeper::holdStageMachinery()
+{
+    QVector<Machine> machines;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        // The rig as it is now, when the fixture list is ours to read.
+        if (thread() == QThread::currentThread())
+            m_machines = machinesNow();
+        machines = m_machines;
+    }
+    // A stop: what the last GO's hazards were refused is history.
+    if (thread() == QThread::currentThread())
+        m_hazardsRefused.clear();
+    if (machines.isEmpty())
+        return;
+
+    // Before anything stops.
+    QList<OutputLayer::Level> levels;
+    const QHash<quint32, QByteArray> held = capture(machines, &levels);
     {
         QMutexLocker locker(&m_machineMutex);
         m_machineHeld = held;
@@ -629,29 +707,8 @@ void OutputRuleKeeper::holdMachineryForEdit(const QHash<quint32, QByteArray> &dr
         /* Where each one is now, before the pick's scenes write: what the
            faders built last frame (a run's fade part way, a stop's hold,
            or what it was left at). */
-        const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
-        QHash<int, QByteArray> pre;
-        QHash<quint32, QByteArray> held;
         QList<OutputLayer::Level> levels;
-        for (const Machine &m : std::as_const(machines))
-        {
-            QByteArray values(int(m.channels), char(0));
-            for (quint32 i = 0; i < m.channels; ++i)
-            {
-                const quint32 abs = m.base + i;
-                const int u = int(abs >> 9);
-                if (u >= ua.size() || ua.at(u) == nullptr)
-                    continue;
-                auto it = pre.find(u);
-                if (it == pre.end())
-                    it = pre.insert(u, ua.at(u)->preGMValues());
-                const int a = int(abs & 0x1ff);
-                if (a < it.value().size())
-                    values[int(i)] = it.value().at(a);
-                levels << OutputLayer::Level { m.fixture, i, uchar(values.at(int(i))) };
-            }
-            held.insert(m.fixture, values);
-        }
+        const QHash<quint32, QByteArray> held = capture(machines, &levels);
         {
             QMutexLocker locker(&m_machineMutex);
             m_editHeld = held;
@@ -719,13 +776,188 @@ QString OutputRuleKeeper::stageMachineryHeldText() const
     }
     if (held.isEmpty())
         return QString();
-    if (held.size() > 1)
-        return tr("%n curtains stopped — GO to carry on", "", int(held.size()));
-    const Fixture *fx = m_doc->fixture(held.constBegin().key());
-    if (fx == nullptr || fx->fixtureMode() == nullptr)
-        return tr("Curtain stopped — GO to carry on");
-    const double open = Scenery::poseFromValues(fx->fixtureMode(), held.constBegin().value()).open;
-    return tr("Curtain stopped at %1% — GO to carry on").arg(qRound(open * 100.0));
+    /* The curtains first -- the operator's next move depends on where
+       they stopped -- then how many more (relays, drops, a turntable). */
+    QList<quint32> curtains;
+    for (auto it = held.constBegin(); it != held.constEnd(); ++it)
+        if (Scenery::isCurtainFixture(m_doc->fixture(it.key())))
+            curtains << it.key();
+    const int others = int(held.size()) - int(curtains.size());
+    QString what;
+    if (curtains.size() == 1)
+    {
+        const Fixture *fx = m_doc->fixture(curtains.first());
+        if (fx == nullptr || fx->fixtureMode() == nullptr)
+            what = tr("Curtain stopped");
+        else
+            what = tr("Curtain stopped at %1%").arg(qRound(
+                Scenery::poseFromValues(fx->fixtureMode(), held.value(curtains.first())).open * 100.0));
+    }
+    else if (curtains.size() > 1)
+        what = tr("%n curtains stopped", "", int(curtains.size()));
+    if (others > 0)
+    {
+        if (!what.isEmpty())
+            what += tr(" · %n more held", "", others);
+        else if (others == 1)
+        {
+            const Fixture *fx = m_doc->fixture(held.constBegin().key());
+            what = tr("%1 held").arg(fx != nullptr ? fx->name() : tr("Stage machinery"));
+        }
+        else
+            what = tr("%n held where they are", "", others);
+    }
+    return tr("%1 — GO to carry on").arg(what);
+}
+
+void OutputRuleKeeper::noteBack()
+{
+    if (GenericFader::stampOverridden())
+        return;
+    QVector<Machine> shots;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        m_machines = machinesNow();
+        for (const Machine &m : std::as_const(m_machines))
+            if (m.behaviour == Fixture::OneShotBehaviour)
+                shots << m;
+    }
+    if (shots.isEmpty())
+        return;
+    // Where each is now, before the Back's cue writes (the action waits
+    // for the next tick): dropped stays dropped.
+    QList<OutputLayer::Level> levels;
+    const QHash<quint32, QByteArray> held = capture(shots, &levels);
+    {
+        QMutexLocker locker(&m_machineMutex);
+        m_backHeld = held;
+        if (++m_backGen == 0)
+            ++m_backGen;
+    }
+    m_backLayer->set(levels, [](const OutputLayer::Level &) { return true; });
+    emitMachineryChanged();
+}
+
+bool OutputRuleKeeper::oneShotsHeldForBack() const
+{
+    QMutexLocker locker(&m_machineMutex);
+    return !m_backHeld.isEmpty();
+}
+
+void OutputRuleKeeper::layHazards()
+{
+    QHash<quint32, QPair<quint32, quint32> > hazards;
+    QList<OutputLayer::Level> levels;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr || !fx->isPatched() || !FixtureRest::isHazard(fx) || isParked(fx->id()))
+            continue;
+        hazards.insert(fx->id(), qMakePair(fx->universeAddress(), fx->channels()));
+        for (quint32 i = 0; i < fx->channels(); ++i)
+            levels << OutputLayer::Level { fx->id(), i, safeValue(fx, i) };
+    }
+    m_hazards = hazards;
+    if (levels.isEmpty())
+        m_hazardLayer->clear();
+    else
+        m_hazardLayer->set(levels, [](const OutputLayer::Level &) { return true; });
+}
+
+QList<quint32> OutputRuleKeeper::heldHazards() const
+{
+    return m_hazards.keys();
+}
+
+void OutputRuleKeeper::checkHazardsRefused()
+{
+    /* What would drive each hazard above off: a fader under the Park ones
+       (every hold here sits at Park) with a target there. On a GO only,
+       never per frame. */
+    QList<quint32> refused;
+    const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
+    for (auto it = m_hazards.constBegin(); it != m_hazards.constEnd(); ++it)
+    {
+        const Fixture *fx = m_doc->fixture(it.key());
+        bool driven = false;
+        for (quint32 i = 0; fx != nullptr && i < it.value().second && !driven; ++i)
+        {
+            const quint32 abs = it.value().first + i;
+            const int u = int(abs >> 9);
+            if (u >= ua.size() || ua.at(u) == nullptr)
+                continue;
+            const uchar safe = safeValue(fx, i);
+            for (const QSharedPointer<GenericFader> &f : ua.at(u)->faders())
+            {
+                if (f.isNull() || f->priority() >= int(Universe::Park))
+                    continue;
+                FadeChannel fc;
+                if (f->peekAddress(abs & 0x1ff, &fc) && fc.target(0) != safe)
+                {
+                    driven = true;
+                    break;
+                }
+            }
+        }
+        if (driven)
+            refused << it.key();
+    }
+    std::sort(refused.begin(), refused.end());
+    if (refused != m_hazardsRefused)
+    {
+        m_hazardsRefused = refused;
+        emitMachineryChanged();
+    }
+}
+
+QList<quint32> OutputRuleKeeper::hazardsRefused() const
+{
+    return m_hazardsRefused;
+}
+
+QString OutputRuleKeeper::hazardRefusedText() const
+{
+    return m_hazardsRefused.isEmpty() ? QString() : tr("Hazard — needs arming (coming)");
+}
+
+void OutputRuleKeeper::parkChanged()
+{
+    /* Park wins: a parked fixture is let go of by a stop's hold, an edit's
+       and a Back's, and by the hazards' (it is parked at off). */
+    QHash<quint32, QByteArray> stopHeld, editHeld, backHeld;
+    bool stop = false, edit = false, back = false;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        m_machines = machinesNow();
+        auto drop = [this](QHash<quint32, QByteArray> &held) {
+            bool any = false;
+            for (auto it = held.begin(); it != held.end();)
+                if (isParked(it.key()))
+                {
+                    it = held.erase(it);
+                    any = true;
+                }
+                else
+                    ++it;
+            return any;
+        };
+        stop = drop(m_machineHeld);
+        edit = drop(m_editHeld);
+        back = drop(m_backHeld);
+        for (auto it = m_editDrawn.begin(); it != m_editDrawn.end();)
+            it = m_editHeld.contains(it.key()) ? std::next(it) : m_editDrawn.erase(it);
+        stopHeld = m_machineHeld;
+        editHeld = m_editHeld;
+        backHeld = m_backHeld;
+    }
+    if (stop)
+        m_machineLayer->set(levelsOf(stopHeld), [](const OutputLayer::Level &) { return false; });
+    if (edit)
+        m_editLayer->set(levelsOf(editHeld), [](const OutputLayer::Level &) { return false; });
+    if (back)
+        m_backLayer->set(levelsOf(backHeld), [](const OutputLayer::Level &) { return false; });
+    layHazards();
+    if (stop || edit || back)
+        emitMachineryChanged();
 }
 
 void OutputRuleKeeper::emitMachineryChanged()
@@ -823,6 +1055,7 @@ void OutputRuleKeeper::rebuild()
         QMutexLocker locker(&m_machineMutex);
         m_machines = machinesNow();
     }
+    layHazards();
     const bool showOnlyListChanged = showOnly != m_showOnly;
     m_showOnly = showOnly;
     // With none, a function never walks what started it (Function).

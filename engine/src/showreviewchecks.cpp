@@ -35,6 +35,7 @@
 #include <algorithm>
 
 #include "showreviewcontext.h"
+#include "fixturerest.h"
 #include "showtreecontroller.h"
 #include "programmercontroller.h"
 #include "venuecorrections.h"
@@ -1059,6 +1060,41 @@ static void pwr06(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+/* Board Q351: a fixture whose Behaves as was set by hand differs from what
+   its definition and symbol suggest -- listed, so a show handed on says
+   what was decided. A laser of class 3R or above set to Light is FIX-21. */
+static void fix20(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    for (Fixture *fx : ctx.doc()->fixtures())
+    {
+        if (fx == nullptr || !fx->behaviourOverridden() || FixtureRest::isHazardousLaserAsLight(fx))
+            continue;
+        const Fixture::Behaviour set = Fixture::Behaviour(fx->behaviourSetting());
+        const Fixture::Behaviour guess = FixtureRest::guessBehaviour(fx);
+        if (set == guess)
+            continue;
+        out << ReviewContext::make(QStringLiteral("FIX-20"), ReviewFinding::Note,
+            tr("%1 behaves as %2 (its definition suggests %3).")
+                .arg(fx->name(), Fixture::behaviourName(set), Fixture::behaviourName(guess)),
+            fixtureKeys({ fx->id() }), QByteArray::number(int(set)) + '/' + QByteArray::number(int(guess)),
+            QStringLiteral("fixtures"), variantIds({ fx->id() }));
+    }
+}
+
+static void fix21(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    for (Fixture *fx : ctx.doc()->fixtures())
+    {
+        if (!FixtureRest::isHazardousLaserAsLight(fx))
+            continue;
+        const QString cls = QLCPhysical::laserClassToString(FixtureRest::laserClass(fx));
+        out << ReviewContext::make(QStringLiteral("FIX-21"), ReviewFinding::Warning,
+            tr("%1 is a Class %2 laser treated as a Light: previews, edits and Locate can fire it.")
+                .arg(fx->name(), cls),
+            fixtureKeys({ fx->id() }), cls.toUtf8(), QStringLiteral("fixtures"), variantIds({ fx->id() }));
+    }
+}
+
 /****************************************************************************
  * Files (FILE)
  ****************************************************************************/
@@ -1570,6 +1606,15 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
           tr("A Gobo look named after glass you loaded in some lights (Gobo Wheels) finds it in "
              "whichever slot each light carries it. A light in the look that has no glass of that "
              "name ignores it. Load the glass in that light too, or take it out of the look."), fix19 },
+        { QStringLiteral("FIX-20"), tr("Behaves as set by hand"), S::Fixtures,
+          tr("What a fixture behaves as (Light, Machinery, One-shot, Switch, Hazard) decides whether "
+             "an edit or a preview may move it and what a stop does to it. One set by hand to "
+             "something other than its definition suggests is listed so whoever runs the show "
+             "knows. Check it is meant, then accept it."), fix20 },
+        { QStringLiteral("FIX-21"), tr("A 3R or stronger laser treated as a light"), S::Fixtures,
+          tr("A laser of class 3R, 3B or 4 (or of unknown class) is a hazard: it is never fired by an "
+             "edit, a preview or Locate. Treated as a Light, any of those can fire it. Accept it "
+             "only with the note naming who approved it (the venue's laser safety officer)."), fix21 },
         { QStringLiteral("FIX-18"), tr("No beam angle or pan/tilt range"), S::Fixtures,
           tr("A definition that says 0 for its lens or its pan/tilt range gives the rig view nothing to "
              "draw and the aim solver nothing to turn. They assume a default by fixture type (a moving "

@@ -39,6 +39,7 @@
 #include <QtMath>
 #include "headlayout.h"
 #include "monitorfixtureitem.h"
+#include "outputrulekeeper.h"
 #include "uprighttext.h"
 #include "lengthinputdialog.h"
 #include "measurementunits.h"
@@ -851,6 +852,14 @@ void MonitorFixtureItem::slotUpdateValues()
         return;
 
     QByteArray fxValues = fxi->channelValues();
+    /* Q350: held where it is while a cue is picked in Design -- drawn
+       where that cue puts it (where it is, if the cue never sends it). */
+    if (m_editHeld && m_doc->outputRuleKeeper() != nullptr)
+    {
+        QByteArray drawn;
+        if (m_doc->outputRuleKeeper()->heldForEdit(m_fid, &drawn) && drawn.size() == fxValues.size())
+            fxValues = drawn;
+    }
 
     bool needUpdate = false;
 
@@ -1113,8 +1122,10 @@ QRectF MonitorFixtureItem::boundingRect() const
     // stale halo fragments on the canvas when the selection changes.
     const qreal m = qMax(qreal(MOVEMENT_THICKNESS), 3.0 + 3.0 / m_viewScale) + 1;
     QRectF rect(-m, -m, m_width + 2 * m, m_height + 2 * m);
-    if (m_showOnlyHeld)
+    if (m_showOnlyHeld || m_editHeld)
         rect |= QRectF(-16.0, m_height / 2.0 - 7.0, 16.0, 14.0);   // the "held" badge
+    if (m_parked)
+        rect |= QRectF(m_width, -8.0, 16.0, 16.0);                 // the "P" badge
     if (m_labelVisibility)
     {
         rect |= QRectF(-10, m_height, m_width + 20, m_labelRect.height() + 2);
@@ -1461,7 +1472,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
        output is kept safe -- an amber dashed outline and a pause badge
        ("held") beside its left edge: a shape, so it reads without colour
        vision too. */
-    if (m_showOnlyHeld)
+    if (m_showOnlyHeld || m_editHeld)
     {
         const QPen keep = painter->pen();
         const QColor amber(240, 170, 30);
@@ -1484,6 +1495,28 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setBrush(QColor(50, 28, 0));
         painter->drawRect(QRectF(at.x() - 3.5, at.y() - 3.5, 2.5, 7.0));
         painter->drawRect(QRectF(at.x() + 1.0, at.y() - 3.5, 2.5, 7.0));
+        painter->setPen(keep);
+    }
+
+    /* Parked: a "P" in a blue square off its top right corner -- a
+       letter, so it reads without colour vision too. */
+    if (m_parked)
+    {
+        const QPen keep = painter->pen();
+        const QFont keepFont = painter->font();
+        QPen edge(QColor(10, 30, 60), 1.0);
+        edge.setCosmetic(true);
+        painter->setPen(edge);
+        painter->setBrush(QColor(70, 140, 230));
+        const QRectF box(m_width + 1.0, -7.0, 13.0, 13.0);
+        painter->drawRoundedRect(box, 2.5, 2.5);
+        QFont f = painter->font();
+        f.setPixelSize(10);
+        f.setBold(true);
+        painter->setFont(f);
+        painter->setPen(Qt::white);
+        UprightText::draw(painter, box, Qt::AlignCenter, QStringLiteral("P"));
+        painter->setFont(keepFont);
         painter->setPen(keep);
     }
 

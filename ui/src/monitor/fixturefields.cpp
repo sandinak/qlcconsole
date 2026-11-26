@@ -34,6 +34,9 @@
 #include "colourswatchbutton.h"
 #include "monitorproperties.h"
 #include "fixturefields.h"
+#include "qlcphysical.h"
+#include "fixturerest.h"
+#include <QInputDialog>
 #include "wledfixture.h"
 #include "rigowner.h"
 #include "fixturegroup.h"
@@ -216,6 +219,44 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
         foreach (quint32 fid, m_fids)
             if (Fixture *fx = m_monitor->m_doc->fixture(fid))
                 fx->setOwner(RigOwner::Owner(v.toInt()));
+        finishEdit();
+    });
+
+    /* What it behaves as (board Q350/Q351): when it may move and what a
+       stop does to it. Auto is the guess from its definition and symbol. */
+    m_behaves = new QComboBox(parent);
+    m_behaves->setObjectName(QStringLiteral("fixtureBehavesAs"));
+    m_behaves->setToolTip(tr("Light: every preview and edit drives it. Machinery (a curtain, a turntable), "
+                             "One-shot (a kabuki drop) and Switch (a relay, house lights): only a run moves "
+                             "it -- held while you edit, frozen by a stop. Hazard (fog, flame, CO2, confetti, "
+                             "a 3R+ laser): never fired by an edit; off at a stop. Auto is guessed from its "
+                             "definition and plot symbol."));
+    form->addRow(tr("Behaves as:"), m_behaves);
+    connect(m_behaves, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        if (m_loading || m_fids.isEmpty() || comboIsMixed(m_behaves))
+            return;
+        const QVariant v = m_behaves->currentData(Qt::UserRole);
+        if (!v.isValid())
+            return;
+        const int b = v.toInt();
+        Doc *doc = m_monitor->m_doc;
+        /* A 3R+ laser as a Light: its class typed, for each such laser. */
+        if (b == int(Fixture::LightBehaviour))
+            foreach (quint32 fid, m_fids)
+            {
+                const Fixture *fx = doc->fixture(fid);
+                const QLCPhysical::LaserClass lc = FixtureRest::laserClass(fx);
+                if (fx != nullptr && QLCPhysical::isHazardousLaserClass(lc)
+                    && !confirmLaserAsLight(m_parent, fx->name(), QLCPhysical::laserClassToString(lc)))
+                {
+                    reload();           // back to what it was
+                    return;
+                }
+            }
+        emit aboutToEdit(QStringLiteral("behavesAs"));
+        foreach (quint32 fid, m_fids)
+            if (Fixture *fx = doc->fixture(fid))
+                fx->setBehaviourSetting(b);     // changed() -> the rules, the lists
         finishEdit();
     });
 
@@ -676,6 +717,7 @@ void FixtureFields::setPowerCompact()
 void FixtureFields::hideAll()
 {
     for (QWidget *w : { static_cast<QWidget *>(m_look), static_cast<QWidget *>(m_owner),
+                        static_cast<QWidget *>(m_behaves),
                         static_cast<QWidget *>(m_mountOn), static_cast<QWidget *>(m_towerPos),
                         static_cast<QWidget *>(m_colour), static_cast<QWidget *>(m_orientation),
                         static_cast<QWidget *>(m_face), static_cast<QWidget *>(m_placement),
@@ -849,6 +891,20 @@ void FixtureFields::setFixtures(const QList<quint32> &fids, quint32 shown)
             return o != nullptr && o->owner() == fx->owner(); }));
     }
     row(m_owner, true);
+
+    // Behaves as: the LD's word, or Auto naming the guess.
+    {
+        const QSignalBlocker block(m_behaves);
+        m_behaves->clear();
+        m_behaves->addItem(tr("Auto (%1)").arg(Fixture::behaviourName(FixtureRest::guessBehaviour(fx))), -1);
+        foreach (Fixture::Behaviour b, Fixture::behaviours())
+            m_behaves->addItem(Fixture::behaviourName(b), int(b));
+        m_behaves->setCurrentIndex(qMax(0, m_behaves->findData(fx->behaviourSetting(), Qt::UserRole)));
+        comboMixed(m_behaves, differs([doc, fx](quint32 f) {
+            const Fixture *o = doc->fixture(f);
+            return o != nullptr && o->behaviourSetting() == fx->behaviourSetting(); }));
+    }
+    row(m_behaves, true);
 
     m_mountOn->setText(many ? tr("%1 (and %n more)", "", m_fids.size() - 1)
                                   .arg(m_monitor->mountDescription(rp, m_shown))
@@ -1713,4 +1769,33 @@ void FixtureFields::writeSegmentsFor(bool freeString)
                               : WledDeviceWrite::confirmSegments(m_parent, name, ip, segments, existing,
                                                                  freeString);
     }, reverse);
+}
+
+namespace
+{
+std::function<QString(const QString &)> s_laserConfirm;
+}
+
+void FixtureFields::setLaserConfirm(const std::function<QString(const QString &)> &answer)
+{
+    s_laserConfirm = answer;
+}
+
+bool FixtureFields::confirmLaserAsLight(QWidget *parent, const QString &fixtureName, const QString &laserClass)
+{
+    QString typed;
+    if (s_laserConfirm)
+        typed = s_laserConfirm(laserClass);
+    else
+    {
+        bool ok = false;
+        typed = QInputDialog::getText(parent, tr("Treat a Class %1 laser as a light?").arg(laserClass),
+                                      tr("%1 is a Class %2 laser. As a Light, every preview, edit and "
+                                         "Locate can fire it, and Show Review lists it.\n\n"
+                                         "Type %2 to treat it as a Light:").arg(fixtureName, laserClass),
+                                      QLineEdit::Normal, QString(), &ok);
+        if (!ok)
+            return false;
+    }
+    return typed.trimmed().compare(laserClass, Qt::CaseInsensitive) == 0;
 }

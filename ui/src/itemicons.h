@@ -102,8 +102,12 @@ namespace ItemIcons
      *  stage look's when it has one; else a curtain's when it is one; else
      *  the look it is shown as (drawnStageLook(): on Auto, its closest when
      *  the show says so); else its kind's, or its definition type's -- with
-     *  the output-rules badge when it has any (Fixture::OutputRules). */
+     *  the output-rules badge when it has any (Fixture::OutputRules), its
+     *  behaviour's letter and Park's P (behaviourBadged()). */
     QIcon fixtureIcon(const Fixture *fixture);
+    /** @p base with @p fixture's behaviour letter (M machinery, 1 one-shot,
+     *  S switch, H hazard; none for a light) and a P when it is parked. */
+    QIcon behaviourBadged(const QIcon &base, const Fixture *fixture);
     /** What a stage-look picker's "Auto" entry shows for @p fixture: its
      *  closest look's icon when it has one, else what it is (a curtain, its
      *  kind, its type) -- no badge: the entry is a look, not the fixture. */

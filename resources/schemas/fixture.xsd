@@ -332,7 +332,25 @@ when changing this list -->
         <xs:element name="Layout" type="layoutType" minOccurs="0"/>
         <xs:element name="Technical" type="technicalType" minOccurs="0"/>
         <xs:element name="Body" type="bodyType" minOccurs="0"/>
+        <xs:element name="Laser" type="laserType" minOccurs="0"/>
     </xs:sequence>
+</xs:complexType>
+
+<xs:complexType name="laserType">
+    <xs:attribute name="Class" use="required">
+        <xs:simpleType>
+            <xs:restriction base="xs:string">
+                <xs:enumeration value="1"/>
+                <xs:enumeration value="1M"/>
+                <xs:enumeration value="2"/>
+                <xs:enumeration value="2M"/>
+                <xs:enumeration value="3R"/>
+                <xs:enumeration value="3B"/>
+                <xs:enumeration value="4"/>
+                <xs:enumeration value="Unknown"/>
+            </xs:restriction>
+        </xs:simpleType>
+    </xs:attribute>
 </xs:complexType>
 
 <xs:complexType name="bulbType">

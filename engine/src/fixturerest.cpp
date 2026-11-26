@@ -14,10 +14,12 @@
 
 #include "inputoutputmap.h"
 #include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
 #include "qlcchannel.h"
 #include "fixturerest.h"
 #include "outputrulekeeper.h"
 #include "scenery.h"
+#include "monitorproperties.h"
 #include "universe.h"
 #include "genericfader.h"
 #include "mastertimer.h"
@@ -60,9 +62,127 @@ bool FixtureRest::holdsPosition(const QLCChannel *ch)
         && (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt);
 }
 
+namespace
+{
+bool hasAny(const QString &text, std::initializer_list<const char *> words)
+{
+    for (const char *w : words)
+        if (text.contains(QLatin1String(w)))
+            return true;
+    return false;
+}
+
+/** The fixture's own name, its definition's model and its mode's channel
+ *  names, lower case: what a guess reads words in. */
+QString wordsOf(const Fixture *fx, bool channels)
+{
+    QString t = fx->name();
+    if (fx->fixtureDef() != nullptr)
+        t += QLatin1Char(' ') + fx->fixtureDef()->model();
+    if (channels && fx->fixtureMode() != nullptr)
+        for (const QLCChannel *ch : fx->fixtureMode()->channels())
+            if (ch != nullptr)
+                t += QLatin1Char(' ') + ch->name();
+    return t.toLower();
+}
+
+bool drivesScenery(const Fixture *fx)
+{
+    Doc *doc = qobject_cast<Doc *>(fx->parent());
+    if (doc == nullptr || doc->monitorProperties() == nullptr)
+        return false;
+    for (const Scenery *sc : doc->monitorProperties()->sceneries())
+        if (sc != nullptr && sc->driverFixture() == fx->id())
+            return true;
+    return false;
+}
+}
+
+QLCPhysical::LaserClass FixtureRest::laserClass(const Fixture *fx)
+{
+    if (fx == nullptr)
+        return QLCPhysical::NoLaserClass;
+    /* The unit's own label first (Fixture Properties' Laser class: 1, 2,
+       3R, 3B, 4), then its definition's. */
+    if (Doc *doc = qobject_cast<Doc *>(fx->parent()))
+        if (doc->monitorProperties() != nullptr)
+            switch (doc->monitorProperties()->fixtureRigProps(fx->id()).laserClass)
+            {
+                case 1: return QLCPhysical::LaserClass1;
+                case 2: return QLCPhysical::LaserClass2;
+                case 3: return QLCPhysical::LaserClass3R;
+                case 4: return QLCPhysical::LaserClass3B;
+                case 5: return QLCPhysical::LaserClass4;
+                default: break;
+            }
+    if (fx->fixtureMode() != nullptr)
+        return fx->fixtureMode()->physical().laserClass();
+    return fx->fixtureDef() != nullptr ? fx->fixtureDef()->physical().laserClass()
+                                       : QLCPhysical::NoLaserClass;
+}
+
+Fixture::Behaviour FixtureRest::guessBehaviour(const Fixture *fx)
+{
+    if (fx == nullptr)
+        return Fixture::LightBehaviour;
+    // Scenery: the plot's word for it first, then what it is called.
+    if (Scenery::isCurtainFixture(fx) || drivesScenery(fx))
+        return Fixture::MachineryBehaviour;
+    const QString names = wordsOf(fx, false);
+    const bool lit = fx->fixtureMode() == nullptr || fx->fixtureMode()->physical().emitsLight();
+    if (hasAny(names, { "kabuki" }) || (hasAny(names, { "drop", "release" }) && hasAny(names, { "scrim", "curtain", "drape" })))
+        return Fixture::OneShotBehaviour;
+    if (hasAny(names, { "turntable", "revolve", "winch", "hoist", "scrim", "drape", "curtain" }) && !lit)
+        return Fixture::MachineryBehaviour;
+
+    // Something in the air, a flame or a gas: a hazard.
+    const QLCFixtureDef *def = fx->fixtureDef();
+    if (def != nullptr && (def->type() == QLCFixtureDef::Hazer || def->type() == QLCFixtureDef::Smoke))
+        return Fixture::HazardBehaviour;
+    if (QLCPhysical::isHazardousLaserClass(laserClass(fx)))
+        return Fixture::HazardBehaviour;
+    const bool silk = names.contains(QLatin1String("silk"))
+                      || (fx->fixtureMode() != nullptr
+                          && fx->fixtureMode()->physical().emission() == QLCPhysical::FlameEmission);
+    if (hasAny(names, { "co2", "confetti", "sparkular", "cold spark", "spark machine", "pyro",
+                        "fog", "haze", "smoke", "propane", "gas " })
+        || (names.contains(QLatin1String("flame")) && !silk))
+        return Fixture::HazardBehaviour;
+
+    // A relay, house lights: a switch.
+    const Fixture::OutputRules rules = fx->outputRules();
+    if ((rules & Fixture::Switch) || (rules & Fixture::OnAtOpen) || hasAny(names, { "relay", "house" }))
+        return Fixture::SwitchBehaviour;
+    return Fixture::LightBehaviour;
+}
+
+Fixture::Behaviour FixtureRest::behaviour(const Fixture *fx)
+{
+    if (fx == nullptr)
+        return Fixture::LightBehaviour;
+    const int set = fx->behaviourSetting();
+    return set >= 0 ? Fixture::Behaviour(set) : guessBehaviour(fx);
+}
+
+bool FixtureRest::isHazardousLaserAsLight(const Fixture *fx)
+{
+    return fx != nullptr && fx->behaviourOverridden()
+        && fx->behaviourSetting() == int(Fixture::LightBehaviour)
+        && QLCPhysical::isHazardousLaserClass(laserClass(fx));
+}
+
+bool FixtureRest::isHazard(const Fixture *fx)
+{
+    return behaviour(fx) == Fixture::HazardBehaviour;
+}
+
 bool FixtureRest::freezesOnStop(const Fixture *fx)
 {
-    return fx != nullptr && Scenery::isCurtainFixture(fx);
+    if (fx == nullptr)
+        return false;
+    const Fixture::Behaviour b = behaviour(fx);
+    return b == Fixture::MachineryBehaviour || b == Fixture::OneShotBehaviour
+        || b == Fixture::SwitchBehaviour;
 }
 
 bool FixtureRest::holdsPosition(const Doc *doc, quint32 fixtureId, quint32 channel)
@@ -86,7 +206,7 @@ uchar FixtureRest::restValue(const Fixture *fx, quint32 channel)
     const QLCChannel *ch = fx != nullptr ? fx->channel(channel) : nullptr;
     if (ch == nullptr)
         return 0;
-    if (makesAtmosphere(fx) || isLaser(fx) || isAtmosphereChannel(ch))
+    if (makesAtmosphere(fx) || isLaser(fx) || isAtmosphereChannel(ch) || isHazard(fx))
         return 0;
     return ch->defaultValue();
 }
@@ -103,7 +223,7 @@ int FixtureRest::putAllAtRest(Doc *doc)
     {
         if (fx == nullptr || !fx->isPatched())
             continue;
-        // A curtain stays where it is: its rest (0, closed) is a move.
+        // A curtain, a relay, a drop stays where it is: its rest is a move.
         if (freezesOnStop(fx))
             continue;
         const quint32 base = fx->universeAddress();

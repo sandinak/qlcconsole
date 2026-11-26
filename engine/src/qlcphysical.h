@@ -66,6 +66,9 @@ class QXmlStreamWriter;
 #define KXMLQLCPhysicalFocusPanMax  QStringLiteral("PanMax")
 #define KXMLQLCPhysicalFocusTiltMax QStringLiteral("TiltMax")
 
+#define KXMLQLCPhysicalLaser       QStringLiteral("Laser")
+#define KXMLQLCPhysicalLaserClass  QStringLiteral("Class")
+
 #define KXMLQLCPhysicalTechnical                    QStringLiteral("Technical")
 #define KXMLQLCPhysicalTechnicalPowerConsumption    QStringLiteral("PowerConsumption")
 #define KXMLQLCPhysicalTechnicalDmxConnector        QStringLiteral("DmxConnector")
@@ -205,6 +208,25 @@ public:
     void setClearGlass(bool clear) { m_clearGlass = clear; }
     bool clearGlass() const { return m_clearGlass; }
 
+    /** A laser's hazard class (IEC 60825-1), as its label says: none (not
+     *  a laser, or not said -- the default), 1, 1M, 2, 2M, 3R, 3B, 4, or
+     *  Unknown (a laser whose class nobody knows). It picks what a fixture
+     *  of it behaves as (FixtureRest::guessBehaviour()): 1 to 2M a light,
+     *  3R and up -- and Unknown -- a hazard. */
+    enum LaserClass { NoLaserClass = 0, LaserClass1, LaserClass1M, LaserClass2, LaserClass2M,
+                      LaserClass3R, LaserClass3B, LaserClass4, LaserClassUnknown };
+    void setLaserClass(LaserClass c) { m_laserClass = c; }
+    LaserClass laserClass() const { return m_laserClass; }
+    /** 3R, 3B, 4 or Unknown: never treated as a light without a typed yes */
+    static bool isHazardousLaserClass(LaserClass c)
+    { return c == LaserClass3R || c == LaserClass3B || c == LaserClass4 || c == LaserClassUnknown; }
+    /** "1", "1M" ... "4", "Unknown"; empty for none (as saved, and shown) */
+    static QString laserClassToString(LaserClass c);
+    /** The class for @p str; none for anything else */
+    static LaserClass stringToLaserClass(const QString &str);
+    /** Every class, none first, in the order a picker lists them */
+    static QList<LaserClass> laserClasses();
+
 protected:
     QString m_bulbType;
     int m_bulbLumens;
@@ -233,6 +255,7 @@ protected:
     int m_leds = 0;
     LedLayout m_ledLayout = ClusterLeds;
     bool m_clearGlass = false;
+    LaserClass m_laserClass = NoLaserClass;
 
     /************************************************************************
      * Load & Save
