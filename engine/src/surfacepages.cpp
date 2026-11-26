@@ -203,6 +203,8 @@ bool SurfacePages::pressKey(quint32 universe, quint32 key)
         stepPage(universe, -1);
     else
         setPage(universe, b->set.pageForKey(key, b->page));
+    // Its page's key again: the lights too (a board patched before its feedback line).
+    sendLamps(universe);
     return true;
 }
 

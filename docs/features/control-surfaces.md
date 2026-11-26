@@ -340,7 +340,9 @@ names the page: **APC40 · Move**.
   open in the Look Editor, else the selected fixtures or group of the
   scene in Build. One move is one undo step. In **Operate** a page does
   nothing and its controls are the show's again: a trigger or a Virtual
-  Console control you assigned to one works as you set it up. In Design
+  Console control you assigned to one works as you set it up, its light
+  too (in Design a page key's light is the page's). While a Learn
+  listens, the page rests. In Design
   the page has them, and the map names the show's job as kept from it.
   [Edit Live](edit-live.md) lets a page trim the running cue in Operate.
 - **A fader picks up first.** A page's fader does nothing until it meets
@@ -357,7 +359,7 @@ names the page: **APC40 · Move**.
 |---|---|---|
 | **APC40 mk2** (*Build*) | **Move**: device knobs 1, 2 pan and pan fine; 3, 4 focus and zoom; 5, 6 tilt and tilt fine; 7, 8 gobo and gobo rotation. **Beam**: zoom, focus, iris, frost, strobe, shutter, prism, prism rotation. On every page: faders 1-6 red, green, blue, white, amber, UV, fader 8 intensity; track knobs 1, 2 hue and saturation. | **Pan** (Move) and **Sends** (Beam), lit when on; **Device ◀ ▶** step |
 | **APC64** (*Build*) | **Colour**: touch strips 1-7 red, green, blue, white, amber, UV, intensity. **Move**: pan, tilt, zoom, focus, iris, gobo, intensity. The pads stay free; strip 8 is the GM. | Turn the **encoder** |
-| **PMJ Black 1** (*Pages*) | **Looks** (on at start): the faders edit the open look (a colour look: 1-6 R G B W A UV; a dimmer look: 1), else the intensity of selected fixture N; encoders pan, tilt, hue, saturation. **Fix Cont**: faders 1-6 colour, 10 intensity, encoders pan, tilt, zoom, focus; press it again for gobo, gobo rotation, prism, iris. **Groups**: fader N is the level of the open scene's group N. **Effects** and **Macros**: nothing yet. | The mode keys, the lit one is the page |
+| **PMJ Black 1** (*Pages*) | **Looks** (on at start): the faders edit the open look (a colour look: 1-6 R G B W A UV; a dimmer look: 1), else the intensity of selected fixture N; encoders pan, tilt, hue, saturation. **Fix Cont**: faders 1-6 colour, 10 intensity, encoders pan, tilt, zoom, focus; press it again for gobo, gobo rotation, prism, iris. **Groups**: fader N is the level of the open scene's group N. **Effects** and **Macros**: nothing yet (their keys dim; the map and the Workbench say *Effects: coming*). Every fader picks up first; **1-Up…10-Up** zero the open look's channel on any page. | The mode keys, the lit one is the page |
 | **MaizeDMX** (*Colour*) | Faders 1-6 red, green, blue, white, amber, UV; 7, 8 hue and saturation; 10 intensity. | One page |
 
 **Which set, and sharing one.** The **Pages** row over each map picks the
@@ -367,6 +369,8 @@ saves the set as a `.pageset.json` file; **Import…** adds one made for
 this board (it is checked first: a set for another board, or one with a
 job on the desk's controls, is refused with the reason). The built-in sets
 cannot be changed: export one, edit the file, import it under a new name.
+A set in your page sets folder that puts a job on the desk's GO, Back,
+STOP or GM (edited by hand) is not used, and the Pages row says why.
 A show saved with a set other than the board's own remembers it; opened on
 a computer that uses another, the row offers it (**Use It** or **Not
 Now**). Making pages in the app is the next step.

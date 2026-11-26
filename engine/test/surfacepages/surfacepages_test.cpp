@@ -42,6 +42,7 @@
 #include "qlcfile.h"
 #include "functionparent.h"
 #include "mastertimer.h"
+#include "fixture.h"
 #include "scene.h"
 #include "doc.h"
 
@@ -622,8 +623,14 @@ void SurfacePages_Test::thePageKeysLightsAreThePagesInDesignOnly()
     SimMidiDevice *apc = plug(QStringLiteral("APC40 mkII"), kApc, fileOf(kApc), 0);
     QVERIFY(apc != nullptr);
     // The show's trigger on Sends, its scene playing: the Control Map would light it.
+    Fixture *dim = new Fixture(m_doc);
+    dim->setName(QStringLiteral("Dim"));
+    dim->setChannels(1);
+    dim->setUniverse(0);
+    QVERIFY(m_doc->addFixture(dim));
     Scene *stab = new Scene(m_doc);
     stab->setName(QStringLiteral("Stab"));
+    stab->setValue(dim->id(), 0, 255);     // a scene with a value keeps playing
     m_doc->addFunction(stab);
     ControlMap *cm = m_doc->controlMap();
     cm->setBinding({ 0, 216, ControlMap::function(stab->id()), ControlMap::Toggle });
@@ -632,6 +639,8 @@ void SurfacePages_Test::thePageKeysLightsAreThePagesInDesignOnly()
     QCoreApplication::processEvents();
     cm->resendFeedback();
     QCoreApplication::processEvents();
+    QVERIFY(apc->tap(QStringLiteral("#215")));         // heard: its keys light
+    QVERIFY(stab->isRunning());
     // Design, on Move: Pan is lit, Sends is the page's (dark), whatever the show says.
     QCOMPARE(apc->lamp(QStringLiteral("#215")), 127);
     QCOMPARE(apc->lamp(QStringLiteral("#216")), 0);

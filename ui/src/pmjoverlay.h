@@ -190,7 +190,7 @@ private:
     QString m_lastRefusal;
     /** Strip faders' pick-up, by strip: forgotten at a page, look,
      *  selection or mode change. */
-    QHash<int, FaderPickup> m_pickups;
+    mutable QHash<int, FaderPickup> m_pickups;  // mutable: programmingManager() const clears it once wired
     QSet<int> m_warnedSecond;   // second boards already named
     QElapsedTimer m_refusedAt[2];   // faders, encoders: each said once a second
 };
