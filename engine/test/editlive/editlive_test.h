@@ -53,12 +53,13 @@ private slots:
     void theEmergencyStopClearsIt();
     void designTurnsItOff();
 
-    /* The review of d01a79bfb (each fails there) */
+    /* The review of d01a79bfb: most fail there; stopAllDropsTheTrims,
+       closingTheShowTurnsItOff, theGrandMasterStillAppliesOverTrims and
+       anEvenMoveOfAFanKeepsTheFan held already and guard it */
     void aPartOfALayerGetsItsOwnException();
     void anEvenMoveOfAFanKeepsTheFan();
     void anUnevenMoveOfAFanStoresEachHead();
     void oneHeadOfAFanStoresWhereItIs();
-    void mixedLevelsStoreEachHead();
     void theLayerThatSetsTheKeyIsTheOneStored();
     void theListMasterScalesTheTrimsAndNotTheStore();
     void theGrandMasterStillAppliesOverTrims();
@@ -70,6 +71,16 @@ private slots:
     void aSubCueGoDropsTheTrims();
     void anAttributeMovedBackIsNotPending();
     void aRefusedControlStaysTheShows();
+
+    /* The review of 4835ca7c4: each fails there (anUnboundFaderStaysTheShows
+       guards: an unbound control was never the page's) */
+    void aWholeFanMovedAsOneMovesTheFan();
+    void someHeadsWithOneResultAreOneException();
+    void twoKindsOfMoverMovedAsOneMoveTheLook();
+    void theFirstTouchStartsFromTheStage();
+    void undoingASecondStoreKeepsTheFirstHeld();
+    void undoThenRedoHoldsAgain();
+    void anUnboundFaderStaysTheShows();
 
 private:
     bool show();
@@ -89,8 +100,8 @@ private:
     QTemporaryDir m_settings;
     QList<quint32> m_selection;
     Chaser *m_chaser = nullptr;
-    quint32 m_spot = 0, m_par1 = 0, m_par2 = 0, m_spot2 = 0, m_spot3 = 0;
-    quint32 m_pars = 0, m_spots = 0, m_movers = 0, m_par1Only = 0;
+    quint32 m_spot = 0, m_par1 = 0, m_par2 = 0, m_par3 = 0, m_spot2 = 0, m_spot3 = 0, m_spot4 = 0, m_alpha = 0;
+    quint32 m_pars = 0, m_spots = 0, m_movers = 0, m_par1Only = 0, m_mixed = 0;
     quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0, m_c4 = 0, m_s1 = 0, m_s2 = 0;
     quint32 m_red = 0, m_blue = 0, m_full = 0, m_front = 0, m_half = 0, m_fan = 0, m_dimFan = 0;
 };

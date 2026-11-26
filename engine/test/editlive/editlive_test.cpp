@@ -29,6 +29,7 @@
 #undef protected
 #undef private
 #include <QDir>
+#include <algorithm>
 
 #include "editlive_test.h"
 #include "simmididevice.h"
@@ -52,6 +53,7 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "scene.h"
 #include "doc.h"
 
 using namespace ShowTree;
@@ -169,12 +171,20 @@ bool EditLive_Test::show()
     m_par1 = fixture(par, "RGB Dimmer");
     m_par2 = fixture(par, "RGB Dimmer");
     m_spot = fixture(spot, "Standard");
-    m_pars = group("Pars", { m_par1, m_par2 });
+    m_par3 = fixture(par, "RGB Dimmer");
+    m_pars = group("Pars", { m_par1, m_par2, m_par3 });
     m_spots = group("Spot", { m_spot });
     m_spot2 = fixture(spot, "Standard");
     m_spot3 = fixture(spot, "Standard");
     m_movers = group("Movers", { m_spot2, m_spot3 });
     m_par1Only = group("Par 1", { m_par1 });
+    // Two kinds of mover in one layer (540 and 450 degrees of pan).
+    QLCFixtureDef *alpha = m_doc->fixtureDefCache()->fixtureDef("Clay Paky", "Alpha Spot HPE 575");
+    if (alpha == nullptr)
+        return false;
+    m_spot4 = fixture(spot, "Standard");
+    m_alpha = fixture(alpha, "Option 16b");
+    m_mixed = group("Mixed", { m_spot4, m_alpha });
     m_red = palette(QLCPalette::Color, "Red", { QLCPalette::colorToString(Qt::red, Qt::black) });
     m_blue = palette(QLCPalette::Color, "Blue", { QLCPalette::colorToString(Qt::blue, Qt::black) });
     m_full = palette(QLCPalette::Dimmer, "Full", { 255 });
@@ -201,6 +211,7 @@ bool EditLive_Test::show()
     set(m_c1, m_spots, m_full);
     set(m_c1, m_movers, m_fan);
     set(m_c1, m_movers, m_dimFan);
+    set(m_c1, m_mixed, m_front);
     // Par 1 again on a layer of its own that sets only its level.
     set(m_c1, m_par1Only, m_half);
     m_c2 = st->addCue(list, 0, "Blue");
@@ -455,7 +466,7 @@ void EditLive_Test::aFaderPicksUpThenTrims()
     go();
     go();
     QVERIFY(m_live->setOn(true));
-    m_selection = { m_par1, m_par2 };
+    m_selection = { m_par1, m_par2, m_par3 };
     Fixture *p1 = m_doc->fixture(m_par1);
     const int red = int(p1->address() + p1->channelNumber(QLCChannel::Red, QLCChannel::MSB));
     const int blue = int(p1->address() + p1->channelNumber(QLCChannel::Blue, QLCChannel::MSB));
@@ -577,7 +588,8 @@ void EditLive_Test::designTurnsItOff()
 }
 
 /*****************************************************************************
- * The review of d01a79bfb: each of these fails there
+ * The review of d01a79bfb (and of 4835ca7c4 below): most fail there;
+ * the guards are named in the header
  *****************************************************************************/
 
 void EditLive_Test::aPartOfALayerGetsItsOwnException()
@@ -656,19 +668,160 @@ void EditLive_Test::oneHeadOfAFanStoresWhereItIs()
     QVERIFY(childOf(m_c1, m_movers, m_spot2) == nullptr);
 }
 
-void EditLive_Test::mixedLevelsStoreEachHead()
+void EditLive_Test::aWholeFanMovedAsOneMovesTheFan()
 {
     m_doc->setMode(Doc::Operate);
     go();
     QVERIFY(m_live->setOn(true));
+    // Every head of the level fan down by the same step: the fan moves.
     m_selection = { m_spot2, m_spot3 };
     QVERIFY(m_live->adjust(EncoderBank::IntensityBank, 0, -5, false));
     QString why;
     QVERIFY2(m_live->store(&why), qPrintable(why));
-    const int l2 = lookValue(childOf(m_c1, m_movers, m_spot2), KeyDimmer);
-    const int l3 = lookValue(childOf(m_c1, m_movers, m_spot3), KeyDimmer);
-    QVERIFY2(l2 > 0 && l2 < 255, qPrintable(QString::number(l2)));
-    QVERIFY2(l3 > 0 && l2 - l3 > 100, qPrintable(QStringLiteral("%1 %2").arg(l2).arg(l3)));
+    const ShowTree::Layer *movers = layerOn(m_doc->showTree()->cue(m_c1), groupTarget(m_movers));
+    const QLCPalette *p = m_doc->palette(movers->look(KeyDimmer)->palettes.first());
+    QVERIFY(p->id() != m_dimFan);
+    const int v = p->values().at(0).toInt();
+    QVERIFY2(v < 255 && v > 150, qPrintable(QString::number(v)));
+    QCOMPARE(p->fanningType(), QLCPalette::Linear);
+    QVERIFY(qAbs(p->fanningValue().toInt() - (127 - (255 - v))) <= 1);
+    // No exceptions: later cues still move these heads.
+    QVERIFY(childOf(m_c1, m_movers, m_spot2) == nullptr);
+    QVERIFY(childOf(m_c1, m_movers, m_spot3) == nullptr);
+}
+
+void EditLive_Test::someHeadsWithOneResultAreOneException()
+{
+    m_doc->setMode(Doc::Operate);
+    go();
+    go();
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_par1, m_par2 };       // two of the three
+    trimRed(0, 64);
+    QString why;
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    const ShowTree::Cue *c2 = m_doc->showTree()->cue(m_c2);
+    const ShowTree::Layer *pars = layerOn(c2, groupTarget(m_pars));
+    int children = 0;
+    const ShowTree::Layer *child = nullptr;
+    for (const ShowTree::Layer &l : c2->layers)
+        if (l.parent == pars->id)
+        {
+            ++children;
+            child = &l;
+        }
+    QCOMPARE(children, 1);
+    QList<quint32> both = child->target.fixtures;
+    std::sort(both.begin(), both.end());
+    QCOMPARE(both, QList<quint32>({ m_par1, m_par2 }));
+    QVERIFY(qAbs(lookValue(child, KeyColour, 0) - 128) <= 3);
+}
+
+void EditLive_Test::twoKindsOfMoverMovedAsOneMoveTheLook()
+{
+    m_doc->setMode(Doc::Operate);
+    go();
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_spot4, m_alpha };
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 66));
+    QString why;
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    const ShowTree::Layer *mixed = layerOn(m_doc->showTree()->cue(m_c1), groupTarget(m_mixed));
+    QVERIFY(mixed->look(KeyPosition)->palettes.first() != m_front);
+    QVERIFY(lookValue(mixed, KeyPosition, 0) > 90);
+    QCOMPARE(lookValue(mixed, KeyPosition, 1), 45);
+    QVERIFY(childOf(m_c1, m_mixed, m_spot4) == nullptr);
+    QVERIFY(childOf(m_c1, m_mixed, m_alpha) == nullptr);
+}
+
+void EditLive_Test::theFirstTouchStartsFromTheStage()
+{
+    // Something else has par 1's red up (an effect, a hit): 200 on stage.
+    Fixture *p1 = m_doc->fixture(m_par1);
+    const quint32 redCh = p1->channelNumber(QLCChannel::Red, QLCChannel::MSB);
+    Scene *over = new Scene(m_doc);
+    over->setValue(m_par1, redCh, 200);
+    QVERIFY(m_doc->addFunction(over));
+    m_doc->setMode(Doc::Operate);
+    go();
+    go();
+    over->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(5);
+    const int red = int(p1->address() + redCh);
+    QCOMPARE(uchar(frame().at(red)), uchar(200));
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_par1 };
+    // A turn up from what is on stage: no jump down to the look's 0.
+    QVERIFY(m_live->adjust(EncoderBank::ColourBank, 2, 3, false));
+    const int now = uchar(frame().at(red));
+    QVERIFY2(now > 200, qPrintable(QString::number(now)));
+    // The store is the look's 0 and the trim, not the 200 from elsewhere.
+    QString why;
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    const int stored = lookValue(childOf(m_c2, m_pars, m_par1), KeyColour, 0);
+    QVERIFY2(stored > 0 && stored < 100, qPrintable(QString::number(stored)));
+}
+
+void EditLive_Test::undoingASecondStoreKeepsTheFirstHeld()
+{
+    m_doc->setMode(Doc::Operate);
+    go();
+    go();
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_spot };
+    Fixture *f = m_doc->fixture(m_spot);
+    const int pan = int(f->address() + f->channelNumber(QLCChannel::Pan, QLCChannel::MSB));
+    const int tilt = int(f->address() + f->channelNumber(QLCChannel::Tilt, QLCChannel::MSB));
+    const QByteArray before = frame();
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 70));
+    QString why;
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    QVERIFY(m_apc->set(QStringLiteral("#20"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#20"), 70));
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    const QByteArray both = frame();
+    QVERIFY(both.at(pan) != before.at(pan));
+    QVERIFY(both.at(tilt) != before.at(tilt));
+    // Undo the second: its tilt goes, the first's pan stays held.
+    QVERIFY(m_doc->showTree()->undo());
+    QCoreApplication::processEvents();
+    const QByteArray after = frame();
+    QCOMPARE(after.at(pan), both.at(pan));
+    QCOMPARE(after.at(tilt), before.at(tilt));
+    QVERIFY(m_live->isHolding());
+}
+
+void EditLive_Test::undoThenRedoHoldsAgain()
+{
+    m_doc->setMode(Doc::Operate);
+    go();
+    go();
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_spot };
+    const QByteArray before = frame();
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 70));
+    const QByteArray trimmed = frame();
+    QString why;
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    QVERIFY(m_doc->showTree()->undo());
+    QCoreApplication::processEvents();
+    QCOMPARE(frame(), before);
+    QVERIFY(m_doc->showTree()->redo());
+    QCoreApplication::processEvents();
+    QCOMPARE(frame(), trimmed);
+    QVERIFY(m_live->isHolding());
+}
+
+void EditLive_Test::anUnboundFaderStaysTheShows()
+{
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_live->setOn(true));
+    // Fader 7 has no job on the Build set's pages.
+    QVERIFY(!m_doc->inputOutputMap()->isPageControl(0, 7 + 6 * 4096));
+    QVERIFY(m_doc->inputOutputMap()->isPageControl(0, 7));     // fader 1: red
 }
 
 void EditLive_Test::theLayerThatSetsTheKeyIsTheOneStored()
@@ -696,20 +849,20 @@ void EditLive_Test::theListMasterScalesTheTrimsAndNotTheStore()
     tick(5);
     QVERIFY(m_live->setOn(true));
     QCOMPARE(m_live->listIntensity(), 0.5);
-    m_selection = { m_par1, m_par2 };
+    m_selection = { m_par1, m_par2, m_par3 };
     Fixture *p1 = m_doc->fixture(m_par1);
     const int red = int(p1->address() + p1->channelNumber(QLCChannel::Red, QLCChannel::MSB));
-    trimRed(0, 64);
-    // Never brighter than the cue would play it: half of the trim.
+    // The fader is what is on stage: 25% there.
+    trimRed(0, 32);
     QVERIFY2(qAbs(int(uchar(frame().at(red))) - 64) <= 3, qPrintable(QString::number(uchar(frame().at(red)))));
     QString why;
     QVERIFY2(m_live->store(&why), qPrintable(why));
-    // The look keeps the look's level, not the output's.
-    QVERIFY(qAbs(lookValue(layerOn(m_doc->showTree()->cue(m_c2), groupTarget(m_pars)), KeyColour, 0) - 128) <= 3);
-    // The master up again: the held trim follows it.
+    // In the look that is 50%: at the list's full it plays twice that.
+    QVERIFY(qAbs(lookValue(layerOn(m_doc->showTree()->cue(m_c2), groupTarget(m_pars)), KeyColour, 0) - 128) <= 4);
+    // The master up again: the held trim follows it, never brighter than the cue.
     m_chaser->adjustAttribute(1.0, Function::Intensity);
-    QTest::qWait(300);
-    QVERIFY(qAbs(int(uchar(frame().at(red))) - 128) <= 3);
+    QCoreApplication::processEvents();
+    QVERIFY(qAbs(int(uchar(frame().at(red))) - 128) <= 4);
 }
 
 void EditLive_Test::theGrandMasterStillAppliesOverTrims()

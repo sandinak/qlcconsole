@@ -33,7 +33,6 @@
 #include "qlcengine_export.h"
 
 class SurfacePages;
-class QTimer;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -166,29 +165,43 @@ signals:
     void stored(const QString &note);
 
 private:
-    /** What a Store writes: the trimmed values over what was there. */
+    /** What a Store writes: the trims as deltas, over the look's levels. */
     struct Snapshot
     {
         quint32 cue = 0xFFFFFFFF;
         QList<Trim> trims;
-        QHash<quint64, uchar> values;   //!< (fixture << 32 | channel) -> trimmed
-        QHash<quint64, uchar> base;     //!< what was there
+        QHash<quint64, uchar> values;   //!< (fixture << 32 | channel) -> trimmed, on stage
+        QHash<quint64, uchar> base;     //!< on stage before the trim
+        QHash<quint64, int> look;       //!< the look's level (cueLevels())
+        QHash<quint32, qreal> scale;    //!< the list master when the fixture was first touched
+    };
+    /** A Store, held on stage until the cue changes: its undo step (by
+     *  stamp) and what it put there. In the undo history: held (unless
+     *  Drop let go of it); undone: let go; redone: held again. */
+    struct Hold
+    {
+        quint64 stamp = 0;
+        QHash<quint64, uchar> stage;    //!< channel -> on stage
+        QHash<quint64, int> look;       //!< channel -> the look's level now
+        bool dropped = false;
     };
 
     QList<quint32> selection() const;
     bool begin(int bank, int slot, QList<quint32> *fixtures);
     void seed(const QList<quint32> &fixtures);
-    void afterEdit(const QList<quint32> &fixtures, int bank, int slot);
+    QHash<quint64, uchar> valuesOf(const QList<quint32> &fixtures) const;
+    void noteMoved(const QHash<quint64, uchar> &before, int bank, int slot);
+    void afterEdit();
     void push();
     Snapshot snapshot() const;
     bool storeSnapshot(const Snapshot &snap, QString *why);
     void clearAll();
     void connectSources();
+    void connectMaster();
     void recomputePending();
-    void releaseHeld(bool keepPending);
+    void applyHolds();
     void treeChanged();
-    void follow();
-    uchar seedValue(quint32 fixture, quint32 channel, const QByteArray &frame) const;
+    bool isIntensity(quint32 fixture, quint32 channel) const;
 
 private:
     Doc *m_doc;
@@ -197,28 +210,28 @@ private:
     bool m_sourcesConnected = false;
     quint32 m_cue;
     OutputLayer m_layer;
-    /** The values the trims start from (what the stage had), and where they
-     *  are now: scratch scenes, never the show's. */
+    /** What is on stage where the trims start (seeded from the output, so
+     *  the first touch never jumps), and where they are now: scratch
+     *  scenes, never the show's. */
     QPointer<Scene> m_base;
     QPointer<Scene> m_trim;
-    /** What the output had before any trim, per channel: what Drop and a
-     *  stored trim (held until GO) are measured from. */
+    /** What the stage had before any trim, per channel. */
     QHash<quint64, uchar> m_original;
+    /** The look's level per channel (cueLevels(), 0 included), and as the
+     *  stores held now have made it: what a Store adds the trim to. */
+    QHash<quint64, int> m_lookOriginal;
+    QHash<quint64, int> m_look;
+    /** The list master when each fixture was first touched. */
+    QHash<quint32, qreal> m_seedScale;
     QSet<quint32> m_seeded;
     /** (fixture, bank, slot) pending, in the order first touched. */
     QList<quint64> m_pending;
     /** The channels each (fixture, bank, slot) moved: an attribute moved
      *  back to where it was is no longer pending, whatever else moved. */
     QHash<quint64, QSet<quint32>> m_slotChannels;
-    /** What the running cue puts on stage, as look levels (before the list
-     *  master and the layers over it): what a trim starts from. */
-    QHash<quint32, QByteArray> m_levels;
-    bool m_levelsRead = false;
-    /** The Show Tree's undo depth right after a Store (-1: none held). */
-    int m_heldSteps = -1;
-    /** The list intensity the layer was last pushed at. */
-    qreal m_pushedScale = 1.0;
-    QTimer *m_follow = nullptr;
+    QList<Hold> m_holds;
+    /** The list master's attribute signals (the cue's list and its parent's). */
+    QList<QMetaObject::Connection> m_masterConnections;
     /** A Store to Cue offer's generation: an old offer's timer is not the
      *  new one's. */
     quint32 m_leftGeneration = 0;

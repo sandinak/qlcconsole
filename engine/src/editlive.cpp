@@ -36,6 +36,91 @@
 #include "qlcchannel.h"
 #include "universe.h"
 #include "fadechannel.h"
+#include "qlcfixturedef.h"
+#include "fixture.h"
+#include "scene.h"
+#include "doc.h"
+
+using namespace ShowTree;
+
+namespace
+{
+const quint32 kInvalid = 0xFFFFFFFF;
+
+quint64 chanKey(quint32 fixture, quint32 channel)
+{
+    return (quint64(fixture) << 32) | channel;
+}
+
+quint64 slotKey(quint32 fixture, int bank, int slot)
+{
+    return (quint64(fixture) << 32) | quint32((bank << 8) | slot);
+}
+
+quint32 keyFixture(quint64 k) { return quint32(k >> 32); }
+int keyBank(quint64 k) { return int((k >> 8) & 0xFF); }
+int keySlot(quint64 k) { return int(k & 0xFF); }
+
+/** The dimmer a Dimmer look writes on @p f (invalid: none). */
+quint32 dimmerChannel(const Fixture *f)
+{
+    const quint32 master = f->masterIntensityChannel();
+    if (master != QLCChannel::invalid())
+        return master;
+    return f->channelNumber(QLCChannel::Intensity, QLCChannel::MSB, 0);
+}
+
+/** A look's value, before it is made a palette: what Store compares
+ *  between fixtures (equal: one look for all; else one per fixture). */
+struct StoreValue
+{
+    QLCPalette::PaletteType type = QLCPalette::Undefined;
+    QVariantList values;
+
+    bool isValid() const { return type != QLCPalette::Undefined; }
+    bool operator==(const StoreValue &o) const { return type == o.type && values == o.values; }
+};
+}
+
+/*
+  Q Light Controller Plus
+  editlive.cpp
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#include <QTimer>
+#include <QColor>
+#include <QMap>
+#include <algorithm>
+
+#include "editlive.h"
+#include "encoderattributes.h"
+#include "showtreecontroller.h"
+#include "outputrulekeeper.h"
+#include "inputoutputmap.h"
+#include "refinesession.h"
+#include "surfacepages.h"
+#include "encoderbank.h"
+#include "qlcphysical.h"
+#include "qlcfixturemode.h"
+#include "qlcpalette.h"
+#include "qlcchannel.h"
+#include "universe.h"
+#include "fadechannel.h"
+#include "qlcfixturedef.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -93,10 +178,6 @@ EditLive::EditLive(Doc *doc, SurfacePages *pages, QObject *parent)
     m_layer.setHoldsShowOnly(true);
     m_base = new Scene(doc);
     m_trim = new Scene(doc);
-    // A list master pulled while trims are up: the trims follow it.
-    m_follow = new QTimer(this);
-    m_follow->setInterval(100);
-    connect(m_follow, &QTimer::timeout, this, &EditLive::follow);
 
     if (m_pages != nullptr)
     {
@@ -238,16 +319,18 @@ void EditLive::checkCue()
 void EditLive::clearAll()
 {
     m_layer.clear();
-    m_follow->stop();
+    for (const QMetaObject::Connection &c : std::as_const(m_masterConnections))
+        disconnect(c);
+    m_masterConnections.clear();
     m_pending.clear();
     m_slotChannels.clear();
     m_pickups.clear();
     m_original.clear();
+    m_lookOriginal.clear();
+    m_look.clear();
+    m_seedScale.clear();
     m_seeded.clear();
-    m_levels.clear();
-    m_levelsRead = false;
-    m_heldSteps = -1;
-    m_pushedScale = 1.0;
+    m_holds.clear();
     if (m_base.isNull() || m_trim.isNull())
         return;
     for (const SceneValue &v : m_base->values())
@@ -277,10 +360,23 @@ qreal EditLive::listIntensity() const
     return qBound(0.0, scale, 1.0);
 }
 
-void EditLive::follow()
+void EditLive::connectMaster()
 {
-    if (!qFuzzyCompare(1.0 + listIntensity(), 1.0 + m_pushedScale))
-        push();
+    if (!m_masterConnections.isEmpty())
+        return;
+    ShowTreeController *st = m_doc->showTree();
+    quint32 cue = m_cue;
+    for (int depth = 0; depth < 2 && st != nullptr && cue != kInvalid; ++depth)
+    {
+        const CueList *list = st->listOfCue(cue);
+        if (list == nullptr)
+            break;
+        // A list master moved: the trims' intensities follow it.
+        if (Function *chaser = m_doc->function(list->chaser))
+            m_masterConnections << connect(chaser, &Function::attributeChanged, this, [this](int, qreal) { push(); });
+        quint32 parent = kInvalid;
+        cue = st->isSubCue(cue, &parent) ? parent : kInvalid;
+    }
 }
 
 /*****************************************************************************
@@ -343,38 +439,34 @@ bool EditLive::begin(int bank, int slot, QList<quint32> *fixtures)
         return false;
     }
     seed(*fixtures);
+    connectMaster();
     return true;
 }
 
-uchar EditLive::seedValue(quint32 fixture, quint32 channel, const QByteArray &frame) const
+bool EditLive::isIntensity(quint32 fixture, quint32 channel) const
 {
-    /* The look's level, not the output: the output has the list master,
-       the Grand Master's neighbours (Highlight, Park, Focus) and effects
-       in it, and a Store must keep what the look plays. A channel the cue
-       does not set is what the stage has (a pan at its default); an
-       intensity it does not set is dark. */
-    const QByteArray look = m_levels.value(fixture);
-    const uchar lv = int(channel) < look.size() ? uchar(look.at(int(channel))) : 0;
-    if (lv > 0)
-        return lv;
     Fixture *f = m_doc->fixture(fixture);
     const QLCChannel *qch = f != nullptr ? f->channel(channel) : nullptr;
-    if (qch == nullptr || qch->group() == QLCChannel::Intensity)
-        return 0;
-    const int addr = int(f->address() + channel);
-    return addr < frame.size() ? uchar(frame.at(addr)) : 0;
+    return qch != nullptr && qch->group() == QLCChannel::Intensity;
 }
 
 void EditLive::seed(const QList<quint32> &fixtures)
 {
     if (m_base.isNull() || m_trim.isNull())
         return;
-    if (!m_levelsRead)
-    {
-        if (ShowTreeController *st = m_doc->showTree())
-            m_levels = st->cueLevels(m_cue);
-        m_levelsRead = true;
-    }
+    /* Two sides: the stage side starts from what is on stage (an override
+       hit's colour, a fade half way, an effect: the first touch never
+       jumps), and a Store adds the trim to the look's own level (the cue's
+       levels, 0 included: never an effect's or a Locate's value). */
+    bool fresh = false;
+    for (quint32 fid : fixtures)
+        fresh = fresh || !m_seeded.contains(fid);
+    if (!fresh)
+        return;
+    QHash<quint32, QByteArray> levels;
+    if (ShowTreeController *st = m_doc->showTree())
+        levels = st->cueLevels(m_cue);
+    const qreal scale = listIntensity();
     InputOutputMap *iom = m_doc->inputOutputMap();
     QHash<quint32, QByteArray> frames;
     for (quint32 fid : fixtures)
@@ -390,24 +482,54 @@ void EditLive::seed(const QList<quint32> &fixtures)
             frames.insert(f->universe(), u != nullptr ? u->preGMValues() : QByteArray());
         }
         const QByteArray &frame = frames[f->universe()];
+        const QByteArray look = levels.value(fid);
         m_base->addFixture(fid);
         m_trim->addFixture(fid);
         for (quint32 ch = 0; ch < f->channels(); ++ch)
         {
-            const uchar v = seedValue(fid, ch, frame);
+            const int addr = int(f->address() + ch);
+            const uchar v = addr < frame.size() ? uchar(frame.at(addr)) : 0;
             m_base->setValue(fid, ch, v);
             m_trim->setValue(fid, ch, v);
             m_original.insert(chanKey(fid, ch), v);
+            const int lv = int(ch) < look.size() ? int(uchar(look.at(int(ch)))) : 0;
+            m_lookOriginal.insert(chanKey(fid, ch), lv);
+            m_look.insert(chanKey(fid, ch), lv);
         }
+        m_seedScale.insert(fid, scale);
         m_seeded.insert(fid);
     }
 }
 
-void EditLive::afterEdit(const QList<quint32> &fixtures, int bank, int slot)
+QHash<quint64, uchar> EditLive::valuesOf(const QList<quint32> &fixtures) const
 {
-    Q_UNUSED(fixtures)
-    Q_UNUSED(bank)
-    Q_UNUSED(slot)
+    QHash<quint64, uchar> out;
+    if (m_trim.isNull())
+        return out;
+    for (quint32 fid : fixtures)
+    {
+        Fixture *f = m_doc->fixture(fid);
+        if (f == nullptr)
+            continue;
+        for (quint32 ch = 0; ch < f->channels(); ++ch)
+            out.insert(chanKey(fid, ch), m_trim->value(fid, ch));
+    }
+    return out;
+}
+
+void EditLive::noteMoved(const QHash<quint64, uchar> &before, int bank, int slot)
+{
+    for (auto it = before.constBegin(); it != before.constEnd(); ++it)
+    {
+        const quint32 fid = keyFixture(it.key());
+        const quint32 ch = quint32(it.key() & 0xFFFFFFFF);
+        if (m_trim->value(fid, ch) != it.value())
+            m_slotChannels[slotKey(fid, bank, slot)].insert(ch);
+    }
+}
+
+void EditLive::afterEdit()
+{
     recomputePending();
     push();
     emit changed();
@@ -418,9 +540,7 @@ void EditLive::recomputePending()
     if (m_base.isNull() || m_trim.isNull())
         return;
     // Per attribute: pending while any channel it moved is off where it was.
-    QList<quint64> now;
-    for (quint64 k : std::as_const(m_pending))
-        now << k;
+    QList<quint64> now = m_pending;
     for (auto it = m_slotChannels.constBegin(); it != m_slotChannels.constEnd(); ++it)
         if (!now.contains(it.key()))
             now << it.key();
@@ -442,7 +562,8 @@ void EditLive::push()
     if (m_trim.isNull())
         return;
     /* The list master scales what the cue plays; it scales the trims'
-       intensities too, so the stage is never brighter than the cue. */
+       intensities too, from where it was when they started, so the stage
+       is never brighter than the cue would play. */
     const qreal scale = listIntensity();
     QList<OutputLayer::Level> levels;
     for (auto it = m_original.constBegin(); it != m_original.constEnd(); ++it)
@@ -452,17 +573,15 @@ void EditLive::push()
         const uchar v = m_trim->value(fid, ch);
         if (v == it.value())
             continue;
-        Fixture *f = m_doc->fixture(fid);
-        const QLCChannel *qch = f != nullptr ? f->channel(ch) : nullptr;
-        const bool intensity = qch != nullptr && qch->group() == QLCChannel::Intensity;
-        levels << OutputLayer::Level { fid, ch, intensity ? uchar(qRound(v * scale)) : v };
+        uchar out = v;
+        if (isIntensity(fid, ch))
+        {
+            const qreal s0 = m_seedScale.value(fid, 1.0);
+            out = uchar(qBound(0, qRound(s0 > 0.0 ? v * scale / s0 : v * scale), 255));
+        }
+        levels << OutputLayer::Level { fid, ch, out };
     }
-    m_pushedScale = scale;
     m_layer.set(levels);
-    if (levels.isEmpty())
-        m_follow->stop();
-    else if (!m_follow->isActive())
-        m_follow->start();
 }
 
 bool EditLive::adjust(int bank, int slot, int detents, bool fine)
@@ -470,17 +589,11 @@ bool EditLive::adjust(int bank, int slot, int detents, bool fine)
     QList<quint32> fixtures;
     if (!begin(bank, slot, &fixtures) || m_trim.isNull())
         return false;
-    QHash<quint64, uchar> before;
-    for (quint32 fid : fixtures)
-        for (const SceneValue &v : m_trim->values())
-            if (v.fxi == fid)
-                before.insert(chanKey(fid, v.channel), v.value);
+    const QHash<quint64, uchar> before = valuesOf(fixtures);
     if (!EncoderAttributes::adjust(m_doc, m_trim, fixtures, bank, slot, detents, fine))
         return false;
-    for (auto it = before.constBegin(); it != before.constEnd(); ++it)
-        if (m_trim->value(keyFixture(it.key()), quint32(it.key() & 0xFFFFFFFF)) != it.value())
-            m_slotChannels[slotKey(keyFixture(it.key()), bank, slot)].insert(quint32(it.key() & 0xFFFFFFFF));
-    afterEdit(fixtures, bank, slot);
+    noteMoved(before, bank, slot);
+    afterEdit();
     float norm = 0.0f;
     if (EncoderAttributes::read(m_doc, m_trim, fixtures, bank, slot, &norm))
         emit message(tr("Edit Live: %1 %2%").arg(EncoderBank::slotName(bank, slot)).arg(int(norm * 100.0f + 0.5f)));
@@ -495,7 +608,7 @@ bool EditLive::level(quint32 universe, quint32 channel, int bank, int slot, ucha
     float norm = 0.0f;
     if (!EncoderAttributes::read(m_doc, m_trim, fixtures, bank, slot, &norm))
         return false;
-    // Pick-up (Q299): the fader waits until it meets the look's value.
+    // Pick-up (Q299): the fader waits until it meets what is on stage.
     FaderPickup &pick = m_pickups[(quint64(universe) << 32) | channel];
     pick.setSource(universe, channel);
     const int current = qBound(0, int(norm * 255.0f + 0.5f), 255);
@@ -504,17 +617,11 @@ bool EditLive::level(quint32 universe, quint32 channel, int bank, int slot, ucha
         emit message(FaderPickup::hintText(EncoderBank::slotName(bank, slot), int(norm * 100.0f + 0.5f)));
         return false;
     }
-    QHash<quint64, uchar> before;
-    for (quint32 fid : fixtures)
-        for (const SceneValue &v : m_trim->values())
-            if (v.fxi == fid)
-                before.insert(chanKey(fid, v.channel), v.value);
+    const QHash<quint64, uchar> before = valuesOf(fixtures);
     if (!EncoderAttributes::set(m_doc, m_trim, fixtures, bank, slot, float(value) / 255.0f))
         return false;
-    for (auto it = before.constBegin(); it != before.constEnd(); ++it)
-        if (m_trim->value(keyFixture(it.key()), quint32(it.key() & 0xFFFFFFFF)) != it.value())
-            m_slotChannels[slotKey(keyFixture(it.key()), bank, slot)].insert(quint32(it.key() & 0xFFFFFFFF));
-    afterEdit(fixtures, bank, slot);
+    noteMoved(before, bank, slot);
+    afterEdit();
     return true;
 }
 
@@ -524,7 +631,7 @@ bool EditLive::level(quint32 universe, quint32 channel, int bank, int slot, ucha
 
 bool EditLive::isHolding() const
 {
-    if (m_trim.isNull())
+    if (m_base.isNull())
         return false;
     for (auto it = m_original.constBegin(); it != m_original.constEnd(); ++it)
         if (m_base->value(keyFixture(it.key()), quint32(it.key() & 0xFFFFFFFF)) != it.value())
@@ -571,10 +678,12 @@ EditLive::Snapshot EditLive::snapshot() const
         Fixture *f = m_doc->fixture(fid);
         if (f == nullptr)
             continue;
+        s.scale.insert(fid, m_seedScale.value(fid, 1.0));
         for (quint32 ch = 0; ch < f->channels(); ++ch)
         {
             s.values.insert(chanKey(fid, ch), m_trim->value(fid, ch));
             s.base.insert(chanKey(fid, ch), m_base->value(fid, ch));
+            s.look.insert(chanKey(fid, ch), m_look.value(chanKey(fid, ch)));
         }
     }
     return s;
@@ -584,27 +693,44 @@ EditLive::Snapshot EditLive::snapshot() const
  * Store and Drop
  *****************************************************************************/
 
-void EditLive::releaseHeld(bool keepPending)
+void EditLive::applyHolds()
 {
     if (m_base.isNull() || m_trim.isNull())
         return;
-    // What was stored goes back to what the cue plays now.
+    /* Each channel: what the latest Store still in the undo history put
+       there (unless Drop let go of it on stage), else what the stage had.
+       A channel a pending trim moved keeps that trim. */
+    ShowTreeController *st = m_doc->showTree();
+    QSet<quint64> stamps;
+    if (st != nullptr)
+        for (const ShowTreeController::StepInfo &i : st->undoSteps())
+            stamps.insert(i.stamp);
     QSet<quint64> pendingChannels;
-    if (keepPending)
-        for (quint64 k : std::as_const(m_pending))
-            for (quint32 ch : m_slotChannels.value(k))
-                pendingChannels.insert(chanKey(keyFixture(k), ch));
+    for (quint64 k : std::as_const(m_pending))
+        for (quint32 ch : m_slotChannels.value(k))
+            pendingChannels.insert(chanKey(keyFixture(k), ch));
     for (auto it = m_original.constBegin(); it != m_original.constEnd(); ++it)
     {
+        uchar stage = it.value();
+        int look = m_lookOriginal.value(it.key());
+        for (const Hold &h : std::as_const(m_holds))
+        {
+            if (!stamps.contains(h.stamp))
+                continue;
+            if (h.look.contains(it.key()))
+                look = h.look.value(it.key());
+            if (!h.dropped && h.stage.contains(it.key()))
+                stage = h.stage.value(it.key());
+        }
+        m_look.insert(it.key(), look);
         const quint32 fid = keyFixture(it.key());
         const quint32 ch = quint32(it.key() & 0xFFFFFFFF);
-        if (m_base->value(fid, ch) == it.value())
+        if (m_base->value(fid, ch) == stage)
             continue;
         if (!pendingChannels.contains(it.key()))
-            m_trim->setValue(fid, ch, it.value());
-        m_base->setValue(fid, ch, it.value());
+            m_trim->setValue(fid, ch, stage);
+        m_base->setValue(fid, ch, stage);
     }
-    m_heldSteps = -1;
 }
 
 void EditLive::drop()
@@ -615,7 +741,10 @@ void EditLive::drop()
     {
         if (!isHolding())
             return;
-        releaseHeld(false);
+        // What was stored goes back to what the cue plays now.
+        for (Hold &h : m_holds)
+            h.dropped = true;
+        applyHolds();
     }
     else
     {
@@ -635,11 +764,10 @@ void EditLive::drop()
 
 void EditLive::treeChanged()
 {
-    // The Store undone: what it held goes back to what the cue plays.
-    ShowTreeController *st = m_doc->showTree();
-    if (m_heldSteps < 0 || st == nullptr || st->undoSteps().size() >= m_heldSteps)
+    // A Store undone lets go of the stage; redone, holds it again.
+    if (m_holds.isEmpty())
         return;
-    releaseHeld(true);
+    applyHolds();
     recomputePending();
     push();
     emit changed();
@@ -653,16 +781,38 @@ bool EditLive::store(QString *why)
             *why = tr("Nothing to store.");
         return false;
     }
-    if (!storeSnapshot(snapshot(), why))
+    const Snapshot snap = snapshot();
+    if (!storeSnapshot(snap, why))
         return false;
     /* Stored: the running cue plays it from its next GO, so it stays on the
        rig until then -- held, not pending (Drop or an undo lets go). */
-    for (const SceneValue &v : m_trim->values())
-        m_base->setValue(v.fxi, v.channel, v.value);
+    Hold h;
+    if (ShowTreeController *st = m_doc->showTree())
+        if (!st->undoSteps().isEmpty())
+            h.stamp = st->undoSteps().last().stamp;
+    QSet<quint32> fixtures;
+    for (const Trim &t : snap.trims)
+        fixtures.insert(t.fixture);
+    for (quint32 fid : fixtures)
+    {
+        const qreal s0 = snap.scale.value(fid, 1.0);
+        for (const SceneValue &v : m_trim->values())
+        {
+            if (v.fxi != fid)
+                continue;
+            const quint64 k = chanKey(fid, v.channel);
+            const int delta = int(v.value) - int(m_base->value(fid, v.channel));
+            if (delta == 0)
+                continue;
+            h.stage.insert(k, v.value);
+            const qreal d = isIntensity(fid, v.channel) && s0 > 0.0 ? delta / s0 : delta;
+            h.look.insert(k, qBound(0, qRound(m_look.value(k) + d), 255));
+        }
+    }
+    m_holds << h;
     m_pending.clear();
     m_slotChannels.clear();
-    if (ShowTreeController *st = m_doc->showTree())
-        m_heldSteps = int(st->undoSteps().size());
+    applyHolds();
     push();
     emit changed();
     return true;
@@ -708,23 +858,35 @@ QString lookKey(const Fixture *f, int bank, int slot)
     }
 }
 
-int valueAt(const QHash<quint64, uchar> &m, quint32 fid, quint32 ch)
+/** Whether a palette of @p type is a look of @p key that a trim can move. */
+bool movable(const QString &key, QLCPalette::PaletteType type)
 {
-    return ch == QLCChannel::invalid() ? -1 : int(m.value(chanKey(fid, ch), 0));
+    if (key == KeyDimmer)
+        return type == QLCPalette::Dimmer;
+    if (key == KeyColour)
+        return type == QLCPalette::Color;
+    if (key == KeyPosition)
+        return type == QLCPalette::PanTilt || type == QLCPalette::Pan || type == QLCPalette::Tilt;
+    if (key == KeyZoom)
+        return type == QLCPalette::Zoom;
+    if (key == KeyBeam)
+        return type == QLCPalette::Beam;
+    return false;
 }
 
-float degreesAt(Fixture *f, const QHash<quint64, uchar> &m, int type)
+QColor shifted(const QColor &c, int dr, int dg, int db)
 {
-    const quint32 msb = f->channelNumber(type, QLCChannel::MSB);
-    const quint32 lsb = f->channelNumber(type, QLCChannel::LSB);
-    const int hi = qMax(0, valueAt(m, f->id(), msb));
-    const int lo = qMax(0, valueAt(m, f->id(), lsb));
-    return RefineSession::dmxToDegrees(f, type, quint16((hi << 8) | lo));
+    return QColor(qBound(0, c.red() + dr, 255), qBound(0, c.green() + dg, 255), qBound(0, c.blue() + db, 255));
 }
 
-bool isPanTiltType(QLCPalette::PaletteType t)
+/** A fixture's definition and mode: the heads one DMX delta means the
+ *  same move on. */
+QString typeOf(const Fixture *f)
 {
-    return t == QLCPalette::PanTilt || t == QLCPalette::Pan || t == QLCPalette::Tilt;
+    const QLCFixtureDef *def = f->fixtureDef();
+    const QLCFixtureMode *mode = f->fixtureMode();
+    return (def != nullptr ? def->manufacturer() + QLatin1Char('/') + def->model() : QString())
+           + QLatin1Char('/') + (mode != nullptr ? mode->name() : QString());
 }
 }
 
@@ -743,6 +905,72 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
     if (at < 0 || at >= res.size())
         return false;
     const ResolvedCue rc = res.at(at);
+
+    /* The look's level of a channel before (was) and after (now): the
+       trim's delta on stage added to it, in look terms (an intensity's
+       delta at a 50% list master is twice that in the look). */
+    auto lookWas = [&snap](quint32 fid, quint32 ch) -> int {
+        return ch == QLCChannel::invalid() ? -1 : snap.look.value(chanKey(fid, ch));
+    };
+    auto lookNow = [&](quint32 fid, quint32 ch) -> int {
+        if (ch == QLCChannel::invalid())
+            return -1;
+        const quint64 k = chanKey(fid, ch);
+        const int delta = int(snap.values.value(k)) - int(snap.base.value(k));
+        const qreal s0 = snap.scale.value(fid, 1.0);
+        const qreal d = isIntensity(fid, ch) && s0 > 0.0 ? delta / s0 : delta;
+        return qBound(0, qRound(snap.look.value(k) + d), 255);
+    };
+    auto degrees = [&](Fixture *f, int type, bool now) {
+        const quint32 msb = f->channelNumber(type, QLCChannel::MSB);
+        const quint32 lsb = f->channelNumber(type, QLCChannel::LSB);
+        const int hi = qMax(0, now ? lookNow(f->id(), msb) : lookWas(f->id(), msb));
+        const int lo = qMax(0, now ? lookNow(f->id(), lsb) : lookWas(f->id(), lsb));
+        return RefineSession::dmxToDegrees(f, type, quint16((hi << 8) | lo));
+    };
+    auto dmx16 = [&](Fixture *f, int type, bool now) {
+        const quint32 msb = f->channelNumber(type, QLCChannel::MSB);
+        const quint32 lsb = f->channelNumber(type, QLCChannel::LSB);
+        const int hi = qMax(0, now ? lookNow(f->id(), msb) : lookWas(f->id(), msb));
+        const int lo = qMax(0, now ? lookNow(f->id(), lsb) : lookWas(f->id(), lsb));
+        return (hi << 8) | lo;
+    };
+    auto zoomDegrees = [&](Fixture *f, bool now) -> float {
+        for (quint32 ch = 0; ch < f->channels(); ++ch)
+        {
+            const QLCChannel *c = f->channel(ch);
+            if (c == nullptr || f->fixtureMode() == nullptr || c->controlByte() != QLCChannel::MSB
+                || (c->preset() != QLCChannel::BeamZoomSmallBig && c->preset() != QLCChannel::BeamZoomBigSmall))
+                continue;
+            const int v = now ? lookNow(f->id(), ch) : lookWas(f->id(), ch);
+            const QLCPhysical phy = f->fixtureMode()->physical();
+            const int d = c->preset() == QLCChannel::BeamZoomBigSmall ? 255 - v : v;
+            return float(phy.lensDegreesMin() + (phy.lensDegreesMax() - phy.lensDegreesMin()) * d / 255.0);
+        }
+        return -1.0f;
+    };
+    // Focus, frost, iris (as a Beam look holds them).
+    auto beamOf = [&](Fixture *f, bool now, QVariantList beam) {
+        for (quint32 ch = 0; ch < f->channels(); ++ch)
+        {
+            const QLCChannel *c = f->channel(ch);
+            if (c == nullptr || c->controlByte() != QLCChannel::MSB)
+                continue;
+            const int v = now ? lookNow(f->id(), ch) : lookWas(f->id(), ch);
+            switch (c->preset())
+            {
+                case QLCChannel::BeamFocusNearFar: beam[0] = v; break;
+                case QLCChannel::BeamFocusFarNear: beam[0] = 255 - v; break;
+                case QLCChannel::ShutterIrisMinToMax: beam[2] = v; break;
+                case QLCChannel::ShutterIrisMaxToMin: beam[2] = 255 - v; break;
+                default:
+                    if (c->group() == QLCChannel::Beam && c->name().contains(QLatin1String("frost"), Qt::CaseInsensitive))
+                        beam[1] = v;
+                break;
+            }
+        }
+        return beam;
+    };
 
     /* Per fixture and key, the layer that sets that key on it in this cue:
        a child layer wins (the deepest), else the first top layer that sets
@@ -801,8 +1029,7 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
         return false;
     }
 
-    /* The value of @p key on @p fid as it is now: the look levels of the
-       trims, so it plays back as it was on stage. */
+    // @p key's value on @p fid, the trim in it: a flat look of it.
     auto valueFor = [&](const QString &key, quint32 fid, const Look &was) -> StoreValue {
         StoreValue out;
         Fixture *f = m_doc->fixture(fid);
@@ -814,15 +1041,13 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
             const QLCChannel *qch = f->channel(ch);
             const int ceiling = qch != nullptr && qch->dimmerCeiling() > 0 ? qch->dimmerCeiling() : 255;
             out.type = QLCPalette::Dimmer;
-            out.values << qBound(0, valueAt(snap.values, fid, ch) * 255 / ceiling, 255);
+            out.values << qBound(0, lookNow(fid, ch) * 255 / ceiling, 255);
         }
         else if (key == KeyColour)
         {
             if (f->channelNumber(QLCChannel::Red, QLCChannel::MSB, 0) == QLCChannel::invalid())
                 return out;
-            auto c = [&](int type) {
-                return qMax(0, valueAt(snap.values, fid, f->channelNumber(type, QLCChannel::MSB, 0)));
-            };
+            auto c = [&](int type) { return qMax(0, lookNow(fid, f->channelNumber(type, QLCChannel::MSB, 0))); };
             out.type = QLCPalette::Color;
             out.values << QLCPalette::colorToString(QColor(c(QLCChannel::Red), c(QLCChannel::Green), c(QLCChannel::Blue)),
                                                     QColor(c(QLCChannel::White), c(QLCChannel::Amber), c(QLCChannel::UV)));
@@ -833,62 +1058,66 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
                 && f->channelNumber(QLCChannel::Tilt, QLCChannel::MSB) == QLCChannel::invalid())
                 return out;
             out.type = QLCPalette::PanTilt;
-            out.values << qRound(degreesAt(f, snap.values, QLCChannel::Pan))
-                       << qRound(degreesAt(f, snap.values, QLCChannel::Tilt));
+            out.values << qRound(degrees(f, QLCChannel::Pan, true)) << qRound(degrees(f, QLCChannel::Tilt, true));
         }
-        else if (key == KeyZoom || key == KeyBeam)
+        else if (key == KeyZoom)
+        {
+            const float z = zoomDegrees(f, true);
+            if (z < 0.0f)
+                return out;
+            out.type = QLCPalette::Zoom;
+            out.values << double(qRound(z * 10.0f) / 10.0f);
+        }
+        else if (key == KeyBeam)
         {
             QVariantList beam { 0, 0, 0 };
-            float zoom = -1.0f;
-            if (key == KeyBeam)
-                for (quint32 pid : was.palettes)
-                    if (const QLCPalette *p = m_doc->palette(pid))
-                        if (p->type() == QLCPalette::Beam)
-                            for (int i = 0; i < qMin(3, int(p->values().size())); ++i)
-                                beam[i] = p->values().at(i);
-            for (quint32 ch = 0; ch < f->channels(); ++ch)
-            {
-                const QLCChannel *c = f->channel(ch);
-                if (c == nullptr || c->controlByte() != QLCChannel::MSB)
-                    continue;
-                const int v = valueAt(snap.values, fid, ch);
-                switch (c->preset())
-                {
-                    case QLCChannel::BeamZoomSmallBig:
-                    case QLCChannel::BeamZoomBigSmall:
-                    {
-                        if (f->fixtureMode() == nullptr)
-                            break;
-                        const QLCPhysical phy = f->fixtureMode()->physical();
-                        const int d = c->preset() == QLCChannel::BeamZoomBigSmall ? 255 - v : v;
-                        zoom = float(phy.lensDegreesMin()
-                                     + (phy.lensDegreesMax() - phy.lensDegreesMin()) * d / 255.0);
-                    }
-                    break;
-                    case QLCChannel::BeamFocusNearFar: beam[0] = v; break;
-                    case QLCChannel::BeamFocusFarNear: beam[0] = 255 - v; break;
-                    case QLCChannel::ShutterIrisMinToMax: beam[2] = v; break;
-                    case QLCChannel::ShutterIrisMaxToMin: beam[2] = 255 - v; break;
-                    default:
-                        if (c->group() == QLCChannel::Beam && c->name().contains(QLatin1String("frost"), Qt::CaseInsensitive))
-                            beam[1] = v;
-                    break;
-                }
-            }
-            if (key == KeyZoom)
-            {
-                if (zoom < 0.0f)
-                    return out;
-                out.type = QLCPalette::Zoom;
-                out.values << double(qRound(zoom * 10.0f) / 10.0f);
-            }
-            else
-            {
-                out.type = QLCPalette::Beam;
-                out.values = beam;
-            }
+            for (quint32 pid : was.palettes)
+                if (const QLCPalette *p = m_doc->palette(pid))
+                    if (p->type() == QLCPalette::Beam)
+                        for (int i = 0; i < qMin(3, int(p->values().size())); ++i)
+                            beam[i] = p->values().at(i);
+            out.type = QLCPalette::Beam;
+            out.values = beamOf(f, true, beam);
         }
         return out;
+    };
+    /* What the trim moved @p key by on @p fid, in the look's terms: the same
+       on every head (of one type, for a position) is one move of the look. */
+    auto shiftOf = [&](const QString &key, quint32 fid) -> QList<double> {
+        Fixture *f = m_doc->fixture(fid);
+        QList<double> d;
+        if (f == nullptr)
+            return d;
+        if (key == KeyDimmer)
+        {
+            const quint32 ch = dimmerChannel(f);
+            const QLCChannel *qch = f->channel(ch);
+            const int ceiling = qch != nullptr && qch->dimmerCeiling() > 0 ? qch->dimmerCeiling() : 255;
+            d << double(lookNow(fid, ch) - lookWas(fid, ch)) * 255.0 / ceiling;
+        }
+        else if (key == KeyColour)
+        {
+            for (int type : { int(QLCChannel::Red), int(QLCChannel::Green), int(QLCChannel::Blue),
+                              int(QLCChannel::White), int(QLCChannel::Amber), int(QLCChannel::UV) })
+            {
+                const quint32 ch = f->channelNumber(type, QLCChannel::MSB, 0);
+                d << (ch == QLCChannel::invalid() ? 0.0 : double(lookNow(fid, ch) - lookWas(fid, ch)));
+            }
+        }
+        else if (key == KeyPosition)
+        {
+            d << double(dmx16(f, QLCChannel::Pan, true) - dmx16(f, QLCChannel::Pan, false))
+              << double(dmx16(f, QLCChannel::Tilt, true) - dmx16(f, QLCChannel::Tilt, false));
+        }
+        else if (key == KeyZoom)
+            d << double(zoomDegrees(f, true) - zoomDegrees(f, false));
+        else if (key == KeyBeam)
+        {
+            const QVariantList a = beamOf(f, true, { 0, 0, 0 }), b = beamOf(f, false, { 0, 0, 0 });
+            for (int i = 0; i < 3; ++i)
+                d << double(a.at(i).toInt() - b.at(i).toInt());
+        }
+        return d;
     };
     auto labelFor = [this](const QString &key) {
         return key == KeyDimmer ? tr("Edit Live level") : key == KeyColour ? tr("Edit Live colour")
@@ -899,6 +1128,75 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
         Look look;
         look.key = key;
         look.palettes << st->createInlinePalette(v.type, v.values, labelFor(key));
+        return look;
+    };
+    // @p was moved by @p d (the first head's shift), its fan kept.
+    auto shiftedLook = [&](const QString &key, const Look &was, const QList<double> &d, float dPan, float dTilt) {
+        Look look = was;
+        look.palettes.clear();
+        for (quint32 pid : was.palettes)
+        {
+            const QLCPalette *p = m_doc->palette(pid);
+            if (p == nullptr || !movable(key, p->type()))
+            {
+                look.palettes << pid;
+                continue;
+            }
+            QVariantList v = p->values();
+            QVariant fan = p->fanningValue();
+            const bool fanned = p->fanningType() != QLCPalette::Flat;
+            if (key == KeyDimmer && !v.isEmpty())
+            {
+                v[0] = qBound(0, qRound(v.at(0).toDouble() + d.value(0)), 255);
+                if (fanned && fan.isValid())
+                    fan = qBound(0, qRound(fan.toDouble() + d.value(0)), 255);
+            }
+            else if (key == KeyColour)
+            {
+                const int dr = qRound(d.value(0)), dg = qRound(d.value(1)), db = qRound(d.value(2));
+                const int dw = qRound(d.value(3)), da = qRound(d.value(4)), du = qRound(d.value(5));
+                for (int i = 0; i < v.size(); ++i)
+                {
+                    QColor rgb, wauv;
+                    QLCPalette::stringToColor(v.at(i).toString(), rgb, wauv);
+                    if (wauv.isValid() || dw != 0 || da != 0 || du != 0)
+                        wauv = shifted(wauv.isValid() ? wauv : QColor(Qt::black), dw, da, du);
+                    v[i] = QLCPalette::colorToString(shifted(rgb, dr, dg, db), wauv);
+                }
+                if (fanned && fan.canConvert<QColor>() && fan.value<QColor>().isValid())
+                    fan = shifted(fan.value<QColor>(), dr, dg, db);
+            }
+            else if (key == KeyPosition)
+            {
+                if (p->type() == QLCPalette::PanTilt && v.size() >= 2)
+                {
+                    v[0] = qRound(v.at(0).toFloat() + dPan);
+                    v[1] = qRound(v.at(1).toFloat() + dTilt);
+                }
+                else if (!v.isEmpty())
+                    v[0] = qRound(v.at(0).toFloat() + (p->type() == QLCPalette::Pan ? dPan : dTilt));
+            }
+            else if (key == KeyZoom && !v.isEmpty())
+            {
+                v[0] = double(qRound((v.at(0).toDouble() + d.value(0)) * 10.0) / 10.0);
+                if (fanned && fan.isValid())
+                    fan = fan.toDouble() + d.value(0);
+            }
+            else if (key == KeyBeam)
+            {
+                for (int i = 0; i < qMin(3, int(v.size())); ++i)
+                    v[i] = qBound(0, qRound(v.at(i).toDouble() + d.value(i)), 255);
+            }
+            const quint32 np = st->createInlinePalette(p->type(), v, labelFor(key));
+            if (QLCPalette *n = m_doc->palette(np))
+            {
+                n->setFanningType(p->fanningType());
+                n->setFanningLayout(p->fanningLayout());
+                n->setFanningAmount(p->fanningAmount());
+                n->setFanningValue(fan);
+            }
+            look.palettes << np;
+        }
         return look;
     };
 
@@ -940,14 +1238,14 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
         std::sort(mine.begin(), mine.end());
         const bool whole = mine == all;
 
-        QHash<quint32, StoreValue> values;
+        QMap<quint32, StoreValue> values;
         bool same = true;
         for (quint32 fid : std::as_const(mine))
         {
             const StoreValue v = valueFor(g.key, fid, was);
             if (!v.isValid())
                 continue;
-            if (!values.isEmpty() && !(v == values.constBegin().value()))
+            if (!values.isEmpty() && !(v == values.first()))
                 same = false;
             values.insert(fid, v);
         }
@@ -957,93 +1255,85 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
             continue;
         }
 
-        /* A position moved the same on every head of a fanned (or any
-           PanTilt) look: the look moved by it, its fan kept. */
-        bool done = false;
-        if (whole && g.key == KeyPosition && placeLayer != kInvalid)
+        // One move of the whole layer (one per fixture type for a position)?
+        bool even = true;
+        QHash<QString, QList<double>> firstOf;
+        QList<double> first;
+        for (quint32 fid : std::as_const(mine))
         {
-            QList<quint32> bases;
-            for (quint32 pid : was.palettes)
-                if (const QLCPalette *p = m_doc->palette(pid))
-                    if (isPanTiltType(p->type()))
-                        bases << pid;
-            float dPan = 0.0f, dTilt = 0.0f;
-            bool even = !bases.isEmpty();
-            for (int i = 0; i < mine.size() && even; ++i)
+            Fixture *f = m_doc->fixture(fid);
+            const QList<double> d = shiftOf(g.key, fid);
+            const QString group = g.key == KeyPosition && f != nullptr ? typeOf(f) : QString();
+            if (first.isEmpty())
+                first = d;
+            if (!firstOf.contains(group))
             {
-                Fixture *f = m_doc->fixture(mine.at(i));
-                const float p = degreesAt(f, snap.values, QLCChannel::Pan) - degreesAt(f, snap.base, QLCChannel::Pan);
-                const float t = degreesAt(f, snap.values, QLCChannel::Tilt) - degreesAt(f, snap.base, QLCChannel::Tilt);
-                if (i == 0)
-                {
-                    dPan = p;
-                    dTilt = t;
-                }
-                else
-                    even = qAbs(p - dPan) <= 0.5f && qAbs(t - dTilt) <= 0.5f;
-            }
-            if (even)
-            {
-                Look look;
-                look.key = KeyPosition;
-                for (quint32 pid : std::as_const(bases))
-                {
-                    const QLCPalette *p = m_doc->palette(pid);
-                    QVariantList v = p->values();
-                    if (p->type() == QLCPalette::PanTilt && v.size() >= 2)
-                    {
-                        v[0] = qRound(v.at(0).toFloat() + dPan);
-                        v[1] = qRound(v.at(1).toFloat() + dTilt);
-                    }
-                    else if (!v.isEmpty())
-                        v[0] = qRound(v.at(0).toFloat() + (p->type() == QLCPalette::Pan ? dPan : dTilt));
-                    const quint32 np = st->createInlinePalette(p->type(), v, labelFor(KeyPosition));
-                    if (QLCPalette *n = m_doc->palette(np))
-                    {
-                        n->setFanningType(p->fanningType());
-                        n->setFanningLayout(p->fanningLayout());
-                        n->setFanningAmount(p->fanningAmount());
-                        n->setFanningValue(p->fanningValue());
-                    }
-                    look.palettes << np;
-                }
-                ok = st->setLayerLook(placeCue, placeLayer, look);
-                done = true;
-            }
-        }
-        if (!done && whole && same)
-        {
-            // Every head the same: one look on the layer.
-            const Look look = lookOf(g.key, values.constBegin().value());
-            ok = placeLayer != kInvalid ? st->setLayerLook(placeCue, placeLayer, look)
-                                        : st->setTargetLook(placeCue, rl.target, look);
-            done = true;
-        }
-        if (!done)
-        {
-            /* Some of the layer's heads, or heads that now differ (a fan, a
-               formation, mixed levels): each its own exception -- a child
-               layer on that fixture with its value, so the next GO plays
-               what was on stage. */
-            if (placeLayer == kInvalid)
-            {
-                refused << tr("%1 of %2").arg(keyLabel(g.key), st->targetLabel(rl.target));
+                firstOf.insert(group, d);
                 continue;
             }
-            for (auto it = values.constBegin(); it != values.constEnd() && ok; ++it)
+            const QList<double> &ref = firstOf.value(group);
+            const double tol = g.key == KeyZoom ? 0.5 : g.key == KeyPosition ? 0.0 : 1.0;
+            for (int i = 0; i < d.size() && even; ++i)
+                even = qAbs(d.at(i) - ref.value(i)) <= tol;
+        }
+        bool movableLook = false;
+        for (quint32 pid : was.palettes)
+            if (const QLCPalette *p = m_doc->palette(pid))
+                movableLook = movableLook || movable(g.key, p->type());
+
+        if (whole && even && movableLook && placeLayer != kInvalid)
+        {
+            /* The whole layer moved as one: its look moved by that, a fan
+               or a formation kept (Store = the look + the trim). */
+            float dPan = 0.0f, dTilt = 0.0f;
+            if (g.key == KeyPosition)
+                if (Fixture *f = m_doc->fixture(mine.first()))
+                {
+                    dPan = degrees(f, QLCChannel::Pan, true) - degrees(f, QLCChannel::Pan, false);
+                    dTilt = degrees(f, QLCChannel::Tilt, true) - degrees(f, QLCChannel::Tilt, false);
+                }
+            ok = st->setLayerLook(placeCue, placeLayer, shiftedLook(g.key, was, first, dPan, dTilt));
+        }
+        else if (same && whole)
+        {
+            // Every head the same: one look on the layer.
+            const Look look = lookOf(g.key, values.first());
+            ok = placeLayer != kInvalid ? st->setLayerLook(placeCue, placeLayer, look)
+                                        : st->setTargetLook(placeCue, rl.target, look);
+        }
+        else if (placeLayer == kInvalid)
+        {
+            refused << tr("%1 of %2").arg(keyLabel(g.key), st->targetLabel(rl.target));
+            continue;
+        }
+        else
+        {
+            /* Some of the layer's heads with one result: one exception (a
+               child layer) on just those. Heads that end differently (a fan
+               moved unevenly, mixed levels): each its own, so the next GO
+               plays what was on stage. */
+            QList<QPair<QList<quint32>, StoreValue>> parts;
+            if (same)
+                parts << qMakePair(values.keys(), values.first());
+            else
+                for (auto it = values.constBegin(); it != values.constEnd(); ++it)
+                    parts << qMakePair(QList<quint32>({ it.key() }), it.value());
+            for (const auto &part : std::as_const(parts))
             {
                 Target t;
-                t.fixtures << it.key();
+                t.fixtures = part.first;
                 quint32 child = kInvalid;
+                if (rl.target == t)
+                    child = placeLayer;     // the layer is those fixtures already
                 if (const ShowTree::Cue *c = st->cue(placeCue))
                     for (const ShowTree::Layer &l : c->layers)
-                        if (l.parent == placeLayer && l.target == t)
+                        if (child == kInvalid && l.parent == placeLayer && l.target == t)
                             child = l.id;
-                if (child == kInvalid && rl.target == t)
-                    child = placeLayer;     // the layer is that one fixture already
                 if (child == kInvalid)
                     child = st->addChildLayer(placeCue, placeLayer, t, why);
-                ok = child != kInvalid && st->setLayerLook(placeCue, child, lookOf(g.key, it.value()));
+                ok = child != kInvalid && st->setLayerLook(placeCue, child, lookOf(g.key, part.second));
+                if (!ok)
+                    break;
             }
         }
         if (!ok)
