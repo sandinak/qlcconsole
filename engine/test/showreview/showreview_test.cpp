@@ -1156,6 +1156,8 @@ void ShowReview_Test::fix20fix21()
 
 void ShowReview_Test::fix22fix23()
 {
+    par("Par 1", 0);
+    QVERIFY(quiet("FIX-23"));               // a light: nothing to say
     Fixture *jet = dimmer("CO2 jet", 30);
     QCOMPARE(FixtureRest::behaviour(jet), Fixture::HazardBurstBehaviour);
     QVERIFY(quiet("FIX-22"));               // nothing fires it
