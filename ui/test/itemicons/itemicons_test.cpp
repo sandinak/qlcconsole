@@ -534,7 +534,8 @@ void ItemIcons_Test::aCurtainShowsAsACurtain()
     QVERIFY(tabs->assignFixture(par->id()));
     QVERIFY(groupIcon(m_doc, tabs).name().isEmpty());       // mixed: the stock group icon
 
-    // A hazer is no curtain: its own hazer icon, setting on or off.
+    // A hazer is no curtain: its own hazer icon, setting on or off -- with
+    // the H of a hazard on it (053p review); as a Light, the plain icon.
     Fixture *hazer = makeFixture(QLCFixtureDef::Hazer, QStringLiteral("Hazer"),
                                  { { QLCChannel::Maintenance, -1 } });
     QVERIFY(!Scenery::isCurtainFixture(hazer));
@@ -542,7 +543,10 @@ void ItemIcons_Test::aCurtainShowsAsACurtain()
     for (bool on : { false, true })
     {
         props->setAutoStageLooks(on);
+        QVERIFY(iconImage(fixtureIcon(hazer)) != iconImage(QIcon(":/hazer.png")));
+        hazer->setBehaviourSetting(Fixture::LightBehaviour);
         QCOMPARE(iconImage(fixtureIcon(hazer)), iconImage(QIcon(":/hazer.png")));
+        hazer->setBehaviourSetting(-1);
     }
     props->setAutoStageLooks(false);
 }

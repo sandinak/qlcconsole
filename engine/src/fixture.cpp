@@ -1009,6 +1009,7 @@ void Fixture::setStageLook(StageLook look)
         look = AutoLook;
     if (m_stageLook.exchange(int(look), std::memory_order_relaxed) == int(look))
         return;
+    invalidateGuess();      // the Curtain look is Machinery (Behaves as)
     emit changed(m_id);
 }
 
