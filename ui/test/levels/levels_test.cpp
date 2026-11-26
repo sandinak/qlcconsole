@@ -552,7 +552,11 @@ void Levels_Test::aStudentShowSavedOnFunctionsOpensQuietly()
 {
     QTemporaryDir dir;
     const QString path = dir.filePath(QStringLiteral("student.qxw"));
+    // The Everything view has a Functions tab for the level to take away.
+    m_app->chooseWorkspaceView(App::EverythingView);
     QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    QCOMPARE(m_app->workspaceView(), App::EverythingView);
+    QVERIFY(m_app->levelHiddenTabs().contains(QStringLiteral("Functions")));
     QCOMPARE(m_app->saveXML(path), QFile::NoError);
     QFile f(path);
     QVERIFY(f.open(QIODevice::ReadOnly));
