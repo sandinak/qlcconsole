@@ -81,6 +81,7 @@
 #include "focuscallsdialog.h"
 #include "venuerigdialog.h"
 #include "venuefromshowdialog.h"
+#include "surfacesetupdialog.h"
 #include "preshowcheck.h"
 #include "showreviewpanel.h"
 #include "pmjlamplogdialog.h"
@@ -376,7 +377,10 @@ QList<Row> windows()
                 PmjLampLogDialog *d = new PmjLampLogDialog(a->m_pmjOverlay, a);
                 d->setAttribute(Qt::WA_DeleteOnClose);
                 d->show();
-            });
+            })
+         // Connections ▸ Control surfaces ▸ Controller setup ▸ Set Up…
+         << row("SurfaceSetupDialog", QStringLiteral("Controller setup"),
+                [](App *a) { SurfaceSetupDialog::open(a->doc(), a); });
 
     return list;
 }

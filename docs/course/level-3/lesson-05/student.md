@@ -112,6 +112,13 @@ has its own switch, and its own PIN.
   patch the desk, the footer's **Desk** chip turns red: click it to patch
   it. The show keeps its own stop too, so a computer with no desk learned
   can still stop the show.
+- **A desk that needs its own setting.** Some desks must be set on the
+  device itself first: a PMJ Black 1 straight from the factory lights the
+  wrong keys, an APC40 mkII must be in Ableton mode. **Connections ▸ Control
+  surfaces ▸ Controller setup ▸ Set Up…** checks it and fixes it (**Align
+  Lamps**, with a backup and **Undo Align**). Do it before the show, not in
+  Operate. A desk that never shows up at all is usually power or the cable:
+  **Rescan** says so.
 
 ## Exit ticket
 

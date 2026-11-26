@@ -22,6 +22,7 @@
 #include <QLabel>
 #include <QShowEvent>
 #include <QFrame>
+#include <QVBoxLayout>
 
 #include "controlsurfacespanel.h"
 #include "desksetuppanel.h"
@@ -47,6 +48,7 @@
 #include "ioplugincache.h"
 #include "pmjoverlay.h"
 #include "pmjlamplogdialog.h"
+#include "surfacesetup.h"
 #include "doc.h"
 
 namespace
@@ -64,6 +66,7 @@ const Row kRows[] = {
     { "masters", "surfaceMasters" },
     { "gm",      "surfaceGrandMaster" },
     { "pmj",     "surfacePmj" },
+    { "setup",   "surfaceDeviceSetup" },
     { "web",     "surfaceCompanion" },
     { "pads",    "surfacePads" },
     { "devices", "surfaceDevices" },
@@ -121,6 +124,14 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             tr("Set Up…"),
             tr("Go to the patch: patch the PMJ as an input with the profile PMJ Black 1, and its "
                "output as the feedback line so its lamps light.") } },
+        { QStringLiteral("setup"),
+          { tr("Controller setup"),
+            tr("What a controller needs set on the device itself: the PMJ Black 1's lamps under "
+               "their buttons, the APC40 mkII's Ableton mode. Rescan looks for a controller just "
+               "plugged in or switched on."),
+            tr("Set Up…"),
+            tr("Check the patched controller's own settings, and set them: Align Lamps, Undo "
+               "Align, or its mode sent again.") } },
         { QStringLiteral("web"),
           { tr("Companion and Stream Deck"),
             tr("A Stream Deck through Bitfocus Companion, over this show's web access."),
@@ -223,6 +234,22 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             m_pmjLampLog = log;
             grid->addWidget(box, r, 2, Qt::AlignTop);
         }
+        else if (key == QLatin1String("setup"))
+        {
+            /* Rescan, beside it: a controller switched on or plugged in is
+               looked for now, and a rescan that finds none says why the
+               computer may not see it (its power, its cable). */
+            QWidget *both = new QWidget(this);
+            QVBoxLayout *col = new QVBoxLayout(both);
+            col->setContentsMargins(0, 0, 0, 0);
+            col->addWidget(btn);
+            m_rescan = new QPushButton(tr("Rescan"), both);
+            m_rescan->setObjectName(QStringLiteral("surfaceRescan"));
+            m_rescan->setToolTip(tr("Ask every MIDI and USB interface for its devices now."));
+            col->addWidget(m_rescan);
+            connect(m_rescan, &QPushButton::clicked, this, &ControlSurfacesPanel::rescan);
+            grid->addWidget(both, r, 2, Qt::AlignTop);
+        }
         else
             grid->addWidget(btn, r, 2, Qt::AlignTop);
         m_buttons.insert(key, btn);
@@ -274,7 +301,31 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     connect(cm->encoderBank(), &EncoderBank::deviceChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::settingsChanged, this, &ControlSurfacesPanel::refresh);
     connect(m_doc->webAccess(), &ShowWebAccess::statusChanged, this, &ControlSurfacesPanel::refresh);
+    if (m_doc->surfaceSetup() != nullptr)
+        connect(m_doc->surfaceSetup(), &SurfaceSetup::changed, this, &ControlSurfacesPanel::refresh);
+    // A device found: what the last rescan said is old news.
+    connect(iom, &InputOutputMap::inputDeviceConnected, this, [this]() { m_rescanNote.clear(); });
     refresh();
+}
+
+void ControlSurfacesPanel::rescan()
+{
+    m_rescanNote = SurfaceSetup::rescanControllers(m_doc);
+    refresh();
+}
+
+QString ControlSurfacesPanel::setupText() const
+{
+    QStringList lines;
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    if (setup != nullptr)
+        for (quint32 u : setup->universes())
+            lines << tr("%1: %2").arg(setup->title(u), setup->lastCheck(u).text);
+    if (lines.isEmpty())
+        lines << tr("All patched controllers are set up · Rescan to look for a new one");
+    if (!m_rescanNote.isEmpty())
+        lines << m_rescanNote;
+    return lines.join(QStringLiteral("\n"));
 }
 
 QStringList ControlSurfacesPanel::keys()
@@ -657,6 +708,7 @@ void ControlSurfacesPanel::refresh()
     m_status["masters"]->setText(mastersText());
     m_status["gm"]->setText(grandMasterText());
     m_status["pmj"]->setText(pmjText());
+    m_status["setup"]->setText(setupText());
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());
     m_status["devices"]->setText(devicesText());

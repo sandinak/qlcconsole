@@ -48,6 +48,7 @@
 #include "showwebaccess.h"
 #include "inputpatch.h"
 #include "padrun.h"
+#include "surfacesetupdialog.h"
 #include "doc.h"
 
 namespace
@@ -550,6 +551,12 @@ void ShowControlSyncPage::setUpSurface(const QString &key)
         }
         else
             emit virtualConsoleRequested();
+    }
+    else if (key == QLatin1String("setup"))
+    {
+        // What the device itself needs set: checked, aligned, its mode sent.
+        SurfaceSetupDialog::open(m_doc, this);
+        m_surfaces->refresh();
     }
     else if (key == QLatin1String("pmj") || key == QLatin1String("pads") || key == QLatin1String("devices"))
         emit patchMidiInputRequested();     // the wiring, where inputs are patched

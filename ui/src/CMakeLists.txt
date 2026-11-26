@@ -230,6 +230,7 @@ add_library(${module_name}
     showcontrollistener.cpp showcontrollistener.h
     showcontrolsyncpage.cpp showcontrolsyncpage.h
     controlsurfacespanel.cpp controlsurfacespanel.h
+    surfacesetupdialog.cpp surfacesetupdialog.h
     desksetuppanel.cpp desksetuppanel.h
     deskchip.cpp deskchip.h
     surfacechips.cpp surfacechips.h

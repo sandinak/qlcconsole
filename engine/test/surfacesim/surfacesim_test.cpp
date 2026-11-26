@@ -24,6 +24,13 @@
 
 #include "surfacesim_test.h"
 #include "simmididevice.h"
+#include "simopendeck.h"
+#include "simapc64.h"
+#include "qlcinputchannel.h"
+#include "surfacesetup.h"
+#include "opendecklink.h"
+#include "controllerkeepalive.h"
+#include "programmercontroller.h"
 #include "surfacescenarios.h"
 #include "surfacescript.h"
 #include "gamepadlayout.h"
@@ -162,6 +169,8 @@ void SurfaceSim_Test::initTestCase()
     QVERIFY(m_settings.isValid());
     QSettings::setDefaultFormat(QSettings::IniFormat);
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, m_settings.path());
+    QVERIFY(m_backups.isValid());
+    SurfaceSetup::setBackupDir(m_backups.path());
 }
 
 void SurfaceSim_Test::init()
@@ -190,10 +199,17 @@ void SurfaceSim_Test::cleanup()
     m_stub->m_lineNames.clear();
     m_stub->m_linesAreHardware = false;
     m_stub->m_networkDmx = true;
+    m_stub->m_showControlSent.clear();
+    m_stub->m_onShowControl = nullptr;
+    m_stub->m_onRescan = nullptr;
     delete m_doc;
     m_doc = nullptr;
     m_stub = nullptr;
     QSettings().remove(DeskRecord::settingsGroup());
+    QSettings().remove(QStringLiteral("surfacesetup"));
+    // Each test's backups are its own.
+    QDir(m_backups.path()).removeRecursively();
+    QDir().mkpath(m_backups.path());
 }
 
 void SurfaceSim_Test::theBoardSpeaksMidi()
@@ -973,6 +989,368 @@ void SurfaceSim_Test::theApc64SeedsItsDefaults()
     QVERIFY(apc64.tap(QStringLiteral("#%1").arg((6 << 12) | (128 + 23))));
     settle();
     QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+}
+
+/****************************************************************************
+ * Setting up a controller: the device's own config (SurfaceSetup)
+ ****************************************************************************/
+
+namespace
+{
+/* The board in the PMJ's real layout: each button's LED, as his profiler's
+   identify found them (SurfaceSetup's shipped pairing). */
+void pmjLayout(SimOpenDeck &deck, const QList<SurfaceSetup::LampPair> &pairs)
+{
+    for (const SurfaceSetup::LampPair &p : pairs)
+        deck.setUnder(p.note, p.led);
+}
+}
+
+void SurfaceSim_Test::theLampCheckReadsTheBoard()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QVERIFY(setup != nullptr);
+    QCOMPARE(setup->universes(), QList<quint32>() << 0);
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::NotChecked);
+
+    // Every one of the 54 paired buttons: its LED is on note i, channel 1.
+    const SurfaceSetup::Check c = setup->check(0);
+    QCOMPARE(c.state, SurfaceSetup::Check::Misplaced);
+    QCOMPARE(c.lamps, 54);
+    QCOMPARE(c.misplaced, 54);
+    QVERIFY2(c.text.startsWith(QStringLiteral("54 of 54 lamps aren't under their buttons")), qPrintable(c.text));
+    // The 128 LEDs were read in parts of 32 (a part-0 read would see 32).
+    QCOMPARE(setup->lampCount(0), 128);
+    QCOMPARE(deck.writes(), 0);
+
+    // One lamp put right by hand on the board: 53 left.
+    deck.setValue(4, 3, 17, 0);
+    deck.setValue(4, 7, 17, 9);
+    QCOMPARE(setup->check(0).misplaced, 53);
+    QVERIFY(setup->lastCheck(0).text.startsWith(QStringLiteral("53 of 54")));
+    // A static LED does not listen, whatever its note.
+    deck.setValue(4, 5, 17, 10);
+    QCOMPARE(setup->check(0).misplaced, 54);
+}
+
+void SurfaceSim_Test::alignBacksUpAndUndoRestores()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    pmjLayout(deck, setup->pairing(0));
+    const auto factory = deck.tables();
+
+    // Go (note 0, channel 9) lights nothing as it left the factory.
+    QCOMPARE(deck.litBy(9, 0), -1);
+    QVERIFY(setup->lastBackup(0).isEmpty());
+
+    QString error;
+    QVERIFY2(setup->align(0, false, &error), qPrintable(error));
+    // The backup first: on disk, the whole factory config.
+    const QString backup = setup->lastBackup(0);
+    QVERIFY(!backup.isEmpty());
+    QVERIFY(backup.startsWith(m_backups.path()));
+    OpenDeckLink::Tables saved;
+    QVERIFY(OpenDeckLink::loadBackup(backup, &saved));
+    QCOMPARE(saved, factory);
+
+    // Each lamp is under its own button now: Go lights the LED under Go.
+    QCOMPARE(deck.litBy(9, 0), deck.ledUnder(0));
+    QCOMPARE(deck.litBy(9, 0), 17);
+    for (const SurfaceSetup::LampPair &p : setup->pairing(0))
+        QCOMPARE(deck.litBy(9, p.note), deck.ledUnder(p.note));
+    QCOMPARE(deck.writes(), 54 * 4);
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::Aligned);
+    QVERIFY(setup->lastCheck(0).text.contains(QStringLiteral("All 54 lamps are under their buttons")));
+    QCOMPARE(setup->check(0).misplaced, 0);
+
+    // Undo Align: the factory order back, the aligned one kept (redo).
+    const auto aligned = deck.tables();
+    QVERIFY2(setup->undoAlign(0, false, &error), qPrintable(error));
+    QCOMPARE(deck.tables(), factory);
+    QCOMPARE(deck.litBy(9, 0), -1);
+    QVERIFY(setup->lastBackup(0).isEmpty());
+    const QStringList kept = QDir(m_backups.path()).entryList({ QStringLiteral("*pre-restore*.json") });
+    QCOMPARE(kept.size(), 1);
+    QVERIFY(OpenDeckLink::loadBackup(m_backups.path() + QLatin1Char('/') + kept.first(), &saved));
+    QCOMPARE(saved, aligned);
+    // Nothing left to undo.
+    QVERIFY(!setup->undoAlign(0, false, &error));
+}
+
+void SurfaceSim_Test::aWriteIsRefusedInOperate()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    m_doc->setMode(Doc::Operate);
+    QString error;
+    QVERIFY(!setup->align(0, false, &error));
+    QVERIFY2(error.contains(QStringLiteral("Operate")), qPrintable(error));
+    QVERIFY(!setup->beginIdentify(0, false, &error));
+    QCOMPARE(deck.writes(), 0);
+    QVERIFY(setup->lastBackup(0).isEmpty());
+    // Reading is not writing: the check still works in Operate.
+    QCOMPARE(setup->check(0).state, SurfaceSetup::Check::Misplaced);
+    // Confirmed by the person: written.
+    QVERIFY2(setup->align(0, true, &error), qPrintable(error));
+    QCOMPARE(deck.writes(), 54 * 4);
+    m_doc->setMode(Doc::Design);
+}
+
+void SurfaceSim_Test::aSilentBoardIsSaidAndNotWritten()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    deck.setDeaf(true);
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    setup->setTimeout(30);
+    const SurfaceSetup::Check c = setup->check(0);
+    QCOMPARE(c.state, SurfaceSetup::Check::NoAnswer);
+    QVERIFY2(c.text.contains(QStringLiteral("did not answer")), qPrintable(c.text));
+    QString error;
+    QVERIFY(!setup->align(0, false, &error));
+    QVERIFY2(error.contains(QStringLiteral("nothing was written")), qPrintable(error));
+    QCOMPARE(deck.writes(), 0);
+    QVERIFY(QDir(m_backups.path()).entryList(QDir::Files).isEmpty());
+}
+
+void SurfaceSim_Test::identifyPairsLampsAndPutsTheBoardBack()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    // A board whose LEDs are Static: nothing would light for Identify.
+    for (int i = 0; i < SimOpenDeck::Leds; ++i)
+        deck.setValue(4, 5, i, 10);
+    const auto before = deck.tables();
+
+    QString error;
+    QVERIFY2(setup->beginIdentify(0, false, &error), qPrintable(error));
+    QCOMPARE(setup->lampCount(0), 128);
+    for (int i = 0; i < SimOpenDeck::Leds; ++i)
+        QCOMPARE(deck.litBy(1, i), i);
+
+    // LED 17 flashes (note 17, channel 1); the person presses Go, under it.
+    pmj.forgetLamps();
+    setup->flashLamp(0, 17, true);
+    const QList<SimMidiDevice::Out> out = pmj.takeOutput();
+    QCOMPARE(out.size(), 1);
+    QCOMPARE(QString::fromLatin1(out.first().midi.toHex(' ')), QStringLiteral("90 11 7f"));
+    QCOMPARE(deck.litBy(1, 17), 17);
+    SurfaceSetup::LampPair pair;
+    QVERIFY(SurfaceSetup::pairFromChannel(kGo, 17, &pair));
+    QCOMPARE(pair.channel, 9);
+    QCOMPARE(pair.note, 0);
+    QVERIFY(!SurfaceSetup::pairFromChannel(kMaster, 1, &pair));     // a fader: no lamp
+
+    QVERIFY2(setup->endIdentify(0, { pair }, &error), qPrintable(error));
+    QCOMPARE(deck.tables(), before);
+    // The pairing found is this board's now (in place of the shipped one).
+    QCOMPARE(setup->pairing(0).size(), 1);
+    QCOMPARE(setup->pairing(0).first().led, 17);
+    QCOMPARE(setup->check(0).lamps, 1);
+}
+
+void SurfaceSim_Test::theInitIsSentOnPatchReplugAndWake()
+{
+    const QString apc = QStringLiteral("Akai APC40 mkII");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC40-mkII.qxi")) != nullptr);
+    const QString ableton = QStringLiteral("f0 47 7f 29 60 00 04 41 09 00 05 f7");
+    auto sends = [this, &ableton]() {
+        int n = 0;
+        for (const auto &m : std::as_const(m_stub->m_showControlSent))
+            n += hex(m.second) == ableton ? 1 : 0;
+        return n;
+    };
+    SimMidiDevice board(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, apc);
+    QVERIFY2(board.plug(), qPrintable(board.lastError()));
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QCOMPARE(setup->universes(), QList<quint32>() << 0);
+    // Patched: its Ableton mode, out of its own port.
+    QVERIFY(sends() >= 1);
+    QCOMPARE(int(m_stub->m_showControlSent.last().first), board.line());
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::InitOnly);
+    QVERIFY(setup->lastCheck(0).text.contains(QStringLiteral("Ableton mode")));
+
+    // A replug: sent again (the board lost it with its power).
+    m_stub->m_showControlSent.clear();
+    QVERIFY(board.unplug());
+    m_stub->m_showControlSent.clear();
+    QVERIFY(board.replug());
+    QTRY_VERIFY(sends() >= 1);
+
+    // A wake: sent again once the devices are back.
+    m_stub->m_showControlSent.clear();
+    ControllerKeepAlive *ka = m_doc->programmer()->controllerKeepAlive();
+    QVERIFY(ka != nullptr);
+    emit ka->woke(60000);
+    QCOMPARE(sends(), 0);
+    QTRY_VERIFY_WITH_TIMEOUT(sends() == 1, 4000);
+
+    // A board with nothing to set (the PMJ is set by its check) gets no init.
+    QVERIFY(!setup->sendInit(5));
+}
+
+void SurfaceSim_Test::aRescanThatFindsNothingSaysSo()
+{
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_lineNames = { QStringLiteral("PMJ Black 1") };
+    QStringList found;
+    const QString nothing = SurfaceSetup::rescanControllers(m_doc, &found);
+    QVERIFY(found.isEmpty());
+    QVERIFY2(nothing.startsWith(QStringLiteral("No new controller found.")), qPrintable(nothing));
+    QVERIFY(nothing.contains(QStringLiteral("power")));
+    QVERIFY(nothing.contains(QStringLiteral("charge-only")));
+    QVERIFY(m_stub->m_rescanCalled > 0);
+
+    // The APC40 mkII powered on: found by name.
+    m_stub->m_onRescan = [this]() { m_stub->m_lineNames << QStringLiteral("APC40 mkII"); };
+    const QString text = SurfaceSetup::rescanControllers(m_doc, &found);
+    QCOMPARE(found, QStringList() << QStringLiteral("APC40 mkII"));
+    QCOMPARE(text, QStringLiteral("Found APC40 mkII."));
+}
+
+void SurfaceSim_Test::identifyHoldsTheKeysJobs()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    runList(m_doc);
+    QVERIFY(deskOn(m_doc, DeskRecord::Stop, 0, kPmj, kFavorites));
+    QVERIFY(deskOn(m_doc, DeskRecord::Go, 0, kPmj, kGo));
+    QVERIFY(deskOn(m_doc, DeskRecord::Back, 0, kPmj, kBack));
+    // A show trigger on 1-Down (note 1): a scene.
+    Fixture *fxi = m_doc->fixtures().isEmpty() ? nullptr : m_doc->fixtures().first();
+    QVERIFY(fxi != nullptr);
+    Scene *sc = new Scene(m_doc);
+    sc->setName(QStringLiteral("Warm"));
+    sc->addFixture(fxi->id());
+    sc->setValue(fxi->id(), 0, 255);
+    m_doc->addFunction(sc);
+    const quint32 down1 = pmj.channelOf(QStringLiteral("1-Down"));
+    m_doc->controlMap()->setBinding({ 0, down1, ControlMap::function(sc->id()), ControlMap::Toggle });
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(0);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    auto count = [&commands](ShowControl::Command c) { return int(commands.count(int(c))); };
+    QTest::qWait(300);      // past a fresh patch's dump window
+
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QString error;
+    QVERIFY2(setup->beginIdentify(0, false, &error), qPrintable(error));
+    QCOMPARE(m_doc->inputOutputMap()->setupListening(), quint32(0));
+    // The presses still reach what pairs them (raw input)...
+    QSignalSpy raw(m_doc->inputOutputMap(), &InputOutputMap::inputValueChanged);
+    QVERIFY(pmj.tap(QStringLiteral("Go")));
+    QVERIFY(pmj.tap(QStringLiteral("Back")));
+    QVERIFY(pmj.tap(QStringLiteral("1-Down")));
+    settle();
+    m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    bool heardGo = false;
+    for (const QList<QVariant> &a : std::as_const(raw))
+        heardGo = heardGo || (a.at(1).toUInt() == kGo && a.at(2).toUInt() > 0);
+    QVERIFY(heardGo);
+    SurfaceSetup::LampPair pair;
+    QVERIFY(SurfaceSetup::pairFromChannel(kGo, 17, &pair));
+    // ...and do no job: no GO, no Back, no scene.
+    QCOMPARE(count(ShowControl::Go), 0);
+    QCOMPARE(count(ShowControl::Back), 0);
+    QVERIFY2(!sc->isRunning(), "1-Down played its scene during Identify");
+    // The desk's STOP still stops.
+    QVERIFY(pmj.tap(QStringLiteral("Favorites")));
+    settle();
+    QCOMPARE(count(ShowControl::AllOff), 1);
+
+    QVERIFY2(setup->endIdentify(0, { pair }, &error), qPrintable(error));
+    QCOMPARE(m_doc->inputOutputMap()->setupListening(), UINT_MAX);
+    // Identify over: Go is the desk's GO again.
+    QTest::qWait(300);
+    QVERIFY(pmj.tap(QStringLiteral("Go")));
+    settle();
+    QCOMPARE(count(ShowControl::Go), 1);
+    m_doc->showControl()->setRunHandler(ShowControl::RunHandler());
+    cm->setDumpWindowMs(500);
+}
+
+void SurfaceSim_Test::theApc64IsNamedAndItsModeChecked()
+{
+    // The shipped profile (resources/inputprofiles/Akai-APC64.qxi): its pads on channel 7.
+    QLCInputProfile *p = mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64.qxi"));
+    QVERIFY(p != nullptr);
+    const QString name = QStringLiteral("Akai APC64");
+    QCOMPARE(p->name(), name);
+    QVERIFY(p->channel(quint32((6 << 12) | 128)) != nullptr);   // Pad 8-1
+
+    SimMidiDevice board(m_doc, m_stub, QStringLiteral("APC64 DAW"), 0, name);
+    SimApc64 apc(m_stub, &board);
+    QVERIFY2(board.plug(), qPrintable(board.lastError()));
+    SurfaceSetup *setup = m_doc->surfaceSetup();
+    QCOMPARE(setup->universes(), QList<quint32>() << 0);
+    // Patched: the display is the app's, and says what it is.
+    QVERIFY(apc.owned());
+    QCOMPARE(apc.text(0), QStringLiteral("qlc"));
+    QCOMPARE(apc.text(1), QStringLiteral("console"));
+    QCOMPARE(apc.text(2), QString());
+    QCOMPARE(apc.malformed(), 0);
+    QCOMPARE(hex(SurfaceSetup::apc64Text(0, QStringLiteral("qlc"))),
+             QStringLiteral("f0 47 00 53 10 00 05 00 71 6c 63 00 f7"));
+    QCOMPARE(hex(SurfaceSetup::apc64Text(2, QString())), QStringLiteral("f0 47 00 53 10 00 02 02 00 f7"));
+
+    // Its power cut and back (a replug): named again.
+    QVERIFY(board.unplug());
+    apc.powerCycle();
+    QVERIFY(board.replug());
+    QTRY_VERIFY(apc.owned());
+    QCOMPARE(apc.text(1), QStringLiteral("console"));
+
+    // Session mode: asked for by a press. A pad on channel 1 is another mode.
+    QVERIFY(setup->lastCheck(0).text.contains(QStringLiteral("Session mode: not checked yet")));
+    Scene *sc = new Scene(m_doc);
+    m_doc->addFunction(sc);
+    const quint32 pad1 = quint32((6 << 12) | 128);
+    m_doc->controlMap()->setBinding({ 0, pad1, ControlMap::function(sc->id()), ControlMap::Toggle });
+    QVERIFY(setup->beginModeCheck(0));
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::WaitingForPress);
+    QVERIFY(setup->lastCheck(0).text.startsWith(QStringLiteral("Press SESSION on the APC64")));
+    QVERIFY(board.noteOn(1, 0, 127));
+    QVERIFY(board.noteOff(1, 0));
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::WrongMode);
+    QVERIFY2(setup->lastCheck(0).text.contains(QStringLiteral("channel 1")), qPrintable(setup->lastCheck(0).text));
+    QTRY_COMPARE(m_doc->inputOutputMap()->setupListening(), UINT_MAX);
+    QVERIFY(setup->beginModeCheck(0));
+    QVERIFY(board.noteOn(7, 0, 127));
+    QVERIFY(board.noteOff(7, 0));
+    m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    QCOMPARE(setup->lastCheck(0).state, SurfaceSetup::Check::InMode);
+    QVERIFY2(!sc->isRunning(), "the pad that answered the mode check played its trigger");
+    QVERIFY(!setup->isWaitingForPress(0));
+
+    // The app lets go: the display is the APC64's again.
+    {
+        SurfaceSetup leaving(m_doc);
+    }
+    QVERIFY(!apc.owned());
 }
 
 QTEST_MAIN(SurfaceSim_Test)

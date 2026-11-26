@@ -91,10 +91,36 @@ private slots:
      *  apart from the buttons on 1. */
     void theApc64SeedsItsDefaults();
 
+    /* Setting up a controller (SurfaceSetup, the OpenDeck model in
+       simopendeck.h): the device's own config, read and written over SysEx. */
+    /** The PMJ's factory LEDs are read and found not under their buttons. */
+    void theLampCheckReadsTheBoard();
+    /** Align: a full backup first, then each lamp under its own button;
+     *  Undo Align puts the factory order back (and keeps the aligned one). */
+    void alignBacksUpAndUndoRestores();
+    /** In Operate nothing is written unless the person confirmed. */
+    void aWriteIsRefusedInOperate();
+    /** A board that never answers: said, and nothing written. */
+    void aSilentBoardIsSaidAndNotWritten();
+    /** Identify: every lamp findable, flashed, paired by a press, the
+     *  board put back and the pairing kept. */
+    void identifyPairsLampsAndPutsTheBoardBack();
+    /** The APC40 mkII's Ableton mode: sent when patched, on a replug, on a wake. */
+    void theInitIsSentOnPatchReplugAndWake();
+    /** Rescan says when the computer sees no new controller. */
+    void aRescanThatFindsNothingSaysSo();
+    /** While Identify listens, the board's keys do no job (no GO, no
+     *  Back, no trigger); the desk's STOP still stops. */
+    void identifyHoldsTheKeysJobs();
+    /** The APC64: its display taken and named on patch and replug, given
+     *  back on exit; Session mode checked by a pad press. */
+    void theApc64IsNamedAndItsModeChecked();
+
 private:
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;
     QTemporaryDir m_settings;
+    QTemporaryDir m_backups;
 };
 
 #endif
