@@ -52,7 +52,14 @@ private slots:
      *  opened by its intensity (the Curtain plot symbol: HTP), house
      *  dimmers and a Switch relay: every way of arriving lands on each cue
      *  as GO from the top does -- 0 (house out, curtain closed) too. */
+    void curtainsHouseAndRelaysTrackOnAJump_data();
     void curtainsHouseAndRelaysTrackOnAJump();
+    /** His second report: GO to the cue that opens the traveller and,
+     *  while it is still opening, jump on (or Back): it stopped where it
+     *  was, part open, and stayed. It ends where the run from the top
+     *  leaves it -- the channel and the plot's pose of it. */
+    void aJumpDuringTheOpeningFadeEndsOpen_data();
+    void aJumpDuringTheOpeningFadeEndsOpen();
     void courseShows_data();
     void courseShows();
     void aRealShow();
@@ -72,7 +79,10 @@ private:
      *  that mixes. Its chaser. */
     Chaser *everyModeList();
     /** House to half, House out + the curtains open, two stage cues. */
-    Chaser *houseAndCurtainList();
+    /** @a showOnly: the curtains and the house relay Show only; @a operate:
+     *  the show in Operate (else Design). */
+    Chaser *houseAndCurtainList(bool showOnly = false, bool operate = false);
+    void curtainRows();
 
     bool rig();
     Chaser *chaserOf(quint32 listId) const;

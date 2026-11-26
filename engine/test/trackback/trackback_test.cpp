@@ -47,6 +47,7 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "scene.h"
+#include "scenery.h"
 #include "qlcchannel.h"
 #include "chaser.h"
 #include "doc.h"
@@ -759,7 +760,7 @@ void TrackBack_Test::skippedCuesPlayAsIfDeleted()
     }
 }
 
-Chaser *TrackBack_Test::houseAndCurtainList()
+Chaser *TrackBack_Test::houseAndCurtainList(bool showOnly, bool operate)
 {
     if (!rig())
         return nullptr;
@@ -804,6 +805,14 @@ Chaser *TrackBack_Test::houseAndCurtainList()
     houseRelay->setOutputRules(Fixture::Switch);
     const quint32 house = group("House Lights", { house1->id(), house2->id(), houseRelay->id() });
     const quint32 travellers = group("Traveller", { traveller->id() });
+    if (showOnly)
+    {
+        drape->setOutputRules(Fixture::ShowOnly);
+        traveller->setOutputRules(Fixture::ShowOnly);
+        houseRelay->setOutputRules(Fixture::Switch | Fixture::ShowOnly);
+    }
+    if (operate)
+        m_doc->setMode(Doc::Operate);
 
     Scene *open = new Scene(m_doc);
     open->setName("Curtain Open");
@@ -841,9 +850,25 @@ Chaser *TrackBack_Test::houseAndCurtainList()
     return chaserOf(listId);
 }
 
+void TrackBack_Test::curtainRows()
+{
+    QTest::addColumn<bool>("showOnly");
+    QTest::addColumn<bool>("operate");
+    QTest::newRow("Design") << false << false;
+    QTest::newRow("Operate") << false << true;
+    QTest::newRow("Operate, Show only") << true << true;
+}
+
+void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump_data()
+{
+    curtainRows();
+}
+
 void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
 {
-    Chaser *c = houseAndCurtainList();
+    QFETCH(bool, showOnly);
+    QFETCH(bool, operate);
+    Chaser *c = houseAndCurtainList(showOnly, operate);
     QVERIFY(c != nullptr);
     QCOMPARE(c->stepsCount(), 4);
     const QMap<int, QByteArray> ref = straightRun(c);
@@ -931,6 +956,87 @@ void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
     QString why;
     const int differ = everyWay(c, 20, &why);
     QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1 in all; first: %2").arg(differ).arg(why)));
+}
+
+void TrackBack_Test::aJumpDuringTheOpeningFadeEndsOpen_data()
+{
+    curtainRows();
+}
+
+void TrackBack_Test::aJumpDuringTheOpeningFadeEndsOpen()
+{
+    QFETCH(bool, showOnly);
+    QFETCH(bool, operate);
+    Chaser *c = houseAndCurtainList(showOnly, operate);
+    QVERIFY(c != nullptr);
+    ShowTreeController *st = m_doc->showTree();
+    // Cue 2 opens the curtains over 2 s.
+    Cue opening = st->cueList(m_list)->cues.at(1);
+    opening.fadeIn = 2000;
+    QVERIFY(st->setCue(opening));
+    c = chaserOf(m_list);
+    QVERIFY(c != nullptr);
+    const QMap<int, QByteArray> ref = straightRun(c);
+    QCOMPARE(ref.count(), 4);
+
+    Fixture *drape = nullptr, *traveller = nullptr;
+    for (Fixture *f : m_doc->fixtures())
+    {
+        if (f->name() == "Main drape curtain")
+            drape = f;
+        else if (f->name() == "Traveller relay")
+            traveller = f;
+    }
+    QVERIFY(drape && traveller);
+    // What the plot draws: the fixture's values from the output, as the
+    // App hands them over, read by Scenery.
+    auto pose = [](Fixture *f, const QByteArray &out) {
+        f->setChannelValues(out);
+        return Scenery::poseFromValues(f->fixtureMode(), f->channelValues()).open;
+    };
+    const int fadeTicks = int(2000 / MasterTimer::tick());
+
+    QStringList bad;
+    // GO GO (the opening starts), part way through: jump to 3 / 4, or GO
+    // and Back; and from cue 1 straight to cue 2 by a jump, then on.
+    struct Way { QString name; bool goToOpening; QList<Move> then; int lands; };
+    const QList<Way> ways = {
+        { "GO to 2, jump to 4", true, { { Jump, 3 } }, 3 },
+        { "GO to 2, jump to 3", true, { { Jump, 2 } }, 2 },
+        { "jump to 2, jump to 4", false, { { Jump, 3 } }, 3 },
+        { "GO to 2, GO, Back", true, { { Go, 0 }, { Back, 0 } }, 1 },
+    };
+    for (const Way &w : ways)
+    {
+        stopAll();
+        act(c, { Go, 0 });
+        land(c);
+        act(c, w.goToOpening ? Move { Go, 0 } : Move { Jump, 1 });
+        tick(fadeTicks / 3);
+        const QByteArray mid = settle(0);
+        const int midOpen = int(uchar(mid.at(int(traveller->universeAddress()))));
+        if (midOpen <= 0 || midOpen >= 255)
+            bad << QStringLiteral("%1: not mid-fade (%2)").arg(w.name).arg(midOpen);
+        for (const Move &m : w.then)
+        {
+            act(c, m);
+            tick(2);
+        }
+        // Past the opening's own time: whatever it was doing is over.
+        const QByteArray out = settle(fadeTicks + 10);
+        if (c->currentStepIndex() != w.lands)
+            bad << QStringLiteral("%1: at cue %2").arg(w.name).arg(c->currentStepIndex() + 1);
+        for (Fixture *f : { drape, traveller })
+        {
+            const int v = int(uchar(out.at(int(f->universeAddress()))));
+            const double open = pose(f, out);
+            if (v != 255 || open < 0.999)
+                bad << QStringLiteral("%1: %2 at %3 (drawn %4 open)").arg(w.name, f->name()).arg(v).arg(open);
+        }
+        if (out != ref[w.lands])
+            bad << QStringLiteral("%1: the stage is not cue %2's").arg(w.name).arg(w.lands + 1);
+    }
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QStringLiteral("; "))));
 }
 
 bool TrackBack_Test::loadShow(const QString &path)
