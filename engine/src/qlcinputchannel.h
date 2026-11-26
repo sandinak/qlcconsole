@@ -23,6 +23,8 @@
 #include <QIcon>
 #include <QObject>
 
+#include "faderpickup.h"
+
 class QXmlStreamWriter;
 class QXmlStreamReader;
 class QLCInputProfile;
@@ -53,6 +55,9 @@ class QString;
 #define KXMLQLCInputChannelLowerValue   QStringLiteral("LowerValue")
 #define KXMLQLCInputChannelUpperValue   QStringLiteral("UpperValue")
 #define KXMLQLCInputChannelMidiChannel  QStringLiteral("MidiChannel")
+#define KXMLQLCInputChannelRole         QStringLiteral("Role")
+#define KXMLQLCInputChannelFacts        QStringLiteral("Facts")
+#define KXMLQLCInputChannelFactsFader   QStringLiteral("Fader")
 
 class QLCInputChannel final : public QObject
 {
@@ -220,6 +225,42 @@ protected:
     bool m_sendExtraPress;
     uchar m_lowerValue, m_upperValue;
     int m_lowerChannel, m_upperChannel;
+
+    /*********************************************************************
+     * Surface type: the control's static role and declared facts
+     * (docs/design/CONTROL_SCOPES.md sections 2 and 6)
+     *********************************************************************/
+public:
+    /** The static role this control has on its surface type, as written in
+     *  the profile ("GrandMaster", "Go", "Select 3", "SpeedRate 1"); empty:
+     *  none, the control is free for a show. See roleKinds(). */
+    QString role() const;
+    void setRole(const QString &role);
+
+    /** Every role kind a profile may name, in the editor's order. A kind
+     *  that roleTakesIndex() is written with its number ("Level 3"). */
+    static QStringList roleKinds();
+    static bool roleTakesIndex(const QString &kind);
+    /** A role text is a kind, plus a number when the kind takes one
+     *  ("Page 0", "Level 10"); anything else is not a role. */
+    static bool isValidRole(const QString &role);
+
+    /** What the fader is, as its type declares it: Relative (an endless
+     *  knob), Motorised, Absolute (a plain fader), Unknown (not declared:
+     *  every profile written before surface types). FaderPickup's rule
+     *  follows it. A channel whose movement is Relative, or an Encoder,
+     *  is Relative whatever is declared. */
+    FaderFact faderFact() const;
+    /** What was declared in the profile (<Facts Fader="...">) */
+    FaderFact declaredFaderFact() const;
+    void setDeclaredFaderFact(FaderFact fact);
+
+    static QString faderFactToString(FaderFact fact);
+    static FaderFact stringToFaderFact(const QString &str);
+
+protected:
+    QString m_role;
+    FaderFact m_faderFact;
 
     /********************************************************************
      * Load & Save

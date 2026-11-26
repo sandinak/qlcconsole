@@ -9,74 +9,102 @@
  <Manufacturer>PMJ</Manufacturer>
  <Model>Black 1</Model>
  <Type>MIDI</Type>
+ <Surface Version="1"/>
  <Channel Number="32768">
   <Name>Master</Name>
   <Type>Slider</Type>
+  <Role>GrandMaster</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32769">
   <Name>Ch 1</Name>
   <Type>Slider</Type>
+  <Role>Level 1</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32770">
   <Name>Ch 2</Name>
   <Type>Slider</Type>
+  <Role>Level 2</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32771">
   <Name>Ch 3</Name>
   <Type>Slider</Type>
+  <Role>Level 3</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32772">
   <Name>Ch 4</Name>
   <Type>Slider</Type>
+  <Role>Level 4</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32773">
   <Name>Ch 5</Name>
   <Type>Slider</Type>
+  <Role>Level 5</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32774">
   <Name>Ch 6</Name>
   <Type>Slider</Type>
+  <Role>Level 6</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32775">
   <Name>Ch 7</Name>
   <Type>Slider</Type>
+  <Role>Level 7</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32776">
   <Name>Ch 8</Name>
   <Type>Slider</Type>
+  <Role>Level 8</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32777">
   <Name>Ch 9</Name>
   <Type>Slider</Type>
+  <Role>Level 9</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32778">
   <Name>Ch 10</Name>
   <Type>Slider</Type>
+  <Role>Level 10</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="32779">
   <Name>Enc 1</Name>
   <Type>Encoder</Type>
   <Movement Sensitivity="1"/>
+  <Role>Param 1</Role>
  </Channel>
  <Channel Number="32780">
   <Name>Enc 2</Name>
   <Type>Encoder</Type>
   <Movement Sensitivity="1"/>
+  <Role>Param 2</Role>
  </Channel>
  <Channel Number="32781">
   <Name>Enc 3</Name>
   <Type>Encoder</Type>
   <Movement Sensitivity="1"/>
+  <Role>Param 3</Role>
  </Channel>
  <Channel Number="32782">
   <Name>Enc 4</Name>
   <Type>Encoder</Type>
   <Movement Sensitivity="1"/>
+  <Role>Param 4</Role>
  </Channel>
  <Channel Number="32896">
   <Name>Go</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Go</Role>
  </Channel>
  <Channel Number="32897">
   <Name>1-Down</Name>
@@ -132,186 +160,223 @@
   <Name>Back</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Back</Role>
  </Channel>
  <Channel Number="32908">
   <Name>1-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 1</Role>
  </Channel>
  <Channel Number="32909">
   <Name>2-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 2</Role>
  </Channel>
  <Channel Number="32910">
   <Name>3-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 3</Role>
  </Channel>
  <Channel Number="32911">
   <Name>4-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 4</Role>
  </Channel>
  <Channel Number="32912">
   <Name>5-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 5</Role>
  </Channel>
  <Channel Number="32913">
   <Name>6-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 6</Role>
  </Channel>
  <Channel Number="32914">
   <Name>7-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 7</Role>
  </Channel>
  <Channel Number="32915">
   <Name>8-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 8</Role>
  </Channel>
  <Channel Number="32916">
   <Name>9-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 9</Role>
  </Channel>
  <Channel Number="32917">
   <Name>10-Up</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Reset 10</Role>
  </Channel>
  <Channel Number="32918">
   <Name>O</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Blackout</Role>
  </Channel>
  <Channel Number="32919">
   <Name>Pre Page</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Prev</Role>
  </Channel>
  <Channel Number="32920">
   <Name>Next Page</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Next</Role>
  </Channel>
  <Channel Number="32921">
   <Name>1-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 1</Role>
  </Channel>
  <Channel Number="32922">
   <Name>2-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 2</Role>
  </Channel>
  <Channel Number="32923">
   <Name>3-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 3</Role>
  </Channel>
  <Channel Number="32924">
   <Name>4-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 4</Role>
  </Channel>
  <Channel Number="32925">
   <Name>5-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 5</Role>
  </Channel>
  <Channel Number="32926">
   <Name>6-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 6</Role>
  </Channel>
  <Channel Number="32927">
   <Name>7-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 7</Role>
  </Channel>
  <Channel Number="32928">
   <Name>8-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 8</Role>
  </Channel>
  <Channel Number="32929">
   <Name>9-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 9</Role>
  </Channel>
  <Channel Number="32930">
   <Name>10-Load</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Load 10</Role>
  </Channel>
  <Channel Number="32931">
   <Name>Fix Cont</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Page 4</Role>
  </Channel>
  <Channel Number="32932">
   <Name>Left</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Left</Role>
  </Channel>
  <Channel Number="32933">
   <Name>Right</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Right</Role>
  </Channel>
  <Channel Number="32934">
   <Name>1</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 1</Role>
  </Channel>
  <Channel Number="32935">
   <Name>2</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 2</Role>
  </Channel>
  <Channel Number="32936">
   <Name>3</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 3</Role>
  </Channel>
  <Channel Number="32937">
   <Name>4</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 4</Role>
  </Channel>
  <Channel Number="32938">
   <Name>5</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 5</Role>
  </Channel>
  <Channel Number="32939">
   <Name>6</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 6</Role>
  </Channel>
  <Channel Number="32940">
   <Name>7</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 7</Role>
  </Channel>
  <Channel Number="32941">
   <Name>8</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 8</Role>
  </Channel>
  <Channel Number="32942">
   <Name>9</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 9</Role>
  </Channel>
  <Channel Number="32943">
   <Name>10</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Select 10</Role>
  </Channel>
  <Channel Number="32944">
   <Name>Favorites</Name>
@@ -322,25 +387,30 @@
   <Name>Set</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Blind</Role>
  </Channel>
  <Channel Number="32946">
   <Name>Effects</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Page 0</Role>
  </Channel>
  <Channel Number="32947">
   <Name>Groups</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Page 1</Role>
  </Channel>
  <Channel Number="32948">
   <Name>Looks</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Page 2</Role>
  </Channel>
  <Channel Number="32949">
   <Name>Macros</Name>
   <Type>Button</Type>
   <Feedback LowerValue="15" UpperValue="127"/>
+  <Role>Page 3</Role>
  </Channel>
 </InputProfile>

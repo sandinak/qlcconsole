@@ -260,6 +260,26 @@ void PmjSim_Test::theOverlayIsTheProfile()
     QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QStringLiteral("\n"))));
 }
 
+void PmjSim_Test::theRolesFromItsTypeAreTheOldTable()
+{
+    // What pmjoverlay.cpp's table acted on before S2: the faders, pan and
+    // tilt, Blackout and Blind, the page keys, and the strips' Select, Load
+    // and Up (Reset) keys; never the transport, Enc 3/4, Favorites or Down
+    QList<quint32> expected;
+    for (quint32 ch = 32768; ch <= 32780; ++ch)
+        expected << ch;                                         // Master, Ch 1-10, Enc 1-2
+    expected << 32918 << 32945;                                 // O, Set
+    expected << 32946 << 32947 << 32948 << 32949 << 32931;      // the page keys
+    for (quint32 n = 1; n <= 10; ++n)
+        expected << 32933 + n << 32920 + n << 32907 + n;        // Select, Load, Up
+    QList<quint32> acted = PMJOverlay::controlChannels();
+    std::sort(expected.begin(), expected.end());
+    std::sort(acted.begin(), acted.end());
+    QCOMPARE(acted, expected);
+    QCOMPARE(PMJOverlay::controlName(32768), QStringLiteral("Master"));
+    QCOMPARE(PMJOverlay::controlName(32944), QStringLiteral("Favorites"));
+}
+
 void PmjSim_Test::everyControlReachesItsRole()
 {
     Doc *doc = m_app->doc();

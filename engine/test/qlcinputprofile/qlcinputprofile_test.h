@@ -40,6 +40,11 @@ private slots:
     void assign();
     void load();
     void loadNoProfile();
+    void surfaceTypeLoadsAndSaves();
+    void aProfileWithoutATypeSavesAsBefore();
+    void roleProblemsAreSaid();
+    void pmjBlack1RolesAreItsOldTable();
+    void shippedSurfaceTypesHoldTheirRules();
     void loader();
     void save();
     void saveFlushesOnlyItsFile();

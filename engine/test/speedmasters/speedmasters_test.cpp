@@ -928,6 +928,88 @@ void SpeedMasters_Test::aFaderIsPickedUpBeforeItFollows()
     QVERIFY(!p.accept(250, 128));           // not a crossing from 10
 }
 
+/* S2: the fader's declared fact (its surface type) sets the rule. A
+   Relative one never waits; a Motorised one waits as a plain fader and asks
+   for the value to be sent to it once, when the wait starts; Absolute and
+   Unknown (every profile before surface types) wait as always. */
+void SpeedMasters_Test::declaredFactsSetThePickUpRule()
+{
+    FaderPickup rel;
+    rel.setFact(FaderFact::Relative);
+    QVERIFY(!rel.picksUp());
+    QVERIFY(rel.accept(10, 200));           // far from the control: taken
+    QVERIFY(rel.accept(250, 10));
+    QVERIFY(!rel.waiting(10));
+
+    FaderPickup motor;
+    motor.setFact(FaderFact::Motorised);
+    bool sendBack = false;
+    QVERIFY(!motor.accept(10, 200, &sendBack));
+    QVERIFY(sendBack);                      // the wait starts: send it 200
+    QVERIFY(!motor.accept(60, 200, &sendBack));
+    QVERIFY(!sendBack);                     // once, not for every value on the way
+    QVERIFY(motor.accept(198, 200, &sendBack)); // arrived: picked up
+    QVERIFY(!sendBack);
+
+    for (FaderFact f : { FaderFact::Absolute, FaderFact::Unknown })
+    {
+        FaderPickup p;
+        p.setFact(f);
+        bool sb = false;
+        QVERIFY(!p.accept(10, 200, &sb));
+        QVERIFY(!sb);                       // a plain fader is sent nothing
+        QVERIFY(p.waiting(200));
+        QVERIFY(p.accept(201, 200));
+    }
+}
+
+/* Q313 / Q-R A: a master (the Grand Master, VC Grand / Sub / Group master
+   sliders) follows at once unless its type declares it Absolute; then a
+   raise waits, and a pull-down never does -- not on the first report after
+   a start, not while it waits above, not in one big step. */
+void SpeedMasters_Test::aMasterPullDownNeverWaits()
+{
+    for (FaderFact f : { FaderFact::Unknown, FaderFact::Motorised, FaderFact::Relative })
+    {
+        FaderPickup p;
+        p.setMaster(true);
+        p.setFact(f);
+        QVERIFY(!p.picksUp());
+        QVERIFY(p.accept(250, 100));        // up at once
+        QVERIFY(p.accept(5, 250));          // down at once
+    }
+
+    FaderPickup gm;
+    gm.setMaster(true);
+    gm.setFact(FaderFact::Absolute);
+    QVERIFY(gm.picksUp());
+    // A start, the master at full: a first report anywhere below is taken
+    QVERIFY(gm.accept(120, 255));
+    gm.reset();
+    QVERIFY(gm.accept(0, 255));             // thrown to 0
+    // A raise waits to be picked up...
+    gm.reset();
+    QVERIFY(!gm.accept(200, 100));
+    QVERIFY(gm.waiting(100));
+    QVERIFY(!gm.accept(230, 100));
+    // ...and a pull down from above it is taken the moment it is at or
+    // below the master, however big the step
+    QVERIFY(gm.accept(0, 100));
+    QVERIFY(!gm.waiting(100));
+    // following, it rises with the fader
+    QVERIFY(gm.accept(30, 0));
+    QVERIFY(gm.accept(90, 30));
+    // The master raised on screen above the fader: pushing the fader up
+    // toward it is no pull (it waits); its resting jitter is none either;
+    // a pull of more than the jitter is taken, wherever the run began
+    QVERIFY(!gm.accept(120, 200));
+    QVERIFY(!gm.accept(118, 200));
+    QVERIFY(!gm.accept(120, 200));
+    QVERIFY(gm.accept(110, 200));
+    QVERIFY(!gm.accept(150, 110 + 80));
+    QVERIFY(gm.accept(140, 190));
+}
+
 void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()
 {
     SpeedMasters *sm = m_doc->speedMasters();

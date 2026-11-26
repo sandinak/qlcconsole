@@ -50,6 +50,7 @@
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
+#include "inputoutputmap.h"
 
 Workbench::EncoderTarget Workbench::encoderTarget() const
 {
@@ -388,6 +389,7 @@ void Workbench::pageLevel(quint32 universe, quint32 channel, int bank, int slot,
     const quint64 key = (quint64(universe) << 32) | channel;
     FaderPickup &pick = m_pagePickups[key];
     pick.setSource(universe, channel);
+    pick.setFact(m_doc->inputOutputMap()->faderFact(universe, channel));    // its type's fact (S2)
     const int current = qBound(0, int(norm * 255.0f + 0.5f), 255);
     if (!pick.accept(value, current))
     {

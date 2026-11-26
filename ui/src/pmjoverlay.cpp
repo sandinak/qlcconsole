@@ -8,6 +8,8 @@
 #include <QStatusBar>
 #include <QColor>
 #include <QTimer>
+#include <QScopedPointer>
+#include <QDebug>
 
 #include "pmjoverlay.h"
 #include "controlowners.h"
@@ -33,119 +35,75 @@
 #include "mastertimer.h"
 #include "cuerunner.h"
 #include "chaser.h"
+#include "qlcinputprofile.h"
+#include "qlcinputchannel.h"
+#include "surfacelayout.h"
+#include "controlsurface.h"
 
 const QString PMJOverlay::deviceId = QStringLiteral("PMJ Black 1");
 
-// Channel numbers straight from resources/inputprofiles/PMJ-Black-1.qxi.
-// Kept here rather than parsed from the profile at runtime: the overlay
-// needs to know these regardless of whether the user has the PMJ patched at
-// all yet, and re-deriving them from whatever profile happens to be loaded
-// would let a stale/edited profile silently break the role binding.
+// The board's controls and their roles are data: the <Role> of each channel
+// of the PMJ's surface type (resources/inputprofiles/PMJ-Black-1.qxi), read
+// from the copy built into the engine (SurfaceLayout::builtInTypePath()),
+// never from whatever profile is patched: the overlay knows its board
+// whether or not it is patched yet, and an edited copy of the profile can't
+// break the binding (a type is fixed, Q307). pmjsim_test holds it to the
+// table this file had before.
 namespace {
+
+namespace CS = ControlSurface;
 
 struct PmjControl
 {
     quint32 channel;
-    const char *name;
+    QString name;
     ControlSurface::Kind kind;
-    bool hasFeedback;   // true = the profile gives this control a <Feedback> range
+    bool hasFeedback;   // a button: the profile gives it a <Feedback> range (a lamp)
     ControlSurface::Role role;
 };
 
-namespace CS = ControlSurface;
+const QList<PmjControl> &pmjControls()
+{
+    static const QList<PmjControl> controls = []() {
+        QList<PmjControl> out;
+        QScopedPointer<QLCInputProfile> prof(
+            QLCInputProfile::loader(SurfaceLayout::builtInTypePath(QStringLiteral("PMJ-Black-1.qxi"))));
+        if (prof.isNull())
+        {
+            qWarning() << "PMJ overlay: its surface type (PMJ-Black-1.qxi) is not built in";
+            return out;
+        }
+        QMapIterator<quint32, QLCInputChannel *> it(prof->channels());
+        while (it.hasNext())
+        {
+            it.next();
+            const QLCInputChannel *ich = it.value();
+            PmjControl pc;
+            pc.channel = it.key();
+            pc.name = ich->name();
+            pc.kind = ich->type() == QLCInputChannel::Slider ? CS::Kind::Fader
+                      : ich->type() == QLCInputChannel::Button ? CS::Kind::Button
+                                                               : CS::Kind::Encoder;
+            pc.hasFeedback = ich->type() == QLCInputChannel::Button;
+            /* The Master fader's role is the GrandMaster: the overlay's
+               "Level -1" (slotRoleActivated()), as it always was */
+            pc.role = ich->role() == QLatin1String("GrandMaster")
+                      ? CS::Role(CS::RoleType::Level, -1)
+                      : CS::roleFromText(ich->role());
+            out << pc;
+        }
+        return out;
+    }();
+    return controls;
+}
 
-// clang-format off
-const PmjControl kPmjControls[] = {
-    { 32768, "Master", CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, -1) },
-    { 32769, "Ch 1",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 1) },
-    { 32770, "Ch 2",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 2) },
-    { 32771, "Ch 3",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 3) },
-    { 32772, "Ch 4",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 4) },
-    { 32773, "Ch 5",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 5) },
-    { 32774, "Ch 6",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 6) },
-    { 32775, "Ch 7",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 7) },
-    { 32776, "Ch 8",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 8) },
-    { 32777, "Ch 9",   CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 9) },
-    { 32778, "Ch 10",  CS::Kind::Fader,  false, CS::Role(CS::RoleType::Level, 10) },
-
-    { 32779, "Enc 1",  CS::Kind::Encoder, false, CS::Role(CS::RoleType::Param, 1) },
-    { 32780, "Enc 2",  CS::Kind::Encoder, false, CS::Role(CS::RoleType::Param, 2) },
-    { 32781, "Enc 3",  CS::Kind::Encoder, false, CS::Role(CS::RoleType::Param, 3) },
-    { 32782, "Enc 4",  CS::Kind::Encoder, false, CS::Role(CS::RoleType::Param, 4) },
-
-    // Go and Back are the Run tab's GO and Back (CueRunner::runTabCommand()),
-    // unless the show has learned a trigger on them (showOwns()).
-    { 32896, "Go",         CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Go) },
-    { 32907, "Back",       CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Back) },
-    { 32932, "Left",       CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Left) },
-    { 32933, "Right",      CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Right) },
-    { 32919, "Pre Page",   CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Prev) },
-    { 32920, "Next Page",  CS::Kind::Button, true, CS::Role(CS::RoleType::Transport, CS::Next) },
-
-    // Static core (design doc proposal, confirmed): O -> Blackout, Set ->
-    // Blind. Favorites (proposed Tap) deliberately left unbound this slice
-    // — see the header comment.
-    { 32918, "O",          CS::Kind::Button, true, CS::Role(CS::RoleType::Static, CS::Blackout) },
-    { 32945, "Set",        CS::Kind::Button, true, CS::Role(CS::RoleType::Static, CS::Blind) },
-    { 32944, "Favorites",  CS::Kind::Button, true, CS::Role() },
-
-    // The 5 hardware mode buttons ARE the page selector.
-    { 32946, "Effects",    CS::Kind::Button, true, CS::Role(CS::RoleType::Page, 0) },
-    { 32947, "Groups",     CS::Kind::Button, true, CS::Role(CS::RoleType::Page, 1) },
-    { 32948, "Looks",      CS::Kind::Button, true, CS::Role(CS::RoleType::Page, 2) },
-    { 32949, "Macros",     CS::Kind::Button, true, CS::Role(CS::RoleType::Page, 3) },
-    { 32931, "Fix Cont",   CS::Kind::Button, true, CS::Role(CS::RoleType::Page, 4) },
-
-    // 10 strips: select, load, up/down. Up/Down have no Role yet (see the
-    // design doc's open discussion point on what they're actually for).
-    { 32934, "1",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 1) },
-    { 32935, "2",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 2) },
-    { 32936, "3",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 3) },
-    { 32937, "4",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 4) },
-    { 32938, "5",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 5) },
-    { 32939, "6",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 6) },
-    { 32940, "7",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 7) },
-    { 32941, "8",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 8) },
-    { 32942, "9",  CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 9) },
-    { 32943, "10", CS::Kind::Button, true, CS::Role(CS::RoleType::Select, 10) },
-
-    { 32921, "1-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 1) },
-    { 32922, "2-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 2) },
-    { 32923, "3-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 3) },
-    { 32924, "4-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 4) },
-    { 32925, "5-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 5) },
-    { 32926, "6-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 6) },
-    { 32927, "7-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 7) },
-    { 32928, "8-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 8) },
-    { 32929, "9-Load",  CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 9) },
-    { 32930, "10-Load", CS::Kind::Button, true, CS::Role(CS::RoleType::Load, 10) },
-
-    { 32897, "1-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32898, "2-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32899, "3-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32900, "4-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32901, "5-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32902, "6-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32903, "7-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32904, "8-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32905, "9-Down",  CS::Kind::Button, true, CS::Role() },
-    { 32906, "10-Down", CS::Kind::Button, true, CS::Role() },
-
-    // "N-Up" resets fader N's currently-mapped value to 0 and doubles as a
-    // "this fader is in use" indicator (lit whenever its Level index applies
-    // to the focused palette's type — see stateFor()).
-    { 32908, "1-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 1) },
-    { 32909, "2-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 2) },
-    { 32910, "3-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 3) },
-    { 32911, "4-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 4) },
-    { 32912, "5-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 5) },
-    { 32913, "6-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 6) },
-    { 32914, "7-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 7) },
-    { 32915, "8-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 8) },
-    { 32916, "9-Up",  CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 9) },
-    { 32917, "10-Up", CS::Kind::Button, true, CS::Role(CS::RoleType::Reset, 10) },
-};
-// clang-format on
+quint32 roleChannel(const CS::Role &role)
+{
+    for (const PmjControl &pc : pmjControls())
+        if (pc.role == role)
+            return pc.channel;
+    return 0xFFFFFFFF;
+}
 
 // OpenDeck packs blink speed into the low bits of the same byte that carries
 // brightness (see qlcplus-midi-profiler's README, "OpenDeck LED values are
@@ -176,9 +134,10 @@ int levelForState(ControlSurface::State st)
     }
     return 0;
 }
-const quint32 kGoChannel = 32896;
-const quint32 kFirstStrip = 32769;  // Ch 1: the strips' faders run on from here
-const quint32 kBackChannel = 32907;
+quint32 goChannel() { return roleChannel(CS::Role(CS::RoleType::Transport, CS::Go)); }
+quint32 backChannel() { return roleChannel(CS::Role(CS::RoleType::Transport, CS::Back)); }
+// Level 1: the strips' faders run on from here
+quint32 firstStrip() { return roleChannel(CS::Role(CS::RoleType::Level, 1)); }
 
 int snapToSteadyLevel(int level)
 {
@@ -200,9 +159,9 @@ int snapToSteadyLevel(int level)
 
 QString PMJOverlay::controlName(quint32 channel)
 {
-    for (const PmjControl &pc : kPmjControls)
+    for (const PmjControl &pc : pmjControls())
         if (pc.channel == channel)
-            return QString::fromLatin1(pc.name);
+            return pc.name;
     return QString();
 }
 
@@ -215,7 +174,7 @@ QList<quint32> PMJOverlay::controlChannels()
        tab's list only while the show has learned nothing on them
        (showOwns()): a trigger learned there is theirs instead. */
     QList<quint32> out;
-    for (const PmjControl &pc : kPmjControls)
+    for (const PmjControl &pc : pmjControls())
     {
         const ControlSurface::RoleType t = pc.role.type;
         if (t == ControlSurface::RoleType::None || t == ControlSurface::RoleType::Transport)
@@ -574,7 +533,7 @@ const PageSet::Binding *PMJOverlay::pageBinding(quint32 channel) const
 
 bool PMJOverlay::pageRule(int index, const QString &rule) const
 {
-    const PageSet::Binding *b = pageBinding(kFirstStrip + quint32(index) - 1);
+    const PageSet::Binding *b = pageBinding(firstStrip() + quint32(index) - 1);
     return b != nullptr && b->param == rule;
 }
 
@@ -589,7 +548,7 @@ bool PMJOverlay::pickedUp(int index, uchar value, int current)
     if (current < 0)
         return true;    // nothing to pick up: nothing is written either
     FaderPickup &p = m_pickups[index];
-    p.setSource(quint32(qMax(0, m_universe)), kFirstStrip + quint32(index) - 1);
+    p.setSource(quint32(qMax(0, m_universe)), firstStrip() + quint32(index) - 1);
     return p.accept(value, current);
 }
 
@@ -681,12 +640,12 @@ void PMJOverlay::registerDevice()
     dev.id = deviceId;
     dev.maxBrightness = 127;   // 7-bit MIDI velocity, not the engine's 0-15 default
 
-    for (const PmjControl &pc : kPmjControls)
+    for (const PmjControl &pc : pmjControls())
     {
         int index = dev.controls.size();
         ControlSurface::Control ctl;
         ctl.kind = pc.kind;
-        ctl.name = QString::fromLatin1(pc.name);
+        ctl.name = pc.name;
         ctl.ledId = pc.hasFeedback ? int(pc.channel) : -1;
         dev.controls.append(ctl);
 
@@ -946,7 +905,7 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         if (role.index == ControlSurface::Go || role.index == ControlSurface::Back)
         {
             const bool go = role.index == ControlSurface::Go;
-            const quint32 channel = go ? kGoChannel : kBackChannel;
+            const quint32 channel = go ? goChannel() : backChannel();
             /* A board that came back dumps its keys (phase R): the Control
                Map's one rule, as a VC button and the desk's GO ask it. */
             ControlMap *cm = m_doc->controlMap();
@@ -964,9 +923,9 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
             m_transportDown.insert(role.index);
             if (dump)
                 break;
-            if (go && !showOwns(kGoChannel))
+            if (go && !showOwns(goChannel()))
                 CueRunner::runTabCommand(m_doc, ShowControl::Go);
-            else if (!go && !showOwns(kBackChannel))
+            else if (!go && !showOwns(backChannel()))
                 CueRunner::runTabCommand(m_doc, ShowControl::Back);
         }
         break;
@@ -1116,7 +1075,7 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
 
 quint32 PMJOverlay::pageKeyChannel(int index)
 {
-    for (const PmjControl &pc : kPmjControls)
+    for (const PmjControl &pc : pmjControls())
         if (pc.role.type == ControlSurface::RoleType::Page && pc.role.index == index)
             return pc.channel;
     return 0xFFFFFFFF;

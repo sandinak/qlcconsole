@@ -38,6 +38,7 @@ QLCInputChannel::QLCInputChannel()
     , m_lowerValue(0)
     , m_upperValue(UCHAR_MAX)
     , m_lowerChannel(-1)
+    , m_faderFact(FaderFact::Unknown)
 {
 }
 
@@ -52,6 +53,8 @@ QLCInputChannel *QLCInputChannel::createCopy()
     copy->setSendExtraPress(this->sendExtraPress());
     copy->setLowerChannel(this->lowerChannel());
     copy->setRange(this->lowerValue(), this->upperValue());
+    copy->setRole(this->role());
+    copy->setDeclaredFaderFact(this->declaredFaderFact());
 
     return copy;
 }
@@ -316,6 +319,97 @@ void QLCInputChannel::setLowerChannel(const int channel)
 }
 
 /****************************************************************************
+ * Surface type
+ ****************************************************************************/
+
+QString QLCInputChannel::role() const
+{
+    return m_role;
+}
+
+void QLCInputChannel::setRole(const QString &role)
+{
+    m_role = role.simplified();
+}
+
+QStringList QLCInputChannel::roleKinds()
+{
+    // ControlSurface's vocabulary (controlsurface.h), then the desk's
+    // stop and the speed masters (CONTROL_SCOPES.md section 2)
+    return QStringList()
+        << QStringLiteral("GrandMaster") << QStringLiteral("EmergencyStop")
+        << QStringLiteral("Go") << QStringLiteral("Back")
+        << QStringLiteral("Blackout") << QStringLiteral("Blind") << QStringLiteral("Tap")
+        << QStringLiteral("AutoMIB") << QStringLiteral("Clear") << QStringLiteral("Record")
+        << QStringLiteral("Next") << QStringLiteral("Prev")
+        << QStringLiteral("Left") << QStringLiteral("Right")
+        << QStringLiteral("SpeedRate") << QStringLiteral("SpeedTap")
+        << QStringLiteral("Level") << QStringLiteral("Select") << QStringLiteral("Load")
+        << QStringLiteral("Reset") << QStringLiteral("Param") << QStringLiteral("Page");
+}
+
+bool QLCInputChannel::roleTakesIndex(const QString &kind)
+{
+    static const QStringList indexed = QStringList()
+        << QStringLiteral("SpeedRate") << QStringLiteral("SpeedTap")
+        << QStringLiteral("Level") << QStringLiteral("Select") << QStringLiteral("Load")
+        << QStringLiteral("Reset") << QStringLiteral("Param") << QStringLiteral("Page");
+    return indexed.contains(kind);
+}
+
+bool QLCInputChannel::isValidRole(const QString &role)
+{
+    const QStringList parts = role.simplified().split(QLatin1Char(' '));
+    if (parts.isEmpty() || !roleKinds().contains(parts.first()))
+        return false;
+    if (!roleTakesIndex(parts.first()))
+        return parts.size() == 1;
+    bool ok = false;
+    const int n = parts.size() == 2 ? parts.at(1).toInt(&ok) : -1;
+    return ok && n >= 0;
+}
+
+FaderFact QLCInputChannel::faderFact() const
+{
+    if (m_type == Encoder || ((m_type == Slider || m_type == Knob) && m_movementType == Relative))
+        return FaderFact::Relative;
+    return m_faderFact;
+}
+
+FaderFact QLCInputChannel::declaredFaderFact() const
+{
+    return m_faderFact;
+}
+
+void QLCInputChannel::setDeclaredFaderFact(FaderFact fact)
+{
+    m_faderFact = fact;
+}
+
+QString QLCInputChannel::faderFactToString(FaderFact fact)
+{
+    switch (fact)
+    {
+        case FaderFact::Absolute:  return QStringLiteral("Absolute");
+        case FaderFact::Motorised: return QStringLiteral("Motorised");
+        case FaderFact::Relative:  return QStringLiteral("Relative");
+        case FaderFact::Unknown:   break;
+    }
+    return QStringLiteral("Unknown");
+}
+
+FaderFact QLCInputChannel::stringToFaderFact(const QString &str)
+{
+    if (str == QLatin1String("Absolute"))
+        return FaderFact::Absolute;
+    if (str == QLatin1String("Motorised") || str == QLatin1String("Motorized"))
+        return FaderFact::Motorised;
+    if (str == QLatin1String("Relative"))
+        return FaderFact::Relative;
+    return FaderFact::Unknown;
+}
+
+/****************************************************************************
  * Load & Save
  ****************************************************************************/
 
@@ -369,6 +463,20 @@ bool QLCInputChannel::loadXML(QXmlStreamReader &root)
             setLowerChannel(fbChannel);
             root.skipCurrentElement();
         }
+        else if (root.name() == KXMLQLCInputChannelRole)
+        {
+            const QString role = root.readElementText().simplified();
+            if (isValidRole(role))
+                setRole(role);
+            else
+                qWarning() << Q_FUNC_INFO << "Unknown surface role" << role;
+        }
+        else if (root.name() == KXMLQLCInputChannelFacts)
+        {
+            setDeclaredFaderFact(stringToFaderFact(
+                root.attributes().value(KXMLQLCInputChannelFactsFader).toString()));
+            root.skipCurrentElement();
+        }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unknown input channel tag" << root.name();
@@ -418,6 +526,17 @@ bool QLCInputChannel::saveXML(QXmlStreamWriter *doc, quint32 channelNumber) cons
             doc->writeAttribute(KXMLQLCInputChannelUpperValue, QString::number(upperValue()));
         if (lowerChannel() != -1)
             doc->writeAttribute(KXMLQLCInputChannelMidiChannel, QString::number(lowerChannel()));
+        doc->writeEndElement();
+    }
+
+    /* A surface type's additions: only when there is one, so a profile
+       without them saves exactly as before */
+    if (!m_role.isEmpty())
+        doc->writeTextElement(KXMLQLCInputChannelRole, m_role);
+    if (m_faderFact != FaderFact::Unknown)
+    {
+        doc->writeStartElement(KXMLQLCInputChannelFacts);
+        doc->writeAttribute(KXMLQLCInputChannelFactsFader, faderFactToString(m_faderFact));
         doc->writeEndElement();
     }
 

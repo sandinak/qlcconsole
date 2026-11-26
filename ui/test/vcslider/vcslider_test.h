@@ -38,6 +38,7 @@ private slots:
     void addedSlidersCatchValues();
     void sliderCatchValuesAreUnchanged();
     void masterSlidersFollowAtOnce();
+    void aDeclaredMasterRaiseWaitsButAPullDownNeverDoes();
     void parkedFaderJitterNeverJumpsANonMaster();
     void invertedSliderIsPickedUpWhereItsFaderIs();
     void limitedSliderIsPickedUpOnItsOwnScale();

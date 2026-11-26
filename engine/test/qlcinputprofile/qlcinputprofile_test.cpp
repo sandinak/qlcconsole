@@ -19,11 +19,16 @@
 
 #include <QXmlStreamWriter>
 #include <QtTest>
+#include <QBuffer>
+#include <QScopedPointer>
+#include <QTemporaryDir>
 
 #include "qlcinputprofile_test.h"
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
 #include "qlcchannel.h"
+#include "surfacelayout.h"
+#include "controlsurface.h"
 
 #include "../common/resource_paths.h"
 
@@ -345,6 +350,194 @@ void QLCInputProfile_Test::loadNoProfile()
 
     doc.setDevice(&buffer);
     QVERIFY(ip.loadXML(doc) == false);
+}
+
+/* S2, surface types (CONTROL_SCOPES.md section 2): <Surface>, <Role> and
+   <Facts> load, save and copy. */
+void QLCInputProfile_Test::surfaceTypeLoadsAndSaves()
+{
+    QByteArray xml =
+        "<?xml version='1.0' encoding='UTF-8'?>\n<!DOCTYPE InputProfile>\n"
+        "<InputProfile xmlns=\"http://www.qlcplus.org/InputProfile\">\n"
+        " <Manufacturer>Test</Manufacturer><Model>Box</Model><Type>MIDI</Type>\n"
+        " <Surface Version=\"1\" Layout=\"grid\" Columns=\"9\"/>\n"
+        " <Channel Number=\"7\"><Name>Fader 9</Name><Type>Slider</Type>"
+        "<Role>GrandMaster</Role><Facts Fader=\"Motorised\"/></Channel>\n"
+        " <Channel Number=\"8\"><Name>Pad</Name><Type>Button</Type><Role>Select 3</Role></Channel>\n"
+        " <Channel Number=\"9\"><Name>Knob</Name><Type>Knob</Type><Facts Fader=\"Relative\"/></Channel>\n"
+        " <Channel Number=\"10\"><Name>Odd</Name><Type>Button</Type><Role>Sing 3</Role></Channel>\n"
+        "</InputProfile>\n";
+    QBuffer buffer(&xml);
+    buffer.open(QIODevice::ReadOnly | QIODevice::Text);
+    QXmlStreamReader reader(&buffer);
+    QLCInputProfile ip;
+    QVERIFY(ip.loadXML(reader));
+    QVERIFY(ip.isSurfaceType());
+    QCOMPARE(ip.surfaceVersion(), 1);
+    QCOMPARE(ip.surfaceLayout(), QString("grid"));
+    QCOMPARE(ip.surfaceColumns(), 9);
+    QCOMPARE(ip.channel(7)->role(), QString("GrandMaster"));
+    QCOMPARE(ip.channel(7)->faderFact(), FaderFact::Motorised);
+    QCOMPARE(ip.channel(8)->role(), QString("Select 3"));
+    QCOMPARE(ip.channel(8)->faderFact(), FaderFact::Unknown);
+    QCOMPARE(ip.channel(9)->faderFact(), FaderFact::Relative);
+    QVERIFY(ip.channel(10)->role().isEmpty());            // not a role: dropped
+    QCOMPARE(ip.roleChannel("GrandMaster"), quint32(7));
+    QCOMPARE(ip.roleChannel("Go"), QLCChannel::invalid());
+    QCOMPARE(ControlSurface::roleFromText(ip.channel(8)->role()),
+             ControlSurface::Role(ControlSurface::RoleType::Select, 3));
+
+    // A relative movement is relative, whatever was declared
+    ip.channel(7)->setMovementType(QLCInputChannel::Relative);
+    QCOMPARE(ip.channel(7)->faderFact(), FaderFact::Relative);
+    QCOMPARE(ip.channel(7)->declaredFaderFact(), FaderFact::Motorised);
+    ip.channel(7)->setMovementType(QLCInputChannel::Absolute);
+
+    // Saved and read back; a copy and an assignment keep it
+    QTemporaryDir dir;
+    const QString path = dir.filePath("box.qxi");
+    QVERIFY(ip.saveXML(path));
+    QScopedPointer<QLCInputProfile> back(QLCInputProfile::loader(path));
+    QVERIFY(!back.isNull());
+    QVERIFY(back->isSurfaceType());
+    QCOMPARE(back->surfaceColumns(), 9);
+    QCOMPARE(back->channel(7)->role(), QString("GrandMaster"));
+    QCOMPARE(back->channel(7)->declaredFaderFact(), FaderFact::Motorised);
+    QCOMPARE(back->channel(8)->role(), QString("Select 3"));
+    QScopedPointer<QLCInputProfile> copy(ip.createCopy());
+    QCOMPARE(copy->surfaceLayout(), QString("grid"));
+    QCOMPARE(copy->channel(7)->role(), QString("GrandMaster"));
+    QCOMPARE(copy->channel(7)->declaredFaderFact(), FaderFact::Motorised);
+    QLCInputProfile assigned;
+    assigned = ip;
+    QCOMPARE(assigned.surfaceVersion(), 1);
+    QCOMPARE(assigned.channel(8)->role(), QString("Select 3"));
+}
+
+/* A profile written before surface types (every QLC+ one) loads with no
+   roles and no declared facts, and saves without a tag of them. */
+void QLCInputProfile_Test::aProfileWithoutATypeSavesAsBefore()
+{
+    QScopedPointer<QLCInputProfile> prof(QLCInputProfile::loader(INTERNAL_PROFILEDIR "Generic-MIDI.qxi"));
+    QVERIFY(!prof.isNull());
+    QVERIFY(!prof->isSurfaceType());
+    for (QLCInputChannel *ich : prof->channels())
+    {
+        QVERIFY(ich->role().isEmpty());
+        QCOMPARE(ich->declaredFaderFact(), FaderFact::Unknown);
+    }
+    QTemporaryDir dir;
+    const QString path = dir.filePath("generic.qxi");
+    QVERIFY(prof->saveXML(path));
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray text = f.readAll();
+    QVERIFY(!text.contains("<Surface"));
+    QVERIFY(!text.contains("<Role"));
+    QVERIFY(!text.contains("<Facts"));
+}
+
+/* A type's rules: one stop, on a button; one Grand Master, on a fader. */
+void QLCInputProfile_Test::roleProblemsAreSaid()
+{
+    QLCInputProfile ip;
+    QLCInputChannel *f1 = new QLCInputChannel();
+    f1->setType(QLCInputChannel::Slider);
+    f1->setRole("GrandMaster");
+    ip.insertChannel(0, f1);
+    QVERIFY(ip.roleProblems().isEmpty());
+    QLCInputChannel *f2 = new QLCInputChannel();
+    f2->setType(QLCInputChannel::Slider);
+    f2->setRole("EmergencyStop");
+    ip.insertChannel(1, f2);
+    QLCInputChannel *b = new QLCInputChannel();
+    b->setType(QLCInputChannel::Button);
+    b->setRole("GrandMaster");
+    ip.insertChannel(2, b);
+    const QString all = ip.roleProblems().join('\n');
+    QVERIFY2(all.contains("the stop must be a button"), qPrintable(all));
+    QVERIFY2(all.contains("the Grand Master must be a fader"), qPrintable(all));
+    QVERIFY2(all.contains("GrandMaster is on channel 1 already"), qPrintable(all));
+}
+
+/* The PMJ Black 1's roles moved out of pmjoverlay.cpp into its profile:
+   the table that file held, control for control (golden test). */
+void QLCInputProfile_Test::pmjBlack1RolesAreItsOldTable()
+{
+    struct Row { quint32 ch; const char *name; const char *role; };
+    const Row table[] = {
+        { 32768, "Master", "GrandMaster" },
+        { 32769, "Ch 1", "Level 1" }, { 32770, "Ch 2", "Level 2" }, { 32771, "Ch 3", "Level 3" },
+        { 32772, "Ch 4", "Level 4" }, { 32773, "Ch 5", "Level 5" }, { 32774, "Ch 6", "Level 6" },
+        { 32775, "Ch 7", "Level 7" }, { 32776, "Ch 8", "Level 8" }, { 32777, "Ch 9", "Level 9" },
+        { 32778, "Ch 10", "Level 10" },
+        { 32779, "Enc 1", "Param 1" }, { 32780, "Enc 2", "Param 2" },
+        { 32781, "Enc 3", "Param 3" }, { 32782, "Enc 4", "Param 4" },
+        { 32896, "Go", "Go" }, { 32907, "Back", "Back" }, { 32932, "Left", "Left" },
+        { 32933, "Right", "Right" }, { 32919, "Pre Page", "Prev" }, { 32920, "Next Page", "Next" },
+        { 32918, "O", "Blackout" }, { 32945, "Set", "Blind" }, { 32944, "Favorites", "" },
+        { 32946, "Effects", "Page 0" }, { 32947, "Groups", "Page 1" }, { 32948, "Looks", "Page 2" },
+        { 32949, "Macros", "Page 3" }, { 32931, "Fix Cont", "Page 4" },
+    };
+    // Both copies: the installed profile and the one built into the engine
+    const QStringList paths = { QString(INTERNAL_PROFILEDIR "PMJ-Black-1.qxi"),
+                                SurfaceLayout::builtInTypePath("PMJ-Black-1.qxi") };
+    for (const QString &path : paths)
+    {
+        QScopedPointer<QLCInputProfile> prof(QLCInputProfile::loader(path));
+        QVERIFY2(!prof.isNull(), qPrintable(path));
+        QVERIFY(prof->isSurfaceType());
+        QCOMPARE(prof->channels().size(), 69);
+        for (const Row &r : table)
+        {
+            const QLCInputChannel *ich = prof->channel(r.ch);
+            QVERIFY2(ich != nullptr, qPrintable(QString::number(r.ch)));
+            QCOMPARE(ich->name(), QString(r.name));
+            QCOMPARE(ich->role(), QString(r.role));
+        }
+        // The strips: Select / Load N, Up = Reset N; the Down row is free
+        for (int n = 1; n <= 10; ++n)
+        {
+            QCOMPARE(prof->channel(32933 + n)->role(), QString("Select %1").arg(n));
+            QCOMPARE(prof->channel(32920 + n)->role(), QString("Load %1").arg(n));
+            QCOMPARE(prof->channel(32907 + n)->role(), QString("Reset %1").arg(n));
+            QVERIFY(prof->channel(32896 + n)->role().isEmpty());
+            QCOMPARE(prof->channel(32768 + n)->faderFact(), FaderFact::Absolute);
+        }
+        QVERIFY(prof->roleProblems().isEmpty());
+    }
+}
+
+/* The first shipped types (CONTROL_SCOPES.md section 2): the Grand Master
+   on the last fader, the APC minis' GO, Back and stop on their scene keys,
+   every fader said, and each type's rules hold. */
+void QLCInputProfile_Test::shippedSurfaceTypesHoldTheirRules()
+{
+    struct Type { const char *file; quint32 gm; FaderFact fader; quint32 go, back, stop; };
+    const quint32 none = QLCChannel::invalid();
+    const Type types[] = {
+        { "Akai-APCMini.qxi", 56, FaderFact::Absolute, 210, 211, 217 },
+        { "Akai-APCMini-mk2.qxi", 56, FaderFact::Absolute, 240, 241, 247 },
+        { "PMJ-9-Faders-Controller.qxi", 5, FaderFact::Absolute, none, none, none },
+        { "KORG-nanoKONTROL2.qxi", 7, FaderFact::Absolute, none, none, none },
+        { "Behringer-BCF2000.qxi", 88, FaderFact::Motorised, none, none, none },
+    };
+    for (const Type &t : types)
+    {
+        QScopedPointer<QLCInputProfile> prof(QLCInputProfile::loader(INTERNAL_PROFILEDIR + QString(t.file)));
+        QVERIFY2(!prof.isNull(), t.file);
+        QVERIFY2(prof->isSurfaceType(), t.file);
+        QVERIFY2(prof->roleProblems().isEmpty(), qPrintable(prof->roleProblems().join('\n')));
+        QCOMPARE(prof->roleChannel("GrandMaster"), t.gm);
+        QCOMPARE(prof->roleChannel("Go"), t.go);
+        QCOMPARE(prof->roleChannel("Back"), t.back);
+        QCOMPARE(prof->roleChannel("EmergencyStop"), t.stop);
+        for (QLCInputChannel *ich : prof->channels())
+            if (ich->type() == QLCInputChannel::Slider && ich->name().startsWith("Slider"))
+                QCOMPARE(ich->faderFact(), t.fader);
+            else if (ich->type() == QLCInputChannel::Slider)
+                QCOMPARE(ich->faderFact(), FaderFact::Absolute);   // the BCF2000's pedal
+    }
 }
 
 void QLCInputProfile_Test::loader()

@@ -9,42 +9,53 @@
  <Manufacturer>Akai</Manufacturer>
  <Model>APC Mini</Model>
  <Type>MIDI</Type>
+ <Surface Version="1"/>
  <MIDISendNoteOff>False</MIDISendNoteOff>
  <Channel Number="48">
   <Name>Slider 1</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="49">
   <Name>Slider 2</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="50">
   <Name>Slider 3</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="51">
   <Name>Slider 4</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="52">
   <Name>Slider 5</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="53">
   <Name>Slider 6</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="54">
   <Name>Slider 7</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="55">
   <Name>Slider 8</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="56">
   <Name>Slider 9</Name>
   <Type>Slider</Type>
+  <Role>GrandMaster</Role>
+  <Facts Fader="Absolute"/>
  </Channel>
  <Channel Number="128">
   <Name>Button 1-8</Name>
@@ -337,10 +348,12 @@
  <Channel Number="210">
   <Name>Clip stop Button</Name>
   <Type>Button</Type>
+  <Role>Go</Role>
  </Channel>
  <Channel Number="211">
   <Name>Solo Button</Name>
   <Type>Button</Type>
+  <Role>Back</Role>
  </Channel>
  <Channel Number="212">
   <Name>Rec arm Button</Name>
@@ -365,6 +378,7 @@
  <Channel Number="217">
   <Name>Stop all clips Button</Name>
   <Type>Button</Type>
+  <Role>EmergencyStop</Role>
  </Channel>
  <Channel Number="226">
   <Name>Shift Button</Name>

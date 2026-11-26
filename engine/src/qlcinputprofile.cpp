@@ -49,6 +49,8 @@ QLCInputProfile::QLCInputProfile()
     , m_model(QString())
     , m_path(QString())
     , m_type(MIDI)
+    , m_surfaceVersion(0)
+    , m_surfaceColumns(0)
     , m_midiSendNoteOff(true)
 {
 }
@@ -66,6 +68,9 @@ QLCInputProfile *QLCInputProfile::createCopy()
     copy->setType(this->type());
     copy->setPath(this->path());
     copy->setMidiSendNoteOff(this->midiSendNoteOff());
+    copy->setSurfaceVersion(this->surfaceVersion());
+    copy->setSurfaceLayout(this->surfaceLayout());
+    copy->setSurfaceColumns(this->surfaceColumns());
 
     /* Copy the other profile's channels */
     QMapIterator <quint32,QLCInputChannel*> it(this->channels());
@@ -106,6 +111,9 @@ QLCInputProfile& QLCInputProfile::operator=(const QLCInputProfile& profile)
         m_type = profile.m_type;
         m_midiSendNoteOff = profile.m_midiSendNoteOff;
         m_globalSettingsMap = profile.m_globalSettingsMap;
+        m_surfaceVersion = profile.m_surfaceVersion;
+        m_surfaceLayout = profile.m_surfaceLayout;
+        m_surfaceColumns = profile.m_surfaceColumns;
 
         /* Destroy all existing channels */
         destroyChannels();
@@ -499,6 +507,74 @@ bool QLCInputProfile::loadMidiChannelTableXML(QXmlStreamReader &tableRoot)
     return true;
 }
 
+/****************************************************************************
+ * Surface type
+ ****************************************************************************/
+
+int QLCInputProfile::surfaceVersion() const
+{
+    return m_surfaceVersion;
+}
+
+void QLCInputProfile::setSurfaceVersion(int version)
+{
+    m_surfaceVersion = qMax(0, version);
+}
+
+QString QLCInputProfile::surfaceLayout() const
+{
+    return m_surfaceLayout;
+}
+
+void QLCInputProfile::setSurfaceLayout(const QString &layout)
+{
+    m_surfaceLayout = layout;
+}
+
+int QLCInputProfile::surfaceColumns() const
+{
+    return m_surfaceColumns;
+}
+
+void QLCInputProfile::setSurfaceColumns(int columns)
+{
+    m_surfaceColumns = qMax(0, columns);
+}
+
+quint32 QLCInputProfile::roleChannel(const QString &role) const
+{
+    for (auto it = m_channels.constBegin(); it != m_channels.constEnd(); ++it)
+        if (it.value()->role() == role)
+            return it.key();
+    return QLCChannel::invalid();
+}
+
+QStringList QLCInputProfile::roleProblems() const
+{
+    QStringList out;
+    QHash<QString, quint32> seen;
+    for (auto it = m_channels.constBegin(); it != m_channels.constEnd(); ++it)
+    {
+        const QLCInputChannel *ich = it.value();
+        const QString role = ich->role();
+        if (role.isEmpty())
+            continue;
+        const QString where = QString("%1 (%2)").arg(ich->name()).arg(it.key() + 1);
+        if (!QLCInputChannel::isValidRole(role))
+            out << QString("%1: unknown role %2").arg(where, role);
+        if (seen.contains(role))
+            out << QString("%1: %2 is on channel %3 already").arg(where, role).arg(seen.value(role) + 1);
+        else
+            seen.insert(role, it.key());
+        // The stop's Learn rule (control-surfaces.md "The emergency stop")
+        if (role == QLatin1String("EmergencyStop") && ich->type() != QLCInputChannel::Button)
+            out << QString("%1: the stop must be a button").arg(where);
+        if (role == QLatin1String("GrandMaster") && ich->type() != QLCInputChannel::Slider)
+            out << QString("%1: the Grand Master must be a fader").arg(where);
+    }
+    return out;
+}
+
 bool QLCInputProfile::loadXML(QXmlStreamReader& doc)
 {
     if (doc.readNextStartElement() == false)
@@ -552,6 +628,14 @@ bool QLCInputProfile::loadXML(QXmlStreamReader& doc)
             {
                 loadMidiChannelTableXML(doc);
             }
+            else if (doc.name() == KXMLQLCInputProfileSurface)
+            {
+                const QXmlStreamAttributes attrs = doc.attributes();
+                setSurfaceVersion(attrs.value("Version").toInt());
+                setSurfaceLayout(attrs.value("Layout").toString());
+                setSurfaceColumns(attrs.value("Columns").toInt());
+                doc.skipCurrentElement();
+            }
             else
             {
                 qWarning() << Q_FUNC_INFO << "Unknown input profile tag:" << doc.name().toString();
@@ -594,6 +678,18 @@ bool QLCInputProfile::saveXML(const QString& fileName)
 
     if (midiSendNoteOff() == false)
         doc.writeTextElement(KXMLQLCInputProfileMidiSendNoteOff, QString(KXMLQLCFalse));
+
+    /* A surface type says so; any other profile saves as it always did */
+    if (isSurfaceType())
+    {
+        doc.writeStartElement(KXMLQLCInputProfileSurface);
+        doc.writeAttribute("Version", QString::number(m_surfaceVersion));
+        if (!m_surfaceLayout.isEmpty())
+            doc.writeAttribute("Layout", m_surfaceLayout);
+        if (m_surfaceColumns > 0)
+            doc.writeAttribute("Columns", QString::number(m_surfaceColumns));
+        doc.writeEndElement();
+    }
 
     /* Write channels to the document */
     QMapIterator <quint32, QLCInputChannel*> it(m_channels);

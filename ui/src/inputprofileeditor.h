@@ -51,6 +51,10 @@ protected:
     void updateMidiChannelTree();
     void updateChannelItem(QTreeWidgetItem *item, QLCInputChannel *ch);
     void setOptionsVisibility(QLCInputChannel::Type type);
+    /** The role and fader fact rows show @p ich's */
+    void showChannelRole(const QLCInputChannel *ich);
+    /** "Grand Master" for "GrandMaster" */
+    static QString roleKindLabel(const QString &kind);
 
 protected slots:
     void slotTypeComboChanged(int);
@@ -83,6 +87,9 @@ protected slots:
     void slotLowerValueSpinChanged(int value);
     void slotUpperValueSpinChanged(int value);
     void slotMidiChannelComboChanged(int index);
+    void slotSurfaceToggled(bool on);
+    void slotRoleChanged();
+    void slotFaderFactChanged(int index);
 
     void slotAddColor();
     void slotRemoveColor();

@@ -115,6 +115,45 @@
         </widget>
        </item>
        <item row="4" column="0" colspan="2">
+        <widget class="QGroupBox" name="m_surfaceGroup">
+         <property name="title">
+          <string>Surface type</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_surface">
+          <item row="0" column="0" colspan="2">
+           <widget class="QCheckBox" name="m_surfaceCheck">
+            <property name="toolTip">
+             <string>A surface type's controls can have a static role (Grand Master, GO, Back, the stop) and say what each fader is. See Help, Control surfaces.</string>
+            </property>
+            <property name="text">
+             <string>This profile is a surface type (roles and fader facts)</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="m_surfaceColumnsLabel">
+            <property name="text">
+             <string>Controls in a row on the map</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QSpinBox" name="m_surfaceColumnsSpin">
+            <property name="toolTip">
+             <string>How many controls the surface map draws in a row when the type has no drawing of its own. 0: one row per control.</string>
+            </property>
+            <property name="specialValueText">
+             <string>A list</string>
+            </property>
+            <property name="maximum">
+             <number>64</number>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item row="5" column="0" colspan="2">
         <spacer name="verticalSpacer_2">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -197,6 +236,48 @@
            <widget class="QCheckBox" name="m_extraPressCheck">
             <property name="text">
              <string>Generate an extra Press/Release when toggled</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="m_roleLabel">
+            <property name="text">
+             <string>Role</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="m_roleCombo">
+            <property name="toolTip">
+             <string>The control's static role on this surface type. None: the control is free for a show to assign.</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLabel" name="m_roleIndexLabel">
+            <property name="text">
+             <string>Number</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="3">
+           <widget class="QSpinBox" name="m_roleIndexSpin">
+            <property name="maximum">
+             <number>999</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="m_faderFactLabel">
+            <property name="text">
+             <string>Fader</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1" colspan="3">
+           <widget class="QComboBox" name="m_faderFactCombo">
+            <property name="toolTip">
+             <string>What this fader is. Pick-up follows it: a plain fader waits to be picked up, a motor fader is sent the value, an endless knob never waits. Not declared: as every profile before surface types.</string>
             </property>
            </widget>
           </item>
