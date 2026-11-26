@@ -541,7 +541,8 @@ void CurtainDraw_Test::behavesAsAndParkOnScreen()
             italic.insert(v.toUInt(), (*it)->font(col).italic());
         }
     }
-    QCOMPARE(says.value(wash->id()), QStringLiteral("Light"));
+    QCOMPARE(says.value(wash->id()), QString());          // a light says nothing (UX-23)
+    QVERIFY(!fm->m_fixtures_tree->isColumnHidden(col));
     QCOMPARE(says.value(relay->id()), QStringLiteral("Switch · Parked"));
     QCOMPARE(says.value(drop->id()), QStringLiteral("One-shot"));
     QCOMPARE(says.value(jet->id()), QStringLiteral("Hazard"));

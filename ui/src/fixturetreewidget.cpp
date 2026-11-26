@@ -669,9 +669,11 @@ void FixtureTreeWidget::updateBehavesColumn(QTreeWidgetItem *item, const Fixture
         return;
     const Fixture::Behaviour b = FixtureRest::behaviour(fixture);
     const bool parked = m_doc->programmer() != nullptr && m_doc->programmer()->isFixtureParked(fixture->id());
-    QString text = Fixture::behaviourName(b);
+    // A guessed light says nothing (UX-23): only what is not a plain light.
+    QString text = (b == Fixture::LightBehaviour && !fixture->behaviourOverridden())
+                   ? QString() : Fixture::behaviourName(b);
     if (parked)
-        text = tr("%1 · Parked").arg(text);
+        text = text.isEmpty() ? tr("Parked") : tr("%1 · Parked").arg(text);
     item->setText(m_behavesColumn, text);
     QFont f = item->font(m_behavesColumn);
     f.setItalic(!fixture->behaviourOverridden());
@@ -706,6 +708,7 @@ void FixtureTreeWidget::refreshStageLookIcons()
         }
     }
     blockSignals(was);
+    updateBehavesColumnShown();
 }
 
 void FixtureTreeWidget::setFlags(quint32 flags)
@@ -842,6 +845,7 @@ void FixtureTreeWidget::refreshFixtureName(quint32 id)
         updateBehavesColumn(item, fxi);
     }
     blockSignals(was);
+    updateBehavesColumnShown();
 }
 
 namespace
@@ -1679,8 +1683,27 @@ void FixtureTreeWidget::updateTree()
         setSortingEnabled(true);    // sorts by the header's column, once
 
     header()->resizeSections(QHeaderView::ResizeToContents);
+    updateBehavesColumnShown();
 
     restoreSelection(keep);
+}
+
+void FixtureTreeWidget::updateBehavesColumnShown()
+{
+    /* Only where it says something: a rig of lights shows no column of
+       "Light" (UX-23); one fixture that is not a light, set by hand or
+       parked brings it. */
+    if (m_behavesColumn <= 0)
+        return;
+    bool any = false;
+    for (Fixture *fx : m_doc->fixtures())
+        if (fx->behaviourOverridden() || FixtureRest::behaviour(fx) != Fixture::LightBehaviour
+            || (m_doc->programmer() != nullptr && m_doc->programmer()->isFixtureParked(fx->id())))
+        {
+            any = true;
+            break;
+        }
+    setColumnHidden(m_behavesColumn, !any);
 }
 
 void FixtureTreeWidget::setShowFound(bool on)

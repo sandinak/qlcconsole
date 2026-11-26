@@ -251,6 +251,8 @@ private:
     int m_behavesColumn = -1;
     /** The Behaves as column of fixture @p fixture's row (BehavesAs) */
     void updateBehavesColumn(QTreeWidgetItem *item, const Fixture *fixture);
+    /** The column hidden while every fixture is a light, unparked (UX-23) */
+    void updateBehavesColumnShown();
     bool m_showGroups;
     bool m_showFound = false;
     bool m_showHeads;

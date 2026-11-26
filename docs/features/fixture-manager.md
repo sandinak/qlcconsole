@@ -1016,8 +1016,10 @@ Loopback chain to a USB interface.
 
 Every fixture says what it is on stage, which decides **when it may move**
 and **what a stop does to it**. The **Behaves as** column in the Fixtures
-list shows it, and a letter on its icon: **M**, **1**, **S** or **H** (a
-light has none). A guess is in grey italics; one you set is in plain type.
+list shows it for everything that is not a plain light (it appears once
+the rig has one), and a letter on its icon: **M**, **1**, **S** or **H**
+(a light has none). A guess is in grey italics; one you set is in plain
+type.
 
 | Behaves as | For | Moves when | A stop (Stop all, Fade and stop, the emergency stop) |
 |---|---|---|---|
