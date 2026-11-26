@@ -46,6 +46,13 @@ private slots:
      *  list with them deleted plays; every way of arriving lands the same
      *  (the restack walks past them); a jump to one plays it. */
     void skippedCuesPlayAsIfDeleted();
+    /** The report (2026-11-26): a curtain an early cue opens stayed closed
+     *  when a later cue was loaded; the house lights at half and a relay
+     *  the same. A curtain driven by its Open/Fly channels (LTP), one
+     *  opened by its intensity (the Curtain plot symbol: HTP), house
+     *  dimmers and a Switch relay: every way of arriving lands on each cue
+     *  as GO from the top does -- 0 (house out, curtain closed) too. */
+    void curtainsHouseAndRelaysTrackOnAJump();
     void courseShows_data();
     void courseShows();
     void aRealShow();
@@ -64,6 +71,8 @@ private:
     /** One with every mode: Block, Cue-only, Release, an include, a cue
      *  that mixes. Its chaser. */
     Chaser *everyModeList();
+    /** House to half, House out + the curtains open, two stage cues. */
+    Chaser *houseAndCurtainList();
 
     bool rig();
     Chaser *chaserOf(quint32 listId) const;

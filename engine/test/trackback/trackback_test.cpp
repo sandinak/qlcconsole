@@ -46,6 +46,7 @@
 #include "resource_paths.h"
 #include "qlcfile.h"
 #include "fixture.h"
+#include "scene.h"
 #include "qlcchannel.h"
 #include "chaser.h"
 #include "doc.h"
@@ -756,6 +757,155 @@ void TrackBack_Test::skippedCuesPlayAsIfDeleted()
             c = chaserOf(m_list);
         }
     }
+}
+
+Chaser *TrackBack_Test::houseAndCurtainList()
+{
+    if (!rig())
+        return nullptr;
+    QLCFixtureDef *curtainDef = m_doc->fixtureDefCache()->fixtureDef("Generic", "Stage Curtain");
+    if (curtainDef == nullptr || curtainDef->mode("Open + Fly") == nullptr)
+        return nullptr;
+    quint32 address = 0;
+    for (Fixture *f : m_doc->fixtures())
+        address = qMax(address, f->address() + f->channels());
+    auto group = [&](const QString &name, const QList<quint32> &fixtures) {
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        m_doc->addFixtureGroup(g);
+        for (quint32 f : fixtures)
+            g->assignFixture(f);
+        return g->id();
+    };
+    auto dimmer = [&](const QString &name) {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setAddress(address);
+        address += 1;
+        m_doc->addFixture(f);
+        return f;
+    };
+
+    // The main drape's curtain fixture (Open, Fly: LTP).
+    Fixture *drape = new Fixture(m_doc);
+    drape->setName("Main drape curtain");
+    drape->setFixtureDefinition(curtainDef, curtainDef->mode("Open + Fly"));
+    drape->setAddress(address);
+    address += drape->channels();
+    m_doc->addFixture(drape);
+    // A traveller on a relay: the Curtain plot symbol, its intensity opens it.
+    Fixture *traveller = dimmer("Traveller relay");
+    traveller->setStageLook(Fixture::CurtainLook);
+    // The house: two dimmers and a relay that switches.
+    Fixture *house1 = dimmer("House 1");
+    Fixture *house2 = dimmer("House 2");
+    Fixture *houseRelay = dimmer("House relay");
+    houseRelay->setOutputRules(Fixture::Switch);
+    const quint32 house = group("House Lights", { house1->id(), house2->id(), houseRelay->id() });
+    const quint32 travellers = group("Traveller", { traveller->id() });
+
+    Scene *open = new Scene(m_doc);
+    open->setName("Curtain Open");
+    open->setValue(drape->id(), 0, 255);
+    open->setValue(drape->id(), 1, 0);
+    m_doc->addFunction(open);
+    QLCPalette *out = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    out->setName("Out");
+    out->setValue(0);
+    m_doc->addPalette(out);
+
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 listId = st->addCueList(st->addProduction("House"), "House list");
+    m_list = listId;
+    auto cue = [&](int after, const QString &name) { return st->addCue(listId, after, name); };
+    // 1: House to half (the relay on: half is over its switch point).
+    const quint32 c1 = cue(-1, "House to half");
+    set(c1, house, m_half);
+    // 2: House out; the curtains open: the drape by a layer playing the
+    // Curtain Open scene, the traveller at full.
+    const quint32 c2 = cue(0, "House out, curtains open");
+    set(c2, house, out->id());
+    Target drapeLayer;
+    drapeLayer.function = open->id();
+    if (st->addLayer(c2, drapeLayer) == ShowTree::invalidId())
+        return nullptr;
+    set(c2, travellers, m_full);
+    // 3, 4: the stage; nothing touches the house or the curtains.
+    const quint32 c3 = cue(1, "A red");
+    set(c3, m_a, m_red);
+    set(c3, m_a, m_full);
+    const quint32 c4 = cue(2, "B blue");
+    set(c4, m_b, m_blue);
+    set(c4, m_b, m_full);
+    return chaserOf(listId);
+}
+
+void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
+{
+    Chaser *c = houseAndCurtainList();
+    QVERIFY(c != nullptr);
+    QCOMPARE(c->stepsCount(), 4);
+    const QMap<int, QByteArray> ref = straightRun(c);
+    QCOMPARE(ref.count(), 4);
+
+    const Fixture *drape = nullptr, *traveller = nullptr, *house1 = nullptr, *relay = nullptr;
+    for (const Fixture *f : m_doc->fixtures())
+    {
+        if (f->name() == "Main drape curtain")
+            drape = f;
+        else if (f->name() == "Traveller relay")
+            traveller = f;
+        else if (f->name() == "House 1")
+            house1 = f;
+        else if (f->name() == "House relay")
+            relay = f;
+    }
+    QVERIFY(drape && traveller && house1 && relay);
+    auto at = [](const QByteArray &out, const Fixture *f, int ch = 0) {
+        return int(uchar(out.at(int(f->universeAddress()) + ch)));
+    };
+    // From the top: the house at half (the relay on), then out with the
+    // curtains open, and they stay open through cues 3 and 4.
+    QCOMPARE(at(ref[0], house1), 128);
+    QCOMPARE(at(ref[0], relay), 255);
+    QCOMPARE(at(ref[0], drape), 0);
+    for (int k = 1; k < 4; ++k)
+    {
+        QCOMPARE(at(ref[k], house1), 0);
+        QCOMPARE(at(ref[k], relay), 0);
+        QCOMPARE(at(ref[k], drape), 255);
+        QCOMPARE(at(ref[k], traveller), 255);
+    }
+
+    // The report: load cue 3 (or 4) from a dark stage: the curtains open.
+    for (int target : { 2, 3 })
+    {
+        stopAll();
+        act(c, { Jump, target });
+        const QByteArray o = land(c);
+        QVERIFY2(at(o, drape) == 255, qPrintable(QStringLiteral("jump to %1: drape Open %2").arg(target + 1).arg(at(o, drape))));
+        QVERIFY2(at(o, traveller) == 255, qPrintable(QStringLiteral("jump to %1: traveller %2").arg(target + 1).arg(at(o, traveller))));
+        QCOMPARE(at(o, house1), 0);
+    }
+    // Back to the pre-show from the stage: the house back at half, the
+    // relay on again, the curtains closed.
+    stopAll();
+    act(c, { Jump, 3 });
+    land(c);
+    act(c, { Jump, 0 });
+    QByteArray o = land(c);
+    QCOMPARE(at(o, house1), 128);
+    QCOMPARE(at(o, relay), 255);
+    QCOMPARE(at(o, drape), 0);
+    QCOMPARE(at(o, traveller), 0);
+    // GO from there plays on as from the top.
+    act(c, { Go, 0 });
+    QCOMPARE(land(c), ref[1]);
+
+    QString why;
+    const int differ = everyWay(c, 20, &why);
+    QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1 in all; first: %2").arg(differ).arg(why)));
 }
 
 bool TrackBack_Test::loadShow(const QString &path)
