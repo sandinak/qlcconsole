@@ -31,6 +31,8 @@
 #include "function.h"
 #include "chaser.h"
 #include "doc.h"
+#include "outputrulekeeper.h"
+#include <QThread>
 #include "bus.h"
 
 #define KXMLQLCChaserSpeedModeCommon  QStringLiteral("Common")
@@ -943,6 +945,13 @@ void Chaser::tap()
 
 void Chaser::setAction(ChaserAction &action)
 {
+    /* A Back, from any route (the Run tab, a VC cue list, the pad, the
+       chaser editor's Test, a web or Simple Desk step): a one-shot is
+       never fired again (board Q350). Its level read now, before the Back
+       is stored -- a frame between could read the Back's own 0. */
+    if (action.m_action == ChaserPreviousStep && isRunning() && doc() != nullptr
+        && doc()->outputRuleKeeper() != nullptr && QThread::currentThread() == doc()->thread())
+        doc()->outputRuleKeeper()->noteBack();
     QMutexLocker runnerLocker(&m_runnerMutex);
     if (m_runner != NULL && !m_restarting)
     {

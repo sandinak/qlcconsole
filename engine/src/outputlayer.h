@@ -82,6 +82,8 @@ public:
      *  stop froze them (board 053p review). */
     void dropGlides();
     /** How many faders glideOut() left still travelling (for tests) */
+    int glidingKept() const { QMutexLocker locker(&m_mutex); return int(m_gliding.size()); }
+    /** How many faders glideOut() left still travelling, live (for tests) */
     int glidingCount() const;
 
     /** Show only (Fixture::ShowOnly): this layer is not the show -- focus,
@@ -89,6 +91,11 @@ public:
      *  (GenericFader::setHoldsShowOnly()). Park, a held last look and Mark
      *  are the show's or the operator's own hand, and drive it. */
     void setHoldsShowOnly(bool hold);
+
+    /** Each fader kept on top of its priority (Universe::requestTopFader()):
+     *  over a layer of the same priority laid after it (the hazards' hold
+     *  over a Park, board 053p review). Set before the first set(). */
+    void setOnTop(bool onTop) { m_onTop = onTop; }
     bool holdsShowOnly() const { return m_holdsShowOnly; }
 
     /** The channels the layer writes, per universe index (for tests) */
@@ -122,6 +129,7 @@ private:
     const int m_flags;
     const QString m_name;
     bool m_holdsShowOnly = false;
+    bool m_onTop = false;
 
     /** Serialises set()/clear(); guards m_slots */
     mutable QMutex m_mutex;

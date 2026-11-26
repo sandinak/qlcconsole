@@ -126,7 +126,7 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
             // Its own, not the function's whose tick this may run in (a
             // show stopping captures its last look in postRun()).
             GenericFader::CreationScope noFunction(nullptr);
-            slot.fader = uni->requestFader(m_priority);
+            slot.fader = m_onTop ? uni->requestTopFader(m_priority) : uni->requestFader(m_priority);
             slot.fader->setHoldsShowOnly(m_holdsShowOnly || stale);
             slot.fader->setName(m_name);
             slot.fader->setDoc(doc);
@@ -163,6 +163,15 @@ void OutputLayer::glideOut(uint ms)
     }
     QMutexLocker locker(&m_mutex);
     m_stamps.clear();
+    // What finished travelling (its fader deleted) is no longer kept.
+    for (auto it = m_gliding.begin(); it != m_gliding.end();)
+    {
+        QSharedPointer<GenericFader> f = it->toStrongRef();
+        if (f.isNull() || f->deleteRequested())
+            it = m_gliding.erase(it);
+        else
+            ++it;
+    }
     for (auto it = m_slots.begin(); it != m_slots.end(); ++it)
     {
         Slot &slot = it.value();

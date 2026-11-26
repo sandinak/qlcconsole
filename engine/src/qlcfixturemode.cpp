@@ -29,6 +29,7 @@
 #include "qlcfixturedef.h"
 #include "qlcchannel.h"
 #include "qlcphysical.h"
+#include "fixture.h"
 
 QLCFixtureMode::QLCFixtureMode(QLCFixtureDef *fixtureDef)
     : m_fixtureDef(fixtureDef)
@@ -370,6 +371,7 @@ void QLCFixtureMode::setPhysical(const QLCPhysical& physical)
 {
     m_useGlobalPhysical = false;
     m_physical = physical;
+    Fixture::invalidateGuesses();       // a laser class, an emission: Behaves as
 }
 
 void QLCFixtureMode::resetPhysical()

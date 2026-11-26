@@ -847,13 +847,12 @@ QIcon behaviourBadged(const QIcon &base, const Fixture *fixture)
             break;
         case Fixture::OneShotBehaviour:   letter = QLatin1Char('1'); fill = QColor(140, 70, 170); break;
         case Fixture::SwitchBehaviour:    letter = QLatin1Char('S'); fill = QColor(40, 140, 80); break;
-        case Fixture::HazardBehaviour:
-            // A hazer's or fogger's own icon says it already.
-            if (!FixtureRest::makesAtmosphere(fixture))
-            {
-                letter = QLatin1Char('H');
-                fill = QColor(200, 50, 40);
-            }
+        case Fixture::HazardBurstBehaviour:
+        case Fixture::HazardRunningBehaviour:
+            // A hazer or fogger too: its icon says what it is, the H that
+            // it stays off until the spotter lets it fire (053p review).
+            letter = QLatin1Char('H');
+            fill = QColor(200, 50, 40);
             break;
         case Fixture::LightBehaviour:
         default: break;

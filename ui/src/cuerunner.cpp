@@ -61,6 +61,7 @@
 #include "controllerjobs.h"
 #include "cuerunner.h"
 #include "fixture.h"
+#include "outputrulekeeper.h"
 #include "editlivechip.h"
 #include "showlevel.h"
 #include "editlive.h"
@@ -629,6 +630,32 @@ void CueRunner::fitStateColumn()
         m_tree->header()->resizeSection(ColState, width);
 }
 
+void CueRunner::refreshHazards()
+{
+    if (m_hazardBox == nullptr)
+        return;
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    const QList<quint32> ids = k != nullptr ? k->hazards() : QList<quint32>();
+    QStringList lines;
+    for (quint32 id : ids)
+    {
+        const Fixture *fx = m_doc->fixture(id);
+        if (fx == nullptr)
+            continue;
+        const bool burst = k->isBurstHazard(id);
+        QString state;
+        if (k->hazardLive(id))
+            state = tr("OUT NOW");
+        else if (burst)
+            state = k->hazardHeld() ? tr("HELD — fires with its cue") : tr("DISARMED — fires only while held");
+        else
+            state = k->hazardsArmed() ? tr("ARMED — on from its next cue") : tr("DISARMED");
+        lines << tr("%1 · %2 · %3").arg(fx->name(), burst ? tr("Burst") : tr("Running"), state);
+    }
+    m_hazardList->setText(lines.join(QLatin1Char('\n')));
+    m_hazardBox->setVisible(!lines.isEmpty());
+}
+
 void CueRunner::refreshParked()
 {
     if (m_parkedBox == nullptr)
@@ -964,6 +991,33 @@ void CueRunner::buildFullLayout()
         connect(m_doc->programmer(), &ProgrammerController::parkChanged, this, &CueRunner::refreshParked);
         connect(m_doc, &Doc::fixtureChanged, this, &CueRunner::refreshParked);
         refreshParked();
+    }
+
+    /* Hazards (board Q352/Q353): which are armed, held or out -- the
+       spotter arms them on their own controls, never from here. Hidden
+       while the show has none. */
+    {
+        m_hazardBox = new QWidget(this);
+        m_hazardBox->setObjectName(QStringLiteral("crHazardBox"));
+        QHBoxLayout *hh = new QHBoxLayout(m_hazardBox);
+        hh->setContentsMargins(0, 0, 0, 0);
+        QLabel *title = new QLabel(tr("Hazards"), m_hazardBox);
+        QFont tf = title->font();
+        tf.setBold(true);
+        title->setFont(tf);
+        title->setToolTip(tr("A Burst hazard fires only while the spotter's Hazard hold is held down; a "
+                             "Running one once their Hazard arm has armed it, until their Hazard kill. Set "
+                             "the controls in Connections ▸ Control surfaces ▸ This computer's desk."));
+        hh->addWidget(title, 0, Qt::AlignTop);
+        m_hazardList = new QLabel(m_hazardBox);
+        m_hazardList->setObjectName(QStringLiteral("crHazards"));
+        m_hazardList->setWordWrap(true);
+        hh->addWidget(m_hazardList, 1);
+        v->addWidget(m_hazardBox);
+        if (OutputRuleKeeper *k = m_doc->outputRuleKeeper())
+            connect(k, &OutputRuleKeeper::hazardsChanged, this, &CueRunner::refreshHazards);
+        connect(m_doc, &Doc::fixtureChanged, this, &CueRunner::refreshHazards);
+        refreshHazards();
     }
 
     /* Teaching show: what each GO, Back and hit just did, in crew words

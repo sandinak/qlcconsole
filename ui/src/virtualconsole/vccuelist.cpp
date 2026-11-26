@@ -1138,11 +1138,9 @@ void VCCueList::slotPreviousCue()
             action.m_masterIntensity = intensity();
             action.m_stepIntensity = getPrimaryIntensity();
             action.m_fadeMode = getFadeMode();
+            // A Back never fires a one-shot again (board Q350): Chaser::setAction().
             ch->setAction(action);
             claimRunning(ch);
-            // A Back never fires a one-shot again (board Q350).
-            if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
-                rules->noteBack();
         }
     }
     else

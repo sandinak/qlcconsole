@@ -671,12 +671,10 @@ bool ShowControl::execute(const Request &request)
                 emit cueTaken(Back, chaser->id(), held ? -1 : from, held ? -1 : chaser->currentSubCueIndex(),
                               to < 0 ? from : to, -1);
             }
+            // A Back never fires a one-shot again (board Q350): each is
+            // held where it is until the next GO (Chaser::setAction()).
             chaser->setAction(action);
             claim(chaser);
-            // A Back never fires a one-shot again (board Q350): each is
-            // held where it is (dropped stays dropped) until the next GO.
-            if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
-                rules->noteBack();
             m_loaded.remove(chaser->id());
             return finish(true, name);
         }

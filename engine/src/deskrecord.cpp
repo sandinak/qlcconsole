@@ -40,6 +40,7 @@
 #include "qlcioplugin.h"
 #include "universe.h"
 #include "surfacelayout.h"
+#include "outputrulekeeper.h"
 #include "doc.h"
 
 namespace
@@ -103,6 +104,16 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, [this]() { portChanged(kInvalid); });
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, [this]() { portChanged(kInvalid); });
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, [this](quint32 universe) {
+            /* The spotter's device gone: every hazard safe and disarmed at
+               once, before anything else (Q352/Q353). */
+            for (Role r : rolesOn(universe))
+                if (isHazardRole(r))
+                {
+                    if (OutputRuleKeeper *k = m_doc->outputRuleKeeper())
+                        k->disarmHazards(tr("%1 (the spotter's %2) was lost")
+                                             .arg(m_bindings[r].device, roleName(r)));
+                    break;
+                }
             forgetHeld(universe);
             rebind();
         });
@@ -186,7 +197,7 @@ DeskRecord::~DeskRecord()
 
 QList<DeskRecord::Role> DeskRecord::roles()
 {
-    return { Stop, GrandMaster, Go, Back };
+    return { Stop, GrandMaster, Go, Back, HazardHold, HazardArm, HazardKill };
 }
 
 QString DeskRecord::roleName(Role role)
@@ -197,6 +208,9 @@ QString DeskRecord::roleName(Role role)
         case GrandMaster:   return tr("Grand Master");
         case Go:            return tr("GO");
         case Back:          return tr("Back");
+        case HazardHold:    return tr("Hazard hold");
+        case HazardArm:     return tr("Hazard arm");
+        case HazardKill:    return tr("Hazard kill");
     }
     return QString();
 }
@@ -209,6 +223,9 @@ QString DeskRecord::roleKey(Role role)
         case GrandMaster:   return QStringLiteral("gm");
         case Go:            return QStringLiteral("go");
         case Back:          return QStringLiteral("back");
+        case HazardHold:    return QStringLiteral("hazardhold");
+        case HazardArm:     return QStringLiteral("hazardarm");
+        case HazardKill:    return QStringLiteral("hazardkill");
     }
     return QString();
 }
@@ -540,8 +557,124 @@ void DeskRecord::rebind()
         m_lastState[r] = st;
         m_lastPassthrough[r] = pass;
     }
+    checkHazardRolesLost();
     if (moved)
         emit changed();
+}
+
+void DeskRecord::checkHazardRolesLost()
+{
+    QString lost;
+    for (Role r : { HazardHold, HazardArm, HazardKill })
+    {
+        const bool live = isLive(r);
+        if (m_hazardWasLive[r] && !live && lost.isEmpty())
+            lost = m_bindings[r].isSet() ? tr("%1 (the spotter's %2) is no longer reachable")
+                                               .arg(m_bindings[r].device, roleName(r))
+                                         : tr("the spotter's %1 was cleared").arg(roleName(r));
+        m_hazardWasLive[r] = live;
+    }
+    if (!lost.isEmpty() && m_doc != nullptr && m_doc->outputRuleKeeper() != nullptr)
+        m_doc->outputRuleKeeper()->disarmHazards(lost);
+}
+
+QString DeskRecord::learnRefusal(Role role, quint32 universe, quint32 channel) const
+{
+    if (universe == ControlMap::KeyboardUniverse)
+        return isHazardRole(role)
+                   ? tr("The computer keyboard can't be the %1: anyone at the desk can press a key, and a "
+                        "held key is lost when another window takes the keyboard. Learn it on a button of "
+                        "the spotter's own device.").arg(roleName(role))
+                   : QString();
+    const QString id = identityOfUniverse(universe);
+    const QString name = m_doc != nullptr ? controlName(universe, channel) : QString();
+    for (Role r : roles())
+    {
+        if (r == role || !m_bindings[r].isSet() || m_bindings[r].identity != id || m_bindings[r].channel != channel)
+            continue;
+        const bool clash = isHazardRole(role) ? (r == Stop || r == Go || r == Back || r == GrandMaster)
+                                              : isHazardRole(r);
+        if (clash)
+            return tr("%1 is this computer's %2: the %3 can't share a control with it. Choose another control.")
+                .arg(name, roleName(r), isHazardRole(role) ? roleName(role) : roleName(r));
+    }
+    if (!isHazardRole(role))
+        return QString();
+    // The show's own GO, Back or stop on this control.
+    if (ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr)
+        for (const ControlMap::Binding &b : cm->bindingsOn(universe, channel))
+            switch (b.target.type)
+            {
+                case ControlMap::CueListTarget:
+                case ControlMap::CueTarget:
+                case ControlMap::CueListBackTarget:
+                case ControlMap::EmergencyStopTarget:
+                    return tr("%1 is this show's %2: the %3 can't share a control with a GO, a Back or a "
+                              "stop. Choose another control.").arg(name, cm->targetName(b.target), roleName(role));
+                default:
+                    break;
+            }
+    return QString();
+}
+
+QString DeskRecord::hazardDeviceNote() const
+{
+    if (!m_bindings[Go].isSet())
+        return QString();
+    QStringList shared;
+    for (Role r : { HazardHold, HazardArm, HazardKill })
+        if (m_bindings[r].isSet() && m_bindings[r].identity == m_bindings[Go].identity)
+            shared << roleName(r);
+    if (shared.isEmpty())
+        return QString();
+    return tr("%1 on %2, the same device as GO. That works, but the spotter's controls are safer on a "
+              "device of their own, away from the operator's hands.")
+        .arg(shared.join(QStringLiteral(", ")), m_bindings[Go].device);
+}
+
+void DeskRecord::hazardInput(Role role, quint64 k, quint32 universe, quint32 channel, uchar value)
+{
+    OutputRuleKeeper *keeper = m_doc != nullptr ? m_doc->outputRuleKeeper() : nullptr;
+    if (keeper == nullptr)
+        return;
+    if (role == HazardKill)
+    {
+        // Always, as STOP: a learn, Identify or Assign to Control open too.
+        if (value > 0)
+        {
+            keeper->killHazards();
+            emit fired(tr("Hazards killed"));
+        }
+        return;
+    }
+    // A release always lets go: back to safe at once.
+    if (value == 0)
+    {
+        m_down.remove(k);
+        if (role == HazardHold)
+            keeper->setHazardHold(false);
+        return;
+    }
+    /* The device's dump after a replug is no press, and a control held
+       across it counts only after a release then a press (as GO). */
+    ControlMap *cm = m_doc->controlMap();
+    if (cm != nullptr && cm->isTriggerDump(universe, channel, value, tr("this computer's %1").arg(roleName(role))))
+    {
+        m_down.insert(k);
+        return;
+    }
+    if (m_down.contains(k))
+        return;
+    if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->assignListening())
+        return;
+    m_down.insert(k);
+    if (role == HazardHold)
+        keeper->setHazardHold(true);
+    else
+    {
+        keeper->armHazards();
+        emit fired(tr("Hazards armed"));
+    }
 }
 
 void DeskRecord::portChanged(quint32 universe)
@@ -924,8 +1057,13 @@ void DeskRecord::stopPressed(quint64 k, uchar value)
 QStringList DeskRecord::reviewLines() const
 {
     QStringList out;
+    // The spotter's roles: said when set, or when the show has a hazard.
+    const OutputRuleKeeper *keeper = m_doc != nullptr ? m_doc->outputRuleKeeper() : nullptr;
+    const bool hazards = keeper != nullptr && !keeper->hazards().isEmpty();
     for (Role r : roles())
     {
+        if (isHazardRole(r) && !m_bindings[r].isSet() && !hazards)
+            continue;
         QString text;
         switch (state(r))
         {
@@ -1201,6 +1339,14 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
     const QString name = controlName(universe, channel);
     if (identityOfUniverse(universe).isEmpty() || m_learnRefused.contains(k))
         return;
+    // A hazard role never on GO's, Back's or a STOP's control (Q352/Q353).
+    const QString refusal = learnRefusal(m_learnRole, universe, channel);
+    if (!refusal.isEmpty())
+    {
+        if (value > 0)
+            refuseLearn(k, refusal);
+        return;
+    }
     /* Q315: learned here, the show's emergency stop on this control would
        be blocked, and the show's STOP would GO or move the master. */
     if (m_learnRole != Stop && isShowStop(universe, channel))
@@ -1310,7 +1456,16 @@ void DeskRecord::updateConnections()
 void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
 {
     if (universe == ControlMap::KeyboardUniverse)
+    {
+        // A key while a hazard role learns: refused, and said why.
+        if (m_learning && value > 0)
+        {
+            const QString why = learnRefusal(m_learnRole, universe, channel);
+            if (!why.isEmpty())
+                emit learnRefused(why);
+        }
         return;
+    }
     const quint64 k = controlKey(universe, channel);
     if (value == 0)
     {
@@ -1356,6 +1511,13 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
     {
         stopPressed(k, value);
         return;
+    }
+    // So do the spotter's Kill and their Hold let go of: back to safe.
+    if (desk && ((role == HazardKill && value > 0) || (role == HazardHold && value == 0)))
+    {
+        hazardInput(role, k, universe, channel, value);
+        if (role == HazardKill)
+            return;
     }
 
     if (m_learning)
@@ -1414,6 +1576,11 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
                 break;
             m_down.insert(k);
             goPressed(role == Back);
+            break;
+        case HazardHold:
+        case HazardArm:
+        case HazardKill:
+            hazardInput(role, k, universe, channel, value);
             break;
         case Stop:
             break;

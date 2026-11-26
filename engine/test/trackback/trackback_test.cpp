@@ -1716,7 +1716,7 @@ void TrackBack_Test::behavesAsIsGuessedSetAndSaved()
     QCOMPARE(FixtureRest::behaviour(named("Stage wash")), Fixture::LightBehaviour);
     QCOMPARE(FixtureRest::behaviour(named("House relay")), Fixture::SwitchBehaviour);
     QCOMPARE(FixtureRest::behaviour(named("Kabuki drop")), Fixture::OneShotBehaviour);
-    QCOMPARE(FixtureRest::behaviour(named("CO2 jet")), Fixture::HazardBehaviour);
+    QCOMPARE(FixtureRest::behaviour(named("CO2 jet")), Fixture::HazardBurstBehaviour);
     QCOMPARE(FixtureRest::behaviour(curtain), Fixture::MachineryBehaviour);
     for (Fixture *f : m_doc->fixtures())
         if (f->fixtureDef() != nullptr && f->fixtureDef()->model() == "Sharpy")
@@ -1729,7 +1729,7 @@ void TrackBack_Test::behavesAsIsGuessedSetAndSaved()
     QVERIFY(m_doc->addFixture(silk));
     QCOMPARE(FixtureRest::behaviour(silk), Fixture::SwitchBehaviour);
     silk->setName("Flame projector");
-    QCOMPARE(FixtureRest::behaviour(silk), Fixture::HazardBehaviour);
+    QCOMPARE(FixtureRest::behaviour(silk), Fixture::HazardBurstBehaviour);
     QVERIFY(m_doc->deleteFixture(silk->id()));
 
     // A laser: its definition's class picks. None or 1-2M a light; 3R and
@@ -1759,7 +1759,7 @@ void TrackBack_Test::behavesAsIsGuessedSetAndSaved()
     QCOMPARE(FixtureRest::behaviour(laser), Fixture::LightBehaviour);
     phys.setLaserClass(QLCPhysical::LaserClass3B);
     lmode->setPhysical(phys);
-    QCOMPARE(FixtureRest::behaviour(laser), Fixture::HazardBehaviour);
+    QCOMPARE(FixtureRest::behaviour(laser), Fixture::HazardRunningBehaviour);
     QVERIFY(!FixtureRest::isHazardousLaserAsLight(laser));
     laser->setBehaviourSetting(Fixture::LightBehaviour);
     QVERIFY(FixtureRest::isHazardousLaserAsLight(laser));
@@ -1823,22 +1823,24 @@ void TrackBack_Test::behavesAsIsGuessedSetAndSaved()
     Chaser *c = chaserOf(m_list);
     m_doc->setMode(Doc::Operate);
     OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
-    QCOMPARE(rules->hazardRefusedText(), QString());
+    QCOMPARE(rules->hazardSkippedText(), QString());
+    QCOMPARE(rules->hazardChipText(), QStringLiteral("Hazards: DISARMED"));
     act(c, { Go, 0 });
     settle(5);
     act(c, { Go, 0 });
     settle(5);
-    QTRY_COMPARE_WITH_TIMEOUT(rules->hazardRefusedText(), QStringLiteral("Hazard — needs arming (coming)"), 2000);
-    QCOMPARE(rules->hazardsRefused(), QList<quint32>() << named("CO2 jet")->id());
-    act(c, { Go, 0 });          // cue 3 tracks the jet on: still refused
+    QTRY_COMPARE_WITH_TIMEOUT(rules->hazardSkippedText(), QStringLiteral("CO2 jet skipped — not held"), 2000);
+    QCOMPARE(rules->hazardsSkipped(), QList<quint32>() << named("CO2 jet")->id());
+    QCOMPARE(rules->hazardChipText(), QStringLiteral("Hazards: DISARMED · CO2 jet skipped — not held"));
+    act(c, { Go, 0 });          // cue 3 tracks the jet on: still skipped
     settle(5);
     QTest::qWait(300);
-    QCOMPARE(rules->hazardsRefused().size(), 1);
+    QCOMPARE(rules->hazardsSkipped().size(), 1);
     ShowControl::Request off;
     off.command = ShowControl::AllOff;
     m_doc->showControl()->execute(off);
     QTest::qWait(100);
-    QCOMPARE(rules->hazardRefusedText(), QString());
+    QCOMPARE(rules->hazardSkippedText(), QString());
     m_doc->setMode(Doc::Design);
 }
 

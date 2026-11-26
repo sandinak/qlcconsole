@@ -710,16 +710,23 @@ public:
      *    a dropping scrim). As Machinery, and never fired again by a Back.
      *  - Switch: a relay, house or work lights. As Machinery: holds its
      *    state while editing and through a stop.
-     *  - Hazard: confetti, CO2, flame, fog and haze, a 3R+ laser. Never
-     *    fired by an edit or a preview; a stop sends it to off at once.
-     *    Until arming lands (Q352/Q353) a run does not fire it either. */
+     *  - Hazard: never fired by an edit or a preview; a stop sends it to
+     *    off at once and disarms it. A run fires it only when the spotter
+     *    lets it (OutputRuleKeeper's hazard arming, board Q352/Q353), by
+     *    its kind:
+     *    - HazardBurst (flame, CO2 jets, confetti, cannons, sparkulars,
+     *      pyro): the spotter's deadman -- out only while their Hold
+     *      control is held down.
+     *    - HazardRunning (fog, haze, a 3R/3B/4 laser): armed with a press
+     *      of the spotter's Arm control, it stays armed until their Kill. */
     enum Behaviour
     {
         LightBehaviour = 0,
         MachineryBehaviour,
         OneShotBehaviour,
         SwitchBehaviour,
-        HazardBehaviour
+        HazardBurstBehaviour,
+        HazardRunningBehaviour
     };
     Q_ENUM(Behaviour)
 
@@ -733,15 +740,44 @@ public:
 
     /** Every behaviour, in the order a picker lists them */
     static QList<Behaviour> behaviours();
-    /** The XML key ("Light", "Machinery", "OneShot", "Switch", "Hazard") */
+    /** The XML key ("Light", "Machinery", "OneShot", "Switch",
+     *  "HazardBurst", "HazardRunning") */
     static QString behaviourToString(Behaviour behaviour);
-    /** The behaviour for @p key; -1 for anything else (a newer file) */
+    /** The behaviour for @p key; -1 for anything else (a newer file). The
+     *  one-kind "Hazard" of 0.5.3's first builds is kHazardOfGuessedKind:
+     *  loadXML() makes it the kind its definition suggests
+     *  (FixtureRest::guessHazardKind()). */
     static int stringToBehaviour(const QString &key);
+    static constexpr int kHazardOfGuessedKind = -2;
+    /** Either kind of Hazard */
+    static bool isHazardBehaviour(int behaviour)
+    { return behaviour == HazardBurstBehaviour || behaviour == HazardRunningBehaviour; }
     /** Its name for people ("One-shot"), translated */
     static QString behaviourName(Behaviour behaviour);
 
+    /** FixtureRest::guessBehaviour()'s answer kept (-1: none kept): a
+     *  guess reads names, definitions and the plot, too much for every
+     *  fixtureChanged of a bulk edit. Dropped on a name, definition or
+     *  output rules change here, and for every fixture by
+     *  invalidateGuesses() (the plot: a scenery, a symbol, a laser class). */
+    int cachedGuess() const
+    {
+        return m_guessEpoch.load(std::memory_order_acquire) == s_guessEpoch.load(std::memory_order_relaxed)
+                   ? m_guess.load(std::memory_order_relaxed) : -1;
+    }
+    void setCachedGuess(int guess) const
+    {
+        m_guess.store(guess, std::memory_order_relaxed);
+        m_guessEpoch.store(s_guessEpoch.load(std::memory_order_relaxed), std::memory_order_release);
+    }
+    static void invalidateGuesses() { s_guessEpoch.fetch_add(1, std::memory_order_relaxed); }
+
 protected:
+    void invalidateGuess() { m_guessEpoch.store(0, std::memory_order_relaxed); }
     std::atomic<int> m_behaviour { -1 };
+    mutable std::atomic<int> m_guess { -1 };
+    mutable std::atomic<quint32> m_guessEpoch { 0 };
+    static std::atomic<quint32> s_guessEpoch;
 
     /*********************************************************************
      * Owner (board Q137, docs/design/VENUES.md)

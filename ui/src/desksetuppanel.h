@@ -54,6 +54,11 @@ public:
     QLabel *learnLine() const { return m_learnLine; }
     QPushButton *exportButton() const { return m_export; }
     QPushButton *importButton() const { return m_import; }
+    /** "Hazard hold on APC MINI, the same device as GO…" (hidden when not) */
+    QLabel *hazardNote() const { return m_hazardNote; }
+    /** Whether the spotter's three rows show: the show has a hazard, or
+     *  one of them is set. */
+    bool hazardRowsShown() const { return m_hazardRowsShown; }
 
     /** Asks for the show's PIN (a test's answer instead of the dialog). */
     static void setPinAsker(const std::function<bool(QWidget *, const QString &why)> &asker);
@@ -66,6 +71,8 @@ public slots:
 protected:
     /** Hidden (another tab, another page, the window): a learn ends. */
     void hideEvent(QHideEvent *event) override;
+    /** A key while a role learns: the desk says why a key can't be it. */
+    void keyPressEvent(QKeyEvent *event) override;
 
 private:
     /** The PIN asked when the show has one; true when the change may go on. */
@@ -82,6 +89,10 @@ private:
     QPushButton *m_learn[DeskRecord::RoleCount] = {};
     QLabel *m_learnLine = nullptr;
     QLabel *m_warning = nullptr;
+    QLabel *m_hazardNote = nullptr;
+    QLabel *m_hazardHead = nullptr;
+    QList<QWidget *> m_hazardWidgets;
+    bool m_hazardRowsShown = false;
     QPushButton *m_export = nullptr;
     QPushButton *m_import = nullptr;
 };

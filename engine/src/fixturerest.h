@@ -64,8 +64,8 @@ namespace FixtureRest
      *  driver of a drape on the plot, a turntable, winch, hoist or scrim
      *  is Machinery; a kabuki or a dropping scrim One-shot; a hazer,
      *  fogger, flame, CO2, confetti or spark effect -- anything gas
-     *  powered -- and a laser of class 3R, 3B, 4 or Unknown a Hazard (a
-     *  silk flame is a light); a relay (the Switch output rule, or named
+     *  powered -- and a laser of class 3R, 3B, 4 or Unknown a Hazard of
+     *  the kind guessHazardKind() says (a silk flame is a light); a relay (the Switch output rule, or named
      *  so) and house or work lights on when not in use (the On at open
      *  rule) a Switch; the rest -- house dimmers by name too --,
      *  lasers of class 1 to 2M or none said too, a Light. */
@@ -76,13 +76,21 @@ namespace FixtureRest
      *  definition's); none when neither says. */
     QLC_ENGINE_EXPORT QLCPhysical::LaserClass laserClass(const Fixture *fx);
 
+    /** Which kind of Hazard @p fx is when nobody has said (board Q352,
+     *  Q353): fog, haze, smoke -- a hazer or smoke machine by its
+     *  definition -- and a laser are Running (armed, then on until the
+     *  Kill); flame, CO2, confetti, cannons, sparkulars, pyro and anything
+     *  else Burst (out only while the Hold is held). */
+    QLC_ENGINE_EXPORT Fixture::Behaviour guessHazardKind(const Fixture *fx);
+
     /** A laser whose class is 3R, 3B, 4 or Unknown that the LD has said is
      *  a Light: what Show Review lists, and what the properties ask a
      *  typed yes for. */
     QLC_ENGINE_EXPORT bool isHazardousLaserAsLight(const Fixture *fx);
 
-    /** Behaves as a Hazard: never fired by an edit, a preview or (until
-     *  arming, Q352/Q353) a run; off the moment a stop comes. */
+    /** Behaves as a Hazard, either kind: never fired by an edit or a
+     *  preview, and by a run only as the spotter lets it (Q352/Q353:
+     *  OutputRuleKeeper's hazard arming); off the moment a stop comes. */
     QLC_ENGINE_EXPORT bool isHazard(const Fixture *fx);
 
     /** Stage machinery, a one-shot or a switch (behaviour()): it moves

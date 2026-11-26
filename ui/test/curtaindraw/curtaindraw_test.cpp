@@ -445,8 +445,8 @@ void CurtainDraw_Test::behavesAsAndParkOnScreen()
     doc->outputRuleKeeper()->rebuild();
     QCOMPARE(FixtureRest::behaviour(relay), Fixture::SwitchBehaviour);
     QCOMPARE(FixtureRest::behaviour(drop), Fixture::OneShotBehaviour);
-    QCOMPARE(FixtureRest::behaviour(jet), Fixture::HazardBehaviour);
-    QCOMPARE(FixtureRest::behaviour(laser), Fixture::HazardBehaviour);
+    QCOMPARE(FixtureRest::behaviour(jet), Fixture::HazardBurstBehaviour);
+    QCOMPARE(FixtureRest::behaviour(laser), Fixture::HazardRunningBehaviour);
 
     Monitor *mon = Monitor::instance();
     QVERIFY(mon != nullptr);

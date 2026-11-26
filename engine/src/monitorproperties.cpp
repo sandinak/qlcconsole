@@ -35,6 +35,7 @@
 #include <QLocale>
 #include <QScopedValueRollback>
 #include "monitorproperties.h"
+#include "fixture.h"
 #include "blocking.h"
 #include "righeads.h"
 #include "fountain.h"
@@ -1195,6 +1196,7 @@ void MonitorProperties::reset()
     for (QObject *o : std::as_const(m_sceneries))
         deleteStructure(o);
     m_sceneries.clear();
+    Fixture::invalidateGuesses();
     for (QObject *o : std::as_const(m_stageTargets))
         deleteStructure(o);
     m_stageTargets.clear();
@@ -2700,12 +2702,14 @@ Scenery *MonitorProperties::addScenery()
 {
     Scenery *s = new Scenery(nextSceneryId(), this);
     m_sceneries.insert(s->id(), s);
+    Fixture::invalidateGuesses();
     return s;
 }
 
 void MonitorProperties::removeScenery(quint32 id)
 {
     deleteStructure(m_sceneries.take(id));
+    Fixture::invalidateGuesses();
 }
 
 Stand *MonitorProperties::addStand()
@@ -3453,6 +3457,7 @@ FixtureRigProps MonitorProperties::fixtureRigProps(quint32 fid) const
 void MonitorProperties::setFixtureRigProps(quint32 fid, const FixtureRigProps &props)
 {
     m_rigProps[fid] = props;
+    Fixture::invalidateGuesses();       // a symbol, a laser class: Behaves as
 
     /* A mount implies a place on the plot.
      *
@@ -4141,6 +4146,7 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (s->loadXML(root) && !m_sceneries.contains(s->id()))
             {
                 m_sceneries.insert(s->id(), s);
+                Fixture::invalidateGuesses();
             }
             else
             {
@@ -4376,6 +4382,7 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                     ? a.value("TSide").toInt() : FixtureRigProps::TowerShelf;
             }
             m_rigProps[fid] = rp;
+            Fixture::invalidateGuesses();
             root.skipCurrentElement();
         }
         else

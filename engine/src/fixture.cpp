@@ -38,6 +38,7 @@
 
 #include "wledfixture.h"
 #include "fixture.h"
+#include "fixturerest.h"
 #include "doc.h"
 
 /*****************************************************************************
@@ -102,9 +103,12 @@ quint32 Fixture::invalidId()
  * Name
  *****************************************************************************/
 
+std::atomic<quint32> Fixture::s_guessEpoch { 1 };
+
 void Fixture::setName(const QString& name)
 {
     m_name = name;
+    invalidateGuess();
     emit changed(m_id);
 }
 
@@ -837,6 +841,7 @@ void Fixture::checkAlias(int chIndex, uchar value)
 void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
                                    QLCFixtureMode* fixtureMode)
 {
+    invalidateGuess();
     // Given a definition: it is no longer standing in for a missing one.
     m_unavailableManufacturer.clear();
     m_unavailableModel.clear();
@@ -1013,7 +1018,7 @@ void Fixture::setStageLook(StageLook look)
 
 void Fixture::setBehaviourSetting(int behaviour)
 {
-    if (behaviour < int(LightBehaviour) || behaviour > int(HazardBehaviour))
+    if (behaviour < int(LightBehaviour) || behaviour > int(HazardRunningBehaviour))
         behaviour = -1;
     if (m_behaviour.exchange(behaviour, std::memory_order_relaxed) == behaviour)
         return;
@@ -1022,7 +1027,8 @@ void Fixture::setBehaviourSetting(int behaviour)
 
 QList<Fixture::Behaviour> Fixture::behaviours()
 {
-    return { LightBehaviour, MachineryBehaviour, OneShotBehaviour, SwitchBehaviour, HazardBehaviour };
+    return { LightBehaviour, MachineryBehaviour, OneShotBehaviour, SwitchBehaviour,
+             HazardBurstBehaviour, HazardRunningBehaviour };
 }
 
 QString Fixture::behaviourToString(Behaviour behaviour)
@@ -1032,7 +1038,8 @@ QString Fixture::behaviourToString(Behaviour behaviour)
         case MachineryBehaviour: return QStringLiteral("Machinery");
         case OneShotBehaviour: return QStringLiteral("OneShot");
         case SwitchBehaviour: return QStringLiteral("Switch");
-        case HazardBehaviour: return QStringLiteral("Hazard");
+        case HazardBurstBehaviour: return QStringLiteral("HazardBurst");
+        case HazardRunningBehaviour: return QStringLiteral("HazardRunning");
         case LightBehaviour:
         default: return QStringLiteral("Light");
     }
@@ -1043,6 +1050,8 @@ int Fixture::stringToBehaviour(const QString &key)
     for (Behaviour b : behaviours())
         if (key == behaviourToString(b))
             return int(b);
+    if (key == QLatin1String("Hazard"))
+        return kHazardOfGuessedKind;
     return -1;
 }
 
@@ -1053,7 +1062,8 @@ QString Fixture::behaviourName(Behaviour behaviour)
         case MachineryBehaviour: return tr("Machinery");
         case OneShotBehaviour: return tr("One-shot");
         case SwitchBehaviour: return tr("Switch");
-        case HazardBehaviour: return tr("Hazard");
+        case HazardBurstBehaviour: return tr("Hazard — Burst");
+        case HazardRunningBehaviour: return tr("Hazard — Running");
         case LightBehaviour:
         default: return tr("Light");
     }
@@ -2072,6 +2082,11 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setForcedHTPChannels(forcedHTP);
     setForcedLTPChannels(forcedLTP);
     m_outputRules.storeRelaxed(int(outputRules));
+    invalidateGuess();
+    /* 0.5.3's first builds had one kind of Hazard: set by hand, so it
+       stays a hazard -- of the kind its definition and name suggest. */
+    if (behaviour == kHazardOfGuessedKind)
+        behaviour = int(FixtureRest::guessHazardKind(this));
     m_behaviour.store(behaviour, std::memory_order_relaxed);
     for (int i = 0; i < modifierIndices.count(); i++)
         setChannelModifier(modifierIndices.at(i), modifierPointers.at(i));
@@ -2245,6 +2260,7 @@ void Fixture::setOutputRules(OutputRules rules)
 {
     if (rules == outputRules())
         return;
+    invalidateGuess();
     m_outputRules.storeRelaxed(int(rules));
     emit changed(m_id);
 }

@@ -64,26 +64,78 @@ bool FixtureRest::holdsPosition(const QLCChannel *ch)
 
 namespace
 {
-bool hasAny(const QString &text, std::initializer_list<const char *> words)
+/** Whole words, lower case: "Vegas Sign" has no "gas", "Flameless
+ *  candle" no "flame" (053p review). */
+QStringList tokensOf(const QString &text)
+{
+    QStringList out;
+    QString cur;
+    for (const QChar c : text.toLower())
+    {
+        if (c.isLetterOrNumber())
+            cur += c;
+        else if (!cur.isEmpty())
+        {
+            out << cur;
+            cur.clear();
+        }
+    }
+    if (!cur.isEmpty())
+        out << cur;
+    return out;
+}
+
+bool hasWord(const QStringList &tokens, std::initializer_list<const char *> words)
 {
     for (const char *w : words)
-        if (text.contains(QLatin1String(w)))
+        if (tokens.contains(QLatin1String(w)))
             return true;
     return false;
 }
 
-/** The fixture's own name, its definition's model and its mode's channel
- *  names, lower case: what a guess reads words in. */
-QString wordsOf(const Fixture *fx, bool channels)
+/** "cold spark": the words one after the other */
+bool hasPhrase(const QStringList &tokens, const char *first, const char *second)
+{
+    for (int i = 0; i + 1 < tokens.size(); ++i)
+        if (tokens.at(i) == QLatin1String(first) && tokens.at(i + 1) == QLatin1String(second))
+            return true;
+    return false;
+}
+
+/** A definition's model run together ("Eco2Jet", "StadiumShot III"):
+ *  its words are inside it. */
+bool modelHas(const Fixture *fx, std::initializer_list<const char *> parts)
+{
+    if (fx->fixtureDef() == nullptr)
+        return false;
+    const QString m = fx->fixtureDef()->model().toLower();
+    for (const char *p : parts)
+        if (m.contains(QLatin1String(p)))
+            return true;
+    return false;
+}
+
+/** The fixture's own name and its definition's manufacturer and model, as
+ *  words: what a guess reads. */
+QStringList wordsOf(const Fixture *fx)
 {
     QString t = fx->name();
     if (fx->fixtureDef() != nullptr)
-        t += QLatin1Char(' ') + fx->fixtureDef()->model();
-    if (channels && fx->fixtureMode() != nullptr)
-        for (const QLCChannel *ch : fx->fixtureMode()->channels())
-            if (ch != nullptr)
-                t += QLatin1Char(' ') + ch->name();
-    return t.toLower();
+        t += QLatin1Char(' ') + fx->fixtureDef()->manufacturer() + QLatin1Char(' ') + fx->fixtureDef()->model();
+    return tokensOf(t);
+}
+
+/** A gel or colour name after "flame" ("Flame Red", Lee 164): a light. */
+bool flameIsAColour(const QStringList &tokens)
+{
+    static const char *const colours[] = { "red", "orange", "yellow", "amber", "pink", "blue", "green",
+                                           "gold", "magenta", "purple", "white" };
+    for (int i = 0; i + 1 < tokens.size(); ++i)
+        if (tokens.at(i) == QLatin1String("flame"))
+            for (const char *c : colours)
+                if (tokens.at(i + 1) == QLatin1String(c))
+                    return true;
+    return false;
 }
 
 bool drivesScenery(const Fixture *fx)
@@ -121,39 +173,102 @@ QLCPhysical::LaserClass FixtureRest::laserClass(const Fixture *fx)
                                        : QLCPhysical::NoLaserClass;
 }
 
+namespace
+{
+Fixture::Behaviour guessUncached(const Fixture *fx);
+}
+
 Fixture::Behaviour FixtureRest::guessBehaviour(const Fixture *fx)
 {
     if (fx == nullptr)
         return Fixture::LightBehaviour;
+    const int kept = fx->cachedGuess();
+    if (kept >= 0)
+        return Fixture::Behaviour(kept);
+    const Fixture::Behaviour b = guessUncached(fx);
+    fx->setCachedGuess(int(b));
+    return b;
+}
+
+namespace
+{
+Fixture::Behaviour guessUncached(const Fixture *fx)
+{
+    using namespace FixtureRest;
     // Scenery: the plot's word for it first, then what it is called.
     if (Scenery::isCurtainFixture(fx) || drivesScenery(fx))
         return Fixture::MachineryBehaviour;
-    const QString names = wordsOf(fx, false);
-    const bool lit = fx->fixtureMode() == nullptr || fx->fixtureMode()->physical().emitsLight();
-    if (hasAny(names, { "kabuki" }) || (hasAny(names, { "drop", "release" }) && hasAny(names, { "scrim", "curtain", "drape" })))
-        return Fixture::OneShotBehaviour;
-    if (hasAny(names, { "turntable", "revolve", "winch", "hoist", "scrim", "drape", "curtain" }) && !lit)
-        return Fixture::MachineryBehaviour;
+    const QStringList names = wordsOf(fx);
+    const QLCFixtureDef *def = fx->fixtureDef();
+    const bool generic = def == nullptr || def->manufacturer() == KXMLFixtureGeneric;
+
+    /* A light by its name or its definition ("Backdrop curtain wash", a
+       moving head): never Machinery or a One-shot by name alone. A generic
+       dimmer says nothing of what it feeds (a kabuki on a relay channel). */
+    const bool lit = (!generic && fx->fixtureMode() != nullptr && fx->fixtureMode()->physical().emitsLight())
+                     || hasWord(names, { "wash", "spot", "par", "pars", "light", "lights", "led", "lamp",
+                                         "fresnel", "profile", "cyc", "strip", "beam", "flood", "pc" });
+    if (!lit)
+    {
+        if (hasWord(names, { "kabuki" })
+            || (hasWord(names, { "drop", "release" }) && hasWord(names, { "scrim", "curtain", "drape" })))
+            return Fixture::OneShotBehaviour;
+        if (hasWord(names, { "turntable", "revolve", "winch", "hoist", "scrim", "drape", "curtain" }))
+            return Fixture::MachineryBehaviour;
+    }
 
     // Something in the air, a flame or a gas: a hazard.
-    const QLCFixtureDef *def = fx->fixtureDef();
     if (def != nullptr && (def->type() == QLCFixtureDef::Hazer || def->type() == QLCFixtureDef::Smoke))
-        return Fixture::HazardBehaviour;
+        return guessHazardKind(fx);
     if (QLCPhysical::isHazardousLaserClass(laserClass(fx)))
-        return Fixture::HazardBehaviour;
-    const bool silk = names.contains(QLatin1String("silk"))
+        return guessHazardKind(fx);
+    // A special-effects maker's (MagicFX: confetti, CO2, flame), not its fan.
+    if (def != nullptr && hasWord(tokensOf(def->manufacturer()), { "magicfx" })
+        && def->type() != QLCFixtureDef::Fan)
+        return guessHazardKind(fx);
+    if (modelHas(fx, { "co2", "confetti", "streamer", "sparkular", "pyro" }))
+        return guessHazardKind(fx);
+    const bool silk = hasWord(names, { "silk" })
                       || (fx->fixtureMode() != nullptr
                           && fx->fixtureMode()->physical().emission() == QLCPhysical::FlameEmission);
-    if (hasAny(names, { "co2", "confetti", "sparkular", "cold spark", "spark machine", "pyro",
-                        "fog", "haze", "smoke", "propane", "gas " })
-        || (names.contains(QLatin1String("flame")) && !silk))
-        return Fixture::HazardBehaviour;
+    if (hasWord(names, { "co2", "confetti", "streamer", "streamers", "sparkular", "pyro", "pyrotechnic",
+                         "pyrotechnics", "fog", "fogger", "foggers", "haze", "hazer", "hazers", "smoke",
+                         "propane", "gas", "cannon", "cannons" })
+        || hasPhrase(names, "cold", "spark") || hasPhrase(names, "spark", "machine")
+        || (hasWord(names, { "flame", "flames", "flamethrower" }) && !silk && !flameIsAColour(names)))
+        return guessHazardKind(fx);
 
     // A relay, house lights: a switch.
     const Fixture::OutputRules rules = fx->outputRules();
-    if ((rules & Fixture::Switch) || (rules & Fixture::OnAtOpen) || hasAny(names, { "relay" }))
+    if ((rules & Fixture::Switch) || (rules & Fixture::OnAtOpen) || hasWord(names, { "relay" }))
         return Fixture::SwitchBehaviour;
     return Fixture::LightBehaviour;
+}
+}
+
+Fixture::Behaviour FixtureRest::guessHazardKind(const Fixture *fx)
+{
+    if (fx == nullptr)
+        return Fixture::HazardBurstBehaviour;
+    /* A burst first: a CO2 jet is a "Smoke" definition (MagicFX's Eco2Jet),
+       confetti an "Effect". */
+    const QStringList names = wordsOf(fx);
+    if (modelHas(fx, { "co2", "confetti", "flame", "spark", "pyro", "stadium", "streamer", "blaster", "cannon" })
+        || hasWord(names, { "co2", "confetti", "flame", "flames", "sparkular", "pyro", "cannon", "streamer" }))
+        return Fixture::HazardBurstBehaviour;
+    // Something that runs: in the air (fog, haze), or a beam (a laser).
+    const QLCFixtureDef *def = fx->fixtureDef();
+    if (def != nullptr && (def->type() == QLCFixtureDef::Hazer || def->type() == QLCFixtureDef::Smoke
+                           || def->type() == QLCFixtureDef::Laser))
+        return Fixture::HazardRunningBehaviour;
+    if (laserClass(fx) != QLCPhysical::NoLaserClass)
+        return Fixture::HazardRunningBehaviour;
+    if (hasWord(names, { "fog", "fogger", "haze", "hazer", "smoke", "laser", "lasers" })
+        || modelHas(fx, { "fog", "haze", "smoke", "laser" }))
+        return Fixture::HazardRunningBehaviour;
+    // A flame, a CO2 jet, confetti, a spark machine, pyro -- or unknown:
+    // the deadman, the stricter of the two.
+    return Fixture::HazardBurstBehaviour;
 }
 
 Fixture::Behaviour FixtureRest::behaviour(const Fixture *fx)
@@ -173,7 +288,7 @@ bool FixtureRest::isHazardousLaserAsLight(const Fixture *fx)
 
 bool FixtureRest::isHazard(const Fixture *fx)
 {
-    return behaviour(fx) == Fixture::HazardBehaviour;
+    return Fixture::isHazardBehaviour(int(behaviour(fx)));
 }
 
 bool FixtureRest::freezesOnStop(const Fixture *fx)

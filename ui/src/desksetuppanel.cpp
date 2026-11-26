@@ -23,10 +23,13 @@
 #include <QPushButton>
 #include <QCheckBox>
 #include <QLabel>
+#include <QKeyEvent>
 
 #include "showsettingsdialog.h"
 #include "desksetuppanel.h"
 #include "showoperate.h"
+#include "outputrulekeeper.h"
+#include "controlmap.h"
 #include "doc.h"
 
 namespace
@@ -34,7 +37,8 @@ namespace
 std::function<bool(QWidget *, const QString &)> s_pinAsker;
 std::function<QString(QWidget *, bool)> s_fileAsker;
 
-const char *kObject[DeskRecord::RoleCount] = { "deskStop", "deskGrandMaster", "deskGo", "deskBack" };
+const char *kObject[DeskRecord::RoleCount] = { "deskStop", "deskGrandMaster", "deskGo", "deskBack",
+                                               "deskHazardHold", "deskHazardArm", "deskHazardKill" };
 }
 
 void DeskSetupPanel::setPinAsker(const std::function<bool(QWidget *, const QString &)> &asker)
@@ -76,10 +80,29 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
         { tr("Grand Master"), tr("The level of the whole show. Learn: move the fader.") },
         { tr("GO"), tr("GO on the Run tab's list, one press. Learn: press the button.") },
         { tr("Back"), tr("Back on the Run tab's list. Learn: press the button.") },
+        { tr("Hazard hold"), tr("The spotter's deadman: a Burst hazard (flame, CO2, confetti) fires only "
+                                "while it is held down. Learn: press the button.") },
+        { tr("Hazard arm"), tr("Arms the Running hazards (fog, haze, lasers): on from the next cue that "
+                               "sets them. Learn: press the button.") },
+        { tr("Hazard kill"), tr("Every hazard off at once, and disarmed. Learn: press the button.") },
     };
     int r = 1;
     for (DeskRecord::Role role : DeskRecord::roles())
     {
+        if (role == DeskRecord::HazardHold)
+        {
+            m_hazardHead = new QLabel(QStringLiteral("<b>%1</b><br>%2")
+                                          .arg(tr("Hazards — the spotter's controls").toHtmlEscaped(),
+                                               tr("For the spotter or laser safety officer, not the operator: "
+                                                  "never GO's, Back's or a STOP's control, never a computer key. "
+                                                  "Lost (unplugged), every hazard is disarmed.").toHtmlEscaped()),
+                                      this);
+            m_hazardHead->setObjectName(QStringLiteral("deskHazardHead"));
+            m_hazardHead->setWordWrap(true);
+            m_hazardHead->setTextFormat(Qt::RichText);
+            grid->addWidget(m_hazardHead, r++, 0, 1, 4);
+            m_hazardWidgets << m_hazardHead;
+        }
         const QString base = QString::fromLatin1(kObject[role]);
         QLabel *what = new QLabel(QStringLiteral("<b>%1</b><br>%2").arg(text[role].name.toHtmlEscaped(),
                                                                        text[role].what.toHtmlEscaped()), this);
@@ -101,6 +124,8 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
         grid->addWidget(m_status[role], r, 1);
         grid->addWidget(m_on[role], r, 2, Qt::AlignTop);
         grid->addWidget(m_learn[role], r, 3, Qt::AlignTop);
+        if (DeskRecord::isHazardRole(role))
+            m_hazardWidgets << what << m_status[role] << m_on[role] << m_learn[role];
         connect(m_learn[role], &QPushButton::clicked, this, [this, role]() { startLearn(role); });
         connect(m_on[role], &QCheckBox::toggled, this, [this, role](bool on) {
             if (m_desk->binding(role).on == on)
@@ -128,6 +153,13 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
     m_warning->setStyleSheet(QStringLiteral("color: #a06000;"));
     m_warning->hide();
     grid->addWidget(m_warning, r++, 0, 1, 4);
+
+    m_hazardNote = new QLabel(this);
+    m_hazardNote->setObjectName(QStringLiteral("deskHazardNote"));
+    m_hazardNote->setWordWrap(true);
+    m_hazardNote->setStyleSheet(QStringLiteral("color: #a06000;"));
+    m_hazardNote->hide();
+    grid->addWidget(m_hazardNote, r++, 0, 1, 4);
 
     QHBoxLayout *files = new QHBoxLayout();
     files->addStretch(1);
@@ -163,7 +195,21 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
         m_learnLine->show();
     });
     connect(m_desk, &DeskRecord::grandMasterWaitingChanged, this, &DeskSetupPanel::refresh);
+    if (OutputRuleKeeper *k = m_doc->outputRuleKeeper())
+        connect(k, &OutputRuleKeeper::hazardsChanged, this, &DeskSetupPanel::refresh);
     refresh();
+}
+
+void DeskSetupPanel::keyPressEvent(QKeyEvent *event)
+{
+    if (m_desk != nullptr && m_desk->isLearning() && !event->isAutoRepeat() && event->key() != Qt::Key_Escape
+        && event->key() != Qt::Key_Tab)
+    {
+        m_desk->handleInput(ControlMap::KeyboardUniverse, quint32(event->key()), UCHAR_MAX);
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 DeskSetupPanel::~DeskSetupPanel()
@@ -234,6 +280,16 @@ void DeskSetupPanel::refresh()
         const bool learning = m_desk->isLearning() && m_desk->learningRole() == role;
         m_learn[role]->setText(learning ? tr("Cancel") : tr("Learn…"));
     }
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    bool hazards = k != nullptr && !k->hazards().isEmpty();
+    for (DeskRecord::Role role : { DeskRecord::HazardHold, DeskRecord::HazardArm, DeskRecord::HazardKill })
+        hazards = hazards || m_desk->isSet(role);
+    m_hazardRowsShown = hazards;
+    for (QWidget *w : std::as_const(m_hazardWidgets))
+        w->setVisible(hazards);
+    const QString note = m_desk->hazardDeviceNote();
+    m_hazardNote->setText(note);
+    m_hazardNote->setVisible(hazards && !note.isEmpty());
     const QString dup = m_desk->duplicateWarning();
     m_warning->setText(dup);
     m_warning->setVisible(!dup.isEmpty());

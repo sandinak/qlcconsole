@@ -163,7 +163,7 @@ public:
      *  scene, a chaser step or a fader moves it, its fade time is how long
      *  the move takes. Only a curtain (hasState()) is ever driven. */
     quint32 driverFixture() const { return m_driver; }
-    void setDriverFixture(quint32 fid) { m_driver = fid; }
+    void setDriverFixture(quint32 fid);
     bool isDriven() const { return hasState() && m_driver != invalidId(); }
 
     /** Which channel of a curtain fixture does what: Open (and its fine

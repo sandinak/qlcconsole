@@ -64,6 +64,9 @@ public:
 
     /** A hit fired (a Virtual Console button, hit cue @a hitId). */
     void hit(quint32 hitId);
+    /** Something else the crew should read in the log (a hazard fired,
+     *  skipped or disarmed: OutputRuleKeeper). Nothing when not active. */
+    void note(const QString &text);
 
     static const int kMaxLines = 200;
 

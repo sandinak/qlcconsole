@@ -535,6 +535,8 @@ void FixtureRemap::slotCloneSourceFixture()
     tgtFix->setMacAddress(srcFix->macAddress());
     tgtFix->setTransport(srcFix->transport());
     tgtFix->setStageLook(srcFix->stageLook());
+    // What it behaves as goes with it: a hazard stays a hazard (Q351).
+    tgtFix->setBehaviourSetting(srcFix->behaviourSetting());
     tgtFix->setOwner(srcFix->owner());
     tgtFix->setName(srcFix->name());
 
