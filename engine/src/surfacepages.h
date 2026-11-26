@@ -75,6 +75,10 @@ public:
     int page(quint32 universe) const;
     /** "Move"; empty when the board has no pages. */
     QString pageName(quint32 universe) const;
+    /** A page with no jobs yet (the PMJ's Effects, Macros). */
+    bool pageIsEmpty(quint32 universe) const;
+    /** "Move", or "Effects: coming" for a page with no jobs yet. */
+    QString pageText(quint32 universe) const;
     /** "APC40 · Move"; empty when none. */
     QString chipText(quint32 universe) const;
     void setPage(quint32 universe, int page);
@@ -159,14 +163,20 @@ private:
         PageSet set;
         int page = 0;
         QHash<quint32, int> last;       //!< a knob's last position (MIDI 0-127)
+        bool lampsOurs = false;         //!< the page keys' lights were sent by the page
     };
+    static constexpr int kNotAKnob = 0x7FFFFFFF;
+    /** A learn listens (the desk's, the Control Map's): the pages rest. */
+    bool standsDown() const;
     Board *board(quint32 universe);
     const Board *board(quint32 universe) const;
     QString settingsKey(const Board &b) const;
     PageSet setFor(const Board &b) const;
     void applyStatic();
     void sendLamps(quint32 universe);
-    int turnDetents(Board &b, quint32 universe, quint32 channel, uchar value, bool knob);
+    /** A turn of @p channel in detents: a relative control's decoded, a
+     *  knob's @p knobDelta (kNotAKnob: not a position knob). */
+    int turnDetents(Board &b, quint32 channel, uchar value, int knobDelta);
     bool encoderBankOn(quint32 universe) const;
 
 private:

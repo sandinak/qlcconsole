@@ -158,6 +158,9 @@ public:
     static QList<PageSet> builtIns();
     /** Every set of @p profileName: built-ins first, then this user's. */
     static QList<PageSet> forProfile(const QString &profileName);
+    /** This user's sets of @p profileName that the checker refused as they
+     *  were read ("x.pageset.json is not used: ..."), each not offered. */
+    static QStringList refusedFor(const QString &profileName);
     /** The set named @p name of @p profileName; invalid when none. */
     static PageSet find(const QString &profileName, const QString &name);
     /** The board's default set (its first built-in); invalid when none. */

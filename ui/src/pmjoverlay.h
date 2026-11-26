@@ -32,6 +32,7 @@
 #include "controlsurface.h"
 #include "controlsurfaceengine.h"
 #include "pageset.h"
+#include "faderpickup.h"
 
 class Doc;
 class App;
@@ -125,6 +126,17 @@ private:
      *  their LED state in stateFor(), so all three always agree on which
      *  faders are "live" right now. */
     bool faderInUse(int index) const;
+    /** The open look's rule alone, whatever the page (N-Up keeps it on
+     *  every page, as before pages). */
+    bool lookFaderInUse(int index) const;
+    /** Fader @p index at @p value catches what it edits, now at
+     *  @p current (0-255; -1: nothing to edit) -- FaderPickup, Q299. */
+    bool pickedUp(int index, uchar value, int current);
+    /** Where the Looks rule's fader @p index target is (0-255; -1: none). */
+    int lookLevel(int index) const;
+    /** The Groups rule's: the first member's live intensity. */
+    int groupLevel(int index) const;
+    int liveLevel(quint32 fixtureId) const;
     /** The job of PMJ control @p channel on the page on now (SurfacePages:
      *  the PMJ's page set); null: none. */
     const PageSet::Binding *pageBinding(quint32 channel) const;
@@ -176,6 +188,9 @@ private:
      *  if that guess is wrong). -1 = not yet known, LED sends are skipped. */
     int m_universe = -1;
     QString m_lastRefusal;
+    /** Strip faders' pick-up, by strip: forgotten at a page, look,
+     *  selection or mode change. */
+    QHash<int, FaderPickup> m_pickups;
     QSet<int> m_warnedSecond;   // second boards already named
     QElapsedTimer m_refusedAt[2];   // faders, encoders: each said once a second
 };

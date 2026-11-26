@@ -58,6 +58,14 @@ private slots:
     void theShowsEncoderBankOnTheBoardWins();
     void aShowOffersTheSetItWasBuiltWith();
 
+    /* Review fixes (729e6a167007) */
+    void aKnobRiddenElsewhereTurnsFromWhereItIs();
+    void aKeyHeldIntoOperateIsLetGo();
+    void thePageKeysLightsAreThePagesInDesignOnly();
+    void aHandEditedSetWithTheDesksControlsIsRefused();
+    void thePagesRestWhileALearnListens();
+    void anEmptyPageSaysComing();
+
 private:
     SimMidiDevice *plug(const QString &name, const QString &profile, const QString &file, quint32 universe);
 

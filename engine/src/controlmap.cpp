@@ -2543,6 +2543,10 @@ void ControlMap::sendLamp(const Binding &b, bool force)
 
 void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
 {
+    // A surface page's key in Design is the page's light (SurfacePages::sendLamps()).
+    if (universe != KeyboardUniverse && m_doc->inputOutputMap() != nullptr
+        && m_doc->inputOutputMap()->isPageControl(universe, channel))
+        return;
     Binding at;
     at.universe = universe;
     at.channel = channel;

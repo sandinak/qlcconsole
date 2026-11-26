@@ -65,6 +65,8 @@ SurfacePages::SurfacePages(Doc *doc)
     connect(m_doc, &Doc::loaded, this, &SurfacePages::rescan);
 
     connect(m_doc, &Doc::modeChanged, this, [this]() {
+        for (Board &b : m_boards)
+            b.last.clear();
         applyStatic();
         for (quint32 u : m_boards.keys())
             sendLamps(u);
@@ -103,7 +105,7 @@ void SurfacePages::rescan()
         if (old != was.constEnd() && old->profile == b.profile && old->set.name() == b.set.name())
         {
             b.page = qBound(0, old->page, int(b.set.pages().size()) - 1);
-            b.last = old->last;
+            b.lampsOurs = old->lampsOurs;
         }
         m_boards.insert(u, b);
     }
@@ -150,12 +152,29 @@ QString SurfacePages::pageName(quint32 universe) const
     return b->set.pages().at(b->page).name;
 }
 
+bool SurfacePages::pageIsEmpty(quint32 universe) const
+{
+    const Board *b = board(universe);
+    if (b == nullptr || b->page < 0 || b->page >= b->set.pages().size())
+        return false;
+    for (const PageSet::Binding &x : b->set.pages().at(b->page).controls)
+        if (x.param != QLatin1String("none"))
+            return false;
+    return true;
+}
+
+QString SurfacePages::pageText(quint32 universe) const
+{
+    const QString name = pageName(universe);
+    return pageIsEmpty(universe) ? tr("%1: coming").arg(name) : name;
+}
+
 QString SurfacePages::chipText(quint32 universe) const
 {
     const Board *b = board(universe);
     if (b == nullptr)
         return QString();
-    return QStringLiteral("%1 · %2").arg(b->layout.shortName(), pageName(universe));
+    return QStringLiteral("%1 · %2").arg(b->layout.shortName(), pageText(universe));
 }
 
 void SurfacePages::setPage(quint32 universe, int page)
@@ -164,6 +183,7 @@ void SurfacePages::setPage(quint32 universe, int page)
     if (b == nullptr || page < 0 || page >= b->set.pages().size() || page == b->page)
         return;
     b->page = page;
+    b->last.clear();    // a knob's first move on the new page is read from there
     applyStatic();
     sendLamps(universe);
     emit pageChanged(universe, pageName(universe));
@@ -261,6 +281,9 @@ void SurfacePages::applyStatic()
             continue;
         for (quint32 ch : it->set.controlsOn(it->page))
         {
+            // Never the desk's GO, Back, STOP or GM, whatever a set says.
+            if (!it->layout.roleOn(ch).isEmpty())
+                continue;
             controls.insert(keyOf(it.key(), ch));
             const int i = it->layout.indexOf(ch);
             if (i >= 0)
@@ -273,11 +296,27 @@ void SurfacePages::applyStatic()
 
 void SurfacePages::sendLamps(quint32 universe)
 {
-    const Board *b = board(universe);
+    Board *b = board(universe);
     InputOutputMap *iom = m_doc->inputOutputMap();
-    // The PMJ's page keys are its overlay's to light; in Operate the keys are the show's.
-    if (b == nullptr || iom == nullptr || m_overlaid.contains(b->profile) || !isActive(universe))
+    // The PMJ's page keys are its overlay's to light.
+    if (b == nullptr || iom == nullptr || m_overlaid.contains(b->profile))
         return;
+    /* One owner per light: in Design the page has its keys' lights (the
+       Control Map leaves a page control alone); out of Design they go
+       dark and the show's own lights come back. */
+    if (!isActive(universe))
+    {
+        if (!b->lampsOurs)
+            return;
+        b->lampsOurs = false;
+        for (const PageSet::Page &p : b->set.pages())
+            if (p.key != kNone)
+                iom->sendFeedBack(universe, p.key, 0, QVariant());
+        if (ControlMap *cm = m_doc->controlMap())
+            cm->resendFeedback();
+        return;
+    }
+    b->lampsOurs = true;
     const quint32 on = b->page >= 0 && b->page < b->set.pages().size() ? b->set.pages().at(b->page).key : kNone;
     for (const PageSet::Page &p : b->set.pages())
         if (p.key != kNone)
@@ -288,28 +327,24 @@ void SurfacePages::sendLamps(quint32 universe)
  * Input
  *****************************************************************************/
 
-int SurfacePages::turnDetents(Board &b, quint32 universe, quint32 channel, uchar value, bool knob)
+int SurfacePages::turnDetents(Board &b, quint32 channel, uchar value, int knobDelta)
 {
-    Q_UNUSED(universe)
-    int detents = 0;
+    int detents = knobDelta;
     QLCInputProfile *profile = m_doc->inputOutputMap()->profile(b.profile);
     const QLCInputChannel *ich = profile != nullptr ? profile->channel(channel) : nullptr;
     if (ich != nullptr && ich->movementType() == QLCInputChannel::Relative)
         detents = EncoderBank::decode(EncoderBank::Encoding(int(ich->relativeEncoding())), value);
-    else if (!knob)
+    else if (knobDelta == kNotAKnob)
         detents = EncoderBank::decode(EncoderBank::TwosComplement, value);
-    else
-    {
-        // A knob sends where it is (the APC40's): the change from the last.
-        const int midi = value == 255 ? 127 : value >> 1;
-        // One knob on any track's MIDI channel: one position.
-        const int at = b.layout.indexOf(channel);
-        const quint32 own = at >= 0 ? b.layout.controls().at(at).channel : channel;
-        const int last = b.last.value(own, -1);
-        b.last.insert(own, midi);
-        detents = last < 0 ? 0 : midi - last;
-    }
     return b.set.invertTurns() ? -detents : detents;
+}
+
+bool SurfacePages::standsDown() const
+{
+    // A learn of any kind hears the board, not a page: the desk's, the show's.
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    ControlMap *cm = m_doc->controlMap();
+    return (iom != nullptr && iom->deskLearning()) || (cm != nullptr && cm->isListening());
 }
 
 void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
@@ -318,36 +353,57 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
     if (b == nullptr)
         return;
     InputOutputMap *iom = m_doc->inputOutputMap();
-    // The desk's own (a role learned on any control) and a learn come first.
-    if (iom->deskLearning() || iom->isStaticControl(universe, channel) || encoderBankOn(universe))
-        return;
     const int ci = b->layout.indexOf(channel);
     if (ci < 0)
         return;
     const SurfaceLayout::Control &c = b->layout.controls().at(ci);
     const quint32 own = c.channel;
+    QLCInputProfile *profile = iom->profile(b->profile);
     if (channel != own)
     {
         // One control on another channel (the APC40's device knob on the
         // track's MIDI channel) is the same control; a strip's touch is not
         // its value.
-        QLCInputProfile *profile = iom->profile(b->profile);
         const QLCInputChannel *a = profile != nullptr ? profile->channel(channel) : nullptr;
         const QLCInputChannel *o = profile != nullptr ? profile->channel(own) : nullptr;
         if (a == nullptr || o == nullptr || a->type() != o->type())
             return;
     }
+
+    /* A knob that sends where it is (the APC40's) is followed on every
+       value, whoever has it now (Operate, a learn, a page where it has no
+       job): its first turn on a page is then the turn, never the whole
+       way from where it was last heard. */
+    int knobDelta = kNotAKnob;
+    const QLCInputChannel *ich = profile != nullptr ? profile->channel(channel) : nullptr;
+    if (c.kind == SurfaceLayout::Knob && (ich == nullptr || ich->movementType() != QLCInputChannel::Relative))
+    {
+        const int midi = value == 255 ? 127 : value >> 1;
+        const int last = b->last.value(own, -1);
+        b->last.insert(own, midi);
+        knobDelta = last < 0 ? 0 : midi - last;
+    }
+
+    // A key's release always lets go, in any mode (held across a switch).
+    const quint64 k = keyOf(universe, own);
+    if (value == 0 && m_down.remove(k))
+        return;
+
+    // The desk's own (a role learned on any control), a learn, the show's encoder bank.
+    if (standsDown() || iom->isStaticControl(universe, channel) || encoderBankOn(universe))
+        return;
+    // Never the desk's GO, Back, STOP or GM, whatever a set says.
+    if (!b->layout.roleOn(own).isEmpty())
+        return;
     const bool design = m_doc->mode() == Doc::Design;
     const bool overlaid = m_overlaid.contains(b->profile);
-    // Operate: the controls are the show's (the PMJ's keys still light its page).
-    if (!design && !overlaid)
+    // Operate: the controls are the show's (the PMJ's keys are its overlay's).
+    if (!design)
         return;
 
     if (own == b->set.stepper())
     {
-        if (!design)
-            return;
-        const int d = turnDetents(*b, universe, channel, value, c.kind == SurfaceLayout::Knob);
+        const int d = turnDetents(*b, channel, value, knobDelta);
         if (d != 0)
             stepPage(universe, d);
         return;
@@ -355,22 +411,14 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
     if (b->set.keys().contains(own))
     {
         // An overlay's keys are the overlay's to press (pressKey()).
-        if (overlaid)
+        if (overlaid || value == 0)
             return;
-        const quint64 k = keyOf(universe, own);
-        if (value == 0)
-        {
-            m_down.remove(k);
-            return;
-        }
         if (m_down.contains(k))
             return;     // a held key resending is the one press
         m_down.insert(k);
         pressKey(universe, own);
         return;
     }
-    if (!design)
-        return;
     const PageSet::Binding *bind = b->set.binding(b->page, own);
     int bank = 0, slot = 0;
     if (bind == nullptr || !PageSet::bankSlot(bind->param, &bank, &slot))
@@ -379,7 +427,7 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
         emit levelSet(universe, own, bank, slot, value);
     else if (c.turns())
     {
-        const int d = turnDetents(*b, universe, channel, value, c.kind == SurfaceLayout::Knob);
+        const int d = turnDetents(*b, channel, value, knobDelta);
         if (d != 0)
             emit adjusted(bank, slot, d, bind->fine);
     }

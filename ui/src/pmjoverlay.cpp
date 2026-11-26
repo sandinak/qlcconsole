@@ -6,6 +6,7 @@
 */
 
 #include <QStatusBar>
+#include <QColor>
 #include <QTimer>
 
 #include "pmjoverlay.h"
@@ -228,9 +229,14 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
     SurfacePages *pages = m_doc->controlMap()->surfacePages();
     pages->setOverlaid(deviceId);
     connect(pages, &SurfacePages::pageChanged, this, [this](quint32 universe) {
-        if (int(universe) == m_universe)
-            m_engine->refreshDevice(deviceId);
+        if (int(universe) != m_universe)
+            return;
+        m_pickups.clear();      // another page: every fader picks up again
+        m_engine->refreshDevice(deviceId);
     });
+    connect(m_doc->programmer(), &ProgrammerController::programmerSelectionChanged,
+            this, [this]() { m_pickups.clear(); });
+    connect(m_doc, &Doc::modeChanged, this, [this]() { m_pickups.clear(); });
     connect(pages, &SurfacePages::setsChanged, this, [this]() { m_engine->refreshDevice(deviceId); });
 
     /* A show listener (Q309): never a control this computer's desk has,
@@ -406,8 +412,71 @@ bool PMJOverlay::pageRule(int index, const QString &rule) const
 bool PMJOverlay::faderInUse(int index) const
 {
     // The Looks page's rule (look-level) only: another page's faders are its own.
-    if (!pageRule(index, QStringLiteral("look-level")))
-        return false;
+    return pageRule(index, QStringLiteral("look-level")) && lookFaderInUse(index);
+}
+
+bool PMJOverlay::pickedUp(int index, uchar value, int current)
+{
+    if (current < 0)
+        return true;    // nothing to pick up: nothing is written either
+    FaderPickup &p = m_pickups[index];
+    p.setSource(quint32(qMax(0, m_universe)), kFirstStrip + quint32(index) - 1);
+    return p.accept(value, current);
+}
+
+int PMJOverlay::lookLevel(int index) const
+{
+    if (lookFaderInUse(index))
+    {
+        QLCPalette *pal = m_doc->palette(programmingManager()->currentPaletteId());
+        if (pal->type() == QLCPalette::Dimmer)
+            return pal->value().toInt();
+        const QColor rgb = pal->rgbValue();
+        QColor wauv = pal->wauvValue();
+        if (!wauv.isValid())
+            wauv = QColor(0, 0, 0);
+        const int parts[6] = { rgb.red(), rgb.green(), rgb.blue(), wauv.red(), wauv.green(), wauv.blue() };
+        return index >= 1 && index <= 6 ? parts[index - 1] : -1;
+    }
+    if (index < 1 || index > 6 || m_doc->programmer() == nullptr)
+        return -1;
+    const QList<quint32> sel = m_doc->programmer()->programmerSelection();
+    if (index - 1 >= sel.size())
+        return -1;
+    return liveLevel(sel.at(index - 1));
+}
+
+int PMJOverlay::liveLevel(quint32 fixtureId) const
+{
+    Fixture *fxi = m_doc->fixture(fixtureId);
+    const quint32 ch = fxi != nullptr ? fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB)
+                                      : QLCChannel::invalid();
+    if (ch == QLCChannel::invalid())
+        return -1;
+    return m_doc->programmerValues().value(fixtureId).value(ch, 0);
+}
+
+int PMJOverlay::groupLevel(int index) const
+{
+    ProgrammingManager *pm = programmingManager();
+    const quint32 sceneId = pm != nullptr ? pm->currentSceneId() : Function::invalidId();
+    Scene *scene = sceneId != Function::invalidId() ? qobject_cast<Scene *>(m_doc->function(sceneId)) : nullptr;
+    if (scene == nullptr || index < 1 || index > scene->fixtureGroups().size())
+        return -1;
+    FixtureGroup *g = m_doc->fixtureGroup(scene->fixtureGroups().at(index - 1));
+    if (g == nullptr)
+        return -1;
+    for (quint32 fid : g->fixtureList())
+    {
+        const int v = liveLevel(fid);
+        if (v >= 0)
+            return v;
+    }
+    return -1;
+}
+
+bool PMJOverlay::lookFaderInUse(int index) const
+{
     ProgrammingManager *pm = programmingManager();
     quint32 pid = pm ? pm->currentPaletteId() : QLCPalette::invalidId();
     QLCPalette *pal = pid != QLCPalette::invalidId() ? m_doc->palette(pid) : nullptr;
@@ -428,7 +497,10 @@ ProgrammingManager *PMJOverlay::programmingManager() const
         if (m_programmingManager)
         {
             connect(m_programmingManager, &ProgrammingManager::currentPaletteIdChanged,
-                    this, [this](quint32) { m_engine->refreshDevice(deviceId); });
+                    this, [this](quint32) {
+                        m_pickups.clear();      // another look: its faders pick up again
+                        m_engine->refreshDevice(deviceId);
+                    });
         }
     }
     return m_programmingManager;
@@ -595,11 +667,15 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // The page's group rule: fader N is the focused scene's group N.
         if (role.index >= 1 && role.index <= 10 && pageRule(role.index, QStringLiteral("group-intensity")))
         {
-            writeGroupLevel(role.index, value);
+            // Q299: a fader that is not a master picks its value up first.
+            if (pickedUp(role.index, value, groupLevel(role.index)))
+                writeGroupLevel(role.index, value);
             break;
         }
         // Not the Looks page's rule: an attribute is the page's (SurfacePages), else nothing.
         if (!pageRule(role.index, QStringLiteral("look-level")))
+            break;
+        if (role.index >= 1 && role.index <= 10 && !pickedUp(role.index, value, lookLevel(role.index)))
             break;
         if (role.index >= 1 && role.index <= 10 && faderInUse(role.index) && m_doc->programmer())
         {
@@ -631,7 +707,8 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // in-use gate as the Level write path above, so a press on a fader
         // that isn't doing anything right now is a no-op, not a surprise
         // reset of an unrelated channel.
-        if (value > 0 && role.index >= 1 && role.index <= 10 && faderInUse(role.index) && m_doc->programmer()
+        // On every page, as before pages: it zeroes the open look's channel.
+        if (value > 0 && role.index >= 1 && role.index <= 10 && lookFaderInUse(role.index) && m_doc->programmer()
             && !refuseInOperate(false))
         {
             ProgrammingManager *pm = programmingManager();
@@ -794,13 +871,26 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
     // surfaces hub say so (control-surfaces.md, "What the lamps mean").
     case ControlSurface::RoleType::Page:
     {
-        if (m_universe < 0)
-            return role.index == 0 ? ControlSurface::State::Active : ControlSurface::State::Empty;
         SurfacePages *pages = m_doc->controlMap()->surfacePages();
-        const PageSet set = pages->pageSet(quint32(m_universe));
-        const int on = pages->page(quint32(m_universe));
+        const bool found = m_universe >= 0 && pages->pageSet(quint32(m_universe)).isValid();
+        // Not found yet: the set's first page (Looks), the one the faders use.
+        const PageSet set = found ? pages->pageSet(quint32(m_universe)) : PageSet::defaultFor(deviceId);
+        const int on = found ? pages->page(quint32(m_universe)) : 0;
+        const quint32 mine = pageKeyChannel(role.index);
         const quint32 key = on >= 0 && on < set.pages().size() ? set.pages().at(on).key : 0xFFFFFFFF;
-        return key == pageKeyChannel(role.index) ? ControlSurface::State::Active : ControlSurface::State::Empty;
+        if (key == mine)
+            return ControlSurface::State::Active;
+        // A page with no jobs yet (Effects, Macros): its key dim, the map says "coming".
+        for (const PageSet::Page &p : set.pages())
+            if (p.key == mine)
+            {
+                bool empty = true;
+                for (const PageSet::Binding &b : p.controls)
+                    empty = empty && b.param == QLatin1String("none");
+                if (empty)
+                    return ControlSurface::State::Valid;
+            }
+        return ControlSurface::State::Empty;
     }
 
     // Go and Back: lit when the Run tab's GO / Back would do something
@@ -849,7 +939,7 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
     // paths gate on (faderInUse()), so the board never lights a fader that
     // pressing/turning it wouldn't actually do anything to.
     case ControlSurface::RoleType::Reset:
-        return faderInUse(role.index) ? ControlSurface::State::Valid : ControlSurface::State::Empty;
+        return lookFaderInUse(role.index) ? ControlSurface::State::Valid : ControlSurface::State::Empty;
 
     default:
         return ControlSurface::State::Empty;
