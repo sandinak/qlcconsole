@@ -28,6 +28,14 @@
 #include <QDir>
 #include <QtTest>
 
+#include "../../../engine/test/common/stdprelude.h"
+#define private public
+#define protected public
+#include "mastertimer.h"
+#include "universe.h"
+#undef protected
+#undef private
+
 #include "editliveui_test.h"
 #include "../../../engine/test/common/resource_paths.h"
 #include "simmididevice.h"
@@ -41,13 +49,11 @@
 #include "fixturegroup.h"
 #include "showoperate.h"
 #include "showcontrol.h"
-#include "mastertimer.h"
 #include "deskrecord.h"
 #include "controlmap.h"
 #include "cuerunner.h"
 #include "qlcpalette.h"
 #include "editlive.h"
-#include "universe.h"
 #include "qlcfile.h"
 #include "fixture.h"
 #include "chaser.h"

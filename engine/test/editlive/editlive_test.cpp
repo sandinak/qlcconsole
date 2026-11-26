@@ -20,6 +20,14 @@
 #include <QSignalSpy>
 #include <QSettings>
 #include <QtTest>
+
+#include "../common/stdprelude.h"
+#define private public
+#define protected public
+#include "mastertimer.h"
+#include "universe.h"
+#undef protected
+#undef private
 #include <QDir>
 
 #include "editlive_test.h"
@@ -38,11 +46,9 @@
 #include "showcontrol.h"
 #include "fixturegroup.h"
 #include "showtreemodel.h"
-#include "mastertimer.h"
 #include "resource_paths.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
-#include "universe.h"
 #include "qlcfile.h"
 #include "fixture.h"
 #include "chaser.h"
@@ -61,11 +67,11 @@ Target groupTarget(quint32 g)
     return t;
 }
 
-const Layer *layerOn(const Cue *c, const Target &t)
+const ShowTree::Layer *layerOn(const ShowTree::Cue *c, const Target &t)
 {
     if (c == nullptr)
         return nullptr;
-    for (const Layer &l : c->layers)
+    for (const ShowTree::Layer &l : c->layers)
         if (l.target == t)
             return &l;
     return nullptr;
@@ -318,7 +324,7 @@ void EditLive_Test::aTrimMovesOnlyThatAttribute()
     QVERIFY(trims.first().to > trims.first().from);
     QVERIFY(m_live->trimText(trims.first()).contains(QStringLiteral("Pan")));
     // The show is not touched.
-    const Layer *s1 = layerOn(m_doc->showTree()->cue(m_c1), groupTarget(m_spots));
+    const ShowTree::Layer *s1 = layerOn(m_doc->showTree()->cue(m_c1), groupTarget(m_spots));
     QVERIFY(s1 != nullptr);
     QCOMPARE(s1->look(KeyPosition)->palettes, QList<quint32>({ m_front }));
 }
@@ -347,7 +353,7 @@ void EditLive_Test::storeWritesOnlyTheTouchedAttributeIntoTheTrackingSource()
     QVERIFY(!m_live->hasTrims());
 
     // Into cue 1's spot layer, where the position cue 2 plays is set.
-    const Layer *s1 = layerOn(st->cue(m_c1), groupTarget(m_spots));
+    const ShowTree::Layer *s1 = layerOn(st->cue(m_c1), groupTarget(m_spots));
     QVERIFY(s1 != nullptr);
     const Look *pos = s1->look(KeyPosition);
     QVERIFY(pos != nullptr);
@@ -459,7 +465,7 @@ void EditLive_Test::goDropsTheTrimsAndTheNoticeStoresToTheRightCue()
     QVERIFY2(m_live->storeLeftBehind(&why), qPrintable(why));
     QVERIFY(!m_live->hasLeftBehind());
     ShowTreeController *st = m_doc->showTree();
-    const Layer *s1 = layerOn(st->cue(m_c1), groupTarget(m_spots));
+    const ShowTree::Layer *s1 = layerOn(st->cue(m_c1), groupTarget(m_spots));
     QVERIFY(s1->look(KeyPosition)->palettes.first() != m_front);
     QCOMPARE(s1->look(KeyDimmer)->palettes, QList<quint32>({ m_full }));
     QVERIFY(layerOn(st->cue(m_c2), groupTarget(m_spots)) == nullptr);
@@ -498,4 +504,4 @@ void EditLive_Test::designTurnsItOff()
     QVERIFY(!m_doc->controlMap()->surfacePages()->isLive());
 }
 
-QTEST_GUILESS_MAIN(EditLive_Test)
+QTEST_MAIN(EditLive_Test)

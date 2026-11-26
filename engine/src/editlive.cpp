@@ -35,6 +35,7 @@
 #include "qlcpalette.h"
 #include "qlcchannel.h"
 #include "universe.h"
+#include "fadechannel.h"
 #include "fixture.h"
 #include "scene.h"
 #include "doc.h"
@@ -672,6 +673,8 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
                     case QLCChannel::BeamZoomSmallBig:
                     case QLCChannel::BeamZoomBigSmall:
                     {
+                        if (f->fixtureMode() == nullptr)
+                            break;
                         const QLCPhysical phy = f->fixtureMode()->physical();
                         const int d = c->preset() == QLCChannel::BeamZoomBigSmall ? 255 - v : v;
                         zoom = float(phy.lensDegreesMin()
@@ -717,7 +720,7 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
         }
         else if (!rl.own && rl.fromCue != kInvalid)
             placeCue = rl.fromCue;
-        const Cue *pc = st->cue(placeCue);
+        const ShowTree::Cue *pc = st->cue(placeCue);
         if (pc == nullptr)
         {
             ok = false;
@@ -727,7 +730,7 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
         {
             // Set by that cue's own look: the layer there on this target.
             placeLayer = kInvalid;
-            for (const Layer &l : pc->layers)
+            for (const ShowTree::Layer &l : pc->layers)
                 if (l.target == rl.target)
                     placeLayer = l.id;
         }
@@ -752,7 +755,7 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
             Target t;
             t.fixtures = mine;
             quint32 child = kInvalid;
-            for (const Layer &l : pc->layers)
+            for (const ShowTree::Layer &l : pc->layers)
                 if (l.parent == placeLayer && l.target == t)
                     child = l.id;
             if (child == kInvalid)
