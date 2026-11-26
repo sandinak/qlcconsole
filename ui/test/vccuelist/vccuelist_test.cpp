@@ -1577,16 +1577,18 @@ void VCCueList_Test::songSectionShots()
     {
         if (theme == 1)
             shotUseDarkTheme();
-        VCCueList cl(NULL, m_doc);
+        QWidget host;
+        VCCueList cl(&host, m_doc);
         cl.setCaption("Main");
         cl.setChaser(st->cueList(list)->chaser);
-        cl.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&cl));
+        host.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&host));
         // The current cue far down the second song: its header scrolled off.
         cl.m_tree->setCurrentItem(cl.stepItem(14));
         for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
         {
-            cl.resize(z);
+            host.resize(z);
+            cl.setGeometry(QRect(QPoint(0, 0), z));
             for (int i = 0; i < 5; ++i)
                 QApplication::processEvents();
             cl.m_tree->scrollToItem(cl.stepItem(14), QAbstractItemView::PositionAtBottom);
@@ -1594,7 +1596,7 @@ void VCCueList_Test::songSectionShots()
             const QString file = QStringLiteral("%1-vccuelist-sections-%2-%3x%4.png")
                                      .arg(prefix, theme == 0 ? "light" : "dark")
                                      .arg(z.width()).arg(z.height());
-            QVERIFY(cl.grab().save(QDir(dir).filePath(file)));
+            QVERIFY(host.grab().save(QDir(dir).filePath(file)));
         }
     }
     QApplication::setPalette(light);
