@@ -94,6 +94,8 @@ private slots:
      *  layer set in its cue) take Release / Untrack as one undo step. */
     void severalLayersReleaseAndUntrackTogether();
     /** Release on a layer of a reusable cue says it also changes its other uses. */
+    /** ⌘D on the Library's palettes: a copy (one undo step), two at once. */
+    void libraryPalettesDuplicateOnCmdD();
     void releaseSaysWhenItAlsoChangesOtherUses();
     void updateCueWhereATrackedValueWasSet();
     void recordAsNewCueFromTheHeader();

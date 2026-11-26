@@ -138,6 +138,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Chorus…) between its cues, in the running order; GO, Next and Previous
   pass them, and the section of the cue playing stays named over the list.
   Lists without sections and saved layouts are unchanged.
+- **Fixtures tab: duplicate and group edits undo**: a duplicate (⌘D, or ⌘C
+  then ⌘V), a new group and a group's rename are each one ⌘Z on the rig's
+  history, and ⇧⌘Z (Edit ▸ Redo) does them again; ⌘D in the Show Tree
+  Library duplicates the selected palettes too.
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or

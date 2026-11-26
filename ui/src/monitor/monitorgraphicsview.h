@@ -1110,6 +1110,9 @@ protected:
 public:
     /** Undo the last fixture move (Cmd/Ctrl+Z). */
     void undoLastMove();
+    /** Redo the last step undone, when it can be (Cmd/Ctrl+Shift+Z): only
+     *  steps recorded with a way forward (pushUndoCallback(undo, redo)). */
+    void redoLast();
     /** True while fixtureMoved() is for a fixture the person did not place:
      *  an undo putting it back, a truss carrying it. */
     bool quietMoves() const { return m_quietMoves; }
@@ -1129,12 +1132,17 @@ public:
     /** Record an edit whose way back is @p undo (what the rig snapshot does
      *  not hold: fixtures added, universes made and patched) as one step. */
     void pushUndoCallback(const std::function<void()> &undo);
+    /** The same, with @p redo to do it again after an undo (⇧⌘Z). @p redo
+     *  must leave the step's own @p undo good to run again. */
+    void pushUndoCallback(const std::function<void()> &undo, const std::function<void()> &redo);
     /** Who puts a rig snapshot back: the Monitor, which owns the rebuild. */
     void setRigRestorer(std::function<void(const QByteArray &)> fn) { m_rigRestorer = fn; }
     /** Who takes one (Monitor::rigSnapshot()), for edits made here. */
     void setRigSnapshotter(std::function<QByteArray()> fn) { m_rigSnapshotter = fn; }
     /** Is there anything for Ctrl+Z to undo? */
     bool canUndo() const { return !m_moveUndo.isEmpty(); }
+    /** Is there a step undone that Ctrl+Shift+Z can do again? */
+    bool canRedo() const { return !m_moveRedo.isEmpty(); }
 
     /* ---- Free string anchors (PixelPath::FreeString, on the plot) ---- */
     /** Arm "click to add an anchor" for @p fid: each left click on the plan
@@ -1664,6 +1672,7 @@ private:
         QList<quint32> pastedFixtureIds;
         QByteArray rigBefore;                       ///< type == RigEdit
         std::function<void()> callback;             ///< type == Callback
+        std::function<void()> redo;                 ///< type == Callback, optional
         StructureDuplicate::Undo dupUndo;           ///< type == DuplicateSetup
         quint32 blockingSet = 0;                    ///< type == TargetBlock
         QHash<quint32, StageTarget::Blocked> targetBlocked; ///< type == TargetBlock
@@ -1671,6 +1680,9 @@ private:
     std::function<void(const QByteArray &)> m_rigRestorer;
     std::function<QByteArray()> m_rigSnapshotter;
     QList<UndoEntry> m_moveUndo;
+    /** Steps undone that can be done again, newest last; a new step clears it. */
+    QList<UndoEntry> m_moveRedo;
+    bool m_redoing = false;       ///< in redoLast(): a push keeps m_moveRedo
     int m_undoBatch = 0;          ///< last batch number handed out
     int m_openUndoBatch = 0;      ///< the drag in progress's batch, 0 = none
     bool m_quietMoves = false;    ///< quietMoves()

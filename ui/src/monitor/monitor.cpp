@@ -2030,6 +2030,17 @@ bool Monitor::canUndo() const
     return m_graphicsView != nullptr && m_graphicsView->canUndo();
 }
 
+void Monitor::redo()
+{
+    if (m_graphicsView != nullptr)
+        m_graphicsView->redoLast();
+}
+
+bool Monitor::canRedo() const
+{
+    return m_graphicsView != nullptr && m_graphicsView->canRedo();
+}
+
 void Monitor::pushRigUndo(const QByteArray &before)
 {
     if (m_graphicsView != nullptr && !before.isEmpty() && rigSnapshot() != before)
@@ -2040,6 +2051,12 @@ void Monitor::pushUndoCallback(const std::function<void()> &undo)
 {
     if (m_graphicsView != nullptr)
         m_graphicsView->pushUndoCallback(undo);
+}
+
+void Monitor::pushUndoCallback(const std::function<void()> &undo, const std::function<void()> &redo)
+{
+    if (m_graphicsView != nullptr)
+        m_graphicsView->pushUndoCallback(undo, redo);
 }
 
 /*****************************************************************************

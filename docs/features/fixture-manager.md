@@ -95,6 +95,9 @@ any of its targets are unpatched.
   one more like it to the inventory: the same definition, mode and
   settings, unpatched, named on ("Front" → "Front #2"). On a group it makes
   a copy of the group, the same fixtures laid out the same, in its folder.
+  The whole duplicate is one undo step: **⌘Z** takes the copies away again,
+  **⇧⌘Z** puts them back. A new group (**⇧⌘N** or **New Group…**) and a
+  group's rename (in place or in its editor) are one step each the same way.
   **Esc** lets go of the selection. The keys are the same in every list
   ([Edit keys](shortcuts.md#edit-keys-the-same-in-every-list)).
 - Adding is Design mode only, like Add Fixture.

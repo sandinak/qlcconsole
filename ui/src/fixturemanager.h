@@ -145,6 +145,15 @@ public:
     /** What newHere() would make ("New Group in Movers"; empty: nothing). */
     QString newHereLabel() const;
 
+    /** One step on the rig's history (⌘Z here or in the Lighting Studio,
+     *  ⇧⌘Z does it again): @p fixtures and @p groups were just made -- a
+     *  duplicate, a paste, a new group. The undo takes them away, the redo
+     *  puts them back as they were, with the same ids. No Studio: none. */
+    static void recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups);
+    /** One step on the same history: group @p gid was just renamed from
+     *  @p before. Nothing when its name is still @p before. */
+    static void recordGroupRename(Doc *doc, quint32 gid, const QString &before);
+
 private:
     /** The folder a new group goes in, from the tree's current row; false:
      *  not a group row (nor a group's fixture, a folder, the groups root). */

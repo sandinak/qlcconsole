@@ -35,6 +35,7 @@
 #include "treekeepview.h"
 #include "fixturetreewidget.h"
 #include "monitor.h"
+#include "fixturemanager.h"
 #include "monitor/fixturevisualtraits.h"
 #include "itemicons.h"
 #include "apputil.h"
@@ -386,8 +387,11 @@ void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
             const QString newName = item->text(KColumnName).trimmed();
             if (newName.isEmpty() == false && newName != grp->name())
             {
+                const QString before = grp->name();
                 grp->setName(newName);
                 m_doc->setModified();
+                // One rig undo step, as a fixture's rename (⇧⌘Z redoes it).
+                FixtureManager::recordGroupRename(m_doc, grp->id(), before);
             }
             if (item->text(KColumnName) != grp->name())
                 item->setText(KColumnName, grp->name());

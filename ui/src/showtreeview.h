@@ -836,6 +836,9 @@ public:
     bool copyLibraryReusable();
     bool pasteReusableCue();
     bool duplicateLibraryReusable();
+    /** ⌘D on the Library's palettes: each selected copied, one undo step;
+     *  one copy opens to edit. False: no palette selected. */
+    bool duplicateLibraryPalettes();
     bool duplicateReusableCueRow(quint32 id);
     void listClipboardItems(ContextMenu &menu, const QString &what);
     /** Renumber Song… for song @a song of list @a listId (greyed under Manual). */

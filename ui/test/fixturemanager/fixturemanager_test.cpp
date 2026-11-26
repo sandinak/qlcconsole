@@ -1822,6 +1822,118 @@ void FixtureManager_Test::newHereMakesAGroupInTheFolder()
     QCOMPARE(mgr.newHere(), FixtureGroup::invalidId());
 }
 
+/* Duplicate, a new group and a group renamed in its editor: each one step
+   on the rig's history (⌘Z on Fixtures), and ⇧⌘Z does it again. */
+void FixtureManager_Test::duplicateNewGroupAndRenameAreUndoSteps()
+{
+    const QList<quint32> fids = addDimmers(m_doc, 2, 1, "Wash");
+    FixtureGroup *front = addGroup(m_doc, "Front", "Movers", fids);
+    const int fixturesBefore = m_doc->fixtures().count();
+    const int groupsBefore = m_doc->fixtureGroups().count();
+
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(1000, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    QVERIFY(!mon.canUndo());
+    QShortcut *redoKey = mgr.findChild<QShortcut *>("fmRedo");
+    QVERIFY(redoKey != nullptr);
+    QCOMPARE(redoKey->key(), QKeySequence(QKeySequence::Redo));
+
+    auto shots = [](QWidget *w, const QString &prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        const QSize was = w->size();
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+        w->resize(was);
+        QTest::qWait(20);
+    };
+
+    // Duplicate a fixture and the group: one step takes both copies away.
+    const QList<quint32> made = mgr.duplicate({ fids.first() }, { front->id() });
+    QCOMPARE(made.size(), 1);
+    shots(&mgr, "fixtures-undo-duplicated");
+    const quint32 copy = made.first();
+    const QString copyName = m_doc->fixture(copy)->name();
+    QCOMPARE(m_doc->fixtures().count(), fixturesBefore + 1);
+    QCOMPARE(m_doc->fixtureGroups().count(), groupsBefore + 1);
+    quint32 groupCopy = FixtureGroup::invalidId();
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+        if (g->id() != front->id())
+            groupCopy = g->id();
+    QVERIFY(groupCopy != FixtureGroup::invalidId());
+    QVERIFY(mon.canUndo());
+    mon.undo();
+    QCOMPARE(m_doc->fixtures().count(), fixturesBefore);
+    QCOMPARE(m_doc->fixtureGroups().count(), groupsBefore);
+    QVERIFY(m_doc->fixture(copy) == nullptr);
+    QVERIFY(mgr.m_fixtures_tree->fixtureItem(copy) == nullptr);
+    shots(&mgr, "fixtures-undo-undone");
+    // ⇧⌘Z: back, the same fixture and group (ids, name, path).
+    QVERIFY(mon.canRedo());
+    mon.redo();
+    QVERIFY(m_doc->fixture(copy) != nullptr);
+    QCOMPARE(m_doc->fixture(copy)->name(), copyName);
+    QVERIFY(!m_doc->fixture(copy)->isPatched());
+    QVERIFY(m_doc->fixtureGroup(groupCopy) != nullptr);
+    QCOMPARE(m_doc->fixtureGroup(groupCopy)->path(), QString("Movers"));
+    QCOMPARE(m_doc->fixtureGroup(groupCopy)->fixtureList().size(), fids.size());
+    QVERIFY(mgr.m_fixtures_tree->fixtureItem(copy) != nullptr);
+    shots(&mgr, "fixtures-undo-redone");
+    QVERIFY(!mon.canRedo());
+    mon.undo();
+    QCOMPARE(m_doc->fixtures().count(), fixturesBefore);
+    QCOMPARE(m_doc->fixtureGroups().count(), groupsBefore);
+
+    // A new group (⇧⌘N): one step, done again by redo.
+    QTreeWidgetItem *row = groupRow(mgr, front->id());
+    QVERIFY(row != nullptr);
+    mgr.m_fixtures_tree->setCurrentItem(row);
+    const quint32 gid = mgr.newHere();
+    QVERIFY(m_doc->fixtureGroup(gid) != nullptr);
+    // Its name typed in the editor and the field left: a step of its own.
+    QVERIFY(mgr.m_groupEditor != nullptr);
+    QLineEdit *name = mgr.m_groupEditor->findChild<QLineEdit *>("m_nameEdit");
+    QVERIFY(name != nullptr);
+    name->selectAll();
+    QTest::keyClicks(name, "Truss");
+    QCOMPARE(m_doc->fixtureGroup(gid)->name(), QString("Truss"));
+    QTest::keyClick(name, Qt::Key_Return);
+    mon.undo();                                    // the rename
+    QVERIFY(m_doc->fixtureGroup(gid) != nullptr);
+    QCOMPARE(m_doc->fixtureGroup(gid)->name(), QString("New Group"));
+    mon.undo();                                    // the group
+    QVERIFY(m_doc->fixtureGroup(gid) == nullptr);
+    QCOMPARE(m_doc->fixtureGroups().count(), groupsBefore);
+    mon.redo();                                    // the group again
+    QVERIFY(m_doc->fixtureGroup(gid) != nullptr);
+    QCOMPARE(m_doc->fixtureGroup(gid)->name(), QString("New Group"));
+    QCOMPARE(m_doc->fixtureGroup(gid)->path(), QString("Movers"));
+    mon.redo();                                    // and its name
+    QCOMPARE(m_doc->fixtureGroup(gid)->name(), QString("Truss"));
+    QVERIFY(!mon.canRedo());
+
+    // A new edit after an undo: nothing left to redo.
+    mon.undo();
+    QVERIFY(mon.canRedo());
+    FixtureManager::recordGroupRename(m_doc, front->id(), front->name());   // unchanged: no step
+    QVERIFY(mon.canRedo());
+    front->setName("Back");
+    FixtureManager::recordGroupRename(m_doc, front->id(), "Front");
+    QVERIFY(!mon.canRedo());
+    mon.undo();
+    QCOMPARE(front->name(), QString("Front"));
+}
+
 void FixtureManager_Test::outputRulesForFixturesAndGroups()
 {
     QVERIFY(m_doc->inputOutputMap()->addUniverse());

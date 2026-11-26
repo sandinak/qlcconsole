@@ -40,6 +40,7 @@
 #include "doc.h"
 #include "monitorproperties.h"
 #include "itemicons.h"
+#include "monitor.h"
 #undef private
 #undef protected
 
@@ -549,6 +550,37 @@ void FixtureTreeWidget_Test::enterOnAGroupRowRenamesItInPlace()
     QCOMPARE(grp->name(), QString("Front Wash"));
     QVERIFY2((fxRow->flags() & Qt::ItemIsEditable) == 0,
              "Esc left the fixture row armed");
+}
+
+void FixtureTreeWidget_Test::aGroupRenamedInPlaceIsOneUndoStep()
+{
+    FixtureGroup *grp = addRenameGroup(m_doc);
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    FixtureTreeWidget tree(m_doc, FixtureTreeWidget::UniverseNumber
+                                  | FixtureTreeWidget::ShowGroups);
+    tree.updateTree();
+    tree.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tree));
+    QVERIFY(!mon.canUndo());
+
+    QTreeWidgetItem *row = findByRole(tree, PROP_GROUP, grp->id());
+    QVERIFY(row != nullptr);
+    tree.setCurrentItem(row);
+    QTest::keyClick(&tree, Qt::Key_F2);
+    QLineEdit *ed = openEditor(tree);
+    QVERIFY(ed != nullptr);
+    ed->selectAll();
+    QTest::keyClicks(ed, "Front Wash");
+    QTest::keyClick(ed, Qt::Key_Return);
+    QTRY_COMPARE(grp->name(), QString("Front Wash"));
+
+    QVERIFY2(mon.canUndo(), "a group renamed in place left no undo step");
+    mon.undo();
+    QCOMPARE(grp->name(), QString("Old Group"));
+    QVERIFY(mon.canRedo());
+    mon.redo();
+    QCOMPARE(grp->name(), QString("Front Wash"));
 }
 
 void FixtureTreeWidget_Test::escCancelsAGroupRename()
