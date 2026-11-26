@@ -1511,6 +1511,11 @@ void VCCueList_Test::goStepsPastASectionRow()
     QVERIFY(!isSectionRow(tree->currentItem()));
     // The cue playing's song, in sight above the list.
     QCOMPARE(section->text(), ShowTree::sectionTitle(st->sections(list).at(1)));
+
+    cl.slotStop();
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(!ch->isRunning());
 }
 
 void VCCueList_Test::aListWithNoSectionsLooksAsBefore()
