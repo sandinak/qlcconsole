@@ -107,6 +107,7 @@ private slots:
      *  sets each of them, ONE undo step that puts every one back; the line
      *  says which it edits, and leaves a look of another type alone. */
     void severalLookRowsOfOneTypeEditTogether();
+    void severalGoboLooksTakeOneNameInOneStep();
 
 private:
     Scene *scene(const QString &name, const QString &path);

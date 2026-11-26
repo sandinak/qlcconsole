@@ -237,6 +237,10 @@ The scene of the row you clicked is the one a control surface addresses.
 together. A colour pick or a level sets each of them, and one ⌘Z puts them
 all back. A line over the editor says how many it is editing, and that a
 selected look of another type is left as it is.
+Naming the gobo does the same. Select a look together with a layer, a group
+or a fixture and a line over the layers says the editor edits the current row
+only and the others are left as they are: looks, fixtures and layers are
+edited one kind at a time. Select rows of one kind to edit them together.
 
 **▣ Open** (the button, a double-click, or right-click → **Open in Workbench**) loads
 that layer in the Workbench on its own — a nested collection's layers, a

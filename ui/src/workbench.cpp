@@ -162,6 +162,12 @@ Workbench::Workbench(Doc *doc, QWidget *parent)
     m_rowsHint->setWordWrap(true);
     m_rowsHint->setStyleSheet(QStringLiteral("QLabel { font-style: italic; }"));
     col->addWidget(m_rowsHint);
+    m_selNote = new QLabel(column);
+    m_selNote->setObjectName(QStringLiteral("workbenchSelectionNote"));
+    m_selNote->setWordWrap(true);
+    m_selNote->setStyleSheet(QStringLiteral("QLabel { color: #2a7ab8; font-weight: bold; }"));
+    m_selNote->hide();
+    col->addWidget(m_selNote);
     col->addWidget(m_rows, 1);
     buildAddBar(column);
     m_split->addWidget(column);
@@ -1864,6 +1870,7 @@ void Workbench::slotRowsSelectionChanged()
     }
     // Several look rows of one type: a change sets them all.
     updateLookCompanions();
+    updateSelectionNote();
 }
 
 void Workbench::updateScenePage()
@@ -2114,6 +2121,7 @@ void Workbench::editPalette(quint32 paletteId)
     }
     // From a list: that one look alone; the look row: with the others selected.
     updateLookCompanions();
+    updateSelectionNote();
 }
 
 quint32 Workbench::currentPaletteId() const
@@ -2155,6 +2163,27 @@ void Workbench::slotLookEdited(quint32 paletteId)
     }
 }
 
+quint32 Workbench::rowPalette(const ProgrammingOutline::Row &r, QList<WorkbenchStack::Layer> *layers,
+                              bool *haveLayers) const
+{
+    quint32 pid = QLCPalette::invalidId();
+    if (r.kind == ProgrammingOutline::PaletteRow)
+        pid = r.id;
+    else if (r.kind == ProgrammingOutline::AttributeRow && m_stack != nullptr)
+    {
+        if (!*haveLayers)
+        {
+            *layers = m_stack->layers();
+            *haveLayers = true;
+        }
+        const int layer = int(r.scene);
+        const int attr = int(r.id);
+        if (layer >= 0 && layer < layers->size() && attr >= 0 && attr < layers->at(layer).attributes.size())
+            pid = layers->at(layer).attributes.at(attr).palette;
+    }
+    return m_doc->palette(pid) != nullptr ? pid : QLCPalette::invalidId();
+}
+
 void Workbench::updateLookCompanions()
 {
     QList<quint32> also;
@@ -2164,26 +2193,55 @@ void Workbench::updateLookCompanions()
         bool haveLayers = false;
         for (const ProgrammingOutline::Row &r : m_rows->selectedRows())
         {
-            quint32 pid = QLCPalette::invalidId();
-            if (r.kind == ProgrammingOutline::PaletteRow)
-                pid = r.id;
-            else if (r.kind == ProgrammingOutline::AttributeRow && m_stack != nullptr)
-            {
-                if (!haveLayers)
-                {
-                    layers = m_stack->layers();
-                    haveLayers = true;
-                }
-                const int layer = int(r.scene);
-                const int attr = int(r.id);
-                if (layer >= 0 && layer < layers.size() && attr >= 0 && attr < layers.at(layer).attributes.size())
-                    pid = layers.at(layer).attributes.at(attr).palette;
-            }
-            if (m_doc->palette(pid) != nullptr && pid != m_lookEditor->paletteId() && !also.contains(pid))
+            const quint32 pid = rowPalette(r, &layers, &haveLayers);
+            if (pid != QLCPalette::invalidId() && pid != m_lookEditor->paletteId() && !also.contains(pid))
                 also << pid;
         }
     }
     m_lookEditor->setAlsoEditing(also);
+}
+
+QString Workbench::selectionNote() const
+{
+    return m_selNote == nullptr || m_selNote->isHidden() ? QString() : m_selNote->text();
+}
+
+void Workbench::updateSelectionNote()
+{
+    QString text;
+    const QList<ProgrammingOutline::Row> sel = m_rows->selectedRows();
+    if (sel.size() > 1 && !m_paletteDetour)
+    {
+        // What each selected row is edited as: a look, the fixtures and
+        // groups of one layer (together), or a layer of its own.
+        QList<WorkbenchStack::Layer> layers;
+        bool haveLayers = false;
+        auto kindOf = [&](const ProgrammingOutline::Row &r) {
+            if (rowPalette(r, &layers, &haveLayers) != QLCPalette::invalidId())
+                return -1;
+            if (r.kind == ProgrammingOutline::GroupRow || r.kind == ProgrammingOutline::FixtureRow)
+                return int(r.scene & 0xFFFFFF);
+            return -2;
+        };
+        QTreeWidgetItem *cur = m_rows->currentItem();
+        if (cur == nullptr || !cur->isSelected())
+            cur = m_rows->selectedItems().value(0);
+        const int curKind = kindOf(ProgrammingOutline::rowOf(cur));
+        int others = 0;
+        for (const ProgrammingOutline::Row &r : sel)
+            if (kindOf(r) != curKind)
+                ++others;
+        if (others > 0)
+        {
+            const QString what = curKind == -1 ? tr("this look") : curKind == -2 ? tr("this row")
+                                                                                 : tr("these fixtures");
+            text = tr("Editing %1 only: the %n other row(s) selected are of another kind (looks, fixtures and "
+                      "layers are edited one kind at a time) and are left as they are. "
+                      "Select rows of one kind to edit them together.", "", others).arg(what);
+        }
+    }
+    m_selNote->setText(text);
+    m_selNote->setVisible(!text.isEmpty());
 }
 
 void Workbench::updateTrialPalette(quint32 paletteId)
