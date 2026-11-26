@@ -169,9 +169,31 @@ void OutputLayer::glideOut(uint ms)
         // Its universe deletes it once it is all the way out; a set() after
         // this takes a new one.
         if (!slot.fader.isNull() && slot.universe != nullptr && slot.universe->faders().contains(slot.fader))
+        {
             slot.fader->glideOut(ms);
+            m_gliding << slot.fader.toWeakRef();
+        }
     }
     m_slots.clear();
+}
+
+void OutputLayer::dropGlides()
+{
+    QMutexLocker locker(&m_mutex);
+    for (const QWeakPointer<GenericFader> &w : std::as_const(m_gliding))
+        if (QSharedPointer<GenericFader> f = w.toStrongRef())
+            f->requestDelete();
+    m_gliding.clear();
+}
+
+int OutputLayer::glidingCount() const
+{
+    QMutexLocker locker(&m_mutex);
+    int n = 0;
+    for (const QWeakPointer<GenericFader> &w : m_gliding)
+        if (QSharedPointer<GenericFader> f = w.toStrongRef())
+            n += f->deleteRequested() ? 0 : 1;
+    return n;
 }
 
 QHash<int, int> OutputLayer::channelCounts() const

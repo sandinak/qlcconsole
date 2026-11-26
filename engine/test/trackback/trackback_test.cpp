@@ -1616,7 +1616,16 @@ void TrackBack_Test::aGoAfterAStopMidGlideDropsTheGlide()
     QTest::qWait(50);
     settle(1);
     QVERIFY(!rules->machineryHeldForEdit());
-    QVERIFY2(!rules->m_editLayer->channelCounts().isEmpty(), "the let-go glides");
+    // The edit hold's faders, still travelling (on any universe).
+    auto gliding = [this]() {
+        int n = 0;
+        for (Universe *u : m_doc->inputOutputMap()->universes())
+            for (const QSharedPointer<GenericFader> &f : u->faders())
+                if (!f.isNull() && f->name() == QLatin1String("Curtain held while editing") && !f->deleteRequested())
+                    ++n;
+        return n;
+    };
+    QVERIFY2(gliding() > 0, "the let-go glides");
     settle(int(3000 / MasterTimer::tick()));      // part way
     const int moving = at("Main drape curtain", ch);
     QVERIFY2(moving > 0 && moving < 255, qPrintable(QString::number(moving)));
@@ -1638,7 +1647,7 @@ void TrackBack_Test::aGoAfterAStopMidGlideDropsTheGlide()
     QTest::qWait(int(4 * MasterTimer::tick()) + 150);
     settle(2);
     QVERIFY(!rules->stageMachineryHeld());
-    QVERIFY2(rules->m_editLayer->channelCounts().isEmpty(), "the glide's fader is gone");
+    QVERIFY2(gliding() == 0, "the glide's fader is gone");
     const int first = at("Main drape curtain", ch);
     QVERIFY2(qAbs(first - frozen) <= 8, qPrintable(QStringLiteral("frozen %1, after the GO %2").arg(frozen).arg(first)));
     settle(int(21000 / MasterTimer::tick()));

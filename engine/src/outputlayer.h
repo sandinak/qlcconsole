@@ -77,6 +77,12 @@ public:
     /** Let go over @p ms: each level travels to what is under it
      *  (GenericFader::glideOut()); 0 is clear(). */
     void glideOut(uint ms);
+    /** Drop what glideOut() left travelling, at once (its faders deleted at
+     *  the next frame): a GO after a stop takes the channels from where the
+     *  stop froze them (board 053p review). */
+    void dropGlides();
+    /** How many faders glideOut() left still travelling (for tests) */
+    int glidingCount() const;
 
     /** Show only (Fixture::ShowOnly): this layer is not the show -- focus,
      *  Refine, Highlight -- and never drives a Show-only fixture
@@ -121,6 +127,8 @@ private:
     mutable QMutex m_mutex;
     /** Universe index -> the fader this layer writes there */
     QHash<int, Slot> m_slots;
+    /** What glideOut() let go of, still travelling (guarded by m_mutex) */
+    QList<QWeakPointer<GenericFader> > m_gliding;
 };
 
 #endif // OUTPUTLAYER_H

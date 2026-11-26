@@ -505,7 +505,7 @@ void OutputRuleKeeper::noteGo()
                    cue owns the fixture from where the stop froze it --
                    not a glide fader still mixing over the cue. */
                 if (!machineryHeldForEdit())
-                    m_editLayer->clear();
+                    m_editLayer->dropGlides();
                 releaseStageMachinery();
             });
         }, Qt::QueuedConnection);
@@ -749,13 +749,30 @@ void OutputRuleKeeper::holdMachineryForEdit(const QHash<quint32, QByteArray> &dr
 
 void OutputRuleKeeper::releaseMachineryForEdit(uint glideMs)
 {
+    QHash<quint32, QByteArray> motors;
+    bool others = false;
     {
         QMutexLocker locker(&m_machineMutex);
         if (m_editHeld.isEmpty())
             return;
+        /* Only a motor travels: a switch or a one-shot is let go of at
+           once, never mixed through its switch point (or its trigger). */
+        for (auto it = m_editHeld.constBegin(); it != m_editHeld.constEnd(); ++it)
+        {
+            bool motor = false;
+            for (const Machine &m : std::as_const(m_machines))
+                if (m.fixture == it.key())
+                    motor = m.behaviour == Fixture::MachineryBehaviour;
+            if (motor)
+                motors.insert(it.key(), it.value());
+            else
+                others = true;
+        }
         m_editHeld.clear();
         m_editDrawn.clear();
     }
+    if (others)
+        m_editLayer->set(levelsOf(motors), [](const OutputLayer::Level &) { return false; });
     m_editLayer->glideOut(glideMs);
     emitMachineryChanged();
 }
