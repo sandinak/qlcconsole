@@ -453,7 +453,10 @@ void PmsRehearsal_Test::rehearseTheVisit()
 
     /* 1. The touring show, opened on the venue it was left on (the office). */
     QString why;
-    Doc *doc = openShow(this, showPath, &why);
+    /* Deleted on any early return too: a Doc left for the test object to
+       delete outlives the application. */
+    QScopedPointer<Doc> held(openShow(nullptr, showPath, &why));
+    Doc *doc = held.data();
     QVERIFY2(why.isEmpty(), qPrintable(why));
     if (!real)
     {
@@ -463,8 +466,8 @@ void PmsRehearsal_Test::rehearseTheVisit()
         t->setName(QStringLiteral("CenterStage"));
         t->setPosition(QVector3D(7.62f, 5.486f, 1.4f));
         QVERIFY(saveShow(doc, showPath));
-        delete doc;
-        doc = openShow(this, showPath, &why);
+        held.reset(openShow(nullptr, showPath, &why));
+        doc = held.data();
         QVERIFY2(why.isEmpty(), qPrintable(why));
     }
     VenueCorrections *v = doc->programmer()->venueCorrections();
@@ -678,7 +681,9 @@ void PmsRehearsal_Test::rehearseTheVisit()
     roles->setUseExistingAnswer(0);
     QVERIFY(roles->fillButton()->isEnabled());
     roles->fillButton()->click();
-    QTRY_VERIFY(roles.isNull() || !roles->isVisible());
+    QVERIFY2(roles->statusLabel()->text().startsWith(QStringLiteral("Filled")), qPrintable(roles->statusLabel()->text()));
+    report << roles->statusLabel()->text();
+    roles->close();
     for (auto it = want.constBegin(); it != want.constEnd(); ++it)
     {
         const FixtureGroup *g = HouseRole::group(doc, it.key());
@@ -813,8 +818,8 @@ void PmsRehearsal_Test::rehearseTheVisit()
     for (const VenueRig::HouseFixture &hf : src.fixtures)
         QVERIFY2(!savedShow.contains(QStringLiteral("<Name>%1</Name>").arg(hf.name).toUtf8()),
                  qPrintable(QStringLiteral("%1 went into the show file").arg(hf.name)));
-    delete doc;
-    doc = openShow(this, showPath, &why);
+    held.reset(openShow(nullptr, showPath, &why));
+    doc = held.data();
     QVERIFY2(why.isEmpty(), qPrintable(why));
     v = doc->programmer()->venueCorrections();
     stub = stubOf(doc);
@@ -909,7 +914,6 @@ void PmsRehearsal_Test::rehearseTheVisit()
             QVERIFY2(g->fixtureList().isEmpty(), qPrintable(g->name()));
     report << QStringLiteral("back to %1: the show as it was; roles empty there").arg(office);
     QCOMPARE(readFile(roomPath), roomBytes);         // the room's file was only read
-    delete doc;
 
     const QString text = report.join('\n') + QStringLiteral("\nrough edges:\n") + rough.join('\n');
     qInfo().noquote() << text;
