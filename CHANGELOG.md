@@ -133,6 +133,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **House relays switch, not dim**: Fill Roles (and New Venue from a Show's last step) sets each relay it puts in House Lights to Switch for that venue -- a one-channel light whose definition only says Off and On, or whose name says Relay as an Eos export names it -- so House to half leaves the room's house relays on and House out turns them off; the note names them (Q348).
 
 - **The PMS visit rehearsed**: a test walks New Venue from a Show, Fill Roles, the six house cues, a save and reopen and the switch back to the office, on a made-up show and room and (on the developer's Mac) on copies of the real files; the on-site checklist for 2026-12-08 is docs/project/PMS_ONSITE_CHECKLIST.md.
+- **Song sections in a VC Cue List**: a Virtual Console Cue List on a list
+  with song sections shows the Run tab's section rows (Intro, Verse,
+  Chorus…) between its cues, in the running order; GO, Next and Previous
+  pass them, and the section of the cue playing stays named over the list.
+  Lists without sections and saved layouts are unchanged.
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or

@@ -234,6 +234,18 @@ void CueRunner::letGoProxy(VCButton *proxy)
     proxy->letGo();
 }
 
+void CueRunner::styleSectionRow(QTreeWidgetItem *item, const Section &section, const QFont &font)
+{
+    if (item == nullptr)
+        return;
+    item->setFirstColumnSpanned(true);
+    item->setText(ColState, sectionTitle(section));
+    QFont f = font;
+    f.setBold(true);
+    item->setFont(ColState, f);
+    item->setFlags(Qt::ItemIsEnabled);
+}
+
 QString CueRunner::sizeToString(Size size)
 {
     switch (size)
@@ -1727,12 +1739,7 @@ void CueRunner::rebuildTree()
                 // Its identity, so a fold outlives a rename: the key, or its first cue.
                 sectionItem->setData(ColCue, RoleSectionKey, sections.at(si).key.isEmpty()
                                      ? QStringLiteral("#%1").arg(sections.at(si).headCue) : sections.at(si).key);
-                sectionItem->setFirstColumnSpanned(true);
-                sectionItem->setText(ColState, sectionTitle(sections.at(si)));
-                QFont f = m_tree->font();
-                f.setBold(true);
-                sectionItem->setFont(ColState, f);
-                sectionItem->setFlags(Qt::ItemIsEnabled);
+                styleSectionRow(sectionItem, sections.at(si), m_tree->font());
                 sectionItem->setToolTip(ColState, tr("A song section: click ▸ to fold it"));
                 sectionItems << sectionItem;
             }

@@ -58,6 +58,20 @@ private slots:
 
     void input();
 
+    /** Song sections (Q190): the Run tab's section rows, in order, between
+     *  the cues; not cues themselves. */
+    void songSectionsShowAsRowsInOrder();
+    /** Next / Previous / GO pass a section row; a click on one picks no
+     *  section; the current cue's section stays in sight. */
+    void goStepsPastASectionRow();
+    /** An arrow key or a click landing on a section row leaves the cue it
+     *  goes on to highlighted, not only current. */
+    void keysAndClicksOnASectionRowKeepTheCueSelected();
+    /** An older show (no sections): no section rows, no section line. */
+    void aListWithNoSectionsLooksAsBefore();
+    /** With QLC_SHOT_DIR: a sectioned list at three sizes, light and dark. */
+    void songSectionShots();
+
 private:
     Doc* m_doc;
 };
