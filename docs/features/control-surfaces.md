@@ -122,9 +122,11 @@ surface type declares them (below).
 | nothing (most profiles) | as above, unchanged |
 
 A **master** on a fader its profile calls a **plain fader** waits only to be
-raised: pushed up past the master, it waits until it meets it. Pulled down
-it is taken at once, every time, from the very first move after the show
-opens -- lowering a master is the safe way, so it never waits. A master on a
+raised: below the master and pushed up, or above it, it waits until it
+meets it. Pulled down it is taken at once, every time, from the very first
+move after the show opens (a move of a step or two is a resting fader's
+jitter, not a pull) -- lowering a master is the safe way, so it never
+waits. A master on a
 motor fader, an endless knob or an undeclared fader follows at once, as
 before.
 

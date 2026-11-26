@@ -999,6 +999,15 @@ void SpeedMasters_Test::aMasterPullDownNeverWaits()
     // following, it rises with the fader
     QVERIFY(gm.accept(30, 0));
     QVERIFY(gm.accept(90, 30));
+    // The master raised on screen above the fader: pushing the fader up
+    // toward it is no pull (it waits); its resting jitter is none either;
+    // a pull of more than the jitter is taken, wherever the run began
+    QVERIFY(!gm.accept(120, 200));
+    QVERIFY(!gm.accept(118, 200));
+    QVERIFY(!gm.accept(120, 200));
+    QVERIFY(gm.accept(110, 200));
+    QVERIFY(!gm.accept(150, 110 + 80));
+    QVERIFY(gm.accept(140, 190));
 }
 
 void SpeedMasters_Test::aRateFaderWaitsToBePickedUp()

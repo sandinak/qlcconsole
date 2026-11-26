@@ -68,9 +68,11 @@ enum class FaderFact
  *
  * A master (setMaster(): the Grand Master, VC Grand / Sub / Group master
  * sliders) follows its fader at once, both ways (Q313), unless its type
- * declares it Absolute: then a raise waits to be picked up, and anything
- * at or below the master is still taken at once -- a pull-down never
- * waits, not even the first report after a start. A Motorised master
+ * declares it Absolute: then a raise waits to be picked up, and a pull
+ * down to or below the master is taken at once -- the first report after
+ * a start, and any fall of more than Threshold (a resting fader's jitter)
+ * from where the downward run began. A fader below the master pushed up
+ * is no pull: it waits until it meets the master. A Motorised master
  * follows at once (it is sent every change, so it is where the master
  * is); Unknown and Relative ones as always.
  */
@@ -84,6 +86,7 @@ public:
     void reset()
     {
         m_last = -1;
+        m_runTop = -1;
         m_waiting = false;
     }
 
@@ -133,9 +136,18 @@ public:
             m_waiting = false;          // follows at once (see the class comment)
             return true;
         }
-        // A master's pull-down never waits: at or below it, it follows
-        if (m_master && value <= current + Threshold)
+        // Where this downward run started: a rise starts a new one
+        if (last == -1 || value > last)
+            m_runTop = value;
+        /* A master's pull-down never waits: at or below it, the first
+           report after a start is taken, and so is a fall of more than a
+           resting fader's jitter (Threshold) from where the run started,
+           however it got there. A fader below the master that is pushed up
+           is no pull: it waits until it meets the master (below). */
+        if (m_master && value <= current + Threshold &&
+            (last == -1 || m_runTop - value > Threshold))
         {
+            m_runTop = value;
             m_waiting = false;
             return true;
         }
@@ -150,6 +162,8 @@ public:
         // A motor fader is sent where the control is once, when it starts to wait
         if (!take && !m_waiting && m_fact == FaderFact::Motorised && sendBack != nullptr)
             *sendBack = true;
+        if (take)
+            m_runTop = value;
         m_waiting = !take;
         return take;
     }
@@ -183,6 +197,7 @@ private:
     int m_last = -1;
     bool m_waiting = false;
     bool m_master = false;
+    int m_runTop = -1;          //!< where the fader's current downward run started
     FaderFact m_fact = FaderFact::Unknown;
     quint64 m_source = ~quint64(0);
 };
