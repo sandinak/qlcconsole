@@ -121,6 +121,12 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
             if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
                 rearmGrandMaster();
         });
+        /* A motor fader as the Grand Master follows the master when
+           something else moves it (the footer, a VC slider, a fade). */
+        connect(iom, &InputOutputMap::grandMasterValueChanged, this, [this](uchar) {
+            if (!m_gmFromFader)
+                sendGrandMasterToMotor();
+        });
     }
     if (m_doc != nullptr)
     {
@@ -841,6 +847,22 @@ void DeskRecord::rearmGrandMaster()
 {
     m_gmPickup.rearm(now());
     notifyGrandMasterWaiting();
+    // A motor fader is sent to the master: it is picked up when it arrives.
+    sendGrandMasterToMotor();
+}
+
+void DeskRecord::sendGrandMasterToMotor()
+{
+    if (m_gmFromFader || m_doc == nullptr || !isLive(GrandMaster))
+        return;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return;
+    const quint32 universe = m_universes[GrandMaster];
+    const quint32 channel = m_bindings[GrandMaster].channel;
+    if (iom->faderFact(universe, channel) != FaderFact::Motorised)
+        return;
+    iom->sendFeedBack(universe, channel, iom->grandMasterValue(), QVariant());
 }
 
 void DeskRecord::grandMaster(uchar value)
@@ -852,7 +874,12 @@ void DeskRecord::grandMaster(uchar value)
     InputOutputMap *iom = m_doc->inputOutputMap();
     const int current = iom->grandMasterValue();
     if (m_gmPickup.accept(value, current, now()) && value != current)
+    {
+        // The fader's own move: never sent back to it (a motor would fight the hand)
+        m_gmFromFader = true;
         iom->setGrandMasterValue(value);
+        m_gmFromFader = false;
+    }
     notifyGrandMasterWaiting();
 }
 

@@ -319,6 +319,11 @@ private:
     void goPressed(bool back);
     void grandMaster(uchar value);
     void notifyGrandMasterWaiting();
+    /** The Grand Master's fader is a motor fader (its surface type says
+     *  Motorised: the FaderPort 2's): send it where the master is now, so it
+     *  drives there (FaderPickup's rule for a Motorised master). Nothing for
+     *  any other fader, or while the fader itself is moving the master. */
+    void sendGrandMasterToMotor();
     /** A port opened, closed or moved (@p universe, or any): rebind(), and
      *  the Grand Master waits out its dump if it was its port (Q316). */
     void portChanged(quint32 universe);
@@ -378,6 +383,8 @@ private:
     // The Grand Master
     GrandMasterPickup m_gmPickup;
     bool m_gmWasWaiting = false;
+    /** grandMaster() is setting the master from the fader: not sent back */
+    bool m_gmFromFader = false;
     /** The live Grand Master's identity|universe|channel, last rebind(). */
     QString m_gmLiveKey;
     QElapsedTimer m_elapsed;
