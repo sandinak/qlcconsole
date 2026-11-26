@@ -89,6 +89,9 @@ private slots:
     void anUnsetFocusStoredTwiceStaysWhereTheStageIs();
     void anUnsetZoomStoredTwiceStaysWhereTheStageIs();
 
+    /* Round 5: fails on 48e8cefee (head 0's colour written to every head) */
+    void aPixelBarWhoseHeadsDifferIsNotStored();
+
 private:
     bool show();
     void go();

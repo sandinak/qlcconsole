@@ -1145,4 +1145,44 @@ void EditLive_Test::anUnsetZoomStoredTwiceStaysWhereTheStageIs()
              qPrintable(QStringLiteral("%1 %2").arg(p->values().at(0).toDouble()).arg(expected)));
 }
 
+void EditLive_Test::aPixelBarWhoseHeadsDifferIsNotStored()
+{
+    // A two-head bar (outer and inner ring), red in cue 1; something else
+    // has the inner ring's green up, so a hue turn moves the heads apart.
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Stairville", "Stage PAR CX-2 RGBAW");
+    QVERIFY(def != nullptr);
+    Fixture *bar = new Fixture(m_doc);
+    bar->setName(QStringLiteral("Pixel bar"));
+    bar->setFixtureDefinition(def, def->mode("8 Channel"));
+    bar->setAddress(400);
+    QVERIFY(m_doc->addFixture(bar));
+    QCOMPARE(bar->heads(), 2);
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName(QStringLiteral("Bar"));
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(bar->id());
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setTargetLook(m_c1, groupTarget(g->id()), st->lookForPalette(m_red)));
+    Scene *over = new Scene(m_doc);
+    over->setValue(bar->id(), bar->channelNumber(QLCChannel::Green, QLCChannel::MSB, 1), 200);
+    QVERIFY(m_doc->addFunction(over));
+    m_doc->setMode(Doc::Operate);
+    go();
+    over->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(5);
+    QVERIFY(m_live->setOn(true));
+    m_selection = { bar->id() };
+    QVERIFY(m_live->adjust(EncoderBank::ColourBank, 0, 6, false));
+    QVERIFY(m_live->hasTrims());
+    const QByteArray trimmed = frame();
+    QString why;
+    QVERIFY(!m_live->store(&why));
+    QVERIFY2(why.contains(QStringLiteral("Pixel bar: heads differ, set colour in Design")), qPrintable(why));
+    // Nothing written; the trim stays on stage, pending.
+    QCOMPARE(layerOn(st->cue(m_c1), groupTarget(g->id()))->look(KeyColour)->palettes, QList<quint32>({ m_red }));
+    QVERIFY(childOf(m_c1, g->id(), bar->id()) == nullptr);
+    QVERIFY(m_live->hasTrims());
+    QCOMPARE(frame(), trimmed);
+}
+
 QTEST_MAIN(EditLive_Test)

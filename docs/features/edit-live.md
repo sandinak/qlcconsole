@@ -69,7 +69,10 @@ from → to* (**Front 1 · Red · 100% → 50%**), and:
   formation kept (movers of different kinds: only when every kind moved
   the same angle; else each kind keeps its own). An attribute the cue does
   not set at all (a focus left at the fixture's default) is stored as what
-  the stage shows. Some of the layer's heads with one result get one exception (a
+  the stage shows. A colour look is one colour for all of a fixture's
+  heads: a pixel bar whose heads now differ is not stored (the status line
+  says so, *heads differ, set colour in Design*) and its trim stays on
+  stage, pending, until GO or Drop. Some of the layer's heads with one result get one exception (a
   child layer) on just those heads. Only heads that now truly differ get
   one each, so the next GO plays exactly what was on stage. All of it is
   **one undo step**, and the status line names what was stored where

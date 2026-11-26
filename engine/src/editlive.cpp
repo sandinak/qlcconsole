@@ -720,7 +720,8 @@ bool EditLive::store(QString *why)
                 continue;
             const quint64 k = chanKey(fid, v.channel);
             const int delta = int(v.value) - int(m_base->value(fid, v.channel));
-            if (delta == 0)
+            // Held: what was written. A trim Store refused stays pending.
+            if (delta == 0 || !written.contains(k))
                 continue;
             h.stage.insert(k, v.value);
         }
@@ -729,9 +730,8 @@ bool EditLive::store(QString *why)
     // set is the stage's): what the next Store adds its move to.
     h.look = written;
     m_holds << h;
-    m_pending.clear();
-    m_slotChannels.clear();
     applyHolds();
+    recomputePending();
     push();
     emit changed();
     return true;
@@ -954,6 +954,7 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why, QHash<quint64, 
         return false;
     }
 
+    QSet<quint32> headsDiffer;
     // @p key's value on @p fid, the trim in it: a flat look of it.
     auto valueFor = [&](const QString &key, quint32 fid, const Look &was) -> StoreValue {
         StoreValue out;
@@ -972,10 +973,28 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why, QHash<quint64, 
         {
             if (f->channelNumber(QLCChannel::Red, QLCChannel::MSB, 0) == QLCChannel::invalid())
                 return out;
-            auto c = [&](int type) { return qMax(0, lookNow(fid, f->channelNumber(type, QLCChannel::MSB, 0))); };
+            auto c = [&](int type, int head) {
+                return qMax(0, lookNow(fid, f->channelNumber(type, QLCChannel::MSB, head)));
+            };
+            auto colourOf = [&](int head) {
+                return QLCPalette::colorToString(QColor(c(QLCChannel::Red, head), c(QLCChannel::Green, head),
+                                                        c(QLCChannel::Blue, head)),
+                                                 QColor(c(QLCChannel::White, head), c(QLCChannel::Amber, head),
+                                                        c(QLCChannel::UV, head)));
+            };
+            /* A colour look is one colour for all of a fixture's heads: a
+               pixel bar whose heads now differ can't be stored as one, so it
+               is not stored (its trim stays on stage, pending). */
+            const QString first = colourOf(0);
+            for (int h = 1; h < f->heads(); ++h)
+                if (f->channelNumber(QLCChannel::Red, QLCChannel::MSB, h) != QLCChannel::invalid()
+                    && colourOf(h) != first)
+                {
+                    headsDiffer.insert(fid);
+                    return out;
+                }
             out.type = QLCPalette::Color;
-            out.values << QLCPalette::colorToString(QColor(c(QLCChannel::Red), c(QLCChannel::Green), c(QLCChannel::Blue)),
-                                                    QColor(c(QLCChannel::White), c(QLCChannel::Amber), c(QLCChannel::UV)));
+            out.values << first;
         }
         else if (key == KeyPosition)
         {
@@ -1204,27 +1223,33 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why, QHash<quint64, 
         }
 
         QList<quint32> all = st->targetFixtures(rl.target);
-        QList<quint32> mine = g.fixtures;
         std::sort(all.begin(), all.end());
-        std::sort(mine.begin(), mine.end());
-        const bool whole = mine == all;
 
         QMap<quint32, StoreValue> values;
         bool same = true;
-        for (quint32 fid : std::as_const(mine))
+        for (quint32 fid : std::as_const(g.fixtures))
         {
             const StoreValue v = valueFor(g.key, fid, was);
             if (!v.isValid())
+            {
+                if (headsDiffer.contains(fid))
+                    if (Fixture *f = m_doc->fixture(fid))
+                        refused << tr("%1: heads differ, set colour in Design").arg(f->name());
                 continue;
+            }
             if (!values.isEmpty() && !(v == values.first()))
                 same = false;
             values.insert(fid, v);
         }
         if (values.isEmpty())
         {
-            refused << tr("%1 of %2").arg(keyLabel(g.key), st->targetLabel(rl.target));
+            if (headsDiffer.isEmpty())
+                refused << tr("%1 of %2").arg(keyLabel(g.key), st->targetLabel(rl.target));
             continue;
         }
+        // Only what can be stored is: a fixture refused above keeps its trim.
+        const QList<quint32> mine = values.keys();
+        const bool whole = mine == all;
 
         // One move of the whole layer (one per fixture type for a position)?
         bool even = true;
