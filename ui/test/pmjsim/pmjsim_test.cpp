@@ -46,6 +46,7 @@
 #include "surfacescenarios.h"
 #include "mastertimer.h"
 #include "cuerunner.h"
+#include "chaser.h"
 #include "qlcfile.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
@@ -71,6 +72,9 @@ const QStringList kFreeKeys = { "Favorites", "1-Down", "2-Down", "3-Down", "4-Do
 
 /* OpenDeck's steady LED levels (the low bits of the velocity blink). */
 const QList<int> kSteady = { 0, 15, 31, 47, 63, 79, 95, 111, 127 };
+/* The one blink the app sends on purpose: 500 ms, near full (board Q327). */
+const int kBlink = 119;
+const QStringList kPages = { "Effects", "Groups", "Looks", "Macros", "Fix Cont" };
 
 void settle(int ms = 0)
 {
@@ -138,7 +142,16 @@ void PmjSim_Test::initTestCase()
     m_pmj = new SimMidiDevice(m_app->doc(), m_stub, kPmj, 0, kPmj,
                               QStringLiteral(QLC_TEST_RESOURCE_ROOT) + QStringLiteral("inputprofiles/PMJ-Black-1.qxi"));
     QVERIFY2(m_pmj->profile() != nullptr, "the PMJ Black 1 profile did not load");
+    /* His patch (2026-11-25): the feedback line on the MIDI plugin's own
+       default for an output, channel 1 (dink's saved setting), and a DMX
+       output on the board's universe beside it. */
+    m_pmj->setFeedbackLineChannel(0);
+    /* The DMX line first: a replug (theReplugDumpGoesNothingOnThePmj) puts
+       the board's line back last, where it was. */
+    m_stub->m_lineNames.removeAll(QStringLiteral("(no device)"));
+    m_stub->m_lineNames.prepend(QStringLiteral("ArtNet 172.18.2.17"));
     QVERIFY2(m_pmj->plug(), qPrintable(m_pmj->lastError()));
+    QVERIFY(m_app->doc()->inputOutputMap()->setOutputPatch(0, m_stub->name(), QStringLiteral("ArtNet 172.18.2.17"), 0));
     makeShow();
     CueRunner *runTab = m_app->findChild<CueRunner *>(QStringLiteral("runTab"));
     QVERIFY(runTab != nullptr);
@@ -298,7 +311,7 @@ void PmjSim_Test::everyLampIsSentAndNoneStray()
     m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
     settle();
     const QMap<quint32, int> lamps = m_pmj->lamps();
-    QStringList problems;
+    QStringList problems, blinking;
     const QMap<quint32, QLCInputChannel *> chans = m_pmj->profile()->channels();
     int withLamp = 0;
     for (auto it = chans.constBegin(); it != chans.constEnd(); ++it)
@@ -317,8 +330,13 @@ void PmjSim_Test::everyLampIsSentAndNoneStray()
             continue;
         }
         const int level = lamps.value(it.key());
-        if (!kSteady.contains(level))
+        if (level == kBlink)
+            blinking << name;
+        else if (!kSteady.contains(level))
             problems << name + QStringLiteral(": lamp %1 is not a steady level (it blinks)").arg(level);
+        // A mode button is a page to switch to (lit) or the page in use (blinking).
+        if (kPages.contains(name) && level != 127 && level != kBlink)
+            problems << name + QStringLiteral(": a page lamp at %1, neither lit nor blinking").arg(level);
         // A key with no job in a show with none learned: dark, never a stray light.
         if (kFreeKeys.contains(name) && level != 0)
             problems << name + QStringLiteral(": a free key lit (%1)").arg(level);
@@ -327,7 +345,16 @@ void PmjSim_Test::everyLampIsSentAndNoneStray()
         if (!chans.contains(it.key()))
             problems << QStringLiteral("%1: a lamp sent to a control the PMJ does not have").arg(it.key());
     QCOMPARE(withLamp, 54);     // the profile's <Feedback> controls
+    // Only what is in use blinks: here, the one page the strips are on.
+    QCOMPARE(blinking.count(), 1);
+    QVERIFY2(kPages.contains(blinking.first()), qPrintable(blinking.join(QStringLiteral(", "))));
     QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QStringLiteral("\n"))));
+    // Another page pressed: it blinks, and the one before is lit again.
+    const QString other = blinking.first() == QLatin1String("Groups") ? QStringLiteral("Looks") : QStringLiteral("Groups");
+    QVERIFY(m_pmj->tap(other, 20));
+    settle(20);
+    QCOMPARE(m_pmj->lamp(other), kBlink);
+    QCOMPARE(m_pmj->lamp(blinking.first()), 127);
 }
 
 void PmjSim_Test::theMasterFaderMovesTheGrandMaster()
@@ -411,13 +438,14 @@ void PmjSim_Test::aLearnedHitLightsItsLamp()
        own path it lights here (2026-11-25), and stays lit through what
        repaints the board -- a Master move, a page key, a full refresh --
        so the bench case is not this one: see SURFACE_SIMULATOR.md. */
-    QCOMPARE(m_pmj->lamp(ch), 127);
+    // Running: it blinks (board Q327), the board's own blink.
+    QTRY_COMPARE(m_pmj->lamp(ch), kBlink);
     QVERIFY(m_pmj->ramp(QStringLiteral("Master"), 127, 90, 30));
     QVERIFY(m_pmj->set(QStringLiteral("Master"), 127));
     QVERIFY(m_pmj->tap(QStringLiteral("Looks"), 20));
     m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
     settle(30);
-    QVERIFY2(m_pmj->lamp(ch) == 127,
+    QVERIFY2(m_pmj->lamp(ch) == kBlink,
              qPrintable(QStringLiteral("the hit plays, its key's lamp went to %1").arg(m_pmj->lamp(ch))));
     // Let go: still lit, a press would fire it again (its place is live).
     QVERIFY(m_pmj->tap(key, 60));
@@ -427,7 +455,7 @@ void PmjSim_Test::aLearnedHitLightsItsLamp()
         settle(20);
     }
     QTRY_VERIFY(!f->isRunning());
-    QCOMPARE(m_pmj->lamp(ch), 127);
+    QTRY_COMPARE(m_pmj->lamp(ch), 127);     // armed again: lit
 
     // Unlearned: a free key again, dark.
     cm->removeBinding(ControlMap::hit(m_breathe));
@@ -564,6 +592,111 @@ void PmjSim_Test::theDesksStopIsLitOnThePmj()
     settle(30);
     QTRY_COMPARE(m_pmj->lamp(fav), 0);
     QCOMPARE(cm->deskLamps().count(), 0);
+}
+
+namespace
+{
+QString hex(const QByteArray &b)
+{
+    return QString::fromLatin1(b.toHex(' '));
+}
+QString ledFile(const char *name)
+{
+    return QStringLiteral(QLC_TEST_RESOURCE_ROOT) + QStringLiteral("../engine/test/surfacesim/captures/") + QLatin1String(name);
+}
+}
+
+void PmjSim_Test::hisRigLightsGoAndBackOnChannelNine()
+{
+    Doc *doc = m_app->doc();
+    QString err;
+    const QList<SimMidiDevice::Led> leds = SimMidiDevice::loadLeds(ledFile("pmj-leds-aligned-20261125.json"), &err);
+    QVERIFY2(!leds.isEmpty(), qPrintable(err));
+    m_pmj->setLeds(leds);
+    auto restore = qScopeGuard([this]() { m_pmj->setLeds({}); });
+    QVERIFY(doc->inputOutputMap()->universe(0)->outputPatchesCount() >= 1);     // DMX beside it, as his
+    Function *list = doc->function(doc->showTree()->cueList(m_list)->chaser);
+    QVERIFY(list != nullptr);
+    doc->masterTimer()->stopAllFunctions();
+    doc->masterTimer()->timerTick();
+    doc->setMode(Doc::Operate);
+    settle(50);
+    QVERIFY(!list->isRunning());
+    bool ok = false;
+    const quint32 go = m_pmj->channelOf(QStringLiteral("Go"), &ok);
+    QVERIFY(ok);
+    const quint32 back = m_pmj->channelOf(QStringLiteral("Back"), &ok);
+    QVERIFY(ok);
+    auto lastBytes = [&](quint32 ch) { return m_pmj->lastMidi(ch); };
+    m_pmj->forgetLamps();
+    m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
+    settle(30);
+    // A list that can GO: Go lit, note 0 on MIDI channel 9 (0x98), velocity 127.
+    QCOMPARE(hex(lastBytes(go)), QStringLiteral("98 00 7f"));
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Go")), 127);
+
+    // GO from the board, as he does: the list runs, Back can go back.
+    QVERIFY(m_pmj->tap(QStringLiteral("Go"), 60));
+    doc->masterTimer()->timerTick();
+    settle(50);
+    QVERIFY2(list->isRunning(), "Go on the PMJ did not GO the Run tab's list");
+    QTRY_COMPARE(m_pmj->lampUnder(QStringLiteral("Back")), 127);
+    QCOMPARE(hex(lastBytes(back)), QStringLiteral("98 0b 7f"));
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Go")), 127);     // the next cue can GO
+
+    // To the last cue: nothing left to GO, Go dim; Back still lit.
+    const Chaser *chaser = qobject_cast<const Chaser *>(list);
+    for (int i = 0; i < 4 && doc->showControl()->standbyStep(chaser) >= 0; ++i)
+    {
+        QVERIFY(m_pmj->tap(QStringLiteral("Go"), 60));
+        doc->masterTimer()->timerTick();
+        settle(50);
+    }
+    QCOMPARE(doc->showControl()->standbyStep(chaser), -1);
+    QTRY_COMPARE(m_pmj->lampUnder(QStringLiteral("Go")), 15);
+    QCOMPARE(hex(lastBytes(go)), QStringLiteral("98 00 0f"));
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Back")), 127);
+
+    doc->masterTimer()->stopAllFunctions();
+    doc->masterTimer()->timerTick();
+    doc->setMode(Doc::Design);
+    settle(30);
+}
+
+void PmjSim_Test::anUnalignedBoardLightsNoButtonOfItsOwn()
+{
+    Doc *doc = m_app->doc();
+    QString err;
+    const QList<SimMidiDevice::Led> leds = SimMidiDevice::loadLeds(ledFile("pmj-leds-20261125.json"), &err);
+    QVERIFY2(!leds.isEmpty(), qPrintable(err));
+    m_pmj->setLeds(leds);
+    auto restore = qScopeGuard([this]() { m_pmj->setLeds({}); });
+    doc->setMode(Doc::Operate);
+    settle(30);
+    m_pmj->forgetLamps();
+    m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
+    settle(30);
+    // Every lamp goes out on its button's own address (channel 9): none of
+    // this board's LEDs listens there, so no button lights.
+    QStringList lit;
+    for (const SimMidiDevice::Led &l : leds)
+        if (!l.under.isEmpty() && m_pmj->lampUnder(l.under) > 0)
+            lit << l.under;
+    QVERIFY2(lit.isEmpty(), qPrintable(QStringLiteral("lit on an unaligned board: ") + lit.join(QStringLiteral(", "))));
+    QVERIFY(m_pmj->lamp(QStringLiteral("Go")) > 0);       // sent all the same
+    // His 4667 symptoms, as the board takes channel-1 lamps: the Effects
+    // page lamp (note 50) lights the LED under 1-Load, Set's (49) the one
+    // under Effects, O's (22) the one under 10-Load; Go's (0) none.
+    m_pmj->boardReceives(QByteArray::fromHex("90327f"));
+    m_pmj->boardReceives(QByteArray::fromHex("90317f"));
+    m_pmj->boardReceives(QByteArray::fromHex("90167f"));
+    m_pmj->boardReceives(QByteArray::fromHex("90007f"));
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("1-Load")), 127);
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Effects")), 127);
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("10-Load")), 127);
+    QCOMPARE(m_pmj->lampUnder(QStringLiteral("Go")), 0);
+    doc->setMode(Doc::Design);
+    settle(20);
 }
 
 int main(int argc, char **argv)

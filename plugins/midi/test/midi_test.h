@@ -28,6 +28,9 @@ class Midi_Test final : public QObject
 
 private slots:
     void midiToInput();
+    /** Feedback for a control that names its MIDI channel goes out there,
+     *  whatever the feedback line is set to (his PMJ, 2026-11-25). */
+    void feedbackGoesOutOnTheControlsOwnChannel();
     void mtcQuarterFrame();
     void mtcFullFrame();
     void mtcPartialIgnored();

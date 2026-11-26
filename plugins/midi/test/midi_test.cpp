@@ -60,6 +60,27 @@ void Midi_Test::midiToInput()
     QCOMPARE(value, uchar(255U));
 }
 
+void Midi_Test::feedbackGoesOutOnTheControlsOwnChannel()
+{
+    // The PMJ's Go: note 0 on MIDI channel 9, learned with the input on any channel.
+    const quint32 go = (8U << 12) | 128U;
+    uchar cmd = 0, d1 = 0, d2 = 0;
+    // The feedback line on channel 1 (an output's default), on any, on 5.
+    for (int line : { 0, int(MAX_MIDI_CHANNELS), 4 })
+    {
+        const int ch = QLCMIDIProtocol::feedbackMidiChannel(go, line, -1);
+        QVERIFY(QLCMIDIProtocol::feedbackToMidi(go, 255, uchar(ch), true, &cmd, &d1, &d2));
+        QCOMPARE(int(cmd), 0x98);
+        QCOMPARE(int(d1), 0);
+        QCOMPARE(int(d2), 127);
+    }
+    // A plain channel (MIDI channel 1, or a pinned line) keeps the line's channel.
+    QCOMPARE(QLCMIDIProtocol::feedbackMidiChannel(128U, 4, -1), 4);
+    QCOMPARE(QLCMIDIProtocol::feedbackMidiChannel(128U, int(MAX_MIDI_CHANNELS), -1), int(MAX_MIDI_CHANNELS));
+    // A profile's own MidiChannel is added to the line's, as ever.
+    QCOMPARE(QLCMIDIProtocol::feedbackMidiChannel(go, 0, 2), 2);
+}
+
 void Midi_Test::mtcQuarterFrame()
 {
     MidiMtcDecoder dec;

@@ -178,6 +178,7 @@ add_library(${module_name}
     palettegenerator.cpp palettegenerator.h
     playbackslider.cpp playbackslider.h
     pmjoverlay.cpp pmjoverlay.h
+    pmjlamplogdialog.cpp pmjlamplogdialog.h
     positiontool.cpp positiontool.h positiontool.ui
     preferencesdialog.cpp preferencesdialog.h
     rdmmanager.cpp rdmmanager.h rdmmanager.ui

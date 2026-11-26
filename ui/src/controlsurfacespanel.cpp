@@ -15,7 +15,9 @@
   limitations under the License.
 */
 
+#include <QApplication>
 #include <QGridLayout>
+#include <QVBoxLayout>
 #include <QPushButton>
 #include <QLabel>
 #include <QShowEvent>
@@ -43,6 +45,7 @@
 #include "qlcioplugin.h"
 #include "ioplugincache.h"
 #include "pmjoverlay.h"
+#include "pmjlamplogdialog.h"
 #include "doc.h"
 
 namespace
@@ -193,7 +196,24 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
         btn->setAccessibleName(tr("Set up %1").arg(t.name));
         connect(btn, &QPushButton::clicked, this, [this, key]() { emit setUpRequested(key); });
         grid->addWidget(status, r, 1);
-        grid->addWidget(btn, r, 2, Qt::AlignTop);
+        if (key == QLatin1String("pmj"))
+        {
+            /* What the app sent the board, byte for byte, and a lamp test:
+               the truth at the next rig test (2026-11-25). */
+            QWidget *box = new QWidget(this);
+            QVBoxLayout *v = new QVBoxLayout(box);
+            v->setContentsMargins(0, 0, 0, 0);
+            v->addWidget(btn);
+            QPushButton *log = new QPushButton(tr("Lamp Log…"), box);
+            log->setObjectName(QStringLiteral("surfacePmjLampLog"));
+            log->setToolTip(tr("The last lamps sent to the PMJ, and a lamp test for one button."));
+            connect(log, &QPushButton::clicked, this, &ControlSurfacesPanel::openPmjLampLog);
+            v->addWidget(log);
+            m_pmjLampLog = log;
+            grid->addWidget(box, r, 2, Qt::AlignTop);
+        }
+        else
+            grid->addWidget(btn, r, 2, Qt::AlignTop);
         m_buttons.insert(key, btn);
         ++r;
     }
@@ -428,10 +448,26 @@ QString ControlSurfacesPanel::pmjText() const
 
 QString ControlSurfacesPanel::pmjLampsText()
 {
-    return tr("Its lamps: Go lit = a cue to GO, Back lit = the list is running (dim: nothing to do). "
-              "The lit mode button (Effects, Groups, Looks, Macros, Fix Cont) is the page in use. "
-              "A lit 1-10 or Load button: that strip has a fixture of the scene open in Build, "
-              "brighter when it is selected.");
+    // Board Q327 (2026-11-25): lit = a press does something now, blinking =
+    // what is in use now, dim = nothing to do. The help says the same.
+    return tr("Its lamps: lit = a press does something now (Go lit = a cue to GO, Back lit = the list is "
+              "running, a mode button = a page to switch to, a 1-10 or Load button = a fixture of the scene "
+              "open in Build). Blinking = what is in use now: the page in use (Effects, Groups, Looks, "
+              "Macros, Fix Cont), a selected strip, a running hit, Blackout or Blind on. Dim = nothing to "
+              "do now. A lamp that stays dark, or lights under another button, means the board's LEDs "
+              "don't listen on its buttons' notes: run qlc-midi opendeck align (qlcplus-midi-profiler) on "
+              "the board, then check with Lamp Log….");
+}
+
+void ControlSurfacesPanel::openPmjLampLog()
+{
+    PMJOverlay *overlay = nullptr;
+    for (QWidget *w : QApplication::topLevelWidgets())
+        if ((overlay = w->findChild<PMJOverlay *>()) != nullptr)
+            break;
+    PmjLampLogDialog *dlg = new PmjLampLogDialog(overlay, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
 }
 
 QString ControlSurfacesPanel::webText() const

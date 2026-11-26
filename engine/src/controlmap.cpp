@@ -2483,7 +2483,25 @@ uchar ControlMap::lampValueOn(const Binding &owner, Lamp lamp) const
        an ALL OFF it blinks lit / dim (stopBlinkStep()) until the next GO. */
     if (owner.target.type == EmergencyStopTarget)
         return lamp == LampStopped && !m_stopBlinkLit ? dim : lit;
+    // A board that blinks by value blinks a running hit (board Q327).
+    if (lamp == LampRunning && (owner.target.type == HitTarget || owner.target.type == FunctionTarget))
+    {
+        auto it = m_runningLamp.constFind(owner.universe);
+        if (it != m_runningLamp.constEnd())
+            return it.value();
+    }
     return lamp == LampOff ? dim : lit;
+}
+
+void ControlMap::setRunningLampValue(quint32 universe, int value)
+{
+    const bool had = m_runningLamp.contains(universe);
+    if (value < 0)
+        m_runningLamp.remove(universe);
+    else
+        m_runningLamp.insert(universe, uchar(qMin(255, value)));
+    if (had || value >= 0)
+        sendLamps(false);
 }
 
 bool ControlMap::isBlinking(const Binding &b) const

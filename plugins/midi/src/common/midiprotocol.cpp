@@ -122,6 +122,15 @@ bool QLCMIDIProtocol::midiSysCommonToInput(uchar cmd, uchar data1, uchar data2,
     }
 }
 
+int QLCMIDIProtocol::feedbackMidiChannel(quint32 channel, int lineChannel, int profileChannel)
+{
+    if (profileChannel >= 0)
+        return lineChannel + profileChannel;
+    if (((channel >> 12) & 0x0F) != 0)
+        return MAX_MIDI_CHANNELS;   // feedbackToMidi() takes it from the channel
+    return lineChannel;
+}
+
 bool QLCMIDIProtocol::feedbackToMidi(quint32 channel, uchar value,
                                      uchar midiChannel, bool sendNoteOff, uchar* cmd,
                                      uchar* data1, uchar* data2)

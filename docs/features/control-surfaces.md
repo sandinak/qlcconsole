@@ -596,16 +596,50 @@ the profile is patched on.
 
 ### What the lamps mean
 
-| Lit | What it means |
-|---|---|
-| **Go** | The Run tab's GO would play a cue now. Dim: there is a cue list, but nothing left to GO. Dark: no cue list. |
-| **Back** | The list is running, so Back has a cue to go back to. Dim: the list is stopped. |
-| **One mode button** | The page in use: **Effects** until you press another (Groups, Looks, Macros, Fix Cont). |
-| **1-10**, **1-Load…10-Load** | That strip has a fixture of the scene open in Build (strip 1 the first). Brighter: that fixture is selected. Dark: the scene has no fixture for that strip. |
-| **1-Up…10-Up** | That fader edits the open palette now. |
-| **O**, **Set** | Dim: ready. Bright: Blackout or Blind is on. |
-| **A key you learned** | The Control Map's light: lit when a press would fire it or it is running, dim otherwise ([What a control's light says](#what-a-controls-light-says)). |
-| **The emergency stop's key** | Lit at every moment: it always works. Blinking lit and dim: the show is stopped (ALL OFF) until the next GO. |
+One rule for the whole board:
+
+- **Lit**: a press does something now.
+- **Blinking**: what is in use now. The board blinks it itself (every half
+  second), so every blinking lamp is in step.
+- **Dim**: the key has a job, but nothing to do now.
+- **Dark**: the key has no job.
+
+| Key | Lit | Blinking | Dim or dark |
+|---|---|---|---|
+| **Go** | The Run tab's GO would play a cue now. | | Dim: there is a cue list, but nothing left to GO. Dark: no cue list. |
+| **Back** | The list is running, so Back has a cue to go back to. | | Dim: the list is stopped. |
+| **Mode buttons** (Effects, Groups, Looks, Macros, Fix Cont) | A page you can switch to. | The page in use: **Effects** until you press another. | |
+| **1-10**, **1-Load…10-Load** | That strip has a fixture of the scene open in Build (strip 1 the first). | That fixture is selected. | Dark: no scene open, or the scene has no fixture for that strip. |
+| **1-Up…10-Up** | That fader edits the open palette now. | | Dark: it edits nothing now. |
+| **O**, **Set** | Ready: a press turns Blackout or Blind on. | Blackout or Blind is on. | |
+| **A key you learned** | A press would fire it now. | What it fires (a hit, a scene) is running. | Dim otherwise ([What a control's light says](#what-a-controls-light-says)). |
+| **The emergency stop's key** | At every moment: it always works. | Lit and dim in turn: the show is stopped (ALL OFF) until the next GO. | |
+
+The app sends each lamp on its button's own note and MIDI channel (the PMJ
+Black 1's buttons are all MIDI channel 9), whatever channel the MIDI
+plugin's feedback line is set to.
+
+#### A lamp lights under the wrong button, or not at all
+
+The board's own setup decides which note each LED listens on. Out of the
+box an OpenDeck board's LEDs listen on MIDI channel 1 in factory order, so
+the app's lamps light nothing, or light the LED under another button (on
+one such board the Effects page lamp lit under 1-Load, Set's under
+Effects, Blackout's under 10-Load, and Go's under none). The app cannot fix that from
+here; the board's setup can. With **qlcplus-midi-profiler**:
+
+1. Read it, writing nothing: `qlc-midi opendeck dump OpenDeck -m maps/pmj-now.json --raw`.
+2. If its LEDs don't listen on their buttons' notes, pair them by pressing
+   each one (`qlc-midi opendeck identify`, it restores the board after),
+   then `qlc-midi opendeck align` (it backs the board up first) so every
+   LED answers its own button's note on channel 9.
+
+**Lamp Log…** on the PMJ Black 1 row shows the last lamps the app sent,
+each with its note, MIDI channel, velocity and bytes, so you can tell a
+lamp that was never sent from one the board did not light. Its **Lamp
+Test** lights one button's lamp at every level and blink the board has,
+one step every second and a half: say what each step looks like (a colour
+means that LED is an RGB one).
 
 The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
 
