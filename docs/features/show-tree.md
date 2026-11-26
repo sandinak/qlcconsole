@@ -1355,6 +1355,27 @@ later at the laptop. It is only a mark. Nothing plays differently.
 
 To see every tagged cue at once, open **All notes…** in the [notes](#notes) pane and filter it to **Open**.
 
+### Fast cues
+
+The [double-GO guard](show-control.md#two-gos-at-once) holds a second GO
+until the cue that just started has begun: its fade in has started and a
+quarter of a second has gone (never longer than the setting, 1.0 s by
+default). A cue with a wait before its fade has begun when its wait starts.
+For a cue the next one is called right on top of, that can still be too
+long.
+
+- **Tick Fast: Next GO Never Held** on the cue's page. The GO after that
+  cue is never held, from any GO: the Run tab, ⌘↩, the pad, the desk's
+  GO, the Control Map, the phone or Companion.
+- **Only that GO.** The cue after a Fast cue is guarded again, and a Back
+  right after a Fast cue is still held.
+- **Where it shows.** The cue's row says **fast** among its flags.
+- **Main cues only.** A Looks section's looks and a cue's sub-cues have no
+  Fast tick (they are fired, or go on Sub GO).
+- **Undo.** Each tick is one undo step.
+- **Saved with the show.** Off for every cue until you tick it. An older
+  build opens the show as it was, without it.
+
 ### Blocking
 
 A cue's **Blocking** says where the stage targets stand from that cue on

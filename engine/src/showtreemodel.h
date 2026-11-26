@@ -326,6 +326,11 @@ namespace ShowTree
          *  Its chaser step is skipped (ChaserStep::skip). Kept so it can
          *  be put back; this use's, like its number (not a reusable's). */
         bool skip = false;
+        /** Fast (Q328): no double-GO guard after this cue -- the GO after
+         *  it is never held, for cues called close together. Its chaser
+         *  step is Fast (ChaserStep::fast). This use's, like its number.
+         *  Saved as Fast="1", which an older build ignores. */
+        bool fast = false;
         /** The colour its text is shown in -- the tree, the Run tab, the VC
          *  Cue Runner and Cue List ("#rrggbb"; empty: its list's, else the
          *  theme's). Only how it reads: nothing plays differently. This

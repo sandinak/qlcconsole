@@ -686,8 +686,14 @@ void ControlMap_Test::aHeldGoBlinksTheControlTwice()
     cm->setBlinkMs(1);
     cm->setBinding({ 0, 10, ControlMap::cueList(listId), ControlMap::Toggle });
     ShowControl *sc = m_doc->showControl();
-    sc->setGoGuardMs(ShowControl::maxGoGuardMs());   // long, so a loaded
-    auto unhook = qScopeGuard([sc]() { sc->setGoGuardMs(0); });   // machine still holds
+    sc->setGoGuardMs(ShowControl::maxGoGuardMs());
+    // A clock that stands still, so a loaded machine still holds (a GO
+    // after a GO is held only until its cue has begun, Q328).
+    sc->setGuardClock([]() { return qint64(100000); });
+    auto unhook = qScopeGuard([sc]() {
+        sc->setGoGuardMs(0);
+        sc->setGuardClock(ShowControl::GuardClock());
+    });
 
     send(10, 127);                      // the first GO is carried out
     tick(2);

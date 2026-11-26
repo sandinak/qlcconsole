@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **The double-GO guard follows the cue** (Q328): a second GO is held only
+  until the cue the GO before started has begun (its fade in started, a
+  wait counting from its start, and 0.25 s gone), never longer than the
+  Double-GO guard setting; a cue ticked **Fast: Next GO Never Held** on its
+  Show Tree page has no guard after it. Every GO route shares it; Back, Sub
+  GO, Sub Back and Stop keep the whole window. The hold says why: *Second
+  GO held: cue 3 still starting (Laptop's GO)*.
 - **A replug never presses the desk**: this computer's STOP, GO and Back and
   the PMJ's Go and Back now ignore a controller's state dump after a replug,
   by the Control Map's own rules; every trigger ignores any press in the

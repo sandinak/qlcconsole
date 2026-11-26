@@ -66,15 +66,30 @@ A **cue list** is a chase (a chaser). Its steps are the **cues**.
 When more than one person can GO — a student on the laptop calling the
 script, you on the pad, someone on the phone's Run page — two GOs can land
 a moment apart, and the second would skip a cue. The **double-GO guard**
-stops that: on one cue list, a GO that comes within **1.0 s** of a GO that
-played is **held**. The first plays; the second does nothing.
+stops that: on one cue list, a GO that comes before the cue the last GO
+started has **begun** is **held**. The first plays; the second does nothing.
+
+- **The guard follows the cue.** A second GO is held until the cue that
+  just started has visibly begun: its fade in has started **and** at least
+  a quarter of a second (0.25 s) has gone. It is never held longer than the
+  setting (**1.0 s** by default, below). So a quick double press is held,
+  but a GO called close behind a fast cue goes.
+- **A cue with a wait before its fade** has begun when its wait starts,
+  not when its fade does: a delayed cue never holds GO for its whole delay.
+- **Fast cues.** Tick **Fast: Next GO Never Held** on a cue's page in the
+  [Show Tree](show-tree.md#fast-cues) for a cue the next one is called
+  right on top of: the GO after a Fast cue is never held. Its row says
+  **fast** among its flags. Saved with the show; off for every cue until
+  you tick it (an older QLC+ ignores it).
 
 - It doesn't matter where either came from: ⌘↩, the Run tab's GO or
   Space, the calling script's GO, the pad, the phone, a Virtual Console
   cue list or Cue Runner, the Control Map, OSC or MSC — or the same one
   twice (a double press).
-- **Back**, **Sub GO**, **Sub Back** and **Stop** are held the same way: a
-  Back right after a GO is held, and so is a GO right after a Back.
+- **Back**, **Sub GO**, **Sub Back** and **Stop** are held for the whole
+  setting, as before: a Back right after a GO is held, and so is a GO
+  right after a Back. Only a GO after a GO follows the cue, and Fast
+  changes only that.
 - **Emergency stop** (All Off: the pad's four, the phone's) and
   **Blackout** are **never** held. After an emergency stop the next GO
   plays at once.
@@ -89,18 +104,23 @@ played is **held**. The first plays; the second does nothing.
   GO on a parallel list.
 - A list following timecode GOs at its cues' times; those are never held.
 
-Every surface says the same thing at the same moment, naming whose GO
-was taken:
+Every surface says the same thing at the same moment, naming why and
+whose GO was taken:
 
-> Second GO held: Laptop's GO took it 0.4 s ago
+> Second GO held: cue 3 still starting (Laptop's GO)
+
+A Back (or another command) held after a GO says when instead:
+
+> BACK held: Laptop's GO took it 0.3 s ago
 
 It shows under the header of the **Run** tab, in the footer's **Next:**
 chip, on the phone's Run page (which buzzes too), and on the pad: one long
 rumble, and the words aloud when the voice is on. It stays a few seconds.
 
 Set the time in **Settings ▸ General ▸ Show Controls ▸ Double-GO guard**
-(up to 5 s, in tenths). **Off** (0) turns it off. It belongs to this
-computer, not the show.
+(up to 5 s, in tenths): the longest a GO is held, and the whole window
+for Back, Sub GO, Sub Back and Stop. **Off** (0) turns it off. It belongs
+to this computer, not the show; a cue's **Fast** belongs to the show.
 
 ## GO from the game controller (Pad Run)
 

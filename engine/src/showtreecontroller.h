@@ -747,6 +747,11 @@ public:
      *  false when nothing changed. */
     bool setCuesNeedsWork(const QList<quint32> &cueIds, bool on);
     bool isCueNeedsWork(quint32 cueId) const;
+    /** Fast (Q328): no double-GO guard after the cue, so the next GO is
+     *  never held (ShowControl::run(), rule 1). A main list's cues only.
+     *  One undo step; false when nothing changed. */
+    bool setCuesFast(const QList<quint32> &cueIds, bool on);
+    bool isCueFast(quint32 cueId) const;
     /** The cues marked Needs work, in tree order. */
     QList<quint32> needsWorkCues() const;
     /** The show's own setting, read from Doc's programmer (false: none). */

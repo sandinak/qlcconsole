@@ -17,7 +17,10 @@
   limitations under the License.
 */
 
+#include <QXmlStreamReader>
+#include <QXmlStreamWriter>
 #include <QSignalSpy>
+#include <QBuffer>
 #include <QtEndian>
 #include <QtTest>
 
@@ -31,6 +34,7 @@
 #include "controllerscheme.h"
 #include "functionparent.h"
 #include "showcontrol.h"
+#include "showtreemodel.h"
 #include "chaserstep.h"
 #include "padrun.h"
 #include "chaser.h"
@@ -59,6 +63,13 @@ QByteArray osc(const QString &address)
 QString name(ShowControl::Route route)
 {
     return ShowControl::routeName(route);
+}
+
+/** Rule 1's words: a GO held while cue @a cue (that @a route's GO started)
+ *  is still starting. */
+QString starting(const QString &cue, ShowControl::Route route)
+{
+    return QStringLiteral("Second GO held: cue %1 still starting (%2's GO)").arg(cue, ShowControl::sourceName(route));
 }
 }
 
@@ -168,12 +179,11 @@ void GoGuard_Test::aSecondGoInTheWindowIsHeldFromEverySource()
             held.clear();
             QVERIFY2(send(ShowControl::Go, first, list), qPrintable(pair + ": the first GO played"));
             QCOMPARE(list->currentStepIndex(), 0);
-            m_now += 400;
+            m_now += 200;
             QVERIFY2(!send(ShowControl::Go, second, list), qPrintable(pair + ": the second GO played"));
             QVERIFY2(list->currentStepIndex() == 0, qPrintable(pair + ": the cue advanced"));
             QVERIFY2(held.count() == 1, qPrintable(pair + ": not said once"));
-            const QString want = QStringLiteral("Second GO held: %1's GO took it 0.4 s ago")
-                                     .arg(ShowControl::sourceName(first));
+            const QString want = starting(QStringLiteral("1"), first);
             QCOMPARE(held.first().at(0).toString(), want);
             QCOMPARE(held.first().at(1).toUInt(), list->id());
             QCOMPARE(held.first().at(2).value<ShowControl::Route>(), second);
@@ -196,28 +206,27 @@ void GoGuard_Test::theWindowRunsFromTheGoThatPlayed()
         stopAll();
         m_now += 10000;
         QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
-        m_now += 999;
-        QVERIFY2(!send(ShowControl::Go, source, list), qPrintable(name(source) + " at 999 ms"));
+        // The cue has begun (the runner is on it): held to goBegunMs() only.
+        m_now += ShowControl::goBegunMs() - 1;
+        QVERIFY2(!send(ShowControl::Go, source, list), qPrintable(name(source) + " at 249 ms"));
         QCOMPARE(list->currentStepIndex(), 0);
-        m_now += 1;                                         // 1000 ms: the window is over
-        QVERIFY2(send(ShowControl::Go, source, list), qPrintable(name(source) + " at 1000 ms"));
+        m_now += 1;                                         // 250 ms: begun
+        QVERIFY2(send(ShowControl::Go, source, list), qPrintable(name(source) + " at 250 ms"));
         QCOMPARE(list->currentStepIndex(), 1);
-        // From that GO: one at +600 is held, and does not move the window on.
-        m_now += 600;
+        // From that GO: one at +150 is held, and does not move the window on.
+        m_now += 150;
         QVERIFY(!send(ShowControl::Go, source, list));
-        m_now += 400;
+        m_now += 100;
         QVERIFY2(send(ShowControl::Go, source, list), qPrintable(name(source) + ": a held GO lengthened it"));
         QCOMPARE(list->currentStepIndex(), 2);
     }
 
-    // A longer window, from Settings.
+    // A longer setting is a longer cap, not a longer hold once a cue has begun.
     m_doc->showControl()->setGoGuardMs(2500);
     stopAll();
     m_now += 10000;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
-    m_now += 2400;
-    QVERIFY(!send(ShowControl::Go, ShowControl::RoutePad, list));
-    m_now += 100;
+    m_now += 300;
     QVERIFY(send(ShowControl::Go, ShowControl::RoutePad, list));
     QCOMPARE(m_doc->showControl()->goGuardMs(), 2500);
     m_doc->showControl()->setGoGuardMs(99999);
@@ -400,14 +409,14 @@ void GoGuard_Test::timecodeIsNeverHeld()
     m_doc->showControl()->setMainCueList(list->id());
     m_now += 10000;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
-    m_now += 100;
+    m_now += 50;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteTimecode, list, "2"));      // its time came
     QCOMPARE(list->currentStepIndex(), 1);
-    m_now += 100;
+    m_now += 50;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteTimecode, list, "3"));
     QCOMPARE(list->currentStepIndex(), 2);
     // The laptop's GO's window still runs: the clock's GOs did not move it.
-    m_now += 100;
+    m_now += 50;
     QVERIFY(!send(ShowControl::Go, ShowControl::RoutePad, list));
 
     // A timecode GO opens no window.
@@ -440,6 +449,9 @@ void GoGuard_Test::theHoldIsSaidInOneText()
              QStringLiteral("Second GO held: Pad's GO took it 0.7 s ago"));
     QCOMPARE(ShowControl::heldText(ShowControl::Back, ShowControl::Go, ShowControl::RouteWeb, 300),
              QStringLiteral("BACK held: Phone's GO took it 0.3 s ago"));
+    // Rule 1's: why, not when (Q328).
+    QCOMPARE(ShowControl::heldText(ShowControl::Go, ShowControl::Go, ShowControl::RouteKey, 100, "3"),
+             QStringLiteral("Second GO held: cue 3 still starting (Laptop's GO)"));
     // Never "0.0 s": that reads as no time at all.
     QCOMPARE(ShowControl::heldText(ShowControl::Go, ShowControl::Go, ShowControl::RouteRunTab, 10),
              QStringLiteral("Second GO held: Laptop's GO took it 0.1 s ago"));
@@ -457,9 +469,9 @@ void GoGuard_Test::theHoldIsSaidInOneText()
     QSignalSpy from(sc, &ShowControl::commandFrom);
     m_now += 10000;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
-    m_now += 400;
+    m_now += 200;
     QVERIFY(!send(ShowControl::Go, ShowControl::RouteWeb, list));
-    const QString want = QStringLiteral("Second GO held: Laptop's GO took it 0.4 s ago");
+    const QString want = starting(QStringLiteral("1"), ShowControl::RouteKey);
     // The console's own line for a command (the show-control page, the web page's poll) says it too.
     QCOMPARE(handled.last().at(0).toString(), want);
     QCOMPARE(handled.last().at(1).toBool(), false);
@@ -499,10 +511,10 @@ void GoGuard_Test::thePadBuzzesLongForEveryHold()
         tick();
         buzz.clear();
         said.clear();
-        m_now += 400;
+        m_now += 200;
         QVERIFY2(!send(ShowControl::Go, source, list), qPrintable(name(source) + " after the pad"));
         QCOMPARE(list->currentStepIndex(), 0);
-        const QString afterPad = QStringLiteral("Second GO held: Pad's GO took it 0.4 s ago");
+        const QString afterPad = starting(QStringLiteral("1"), ShowControl::RoutePad);
         QVERIFY2(buzz.count() == 1, qPrintable(name(source) + ": buzzed " + QString::number(buzz.count())));
         QCOMPARE(buzz.first().at(0).toInt(), 1);
         QCOMPARE(buzz.first().at(1).toInt(), ControllerScheme::rumbleLongMs());
@@ -515,12 +527,11 @@ void GoGuard_Test::thePadBuzzesLongForEveryHold()
         QVERIFY(send(ShowControl::Go, source, list));
         buzz.clear();
         said.clear();
-        m_now += 300;
+        m_now += 200;
         QVERIFY(!pad->trigger(PadRun::Go));
         tick();
         QCOMPARE(list->currentStepIndex(), 0);
-        const QString afterOther = QStringLiteral("Second GO held: %1's GO took it 0.3 s ago")
-                                       .arg(ShowControl::sourceName(source));
+        const QString afterOther = starting(QStringLiteral("1"), source);
         QVERIFY2(buzz.count() == 1, qPrintable("the pad after " + name(source)));
         QCOMPARE(buzz.first().at(1).toInt(), ControllerScheme::rumbleLongMs());
         QCOMPARE(said.count(), 1);
@@ -551,7 +562,7 @@ void GoGuard_Test::thePadBuzzesLongForEveryHold()
     m_now += 10000;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
     buzz.clear();
-    m_now += 300;
+    m_now += 200;
     QVERIFY(!send(ShowControl::Go, ShowControl::RouteKey, list));
     QCOMPARE(buzz.count(), 0);
 }
@@ -579,7 +590,7 @@ void GoGuard_Test::heldBeforeTheRunHandler()
         reached.clear();
         QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
         QCOMPARE(reached.count(), 1);
-        m_now += 400;
+        m_now += 200;
         QVERIFY(!send(ShowControl::Go, source, list));
         QVERIFY2(reached.count() == 1, qPrintable(name(source) + " reached the handler"));
     }
@@ -588,14 +599,14 @@ void GoGuard_Test::heldBeforeTheRunHandler()
     stopAll();
     m_now += 10000;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
-    m_now += 400;
+    m_now += 200;
     reached.clear();
     QCOMPARE(sc->handleOsc(osc("/go")), 0);
     tick();
     QVERIFY(reached.isEmpty());
     QCOMPARE(list->currentStepIndex(), 0);
     QCOMPARE(from.last().at(0).value<ShowControl::Source>(), ShowControl::Osc);
-    QCOMPARE(from.last().at(2).toString(), QStringLiteral("Second GO held: Laptop's GO took it 0.4 s ago"));
+    QCOMPARE(from.last().at(2).toString(), starting(QStringLiteral("1"), ShowControl::RouteKey));
     // OSC first, the laptop held.
     stopAll();
     m_now += 10000;
@@ -603,7 +614,7 @@ void GoGuard_Test::heldBeforeTheRunHandler()
     tick();
     m_now += 200;
     QVERIFY(!send(ShowControl::Go, ShowControl::RouteKey, list));
-    QCOMPARE(sc->heldNotice(), QStringLiteral("Second GO held: OSC's GO took it 0.2 s ago"));
+    QCOMPARE(sc->heldNotice(), starting(QStringLiteral("1"), ShowControl::RouteOsc));
 
     // The pad's own path: held before the handler too.
     PadRun *pad = m_doc->programmer()->padRun();
@@ -612,7 +623,7 @@ void GoGuard_Test::heldBeforeTheRunHandler()
     m_now += 10000;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
     reached.clear();
-    m_now += 300;
+    m_now += 200;
     QVERIFY(!pad->trigger(PadRun::Go));
     QVERIFY(reached.isEmpty());
     pad->setEnabled(false, false);
@@ -662,7 +673,7 @@ void GoGuard_Test::aHeldGoNeverLetsGoOfTheEmergencyStop()
     m_now += 100;
     QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
     QVERIFY(!rules->emergencyStopped());
-    m_now += 300;
+    m_now += 200;
     QVERIFY(!send(ShowControl::Go, ShowControl::RoutePad, list));
 
     /* The latch set while a window is open (here straight on the keeper, as
@@ -720,12 +731,13 @@ void GoGuard_Test::aVcStepOnAPlainChaserIsHeld()
     m_doc->stepCurrentChaser(+1);
     tick();
     QCOMPARE(list->currentStepIndex(), 1);
-    m_now += 300;
+    m_now += 200;
     m_doc->stepCurrentChaser(+1);
     tick();
     QCOMPARE(list->currentStepIndex(), 1);          // held
     QCOMPARE(heldSpy.count(), 1);
-    QCOMPARE(heldSpy.last().at(0).toString(), QStringLiteral("Second GO held: VC Cue List's GO took it 0.3 s ago"));
+    // A direct step names no cue of its own: held to goBegunMs(), said by when.
+    QCOMPARE(heldSpy.last().at(0).toString(), QStringLiteral("Second GO held: VC Cue List's GO took it 0.2 s ago"));
     m_doc->stepCurrentChaser(-1);
     tick();
     QCOMPARE(list->currentStepIndex(), 1);          // Back held too
@@ -744,6 +756,245 @@ void GoGuard_Test::aVcStepOnAPlainChaserIsHeld()
     tick();
     QCOMPARE(list->currentStepIndex(), 3);
     m_doc->setMode(Doc::Design);
+}
+
+/*****************************************************************************
+ * Q328: the guard follows the cue
+ *****************************************************************************/
+
+namespace
+{
+void markFast(Chaser *list, int index, bool fast = true)
+{
+    ChaserStep step = list->steps().at(index);
+    step.fast = fast;
+    list->replaceStep(step, index);
+}
+}
+
+void GoGuard_Test::theGuardFollowsTheCue()
+{
+    Chaser *list = makeList(5, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(list->id());
+    QSignalSpy held(sc, &ShowControl::commandHeld);
+
+    // A 0-fade cue: begun at once, so a GO 300 ms on goes (it was held).
+    m_now += 10000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
+    QCOMPARE(list->currentStepIndex(), 0);
+    m_now += 300;
+    QVERIFY2(send(ShowControl::Go, ShowControl::RoutePad, list), "a GO 300 ms after a 0-fade cue was held");
+    QCOMPARE(list->currentStepIndex(), 1);
+    // One 100 ms on is held, and says why.
+    held.clear();
+    m_now += 100;
+    QVERIFY(!send(ShowControl::Go, ShowControl::RouteKey, list));
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(held.count(), 1);
+    QCOMPARE(held.first().at(0).toString(), starting(QStringLiteral("2"), ShowControl::RoutePad));
+    QCOMPARE(sc->heldNotice(), starting(QStringLiteral("2"), ShowControl::RoutePad));
+
+    // A 2 s fade: its fade has begun, so a GO at 400 ms goes.
+    stopAll();
+    list->setFadeInMode(Chaser::Common);
+    list->setFadeInSpeed(2000);
+    m_now += 10000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
+    QCOMPARE(list->currentStepIndex(), 0);
+    m_now += 400;
+    QVERIFY2(send(ShowControl::Go, ShowControl::RouteRunTab, list), "a GO 400 ms into a 2 s fade was held");
+    QCOMPARE(list->currentStepIndex(), 1);
+    // ... and one 200 ms into the next is still held.
+    m_now += 200;
+    QVERIFY(!send(ShowControl::Go, ShowControl::RouteRunTab, list));
+    QCOMPARE(list->currentStepIndex(), 1);
+}
+
+void GoGuard_Test::aFastCueHasNoGuard()
+{
+    Chaser *list = makeList(5, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(list->id());
+    markFast(list, 0);
+    QVERIFY(list->isStepFast(0));
+    QVERIFY(!list->isStepFast(1));
+    QSignalSpy held(sc, &ShowControl::commandHeld);
+
+    m_now += 10000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));            // cue 1, Fast
+    QCOMPARE(list->currentStepIndex(), 0);
+    // At once: no guard after a Fast cue.
+    QVERIFY2(send(ShowControl::Go, ShowControl::RouteKey, list), "the GO after a Fast cue was held");
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(held.count(), 0);
+    // Cue 2 isn't Fast: guarded again.
+    m_now += 10;
+    QVERIFY(!send(ShowControl::Go, ShowControl::RouteKey, list));
+    QCOMPARE(list->currentStepIndex(), 1);
+    QCOMPARE(held.count(), 1);
+
+    // Fast takes the guard off a GO only: a Back after a Fast cue's GO is
+    // held as before (rule 3).
+    stopAll();
+    m_now += 10000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));            // cue 1, Fast
+    QCOMPARE(list->currentStepIndex(), 0);
+    m_now += 100;
+    QVERIFY2(!send(ShowControl::Back, ShowControl::RouteKey, list), "a Back after a Fast cue's GO played");
+    QCOMPARE(list->currentStepIndex(), 0);
+}
+
+void GoGuard_Test::theCapHolds()
+{
+    Chaser *list = makeList(5, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(list->id());
+    QSignalSpy held(sc, &ShowControl::commandHeld);
+
+    // A GO whose cue the runner has not begun (no frame since): held ...
+    m_now += 10000;
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = list->id();
+    QVERIFY(sc->run(go, ShowControl::RouteKey));
+    m_now += 400;
+    QVERIFY2(!sc->run(go, ShowControl::RoutePad), "a GO before its cue began played");
+    QCOMPARE(held.last().at(0).toString(), starting(QStringLiteral("1"), ShowControl::RouteKey));
+    m_now += ShowControl::defaultGoGuardMs() - 401;
+    QVERIFY(!sc->run(go, ShowControl::RoutePad));
+    // ... to the setting, and no longer.
+    m_now += 1;
+    QVERIFY2(sc->run(go, ShowControl::RoutePad), "held past the setting");
+    tick();
+    QVERIFY(list->isRunning());
+
+    // A setting under the floor is the cap too: 100 ms, begun or not.
+    sc->setGoGuardMs(100);
+    stopAll();
+    m_now += 10000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
+    m_now += 99;
+    QVERIFY(!send(ShowControl::Go, ShowControl::RouteKey, list));
+    m_now += 1;
+    QVERIFY2(send(ShowControl::Go, ShowControl::RouteKey, list), "held past a 100 ms setting");
+    QCOMPARE(list->currentStepIndex(), 1);
+
+    // Back keeps the whole window (rule 3): held at 900 ms of 1 s.
+    sc->setGoGuardMs(ShowControl::defaultGoGuardMs());
+    stopAll();
+    m_now += 10000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
+    m_now += 2000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
+    m_now += 900;
+    QVERIFY(!send(ShowControl::Back, ShowControl::RouteKey, list));
+    QCOMPARE(list->currentStepIndex(), 1);
+    m_now += 100;
+    QVERIFY(send(ShowControl::Back, ShowControl::RouteKey, list));
+    QCOMPARE(list->currentStepIndex(), 0);
+}
+
+void GoGuard_Test::everyRouteSharesTheCueRule()
+{
+    Chaser *list = makeList(5, "Main");
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(list->id());
+    for (ShowControl::Route first : sources())
+        for (ShowControl::Route second : sources())
+        {
+            const QString pair = name(first) + " then " + name(second);
+            markFast(list, 1, false);
+            stopAll();
+            m_now += 10000;
+            QVERIFY2(send(ShowControl::Go, first, list), qPrintable(pair + ": the first GO"));
+            m_now += 100;
+            QVERIFY2(!send(ShowControl::Go, second, list), qPrintable(pair + ": played at 100 ms"));
+            QCOMPARE(sc->heldNotice(), starting(QStringLiteral("1"), first));
+            m_now += 200;
+            QVERIFY2(send(ShowControl::Go, second, list), qPrintable(pair + ": held at 300 ms"));
+            QCOMPARE(list->currentStepIndex(), 1);
+            // Cue 2 made Fast: the GO after it goes at once, by either.
+            markFast(list, 1);
+            stopAll();
+            m_now += 10000;
+            QVERIFY(send(ShowControl::Go, first, list, "2"));
+            QVERIFY2(send(ShowControl::Go, second, list), qPrintable(pair + ": held after a Fast cue"));
+            QCOMPARE(list->currentStepIndex(), 2);
+        }
+    // A direct step (a VC button on a plain chaser) is the same rule.
+    markFast(list, 1, false);
+    stopAll();
+    m_now += 10000;
+    QVERIFY(send(ShowControl::Go, ShowControl::RouteKey, list));
+    m_now += 100;
+    QVERIFY(!sc->admitDirect(list->id(), ShowControl::Go, ShowControl::RouteVcCueList));
+    m_now += 200;
+    QVERIFY(sc->admitDirect(list->id(), ShowControl::Go, ShowControl::RouteVcCueList));
+}
+
+void GoGuard_Test::fastIsSavedAndLoaded()
+{
+    // The chaser step: Fast="1" when on, nothing when off.
+    auto stepXml = [](const ChaserStep &step) {
+        QByteArray xml;
+        QBuffer buffer(&xml);
+        buffer.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buffer);
+        step.saveXML(&w, 0, false);
+        return xml;
+    };
+    auto stepBack = [this](const QByteArray &xml) {
+        QXmlStreamReader r(xml);
+        r.readNextStartElement();
+        ChaserStep back;
+        int number = -1;
+        back.loadXML(r, number, m_doc);
+        return back;
+    };
+    ChaserStep step(42);
+    QVERIFY(!step.fast);
+    QVERIFY(!stepXml(step).contains("Fast="));
+    QVERIFY(!stepBack(stepXml(step)).fast);
+    step.fast = true;
+    QVERIFY(stepXml(step).contains("Fast=\"1\""));
+    QVERIFY(stepBack(stepXml(step)).fast);
+    QVERIFY(ChaserStep::fromVariant(step.toVariant()).fast);
+    ChaserStep copy(step);
+    QVERIFY(copy.fast);
+
+    // The Show Tree cue: Fast="1", read back; a cue without it is Off.
+    ShowTree::Production p;
+    p.id = 1;
+    p.name = "P";
+    ShowTree::CueList l;
+    l.id = 2;
+    l.name = "L";
+    ShowTree::Cue fast;
+    fast.id = 3;
+    fast.number = "1";
+    fast.fast = true;
+    ShowTree::Cue plain;
+    plain.id = 4;
+    plain.number = "2";
+    l.cues << fast << plain;
+    p.lists << l;
+    QByteArray xml;
+    {
+        QBuffer buffer(&xml);
+        buffer.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buffer);
+        ShowTree::saveXML(&w, p);
+    }
+    QCOMPARE(QString::fromUtf8(xml).count(QStringLiteral("Fast=\"1\"")), 1);
+    QXmlStreamReader r(xml);
+    r.readNextStartElement();
+    ShowTree::Production back;
+    QVERIFY(ShowTree::loadXML(r, back));
+    QCOMPARE(back.lists.count(), 1);
+    QCOMPARE(back.lists.first().cues.count(), 2);
+    QVERIFY(back.lists.first().cues.at(0).fast);
+    QVERIFY(!back.lists.first().cues.at(1).fast);
 }
 
 QTEST_MAIN(GoGuard_Test)

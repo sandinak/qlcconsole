@@ -1641,6 +1641,8 @@ void saveXML(QXmlStreamWriter *doc, const Production &production)
             }
             if (cue.skip && !list.looks)
                 doc->writeAttribute(QStringLiteral("Skip"), QStringLiteral("1"));
+            if (cue.fast && !list.looks && !list.isSubCues())
+                doc->writeAttribute(QStringLiteral("Fast"), QStringLiteral("1"));
             if (!cue.colour.isEmpty())
                 doc->writeAttribute(QStringLiteral("Colour"), cue.colour);
             if (cue.noMoveInBlack && !list.looks)
@@ -1921,6 +1923,7 @@ bool loadXML(QXmlStreamReader &root, Production &production)
             cue.unlinkedFrom = a.value(QStringLiteral("UnlinkedFrom")).toString();
             cue.collection = readId(a, QStringLiteral("Collection"));
             cue.skip = !looks && a.value(QStringLiteral("Skip")).toString() == QLatin1String("1");
+            cue.fast = !looks && !subs && a.value(QStringLiteral("Fast")).toString() == QLatin1String("1");
             cue.colour = readColour(a);
             cue.noMoveInBlack = !looks && a.value(QStringLiteral("NoMoveInBlack")).toString() == QLatin1String("1");
             cue.blocking = looks ? 0xFFFFFFFF : readId(a, QStringLiteral("Blocking"));

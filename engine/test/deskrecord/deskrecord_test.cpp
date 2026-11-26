@@ -422,7 +422,13 @@ void DeskRecord_Test::goTargetsRunTabListAndNamesIt()
 
     ShowControl *sc = m_doc->showControl();
     sc->setGoGuardMs(ShowControl::maxGoGuardMs());
-    auto unhook = qScopeGuard([sc]() { sc->setGoGuardMs(0); });
+    // A clock that stands still: a GO after a GO is held only until its
+    // cue has begun (Q328), so real time could let it through.
+    sc->setGuardClock([]() { return qint64(100000); });
+    auto unhook = qScopeGuard([sc]() {
+        sc->setGoGuardMs(0);
+        sc->setGuardClock(ShowControl::GuardClock());
+    });
     QSignalSpy fired(desk, &D::fired);
     QSignalSpy held(sc, &ShowControl::commandHeld);
     send(0, kGo, 127);

@@ -647,6 +647,7 @@ static void normalizeLooks(QList<Production> &ps)
                 c.skip = false;                 // a look is fired, not GOne through
                 c.noMoveInBlack = false;        // ... nor looked ahead to
                 c.focusCall = false;            // ... nor a pre-show step
+                c.fast = false;                 // ... nor guarded
             }
             l.moveInBlack = MoveInBlack::Show;
         }
@@ -1413,6 +1414,34 @@ bool ShowTreeController::setCuesNeedsWork(const QList<quint32> &cueIds, bool on)
         }
         return changed;
     });
+}
+
+bool ShowTreeController::setCuesFast(const QList<quint32> &cueIds, bool on)
+{
+    const QString label = on ? (cueIds.count() == 1 ? tr("Mark cue Fast")
+                                                    : tr("Mark %1 cues Fast").arg(cueIds.count()))
+                             : (cueIds.count() == 1 ? tr("Clear Fast on cue")
+                                                    : tr("Clear Fast on %1 cues").arg(cueIds.count()));
+    return edit(label, [&](QList<Production> &ps) {
+        bool changed = false;
+        for (quint32 cueId : cueIds)
+        {
+            CueList *l = nullptr;
+            Cue *c = cueIn(ps, cueId, &l);
+            // A GO's cue only: a look is fired, a sub-cue goes on Sub GO.
+            if (c == nullptr || l->looks || l->isSubCues() || c->fast == on)
+                continue;
+            c->fast = on;
+            changed = true;
+        }
+        return changed;
+    });
+}
+
+bool ShowTreeController::isCueFast(quint32 cueId) const
+{
+    const Cue *c = cue(cueId);
+    return c != nullptr && c->fast;
 }
 
 bool ShowTreeController::isCueNeedsWork(quint32 cueId) const
@@ -4855,7 +4884,7 @@ static bool sameSteps(const QList<ChaserStep> &a, const QList<ChaserStep> &b)
         const ChaserStep &x = a.at(i), &y = b.at(i);
         if (x.fid != y.fid || x.fadeIn != y.fadeIn || x.hold != y.hold || x.fadeOut != y.fadeOut
             || x.duration != y.duration || x.note != y.note || x.cueNumber != y.cueNumber
-            || x.subCues != y.subCues || x.skip != y.skip)
+            || x.subCues != y.subCues || x.skip != y.skip || x.fast != y.fast)
             return false;
     }
     return true;
@@ -5378,6 +5407,8 @@ void ShowTreeController::bake()
                 // Skipped: GO, auto-follow and Back pass over it (the
                 // runner), a jump still plays it.
                 step.skip = cue.skip;
+                // Fast (Q328): ShowControl's double-GO guard reads it.
+                step.fast = cue.fast;
                 // With sub-cues (P6): the step plays their chaser, held on
                 // Sub GO; the first sub-cue plays with GO.
                 for (const CueList &s : prod.lists)

@@ -235,7 +235,9 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   ALL OFF; a held button that keeps sending stops the show about once a
   second.
 - **GO is one press**, on the Run tab's list, with the double-GO guard (no
-  arm; the pad keeps its own). **Back** goes back on the same list. The
+  arm; the pad keeps its own): a second GO is held until the cue it
+  started has begun (a quarter second at least), never after a **Fast**
+  cue ([Two GOs at once](show-control.md#two-gos-at-once)). **Back** goes back on the same list. The
   footer chip's tooltip says what GO plays now: *GO → Act 2 main*.
 - **The Grand Master waits to pick up** after a show loads, after its
   device is plugged in again, after its port is patched again (by hand or
@@ -682,8 +684,9 @@ after any build that changes a surface, and say which build.
    channel 9 from a MIDI tool) on another universe. *Expect:* the Grand
    Master does not move.
 6. Without learning anything, press **Go**. *Expect:* the Run tab's list
-   GOes (in Design too, as the Run tab's GO); press twice within a second
-   and the second is held (*Second GO held*). **Back** steps back. Then
+   GOes (in Design too, as the Run tab's GO); press twice quickly (within
+   a quarter second) and the second is held (*Second GO held: cue 1 still
+   starting*). **Back** steps back. Then
    learn **Go** on the main cue list (Control Map) and press it: *Expect:*
    one GO a press, not two.
 7. Learn **Emergency Stop…** on a PMJ button: press, release, press. *Expect:*

@@ -118,6 +118,10 @@ public:
     /** Skipped: GO, Next, Back and auto-follow pass over it; a jump straight
      *  to it still plays it. Kept so it can be put back (rehearsals). */
     bool skip = false;
+    /** Fast (Q328): no double-GO guard after it -- the next GO is never
+     *  held (ShowControl::run(), rule 1). Mirrors a Show Tree cue's Fast;
+     *  saved as Fast="1", which an older build ignores. */
+    bool fast = false;
     /** How the step's sub-cues advance: saved as SubCues="SubGo", nothing
      *  for Auto, so older shows read and write unchanged. */
     SubCueMode subCues = Auto;

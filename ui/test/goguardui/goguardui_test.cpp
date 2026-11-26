@@ -18,6 +18,9 @@
 */
 
 #include <QApplication>
+#include <QScrollArea>
+#include <QTreeWidget>
+#include <QCheckBox>
 #include <QDoubleSpinBox>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -41,6 +44,7 @@
 #include "programmercontroller.h"
 #include "callingscriptview.h"
 #include "showtreecontroller.h"
+#include "showtreeview.h"
 #include "showcontrol.h"
 #include "showoperate.h"
 #include "mastertimer.h"
@@ -233,12 +237,13 @@ void GoGuardUi_Test::everySourceIsHeldAndEverySurfaceSaysIt()
             said.clear();
             QTRY_VERIFY2_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0,
                                       qPrintable(pair + ": the first GO did not play"), 3000);
-            m_now += 400;
+            m_now += 200;            // its cue begun, but under goBegunMs() (Q328)
             second.go();
             settle(60);
             QVERIFY2(list->currentStepIndex() == 0,
                      qPrintable(pair + ": the cue advanced to " + QString::number(list->currentStepIndex())));
-            surfaces(pair, QStringLiteral("Second GO held: %1's GO took it 0.4 s ago").arg(first.who));
+            surfaces(pair, QStringLiteral("Second GO held: cue %1 still starting (%2's GO)")
+                               .arg(list->stepCue(0), first.who));
         }
 
     // The window over, the words go from every screen.
@@ -331,6 +336,94 @@ void GoGuardUi_Test::theSettingChangesTheWindow()
     QCOMPARE(sc->goGuardMs(), 1000);
 }
 
+void GoGuardUi_Test::aFastCueGoesOnAtOnce()
+{
+    Doc *doc = m_app->doc();
+    ShowControl *sc = doc->showControl();
+    sc->setGuardClock([this]() { return m_now; });
+    ShowTreeController *st = doc->showTree();
+    const quint32 first = st->cueList(m_list)->cues.first().id;
+    QVERIFY(st->setCuesFast({ first }, true));
+    Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(m_list)->chaser));
+    QVERIFY(list != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(list->isStepFast(0) && !list->isStepFast(1), 3000);
+    CueRunner *runTab = m_app->findChild<CueRunner *>(QStringLiteral("runTab"));
+    PadRun *pad = doc->programmer()->padRun();
+    pad->setEnabled(true, false);
+    WebAccessRun phone(doc);
+    const QList<QPair<const char *, std::function<void()>>> after = {
+        { "the GO key", [this]() { m_app->m_cueGoAction->trigger(); } },
+        { "the Run tab's GO", [runTab]() { runTab->go(); } },
+        { "the pad", [pad]() { pad->trigger(PadRun::Go); } },
+        { "the phone Run page", [&phone]() { phone.command(QStringLiteral("go"), true); } },
+    };
+    for (const auto &source : after)
+    {
+        doc->masterTimer()->stopAllFunctions();
+        settle();
+        m_now += 10000;
+        runTab->go();
+        QTRY_VERIFY2_WITH_TIMEOUT(list->isRunning() && list->currentStepIndex() == 0,
+                                  qPrintable(QString(source.first) + ": the first GO did not play"), 3000);
+        // Straight after the Fast cue: it goes.
+        source.second();
+        QTRY_VERIFY2_WITH_TIMEOUT(list->currentStepIndex() == 1,
+                                  qPrintable(QString(source.first) + " was held after a Fast cue"), 3000);
+        // Cue 2 isn't Fast: the next GO a moment on is held.
+        m_now += 10;
+        source.second();
+        settle(60);
+        QVERIFY2(list->currentStepIndex() == 1, qPrintable(QString(source.first) + " after cue 2 played"));
+    }
+    doc->masterTimer()->stopAllFunctions();
+    pad->setEnabled(false, false);
+    QVERIFY(st->setCuesFast({ first }, false));
+    settle();
+}
+
+void GoGuardUi_Test::theFastTickIsOnTheCuePage()
+{
+    Doc *doc = m_app->doc();
+    ShowTreeController *st = doc->showTree();
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    m_app->m_tab->setCurrentWidget(view);
+    settle();
+    const quint32 second = st->cueList(m_list)->cues.at(1).id;
+    QVERIFY(view->selectNode(second));
+    settle();
+    QCheckBox *fast = view->findChild<QCheckBox *>(QStringLiteral("stCueFast"));
+    QVERIFY(fast != nullptr);
+    QVERIFY(fast->isVisibleTo(view));
+    QCOMPARE(fast->text(), QStringLiteral("Fast: Next GO Never Held"));
+    QVERIFY(!fast->isChecked());
+    fast->setChecked(true);
+    QVERIFY(st->isCueFast(second));
+    QCOMPARE(st->undoText(), QStringLiteral("Mark cue Fast"));
+    Chaser *list = qobject_cast<Chaser *>(doc->function(st->cueList(m_list)->chaser));
+    QTRY_VERIFY_WITH_TIMEOUT(list != nullptr && list->isStepFast(1) && !list->isStepFast(0), 3000);
+    // The row says so in its flags, with why in the tooltip.
+    view->tree()->expandAll();
+    QTreeWidgetItem *row = nullptr;
+    for (QTreeWidgetItemIterator it(view->tree()); *it; ++it)
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::CueNode
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == second)
+            row = *it;
+    QVERIFY(row != nullptr);
+    QVERIFY2(row->text(ShowTreeView::FlagsCol).contains(QStringLiteral("fast")),
+             qPrintable(row->text(ShowTreeView::FlagsCol)));
+    QVERIFY(row->toolTip(ShowTreeView::FlagsCol).contains(QStringLiteral("never held")));
+    // Another cue selected and back: the tick is the cue's.
+    QVERIFY(view->selectNode(st->cueList(m_list)->cues.first().id));
+    QVERIFY(!view->findChild<QCheckBox *>(QStringLiteral("stCueFast"))->isChecked());
+    QVERIFY(view->selectNode(second));
+    QVERIFY(view->findChild<QCheckBox *>(QStringLiteral("stCueFast"))->isChecked());
+    // One undo step.
+    QVERIFY(st->undo());
+    QVERIFY(!st->isCueFast(second));
+    QTRY_VERIFY_WITH_TIMEOUT(!list->isStepFast(1), 3000);
+}
+
 void GoGuardUi_Test::pictures()
 {
     const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
@@ -338,7 +431,8 @@ void GoGuardUi_Test::pictures()
         QSKIP("QLC_SHOT_DIR not set");
     QDir().mkpath(dir);
     Doc *doc = m_app->doc();
-    doc->showControl()->setGuardClock(ShowControl::GuardClock());   // NEW-API: the real clock
+    // The test's clock: a second GO 0.2 s on, whatever the machine's load.
+    doc->showControl()->setGuardClock([this]() { return m_now; });
     Chaser *list = qobject_cast<Chaser *>(doc->function(doc->showTree()->cueList(m_list)->chaser));
     CueRunner *runTab = m_app->findChild<CueRunner *>(QStringLiteral("runTab"));
     PadRun *pad = doc->programmer()->padRun();
@@ -346,17 +440,18 @@ void GoGuardUi_Test::pictures()
     // What an operator sees once an earlier press's notice has gone.
     QTRY_VERIFY_WITH_TIMEOUT(pad->notice().isEmpty(), PadRun::noticeMs() + 1000);
     const QList<QPair<QSize, QString> > sizes = { { QSize(1024, 640), "1024x640" },
-                                                  { QSize(1280, 800), "1280x800" },
+                                                  { QSize(1440, 900), "1440x900" },
                                                   { QSize(1920, 1080), "1920x1080" } };
     for (const auto &sz : sizes)
     {
         doc->masterTimer()->stopAllFunctions();
         m_app->resize(sz.first);
-        settle(1200);                       // any window before is over
-        // The student's GO from the laptop, the pad's 0.4 s later.
+        settle(200);
+        m_now += 10000;                     // any window before is over
+        // The student's GO from the laptop, the pad's 0.2 s later.
         runTab->go();
         QTRY_VERIFY_WITH_TIMEOUT(list->isRunning(), 3000);
-        QTest::qWait(400);
+        m_now += 200;
         pad->trigger(PadRun::Go);
         settle(150);
         QVERIFY2(m_app->m_statusStandby->isVisible() && !m_app->m_statusStandby->property("statusSqueezed").toBool()
@@ -369,6 +464,36 @@ void GoGuardUi_Test::pictures()
     }
     pad->setEnabled(false, false);
     doc->masterTimer()->stopAllFunctions();
+    m_now += ShowControl::heldNoticeMs() + 1000;
+    m_app->slotUpdateStandby();
+
+    // Q328: the Show Tree's cue page with Fast ticked, and "fast" on its row.
+    ShowTreeController *st = doc->showTree();
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    const quint32 second = st->cueList(m_list)->cues.at(1).id;
+    QVERIFY(st->setCuesFast({ second }, true));
+    m_app->m_tab->setCurrentWidget(view);
+    for (const auto &sz : sizes)
+    {
+        m_app->resize(sz.first);
+        settle(200);
+        QVERIFY(view->selectNode(second));
+        view->tree()->expandAll();
+        settle(200);
+        QCheckBox *fast = view->findChild<QCheckBox *>(QStringLiteral("stCueFast"));
+        QVERIFY(fast != nullptr && fast->isChecked());
+        // Scrolled to, where the cue page scrolls: the tick in the picture.
+        for (QWidget *w = fast->parentWidget(); w != nullptr; w = w->parentWidget())
+            if (QScrollArea *area = qobject_cast<QScrollArea *>(w))
+            {
+                area->ensureWidgetVisible(fast);
+                break;
+            }
+        settle(100);
+        QVERIFY(m_app->grab().save(dir + QStringLiteral("/goguard-cuepage-fast-%1.png").arg(sz.second)));
+    }
+    QVERIFY(st->setCuesFast({ second }, false));
     m_app->resize(1280, 800);
     settle();
 

@@ -254,6 +254,9 @@ public:
     bool isStepSkipped(int index) const;
     /** Skips step @a index, or puts it back. */
     void setStepSkipped(int index, bool skip);
+    /** Step @a index is Fast (ChaserStep::fast: no double-GO guard after
+     *  it); false for one not there. */
+    bool isStepFast(int index) const;
     /** The first step GO plays from stopped: the first not skipped (the last,
      *  running backward); -1 when every step is skipped. */
     int firstPlayableStep() const;

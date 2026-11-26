@@ -3022,7 +3022,7 @@ void AppViews_Test::pmjGoRunsTheRunTabList()
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QTRY_VERIFY_WITH_TIMEOUT(list->currentStepIndex() == 1, 5000);
     QSignalSpy held(sc, &ShowControl::commandHeld);
-    now += 300;
+    now += 200;                 // its cue begun, under goBegunMs() (Q328)
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 0);    // a press is the edge from 0
     pmj->slotRoleActivated(PMJOverlay::deviceId, kPmjGo, 127);
     QCOMPARE(held.count(), 1);

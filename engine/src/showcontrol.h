@@ -166,19 +166,30 @@ public:
      *  at the laptop owns GO, the pad stays armed for the staff hits, the
      *  phone page can GO too). The rules -- every later change keeps them:
      *
-     *   1. A GO arriving within goGuardMs() (Settings ▸ General ▸ Show
-     *      Controls, "Double-GO guard", 1.0 s by default; 0 turns it off)
-     *      of a GO carried out on the same cue list is held: refused, the
-     *      cue does not advance. The window runs from the command carried
-     *      out; a held one does not lengthen it. Any source, the same one
-     *      twice included.
+     *   1. A GO arriving after a GO carried out on the same cue list is
+     *      held -- refused, the cue does not advance -- until the cue that
+     *      GO started has visibly begun (Q328, "the guard follows the
+     *      cue"): the list's runner has started it AND goBegunMs() (250 ms)
+     *      have passed; never longer than goGuardMs() (Settings ▸ General
+     *      ▸ Show Controls, "Double-GO guard", 1.0 s by default; 0 turns
+     *      it off). decided: a cue with a wait before its fade has begun
+     *      when its wait starts, not when its fade does, so a delayed cue
+     *      never holds GO for its whole delay. A cue marked Fast
+     *      (ChaserStep::fast, the Show Tree cue's Fast) has no guard after
+     *      it: the GO after it is never held. The window runs from the
+     *      command carried out; a held one does not lengthen it. Any
+     *      source, the same one twice included.
      *   2. A hold is said on every surface at once, in one text
      *      (heldNotice(), commandHeld()): the Run tab, the footer's Next
      *      chip, the phone Run page, and the pad (a long rumble and its
-     *      notice) -- naming whose command was taken and that the second
-     *      was held: "Second GO held: Laptop's GO took it 0.4 s ago".
+     *      notice) -- naming why, whose command was taken and that the
+     *      second was held: "Second GO held: cue 3 still starting
+     *      (Laptop's GO)"; rule 3's: "BACK held: Laptop's GO took it 0.3
+     *      s ago".
      *   3. Back, Sub GO, Sub Back and Stop are held, and open the window,
-     *      the same way (a Back right after a GO is held). ALL OFF -- the
+     *      for the whole of goGuardMs() (a Back right after a GO is held,
+     *      and a GO right after a Back): only a GO after a GO follows the
+     *      cue (rule 1), and Fast changes only that. ALL OFF -- the
      *      emergency stop, from the pad, the phone, a key or MSC -- is NEVER
      *      held, and clears every window. Blackout is not a run command and
      *      never comes here. Pause, Resume, Load and Reset are not held.
@@ -231,6 +242,9 @@ public:
     static constexpr int defaultGoGuardMs() { return 1000; }
     /** The longest window Settings offer, ms. */
     static constexpr int maxGoGuardMs() { return 5000; }
+    /** Rule 1: a GO after a GO is held at least this long, ms, even
+     *  once its cue has begun -- what "visibly begun" takes (Q328). */
+    static constexpr int goBegunMs() { return 250; }
     /** The window, ms; 0: off. Off in the engine alone: the console sets
      *  it from Settings (App, "showcontrol/goGuardMs"). */
     int goGuardMs() const;
@@ -244,8 +258,11 @@ public:
     /** Who a route is, as a hold names it: "Laptop", "Pad", "Phone"... */
     static QString sourceName(Route route);
     /** The words of a hold: @a held arrived @a agoMs after @a takenBy's
-     *  @a taken. "Second GO held: Laptop's GO took it 0.4 s ago". */
-    static QString heldText(Command held, Command taken, Route takenBy, qint64 agoMs);
+     *  @a taken. "Second GO held: Laptop's GO took it 0.4 s ago"; with
+     *  @a startingCue (rule 1, a GO after a GO), why instead of when:
+     *  "Second GO held: cue 3 still starting (Laptop's GO)". */
+    static QString heldText(Command held, Command taken, Route takenBy, qint64 agoMs,
+                            const QString &startingCue = QString());
     /** The last hold's words for heldNoticeMs() after it; empty after, or
      *  with none. What every surface shows (rule 2). */
     QString heldNotice() const;
@@ -271,14 +288,22 @@ private:
     bool holds(const Request &request, Route route, QString *text, quint32 *chaserId);
     /** holds(), and said on every surface when it does. */
     bool holdIfGuarded(const Request &request, Route route);
-    /** @a command was carried out on @a chaserId: its window opens. */
-    void markTaken(quint32 chaserId, Command command);
+    /** @a command was carried out on @a chaserId: its window opens. A GO
+     *  names the @a step it started (-1: not known, a direct step), the
+     *  step @a from it left (-1: none), its @a cue's name and whether it
+     *  is @a fast (rule 1). */
+    void markTaken(quint32 chaserId, Command command, int step = -1, int from = -1, bool fast = false,
+                   const QString &cue = QString());
 
     struct GuardMark
     {
         qint64 at = 0;
         Route route = RouteOther;
         Command command = Go;
+        int step = -1;          ///< the step a GO started (-1: not known)
+        int from = -1;          ///< the step it left (-1: none, from stopped)
+        bool fast = false;      ///< that step is Fast: no guard after it
+        QString cue;            ///< its cue's name, for the hold's words
     };
     mutable QMutex m_guardMutex;            ///< a command may arrive on a plugin's thread
     int m_goGuardMs = 0;
