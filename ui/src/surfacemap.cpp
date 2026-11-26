@@ -1110,7 +1110,7 @@ void SurfaceMaps::refreshPages()
                    tr("%1 and %2 step").arg(face(set.previousKey()), face(set.nextKey()));
         if (set.stepper() != 0xFFFFFFFF)
             how += (how.isEmpty() ? QString() : QStringLiteral("; ")) + tr("turn %1 to step").arg(face(set.stepper()));
-        QString text = tr("On now: <b>%1</b>").arg(pages->pageName(u).toHtmlEscaped());
+        QString text = tr("On now: <b>%1</b>").arg(pages->pageText(u).toHtmlEscaped());
         if (!how.isEmpty())
             text += QStringLiteral(" (%1)").arg(how.toHtmlEscaped());
         text += m_doc->mode() == Doc::Design
@@ -1118,6 +1118,10 @@ void SurfaceMaps::refreshPages()
                     : tr(". In Operate the controls are the show's: pages wait for Design.");
         it.value()->setTextFormat(Qt::RichText);
         it.value()->setText(text);
+        // A hand-edited set the checker refused: said, not used.
+        const QStringList refused = PageSet::refusedFor(set.profileName());
+        for (const QString &r : refused)
+            text += QStringLiteral("<br><span style=\"color:#c0392b\">%1</span>").arg(r.toHtmlEscaped());
         if (QWidget *offer = m_offers.value(u))
         {
             const QString name = pages->offeredSet(u);

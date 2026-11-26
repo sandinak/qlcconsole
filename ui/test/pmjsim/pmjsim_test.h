@@ -62,6 +62,10 @@ private slots:
      *  (STOP lit always, blinking after ALL OFF); the overlay leaves them. */
     void theDesksStopIsLitOnThePmj();
 
+    /** Surface pages: the Groups page's fader picks the group up before it
+     *  moves it (Q299); a page with no jobs yet lights its key dim. */
+    void theGroupsFaderPicksUpAndAnEmptyPageIsDim();
+
 private:
     void makeShow();
 

@@ -42,6 +42,7 @@ const QString kExt = QStringLiteral(".pageset.json");
 const quint32 kNone = 0xFFFFFFFF;
 
 QString s_userDir;
+QHash<QString, QStringList> s_refused;     // profile -> "file: why" of user sets not used
 
 struct Param
 {
@@ -254,8 +255,12 @@ QHash<quint32, QString> PageSet::labels(int page) const
     for (int i = 0; i < m_pages.size(); ++i)
     {
         const Page &p = m_pages.at(i);
-        if (p.key != kNone && (!out.contains(p.key) || i == page))
-            out.insert(p.key, p.name);
+        if (p.key == kNone || (out.contains(p.key) && i != page))
+            continue;
+        bool empty = true;
+        for (const Binding &b : p.controls)
+            empty = empty && b.param == kNoneParam;
+        out.insert(p.key, empty ? QObject::tr("%1: coming").arg(p.name) : p.name);
     }
     if (m_next != kNone)
         out.insert(m_next, QObject::tr("Next page"));
@@ -573,16 +578,34 @@ QList<PageSet> PageSet::forProfile(const QString &profileName)
     for (const PageSet &s : builtIns())
         if (s.profileName() == profileName)
             out << s;
+    /* A user's set is checked as it is read: a file edited by hand that
+       puts a job on the desk's GO, STOP, GM or Back (or does not fit its
+       board) is not used, and the map says why (refusedFor()). */
+    QStringList refused;
     const QDir dir = userDirectory();
     QStringList files = dir.entryList();
     files.sort();
     for (const QString &f : files)
     {
         const PageSet s = fromFile(dir.absoluteFilePath(f));
-        if (s.isValid() && s.profileName() == profileName)
-            out << s;
+        if (!s.isValid() || s.profileName() != profileName)
+            continue;
+        const QStringList problems = s.check(SurfaceLayout::forProfile(profileName));
+        if (!problems.isEmpty())
+        {
+            refused << QObject::tr("%1 is not used: %2").arg(f, problems.first());
+            continue;
+        }
+        out << s;
     }
+    s_refused.insert(profileName, refused);
     return out;
+}
+
+QStringList PageSet::refusedFor(const QString &profileName)
+{
+    forProfile(profileName);
+    return s_refused.value(profileName);
 }
 
 PageSet PageSet::find(const QString &profileName, const QString &name)

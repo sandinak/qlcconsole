@@ -3201,6 +3201,8 @@ void AppViews_Test::aPmjFaderOrEncoderInOperateEditsNothing()
     // Design: fader 1 sets the selected fixture's intensity (the control case).
     doc->setMode(Doc::Design);
     m_app->statusBar()->clearMessage();
+    // A fader picks up first (Q299): from zero, where the fixture is, then up.
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, level1, 0);
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, level1, 100);
     QCOMPARE(value(), 100);
     QVERIFY(!m_app->statusBar()->currentMessage().contains("Operate"));

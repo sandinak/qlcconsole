@@ -31,6 +31,7 @@
 #define private public
 #define protected public
 #include "app.h"
+#include "programmingmanager.h"
 #undef protected
 #undef private
 #include "simmididevice.h"
@@ -54,6 +55,10 @@
 #include "qlcpalette.h"
 #include "fixture.h"
 #include "function.h"
+#include "surfacepages.h"
+#include "fixturegroup.h"
+#include "workbench.h"
+#include "scene.h"
 #include "doc.h"
 
 #include "pmjsim_test.h"
@@ -579,4 +584,61 @@ int main(int argc, char **argv)
     QCoreApplication::setOrganizationName(QStringLiteral("qlcconsole-test"));
     PmjSim_Test test;
     return QTest::qExec(&test, argc, argv);
+}void PmjSim_Test::theGroupsFaderPicksUpAndAnEmptyPageIsDim()
+{
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Design);
+    // A scene of one group (both dimmers), open in Build.
+    QList<quint32> dimmers;
+    for (Fixture *f : doc->fixtures())
+        dimmers << f->id();
+    QVERIFY(dimmers.size() >= 2);
+    FixtureGroup *g = new FixtureGroup(doc);
+    g->setName(QStringLiteral("Front"));
+    g->setSize(QSize(2, 1));
+    doc->addFixtureGroup(g);
+    g->assignFixture(dimmers.at(0), QLCPoint(0, 0));
+    g->assignFixture(dimmers.at(1), QLCPoint(1, 0));
+    Scene *s = new Scene(doc);
+    s->setName(QStringLiteral("Groups look"));
+    doc->addFunction(s);
+    s->addFixtureGroup(g->id());
+    ProgrammingManager *pm = m_app->findChild<ProgrammingManager *>();
+    QVERIFY(pm != nullptr && pm->m_workbench != nullptr);
+    pm->m_workbench->load(s->id());
+    settle();
+    QCOMPARE(pm->currentSceneId(), s->id());
+
+    SurfacePages *pages = doc->controlMap()->surfacePages();
+    QVERIFY(m_pmj->tap(QStringLiteral("Groups")));
+    settle();
+    QCOMPARE(pages->pageName(m_pmj->universe()), QStringLiteral("Groups"));
+    auto level = [doc, &dimmers]() { return int(doc->programmerValues().value(dimmers.at(0)).value(0, 0)); };
+    const int before = level();
+
+    // Ch 1 far from the group's level: it waits.
+    QVERIFY(m_pmj->set(QStringLiteral("Ch 1"), 100));
+    settle();
+    QCOMPARE(level(), before);
+    // Down through it: picked up, then it follows.
+    QVERIFY(m_pmj->set(QStringLiteral("Ch 1"), 0));
+    QVERIFY(m_pmj->set(QStringLiteral("Ch 1"), 50));
+    settle();
+    QCOMPARE(level(), 100);
+
+    // Effects has no jobs yet: its key dim, not dark, not lit; Groups lit.
+    QVERIFY(m_pmj->tap(QStringLiteral("Groups")));
+    settle();
+    const int effects = m_pmj->lamp(QStringLiteral("Effects"));
+    QVERIFY2(effects > 0 && effects < 127, qPrintable(QString::number(effects)));
+    QCOMPARE(m_pmj->lamp(QStringLiteral("Groups")), 127);
+    QCOMPARE(m_pmj->lamp(QStringLiteral("Fix Cont")), 0);
+    QVERIFY(m_pmj->tap(QStringLiteral("Looks")));
+    settle();
+    pm->m_workbench->load(Function::invalidId());
+    doc->deleteFunction(s->id());
+    doc->deleteFixtureGroup(g->id());
+    settle();
 }
+
+

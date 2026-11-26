@@ -40,6 +40,9 @@
 #include "qlcinputprofile.h"
 #include "ioplugincache.h"
 #include "qlcfile.h"
+#include "functionparent.h"
+#include "mastertimer.h"
+#include "scene.h"
 #include "doc.h"
 
 namespace
@@ -558,6 +561,146 @@ void SurfacePages_Test::aShowOffersTheSetItWasBuiltWith()
     QCOMPARE(pages->offeredSet(0), QStringLiteral("Mine"));
     pages->declineShowSet(0);
     QCOMPARE(pages->offeredSet(0), QString());
+}
+
+/*****************************************************************************
+ * Review fixes
+ *****************************************************************************/
+
+void SurfacePages_Test::aKnobRiddenElsewhereTurnsFromWhereItIs()
+{
+    SimMidiDevice *apc = plug(QStringLiteral("APC40 mkII"), kApc, fileOf(kApc), 0);
+    QVERIFY(apc != nullptr);
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    QSignalSpy turned(pages, &SurfacePages::adjusted);
+    auto biggest = [&turned]() {
+        int most = 0;
+        for (const QList<QVariant> &a : std::as_const(turned))
+            most = qMax(most, qAbs(a.at(2).toInt()));
+        return most;
+    };
+    QVERIFY(apc->set(QStringLiteral("#16"), 10));
+    QVERIFY(apc->set(QStringLiteral("#16"), 11));
+    QCOMPARE(turned.size(), 1);
+    // Ridden all the way in Operate, where it is the show's.
+    m_doc->setMode(Doc::Operate);
+    for (int v = 20; v <= 120; v += 10)
+        QVERIFY(apc->set(QStringLiteral("#16"), v));
+    m_doc->setMode(Doc::Design);
+    turned.clear();
+    // The first nudge in Design is a nudge, never the whole ride.
+    QVERIFY(apc->set(QStringLiteral("#16"), 121));
+    QVERIFY(apc->set(QStringLiteral("#16"), 122));
+    QVERIFY2(biggest() <= 1, qPrintable(QStringLiteral("a nudge turned %1 detents").arg(biggest())));
+    // Ridden while a learn listens, then a nudge.
+    m_doc->controlMap()->listen();
+    QVERIFY(apc->set(QStringLiteral("#16"), 20));
+    m_doc->controlMap()->stopListening();
+    turned.clear();
+    QVERIFY(apc->set(QStringLiteral("#16"), 21));
+    QVERIFY2(biggest() <= 1, qPrintable(QStringLiteral("after a learn a nudge turned %1 detents").arg(biggest())));
+}
+
+void SurfacePages_Test::aKeyHeldIntoOperateIsLetGo()
+{
+    SimMidiDevice *apc = plug(QStringLiteral("APC40 mkII"), kApc, fileOf(kApc), 0);
+    QVERIFY(apc != nullptr);
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    QVERIFY(apc->press(QStringLiteral("#216")));       // Sends, held
+    QCOMPARE(pages->pageName(0), QStringLiteral("Beam"));
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(apc->release(QStringLiteral("#216")));     // let go in Operate
+    m_doc->setMode(Doc::Design);
+    QVERIFY(apc->tap(QStringLiteral("#215")));
+    QCOMPARE(pages->pageName(0), QStringLiteral("Move"));
+    QVERIFY(apc->tap(QStringLiteral("#216")));
+    QCOMPARE(pages->pageName(0), QStringLiteral("Beam"));
+}
+
+void SurfacePages_Test::thePageKeysLightsAreThePagesInDesignOnly()
+{
+    SimMidiDevice *apc = plug(QStringLiteral("APC40 mkII"), kApc, fileOf(kApc), 0);
+    QVERIFY(apc != nullptr);
+    // The show's trigger on Sends, its scene playing: the Control Map would light it.
+    Scene *stab = new Scene(m_doc);
+    stab->setName(QStringLiteral("Stab"));
+    m_doc->addFunction(stab);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 216, ControlMap::function(stab->id()), ControlMap::Toggle });
+    stab->start(m_doc->masterTimer(), FunctionParent::master());
+    m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    cm->resendFeedback();
+    QCoreApplication::processEvents();
+    // Design, on Move: Pan is lit, Sends is the page's (dark), whatever the show says.
+    QCOMPARE(apc->lamp(QStringLiteral("#215")), 127);
+    QCOMPARE(apc->lamp(QStringLiteral("#216")), 0);
+    // Operate: the page's light goes, the show's comes back.
+    m_doc->setMode(Doc::Operate);
+    QCoreApplication::processEvents();
+    QCOMPARE(apc->lamp(QStringLiteral("#215")), 0);
+    QVERIFY2(apc->lamp(QStringLiteral("#216")) > 0, "the show's light on Sends did not come back");
+    stab->stop(FunctionParent::master());
+    m_doc->masterTimer()->timerTick();
+    m_doc->setMode(Doc::Design);
+}
+
+void SurfacePages_Test::aHandEditedSetWithTheDesksControlsIsRefused()
+{
+    // Edited by hand straight into the folder: PLAY (this computer's GO) on a page.
+    PageSet bad = edited(PageSet::defaultFor(kApc), [](QJsonObject &r) {
+        r.insert("name", "Sneaky");
+        QJsonArray pages = r.value("pages").toArray();
+        QJsonObject p = pages.at(0).toObject();
+        QJsonArray c = p.value("controls").toArray();
+        c.append(binding(219, "pan"));
+        p.insert("controls", c);
+        pages.replace(0, p);
+        r.insert("pages", pages);
+    });
+    QVERIFY(bad.save(QDir(m_userSets->path()).filePath(QStringLiteral("sneaky.pageset.json"))));
+    QVERIFY(!PageSet::find(kApc, QStringLiteral("Sneaky")).isValid());
+    const QStringList why = PageSet::refusedFor(kApc);
+    QCOMPARE(why.size(), 1);
+    QVERIFY2(why.first().contains(QStringLiteral("sneaky.pageset.json")) && why.first().contains(QStringLiteral("GO")),
+             qPrintable(why.first()));
+    SimMidiDevice *apc = plug(QStringLiteral("APC40 mkII"), kApc, fileOf(kApc), 0);
+    QVERIFY(apc != nullptr);
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    QVERIFY(!pages->chooseSet(0, QStringLiteral("Sneaky")));
+    QVERIFY(!m_doc->inputOutputMap()->isPageControl(0, 219));
+}
+
+void SurfacePages_Test::thePagesRestWhileALearnListens()
+{
+    SimMidiDevice *apc = plug(QStringLiteral("APC40 mkII"), kApc, fileOf(kApc), 0);
+    QVERIFY(apc != nullptr);
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    QSignalSpy turned(pages, &SurfacePages::adjusted);
+    QVERIFY(apc->set(QStringLiteral("#16"), 10));
+    // A learn hears the next press: the knob turns nothing meanwhile...
+    m_doc->controlMap()->listen();
+    QVERIFY(apc->set(QStringLiteral("#16"), 14));
+    QCOMPARE(turned.size(), 0);
+    m_doc->controlMap()->stopListening();
+    // ...and a page key pressed for a learn is the learn's, not a page.
+    m_doc->controlMap()->listen();
+    QVERIFY(apc->tap(QStringLiteral("#216")));
+    QCOMPARE(pages->pageName(0), QStringLiteral("Move"));
+    m_doc->controlMap()->stopListening();
+}
+
+void SurfacePages_Test::anEmptyPageSaysComing()
+{
+    SimMidiDevice *pmj = plug(kPmj, kPmj, fileOf(kPmj), 0);
+    QVERIFY(pmj != nullptr);
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    QCOMPARE(pages->labels(0).value(32946), QStringLiteral("Effects: coming"));
+    QCOMPARE(pages->labels(0).value(32947), QStringLiteral("Groups"));
+    QVERIFY(pmj->tap(QStringLiteral("Effects")));
+    QVERIFY(pages->pageIsEmpty(0));
+    QCOMPARE(pages->pageText(0), QStringLiteral("Effects: coming"));
+    QCOMPARE(pages->chipText(0), QStringLiteral("PMJ · Effects: coming"));
 }
 
 QTEST_MAIN(SurfacePages_Test)
