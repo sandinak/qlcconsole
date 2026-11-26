@@ -14,6 +14,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
+  surface type with its map. The motor fader is the Grand Master (picked up
+  as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is
+  an endless one, and Play, Stop, Record and Loop have lamps.
 - **Surface pages**: each drawn board (APC40 mk2, APC64, PMJ Black 1,
   MaizeDMX) comes with labelled pages of jobs for its controls, in Design
   only: colour on the faders, moves and beam on the knobs (APC40 device

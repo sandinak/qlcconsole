@@ -45,6 +45,7 @@ private slots:
     void roleProblemsAreSaid();
     void pmjBlack1RolesAreItsOldTable();
     void shippedSurfaceTypesHoldTheirRules();
+    void faderPort2IsATypeWithAMotorFader();
     void loader();
     void save();
     void saveFlushesOnlyItsFile();
