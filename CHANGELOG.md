@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Song sections in a VC Cue List**: a Virtual Console Cue List on a list
+  with song sections shows the Run tab's section rows (Intro, Verse,
+  Chorus…) between its cues, in the running order; GO, Next and Previous
+  pass them, and the section of the cue playing stays named over the list.
+  Lists without sections and saved layouts are unchanged.
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

@@ -1722,6 +1722,19 @@ numbers. The show saves its scheme and section names (`Numbering=`,
 `Section` entries) and the running order (a `RunningOrder` element), which
 an older build ignores.
 
+### Song sections in a VC Cue List
+
+A Virtual Console **Cue List** on a list with song sections shows the same
+section rows as the Run tab: the section's title, bold across the list,
+above its first cue, in tonight's running order. A section row is a
+heading, not a cue: it can't be picked, a double-click on it plays
+nothing, and **GO**, **Next** and **Previous** pass it (the arrow keys go on
+to the cue next to it). The section of the cue playing (stopped: the cue
+picked) is named over the list, so it stays in sight however far the list
+scrolls. Rename a section or change the running order and the rows follow.
+A list with no sections, or a plain QLC+ chaser, looks as it always did, and
+a saved Virtual Console layout loads unchanged: nothing new is saved.
+
 ### Song sections on the timecode
 
 A show on timecode often runs from a DAW session: Logic plays the track,
