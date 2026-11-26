@@ -389,9 +389,12 @@ QList<quint32> PMJOverlay::sceneTargetFixtures() const
 
 const PageSet::Binding *PMJOverlay::pageBinding(quint32 channel) const
 {
-    if (m_universe < 0)
-        return nullptr;
-    return m_doc->controlMap()->surfacePages()->bindingFor(quint32(m_universe), channel);
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    if (m_universe >= 0 && pages->pageSet(quint32(m_universe)).isValid())
+        return pages->bindingFor(quint32(m_universe), channel);
+    // Not found on a universe yet: the set's first page (Looks), as before pages.
+    static const PageSet fallback = PageSet::defaultFor(deviceId);
+    return fallback.binding(0, channel);
 }
 
 bool PMJOverlay::pageRule(int index, const QString &rule) const
@@ -642,7 +645,9 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         break;
 
     case ControlSurface::RoleType::Page:
-        // SurfacePages has the page (its keys); its pageChanged() relights.
+        // The page set's key: SurfacePages has the page; its pageChanged() relights.
+        if (value > 0 && m_universe >= 0)
+            m_doc->controlMap()->surfacePages()->pressKey(quint32(m_universe), pageKeyChannel(role.index));
         break;
 
     case ControlSurface::RoleType::Param:

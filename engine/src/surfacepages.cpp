@@ -172,6 +172,20 @@ void SurfacePages::setPage(quint32 universe, int page)
        display writer is on main; pageChanged() is what it will listen to. */
 }
 
+bool SurfacePages::pressKey(quint32 universe, quint32 key)
+{
+    Board *b = board(universe);
+    if (b == nullptr || !b->set.keys().contains(key))
+        return false;
+    if (key == b->set.nextKey())
+        stepPage(universe, 1);
+    else if (key == b->set.previousKey())
+        stepPage(universe, -1);
+    else
+        setPage(universe, b->set.pageForKey(key, b->page));
+    return true;
+}
+
 void SurfacePages::stepPage(quint32 universe, int direction)
 {
     Board *b = board(universe);
@@ -340,6 +354,9 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
     }
     if (b->set.keys().contains(own))
     {
+        // An overlay's keys are the overlay's to press (pressKey()).
+        if (overlaid)
+            return;
         const quint64 k = keyOf(universe, own);
         if (value == 0)
         {
@@ -349,12 +366,7 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
         if (m_down.contains(k))
             return;     // a held key resending is the one press
         m_down.insert(k);
-        if (own == b->set.nextKey())
-            stepPage(universe, 1);
-        else if (own == b->set.previousKey())
-            stepPage(universe, -1);
-        else
-            setPage(universe, b->set.pageForKey(own, b->page));
+        pressKey(universe, own);
         return;
     }
     if (!design)

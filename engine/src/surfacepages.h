@@ -78,6 +78,10 @@ public:
     /** "APC40 · Move"; empty when none. */
     QString chipText(quint32 universe) const;
     void setPage(quint32 universe, int page);
+    /** Key @p key of @p universe's board pressed: its page (again: the
+     *  key's next page), or the next / previous. A board's overlay (the
+     *  PMJ's mode keys) calls it; others are heard here. False: not a key. */
+    bool pressKey(quint32 universe, quint32 key);
     /** The next (+1) or previous (-1) page, round the set. */
     void stepPage(quint32 universe, int direction);
 
