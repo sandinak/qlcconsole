@@ -58,6 +58,13 @@ SurfacePages::SurfacePages(Doc *doc)
         connect(iom, &InputOutputMap::inputPatchChanged, this, &SurfacePages::rescan);
         connect(iom, &InputOutputMap::profileChanged, this, &SurfacePages::rescan);
         connect(iom, &InputOutputMap::universeRemoved, this, &SurfacePages::rescan);
+        /* A setup's hold ended (Identify, 053m): the board's lamps were its;
+           the page keys' lights are this one's again (the Control Map
+           leaves a page control alone). */
+        connect(iom, &InputOutputMap::boardLampsReleased, this, [this](quint32 universe) {
+            if (board(universe) != nullptr)
+                sendLamps(universe);
+        });
         connect(iom, &InputOutputMap::inputDeviceConnected, this, [this](quint32 universe) {
             if (board(universe) != nullptr)
                 sendLamps(universe);
@@ -372,7 +379,10 @@ bool SurfacePages::standsDown() const
     // A learn of any kind hears the board, not a page: the desk's, the show's.
     InputOutputMap *iom = m_doc->inputOutputMap();
     ControlMap *cm = m_doc->controlMap();
-    return (iom != nullptr && iom->deskLearning()) || (cm != nullptr && cm->isListening());
+    /* An Assign to Control... window too (053m's AssignInputGate): a control
+       moved to find it in the list fires nothing, Edit Live's trims included. */
+    return (iom != nullptr && (iom->deskLearning() || iom->assignListening()))
+           || (cm != nullptr && cm->isListening());
 }
 
 void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
@@ -419,6 +429,10 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
 
     // The desk's own (a role learned on any control), a learn, the show's encoder bank.
     if (standsDown() || iom->isStaticControl(universe, channel) || encoderBankOn(universe))
+        return;
+    /* A controller's setup holds this board (Identify, a mode check): a
+       press pairs a lamp, it never switches a page or trims (Edit Live). */
+    if (value > 0 && iom->isSetupHeld(universe))
         return;
     // Never the desk's GO, Back, STOP or GM, whatever a set says.
     if (!b->layout.roleOn(own).isEmpty())

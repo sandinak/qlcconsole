@@ -45,6 +45,7 @@
 #include "inputoutputmap.h"
 #include "ioplugincache.h"
 #include "editlivechip.h"
+#include "showlevel.h"
 #include "surfacepages.h"
 #include "fixturegroup.h"
 #include "showoperate.h"
@@ -264,6 +265,49 @@ void EditLiveUi_Test::theRunTabSwitchTurnsItOn()
     QVERIFY(!el->isOn());
     QVERIFY(!b->isChecked());
     QVERIFY(b->isHidden());
+}
+
+/* Workspace levels (L1): Edit Live edits the show live, so it is
+   Standard and up. At Student the Run tab's switch and the footer chip are
+   greyed, saying the level, and neither turns it on; a step down to
+   Student turns it off. GO and the safety controls are not its to hide. */
+void EditLiveUi_Test::aStudentShowNeverReachesIt()
+{
+    ShowLevel *level = ShowLevel::instance();
+    QCOMPARE(ShowLevel::levelOf(QStringLiteral("operate.editlive")), ShowLevel::Standard);
+    m_doc->setMode(Doc::Operate);
+    EditLive *el = m_doc->controlMap()->editLive();
+    CueRunner run(m_doc, CueRunner::Full);
+    EditLiveChip chip(m_doc);
+    level->setLevel(ShowLevel::Student);
+    level->apply();
+    settle();
+    QToolButton *b = run.editLiveButton();
+    QVERIFY(!b->isEnabled());
+    QVERIFY(!chip.chip()->isEnabled());
+    QVERIFY2(b->toolTip().contains(QStringLiteral("Standard")), qPrintable(b->toolTip()));
+    QVERIFY2(chip.chip()->toolTip().contains(QStringLiteral("Standard")), qPrintable(chip.chip()->toolTip()));
+    QString why;
+    QVERIFY(!EditLiveChip::turnOn(m_doc, nullptr, &why));
+    QVERIFY(why.contains(QStringLiteral("Standard")));
+    QVERIFY(!el->isOn());
+
+    // Standard: both work; back down to Student turns it off.
+    level->setLevel(ShowLevel::Standard);
+    level->apply();
+    settle();
+    QVERIFY(b->isEnabled());
+    QVERIFY(chip.chip()->isEnabled());
+    QVERIFY(!b->toolTip().contains(QStringLiteral("Standard level")));
+    QVERIFY(EditLiveChip::turnOn(m_doc, nullptr));
+    QVERIFY(el->isOn());
+    level->setLevel(ShowLevel::Student);
+    level->apply();
+    settle();
+    QVERIFY(!el->isOn());
+    QVERIFY(!b->isChecked());
+    level->setLevel(ShowLevel::Standard);
+    level->apply();
 }
 
 void EditLiveUi_Test::theChipIsRedAndListsTheTrims()

@@ -44,6 +44,8 @@ private slots:
     void theRunTabSwitchTurnsItOn();
     void theChipIsRedAndListsTheTrims();
     void afterGoTheChipOffersStoreToCue();
+    /* Train 053o's cross-branch review: fails on 72ae430a3 */
+    void aStudentShowNeverReachesIt();
     void shots();
 
 private:

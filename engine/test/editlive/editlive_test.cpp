@@ -29,6 +29,7 @@
 #undef protected
 #undef private
 #include <QDir>
+#include <climits>
 #include <algorithm>
 
 #include "editlive_test.h"
@@ -1183,6 +1184,60 @@ void EditLive_Test::aPixelBarWhoseHeadsDifferIsNotStored()
     QVERIFY(childOf(m_c1, g->id(), bar->id()) == nullptr);
     QVERIFY(m_live->hasTrims());
     QCOMPARE(frame(), trimmed);
+}
+
+/* Train 053o: 053m's Identify (a setup hold on the board) and Assign to
+   Control... (AssignInputGate) hear the board; Edit Live stands down. */
+void EditLive_Test::aSetupHoldOrAnAssignStandsItDown()
+{
+    m_doc->setMode(Doc::Operate);
+    go();
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_spot };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    const QByteArray before = frame();
+
+    // Identify holds the board: a knob turned pairs, it trims nothing.
+    iom->setSetupListening(0);
+    QVERIFY(iom->isSetupHeld(0));
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 70));
+    QVERIFY(!m_live->hasTrims());
+    QCOMPARE(frame(), before);
+    iom->setSetupListening(UINT_MAX);
+
+    // An Assign to Control... window is open: the same.
+    iom->setAssignListening(true);
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 80));
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 90));
+    QVERIFY(!m_live->hasTrims());
+    QCOMPARE(frame(), before);
+    iom->setAssignListening(false);
+
+    // Both gone: the knob trims again, from where it was left (no jump).
+    QVERIFY(m_apc->set(QStringLiteral("#16"), 94));
+    QVERIFY(m_live->hasTrims());
+}
+
+/* Train 053o: Identify is the board's one lamp writer while it holds;
+   when it lets go, the page's keys are lit as the page again (Edit Live
+   on in Operate, as in Design), not left as Identify had them. */
+void EditLive_Test::aSetupHoldGivesThePageLampsBack()
+{
+    m_doc->setMode(Doc::Operate);
+    go();
+    QVERIFY(m_live->setOn(true));
+    QCoreApplication::processEvents();
+    // The Move page: its key (Pan) lit.
+    QCOMPARE(m_apc->lamp(QStringLiteral("#215")), 127);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setSetupListening(0);
+    // Identify flashed lamp after lamp: what the board shows is not the page's.
+    m_apc->forgetLamps();
+    iom->setSetupListening(UINT_MAX);
+    QCoreApplication::processEvents();
+    QCOMPARE(m_apc->lamp(QStringLiteral("#215")), 127);
+    QCOMPARE(m_apc->lamp(QStringLiteral("#216")), 0);
 }
 
 QTEST_MAIN(EditLive_Test)

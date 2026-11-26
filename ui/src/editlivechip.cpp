@@ -27,6 +27,7 @@
 #include "showtreecontroller.h"
 #include "surfacepages.h"
 #include "showoperate.h"
+#include "showlevel.h"
 #include "controlmap.h"
 #include "editlive.h"
 #include "doc.h"
@@ -90,7 +91,21 @@ EditLiveChip::EditLiveChip(Doc *doc, QWidget *parent)
     if (ControlMap *map = m_doc->controlMap())
         connect(map->surfacePages(), &SurfacePages::setsChanged, this, &EditLiveChip::refresh);
     connect(m_doc, &Doc::modeChanged, this, &EditLiveChip::refresh);
+    /* Standard and up (it edits the show live): greyed at Student, saying
+       the level; a step down to Student turns it off. */
     refresh();
+    ShowLevel::instance()->bind(m_chip, levelKey());
+    connect(ShowLevel::instance(), &ShowLevel::changed, this, [this]() {
+        EditLive *el = live();
+        if (el != nullptr && el->isOn() && !ShowLevel::shown(levelKey()))
+            el->setOn(false);
+        refresh();
+    });
+}
+
+QString EditLiveChip::levelKey()
+{
+    return QStringLiteral("operate.editlive");
 }
 
 EditLive *EditLiveChip::live() const
@@ -110,6 +125,13 @@ bool EditLiveChip::turnOn(Doc *doc, QWidget *parent, QString *why)
         return false;
     if (el->isOn())
         return true;
+    // Not at Student (WORKSPACE_LEVELS.md): the level says so, no PIN asked.
+    if (!ShowLevel::shown(levelKey()))
+    {
+        if (why != nullptr)
+            *why = ShowLevel::whyHidden(levelKey());
+        return false;
+    }
     // Anyone at this computer, but the show's PIN when it has one (Q339 a).
     ShowOperate *lock = doc->operateSettings();
     if (lock != nullptr && lock->hasPin())
@@ -155,8 +177,10 @@ void EditLiveChip::refresh()
     {
         m_chip->setText(tr("Edit Live"));
         m_chip->setStyleSheet(QLatin1String(kOffStyle));
-        m_chip->setToolTip(tr("Turn on Edit Live: the board's page controls trim the running cue, "
-                              "and Store keeps the trims in its looks."));
+        // Greyed by the level (ShowLevel): its tooltip says the level.
+        if (ShowLevel::shown(levelKey()))
+            m_chip->setToolTip(tr("Turn on Edit Live: the board's page controls trim the running cue, "
+                                  "and Store keeps the trims in its looks."));
     }
     const bool left = el != nullptr && el->hasLeftBehind() && m_leftTimer->isActive();
     if (left)

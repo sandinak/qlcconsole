@@ -58,6 +58,8 @@ const QList<LevelRegistry::Row> &LevelRegistry::rows()
         makeRow("control.followmtc",    L::Standard, L::Fold, tr("Following MIDI time code")),
         makeRow("control.timeline",     L::Standard, L::Fold, tr("Timeline control")),
         makeRow("control.holdatend",    L::Standard, L::Fold, tr("Holding a show's look at its end")),
+        // Run (Operate): trimming the running cue from a board, behind the PIN.
+        makeRow("operate.editlive",     L::Standard, L::Grey, tr("Edit Live, trimming the running cue from a board")),
         // Tabs (the Window menu names them)
         makeRow("tab.build",            L::Standard, L::Tab,  tr("Building scenes, chasers and collections"),
                 QStringLiteral("Build")),

@@ -59,6 +59,7 @@
 #include "controllerjobs.h"
 #include "cuerunner.h"
 #include "editlivechip.h"
+#include "showlevel.h"
 #include "editlive.h"
 #include "surfacepages.h"
 #include "controlmap.h"
@@ -706,7 +707,11 @@ void CueRunner::buildFullLayout()
     connect(m_doc->controlMap()->surfacePages(), &SurfacePages::setsChanged, this, &CueRunner::refreshEditLive);
     connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshEditLive);
     head->addWidget(m_editLiveBtn);
+    /* Standard and up (it edits the show live): greyed at Student, saying
+       the level, as the footer's chip. */
     refreshEditLive();
+    ShowLevel::instance()->bind(m_editLiveBtn, QStringLiteral("operate.editlive"));
+    connect(ShowLevel::instance(), &ShowLevel::changed, this, &CueRunner::refreshEditLive);
     m_mode = new QLabel(this);
     m_mode->setObjectName(QStringLiteral("crMode"));
     m_mode->setFont(hf);
@@ -1474,8 +1479,10 @@ void CueRunner::refreshEditLive()
     m_editLiveBtn->setStyleSheet(on ? QStringLiteral("QToolButton { color: #ffffff; background: #c62828; "
                                                      "font-weight: bold; }")
                                     : QString());
-    m_editLiveBtn->setToolTip(tr("Edit Live: the board's page controls trim the running cue; the footer's "
-                                 "red chip stores or drops the trims. GO never waits for them."));
+    // Greyed by the level (ShowLevel): its tooltip says the level.
+    if (ShowLevel::shown(QStringLiteral("operate.editlive")))
+        m_editLiveBtn->setToolTip(tr("Edit Live: the board's page controls trim the running cue; the footer's "
+                                     "red chip stores or drops the trims. GO never waits for them."));
 }
 
 void CueRunner::refreshPadRun()

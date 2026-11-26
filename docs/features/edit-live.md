@@ -17,9 +17,16 @@ nothing else.
 Anyone at this computer can turn it on, but a show with a PIN
 (**File ▸ Show Settings**) asks for it first. While it is on, the footer
 chip is red, **EDIT LIVE**, with the number of trims, and it never hides.
+Edit Live is a **Standard** level tool (**View ▸ Workspace**): in a
+Student show, a Teaching show included, the switch and the chip are greyed
+and say so.
 
 Edit Live turns itself off, and lets go of its trims, when you go back to
-Design, when the show is closed, and at the emergency stop.
+Design, when the show is closed, at the emergency stop, and when the show
+goes down to Student. While a controller's setup listens to the board
+(**Identify Lamps**, a mode check) or an **Assign to Control…** window is
+open, the board's controls trim nothing; the page's key lights come back
+when the setup lets go.
 
 ## Trimming
 

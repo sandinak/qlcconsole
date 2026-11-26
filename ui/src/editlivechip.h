@@ -56,6 +56,9 @@ public:
      *  one. False: refused (the why is said on @p parent's status line by
      *  the caller) or the PIN not given. The Run tab's switch uses it too. */
     static bool turnOn(Doc *doc, QWidget *parent, QString *why = nullptr);
+    /** Its workspace level key (LevelRegistry): Standard and up, so a
+     *  Student show never reaches it (greyed, saying the level). */
+    static QString levelKey();
     /** Tests stand in for the PIN dialog (true: given). */
     static void setPinAsker(const std::function<bool(QWidget *, const QString &why)> &asker);
 

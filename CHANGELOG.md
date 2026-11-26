@@ -32,6 +32,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   the trims (Store, Drop, Turn Off); GO never waits: unstored trims drop
   with the cue and Store to Cue N stays offered 30 s. Run tab and footer,
   the show's PIN asked; off in Design, on close and at the emergency stop.
+  Standard level and up (greyed at Student); it trims nothing while
+  Identify or Assign to Control… listens to the board.
 
 ### Changed
 
