@@ -298,7 +298,10 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     settle(300);
     QCOMPARE(onWire(fid, 0), 0);
     loadAndGo(c, n1);
-    QVERIFY2(travels(fid, 0, 255, 1200, 4000), "GO after a pick");
+    {
+        const QString why = travels(fid, 0, 255, 1200, 4000);
+        QVERIFY2(why.isEmpty(), qPrintable("GO after a pick: " + why));
+    }
     QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
     QCOMPARE(drawnOpen(sid, fid, "GO, opened:"), 1.0);
 
@@ -351,7 +354,10 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     // Into Operate: let go, and never a jump -- nothing plays it there
     // until a GO, so it stays where it was held.
     doc->setMode(Doc::Operate);
-    QVERIFY2(travels(fid, 0, stopped, 0, 1500), "into Operate");
+    {
+        const QString why = travels(fid, 0, stopped, 0, 1500);
+        QVERIFY2(why.isEmpty(), qPrintable("into Operate: " + why));
+    }
     QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
     QVERIFY(!keeper->machineryHeldForEdit());
 
@@ -365,21 +371,25 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     doc->setMode(Doc::Design);
 }
 
-bool CurtainDraw_Test::travels(quint32 fixtureId, quint32 ch, int to, int notBefore, int within)
+QString CurtainDraw_Test::travels(quint32 fixtureId, quint32 ch, int to, int notBefore, int within)
 {
     /* Watched every 10 ms: no step bigger than a 2 s fade's 40 ms worth
        (the wire is sampled, a frame can be missed), at @p to no sooner than
-       @p notBefore ms, and there within @p within. */
+       @p notBefore ms, and there within @p within. Empty: it did. */
     QElapsedTimer t;
     t.start();
     int last = onWire(fixtureId, ch);
     int biggest = 0;
     qint64 reached = -1;
+    QStringList trace;
+    trace << QStringLiteral("0:%1").arg(last);
     while (t.elapsed() < within)
     {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
         QTest::qSleep(10);
         const int now = onWire(fixtureId, ch);
+        if (now != last)
+            trace << QStringLiteral("%1:%2").arg(t.elapsed()).arg(now);
         biggest = qMax(biggest, qAbs(now - last));
         last = now;
         if (now == to && reached < 0)
@@ -387,8 +397,10 @@ bool CurtainDraw_Test::travels(quint32 fixtureId, quint32 ch, int to, int notBef
         if (reached >= 0 && t.elapsed() > reached + 300)
             break;
     }
-    qInfo() << "travels to" << to << ": biggest step" << biggest << "reached at" << reached << "ms, ends" << last;
-    return biggest <= 40 && reached >= notBefore && last == to;
+    if (biggest <= 40 && reached >= notBefore && last == to)
+        return QString();
+    return QStringLiteral("to %1: biggest step %2, reached at %3 ms, ends %4; %5")
+        .arg(to).arg(biggest).arg(reached).arg(last).arg(trace.mid(0, 60).join(QLatin1Char(' ')));
 }
 
 /* His show (a copy, never in the gate): QLC_CURTAIN_SHOW=<the .qlcc>, or

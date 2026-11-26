@@ -47,8 +47,8 @@ private:
     void stopAll();
     int onWire(quint32 fixtureId, quint32 ch);
     bool markShown(quint32 sceneryId);
-    /** Channel @p ch of the fixture goes to @p to with no jump (see .cpp) */
-    bool travels(quint32 fixtureId, quint32 ch, int to, int notBefore, int within);
+    /** Channel @p ch of the fixture goes to @p to with no jump (see .cpp); empty when it does */
+    QString travels(quint32 fixtureId, quint32 ch, int to, int notBefore, int within);
 
     App *m_app = nullptr;
 };
