@@ -1253,6 +1253,7 @@ Fixture *ShowOnlyReview5_Test::addFogger(const QString &name, int address)
     f->setUniverse(0);
     f->setAddress(quint32(address));
     f->setOutputRules(Fixture::ShowOnly);
+    f->setBehaviourSetting(Fixture::LightBehaviour);    // as addDimmer()
     if (!m_doc->addFixture(f))
     {
         delete f;
