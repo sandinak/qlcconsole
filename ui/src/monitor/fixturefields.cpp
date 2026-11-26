@@ -228,9 +228,11 @@ FixtureFields::FixtureFields(Monitor *monitor, QFormLayout *form, QWidget *paren
     m_behaves->setObjectName(QStringLiteral("fixtureBehavesAs"));
     m_behaves->setToolTip(tr("Light: every preview and edit drives it. Machinery (a curtain, a turntable), "
                              "One-shot (a kabuki drop) and Switch (a relay, house lights): only a run moves "
-                             "it -- held while you edit, frozen by a stop. Hazard (fog, flame, CO2, confetti, "
-                             "a 3R+ laser): never fired by an edit; off at a stop. Auto is guessed from its "
-                             "definition and plot symbol."));
+                             "it -- held while you edit, frozen by a stop. Hazard: never fired by an edit, off "
+                             "and disarmed at a stop -- Burst (flame, CO2, confetti, sparkulars, pyro) fires "
+                             "only while the spotter holds Hazard hold; Running (fog, haze, a 3R+ laser) once "
+                             "the spotter has armed it, until their Hazard kill. Auto is guessed from its "
+                             "definition, name and plot symbol."));
     form->addRow(tr("Behaves as:"), m_behaves);
     connect(m_behaves, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         if (m_loading || m_fids.isEmpty() || comboIsMixed(m_behaves))

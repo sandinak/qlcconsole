@@ -215,6 +215,15 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   laser of class 3R, 3B, 4 or Unknown set to behave as a **Light**, so
   previews, edits and Locate can fire it. Accept it with the note naming
   who approved it.
+- **FIX-22** Hazard cues with no spotter's control (an error): cues set
+  a **Hazard — Burst** but no **Hazard hold** is set on this computer, or
+  a **Hazard — Running** but no **Hazard arm**. Every such cue skips its
+  hazard. Set them in **Connections ▸ Control surfaces ▸ This computer's
+  desk** ([Hazards and arming](fixture-manager.md#hazards-and-arming)).
+- **FIX-23** Hazards and switches (a note per fixture): every hazard
+  with its kind and every switch, guessed or set by hand. Accept each once
+  checked; one whose behaviour changes (a rename can change a guess) is
+  listed again.
 - **FIX-19** Loaded gobo missing from a light: a Gobo look named after
   glass you loaded and named in some lights (Gobo Wheels, "Moon") reaches a
   light that has no glass of that name, so that light ignores it. A warning,

@@ -35,6 +35,7 @@
 #include "sceneryitem.h"
 #include "structurestudioview.h"
 #include "fixturemanager.h"
+#include "fixtureremap.h"
 #undef protected
 #undef private
 #include <QComboBox>
@@ -68,6 +69,7 @@
 #include "showtreemodel.h"
 #include "showcontrol.h"
 #include "outputrulekeeper.h"
+#include <QLabel>
 #include "curtaindraw_test.h"
 
 using namespace ShowTree;
@@ -545,7 +547,7 @@ void CurtainDraw_Test::behavesAsAndParkOnScreen()
     QVERIFY(!fm->m_fixtures_tree->isColumnHidden(col));
     QCOMPARE(says.value(relay->id()), QStringLiteral("Switch · Parked"));
     QCOMPARE(says.value(drop->id()), QStringLiteral("One-shot"));
-    QCOMPARE(says.value(jet->id()), QStringLiteral("Hazard"));
+    QCOMPARE(says.value(jet->id()), QStringLiteral("Hazard — Burst"));
     QVERIFY(italic.value(drop->id()));
     shoot(fm, QStringLiteral("behaves-fixture-manager"), true);
 
@@ -562,6 +564,37 @@ void CurtainDraw_Test::behavesAsAndParkOnScreen()
     QCOMPARE(parked->count(), 1);
     QCOMPARE(parked->item(0)->text(), relay->name());
     shoot(run, QStringLiteral("behaves-run-parked"), true);
+
+    /* Hazard arming (Q352/Q353): the Run tab lists each hazard, its kind
+       and state; the footer's chip says DISARMED / ARMED / HELD and what a
+       cue skipped. */
+    {
+        QWidget *hbox = run->findChild<QWidget *>(QStringLiteral("crHazardBox"));
+        QLabel *hlist = run->findChild<QLabel *>(QStringLiteral("crHazards"));
+        QVERIFY(hbox != nullptr && hlist != nullptr);
+        QVERIFY(hbox->isVisible());
+        QVERIFY2(hlist->text().contains(QStringLiteral("CO2 jet · Burst · DISARMED")), qPrintable(hlist->text()));
+        QVERIFY2(hlist->text().contains(QStringLiteral("Sky laser · Running · DISARMED")), qPrintable(hlist->text()));
+        QLabel *chip = m_app->findChild<QLabel *>(QStringLiteral("footerHazard"));
+        QVERIFY(chip != nullptr);
+        QVERIFY(chip->isVisibleTo(m_app));
+        QCOMPARE(chip->text(), QStringLiteral("Hazards: DISARMED"));
+        OutputRuleKeeper *k = doc->outputRuleKeeper();
+        k->armHazards();
+        settle(50);
+        QCOMPARE(chip->text(), QStringLiteral("Hazards: ARMED"));
+        QVERIFY(hlist->text().contains(QStringLiteral("Sky laser · Running · ARMED")));
+        k->setHazardHold(true);
+        settle(50);
+        QCOMPARE(chip->text(), QStringLiteral("Hazards: ARMED · HELD"));
+        QVERIFY(hlist->text().contains(QStringLiteral("CO2 jet · Burst · HELD")));
+        shoot(run, QStringLiteral("hazards-run-armed-held"), true);
+        k->disarmHazards(QStringLiteral("the test"));
+        k->setHazardHold(false);
+        settle(50);
+        QCOMPARE(chip->text(), QStringLiteral("Hazards: DISARMED"));
+        QVERIFY(chip->toolTip().contains(QStringLiteral("Disarmed: the test")));
+    }
     unpark->click();
     settle(100);
     QVERIFY(!doc->programmer()->isFixtureParked(relay->id()));
@@ -622,11 +655,42 @@ void CurtainDraw_Test::behavesAsAndParkOnScreen()
     QTRY_VERIFY_WITH_TIMEOUT(!watch.isActive(), 10000);
     settle(200);
     FixtureFields::setLaserConfirm(nullptr);
-    QCOMPARE(autoText, QStringLiteral("Auto (Hazard)"));
+    QCOMPARE(autoText, QStringLiteral("Auto (Hazard — Running)"));
     QCOMPARE(asked, QStringList({ QStringLiteral("3B"), QStringLiteral("3B") }));
     QCOMPARE(laser->behaviourSetting(), int(Fixture::LightBehaviour));
     QVERIFY(FixtureRest::isHazardousLaserAsLight(laser));
     laser->setBehaviourSetting(-1);
+    doc->resetModified();
+}
+
+void CurtainDraw_Test::remapKeepsBehavesAs()
+{
+    Doc *doc = m_app->doc();
+    Fixture *f = new Fixture(doc);
+    f->setName(QStringLiteral("Glitter cannon prop"));
+    f->setChannels(1);
+    f->setUniverse(3);
+    f->setAddress(300);
+    QVERIFY(doc->addFixture(f));
+    f->setBehaviourSetting(Fixture::HazardBurstBehaviour);
+    {
+        FixtureRemap remap(doc);
+        QTreeWidgetItem *item = nullptr;
+        for (QTreeWidgetItemIterator it(remap.m_sourceTree); *it && item == nullptr; ++it)
+            if ((*it)->text(0) == f->name())
+                item = *it;
+        QVERIFY(item != nullptr);
+        remap.m_sourceTree->clearSelection();
+        item->setSelected(true);
+        remap.slotCloneSourceFixture();
+        Fixture *clone = nullptr;
+        for (Fixture *t : remap.m_targetDoc->fixtures())
+            if (t->name() == f->name())
+                clone = t;
+        QVERIFY(clone != nullptr);
+        QCOMPARE(clone->behaviourSetting(), int(Fixture::HazardBurstBehaviour));
+    }
+    doc->deleteFixture(f->id());
     doc->resetModified();
 }
 

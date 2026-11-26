@@ -22,13 +22,28 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Switches move only when a run plays them: held while you pick cues in
   Design (drawn where the cue puts them, marked held) and frozen by a
   stop until the next GO; a Back never fires a one-shot again. Hazards
-  are never fired by an edit or a preview -- and, until arming lands,
-  not by a GO either ("Hazard — needs arming (coming)"). Lasers get a
+  are never fired by an edit or a preview. Lasers get a
   **Laser class** in the definition's Physical tab: 3R and up is a
   Hazard, and setting one to Light asks for its class typed (FIX-21).
   **Park Here** / **Unpark** in every fixture's right-click Selection ▸: a P on
   the plot and the icon, and a Parked list on the Run tab; Park wins over
   cues, the edit hold and a stop.
+
+- **Hazard arming** (board Q352, Q353): a Hazard is **Burst** (flame, CO₂,
+  confetti, sparkulars, pyro: fires only while the spotter holds **Hazard
+  hold**, safe the frame it is let go) or **Running** (fog, haze, 3R+
+  lasers: **Hazard arm** arms it, on from the next cue that sets it until
+  **Hazard kill**). A cue reached unheld or unarmed skips it ("CO2 jet
+  skipped — not held") and never fires late; a show opened, the emergency
+  stop, Stop ALL and the spotter's device lost disarm. The three controls
+  are this computer's desk roles, refused on GO/Back/STOP and the keyboard;
+  a footer **Hazards** chip (DISARMED / ARMED / HELD), a Hazards list on
+  the Run tab, a hazard log, Show Review FIX-22 (no control set) and FIX-23
+  (every hazard and switch). Also from the Behaves-as review: passthrough
+  and an old Park never fire a hazard, the hold is laid at once and sits
+  over every Park, every Back route holds a one-shot, Remap keeps Behaves
+  as, the guess reads whole words (MagicFX's confetti guns are hazards, a
+  "Flame Red" gel is not), and hazers and foggers get the **H**.
 
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up

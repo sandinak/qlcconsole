@@ -44,6 +44,9 @@ private slots:
      *  puts a P on the plot and a row in the Run tab's Parked list, whose
      *  Unpark lets it go. */
     void behavesAsAndParkOnScreen();
+    /** Board 053p review: Fixture Remap's clone keeps what a fixture
+     *  behaves as (a hazard set by hand stays one). */
+    void remapKeepsBehavesAs();
     void hisCurtain();
 
 private:

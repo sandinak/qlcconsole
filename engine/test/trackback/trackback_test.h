@@ -95,6 +95,31 @@ private slots:
     /** The field: guessed (old shows load unchanged), set, saved; the
      *  definition's laser class; Show Review lists what was set by hand. */
     void behavesAsIsGuessedSetAndSaved();
+
+    /* The independent review of feat/053-behaves-as (each fails on
+       fa11984b3; base APIs only, so they build there). */
+    /** Input passthrough never reaches a hazard held safe. */
+    void passthroughNeverFiresAHazard();
+    /** A hazard parked at a value (run to 255 as a Light, parked, then made
+     *  a Hazard) is held at 0, not at what the Park saved. */
+    void aParkedHazardStaysOff();
+    /** A light overlapping a hazard's address, parked later, never writes
+     *  over the hazard's hold (the hold sits on top of every Park). */
+    void theHazardHoldWinsOverALaterPark();
+    /** Made a hazard mid-show: held from the very next frame, not after
+     *  the event loop's rebuild. */
+    void aHazardIsHeldFromTheNextFrame();
+    /** A Back from any route (a chaser's own step: the Simple Desk, a pad,
+     *  the chaser editor's Test) holds the one-shot. */
+    void everyBackHoldsTheOneShot();
+    /** Guessed by whole words; a light by name or definition is never
+     *  Machinery or One-shot by name alone; MagicFX's confetti guns. */
+    void theGuessReadsWholeWords();
+    /** Reading what a rig behaves as again (the Fixture Manager's column,
+     *  on every fixtureChanged) costs nothing once guessed. */
+    void theGuessIsKept();
+    /** OutputLayer forgets the glides that are over. */
+    void finishedGlidesAreForgotten();
     void courseShows_data();
     void courseShows();
     void aRealShow();

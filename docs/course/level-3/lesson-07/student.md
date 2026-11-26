@@ -20,7 +20,9 @@ words:
   - term: Output rules
     means: "Per fixture: **Ignore Blackout**, **Ignore the Grand Master**, **Switch (relay)**, **On when not in use**."
   - term: Behaves as
-    means: "What a fixture is on stage: **Light**, **Machinery**, **One-shot**, **Switch** or **Hazard**. It decides whether building the show may move it and what a stop does to it."
+    means: "What a fixture is on stage: **Light**, **Machinery**, **One-shot**, **Switch** or a **Hazard** (**Burst** or **Running**). It decides whether building the show may move it and what a stop does to it."
+  - term: Spotter
+    means: "The crew member who watches a hazard (flame, CO₂, fog, a laser) and lets it fire from controls of their own: **Hazard hold** for a burst, **Hazard arm** and **Hazard kill** for one that runs."
 ---
 
 ## Why
@@ -62,7 +64,13 @@ Roles: Driver, Navigator, Designer. Switch after each fixture.
    curtain or a kabuki drop moves only when the show runs (GO, Back),
    never because you clicked a cue while building, and a stop leaves it
    as it is. Fog, flame and strong lasers are **Hazards**: a click never
-   fires them.
+   fires them, and a GO fires them only as the **spotter** lets it. A
+   flame or CO₂ jet (**Burst**) fires only while the spotter holds their
+   **Hazard hold** button; fog, haze and lasers (**Running**) once the
+   spotter has pressed **Hazard arm**, until **Hazard kill**. Why: the
+   person who can see the stage decides, not the operator at the desk. A
+   cue that reaches a hazard the spotter hasn't let fire skips it, and the
+   footer says so.
 
 8. **Settings** (⌘,) → **Advanced**: leave **"On when not in use"
    fixtures come on** at **When you switch to Operate**. Close Settings.

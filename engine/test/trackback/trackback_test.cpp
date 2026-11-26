@@ -1844,6 +1844,258 @@ void TrackBack_Test::behavesAsIsGuessedSetAndSaved()
     m_doc->setMode(Doc::Design);
 }
 
+/****************************************************************************
+ * The independent review of feat/053-behaves-as
+ ****************************************************************************/
+
+void TrackBack_Test::passthroughNeverFiresAHazard()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    QVERIFY(FixtureRest::isHazard(jet));
+    QTest::qWait(50);                   // the hold laid (rebuild)
+    Universe *uni = m_doc->inputOutputMap()->universe(jet->universe());
+    QVERIFY(uni != nullptr);
+    uni->setPassthrough(true);
+    uni->slotInputValueChanged(uni->id(), jet->address(), 255, QString());
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    // A light beside it takes the input as it always did.
+    Fixture *wash = fixtureNamed("Stage wash");
+    uni->slotInputValueChanged(uni->id(), wash->address(), 200, QString());
+    settle(5);
+    QCOMPARE(at("Stage wash"), 200);
+    uni->setPassthrough(false);
+}
+
+void TrackBack_Test::aParkedHazardStaysOff()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    // A Light first: the cue fires it, and it is parked at what it sends.
+    jet->setBehaviourSetting(Fixture::LightBehaviour);
+    QTest::qWait(50);
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("CO2 jet"), 255);
+    m_doc->programmer()->parkFixtures({ jet->id() });
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 255);
+    // Then a hazard: parked means safe, whatever the Park saved.
+    jet->setBehaviourSetting(-1);
+    QVERIFY(FixtureRest::isHazard(jet));
+    QTest::qWait(50);
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::theHazardHoldWinsOverALaterPark()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    // Another hazard on the universe: the hold's fader is there already.
+    Fixture *fog = new Fixture(m_doc);
+    fog->setName("Fogger");
+    fog->setChannels(1);
+    fog->setAddress(510);
+    QVERIFY(m_doc->addFixture(fog));
+    // The jet a Light for now, and a light on its address.
+    jet->setBehaviourSetting(Fixture::LightBehaviour);
+    Fixture *over = new Fixture(m_doc);
+    over->setName("Overlap");
+    over->setChannels(1);
+    over->setAddress(jet->address());
+    QVERIFY(m_doc->addFixture(over));
+    m_doc->outputRuleKeeper()->rebuild();
+    QTest::qWait(50);
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("CO2 jet"), 255);
+    // The light parked at 255 on that address, after the hold's fader...
+    m_doc->programmer()->parkFixtures({ over->id() });
+    settle(5);
+    // ...then the jet a hazard: its hold wins.
+    jet->setBehaviourSetting(-1);
+    QTest::qWait(50);
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->programmer()->unparkFixtures({ over->id() });
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::aHazardIsHeldFromTheNextFrame()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    jet->setBehaviourSetting(Fixture::LightBehaviour);
+    QTest::qWait(50);
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("CO2 jet"), 255);
+    // Made a hazard mid-show: no event loop between, one frame.
+    jet->setBehaviourSetting(-1);
+    settle(1);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::everyBackHoldsTheOneShot()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < 3; ++i)
+    {
+        act(c, { Go, 0 });
+        settle(10);
+    }
+    QCOMPARE(at("Kabuki drop"), 255);
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    QVERIFY(!rules->oneShotsHeldForBack());
+    // A chaser stepped back as the Simple Desk, a pad or the chaser
+    // editor does: setAction() only, no show control.
+    ChaserAction back;
+    back.m_action = ChaserPreviousStep;
+    back.m_stepIndex = 0;
+    back.m_masterIntensity = 1.0;
+    back.m_stepIntensity = 1.0;
+    back.m_fadeMode = Chaser::FromFunction;
+    c->setAction(back);
+    QVERIFY(rules->oneShotsHeldForBack());
+    settle(10);
+    back.m_action = ChaserPreviousStep;
+    c->setAction(back);
+    settle(10);
+    QCOMPARE(c->currentStepIndex(), 0);
+    QCOMPARE(at("Kabuki drop"), 255);       // dropped stays dropped
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::theGuessReadsWholeWords()
+{
+    auto guess = [this](const QString &name, QLCFixtureDef *def = nullptr, const QString &mode = QString()) {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(name);
+        if (def != nullptr)
+            f->setFixtureDefinition(def, def->mode(mode));
+        else
+            f->setChannels(1);
+        f->setAddress(500);
+        f->setUniverse(1);
+        if (!m_doc->addFixture(f))
+            qFatal("could not add %s", qPrintable(name));
+        const Fixture::Behaviour b = FixtureRest::behaviour(f);
+        m_doc->deleteFixture(f->id());
+        return b;
+    };
+    // Not a hazard: a gel, a candle with no flame, a colour, a sign.
+    QCOMPARE(guess("Flame Red"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Flameless candle"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Smokey Pink"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Vegas Sign"), Fixture::LightBehaviour);
+    // A light by its name: never a One-shot by "drop" or "curtain".
+    QCOMPARE(guess("Backdrop curtain wash"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Kabuki drop"), Fixture::OneShotBehaviour);
+    // A hazard.
+    QVERIFY(Fixture::Behaviour(guess("Flame bar")) != Fixture::LightBehaviour);
+    QVERIFY(Fixture::Behaviour(guess("Fogger DSL")) != Fixture::LightBehaviour);
+    // MagicFX's confetti guns and blowers: their definitions say Effect.
+    for (const char *model : { "StadiumShot III", "StadiumBlaster", "StadiumBlower" })
+    {
+        QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("MagicFX", model);
+        QVERIFY2(def != nullptr, model);
+        QVERIFY2(!def->modes().isEmpty(), model);
+        QVERIFY2(guess(QStringLiteral("SFX %1").arg(model), def, def->modes().first()->name())
+                     != Fixture::LightBehaviour, model);
+    }
+}
+
+void TrackBack_Test::theGuessIsKept()
+{
+    // A rig of plain lights: what the Fixture Manager's column reads on
+    // every fixtureChanged (updateBehavesColumnShown()).
+    QLCFixtureDef *spot = m_doc->fixtureDefCache()->fixtureDef("Clay Paky", "Sharpy");
+    QVERIFY(spot != nullptr);
+    QList<Fixture *> rigOf;
+    for (int i = 0; i < 400; ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QStringLiteral("Spot %1").arg(i));
+        f->setFixtureDefinition(spot, spot->modes().first());
+        f->setUniverse(quint32(i / 20));
+        f->setAddress(quint32((i % 20) * 20));
+        QVERIFY(m_doc->addFixture(f));
+        rigOf << f;
+    }
+    auto pass = [&]() {
+        QElapsedTimer t;
+        t.start();
+        int lights = 0;
+        for (int n = 0; n < 5; ++n)
+            for (Fixture *f : std::as_const(rigOf))
+                lights += FixtureRest::behaviour(f) == Fixture::LightBehaviour ? 1 : 0;
+        if (lights != 5 * int(rigOf.size()))
+            qFatal("not every spot guessed a light");
+        return t.nsecsElapsed();
+    };
+    pass();                         // guessed once
+    qint64 again = pass();
+    for (int i = 0; i < 2; ++i)
+        again = qMin(again, pass());
+    // One renamed: guessed again, the rest kept.
+    rigOf.first()->setName(QStringLiteral("Kabuki drop"));
+    QCOMPARE(FixtureRest::guessBehaviour(rigOf.first()), Fixture::LightBehaviour);   // a light by definition
+    // Guessing from scratch each time (every fixture renamed) costs many
+    // times reading what is kept.
+    qint64 fresh = 0;
+    {
+        QElapsedTimer t;
+        t.start();
+        for (int n = 0; n < 5; ++n)
+            for (Fixture *f : std::as_const(rigOf))
+            {
+                f->setName(f->name());
+                (void)FixtureRest::behaviour(f);
+            }
+        fresh = t.nsecsElapsed();
+    }
+    QVERIFY2(again * 4 < fresh, qPrintable(QStringLiteral("kept %1 ns, fresh %2 ns").arg(again).arg(fresh)));
+}
+
+void TrackBack_Test::finishedGlidesAreForgotten()
+{
+    QVERIFY(rig());
+    Fixture *f = m_doc->fixtures().first();
+    OutputLayer layer(m_doc, Universe::Park, FadeChannel::Override, QStringLiteral("test"));
+    for (int i = 0; i < 50; ++i)
+    {
+        layer.set({ OutputLayer::Level { f->id(), 0, uchar(100 + i) } });
+        settle(1);
+        layer.glideOut(10);
+        settle(10);             // the glide over, its fader gone
+    }
+    QVERIFY2(layer.m_gliding.size() <= 2, qPrintable(QString::number(layer.m_gliding.size())));
+}
+
 bool TrackBack_Test::loadShow(const QString &path)
 {
     stopAll();
