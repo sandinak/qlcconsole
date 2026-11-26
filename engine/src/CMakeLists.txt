@@ -114,6 +114,7 @@ add_library(${module_name} SHARED
     aimsolver.cpp aimsolver.h
     panturn.cpp panturn.h
     freerotation.cpp freerotation.h
+    colourmix.cpp colourmix.h
     beamlanding.cpp beamlanding.h
     beamocclusion.cpp beamocclusion.h
     stageplatform.cpp stageplatform.h

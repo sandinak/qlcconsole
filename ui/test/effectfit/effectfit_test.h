@@ -44,6 +44,10 @@ private slots:
     void searchHidesWhatDoesNotFit();
     /** The effect a look already runs stays listed, with the reason. */
     void theEffectInUseIsNeverDropped();
+    /** Rainbow, Color Spread and the other RGB effects fit a CMY or
+     *  colour-wheel mover (the Rivale Profile); a pixel effect doesn't, nor
+     *  a colour channel with no colours; the browser lists them. */
+    void colourEffectsRunOnCmyAndWheelMovers();
 
     /** Pictures of the picker on three kinds of group, QLC_SHOT_DIR set
      *  (skipped otherwise): "all" = Show All Effects, i.e. what it listed

@@ -34,7 +34,8 @@ class Doc;
  *    together (and light to drive: colour or a dimmer);
  *  - any other script takes the fixture types it declares, the way the engine
  *    picks the fixtures it runs on: position needs pan/tilt, colour needs
- *    colour mixing, a dimmer-only fixture gets the intensity effects.
+ *    colour mixing (RGB, or CMY or a colour wheel standing in for it), a
+ *    dimmer-only fixture gets the intensity effects.
  * A mixed set of fixtures fits if it fits ANY of them (it runs on those);
  * runsOn/of say how many. No targets known yet: everything fits.
  */
@@ -49,6 +50,9 @@ public:
         bool gobo = false;
         bool beam = false;          ///< zoom, iris or focus
         bool rgb = false;
+        /** No RGB, but CMY mixing or a colour wheel of coloured slots: an
+         *  RGB colour effect runs on it (ColourMix), as the engine does. */
+        bool rgbByProxy = false;
         bool colorWheel = false;
         bool dimmer = false;
         bool shutter = false;

@@ -258,6 +258,26 @@ previews.
 | **Warm Cool** | Alternates warm (white) and cool (blue) across the fixtures |
 | **Amber Pulse** / **UV Pulse** | A phase-shifted pulse or chase on the amber / UV emitters; Amber Pulse's **Variation** wanders each head on its own, like a candle |
 
+### On CMY and colour-wheel fixtures
+
+Every colour effect above, and every other effect made for RGB fixtures
+(the WLED ports among them), also runs on a mover with no red, green and
+blue emitters, and the effect browser lists them for it:
+
+- **CMY mixing** (an Ayrton Rivale Profile, most profiles): the colour is
+  mixed on its cyan, magenta and yellow filters -- cyan is the red taken
+  out, magenta the green, yellow the blue -- so a rainbow fades through the
+  hues as it does on an RGB par. A fixture with both CMY and a wheel mixes
+  on CMY and leaves its wheel where the look put it.
+- **A colour wheel only**: each colour goes to the wheel slot nearest it
+  (the slot colours come from the fixture's definition), so the wheel
+  **steps** from slot to slot as the colour crosses from one to the next,
+  rather than fading. Matched by hue at full, so a breathing colour stays on
+  its slot.
+
+Black from an effect leaves the filters or the wheel to the look; the
+fixture's dimmer makes it dark. Pixel (matrix) effects stay for RGB pixels.
+
 ### Spell Spread
 
 **Spell Spread** brings a colour to the lights one by one: the spell

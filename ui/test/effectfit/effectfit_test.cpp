@@ -34,6 +34,9 @@
 #include "effectorigin.h"
 #include "effectfit.h"
 #include "qlcfixturedef.h"
+#include "qlcfixturemode.h"
+#include "qlccapability.h"
+#include "qlcchannel.h"
 #include "qlcpalette.h"
 #include "fixture.h"
 #include "scene.h"
@@ -116,7 +119,8 @@ void EffectFit_Test::whatFitsWhat_data()
     const Row rows[] = {
         //  fixture   WLED   RGB   Pos   Gobo  Iris  Zoom  Matrix Dimmer
         { "wled",     true,  true, false, false, false, false, false, true  },
-        { "mover",    false, false, true, true,  true,  true,  false, false },
+        // The Rivale has CMY and a wheel, no RGB: colour effects run on it.
+        { "mover",    false, true,  true, true,  true,  true,  false, false },
         { "par",      false, true, false, false, false, false, false, true  },
         { "dimmer",   false, false, false, false, false, false, false, true  },
         { "bar",      false, true, false, false, false, false, true,  true  },
@@ -336,6 +340,73 @@ void EffectFit_Test::theEffectInUseIsNeverDropped()
     QVERIFY(!browser->fitNote()->isHidden());
     QVERIFY2(browser->fitNote()->text().contains("pan/tilt"), qPrintable(browser->fitNote()->text()));
     QCOMPARE(look->scriptPath(), m_doc->effectScriptRunner()->cache()->scriptPath("Diamond"));
+}
+
+void EffectFit_Test::colourEffectsRunOnCmyAndWheelMovers()
+{
+    // The Rivale Profile: CMY and a colour wheel, no red, green or blue.
+    Fixture *rivale = kind(m_doc, "mover");
+    QVERIFY(rivale != nullptr);
+    const EffectFit::Targets t = EffectFit::targetsOf(m_doc, { rivale->id() });
+    QVERIFY(!t.fixtures.first().rgb);
+    QVERIFY(t.fixtures.first().rgbByProxy);
+    for (const QString &n : { QString("Rainbow"), QString("Color Spread"), QString("Color Gradient"),
+                              QString("Color Chase"), QString("Spatial Gradient") })
+        QVERIFY2(EffectFit::fit(needOf(m_doc, n), t).fits, qPrintable(n));
+    // A pixel effect is not for a mover.
+    QVERIFY(!EffectFit::fit(needOf(m_doc, "Matrix Bars"), t).fits);
+
+    // A wheel of coloured slots alone is enough; a colour channel with no
+    // colours on it (a CTO) is not.
+    auto handMade = [this](bool colouredSlots) {
+        QLCFixtureDef *def = new QLCFixtureDef();
+        def->setManufacturer("Test"); def->setModel(colouredSlots ? "WheelSpot" : "CtoSpot");
+        QLCFixtureMode *mode = new QLCFixtureMode(def);
+        QLCChannel *pan = new QLCChannel(); pan->setName("Pan"); pan->setPreset(QLCChannel::PositionPan);
+        QLCChannel *col = new QLCChannel(); col->setName("Colour"); col->setGroup(QLCChannel::Colour);
+        const char *names[] = { "Red", "Blue", "Green" };
+        for (int i = 0; i < 3; ++i)
+        {
+            QLCCapability *cap = new QLCCapability(uchar(i * 10), uchar(i * 10 + 9),
+                                                   colouredSlots ? names[i] : "3200K");
+            col->addCapability(cap);
+        }
+        def->addChannel(pan); mode->insertChannel(pan, 0);
+        def->addChannel(col); mode->insertChannel(col, 1);
+        def->addMode(mode);
+        Fixture *f = new Fixture(m_doc);
+        f->setFixtureDefinition(def, mode);
+        f->setAddress(400 + m_doc->fixtures().size() * 10);
+        return m_doc->addFixture(f) ? f : nullptr;
+    };
+    Fixture *wheel = handMade(true), *cto = handMade(false);
+    QVERIFY(wheel && cto);
+    QVERIFY(EffectFit::fit(needOf(m_doc, "Rainbow"), EffectFit::targetsOf(m_doc, { wheel->id() })).fits);
+    const EffectFit::Result no = EffectFit::fit(needOf(m_doc, "Rainbow"), EffectFit::targetsOf(m_doc, { cto->id() }));
+    QVERIFY(!no.fits);
+    QVERIFY2(no.why.contains("colour wheel"), qPrintable(no.why));
+
+    // The browser of a look on the Rivale lists Rainbow among the colours.
+    Scene *scene = new Scene(m_doc);
+    scene->addFixture(rivale->id());
+    m_doc->addFunction(scene);
+    QLCPalette *look = new QLCPalette(QLCPalette::Effect, m_doc);
+    look->setName("Look");
+    QVERIFY(m_doc->addPalette(look));
+    LookEditor ed(m_doc);
+    ed.setContextScene(scene);
+    ed.setPalette(look->id());
+    EffectBrowser *browser = ed.m_effectBrowser;
+    QVERIFY(browser != nullptr);
+    QVERIFY(browser->targets().known());
+    QVERIFY(!browser->showAllButton()->isChecked());
+    browser->search()->setText("rainbow");
+    QStringList listed;
+    for (int i = 0; i < browser->list()->count(); ++i)
+        listed << browser->list()->item(i)->text();
+    QVERIFY2(listed.join("|").contains("Rainbow"), qPrintable(listed.join(", ")));
+    browser->search()->setText("color spread");
+    QVERIFY(browser->list()->count() > 0);
 }
 
 void EffectFit_Test::shots()

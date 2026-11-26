@@ -166,6 +166,17 @@ private slots:
     void effectsOnOneChannelLayerAsADeskDoes();
     void aMovementEffectMovesRoundWhereTheLookPoints();
     void aDimmerInTheHeadBreathesAndTheWheelHoldsItsColour();
+    /** Rainbow (declared for RGB) runs on a CMY mover: cyan = 255 - red
+     *  and so on, the fine channels left alone; an RGB par beside it is
+     *  written exactly as before. */
+    void aRainbowMixesOnCmy();
+    /** On a mover with a colour wheel only, each colour goes to the slot
+     *  nearest it, written whole, and the slot changes as the colour
+     *  crosses to the next. */
+    void aRainbowStepsAWheelToTheNearestSlot();
+    /** The Ayrton Rivale Profile's own definition (CMY and a wheel):
+     *  Rainbow runs on it, mixed on CMY, the wheel left where it is. */
+    void aRainbowRunsOnTheRivaleProfile();
     void aSharedDimmerTakesItsBrightestHead();
     /** A follow-spot with Fade Near Limit takes a head's dimmer down when its
      *  target is out of that head's reach, and leaves the dimmer to the scene

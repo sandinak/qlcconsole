@@ -1071,6 +1071,12 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
             }
         }
 
+        /* No red, green and blue, but CMY mixing or a colour wheel: an RGB
+           effect still colours it (parseIntents() mixes CMY, or picks the
+           nearest slot). Not a pixel effect: a mover is not a pixel. */
+        const bool rgbByProxy = !hasRGB && !types.contains(QLatin1String("matrix"))
+                                && ColourMix::showsRgbWithoutRgb(fxi->fixtureMode());
+
         bool matches = false;
         for (const QString &tl : types)
         {
@@ -1083,7 +1089,7 @@ QList<quint32> EffectInstance::typeFiltered(QList<quint32> fxIds) const
                  tl == QLatin1String("rgbwa")    ||
                  tl == QLatin1String("rgbwauv")  ||
                  tl == QLatin1String("wash")     ||
-                 tl == QLatin1String("color"))   && hasRGB)       { matches = true; break; }
+                 tl == QLatin1String("color"))   && (hasRGB || rgbByProxy)) { matches = true; break; }
             // Moving head variants: moving, mover, movers, pantilt, spot, beam
             if ((tl == QLatin1String("moving")   ||
                  tl == QLatin1String("mover")    ||
@@ -3196,9 +3202,11 @@ EffectInstance::parseIntents(const QJSValue &intents,
             writeEmitter(QLCChannel::Blue,  (uchar)qBound(0, (int)qRound(amount * bMix), 255));
             writeEmitter(QLCChannel::White, (uchar)qBound(0, (int)qRound(amount * wMix), 255));
         };
-        writeColour(IntentKey::R,  QLCChannel::Red);
-        writeColour(IntentKey::G,  QLCChannel::Green);
-        writeColour(IntentKey::B,  QLCChannel::Blue);
+        /* Whether this head has a red, green or blue emitter for the colour
+           asked for: none, and the colour goes to CMY or a wheel below. */
+        bool rgbEmitter = writeColour(IntentKey::R, QLCChannel::Red) && !iv(IntentKey::R).isUndefined();
+        rgbEmitter = (writeColour(IntentKey::G, QLCChannel::Green) && !iv(IntentKey::G).isUndefined()) || rgbEmitter;
+        rgbEmitter = (writeColour(IntentKey::B, QLCChannel::Blue) && !iv(IntentKey::B).isUndefined()) || rgbEmitter;
         // White/Amber/UV: use the discrete emitter if present, otherwise adapt
         // the intent onto RGB(W) so it still works on fixtures that lack it.
         if (!writeColour(IntentKey::W, QLCChannel::White))
@@ -3231,12 +3239,54 @@ EffectInstance::parseIntents(const QJSValue &intents,
         }
         writeColour(IntentKey::UV, QLCChannel::UV);             // no meaningful RGB approximation
 
-        // Color-wheel fallback: if r/g/b intent present but no additive RGB found,
-        // find the closest color-wheel slot and write it.
         bool hasColorIntent = !iv(IntentKey::R).isUndefined()
                            || !iv(IntentKey::G).isUndefined()
                            || !iv(IntentKey::B).isUndefined();
-        if (hasColorIntent && writes.size() == colourWritesBefore)
+
+        /* CMY mixing: r/g/b asked for and no red, green or blue emitter on
+           this head, so its cyan, magenta and yellow filters make it
+           (cyan = 255 - red, and so on). Subtractive, so the effect's own
+           fade takes the filters OUT (open white at 0), and they are
+           written whole, not merged highest-wins: more cyan is less red.
+           Black says nothing of a colour, and leaves the head to the look,
+           as a wheel does; the dimmer makes it dark. Coarse channels only:
+           a fine channel would take a coarse value. */
+        bool cmyMixed = false;
+        if (hasColorIntent && !rgbEmitter && mode != nullptr)
+        {
+            const int tR = qBound(0, iv(IntentKey::R).toInt(), 255);
+            const int tG = qBound(0, iv(IntentKey::G).toInt(), 255);
+            const int tB = qBound(0, iv(IntentKey::B).toInt(), 255);
+            const bool lit = (tR | tG | tB) != 0 && envelope > 0.0f;
+            for (quint32 c : headChannels)
+            {
+                const QLCChannel *ch = mode->channel(c);
+                if (ch == nullptr || ch->controlByte() != QLCChannel::MSB
+                    || (ch->group() != QLCChannel::Intensity && ch->group() != QLCChannel::Colour))
+                    continue;
+                int filter;
+                switch (ch->colour())
+                {
+                    case QLCChannel::Cyan:    filter = 255 - tR; break;
+                    case QLCChannel::Magenta: filter = 255 - tG; break;
+                    case QLCChannel::Yellow:  filter = 255 - tB; break;
+                    default: continue;
+                }
+                cmyMixed = true;    // the filter is there, whatever this frame says
+                if (lit)
+                    writes.append({uniIdx, addrBase + (int)c,
+                                   (uchar)qBound(0, (int)qRound(filter * envelope), 255),
+                                   fxid, c, /*replace=*/true});
+            }
+        }
+
+        /* Colour-wheel fallback: r/g/b asked for, no additive RGB nor CMY
+           written: the slot nearest the colour. The slots come from the
+           definition, read once a fixture mode (m_wheelSlots), not every
+           frame. A slot is a place on the wheel, not a level: written
+           whole (snap), so the wheel steps from one to the next instead of
+           running through the slots between on a fade. */
+        if (hasColorIntent && !cmyMixed && writes.size() == colourWritesBefore)
         {
             int tR = qBound(0, iv(IntentKey::R).toInt(), 255);
             int tG = qBound(0, iv(IntentKey::G).toInt(), 255);
@@ -3245,42 +3295,26 @@ EffectInstance::parseIntents(const QJSValue &intents,
             // breathing blue stays on the blue slot instead of hopping to
             // whichever slot is nearest a darker blue. Black: leave the wheel.
             const int top = qMax(tR, qMax(tG, tB));
-            if (top > 0)
+            if (top > 0 && mode != nullptr)
             {
                 tR = tR * 255 / top;
                 tG = tG * 255 / top;
                 tB = tB * 255 / top;
-            }
-            quint32 nCh = top > 0 ? fxi->channels() : 0;
-            for (quint32 c = 0; c < nCh; ++c)
-            {
-                if (mode == nullptr) break;
-                QLCChannel *ch = mode->channel(c);
-                if (!ch || ch->group() != QLCChannel::Colour) continue;
-
-                // Find capability with closest colour
-                uchar bestDmx = 0;
-                int bestDist = INT_MAX;
-                const QList<QLCCapability*> caps = ch->capabilities();
-                for (QLCCapability *cap : caps)
+                auto known = m_wheelSlots.find(fid);
+                if (known == m_wheelSlots.end() || known->first != static_cast<const void *>(mode))
+                    known = m_wheelSlots.insert(fid, qMakePair(static_cast<const void *>(mode),
+                                                               ColourMix::wheels(mode)));
+                for (const ColourMix::Wheel &wh : known->second)
                 {
-                    QColor capColor = cap->resource(0).value<QColor>();
-                    if (!capColor.isValid())
-                        capColor = QColor(cap->name().trimmed());
-                    if (!capColor.isValid())
+                    if (wh.channel >= fxi->channels())
                         continue;
-                    int dr = capColor.red()   - tR;
-                    int dg = capColor.green()  - tG;
-                    int db = capColor.blue()   - tB;
-                    int dist = dr*dr + dg*dg + db*db;
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        bestDmx  = cap->middle();
-                    }
+                    const int best = ColourMix::nearest(wh, tR, tG, tB);
+                    if (best < 0)
+                        continue;
+                    DmxWrite w{uniIdx, addrBase + (int)wh.channel, wh.slotList.at(best).dmx, fxid, wh.channel};
+                    w.snap = true;
+                    writes.append(w);
                 }
-                if (bestDist < INT_MAX)
-                    writes.append({uniIdx, addrBase + (int)c, bestDmx, fxid, c});
             }
         }
 

@@ -24,6 +24,7 @@
 
 #include "wledconfigcheck.h"
 #include "freerotation.h"
+#include "colourmix.h"
 
 #define tr(s) QCoreApplication::translate("EffectFit", s)
 
@@ -84,6 +85,7 @@ EffectFit::Caps EffectFit::capsOf(const Fixture *fixture)
                     || n.contains(QLatin1String("focus"), Qt::CaseInsensitive))))
             c.beam = true;
     }
+    c.rgbByProxy = !c.rgb && ColourMix::showsRgbWithoutRgb(mode);
     return c;
 }
 
@@ -174,7 +176,7 @@ bool EffectFit::typesMatch(const QStringList &types, const Caps &c)
     {
         if ((tl == QLatin1String("rgb") || tl == QLatin1String("rgbw") || tl == QLatin1String("rgba")
              || tl == QLatin1String("rgbwa") || tl == QLatin1String("rgbwauv") || tl == QLatin1String("wash")
-             || tl == QLatin1String("color")) && c.rgb)
+             || tl == QLatin1String("color")) && (c.rgb || c.rgbByProxy))
             return true;
         if ((tl == QLatin1String("moving") || tl == QLatin1String("mover") || tl == QLatin1String("movers")
              || tl == QLatin1String("pantilt") || tl == QLatin1String("spot") || tl == QLatin1String("beam"))
@@ -262,7 +264,7 @@ EffectFit::Result EffectFit::fit(const Need &need, const Targets &targets)
             else if (t == QLatin1String("uv") || t == QLatin1String("uvonly"))
                 w = tr("a UV channel");
             else
-                w = tr("colour mixing (RGB)");
+                w = tr("colour mixing (RGB or CMY) or a colour wheel");
             if (!what.contains(w))
                 what << w;
         }

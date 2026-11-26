@@ -151,6 +151,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   editor moves to Advanced; Clear Hold at End folds into Hold at End, and
   Shift-click a tab moves to Settings ▸ Appearance (Q249, Q340–Q344).
 
+- **Colour effects run on CMY and colour-wheel movers**: Rainbow, Color Spread and every other effect made for RGB now colour a mover with no RGB -- mixed on its cyan, magenta and yellow (cyan = 255 - red, and so on), or, on a wheel alone, the nearest wheel slot, stepping slot to slot as the colour crosses -- and the effect browser lists them for it (an Ayrton Rivale Profile was offered only Color Chase and Spatial Gradient). RGB fixtures play exactly as before.
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only
