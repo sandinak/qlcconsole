@@ -67,6 +67,7 @@
 #include <functional>
 
 #include "../../../engine/test/common/stdprelude.h"
+#include "showlevel.h"
 #define private public
 #define protected public
 #include "app.h"
@@ -1947,6 +1948,61 @@ void LayoutSanity_Test::theFooterChipsNeverOverlap()
         QVERIFY2(m_app->m_statusDirtyLabel->isVisible() && m_app->m_statusDirtyLabel->width() > 0,
                  qPrintable(QStringLiteral("Unsaved at %1 wide").arg(w)));
     }
+    m_app->doc()->resetModified();
+    m_app->resize(1280, 800);
+    settle();
+}
+
+void LayoutSanity_Test::eachLevelLaysOutCleanly()
+{
+    /* Workspace levels (WORKSPACE_LEVELS §6): each level, in the qlcconsole
+       and Everything views, at 1024 wide and the window's minimum: the
+       footer's chips never overlap (the STUDENT chip with them), and the
+       tab strip never scrolls. */
+    QStatusBar *sb = m_app->statusBar();
+    QTabBar *bar = m_app->m_tab->tabBar();
+    const int oldView = m_app->m_workspaceView;
+    const ShowLevel::Level oldLevel = ShowLevel::instance()->level();
+    m_app->doc()->setModified();
+    for (const App::WorkspaceView view : { App::ConsoleView, App::EverythingView })
+    {
+        m_app->setWorkspaceView(view, false);
+        for (int l = ShowLevel::Student; l <= ShowLevel::Advanced; ++l)
+        {
+            ShowLevel::instance()->setLevel(ShowLevel::Level(l));
+            for (const int w : { 1280, 1024, m_app->minimumSizeHint().width() })
+            {
+                const QString where = QStringLiteral("%1 view, %2 level, %3 wide")
+                                          .arg(App::workspaceViewName(view), ShowLevel::name(ShowLevel::Level(l)))
+                                          .arg(w);
+                m_app->resize(w, 800);
+                settle();
+                QTest::qWait(60);
+                settle();
+                QList<QWidget *> chips;
+                for (QWidget *c : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+                    if (c->isVisibleTo(sb) && c->width() > 0 && !qobject_cast<QSizeGrip *>(c))
+                        chips << c;
+                for (int i = 0; i < chips.size(); ++i)
+                    for (int j = i + 1; j < chips.size(); ++j)
+                        QVERIFY2(!chips.at(i)->geometry().intersects(chips.at(j)->geometry()),
+                                 qPrintable(where + ": " + chips.at(i)->objectName() + " overlaps "
+                                            + chips.at(j)->objectName()));
+                for (QToolButton *b : bar->findChildren<QToolButton *>())
+                    QVERIFY2(!b->isVisibleTo(bar), qPrintable(where + ": the tab strip scrolls"));
+                QVERIFY2(bar->count() >= 6, qPrintable(where));
+                QWidget *chip = m_app->m_statusLevelLabel;
+                QVERIFY(chip != nullptr);
+                if (l == ShowLevel::Standard)
+                    QVERIFY2(chip->isHidden(), qPrintable(where + ": a level chip at Standard"));
+                else if (w >= 1280)
+                    QVERIFY2(chip->isVisibleTo(sb) && chip->width() > 0,
+                             qPrintable(where + ": the level chip was squeezed out"));
+            }
+        }
+    }
+    ShowLevel::instance()->setLevel(oldLevel);
+    m_app->setWorkspaceView(App::WorkspaceView(oldView), false);
     m_app->doc()->resetModified();
     m_app->resize(1280, 800);
     settle();

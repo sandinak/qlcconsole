@@ -35,8 +35,8 @@ it, to break it out into its own window (or **Window ▸ Move … to Its Own
 Window**). On a Mac, if the app isn't in front, the first click only brings
 it forward — Shift-click again, or use the right-click menu, which works
 either way; **Window ▸ Put Back in Main Window** returns
-it. **Window ▸ Shift-Click a Tab to Open It in a Window** turns the
-Shift-click off, if it gets in the way.
+it. **Settings ▸ Appearance ▸ Shift-click a tab to open it in a window**
+turns the Shift-click off, if it gets in the way.
 
 ## Edit keys: the same in every list
 

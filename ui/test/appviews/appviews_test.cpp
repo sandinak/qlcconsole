@@ -411,11 +411,17 @@ void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
         QTRY_COMPARE(tabs->count(), count);
     }
 
-    // Turned off from the Window menu: a Shift-click is just a click.
-    QAction *toggle = m_app->menuBar()->findChild<QAction *>("windowShiftClick");
-    QVERIFY(toggle != nullptr);
-    QVERIFY(toggle->isChecked());
-    toggle->trigger();
+    /* Turned off in Settings ▸ Appearance ▸ Window (it left the Window
+       menu, a preference not a window): a Shift-click is just a click. */
+    QVERIFY(m_app->menuBar()->findChild<QAction *>("windowShiftClick") == nullptr);
+    {
+        AppSettings settings(m_app, m_app);
+        QCheckBox *toggle = settings.findChild<QCheckBox *>("settingsShiftClickBreaksOut");
+        QVERIFY(toggle != nullptr);
+        QVERIFY(toggle->isChecked());
+        toggle->setChecked(false);
+        settings.accept();
+    }
     QVERIFY(m_app->shiftClickBreaksOut() == false);
     QTest::mouseClick(bar, Qt::LeftButton, Qt::ShiftModifier, bar->tabRect(1).center());
     QCoreApplication::processEvents();
@@ -1460,8 +1466,9 @@ void AppViews_Test::theViewMenuIsOnlyViews()
             view = a->menu();
     QVERIFY(view != nullptr);
     QStringList items;
+    // What it shows (the level's More line is there only while it folds).
     foreach (QAction *a, view->actions())
-        if (!a->isSeparator())
+        if (!a->isSeparator() && a->isVisible())
             items << a->text();
     // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too.
     QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "DMX Monitor" << "Rig Overview…"
@@ -3749,6 +3756,8 @@ static QStringList windowJumpsAsShown(App *app)
                 out << "|";
             continue;
         }
+        if (!a->isVisible())        // the level's More Tabs line, while nothing is hidden
+            continue;
         const QString key = a->shortcut().toString(QKeySequence::PortableText);
         out << (key.isEmpty() ? a->text() : a->text() + " " + key.right(1));
     }

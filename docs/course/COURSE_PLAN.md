@@ -247,6 +247,21 @@ Blank copies of the six files are in `_template/`.
   [Install → Saving your work](install.md#saving-your-work).
 - **Keyboard shortcuts** are shown as Mac keys (⌘). On Windows and Linux
   use **Ctrl** for ⌘ and **Alt** for ⌥.
+- **The Student level (for the teacher).** A crew new to a console loses
+  time in menus that have nothing to do with the lesson, so a handout opens
+  at the **Student** level: the Show Tree, Run, focus calls, the Lighting
+  Studio and the Virtual Console, which is everything Levels 0 to 2 use.
+  The footer says **STUDENT**. Build, Functions, Simple Desk, the Timeline
+  and tools like importing or the DMX Monitor are put away, and each menu
+  that lost something ends with **More at Standard…**, so nothing a
+  student finds is a dead end. **Make Student Handout** has a **Level**
+  box: leave it on Student for Levels 0 to 2, and choose **Standard** for
+  Level 3 lessons that patch, import or use show control. Going up a
+  level in a Teaching show asks for your PIN. It stays open until the
+  show is closed and is never saved, so the copy a student takes home
+  reopens at its own level. Use the TEACHING chip's **Unlock Standard…**
+  to show the class something above their level, then close the show.
+  See [Teaching mode ▸ Levels](../features/teaching.md#levels).
 
 ---
 

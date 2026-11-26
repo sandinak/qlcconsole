@@ -240,6 +240,45 @@ opens; a show without one gets its view's tabs, and Restore Defaults puts
 them back (and turns every feature back on). Classic QLC+ keeps QLC+'s own
 tabs: there the tab list is greyed, and the features below still switch.
 
+### Levels
+
+The **level** sits beside the view in **View ▸ Workspace**: **Student**,
+**Standard** or **Advanced**. The view picks the tabs, and the level picks
+how much each tab shows. The level is saved with the show, so a show handed
+to a class carries its level to every student's computer.
+
+- **Student** — the Show Tree, Run, focus calls, the Lighting Studio and
+  the Virtual Console: everything course Levels 0 to 2 use. Build,
+  Functions, Simple Desk and the Timeline are put away, and so are the
+  menu items a class doesn't need (importing, the DMX Monitor, the
+  Fixtures menu's tools, Live Edit, timecode). The footer shows
+  **STUDENT**.
+- **Standard** — every qlcconsole tool. A show made before levels opens
+  at Standard, exactly as it did.
+- **Advanced** — Standard, and the expert tools: the Look Editor's
+  **Script ▾** (writing your own effect scripts) is here. The footer shows
+  **ADVANCED**.
+
+Nothing is ever a dead end. A menu that has items put away ends with
+**More at Standard…**, and the **Window** menu has **More Tabs at
+Standard…**. Each one says what is there and offers **Switch to
+Standard** in the line above the tabs. A link or a button that leads to a
+put-away tab says the same thing. It never switches by itself. Click the
+footer's **STUDENT** or **ADVANCED** chip for the three levels.
+
+What a level puts away is **hidden, never stopped**. A cue that uses an
+effect still plays it at Student. These are never put away, at any
+level: **Stop All**, **GO**, **Back**, **Sub GO**, **Sub Back**,
+**Blackout**, **Blind**, **Design | Operate**, the **Grand Master** and the
+footer's readiness.
+
+Levels don't apply in **Classic QLC+**, which shows QLC+'s own tabs in
+full. A show set to Student switches to the qlcconsole view, with **Back
+to Classic QLC+** in the line above the tabs.
+
+In a [Teaching](teaching.md#levels) show, going up a level asks for the
+instructor's PIN.
+
 ### Features
 
 The same page turns **features** off and on for the show. A show that
@@ -618,8 +657,8 @@ Steps, towers and booms usually come in sets that should all be the same:
   clear them all.
 - **Control ▸ Hold at End** — when a show (the Shows timeline) stops or
   ends in Operate, its last look stays on the rig until the next cue
-  takes over, instead of going dark. **Control ▸ Clear Hold at End** lets
-  it go (the held channels go dark).
+  takes over, instead of going dark. Untick it to let a held look go (the
+  held channels go dark).
 - **Control ▸ Exit Timeline Control** (Operate, while a show runs) hands
   the rig to the Virtual Console while the timeline's playhead keeps
   following timecode; untick it and the timeline takes over again from

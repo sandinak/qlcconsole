@@ -44,6 +44,8 @@ struct HandoutOptions
     bool holdOutput = true;
     QString lesson;
     QString link;
+    /** The copy's level (ShowLevel::Level): Student unless asked (Q341) */
+    int level = 0;
 };
 
 /** @addtogroup ui UI

@@ -54,6 +54,7 @@
 #include <QSignalBlocker>
 #include <cmath>
 #include "lookeditor.h"
+#include "showlevel.h"
 #include "effectrows.h"
 #include "contextmenus.h"
 #include "programmercontroller.h"
@@ -974,6 +975,12 @@ LookEditor::LookEditor(Doc *doc, QWidget *parent)
     m_newScriptButton->setToolTip(tr("Create a new effect script from a template and open it in the editor"));
     m_editScriptButton = scriptMenu->addAction(tr("Edit Script…"), this, &LookEditor::slotEditEffectScript);
     m_editScriptButton->setToolTip(tr("Edit this Generator's underlying .js script"));
+    /* Writing scripts is at the Advanced level (board Q343): below it, the
+       menu is its "More at Advanced…" line, with the switch. */
+    scriptMenu->setObjectName(QStringLiteral("lookEditorScriptMenu"));
+    ShowLevel::instance()->bind(m_newScriptButton, QStringLiteral("effects.script"));
+    ShowLevel::instance()->bind(m_editScriptButton, QStringLiteral("effects.script"));
+    ShowLevel::instance()->addMoreLine(scriptMenu);
     scriptBtn->setMenu(scriptMenu);
     efScriptRow->addWidget(scriptBtn);
 

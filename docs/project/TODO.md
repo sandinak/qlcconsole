@@ -10,6 +10,30 @@ under `~/.claude/.../memory/`.
 
 ---
 
+## Workspace levels: after L1 (board Q249, Q340–Q344)
+
+L1 is built (docs/design/WORKSPACE_LEVELS.md §6: the model, the registry
+`ui/src/levelregistry.cpp`, View ▸ Workspace's levels, the footer chip,
+Teaching's reset and PIN unlock, Classic's rule, the menus and tabs, the
+script editor at Advanced, Clear Hold at End and Shift-Click a Tab moved).
+Still to do:
+- **L2, the course path**: the Show Tree, Run, Lighting Studio and Fixtures
+  rows (§2); command-line and shortcut answers for a hidden item; the
+  course test at each lesson's level; the course text changes (§5) and
+  start files re-saved at their levels; the focus report's Teaching line
+  gets the level; `menuwords_test::noStudentTextSendsYouToAHiddenPlace`.
+- **L3, the rest**: Connections and the hub, the VC, Simple Desk, the
+  Settings pages (Settings ▸ Advanced ▸ Scripts moves up with the script
+  editor), Show Review's fix buttons.
+- **Advanced's expert settings (Q343)**: the registry has their switch
+  points (`settings.engine.framerate`, `settings.engine.threads`,
+  `settings.engine.priority`, `values.rawbesidenames`, `help.diagnostics`),
+  marked follow-up; build the settings themselves: the engine frame rate,
+  real-time universe threads, output thread priority, DMX values beside
+  palette names, and the diagnostics in Help ▸ Troubleshooting.
+- CS10 (retiring New Programmer Frame from Input Profile…) is not part of
+  L1; the menu count reached 68 without it.
+
 ## Perf re-check (from the 0.5.0 release)
 
 The perf guard's `scene_frame_170_ns` read +19% on a loaded ender (+6%

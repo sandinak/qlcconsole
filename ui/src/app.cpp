@@ -125,6 +125,8 @@
 #include "testchannels.h"
 #include "fixturerest.h"
 #include "showfeatures.h"
+#include "showlevel.h"
+#include "levelregistry.h"
 #include "speedmasters.h"
 #include "shutterautoopen.h"
 #include "fixture.h"
@@ -957,6 +959,15 @@ void App::init()
     ShowFeatures::instance()->reset();
     connect(ShowFeatures::instance(), &ShowFeatures::changed, this, &App::applyShowFeatures,
             Qt::UniqueConnection);
+    /* The show's level (Q249): Standard for a new show; a change puts the
+       tabs, menus and chip right at once, and a hidden item's switch path
+       speaks in the notice line. */
+    ShowLevel::instance()->resetForShow();
+    m_classicAllowed = false;
+    connect(ShowLevel::instance(), &ShowLevel::changed, this, &App::applyShowLevel,
+            Qt::UniqueConnection);
+    connect(ShowLevel::instance(), &ShowLevel::switchOffered, this, &App::offerLevelSwitch,
+            Qt::UniqueConnection);
     setWorkspaceView(newShowView(), false);
     // Load and apply the tab label mode preference.
     {
@@ -1451,6 +1462,9 @@ void App::clearDocument()
         m_inputNotices->reset();
     m_customTabs.clear();
     ShowFeatures::instance()->reset();
+    // The level, and any PIN unlock with it, end with the show (Q342).
+    ShowLevel::instance()->resetForShow();
+    m_classicAllowed = false;
     setWorkspaceView(newShowView(), false);
     m_doc->resetModified();
     m_doc->inputOutputMap()->startUniverses();
@@ -2556,6 +2570,8 @@ bool App::writeStudentHandout(const HandoutOptions &options, QString *why)
     lock.lockDesign = false;    // a student can still leave Operate
     m_doc->teachingSettings()->setSaveOverride(&teach);
     m_doc->operateSettings()->setSaveOverride(&lock);
+    // The copy's level: Student unless the handout dialog says (Q341).
+    m_levelSaveOverride = qBound(int(ShowLevel::Student), options.level, int(ShowLevel::Advanced));
     const bool wasModified = m_doc->isModified();
     QFile::FileError error = saveXML(path, true);
     /* The file as just written goes into itself, deflated, as the state
@@ -2572,6 +2588,7 @@ bool App::writeStudentHandout(const HandoutOptions &options, QString *why)
     }
     m_doc->teachingSettings()->setSaveOverride(nullptr);
     m_doc->operateSettings()->setSaveOverride(nullptr);
+    m_levelSaveOverride = -1;
     if (wasModified)
         m_doc->setModified();
     if (error != QFile::NoError)
@@ -3217,6 +3234,9 @@ void App::initMenuBar()
     m_fileImportMenu = fileMenu->addMenu(QIcon(":/fileimport.png"), tr("&Import"));
     m_fileImportMenu->setObjectName(QStringLiteral("fileImportMenu"));
     populateImportMenu(m_fileImportMenu);
+    fileMenu->setObjectName(QStringLiteral("fileMenu"));
+    ShowLevel *level = ShowLevel::instance();
+    level->bind(m_fileImportMenu->menuAction(), QStringLiteral("file.import"));
     // Recent-files list becomes an "Open Recent" submenu (kept up to date by
     // updateFileOpenMenu(); no longer attached to the removed toolbar button).
     updateFileOpenMenu("");
@@ -3236,6 +3256,7 @@ void App::initMenuBar()
                                "another computer"));
         connect(collect, &QAction::triggered, this, &App::slotFileCollectForTransfer);
         fileMenu->addAction(collect);
+        level->bind(collect, QStringLiteral("file.collect"));
 
         QAction *showDefs = new QAction(tr("Show &Definitions…"), this);
         showDefs->setObjectName(QStringLiteral("fileShowDefinitions"));
@@ -3246,6 +3267,7 @@ void App::initMenuBar()
             dlg.exec();
         });
         fileMenu->addAction(showDefs);
+        level->bind(showDefs, QStringLiteral("file.showdefinitions"));
 
         // Upgrade this show (docs/design/WORKFLOW_DESIGN.md §3.7): the W5 converter
         // over every chaser and collection, Capture into palettes, one undo
@@ -3266,6 +3288,7 @@ void App::initMenuBar()
             offerConsoleViewAfterUpgrade();
         });
         fileMenu->addAction(upgrade);
+        level->bind(upgrade, QStringLiteral("file.upgrade"));
         // The Run tab's empty state offers it too (Q62).
         CueRunner::setUpgradeAction(upgrade);
 
@@ -3298,6 +3321,9 @@ void App::initMenuBar()
         quitAction->setShortcutContext(Qt::ApplicationShortcut);
         fileMenu->addAction(quitAction);
     }
+    /* What the level folds out of File goes to its More line (Q249). */
+    fileMenu->addSeparator();
+    level->addMoreLine(fileMenu);
 
     /* ---- Edit: Undo / Redo, named (open 24) ---- */
     {
@@ -3491,8 +3517,23 @@ void App::initMenuBar()
             a->setData(int(v.view));
             group->addAction(a);
             const WorkspaceView view = v.view;
-            connect(a, &QAction::triggered, this, [this, view]() { setWorkspaceView(view); });
+            connect(a, &QAction::triggered, this, [this, view]() { chooseWorkspaceView(view); });
             m_workspaceViewActions << a;
+        }
+        /* The level beside the view (board Q249): how much each tab shows.
+           Saved with the show; a Teaching show asks the PIN to go up. */
+        workspace->addSeparator();
+        QActionGroup *levels = new QActionGroup(workspace);
+        levels->setExclusive(true);
+        for (int l = ShowLevel::Student; l <= ShowLevel::Advanced; ++l)
+        {
+            QAction *a = workspace->addAction(ShowLevel::name(ShowLevel::Level(l)));
+            a->setObjectName(QStringLiteral("viewLevel%1").arg(ShowLevel::name(ShowLevel::Level(l))));
+            a->setCheckable(true);
+            a->setData(l);
+            levels->addAction(a);
+            connect(a, &QAction::triggered, this, [this, l]() { requestLevel(l); });
+            m_levelActions << a;
         }
         workspace->addSeparator();
         m_chooseTabsAction = workspace->addAction(tr("Tabs && Features…"));
@@ -3510,6 +3551,8 @@ void App::initMenuBar()
     // and still works via slotControlMonitor().
     viewMenu->addAction(m_addressToolAction);
     viewMenu->addAction(m_dmxMonitorAction);
+    level->bind(m_addressToolAction, QStringLiteral("view.addresstool"));
+    level->bind(m_dmxMonitorAction, QStringLiteral("view.dmxmonitor"));
 
     /* The rig overview is a way of LOOKING at the show, so it belongs in the
        View menu next to the tab jumps rather than buried in the Lighting Studio
@@ -3546,6 +3589,9 @@ void App::initMenuBar()
     // Control, so the menus keep their count.
     viewMenu->addAction(m_controlBlindAction);
     viewMenu->addAction(m_controlFullScreenAction);
+    viewMenu->setObjectName(QStringLiteral("viewMenu"));
+    viewMenu->addSeparator();
+    level->addMoreLine(viewMenu);
 
     /* Appearance -- theme, toolbar style, which chips the footer shows and
        the speed masters' beat -- is in Settings ▸ Appearance (Q65); View is
@@ -3584,6 +3630,13 @@ void App::initMenuBar()
         fixturesMenu->addSeparator();
 
         FixtureManager::instance()->populateFixturesMenu(fixturesMenu);
+        // Fixture tools are Standard: at Student the menu is its More line.
+        fixturesMenu->setObjectName(QStringLiteral("fixturesMenu"));
+        for (QAction *a : fixturesMenu->actions())
+            if (!a->isSeparator())
+                level->bind(a, QStringLiteral("fixtures.tools"));
+        fixturesMenu->addSeparator();
+        level->addMoreLine(fixturesMenu);
     }
 
     /* ---- Control: playback + live editing ---- */
@@ -3609,8 +3662,18 @@ void App::initMenuBar()
     ctrlMenu->addSeparator();
     ctrlMenu->addAction(m_followMtcAction);
     ctrlMenu->addAction(m_timelineSuspendAction);
+    /* Hold at End is the one item (unticking it drops a held look); Clear
+       Hold at End left the menu to pay for the levels (WORKSPACE_LEVELS
+       §3), and stays a VC button's action. */
     ctrlMenu->addAction(m_lastLookAction);
-    ctrlMenu->addAction(m_clearLastLookAction);
+    ctrlMenu->setObjectName(QStringLiteral("controlMenu"));
+    level->bind(m_dumpDmxAction, QStringLiteral("control.dumpdmx"));
+    level->bind(liveMenu->menuAction(), QStringLiteral("control.liveedit"));
+    level->bind(m_followMtcAction, QStringLiteral("control.followmtc"));
+    level->bind(m_timelineSuspendAction, QStringLiteral("control.timeline"));
+    level->bind(m_lastLookAction, QStringLiteral("control.holdatend"));
+    ctrlMenu->addSeparator();
+    level->addMoreLine(ctrlMenu);
 
     /* ---- Window: every view, wherever it is ----
        "the menubar needs a windows thing so I can find them .. if I break out
@@ -3649,6 +3712,17 @@ void App::initMenuBar()
     // Then the tabs the view hides (no shortcut), after this line.
     m_windowHiddenSeparator = windowMenu->addSeparator();
     m_windowHiddenSeparator->setObjectName(QStringLiteral("windowHiddenTabs"));
+    /* The tabs the level hides, in one line (WORKSPACE_LEVELS §4): it says
+       which, with the switch (updateWindowJumps()). */
+    m_windowMoreTabs = windowMenu->addAction(QString());
+    m_windowMoreTabs->setObjectName(QStringLiteral("windowMoreTabs"));
+    connect(m_windowMoreTabs, &QAction::triggered, this, [this]() {
+        offerLevelSwitch(m_windowMoreTabs->data().toInt(),
+                         tr("At the %1 level the window also has: %2.")
+                         .arg(ShowLevel::name(ShowLevel::Level(m_windowMoreTabs->data().toInt())),
+                              m_windowMoreTabs->property("tabNames").toString()));
+    });
+    m_windowMoreTabs->setVisible(false);
     m_windowJumpsEnd = windowMenu->addSeparator();
     /* The Rig Overview is a window of its own, so it is offered here too, not
        only under View: the Window menu is where people go looking for one
@@ -3667,11 +3741,8 @@ void App::initMenuBar()
         if (m_tab != NULL && m_tab->currentIndex() >= 0)
             slotDetachContext(m_tab->currentIndex());
     });
-    m_windowShiftClick = windowMenu->addAction(tr("Shift-Click a Tab to Open It in a Window"));
-    m_windowShiftClick->setObjectName(QStringLiteral("windowShiftClick"));
-    m_windowShiftClick->setCheckable(true);
-    m_windowShiftClick->setChecked(shiftClickBreaksOut());
-    connect(m_windowShiftClick, &QAction::toggled, this, &App::setShiftClickBreaksOut);
+    /* Shift-click a tab to open it in a window is a preference, not a
+       window: Settings ▸ Appearance ▸ Window (WORKSPACE_LEVELS §3). */
     windowMenu->addSeparator();
     QAction *minimize = windowMenu->addAction(tr("Minimize"));
     minimize->setShortcut(QKeySequence(QStringLiteral("CTRL+M")));
@@ -5355,7 +5426,7 @@ QList<QWidget *> App::statusChipsByPriority() const
         m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusMastersHeldLabel, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
-        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
+        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusLevelLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
         m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
         m_statusPowerLabel, m_statusDangleLabel, m_statusTimelineLabel
     };
@@ -5953,7 +6024,20 @@ QStringList App::effectiveViewTabs() const
             ++i;
         order.insert(i, open);
     }
+    // The level's (Q249): a tab it hides is named in the Window menu.
+    foreach (const QString &hidden, levelHiddenTabs())
+        order.removeAll(hidden);
     return order;
+}
+
+QStringList App::levelHiddenTabs() const
+{
+    QStringList out;
+    const QStringList all = workspaceViewTabs(EverythingView), keys = tabKeys();
+    for (const LevelRegistry::Row &r : LevelRegistry::rows())
+        if (r.treatment == ShowLevel::Tab && !ShowLevel::shown(r.key) && keys.contains(r.tab))
+            out << all.at(keys.indexOf(r.tab));
+    return out;
 }
 
 QStringList App::tabKeys()
@@ -6256,9 +6340,14 @@ void App::setWorkspaceView(WorkspaceView view, bool markModified)
     m_openTabs.clear();
     m_functionsWindowShown = (m_workspaceView != ClassicView && !m_customTabs.isEmpty()
                                   ? m_customTabs : workspaceViewTabs(view)).contains(tr("Functions"));
-    applyWorkspaceTabs();
     if (changed)
         hideViewNotice();
+    {
+        // Levels don't apply in Classic QLC+ (Q344): applyShowLevel() below.
+        const QSignalBlocker quiet(ShowLevel::instance());
+        ShowLevel::instance()->setClassic(view == ClassicView);
+    }
+    applyShowLevel();
     // Saved with the show, but not an edit of it: no undo step.
     if (changed && markModified && m_doc != NULL)
         m_doc->setModified();
@@ -6428,6 +6517,197 @@ void App::updateWorkspaceViewActions()
             : tr("Choose and order the tabs along the bottom, and turn features on or off; saved "
                  "with the show"));
     }
+}
+
+/*****************************************************************************
+ * Workspace levels (View ▸ Workspace; board Q249, WORKSPACE_LEVELS.md)
+ *****************************************************************************/
+
+void App::applyShowLevel()
+{
+    ShowLevel *sl = ShowLevel::instance();
+    /* Never hidden at any level: a student can always stop the rig and see
+       why it is the way it is. */
+    sl->setNeverHidden({ m_controlPanicAction, m_controlBlackoutAction, m_controlBlindAction,
+                         m_cueGoAction, m_cueBackAction, m_cueSubGoAction, m_cueSubBackAction,
+                         m_modeToggleAction, m_statusGrandMasterBox, m_statusModeLabel });
+    if (enforceStudentView())
+        return;             // it switched the view, which put everything on
+    applyWorkspaceTabs();
+    sl->apply();
+    updateLevelActions();
+    updateLevelChip();
+}
+
+bool App::enforceStudentView()
+{
+    if (m_workspaceView != ClassicView || m_classicAllowed
+        || ShowLevel::instance()->chosenLevel() != ShowLevel::Student)
+        return false;
+    setWorkspaceView(ConsoleView, false);
+    showViewNotice(tr("The Student level shows the qlcconsole view. Classic QLC+ shows QLC+'s own "
+                      "tabs in full."),
+                   tr("Back to Classic QLC+"), [this]() {
+        hideViewNotice();
+        chooseWorkspaceView(ClassicView);
+    });
+    return true;
+}
+
+void App::chooseWorkspaceView(WorkspaceView view)
+{
+    ShowLevel *sl = ShowLevel::instance();
+    if (view == ClassicView && !m_classicAllowed && sl->chosenLevel() == ShowLevel::Student)
+    {
+        /* Classic QLC+ shows everything: in a Teaching show that is the
+           instructor's call (Q344). */
+        const TeachingSettings *teach = m_doc != NULL ? m_doc->teachingSettings() : nullptr;
+        ShowOperate *op = m_doc != NULL ? m_doc->operateSettings() : nullptr;
+        if (teach != nullptr && teach->enabled() && op != nullptr && op->hasPin() && !sl->unlocked())
+        {
+            if (!ShowSettingsDialog::askForPin(this, op->pinHash(),
+                    tr("This is a Teaching show at the Student level. The instructor's PIN opens "
+                       "Classic QLC+ until the show is closed.")))
+            {
+                updateWorkspaceViewActions();
+                return;
+            }
+            sl->setUnlocked(true);
+        }
+        m_classicAllowed = true;
+    }
+    setWorkspaceView(view);
+}
+
+bool App::requestLevel(int level)
+{
+    if (level < ShowLevel::Student || level > ShowLevel::Advanced)
+        return false;
+    ShowLevel *sl = ShowLevel::instance();
+    const ShowLevel::Level want = ShowLevel::Level(level);
+    const TeachingSettings *teach = m_doc != NULL ? m_doc->teachingSettings() : nullptr;
+    if (teach != nullptr && teach->enabled())
+    {
+        /* A Teaching show opens at its saved level, and a pick here never
+           changes it: up or down lasts until the show is closed (Q341,
+           Q342), so a student who goes down can always come back. Going
+           above the saved level asks the instructor's PIN once; with no
+           PIN set, nothing is asked. */
+        ShowOperate *op = m_doc->operateSettings();
+        if (want > sl->level() && op != nullptr && op->hasPin() && !sl->unlocked())
+        {
+            if (!ShowSettingsDialog::askForPin(this, op->pinHash(),
+                    tr("This is a Teaching show. The instructor's PIN opens the %1 level until "
+                       "the show is closed.").arg(ShowLevel::name(want))))
+            {
+                updateLevelActions();
+                return false;
+            }
+            sl->setUnlocked(true);
+        }
+        sl->setSessionLevel(want);
+    }
+    else
+    {
+        const bool changed = want != sl->level();
+        sl->setLevel(want);
+        // Saved with the show, not an undo step (as the view).
+        if (changed && m_doc != NULL)
+            m_doc->setModified();
+    }
+    // Picking Student means it: Classic QLC+ gives way again (Q344).
+    if (want == ShowLevel::Student && m_classicAllowed)
+    {
+        m_classicAllowed = false;
+        applyShowLevel();
+    }
+    updateLevelActions();
+    return true;
+}
+
+void App::offerLevelSwitch(int level, const QString &text)
+{
+    const ShowLevel::Level l = ShowLevel::Level(qBound(int(ShowLevel::Student), level, int(ShowLevel::Advanced)));
+    showViewNotice(text, tr("Switch to %1").arg(ShowLevel::name(l)), [this, l]() {
+        hideViewNotice();
+        requestLevel(l);
+    });
+}
+
+void App::updateLevelActions()
+{
+    const ShowLevel *sl = ShowLevel::instance();
+    const bool classic = m_workspaceView == ClassicView;
+    foreach (QAction *a, m_levelActions)
+    {
+        const ShowLevel::Level l = ShowLevel::Level(a->data().toInt());
+        a->setChecked(l == sl->chosenLevel());
+        QString tip;
+        switch (l)
+        {
+        case ShowLevel::Student:
+            tip = tr("The Show Tree, Run, focus calls and the Lighting Studio: what a class uses. "
+                     "Everything else is one Switch away");
+            break;
+        case ShowLevel::Advanced:
+            tip = tr("Standard, and the expert tools: the effect script editor");
+            break;
+        case ShowLevel::Standard:
+        default:
+            tip = tr("Every qlcconsole tool");
+            break;
+        }
+        if (classic)
+            tip = l == ShowLevel::Student
+                ? tr("Switches to the qlcconsole view: Classic QLC+ shows QLC+'s own tabs in full")
+                : tr("Saved with the show; Classic QLC+ shows QLC+'s own tabs in full");
+        a->setToolTip(tip);
+        a->setStatusTip(tip);
+    }
+}
+
+void App::updateLevelChip()
+{
+    if (m_statusLevelLabel == nullptr)
+        return;
+    const ShowLevel *sl = ShowLevel::instance();
+    const ShowLevel::Level l = sl->chosenLevel();
+    const bool show = sl->applies() && l != ShowLevel::Standard;
+    if (l == ShowLevel::Student)
+    {
+        m_statusLevelLabel->setText(tr("STUDENT"));
+        m_statusLevelLabel->setToolTip(tr("The Student level: the Show Tree, Run, focus calls and the "
+                                          "Lighting Studio. Click for the levels."));
+    }
+    else
+    {
+        m_statusLevelLabel->setText(tr("ADVANCED"));
+        m_statusLevelLabel->setToolTip(tr("The Advanced level: Standard and the expert tools. Click "
+                                          "for the levels."));
+    }
+    m_statusLevelLabel->setVisible(show);
+    if (m_statusFitTimer != nullptr)
+        m_statusFitTimer->start();
+}
+
+void App::showLevelMenu()
+{
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("levelMenu"));
+    menu.setToolTipsVisible(true);
+    const ShowLevel::Level at = ShowLevel::instance()->chosenLevel();
+    for (int l = ShowLevel::Student; l <= ShowLevel::Advanced; ++l)
+    {
+        QAction *a = menu.addAction(ShowLevel::name(ShowLevel::Level(l)), this,
+                                    [this, l]() { requestLevel(l); });
+        a->setCheckable(true);
+        a->setChecked(l == int(at));
+    }
+    menu.addSeparator();
+    menu.addAction(tr("What Each Level Shows"), this, []() {
+        HelpBrowser::open(QStringLiteral("getting-started.md#levels"));
+    });
+    menu.exec(QCursor::pos());
 }
 
 void App::showViewNotice(const QString &text, const QString &buttonText,
@@ -6625,6 +6905,21 @@ void App::showContextKeepingPreview(const QString &tabLabel)
 
 void App::showContext(const QString &tabLabel)
 {
+    /* A tab the level hides (Q249): never a silent raise -- the notice,
+       with its Switch. */
+    if (levelHiddenTabs().contains(tabLabel))
+    {
+        const QStringList all = workspaceViewTabs(EverythingView), keys = tabKeys();
+        const QString key = keys.value(all.indexOf(tabLabel));
+        for (const LevelRegistry::Row &r : LevelRegistry::rows())
+            if (r.treatment == ShowLevel::Tab && r.tab == key)
+            {
+                offerLevelSwitch(r.level, tr("%1 is at the %2 level.")
+                                 .arg(tabDisplayLabel(tabLabel), ShowLevel::name(r.level)));
+                return;
+            }
+    }
+
     /* Still docked? Switch to it and bring the main window forward.
        Matching on the label rather than the index is what makes this survive
        detaching: tabData is set once in addTab() and travels with the page
@@ -6745,20 +7040,54 @@ void App::updateWindowJumps()
     for (int i = 0; i < shown.size(); i++)
     {
         QAction *jump = shown.at(i);
+        jump->setVisible(true);
         m_windowMenu->removeAction(jump);
         m_windowMenu->insertAction(m_windowHiddenSeparator, jump);
         jump->setShortcut(i < 10 ? QKeySequence(QString("CTRL+SHIFT+%1").arg((i + 1) % 10))
                                  : QKeySequence());
     }
+    /* The tabs the level hides leave the menu for its one More Tabs line
+       (Q249), shortcut and all. */
+    const QStringList byLevel = levelHiddenTabs();
+    QStringList levelNames;
+    int lowest = -1;
+    foreach (const QString &label, byLevel)
+    {
+        levelNames << tabDisplayLabel(label);
+        const QStringList all = workspaceViewTabs(EverythingView), keys = tabKeys();
+        for (const LevelRegistry::Row &r : LevelRegistry::rows())
+            if (r.treatment == ShowLevel::Tab && r.tab == keys.value(all.indexOf(label))
+                && (lowest < 0 || int(r.level) < lowest))
+                lowest = int(r.level);
+    }
+    int offered = 0;
     foreach (QAction *jump, hidden)
     {
         m_windowMenu->removeAction(jump);
         m_windowMenu->insertAction(m_windowJumpsEnd, jump);
+        const bool levelHides = byLevel.contains(jump->data().toString());
+        jump->setVisible(!levelHides);
+        if (!levelHides)
+            ++offered;
         // Simple Desk opens on demand (Q262): D for Desk while it has no number.
-        jump->setShortcut(jump->data().toString() == tr("Simple Desk")
+        jump->setShortcut(jump->data().toString() == tr("Simple Desk") && !levelHides
                               ? QKeySequence(QStringLiteral("CTRL+SHIFT+D")) : QKeySequence());
     }
-    m_windowHiddenSeparator->setVisible(hidden.isEmpty() == false);
+    if (m_windowMoreTabs != nullptr)
+    {
+        m_windowMenu->removeAction(m_windowMoreTabs);
+        m_windowMenu->insertAction(m_windowJumpsEnd, m_windowMoreTabs);
+        m_windowMoreTabs->setVisible(!byLevel.isEmpty());
+        if (lowest >= 0)
+        {
+            const QString level = ShowLevel::name(ShowLevel::Level(lowest));
+            m_windowMoreTabs->setText(tr("More Tabs at %1…").arg(level));
+            m_windowMoreTabs->setToolTip(tr("%1: at the %2 level").arg(levelNames.join(QStringLiteral(", ")), level));
+            m_windowMoreTabs->setData(lowest);
+            m_windowMoreTabs->setProperty("tabNames", levelNames.join(QStringLiteral(", ")));
+        }
+    }
+    m_windowHiddenSeparator->setVisible(offered > 0 || !byLevel.isEmpty());
 }
 
 void App::updateWindowMenu()
@@ -6801,8 +7130,6 @@ bool App::shiftClickBreaksOut() const
 void App::setShiftClickBreaksOut(bool on)
 {
     QSettings().setValue(SETTINGS_SHIFT_CLICK_BREAKS_OUT, on);
-    if (m_windowShiftClick != NULL && m_windowShiftClick->isChecked() != on)
-        m_windowShiftClick->setChecked(on);
 }
 
 void App::reattachContext(const QString &tabLabel)
@@ -7449,6 +7776,14 @@ bool App::loadXML(QXmlStreamReader& doc, bool goToConsole, bool fromMemory)
        before the show's parts are read, so nothing reads the last show's. */
     ShowFeatures::instance()->setFromOffAttribute(
         doc.attributes().value(QStringLiteral("FeaturesOff")).toString());
+    /* Its level (Q249): absent is Standard. Put on the window with the
+       view, below; no PIN unlock carries over from the last show (Q342). */
+    {
+        const QSignalBlocker quiet(ShowLevel::instance());
+        ShowLevel::instance()->resetForShow();
+        ShowLevel::instance()->setFromAttribute(doc.attributes().value(QStringLiteral("Level")).toString());
+    }
+    m_classicAllowed = false;
     m_loadedCreator.clear();
     m_upgradeOfferMade = false;
     m_showTreeNoticeDismissed = false;      // P45: back each time the show opens
@@ -7685,6 +8020,17 @@ QFile::FileError App::saveXML(const QString& fileName, bool autosave)
        (and this one, for a feature it doesn't know) skips it. */
     if (!ShowFeatures::instance()->offAttribute().isEmpty())
         doc.writeAttribute(QStringLiteral("FeaturesOff"), ShowFeatures::instance()->offAttribute());
+    /* The level saved in the show (never a Teaching session's raise);
+       nothing at Standard, so an untouched show's file does not change.
+       QLC+ 4 reads past it. A handout writes its own (Make Student Handout). */
+    {
+        const QString level = m_levelSaveOverride >= 0
+            ? (m_levelSaveOverride == ShowLevel::Standard ? QString()
+                                                          : ShowLevel::key(ShowLevel::Level(m_levelSaveOverride)))
+            : ShowLevel::instance()->attribute();
+        if (!level.isEmpty())
+            doc.writeAttribute(QStringLiteral("Level"), level);
+    }
 
     doc.writeStartElement(KXMLQLCCreator);
     doc.writeTextElement(KXMLQLCCreatorName, APPNAME);
@@ -8997,6 +9343,17 @@ void App::initStatusBar()
     m_statusTeachingLabel->installEventFilter(this);
     m_statusTeachingLabel->hide();
     sb->addWidget(m_statusTeachingLabel, 0);
+    /* The level (Q249): STUDENT or ADVANCED, none at Standard; a click
+       opens the three levels. */
+    m_statusLevelLabel = new QLabel(this);
+    m_statusLevelLabel->setObjectName(QStringLiteral("footerLevel"));
+    m_statusLevelLabel->setCursor(Qt::PointingHandCursor);
+    m_statusLevelLabel->setStyleSheet(QStringLiteral("QLabel { color: #1e73be; font-weight: bold; }"));
+    m_statusLevelLabel->setProperty("helpTopic", QStringLiteral("getting-started.md#levels"));
+    m_statusLevelLabel->installEventFilter(this);
+    m_statusLevelLabel->hide();
+    sb->addWidget(m_statusLevelLabel, 0);
+    updateLevelChip();
     if (m_doc != NULL)
         connect(m_doc->teachingSettings(), &TeachingSettings::teachingChanged,
                 this, &App::updateTeachingStatus);
@@ -9932,6 +10289,13 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_statusTeachingLabel && event->type() == QEvent::MouseButtonPress)
     {
         showTeachingMenu();
+        return true;
+    }
+
+    if (watched == m_statusLevelLabel && m_statusLevelLabel != nullptr
+        && event->type() == QEvent::MouseButtonPress)
+    {
+        showLevelMenu();
         return true;
     }
 
@@ -11542,6 +11906,15 @@ void App::showTeachingMenu()
                                                  : tr("Lesson %1 handout").arg(teach->lesson()),
                        this, [link]() { QDesktopServices::openUrl(QUrl::fromUserInput(link)); });
     }
+    /* The PIN opens the higher levels until the show is closed (Q341,
+       Q342): from here, rather than a new menu item. */
+    const ShowLevel::Level at = ShowLevel::instance()->chosenLevel();
+    if (at < ShowLevel::Standard)
+        menu.addAction(tr("Unlock Standard…"), this, [this]() { requestLevel(ShowLevel::Standard); })
+            ->setObjectName(QStringLiteral("teachingUnlockStandard"));
+    if (at < ShowLevel::Advanced)
+        menu.addAction(tr("Unlock Advanced…"), this, [this]() { requestLevel(ShowLevel::Advanced); })
+            ->setObjectName(QStringLiteral("teachingUnlockAdvanced"));
     menu.addSeparator();
     QAction *settings = menu.addAction(tr("Teaching Settings…"), this, [this]() { openShowSettings(); });
     settings->setEnabled(m_doc->mode() == Doc::Design);
