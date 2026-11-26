@@ -1072,7 +1072,8 @@ it.
 **Park Here** holds a fixture exactly where it is now, over every cue, a
 cue you pick, the emergency stop and the GO after it, until you
 **Unpark** it. Right-click it — on the plot, in the Fixtures list, in
-Build or the Show Tree — for **Park Here** or **Unpark**. A parked fixture
+Build or the Show Tree — and open **Selection ▸** for **Park Here** or
+**Unpark** (it parks everything picked). A parked fixture
 has a **P** beside it on the plot and on its icon, the Fixtures list says
 **· Parked**, and the **Run** tab lists every parked fixture under
 **Parked** (double-click one, or pick and **Unpark**; none picked unparks
@@ -1084,7 +1085,7 @@ is doing.
 1. In Design, click a cue that switches the relay on. It stays off; the
    plot draws it on, with the held badge.
 2. GO that cue from the Run. It switches on.
-3. Right-click the relay → **Park Here**. GO the next cue that turns it
+3. Right-click the relay → **Selection ▸ Park Here**. GO the next cue that turns it
    off: it stays on. The Run tab lists it under **Parked**.
 4. **Unpark** it there. The next GO drives it again.
 5. GO a cue that sends the hazer. It stays off; the footer says

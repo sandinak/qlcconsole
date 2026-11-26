@@ -1372,12 +1372,15 @@ void TrackBack_Test::theFooterSaysWhereTheCurtainStopped()
 Chaser *TrackBack_Test::behavesList(int fadeMs)
 {
     quint32 address = 0;
+    for (Fixture *f : m_doc->fixtures())
+        address = qMax(address, f->address() + f->channels());
     auto dimmer = [&](const QString &name) {
         Fixture *f = new Fixture(m_doc);
         f->setName(name);
         f->setChannels(1);
         f->setAddress(address++);
-        m_doc->addFixture(f);
+        if (!m_doc->addFixture(f))
+            qFatal("could not add %s", qPrintable(name));
         FixtureGroup *g = new FixtureGroup(m_doc);
         g->setName(name);
         m_doc->addFixtureGroup(g);

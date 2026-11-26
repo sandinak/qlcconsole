@@ -67,6 +67,9 @@ private slots:
     void pwr03();
     void pwr05();
     void pwr06();
+    /** Board Q351: Behaves as set by hand (FIX-20) and a 3R+ laser as a
+     *  Light (FIX-21) */
+    void fix20fix21();
     void file01();
     void file02();
     void name01();

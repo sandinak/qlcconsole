@@ -1123,6 +1123,36 @@ void ShowReview_Test::pwr06()
     QVERIFY(fires("PWR-06"));
 }
 
+void ShowReview_Test::fix20fix21()
+{
+    Fixture *wash = par("Par 1", 0);
+    Fixture *relay = dimmer("Stage relay", 10);
+    relay->setOutputRules(Fixture::Switch);
+    QVERIFY(quiet("FIX-20"));               // guessed: nothing to say
+    QVERIFY(quiet("FIX-21"));
+    relay->setBehaviourSetting(Fixture::SwitchBehaviour);
+    QVERIFY(quiet("FIX-20"));               // set to what it is guessed as
+    wash->setBehaviourSetting(Fixture::MachineryBehaviour);
+    QVERIFY(fires("FIX-20"));
+    QCOMPARE(findings("FIX-20").first().severity, ReviewFinding::Note);
+    wash->setBehaviourSetting(-1);
+    QVERIFY(quiet("FIX-20"));
+
+    // A laser of class 3B (its label) set to Light: FIX-21, not FIX-20.
+    Fixture *laser = dimmer("Sky laser", 20);
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(laser->id());
+    rp.laserClass = 4;
+    m_doc->monitorProperties()->setFixtureRigProps(laser->id(), rp);
+    QVERIFY(quiet("FIX-21"));               // a Hazard, as guessed
+    laser->setBehaviourSetting(Fixture::LightBehaviour);
+    QVERIFY(fires("FIX-21"));
+    QCOMPARE(findings("FIX-21").first().severity, ReviewFinding::Warning);
+    QVERIFY(quiet("FIX-20"));
+    rp.laserClass = 2;                      // Class 2: a light anyway
+    m_doc->monitorProperties()->setFixtureRigProps(laser->id(), rp);
+    QVERIFY(quiet("FIX-21"));
+}
+
 /****************************************************************************
  * Files
  ****************************************************************************/

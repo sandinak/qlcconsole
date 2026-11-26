@@ -170,6 +170,10 @@ Fixture *OutputRules_Test::addDimmer(const QString &name, int address, int rules
     f->setAddress(quint32(address));
     f->setUniverse(0);
     f->setOutputRules(Fixture::OutputRules(rulesMask));
+    /* The output rules alone: a "Flame" relay here is a light whose rules
+       are under test, not a Hazard (board Q351, TrackBack_Test has those). */
+    if (name.contains(QStringLiteral("Flame")))
+        f->setBehaviourSetting(Fixture::LightBehaviour);
     if (m_doc->addFixture(f) == false)
     {
         delete f;
@@ -3825,6 +3829,9 @@ void OutputRules_Test::theEmergencyStopPutsAFoggerAtRest()
     fogger->setFixtureDefinition(def, mode);
     fogger->setUniverse(0);
     fogger->setAddress(quint32(Fog));
+    /* Set to fire from its cue (a Hazard does not until arming, Q352):
+       what is under test is the stop putting it at rest. */
+    fogger->setBehaviourSetting(Fixture::LightBehaviour);
     QVERIFY(m_doc->addFixture(fogger));
     m_doc->outputRuleKeeper()->rebuild();
 

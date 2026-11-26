@@ -428,6 +428,9 @@ private:
         quint32 channels = 0;
         bool showOnly = false;
         Fixture::Behaviour behaviour = Fixture::MachineryBehaviour;
+        /** On when not in use: its full goes out after the faders (never
+         *  in the pre-Grand-Master values), so it is read from what is sent */
+        bool onAtOpen = false;
         /** Per channel, 1 where it is intensity (HTP): a Show-only one's
          *  hold there is let go at the GO, as a 0 is no write there */
         QByteArray intensity;

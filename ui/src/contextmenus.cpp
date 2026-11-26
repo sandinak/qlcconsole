@@ -584,28 +584,41 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
         ->setToolTip(ContextMenu::tr("Power relays, house and work lights: ignore Blackout or the "
                                      "Grand Master, switch instead of fade, on when not in use"));
     /* Park (board Q351): held where it is now, over every cue, edit hold
-       and stop, until unparked; saved with the show. A hazard parks off. */
-    if (!members.isEmpty() && doc->programmer() != nullptr)
+       and stop, until unparked; saved with the show. A hazard parks off.
+       Filed in Selection ▸ where the place has it (the menu keeps to 14
+       items), else on its own. */
+    QList<QAction *> parkActs;
+    if (!members.isEmpty() && doc->programmer() != nullptr && menu.menu() != nullptr)
     {
         ProgrammerController *pc = doc->programmer();
         QList<quint32> parked, loose;
         for (quint32 fid : members)
             (pc->isFixtureParked(fid) ? parked : loose) << fid;
         if (!loose.isEmpty())
-            menu.add(ContextMenu::Kind, parkHereText(), [pc, loose, changed]() {
+        {
+            QAction *a = new QAction(parkHereText(), menu.menu());
+            a->setObjectName(QStringLiteral("ctxParkHere"));
+            a->setToolTip(ContextMenu::tr("Hold it where it is now, over every cue, edit and stop, "
+                                          "until you unpark it. A hazard parks off. Saved with the show."));
+            QObject::connect(a, &QAction::triggered, menu.menu(), [pc, loose, changed]() {
                 pc->parkFixtures(loose);
                 if (changed)
                     changed();
-            }, QStringLiteral("ctxParkHere"))
-                ->setToolTip(ContextMenu::tr("Hold it where it is now, over every cue, edit and stop, "
-                                             "until you unpark it. A hazard parks off. Saved with the show."));
+            });
+            parkActs << a;
+        }
         if (!parked.isEmpty())
-            menu.add(ContextMenu::Kind, unparkText(), [pc, parked, changed]() {
+        {
+            QAction *a = new QAction(unparkText(), menu.menu());
+            a->setObjectName(QStringLiteral("ctxUnpark"));
+            a->setToolTip(ContextMenu::tr("Let the cues drive it again"));
+            QObject::connect(a, &QAction::triggered, menu.menu(), [pc, parked, changed]() {
                 pc->unparkFixtures(parked);
                 if (changed)
                     changed();
-            }, QStringLiteral("ctxUnpark"))
-                ->setToolTip(ContextMenu::tr("Let the cues drive it again"));
+            });
+            parkActs << a;
+        }
     }
     /* Fixtures of more than one kind of head (RGB and white rows): a
        fixture group per kind. */
@@ -666,7 +679,8 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
     if (place.offerSelectionMenu && !members.isEmpty() && menu.menu() != nullptr)
     {
         QMenu *staging = new QMenu(menu.menu());
-        QList<QAction *> extra;
+        QList<QAction *> extra = parkActs;
+        parkActs.clear();                   // in Selection ▸
         if (createAct != nullptr)
             extra << createAct;
         QMenu *sub = SelectionMenu::addTo(staging, doc, members, extra);
@@ -683,6 +697,10 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
                                          "Fixture groups: every one made of the same fixtures, "
                                          "laid out the same way."));
     }
+
+    // No Selection ▸ here: Park on its own.
+    for (QAction *a : parkActs)
+        menu.add(ContextMenu::Kind, a);
 
     /* ---- 4. A group of them (when there is no Selection ▸); a folder for
        the groups ---- */

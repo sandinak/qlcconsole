@@ -14,6 +14,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
+  One-shot, Switch or Hazard -- guessed from its definition and plot
+  symbol (old shows load unchanged), set in Fixture Properties, shown in
+  the Fixtures list's new column and as a letter on its icon, and listed
+  in Show Review when set by hand (FIX-20). Machinery, One-shots and
+  Switches move only when a run plays them: held while you pick cues in
+  Design (drawn where the cue puts them, marked held) and frozen by a
+  stop until the next GO; a Back never fires a one-shot again. Hazards
+  are never fired by an edit or a preview -- and, until arming lands,
+  not by a GO either ("Hazard — needs arming (coming)"). Lasers get a
+  **Laser class** in the definition's Physical tab: 3R and up is a
+  Hazard, and setting one to Light asks for its class typed (FIX-21).
+  **Park Here** / **Unpark** in every fixture's right-click Selection ▸: a P on
+  the plot and the icon, and a Parked list on the Run tab; Park wins over
+  cues, the edit hold and a stop.
+
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

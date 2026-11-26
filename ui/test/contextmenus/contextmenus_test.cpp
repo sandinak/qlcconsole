@@ -55,6 +55,7 @@
 
 #include "contextmenus_test.h"
 #include "contextmenus.h"
+#include "programmercontroller.h"
 #include "controllearndialog.h"
 #include "createfixturegroup.h"
 #include "fixturetreewidget.h"
@@ -75,7 +76,7 @@
    way in every place (ContextMenus::rig). */
 static const QStringList kCanonItems = {
     "ctxEditHeadLayout", "ctxFixtureProperties", "ctxLocate", "whyOnAction", "ctxPatch",
-    "ledLayoutAction", "ctxGoboWheels", "outputRulesAction", "ctxParkHere", "ctxUnpark", "ctxSplitByHeadType", "ctxLayOutFromStage", "selectionMenu", "selectAllSimilar",
+    "ledLayoutAction", "ctxGoboWheels", "outputRulesAction", "ctxSplitByHeadType", "ctxLayOutFromStage", "selectionMenu", "selectAllSimilar",
     "ctxCreateGroupFromSelection", "ctxMoveToFolder", "ctxRename", "ctxDeleteGroup"
 };
 
@@ -397,7 +398,7 @@ void ContextMenus_Test::aFixtureGroupHasOneMenuEverywhere()
 
     /* The canon's order for one fixture group. Each place leaves out only
        what it says it does (and why): */
-    const QStringList canon = { "ctxEditHeadLayout", "ctxLocate", "whyOnAction", "outputRulesAction", "ctxParkHere",
+    const QStringList canon = { "ctxEditHeadLayout", "ctxLocate", "whyOnAction", "outputRulesAction",
                                 "ctxLayOutFromStage", "selectionMenu", "selectAllSimilar", "ctxMoveToFolder",
                                 "ctxRename", "ctxDeleteGroup" };
     auto without = [&canon](const QStringList &omit) {
@@ -610,7 +611,7 @@ void ContextMenus_Test::aFixtureHasOneMenuEverywhere()
     /* Create Fixture Group from Selection… is inside Selection ▸ (Q201),
        where the place offers it. */
     const QStringList canon = { "ctxFixtureProperties", "ctxLocate", "whyOnAction", "ctxPatch",
-                                "outputRulesAction", "ctxParkHere", "selectionMenu", "selectAllSimilar",
+                                "outputRulesAction", "selectionMenu", "selectAllSimilar",
                                 "ctxRename" };
     auto without = [&canon](const QStringList &omit) {
         QStringList out = canon;
@@ -1529,10 +1530,27 @@ void ContextMenus_Test::theRigViewFollowsTheCanon()
     gv->buildItemMenu(&menu, QStringLiteral("fixture"), fid, place);
     VERIFY_CANON(&menu);
     QCOMPARE(canonItems(&menu), QStringList({ "ctxFixtureProperties", "ctxLocate", "whyOnAction", "ctxPatch",
-                                              "outputRulesAction", "ctxParkHere", "selectionMenu",
+                                              "outputRulesAction", "selectionMenu",
                                               "selectAllSimilar",
                                               "ctxRename" }));
     QVERIFY(ContextMenu::contextItems(&menu).contains("Remove from View"));
+    // Park Here (board Q351), in its Selection ▸; Unpark once parked.
+    {
+        QMenu *sel = menu.findChild<QMenu *>(QStringLiteral("selectionMenu"));
+        QVERIFY(sel != nullptr);
+        QAction *park = nullptr;
+        for (QAction *a : sel->actions())
+            if (a->objectName() == QLatin1String("ctxParkHere"))
+                park = a;
+        QVERIFY2(park != nullptr, "Selection ▸ Park Here");
+        park->trigger();
+        QVERIFY(m_doc->programmer()->isFixtureParked(fid));
+        QMenu again;
+        gv->buildItemMenu(&again, QStringLiteral("fixture"), fid, place);
+        QVERIFY(again.findChild<QAction *>(QStringLiteral("ctxUnpark")) != nullptr);
+        QVERIFY(again.findChild<QAction *>(QStringLiteral("ctxParkHere")) == nullptr);
+        m_doc->programmer()->unparkFixtures({ fid });
+    }
 
     // A stage piece: the plot's own (shown, locked) on top, its editor below.
     QMenu piece;

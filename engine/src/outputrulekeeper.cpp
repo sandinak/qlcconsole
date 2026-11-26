@@ -553,6 +553,7 @@ QVector<OutputRuleKeeper::Machine> OutputRuleKeeper::machinesNow() const
         Machine m;
         m.fixture = fx->id();
         m.behaviour = FixtureRest::behaviour(fx);
+        m.onAtOpen = (fx->outputRules() & Fixture::OnAtOpen) != 0;
         m.base = fx->universeAddress();
         m.channels = fx->channels();
         m.showOnly = (fx->outputRules() & Fixture::ShowOnly) != 0;
@@ -574,7 +575,7 @@ QHash<quint32, QByteArray> OutputRuleKeeper::capture(const QVector<Machine> &mac
     /* Where each one is now: what the faders built last frame (its cue's
        fade part way, a hold, or what it was left at). */
     const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
-    QHash<int, QByteArray> pre;
+    QHash<int, QByteArray> pre, post;
     QHash<quint32, QByteArray> held;
     for (const Machine &m : machines)
     {
@@ -591,6 +592,16 @@ QHash<quint32, QByteArray> OutputRuleKeeper::capture(const QVector<Machine> &mac
             const int a = int(abs & 0x1ff);
             if (a < it.value().size())
                 values[int(i)] = it.value().at(a);
+            /* On when not in use and nothing sets it: at full on the wire,
+               0 before the Grand Master -- held at what is sent. */
+            if (m.onAtOpen)
+            {
+                auto pt = post.find(u);
+                if (pt == post.end())
+                    pt = post.insert(u, *ua.at(u)->postGMValues());
+                if (a < pt.value().size() && uchar(pt.value().at(a)) > uchar(values.at(int(i))))
+                    values[int(i)] = pt.value().at(a);
+            }
             // Over everything that plays, a Show-only one too (held as its
             // pan and tilt are as well: Universe::holdShowOnlyPositions()).
             if (levels != nullptr)
@@ -627,8 +638,12 @@ void OutputRuleKeeper::holdStageMachinery()
         machines = m_machines;
     }
     // A stop: what the last GO's hazards were refused is history.
-    if (thread() == QThread::currentThread())
+    if (thread() == QThread::currentThread() && !m_hazardsRefused.isEmpty())
+    {
         m_hazardsRefused.clear();
+        if (machines.isEmpty())
+            emitMachineryChanged();
+    }
     if (machines.isEmpty())
         return;
 
