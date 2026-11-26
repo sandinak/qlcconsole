@@ -321,7 +321,8 @@ a click opens its map.
 - **A board with no drawing** (an APC mini, a fader box) is named in one line
   under the maps; what its controls do stays in the rows below.
 - The map reads; it changes nothing. Assign a free control from the thing
-  (right-click a scene, effect, cue or hit ▸ **Learn Trigger…**).
+  (right-click a cue list, cue or hit ▸ **Assign to Control…**; a scene or
+  effect in the Classic QLC+ view).
 
 The **MaizeDMX Playback Controller** shows up as **USB2.0-MIDI** (a name many
 USB MIDI boxes share): patch it with the profile **MaizeDMX Playback

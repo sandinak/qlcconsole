@@ -303,8 +303,8 @@ void SurfaceMapView::refresh()
         else
         {
             cell.job = m_pageLabels.value(c.channel);
-            lines << tr("Free: assign it from the thing (right-click a scene, effect, cue or hit ▸ "
-                        "Learn Trigger…).");
+            lines << tr("Free: assign it from the thing (right-click a cue list, cue or hit ▸ "
+                        "Assign to Control…).");
         }
         // Every show owner is named, the board's and the desk's too.
         for (const ControlOwners::Owner *o : std::as_const(show))
