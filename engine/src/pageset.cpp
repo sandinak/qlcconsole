@@ -250,13 +250,13 @@ QHash<quint32, QString> PageSet::labels(int page) const
         for (const Binding &b : m_pages.at(page).controls)
             if (b.param != kNoneParam)
                 out.insert(b.channel, b.text());
-    // A page key says its page; the keys sharing it say each of theirs.
-    for (const Page &p : m_pages)
-        if (p.key != kNone)
-        {
-            const QString had = out.value(p.key);
-            out.insert(p.key, had.isEmpty() ? p.name : had + QStringLiteral(" / ") + p.name);
-        }
+    // A page key says its page: of a key with several, the one on now, else the first.
+    for (int i = 0; i < m_pages.size(); ++i)
+    {
+        const Page &p = m_pages.at(i);
+        if (p.key != kNone && (!out.contains(p.key) || i == page))
+            out.insert(p.key, p.name);
+    }
     if (m_next != kNone)
         out.insert(m_next, QObject::tr("Next page"));
     if (m_previous != kNone)

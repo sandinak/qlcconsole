@@ -59,7 +59,7 @@ const QColor kFree(0x3a, 0x3d, 0x42);
 const QColor kFreeText(0x9a, 0x9f, 0xa6);
 const QColor kShow(0x1f, 0x7a, 0x8c);
 const QColor kBoardOwn(0x55, 0x5d, 0x6b);
-const QColor kPage(0x2e, 0x7d, 0x4f);       // a surface page's control (Design)
+const QColor kPage(0x5b, 0x4a, 0x9e);       // a surface page's control (Design): violet, apart from GO's green
 const QColor kHighlight(0xff, 0xff, 0xff);
 
 QColor roleColour(const QString &role)
@@ -633,6 +633,9 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     const int px = qMax(9, int(s * 0.2));
     f.setPixelSize(px);
     const QString face = c.face;
+    // A job that is the control's own name ("Looks" on the PMJ's Looks key) once.
+    if (!c.turns() && words.compare(face, Qt::CaseInsensitive) == 0)
+        words.clear();
     if (c.turns())
     {
         // Under a knob: one line, its job if it has one, else its name.
