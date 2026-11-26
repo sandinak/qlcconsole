@@ -13,6 +13,7 @@
       http://www.apache.org/licenses/LICENSE-2.0.txt
 */
 
+#include <memory>
 #include <QtTest>
 #include <QElapsedTimer>
 #include <QTemporaryDir>
