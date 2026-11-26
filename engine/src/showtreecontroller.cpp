@@ -7535,6 +7535,9 @@ void ShowTreeController::syncPreview()
     if (state == PreviewState::Playing && c != nullptr)
         if (MonitorProperties *mp = m_doc->monitorProperties())
             mp->setLiveBlocking(cueBlocking(c->id));
+    // Before the pick's scenes start: the curtains held where the last
+    // frame left them, not a frame into the pick's fade.
+    syncMachineryHold(state);
     for (quint32 fid : want)
     {
         // start() is a no-op for a parent the function already has, and
@@ -7569,33 +7572,46 @@ void ShowTreeController::syncPreview()
 
     // What runs for real underneath: off stage while this has it.
     syncRunHold();
-    syncMachineryHold();
 
     if (state != before || want != runningBefore)
         emit previewChanged();
 }
 
-void ShowTreeController::syncMachineryHold()
+void ShowTreeController::syncMachineryHold(PreviewState state)
 {
     OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
     if (keeper == nullptr)
         return;
     const bool own = m_doc->mode() == Doc::Design && !m_previewHeld && m_previewCue != invalidId()
-                     && (m_previewState == PreviewState::Playing || m_previewState == PreviewState::Dark);
+                     && (state == PreviewState::Playing || state == PreviewState::Dark);
     if (!own)
     {
-        /* Let go over a fade, never a jump: a GO's, the cue it plays;
-           else (Operate, the preview stopped) the cue that was picked. */
-        uint glide = 0;
-        if (m_machineryGlide >= 0)
-            glide = uint(m_machineryGlide);
-        else if (const Cue *held = cue(m_machineryCue))
-            glide = held->fadeIn;
-        if (glide > 60000)                 // an infinite or runaway time
-            glide = 0;
+        /* Let go over a fade, never a jump: a GO's, the cue it plays; else
+           (Operate, the preview stopped) the cue a list is playing under
+           the preview, else the cue that was picked. A cue with no fade
+           still does not jump a motor: a curtain's usual travel. */
+        int glide = m_machineryGlide;
+        if (glide < 0)
+            for (const Production &p : m_productions)
+                for (const CueList &l : p.lists)
+                {
+                    const Chaser *ch = l.isSubCues() || l.looks ? nullptr
+                                     : qobject_cast<const Chaser *>(m_doc->function(l.chaser));
+                    if (glide < 0 && ch != nullptr && ch->isRunning() && !ch->startedOnlyByPreview())
+                    {
+                        const int at = ch->currentStepIndex();
+                        if (at >= 0 && at < ch->stepsCount())
+                            glide = int(qMin<uint>(ch->steps().at(at).fadeIn, 60001));
+                    }
+                }
+        if (glide < 0)
+            if (const Cue *held = cue(m_machineryCue))
+                glide = int(qMin<uint>(held->fadeIn, 60001));
+        if (glide <= 0 || glide > 60000)   // none, or an infinite or runaway time
+            glide = kMachineryGlideMs;
         m_machineryGlide = -1;
         m_machineryCue = invalidId();
-        keeper->releaseMachineryForEdit(glide);
+        keeper->releaseMachineryForEdit(uint(glide));
         return;
     }
     m_machineryCue = m_previewCue;

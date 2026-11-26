@@ -366,11 +366,11 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
         QCOMPARE(view.computeDrapePose(drape).open, 1.0);
     }
 
-    // Into Operate: let go, and never a jump -- nothing plays it there
-    // until a GO, so it stays where it was held.
+    // Into Operate: let go to the run, which plays the cue that opens it --
+    // over that cue's fade from where it was held, never a jump.
     doc->setMode(Doc::Operate);
     {
-        const QString why = travels(fid, 0, stopped, 0, 1500);
+        const QString why = travels(fid, 0, 255, 1200, 4000);
         QVERIFY2(why.isEmpty(), qPrintable("into Operate: " + why));
     }
     QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);

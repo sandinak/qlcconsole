@@ -1801,7 +1801,10 @@ private:
     /** Q350: the preview on stage in Design holds the stage machinery
      *  where it is (OutputRuleKeeper::holdMachineryForEdit()) and tells it
      *  where the cue in edit puts it; anything else lets it go. */
-    void syncMachineryHold();
+    void syncMachineryHold(PreviewState state);
+    /** How long a held curtain takes to go back to what plays when no cue
+     *  says (a cue with no fade): its usual travel, never a jump */
+    static constexpr int kMachineryGlideMs = 2000;
     /** Where cue @p cueId leaves fixture @p fixtureId, tracked: its own
      *  levels there, else the nearest cue before it in its list that sets
      *  it (LTP: a curtain stays where it was sent). Empty: none does. */
