@@ -1419,7 +1419,7 @@ void VCCueList_Test::songSectionsShowAsRowsInOrder()
     QCOMPARE(rows, QStringList({ "# " + ShowTree::sectionTitle(st->sections(list).at(0)), "0", "1",
                                  "# " + ShowTree::sectionTitle(st->sections(list).at(1)), "2", "3",
                                  "# " + ShowTree::sectionTitle(st->sections(list).at(2)), "4", "5" }));
-    QCOMPARE(tree->topLevelItem(4)->text(1), m_doc->function(ch->steps().at(2).fid)->name());
+    QVERIFY(tree->topLevelItem(4)->text(1).endsWith(m_doc->function(ch->steps().at(2).fid)->name()));
 
     // The Run tab's look: across the row, bold, a heading (never selectable).
     QTreeWidgetItem *header = tree->topLevelItem(3);

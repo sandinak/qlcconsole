@@ -176,8 +176,13 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     // click landing on one go on to the cue next to it.
     connect(m_tree, &QTreeWidget::currentItemChanged, this,
             [this](QTreeWidgetItem *current, QTreeWidgetItem *previous) {
-        if (m_listIsUpdating || current == NULL || !current->data(COL_NUM, PROP_SECTION).toBool())
+        if (m_listIsUpdating)
             return;
+        if (current == NULL || !current->data(COL_NUM, PROP_SECTION).toBool())
+        {
+            updateSectionLabel();   // the picked cue's song
+            return;
+        }
         const int first = current->data(COL_NUM, PROP_SECTION_STEP).toInt();
         const int target = topLevelIndexOf(previous) == first && first > 0 ? first - 1 : first;
         if (QTreeWidgetItem *cue = stepItem(target))
