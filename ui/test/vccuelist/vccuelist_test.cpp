@@ -26,6 +26,7 @@
 #include <QSignalSpy>
 #include <QtTest>
 
+#include "../common/shotdark.h"
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
@@ -51,6 +52,7 @@
 #include "efx.h"
 #include "showtreecontroller.h"
 #include "doc.h"
+#include "showtreemodel.h"
 #include "outputrulekeeper.h"
 #include "functionparent.h"
 #undef private
@@ -1358,6 +1360,239 @@ void VCCueList_Test::aNextOnAListRunningFromAPreviewIsTheShow()
     Function *step = m_doc->function(c->steps().at(1).fid);
     QVERIFY(step->isRunning());
     QVERIFY(step->previewGate()->load() == false);    // and what it plays
+}
+
+/****************************************************************************
+ * Song sections (Q190)
+ ****************************************************************************/
+
+namespace
+{
+/* Three songs merged into one list (Merge lists into one…): sections
+   "0 — Preshow", "1 — Scream", "2 — Thriller", their cues under each. */
+quint32 threeSongs(Doc *doc, int cuesEach = 2)
+{
+    ShowTreeController *st = doc->showTree();
+    const quint32 prod = st->addProduction("Dance Hysteria");
+    const char *names[] = { "00-Preshow", "01-Scream", "02-Thriller" };
+    QList<quint32> lists;
+    for (int l = 0; l < 3; ++l)
+    {
+        const quint32 list = st->addCueList(prod, names[l], ShowTree::ListMode::NonTracking);
+        for (int i = 0; i < cuesEach; ++i)
+            st->addCue(list, i - 1, QString("%1 cue %2").arg(QString(names[l]).mid(3)).arg(i + 1));
+        lists << list;
+    }
+    if (!st->mergeLists(prod, lists))
+        return ShowTree::invalidId();
+    st->setCurrentProduction(prod);
+    return lists.first();
+}
+
+bool isSectionRow(const QTreeWidgetItem *item)
+{
+    return item != NULL && item->data(0, Qt::UserRole + 51).toBool();
+}
+} // namespace
+
+void VCCueList_Test::songSectionsShowAsRowsInOrder()
+{
+    const quint32 list = threeSongs(m_doc);
+    QVERIFY(list != ShowTree::invalidId());
+    ShowTreeController *st = m_doc->showTree();
+    QCOMPARE(st->sections(list).count(), 3);
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(ch != NULL);
+    QCOMPARE(ch->stepsCount(), 6);
+
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(ch->id());
+    QTreeWidget *tree = cl.m_tree;
+
+    // A header row above each song's first cue, in list order.
+    QCOMPARE(tree->topLevelItemCount(), 9);
+    QStringList rows;
+    for (int i = 0; i < tree->topLevelItemCount(); ++i)
+        rows << (isSectionRow(tree->topLevelItem(i)) ? QStringLiteral("# ") + tree->topLevelItem(i)->text(0)
+                                                      : QString::number(cl.topLevelIndexOf(tree->topLevelItem(i))));
+    QCOMPARE(rows, QStringList({ "# " + ShowTree::sectionTitle(st->sections(list).at(0)), "0", "1",
+                                 "# " + ShowTree::sectionTitle(st->sections(list).at(1)), "2", "3",
+                                 "# " + ShowTree::sectionTitle(st->sections(list).at(2)), "4", "5" }));
+    QCOMPARE(tree->topLevelItem(4)->text(1), m_doc->function(ch->steps().at(2).fid)->name());
+
+    // The Run tab's look: across the row, bold, a heading (never selectable).
+    QTreeWidgetItem *header = tree->topLevelItem(3);
+    QVERIFY(isSectionRow(header));
+    QVERIFY(header->isFirstColumnSpanned());
+    QVERIFY(header->font(0).bold());
+    QVERIFY(!(header->flags() & Qt::ItemIsSelectable));
+    QVERIFY(header->flags() & Qt::ItemIsEnabled);
+    QVERIFY(!(header->flags() & Qt::ItemIsEditable));
+
+    // The cue numbers count cues, not rows.
+    QCOMPARE(cl.stepCount(), 6);
+    QCOMPARE(cl.stepItem(2), tree->topLevelItem(4));
+    QCOMPARE(cl.stepItem(2)->text(0), QString("3"));
+    QCOMPARE(cl.topLevelIndexOf(header), -1);
+
+    // A section renamed in the tree: the row follows.
+    QVERIFY(st->setSectionName(list, st->sections(list).at(1), "Everybody Scream"));
+    QTRY_COMPARE(tree->topLevelItem(3)->text(0), QString("1 — Everybody Scream"));
+    QCOMPARE(cl.stepCount(), 6);
+}
+
+void VCCueList_Test::goStepsPastASectionRow()
+{
+    const quint32 list = threeSongs(m_doc);
+    QVERIFY(list != ShowTree::invalidId());
+    ShowTreeController *st = m_doc->showTree();
+    ShowControl *sc = m_doc->showControl();
+    Chaser *ch = qobject_cast<Chaser *>(m_doc->function(st->cueList(list)->chaser));
+    QVERIFY(ch != NULL);
+    QList<ShowControl::Request> seen;
+    sc->setRunHandler([&](const ShowControl::Request &r, ShowControl::Route) {
+        seen << r;
+        return sc->execute(r);
+    });
+    auto cleanup = qScopeGuard([&]() {
+        sc->setRunHandler(ShowControl::RunHandler());
+        m_doc->masterTimer()->stopAllFunctions();
+    });
+
+    m_doc->setMode(Doc::Operate);
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(ch->id());
+    QTreeWidget *tree = cl.m_tree;
+    QLabel *section = cl.findChild<QLabel *>("cueListSection");
+    QVERIFY(section != NULL);
+    QVERIFY(!section->isHidden());
+
+    // Stopped, Next selects: from the last cue of a song to the next song's
+    // first, over its header.
+    cl.setNextPrevBehavior(VCCueList::Select);
+    tree->setCurrentItem(cl.stepItem(1));
+    cl.slotNextCue();
+    QCOMPARE(tree->currentItem(), cl.stepItem(2));
+    QCOMPARE(section->text(), ShowTree::sectionTitle(st->sections(list).at(1)));
+    cl.slotPreviousCue();
+    QCOMPARE(tree->currentItem(), cl.stepItem(1));
+    QCOMPARE(section->text(), ShowTree::sectionTitle(st->sections(list).at(0)));
+
+    // The arrow keys (or a click) landing on a header go on to a cue: down
+    // into the song's first, up out of it to the one before.
+    tree->setCurrentItem(tree->topLevelItem(6));
+    QCOMPARE(tree->currentItem(), cl.stepItem(4));
+    tree->setCurrentItem(tree->topLevelItem(6));
+    QCOMPARE(tree->currentItem(), cl.stepItem(3));
+
+    // A double-click on a header plays nothing.
+    cl.slotItemActivated(tree->topLevelItem(3));
+    QVERIFY(seen.isEmpty());
+
+    // GO from cue 2 (the end of the first song): the next song's first cue,
+    // by its number -- the header is no step.
+    MasterTimer *timer = m_doc->masterTimer();
+    cl.slotItemActivated(cl.stepItem(1));
+    QCOMPARE(seen.size(), 1);
+    QCOMPARE(seen.last().cue, ch->stepCue(1));
+    timer->timerTick();
+    timer->timerTick();
+    QVERIFY(ch->isRunning());
+    QTRY_COMPARE(tree->currentItem(), cl.stepItem(1));
+    cl.slotNextCue();
+    QCOMPARE(seen.size(), 2);
+    QCOMPARE(seen.last().command, ShowControl::Go);
+    timer->timerTick();
+    timer->timerTick();
+    QTRY_COMPARE(ch->currentStepIndex(), 2);
+    QTRY_COMPARE(tree->currentItem(), cl.stepItem(2));
+    QVERIFY(!isSectionRow(tree->currentItem()));
+    // The cue playing's song, in sight above the list.
+    QCOMPARE(section->text(), ShowTree::sectionTitle(st->sections(list).at(1)));
+}
+
+void VCCueList_Test::aListWithNoSectionsLooksAsBefore()
+{
+    // A Show Tree list with no scheme, and a plain chaser: rows are steps.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction("P"), "L", ShowTree::ListMode::NonTracking);
+    for (int i = 0; i < 3; ++i)
+        st->addCue(list, i - 1, QString("C%1").arg(i + 1));
+    QVERIFY(st->sections(list).isEmpty());
+
+    QWidget w;
+    VCCueList cl(&w, m_doc);
+    cl.setChaser(st->cueList(list)->chaser);
+    QCOMPARE(cl.m_tree->topLevelItemCount(), 3);
+    for (int i = 0; i < 3; ++i)
+    {
+        QCOMPARE(cl.stepItem(i), cl.m_tree->topLevelItem(i));
+        QVERIFY(!isSectionRow(cl.m_tree->topLevelItem(i)));
+        QCOMPARE(cl.m_tree->topLevelItem(i)->text(0), QString::number(i + 1));
+    }
+    QLabel *section = cl.findChild<QLabel *>("cueListSection");
+    QVERIFY(section != NULL);
+    QVERIFY(section->isHidden());
+
+    Scene *s1 = new Scene(m_doc);
+    m_doc->addFunction(s1);
+    Chaser *plain = new Chaser(m_doc);
+    plain->addStep(ChaserStep(s1->id()));
+    plain->addStep(ChaserStep(s1->id()));
+    m_doc->addFunction(plain);
+    cl.setChaser(plain->id());
+    QCOMPARE(cl.m_tree->topLevelItemCount(), 2);
+    QCOMPARE(cl.stepCount(), 2);
+    QVERIFY(section->isHidden());
+
+    // And a saved layout reads back as it was written (no new element).
+    QBuffer buffer;
+    buffer.open(QIODevice::WriteOnly | QIODevice::Text);
+    QXmlStreamWriter xmlWriter(&buffer);
+    QVERIFY(cl.saveXML(&xmlWriter));
+    QVERIFY(!buffer.data().contains("Section"));
+}
+
+void VCCueList_Test::songSectionShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+
+    const quint32 list = threeSongs(m_doc, 9);
+    QVERIFY(list != ShowTree::invalidId());
+    ShowTreeController *st = m_doc->showTree();
+    QVERIFY(st->setSectionName(list, st->sections(list).at(1), "Everybody Scream"));
+    const QPalette light = QApplication::palette();
+    for (int theme = 0; theme < 2; ++theme)
+    {
+        if (theme == 1)
+            shotUseDarkTheme();
+        VCCueList cl(NULL, m_doc);
+        cl.setCaption("Main");
+        cl.setChaser(st->cueList(list)->chaser);
+        cl.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&cl));
+        // The current cue far down the second song: its header scrolled off.
+        cl.m_tree->setCurrentItem(cl.stepItem(14));
+        for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            cl.resize(z);
+            for (int i = 0; i < 5; ++i)
+                QApplication::processEvents();
+            cl.m_tree->scrollToItem(cl.stepItem(14), QAbstractItemView::PositionAtBottom);
+            QTest::qWait(30);
+            const QString file = QStringLiteral("%1-vccuelist-sections-%2-%3x%4.png")
+                                     .arg(prefix, theme == 0 ? "light" : "dark")
+                                     .arg(z.width()).arg(z.height());
+            QVERIFY(cl.grab().save(QDir(dir).filePath(file)));
+        }
+    }
+    QApplication::setPalette(light);
 }
 
 QTEST_MAIN(VCCueList_Test)

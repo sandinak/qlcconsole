@@ -28,6 +28,7 @@
 #include "qlcui_export.h"
 
 class QTreeWidgetItem;
+class QFont;
 class CueRunnerHandle;
 class CueRunnerFrame;
 class QProgressBar;
@@ -42,6 +43,8 @@ class VCButton;
 class QTimer;
 class Chaser;
 class Doc;
+
+namespace ShowTree { struct Section; }
 
 /** @addtogroup ui UI
  * @{
@@ -141,6 +144,13 @@ public:
 
     static QString sizeToString(Size size);
     static Size stringToSize(const QString &str);
+
+    /** A song section's header row (Q190) as the Run draws it, on @a item
+     *  (already in its tree): the section's title across the row, bold in
+     *  @a font, a heading and not a cue (enabled, never selectable). The
+     *  VC Cue List draws its section rows with this too, so they look the
+     *  same. */
+    static void styleSectionRow(QTreeWidgetItem *item, const ShowTree::Section &section, const QFont &font);
 
     /*********************************************************************
      * The VC sizes' layout (compact, list; the Run tab ignores these)

@@ -50,7 +50,7 @@
 #include "qmath.h"
 #include "showtreecontroller.h"
 #include "showcontrol.h"
-#include "showcontrol.h"
+#include "cuerunner.h"
 #include "doc.h"
 
 #define COL_NUM      0
@@ -60,6 +60,10 @@
 #define COL_DURATION 4
 #define COL_NOTES    5
 #define COL_CUE      6
+
+/* A song section's header row (not a cue), and the step it heads. */
+#define PROP_SECTION      (Qt::UserRole + 51)
+#define PROP_SECTION_STEP (Qt::UserRole + 52)
 
 #define PROP_ID  Qt::UserRole
 #define HYSTERESIS 3 // Hysteresis for next/previous external input
@@ -168,6 +172,32 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
             this, SLOT(slotItemActivated(QTreeWidgetItem*)));
     connect(m_tree, SIGNAL(itemChanged(QTreeWidgetItem*,int)),
             this, SLOT(slotItemChanged(QTreeWidgetItem*,int)));
+    // A section row is a heading, never the cue picked: the arrow keys or a
+    // click landing on one go on to the cue next to it.
+    connect(m_tree, &QTreeWidget::currentItemChanged, this,
+            [this](QTreeWidgetItem *current, QTreeWidgetItem *previous) {
+        if (m_listIsUpdating || current == NULL || !current->data(COL_NUM, PROP_SECTION).toBool())
+            return;
+        const int first = current->data(COL_NUM, PROP_SECTION_STEP).toInt();
+        const int target = topLevelIndexOf(previous) == first && first > 0 ? first - 1 : first;
+        if (QTreeWidgetItem *cue = stepItem(target))
+            m_tree->setCurrentItem(cue);
+    });
+
+    /* The song section of the cue playing (Q190), over the list so it stays
+       in sight however far the list scrolls; shown only for a list with
+       sections. */
+    m_sectionLabel = new QLabel(this);
+    m_sectionLabel->setObjectName(QStringLiteral("cueListSection"));
+    m_sectionLabel->setTextFormat(Qt::PlainText);
+    m_sectionLabel->setMinimumWidth(0);
+    m_sectionLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    QFont sectionFont = m_sectionLabel->font();
+    sectionFont.setBold(true);
+    m_sectionLabel->setFont(sectionFont);
+    m_sectionLabel->setToolTip(tr("The song section of the cue playing"));
+    m_sectionLabel->setVisible(false);
+    vbox->addWidget(m_sectionLabel);
     vbox->addWidget(m_tree);
 
     /* What GO plays next (docs/design/SHOW_CONTROL_DESIGN.md): the standby cue, with
@@ -301,6 +331,10 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
     // A cue's (or its list's) text colour changed: nothing else need be.
     if (ShowTreeController *st = m_doc->showTree())
         connect(st, &ShowTreeController::changed, this, [this]() {
+            // Its song sections changed (a name, a scheme, the running
+            // order): the rows built again.
+            if (!m_updateTimer->isActive() && sectionSignature() != m_sectionsBuiltFor)
+                m_updateTimer->start(UPDATE_TIMEOUT);
             applyCueColours();
             updateStandby();
         });
@@ -450,9 +484,9 @@ void VCCueList::applyCueColours()
             if (item->foreground(col) != fg)
                 item->setForeground(col, fg);
     };
-    for (int i = 0; i < m_tree->topLevelItemCount() && i < steps.count(); ++i)
+    for (int i = 0; i < stepCount() && i < steps.count(); ++i)
     {
-        QTreeWidgetItem *item = m_tree->topLevelItem(i);
+        QTreeWidgetItem *item = stepItem(i);
         paint(item, st->cueOfStep(listId, i), steps.at(i).skip);
         Chaser *inner = ch->subCueChase(i);
         const QList<ChaserStep> subs = inner == NULL ? QList<ChaserStep>() : inner->steps();
@@ -481,7 +515,12 @@ void VCCueList::updateStepList()
     m_listIsUpdating = true;
 
     m_tree->clear();
+    m_stepItems.clear();
+    m_stepSection.clear();
+    m_sectionTitles.clear();
+    m_sectionItems.clear();
     m_subHighlightStep = m_subHighlightSub = -1;
+    m_sectionsBuiltFor = sectionSignature();
 
     Chaser *ch = chaser();
     if (ch == NULL)
@@ -489,10 +528,27 @@ void VCCueList::updateStepList()
         m_subGoButton->setVisible(false);
         m_subBackButton->setVisible(false);
         m_listIsUpdating = false;
+        updateSectionLabel();
         return;
     }
 
+    // A Show Tree list's song sections (Q190), from the same place the Run
+    // tab reads them: step p plays cue playOrder[p], in its section.
+    QList<ShowTree::Section> sections;
+    QList<int> playOrder;
+    if (ShowTreeController *st = m_doc->showTree())
+    {
+        quint32 listId = Function::invalidId();
+        if (st->productionOfChaser(ch->id(), &listId) != Function::invalidId() && st->cueList(listId) != NULL)
+        {
+            sections = st->sections(listId);
+            if (!sections.isEmpty())
+                playOrder = st->playOrderOf(listId);
+        }
+    }
+
     bool anySubCues = false;
+    int lastSection = -2;
     QListIterator <ChaserStep> it(ch->steps());
     while (it.hasNext() == true)
     {
@@ -501,9 +557,26 @@ void VCCueList::updateStepList()
         Function *function = m_doc->function(step.fid);
         Q_ASSERT(function != NULL);
 
+        const int stepAt = m_stepItems.count();
+        const int cueAt = playOrder.count() == ch->stepsCount() ? playOrder.at(stepAt) : stepAt;
+        const int si = sections.isEmpty() ? -1 : ShowTree::sectionOfIndex(sections, cueAt);
+        if (si >= 0 && si != lastSection)
+        {
+            QTreeWidgetItem *header = new QTreeWidgetItem(m_tree);
+            CueRunner::styleSectionRow(header, sections.at(si), m_tree->font());
+            header->setData(COL_NUM, PROP_SECTION, true);
+            header->setData(COL_NUM, PROP_SECTION_STEP, stepAt);
+            header->setToolTip(COL_NUM, tr("A song section: GO goes on to its first cue"));
+            m_sectionItems << header;
+            m_sectionTitles << header->text(COL_NUM);
+        }
+        lastSection = si;
+        m_stepSection << (si >= 0 ? m_sectionItems.count() - 1 : -1);
+
         QTreeWidgetItem *item = new QTreeWidgetItem(m_tree);
+        m_stepItems << item;
         item->setFlags(item->flags() | Qt::ItemIsEditable);
-        int index = m_tree->indexOfTopLevelItem(item) + 1;
+        int index = stepAt + 1;
         item->setText(COL_NUM, QString("%1").arg(index));
         item->setData(COL_NUM, PROP_ID, function->id());
         QString displayName = function->name();
@@ -608,7 +681,7 @@ void VCCueList::updateStepList()
     m_subGoButton->setVisible(subGo);
     m_subBackButton->setVisible(subGo);
 
-    QTreeWidgetItem *item = m_tree->topLevelItem(0);
+    QTreeWidgetItem *item = stepItem(0);
     if (item != NULL)
         m_defCol = item->background(COL_NUM);
 
@@ -641,6 +714,7 @@ void VCCueList::updateStandby()
     if (m_standbyLabel == NULL)
         return;
     updateSubCueHighlight();
+    updateSectionLabel();
     Chaser *ch = chaser();
     const int next = standbyIndex();
     QString text;
@@ -771,7 +845,7 @@ int VCCueList::getLastIndex() const
 
 int VCCueList::getNextTreeIndex() const
 {
-    int count = m_tree->topLevelItemCount();
+    int count = stepCount();
     if (count > 0)
         return (getCurrentIndex() + 1) % count;
     return 0;
@@ -792,7 +866,7 @@ int VCCueList::getFirstTreeIndex() const
 
 int VCCueList::getLastTreeIndex() const
 {
-    return m_tree->topLevelItemCount() - 1;
+    return stepCount() - 1;
 }
 
 qreal VCCueList::getPrimaryIntensity() const
@@ -967,7 +1041,7 @@ void VCCueList::slotStop()
     else
     {
         m_primaryIndex = 0;
-        m_tree->setCurrentItem(m_tree->topLevelItem(getFirstIndex()));
+        m_tree->setCurrentItem(stepItem(getFirstIndex()));
     }
 
     emit stopButtonClicked();
@@ -986,7 +1060,7 @@ void VCCueList::slotNextCue()
     {
         if (ch->isPaused())
         {
-            m_tree->setCurrentItem(m_tree->topLevelItem(getNextIndex()));
+            m_tree->setCurrentItem(stepItem(getNextIndex()));
         }
         else if (!runShowTree(ShowControl::Go) && admitDirect(ShowControl::Go))
         {
@@ -1010,7 +1084,7 @@ void VCCueList::slotNextCue()
                 startChaser(getNextIndex());
             break;
             case Select:
-                m_tree->setCurrentItem(m_tree->topLevelItem(getNextIndex()));
+                m_tree->setCurrentItem(stepItem(getNextIndex()));
             break;
             case Nothing:
             break;
@@ -1033,7 +1107,7 @@ void VCCueList::slotPreviousCue()
     {
         if (ch->isPaused())
         {
-            m_tree->setCurrentItem(m_tree->topLevelItem(getPrevIndex()));
+            m_tree->setCurrentItem(stepItem(getPrevIndex()));
         }
         else if (!runShowTree(ShowControl::Back) && admitDirect(ShowControl::Back))
         {
@@ -1057,7 +1131,7 @@ void VCCueList::slotPreviousCue()
                 startChaser(getPrevIndex());
             break;
             case Select:
-                m_tree->setCurrentItem(m_tree->topLevelItem(getPrevIndex()));
+                m_tree->setCurrentItem(stepItem(getPrevIndex()));
             break;
             case Nothing:
             break;
@@ -1074,19 +1148,21 @@ void VCCueList::slotCurrentStepChanged(int stepNumber)
     if (m_updateTimer->isActive())
         return;
 
-    Q_ASSERT(stepNumber < m_tree->topLevelItemCount() && stepNumber >= 0);
-    QTreeWidgetItem *item = m_tree->topLevelItem(stepNumber);
-    Q_ASSERT(item != NULL);
+    Q_ASSERT(stepNumber < stepCount() && stepNumber >= 0);
+    QTreeWidgetItem *item = stepItem(stepNumber);
+    if (item == NULL)
+        return;
     m_tree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
     m_tree->setCurrentItem(item);
     m_primaryIndex = stepNumber;
+    updateSectionLabel();
     if (sideFaderMode() == Steps)
     {
         m_bottomStepLabel->setStyleSheet(cfLabelBlueStyle);
         m_bottomStepLabel->setText(QString("#%1").arg(m_primaryIndex + 1));
 
         float stepVal;
-        int stepsCount = m_tree->topLevelItemCount();
+        int stepsCount = stepCount();
         if (stepsCount < 256) 
         {
             stepVal = 256.0 / (float)stepsCount; //divide up the full 0..255 range
@@ -1136,11 +1212,14 @@ void VCCueList::slotItemActivated(QTreeWidgetItem *item)
     {
         // A sub-cue: its parent first, if that isn't the one playing.
         QTreeWidgetItem *parent = item->parent();
-        playSubCue(m_tree->indexOfTopLevelItem(parent), parent->indexOfChild(item));
+        playSubCue(topLevelIndexOf(parent), parent->indexOfChild(item));
         return;
     }
 
-    playCueAtIndex(m_tree->indexOfTopLevelItem(item));
+    // A section row is a heading, not a cue.
+    const int index = topLevelIndexOf(item);
+    if (index >= 0)
+        playCueAtIndex(index);
 }
 
 int VCCueList::topLevelIndexOf(QTreeWidgetItem *item) const
@@ -1149,7 +1228,59 @@ int VCCueList::topLevelIndexOf(QTreeWidgetItem *item) const
         return -1;
     while (item->parent() != NULL)
         item = item->parent();
-    return m_tree->indexOfTopLevelItem(item);
+    return m_stepItems.indexOf(item);    // -1 for a section row
+}
+
+QTreeWidgetItem *VCCueList::stepItem(int step) const
+{
+    return step >= 0 && step < m_stepItems.count() ? m_stepItems.at(step) : NULL;
+}
+
+QString VCCueList::sectionSignature() const
+{
+    const Chaser *ch = chaser();
+    ShowTreeController *st = m_doc->showTree();
+    quint32 listId = Function::invalidId();
+    if (ch == NULL || st == NULL || st->productionOfChaser(ch->id(), &listId) == Function::invalidId())
+        return QString();
+    const QList<ShowTree::Section> sections = st->sections(listId);
+    if (sections.isEmpty())
+        return QString();
+    QStringList sig;
+    for (const ShowTree::Section &sec : sections)
+        sig << QStringLiteral("%1:%2").arg(sec.first).arg(ShowTree::sectionTitle(sec));
+    QStringList order;
+    for (int at : st->playOrderOf(listId))
+        order << QString::number(at);
+    return sig.join(QLatin1Char(';')) + QLatin1Char('|') + order.join(QLatin1Char(','));
+}
+
+void VCCueList::updateSectionLabel()
+{
+    if (m_sectionLabel == NULL)
+        return;
+    if (m_sectionItems.isEmpty())
+    {
+        if (!m_sectionLabel->isHidden())
+            m_sectionLabel->setVisible(false);
+        return;
+    }
+    // The cue playing; stopped, the one picked, else the one Play starts from.
+    Chaser *ch = chaser();
+    int step = -1;
+    if (ch != NULL && ch->isRunning())
+        step = ch->currentStepIndex();
+    if (step < 0)
+        step = topLevelIndexOf(m_tree->currentItem());
+    if (step < 0)
+        step = standbyIndex();
+    const int section = m_stepSection.value(step, -1);
+    // Kept one line high in a cue outside every section, so the list doesn't jump.
+    const QString text = section >= 0 ? m_sectionTitles.at(section) : QStringLiteral("\u00a0");
+    if (m_sectionLabel->text() != text)
+        m_sectionLabel->setText(text);
+    if (m_sectionLabel->isHidden())
+        m_sectionLabel->setVisible(true);
 }
 
 void VCCueList::playSubCue(int index, int subIndex)
@@ -1215,7 +1346,7 @@ void VCCueList::updateSubCueHighlight()
         return;
 
     auto paint = [this](int s, int j, bool on) {
-        QTreeWidgetItem *parent = m_tree->topLevelItem(s);
+        QTreeWidgetItem *parent = stepItem(s);
         QTreeWidgetItem *row = parent != NULL ? parent->child(j) : NULL;
         if (row == NULL)
             return;
@@ -1252,7 +1383,9 @@ void VCCueList::slotItemChanged(QTreeWidgetItem *item, int column)
         return;
 
     QString itemText = item->text(column);
-    int idx = m_tree->indexOfTopLevelItem(item);
+    int idx = m_stepItems.indexOf(item);
+    if (idx < 0 || idx >= ch->stepsCount())
+        return;     // a section row
     ChaserStep step = ch->steps().at(idx);
 
     step.note = itemText;
@@ -1297,7 +1430,7 @@ void VCCueList::slotFunctionStopped(quint32 fid)
     m_bottomStepLabel->setText("");
     m_bottomStepLabel->setStyleSheet(cfLabelNoStyle);
     // reset any previously set background
-    QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
+    QTreeWidgetItem *item = stepItem(m_secondaryIndex);
     if (item != NULL)
         item->setBackground(COL_NUM, m_defCol);
     updateSubCueHighlight();
@@ -1580,11 +1713,11 @@ void VCCueList::setFaderInfo(int index)
     m_bottomStepLabel->setStyleSheet(m_primaryTop ? cfLabelOrangeStyle : cfLabelBlueStyle);
 
     // reset any previously set background
-    QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
+    QTreeWidgetItem *item = stepItem(m_secondaryIndex);
     if (item != NULL)
         item->setBackground(COL_NUM, m_defCol);
 
-    item = m_tree->topLevelItem(tmpIndex);
+    item = stepItem(tmpIndex);
     if (item != NULL)
         item->setBackground(COL_NUM, QColor("#FF8000"));
     m_secondaryIndex = tmpIndex;
@@ -1987,7 +2120,7 @@ void VCCueList::slotModeChanged(Doc::Mode mode)
         m_bottomStepLabel->setText("");
         m_progress->setStyleSheet(progressDisabledStyle);
         // reset any previously set background
-        QTreeWidgetItem *item = m_tree->topLevelItem(m_secondaryIndex);
+        QTreeWidgetItem *item = stepItem(m_secondaryIndex);
         if (item != NULL)
             item->setBackground(COL_NUM, m_defCol);
     }

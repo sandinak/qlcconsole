@@ -172,6 +172,29 @@ private:
     /** timer for updating the step list */
     QTimer *m_updateTimer;
 
+    /*************************************************************************
+     * Song sections (Q190)
+     *************************************************************************/
+    /** A Show Tree list's song sections, as the Run tab shows them: a header
+     *  row (CueRunner::styleSectionRow()) above each section's first cue.
+     *  Not a cue: never selected, GO / Next / Previous pass it. A plain
+     *  chaser, or a list with no sections, has none (rows as before). */
+    QList<QTreeWidgetItem *> m_stepItems;   //!< step index -> its row
+    QList<int> m_stepSection;               //!< step index -> section (-1: none)
+    QStringList m_sectionTitles;            //!< section -> its title
+    QList<QTreeWidgetItem *> m_sectionItems;//!< section -> its header row
+    QString m_sectionsBuiltFor;             //!< sectionSignature() at the last build
+    QLabel *m_sectionLabel = nullptr;       //!< the current cue's section, always in sight
+
+    /** The row of step @a step (NULL: none). */
+    QTreeWidgetItem *stepItem(int step) const;
+    /** How many steps (cue rows; section rows not counted). */
+    int stepCount() const { return m_stepItems.count(); }
+    /** The sections this list's rows were built for: rebuilt on a change. */
+    QString sectionSignature() const;
+    /** The current cue's section over the list (hidden: no sections). */
+    void updateSectionLabel();
+
 public slots:
     /** Play/stop/resume the cue list from the current selection */
     void slotPlayback();
