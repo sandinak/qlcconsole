@@ -123,6 +123,14 @@ has its own switch, and its own PIN.
   moves on the knobs. The board's page keys switch it, and its map names
   every control's job. Pages edit in Design only; in Operate the controls
   are the show's again.
+- **Edit Live.** During a run the cue is close but a wash is too hot or a
+  mover lands off its mark. Turn on **Edit Live** (Run tab, or the footer;
+  the show's PIN if it has one), select the fixtures and move the page
+  control: only that attribute changes on stage. The red footer chip lists
+  what you moved; **Store** writes it into the look that set it (in an
+  earlier cue, if this one tracks it), one undo step. GO never waits: trims
+  you did not store drop with the cue, and **Store to Cue N** stays offered
+  for 30 seconds.
 
 ## Exit ticket
 

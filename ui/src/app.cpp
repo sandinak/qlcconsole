@@ -47,6 +47,7 @@
 #include "inputoutputmanager.h"
 #include "deskchip.h"
 #include "surfacechips.h"
+#include "editlivechip.h"
 #include "surfacemap.h"
 #include "functionselection.h"
 #include "effectdesigner.h"
@@ -9851,6 +9852,17 @@ void App::initStatusBar()
     });
     sb->addPermanentWidget(m_statusSurfaceChips);
 
+    /* Edit Live (Q339): in Operate with a paged board, a click turns it on
+       (the show's PIN if it has one); while on, red and always shown -- a
+       click lists the trims with Store and Drop. After a GO, Store to Cue N
+       beside it for 30 s. */
+    m_statusEditLive = new EditLiveChip(m_doc, this);
+    connect(m_statusEditLive, &EditLiveChip::said, this, [this](const QString &text) {
+        if (!text.isEmpty())
+            statusBar()->showMessage(text, 8000);
+    });
+    sb->addPermanentWidget(m_statusEditLive);
+
     // Persistent Design/Operate indicator — see app.h for why this is
     // separate from the mode-toggle button (which shows the destination
     // mode, not the current one). Always visible.
@@ -9938,7 +9950,7 @@ void App::initStatusBar()
     {
         const int h = fontMetrics().height() + 4;
         const QList<QWidget *> items = { m_statusSelectionLabel, m_statusPadModeLabel, m_statusOverridesChip, m_statusTestChip,
-                                         m_statusDeskChip, m_statusSurfaceChips,
+                                         m_statusDeskChip, m_statusSurfaceChips, m_statusEditLive,
                                          m_statusFollowLabel, m_statusModeChipLabel, m_statusStage,
                                          m_statusProgrammerLabel, m_statusDirtyLabel };
         for (QWidget *w : items)
@@ -9949,6 +9961,7 @@ void App::initStatusBar()
             if (QLabel *l = qobject_cast<QLabel *>(w))
                 l->setContentsMargins(6, 0, 6, 0);
         }
+        m_statusEditLive->setChipHeight(h);
     }
     // Unsaved/Saved's width counts the margins just set.
     slotDocModified(m_doc != NULL ? m_doc->isModified() : false);

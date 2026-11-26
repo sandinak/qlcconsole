@@ -58,6 +58,9 @@
 #include "padrun.h"
 #include "controllerjobs.h"
 #include "cuerunner.h"
+#include "editlivechip.h"
+#include "editlive.h"
+#include "surfacepages.h"
 #include "controlmap.h"
 #include "groupmasterstrip.h"
 #include "teachingsettings.h"
@@ -681,6 +684,29 @@ void CueRunner::buildFullLayout()
             this, &CueRunner::refreshPadRun);
     head->addWidget(m_padRunBtn);
     refreshPadRun();
+    /* Edit Live (Q337-Q339): the board's page controls trim the running
+       cue; the footer's red chip lists the trims and stores them. Asks
+       the show's PIN when it has one. Shown in Operate with a paged board. */
+    m_editLiveBtn = new QToolButton(this);
+    m_editLiveBtn->setObjectName(QStringLiteral("crEditLive"));
+    m_editLiveBtn->setText(tr("Edit Live"));
+    m_editLiveBtn->setCheckable(true);
+    m_editLiveBtn->setProperty("helpTopic", QStringLiteral("edit-live.md"));
+    connect(m_editLiveBtn, &QToolButton::toggled, this, [this](bool on) {
+        EditLive *el = m_doc->controlMap()->editLive();
+        if (on)
+            EditLiveChip::turnOn(m_doc, window());
+        else
+            el->setOn(false);
+        refreshEditLive();
+    });
+    if (EditLive *el = m_doc->controlMap()->editLive())
+        connect(el, &EditLive::onChanged, this, &CueRunner::refreshEditLive);
+    // Shown only with a board that has pages (as the footer's chip).
+    connect(m_doc->controlMap()->surfacePages(), &SurfacePages::setsChanged, this, &CueRunner::refreshEditLive);
+    connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshEditLive);
+    head->addWidget(m_editLiveBtn);
+    refreshEditLive();
     m_mode = new QLabel(this);
     m_mode->setObjectName(QStringLiteral("crMode"));
     m_mode->setFont(hf);
@@ -1429,6 +1455,27 @@ void CueRunner::refreshFocusCalls()
     FocusMenu::setAvailable(m_focusCallsBtn, FocusMenu::venueFocusBlocked(m_doc),
                             tr("Pre-show: focus the rig for this venue, call by call, on the controller "
                                "(Design mode)"));
+}
+
+void CueRunner::refreshEditLive()
+{
+    if (m_editLiveBtn == nullptr)
+        return;
+    EditLive *el = m_doc->controlMap()->editLive();
+    const bool on = el != nullptr && el->isOn();
+    {
+        const QSignalBlocker block(m_editLiveBtn);
+        m_editLiveBtn->setChecked(on);
+    }
+    // Operate only (as the footer's chip): the Design header keeps its room.
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    m_editLiveBtn->setVisible(on || (m_doc->mode() == Doc::Operate && pages != nullptr
+                                     && !pages->universes().isEmpty()));
+    m_editLiveBtn->setStyleSheet(on ? QStringLiteral("QToolButton { color: #ffffff; background: #c62828; "
+                                                     "font-weight: bold; }")
+                                    : QString());
+    m_editLiveBtn->setToolTip(tr("Edit Live: the board's page controls trim the running cue; the footer's "
+                                 "red chip stores or drops the trims. GO never waits for them."));
 }
 
 void CueRunner::refreshPadRun()

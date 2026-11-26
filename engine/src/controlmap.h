@@ -35,6 +35,7 @@ class QXmlStreamReader;
 class QXmlStreamWriter;
 class EncoderBank;
 class SurfacePages;
+class EditLive;
 class Chaser;
 class Doc;
 
@@ -272,6 +273,9 @@ public:
      *  the page on now, its keys; the show names the sets it was built
      *  with inside this map. */
     SurfacePages *surfacePages() const { return m_surfacePages; }
+    /** Edit Live (docs/features/edit-live.md): in Operate, the pages trim
+     *  the running cue, and Store keeps the trims in its looks. */
+    EditLive *editLive() const { return m_editLive; }
 
     /*********************************************************************
      * Bindings
@@ -784,6 +788,7 @@ private:
     Doc *m_doc;
     EncoderBank *m_encoderBank = nullptr;
     SurfacePages *m_surfacePages = nullptr;
+    EditLive *m_editLive = nullptr;
     QList<Binding> m_bindings;
     /** control -> indexes in m_bindings (several: at different places, or
      *  stepping through at one) */

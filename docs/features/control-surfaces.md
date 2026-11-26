@@ -348,6 +348,7 @@ names the page: **APC40 · Move**.
   too (in Design a page key's light is the page's). While a Learn
   listens, the page rests. In Design
   the page has them, and the map names the show's job as kept from it.
+  [Edit Live](edit-live.md) lets a page trim the running cue in Operate.
 - **A fader picks up first.** A page's fader does nothing until it meets
   the value it edits, then follows; the Workbench line says where to move
   it (*Red: move it to 50%*). After a page switch or a new selection every

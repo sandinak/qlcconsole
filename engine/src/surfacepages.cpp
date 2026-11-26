@@ -23,6 +23,7 @@
 #include <QUrl>
 
 #include "surfacepages.h"
+#include "editlive.h"
 #include "inputoutputmap.h"
 #include "qlcinputprofile.h"
 #include "qlcinputchannel.h"
@@ -252,7 +253,21 @@ bool SurfacePages::encoderBankOn(quint32 universe) const
 
 bool SurfacePages::isActive(quint32 universe) const
 {
-    return board(universe) != nullptr && m_doc->mode() == Doc::Design && !encoderBankOn(universe);
+    return board(universe) != nullptr && (m_doc->mode() == Doc::Design || m_live)
+           && !encoderBankOn(universe);
+}
+
+void SurfacePages::setLive(bool live)
+{
+    if (m_live == live)
+        return;
+    /* A knob is followed on every value, Operate too (handleInput()): its
+       first turn after Edit Live goes on is that turn, never a jump. */
+    m_live = live;
+    applyStatic();
+    for (quint32 u : m_boards.keys())
+        sendLamps(u);
+    emit setsChanged();
 }
 
 bool SurfacePages::isOverlaid(quint32 universe) const
@@ -281,11 +296,22 @@ void SurfacePages::applyStatic()
     {
         if (!isActive(it.key()) || m_overlaid.contains(it->profile))
             continue;
+        const bool live = m_doc->mode() != Doc::Design;
         for (quint32 ch : it->set.controlsOn(it->page))
         {
             // Never the desk's GO, Back, STOP or GM, whatever a set says.
             if (!it->layout.roleOn(ch).isEmpty())
                 continue;
+            /* Edit Live (Operate) takes only what it trims; a wheel, a
+               strobe or an overlay's rule stays the show's. */
+            if (live)
+            {
+                const PageSet::Binding *bind = it->set.binding(it->page, ch);
+                int bank = 0, slot = 0;
+                if (bind != nullptr && (!PageSet::bankSlot(bind->param, &bank, &slot)
+                                        || !EditLive::canTrim(bank, slot)))
+                    continue;
+            }
             controls.insert(keyOf(it.key(), ch));
             const int i = it->layout.indexOf(ch);
             if (i >= 0)
@@ -398,9 +424,14 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
     if (!b->layout.roleOn(own).isEmpty())
         return;
     const bool design = m_doc->mode() == Doc::Design;
+    // Operate with Edit Live on: the page trims the running stage.
+    const bool live = !design && m_live;
     const bool overlaid = m_overlaid.contains(b->profile);
-    // Operate: the controls are the show's (the PMJ's keys are its overlay's).
-    if (!design)
+    // Operate: the controls are the show's (the PMJ's keys are its overlay's),
+    // unless Edit Live has the page trim the running stage. A board whose
+    // overlay reads its faders (the PMJ) never trims: its faders are the
+    // overlay's and the show's, and would act twice.
+    if (!design && (!live || overlaid))
         return;
 
     if (own == b->set.stepper())
@@ -425,13 +456,26 @@ void SurfacePages::handleInput(quint32 universe, quint32 channel, uchar value)
     int bank = 0, slot = 0;
     if (bind == nullptr || !PageSet::bankSlot(bind->param, &bank, &slot))
         return;     // nothing here, or one of the overlay's rules
+    // Edit Live leaves what it doesn't trim to the show (applyStatic()).
+    if (live && !EditLive::canTrim(bank, slot))
+        return;
     if (c.isFader())
-        emit levelSet(universe, own, bank, slot, value);
+    {
+        if (live)
+            emit liveLevelSet(universe, own, bank, slot, value);
+        else
+            emit levelSet(universe, own, bank, slot, value);
+    }
     else if (c.turns())
     {
         const int d = turnDetents(*b, channel, value, knobDelta);
         if (d != 0)
-            emit adjusted(bank, slot, d, bind->fine);
+        {
+            if (live)
+                emit liveAdjusted(bank, slot, d, bind->fine);
+            else
+                emit adjusted(bank, slot, d, bind->fine);
+        }
     }
 }
 
