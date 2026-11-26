@@ -316,6 +316,8 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
         {
             m_app->resize(size);
             settle(300);
+            mon->m_graphicsView->centerOn(mon->m_graphicsView->m_sceneryItems.value(sid));
+            settle(100);
             mon->m_graphicsView->grab().save(QDir(shots).filePath(
                 QStringLiteral("curtain-held-while-editing-%1x%2.png").arg(size.width()).arg(size.height())));
         }
