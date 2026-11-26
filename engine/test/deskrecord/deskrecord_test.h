@@ -72,6 +72,9 @@ private slots:
     void passthroughUniverseIsNotLive();
     /** Phase R: a replug's state dump fires no desk STOP, GO or Back. */
     void aReplugDumpPressesNothingOfTheDesk();
+    /** A key really held across a replug, resending 127 past the window:
+     *  no GO until a release then a press. */
+    void aKeyHeldAcrossAReplugGoesOnlyAfterARelease();
     void aPortDumpAsAShowLoadsNeverMovesTheGrandMaster();
     void aPortDumpOnPatchItNeverMovesTheGrandMaster();
 

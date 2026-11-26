@@ -1271,10 +1271,16 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             break;
         case Go:
         case Back:
-            // The device's dump after a replug is no press (an unwanted GO is worse than a missed one).
+            /* The device's dump after a replug is no press (an unwanted GO is
+               worse than a missed one), and the key counts as held: one
+               really held across the replug resending (aftertouch, an axis)
+               GOes only after a release then a press, as the PMJ's Go. */
             if (cm != nullptr
                 && cm->isTriggerDump(universe, channel, value, tr("this computer's %1").arg(roleName(role))))
+            {
+                m_down.insert(k);
                 break;
+            }
             // One press, the edge from 0 (a held button resending is the one press).
             if (value == 0)
             {

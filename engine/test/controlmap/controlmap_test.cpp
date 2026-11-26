@@ -2722,6 +2722,46 @@ void ControlMap_Test::triggerIgnoresTheReplugDump()
     QCOMPARE(ignored.count(), 1);
 }
 
+/* Phase R: a trigger really held across the replug (aftertouch, an axis
+   used as GO) keeps resending non-zero. The dump's press is ignored and the
+   control counts as held, so a resend after the window is still that one
+   press, never a GO; a release then a press is one. */
+void ControlMap_Test::aTriggerHeldAcrossAReplugGoesOnlyAfterARelease()
+{
+    ShowTreeController *st = m_doc->showTree();
+    m_doc->showControl()->setGoGuardMs(0);      // not under test here
+    QList<quint32> cues;
+    const quint32 listId = cueList(3, &cues);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kNote, ControlMap::cueList(listId), ControlMap::Toggle });
+    cm->setDumpWindowMs(cm->dumpBurstMs() + 150);
+    Chaser *chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(listId)->chaser));
+    QVERIFY(chaser != nullptr);
+    QSignalSpy fired(cm, &ControlMap::fired);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), QString("Fake"));
+    emit iom->inputDeviceConnected(0, m_stub->name(), QString("Fake"));
+    // Held through the replug: the dump's press, then resends past the window.
+    send(kNote, 127);
+    QTest::qWait(cm->dumpBurstMs() + 50);
+    send(kNote, 127);
+    QTest::qWait(200);
+    sendAll(kNote, { 127, 127 });
+    tick(3);
+    QVERIFY2(!chaser->isRunning(), "a trigger held across the replug GOed on a resend");
+    QCOMPARE(fired.count(), 0);
+
+    // A release, then a press: one GO.
+    send(kNote, 0);
+    send(kNote, 127);
+    tick(3);
+    QVERIFY2(chaser->isRunning(), "a real press after the held key's release was ignored");
+    QCOMPARE(st->runningCue(listId), cues.at(0));
+    send(kNote, 0);
+    cm->setDumpWindowMs(500);
+}
+
 /* Phase R, the dump's two shapes: a key dumped as "pressed" ({127}) and
    OpenDeck's at rest, lamp echo, at rest ({0, 127, 0}). Inside the burst
    after the device came back (ControlMap::kDumpBurstMs) no value is a hand:

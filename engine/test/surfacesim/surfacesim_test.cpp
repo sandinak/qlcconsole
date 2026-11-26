@@ -524,6 +524,64 @@ void SurfaceSim_Test::aStateDumpFiresNoDeskRole()
     cm->setDumpWindowMs(500);
 }
 
+/* Phase R through the PMJ's own bytes: a key really held across the
+   replug (aftertouch, an axis used as GO) keeps resending 127. The dump's
+   press is ignored and the key counts as held, so the resends after the
+   window are that one press: no GO until a release then a press. The
+   desk's GO on Go, a show trigger (a cue list's GO) on Back. */
+void SurfaceSim_Test::aKeyHeldAcrossAReplugGoesOnlyAfterARelease()
+{
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    m_doc->showControl()->setGoGuardMs(0);      // not under test here
+    const quint32 list = runList(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setDumpWindowMs(cm->dumpBurstMs() + 150);
+    const QString go = QStringLiteral("Go"), back = QStringLiteral("Back");
+    // The key held through the cable out and back (the dump says 127), and
+    // still held: resends inside the window, then past it.
+    auto heldAcross = [&](const QString &key) {
+        if (!SurfaceScenarios::unplugReplug(&pmj, { { key, 127 } }))
+            return false;
+        settle();
+        pmj.wait(cm->dumpBurstMs() + 50);
+        if (!pmj.set(key, 127))
+            return false;
+        pmj.wait(200);
+        const bool ok = pmj.set(key, 127) && pmj.set(key, 127);
+        settle();
+        return ok;
+    };
+
+    // This computer's GO.
+    QVERIFY(deskOn(m_doc, DeskRecord::Go, 0, kPmj, kGo));
+    QSignalSpy deskFired(m_doc->deskRecord(), &DeskRecord::fired);
+    QVERIFY2(heldAcross(go), qPrintable(pmj.lastError()));
+    QVERIFY2(deskFired.isEmpty(), "the desk's GO held across the replug GOed on a resend");
+    QVERIFY(pmj.set(go, 0));
+    QVERIFY(pmj.set(go, 127));
+    settle();
+    QCOMPARE(deskFired.count(), 1);
+    QVERIFY(pmj.set(go, 0));
+    settle();
+
+    // A show trigger: the cue list's GO on Back (the desk's GO let go, so
+    // the show's trigger on the Run tab's list is armed).
+    QVERIFY(m_doc->deskRecord()->setOn(DeskRecord::Go, false));
+    cm->setBinding({ 0, kBack, ControlMap::cueList(list), ControlMap::Toggle });
+    settle();
+    QSignalSpy showFired(cm, &ControlMap::fired);
+    QVERIFY2(heldAcross(back), qPrintable(pmj.lastError()));
+    QVERIFY2(showFired.isEmpty(), "a show trigger held across the replug GOed on a resend");
+    QVERIFY(pmj.set(back, 0));
+    QVERIFY(pmj.set(back, 127));
+    settle();
+    QCOMPARE(showFired.count(), 1);
+    QVERIFY(pmj.set(back, 0));
+    cm->setDumpWindowMs(500);
+}
+
 /* This computer's STOP and GO on a feedback surface get their lamps from
    the Control Map's one lamp writer, with the show's stop's and GO's rules:
    on the PMJ (a board that idles dim) STOP lit always and blinking after an

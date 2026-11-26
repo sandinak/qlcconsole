@@ -56,6 +56,9 @@ private slots:
     void aStateDumpAfterAReplugFiresNoAllOff();
     /** Phase R: the same dump fires no desk STOP or GO (both dump shapes). */
     void aStateDumpFiresNoDeskRole();
+    /** Phase R: the PMJ's Go held across a replug, resending, is no GO
+     *  until a release then a press (desk GO and a show trigger). */
+    void aKeyHeldAcrossAReplugGoesOnlyAfterARelease();
     /** The desk's STOP and GO lamps are the Control Map's (PMJ, APC). */
     void deskLampsAreTheControlMaps_data();
     void deskLampsAreTheControlMaps();

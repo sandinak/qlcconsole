@@ -1239,6 +1239,53 @@ void DeskRecord_Test::aGrandMasterMadeLiveWaitsToPickUp()
     QCOMPARE(int(iom->grandMasterValue()), 0);
 }
 
+/* Phase R: a key really held across the replug (aftertouch, a trigger
+   axis used as GO) keeps resending non-zero. The dump's press is ignored,
+   and the key counts as held: a resend after the window is still that one
+   press, never a GO; a release then a press is. */
+void DeskRecord_Test::aKeyHeldAcrossAReplugGoesOnlyAfterARelease()
+{
+    D *desk = m_doc->deskRecord();
+    ControlMap *cm = m_doc->controlMap();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_doc->showControl()->setGoGuardMs(0);
+    quint32 act2 = 0;
+    const quint32 act1 = twoLists(&act2);
+    cm->setRunTabList(act1);
+    learn(D::Go, 0, kGo);
+    learn(D::Back, 0, kBack);
+    cm->setDumpWindowMs(cm->dumpBurstMs() + 150);
+    QSignalSpy fired(desk, &D::fired);
+
+    emit iom->inputDeviceDisconnected(0, m_stub->name(), "APC MINI");
+    emit iom->inputDeviceConnected(0, m_stub->name(), "APC MINI");
+    QVERIFY(desk->isLive(D::Go) && desk->isLive(D::Back));
+    // Held through the replug: the dump's press, then resends past the window.
+    send(0, kGo, 127);
+    send(0, kBack, 127);
+    QTest::qWait(cm->dumpBurstMs() + 50);
+    send(0, kGo, 127);
+    QTest::qWait(200);
+    send(0, kGo, 127);
+    send(0, kBack, 127);
+    send(0, kGo, 127);
+    QVERIFY2(fired.isEmpty(), qPrintable(fired.isEmpty() ? QString()
+                                        : "a held key's resend GOed: " + fired.first().first().toString()));
+    // A release, then a press: one GO each time.
+    send(0, kGo, 0);
+    send(0, kGo, 127);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.last().first().toString(), QString("GO Act 1"));
+    send(0, kGo, 127);
+    QCOMPARE(fired.count(), 1);
+    send(0, kGo, 0);
+    send(0, kGo, 127);
+    QCOMPARE(fired.count(), 2);
+    send(0, kGo, 0);
+    send(0, kBack, 0);
+    cm->setDumpWindowMs(500);
+}
+
 void DeskRecord_Test::aPortDumpAsAShowLoadsNeverMovesTheGrandMaster()
 {
     /* Q316: a real load opens the desk's port while it reads the show (the
