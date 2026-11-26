@@ -1133,8 +1133,13 @@ public:
      *  not hold: fixtures added, universes made and patched) as one step. */
     void pushUndoCallback(const std::function<void()> &undo);
     /** The same, with @p redo to do it again after an undo (⇧⌘Z). @p redo
-     *  must leave the step's own @p undo good to run again. */
+     *  must leave the step's own @p undo good to run again. Such a step
+     *  makes or takes fixtures: it runs in Design only (in Operate Ctrl+Z
+     *  leaves it on the history). */
     void pushUndoCallback(const std::function<void()> &undo, const std::function<void()> &redo);
+    /** Forget every step, undone ones too: the show they were made in has
+     *  gone (Doc::cleared), and its ids mean other things in the next. */
+    void clearUndoHistory();
     /** Who puts a rig snapshot back: the Monitor, which owns the rebuild. */
     void setRigRestorer(std::function<void(const QByteArray &)> fn) { m_rigRestorer = fn; }
     /** Who takes one (Monitor::rigSnapshot()), for edits made here. */
@@ -1673,6 +1678,7 @@ private:
         QByteArray rigBefore;                       ///< type == RigEdit
         std::function<void()> callback;             ///< type == Callback
         std::function<void()> redo;                 ///< type == Callback, optional
+        bool designOnly = false;                    ///< undo/redo only in Design
         StructureDuplicate::Undo dupUndo;           ///< type == DuplicateSetup
         quint32 blockingSet = 0;                    ///< type == TargetBlock
         QHash<quint32, StageTarget::Blocked> targetBlocked; ///< type == TargetBlock

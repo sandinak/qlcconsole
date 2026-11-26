@@ -119,6 +119,7 @@ private slots:
     /** Duplicate, a new group and a group renamed: each one ⌘Z on the
      *  rig's history, and ⇧⌘Z does it again. */
     void duplicateNewGroupAndRenameAreUndoSteps();
+    void rigHistoryWaitsForDesignAndEndsWithTheShow();
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();
     /** A show read rebuilds each list once, not once per fixture (0.5.1). */

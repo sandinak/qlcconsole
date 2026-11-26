@@ -1089,6 +1089,10 @@ void App::init()
 
     // Initialize status bar
     initStatusBar();
+    // The level again now the menus and the status bar are there (the one
+    // setWorkspaceView() applied ran before them: no level ticked, the Grand
+    // Master box not yet on the never-hidden list).
+    applyShowLevel();
 
     // The show controls: top bar (default) or status bar. After the status
     // bar, which the second puts them in.
@@ -6382,6 +6386,11 @@ void App::applyWorkspaceTabs()
     }
 
     QHash<QString, QWidget *> widgets;
+    /* A tab the show's level hides does not stay open in a window of its
+       own either: the Window menu names it "More Tabs at Standard…", and a
+       Teaching show's Student level would mean nothing (train 053n). */
+    const QStringList byLevel = levelHiddenTabs();
+    QList<DetachedContext *> putAway;
     for (int k = 0; k < m_tabOriginals.size(); ++k)
     {
         const QString label = m_tabOriginals.at(k).first;
@@ -6406,6 +6415,12 @@ void App::applyWorkspaceTabs()
             w->setParent(this);
             w->hide();
         }
+        else if (!want && byLevel.contains(label))
+        {
+            foreach (DetachedContext *dw, windows)
+                if (dw->centralWidget() == w)
+                    putAway << dw;
+        }
     }
 
     foreach (const QString &label, order)
@@ -6426,6 +6441,9 @@ void App::applyWorkspaceTabs()
     if (front != NULL && m_tab->indexOf(front) >= 0)
         m_tab->setCurrentWidget(front);
     m_tab->blockSignals(blocked);
+    // Parked above, so closing the window puts it away (slotReattachContext).
+    foreach (DetachedContext *dw, putAway)
+        dw->close();
     applyTabLabelMode();
     updateWorkspaceViewActions();
     updateWindowJumps();
@@ -6609,8 +6627,9 @@ bool App::requestLevel(int level)
     }
     else
     {
-        const bool changed = want != sl->level();
+        const QString before = sl->attribute();
         sl->setLevel(want);
+        const bool changed = sl->attribute() != before;
         // Saved with the show, not an undo step (as the view).
         if (changed && m_doc != NULL)
             m_doc->setModified();

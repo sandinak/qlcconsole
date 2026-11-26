@@ -131,6 +131,18 @@ void Levels_Test::initTestCase()
     m_app->resize(1280, 800);
     m_app->showNormal();
     settle();
+    /* A fresh launch with no show (train 053n review): Standard ticked in
+       View ▸ Workspace, the status bar's safety controls never hidden. */
+    int ticked = 0;
+    for (QAction *a : m_app->m_levelActions)
+        if (a->isChecked())
+        {
+            ++ticked;
+            QCOMPARE(a->data().toInt(), int(ShowLevel::Standard));
+        }
+    QCOMPARE(ticked, 1);
+    QVERIFY(ShowLevel::instance()->isNeverHidden(m_app->m_statusGrandMasterBox));
+    QVERIFY(ShowLevel::instance()->isNeverHidden(m_app->m_statusModeLabel));
 }
 
 void Levels_Test::cleanupTestCase()
@@ -194,6 +206,14 @@ void Levels_Test::theLevelRoundTripsAndQlc4IgnoresIt()
     QCOMPARE(ShowLevel::instance()->level(), ShowLevel::Standard);
     QCOMPARE(m_app->saveXML(path), QFile::NoError);
     QCOMPARE(workspaceAttr(path, QStringLiteral("Level")), QStringLiteral("expert"));
+    // Picking Standard there means it: the unknown value is dropped (train
+    // 053n review: setLevel() returned early and wrote "expert" back).
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+    QVERIFY(m_app->doc()->isModified());
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    present = true;
+    workspaceAttr(path, QStringLiteral("Level"), &present);
+    QVERIFY(!present);
     m_app->doc()->resetModified();
 }
 
@@ -227,6 +247,70 @@ void Levels_Test::anOldShowOpensAtStandard()
     QCOMPARE(after, standard);
     QVERIFY(barTabs(m_app).contains(QStringLiteral("Shows")));
     QVERIFY(m_app->m_statusLevelLabel->isHidden());
+    m_app->doc()->resetModified();
+}
+
+/* Train 053n review: turning Teaching off kept the PIN-unlocked session
+   level on screen while Save wrote the old saved one. */
+void Levels_Test::turningTeachingOffKeepsTheLevelOnScreen()
+{
+    m_app->doc()->teachingSettings()->setEnabled(true);
+    QVERIFY(m_app->doc()->operateSettings()->setPin(QStringLiteral("2468")));
+    ShowLevel::instance()->setLevel(ShowLevel::Student);
+    ShowSettingsDialog::testAnswers() = { QStringLiteral("2468") };
+    QVERIFY(m_app->requestLevel(ShowLevel::Advanced));
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Advanced);
+    QCOMPARE(ShowLevel::instance()->level(), ShowLevel::Student);
+
+    ShowSettingsDialog::testAnswers() = { QStringLiteral("2468") };     // the PIN to turn it off
+    {
+        ShowSettingsDialog dlg(m_app->doc(), m_app);
+        dlg.m_teaching->setChecked(false);
+        dlg.accept();
+    }
+    QVERIFY(!m_app->doc()->teachingSettings()->enabled());
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Advanced);
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("off.qxw"));
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    QCOMPARE(workspaceAttr(path, QStringLiteral("Level")), QStringLiteral("advanced"));
+    ShowSettingsDialog::testAnswers().clear();
+    m_app->doc()->operateSettings()->setPin(QString());
+    m_app->clearDocument();
+    m_app->doc()->resetModified();
+}
+
+/* Train 053n review: a tab the level hides stayed live in a window of its
+   own (the Window menu naming it "More Tabs at Standard…"). */
+void Levels_Test::aLevelHiddenTabLeavesItsWindow()
+{
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+    settle();
+    const int idx = barTabs(m_app).indexOf(QStringLiteral("Build"));
+    QVERIFY2(idx >= 0, qPrintable(barTabs(m_app).join(", ")));
+    QWidget *build = m_app->m_tab->widget(idx);
+    m_app->slotDetachContext(idx);
+    settle();
+    auto buildWindow = [this, build]() -> QWidget * {
+        for (DetachedContext *dw : m_app->findChildren<DetachedContext *>())
+            if (dw->centralWidget() == build && dw->isVisible())
+                return dw;
+        return nullptr;
+    };
+    QVERIFY(buildWindow() != nullptr);
+    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Build")));
+
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    settle();
+    QVERIFY2(buildWindow() == nullptr, "Build still open in its own window at Student");
+    QVERIFY(!build->isVisible());
+    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Build")));
+
+    // Back at Standard it is a tab on the bar again.
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+    settle();
+    QVERIFY(buildWindow() == nullptr);
+    QVERIFY(barTabs(m_app).contains(QStringLiteral("Build")));
     m_app->doc()->resetModified();
 }
 

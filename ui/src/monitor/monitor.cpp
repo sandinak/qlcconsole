@@ -425,6 +425,12 @@ Monitor::Monitor(QWidget* parent, Doc* doc, Qt::WindowFlags f)
     const auto kick = QOverload<>::of(&QTimer::start);
     connect(m_doc->masterTimer(), &MasterTimer::functionListChanged, m_scopeTimer, kick);
     connect(m_doc, &Doc::functionChanged, m_scopeTimer, kick);
+    // The rig's history is the show's: a new or opened show starts clean
+    // (an undo would put back, or delete by id, another show's fixtures).
+    connect(m_doc, &Doc::cleared, this, [this]() {
+        if (m_graphicsView != NULL)
+            m_graphicsView->clearUndoHistory();
+    });
     connect(m_doc, &Doc::loaded, this, [this]() {
         if (m_graphicsView != NULL)
             m_graphicsView->forgetPlacedTargets();

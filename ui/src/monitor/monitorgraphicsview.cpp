@@ -12900,6 +12900,10 @@ void MonitorGraphicsView::undoLastMove()
 {
     if (m_moveUndo.isEmpty())
         return;
+    // A step that makes or takes fixtures waits for Design: in Operate it
+    // stays where it is, not used up doing nothing.
+    if (m_moveUndo.last().designOnly && m_doc->mode() != Doc::Design)
+        return;
     // Whatever moved back, its count bubble goes with it.
     auto refreshBadges = qScopeGuard([this]() { refreshFixtureCountBadges(); emit undoChanged(); });
     // The whole drag: every entry it recorded, newest first.
@@ -12918,6 +12922,8 @@ void MonitorGraphicsView::undoLastMove()
 void MonitorGraphicsView::redoLast()
 {
     if (m_moveRedo.isEmpty())
+        return;
+    if (m_moveRedo.last().designOnly && m_doc->mode() != Doc::Design)
         return;
     auto refreshBadges = qScopeGuard([this]() { refreshFixtureCountBadges(); emit undoChanged(); });
     const UndoEntry next = m_moveRedo.takeLast();
@@ -12957,7 +12963,17 @@ void MonitorGraphicsView::pushUndoCallback(const std::function<void()> &undo,
     e.type = UndoEntry::Callback;
     e.callback = undo;
     e.redo = redo;
+    e.designOnly = true;
     pushUndo(e);
+}
+
+void MonitorGraphicsView::clearUndoHistory()
+{
+    if (m_moveUndo.isEmpty() && m_moveRedo.isEmpty())
+        return;
+    m_moveUndo.clear();
+    m_moveRedo.clear();
+    emit undoChanged();
 }
 
 void MonitorGraphicsView::undoOne(const UndoEntry &entry)

@@ -46,7 +46,8 @@ void ShowLevel::setLevel(Level level)
 {
     if (level < Student || level > Advanced)
         return;
-    if (level == m_level && m_session < 0)
+    // An unknown level read from a newer build is dropped by any pick.
+    if (level == m_level && m_session < 0 && m_unknownAttr.isEmpty())
         return;
     m_level = level;
     m_session = -1;

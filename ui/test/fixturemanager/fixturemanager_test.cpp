@@ -1934,6 +1934,57 @@ void FixtureManager_Test::duplicateNewGroupAndRenameAreUndoSteps()
     QCOMPARE(front->name(), QString("Front"));
 }
 
+/* Train 053n review: a duplicate's undo did nothing in Operate but was used
+   up (moved to redo), so the copies could no longer be undone; and the rig's
+   history outlived the show, so ⌘Z or ⇧⌘Z in the next show deleted or put
+   back fixtures by the old show's ids. */
+void FixtureManager_Test::rigHistoryWaitsForDesignAndEndsWithTheShow()
+{
+    const QList<quint32> fids = addDimmers(m_doc, 2, 1, "Wash");
+    const int fixturesBefore = m_doc->fixtures().count();
+
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    FixtureManager mgr(nullptr, m_doc);
+
+    const QList<quint32> made = mgr.duplicate({ fids.first() }, {});
+    QCOMPARE(made.size(), 1);
+    QVERIFY(mon.canUndo());
+
+    // Operate: ⌘Z leaves the step where it is.
+    m_doc->setMode(Doc::Operate);
+    mon.undo();
+    QVERIFY(m_doc->fixture(made.first()) != nullptr);
+    QVERIFY(mon.canUndo());
+    QVERIFY(!mon.canRedo());
+    m_doc->setMode(Doc::Design);
+    mon.undo();
+    QVERIFY(m_doc->fixture(made.first()) == nullptr);
+    QCOMPARE(m_doc->fixtures().count(), fixturesBefore);
+    QVERIFY(mon.canRedo());
+    // ⇧⌘Z waits for Design too.
+    m_doc->setMode(Doc::Operate);
+    mon.redo();
+    QVERIFY(m_doc->fixture(made.first()) == nullptr);
+    QVERIFY(mon.canRedo());
+    m_doc->setMode(Doc::Design);
+    mon.redo();
+    QVERIFY(m_doc->fixture(made.first()) != nullptr);
+
+    // A new show: nothing of the old one to undo or redo.
+    mon.undo();
+    QVERIFY(mon.canRedo());
+    m_doc->clearContents();
+    QVERIFY(!mon.canUndo());
+    QVERIFY(!mon.canRedo());
+    const QList<quint32> next = addDimmers(m_doc, 2, 1, "Spot");
+    QVERIFY(!next.isEmpty());
+    mon.redo();
+    QCOMPARE(m_doc->fixtures().count(), next.size());
+    mon.undo();
+    QCOMPARE(m_doc->fixtures().count(), next.size());
+}
+
 void FixtureManager_Test::outputRulesForFixturesAndGroups()
 {
     QVERIFY(m_doc->inputOutputMap()->addUniverse());

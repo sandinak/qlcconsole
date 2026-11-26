@@ -47,6 +47,10 @@ private slots:
      *  level stays, the doc is not modified, and going back up to the
      *  saved level asks nothing (round 1 review). */
     void aTeachingShowsSavedLevelSurvivesGoingDown();
+    /** Teaching turned off keeps the level on screen and saves it. */
+    void turningTeachingOffKeepsTheLevelOnScreen();
+    /** A tab the level hides leaves a window of its own (parked). */
+    void aLevelHiddenTabLeavesItsWindow();
     /** Make Student Handout writes the level its Level box says. */
     void theHandoutCarriesItsLevel();
     /** The menu bar's top-level count: Student <= 52, Standard <= 68

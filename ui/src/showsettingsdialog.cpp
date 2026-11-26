@@ -267,6 +267,10 @@ void ShowSettingsDialog::accept()
     teach->setEnabled(m_teaching->isChecked());
     if (turningOn)
         ShowLevel::instance()->setLevel(ShowLevel::Student);
+    /* Turning it off: the level on screen (a PIN-unlocked session pick
+       included) becomes the show's, so Save writes what the window shows. */
+    else if (off)
+        ShowLevel::instance()->setLevel(ShowLevel::instance()->chosenLevel());
     teach->setAllowOutput(m_teaching->isChecked() && m_allowOutput->isChecked());
     teach->setAllowShowControl(m_teaching->isChecked() && m_allowShowControl->isChecked());
     teach->setHoldShowControlInBlind(m_teaching->isChecked() && m_holdBlindControl->isChecked());
