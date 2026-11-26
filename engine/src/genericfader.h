@@ -269,6 +269,11 @@ public:
       * all the intensity channels will be updated.
       * Enabling fade out also resumes a paused fader */
     void setFadeOut(bool enable, uint fadeTime);
+    /** Let go over @p fadeTime: every channel, intensity too, travels from
+     *  where it is to what the faders under this one write, frame by frame
+     *  (releaseOverrideMix()), then the fader goes. Stage machinery a layer held
+     *  (OutputRuleKeeper::releaseMachineryForEdit()): never a jump. */
+    void glideOut(uint fadeTime);
 
     /** As setFadeOut(enable, fadeTime), but honouring a per-channel fade-time
      *  override (keyed by channelHash(fixtureID, channel), in ms). Channels

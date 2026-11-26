@@ -74,6 +74,9 @@ public:
 
     /** Let go of everything */
     void clear();
+    /** Let go over @p ms: each level travels to what is under it
+     *  (GenericFader::glideOut()); 0 is clear(). */
+    void glideOut(uint ms);
 
     /** Show only (Fixture::ShowOnly): this layer is not the show -- focus,
      *  Refine, Highlight -- and never drives a Show-only fixture

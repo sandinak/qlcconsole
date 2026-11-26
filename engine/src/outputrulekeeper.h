@@ -26,12 +26,16 @@
 #include <QList>
 #include <QHash>
 #include <QPair>
+#include <QMutex>
+#include <QVector>
+#include <memory>
 
 #include "fixture.h"
 #include "doc.h"
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
+class OutputLayer;
 class QXmlStreamWriter;
 
 #define KXMLQLCOutputRuleSettings QStringLiteral("OutputRuleSettings")
@@ -222,6 +226,7 @@ public:
     static constexpr bool defaultBlindHoldsExempt() { return true; }
 
     explicit OutputRuleKeeper(Doc *doc);
+    ~OutputRuleKeeper() override;
 
     /** Rebuild every universe's rule bits now (normally done for you,
      *  coalesced) */
@@ -269,8 +274,53 @@ public:
      *  GO after it (noteGo()), a switch of mode or another show. It holds
      *  nothing itself -- the rules do (E4: no release). */
     bool emergencyStopped() const;
-    /** A GO was carried out (ShowControl, a VC cue list, the Show tab) */
+    /** A GO was carried out (ShowControl, a VC cue list, the Show tab).
+     *  The first one after a stop lets the stage machinery it held go
+     *  (holdStageMachinery()); an automatic GO (a StampScope) does not. */
     void noteGo();
+
+    /** Stage machinery stopped where it is (FixtureRest::freezesOnStop():
+     *  a curtain, mid-move or at rest). Stop ALL, Fade and stop and the
+     *  emergency stop call it before anything stops: every channel of each
+     *  such fixture is held at what it has now, over everything that plays
+     *  (Universe::Park, Override), so neither the cue letting go, its fade
+     *  out, putting the rig at rest, a list stopped later nor a timer moves
+     *  it. A Show-only one is held the way its pan and tilt would be
+     *  (Universe::holdShowOnlyPositions()). Held until the operator's next
+     *  GO (noteGo()) or releaseStageMachinery(). Safe from any thread (an
+     *  OSC or MSC emergency stop): the fixtures are read on the main thread
+     *  when the rig changes, the levels from the universes now. */
+    void holdStageMachinery();
+    /** Let go of what holdStageMachinery() holds: the channels keep the
+     *  value they have (LTP) until something drives them. Any thread. */
+    void releaseStageMachinery();
+    bool stageMachineryHeld() const;
+    /** "Curtain stopped at 40% — GO to carry on" (how far open, as the
+     *  plot draws it: Scenery::poseFromValues()); "2 curtains stopped —
+     *  GO to carry on"; empty when nothing is held. For the footer. */
+    QString stageMachineryHeldText() const;
+
+    /** Q350: Design, the Show Tree preview on stage (a cue picked while
+     *  editing): stage machinery (FixtureRest::freezesOnStop(), the same
+     *  predicate as a stop) stays where it physically is -- every channel
+     *  of each such fixture held at what it has now, over everything that
+     *  plays, the preview's own scenes too -- while the plot and the Rig
+     *  Overview draw where the cue in edit puts it (@p drawn: fixture ->
+     *  its channels' values; ShowTreeController works them out). The first
+     *  call takes the levels; the next picks only change @p drawn. A Show-
+     *  only one is held by Design already and is left to that. Main
+     *  thread; stageMachineryChanged() when anything changed. */
+    void holdMachineryForEdit(const QHash<quint32, QByteArray> &drawn);
+    /** The preview let go of the stage (a GO took it, Operate, the preview
+     *  stopped): each curtain travels from where it was held to what plays
+     *  under it over @p glideMs (the cue's fade: a motor is never told to
+     *  jump), else keeps the value it has (LTP). Main thread. */
+    void releaseMachineryForEdit(uint glideMs = 0);
+    bool machineryHeldForEdit() const;
+    /** True while fixture @p fixtureId is held for editing; @p drawn (when
+     *  given) where the cue in edit puts it -- empty when that cue (and the
+     *  ones before it) never drives it: drawn where it is. Any thread. */
+    bool heldForEdit(quint32 fixtureId, QByteArray *drawn = nullptr) const;
 
     /** A Show-only channel's safe value: 0 for an intensity channel, and
      *  where nothing drives it (FixtureRest::restValue()) for the rest: a
@@ -309,6 +359,9 @@ signals:
      *  thread. The pad's red follows it (PadRun::stopEnded()): the pad and
      *  the footer read one source. */
     void emergencyStopEnded();
+    /** holdStageMachinery() held, or let go of, the machinery. On the main
+     *  thread. */
+    void stageMachineryChanged();
 
 private:
     void scheduleRebuild();
@@ -337,6 +390,38 @@ private:
     QHash<quint32, const class QLCFixtureMode *> m_showOnlyMode;
     int m_rebuilds = 0;
     class QTimer *m_rebuildTimer = nullptr;
+
+    /** Stage machinery (FixtureRest::freezesOnStop()) as the rig is now:
+     *  worked out on the main thread (rebuild(), a stop there), read by a
+     *  stop from any thread. */
+    struct Machine
+    {
+        quint32 fixture = 0;
+        quint32 base = 0;       //!< absolute address (universe << 9 | address)
+        quint32 channels = 0;
+        bool showOnly = false;
+        /** Per channel, 1 where it is intensity (HTP): a Show-only one's
+         *  hold there is let go at the GO, as a 0 is no write there */
+        QByteArray intensity;
+    };
+    QVector<Machine> machinesNow() const;
+    void emitMachineryChanged();
+    mutable QMutex m_machineMutex;
+    QVector<Machine> m_machines;
+    /** What is held now: fixture -> its channels' values (guarded) */
+    QHash<quint32, QByteArray> m_machineHeld;
+    /** The machines held (guarded): what a release lets go of */
+    QVector<Machine> m_machinesHeld;
+    /** Counts holds and releases (guarded): a GO's late release lets go
+     *  only of the hold it found */
+    quint32 m_machineGen = 0;
+    /** The held levels on the output (non-Show-only machinery) */
+    std::unique_ptr<OutputLayer> m_machineLayer;
+    /** Q350, held while editing (guarded by m_machineMutex): fixture ->
+     *  the values held on the output, and where the cue in edit puts it */
+    QHash<quint32, QByteArray> m_editHeld;
+    QHash<quint32, QByteArray> m_editDrawn;
+    std::unique_ptr<OutputLayer> m_editLayer;
 };
 
 /** @} */

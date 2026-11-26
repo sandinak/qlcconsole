@@ -730,6 +730,15 @@ bool GenericFader::isFadingOut() const
     return m_fadeOut;
 }
 
+void GenericFader::glideOut(uint fadeTime)
+{
+    /* As an override hit lets go: from its own levels to what the faders
+       under it write -- each frame's, so a cue still fading in under it is
+       followed, never snapshotted -- then the fader goes. */
+    startOverrideMix(0);
+    releaseOverrideMix(fadeTime);
+}
+
 void GenericFader::setFadeOut(bool enable, uint fadeTime)
 {
     m_fadeOut = enable;

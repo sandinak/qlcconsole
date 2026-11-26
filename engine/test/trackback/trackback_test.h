@@ -25,6 +25,7 @@
 #include <QMap>
 
 class Chaser;
+class Fixture;
 class Doc;
 
 /* The output at a cue is the same however the cue was reached: GO from the
@@ -46,9 +47,36 @@ private slots:
      *  list with them deleted plays; every way of arriving lands the same
      *  (the restack walks past them); a jump to one plays it. */
     void skippedCuesPlayAsIfDeleted();
+    /** The report (2026-11-26): a curtain an early cue opens stayed closed
+     *  when a later cue was loaded; the house lights at half and a relay
+     *  the same. A curtain driven by its Open/Fly channels (LTP), one
+     *  opened by its intensity (the Curtain plot symbol: HTP), house
+     *  dimmers and a Switch relay: every way of arriving lands on each cue
+     *  as GO from the top does -- 0 (house out, curtain closed) too. */
+    void curtainsHouseAndRelaysTrackOnAJump_data();
+    void curtainsHouseAndRelaysTrackOnAJump();
+    /** His second report: GO to the cue that opens the traveller and,
+     *  while it is still opening, jump on (or Back): it stopped where it
+     *  was, part open, and stayed. It ends where the run from the top
+     *  leaves it -- the channel and the plot's pose of it. */
+    void aJumpDuringTheOpeningFadeEndsOpen_data();
+    void aJumpDuringTheOpeningFadeEndsOpen();
+    /** Board 2026-11-26 (safety): Stop ALL, Fade and stop or the
+     *  emergency stop while a curtain moves -- opening, closing, flying
+     *  out -- stops it where it is (it could be dragging a set piece), and
+     *  it stays there: the cue letting go, putting the rig at rest, a
+     *  function started and stopped after, never move it. The lights still
+     *  go out, a flame relay off. The next GO carries on. */
+    void aStopLeavesACurtainWhereItIs_data();
+    void aStopLeavesACurtainWhereItIs();
+    /** And the footer says so: "Curtain stopped at 40% — GO to carry on";
+     *  gone at the GO. */
+    void theFooterSaysWhereTheCurtainStopped();
     void courseShows_data();
     void courseShows();
     void aRealShow();
+    /** Diagnostic, env-gated (QLC_CURTAIN_SHOW): his show's curtain. */
+    void hisCurtain();
 
 private:
     enum Step { Go, Back, Jump };
@@ -64,6 +92,12 @@ private:
     /** One with every mode: Block, Cue-only, Release, an include, a cue
      *  that mixes. Its chaser. */
     Chaser *everyModeList();
+    /** House to half, House out + the curtains open, two stage cues. */
+    /** @a showOnly: the curtains and the house relay Show only; @a operate:
+     *  the show in Operate (else Design); @a unpatched: the curtain
+     *  fixtures unpatched (only drawn). */
+    Chaser *houseAndCurtainList(bool showOnly = false, bool operate = false, bool unpatched = false);
+    void curtainRows();
 
     bool rig();
     Chaser *chaserOf(quint32 listId) const;
@@ -87,6 +121,14 @@ private:
     /** Every short sequence and a set of random walks over @a c. */
     int everyWay(Chaser *c, int randomWalks, QString *why);
     bool loadShow(const QString &path);
+    /** The house list with cue 2 opening the curtains over @a fadeMs, a
+     *  Block cue 5 closing them (the house at half, a flame on) and a cue 6
+     *  flying the drape out, both over @a fadeMs. */
+    Chaser *movingCurtainList(bool showOnly, int fadeMs);
+    /** Stop ALL (@a fadeMs > 0: Fade and stop), as Control ▸ Stop all
+     *  does it, the timer played here meanwhile. */
+    void stopAllFromControl(int fadeMs);
+    Fixture *fixtureNamed(const QString &name) const;
 
     Doc *m_doc = nullptr;
     QMap<int, QByteArray> m_moving;   //!< per cue of the straight run: channels an effect moves

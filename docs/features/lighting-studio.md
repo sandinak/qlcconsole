@@ -811,6 +811,43 @@ To have a cue move the real curtain, patch the curtain fixture to the address
 of the curtain's motor controller, or to a DMX relay box that runs it.
 Signals to the crew (standby and go cue lights) aren't built yet.
 
+**A stop leaves it where it is.** **Stop all**, **Fade and stop** and the
+emergency stop never move a curtain: one that's opening, closing or flying
+stops where it is, and one at rest stays put — it could be dragging a set
+piece. That's every curtain fixture, a relay given the **Curtain** symbol
+too. The lights still go out and flame, fog and laser relays still go off.
+The footer says **Curtain stopped at 40% — GO to carry on** (with more than
+one, how many). Nothing moves it after that: not the cue letting go, not
+the rig going to rest, not a list stopped or a look played and let go of.
+The next **GO** carries on with what that cue plays.
+
+**Picking cues in Design holds it.** Click from cue to cue in the Show
+Tree while you build the show and the curtain stays where it is on stage —
+the motor never runs just because you looked at a cue. The plot and the
+Rig Overview draw it where the cue you picked puts it (open, if an earlier
+cue opened it and nothing since closed it), with a small **held while
+editing** mark under its name. A **GO** (Back, a jump) from the Run moves
+it for real, in Design and in Operate, and so does going into Operate with
+a list playing: it travels from where it was held to where that cue puts it
+over the cue's fade (2 seconds when the cue has none) — the motor is never
+told to jump. Stop the preview and it stays where it is until something
+plays on it. Blind changes only what is drawn.
+
+**Check it on the real curtain.** With the curtain fixture patched to the
+motor controller (or its relay box), in Operate:
+
+1. GO the cue that opens it. While it's opening, hit **Stop all**. It
+   stops at once and stays there; the footer says how far open it is.
+2. Wait a minute. It doesn't move, and the stage lights stay out.
+3. GO again. It carries on with that cue's move.
+4. Do 1–3 with the emergency stop, while it's closing and while it's
+   flying out. Each time it stops where it is.
+5. In Design, with it closed, click the cue that opens it in the Show
+   Tree, then a later cue. The curtain doesn't move; the plot draws it
+   open, marked **held while editing**.
+6. GO that cue from the Run. It opens at the cue's speed — no lurch at
+   the start — and the mark goes.
+
 ### Fountains
 
 **Add → Add Fountain…** builds one from its sizes — a drawing beside the

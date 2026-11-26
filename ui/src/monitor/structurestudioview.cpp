@@ -36,6 +36,7 @@
 #include <cmath>
 
 #include "structurestudioview.h"
+#include "outputrulekeeper.h"
 #include "candleremote.h"
 #include "whyonpanel.h"
 #if defined(Q_OS_UNIX)
@@ -137,6 +138,12 @@ StructureStudioView::StructureStudioView(Doc *doc, Kind kind, quint32 id, QWidge
         const QList<quint32> sel = m_doc->programmerSelection();
         m_highlight = QSet<quint32>(sel.begin(), sel.end());
     }
+    // Q350: a curtain held while editing, or let go: drawn again.
+    if (m_doc != nullptr && m_doc->outputRuleKeeper() != nullptr)
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::stageMachineryChanged, this, [this]() {
+            m_liveDirty = true;
+            update();
+        });
     m_lanternPixels = new LanternPixels(doc, this);
     connect(m_lanternPixels, &LanternPixels::changed, this, QOverload<>::of(&QWidget::update));
 
@@ -4354,6 +4361,14 @@ void StructureStudioView::drawOneStructure(QPainter &p, Kind kind, quint32 id) c
             emitPoly(poly, dsum / 4.0, fill, seam, seamWidth, p, vz);
         };
         const QList<Scenery::Piece> pieces = sc->pieces(drapePose(sc));
+        // Q350: held on stage while a cue is picked: what is drawn is the cue.
+        if (m_liveValues && sc->isDriven() && m_doc->outputRuleKeeper() != nullptr
+            && m_doc->outputRuleKeeper()->heldForEdit(sc->driverFixture()))
+        {
+            const QVector3D top = sc->pointAt(0.0, sc->bottom() + sc->height(), 0.0);
+            emitLabel(w2s(top) + QPointF(-40.0, -4.0), viewDepth(top) - 0.01, tr("held while editing"),
+                      QColor(255, 196, 80), p);
+        }
         const bool gathered = sc->hasState() && (pieces.size() > 1);
         foreach (const Scenery::Piece &pc, pieces)
         {
@@ -10895,7 +10910,15 @@ Scenery::Pose StructureStudioView::computeDrapePose(const Scenery *sc) const
         return Scenery::Pose();
     if (m_liveValues && sc->isDriven() && m_doc != nullptr)
         if (Fixture *fx = m_doc->fixture(sc->driverFixture()))
+        {
+            /* Q350: held where it is while a cue is picked in Design; drawn
+               where that cue puts it (MonitorGraphicsView::sceneryPose()). */
+            QByteArray drawn;
+            if (m_doc->outputRuleKeeper() != nullptr
+                && m_doc->outputRuleKeeper()->heldForEdit(fx->id(), &drawn) && !drawn.isEmpty())
+                return Scenery::poseFromValues(fx->fixtureMode(), drawn);
             return Scenery::poseFromValues(fx->fixtureMode(), fx->channelValues());
+        }
     return sc->staticPose();
 }
 

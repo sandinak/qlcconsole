@@ -169,6 +169,14 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
                 this, &MonitorGraphicsView::updateFollowSpotOverlay);
     }
 
+    /* Q350: a curtain held while editing is drawn where the cue in edit
+       puts it, marked held; a pick, the hold or its end redraws it. */
+    if (m_doc != nullptr && m_doc->outputRuleKeeper() != nullptr)
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::stageMachineryChanged, this, [this]() {
+            for (auto it = m_sceneryItems.constBegin(); it != m_sceneryItems.constEnd(); ++it)
+                refreshScenery(it.key());
+        });
+
     /* The stage marks' spikes and numbers are sized for the screen: redrawn
        at a new zoom (rulersChanged() is how a zoom is told), and when a deck
        or a curtain they are found from is moved. */
@@ -5590,6 +5598,7 @@ void MonitorGraphicsView::updatePlatforms()
         const QList<QPolygonF> parts = sceneryParts(sc, pose, &flown);
         SceneryItem *sci = new SceneryItem(sc, m_doc, anchor, parts, m_pov != PovTop);
         sci->setParts(anchor, parts, flown, pose);
+        sci->setHeldMark(sceneryHeldForEdit(sc));
         sci->setMovable(!m_layoutLocked);
         m_scene->addItem(sci);
         m_sceneryItems.insert(sc->id(), sci);
@@ -6062,8 +6071,22 @@ Scenery::Pose MonitorGraphicsView::sceneryPose(const Scenery *sc) const
         return Scenery::Pose();
     if (sc->isDriven())
         if (Fixture *fx = m_doc->fixture(sc->driverFixture()))
+        {
+            /* Q350: held where it is while a cue is picked in Design; drawn
+               where that cue puts it (where it is, if no cue sends it). */
+            QByteArray drawn;
+            if (m_doc->outputRuleKeeper() != nullptr
+                && m_doc->outputRuleKeeper()->heldForEdit(fx->id(), &drawn) && !drawn.isEmpty())
+                return Scenery::poseFromValues(fx->fixtureMode(), drawn);
             return Scenery::poseFromValues(fx->fixtureMode(), fx->channelValues());
+        }
     return sc->staticPose();
+}
+
+bool MonitorGraphicsView::sceneryHeldForEdit(const Scenery *sc) const
+{
+    return sc != nullptr && sc->isDriven() && m_doc->outputRuleKeeper() != nullptr
+           && m_doc->outputRuleKeeper()->heldForEdit(sc->driverFixture());
 }
 
 QList<QPolygonF> MonitorGraphicsView::sceneryParts(const Scenery *sc, const Scenery::Pose &pose,
@@ -6114,6 +6137,7 @@ void MonitorGraphicsView::refreshScenery(quint32 sceneryId)
     if (sci == nullptr || sc == nullptr)
         return;
     const Scenery::Pose pose = sceneryPose(sc);
+    sci->setHeldMark(sceneryHeldForEdit(sc));
     if (sci->hasPose() && sci->pose() == pose)
         return;
     bool flown = false;

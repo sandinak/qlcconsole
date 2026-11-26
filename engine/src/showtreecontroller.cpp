@@ -59,6 +59,8 @@
 #include "scene.h"
 #include "doc.h"
 #include "programmercontroller.h"
+#include "outputrulekeeper.h"
+#include "fixturerest.h"
 
 using namespace ShowTree;
 
@@ -7533,6 +7535,9 @@ void ShowTreeController::syncPreview()
     if (state == PreviewState::Playing && c != nullptr)
         if (MonitorProperties *mp = m_doc->monitorProperties())
             mp->setLiveBlocking(cueBlocking(c->id));
+    // Before the pick's scenes start: the curtains held where the last
+    // frame left them, not a frame into the pick's fade.
+    syncMachineryHold(state);
     for (quint32 fid : want)
     {
         // start() is a no-op for a parent the function already has, and
@@ -7572,6 +7577,74 @@ void ShowTreeController::syncPreview()
         emit previewChanged();
 }
 
+void ShowTreeController::syncMachineryHold(PreviewState state)
+{
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    if (keeper == nullptr)
+        return;
+    const bool own = m_doc->mode() == Doc::Design && !m_previewHeld && m_previewCue != invalidId()
+                     && (state == PreviewState::Playing || state == PreviewState::Dark);
+    if (!own)
+    {
+        /* Let go over a fade, never a jump: a GO's, the cue it plays; else
+           (Operate, the preview stopped) the cue a list is playing under
+           the preview, else the cue that was picked. A cue with no fade
+           still does not jump a motor: a curtain's usual travel. */
+        int glide = m_machineryGlide;
+        if (glide < 0)
+            for (const Production &p : m_productions)
+                for (const CueList &l : p.lists)
+                {
+                    const Chaser *ch = l.isSubCues() || l.looks ? nullptr
+                                     : qobject_cast<const Chaser *>(m_doc->function(l.chaser));
+                    if (glide < 0 && ch != nullptr && ch->isRunning() && !ch->startedOnlyByPreview())
+                    {
+                        const int at = ch->currentStepIndex();
+                        if (at >= 0 && at < ch->stepsCount())
+                            glide = int(qMin<uint>(ch->steps().at(at).fadeIn, 60001));
+                    }
+                }
+        if (glide < 0)
+            if (const Cue *held = cue(m_machineryCue))
+                glide = int(qMin<uint>(held->fadeIn, 60001));
+        if (glide <= 0 || glide > 60000)   // none, or an infinite or runaway time
+            glide = kMachineryGlideMs;
+        m_machineryGlide = -1;
+        m_machineryCue = invalidId();
+        keeper->releaseMachineryForEdit(uint(glide));
+        return;
+    }
+    m_machineryCue = m_previewCue;
+    QHash<quint32, QByteArray> drawn;
+    for (Fixture *fx : m_doc->fixtures())
+        if (fx != nullptr && fx->isPatched() && FixtureRest::freezesOnStop(fx))
+        {
+            const QByteArray v = trackedFixtureLevels(m_previewCue, fx->id());
+            if (!v.isEmpty())
+                drawn.insert(fx->id(), v);
+        }
+    keeper->holdMachineryForEdit(drawn);
+}
+
+QByteArray ShowTreeController::trackedFixtureLevels(quint32 cueId, quint32 fixtureId) const
+{
+    const CueList *list = listOfCue(cueId);
+    if (list == nullptr)
+        return QByteArray();
+    int at = -1;
+    for (int i = 0; i < list->cues.count(); ++i)
+        if (list->cues.at(i).id == cueId)
+            at = i;
+    for (int i = at; i >= 0; --i)
+    {
+        const QHash<quint32, QByteArray> levels = cueLevels(list->cues.at(i).id);
+        const auto it = levels.constFind(fixtureId);
+        if (it != levels.constEnd())
+            return it.value();
+    }
+    return QByteArray();
+}
+
 void ShowTreeController::slotModeChanged()
 {
     // Into Design the app has stopped every function (MasterTimer
@@ -7606,7 +7679,16 @@ void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
                 const Function *f = m_doc->function(fid);
                 if (f != nullptr && f->isRunning() && !f->startedOnlyByPreview()
                     && m_doc->mode() == Doc::Design && !m_previewHeld)
+                {
+                    // A curtain held for the edit travels over this cue's fade.
+                    if (const Chaser *ch = qobject_cast<const Chaser *>(f))
+                    {
+                        const int at = ch->currentStepIndex();
+                        if (at >= 0 && at < ch->stepsCount())
+                            m_machineryGlide = int(qMin<uint>(ch->steps().at(at).fadeIn, 60001));
+                    }
                     takeStageForRun();
+                }
                 else
                 {
                     syncRunHold();           // a list started under the preview

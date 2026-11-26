@@ -59,6 +59,28 @@ void SceneryItem::placeLabel()
     const QRectF b = m_bounds;
     m_label->setPos(b.center().x() - m_label->boundingRect().width() / 2.0,
                     m_elevation ? b.top() + 2.0 : b.top() - m_label->boundingRect().height() - 2.0);
+    // Under its name: what the stage has is not what is drawn.
+    if (m_heldMark != nullptr)
+        m_heldMark->setPos(b.center().x() - m_heldMark->boundingRect().width() / 2.0,
+                           m_elevation ? m_label->pos().y() + m_label->boundingRect().height() - 4.0
+                                       : b.bottom() + 2.0);
+}
+
+void SceneryItem::setHeldMark(bool held)
+{
+    if (!held && m_heldMark == nullptr)
+        return;
+    if (m_heldMark == nullptr)
+    {
+        m_heldMark = new QGraphicsTextItem(tr("held while editing"), this);
+        m_heldMark->setDefaultTextColor(QColor(255, 196, 80));
+        m_heldMark->setFont(QFont("Arial", 7));
+        m_heldMark->setZValue(0.2);
+        m_heldMark->setToolTip(tr("The curtain stays where it is on stage while you pick cues "
+                                  "in Design; drawn where this cue puts it. A GO moves it."));
+    }
+    m_heldMark->setVisible(held);
+    placeLabel();
 }
 
 void SceneryItem::setParts(const QPointF &anchor, const QList<QPolygonF> &parts, bool flown,
