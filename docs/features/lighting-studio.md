@@ -827,8 +827,11 @@ the motor never runs just because you looked at a cue. The plot and the
 Rig Overview draw it where the cue you picked puts it (open, if an earlier
 cue opened it and nothing since closed it), with a small **held while
 editing** mark under its name. A **GO** (Back, a jump) from the Run moves
-it for real, in Design and in Operate; stop the preview and it stays where
-it is until something plays on it. Blind changes only what is drawn.
+it for real, in Design and in Operate, and so does going into Operate with
+a list playing: it travels from where it was held to where that cue puts it
+over the cue's fade (2 seconds when the cue has none) — the motor is never
+told to jump. Stop the preview and it stays where it is until something
+plays on it. Blind changes only what is drawn.
 
 **Check it on the real curtain.** With the curtain fixture patched to the
 motor controller (or its relay box), in Operate:
@@ -842,7 +845,8 @@ motor controller (or its relay box), in Operate:
 5. In Design, with it closed, click the cue that opens it in the Show
    Tree, then a later cue. The curtain doesn't move; the plot draws it
    open, marked **held while editing**.
-6. GO that cue from the Run. It opens; the mark goes.
+6. GO that cue from the Run. It opens at the cue's speed — no lurch at
+   the start — and the mark goes.
 
 ### Fountains
 
