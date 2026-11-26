@@ -30,6 +30,7 @@
 #include "hidprofile.h"
 #include "controlmap.h"
 #include "deskrecord.h"
+#include "surfacelayout.h"
 #include "showtreecontroller.h"
 #include "outputrulekeeper.h"
 #include "fixturegroup.h"
@@ -741,6 +742,237 @@ void SurfaceSim_Test::twoIdenticalBoardsAreTwoControllers()
     m_doc->masterTimer()->timerTick();
     QCoreApplication::processEvents();
     QTRY_VERIFY2(s->isRunning(), "the second board's pad did not play its scene");
+}
+
+/****************************************************************************
+ * The surface map's layouts, and the default roles they seed
+ ****************************************************************************/
+
+namespace
+{
+const QString kApc = QStringLiteral("Akai APC40 mkII");
+const quint32 kApcPlay = 128 + 91, kApcRecord = 128 + 93, kApcStopAll = 128 + 81, kApcMaster = 14;
+
+QString apcFile()
+{
+    return profileDir() + QStringLiteral("Akai-APC40-mkII.qxi");
+}
+}
+
+void SurfaceSim_Test::everyLayoutHoldsToItsProfile()
+{
+    const QStringList files = SurfaceLayout::builtInFiles();
+    QVERIFY2(files.size() >= 4, qPrintable(files.join(", ")));
+    // The profiles by name, from the source folder.
+    QHash<QString, QString> byName;
+    QDir dir(profileDir(), QStringLiteral("*.qxi"), QDir::Name, QDir::Files);
+    for (const QString &f : dir.entryList())
+        if (QLCInputProfile *p = QLCInputProfile::loader(dir.filePath(f)))
+        {
+            byName.insert(p->name(), dir.filePath(f));
+            delete p;
+        }
+    QStringList seen;
+    for (const QString &file : files)
+    {
+        QString error;
+        const SurfaceLayout l = SurfaceLayout::fromFile(file, &error);
+        QVERIFY2(l.isValid(), qPrintable(file + QStringLiteral(": ") + error));
+        QVERIFY2(byName.contains(l.profileName()), qPrintable(file + QStringLiteral(": no profile ") + l.profileName()));
+        QLCInputProfile *p = QLCInputProfile::loader(byName.value(l.profileName()));
+        QVERIFY(p != nullptr);
+        const QStringList problems = l.selfTest(p);
+        QVERIFY2(problems.isEmpty(), qPrintable(file + QStringLiteral(":\n  ") + problems.join(QStringLiteral("\n  "))));
+        QCOMPARE(l.controls().size() > 0, true);
+        delete p;
+        seen << l.profileName();
+        QVERIFY(SurfaceLayout::forProfile(l.profileName()).isValid());
+    }
+    const QStringList needed = { kApc, kPmj, QStringLiteral("MaizeDMX Playback Controller"),
+                                 QStringLiteral("Akai APC64") };
+    for (const QString &must : needed)
+        QVERIFY2(seen.contains(must), qPrintable(must));
+    QVERIFY(!SurfaceLayout::forProfile(QStringLiteral("Akai APC Mini")).isValid());
+}
+
+void SurfaceSim_Test::theLayoutSelfTestCatchesABrokenOne()
+{
+    QLCInputProfile *p = QLCInputProfile::loader(apcFile());
+    QVERIFY(p != nullptr);
+    QVERIFY(!SurfaceLayout::builtInFiles().isEmpty());     // the resource is there
+    QFile f(QStringLiteral(":/surfacelayouts/Akai-APC40-mkII.layout.json"));
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray good = f.readAll();
+    QVERIFY(SurfaceLayout::fromJson(good).selfTest(p).isEmpty());
+
+    auto problemsOf = [p](QByteArray json) { return SurfaceLayout::fromJson(json).selfTest(p).join(QStringLiteral("\n")); };
+    // PLAY gone: channel 219 is not placed (and GO is on nothing).
+    QByteArray missing = good;
+    missing.replace("{\"ch\": 219,", "{\"ch\": 99999,");
+    QString text = problemsOf(missing);
+    QVERIFY2(text.contains(QStringLiteral("channel 219 (Play) is not placed")), qPrintable(text));
+    QVERIFY2(text.contains(QStringLiteral("channel 99999 is not in the profile")), qPrintable(text));
+    QVERIFY2(text.contains(QStringLiteral("role 'go' is on channel 219")), qPrintable(text));
+    // RECORD placed twice, on PLAY's spot: twice and an overlap.
+    QByteArray twice = good;
+    twice.replace("{\"ch\": 219,", "{\"ch\": 221,");
+    text = problemsOf(twice);
+    QVERIFY2(text.contains(QStringLiteral("channel 221 (Record) is placed 2 times")), qPrintable(text));
+    QByteArray overlap = good;
+    overlap.replace("{\"ch\": 221, \"x\": 10.75", "{\"ch\": 221, \"x\": 9.75");
+    text = problemsOf(overlap);
+    QVERIFY2(text.contains(QStringLiteral("channels 219 and 221 overlap")), qPrintable(text));
+    // The Grand Master on a button.
+    QByteArray gm = good;
+    gm.replace("{\"role\": \"gm\", \"ch\": 14,", "{\"role\": \"gm\", \"ch\": 208,");
+    text = problemsOf(gm);
+    QVERIFY2(text.contains(QStringLiteral("role 'gm' is on Master, a button")), qPrintable(text));
+    delete p;
+}
+
+void SurfaceSim_Test::aNewBoardSeedsItsDefaultRoles()
+{
+    QVERIFY(mapProfile(m_doc, apcFile()) != nullptr);
+    DeskRecord *desk = m_doc->deskRecord();
+    QVERIFY2(!desk->anySet(), "not a fresh computer");
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc);
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    settle();
+    QVERIFY2(desk->isLive(DeskRecord::Go), qPrintable(desk->stateText(DeskRecord::Go)));
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, kApcPlay);
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, kApcRecord);
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, kApcStopAll);
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, kApcMaster);
+    QVERIFY(desk->seededDevices().contains(desk->identityOfUniverse(0)));
+
+    // PLAY GOes the Run tab's list, through the one run path.
+    runList(m_doc);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    QVERIFY(apc.tap(QStringLiteral("#%1").arg(kApcPlay)));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+    QVERIFY(apc.tap(QStringLiteral("#%1").arg(kApcRecord)));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Back))), 1);
+}
+
+void SurfaceSim_Test::aLearnedRoleWinsOverTheDefault()
+{
+    QVERIFY(mapProfile(m_doc, apcFile()) != nullptr);
+    QVERIFY(mapProfile(m_doc, pmjFile()) != nullptr);
+    // GO learned first, on another board.
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 1, kPmj);
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    QVERIFY(deskOn(m_doc, DeskRecord::Go, 1, kPmj, kFavorites));
+    const QString pmjId = m_doc->deskRecord()->identityOfUniverse(1);
+
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc);
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    QCOMPARE(desk->binding(DeskRecord::Go).identity, pmjId);
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, kFavorites);
+    // The rest are the APC's defaults.
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, kApcRecord);
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, kApcMaster);
+
+    runList(m_doc);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    QVERIFY(apc.tap(QStringLiteral("#%1").arg(kApcPlay)));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 0);
+    QVERIFY(pmj.tap(QStringLiteral("Favorites")));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+}
+
+void SurfaceSim_Test::aClearedDefaultStaysCleared()
+{
+    QVERIFY(mapProfile(m_doc, apcFile()) != nullptr);
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc);
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    QVERIFY(desk->isSet(DeskRecord::Go));
+    QVERIFY(desk->clear(DeskRecord::Go));
+    // Out and in again, and patched again: still cleared.
+    QVERIFY(SurfaceScenarios::unplugReplug(&apc));
+    m_doc->inputOutputMap()->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    settle();
+    QVERIFY(!desk->isSet(DeskRecord::Go));
+    QVERIFY(desk->isSet(DeskRecord::Back));
+    QVERIFY(!desk->seedDefaults());
+}
+
+void SurfaceSim_Test::theMaizeDmxSeedsItsDefaults()
+{
+    const QString name = QStringLiteral("MaizeDMX Playback Controller");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("MaizeDMX-Playback-Controller.qxi")) != nullptr);
+    // The system names its port "USB2.0-MIDI": the type is told by the profile.
+    SimMidiDevice maize(m_doc, m_stub, QStringLiteral("USB2.0-MIDI Port 1"), 0, name);
+    QVERIFY2(maize.plug(), qPrintable(maize.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 13));
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(128 + 14));
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32(10));
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(128 + 29));
+    runList(m_doc);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    QVERIFY(maize.tap(QStringLiteral("GO")));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+}
+
+void SurfaceSim_Test::theApc64SeedsItsDefaults()
+{
+    const QString name = QStringLiteral("Akai APC64");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64.qxi")) != nullptr);
+    // Session mode, its DAW port: everything on one port.
+    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 DAW"), 0, name);
+    QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    // As the APC40's (Q329): PLAY, RECORD, STOP ALL CLIPS; the GM touch strip 8.
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 91));
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(128 + 92));
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(128 + 119));
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32((7 << 12) | 513));
+    // Pads on MIDI channel 7 and buttons on 1 share note numbers: two channels.
+    QLCInputProfile *p = apc64.profile();
+    QVERIFY(p->channel((6 << 12) | (128 + 23)) != nullptr);
+    QVERIFY(p->channel(128 + 91) != nullptr);
+    const SurfaceLayout layout = SurfaceLayout::forProfile(name);
+    QCOMPARE(layout.displayLines(), 3);
+    QCOMPARE(layout.displayChars(), 8);
+    // The encoder and its push are one control.
+    QCOMPARE(layout.indexOf(90), layout.indexOf(128 + 90));
+    runList(m_doc);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    QVERIFY(apc64.tap(QStringLiteral("Play")));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+    // Pad 23 (channel 7) is not PLAY's neighbour on channel 1: no GO.
+    QVERIFY(apc64.tap(QStringLiteral("#%1").arg((6 << 12) | (128 + 23))));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
 }
 
 QTEST_MAIN(SurfaceSim_Test)

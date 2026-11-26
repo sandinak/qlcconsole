@@ -2121,6 +2121,17 @@ QString InputOutputMap::outputPluginStatus(const QString& pluginName, quint32 ou
     }
 }
 
+bool InputOutputMap::lastFeedback(quint32 universe, quint32 channel, uchar *value) const
+{
+    QMutexLocker locker(&m_feedbackMutex);
+    const auto it = m_lastFeedback.constFind((quint64(universe) << 32) | channel);
+    if (it == m_lastFeedback.constEnd())
+        return false;
+    if (value != nullptr)
+        *value = it.value();
+    return true;
+}
+
 bool InputOutputMap::sendFeedBack(quint32 universe, quint32 channel, uchar value, const QVariant &params)
 {
     if (universe >= universesCount())
@@ -2131,6 +2142,10 @@ bool InputOutputMap::sendFeedBack(quint32 universe, quint32 channel, uchar value
     if (patch != NULL && patch->isPatched())
     {
         patch->plugin()->sendFeedBack(universe, patch->output(), channel, value, params);
+        {
+            QMutexLocker locker(&m_feedbackMutex);
+            m_lastFeedback.insert((quint64(universe) << 32) | channel, value);
+        }
         emit feedbackSent(universe, channel, value, params);
         return true;
     }

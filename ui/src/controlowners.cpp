@@ -324,9 +324,27 @@ QList<QPair<quint64, ControlOwners::Owner>> ControlOwners::owned(Doc *doc)
 
 QList<ControlOwners::Owner> ControlOwners::owners(Doc *doc, quint32 universe, quint32 channel)
 {
-    QList<Owner> out;
+    if (doc == nullptr)
+        return QList<Owner>();
+    return ownersFrom(doc, universe, channel, owned(doc));
+}
+
+QHash<quint32, QList<ControlOwners::Owner>> ControlOwners::ownersOn(Doc *doc, quint32 universe,
+                                                                    const QList<quint32> &channels)
+{
+    QHash<quint32, QList<Owner>> out;
     if (doc == nullptr)
         return out;
+    const QList<QPair<quint64, Owner>> all = owned(doc);
+    for (quint32 ch : channels)
+        out.insert(ch, ownersFrom(doc, universe, ch, all));
+    return out;
+}
+
+QList<ControlOwners::Owner> ControlOwners::ownersFrom(Doc *doc, quint32 universe, quint32 channel,
+                                                      const QList<QPair<quint64, Owner>> &all)
+{
+    QList<Owner> out;
     // A key the app already uses (this computer's; never the show's).
     if (universe == ControlMap::KeyboardUniverse)
     {
@@ -379,7 +397,6 @@ QList<ControlOwners::Owner> ControlOwners::owners(Doc *doc, quint32 universe, qu
     }
     const quint64 k = universe == ControlMap::KeyboardUniverse ? controlKey(universe, channel)
                                                               : controlKey(universe, channel & kPageMask);
-    const QList<QPair<quint64, Owner>> all = owned(doc);
     for (const QPair<quint64, Owner> &p : all)
         if (p.first == k)
             out << p.second;

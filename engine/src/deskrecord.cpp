@@ -39,6 +39,7 @@
 #include "inputpatch.h"
 #include "qlcioplugin.h"
 #include "universe.h"
+#include "surfacelayout.h"
 #include "doc.h"
 
 namespace
@@ -62,6 +63,9 @@ QString fromKey(const QString &key)
 }
 
 const QLatin1String kFileRoot("ThisComputersDesk");
+/* The boards seedDefaults() has seeded, by identity (beside the roles in
+   the group, kept by save()). */
+const QLatin1String kSeeded("seeded");
 }
 
 DeskRecord::DeskRecord(Doc *doc, QObject *parent)
@@ -94,6 +98,8 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
            Master's own one waits out the dump and picks up (portChanged()). */
         connect(iom, &InputOutputMap::inputPatchChanged, this, [this](quint32 u) { portChanged(u); });
         connect(iom, &InputOutputMap::inputSlotChanged, this, [this](quint32 u) { portChanged(u); });
+        // A board given its profile: its type's default roles (seedDefaults()).
+        connect(iom, &InputOutputMap::profileChanged, this, [this](quint32 u) { portChanged(u); });
         connect(iom, &InputOutputMap::offlinePatchesChanged, this, [this]() { portChanged(kInvalid); });
         connect(iom, &InputOutputMap::pluginConfigurationChanged, this, [this]() { portChanged(kInvalid); });
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, [this](quint32 universe) {
@@ -134,6 +140,7 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
             // Another show's patch: where a role was in the last one says nothing here.
             for (int r = 0; r < RoleCount; ++r)
                 m_lastUniverses[r] = kInvalid;
+            seedDefaults();
             rebind();
             rearmGrandMaster();
         });
@@ -162,6 +169,7 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
                                 rearmGrandMaster();
                         });
     }
+    seedDefaults();
     rebind();
     rearmGrandMaster();     // the app starting is a load
 }
@@ -233,8 +241,11 @@ void DeskRecord::load()
 void DeskRecord::save() const
 {
     QSettings s;
+    const QVariant seeded = s.value(settingsGroup() + QLatin1Char('/') + kSeeded);
     s.remove(settingsGroup());
     s.beginGroup(settingsGroup());
+    if (seeded.isValid())
+        s.setValue(kSeeded, seeded);
     for (Role r : roles())
     {
         const Binding &b = m_bindings[r];
@@ -530,6 +541,7 @@ void DeskRecord::rebind()
 void DeskRecord::portChanged(quint32 universe)
 {
     const QString was = m_gmLiveKey;
+    seedDefaults();
     rebind();
     /* The Grand Master's port (re)opened, or it moved to another: the
        device may dump its fader where it sits (a parked 0 would black the
@@ -634,6 +646,78 @@ QString DeskRecord::duplicateWarning() const
         }
     }
     return lines.join(QLatin1Char('\n'));
+}
+
+QStringList DeskRecord::seededDevices() const
+{
+    return QSettings().value(settingsGroup() + QLatin1Char('/') + kSeeded).toStringList();
+}
+
+bool DeskRecord::seedDefaults()
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    if (iom == nullptr || isLocked())
+        return false;
+    QStringList seeded = seededDevices();
+    bool marked = false;
+    bool learnedAny = false;
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || ip->plugin() == nullptr)
+            continue;
+        const SurfaceLayout layout = SurfaceLayout::forProfile(ip->profileName());
+        if (!layout.isValid())
+            continue;
+        const QString id = identityOfUniverse(u);
+        if (id.isEmpty() || seeded.contains(id))
+            continue;
+        seeded << id;
+        marked = true;
+        for (const SurfaceLayout::Role &lr : layout.roles())
+        {
+            if (!lr.seed)
+                continue;
+            Role role = Stop;
+            bool known = false;
+            for (Role r : roles())
+                if (roleKey(r) == lr.role)
+                {
+                    role = r;
+                    known = true;
+                }
+            // Never over a role learned (here or on another device).
+            if (!known || m_bindings[role].isSet())
+                continue;
+            bool taken = false;
+            for (Role r : roles())
+                if (m_bindings[r].isSet() && m_bindings[r].identity == id && m_bindings[r].channel == lr.channel)
+                    taken = true;
+            // Q315: the show's emergency stop is never GO, Back or the master.
+            if (taken || (role != Stop && isShowStop(u, lr.channel)))
+                continue;
+            Binding b;
+            b.identity = id;
+            b.plugin = ip->plugin()->name();
+            b.device = ControllerJobs::midiModelName(ip->inputName());
+            b.channel = lr.channel;
+            b.control = controlName(u, lr.channel);
+            b.on = true;
+            m_bindings[role] = b;
+            m_lastUniverses[role] = kInvalid;
+            learnedAny = true;
+        }
+    }
+    if (learnedAny)
+        save();
+    if (marked)
+        QSettings().setValue(settingsGroup() + QLatin1Char('/') + kSeeded, seeded);
+    if (learnedAny)
+    {
+        rebind();
+        emit changed();
+    }
+    return learnedAny;
 }
 
 QStringList DeskRecord::missingDevices() const

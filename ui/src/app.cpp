@@ -45,6 +45,8 @@
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
 #include "deskchip.h"
+#include "surfacechips.h"
+#include "surfacemap.h"
 #include "functionselection.h"
 #include "effectdesigner.h"
 #include "itemicons.h"
@@ -9452,6 +9454,20 @@ void App::initStatusBar()
     });
     sb->addPermanentWidget(m_statusDeskChip);
 
+    /* A chip per patched surface with a drawn map (Q311): a click opens its
+       map in Connections ▸ Control surfaces. */
+    m_statusSurfaceChips = new SurfaceChips(m_doc, this);
+    connect(m_statusSurfaceChips, &SurfaceChips::mapRequested, this, [this](quint32 universe) {
+        if (InputOutputManager *io = InputOutputManager::instance())
+        {
+            switchToTabContaining(io);
+            io->showShowControlSection(QStringLiteral("surfaces"));
+            if (SurfaceMaps *maps = io->findChild<SurfaceMaps *>())
+                maps->showMap(universe);
+        }
+    });
+    sb->addPermanentWidget(m_statusSurfaceChips);
+
     // Persistent Design/Operate indicator — see app.h for why this is
     // separate from the mode-toggle button (which shows the destination
     // mode, not the current one). Always visible.
@@ -9539,7 +9555,7 @@ void App::initStatusBar()
     {
         const int h = fontMetrics().height() + 4;
         const QList<QWidget *> items = { m_statusSelectionLabel, m_statusPadModeLabel, m_statusOverridesChip, m_statusTestChip,
-                                         m_statusDeskChip,
+                                         m_statusDeskChip, m_statusSurfaceChips,
                                          m_statusFollowLabel, m_statusModeChipLabel, m_statusStage,
                                          m_statusProgrammerLabel, m_statusDirtyLabel };
         for (QWidget *w : items)

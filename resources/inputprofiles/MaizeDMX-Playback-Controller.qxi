@@ -1,0 +1,336 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE InputProfile>
+<InputProfile xmlns="http://www.qlcplus.org/InputProfile">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.4</Version>
+  <Author>Branson Matheson</Author>
+ </Creator>
+ <Manufacturer>MaizeDMX</Manufacturer>
+ <Model>Playback Controller</Model>
+ <Type>MIDI</Type>
+ <Channel Number="0">
+  <Name>Fader 1</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="1">
+  <Name>Fader 2</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="2">
+  <Name>Fader 3</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="3">
+  <Name>Fader 4</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="4">
+  <Name>Fader 5</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="5">
+  <Name>Fader 6</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="6">
+  <Name>Fader 7</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="7">
+  <Name>Fader 8</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="8">
+  <Name>Fader 9</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="9">
+  <Name>Fader 10</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="10">
+  <Name>GM</Name>
+  <Type>Slider</Type>
+ </Channel>
+ <Channel Number="128">
+  <Name>1</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="129">
+  <Name>2</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="130">
+  <Name>3</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="131">
+  <Name>4</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="132">
+  <Name>5</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="133">
+  <Name>6</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="134">
+  <Name>7</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="135">
+  <Name>8</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="136">
+  <Name>9</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="137">
+  <Name>10</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="138">
+  <Name>Up</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="139">
+  <Name>X1</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="140">
+  <Name>X2</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="141">
+  <Name>GO</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="142">
+  <Name>Back</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="143">
+  <Name>Left 1</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="144">
+  <Name>Left 2</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="145">
+  <Name>Left 3</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="146">
+  <Name>Left 4</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="147">
+  <Name>Left 5</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="148">
+  <Name>Left 6</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="149">
+  <Name>Left 7</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="150">
+  <Name>Left 8</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="151">
+  <Name>Left 9</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="152">
+  <Name>Left 10</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="153">
+  <Name>Down</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="154">
+  <Name>X3</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="155">
+  <Name>X4</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="156">
+  <Name>X8</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="157">
+  <Name>X10</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="158">
+  <Name>Right 1</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="159">
+  <Name>Right 2</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="160">
+  <Name>Right 3</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="161">
+  <Name>Right 4</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="162">
+  <Name>Right 5</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="163">
+  <Name>Right 6</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="164">
+  <Name>Right 7</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="165">
+  <Name>Right 8</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="166">
+  <Name>Right 9</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="167">
+  <Name>Right 10</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="168">
+  <Name>BO</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="169">
+  <Name>X5</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="170">
+  <Name>X6</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="171">
+  <Name>X7</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="172">
+  <Name>X9</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="173">
+  <Name>LED 1</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="174">
+  <Name>LED 2</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="175">
+  <Name>LED 3</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="176">
+  <Name>LED 4</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="177">
+  <Name>LED 5</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="178">
+  <Name>LED 6</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="179">
+  <Name>LED 7</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="180">
+  <Name>LED 8</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="181">
+  <Name>LED 9</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="182">
+  <Name>LED 10</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="183">
+  <Name>LED 11</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+</InputProfile>

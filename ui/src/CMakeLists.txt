@@ -232,6 +232,8 @@ add_library(${module_name}
     controlsurfacespanel.cpp controlsurfacespanel.h
     desksetuppanel.cpp desksetuppanel.h
     deskchip.cpp deskchip.h
+    surfacechips.cpp surfacechips.h
+    surfacemap.cpp surfacemap.h
     qrencoder.cpp qrencoder.h
     controlcollisionbox.cpp controlcollisionbox.h
     controllearndialog.cpp controllearndialog.h

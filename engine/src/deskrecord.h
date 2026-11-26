@@ -198,6 +198,19 @@ public:
     /** "Two devices are called APC MINI: …" for each set role whose
      *  device can't be told from another here; empty when none. */
     QString duplicateWarning() const;
+    /** The default roles of each board patched here whose surface type
+     *  has them (SurfaceLayout::roles() with "seed": the APC40 mk2's PLAY
+     *  is GO), learned for this computer the first time each board -- by
+     *  its identity -- is patched: only a role not learned yet, never on
+     *  a control another role has, never the show's emergency stop for GO,
+     *  Back or the Grand Master. A board is seeded once: a role cleared
+     *  afterwards stays cleared. Nothing while locked (Q319: the next patch
+     *  asks again). Runs by itself on every patch and load; true when a
+     *  role was learned. */
+    bool seedDefaults();
+    /** The identities seedDefaults() has seeded on this computer. */
+    QStringList seededDevices() const;
+
     /** The devices set roles need that this show's patch lacks, but are
      *  plugged in (Patch It can patch them). */
     QStringList missingDevices() const;
