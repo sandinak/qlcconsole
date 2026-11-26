@@ -51,6 +51,7 @@ private:
     void go();
     void tick(int n = 1);
     void trimRed();
+    void trimRed2();
 
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;

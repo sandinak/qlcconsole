@@ -197,6 +197,14 @@ void EditLiveUi_Test::go()
     settle();
 }
 
+void EditLiveUi_Test::trimRed2()
+{
+    // From the held 50%: down to 25%.
+    QVERIFY(m_apc->set(QStringLiteral("#7"), 64));
+    QVERIFY(m_apc->set(QStringLiteral("#7"), 32));
+    settle();
+}
+
 void EditLiveUi_Test::trimRed()
 {
     // Fader 1 is red: up at the red on stage (picked up), then half.
@@ -384,6 +392,11 @@ void EditLiveUi_Test::shots()
         QVERIFY(img.save(base.arg(QStringLiteral("popup")).arg(size.width()).arg(size.height())));
         menu->close();
         delete menu;
+        // Stored: held on stage until GO, the chip says so, Drop still there.
+        QVERIFY(el->store());
+        settle();
+        QVERIFY(win.grab().save(base.arg(QStringLiteral("held")).arg(size.width()).arg(size.height())));
+        trimRed2();
         go();
         settle();
         QVERIFY(win.grab().save(base.arg(QStringLiteral("storetocue")).arg(size.width()).arg(size.height())));
