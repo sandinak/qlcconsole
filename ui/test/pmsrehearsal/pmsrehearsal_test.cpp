@@ -885,7 +885,7 @@ void PmsRehearsal_Test::rehearseTheVisit()
                  qPrintable(listItems(page.clashList()).join('\n')));
     }
     QVERIFY2(VenueRig::outputText(doc->inputOutputMap()->universe(roomU)->outputPatchDescriptions())
-                 .startsWith(QStringLiteral("DMX USB")),
+                 .startsWith(QStringLiteral("USB DMX")),
              qPrintable(VenueRig::outputText(doc->inputOutputMap()->universe(roomU)->outputPatchDescriptions())));
     VenueChip chip2(doc, &window);
     chip2.refresh();
