@@ -3553,7 +3553,7 @@ Fixture *handBuilt(Doc *doc, const QString &model, const QList<QLCChannel *> &ch
     def->addMode(mode);
     Fixture *f = new Fixture(doc);
     f->setFixtureDefinition(def, mode);
-    f->setUniverse(0); f->setAddress(address);
+    f->setUniverse(3); f->setAddress(address);
     return doc->addFixture(f) ? f : nullptr;
 }
 
@@ -3584,12 +3584,12 @@ void EffectInstance_Test::aRainbowMixesOnCmy()
         presetChannel("Cyan", QLCChannel::IntensityCyan),
         presetChannel("Cyan fine", QLCChannel::IntensityCyanFine),
         presetChannel("Magenta", QLCChannel::IntensityMagenta),
-        presetChannel("Yellow", QLCChannel::IntensityYellow) }, 0);
+        presetChannel("Yellow", QLCChannel::IntensityYellow) }, 100);
     QVERIFY(cmy != nullptr);
     Fixture *par = handBuilt(m_doc, "RgbPar", {
         presetChannel("Red", QLCChannel::IntensityRed),
         presetChannel("Green", QLCChannel::IntensityGreen),
-        presetChannel("Blue", QLCChannel::IntensityBlue) }, 20);
+        presetChannel("Blue", QLCChannel::IntensityBlue) }, 120);
     QVERIFY(par != nullptr);
 
     QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
@@ -3692,7 +3692,7 @@ void EffectInstance_Test::aRainbowStepsAWheelToTheNearestSlot()
     }
     Fixture *spot = handBuilt(m_doc, "WheelSpot", {
         presetChannel("Pan", QLCChannel::PositionPan),
-        presetChannel("Dimmer", QLCChannel::IntensityMasterDimmer), wheel }, 0);
+        presetChannel("Dimmer", QLCChannel::IntensityMasterDimmer), wheel }, 100);
     QVERIFY(spot != nullptr);
 
     QLCPalette *rainbow = new QLCPalette(QLCPalette::Effect, m_doc);
@@ -3745,7 +3745,8 @@ void EffectInstance_Test::aRainbowRunsOnTheRivaleProfile()
     QVERIFY(mode != nullptr);
     Fixture *rivale = new Fixture(m_doc);
     rivale->setFixtureDefinition(def, mode);
-    rivale->setAddress(0);
+    rivale->setUniverse(3);
+    rivale->setAddress(100);
     QVERIFY(m_doc->addFixture(rivale));
     int cyan = -1, magenta = -1, yellow = -1, wheel = -1;
     for (quint32 c = 0; c < rivale->channels(); ++c)
