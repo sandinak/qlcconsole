@@ -142,6 +142,9 @@ public:
     QAction *moreLine(const QMenu *menu) const;
     /** Say what @p key needs, with the switch: emits switchOffered(). */
     void offer(const QString &key);
+    /** The same with @p text as the sentence (a command line's: "`mib` is a
+     *  Standard-level command."). */
+    void offer(const QString &key, const QString &text);
     /** The More line's list: what the menu has at the level above. */
     void offerMenu(QMenu *menu);
 
@@ -155,7 +158,15 @@ public:
     /** Use instance(); public only for the process-wide holder. */
     explicit ShowLevel(QObject *parent = nullptr);
 
+protected:
+    /** A greyed widget stays greyed whatever re-enables it, and keeps the
+     *  level's words as its tooltip. */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
+    /** A hidden or greyed action's shortcut answers in the notice line
+     *  (never silent, UX-28). */
+    void answerShortcut(QAction *action, bool hidden);
     void applyTo(QAction *action);
     void applyTo(QWidget *widget);
 
@@ -168,6 +179,7 @@ private:
     QList<QPointer<QWidget>> m_widgets;
     QList<QPointer<QMenu>> m_menus;
     QList<QPointer<QObject>> m_neverHidden;
+    QList<QPointer<QObject>> m_shortcutAnswers;
 };
 
 /** @} */

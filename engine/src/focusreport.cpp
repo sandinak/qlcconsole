@@ -197,6 +197,20 @@ QString FocusReport::flags(const Row &row)
     return f.join(QStringLiteral(", "));
 }
 
+namespace
+{
+std::function<QString()> &levelNameProvider()
+{
+    static std::function<QString()> provider;
+    return provider;
+}
+}
+
+void FocusReport::setLevelNameProvider(const std::function<QString()> &provider)
+{
+    levelNameProvider() = provider;
+}
+
 QString FocusReport::html(Doc *doc, const QString &venueName, const QString &showName)
 {
     const QList<Row> list = rows(doc, venueName);
@@ -250,6 +264,10 @@ QString FocusReport::html(Doc *doc, const QString &venueName, const QString &sho
         const TeachingSettings *t = doc->teachingSettings();
         QStringList teach;
         teach << (t->lesson().isEmpty() ? tr("Teaching show") : tr("Teaching show, lesson %1").arg(t->lesson()));
+        // The level the show is at: what a student could reach when it was made.
+        const QString level = levelNameProvider() ? levelNameProvider()() : QString();
+        if (!level.isEmpty())
+            teach << tr("%1 level").arg(level);
         teach << (doc->operateSettings()->hasPin() ? tr("PIN set: yes") : tr("PIN set: no"));
         if (!t->handedOut().isEmpty())
             teach << tr("handed out %1").arg(when(QDateTime::fromString(t->handedOut(), Qt::ISODate)));

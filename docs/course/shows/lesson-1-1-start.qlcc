@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workspace>
-<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ShowTreeView">
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="ShowTreeView" Level="student">
  <Creator>
   <Name>qlcconsole</Name>
   <Version>4.14.2+qlcconsole.1817</Version>

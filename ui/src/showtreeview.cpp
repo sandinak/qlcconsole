@@ -108,6 +108,7 @@
 #include "focuscallsdialog.h"
 #include "focusmenu.h"
 #include "showtreeview.h"
+#include "showlevel.h"
 #include "venuecorrections.h"
 #include "houserole.h"
 #include "programmerstrip.h"
@@ -3057,6 +3058,26 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         if (editedPalette() != QLCPalette::invalidId())
             updateUsedBy(editedPalette());
     });
+
+    /* Workspace levels (WORKSPACE_LEVELS.md §2): what Student greys here.
+       Nothing a lesson of course Levels 0-2 uses (courseshow_test). */
+    {
+        ShowLevel *lv = ShowLevel::instance();
+        connect(lv, &ShowLevel::changed, this, &ShowTreeView::updateBridgeBanner);
+        lv->bind(findChild<QWidget *>(QStringLiteral("stOpenWorkbench")), QStringLiteral("showtree.workbench"));
+        for (QWidget *w : { static_cast<QWidget *>(m_listMib), static_cast<QWidget *>(m_cueNoMib),
+                            static_cast<QWidget *>(m_moveInBlack) })
+            lv->bind(w, QStringLiteral("showtree.mib"));
+        lv->bind(m_cueMix, QStringLiteral("showtree.cue.mix"));
+        lv->bind(m_cueColour, QStringLiteral("showtree.cue.textcolour"));
+        for (QWidget *w : { static_cast<QWidget *>(m_cueTcRow), static_cast<QWidget *>(m_listFollowTc),
+                            static_cast<QWidget *>(m_prodTimecode) })
+            lv->bind(w, QStringLiteral("showtree.timecode"));
+        for (QWidget *w : { static_cast<QWidget *>(m_cueFocusCall), static_cast<QWidget *>(m_cueRefine) })
+            lv->bind(w, QStringLiteral("showtree.focuscue"));
+        for (QWidget *w : { static_cast<QWidget *>(m_listConvert), static_cast<QWidget *>(m_listDetach) })
+            lv->bind(w, QStringLiteral("showtree.reuse"));
+    }
 
     mirrorFormTips(m_listForm);
     mirrorFormTips(m_cueForm);
@@ -6894,6 +6915,7 @@ void ShowTreeView::fillCueFocusMenu(QMenu *m)
     self->setObjectName("stCueFocusThis");
     FocusMenu::setAvailable(self, cue == nullptr ? tr("Choose a cue first.") : FocusMenu::focusCueBlocked(m_doc),
                             FocusMenu::focusCueTip(m_doc));
+    ShowLevel::instance()->bind(self, QStringLiteral("showtree.focuscue"));
     // Focus calls off for the show (Q293): no venue focus here.
     if (!ShowFeatures::isOn(ShowFeatures::FocusCalls))
         return;
@@ -6906,6 +6928,7 @@ void ShowTreeView::fillCueFocusMenu(QMenu *m)
         make->setChecked(cue->focusCall);
         FocusMenu::setAvailable(make, cue->focusCall ? QString() : FocusMenu::venueFocusCueBlocked(m_doc),
                                 venueFocusCueTip());
+        ShowLevel::instance()->bind(make, QStringLiteral("showtree.focuscue"));
         connect(make, &QAction::toggled, this, [this, cueId](bool on) {
             m_st->setCuesFocusCall({ cueId }, on);
         });
@@ -10117,6 +10140,13 @@ void ShowTreeView::updateBridgeBanner()
     });
     if (m_bridgeBanner == nullptr)
         return;
+    // A handout is already upgraded: the banner is Standard's (File ▸ Upgrade
+    // This Show… is folded to its More line the same way).
+    if (!ShowLevel::shown(QStringLiteral("file.upgrade")))
+    {
+        m_bridgeBanner->hide();
+        return;
+    }
     // Only a show with no tree yet, and only until dismissed: it never
     // nags a show that already has one, and never converts on its own.
     QStringList lists;
@@ -13178,6 +13208,13 @@ bool ShowTreeView::runCommand(const QString &line)
     // One line (docs/design/AI_ASSIST.md section 7): a line that isn't a
     // command is spell-checked here first, then (AI Assist on, Design) asked
     // of the assistant with the parser's error. Neither runs anything.
+    if (!r.levelKey.isEmpty())
+    {
+        // A word this level hides: said on the screen, with the switch.
+        m_commandMsg->setText(r.message);
+        ShowLevel::instance()->offer(r.levelKey, r.message);
+        return false;
+    }
     if (!r.ok && r.help.isEmpty())
     {
         bool sent = false;

@@ -44,6 +44,11 @@ private slots:
     void noLengthIsMetresOnly();
     void theTabsHaveTheirNames();
     void noTextSendsYouToAHiddenBuild();
+    /** The Student level's own words (the Teaching glossary, the Teaching
+     *  tips, the Run tab) name no place that is hidden or greyed at Student
+     *  (WORKSPACE_LEVELS.md §6): a lesson text never sends you where the
+     *  level has nothing. */
+    void noStudentTextSendsYouToAHiddenPlace();
 };
 
 #endif

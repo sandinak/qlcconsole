@@ -49,7 +49,9 @@ Roles: Driver, Navigator, Designer. Switch after each part.
 ## Steps
 
 1. **File ▸ Open** → `lesson-1-1-finish.qlcc`. The footer reads *No
-   outputs: preview only*: expected in class.
+   outputs: preview only*: expected in class. Its **STUDENT** chip means the
+   show is set up for the class: the tabs and tools this course uses, and
+   nothing else in the way.
 
    {% include inapp.html do="Open a show" path="File ▸ Open" mac="⌘O" win="Ctrl+O" see="Pick the file in **Documents → qlcconsole**. Its name shows in the window title." %}
 

@@ -18,10 +18,15 @@
 #include <QAction>
 #include <QDebug>
 #include <QGlobalStatic>
+#include <QHash>
+#include <QEvent>
 #include <QMenu>
+#include <QShortcut>
 #include <QWidget>
 
 #include "levelregistry.h"
+#include "focusreport.h"
+#include "showtreecommand.h"
 #include "showlevel.h"
 
 Q_GLOBAL_STATIC(ShowLevel, s_level)
@@ -35,6 +40,28 @@ Q_GLOBAL_STATIC(ShowLevel, s_level)
 ShowLevel::ShowLevel(QObject *parent)
     : QObject(parent)
 {
+    /* The Show Tree's command line: a word the level hides answers with the
+       level's words (WORKSPACE_LEVELS.md §4), not "don't know". */
+    FocusReport::setLevelNameProvider([]() { return name(ShowLevel::instance()->effectiveLevel()); });
+    ShowTreeCommand::setLevelGate([](const QString &word, QString *sentence) -> QString {
+        static const QHash<QString, QString> words = {
+            { QStringLiteral("wb"), QStringLiteral("showtree.workbench") },
+            { QStringLiteral("workbench"), QStringLiteral("showtree.workbench") },
+            { QStringLiteral("mib"), QStringLiteral("showtree.mib") },
+            { QStringLiteral("nomib"), QStringLiteral("showtree.mib") },
+            { QStringLiteral("allowmib"), QStringLiteral("showtree.mib") },
+            { QStringLiteral("textcolour"), QStringLiteral("showtree.cue.textcolour") },
+            { QStringLiteral("textcolor"), QStringLiteral("showtree.cue.textcolour") },
+            { QStringLiteral("detach"), QStringLiteral("showtree.reuse") },
+            { QStringLiteral("convert"), QStringLiteral("showtree.reuse") },
+        };
+        const QString key = words.value(word.toLower());
+        if (key.isEmpty() || ShowLevel::shown(key))
+            return QString();
+        if (sentence != nullptr)
+            *sentence = tr("%1 is a %2-level command.").arg(word, name(levelOf(key)));
+        return key;
+    });
 }
 
 ShowLevel *ShowLevel::instance()
@@ -259,6 +286,25 @@ void ShowLevel::applyTo(QAction *a)
             a->setProperty(KPropToolTip, a->toolTip());
             a->setEnabled(false);
             a->setToolTip(whyHidden(key));
+            if (!a->property("levelGuarded").toBool())
+            {
+                // A mode change that re-enables it, or a tooltip it sets, is
+                // put right again: the level wins while it is greyed.
+                a->setProperty("levelGuarded", true);
+                QPointer<QAction> guard(a);
+                connect(a, &QAction::changed, this, [guard]() {
+                    if (guard == nullptr || !guard->property(KPropGreyed).toBool())
+                        return;
+                    const QString why = whyHidden(guard->property(KPropLevelKey).toString());
+                    if (guard->isEnabled())
+                        guard->setEnabled(false);
+                    if (guard->toolTip() != why)
+                    {
+                        guard->setProperty(KPropToolTip, guard->toolTip());
+                        guard->setToolTip(why);
+                    }
+                });
+            }
         }
         else if (show && a->property(KPropGreyed).toBool())
         {
@@ -266,6 +312,7 @@ void ShowLevel::applyTo(QAction *a)
             a->setEnabled(true);
             a->setToolTip(a->property(KPropToolTip).toString());
         }
+        answerShortcut(a, !show);
         return;
     }
     // Fold and Tab: out of the menu (and its shortcut with it), and back
@@ -283,6 +330,7 @@ void ShowLevel::applyTo(QAction *a)
         a->setProperty(KPropFolded, false);
         a->setVisible(true);
     }
+    answerShortcut(a, !show && a->property(KPropFolded).toBool());
 }
 
 void ShowLevel::applyTo(QWidget *w)
@@ -299,10 +347,12 @@ void ShowLevel::applyTo(QWidget *w)
             w->setProperty(KPropToolTip, w->toolTip());
             w->setEnabled(false);
             w->setToolTip(whyHidden(key));
+            w->installEventFilter(this);
         }
         else if (show && w->property(KPropGreyed).toBool())
         {
             w->setProperty(KPropGreyed, false);
+            w->removeEventFilter(this);
             w->setEnabled(true);
             w->setToolTip(w->property(KPropToolTip).toString());
         }
@@ -320,6 +370,70 @@ void ShowLevel::applyTo(QWidget *w)
     {
         w->setProperty(KPropFolded, false);
         w->show();
+    }
+}
+
+bool ShowLevel::eventFilter(QObject *watched, QEvent *event)
+{
+    QWidget *w = qobject_cast<QWidget *>(watched);
+    if (w == nullptr || !w->property(KPropGreyed).toBool())
+        return QObject::eventFilter(watched, event);
+    if (event->type() == QEvent::EnabledChange)
+    {
+        // Something else (a page refresh) enabled it: the level wins.
+        if (w->isEnabled())
+            QMetaObject::invokeMethod(w, [w]() {
+                if (w->property(KPropGreyed).toBool())
+                    w->setEnabled(false);
+            }, Qt::QueuedConnection);
+    }
+    else if (event->type() == QEvent::ToolTipChange)
+    {
+        const QString why = whyHidden(w->property(KPropLevelKey).toString());
+        if (w->toolTip() != why)
+        {
+            const QString theirs = w->toolTip();
+            QMetaObject::invokeMethod(w, [w, why, theirs]() {
+                if (!w->property(KPropGreyed).toBool() || w->toolTip() == why)
+                    return;
+                w->setProperty(KPropToolTip, theirs);
+                w->setToolTip(why);
+            }, Qt::QueuedConnection);
+        }
+    }
+    return QObject::eventFilter(watched, event);
+}
+
+void ShowLevel::answerShortcut(QAction *a, bool hidden)
+{
+    // A hidden or disabled action's shortcut is dead in Qt: a shadow
+    // shortcut answers it with the level's words.
+    const QString key = a->property(KPropLevelKey).toString();
+    m_shortcutAnswers.removeAll(QPointer<QObject>());
+    bool have = false;
+    for (const QPointer<QObject> &o : m_shortcutAnswers)
+        if (o != nullptr && o->property("levelAnswerFor").value<QObject *>() == a)
+        {
+            static_cast<QShortcut *>(o.data())->setEnabled(hidden);
+            have = true;
+        }
+    if (have || !hidden || a->shortcuts().isEmpty())
+        return;
+    QWidget *host = nullptr;
+    for (QObject *o : a->associatedObjects())
+        if ((host = qobject_cast<QWidget *>(o)) != nullptr)
+            break;
+    if (host == nullptr)
+        host = qobject_cast<QWidget *>(a->parent());
+    if (host == nullptr)
+        return;
+    for (const QKeySequence &seq : a->shortcuts())
+    {
+        QShortcut *s = new QShortcut(seq, host->window());
+        s->setContext(Qt::WindowShortcut);
+        s->setProperty("levelAnswerFor", QVariant::fromValue<QObject *>(a));
+        connect(s, &QShortcut::activated, this, [this, key]() { offer(key); });
+        m_shortcutAnswers << s;
     }
 }
 
@@ -383,6 +497,14 @@ void ShowLevel::offer(const QString &key)
     if (r == nullptr)
         return;
     emit switchOffered(int(r->level), tr("%1 is at the %2 level.").arg(r->words, name(r->level)));
+}
+
+void ShowLevel::offer(const QString &key, const QString &text)
+{
+    const LevelRegistry::Row *r = LevelRegistry::row(key);
+    if (r == nullptr)
+        return;
+    emit switchOffered(int(r->level), text);
 }
 
 void ShowLevel::offerMenu(QMenu *menu)

@@ -183,6 +183,41 @@ QString levelThreeFile(int lesson, const char *kind)
     return kShows + QStringLiteral("/lesson-3-%1-%2.qlcc").arg(lesson).arg(QLatin1String(kind));
 }
 
+/* A course show file at its lesson's level (WORKSPACE_LEVELS.md §5): Level
+   on <Workspace>, as App::saveXML() writes it -- "student", or nothing at
+   Standard. Levels 0-2 and 3.8, 3.9 are Student's; 3.5 and 3.6 are Standard's
+   (Connections editing, Focus This Cue and the Venues). */
+bool stampLevel(const QString &path, const QString &level)
+{
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly))
+        return false;
+    QString xml = QString::fromUtf8(f.readAll());
+    f.close();
+    static const QRegularExpression tag(QStringLiteral("<Workspace [^>]*>"));
+    const QRegularExpressionMatch m = tag.match(xml);
+    if (!m.hasMatch())
+        return false;
+    QString t = m.captured(0);
+    t.remove(QRegularExpression(QStringLiteral(" Level=\"[^\"]*\"")));
+    if (level != QLatin1String("standard"))
+        t = t.contains(QLatin1String(" View=\""))
+            ? t.replace(QRegularExpression(QStringLiteral("( View=\"[^\"]*\")")),
+                        QStringLiteral("\\1 Level=\"%1\"").arg(level))
+            : t.replace(QLatin1String(">"), QStringLiteral(" Level=\"%1\">").arg(level));
+    xml.replace(m.captured(0), t);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    return f.write(xml.toUtf8()) > 0;
+}
+
+/* The level a lesson's files are saved at: lesson "1.3", "3.5"... */
+QString lessonLevel(const QString &lesson)
+{
+    return lesson == QLatin1String("3.5") || lesson == QLatin1String("3.6") ? QStringLiteral("standard")
+                                                                                 : QStringLiteral("student");
+}
+
 /* The base palettes every lesson uses -- typed, as the course teaches. */
 const QStringList kPaletteCommands = {
     "palette colour \"White\" #ffffff",
@@ -930,14 +965,17 @@ void CourseShow_Test::buildTheShows()
     }
     QVERIFY2(view->runCommand(kFleshCommand), qPrintable(view->commandMessage()));
     QCOMPARE(m_app->saveXML(kClassroom), QFile::NoError);
+    QVERIFY(stampLevel(kClassroom, lessonLevel(QStringLiteral("0.8"))));
     // Lesson 3.6 is the one lesson that expects Teaching mode (decided, can
     // change): its start file is the classroom show with it on.
     doc->teachingSettings()->setLesson(QStringLiteral("3.6"), QString());
     doc->teachingSettings()->setEnabled(true);
     QCOMPARE(m_app->saveXML(kL36Start), QFile::NoError);
+    QVERIFY(stampLevel(kL36Start, lessonLevel(QStringLiteral("3.6"))));
     doc->teachingSettings()->setEnabled(false);
     doc->teachingSettings()->setLesson(QString(), QString());
     QCOMPARE(m_app->saveXML(kL1Start), QFile::NoError);
+    QVERIFY(stampLevel(kL1Start, lessonLevel(QStringLiteral("1.1"))));
 
     QVERIFY(open(kL1Start));
     QVERIFY(lessonOneByMouse(m_app->doc(), showTree()));
@@ -1590,6 +1628,7 @@ void CourseShow_Test::buildLessonShows()
     QVERIFY(QFile::exists(kL1Finish));
     QVERIFY(QFile::remove(kL2Start) || !QFile::exists(kL2Start));
     QVERIFY(QFile::copy(kL1Finish, kL2Start));
+    QVERIFY(stampLevel(kL2Start, lessonLevel(QStringLiteral("1.2"))));
 
     QVERIFY(open(kL2Start));
     QVERIFY(lessonTwoByMouse(m_app->doc(), showTree()));
@@ -1598,6 +1637,7 @@ void CourseShow_Test::buildLessonShows()
 
     QVERIFY(QFile::remove(kL3Start) || !QFile::exists(kL3Start));
     QVERIFY(QFile::copy(kL2Finish, kL3Start));
+    QVERIFY(stampLevel(kL3Start, lessonLevel(QStringLiteral("1.2"))));
     QVERIFY(open(kL3Start));
     QVERIFY(lessonThreeByMouse(m_app->doc(), showTree()));
     QCOMPARE(m_app->saveXML(kL3Finish), QFile::NoError);
@@ -1605,6 +1645,7 @@ void CourseShow_Test::buildLessonShows()
 
     QVERIFY(QFile::remove(kL4Start) || !QFile::exists(kL4Start));
     QVERIFY(QFile::copy(kL3Finish, kL4Start));
+    QVERIFY(stampLevel(kL4Start, lessonLevel(QStringLiteral("1.2"))));
     QVERIFY(open(kL4Start));
     QVERIFY(lessonFourByMouse(m_app->doc(), showTree()));
     QCOMPARE(m_app->saveXML(kL4Finish), QFile::NoError);
@@ -1613,6 +1654,7 @@ void CourseShow_Test::buildLessonShows()
     // Lesson 1.5 runs the show: it starts from 1.4's finish and saves nothing.
     QVERIFY(QFile::remove(kL5Start) || !QFile::exists(kL5Start));
     QVERIFY(QFile::copy(kL4Finish, kL5Start));
+    QVERIFY(stampLevel(kL5Start, lessonLevel(QStringLiteral("1.2"))));
 }
 
 /* The Run tab, brought forward as a student clicks its tab. */
@@ -5881,6 +5923,7 @@ void CourseShow_Test::buildLevelTwoShows()
         QVERIFY2(QFile::exists(from), qPrintable(from));
         QVERIFY(QFile::remove(levelTwoStart(l.n)) || !QFile::exists(levelTwoStart(l.n)));
         QVERIFY(QFile::copy(from, levelTwoStart(l.n)));
+        QVERIFY(stampLevel(levelTwoStart(l.n), lessonLevel(QStringLiteral("2.%1").arg(l.n))));
         QVERIFY(open(levelTwoStart(l.n)));
         QVERIFY(l.byMouse(m_app->doc(), showTree(), QString()));
         QCOMPARE(m_app->saveXML(levelTwoFinish(l.n)), QFile::NoError);
@@ -6168,6 +6211,7 @@ void CourseShow_Test::buildLevelThreeShows()
         QVERIFY2(QFile::exists(from), qPrintable(from));
         QVERIFY(QFile::remove(levelThreeFile(l.n, "start")) || !QFile::exists(levelThreeFile(l.n, "start")));
         QVERIFY(QFile::copy(from, levelThreeFile(l.n, "start")));
+        QVERIFY(stampLevel(levelThreeFile(l.n, "start"), lessonLevel(QStringLiteral("3.%1").arg(l.n))));
         QVERIFY(open(levelThreeFile(l.n, "start")));
         if (l.n == 9)
         {

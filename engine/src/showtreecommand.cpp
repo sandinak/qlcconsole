@@ -989,6 +989,20 @@ struct Reader
 
 } // namespace
 
+namespace
+{
+ShowTreeCommand::LevelGate &levelGate()
+{
+    static ShowTreeCommand::LevelGate gate;
+    return gate;
+}
+}
+
+void ShowTreeCommand::setLevelGate(const LevelGate &gate)
+{
+    levelGate() = gate;
+}
+
 ShowTreeCommand::Result ShowTreeCommand::run(const QString &line, const Context &context)
 {
     Result res = runParsed(line, context);
@@ -1027,6 +1041,19 @@ ShowTreeCommand::Result ShowTreeCommand::runParsed(const QString &line, const Co
         res.help = helpText(what);
         res.message = what.isEmpty() ? tr("help: every word (Esc closes)") : tr("help %1").arg(what);
         return res;
+    }
+    if (levelGate())
+    {
+        // A word the show's level hides answers with the level's words,
+        // never "don't know" and never silence (WORKSPACE_LEVELS.md §4).
+        QString sentence;
+        const QString key = levelGate()(w0, &sentence);
+        if (!key.isEmpty())
+        {
+            res.message = sentence;
+            res.levelKey = key;
+            return res;
+        }
     }
     if (w0 == QLatin1String("undo") || w0 == QLatin1String("redo"))
     {

@@ -1216,6 +1216,9 @@ void LayoutSanity_Test::initTestCase()
     QVERIFY(m_app->doc()->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures")));
     // A finished course show: fixtures, groups, looks, scenes, a production.
     QCOMPARE(m_app->loadXML(QStringLiteral(COURSE_DIR "/shows/lesson-3-9-finish.qlcc")), QFile::NoError);
+    // The course files are saved at their lesson's level (Student for this
+    // one); these screens are the whole app's, so they are checked at Standard.
+    ShowLevel::instance()->setLevel(ShowLevel::Standard);
     m_app->doc()->resetModified();
     m_app->showNormal();
     settle();

@@ -47,6 +47,7 @@
 #include "paletteops.h"
 #include "qlcpalette.h"
 #include "workbench.h"
+#include "showlevel.h"
 #include "treecuestack.h"
 #include "function.h"
 #include "doc.h"
@@ -102,6 +103,13 @@ Workbench *ShowTreeView::dockedWorkbench() const
 
 bool ShowTreeView::openSelectionInWorkbench()
 {
+    // Student: the Workbench's stock editors are Build internals. Double-click,
+    // the context menu and ✎ answer with the level's words (never silent).
+    if (!ShowLevel::shown(QStringLiteral("showtree.workbench")))
+    {
+        ShowLevel::instance()->offer(QStringLiteral("showtree.workbench"));
+        return false;
+    }
     const quint32 cueId = currentCueId();
     if (cueId == invalidId())
     {

@@ -20,6 +20,9 @@
 #include <QtTest>
 #include <QAction>
 #include <QCheckBox>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QToolButton>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -29,6 +32,7 @@
 #include <QPushButton>
 #include <QStatusBar>
 #include <QTabBar>
+#include <QShortcut>
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QXmlStreamReader>
@@ -37,6 +41,9 @@
 #include "levelregistry.h"
 #include "showlevel.h"
 #include "showoperate.h"
+#include "showfeatures.h"
+#include "focusmenu.h"
+#include "focusreport.h"
 #include "teachingsettings.h"
 #include "qlcfixturedefcache.h"
 
@@ -47,6 +54,10 @@
 #include "app.h"
 #include "virtualconsole.h"
 #include "showsettingsdialog.h"
+#include "showtreeview.h"
+#include "moveinblackbutton.h"
+#include "fixturemanager.h"
+#include "monitor.h"
 #undef private
 #undef protected
 
@@ -840,6 +851,269 @@ void Levels_Test::classicActsAsAdvancedAndStudentLeavesIt()
     m_app->doc()->resetModified();
 }
 
+void Levels_Test::theL2RowsGreyAndSayTheirLevel()
+{
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QList<QWidget *> treeRows;
+    for (QWidget *w : std::initializer_list<QWidget *>{
+             view->findChild<QWidget *>(QStringLiteral("stOpenWorkbench")), view->m_listMib, view->m_cueNoMib, view->m_moveInBlack,
+             view->m_cueMix, view->m_cueColour, view->m_cueTcRow, view->m_listFollowTc, view->m_prodTimecode,
+             view->m_cueFocusCall, view->m_cueRefine, view->m_listConvert, view->m_listDetach })
+        treeRows.append(w);
+    for (QWidget *w : treeRows)
+        QVERIFY(w != nullptr);
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    for (QWidget *w : treeRows)
+    {
+        QVERIFY2(!w->isEnabled(), qPrintable(w->objectName()));
+        QVERIFY2(w->toolTip().contains(QStringLiteral("Standard level")), qPrintable(w->objectName() + ": " + w->toolTip()));
+    }
+    // Something that re-enables a greyed row (a page refresh) does not win.
+    view->m_cueMix->setEnabled(true);
+    view->m_cueMix->setToolTip(QStringLiteral("its own words"));
+    settle();
+    QVERIFY(!view->m_cueMix->isEnabled());
+    QVERIFY(view->m_cueMix->toolTip().contains(QStringLiteral("Standard level")));
+    // What a lesson of course Levels 0-2 uses stays whole.
+    for (const QString &name : { QStringLiteral("stNewProduction"), QStringLiteral("stRecord"),
+                                 QStringLiteral("stNewSubCue"), QStringLiteral("stMerge") })
+        if (QWidget *w = view->findChild<QWidget *>(name))
+            QVERIFY2(!w->property("levelKey").isValid(), qPrintable(name));
+    QVERIFY(view->m_cueBase->isEnabled() || !view->m_cueBase->property("levelKey").isValid());
+
+    // Fixtures: the inventory and the patch list's paperwork, greyed.
+    FixtureManager *fm = FixtureManager::instance();
+    QVERIFY(fm != nullptr);
+    for (QAction *a : { fm->m_addAction, fm->m_addInventoryAction, fm->m_patchInventoryAction,
+                        fm->m_addRGBAction, fm->m_removeAction })
+    {
+        QVERIFY2(!a->isEnabled(), qPrintable(a->text()));
+        QVERIFY2(a->toolTip().contains(QStringLiteral("Standard level")), qPrintable(a->text()));
+    }
+    // The Lighting Studio's overlay box keeps Normal and Stage only, and says why.
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    QStringList overlays;
+    for (int i = 0; i < mon->m_overlayCombo->count(); ++i)
+        overlays << mon->m_overlayCombo->itemText(i);
+    QCOMPARE(overlays, QStringList({ QStringLiteral("Normal"), QStringLiteral("Stage only") }));
+    QVERIFY(mon->m_overlayCombo->toolTip().contains(QStringLiteral("Standard level")));
+    // Edit Focus Calls and the Venues are the teacher's; Venue Focus is a student's.
+    QMenu focus;
+    FocusMenu::fill(&focus, m_app->doc(), m_app, []() {});
+    QAction *edit = nullptr, *venueFocus = nullptr;
+    for (QAction *a : focus.actions())
+    {
+        if (a->objectName() == QLatin1String("focusEditCalls"))
+            edit = a;
+        if (a->objectName() == QLatin1String("focusVenue"))
+            venueFocus = a;
+    }
+    QVERIFY(edit != nullptr && venueFocus != nullptr);
+    QVERIFY(!edit->isEnabled());
+    QVERIFY(edit->toolTip().contains(QStringLiteral("Standard level")));
+    QVERIFY(!venueFocus->property("levelKey").isValid());
+
+    // Standard: all of it back.
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+    for (QWidget *w : treeRows)
+        QVERIFY2(w->isEnabledTo(view), qPrintable(w->objectName()));
+    QVERIFY(view->m_cueMix->isEnabled());
+    QVERIFY(!view->m_cueMix->toolTip().contains(QStringLiteral("Standard level")));
+    QVERIFY(fm->m_addInventoryAction->isEnabled());
+    QCOMPARE(mon->m_overlayCombo->count(), 6 - (ShowFeatures::isOn(ShowFeatures::Power) ? 0 : 1));
+    m_app->doc()->resetModified();
+}
+
+void Levels_Test::aHiddenItemReachedByCommandOrShortcutAnswersOnScreen()
+{
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(view != nullptr);
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    for (const QString &word : { QStringLiteral("wb"), QStringLiteral("workbench"), QStringLiteral("mib on"),
+                                 QStringLiteral("nomib"), QStringLiteral("detach"),
+                                 QStringLiteral("textcolour red") })
+    {
+        m_app->hideViewNotice();
+        QVERIFY2(!view->runCommand(word), qPrintable(word));
+        QVERIFY2(view->commandMessage().contains(QStringLiteral("Standard-level command")),
+                 qPrintable(word + ": " + view->commandMessage()));
+        QVERIFY2(m_app->m_viewNotice->isVisibleTo(m_app), qPrintable(word));
+        QVERIFY2(m_app->m_viewNoticeText->text().contains(QStringLiteral("Standard-level command")),
+                 qPrintable(m_app->m_viewNoticeText->text()));
+        QCOMPARE(m_app->m_viewNoticeButton->text(), QStringLiteral("Switch to Standard"));
+    }
+    // The double-click and the ✎ button answer the same way.
+    m_app->hideViewNotice();
+    QVERIFY(!view->openSelectionInWorkbench());
+    QVERIFY(m_app->m_viewNotice->isVisibleTo(m_app));
+    QVERIFY(m_app->m_viewNoticeText->text().contains(QStringLiteral("Workbench")));
+    // Switch, and the word is the command's again.
+    m_app->m_viewNoticeButton->click();
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Standard);
+    m_app->hideViewNotice();
+    view->runCommand(QStringLiteral("mib"));        // says the list's setting, changes nothing
+    QVERIFY(!view->commandMessage().contains(QStringLiteral("Standard-level command")));
+    QVERIFY(!m_app->m_viewNotice->isVisibleTo(m_app));
+
+    // A shortcut of a folded or greyed action answers, never nothing (UX-28).
+    QAction *act = new QAction(QStringLiteral("Test item"), m_app);
+    act->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+Shift+J")));
+    m_app->addAction(act);
+    ShowLevel::instance()->bind(act, QStringLiteral("file.import"));
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    m_app->hideViewNotice();
+    QShortcut *answer = nullptr;
+    for (QShortcut *s : m_app->findChildren<QShortcut *>())
+        if (s->property("levelAnswerFor").value<QObject *>() == act)
+            answer = s;
+    QVERIFY(answer != nullptr);
+    QVERIFY(answer->isEnabled());
+    QCOMPARE(answer->key(), QKeySequence(QStringLiteral("Ctrl+Alt+Shift+J")));
+    emit answer->activated();
+    QVERIFY(m_app->m_viewNotice->isVisibleTo(m_app));
+    QVERIFY(m_app->m_viewNoticeText->text().contains(QStringLiteral("Standard level")));
+    // At Standard the action has its shortcut back and the answer stands down.
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+    QVERIFY(!answer->isEnabled());
+    delete act;
+    m_app->doc()->resetModified();
+}
+
+void Levels_Test::theFocusReportsTeachingLineNamesTheLevel()
+{
+    m_app->doc()->teachingSettings()->setEnabled(true);
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    QString html = FocusReport::html(m_app->doc(), QStringLiteral("Test Hall"), QStringLiteral("Show"));
+    QVERIFY2(html.contains(QStringLiteral("Student level")), qPrintable(html.left(1500)));
+    QVERIFY(m_app->doc()->operateSettings()->setPin(QStringLiteral("1357")));
+    ShowSettingsDialog::testAnswers() = { QStringLiteral("1357") };
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+    html = FocusReport::html(m_app->doc(), QStringLiteral("Test Hall"), QStringLiteral("Show"));
+    QVERIFY(html.contains(QStringLiteral("Standard level")));
+    QVERIFY(!html.contains(QStringLiteral("Student level")));
+    // Not a Teaching show: no Teaching line, so no level in it.
+    m_app->doc()->teachingSettings()->setEnabled(false);
+    html = FocusReport::html(m_app->doc(), QStringLiteral("Test Hall"), QStringLiteral("Show"));
+    QVERIFY(!html.contains(QStringLiteral("Standard level")));
+    m_app->doc()->resetModified();
+}
+
+namespace
+{
+QString readFile(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll()) : QString();
+}
+
+/* What a lesson's student page and handout name, per registry row (the
+   words a hidden row's place is called in the course text). */
+const QMultiMap<QString, QString> &coursePhrases()
+{
+    static const QMultiMap<QString, QString> map = {
+        { QStringLiteral("showtree.workbench"), QStringLiteral("Workbench") },
+        { QStringLiteral("showtree.mib"), QStringLiteral("Move in Black") },
+        { QStringLiteral("showtree.mib"), QStringLiteral("Don't move in black") },
+        { QStringLiteral("showtree.cue.mix"), QStringLiteral("Overlapping layers") },
+        { QStringLiteral("showtree.cue.textcolour"), QStringLiteral("Text colour") },
+        { QStringLiteral("showtree.timecode"), QStringLiteral("At timecode") },
+        { QStringLiteral("showtree.timecode"), QStringLiteral("Follow timecode") },
+        { QStringLiteral("showtree.focuscue"), QStringLiteral("Focus This Cue") },
+        { QStringLiteral("showtree.focuscue"), QStringLiteral("venue focus cue") },
+        { QStringLiteral("showtree.reuse"), QStringLiteral("Convert to Tracking") },
+        { QStringLiteral("showtree.reuse"), QStringLiteral("Detach to Plain") },
+        { QStringLiteral("fixtures.inventory"), QStringLiteral("Patch Inventory") },
+        { QStringLiteral("fixtures.inventory"), QStringLiteral("Add to Inventory") },
+        { QStringLiteral("fixtures.inventory"), QStringLiteral("Add Fixture") },
+        { QStringLiteral("fixtures.tools"), QStringLiteral("Print Labels") },
+        { QStringLiteral("fixtures.rules"), QStringLiteral("Plot Symbol") },
+        { QStringLiteral("studio.venues"), QStringLiteral("Edit Focus Calls") },
+        { QStringLiteral("studio.structures"), QStringLiteral("Add Truss") },
+        { QStringLiteral("studio.structures"), QStringLiteral("Add Platform") },
+        { QStringLiteral("tab.build"), QStringLiteral("Build tab") },
+        { QStringLiteral("tab.simpledesk"), QStringLiteral("Simple Desk") },
+        { QStringLiteral("tab.functions"), QStringLiteral("Functions tab") },
+    };
+    return map;
+}
+
+/* The lesson's folder in docs/course for a start or finish file name. */
+QString lessonDir(const QString &fileName)
+{
+    static const QRegularExpression re(QStringLiteral("^lesson-(\\d)-(\\d)-"));
+    const QRegularExpressionMatch m = re.match(fileName);
+    if (!m.hasMatch())
+        return QString();
+    return QStringLiteral(COURSE_DIR "/level-%1/lesson-0%2").arg(m.captured(1), m.captured(2));
+}
+}
+
+void Levels_Test::everyLessonOpensAtItsLevelAndItsStepsAreReachable()
+{
+    QVERIFY(m_app->doc()->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures")));
+    const QStringList files = QDir(QStringLiteral(COURSE_DIR "/shows"))
+                                  .entryList({ QStringLiteral("*.qlcc") }, QDir::Files, QDir::Name);
+    QVERIFY(files.size() >= 25);
+    int opened = 0;
+    for (const QString &name : files)
+    {
+        const QString path = QStringLiteral(COURSE_DIR "/shows/") + name;
+        const bool standard = name.startsWith(QLatin1String("lesson-3-5-")) || name.startsWith(QLatin1String("lesson-3-6-"));
+        // Saved at its lesson's level: Student in the file, Standard writing nothing.
+        bool present = false;
+        const QString saved = workspaceAttr(path, QStringLiteral("Level"), &present);
+        if (standard)
+            QVERIFY2(!present, qPrintable(name + " should be at Standard (no Level)"));
+        else
+            QVERIFY2(present && saved == QLatin1String("student"), qPrintable(name + " should be at Student: " + saved));
+
+        m_app->doc()->resetModified();
+        m_app->clearDocument();
+        QCOMPARE(m_app->loadXML(path), QFile::NoError);
+        m_app->doc()->resetModified();
+        settle();
+        QCOMPARE(ShowLevel::instance()->chosenLevel(), standard ? ShowLevel::Standard : ShowLevel::Student);
+        ++opened;
+
+        // Its student page and handout name nothing the level hides.
+        const QString dir = lessonDir(name);
+        if (dir.isEmpty())
+            continue;
+        const QString text = readFile(dir + QStringLiteral("/student.md")) + readFile(dir + QStringLiteral("/handout.md"));
+        if (text.isEmpty())
+            continue;
+        for (auto it = coursePhrases().cbegin(); it != coursePhrases().cend(); ++it)
+            if (!ShowLevel::shown(it.key()))
+                QVERIFY2(!text.contains(it.value()),
+                         qPrintable(QStringLiteral("%1: the lesson names \"%2\", hidden at Student (%3)")
+                                    .arg(name, it.value(), it.key())));
+    }
+    QVERIFY(opened >= 25);
+
+    // What 3.5 and 3.6 teach is there at their level: the cue's timecode row,
+    // Focus This Cue, the venue focus cue, and the teacher's focus calls.
+    ShowTreeView *view = ShowTreeView::instance();
+    QVERIFY(m_app->loadXML(QStringLiteral(COURSE_DIR "/shows/lesson-3-5-start.qlcc")) == QFile::NoError);
+    settle();
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Standard);
+    QVERIFY(view->m_cueTcRow->isEnabled());
+    QVERIFY(view->m_listFollowTc->isEnabled());
+    QVERIFY(view->m_cueRefine->isEnabledTo(view));
+    QVERIFY(view->m_cueFocusCall->isEnabledTo(view));
+    QVERIFY(ShowLevel::shown(QStringLiteral("studio.venues")));
+    // And Level 0-2's Show Tree work is untouched at Student.
+    QCOMPARE(m_app->loadXML(QStringLiteral(COURSE_DIR "/shows/lesson-2-5-start.qlcc")), QFile::NoError);
+    settle();
+    QCOMPARE(ShowLevel::instance()->chosenLevel(), ShowLevel::Student);
+    for (const QString &name : { QStringLiteral("stNewProduction"), QStringLiteral("stNewCueList"),
+                                 QStringLiteral("stRecord"), QStringLiteral("stNewSubCue"), QStringLiteral("stUndo") })
+        if (QWidget *w = view->findChild<QWidget *>(name))
+            QVERIFY2(!w->property("levelKey").isValid(), qPrintable(name));
+    m_app->doc()->resetModified();
+}
+
 void Levels_Test::levelShots()
 {
     const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
@@ -856,6 +1130,16 @@ void Levels_Test::levelShots()
     {
         QVERIFY(m_app->requestLevel(l.level));
         m_app->showContext(QStringLiteral("Show Tree"));
+        // A cue selected, so its page (the rows L2 greys) is on show.
+        {
+            quint32 firstCue = ShowTree::invalidId();
+            for (const ShowTree::Production &prod : m_app->doc()->showTree()->productions())
+                for (const ShowTree::CueList &list : prod.lists)
+                    if (firstCue == ShowTree::invalidId() && !list.cues.isEmpty())
+                        firstCue = list.cues.first().id;
+            if (firstCue != ShowTree::invalidId() && ShowTreeView::instance() != nullptr)
+                ShowTreeView::instance()->selectNode(firstCue);
+        }
         for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
         {
             m_app->resize(size);
@@ -865,6 +1149,22 @@ void Levels_Test::levelShots()
             QVERIFY(m_app->grab().save(QStringLiteral("%1/level-%2-%3x%4.png")
                                        .arg(dir, QString::fromLatin1(l.name)).arg(size.width()).arg(size.height())));
         }
+        // L2: the Fixtures tab and the Lighting Studio, where the rows grey.
+        for (const QString &ctx : { QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio") })
+        {
+            m_app->showContext(ctx);
+            for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+            {
+                m_app->resize(size);
+                settle();
+                QTest::qWait(60);
+                settle();
+                QVERIFY(m_app->grab().save(QStringLiteral("%1/level-%2-%3-%4x%5.png")
+                                           .arg(dir, QString::fromLatin1(l.name), QString(ctx).remove(QLatin1Char(' ')).toLower())
+                                           .arg(size.width()).arg(size.height())));
+            }
+        }
+        m_app->showContext(QStringLiteral("Show Tree"));
         // The menus as each level has them.
         for (QMenu *menu : topMenus(m_app))
         {

@@ -36,6 +36,7 @@
 #include "showtreecontroller.h"
 #include "showtreeview.h"
 #include "workbenchcommand.h"
+#include "showlevel.h"
 #include "qlcpalette.h"
 #include "function.h"
 #include "doc.h"
@@ -250,6 +251,12 @@ bool BuildCommandBar::runLine(const QString &line)
 #endif
     ShowTreeCommand::Result r = m_operations->runLine(line, ctx);
     m_suggestedFrom.clear();
+    if (!r.levelKey.isEmpty())
+    {
+        setMessage(r.message, false);
+        ShowLevel::instance()->offer(r.levelKey, r.message);
+        return false;
+    }
     // One line, as in the tree: a line that isn't a command is a typo (the
     // fix in the line) or plain words (AI Assist, in Design).
     if (!r.ok && r.help.isEmpty())

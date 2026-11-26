@@ -36,6 +36,7 @@
 #define private public
 #define protected public
 #include "app.h"
+#include "showlevel.h"
 #include "appsettings.h"
 #include "functionmanager.h"
 #include "functionstreewidget.h"
@@ -136,6 +137,9 @@ void ViewLayout_Test::initTestCase()
     const QString show = m_dir.filePath("show.qlcc");
     QVERIFY(QFile::copy(QStringLiteral(COURSE_SHOW), show));
     QCOMPARE(m_app->loadXML(show), QFile::NoError);
+    // The course files are saved at their lesson's level (Student for this
+    // one); these screens are the whole app's, so they are checked at Standard.
+    ShowLevel::instance()->setLevel(ShowLevel::Standard);
 
     // And one of each plain kind, to open.
     Doc *doc = m_app->doc();

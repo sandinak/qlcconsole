@@ -22,6 +22,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   a group or a fixture and a line over the layers says the editor edits the
   current row only and the others are left as they are; the gobo name of
   several Gobo looks selected together is one undo step like their values.
+- **Levels, the course path**: at Student the Show Tree, Fixtures and Lighting
+  Studio grey what a class only reads, each with its level in the tooltip
+  (the ✎ Workbench, move in black, a cue's mixing, text colour and timecode,
+  Focus This Cue, convert and detach; the inventory, patching, group folders,
+  definitions, plot symbols and power; the Studio's Add menu, Power / DMX /
+  Network / Owner views and Edit Focus Calls) and keep what the lessons use;
+  a command (`mib`, `wb`, `detach`…), a double-click on a cue and the shortcut
+  of a put-away item answer in the line above the tabs with the level and
+  Switch, never silently; the focus report's Teaching line names the level;
+  the course's show files are saved at their lesson's level (3.5 and 3.6 at
+  Standard) and lesson 0.8 says what the STUDENT chip means.
 - **Surface pages**: each drawn board (APC40 mk2, APC64, PMJ Black 1,
   MaizeDMX) comes with labelled pages of jobs for its controls, in Design
   only: colour on the faders, moves and beam on the knobs (APC40 device

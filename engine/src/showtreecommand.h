@@ -153,7 +153,17 @@ public:
          *  or a cue it names isn't there. The one command line's fallback
          *  (suggest(), then AI Assist) starts from these. */
         bool unparsed = false;
+        /** The line's word is hidden at the show's level (the UI's gate):
+         *  the registry key. The message says so; nothing ran. */
+        QString levelKey;
     };
+
+    /** The UI's workspace level, as a gate on a line's first word: it
+     *  returns the registry key of the level that shows the word (empty:
+     *  shown) and the sentence to say ("`mib` is a Standard-level
+     *  command."). The engine knows no levels; the UI installs this. */
+    typedef std::function<QString(const QString &word, QString *sentence)> LevelGate;
+    static void setLevelGate(const LevelGate &gate);
 
     Result run(const QString &line, const Context &context);
 

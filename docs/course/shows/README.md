@@ -32,6 +32,25 @@ has a network address of its own. `ui/test/courseshow`
 that every fixture opens with its own definition on a computer that has
 only the app's.
 
+## Levels
+
+Every lesson file opens at the level its lesson needs, saved in the show
+(`Level` on `<Workspace>`; nothing is written at Standard). **Student**
+covers Levels 0 to 2 and lessons 3.8 and 3.9: the Show Tree, the Library,
+Run, the Lighting Studio for looking and selecting, the Virtual Console for
+pressing, and Venue Focus. **Standard** is the whole app as the shipped
+view has it, and is what 3.5 (show control, timecode) and 3.6 (Focus This
+Cue, the Venues) start at, because those lessons edit what Student only
+reads.
+
+The reason is the crew's: a student who can't see Build, raw channels or
+the patch isn't tempted to fix a cue there, and every greyed item says
+which level it is at and how to get there (View ▸ Workspace). With
+Teaching on, the instructor's PIN is what opens Standard or Advanced, and
+only until the show is closed: the student copy always reopens at its own
+level. **File ▸ Show Settings… ▸ Make Student Handout…** has a **Level**
+box (Student by default) for a handout of a Standard lesson.
+
 ## Teaching mode
 
 The shows are safe on their own (see above), so they ship with **Teaching

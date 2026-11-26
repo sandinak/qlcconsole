@@ -251,8 +251,15 @@ to a class carries its level to every student's computer.
   the Virtual Console: everything course Levels 0 to 2 use. Build,
   Functions, Simple Desk and the Timeline are put away, and so are the
   menu items a class doesn't need (importing, the DMX Monitor, the
-  Fixtures menu's tools, Live Edit, timecode). The footer shows
-  **STUDENT**.
+  Fixtures menu's tools, Live Edit, timecode). Inside the tabs that stay,
+  what a class only reads is greyed, with the level in its tooltip: the
+  Show Tree's **✎ Workbench**, move in black, a cue's mixing, text colour
+  and timecode, **Focus This Cue** and the venue focus cue, converting and
+  detaching a list; the Fixtures tab's inventory, patching, group folders,
+  definitions, plot symbols and power; the Lighting Studio's
+  Add menu, its Power, DMX, Network and Owner views, and **Edit Focus
+  Calls** and the Venues. **Venue Focus…** and **Practice** stay. The
+  footer shows **STUDENT**.
 - **Standard** — every qlcconsole tool. A show made before levels opens
   at Standard, exactly as it did.
 - **Advanced** — Standard, and the expert tools: the Look Editor's
@@ -263,7 +270,10 @@ Nothing is ever a dead end. A menu that has items put away ends with
 **More at Standard…**, and the **Window** menu has **More Tabs at
 Standard…**. Each one says what is there and offers **Switch to
 Standard** in the line above the tabs. A link or a button that leads to a
-put-away tab says the same thing. It never switches by itself. Click the
+put-away tab says the same thing, and so does a Show Tree command
+(`mib`, `wb`, `detach`…), a double-click that would open the Workbench, and
+the shortcut of a put-away item: each answers in that line, with the
+level's name and **Switch**, never silently. It never switches by itself. Click the
 footer's **STUDENT** or **ADVANCED** chip for the three levels.
 
 What a level puts away is **hidden, never stopped**. A cue that uses an
