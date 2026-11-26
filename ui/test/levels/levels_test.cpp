@@ -1042,6 +1042,16 @@ void Levels_Test::levelShots()
     {
         QVERIFY(m_app->requestLevel(l.level));
         m_app->showContext(QStringLiteral("Show Tree"));
+        // A cue selected, so its page (the rows L2 greys) is on show.
+        {
+            quint32 firstCue = ShowTree::invalidId();
+            for (const ShowTree::Production &prod : m_app->doc()->showTree()->productions())
+                for (const ShowTree::CueList &list : prod.lists)
+                    if (firstCue == ShowTree::invalidId() && !list.cues.isEmpty())
+                        firstCue = list.cues.first().id;
+            if (firstCue != ShowTree::invalidId() && ShowTreeView::instance() != nullptr)
+                ShowTreeView::instance()->selectNode(firstCue);
+        }
         for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
         {
             m_app->resize(size);
@@ -1051,6 +1061,22 @@ void Levels_Test::levelShots()
             QVERIFY(m_app->grab().save(QStringLiteral("%1/level-%2-%3x%4.png")
                                        .arg(dir, QString::fromLatin1(l.name)).arg(size.width()).arg(size.height())));
         }
+        // L2: the Fixtures tab and the Lighting Studio, where the rows grey.
+        for (const QString &ctx : { QStringLiteral("Fixtures"), QStringLiteral("Lighting Studio") })
+        {
+            m_app->showContext(ctx);
+            for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+            {
+                m_app->resize(size);
+                settle();
+                QTest::qWait(60);
+                settle();
+                QVERIFY(m_app->grab().save(QStringLiteral("%1/level-%2-%3-%4x%5.png")
+                                           .arg(dir, QString::fromLatin1(l.name), QString(ctx).remove(QLatin1Char(' ')).toLower())
+                                           .arg(size.width()).arg(size.height())));
+            }
+        }
+        m_app->showContext(QStringLiteral("Show Tree"));
         // The menus as each level has them.
         for (QMenu *menu : topMenus(m_app))
         {
