@@ -1568,7 +1568,8 @@ void VCCueList_Test::songSectionShots()
     QDir().mkpath(dir);
     const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
 
-    const quint32 list = threeSongs(m_doc, 9);
+    const quint32 list = threeSongs(m_doc, 20);
+    m_doc->setMode(Doc::Operate);     // as the operator sees it
     QVERIFY(list != ShowTree::invalidId());
     ShowTreeController *st = m_doc->showTree();
     QVERIFY(st->setSectionName(list, st->sections(list).at(1), "Everybody Scream"));
@@ -1583,16 +1584,17 @@ void VCCueList_Test::songSectionShots()
         cl.setChaser(st->cueList(list)->chaser);
         host.show();
         QVERIFY(QTest::qWaitForWindowExposed(&host));
-        // The current cue far down the second song: its header scrolled off.
-        cl.m_tree->setCurrentItem(cl.stepItem(14));
+        // The cue picked far down the second song: its header scrolled off,
+        // its song still named over the list.
+        cl.m_tree->setCurrentItem(cl.stepItem(35));
         for (const QSize &z : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
         {
             host.resize(z);
             cl.setGeometry(QRect(QPoint(0, 0), z));
             for (int i = 0; i < 5; ++i)
                 QApplication::processEvents();
-            cl.m_tree->scrollToItem(cl.stepItem(14), QAbstractItemView::PositionAtBottom);
-            QTest::qWait(30);
+            cl.m_tree->scrollToItem(cl.stepItem(33), QAbstractItemView::PositionAtTop);
+            QTest::qWait(300);
             const QString file = QStringLiteral("%1-vccuelist-sections-%2-%3x%4.png")
                                      .arg(prefix, theme == 0 ? "light" : "dark")
                                      .arg(z.width()).arg(z.height());
