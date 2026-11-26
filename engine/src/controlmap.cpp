@@ -36,6 +36,7 @@
 #include "controlmap.h"
 #include "deskrecord.h"
 #include "encoderbank.h"
+#include "surfacepages.h"
 #include "inputpatch.h"
 #include "universe.h"
 #include "qlcioplugin.h"
@@ -88,6 +89,10 @@ ControlMap::ControlMap(Doc *doc)
                 [this](quint32 universe) { m_backAt.remove(universe); });     // gone: no dump to wait for yet
     }
     m_encoderBank->setParent(this);
+    m_surfacePages = new SurfacePages(doc);
+    m_surfacePages->setParent(this);
+    // The show's encoder bank on a board rests that board's pages.
+    connect(m_encoderBank, &EncoderBank::deviceChanged, m_surfacePages, &SurfacePages::rescan);
     // A function deleted takes its binding with it.
     connect(m_doc, &Doc::functionRemoved, this, &ControlMap::slotFunctionRemoved);
     // Where a key may fire follows the mode and the show's cue lists.
@@ -273,6 +278,7 @@ void ControlMap::removeAll()
 void ControlMap::reset()
 {
     m_encoderBank->reset();
+    m_surfacePages->reset();
     m_blinking.clear();
     m_blinkLeft = 0;
     m_blinkRunning = false;
@@ -873,6 +879,12 @@ void ControlMap::handleInput(quint32 universe, quint32 channel, uchar value)
                              .arg(controlName(universe, channel), DeskRecord::roleName(role)));
         return;
     }
+    /* A surface page has it in Design (SurfacePages, Q332 a): the show's
+       trigger on it waits for Operate. A Learn still hears it, so a key can
+       be given its Operate job from Design. */
+    if (!m_listening && universe != KeyboardUniverse && m_doc->inputOutputMap() != nullptr
+        && m_doc->inputOutputMap()->isPageControl(universe, channel) && !(value == 0 && m_down.contains(k)))
+        return;
     // Learning: what the control sends says whether it is a fader or a latch.
     if (m_listening && universe != KeyboardUniverse)
         observeLearn(k, value);
@@ -2559,6 +2571,10 @@ void ControlMap::sendLamp(const Binding &b, bool force)
 
 void ControlMap::sendControlLamp(quint32 universe, quint32 channel, bool force)
 {
+    // A surface page's key in Design is the page's light (SurfacePages::sendLamps()).
+    if (universe != KeyboardUniverse && m_doc->inputOutputMap() != nullptr
+        && m_doc->inputOutputMap()->isPageControl(universe, channel))
+        return;
     Binding at;
     at.universe = universe;
     at.channel = channel;
@@ -2849,7 +2865,7 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
     if (doc == nullptr)
         return false;
     if (m_bindings.isEmpty() && m_encoderBank->device().encoders < 0 && m_runTabList == 0xFFFFFFFF
-        && m_dimWhenReady)
+        && m_dimWhenReady && !m_surfacePages->hasShowSets())
         return true;    // a show with none saves as before
     doc->writeStartElement(KXMLQLCControlMap);
     // The list the Run tab (and so the pad) plays, when it is not the main one.
@@ -2893,6 +2909,7 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
         doc->writeEndElement();
     }
     m_encoderBank->saveXML(doc);
+    m_surfacePages->saveXML(doc);
     doc->writeEndElement();
     return true;
 }
@@ -2922,6 +2939,7 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_widened.clear();
     m_placeHomes.clear();
     m_encoderBank->reset();
+    m_surfacePages->reset();
     // The light a ready control shows; a file that says nothing: dim.
     m_dimWhenReady = root.attributes().value(KXMLLights).toString() != QStringLiteral("onoff");
     bool okList = false;
@@ -2933,6 +2951,11 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
         if (root.name() == KXMLQLCEncoderBank)
         {
             m_encoderBank->loadXML(root);
+            continue;
+        }
+        if (root.name() == KXMLQLCSurfacePageSet)
+        {
+            m_surfacePages->loadXML(root);
             continue;
         }
         if (root.name() != KXMLTrigger)

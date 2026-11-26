@@ -1,0 +1,131 @@
+{
+  "format": 1,
+  "name": "Build",
+  "description": "Colour on the faders, hue and saturation on track knobs 1-2, moves or beam on the device knobs (Pan and Sends pick the page; Device ◀ ▶ step).",
+  "fits": {
+    "profile": "Akai APC40 mkII",
+    "layout": 1
+  },
+  "keys": {
+    "next": 187,
+    "previous": 186
+  },
+  "always": [
+    {
+      "ch": 7,
+      "param": "red"
+    },
+    {
+      "ch": 4103,
+      "param": "green"
+    },
+    {
+      "ch": 8199,
+      "param": "blue"
+    },
+    {
+      "ch": 12295,
+      "param": "white"
+    },
+    {
+      "ch": 16391,
+      "param": "amber"
+    },
+    {
+      "ch": 20487,
+      "param": "uv"
+    },
+    {
+      "ch": 28679,
+      "param": "intensity"
+    },
+    {
+      "ch": 48,
+      "param": "hue"
+    },
+    {
+      "ch": 49,
+      "param": "saturation"
+    }
+  ],
+  "pages": [
+    {
+      "name": "Move",
+      "key": 215,
+      "controls": [
+        {
+          "ch": 16,
+          "param": "pan"
+        },
+        {
+          "ch": 17,
+          "param": "pan",
+          "fine": true
+        },
+        {
+          "ch": 18,
+          "param": "focus"
+        },
+        {
+          "ch": 19,
+          "param": "zoom"
+        },
+        {
+          "ch": 20,
+          "param": "tilt"
+        },
+        {
+          "ch": 21,
+          "param": "tilt",
+          "fine": true
+        },
+        {
+          "ch": 22,
+          "param": "gobo"
+        },
+        {
+          "ch": 23,
+          "param": "gobo-rotation"
+        }
+      ]
+    },
+    {
+      "name": "Beam",
+      "key": 216,
+      "controls": [
+        {
+          "ch": 16,
+          "param": "zoom"
+        },
+        {
+          "ch": 17,
+          "param": "focus"
+        },
+        {
+          "ch": 18,
+          "param": "iris"
+        },
+        {
+          "ch": 19,
+          "param": "frost"
+        },
+        {
+          "ch": 20,
+          "param": "strobe"
+        },
+        {
+          "ch": 21,
+          "param": "shutter"
+        },
+        {
+          "ch": 22,
+          "param": "prism"
+        },
+        {
+          "ch": 23,
+          "param": "prism-rotation"
+        }
+      ]
+    }
+  ]
+}

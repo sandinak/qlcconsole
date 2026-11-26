@@ -31,6 +31,7 @@
 #include <QTimer>
 #include <QLabel>
 #include <climits>
+#include <cmath>
 
 #include "workbench.h"
 #include "workbenchstack.h"
@@ -38,6 +39,8 @@
 #include "fixtureconsole.h"
 #include "programmingoutline.h"
 #include "encoderbank.h"
+#include "surfacepages.h"
+#include "pageset.h"
 #include "controlmap.h"
 #include "showtreecontroller.h"
 #include "paletteops.h"
@@ -107,6 +110,22 @@ void Workbench::connectEncoders()
     connect(enc, &EncoderBank::ringsWanted, this, &Workbench::scheduleEncoderRings);
     connect(enc, &EncoderBank::deviceChanged, this, &Workbench::scheduleEncoderRings);
 
+    /* A surface page's knobs and faders (docs/design/SURFACE_PAGES.md): the
+       same edit as an encoder's, on the same target, one undo step per
+       move. A page switch or a new selection forgets where the faders were:
+       each picks its value up again. */
+    SurfacePages *pages = map->surfacePages();
+    connect(pages, &SurfacePages::adjusted, this, &Workbench::encoderAdjusted);
+    connect(pages, &SurfacePages::levelSet, this, &Workbench::pageLevel);
+    connect(pages, &SurfacePages::pageChanged, this, [this]() {
+        m_pagePickups.clear();
+        m_encoderMessage.clear();
+        scheduleEncoderRings();
+    });
+    connect(pages, &SurfacePages::setsChanged, this, &Workbench::scheduleEncoderRings);
+    connect(this, &Workbench::fixturesSelected, this, [this]() { m_pagePickups.clear(); });
+    connect(this, &Workbench::currentPaletteIdChanged, this, [this]() { m_pagePickups.clear(); });
+
     // Another selection, another page, or the values moved (an undo).
     connect(this, &Workbench::fixturesSelected, this, [this]() { scheduleEncoderRings(); });
     connect(this, &Workbench::currentPaletteIdChanged, this, [this]() { scheduleEncoderRings(); });
@@ -138,15 +157,38 @@ void Workbench::refreshEncoderRings()
     EncoderBank *enc = m_doc->controlMap() != nullptr ? m_doc->controlMap()->encoderBank() : nullptr;
     if (enc == nullptr)
         return;
-    const bool on = enc->isEnabled();
-    m_encoderLine->setVisible(on);
-    if (!on)
+    const bool bankOn = enc->isEnabled();
+    const QString boards = pageBoards();
+    m_encoderLine->setVisible(bankOn || !boards.isEmpty());
+    if (!bankOn && boards.isEmpty())
     {
         m_encoderLine->clear();
         return;
     }
+    if (!bankOn)
+    {
+        // Surface pages only: the page on now, the target, the last move.
+        QString line = tr("Pages — %1").arg(boards);
+        const EncoderTarget t = encoderTarget();
+        if (m_encoderMessage.isEmpty())
+        {
+            if (!t.isValid())
+                line += t.why.isEmpty() ? tr(" · select a fixture, a group or a look")
+                                        : QStringLiteral(" · ") + t.why;
+            else if (t.look != nullptr)
+                line += tr(" · the open look");
+            else
+                line += tr(" · %n selected fixture(s)", "", int(t.fixtures.size()));
+        }
+        else
+            line += QStringLiteral(" · ") + m_encoderMessage;
+        m_encoderLine->setText(line);
+        return;
+    }
     const int bank = enc->bank();
     QString line = tr("Encoders — %1").arg(EncoderBank::bankName(bank));
+    if (!boards.isEmpty())
+        line += QStringLiteral(" · ") + boards;
 
     const EncoderTarget t = encoderTarget();
     if (!t.isValid())
@@ -306,5 +348,76 @@ void Workbench::encoderHomed(int bank, int slot)
         afterEncoderEdit(t, what, before, bank, slot, true);
     }
     m_encoderMessage = tr("%1 home").arg(what);
+    refreshEncoderRings();
+}
+
+QString Workbench::pageBoards() const
+{
+    ControlMap *map = m_doc->controlMap();
+    SurfacePages *pages = map != nullptr ? map->surfacePages() : nullptr;
+    if (pages == nullptr)
+        return QString();
+    QStringList out;
+    for (quint32 u : pages->universes())
+        if (pages->isActive(u))
+            out << pages->chipText(u);
+    return out.join(QStringLiteral(", "));
+}
+
+void Workbench::pageLevel(quint32 universe, quint32 channel, int bank, int slot, uchar value)
+{
+    if (!isVisible())
+        return;
+    const EncoderTarget t = encoderTarget();
+    if (!t.isValid())
+    {
+        encoderMessage(t.why.isEmpty() ? tr("nothing selected to set") : t.why);
+        return;
+    }
+    const QString what = encoderSlotLabel(t, bank, slot);
+    float norm = 0.0f;
+    const bool has = t.look != nullptr ? t.look->encoderValue(bank, slot, &norm)
+                                       : EncoderAttributes::read(m_doc, t.scene, t.fixtures, bank, slot, &norm);
+    if (!has)
+    {
+        encoderMessage(t.look != nullptr ? tr("this look has no %1").arg(what.toLower())
+                                         : tr("the selection has no %1").arg(what.toLower()));
+        return;
+    }
+    // Pick-up (Q299): the fader waits until it meets the value, then follows.
+    const quint64 key = (quint64(universe) << 32) | channel;
+    FaderPickup &pick = m_pagePickups[key];
+    pick.setSource(universe, channel);
+    const int current = qBound(0, int(norm * 255.0f + 0.5f), 255);
+    if (!pick.accept(value, current))
+    {
+        encoderMessage(FaderPickup::hintText(what, int(norm * 100.0f + 0.5f)));
+        return;
+    }
+    const float to = float(value) / 255.0f;
+    if (t.look != nullptr)
+    {
+        // The Look Editor edits its look by turns: as many as the move is.
+        const int detents = int(std::lround((to - norm) / EncoderAttributes::step(bank, slot, false)));
+        if (detents != 0 && !t.look->encoderAdjust(bank, slot, detents, false))
+        {
+            const QString hint = t.look->encoderHint();
+            encoderMessage(hint.isEmpty() ? tr("this look has no %1").arg(what.toLower()) : hint);
+            return;
+        }
+    }
+    else
+    {
+        PaletteOps *ops = m_doc->paletteOps();
+        const QSharedPointer<Scene> before = ops != nullptr ? ops->sceneSnapshot(t.scene->id())
+                                                            : QSharedPointer<Scene>();
+        if (!EncoderAttributes::set(m_doc, t.scene, t.fixtures, bank, slot, to))
+        {
+            encoderMessage(tr("a look drives the %1 — edit the look").arg(what.toLower()));
+            return;
+        }
+        afterEncoderEdit(t, what, before, bank, slot);
+    }
+    m_encoderMessage = tr("%1 %2%").arg(what).arg(int(to * 100.0f + 0.5f));
     refreshEncoderRings();
 }

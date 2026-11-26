@@ -119,6 +119,10 @@ has its own switch, and its own PIN.
   Lamps**, with a backup and **Undo Align**). Do it before the show, not in
   Operate. A desk that never shows up at all is usually power or the cable:
   **Rescan** says so.
+- **Pages.** A page is a labelled layer of the desk: colour on the faders,
+  moves on the knobs. The board's page keys switch it, and its map names
+  every control's job. Pages edit in Design only; in Operate the controls
+  are the show's again.
 
 ## Exit ticket
 

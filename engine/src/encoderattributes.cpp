@@ -522,4 +522,76 @@ bool home(Doc *doc, Scene *scene, const QList<quint32> &fixtures, int bank, int 
     return wrote;
 }
 
+
+bool set(Doc *doc, Scene *scene, const QList<quint32> &fixtures, int bank, int slot, float norm)
+{
+    if (scene == nullptr || slot < 0 || slot >= EncoderBank::slotCount(bank))
+        return false;
+    norm = qBound(0.0f, norm, 1.0f);
+    const QSet<quint64> driven = drivenSet(doc, scene);
+    bool wrote = false;
+    for (quint32 id : fixtures)
+    {
+        const Fixture *f = doc->fixture(id);
+        if (f == nullptr)
+            continue;
+        if (isHueSat(bank, slot))
+        {
+            for (const Trio &t : trios(f, id))
+            {
+                if (trioDriven(driven, t))
+                    continue;
+                float h, s, v;
+                colourOf(scene, t).getHsvF(&h, &s, &v);
+                if (v <= 0.0f)
+                    v = 1.0f;       // black shows nothing of a hue: bring it up
+                if (slot == 0)
+                {
+                    if (s <= 0.0f)
+                        s = 1.0f;
+                    h = qMin(norm, 0.9999f);
+                }
+                else
+                {
+                    h = h < 0.0f ? 0.0f : h;
+                    s = norm;
+                }
+                setColour(scene, t, QColor::fromHsvF(h, s, v));
+                wrote = true;
+            }
+            continue;
+        }
+        const QList<Axis> axes = axesOf(f, id, bank, slot);
+        for (const Axis &a : axes)
+        {
+            if (driven.contains(keyOf(a.fixture, a.msb)))
+                continue;
+            set16(scene, a, int(std::lround(norm * a.range())));
+            wrote = true;
+        }
+        if (axes.isEmpty() && bank == EncoderBank::IntensityBank)
+        {
+            // No dimmer: intensity is the strongest of the colour emitters.
+            for (const Trio &t : trios(f, id))
+            {
+                if (trioDriven(driven, t))
+                    continue;
+                const QColor c = colourOf(scene, t);
+                const int top = qMax(c.red(), qMax(c.green(), c.blue()));
+                const int to = int(std::lround(norm * 255.0f));
+                QColor n;
+                if (top == 0)
+                    n = QColor(to, to, to);
+                else
+                    n = QColor(int(std::lround(float(c.red()) * to / top)),
+                               int(std::lround(float(c.green()) * to / top)),
+                               int(std::lround(float(c.blue()) * to / top)));
+                setColour(scene, t, n);
+                wrote = true;
+            }
+        }
+    }
+    return wrote;
+}
+
 }

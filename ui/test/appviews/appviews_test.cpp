@@ -3123,7 +3123,7 @@ void AppViews_Test::pmjGoLampLitWhenReady()
     m_app->clearDocument();
     IOPluginStub *stub = patchPmj(m_app);
     QVERIFY(stub != nullptr);
-    const quint32 go = 32896, back = 32907, effects = 32946, groups = 32947;
+    const quint32 go = 32896, back = 32907, looks = 32948, groups = 32947;
     auto lastSent = [stub](quint32 ch) -> int {
         for (int i = stub->m_feedback.size() - 1; i >= 0; --i)
             if (stub->m_feedback.at(i).first == ch)
@@ -3136,9 +3136,9 @@ void AppViews_Test::pmjGoLampLitWhenReady()
     m_app->m_controlSurfaceEngine->refreshDevice(PMJOverlay::deviceId);
     QCOMPARE(lastSent(go), 0);
     QCOMPARE(lastSent(back), 0);
-    // The page in use blinks (Effects until another is pressed); the
-    // others are lit, a page to switch to.
-    QCOMPARE(lastSent(effects), blink);
+    // The page in use blinks: Looks (the surface pages' first) until another
+    // is pressed. A page with jobs is lit, one to switch to.
+    QCOMPARE(lastSent(looks), blink);
     QCOMPARE(lastSent(groups), lit);
 
     // A list with a cue to GO: Go lit, Back dim (nothing to go back to).
@@ -3171,9 +3171,11 @@ void AppViews_Test::pmjGoLampLitWhenReady()
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId,
                                            ControlSurface::Role(ControlSurface::RoleType::Page, 1), 127);
     QCOMPARE(lastSent(groups), blink);
-    QCOMPARE(lastSent(effects), lit);
+    QCOMPARE(lastSent(looks), lit);
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId,
-                                           ControlSurface::Role(ControlSurface::RoleType::Page, 0), 127);
+                                           ControlSurface::Role(ControlSurface::RoleType::Page, 2), 127);
+    QCOMPARE(lastSent(looks), blink);
+    QCOMPARE(lastSent(groups), lit);
 }
 
 void AppViews_Test::aPmjFaderOrEncoderInOperateEditsNothing()
@@ -3201,6 +3203,8 @@ void AppViews_Test::aPmjFaderOrEncoderInOperateEditsNothing()
     // Design: fader 1 sets the selected fixture's intensity (the control case).
     doc->setMode(Doc::Design);
     m_app->statusBar()->clearMessage();
+    // A fader picks up first (Q299): from zero, where the fixture is, then up.
+    m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, level1, 0);
     m_app->m_pmjOverlay->slotRoleActivated(PMJOverlay::deviceId, level1, 100);
     QCOMPARE(value(), 100);
     QVERIFY(!m_app->statusBar()->currentMessage().contains("Operate"));

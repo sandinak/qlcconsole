@@ -331,6 +331,56 @@ Controller**. The map and its default roles come from the profile, never the
 port's name. Its **BO** key is printed Blackout; it has no job yet in
 qlcconsole (the map says *Blackout (coming)*).
 
+## Pages
+
+**A page is a labelled layer of the desk: colour on the faders, moves on
+the knobs.** Each drawn board comes with a page set: named pages, each
+giving its controls a job (an attribute of what you are editing: *Red*,
+*Pan*, *Pan fine*, *Zoom*). The map labels every control with its job on
+the page on now, the colour faders in their colours, and the footer chip
+names the page: **APC40 · Move**.
+
+- **Design only.** In Design a page edits what the encoders edit: the look
+  open in the Look Editor, else the selected fixtures or group of the
+  scene in Build. One move is one undo step. In **Operate** a page does
+  nothing and its controls are the show's again: a trigger or a Virtual
+  Console control you assigned to one works as you set it up, its light
+  too (in Design a page key's light is the page's). While a Learn
+  listens, the page rests. In Design
+  the page has them, and the map names the show's job as kept from it.
+- **A fader picks up first.** A page's fader does nothing until it meets
+  the value it edits, then follows; the Workbench line says where to move
+  it (*Red: move it to 50%*). After a page switch or a new selection every
+  fader picks up again, so a value never jumps.
+- **A knob turns.** It moves the value from where it is. A knob marked
+  *fine* turns the same attribute by the small step: on the APC40, knob 1
+  is pan, knob 2 pan fine.
+- **Never the desk's.** This computer's GO, Back, STOP and Grand Master
+  are on no page; a page set that puts a job there is refused.
+
+| Board | Pages | How you switch |
+|---|---|---|
+| **APC40 mk2** (*Build*) | **Move**: device knobs 1, 2 pan and pan fine; 3, 4 focus and zoom; 5, 6 tilt and tilt fine; 7, 8 gobo and gobo rotation. **Beam**: zoom, focus, iris, frost, strobe, shutter, prism, prism rotation. On every page: faders 1-6 red, green, blue, white, amber, UV, fader 8 intensity; track knobs 1, 2 hue and saturation. | **Pan** (Move) and **Sends** (Beam), lit when on; **Device ◀ ▶** step |
+| **APC64** (*Build*) | **Colour**: touch strips 1-7 red, green, blue, white, amber, UV, intensity. **Move**: pan, tilt, zoom, focus, iris, gobo, intensity. The pads stay free; strip 8 is the GM. | Turn the **encoder** |
+| **PMJ Black 1** (*Pages*) | **Looks** (on at start): the faders edit the open look (a colour look: 1-6 R G B W A UV; a dimmer look: 1), else the intensity of selected fixture N; encoders pan, tilt, hue, saturation. **Fix Cont**: faders 1-6 colour, 10 intensity, encoders pan, tilt, zoom, focus; press it again for gobo, gobo rotation, prism, iris. **Groups**: fader N is the level of the open scene's group N. **Effects** and **Macros**: nothing yet (their keys dim; the map and the Workbench say *Effects: coming*). Every fader picks up first; **1-Up…10-Up** zero the open look's channel on any page. | The mode keys, the lit one is the page |
+| **MaizeDMX** (*Colour*) | Faders 1-6 red, green, blue, white, amber, UV; 7, 8 hue and saturation; 10 intensity. | One page |
+
+**Which set, and sharing one.** The **Pages** row over each map picks the
+set this board uses **on this computer** (by the device, like this
+computer's desk), names the page on now and how to switch. **Export…**
+saves the set as a `.pageset.json` file; **Import…** adds one made for
+this board (it is checked first: a set for another board, or one with a
+job on the desk's controls, is refused with the reason). The built-in sets
+cannot be changed: export one, edit the file, import it under a new name.
+A set in your page sets folder that puts a job on the desk's GO, Back,
+STOP or GM (edited by hand) is not used, and the Pages row says why.
+A show saved with a set other than the board's own remembers it; opened on
+a computer that uses another, the row offers it (**Use It** or **Not
+Now**). Making pages in the app is the next step.
+
+A show's **encoder bank** on the same board wins: while it is on, that
+board's pages rest.
+
 ## The emergency stop
 
 A control surface can have **one emergency stop**: **Emergency Stop…**, the
@@ -675,10 +725,12 @@ the profile is patched on.
 
 - **Master** is the Grand Master. **O** is Blackout (a toggle, not a stop),
   **Set** is Blind.
-- **Ch 1-10** edit the open palette (Colour: R G B White Amber UV; Dimmer:
-  intensity) or, with fixtures selected, their intensity. **1-Up…10-Up**
-  zero that fader's target. **Enc 1 and 2** nudge pan and tilt. These are
-  **Design only**: in Operate they are refused with the sentence above.
+- **Ch 1-10** and **Enc 1-4** do the job of the page on now ([Pages](#pages)):
+  on **Looks** the faders edit the open palette (Colour: R G B White Amber
+  UV; Dimmer: intensity) or, with fixtures selected, their intensity, and
+  the encoders pan, tilt, hue and saturation. **1-Up…10-Up** zero that
+  fader's target on Looks. These are **Design only**: in Operate they are
+  refused with the sentence above.
 - **Select 1-10** and **Load 1-10** change the selection and work in either
   mode.
 - **Two boards.** Only the first universe patched with the PMJ Black 1
@@ -695,7 +747,7 @@ the profile is patched on.
   either in the Control Map and that trigger is its job instead.
 - **Left**, **Right**, **Pre Page** and **Next Page** do nothing yet. The
   mode buttons (**Effects**, **Groups**, **Looks**, **Macros**, **Fix Cont**)
-  choose the page; for now every page gives the strips the same job.
+  choose the page (see [Pages](#pages)).
 
 ### What the lamps mean
 
@@ -711,9 +763,9 @@ One rule for the whole board:
 |---|---|---|---|
 | **Go** | The Run tab's GO would play a cue now. | | Dim: there is a cue list, but nothing left to GO. Dark: no cue list. |
 | **Back** | The list is running, so Back has a cue to go back to. | | Dim: the list is stopped. |
-| **Mode buttons** (Effects, Groups, Looks, Macros, Fix Cont) | A page you can switch to. | The page in use: **Effects** until you press another. | |
+| **Mode buttons** (Effects, Groups, Looks, Macros, Fix Cont) | A page you can switch to. | The page in use: **Looks** until you press another (see [Pages](#pages)). | Dim: a page with no jobs yet (Effects, Macros). |
 | **1-10**, **1-Load…10-Load** | That strip has a fixture of the scene open in Build (strip 1 the first). | That fixture is selected. | Dark: no scene open, or the scene has no fixture for that strip. |
-| **1-Up…10-Up** | That fader edits the open palette now. | | Dark: it edits nothing now. |
+| **1-Up…10-Up** | That fader edits the open palette now (the Looks page). | | Dark: it edits nothing now. |
 | **O**, **Set** | Ready: a press turns Blackout or Blind on. | Blackout or Blind is on. | |
 | **A key you learned** | A press would fire it now. | What it fires (a hit, a scene) is running. | Dim otherwise ([What a control's light says](#what-a-controls-light-says)). |
 | **The emergency stop's key** | At every moment: it always works. | Lit and dim in turn: the show is stopped (ALL OFF) until the next GO. | |
@@ -872,7 +924,8 @@ after any build that changes a surface, and say which build.
 
 1. Patch the PMJ as an input on any MIDI channel with the feedback line and
    the profile PMJ Black 1 (no restart). *Expect:* **O** and **Set** glow
-   dim at once and **Effects** is lit (the page in use); **Go** is lit when
+   lit at once and **Looks** blinks (the page in use; Groups and Fix Cont
+   lit, Effects and Macros dim); **Go** is lit when
    the show has a cue list. The strip buttons light only with a scene open
    in Build.
 2. In Design, open a Colour look in Build and move the faders. *Expect:* the
@@ -910,8 +963,8 @@ after any build that changes a surface, and say which build.
 11. **The lights.** First with nothing learned on **Go**: *Expect:* with a
     cue list in the show, **Go** is **lit** and **Back** dim; after a GO,
     both lit; on the last cue Go goes dim; Stop the list and Back goes dim.
-    The lit mode button is **Effects**; press **Looks** and Looks is the
-    lit one. Then with **Go** learned on the main cue list (step 6) and the
+    The blinking mode button is **Looks**; press **Groups** and Groups
+    blinks, Looks lit again. Then with **Go** learned on the main cue list (step 6) and the
     stop learned (step 7): *Expect:* Go **lit** while a GO would play a
     cue; it **blinks twice** when you press Go twice inside a second, then
     lit again; the stop's button **lit** all along (it always works) and

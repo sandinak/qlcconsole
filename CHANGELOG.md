@@ -12,6 +12,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Surface pages**: each drawn board (APC40 mk2, APC64, PMJ Black 1,
+  MaizeDMX) comes with labelled pages of jobs for its controls, in Design
+  only: colour on the faders, moves and beam on the knobs (APC40 device
+  knobs 1-2 pan and pan fine, 3-4 focus and zoom, 5-6 tilt and tilt fine,
+  7-8 gobo and rotation), picked by the board's own keys (the APC40's Pan
+  and Sends, the PMJ's mode keys, the APC64's encoder). They edit the open
+  look or the selected fixtures, one undo step a move, faders picked up
+  first; the map labels every control by the page on now and the footer
+  chip names it; in Operate the controls are the show's again. Page sets
+  are .pageset.json files: Export… and Import… on the map, chosen per
+  computer by the device, and a show offers the set it was built with.
+
 ### Changed
 
 - **The double-GO guard follows the cue** (Q328): a second GO is held only

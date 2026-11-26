@@ -72,6 +72,10 @@ private slots:
      *  lamps build 4667 sent lit the wrong ones (Effects under 1-Load). */
     void anUnalignedBoardLightsNoButtonOfItsOwn();
 
+    /** Surface pages: the Groups page's fader picks the group up before it
+     *  moves it (Q299); a page with no jobs yet lights its key dim. */
+    void theGroupsFaderPicksUpAndAnEmptyPageIsDim();
+
 private:
     void makeShow();
 

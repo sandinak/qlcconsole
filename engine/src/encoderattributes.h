@@ -66,6 +66,14 @@ namespace EncoderAttributes
     QLC_ENGINE_EXPORT bool adjust(Doc *doc, Scene *scene, const QList<quint32> &fixtures,
                                   int bank, int slot, int detents, bool fine);
 
+    /** Set @a slot of @a bank to @a norm (0-1) on every fixture of
+     *  @a fixtures (a surface page's fader, after it picked up: the
+     *  absolute counterpart of adjust()). A hue is its place round the
+     *  wheel; intensity without a dimmer scales the colour. True: something
+     *  was written; false: no fixture has it, or a look drives it. */
+    QLC_ENGINE_EXPORT bool set(Doc *doc, Scene *scene, const QList<quint32> &fixtures,
+                               int bank, int slot, float norm);
+
     /** @a slot back to its default (a tap on the encoder). */
     QLC_ENGINE_EXPORT bool home(Doc *doc, Scene *scene, const QList<quint32> &fixtures,
                                 int bank, int slot);

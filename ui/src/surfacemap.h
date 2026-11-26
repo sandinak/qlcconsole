@@ -50,6 +50,9 @@ class Doc;
  *    master, the show's Grand Master or emergency stop); a trigger whose
  *    place is not live now (a hit armed only in another cue) dimmer, its
  *    place in the tooltip;
+ *  - Page: in Design, what the board's surface page on now gives it
+ *    (SurfacePages: "Pan fine", a colour fader in its colour, the page
+ *    keys); a show job on it is named as kept from it until Operate;
  *  - Free.
  * Live: a control pressed or moved on the board lights here, a fader or a
  * knob with its value; each lamp shows what the app last sent the board
@@ -60,7 +63,7 @@ class QLC_UI_EXPORT SurfaceMapView final : public QWidget
     Q_OBJECT
 
 public:
-    enum Group { Free, Desk, Board, Show };
+    enum Group { Free, Desk, Board, Show, Page };
     Q_ENUM(Group)
 
     SurfaceMapView(Doc *doc, quint32 universe, const SurfaceLayout &layout, QWidget *parent = nullptr);
@@ -88,6 +91,9 @@ public:
     /** A label of the active surface page (the surface pages design), in
      *  place of a free control's own name; empty clears it. */
     void setPageLabels(const QHash<quint32, QString> &labels);
+    /** The colour a page control is drawn in (a colour fader's); invalid:
+     *  the page's own. For the tests. */
+    QColor pageColour(quint32 channel) const;
     /** Pixels per grid unit now. */
     double scale() const;
 
@@ -121,6 +127,7 @@ private:
         QString job;
         QString tip;
         bool dim = false;
+        QColor colour;      //!< a page's colour control: its colour
         int value = -1;
         int lamp = -1;
         qint64 movedAt = -1;
@@ -159,6 +166,16 @@ public:
     SurfaceMapView *view(quint32 universe) const { return m_views.value(universe); }
     /** "GO is PLAY · Back is RECORD · ..." for @p universe's board. */
     QString roleLine(quint32 universe) const;
+    /** "Pages: Build · on now: Move (Pan, Sends pick the page)" of
+     *  @p universe's board; empty when it has no page set. */
+    QString pageLine(quint32 universe) const;
+    /** The offer of the show's own page set; empty when none. */
+    QString offerLine(quint32 universe) const;
+    /** Export @p universe's page set to @p path / import one (the Export…
+     *  and Import… buttons, without their file dialogs: the tests). An
+     *  import that passes is chosen for the board. False: @p error says why. */
+    bool exportPageSet(quint32 universe, const QString &path, QString *error = nullptr) const;
+    bool importPageSet(quint32 universe, const QString &path, QString *error = nullptr);
     /** The lines of surfaces patched with no layout. */
     QStringList fallbackLines() const;
 
@@ -179,12 +196,18 @@ signals:
 
 private:
     QWidget *buildBlock(quint32 universe, const SurfaceLayout &layout);
+    void addPagesRow(QVBoxLayout *v, QWidget *block, quint32 universe);
+    /** The pages row's words and the offer, as they are now. */
+    void refreshPages();
 
 private:
     Doc *m_doc;
     QVBoxLayout *m_box;
     QMap<quint32, SurfaceMapView *> m_views;
     QMap<quint32, QLabel *> m_roleLines;
+    QMap<quint32, QLabel *> m_pageLines;
+    QMap<quint32, QWidget *> m_offers;
+    QMap<quint32, class QComboBox *> m_setBoxes;
     QMap<quint32, QWidget *> m_blocks;
     QList<QWidget *> m_parts;
     QStringList m_fallback;

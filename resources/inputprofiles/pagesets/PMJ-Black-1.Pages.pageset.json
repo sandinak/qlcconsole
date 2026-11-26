@@ -1,0 +1,266 @@
+{
+  "format": 1,
+  "name": "Pages",
+  "description": "The PMJ's mode keys: Looks (the open look's colour or level), Fix Cont (colour and moves), Groups (each group's level), Effects and Macros.",
+  "fits": {
+    "profile": "PMJ Black 1",
+    "layout": 1
+  },
+  "invertTurns": true,
+  "pages": [
+    {
+      "name": "Looks",
+      "key": 32948,
+      "controls": [
+        {
+          "ch": 32769,
+          "param": "look-level",
+          "index": 1
+        },
+        {
+          "ch": 32770,
+          "param": "look-level",
+          "index": 2
+        },
+        {
+          "ch": 32771,
+          "param": "look-level",
+          "index": 3
+        },
+        {
+          "ch": 32772,
+          "param": "look-level",
+          "index": 4
+        },
+        {
+          "ch": 32773,
+          "param": "look-level",
+          "index": 5
+        },
+        {
+          "ch": 32774,
+          "param": "look-level",
+          "index": 6
+        },
+        {
+          "ch": 32775,
+          "param": "look-level",
+          "index": 7
+        },
+        {
+          "ch": 32776,
+          "param": "look-level",
+          "index": 8
+        },
+        {
+          "ch": 32777,
+          "param": "look-level",
+          "index": 9
+        },
+        {
+          "ch": 32778,
+          "param": "look-level",
+          "index": 10
+        },
+        {
+          "ch": 32779,
+          "param": "pan"
+        },
+        {
+          "ch": 32780,
+          "param": "tilt"
+        },
+        {
+          "ch": 32781,
+          "param": "hue"
+        },
+        {
+          "ch": 32782,
+          "param": "saturation"
+        }
+      ]
+    },
+    {
+      "name": "Fix Cont",
+      "key": 32931,
+      "controls": [
+        {
+          "ch": 32769,
+          "param": "red"
+        },
+        {
+          "ch": 32770,
+          "param": "green"
+        },
+        {
+          "ch": 32771,
+          "param": "blue"
+        },
+        {
+          "ch": 32772,
+          "param": "white"
+        },
+        {
+          "ch": 32773,
+          "param": "amber"
+        },
+        {
+          "ch": 32774,
+          "param": "uv"
+        },
+        {
+          "ch": 32778,
+          "param": "intensity"
+        },
+        {
+          "ch": 32779,
+          "param": "pan"
+        },
+        {
+          "ch": 32780,
+          "param": "tilt"
+        },
+        {
+          "ch": 32781,
+          "param": "zoom"
+        },
+        {
+          "ch": 32782,
+          "param": "focus"
+        }
+      ]
+    },
+    {
+      "name": "Fix Cont 2",
+      "key": 32931,
+      "controls": [
+        {
+          "ch": 32769,
+          "param": "red"
+        },
+        {
+          "ch": 32770,
+          "param": "green"
+        },
+        {
+          "ch": 32771,
+          "param": "blue"
+        },
+        {
+          "ch": 32772,
+          "param": "white"
+        },
+        {
+          "ch": 32773,
+          "param": "amber"
+        },
+        {
+          "ch": 32774,
+          "param": "uv"
+        },
+        {
+          "ch": 32778,
+          "param": "intensity"
+        },
+        {
+          "ch": 32779,
+          "param": "gobo"
+        },
+        {
+          "ch": 32780,
+          "param": "gobo-rotation"
+        },
+        {
+          "ch": 32781,
+          "param": "prism"
+        },
+        {
+          "ch": 32782,
+          "param": "iris"
+        }
+      ]
+    },
+    {
+      "name": "Groups",
+      "key": 32947,
+      "controls": [
+        {
+          "ch": 32769,
+          "param": "group-intensity",
+          "index": 1
+        },
+        {
+          "ch": 32770,
+          "param": "group-intensity",
+          "index": 2
+        },
+        {
+          "ch": 32771,
+          "param": "group-intensity",
+          "index": 3
+        },
+        {
+          "ch": 32772,
+          "param": "group-intensity",
+          "index": 4
+        },
+        {
+          "ch": 32773,
+          "param": "group-intensity",
+          "index": 5
+        },
+        {
+          "ch": 32774,
+          "param": "group-intensity",
+          "index": 6
+        },
+        {
+          "ch": 32775,
+          "param": "group-intensity",
+          "index": 7
+        },
+        {
+          "ch": 32776,
+          "param": "group-intensity",
+          "index": 8
+        },
+        {
+          "ch": 32777,
+          "param": "group-intensity",
+          "index": 9
+        },
+        {
+          "ch": 32778,
+          "param": "group-intensity",
+          "index": 10
+        },
+        {
+          "ch": 32779,
+          "param": "pan"
+        },
+        {
+          "ch": 32780,
+          "param": "tilt"
+        },
+        {
+          "ch": 32781,
+          "param": "zoom"
+        },
+        {
+          "ch": 32782,
+          "param": "focus"
+        }
+      ]
+    },
+    {
+      "name": "Effects",
+      "key": 32946,
+      "controls": []
+    },
+    {
+      "name": "Macros",
+      "key": 32949,
+      "controls": []
+    }
+  ]
+}
