@@ -978,6 +978,12 @@ public:
      *  speed master or the encoder bank. */
     void setStaticControls(const QSet<quint64> &controls);
     QSet<quint64> staticControls() const { return m_staticControls; }
+    /** The controls a surface page has now (SurfacePages, in Design): no
+     *  show listener hears them either. Kept apart from the desk's: they
+     *  come and go with the page and the mode. */
+    void setPageControls(const QSet<quint64> &controls) { m_pageControls = controls; }
+    bool isPageControl(quint32 universe, quint32 channel) const
+    { return !m_pageControls.isEmpty() && m_pageControls.contains((quint64(universe) << 32) | channel); }
     bool isStaticControl(quint32 universe, quint32 channel) const
     { return !m_staticControls.isEmpty() && m_staticControls.contains((quint64(universe) << 32) | channel); }
     /** This computer's desk has a live Grand Master (board Q314): the
@@ -999,6 +1005,7 @@ private slots:
 
 private:
     QSet<quint64> m_staticControls;
+    QSet<quint64> m_pageControls;
     bool m_deskGrandMaster = false;
     bool m_deskLearning = false;
 

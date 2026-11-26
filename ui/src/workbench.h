@@ -21,11 +21,13 @@
 #define WORKBENCH_H
 
 #include <QSharedPointer>
+#include <QHash>
 #include <QPointer>
 #include <QWidget>
 #include <functional>
 
 #include "programmingoutline.h"
+#include "faderpickup.h"
 #include "showtreemodel.h"
 #include "function.h"
 #include "qlcui_export.h"
@@ -562,13 +564,20 @@ public:
     };
     EncoderTarget encoderTarget() const;
     /** The line under the title that says what the encoders turn / why not
-     *  (empty and hidden while the Encoder bank is off). */
+     *  (empty and hidden while the Encoder bank is off and no surface page
+     *  acts: SurfacePages). */
     QString encoderLine() const;
 
 private:
     void connectEncoders();
     void encoderAdjusted(int bank, int slot, int detents, bool fine);
     void encoderHomed(int bank, int slot);
+    /** A surface page's fader (SurfacePages::levelSet()): picked up first
+     *  (FaderPickup), then set (EncoderAttributes::set(), or the Look
+     *  Editor's own turn). */
+    void pageLevel(quint32 universe, quint32 channel, int bank, int slot, uchar value);
+    /** "APC40 · Move" of every board whose page acts now; empty: none. */
+    QString pageBoards() const;
     void encoderMessage(const QString &text);
     /** The rings and the line, as they are now (queued: one per event loop turn). */
     void scheduleEncoderRings();
@@ -583,6 +592,9 @@ private:
     QLabel *m_encoderLine = nullptr;
     QString m_encoderMessage;
     bool m_encoderRingsQueued = false;
+    /** A page fader's pick-up, by universe << 32 | channel: forgotten at a
+     *  page switch and a new selection (a value never jumps). */
+    QHash<quint64, FaderPickup> m_pagePickups;
     int m_stackLayer = -1;      //!< the layer showStackRow() last showed
 
     QToolButton *m_sendToTreeBtn = nullptr;

@@ -26,6 +26,8 @@
 #include "inputoutputmap.h"
 #include "surfacemap.h"
 #include "inputpatch.h"
+#include "surfacepages.h"
+#include "controlmap.h"
 #include "doc.h"
 
 SurfaceChips::SurfaceChips(Doc *doc, QWidget *parent)
@@ -48,6 +50,10 @@ SurfaceChips::SurfaceChips(Doc *doc, QWidget *parent)
     connect(iom, &InputOutputMap::universeAdded, this, queue);
     connect(iom, &InputOutputMap::universeRemoved, this, queue);
     connect(m_doc, &Doc::loaded, this, queue);
+    // "APC40 · Move": the page on now.
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    connect(pages, &SurfacePages::pageChanged, this, queue);
+    connect(pages, &SurfacePages::setsChanged, this, queue);
     rebuild();
 }
 
@@ -73,7 +79,10 @@ void SurfaceChips::rebuild()
         b->setToolButtonStyle(Qt::ToolButtonTextOnly);
         b->setCursor(Qt::PointingHandCursor);
         b->setProperty("helpTopic", QStringLiteral("control-surfaces.md#the-surface-map"));
-        b->setText(layout.shortName());
+        // In Operate the controls are the show's: the page is not said.
+        SurfacePages *pages = m_doc->controlMap()->surfacePages();
+        const QString withPage = pages->isActive(u) ? pages->chipText(u) : QString();
+        b->setText(withPage.isEmpty() ? layout.shortName() : withPage);
         b->setToolTip(tr("%1 on Universe %2: click for its map (what each control does now).")
                           .arg(layout.name()).arg(u + 1));
         b->setAccessibleName(tr("Map of the %1").arg(layout.name()));

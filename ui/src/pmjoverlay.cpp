@@ -11,6 +11,8 @@
 #include "pmjoverlay.h"
 #include "controlowners.h"
 #include "controlmap.h"
+#include "surfacepages.h"
+#include "pageset.h"
 #include "deskrecord.h"
 #include "doc.h"
 #include "inputoutputmap.h"
@@ -156,6 +158,7 @@ const int kSteadyLevels[] = { 0, 15, 31, 47, 63, 79, 95, 111, 127 };
 const int kProfileDim = 15;
 const int kProfileLit = 127;
 const quint32 kGoChannel = 32896;
+const quint32 kFirstStrip = 32769;  // Ch 1: the strips' faders run on from here
 const quint32 kBackChannel = 32907;
 
 int snapToSteadyLevel(int level)
@@ -216,6 +219,19 @@ PMJOverlay::PMJOverlay(Doc *doc, ControlSurfaceEngine *engine, App *app, QObject
     Q_ASSERT(m_app != nullptr);
 
     registerDevice();
+
+    /* Its pages are a page set (PMJ-Black-1.Pages.pageset.json): the mode
+       keys pick the page, SurfacePages has it; the overlay still hears its
+       faders and encoders (setOverlaid()) and does the page's two rules,
+       "look-level" and "group-intensity". An attribute on a page (Fix
+       Cont's colour, the encoders' pan) is the Workbench's, as an encoder's. */
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    pages->setOverlaid(deviceId);
+    connect(pages, &SurfacePages::pageChanged, this, [this](quint32 universe) {
+        if (int(universe) == m_universe)
+            m_engine->refreshDevice(deviceId);
+    });
+    connect(pages, &SurfacePages::setsChanged, this, [this]() { m_engine->refreshDevice(deviceId); });
 
     /* A show listener (Q309): never a control this computer's desk has,
        so a desk role on a PMJ control is not also the overlay's. */
@@ -371,8 +387,24 @@ QList<quint32> PMJOverlay::sceneTargetFixtures() const
     return fixtures;
 }
 
+const PageSet::Binding *PMJOverlay::pageBinding(quint32 channel) const
+{
+    if (m_universe < 0)
+        return nullptr;
+    return m_doc->controlMap()->surfacePages()->bindingFor(quint32(m_universe), channel);
+}
+
+bool PMJOverlay::pageRule(int index, const QString &rule) const
+{
+    const PageSet::Binding *b = pageBinding(kFirstStrip + quint32(index) - 1);
+    return b != nullptr && b->param == rule;
+}
+
 bool PMJOverlay::faderInUse(int index) const
 {
+    // The Looks page's rule (look-level) only: another page's faders are its own.
+    if (!pageRule(index, QStringLiteral("look-level")))
+        return false;
     ProgrammingManager *pm = programmingManager();
     quint32 pid = pm ? pm->currentPaletteId() : QLCPalette::invalidId();
     QLCPalette *pal = pid != QLCPalette::invalidId() ? m_doc->palette(pid) : nullptr;
@@ -557,6 +589,15 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         // A fader edits a palette or a fixture live: not in Operate (CS1, F5).
         if (refuseInOperate(false))
             break;
+        // The page's group rule: fader N is the focused scene's group N.
+        if (role.index >= 1 && role.index <= 10 && pageRule(role.index, QStringLiteral("group-intensity")))
+        {
+            writeGroupLevel(role.index, value);
+            break;
+        }
+        // Not the Looks page's rule: an attribute is the page's (SurfacePages), else nothing.
+        if (!pageRule(role.index, QStringLiteral("look-level")))
+            break;
         if (role.index >= 1 && role.index <= 10 && faderInUse(role.index) && m_doc->programmer())
         {
             ProgrammingManager *pm = programmingManager();
@@ -601,47 +642,15 @@ void PMJOverlay::slotRoleActivated(const QString &fromDeviceId, ControlSurface::
         break;
 
     case ControlSurface::RoleType::Page:
-        if (value > 0)
-        {
-            m_activePage = role.index;
-            m_engine->refreshDevice(deviceId);
-        }
+        // SurfacePages has the page (its keys); its pageChanged() relights.
         break;
 
     case ControlSurface::RoleType::Param:
-        // Enc 1 = pan, Enc 2 = tilt, direct and unconditional for now — real
-        // per-page parameter targeting (colour/beam/etc. on Enc 3/4) needs
-        // the same selection/paging model the rest of this slice is missing.
-        // The PMJ's encoders send raw twos-complement MIDI (1..63 = +N,
-        // 127..65 = -N — confirmed via qlc-midi monitor during the original
-        // encoder classification work), BUT by the time it reaches
-        // inputValueChanged() here, QLC+'s own MIDI plugin has already
-        // scaled it from 7-bit MIDI into its internal 0-255 (DMX-style)
-        // space (MIDI2DMX, ~x<<1 with 127->255 special-cased) — confirmed
-        // via live debug logging: a raw MIDI 1 arrived here as 2, a raw 127
-        // arrived as 255. So the decode threshold is 128/256, not 64/128.
-        if ((role.index == 1 || role.index == 2) && !refuseInOperate(true))
-        {
-            int delta = (value < 128) ? int(value) : int(value) - 256;
-            const float degreesPerClick = 5.0f;
-            // Both encoders' raw MIDI delta is physically inverted relative
-            // to their on-screen effect (confirmed live on the rig: enc 1
-            // moved the XY pad dot left on clockwise, not right) — negate
-            // both consistently so "clockwise increases" holds for pan and
-            // tilt alike.
-            float dPan  = (role.index == 1) ? -delta * degreesPerClick : 0.0f;
-            float dTilt = (role.index == 2) ? -delta * degreesPerClick : 0.0f;
-            // The palette actually on screen right now, not
-            // ProgrammerController's separate focused-scene/palette
-            // tracking — that only updates when a scene is freshly opened
-            // in the Programming tab and doesn't survive an app relaunch,
-            // confirmed via debug logging returning before ever reaching
-            // ProgrammerController's own log line.
-            ProgrammingManager *pm = programmingManager();
-            quint32 pid = pm ? pm->currentPaletteId() : QLCPalette::invalidId();
-            if (pm && m_doc->programmer())
-                m_doc->programmer()->nudgeDesignPanTilt(pid, dPan, dTilt);
-        }
+        /* The encoders are the page's (Looks: pan, tilt, hue, saturation;
+           Fix Cont: pan, tilt, zoom, focus): SurfacePages turns them on the
+           Workbench's target, EncoderBank's path. In Operate they edit
+           nothing, and say so. */
+        refuseInOperate(true);
         break;
 
     case ControlSurface::RoleType::Select:
@@ -779,7 +788,15 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
     // (Effects until another is pressed). The help and the Control
     // surfaces hub say so (control-surfaces.md, "What the lamps mean").
     case ControlSurface::RoleType::Page:
-        return role.index == m_activePage ? ControlSurface::State::Active : ControlSurface::State::Empty;
+    {
+        if (m_universe < 0)
+            return role.index == 0 ? ControlSurface::State::Active : ControlSurface::State::Empty;
+        SurfacePages *pages = m_doc->controlMap()->surfacePages();
+        const PageSet set = pages->pageSet(quint32(m_universe));
+        const int on = pages->page(quint32(m_universe));
+        const quint32 key = on >= 0 && on < set.pages().size() ? set.pages().at(on).key : 0xFFFFFFFF;
+        return key == pageKeyChannel(role.index) ? ControlSurface::State::Active : ControlSurface::State::Empty;
+    }
 
     // Go and Back: lit when the Run tab's GO / Back would do something
     // (the rule its buttons are enabled on), dim when there is a list but
@@ -796,7 +813,7 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
         return can ? ControlSurface::State::Active : ControlSurface::State::Valid;
     }
 
-    // Enc 3/4 have no job yet; Enc 1/2 have no LED.
+    // The encoders have no LED.
     case ControlSurface::RoleType::Param:
         return ControlSurface::State::Empty;
 
@@ -831,5 +848,36 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
 
     default:
         return ControlSurface::State::Empty;
+    }
+}
+
+quint32 PMJOverlay::pageKeyChannel(int index)
+{
+    for (const PmjControl &pc : kPmjControls)
+        if (pc.role.type == ControlSurface::RoleType::Page && pc.role.index == index)
+            return pc.channel;
+    return 0xFFFFFFFF;
+}
+
+void PMJOverlay::writeGroupLevel(int index, uchar value)
+{
+    // The Groups page (Q335 a): fader N is the intensity of the focused
+    // scene's group N, every member live as selection mode writes one.
+    ProgrammingManager *pm = programmingManager();
+    ProgrammerController *pc = m_doc->programmer();
+    const quint32 sceneId = pm != nullptr ? pm->currentSceneId() : Function::invalidId();
+    Scene *scene = sceneId != Function::invalidId() ? qobject_cast<Scene *>(m_doc->function(sceneId)) : nullptr;
+    if (scene == nullptr || pc == nullptr || index < 1 || index > scene->fixtureGroups().size())
+        return;
+    FixtureGroup *g = m_doc->fixtureGroup(scene->fixtureGroups().at(index - 1));
+    if (g == nullptr)
+        return;
+    for (quint32 fid : g->fixtureList())
+    {
+        Fixture *fxi = m_doc->fixture(fid);
+        const quint32 ch = fxi != nullptr ? fxi->channelNumber(QLCChannel::Intensity, QLCChannel::MSB)
+                                          : QLCChannel::invalid();
+        if (ch != QLCChannel::invalid())
+            pc->writeChannelLive(fid, ch, value);
     }
 }

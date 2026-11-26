@@ -1,0 +1,52 @@
+{
+  "format": 1,
+  "name": "Colour",
+  "description": "Faders 1-6 red, green, blue, white, amber, UV; 7 and 8 hue and saturation; 10 intensity.",
+  "fits": {
+    "profile": "MaizeDMX Playback Controller",
+    "layout": 1
+  },
+  "pages": [
+    {
+      "name": "Colour",
+      "controls": [
+        {
+          "ch": 0,
+          "param": "red"
+        },
+        {
+          "ch": 1,
+          "param": "green"
+        },
+        {
+          "ch": 2,
+          "param": "blue"
+        },
+        {
+          "ch": 3,
+          "param": "white"
+        },
+        {
+          "ch": 4,
+          "param": "amber"
+        },
+        {
+          "ch": 5,
+          "param": "uv"
+        },
+        {
+          "ch": 6,
+          "param": "hue"
+        },
+        {
+          "ch": 7,
+          "param": "saturation"
+        },
+        {
+          "ch": 9,
+          "param": "intensity"
+        }
+      ]
+    }
+  ]
+}

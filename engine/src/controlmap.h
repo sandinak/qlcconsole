@@ -34,6 +34,7 @@
 class QXmlStreamReader;
 class QXmlStreamWriter;
 class EncoderBank;
+class SurfacePages;
 class Chaser;
 class Doc;
 
@@ -267,6 +268,10 @@ public:
      *  driving the selection in Build (docs/features/encoder-banks.md).
      *  Saved with this map; off until a device is set up. */
     EncoderBank *encoderBank() const { return m_encoderBank; }
+    /** The patched boards' surface pages (docs/design/SURFACE_PAGES.md):
+     *  the page on now, its keys; the show names the sets it was built
+     *  with inside this map. */
+    SurfacePages *surfacePages() const { return m_surfacePages; }
 
     /*********************************************************************
      * Bindings
@@ -772,6 +777,7 @@ private:
 private:
     Doc *m_doc;
     EncoderBank *m_encoderBank = nullptr;
+    SurfacePages *m_surfacePages = nullptr;
     QList<Binding> m_bindings;
     /** control -> indexes in m_bindings (several: at different places, or
      *  stepping through at one) */

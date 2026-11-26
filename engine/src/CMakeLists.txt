@@ -33,6 +33,8 @@ add_library(${module_name} SHARED
     controlmap.cpp controlmap.h
     deskrecord.cpp deskrecord.h
     surfacelayout.cpp surfacelayout.h
+    pageset.cpp pageset.h
+    surfacepages.cpp surfacepages.h
     grandmasterpickup.h
     encoderbank.cpp encoderbank.h
     encoderattributes.cpp encoderattributes.h

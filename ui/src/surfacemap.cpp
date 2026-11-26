@@ -18,6 +18,9 @@
 */
 
 #include <QPainterPath>
+#include <QFileDialog>
+#include <QMessageBox>
+#include <QComboBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -37,6 +40,8 @@
 #include "showfeatures.h"
 #include "deskrecord.h"
 #include "controlmap.h"
+#include "surfacepages.h"
+#include "pageset.h"
 #include "inputpatch.h"
 #include "universe.h"
 #include "doc.h"
@@ -54,6 +59,7 @@ const QColor kFree(0x3a, 0x3d, 0x42);
 const QColor kFreeText(0x9a, 0x9f, 0xa6);
 const QColor kShow(0x1f, 0x7a, 0x8c);
 const QColor kBoardOwn(0x55, 0x5d, 0x6b);
+const QColor kPage(0x2e, 0x7d, 0x4f);       // a surface page's control (Design)
 const QColor kHighlight(0xff, 0xff, 0xff);
 
 QColor roleColour(const QString &role)
@@ -148,7 +154,22 @@ SurfaceMapView::SurfaceMapView(Doc *doc, quint32 universe, const SurfaceLayout &
             m_fade->stop();
         update();
     });
+    // The page on now labels the board: a page switch, another set, the mode.
+    if (SurfacePages *pages = m_doc->controlMap() != nullptr ? m_doc->controlMap()->surfacePages() : nullptr)
+    {
+        connect(pages, &SurfacePages::pageChanged, this, [this](quint32 u) {
+            if (u == m_universe)
+                refresh();
+        });
+        connect(pages, &SurfacePages::setsChanged, this, &SurfaceMapView::refresh);
+    }
     refresh();
+}
+
+QColor SurfaceMapView::pageColour(quint32 channel) const
+{
+    const int i = cellIndex(channel);
+    return i < 0 || m_cells.at(i).group != Page ? QColor() : m_cells.at(i).colour;
 }
 
 double SurfaceMapView::scale() const
@@ -225,6 +246,10 @@ void SurfaceMapView::refresh()
     ControlMap *cm = m_doc->controlMap();
     DeskRecord *desk = m_doc->deskRecord();
     InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfacePages *pages = cm != nullptr ? cm->surfacePages() : nullptr;
+    const QHash<quint32, QString> pageLabels = pages != nullptr ? pages->labels(m_universe)
+                                                                : QHash<quint32, QString>();
+    const QString pageName = pages != nullptr ? pages->pageName(m_universe) : QString();
 
     for (int i = 0; i < controls.size(); ++i)
     {
@@ -235,6 +260,7 @@ void SurfaceMapView::refresh()
         cell.job.clear();
         cell.tip.clear();
         cell.dim = false;
+        cell.colour = QColor();
 
         QList<ControlOwners::Owner> mine;
         QList<quint32> hears = QList<quint32>() << c.channel << c.also;
@@ -278,6 +304,25 @@ void SurfaceMapView::refresh()
             if (cell.role == QLatin1String("gm") && desk != nullptr && desk->grandMasterWaiting())
                 lines << desk->grandMasterHint().toHtmlEscaped();
         }
+        else if (pages != nullptr && pages->owns(m_universe, c.channel))
+        {
+            // Design: the page on now has it (Q332 a); a show job waits for Operate.
+            cell.group = Page;
+            cell.job = pageLabels.value(c.channel);
+            const PageSet::Binding *b = pages->bindingFor(m_universe, c.channel);
+            if (b != nullptr)
+                cell.colour = QColor(PageSet::paramColour(b->param));
+            lines << tr("Page %1: %2.").arg(pageName.toHtmlEscaped(), cell.job.toHtmlEscaped());
+            if (b == nullptr)
+                lines << tr("A page key: press it for its page.");
+            else if (c.isFader())
+                lines << tr("Sets it on the open look or the selected fixtures; a fader picks the value up "
+                            "first.");
+            else
+                lines << tr("Turns it on the open look or the selected fixtures.");
+            if (!show.isEmpty())
+                lines << tr("In Operate it is the show's again.");
+        }
         else if (boardOwner != nullptr || !builtIn.isEmpty() || !c.job.isEmpty())
         {
             cell.group = Board;
@@ -302,7 +347,9 @@ void SurfaceMapView::refresh()
         }
         else
         {
-            cell.job = m_pageLabels.value(c.channel);
+            cell.job = m_pageLabels.value(c.channel, pageLabels.value(c.channel));
+            if (!cell.job.isEmpty())
+                lines << tr("Page %1 in Design: %2.").arg(pageName.toHtmlEscaped(), cell.job.toHtmlEscaped());
             lines << tr("Free: assign it from the thing (right-click a scene, effect, cue or hit ▸ "
                         "Learn Trigger…).");
         }
@@ -465,6 +512,12 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
         case Board: fill = cell.role.isEmpty() ? kBoardOwn : roleColour(cell.role); break;
         case Show: fill = kShow; break;
         case Free: fill = kFree; text = kFreeText; break;
+        case Page:
+            fill = cell.colour.isValid() ? cell.colour : kPage;
+            // Words dark on a light colour (white, amber).
+            if (fill.lightness() > 150)
+                text = QColor(0x1a, 0x1a, 0x1a);
+            break;
     }
     if (!fill.isValid())
         fill = kBoardOwn;
@@ -648,6 +701,9 @@ SurfaceMaps::SurfaceMaps(Doc *doc, QWidget *parent)
     connect(m_doc->deskRecord(), &DeskRecord::grandMasterWaitingChanged, this, &SurfaceMaps::refresh);
     ControlMap *cm = m_doc->controlMap();
     connect(cm, &ControlMap::bindingsChanged, this, &SurfaceMaps::refresh);
+    // The pages row: the set, the page on now, the show's offer.
+    connect(cm->surfacePages(), &SurfacePages::pageChanged, this, &SurfaceMaps::refreshPages);
+    connect(cm->surfacePages(), &SurfacePages::setsChanged, this, &SurfaceMaps::refreshPages);
     // Who has a control follows the GO and the selection (Q296): while shown.
     connect(cm, &ControlMap::lampsChanged, this, [this]() {
         if (isVisible())
@@ -804,7 +860,10 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
         { kShow, tr("This show") },
         { kFree, tr("Free") },
     };
-    for (const Key &k : keys)
+    QList<Key> shown = keys;
+    if (m_doc->controlMap()->surfacePages()->pageSet(universe).isValid())
+        shown.insert(1, { kPage, tr("This page (Design)") });
+    for (const Key &k : std::as_const(shown))
     {
         QLabel *swatch = new QLabel(block);
         swatch->setFixedSize(14, 14);
@@ -824,6 +883,7 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
         screen->setWordWrap(true);
         v->addWidget(screen);
     }
+    addPagesRow(v, block, universe);
     QLabel *hint = new QLabel(tr("Press or move a control on the board: it lights here. Hover a control for "
                                  "what it does and where."), block);
     hint->setWordWrap(true);
@@ -844,6 +904,9 @@ void SurfaceMaps::rebuild()
     m_parts.clear();
     m_views.clear();
     m_roleLines.clear();
+    m_pageLines.clear();
+    m_offers.clear();
+    m_setBoxes.clear();
     m_blocks.clear();
     m_fallback.clear();
     while (QLayoutItem *it = m_box->takeAt(0))
@@ -878,6 +941,188 @@ void SurfaceMaps::rebuild()
         m_parts << l;
     }
     setVisible(!m_parts.isEmpty());
+    refreshPages();
+}
+
+void SurfaceMaps::addPagesRow(QVBoxLayout *v, QWidget *block, quint32 universe)
+{
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    const PageSet set = pages->pageSet(universe);
+    if (!set.isValid())
+        return;
+    QHBoxLayout *h = new QHBoxLayout();
+    QLabel *word = new QLabel(tr("Pages:"), block);
+    QComboBox *box = new QComboBox(block);
+    box->setObjectName(QStringLiteral("surfacePageSet%1").arg(universe));
+    box->setToolTip(tr("The page set this board uses on this computer: labelled pages of jobs for its "
+                       "controls, in Design."));
+    box->setAccessibleName(tr("Page set"));
+    m_setBoxes.insert(universe, box);
+    QPushButton *exp = new QPushButton(tr("Export…"), block);
+    exp->setObjectName(QStringLiteral("surfacePagesExport%1").arg(universe));
+    exp->setToolTip(tr("Save this page set as a .pageset.json file, to share or to edit."));
+    QPushButton *imp = new QPushButton(tr("Import…"), block);
+    imp->setObjectName(QStringLiteral("surfacePagesImport%1").arg(universe));
+    imp->setToolTip(tr("Add a .pageset.json file made for this board, and use it here."));
+    h->addWidget(word);
+    h->addWidget(box);
+    h->addWidget(exp);
+    h->addWidget(imp);
+    h->addStretch(1);
+    v->addLayout(h);
+
+    QLabel *line = new QLabel(block);
+    line->setObjectName(QStringLiteral("surfacePageLine%1").arg(universe));
+    line->setWordWrap(true);
+    v->addWidget(line);
+    m_pageLines.insert(universe, line);
+
+    // The show's own set, offered when this computer uses another (Q333 b).
+    QWidget *offer = new QWidget(block);
+    offer->setObjectName(QStringLiteral("surfacePageOffer%1").arg(universe));
+    QHBoxLayout *oh = new QHBoxLayout(offer);
+    oh->setContentsMargins(0, 0, 0, 0);
+    QLabel *otext = new QLabel(offer);
+    otext->setObjectName(QStringLiteral("surfacePageOfferText%1").arg(universe));
+    otext->setWordWrap(true);
+    QPushButton *use = new QPushButton(tr("Use It"), offer);
+    use->setObjectName(QStringLiteral("surfacePageOfferUse%1").arg(universe));
+    QPushButton *notNow = new QPushButton(tr("Not Now"), offer);
+    notNow->setObjectName(QStringLiteral("surfacePageOfferNo%1").arg(universe));
+    oh->addWidget(otext, 1);
+    oh->addWidget(use);
+    oh->addWidget(notNow);
+    v->addWidget(offer);
+    m_offers.insert(universe, offer);
+
+    connect(box, &QComboBox::activated, this, [this, universe, box](int i) {
+        m_doc->controlMap()->surfacePages()->chooseSet(universe, box->itemData(i).toString());
+    });
+    connect(use, &QPushButton::clicked, this,
+            [this, universe]() { m_doc->controlMap()->surfacePages()->useShowSet(universe); });
+    connect(notNow, &QPushButton::clicked, this,
+            [this, universe]() { m_doc->controlMap()->surfacePages()->declineShowSet(universe); });
+    connect(exp, &QPushButton::clicked, this, [this, universe, block]() {
+        const PageSet s = m_doc->controlMap()->surfacePages()->pageSet(universe);
+        const QString name = QStringLiteral("%1.%2.pageset.json")
+                                 .arg(QString(s.profileName()).replace(QLatin1Char(' '), QLatin1Char('-')), s.name());
+        const QString path = QFileDialog::getSaveFileName(block, tr("Export Page Set"),
+                                                          QDir::home().absoluteFilePath(name),
+                                                          tr("Page sets (*.pageset.json)"));
+        if (path.isEmpty())
+            return;
+        QString why;
+        if (!exportPageSet(universe, path, &why))
+            QMessageBox::warning(block, tr("Export Page Set"), why);
+    });
+    connect(imp, &QPushButton::clicked, this, [this, universe, block]() {
+        const QString path = QFileDialog::getOpenFileName(block, tr("Import Page Set"), QDir::homePath(),
+                                                          tr("Page sets (*.pageset.json)"));
+        if (path.isEmpty())
+            return;
+        QString why;
+        if (!importPageSet(universe, path, &why))
+            QMessageBox::warning(block, tr("Import Page Set"),
+                                 tr("This page set can't be used on this board:\n%1").arg(why));
+    });
+}
+
+QString SurfaceMaps::pageLine(quint32 universe) const
+{
+    const QLabel *l = m_pageLines.value(universe);
+    return l != nullptr ? l->text() : QString();
+}
+
+QString SurfaceMaps::offerLine(quint32 universe) const
+{
+    const QWidget *w = m_offers.value(universe);
+    if (w == nullptr || w->isHidden())
+        return QString();
+    const QLabel *l = w->findChild<QLabel *>(QStringLiteral("surfacePageOfferText%1").arg(universe));
+    return l != nullptr ? l->text() : QString();
+}
+
+bool SurfaceMaps::exportPageSet(quint32 universe, const QString &path, QString *error) const
+{
+    const PageSet s = m_doc->controlMap()->surfacePages()->pageSet(universe);
+    if (!s.isValid())
+    {
+        if (error != nullptr)
+            *error = tr("This board has no page set.");
+        return false;
+    }
+    return s.save(path, error);
+}
+
+bool SurfaceMaps::importPageSet(quint32 universe, const QString &path, QString *error)
+{
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    const PageSet here = pages->pageSet(universe);
+    const PageSet incoming = PageSet::fromFile(path, error);
+    if (!incoming.isValid())
+        return false;
+    if (here.isValid() && incoming.profileName() != here.profileName())
+    {
+        if (error != nullptr)
+            *error = tr("It is made for the %1, not this board.").arg(incoming.profileName());
+        return false;
+    }
+    PageSet added;
+    if (!PageSet::importFile(path, error, &added))
+        return false;
+    pages->chooseSet(universe, added.name());
+    return true;
+}
+
+void SurfaceMaps::refreshPages()
+{
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    for (auto it = m_pageLines.begin(); it != m_pageLines.end(); ++it)
+    {
+        const quint32 u = it.key();
+        const PageSet set = pages->pageSet(u);
+        if (QComboBox *box = m_setBoxes.value(u))
+        {
+            box->blockSignals(true);
+            box->clear();
+            for (const PageSet &s : PageSet::forProfile(set.profileName()))
+                box->addItem(s.isBuiltIn() ? tr("%1 (built in)").arg(s.name()) : s.name(), s.name());
+            box->setCurrentIndex(qMax(0, box->findData(set.name())));
+            box->blockSignals(false);
+        }
+        QStringList keys;
+        const SurfaceLayout layout = SurfaceLayout::forProfile(set.profileName());
+        auto face = [&layout](quint32 ch) {
+            const int i = layout.indexOf(ch);
+            return i < 0 ? QString() : layout.controls().at(i).face;
+        };
+        for (const PageSet::Page &p : set.pages())
+            if (p.key != 0xFFFFFFFF && !keys.contains(face(p.key)))
+                keys << face(p.key);
+        QString how;
+        if (!keys.isEmpty())
+            how = tr("%1 pick the page").arg(keys.join(QStringLiteral(", ")));
+        if (set.nextKey() != 0xFFFFFFFF)
+            how += (how.isEmpty() ? QString() : QStringLiteral("; ")) +
+                   tr("%1 and %2 step").arg(face(set.previousKey()), face(set.nextKey()));
+        if (set.stepper() != 0xFFFFFFFF)
+            how += (how.isEmpty() ? QString() : QStringLiteral("; ")) + tr("turn %1 to step").arg(face(set.stepper()));
+        QString text = tr("On now: <b>%1</b>").arg(pages->pageName(u).toHtmlEscaped());
+        if (!how.isEmpty())
+            text += QStringLiteral(" (%1)").arg(how.toHtmlEscaped());
+        text += m_doc->mode() == Doc::Design
+                    ? tr(". In Design a page edits the open look or the selected fixtures.")
+                    : tr(". In Operate the controls are the show's: pages wait for Design.");
+        it.value()->setTextFormat(Qt::RichText);
+        it.value()->setText(text);
+        if (QWidget *offer = m_offers.value(u))
+        {
+            const QString name = pages->offeredSet(u);
+            offer->setVisible(!name.isEmpty());
+            if (QLabel *l = offer->findChild<QLabel *>(QStringLiteral("surfacePageOfferText%1").arg(u)))
+                l->setText(tr("This show was built with the page set %1 on this board.").arg(name));
+        }
+    }
 }
 
 void SurfaceMaps::refresh()

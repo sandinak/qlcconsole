@@ -1,0 +1,80 @@
+{
+  "format": 1,
+  "name": "Build",
+  "description": "Colour and intensity on the touch strips; turn the encoder for the next page. The pads stay free.",
+  "fits": {
+    "profile": "Akai APC64",
+    "layout": 1
+  },
+  "keys": {
+    "stepper": 90
+  },
+  "pages": [
+    {
+      "name": "Colour",
+      "controls": [
+        {
+          "ch": 513,
+          "param": "red"
+        },
+        {
+          "ch": 4609,
+          "param": "green"
+        },
+        {
+          "ch": 8705,
+          "param": "blue"
+        },
+        {
+          "ch": 12801,
+          "param": "white"
+        },
+        {
+          "ch": 16897,
+          "param": "amber"
+        },
+        {
+          "ch": 20993,
+          "param": "uv"
+        },
+        {
+          "ch": 25089,
+          "param": "intensity"
+        }
+      ]
+    },
+    {
+      "name": "Move",
+      "controls": [
+        {
+          "ch": 513,
+          "param": "pan"
+        },
+        {
+          "ch": 4609,
+          "param": "tilt"
+        },
+        {
+          "ch": 8705,
+          "param": "zoom"
+        },
+        {
+          "ch": 12801,
+          "param": "focus"
+        },
+        {
+          "ch": 16897,
+          "param": "iris"
+        },
+        {
+          "ch": 20993,
+          "param": "gobo"
+        },
+        {
+          "ch": 25089,
+          "param": "intensity"
+        }
+      ]
+    }
+  ]
+}

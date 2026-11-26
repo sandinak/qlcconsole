@@ -37,7 +37,8 @@ class Doc;
  * The footer's chips for the patched surfaces (Q311): one per universe
  * whose input is a surface with a drawn map (SurfaceMaps::
  * surfaceUniverses()), named as its type is ("APC40", "PMJ"); a click
- * opens its map in Connections ▸ Control surfaces. A chip as the footer's
+ * opens its map in Connections ▸ Control surfaces. A board with surface
+ * pages says the page on now ("APC40 · Move"). A chip as the footer's
  * others are (DeskChip: a flat QToolButton, bold, 6 px padding). Hidden
  * while there is none.
  */

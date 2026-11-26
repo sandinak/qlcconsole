@@ -31,6 +31,7 @@
 
 #include "controlsurface.h"
 #include "controlsurfaceengine.h"
+#include "pageset.h"
 
 class Doc;
 class App;
@@ -124,6 +125,15 @@ private:
      *  their LED state in stateFor(), so all three always agree on which
      *  faders are "live" right now. */
     bool faderInUse(int index) const;
+    /** The job of PMJ control @p channel on the page on now (SurfacePages:
+     *  the PMJ's page set); null: none. */
+    const PageSet::Binding *pageBinding(quint32 channel) const;
+    /** Whether strip @p index's fader has rule @p rule on the page now. */
+    bool pageRule(int index, const QString &rule) const;
+    /** The channel of page key @p index (Role::Page) on the board. */
+    static quint32 pageKeyChannel(int index);
+    /** The Groups page: the focused scene's group @p index to @p value. */
+    void writeGroupLevel(int index, uchar value);
 
     /** P2 "selection mode": the fixtures Select(1-10)/Load(1-10) currently
      *  address — the scene shown in the Programming canvas
@@ -153,10 +163,6 @@ private:
      *  faders and encoder pushes have none). */
     QHash<int, quint32> m_ledChannel;
 
-    /** Which page button (Role::Page index) is the active page: Effects
-     *  (0) until another is pressed. Its lamp is lit (State::Active); real
-     *  per-page behaviour is the next slice. */
-    int m_activePage = 0;
     bool m_transportQueued = false;
     int m_transportLamps = -1;      ///< Go's and Back's states last painted
     /** Go and Back held down (ControlSurface::Go / Back): a press is the

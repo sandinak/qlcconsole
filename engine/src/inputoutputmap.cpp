@@ -3553,7 +3553,7 @@ void InputOutputMap::setStaticControls(const QSet<quint64> &controls)
 
 void InputOutputMap::slotDispatchInput(quint32 universe, quint32 channel, uchar value, const QString &key)
 {
-    if (isStaticControl(universe, channel))
+    if (isStaticControl(universe, channel) || isPageControl(universe, channel))
         return;
     if (m_deskLearning && value > 0)
         return;
