@@ -339,8 +339,10 @@ void PmjSim_Test::everyLampIsSentAndNoneStray()
             blinking << name;
         else if (!kSteady.contains(level))
             problems << name + QStringLiteral(": lamp %1 is not a steady level (it blinks)").arg(level);
-        // A mode button is a page to switch to (lit) or the page in use (blinking).
-        if (kPages.contains(name) && level != 127 && level != kBlink)
+        // A mode button is a page to switch to (lit), the page in use
+        // (blinking), or a page with no jobs yet (dim: Effects, Macros).
+        const bool noJobs = name == QLatin1String("Effects") || name == QLatin1String("Macros");
+        if (kPages.contains(name) && level != 127 && level != kBlink && !(noJobs && level == 15))
             problems << name + QStringLiteral(": a page lamp at %1, neither lit nor blinking").arg(level);
         // A key with no job in a show with none learned: dark, never a stray light.
         if (kFreeKeys.contains(name) && level != 0)
@@ -759,13 +761,14 @@ int main(int argc, char **argv)
     settle();
     QCOMPARE(level(), 100);
 
-    // Effects has no jobs yet: its key dim, not dark, not lit; Groups lit.
+    // Effects has no jobs yet: its key dim, not dark, not lit; Groups, the
+    // page in use, blinks (train 053m's lamp rule); Fix Cont has jobs: lit.
     QVERIFY(m_pmj->tap(QStringLiteral("Groups")));
     settle();
     const int effects = m_pmj->lamp(QStringLiteral("Effects"));
-    QVERIFY2(effects > 0 && effects < 127, qPrintable(QString::number(effects)));
-    QCOMPARE(m_pmj->lamp(QStringLiteral("Groups")), 127);
-    QCOMPARE(m_pmj->lamp(QStringLiteral("Fix Cont")), 0);
+    QVERIFY2(effects > 0 && effects < 119, qPrintable(QString::number(effects)));
+    QCOMPARE(m_pmj->lamp(QStringLiteral("Groups")), 119);
+    QCOMPARE(m_pmj->lamp(QStringLiteral("Fix Cont")), 127);
     QVERIFY(m_pmj->tap(QStringLiteral("Looks")));
     settle();
     pm->m_workbench->load(Function::invalidId());

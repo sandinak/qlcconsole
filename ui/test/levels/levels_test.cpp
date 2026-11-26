@@ -286,31 +286,31 @@ void Levels_Test::aLevelHiddenTabLeavesItsWindow()
 {
     QVERIFY(m_app->requestLevel(ShowLevel::Standard));
     settle();
-    const int idx = barTabs(m_app).indexOf(QStringLiteral("Build"));
+    const int idx = barTabs(m_app).indexOf(QStringLiteral("Shows"));
     QVERIFY2(idx >= 0, qPrintable(barTabs(m_app).join(", ")));
-    QWidget *build = m_app->m_tab->widget(idx);
+    QWidget *shows = m_app->m_tab->widget(idx);
     m_app->slotDetachContext(idx);
     settle();
-    auto buildWindow = [this, build]() -> QWidget * {
+    auto showsWindow = [this, shows]() -> QWidget * {
         for (DetachedContext *dw : m_app->findChildren<DetachedContext *>())
-            if (dw->centralWidget() == build && dw->isVisible())
+            if (dw->centralWidget() == shows && dw->isVisible())
                 return dw;
         return nullptr;
     };
-    QVERIFY(buildWindow() != nullptr);
-    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Build")));
+    QVERIFY(showsWindow() != nullptr);
+    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Shows")));
 
     QVERIFY(m_app->requestLevel(ShowLevel::Student));
     settle();
-    QVERIFY2(buildWindow() == nullptr, "Build still open in its own window at Student");
-    QVERIFY(!build->isVisible());
-    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Build")));
+    QVERIFY2(showsWindow() == nullptr, "Shows (the Timeline) still open in its own window at Student");
+    QVERIFY(!shows->isVisible());
+    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Shows")));
 
     // Back at Standard it is a tab on the bar again.
     QVERIFY(m_app->requestLevel(ShowLevel::Standard));
     settle();
-    QVERIFY(buildWindow() == nullptr);
-    QVERIFY(barTabs(m_app).contains(QStringLiteral("Build")));
+    QVERIFY(showsWindow() == nullptr);
+    QVERIFY(barTabs(m_app).contains(QStringLiteral("Shows")));
     m_app->doc()->resetModified();
 }
 
