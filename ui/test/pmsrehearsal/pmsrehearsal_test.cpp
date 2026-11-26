@@ -466,6 +466,7 @@ void PmsRehearsal_Test::rehearseTheVisit()
         t->setName(QStringLiteral("CenterStage"));
         t->setPosition(QVector3D(7.62f, 5.486f, 1.4f));
         QVERIFY(saveShow(doc, showPath));
+        held.reset();       // one Doc at a time, as in the app
         held.reset(openShow(nullptr, showPath, &why));
         doc = held.data();
         QVERIFY2(why.isEmpty(), qPrintable(why));
@@ -818,6 +819,7 @@ void PmsRehearsal_Test::rehearseTheVisit()
     for (const VenueRig::HouseFixture &hf : src.fixtures)
         QVERIFY2(!savedShow.contains(QStringLiteral("<Name>%1</Name>").arg(hf.name).toUtf8()),
                  qPrintable(QStringLiteral("%1 went into the show file").arg(hf.name)));
+    held.reset();       // one Doc at a time, as in the app
     held.reset(openShow(nullptr, showPath, &why));
     doc = held.data();
     QVERIFY2(why.isEmpty(), qPrintable(why));
