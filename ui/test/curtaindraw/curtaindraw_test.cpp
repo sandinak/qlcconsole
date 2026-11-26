@@ -78,6 +78,8 @@ void CurtainDraw_Test::initTestCase()
     m_app->resize(1280, 800);
     QVERIFY(m_app->doc()->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures")));
     QVERIFY(m_app->doc()->fixtureDefCache()->fixtureDef("Generic", "Stage Curtain") != nullptr);
+    connect(m_app->doc()->inputOutputMap(), &InputOutputMap::universeWritten, this,
+            [this](quint32 universe, const QByteArray &frame) { m_frames[universe] = frame; });
 }
 
 void CurtainDraw_Test::cleanupTestCase()
@@ -95,18 +97,7 @@ double CurtainDraw_Test::drawnOpen(quint32 sceneryId, quint32 fixtureId, const c
     SceneryItem *item = gv != nullptr ? gv->m_sceneryItems.value(sceneryId, nullptr) : nullptr;
     Doc *doc = m_app->doc();
     Fixture *fx = doc->fixture(fixtureId);
-    int out = -1;
-    if (fx != nullptr)
-    {
-        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
-        if (int(fx->universe()) < ua.size())
-        {
-            const QByteArray *v = ua.at(int(fx->universe()))->postGMValues();
-            if (v != nullptr && int(fx->address()) < v->size())
-                out = uchar(v->at(int(fx->address())));
-        }
-        doc->inputOutputMap()->releaseUniverses(false);
-    }
+    const int out = onWire(fixtureId, 0);
     const double drawn = (item != nullptr && item->hasPose()) ? item->pose().open : -1.0;
     qInfo().noquote() << what << "on the wire" << out
                       << "fixture" << (fx != nullptr ? fx->channelValues().toHex() : QByteArray())
@@ -152,20 +143,16 @@ void CurtainDraw_Test::stopAll()
 /* What the wire has for fixture @p fx's channel @p ch now (-1: none). */
 int CurtainDraw_Test::onWire(quint32 fixtureId, quint32 ch)
 {
-    Doc *doc = m_app->doc();
-    Fixture *fx = doc->fixture(fixtureId);
-    int out = -1;
+    /* Whole frames, as each universe hands them on (universeWritten: what
+       goes out, and what the rig views get) -- never a read of the live
+       array mid-frame, which can catch a lower fader's value before the
+       layer over it has written. */
+    Fixture *fx = m_app->doc()->fixture(fixtureId);
     if (fx == nullptr)
-        return out;
-    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
-    if (int(fx->universe()) < ua.size())
-    {
-        const QByteArray *v = ua.at(int(fx->universe()))->postGMValues();
-        if (v != nullptr && int(fx->address() + ch) < v->size())
-            out = uchar(v->at(int(fx->address() + ch)));
-    }
-    doc->inputOutputMap()->releaseUniverses(false);
-    return out;
+        return -1;
+    const QByteArray frame = m_frames.value(fx->universe());
+    const int at = int(fx->address() + ch);
+    return at < frame.size() ? int(uchar(frame.at(at))) : 0;
 }
 
 bool CurtainDraw_Test::markShown(quint32 sceneryId)

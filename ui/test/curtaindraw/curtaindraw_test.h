@@ -22,6 +22,8 @@
 
 #include <QObject>
 #include <QString>
+#include <QHash>
+#include <QByteArray>
 
 class App;
 class Chaser;
@@ -51,6 +53,8 @@ private:
     QString travels(quint32 fixtureId, quint32 ch, int to, int notBefore, int within);
 
     App *m_app = nullptr;
+    /** Each universe's last frame (InputOutputMap::universeWritten) */
+    QHash<quint32, QByteArray> m_frames;
 };
 
 #endif
