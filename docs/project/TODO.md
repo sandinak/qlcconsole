@@ -2008,7 +2008,7 @@ the plan, a plain stretch snapping to an end on its line, keyboard nudge.
   - Look Editor *value* edits (a colour, a level) are not on the history
     yet — only scene and collection edits are. Deleting a function is still
     not undoable.
-  - Several look rows of one type selected don't edit together yet.
+  - Several look rows of one type edit together (done 0.4.7); rows of another kind say so on screen.
   - The Workbench's expansion is remembered per show folder and loaded
     function id.
 - **W3 Show Tree ↔ Workbench — leftovers.** `TreeCueStack` (the engine's

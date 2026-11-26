@@ -1608,9 +1608,45 @@ void Workbench_Test::severalLookRowsOfOneTypeEditTogether()
     QVERIFY(ed->alsoEditing().isEmpty());
     QVERIFY2(ed->alsoNote().contains("this Dimmer look only"), qPrintable(ed->alsoNote()));
 
+    // A layer row selected with a look row: the Workbench says, on screen,
+    // that only the current one is edited (the look rows are not silently dropped).
+    QCoreApplication::processEvents();
+    QVERIFY(wb.selectionNote().isEmpty());
+    selectItem(rows, lookItem(rows, layers[1]->id(), colours[1]));
+    rows->layerItem(0)->setSelected(true);
+    QVERIFY2(wb.selectionNote().contains("1 other row") && wb.selectionNote().contains("this look"),
+             qPrintable(wb.selectionNote()));
+    QVERIFY(wb.m_selNote->isVisibleTo(&wb));
+    lookRowShots(&wb, shots, "wbundo-look-with-layer-row");
+    // Rows of one kind: no line.
+    selectItem(rows, lookItem(rows, layers[1]->id(), colours[1]));
+    lookItem(rows, layers[2]->id(), colours[2])->setSelected(true);
+    QVERIFY(wb.selectionNote().isEmpty());
+
     // One row again: no line.
     QCoreApplication::processEvents();
     selectItem(rows, lookItem(rows, layers[1]->id(), colours[1]));
     QVERIFY(ed->alsoNote().isEmpty());
     QVERIFY(ed->alsoEditing().isEmpty());
+    QVERIFY(wb.selectionNote().isEmpty());
+}
+
+void Workbench_Test::severalGoboLooksTakeOneNameInOneStep()
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    const quint32 a = ops->create(QLCPalette::Gobo, QString(), "Gobo A", { 10 });
+    const quint32 b = ops->create(QLCPalette::Gobo, QString(), "Gobo B", { 20 });
+    ops->clearUndo();
+    LookEditor ed(m_doc);
+    ed.setPalette(a);
+    ed.setAlsoEditing({ b });
+    QCOMPARE(ed.alsoEditing(), QList<quint32>({ b }));
+    ed.m_goboNameEdit->setText("Breakup");
+    ed.slotGoboNameEdited();
+    QCOMPARE(m_doc->palette(a)->goboName(), QString("Breakup"));
+    QCOMPARE(m_doc->palette(b)->goboName(), QString("Breakup"));
+    QCOMPARE(int(ops->undoSteps().size()), 1);
+    QVERIFY(m_doc->showTree()->undoShared());
+    QVERIFY(m_doc->palette(a)->goboName() != QString("Breakup"));
+    QVERIFY(m_doc->palette(b)->goboName() != QString("Breakup"));
 }

@@ -277,6 +277,8 @@ public:
      *  Build -- never a Show Tree cue (the Record is already beside it). */
     bool recordPointerWanted() const;
     QLabel *recordPointer() const { return m_recordPointer; }
+    /** The line that says the rows selected cannot be edited together (empty: hidden). */
+    QString selectionNote() const;
 
 signals:
     /** What is loaded changed (its function; invalid: none or not one). */
@@ -398,6 +400,14 @@ private:
     /** The other look rows selected with the one the Look Editor shows: the
      *  looks of its type it edits with it (LookEditor::setAlsoEditing()). */
     void updateLookCompanions();
+    /** The look a selected row is (its palette); invalidId() for any other
+     *  row. @a layers is filled once and reused across rows. */
+    quint32 rowPalette(const ProgrammingOutline::Row &r, QList<WorkbenchStack::Layer> *layers,
+                       bool *haveLayers) const;
+    /** The line over the layers when the rows selected are not all of one
+     *  kind (looks with fixtures, a scene with looks...): the editor shows
+     *  the current row's page and says the others are left as they are. */
+    void updateSelectionNote();
 
 private:
     Doc *m_doc;
@@ -430,6 +440,7 @@ private:
     ProgrammingOutline *m_rows = nullptr;
     QLabel *m_rowsHint = nullptr;
     QString m_rowsWhat;                  //!< what the hint says when nothing is being said
+    QLabel *m_selNote = nullptr;         //!< rows of different kinds selected: only the current one is edited
     class QTimer *m_hintTimer = nullptr;       //!< puts the hint back after sayHint()
     QToolButton *m_addSceneBtn = nullptr;
     /** + Effect ▾ (Q94): one button for the QLC+ effects, as Build ▸

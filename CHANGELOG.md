@@ -18,6 +18,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is
   an endless one, and Play, Stop, Record and Loop have lamps.
+- **Workbench: rows of different kinds say so.** Select a look with a layer,
+  a group or a fixture and a line over the layers says the editor edits the
+  current row only and the others are left as they are; the gobo name of
+  several Gobo looks selected together is one undo step like their values.
 - **Surface pages**: each drawn board (APC40 mk2, APC64, PMJ Black 1,
   MaizeDMX) comes with labelled pages of jobs for its controls, in Design
   only: colour on the faders, moves and beam on the knobs (APC40 device

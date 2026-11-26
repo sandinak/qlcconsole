@@ -2982,7 +2982,8 @@ void LookEditor::slotGoboNameEdited()
     const QString name = m_goboNameEdit->text().trimmed();
     if (name == p->goboName())
         return;
-    p->setGoboName(name);
+    // Every Gobo look selected with this one takes the name: one undo step.
+    editValue([&name](QLCPalette *pal) { pal->setGoboName(name); });
     updateGoboMatches();
     m_doc->setModified();
     emit paletteChanged(m_paletteId);
