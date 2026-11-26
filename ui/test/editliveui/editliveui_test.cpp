@@ -245,11 +245,11 @@ void EditLiveUi_Test::theRunTabSwitchTurnsItOn()
     QToolButton *b = run.editLiveButton();
     QVERIFY(b != nullptr);
     QCOMPARE(b->text(), QStringLiteral("Edit Live"));
-    // Design: Operate only.
-    QVERIFY(!b->isEnabled());
+    // Design: Operate only, and the Design header keeps its room.
+    QVERIFY(b->isHidden());
     m_doc->setMode(Doc::Operate);
     settle();
-    QVERIFY(b->isEnabled());
+    QVERIFY(!b->isHidden());
     b->click();
     EditLive *el = m_doc->controlMap()->editLive();
     QVERIFY(el->isOn());
@@ -262,6 +262,7 @@ void EditLiveUi_Test::theRunTabSwitchTurnsItOn()
     m_doc->setMode(Doc::Design);
     QVERIFY(!el->isOn());
     QVERIFY(!b->isChecked());
+    QVERIFY(b->isHidden());
 }
 
 void EditLiveUi_Test::theChipIsRedAndListsTheTrims()

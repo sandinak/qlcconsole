@@ -9,7 +9,7 @@ nothing else.
 
 ## Turning it on
 
-- **Run tab**: the **Edit Live** switch in the header, beside the pad's
+- **Run tab** (Operate): the **Edit Live** switch in the header, beside the pad's
   button.
 - **Footer**: the **Edit Live** chip (shown in Operate when a board with
   pages is patched). A click turns it on.

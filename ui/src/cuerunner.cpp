@@ -673,7 +673,7 @@ void CueRunner::buildFullLayout()
     refreshPadRun();
     /* Edit Live (Q337-Q339): the board's page controls trim the running
        cue; the footer's red chip lists the trims and stores them. Asks
-       the show's PIN when it has one. Operate only. */
+       the show's PIN when it has one. Shown in Operate only. */
     m_editLiveBtn = new QToolButton(this);
     m_editLiveBtn->setObjectName(QStringLiteral("crEditLive"));
     m_editLiveBtn->setText(tr("Edit Live"));
@@ -1452,14 +1452,13 @@ void CueRunner::refreshEditLive()
         const QSignalBlocker block(m_editLiveBtn);
         m_editLiveBtn->setChecked(on);
     }
-    m_editLiveBtn->setEnabled(on || m_doc->mode() == Doc::Operate);
+    // Operate only (as the footer's chip): the Design header keeps its room.
+    m_editLiveBtn->setVisible(on || m_doc->mode() == Doc::Operate);
     m_editLiveBtn->setStyleSheet(on ? QStringLiteral("QToolButton { color: #ffffff; background: #c62828; "
                                                      "font-weight: bold; }")
                                     : QString());
-    m_editLiveBtn->setToolTip(m_doc->mode() == Doc::Operate
-        ? tr("Edit Live: the board's page controls trim the running cue; the footer's red chip "
-             "stores or drops the trims. GO never waits for them.")
-        : tr("Edit Live is for Operate: it trims the running cue."));
+    m_editLiveBtn->setToolTip(tr("Edit Live: the board's page controls trim the running cue; the footer's "
+                                 "red chip stores or drops the trims. GO never waits for them."));
 }
 
 void CueRunner::refreshPadRun()
