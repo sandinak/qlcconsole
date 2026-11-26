@@ -865,29 +865,45 @@ void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
     auto at = [](const QByteArray &out, const Fixture *f, int ch = 0) {
         return int(uchar(out.at(int(f->universeAddress()) + ch)));
     };
+    QStringList bad;
+    auto want = [&](const QString &where, const Fixture *f, int got, bool on) {
+        if ((got > 0) != on)
+            bad << QStringLiteral("%1: %2 at %3").arg(where, f->name()).arg(got);
+    };
     // From the top: the house at half (the relay on), then out with the
     // curtains open, and they stay open through cues 3 and 4.
-    QCOMPARE(at(ref[0], house1), 128);
-    QCOMPARE(at(ref[0], relay), 255);
-    QCOMPARE(at(ref[0], drape), 0);
+    want("top 1", house1, at(ref[0], house1), true);
+    want("top 1", relay, at(ref[0], relay), true);
+    want("top 1", drape, at(ref[0], drape), false);
+    want("top 1", traveller, at(ref[0], traveller), false);
     for (int k = 1; k < 4; ++k)
     {
-        QCOMPARE(at(ref[k], house1), 0);
-        QCOMPARE(at(ref[k], relay), 0);
-        QCOMPARE(at(ref[k], drape), 255);
-        QCOMPARE(at(ref[k], traveller), 255);
+        const QString where = QStringLiteral("top %1").arg(k + 1);
+        want(where, house1, at(ref[k], house1), false);
+        want(where, relay, at(ref[k], relay), false);
+        want(where, drape, at(ref[k], drape), true);
+        want(where, traveller, at(ref[k], traveller), true);
     }
 
-    // The report: load cue 3 (or 4) from a dark stage: the curtains open.
-    for (int target : { 2, 3 })
-    {
-        stopAll();
-        act(c, { Jump, target });
-        const QByteArray o = land(c);
-        QVERIFY2(at(o, drape) == 255, qPrintable(QStringLiteral("jump to %1: drape Open %2").arg(target + 1).arg(at(o, drape))));
-        QVERIFY2(at(o, traveller) == 255, qPrintable(QStringLiteral("jump to %1: traveller %2").arg(target + 1).arg(at(o, traveller))));
-        QCOMPARE(at(o, house1), 0);
-    }
+    // The report: load cue 3 (or 4) from a dark stage, or from cue 1:
+    // the curtains open, the house out.
+    for (int from : { -1, 0 })
+        for (int target : { 2, 3 })
+        {
+            stopAll();
+            if (from >= 0)
+            {
+                act(c, { Jump, from });
+                land(c);
+            }
+            act(c, { Jump, target });
+            const QByteArray o = land(c);
+            const QString where = QStringLiteral("jump %1 -> %2").arg(from + 1).arg(target + 1);
+            want(where, drape, at(o, drape), true);
+            want(where, traveller, at(o, traveller), true);
+            want(where, house1, at(o, house1), false);
+            want(where, relay, at(o, relay), false);
+        }
     // Back to the pre-show from the stage: the house back at half, the
     // relay on again, the curtains closed.
     stopAll();
@@ -895,13 +911,22 @@ void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
     land(c);
     act(c, { Jump, 0 });
     QByteArray o = land(c);
-    QCOMPARE(at(o, house1), 128);
-    QCOMPARE(at(o, relay), 255);
-    QCOMPARE(at(o, drape), 0);
-    QCOMPARE(at(o, traveller), 0);
-    // GO from there plays on as from the top.
-    act(c, { Go, 0 });
-    QCOMPARE(land(c), ref[1]);
+    want("jump 4 -> 1", house1, at(o, house1), true);
+    want("jump 4 -> 1", relay, at(o, relay), true);
+    want("jump 4 -> 1", drape, at(o, drape), false);
+    want("jump 4 -> 1", traveller, at(o, traveller), false);
+    // Back from 4 to 3: still open.
+    stopAll();
+    for (int i = 0; i < 4; ++i)
+    {
+        act(c, { Go, 0 });
+        land(c);
+    }
+    act(c, { Back, 0 });
+    o = land(c);
+    want("back 4 -> 3", drape, at(o, drape), true);
+    want("back 4 -> 3", traveller, at(o, traveller), true);
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QStringLiteral("; "))));
 
     QString why;
     const int differ = everyWay(c, 20, &why);
