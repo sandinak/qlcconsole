@@ -453,6 +453,9 @@ public:
     /** Where a piece of scenery is drawn: a curtain driven by a fixture
      *  where its channels put it, anything else as it stands. */
     Scenery::Pose sceneryPose(const Scenery *sc) const;
+    /** Q350: its curtain held on stage while a cue is picked in Design
+     *  (OutputRuleKeeper::heldForEdit()): drawn marked "held while editing" */
+    bool sceneryHeldForEdit(const Scenery *sc) const;
     /** Redraw one piece of scenery where it now is (its curtain moved). */
     void refreshScenery(quint32 sceneryId);
     /** Its outline in the current point of view: one polygon per stretch it

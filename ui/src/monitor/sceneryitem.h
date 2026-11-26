@@ -62,6 +62,10 @@ public:
     void setParts(const QPointF &anchor, const QList<QPolygonF> &parts, bool flown,
                   const Scenery::Pose &pose);
     QList<QPolygonF> parts() const { return m_parts; }
+    /** Q350: held where it is on stage while a cue is picked in Design --
+     *  drawn where that cue puts it, with a small "held while editing" mark. */
+    void setHeldMark(bool held);
+    bool heldMark() const { return m_heldMark != nullptr && m_heldMark->isVisible(); }
     bool hasPose() const { return m_hasPose; }
     Scenery::Pose pose() const { return m_pose; }
 
@@ -88,6 +92,7 @@ private:
     QRectF             m_bounds;       //!< all of them
     bool               m_elevation;
     QGraphicsTextItem *m_label;
+    QGraphicsTextItem *m_heldMark = nullptr;
     bool               m_dragMoved = false;
     bool               m_flown = false;
     bool               m_hasPose = false;

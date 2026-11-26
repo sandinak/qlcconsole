@@ -1798,6 +1798,14 @@ private:
      *  runHeldOffStage() says (Universe::setFunctionsHeld,
      *  EffectScriptRunner::setScenesOffStage). UI thread; nothing per tick. */
     void syncRunHold();
+    /** Q350: the preview on stage in Design holds the stage machinery
+     *  where it is (OutputRuleKeeper::holdMachineryForEdit()) and tells it
+     *  where the cue in edit puts it; anything else lets it go. */
+    void syncMachineryHold();
+    /** Where cue @p cueId leaves fixture @p fixtureId, tracked: its own
+     *  levels there, else the nearest cue before it in its list that sets
+     *  it (LTP: a curtain stays where it was sent). Empty: none does. */
+    QByteArray trackedFixtureLevels(quint32 cueId, quint32 fixtureId) const;
     QSet<quint32> m_runMuted;
     bool m_soloPlaying = false;
     quint32 m_soloFunction = 0xFFFFFFFF;

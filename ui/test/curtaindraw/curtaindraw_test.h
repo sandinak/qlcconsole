@@ -34,7 +34,7 @@ private slots:
     void initTestCase();
     void cleanupTestCase();
 
-    void theDrapeIsDrawnWhereItsCueLeftIt();
+    void aPickedCueDrawsTheCurtainAndHoldsTheStage();
     void hisCurtain();
 
 private:
@@ -45,6 +45,8 @@ private:
     void loadAndGo(Chaser *c, const QString &number);
     void jump(Chaser *c, int step);
     void stopAll();
+    int onWire(quint32 fixtureId, quint32 ch);
+    bool markShown(quint32 sceneryId);
 
     App *m_app = nullptr;
 };

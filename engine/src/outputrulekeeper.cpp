@@ -44,6 +44,7 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
     , m_machineLayer(new OutputLayer(doc, Universe::Park, FadeChannel::Override, QStringLiteral("Curtain stopped")))
+    , m_editLayer(new OutputLayer(doc, Universe::Park, FadeChannel::Override, QStringLiteral("Curtain held while editing")))
 {
     /* A Show-only fixture added, moved or (re)patched -- mid-show too: its
        new address is held at once, not after the event loop comes round
@@ -68,6 +69,7 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         // automatic widget armed.
         const bool wasStopped = m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0;
         releaseStageMachinery();
+        releaseMachineryForEdit();
         Function::clearAutoSources();
         startSession();
         m_onAtOpenWhen = defaultOnAtOpenWhen();
@@ -81,6 +83,9 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
            or set in Design is not the show until a GO in Operate -- with
            every running function's gate worked out now, and only then the
            universes live. Before anything else hears of Operate. */
+        // Live: a curtain held while editing goes back to the run.
+        if (mode == Doc::Operate)
+            releaseMachineryForEdit();
         if (mode == Doc::Operate)
             startSession();
         pushShowOnlyLive();
@@ -604,6 +609,102 @@ void OutputRuleKeeper::releaseStageMachinery()
         }
     }
     emitMachineryChanged();
+}
+
+void OutputRuleKeeper::holdMachineryForEdit(const QHash<quint32, QByteArray> &drawn)
+{
+    bool changed = false;
+    bool take = false;
+    QVector<Machine> machines;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        if (m_editHeld.isEmpty())
+        {
+            m_machines = machinesNow();
+            for (const Machine &m : std::as_const(m_machines))
+                if (!m.showOnly)            // Design holds a Show-only one already
+                    machines << m;
+            take = !machines.isEmpty();
+        }
+    }
+    if (take)
+    {
+        /* Where each one is now, before the pick's scenes write: what the
+           faders built last frame (a run's fade part way, a stop's hold,
+           or what it was left at). */
+        const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
+        QHash<int, QByteArray> pre;
+        QHash<quint32, QByteArray> held;
+        QList<OutputLayer::Level> levels;
+        for (const Machine &m : std::as_const(machines))
+        {
+            QByteArray values(int(m.channels), char(0));
+            for (quint32 i = 0; i < m.channels; ++i)
+            {
+                const quint32 abs = m.base + i;
+                const int u = int(abs >> 9);
+                if (u >= ua.size() || ua.at(u) == nullptr)
+                    continue;
+                auto it = pre.find(u);
+                if (it == pre.end())
+                    it = pre.insert(u, ua.at(u)->preGMValues());
+                const int a = int(abs & 0x1ff);
+                if (a < it.value().size())
+                    values[int(i)] = it.value().at(a);
+                levels << OutputLayer::Level { m.fixture, i, uchar(values.at(int(i))) };
+            }
+            held.insert(m.fixture, values);
+        }
+        {
+            QMutexLocker locker(&m_machineMutex);
+            m_editHeld = held;
+        }
+        m_editLayer->set(levels, [](const OutputLayer::Level &) { return true; });
+        changed = true;
+    }
+    {
+        QMutexLocker locker(&m_machineMutex);
+        QHash<quint32, QByteArray> mine;
+        for (auto it = drawn.constBegin(); it != drawn.constEnd(); ++it)
+            if (m_editHeld.contains(it.key()))
+                mine.insert(it.key(), it.value());
+        if (mine != m_editDrawn)
+        {
+            m_editDrawn = mine;
+            changed = true;
+        }
+    }
+    if (changed)
+        emitMachineryChanged();
+}
+
+void OutputRuleKeeper::releaseMachineryForEdit()
+{
+    {
+        QMutexLocker locker(&m_machineMutex);
+        if (m_editHeld.isEmpty())
+            return;
+        m_editHeld.clear();
+        m_editDrawn.clear();
+    }
+    m_editLayer->clear();
+    emitMachineryChanged();
+}
+
+bool OutputRuleKeeper::machineryHeldForEdit() const
+{
+    QMutexLocker locker(&m_machineMutex);
+    return !m_editHeld.isEmpty();
+}
+
+bool OutputRuleKeeper::heldForEdit(quint32 fixtureId, QByteArray *drawn) const
+{
+    QMutexLocker locker(&m_machineMutex);
+    if (!m_editHeld.contains(fixtureId))
+        return false;
+    if (drawn != nullptr)
+        *drawn = m_editDrawn.value(fixtureId);
+    return true;
 }
 
 bool OutputRuleKeeper::stageMachineryHeld() const

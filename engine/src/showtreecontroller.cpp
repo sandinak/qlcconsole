@@ -59,6 +59,8 @@
 #include "scene.h"
 #include "doc.h"
 #include "programmercontroller.h"
+#include "outputrulekeeper.h"
+#include "fixturerest.h"
 
 using namespace ShowTree;
 
@@ -7567,9 +7569,52 @@ void ShowTreeController::syncPreview()
 
     // What runs for real underneath: off stage while this has it.
     syncRunHold();
+    syncMachineryHold();
 
     if (state != before || want != runningBefore)
         emit previewChanged();
+}
+
+void ShowTreeController::syncMachineryHold()
+{
+    OutputRuleKeeper *keeper = m_doc->outputRuleKeeper();
+    if (keeper == nullptr)
+        return;
+    const bool own = m_doc->mode() == Doc::Design && !m_previewHeld && m_previewCue != invalidId()
+                     && (m_previewState == PreviewState::Playing || m_previewState == PreviewState::Dark);
+    if (!own)
+    {
+        keeper->releaseMachineryForEdit();
+        return;
+    }
+    QHash<quint32, QByteArray> drawn;
+    for (Fixture *fx : m_doc->fixtures())
+        if (fx != nullptr && fx->isPatched() && FixtureRest::freezesOnStop(fx))
+        {
+            const QByteArray v = trackedFixtureLevels(m_previewCue, fx->id());
+            if (!v.isEmpty())
+                drawn.insert(fx->id(), v);
+        }
+    keeper->holdMachineryForEdit(drawn);
+}
+
+QByteArray ShowTreeController::trackedFixtureLevels(quint32 cueId, quint32 fixtureId) const
+{
+    const CueList *list = listOfCue(cueId);
+    if (list == nullptr)
+        return QByteArray();
+    int at = -1;
+    for (int i = 0; i < list->cues.count(); ++i)
+        if (list->cues.at(i).id == cueId)
+            at = i;
+    for (int i = at; i >= 0; --i)
+    {
+        const QHash<quint32, QByteArray> levels = cueLevels(list->cues.at(i).id);
+        const auto it = levels.constFind(fixtureId);
+        if (it != levels.constEnd())
+            return it.value();
+    }
+    return QByteArray();
 }
 
 void ShowTreeController::slotModeChanged()

@@ -32,6 +32,7 @@
 #include "monitor.h"
 #include "monitorgraphicsview.h"
 #include "sceneryitem.h"
+#include "structurestudioview.h"
 #undef protected
 #undef private
 #include "doc.h"
@@ -49,6 +50,7 @@
 #include "showtreecontroller.h"
 #include "showtreemodel.h"
 #include "showcontrol.h"
+#include "outputrulekeeper.h"
 #include "curtaindraw_test.h"
 
 using namespace ShowTree;
@@ -146,14 +148,43 @@ void CurtainDraw_Test::stopAll()
     settle(200);
 }
 
-/* "open the curtain with its cue, then go to a later cue: the curtain stays
-   closed on screen; jump while it is opening and the traveler stops where it
-   is". His structure: the curtain fixture on a universe with no output,
-   driving the Main drape; a scene opening it that every cue plays; a jump
-   from the cue that opens it, done and mid-fade, in Design (the Run, a
-   cue picked) and in Operate. The engine has the curtain open every time
-   (TrackBack_Test::hisCurtain); this is what the plot DRAWS. */
-void CurtainDraw_Test::theDrapeIsDrawnWhereItsCueLeftIt()
+/* What the wire has for fixture @p fx's channel @p ch now (-1: none). */
+int CurtainDraw_Test::onWire(quint32 fixtureId, quint32 ch)
+{
+    Doc *doc = m_app->doc();
+    Fixture *fx = doc->fixture(fixtureId);
+    int out = -1;
+    if (fx == nullptr)
+        return out;
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    if (int(fx->universe()) < ua.size())
+    {
+        const QByteArray *v = ua.at(int(fx->universe()))->postGMValues();
+        if (v != nullptr && int(fx->address() + ch) < v->size())
+            out = uchar(v->at(int(fx->address() + ch)));
+    }
+    doc->inputOutputMap()->releaseUniverses(false);
+    return out;
+}
+
+bool CurtainDraw_Test::markShown(quint32 sceneryId)
+{
+    Monitor *mon = Monitor::instance();
+    SceneryItem *item = mon != nullptr && mon->m_graphicsView != nullptr
+                      ? mon->m_graphicsView->m_sceneryItems.value(sceneryId, nullptr) : nullptr;
+    return item != nullptr && item->heldMark();
+}
+
+/* Board Q350, his report ("clicking between cues in the Show Tree, in
+   Design: the curtain stays closed on screen; clicked again while it opens,
+   it stops"): in Design a cue picked while editing holds the curtain where
+   it physically is -- nothing on the wire moves it, the preview's own
+   scene neither -- while the plot (and the Rig Overview) draw it where the
+   picked cue's tracked state puts it, marked "held while editing". A GO
+   moves it for real; Operate is the run's. His structure: the curtain
+   fixture on a universe with no output, driving the Main drape, its scene
+   in every cue but the first. */
+void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
 {
     Doc *doc = m_app->doc();
     m_app->clearDocument();
@@ -186,7 +217,7 @@ void CurtainDraw_Test::theDrapeIsDrawnWhereItsCueLeftIt()
     open->setName("Curtain Open");
     open->setValue(curtain->id(), 0, 255);
     open->setValue(curtain->id(), 1, 0);
-    open->setFadeInSpeed(1500);
+    open->setFadeInSpeed(2000);
     QVERIFY(doc->addFunction(open));
     Scene *half = new Scene(doc);
     half->setName("Half");
@@ -204,19 +235,18 @@ void CurtainDraw_Test::theDrapeIsDrawnWhereItsCueLeftIt()
         t.function = function;
         return st->addLayer(cue, t) != ShowTree::invalidId();
     };
-    const quint32 dark = st->addCue(listId, -1, "Preset");
-    QVERIFY(layer(dark, half->id()));
+    const quint32 preset = st->addCue(listId, -1, "Preset");
+    QVERIFY(layer(preset, half->id()));
     const quint32 c1 = st->addCue(listId, 0, "Curtain");
     QVERIFY(layer(c1, open->id()) && layer(c1, half->id()));
     const quint32 c2 = st->addCue(listId, 1, "Song");
     QVERIFY(layer(c2, open->id()) && layer(c2, full->id()));
-    const quint32 c3 = st->addCue(listId, 2, "Later");
-    QVERIFY(layer(c3, open->id()) && layer(c3, half->id()));
     const CueList *list = st->cueList(listId);
     QVERIFY(list != nullptr);
     Chaser *c = qobject_cast<Chaser *>(doc->function(list->chaser));
     QVERIFY(c != nullptr);
     doc->showControl()->setMainCueList(c->id());
+    const QString n1 = st->cueNumber(*list, 1);
 
     // The Lighting Studio's plot, as he has it up.
     Monitor *mon = Monitor::instance();
@@ -225,73 +255,81 @@ void CurtainDraw_Test::theDrapeIsDrawnWhereItsCueLeftIt()
     mon->updateView();
     settle(300);
     QVERIFY(mon->m_graphicsView != nullptr);
-    QVERIFY(mon->m_graphicsView->m_sceneryItems.contains(drape->id()));
     const quint32 sid = drape->id(), fid = curtain->id();
+    QVERIFY(mon->m_graphicsView->m_sceneryItems.contains(sid));
+    OutputRuleKeeper *keeper = doc->outputRuleKeeper();
+    QVERIFY(keeper != nullptr);
     QCOMPARE(drawnOpen(sid, fid, "loaded:"), 0.0);    // nothing plays on it: closed
+    QVERIFY(!markShown(sid));
 
-    auto closeIt = [&]() {
-        stopAll();
-        // Closed again: the preset cue, the curtain's channel let go.
-        jump(c, 0);
-        settle(400);
-        stopAll();
-        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
-        ua.at(3)->reset(0, 2);
-        doc->inputOutputMap()->releaseUniverses(true);
-        settle(300);
-    };
-    auto check = [&](const char *what) {
-        // Long past the fade: the drape drawn open, as the wire has it.
-        QTRY_VERIFY2_WITH_TIMEOUT(drawnOpen(sid, fid, what) == 1.0, what, 4000);
-    };
+    // The cue that opens it picked: drawn open, marked; the stage stays shut.
+    st->pickCue(c1);
+    QTRY_COMPARE_WITH_TIMEOUT(drawnOpen(sid, fid, "1 picked:"), 1.0, 2000);
+    QVERIFY(markShown(sid));
+    settle(2500);                              // longer than its fade
+    QCOMPARE(onWire(fid, 0), 0);
+    QCOMPARE(drawnOpen(sid, fid, "1 picked, its fade over:"), 1.0);
+    // The next one (the curtain tracks on): the same.
+    st->pickCue(c2);
+    settle(400);
+    QCOMPARE(drawnOpen(sid, fid, "2 picked:"), 1.0);
+    QVERIFY(markShown(sid));
+    QCOMPARE(onWire(fid, 0), 0);
+    // The preset (nothing sends it): drawn where it is, still held.
+    st->pickCue(preset);
+    settle(300);
+    QCOMPARE(drawnOpen(sid, fid, "preset picked:"), 0.0);
+    QVERIFY(markShown(sid));
 
-    for (const Doc::Mode mode : { Doc::Design, Doc::Operate })
+    // The preview stopped: let go, it stays where it is (closed), unmarked.
+    st->stopPreview();
+    QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
+    settle(200);
+    QCOMPARE(onWire(fid, 0), 0);
+    QCOMPARE(drawnOpen(sid, fid, "preview stopped:"), 0.0);
+
+    // A GO moves it for real: the drawing follows the wire.
+    loadAndGo(c, n1);
+    QTRY_VERIFY_WITH_TIMEOUT(onWire(fid, 0) > 20, 1500);
+    QVERIFY2(onWire(fid, 0) < 255, "still opening");
+    // Picked while it opens: held where it is, drawn where the cue puts it.
+    st->pickCue(c2);
+    settle(200);
+    const int stopped = onWire(fid, 0);
+    QVERIFY2(stopped > 0 && stopped < 255, qPrintable(QString::number(stopped)));
+    settle(800);
+    QCOMPARE(onWire(fid, 0), stopped);
+    QCOMPARE(drawnOpen(sid, fid, "2 picked mid-move:"), 1.0);
+    QVERIFY(markShown(sid));
+
+    // The Rig Overview draws it the same.
     {
-        closeIt();
-        doc->setMode(mode);
-        // Opened by its cue, done; then a later cue.
-        jump(c, 1);
-        settle(2000);
-        check("opened by its cue:");
-        jump(c, 3);
-        settle(600);
-        check("then a later cue:");
-
-        // Jumped away while it opens.
-        closeIt();
-        jump(c, 1);
-        settle(500);
-        drawnOpen(sid, fid, "opening:");
-        jump(c, 3);
-        check("jumped while opening:");
-
-        // The Run's click: Load, GO, mid-fade.
-        closeIt();
-        loadAndGo(c, st->cueNumber(*st->cueList(listId), 1));
-        settle(500);
-        drawnOpen(sid, fid, "GO, opening:");
-        loadAndGo(c, st->cueNumber(*st->cueList(listId), 2));
-        check("Load + GO a later cue while opening:");
-
-        if (mode == Doc::Design)
-        {
-            // Design: a cue picked previews it.
-            closeIt();
-            st->pickCue(c1);
-            settle(500);
-            drawnOpen(sid, fid, "picked, opening:");
-            st->pickCue(c3);
-            check("then a later cue picked:");
-            st->stopPreview();
-        }
+        StructureStudioView view(doc, StructureStudioView::StageKind, 0);
+        view.setLiveValues(true);
+        QCOMPARE(view.computeDrapePose(drape).open, 1.0);
     }
+
+    // The preview stopped: drawn where it is, unmarked.
+    st->stopPreview();
+    QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
+    QCOMPARE(drawnOpen(sid, fid, "preview stopped:"), double(uchar(onWire(fid, 0))) / 255.0);
+
+    // Operate: the run's -- a jump moves it, nothing holds it.
+    stopAll();
+    doc->setMode(Doc::Operate);
+    jump(c, 2);
+    QTRY_COMPARE_WITH_TIMEOUT(onWire(fid, 0), 255, 4000);
+    QTRY_COMPARE_WITH_TIMEOUT(drawnOpen(sid, fid, "Operate, jumped:"), 1.0, 1000);
+    QVERIFY(!markShown(sid));
+    QVERIFY(!keeper->machineryHeldForEdit());
     stopAll();
     doc->setMode(Doc::Design);
 }
 
 /* His show (a copy, never in the gate): QLC_CURTAIN_SHOW=<the .qlcc>, or
    QLC_CURTAIN_SHOW_QZ=<base64 of its qCompress()> to send it to a pool
-   host. Scenery 1 "Main drape", driven by fixture 182 on U04-Control. */
+   host. Scenery 1 "Main drape", driven by fixture 182 on U04-Control: in
+   Design, 1.0.1 then 1.1.1 clicked in the Show Tree. */
 void CurtainDraw_Test::hisCurtain()
 {
     QTemporaryDir dir;
@@ -322,14 +360,17 @@ void CurtainDraw_Test::hisCurtain()
         if (f->name() == "Main drape 2 curtain")
             cur = f;
     QVERIFY(cur != nullptr);
-    auto idx = [&](const QString &cue) {
-        for (int i = 0; i < c->stepsCount(); ++i)
-            if (c->steps().at(i).note == cue || c->stepCue(i) == cue)
-                return i;
-        return -1;
+    ShowTreeController *st = doc->showTree();
+    quint32 listId = ShowTree::invalidId();
+    st->productionOfChaser(c->id(), &listId);
+    const CueList *list = st->cueList(listId);
+    QVERIFY(list != nullptr);
+    auto cueId = [&](const char *n) {
+        for (int i = 0; i < list->cues.count(); ++i)
+            if (st->cueNumber(*list, i) == QLatin1String(n))
+                return list->cues.at(i).id;
+        return ShowTree::invalidId();
     };
-    const int s101 = idx("1.0.1"), s111 = idx("1.1.1");
-    QVERIFY(s101 > 0 && s111 > s101);
     Monitor *mon = Monitor::instance();
     QVERIFY(mon != nullptr);
     m_app->m_tab->setCurrentIndex(m_app->m_tab->indexOf(mon));
@@ -337,29 +378,18 @@ void CurtainDraw_Test::hisCurtain()
     settle(500);
     const quint32 sid = 1, fid = cur->id();
     QVERIFY(mon->m_graphicsView->m_sceneryItems.contains(sid));
+    const int was = onWire(fid, 0);
     drawnOpen(sid, fid, "loaded:");
-    auto check = [&](const char *what) {
-        QTRY_VERIFY2_WITH_TIMEOUT(drawnOpen(sid, fid, what) == 1.0, what, 6000);
-    };
-    for (const Doc::Mode mode : { Doc::Design, Doc::Operate })
+    for (const char *n : { "1.0.1", "1.1.1", "1.0.2.1", "1.1.2" })
     {
-        stopAll();
-        doc->setMode(mode);
-        jump(c, s101 - 1);
-        settle(1500);
-        jump(c, s101);
-        settle(800);
-        drawnOpen(sid, fid, "1.0.1 opening:");
-        jump(c, s111);
-        check("then a jump to 1.1.1:");
-        jump(c, s101);
-        settle(4500);
-        check("1.0.1 done:");
-        loadAndGo(c, QStringLiteral("1.1.2"));
-        check("then Load 1.1.2 + GO:");
+        st->pickCue(cueId(n));
+        settle(3500);
+        QVERIFY2(drawnOpen(sid, fid, n) == 1.0, n);
+        QVERIFY2(markShown(sid), n);
+        QCOMPARE(onWire(fid, 0), was);
     }
+    st->stopPreview();
     stopAll();
-    doc->setMode(Doc::Design);
     doc->resetModified();
 }
 

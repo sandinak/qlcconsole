@@ -300,6 +300,27 @@ public:
      *  GO to carry on"; empty when nothing is held. For the footer. */
     QString stageMachineryHeldText() const;
 
+    /** Q350: Design, the Show Tree preview on stage (a cue picked while
+     *  editing): stage machinery (FixtureRest::freezesOnStop(), the same
+     *  predicate as a stop) stays where it physically is -- every channel
+     *  of each such fixture held at what it has now, over everything that
+     *  plays, the preview's own scenes too -- while the plot and the Rig
+     *  Overview draw where the cue in edit puts it (@p drawn: fixture ->
+     *  its channels' values; ShowTreeController works them out). The first
+     *  call takes the levels; the next picks only change @p drawn. A Show-
+     *  only one is held by Design already and is left to that. Main
+     *  thread; stageMachineryChanged() when anything changed. */
+    void holdMachineryForEdit(const QHash<quint32, QByteArray> &drawn);
+    /** The preview let go of the stage (a GO took it, Operate, the preview
+     *  stopped): the channels keep the value they have (LTP) until the run
+     *  drives them. Main thread. */
+    void releaseMachineryForEdit();
+    bool machineryHeldForEdit() const;
+    /** True while fixture @p fixtureId is held for editing; @p drawn (when
+     *  given) where the cue in edit puts it -- empty when that cue (and the
+     *  ones before it) never drives it: drawn where it is. Any thread. */
+    bool heldForEdit(quint32 fixtureId, QByteArray *drawn = nullptr) const;
+
     /** A Show-only channel's safe value: 0 for an intensity channel, and
      *  where nothing drives it (FixtureRest::restValue()) for the rest: a
      *  laser, fogger or hazer all 0, a gobo or colour wheel open. */
@@ -395,6 +416,11 @@ private:
     quint32 m_machineGen = 0;
     /** The held levels on the output (non-Show-only machinery) */
     std::unique_ptr<OutputLayer> m_machineLayer;
+    /** Q350, held while editing (guarded by m_machineMutex): fixture ->
+     *  the values held on the output, and where the cue in edit puts it */
+    QHash<quint32, QByteArray> m_editHeld;
+    QHash<quint32, QByteArray> m_editDrawn;
+    std::unique_ptr<OutputLayer> m_editLayer;
 };
 
 /** @} */
