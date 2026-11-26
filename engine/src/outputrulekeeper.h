@@ -312,9 +312,10 @@ public:
      *  thread; stageMachineryChanged() when anything changed. */
     void holdMachineryForEdit(const QHash<quint32, QByteArray> &drawn);
     /** The preview let go of the stage (a GO took it, Operate, the preview
-     *  stopped): the channels keep the value they have (LTP) until the run
-     *  drives them. Main thread. */
-    void releaseMachineryForEdit();
+     *  stopped): each curtain travels from where it was held to what plays
+     *  under it over @p glideMs (the cue's fade: a motor is never told to
+     *  jump), else keeps the value it has (LTP). Main thread. */
+    void releaseMachineryForEdit(uint glideMs = 0);
     bool machineryHeldForEdit() const;
     /** True while fixture @p fixtureId is held for editing; @p drawn (when
      *  given) where the cue in edit puts it -- empty when that cue (and the

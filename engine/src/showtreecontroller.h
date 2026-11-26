@@ -1806,6 +1806,10 @@ private:
      *  levels there, else the nearest cue before it in its list that sets
      *  it (LTP: a curtain stays where it was sent). Empty: none does. */
     QByteArray trackedFixtureLevels(quint32 cueId, quint32 fixtureId) const;
+    /** The cue the machinery is held for; how long its release takes (-1:
+     *  that cue's fade; a GO sets the fade of the cue it plays) */
+    quint32 m_machineryCue = 0xFFFFFFFF;
+    int m_machineryGlide = -1;
     QSet<quint32> m_runMuted;
     bool m_soloPlaying = false;
     quint32 m_soloFunction = 0xFFFFFFFF;

@@ -730,6 +730,26 @@ bool GenericFader::isFadingOut() const
     return m_fadeOut;
 }
 
+void GenericFader::glideOut(uint fadeTime)
+{
+    m_fadeOut = true;
+    m_paused = false;
+    std::lock_guard<ChannelsLock> l(m_channelsLock);
+    QMutableHashIterator <quint32,FadeChannel> it(m_channels);
+    while (it.hasNext() == true)
+    {
+        FadeChannel& fc(it.next().value());
+        fc.addFlag(FadeChannel::CanFade);
+        fc.removeFlag(FadeChannel::Flashing);
+        fc.setStart(fc.current());
+        fc.setTarget(fc.current());
+        fc.addFlag(FadeChannel::SetTarget);     // what is under it, at the next write
+        fc.setElapsed(0);
+        fc.setReady(false);
+        fc.setFadeTime(fadeTime);
+    }
+}
+
 void GenericFader::setFadeOut(bool enable, uint fadeTime)
 {
     m_fadeOut = enable;

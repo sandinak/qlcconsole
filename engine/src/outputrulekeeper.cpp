@@ -83,9 +83,6 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
            or set in Design is not the show until a GO in Operate -- with
            every running function's gate worked out now, and only then the
            universes live. Before anything else hears of Operate. */
-        // Live: a curtain held while editing goes back to the run.
-        if (mode == Doc::Operate)
-            releaseMachineryForEdit();
         if (mode == Doc::Operate)
             startSession();
         pushShowOnlyLive();
@@ -678,7 +675,7 @@ void OutputRuleKeeper::holdMachineryForEdit(const QHash<quint32, QByteArray> &dr
         emitMachineryChanged();
 }
 
-void OutputRuleKeeper::releaseMachineryForEdit()
+void OutputRuleKeeper::releaseMachineryForEdit(uint glideMs)
 {
     {
         QMutexLocker locker(&m_machineMutex);
@@ -687,7 +684,7 @@ void OutputRuleKeeper::releaseMachineryForEdit()
         m_editHeld.clear();
         m_editDrawn.clear();
     }
-    m_editLayer->clear();
+    m_editLayer->glideOut(glideMs);
     emitMachineryChanged();
 }
 

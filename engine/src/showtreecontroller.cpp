@@ -7584,9 +7584,21 @@ void ShowTreeController::syncMachineryHold()
                      && (m_previewState == PreviewState::Playing || m_previewState == PreviewState::Dark);
     if (!own)
     {
-        keeper->releaseMachineryForEdit();
+        /* Let go over a fade, never a jump: a GO's, the cue it plays;
+           else (Operate, the preview stopped) the cue that was picked. */
+        uint glide = 0;
+        if (m_machineryGlide >= 0)
+            glide = uint(m_machineryGlide);
+        else if (const Cue *held = cue(m_machineryCue))
+            glide = held->fadeIn;
+        if (glide > 60000)                 // an infinite or runaway time
+            glide = 0;
+        m_machineryGlide = -1;
+        m_machineryCue = invalidId();
+        keeper->releaseMachineryForEdit(glide);
         return;
     }
+    m_machineryCue = m_previewCue;
     QHash<quint32, QByteArray> drawn;
     for (Fixture *fx : m_doc->fixtures())
         if (fx != nullptr && fx->isPatched() && FixtureRest::freezesOnStop(fx))
@@ -7651,7 +7663,16 @@ void ShowTreeController::slotTimerFunctionStarted(quint32 fid)
                 const Function *f = m_doc->function(fid);
                 if (f != nullptr && f->isRunning() && !f->startedOnlyByPreview()
                     && m_doc->mode() == Doc::Design && !m_previewHeld)
+                {
+                    // A curtain held for the edit travels over this cue's fade.
+                    if (const Chaser *ch = qobject_cast<const Chaser *>(f))
+                    {
+                        const int at = ch->currentStepIndex();
+                        if (at >= 0 && at < ch->stepsCount())
+                            m_machineryGlide = int(qMin<uint>(ch->steps().at(at).fadeIn, 60001));
+                    }
                     takeStageForRun();
+                }
                 else
                 {
                     syncRunHold();           // a list started under the preview

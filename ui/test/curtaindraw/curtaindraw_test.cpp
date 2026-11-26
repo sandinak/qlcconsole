@@ -19,6 +19,7 @@
 
 #include <QApplication>
 #include <QElapsedTimer>
+#include <QVector3D>
 #include <QTemporaryDir>
 #include <QTabWidget>
 #include <QDir>
@@ -206,6 +207,9 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     dimmer->setAddress(0);
     QVERIFY(doc->addFixture(dimmer));
 
+    // A 12 x 10 m stage, the drape across it (in the shots).
+    doc->monitorProperties()->setGridUnits(MonitorProperties::Meters);
+    doc->monitorProperties()->setGridSize(QVector3D(12.0f, 6.0f, 10.0f));
     Scenery *drape = doc->monitorProperties()->addScenery();
     drape->setKind(Scenery::MainDrape);
     drape->setOriginX(6.0f); drape->setOriginY(6.0f);
@@ -287,18 +291,31 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     QCOMPARE(drawnOpen(sid, fid, "preset picked:"), 0.0);
     QVERIFY(markShown(sid));
 
-    // The preview stopped: let go, it stays where it is (closed), unmarked.
-    st->stopPreview();
-    QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
-    settle(200);
+    // A GO from the Run moves it for real -- the cue's 2 s fade from where
+    // it was held, though its scene is at full under the preview: a motor
+    // is never told to jump.
+    st->pickCue(c1);
+    settle(300);
     QCOMPARE(onWire(fid, 0), 0);
-    QCOMPARE(drawnOpen(sid, fid, "preview stopped:"), 0.0);
+    loadAndGo(c, n1);
+    QVERIFY2(travels(fid, 0, 255, 1200, 4000), "GO after a pick");
+    QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
+    QCOMPARE(drawnOpen(sid, fid, "GO, opened:"), 1.0);
 
-    // A GO moves it for real: the drawing follows the wire.
+    // Picked while it opens: held where it is, drawn where the cue puts it.
+    stopAll();
+    jump(c, 0);
+    settle(300);
+    stopAll();
+    {
+        QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+        ua.at(3)->reset(0, 2);
+        doc->inputOutputMap()->releaseUniverses(true);
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(onWire(fid, 0), 0, 1000);
     loadAndGo(c, n1);
     QTRY_VERIFY_WITH_TIMEOUT(onWire(fid, 0) > 20, 1500);
     QVERIFY2(onWire(fid, 0) < 255, "still opening");
-    // Picked while it opens: held where it is, drawn where the cue puts it.
     st->pickCue(c2);
     settle(200);
     const int stopped = onWire(fid, 0);
@@ -331,21 +348,47 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
         QCOMPARE(view.computeDrapePose(drape).open, 1.0);
     }
 
-    // The preview stopped: drawn where it is, unmarked.
-    st->stopPreview();
+    // Into Operate: let go, and never a jump -- nothing plays it there
+    // until a GO, so it stays where it was held.
+    doc->setMode(Doc::Operate);
+    QVERIFY2(travels(fid, 0, stopped, 0, 1500), "into Operate");
     QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
-    QCOMPARE(drawnOpen(sid, fid, "preview stopped:"), double(uchar(onWire(fid, 0))) / 255.0);
+    QVERIFY(!keeper->machineryHeldForEdit());
 
     // Operate: the run's -- a jump moves it, nothing holds it.
     stopAll();
-    doc->setMode(Doc::Operate);
     jump(c, 2);
     QTRY_COMPARE_WITH_TIMEOUT(onWire(fid, 0), 255, 4000);
     QTRY_COMPARE_WITH_TIMEOUT(drawnOpen(sid, fid, "Operate, jumped:"), 1.0, 1000);
     QVERIFY(!markShown(sid));
-    QVERIFY(!keeper->machineryHeldForEdit());
     stopAll();
     doc->setMode(Doc::Design);
+}
+
+bool CurtainDraw_Test::travels(quint32 fixtureId, quint32 ch, int to, int notBefore, int within)
+{
+    /* Watched every 10 ms: no step bigger than a 2 s fade's 40 ms worth
+       (the wire is sampled, a frame can be missed), at @p to no sooner than
+       @p notBefore ms, and there within @p within. */
+    QElapsedTimer t;
+    t.start();
+    int last = onWire(fixtureId, ch);
+    int biggest = 0;
+    qint64 reached = -1;
+    while (t.elapsed() < within)
+    {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        QTest::qSleep(10);
+        const int now = onWire(fixtureId, ch);
+        biggest = qMax(biggest, qAbs(now - last));
+        last = now;
+        if (now == to && reached < 0)
+            reached = t.elapsed();
+        if (reached >= 0 && t.elapsed() > reached + 300)
+            break;
+    }
+    qInfo() << "travels to" << to << ": biggest step" << biggest << "reached at" << reached << "ms, ends" << last;
+    return biggest <= 40 && reached >= notBefore && last == to;
 }
 
 /* His show (a copy, never in the gate): QLC_CURTAIN_SHOW=<the .qlcc>, or

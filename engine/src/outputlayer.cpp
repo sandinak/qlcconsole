@@ -154,6 +154,26 @@ void OutputLayer::clear()
     set(QList<Level>());
 }
 
+void OutputLayer::glideOut(uint ms)
+{
+    if (ms == 0)
+    {
+        clear();
+        return;
+    }
+    QMutexLocker locker(&m_mutex);
+    m_stamps.clear();
+    for (auto it = m_slots.begin(); it != m_slots.end(); ++it)
+    {
+        Slot &slot = it.value();
+        // Its universe deletes it once it is all the way out; a set() after
+        // this takes a new one.
+        if (!slot.fader.isNull() && slot.universe != nullptr && slot.universe->faders().contains(slot.fader))
+            slot.fader->glideOut(ms);
+    }
+    m_slots.clear();
+}
+
 QHash<int, int> OutputLayer::channelCounts() const
 {
     QMutexLocker locker(&m_mutex);
