@@ -304,6 +304,24 @@ public:
     void setGoGuardMs(int ms);
     /** Blind's tooltip in Design (the mute). */
     static QString blindDesignTip();
+
+    /** The one way a person changes the show's level (View ▸ Workspace's
+     *  levels, the footer chip, the notice line's Switch, the Teaching
+     *  chip's Unlock; docs/design/WORKSPACE_LEVELS.md, board Q249). Going
+     *  up in a Teaching show asks the instructor's PIN once (it then holds
+     *  until the show is closed, never saved: Q341, Q342) and raises it for
+     *  this session only; anything else sets the level saved in the show.
+     *  False when it did not change (a wrong PIN, Cancel). */
+    bool requestLevel(int level);
+    /** View ▸ Workspace's view items: setWorkspaceView(), except Classic
+     *  in a show at the Student level, which asks the PIN in Teaching
+     *  (Q344) and then shows QLC+'s tabs in full for this session. */
+    void chooseWorkspaceView(WorkspaceView view);
+    /** The tabs the level hides now (Build, Functions, Simple Desk and the
+     *  Timeline at Student), by label. */
+    QStringList levelHiddenTabs() const;
+    /** The notice line's offer: @p text, with Switch to @p level. */
+    void offerLevelSwitch(int level, const QString &text);
     /** RC8: as a show opens, when any fixture is drawn from the show's own
      *  copy of a definition that differs from this computer's (and was not
      *  dealt with), say so once in the notice bar, with Review… -- never
@@ -321,6 +339,17 @@ private:
     void closeOpenedTab(int index);
     /** View ▸ Workspace ▸ Tabs & Features… (Q262, Q293). */
     void slotChooseTabs();
+    /** The level (ShowLevel) put on the window: the tabs, the bound menu
+     *  items and their More lines, the Window menu's More Tabs line, the
+     *  level items and the footer chip. Run on every level change. */
+    void applyShowLevel();
+    /** A show at the Student level in Classic QLC+ switches to the
+     *  qlcconsole view and offers Back to Classic QLC+ (Q344). */
+    bool enforceStudentView();
+    void updateLevelActions();
+    void updateLevelChip();
+    /** The footer level chip's menu: the three levels, and the help. */
+    void showLevelMenu();
     /** The show's features (ShowFeatures) put on the window: chips, menu
      *  items, and the tabs' own surfaces told to look again. */
     void applyShowFeatures();
@@ -351,6 +380,10 @@ private:
     QString m_loadedCreator;                   ///< <Creator><Name> of the show loaded
     bool m_upgradeOfferMade = false;           ///< offerConsoleViewAfterUpgrade(), per show
     QList<QAction *> m_workspaceViewActions;   ///< View ▸ Workspace
+    QList<QAction *> m_levelActions;           ///< View ▸ Workspace's levels
+    QAction *m_windowMoreTabs = nullptr;       ///< Window ▸ More Tabs at Standard…
+    bool m_classicAllowed = false;             ///< Back to Classic QLC+ chosen at Student, this show
+    int m_levelSaveOverride = -1;              ///< Make Student Handout's level, while it writes
     QWidget *m_viewNotice = nullptr;
     class QLabel *m_viewNoticeText = nullptr;
     class QPushButton *m_viewNoticeButton = nullptr;
@@ -875,8 +908,8 @@ public slots:
 
     void slotDetachContext(int index);
 
-    /** Shift-click on a tab breaks the view out into its own window (Window
-     *  menu toggle, remembered). A plain double-click no longer does: it
+    /** Shift-click on a tab breaks the view out into its own window
+     *  (Settings ▸ Appearance ▸ Window, remembered). A plain double-click no longer does: it
      *  tore views off the tab bar by accident. */
     bool shiftClickBreaksOut() const;
     /** A tab's right-click menu (Open in Its Own Window). */
@@ -938,7 +971,6 @@ private:
     QMenu *m_windowDockMenu = nullptr;      ///< Window > Put Back in Main Window
     QAction *m_windowDockAll = nullptr;
     QAction *m_windowBreakOut = nullptr;    ///< Window > Move <view> to Its Own Window
-    QAction *m_windowShiftClick = nullptr;  ///< Window > Shift-Click a Tab ... (toggle)
     QAction* m_controlBlackoutAction;
     QAction* m_controlBlindAction;
     /** Exit/resume timeline control (Operate-mode VC takeover). */
@@ -1324,6 +1356,8 @@ private:
     class VenueChip* m_venueChip = nullptr;
     /** "TEACHING" while the show is in Teaching mode; a click opens a menu */
     QLabel* m_statusTeachingLabel = nullptr;
+    /** "STUDENT" or "ADVANCED" (none at Standard); a click opens the levels */
+    QLabel* m_statusLevelLabel = nullptr;
     /** Show Review's chip; a click opens the Review panel */
     QLabel* m_statusReviewLabel = nullptr;
     /** Re-checks the show quietly a moment after it changes (Design only) */

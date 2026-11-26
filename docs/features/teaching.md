@@ -7,7 +7,8 @@ runs it for real. It is saved in the show file, so it follows the show to the
 student's computer.
 
 It is a flag on the show, not a view: a classroom show can be in any
-workspace view, and Teaching never changes which tabs you see.
+workspace view. Teaching sets the Student [level](getting-started.md#levels),
+and the PIN opens the others (below).
 
 ## Turn it on
 
@@ -89,6 +90,26 @@ text file, and a student with a text editor can delete the Teaching line. Keep
 your own master copy without Teaching mode. If the PIN is forgotten, the master
 is the way back. There is no back door.
 
+## Levels
+
+Turning Teaching mode on sets the show to the **Student** level
+([Levels](getting-started.md#levels)): the Show Tree, Run, focus calls
+and the Lighting Studio, with the tools a class doesn't need put away.
+A Teaching show opens at the level saved in it, so a Level 3 handout can
+be saved at **Standard** (Make Student Handout's **Level** box, below).
+
+- **Going up a level asks for the PIN**: **View ▸ Workspace ▸ Standard**,
+  a **Switch to Standard** line, or the TEACHING chip's **Unlock
+  Standard…** and **Unlock Advanced…**. A wrong PIN changes nothing.
+- **An unlock lasts until the show is closed, and is never saved.** The
+  student copy reopens at its own level, whatever was unlocked while it
+  was open.
+- **Going down never asks.**
+- With **no PIN set**, Teaching still sets Student, and going up asks
+  for nothing, as Teaching's other switches do.
+- **Classic QLC+** shows QLC+'s tabs in full, so a Student show opens
+  in the qlcconsole view. **Back to Classic QLC+** asks for the PIN.
+
 ## Running a Teaching show
 
 Operate is a lesson in itself (Level 1, lesson 5), so a Teaching show goes to
@@ -169,6 +190,9 @@ The copy is always a `.qlcc`, so its fixture definitions travel with it, and:
   show with a practice in progress.
 - **Blank the "checked by" names** in the venue file.
 - Lesson and handout link, filled from the settings.
+- **Level**: what the copy shows when it opens. **Student** by default,
+  which is enough for course Levels 0 to 2. Choose **Standard** for a
+  Level 3 lesson that patches, imports or uses show control.
 
 Put the copy in the same folder as the show if the show uses pictures kept
 beside it. [Collect for Transfer](shows.md) is the way to move a show with its

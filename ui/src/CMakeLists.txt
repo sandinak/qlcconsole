@@ -293,6 +293,7 @@ add_library(${module_name}
     systemtuningpage.cpp systemtuningpage.h
     showstatusdialog.cpp showstatusdialog.h
     showfeatures.cpp showfeatures.h
+    showlevel.cpp showlevel.h levelregistry.cpp levelregistry.h
     showreviewpanel.cpp showreviewpanel.h showreviewmarker.cpp showreviewmarker.h
     preshowcheck.cpp preshowcheck.h
     showdifferencesdialog.cpp showdifferencesdialog.h

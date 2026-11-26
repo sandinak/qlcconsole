@@ -29,9 +29,11 @@
 #include <QMessageBox>
 #include <QLineEdit>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QLabel>
 
 #include "showsettingsdialog.h"
+#include "showlevel.h"
 #include "teachingsettings.h"
 #include "teachingtips.h"
 #include "showoperate.h"
@@ -259,7 +261,12 @@ void ShowSettingsDialog::accept()
                                  : tr("Enter the PIN to change what Teaching holds.")))
         return;
 
+    /* Turning Teaching on sets the show to the Student level (Q341): the
+       PIN then opens the others. */
+    const bool turningOn = !teach->enabled() && m_teaching->isChecked();
     teach->setEnabled(m_teaching->isChecked());
+    if (turningOn)
+        ShowLevel::instance()->setLevel(ShowLevel::Student);
     teach->setAllowOutput(m_teaching->isChecked() && m_allowOutput->isChecked());
     teach->setAllowShowControl(m_teaching->isChecked() && m_allowShowControl->isChecked());
     teach->setHoldShowControlInBlind(m_teaching->isChecked() && m_holdBlindControl->isChecked());
@@ -476,6 +483,16 @@ bool ShowSettingsDialog::askHandoutOptions(Doc *doc, QWidget *parent, HandoutOpt
     QLineEdit *link = new QLineEdit(teach->link(), &d);
     lf->addRow(tr("Lesson:"), lesson);
     lf->addRow(tr("Handout link:"), link);
+    /* The copy's level (Q341): Student, unless the lesson needs more (the
+       course's Level 3 handouts are Standard). Going up needs the PIN. */
+    QComboBox *level = new QComboBox(&d);
+    level->setObjectName(QStringLiteral("handoutLevel"));
+    for (int l = ShowLevel::Student; l <= ShowLevel::Advanced; ++l)
+        level->addItem(ShowLevel::name(ShowLevel::Level(l)), l);
+    level->setCurrentIndex(0);
+    level->setToolTip(tr("What the copy shows when it opens: Student for course Levels 0 to 2, "
+                         "Standard for Level 3. The PIN opens the others."));
+    lf->addRow(tr("Level:"), level);
     vl->addLayout(lf);
 
     QDialogButtonBox *btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &d);
@@ -492,5 +509,6 @@ bool ShowSettingsDialog::askHandoutOptions(Doc *doc, QWidget *parent, HandoutOpt
     out->holdOutput = hold->isChecked();
     out->lesson = lesson->text().trimmed();
     out->link = link->text().trimmed();
+    out->level = level->currentData().toInt();
     return true;
 }

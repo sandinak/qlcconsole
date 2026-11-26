@@ -1172,5 +1172,8 @@ appears in the browser next time the app starts. The script is handed every
 fixture (each head of a pixel fixture), the look's colours and its own
 settings each tick, and returns what each should do. In the Look Editor,
 an Effect look's **Script ▾** has **New Script…** (a new one from a
-template) and **Edit Script…** (the one behind the picked effect). See the
+template) and **Edit Script…** (the one behind the picked effect). They are
+at the **Advanced** [level](getting-started.md#levels): at Student and
+Standard, **Script ▾** holds **More at Advanced…**, which offers the
+switch. Effects already written play at every level. See the
 [Effect script API](../dev/EFFECTSCRIPT_API.md) for the full reference.

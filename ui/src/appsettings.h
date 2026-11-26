@@ -95,6 +95,7 @@ private:
     QComboBox *m_beatStyleCombo = nullptr;
     QComboBox *m_beatWhenCombo = nullptr;
     QCheckBox *m_scrollBarsCheck = nullptr;
+    QCheckBox *m_shiftClickCheck = nullptr;
     // Show controls: top bar or status bar (App::ShowControlsPlacement)
     QComboBox *m_showControlsCombo;
     /** The double-GO guard's window, seconds (0: off); App::setGoGuardMs() */

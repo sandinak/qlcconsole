@@ -140,6 +140,14 @@ AppSettings::AppSettings(App *app, QWidget *parent)
                                          "sideways with Shift + the wheel, or a drag on the "
                                          "space between them."));
         winForm->addRow(QString(), m_scrollBarsCheck);
+        // Moved here from the Window menu: a preference, not a window.
+        m_shiftClickCheck = new QCheckBox(tr("Shift-click a tab to open it in a window"), winGroup);
+        m_shiftClickCheck->setObjectName(QStringLiteral("settingsShiftClickBreaksOut"));
+        m_shiftClickCheck->setChecked(m_app->shiftClickBreaksOut());
+        m_shiftClickCheck->setToolTip(tr("A Shift-click on a tab opens that tab in a window of its "
+                                         "own; Window \342\226\270 Put Back in Main Window "
+                                         "brings it back."));
+        winForm->addRow(QString(), m_shiftClickCheck);
         lookLayout->addWidget(winGroup);
 
         QGroupBox *footGroup = new QGroupBox(tr("Footer"), appearancePage);
@@ -774,6 +782,8 @@ void AppSettings::accept()
         m_app->setTheme(theme);
     if (m_scrollBarsCheck->isChecked() != m_app->alwaysShowScrollBars())
         m_app->setAlwaysShowScrollBars(m_scrollBarsCheck->isChecked());
+    if (m_shiftClickCheck->isChecked() != m_app->shiftClickBreaksOut())
+        m_app->setShiftClickBreaksOut(m_shiftClickCheck->isChecked());
     for (auto it = m_footerChecks.constBegin(); it != m_footerChecks.constEnd(); ++it)
         if (it.value()->isChecked() != m_app->footerChipShown(App::FooterChip(it.key())))
             m_app->setFooterChipShown(App::FooterChip(it.key()), it.value()->isChecked());

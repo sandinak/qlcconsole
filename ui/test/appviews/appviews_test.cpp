@@ -410,11 +410,17 @@ void AppViews_Test::shiftClickBreaksATabOutDoubleClickDoesNot()
         QTRY_COMPARE(tabs->count(), count);
     }
 
-    // Turned off from the Window menu: a Shift-click is just a click.
-    QAction *toggle = m_app->menuBar()->findChild<QAction *>("windowShiftClick");
-    QVERIFY(toggle != nullptr);
-    QVERIFY(toggle->isChecked());
-    toggle->trigger();
+    /* Turned off in Settings ▸ Appearance ▸ Window (it left the Window
+       menu, a preference not a window): a Shift-click is just a click. */
+    QVERIFY(m_app->menuBar()->findChild<QAction *>("windowShiftClick") == nullptr);
+    {
+        AppSettings settings(m_app, m_app);
+        QCheckBox *toggle = settings.findChild<QCheckBox *>("settingsShiftClickBreaksOut");
+        QVERIFY(toggle != nullptr);
+        QVERIFY(toggle->isChecked());
+        toggle->setChecked(false);
+        settings.accept();
+    }
     QVERIFY(m_app->shiftClickBreaksOut() == false);
     QTest::mouseClick(bar, Qt::LeftButton, Qt::ShiftModifier, bar->tabRect(1).center());
     QCoreApplication::processEvents();

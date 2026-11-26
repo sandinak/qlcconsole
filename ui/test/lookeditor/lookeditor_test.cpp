@@ -42,6 +42,7 @@
 #include <QSignalSpy>
 
 #include "../../../engine/test/common/stdprelude.h"
+#include "showlevel.h"
 #define private public
 #include "lookeditor.h"
 #include "effectrows.h"
@@ -999,9 +1000,25 @@ void LookEditor_Test::scriptsAreUnderOneScriptButton()
     QCOMPARE(script->text(), QString("Script"));
     QCOMPARE(script->popupMode(), QToolButton::InstantPopup);
     QVERIFY(script->menu() != nullptr);
-    QCOMPARE(script->menu()->actions(), QList<QAction *>({ ed.m_newScriptButton, ed.m_editScriptButton }));
+    // The two, then the level's More line (board Q343: Advanced).
+    QAction *more = ShowLevel::instance()->moreLine(script->menu());
+    QVERIFY(more != nullptr);
+    QCOMPARE(script->menu()->actions(), QList<QAction *>({ ed.m_newScriptButton, ed.m_editScriptButton, more }));
     QCOMPARE(ed.m_newScriptButton->text(), QString::fromUtf8("New Script…"));
     QCOMPARE(ed.m_editScriptButton->text(), QString::fromUtf8("Edit Script…"));
+    // At Standard (no App: a show's default) writing scripts is folded into
+    // "More at Advanced…"; at Advanced the two are back and the line goes.
+    QCOMPARE(ShowLevel::instance()->level(), ShowLevel::Standard);
+    QVERIFY(!ed.m_newScriptButton->isVisible() && !ed.m_editScriptButton->isVisible());
+    QVERIFY(more->isVisible());
+    QCOMPARE(more->text(), QString::fromUtf8("More at Advanced…"));
+    ShowLevel::instance()->setLevel(ShowLevel::Advanced);
+    ShowLevel::instance()->apply();
+    QVERIFY(ed.m_newScriptButton->isVisible() && ed.m_editScriptButton->isVisible());
+    QVERIFY(!more->isVisible());
+    ShowLevel::instance()->setLevel(ShowLevel::Standard);
+    ShowLevel::instance()->apply();
+    QVERIFY(!ed.m_newScriptButton->isVisible());
     for (QAbstractButton *b : ed.findChildren<QAbstractButton *>())
         QVERIFY2(!b->text().contains("script…"), qPrintable(b->text()));
 }

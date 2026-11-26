@@ -90,6 +90,10 @@ private slots:
      *  tooltip with the full name on every tab, and the explicit modes
      *  unchanged. TABFIT_SHOTS=dir (+ TABFIT_TAG) saves pictures. */
     void theTabStripFitsTheWindow();
+    /** Each level (Student, Standard, Advanced) in the qlcconsole and
+     *  Everything views at 1024 wide and the minimum: no footer chips
+     *  overlap, the tab strip never scrolls, the level chip fits. */
+    void eachLevelLaysOutCleanly();
 
     /** The 0.4.4 UX nits at 1024x640, 1280x800 and 1920x1080: the Everything
      *  view's tab strip fits with no scroll arrow, the footer has no "Venue:

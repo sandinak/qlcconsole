@@ -14,6 +14,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Levels: Student, Standard, Advanced** (View ▸ Workspace, beside the view;
+  saved with the show, absent = Standard): Student puts away Build, Functions,
+  Simple Desk, the Timeline and the menu items a class doesn't use, each with a
+  **More at Standard…** line and a Switch; Teaching and Make Student Handout set
+  Student, and going up asks the PIN until the show closes; the effect script
+  editor moves to Advanced; Clear Hold at End folds into Hold at End, and
+  Shift-click a tab moves to Settings ▸ Appearance (Q249, Q340–Q344).
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only
