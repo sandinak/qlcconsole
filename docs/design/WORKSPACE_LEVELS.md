@@ -360,7 +360,11 @@ Window counted in the qlcconsole view (10 tab jumps + 6).
   menu, tab or top-level item.
 
 `levels_test::theMenuCountFallsOrStaysFlat` holds these numbers: Student
-must be at most 52 and Standard at most 68. A later change that raises
+must be at most 52 and Standard at most 68 at the top level, and counted
+item by item (submenus opened out, the VC's Add menu in) Standard at most
+98 and Student at most 75, with Advanced equal to Standard. CS10 shipped
+with L1's review (the wizard is gone), so the paid-back count holds: the
+top-level 68 alone hid that Standard was one item over. A later change that raises
 either has to change the test, with its reason in the commit.
 
 ---

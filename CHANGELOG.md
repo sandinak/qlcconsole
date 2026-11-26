@@ -54,6 +54,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Levels cleanups**: the menu count now holds item by item at every
+  level: the Virtual Console's rarely used Add ▸ New Programmer Frame from
+  Input Profile… wizard is retired (the one fold the levels design owed).
+  A Student show saved on the Functions tab opens quietly on a tab Student
+  shows, with a footer line saying why, instead of a notice with a Switch
+  button.
 - **The double-GO guard follows the cue** (Q328): a second GO is held only
   until the cue the GO before started has begun (its fade in started, a
   wait counting from its start, and 0.25 s gone), never longer than the

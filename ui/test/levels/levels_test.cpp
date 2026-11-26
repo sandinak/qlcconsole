@@ -45,6 +45,7 @@
 #define protected public
 #include "doc.h"
 #include "app.h"
+#include "virtualconsole.h"
 #include "showsettingsdialog.h"
 #undef private
 #undef protected
@@ -78,6 +79,36 @@ int menuCount(App *app, QStringList *detail = nullptr)
         if (detail != nullptr)
             *detail << QStringLiteral("%1 %2").arg(m->title().remove(QLatin1Char('&'))).arg(n);
     }
+    return total;
+}
+
+
+/* Every leaf item, counted one by one: the menu bar's menus with their
+   submenus opened out, plus the Virtual Console's Add menu (it is not on the
+   bar, but it is a menu of the product). Separators and hidden items do not
+   count; a submenu is not itself an item. The menu count is held per level
+   on this, not only on the top-level entries, because the level's own items
+   sit inside View > Workspace where menuCount() does not see them. */
+int leafItems(const QMenu *menu)
+{
+    int n = 0;
+    for (QAction *a : menu->actions())
+    {
+        if (a->isSeparator() || !a->isVisible())
+            continue;
+        n += a->menu() != nullptr ? leafItems(a->menu()) : 1;
+    }
+    return n;
+}
+
+int itemCount(App *app)
+{
+    int total = 0;
+    for (QAction *top : app->menuBar()->actions())
+        if (top->menu() != nullptr && top->isVisible())
+            total += leafItems(top->menu());
+    if (VirtualConsole::instance() != nullptr && VirtualConsole::instance()->addMenu() != nullptr)
+        total += leafItems(VirtualConsole::instance()->addMenu());
     return total;
 }
 
@@ -482,6 +513,21 @@ void Levels_Test::theMenuCountFallsOrStaysFlat()
        left their menus); Student falls by a quarter. Raising either number
        means changing this test, with the reason in the commit. */
     QStringList standard, student, advanced;
+    /* Item by item (submenus opened, the VC's Add menu in): the same three
+       levels. kBefore is origin/main 63dafbfa4's count; the level adds its
+       three radio items inside View > Workspace, and Standard pays them
+       back (Clear Hold at End, Shift-Click a Tab, the VC's Programmer Frame
+       wizard), so it holds flat. */
+    const int kBefore = 98;
+    const int itemsAtStandard = itemCount(m_app);
+    QVERIFY2(itemsAtStandard <= kBefore, qPrintable(QString::number(itemsAtStandard)));
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    const int itemsAtStudent = itemCount(m_app);
+    QVERIFY2(itemsAtStudent <= 75, qPrintable(QString::number(itemsAtStudent)));
+    QVERIFY(m_app->requestLevel(ShowLevel::Advanced));
+    QCOMPARE(itemCount(m_app), itemsAtStandard);
+    QVERIFY(m_app->requestLevel(ShowLevel::Standard));
+
     const int atStandard = menuCount(m_app, &standard);
     QVERIFY2(atStandard <= 68, qPrintable(standard.join(QStringLiteral(", "))));
     QVERIFY(m_app->requestLevel(ShowLevel::Student));
@@ -499,6 +545,47 @@ void Levels_Test::theMenuCountFallsOrStaysFlat()
         QAction *a = workspace->findChild<QAction *>(QString::fromLatin1(name));
         QVERIFY2(a != nullptr && workspace->actions().contains(a), name);
     }
+    m_app->doc()->resetModified();
+}
+
+void Levels_Test::aStudentShowSavedOnFunctionsOpensQuietly()
+{
+    QTemporaryDir dir;
+    const QString path = dir.filePath(QStringLiteral("student.qxw"));
+    // The Everything view has a Functions tab for the level to take away.
+    m_app->chooseWorkspaceView(App::EverythingView);
+    QVERIFY(m_app->requestLevel(ShowLevel::Student));
+    QCOMPARE(m_app->workspaceView(), App::EverythingView);
+    QVERIFY(m_app->levelHiddenTabs().contains(QStringLiteral("Functions")));
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QString xml = QString::fromUtf8(f.readAll());
+    f.close();
+    // The show was last saved with the Functions tab in front (a Standard session).
+    xml.replace(QRegularExpression(QStringLiteral(" CurrentWindow=\"[^\"]*\"")), QString());
+    xml.replace(QStringLiteral("<Workspace "),
+                QStringLiteral("<Workspace CurrentWindow=\"FunctionManager\" "));
+    QVERIFY(xml.contains(QStringLiteral("CurrentWindow=\"FunctionManager\"")));
+    QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    f.write(xml.toUtf8());
+    f.close();
+
+    m_app->clearDocument();
+    m_app->hideViewNotice();
+    m_app->statusBar()->clearMessage();
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    QCOMPARE(ShowLevel::instance()->level(), ShowLevel::Student);
+    settle();
+
+    // Quiet: no notice line, no Switch button; the Functions tab is not on screen.
+    QVERIFY(!m_app->m_viewNotice->isVisibleTo(m_app));
+    QVERIFY(!m_app->m_viewNoticeButton->isVisibleTo(m_app));
+    QVERIFY(!barTabs(m_app).contains(QStringLiteral("Functions")));
+    // The footer says why, in one line.
+    const QString said = m_app->statusBar()->currentMessage();
+    QVERIFY2(said.contains(QStringLiteral("Functions")) && said.contains(QStringLiteral("Standard")),
+             qPrintable(said));
     m_app->doc()->resetModified();
 }
 

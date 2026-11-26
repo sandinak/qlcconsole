@@ -290,7 +290,6 @@ App::App()
     , m_timelineSuspendAction(NULL)
     , m_followMtcAction(NULL)
     , m_lastLookAction(NULL)
-    , m_clearLastLookAction(NULL)
     , m_controlPanicAction(NULL)
     , m_dumpDmxAction(NULL)
     , m_liveEditAction(NULL)
@@ -1219,6 +1218,21 @@ void App::setActiveWindow(const QString& name)
     // has it; a view without it isn't switched just by opening a show.
     if (name == QLatin1String(FunctionManager::staticMetaObject.className()))
     {
+        /* A level that hides it (Student) opens the show quietly: no notice,
+           no Switch button, one line in the footer saying why. */
+        if (levelHiddenTabs().contains(tr("Functions")))
+        {
+            const QStringList all = workspaceViewTabs(EverythingView), keys = tabKeys();
+            const QString key = keys.value(all.indexOf(tr("Functions")));
+            for (const LevelRegistry::Row &r : LevelRegistry::rows())
+                if (r.treatment == ShowLevel::Tab && r.tab == key)
+                {
+                    statusBar()->showMessage(tr("This show was saved on Functions, which is at the %1 level.")
+                                                 .arg(ShowLevel::name(r.level)), 8000);
+                    break;
+                }
+            return;
+        }
         if (m_functionsWindowShown)
             showContext(tr("Functions"));
         return;
@@ -2903,19 +2917,13 @@ void App::initActions()
     m_lastLookAction->setChecked(m_doc->lastLookEnabled());
     m_lastLookAction->setToolTip(tr(
         "Hold at end: when a show stops or ends (Operate), keep its final look "
-        "on the rig instead of blacking out, until the next cue takes over."));
+        "on the rig instead of blacking out, until the next cue takes over. "
+        "Unticking it drops the look being held now."));
     connect(m_lastLookAction, SIGNAL(toggled(bool)),
             this, SLOT(slotLastLookToggled(bool)));
 
     /* No Control ▸ Auto Move in Black (Q91): the Show Tree's MIB button is
        the show's one switch (Build's Move in black menu follows it). */
-
-    m_clearLastLookAction = new QAction(QIcon(":/fileclose.png"),
-                                        tr("&Clear Hold at End"), this);
-    m_clearLastLookAction->setToolTip(tr(
-        "Drop what a stopped show is holding at its end now (the held channels go dark)."));
-    connect(m_clearLastLookAction, SIGNAL(triggered()),
-            this, SLOT(slotClearLastLook()));
 
     // Exit / resume timeline control — an Operate-mode VC takeover. While a show
     // is driving the rig, checking this suspends the timeline's output (the
@@ -11050,12 +11058,6 @@ void App::slotLastLookToggled(bool checked)
 {
     if (m_doc != NULL)
         m_doc->setLastLookEnabled(checked); // disabling also clears any held look
-}
-
-void App::slotClearLastLook()
-{
-    if (m_doc != NULL && m_doc->lastLook() != NULL)
-        m_doc->lastLook()->clear();
 }
 
 void App::slotProgrammerSelectionChanged()
