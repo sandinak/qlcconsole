@@ -11932,6 +11932,22 @@ void ShowTreeView_Test::libraryPalettesDuplicateOnCmdD()
     // The copy is what the Library selects now.
     QVERIFY(lib->currentItem() != nullptr);
     QCOMPARE(lib->currentItem()->data(0, ShowTreeView::IdRole).toUInt(), copy->id());
+    auto shots = [](QWidget *w, const QString &prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        const QSize was = w->size();
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+        w->resize(was);
+        QTest::qWait(20);
+    };
+    shots(&view, "library-palette-duplicated");
     QVERIFY(st->canUndoShared());
     QVERIFY(st->undoShared());
     QCOMPARE(m_doc->palettes().count(), before);

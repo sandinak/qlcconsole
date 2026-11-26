@@ -2313,6 +2313,25 @@ void AppViews_Test::editUndoFollowsTheTabInFront()
         QVERIFY(doc->fixture(fid) != nullptr);
         QCOMPARE(doc->fixture(fid)->name(), QString("Rig A"));
     }
+    // A group renamed on Fixtures: Edit ▸ Redo names it and does it again.
+    {
+        QAction *redo = m_app->menuBar()->findChild<QAction *>("editRedo");
+        QVERIFY(redo != nullptr);
+        FixtureGroup *grp = new FixtureGroup(doc);
+        grp->setName("Old");
+        QVERIFY(doc->addFixtureGroup(grp));
+        const quint32 gid = grp->id();
+        auto tidyGroup = qScopeGuard([doc, gid]() { doc->deleteFixtureGroup(gid); });
+        grp->setName("New");
+        FixtureManager::recordGroupRename(doc, gid, "Old");
+        undoOn("Fixtures");
+        QCOMPARE(doc->fixtureGroup(gid)->name(), QString("Old"));
+        emit edit->aboutToShow();
+        QVERIFY(redo->isEnabled());
+        QCOMPARE(redo->text(), App::menuTextWithKeys("Redo rig change", QKeySequence::Redo));
+        redo->trigger();
+        QCOMPARE(doc->fixtureGroup(gid)->name(), QString("New"));
+    }
 
     // Simple Desk and Run: nothing of theirs, and a Show Tree step stays.
     ShowTreeController *st = doc->showTree();

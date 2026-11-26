@@ -1842,9 +1842,26 @@ void FixtureManager_Test::duplicateNewGroupAndRenameAreUndoSteps()
     QVERIFY(redoKey != nullptr);
     QCOMPARE(redoKey->key(), QKeySequence(QKeySequence::Redo));
 
+    auto shots = [](QWidget *w, const QString &prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        const QSize was = w->size();
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+        w->resize(was);
+        QTest::qWait(20);
+    };
+
     // Duplicate a fixture and the group: one step takes both copies away.
     const QList<quint32> made = mgr.duplicate({ fids.first() }, { front->id() });
     QCOMPARE(made.size(), 1);
+    shots(&mgr, "fixtures-undo-duplicated");
     const quint32 copy = made.first();
     const QString copyName = m_doc->fixture(copy)->name();
     QCOMPARE(m_doc->fixtures().count(), fixturesBefore + 1);
@@ -1860,6 +1877,7 @@ void FixtureManager_Test::duplicateNewGroupAndRenameAreUndoSteps()
     QCOMPARE(m_doc->fixtureGroups().count(), groupsBefore);
     QVERIFY(m_doc->fixture(copy) == nullptr);
     QVERIFY(mgr.m_fixtures_tree->fixtureItem(copy) == nullptr);
+    shots(&mgr, "fixtures-undo-undone");
     // ⇧⌘Z: back, the same fixture and group (ids, name, path).
     QVERIFY(mon.canRedo());
     mon.redo();
@@ -1870,6 +1888,7 @@ void FixtureManager_Test::duplicateNewGroupAndRenameAreUndoSteps()
     QCOMPARE(m_doc->fixtureGroup(groupCopy)->path(), QString("Movers"));
     QCOMPARE(m_doc->fixtureGroup(groupCopy)->fixtureList().size(), fids.size());
     QVERIFY(mgr.m_fixtures_tree->fixtureItem(copy) != nullptr);
+    shots(&mgr, "fixtures-undo-redone");
     QVERIFY(!mon.canRedo());
     mon.undo();
     QCOMPARE(m_doc->fixtures().count(), fixturesBefore);
