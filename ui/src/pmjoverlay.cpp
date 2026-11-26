@@ -785,7 +785,7 @@ ControlSurface::State PMJOverlay::stateFor(const ControlSurface::Role &role) con
         return ControlSurface::State::Empty;   // Favorites/Tap: unbound this slice
 
     // The mode buttons: the one lit is the page the strips are on
-    // (Effects until another is pressed). The help and the Control
+    // (Looks until another is pressed: SurfacePages). The help and the Control
     // surfaces hub say so (control-surfaces.md, "What the lamps mean").
     case ControlSurface::RoleType::Page:
     {

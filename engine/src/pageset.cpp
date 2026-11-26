@@ -143,7 +143,7 @@ QString PageSet::Binding::text() const
     if (!label.isEmpty())
         return label;
     if (param == kLookLevel)
-        return QObject::tr("Look %1").arg(index);
+        return QObject::tr("Level %1").arg(index);
     if (param == kGroupIntensity)
         return QObject::tr("Group %1").arg(index);
     const QString n = paramName(param);

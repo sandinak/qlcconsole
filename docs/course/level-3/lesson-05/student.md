@@ -112,6 +112,10 @@ has its own switch, and its own PIN.
   patch the desk, the footer's **Desk** chip turns red: click it to patch
   it. The show keeps its own stop too, so a computer with no desk learned
   can still stop the show.
+- **Pages.** A page is a labelled layer of the desk: colour on the faders,
+  moves on the knobs. The board's page keys switch it, and its map names
+  every control's job. Pages edit in Design only; in Operate the controls
+  are the show's again.
 
 ## Exit ticket
 

@@ -327,6 +327,52 @@ Controller**. The map and its default roles come from the profile, never the
 port's name. Its **BO** key is printed Blackout; it has no job yet in
 qlcconsole (the map says *Blackout (coming)*).
 
+## Pages
+
+**A page is a labelled layer of the desk: colour on the faders, moves on
+the knobs.** Each drawn board comes with a page set: named pages, each
+giving its controls a job (an attribute of what you are editing: *Red*,
+*Pan*, *Pan fine*, *Zoom*). The map labels every control with its job on
+the page on now, the colour faders in their colours, and the footer chip
+names the page: **APC40 · Move**.
+
+- **Design only.** In Design a page edits what the encoders edit: the look
+  open in the Look Editor, else the selected fixtures or group of the
+  scene in Build. One move is one undo step. In **Operate** a page does
+  nothing and its controls are the show's again: a trigger or a Virtual
+  Console control you assigned to one works as you set it up. In Design
+  the page has them, and the map names the show's job as kept from it.
+- **A fader picks up first.** A page's fader does nothing until it meets
+  the value it edits, then follows; the Workbench line says where to move
+  it (*Red: move it to 50%*). After a page switch or a new selection every
+  fader picks up again, so a value never jumps.
+- **A knob turns.** It moves the value from where it is. A knob marked
+  *fine* turns the same attribute by the small step: on the APC40, knob 1
+  is pan, knob 2 pan fine.
+- **Never the desk's.** This computer's GO, Back, STOP and Grand Master
+  are on no page; a page set that puts a job there is refused.
+
+| Board | Pages | How you switch |
+|---|---|---|
+| **APC40 mk2** (*Build*) | **Move**: device knobs 1, 2 pan and pan fine; 3, 4 focus and zoom; 5, 6 tilt and tilt fine; 7, 8 gobo and gobo rotation. **Beam**: zoom, focus, iris, frost, strobe, shutter, prism, prism rotation. On every page: faders 1-6 red, green, blue, white, amber, UV, fader 8 intensity; track knobs 1, 2 hue and saturation. | **Pan** (Move) and **Sends** (Beam), lit when on; **Device ◀ ▶** step |
+| **APC64** (*Build*) | **Colour**: touch strips 1-7 red, green, blue, white, amber, UV, intensity. **Move**: pan, tilt, zoom, focus, iris, gobo, intensity. The pads stay free; strip 8 is the GM. | Turn the **encoder** |
+| **PMJ Black 1** (*Pages*) | **Looks** (on at start): the faders edit the open look (a colour look: 1-6 R G B W A UV; a dimmer look: 1), else the intensity of selected fixture N; encoders pan, tilt, hue, saturation. **Fix Cont**: faders 1-6 colour, 10 intensity, encoders pan, tilt, zoom, focus; press it again for gobo, gobo rotation, prism, iris. **Groups**: fader N is the level of the open scene's group N. **Effects** and **Macros**: nothing yet. | The mode keys, the lit one is the page |
+| **MaizeDMX** (*Colour*) | Faders 1-6 red, green, blue, white, amber, UV; 7, 8 hue and saturation; 10 intensity. | One page |
+
+**Which set, and sharing one.** The **Pages** row over each map picks the
+set this board uses **on this computer** (by the device, like this
+computer's desk), names the page on now and how to switch. **Export…**
+saves the set as a `.pageset.json` file; **Import…** adds one made for
+this board (it is checked first: a set for another board, or one with a
+job on the desk's controls, is refused with the reason). The built-in sets
+cannot be changed: export one, edit the file, import it under a new name.
+A show saved with a set other than the board's own remembers it; opened on
+a computer that uses another, the row offers it (**Use It** or **Not
+Now**). Making pages in the app is the next step.
+
+A show's **encoder bank** on the same board wins: while it is on, that
+board's pages rest.
+
 ## The emergency stop
 
 A control surface can have **one emergency stop**: **Emergency Stop…**, the
@@ -623,10 +669,12 @@ the profile is patched on.
 
 - **Master** is the Grand Master. **O** is Blackout (a toggle, not a stop),
   **Set** is Blind.
-- **Ch 1-10** edit the open palette (Colour: R G B White Amber UV; Dimmer:
-  intensity) or, with fixtures selected, their intensity. **1-Up…10-Up**
-  zero that fader's target. **Enc 1 and 2** nudge pan and tilt. These are
-  **Design only**: in Operate they are refused with the sentence above.
+- **Ch 1-10** and **Enc 1-4** do the job of the page on now ([Pages](#pages)):
+  on **Looks** the faders edit the open palette (Colour: R G B White Amber
+  UV; Dimmer: intensity) or, with fixtures selected, their intensity, and
+  the encoders pan, tilt, hue and saturation. **1-Up…10-Up** zero that
+  fader's target on Looks. These are **Design only**: in Operate they are
+  refused with the sentence above.
 - **Select 1-10** and **Load 1-10** change the selection and work in either
   mode.
 - **Two boards.** Only the first universe patched with the PMJ Black 1
@@ -643,7 +691,7 @@ the profile is patched on.
   either in the Control Map and that trigger is its job instead.
 - **Left**, **Right**, **Pre Page** and **Next Page** do nothing yet. The
   mode buttons (**Effects**, **Groups**, **Looks**, **Macros**, **Fix Cont**)
-  choose the page; for now every page gives the strips the same job.
+  choose the page (see [Pages](#pages)).
 
 ### What the lamps mean
 
@@ -651,9 +699,9 @@ the profile is patched on.
 |---|---|
 | **Go** | The Run tab's GO would play a cue now. Dim: there is a cue list, but nothing left to GO. Dark: no cue list. |
 | **Back** | The list is running, so Back has a cue to go back to. Dim: the list is stopped. |
-| **One mode button** | The page in use: **Effects** until you press another (Groups, Looks, Macros, Fix Cont). |
+| **One mode button** | The page in use: **Looks** until you press another (Fix Cont, Groups, Effects, Macros). |
 | **1-10**, **1-Load…10-Load** | That strip has a fixture of the scene open in Build (strip 1 the first). Brighter: that fixture is selected. Dark: the scene has no fixture for that strip. |
-| **1-Up…10-Up** | That fader edits the open palette now. |
+| **1-Up…10-Up** | That fader edits the open palette now (the Looks page). |
 | **O**, **Set** | Dim: ready. Bright: Blackout or Blind is on. |
 | **A key you learned** | The Control Map's light: lit when a press would fire it or it is running, dim otherwise ([What a control's light says](#what-a-controls-light-says)). |
 | **The emergency stop's key** | Lit at every moment: it always works. Blinking lit and dim: the show is stopped (ALL OFF) until the next GO. |

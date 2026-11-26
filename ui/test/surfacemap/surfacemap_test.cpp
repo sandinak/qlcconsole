@@ -288,8 +288,9 @@ void SurfaceMap_Test::theFooterChipOpensItsMap()
     SurfaceChips chips(m_doc);
     settle();
     QCOMPARE(chips.universes(), QList<quint32>({ 0, 1 }));
-    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC40"));
-    QCOMPARE(chips.chip(1)->text(), QStringLiteral("MaizeDMX"));
+    // Each with the surface page on now (Design).
+    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC40 · Move"));
+    QCOMPARE(chips.chip(1)->text(), QStringLiteral("MaizeDMX · Colour"));
     QSignalSpy asked(&chips, &SurfaceChips::mapRequested);
     chips.chip(1)->click();
     QCOMPARE(asked.count(), 1);
