@@ -24,6 +24,14 @@
 #include <QBuffer>
 #include <QtTest>
 
+#include "../common/stdprelude.h"
+#define private public
+#define protected public
+#include "mastertimer.h"
+#include "universe.h"
+#undef protected
+#undef private
+
 #include "hazardarming_test.h"
 #include "simmididevice.h"
 #include "programmercontroller.h"

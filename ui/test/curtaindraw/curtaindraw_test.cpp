@@ -672,7 +672,7 @@ void CurtainDraw_Test::remapKeepsBehavesAs()
     f->setUniverse(3);
     f->setAddress(300);
     QVERIFY(doc->addFixture(f));
-    f->setBehaviourSetting(Fixture::HazardBurstBehaviour);
+    f->setBehaviourSetting(Fixture::SwitchBehaviour);       // set by hand
     {
         FixtureRemap remap(doc);
         QTreeWidgetItem *item = nullptr;
@@ -688,7 +688,7 @@ void CurtainDraw_Test::remapKeepsBehavesAs()
             if (t->name() == f->name())
                 clone = t;
         QVERIFY(clone != nullptr);
-        QCOMPARE(clone->behaviourSetting(), int(Fixture::HazardBurstBehaviour));
+        QCOMPARE(clone->behaviourSetting(), int(Fixture::SwitchBehaviour));
     }
     doc->deleteFixture(f->id());
     doc->resetModified();
