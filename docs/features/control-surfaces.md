@@ -109,7 +109,24 @@ it is never made to wait.
 and a Virtual Console slider set to **Grand Master**, **Submaster** or
 **Group master** do not wait: they follow their fader, up and down, from the
 first value, whatever Catch values says. They stay that way until their
-surface type declares them.
+surface type declares them (below).
+
+**What the fader is.** A device's input profile can say what each fader is
+(a *surface type*, [below](#surface-types)), and the pick-up follows it:
+
+| The profile says | Pick-up |
+|---|---|
+| **Endless knob** (Relative) | never waits: it turns from where the value is |
+| **Motor fader** | waits as a plain fader, and is sent the value once when it starts to wait, so the motor drives it there and it is picked up when it arrives |
+| **Plain fader** (Absolute) | waits until it meets the value, as above |
+| nothing (most profiles) | as above, unchanged |
+
+A **master** on a fader its profile calls a **plain fader** waits only to be
+raised: pushed up past the master, it waits until it meets it. Pulled down
+it is taken at once, every time, from the very first move after the show
+opens -- lowering a master is the safe way, so it never waits. A master on a
+motor fader, an endless knob or an undeclared fader follows at once, as
+before.
 
 A fader that is waiting says so in the tooltip of the control, and a speed
 master's footer button gets an arrow, the way to move the fader:
@@ -130,6 +147,38 @@ sits on the fader's travel, and its hint says that place.
 
 Giving a control another fader (Learn again) starts over: the new fader
 waits until it reaches the control.
+
+## Surface types
+
+A **surface type** is the device's input profile with a few more lines: the
+profile says it is one, which controls have a fixed **role** on this kind of
+board (the Grand Master, GO, Back, the emergency stop, the PMJ's page keys
+and strips), and what each fader **is** (plain, motor, endless). A control
+with no role is free for a show to assign. QLC+ 4 reads these profiles and
+skips the new lines.
+
+These come as surface types:
+
+| Profile | Roles | Faders |
+|---|---|---|
+| **PMJ Black 1** | Master = Grand Master; Go, Back, Left, Right, page arrows; O = Blackout, Set = Blind; the five mode keys = pages; strip keys Select / Load / Up (reset); encoders | plain |
+| **Akai APC mini** and **APC mini mk2** | Slider 9 = Grand Master; scene keys: **Clip Stop** = GO, **Solo** = Back, **Stop All Clips** = stop | plain |
+| **PMJ 9 Faders**, **KORG nanoKONTROL2**, **Behringer BCF2000** | the last fader = Grand Master | plain (BCF2000: motor) |
+
+Today the roles are what the board's own overlay does (the PMJ's) and what
+the profile says about its faders; the APC minis' and fader boxes' roles are
+written down for the desk to use, which a later version does. Learning a
+control for this computer's desk ([This computer's desk](#this-computers-desk))
+is unchanged.
+
+**Make one.** Connections ▸ the universe ▸ edit its input profile. On
+**General**, tick **This profile is a surface type**; on **Input Mapping**
+click a control and pick its **Role** (a strip or page role takes a
+number) and, for a fader or knob, what the **Fader** is. A shipped profile
+is fixed: save your changes as a copy (a new name). The editor refuses to
+save a type that breaks its rules -- the stop on anything but a button, the
+Grand Master on anything but a fader, a role on two controls -- and says
+which control.
 
 ## The rules for a surface
 
@@ -992,6 +1041,25 @@ after any build that changes a surface, and say which build.
     *… everywhere, except … in cue 2*. In Operate: before cue 2, the button
     fires the scene; GO to cue 2 -- it fires the hit; GO past it -- the
     scene again. The light follows each GO without a press.
+
+**Surface types**
+
+1. Patch a **Behringer BCF2000** with its profile, put a VC **Level**
+   slider (Catch values on) on fader 1 at 80 % and the fader at the
+   bottom; move the fader a little. *Expect:* the motor drives the fader to
+   80 % and the slider follows from there; it never drops.
+2. On the same BCF2000 put a VC **Grand Master** slider on fader 8 and
+   move the GM on screen. *Expect:* the motor follows the GM; moving the
+   fader moves the GM at once, up and down (a motor master follows).
+3. Patch an **APC mini** (mk1 or mk2), put a VC **Grand Master** slider on
+   **Slider 9**, GM at full. Pull Slider 9 to the bottom. *Expect:* the GM
+   goes down with it at once, from the first move. Push it back up from the
+   bottom while the GM sits at 30 % (set on screen). *Expect:* nothing until
+   the fader meets 30 %.
+4. On the APC mini check the keys its profile names: **Clip Stop** (GO),
+   **Solo** (Back), **Stop All Clips** (stop) are the scene column's top,
+   second and bottom keys. *Expect:* the names match the board (Q318: the
+   keys confirmed on the bench).
 
 **Akai APC40 mk2**
 

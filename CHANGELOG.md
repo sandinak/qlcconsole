@@ -34,6 +34,15 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   the show's PIN asked; off in Design, on close and at the emergency stop.
   Standard level and up (greyed at Student); it trims nothing while
   Identify or Assign to Control… listens to the board.
+- **Surface types**: an input profile can say it is a surface type, give
+  each control a fixed role (Grand Master, GO, Back, the stop, pages,
+  strips) and say what each fader is (plain, motor, endless knob); the
+  Input Profile editor sets them and refuses a broken rule. The PMJ Black
+  1's roles now come from its profile; the APC minis, PMJ 9 Faders,
+  nanoKONTROL2 and BCF2000 ship as types. Pick-up follows the fader: an
+  endless knob never waits, a motor fader is sent the value, and a master
+  on a plain fader waits only to be raised -- a pull-down never waits.
+  Profiles without these load and save as before.
 
 ### Changed
 
