@@ -185,8 +185,19 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
         }
         const int first = current->data(COL_NUM, PROP_SECTION_STEP).toInt();
         const int target = topLevelIndexOf(previous) == first && first > 0 ? first - 1 : first;
-        if (QTreeWidgetItem *cue = stepItem(target))
-            m_tree->setCurrentItem(cue);
+        QTreeWidgetItem *cue = stepItem(target);
+        if (cue == NULL)
+            return;
+        m_tree->setCurrentItem(cue);
+        // A key press or a click is still in the view's own handler here: it
+        // goes on to select what it landed on (the header, which can't be),
+        // and so leaves the cue current but not highlighted. Select the cue
+        // (and only it) again once that handler is done.
+        QTimer::singleShot(0, this, [this, target]() {
+            QTreeWidgetItem *picked = stepItem(target);
+            if (picked != NULL && m_tree->currentItem() == picked)
+                m_tree->setCurrentItem(picked);
+        });
     });
 
     /* The song section of the cue playing (Q190), over the list so it stays
