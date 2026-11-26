@@ -1101,25 +1101,8 @@ static void fix21(ReviewContext &ctx, QList<ReviewFinding> &out)
    button's, any): the ones the spotter has to let fire. */
 static QList<quint32> hazardsCued(Doc *doc)
 {
-    QSet<quint32> hazards;
-    for (Fixture *fx : doc->fixtures())
-        if (fx != nullptr && FixtureRest::isHazard(fx))
-            hazards.insert(fx->id());
-    QSet<quint32> cued;
-    if (hazards.isEmpty())
-        return QList<quint32>();
-    for (Function *f : doc->functions())
-    {
-        const Scene *sc = qobject_cast<const Scene *>(f);
-        if (sc == nullptr)
-            continue;
-        for (const SceneValue &v : sc->values())
-            if (v.value > 0 && hazards.contains(v.fxi))
-                cued.insert(v.fxi);
-    }
-    QList<quint32> out = cued.values();
-    std::sort(out.begin(), out.end());
-    return out;
+    const OutputRuleKeeper *k = doc->outputRuleKeeper();
+    return k != nullptr ? k->hazardsCued() : QList<quint32>();
 }
 
 static void fix22(ReviewContext &ctx, QList<ReviewFinding> &out)

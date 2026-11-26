@@ -1903,19 +1903,13 @@ void TrackBack_Test::theHazardHoldWinsOverALaterPark()
     Chaser *c = behavesList();
     QVERIFY(c != nullptr);
     Fixture *jet = fixtureNamed("CO2 jet");
+    Fixture *wash = fixtureNamed("Stage wash");
     // Another hazard on the universe: the hold's fader is there already.
     Fixture *fog = new Fixture(m_doc);
     fog->setName("Fogger");
     fog->setChannels(1);
     fog->setAddress(510);
     QVERIFY(m_doc->addFixture(fog));
-    // The jet a Light for now, and a light on its address.
-    jet->setBehaviourSetting(Fixture::LightBehaviour);
-    Fixture *over = new Fixture(m_doc);
-    over->setName("Overlap");
-    over->setChannels(1);
-    over->setAddress(jet->address());
-    QVERIFY(m_doc->addFixture(over));
     m_doc->outputRuleKeeper()->rebuild();
     QTest::qWait(50);
     m_doc->setMode(Doc::Operate);
@@ -1923,16 +1917,16 @@ void TrackBack_Test::theHazardHoldWinsOverALaterPark()
     settle(10);
     act(c, { Go, 0 });
     settle(20);
-    QCOMPARE(at("CO2 jet"), 255);
-    // The light parked at 255 on that address, after the hold's fader...
-    m_doc->programmer()->parkFixtures({ over->id() });
+    QCOMPARE(at("Stage wash"), 128);
+    // The wash parked at 128, after the hold's fader was laid...
+    m_doc->programmer()->parkFixtures({ wash->id() });
     settle(5);
-    // ...then the jet a hazard: its hold wins.
-    jet->setBehaviourSetting(-1);
+    // ...then the jet re-patched onto the wash's address: the hold wins.
+    jet->setAddress(wash->address());
     QTest::qWait(50);
     settle(5);
     QCOMPARE(at("CO2 jet"), 0);
-    m_doc->programmer()->unparkFixtures({ over->id() });
+    m_doc->programmer()->unparkFixtures({ wash->id() });
     m_doc->setMode(Doc::Design);
 }
 

@@ -41,6 +41,7 @@
 #include "programmercontroller.h"
 #include "teachinglog.h"
 #include "scene.h"
+#include "qlcpalette.h"
 #include <QDateTime>
 
 #define KXMLQLCOutputRuleOnAtOpen QStringLiteral("OnAtOpen")
@@ -1377,6 +1378,18 @@ QList<quint32> OutputRuleKeeper::hazardsCued() const
         for (const SceneValue &v : sc->values())
             if (v.value > 0 && hazards.contains(v.fxi))
                 cued.insert(v.fxi);
+        // A Show Tree look: a palette on its targets.
+        for (quint32 pid : sc->palettes())
+        {
+            QLCPalette *p = m_doc->palette(pid);
+            if (p == nullptr)
+                continue;
+            QList<SceneValue> vals = p->valuesFromFixtures(m_doc, sc->fixtures(), sc);
+            vals << p->valuesFromFixtureGroups(m_doc, sc->fixtureGroups(), sc);
+            for (const SceneValue &v : std::as_const(vals))
+                if (v.value > 0 && hazards.contains(v.fxi))
+                    cued.insert(v.fxi);
+        }
     }
     QList<quint32> out = cued.values();
     std::sort(out.begin(), out.end());
