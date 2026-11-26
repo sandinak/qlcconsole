@@ -60,6 +60,27 @@ const QList<LevelRegistry::Row> &LevelRegistry::rows()
         makeRow("control.holdatend",    L::Standard, L::Fold, tr("Holding a show's look at its end")),
         // Run (Operate): trimming the running cue from a board, behind the PIN.
         makeRow("operate.editlive",     L::Standard, L::Grey, tr("Edit Live, trimming the running cue from a board")),
+        /* Phase L2 (the course path, WORKSPACE_LEVELS.md §2): the Show Tree,
+           Run, Fixtures and Lighting Studio. Nothing here is used by a
+           lesson of course Levels 0-2 (levels_test, courseshow_test). */
+        // Show Tree
+        makeRow("showtree.workbench",   L::Standard, L::Grey, tr("The Workbench, the stock editors for scenes, effects and matrices")),
+        makeRow("showtree.production",  L::Standard, L::Fold, tr("More than one production in a show")),
+        makeRow("showtree.mib",         L::Standard, L::Grey, tr("Automatic move in black")),
+        makeRow("showtree.cue.mix",     L::Standard, L::Grey, tr("Overlapping layers mixing, as a chaser does")),
+        makeRow("showtree.cue.textcolour", L::Standard, L::Grey, tr("A cue's text colour")),
+        makeRow("showtree.timecode",    L::Standard, L::Grey, tr("Cues at a timecode")),
+        makeRow("showtree.focuscue",    L::Standard, L::Grey, tr("Focus This Cue and the venue focus cue")),
+        makeRow("showtree.reuse",       L::Standard, L::Grey, tr("Converting a list to tracking, detaching to a plain chaser")),
+        // Fixtures
+        makeRow("fixtures.inventory",   L::Standard, L::Grey, tr("The inventory, patching and removing fixtures")),
+        makeRow("fixtures.groups",      L::Standard, L::Grey, tr("Fixture group folders and the head-layout grid")),
+        makeRow("fixtures.rules",       L::Standard, L::Grey, tr("Output rules, definitions, plot symbols and power")),
+        makeRow("fixtures.patchlist",   L::Standard, L::Grey, tr("The patch list and printing labels")),
+        // Lighting Studio
+        makeRow("studio.overlays",      L::Standard, L::Grey, tr("The Power, DMX, Network and Owner views")),
+        makeRow("studio.structures",    L::Standard, L::Grey, tr("Stage structures, mounting, scenery and the plot's locks")),
+        makeRow("studio.venues",        L::Standard, L::Grey, tr("Venues and editing the focus calls")),
         // Tabs (the Window menu names them)
         makeRow("tab.build",            L::Standard, L::Tab,  tr("Building scenes, chasers and collections"),
                 QStringLiteral("Build")),

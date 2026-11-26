@@ -66,6 +66,7 @@
 #include "addchannelsgroup.h"
 #include <functional>
 #include "fixturemanager.h"
+#include "showlevel.h"
 #include "wledfixture.h"
 #include "contextmenus.h"
 #include "selectionmenu.h"
@@ -1909,6 +1910,16 @@ void FixtureManager::initActions()
     m_collapseAllAction = new QAction(tr("Collapse All"), this);
     connect(m_collapseAllAction, &QAction::triggered, this,
             [this]() { if (m_fixtures_tree) m_fixtures_tree->collapseAll(); });
+
+    /* Workspace levels (WORKSPACE_LEVELS.md §2): at Student the tab shows the
+       rig and selects from it (course 1.1 to 2.3); patching and the rig's
+       paperwork are Standard's, greyed with the level's words. */
+    ShowLevel *lv = ShowLevel::instance();
+    for (QAction *a : { m_addAction, m_addInventoryAction, m_patchInventoryAction, m_addRGBAction,
+                        m_removeAction })
+        lv->bind(a, QStringLiteral("fixtures.inventory"));
+    lv->bind(m_patchListAction, QStringLiteral("fixtures.patchlist"));
+    lv->bind(m_fadeConfigAction, QStringLiteral("fixtures.rules"));
 }
 
 void FixtureManager::updateGroupMenu()
@@ -3466,6 +3477,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             connect(defMode, &QAction::triggered, this, [this, fid]() {
                 editDefinitionAndMode(this, m_doc, fid);
             });
+            ShowLevel::instance()->bind(defMode, QStringLiteral("fixtures.rules"));
         }
         /* Another version of their definition, the same channels with
            other heads (a mover's colour ring as a head of its own): every
@@ -3510,6 +3522,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             {
                 editDefinition = setupMenu->addAction(tr("Edit Fixture Definition…"));
                 editDefinition->setObjectName(QStringLiteral("editFixtureDefinitionAction"));
+                ShowLevel::instance()->bind(editDefinition, QStringLiteral("fixtures.rules"));
             }
             else if (defCount > 1)
             {
@@ -3538,6 +3551,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             {
                 QMenu *lookMenu = setupMenu->addMenu(tr("Plot Symbol"));
                 lookMenu->setObjectName(QStringLiteral("stageLookMenu"));
+                ShowLevel::instance()->bind(lookMenu->menuAction(), QStringLiteral("fixtures.rules"));
                 fillStageLookMenu(lookMenu, m_doc, lookFids);
             }
         }
@@ -3683,6 +3697,7 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
         if (selFixtures.isEmpty() == false && ShowFeatures::isOn(ShowFeatures::Power))
         {
             QMenu *powerMenu = setupMenu->addMenu(tr("Power"));
+            ShowLevel::instance()->bind(powerMenu->menuAction(), QStringLiteral("fixtures.rules"));
             PowerDistribution *pd = m_doc->powerDistribution();
             circuitMenu = powerMenu->addMenu(selFixtures.size() > 1
                 ? tr("Add %1 Fixtures to Circuit").arg(selFixtures.size())
@@ -4467,6 +4482,7 @@ void FixtureManager::fillMoveToFolderMenu(QMenu *sub, Doc *doc, const QList<quin
     sub->addSeparator();
     QAction *nf = sub->addAction(tr("New Folder…"));
     nf->setObjectName(QStringLiteral("newGroupFolder"));
+    ShowLevel::instance()->bind(nf, QStringLiteral("fixtures.groups"));
     nf->setToolTip(tr("Make a folder and move them into it -- inside the one they are in"));
 }
 

@@ -29,6 +29,7 @@
 #include "focussession.h"
 #include "focuscalls.h"
 #include "focusmenu.h"
+#include "showlevel.h"
 #include "venuemenu.h"
 #include "fixture.h"
 #include "doc.h"
@@ -184,6 +185,8 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
     edit->setVisible(calls);
     edit->setToolTip(tr("The show's focus calls, in the order they are run: groups, the point they "
                         "focus to, a note for the crew; and the venue"));
+    // The teacher sets the calls; a student runs them (Standard's, greyed at Student).
+    ShowLevel::instance()->bind(edit, QStringLiteral("studio.venues"));
 
     /* The venue menu (Q150): the same one the app's venue chip and View ▸
        Venue… open, filled by the same code. */
@@ -193,6 +196,7 @@ void FocusMenu::fill(QMenu *menu, Doc *doc, QWidget *parent, const std::function
         QMenu *venuesMenu = menu->addMenu(tr("Venues"));
         venuesMenu->setObjectName(QStringLiteral("focusVenuesMenu"));
         venuesMenu->menuAction()->setObjectName(QStringLiteral("focusVenues"));
+        ShowLevel::instance()->bind(venuesMenu->menuAction(), QStringLiteral("studio.venues"));
         VenueMenu::fill(venuesMenu, doc, parent);
     }
 

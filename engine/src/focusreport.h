@@ -23,6 +23,7 @@
 #include <QCoreApplication>
 #include <QDateTime>
 #include <QString>
+#include <functional>
 #include <QList>
 
 #include "qlcengine_export.h"
@@ -83,6 +84,9 @@ public:
     static QString flags(const Row &row);
 
     /** The printable page, a whole HTML document. @p showName heads it. */
+    /** The workspace level's name ("Student"), for a Teaching show's line:
+     *  the UI owns levels, so it installs this (empty: no level said). */
+    static void setLevelNameProvider(const std::function<QString()> &provider);
     static QString html(Doc *doc, const QString &venue, const QString &showName);
 
     /** The Lightwright-style CSV: a header line, then one line per row. */

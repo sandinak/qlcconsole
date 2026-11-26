@@ -175,6 +175,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "showlevel.h"
 #include "masklenswidget.h"
 #include "planmapwidget.h"
 #include "mountinsituview.h"
@@ -1464,6 +1465,8 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     // The Power overlay with the Power estimate on for the show (Q293).
     connect(ShowFeatures::instance(), &ShowFeatures::changed, m_overlayCombo,
             [this]() { applyShowFeatures(); });
+    connect(ShowLevel::instance(), &ShowLevel::changed, m_overlayCombo,
+            [this]() { applyShowFeatures(); });
     applyShowFeatures();
     addSep();
     fl->addWidget(new QLabel(tr("View:")));
@@ -2717,6 +2720,12 @@ void Monitor::initGraphicsToolbar()
             people->setText(n == 0 ? tr("Add People…")
                                    : tr("Fill %n Selected Riser(s) with People…", "", n));
         });
+        /* Student reads and selects on the plot (course 0.8, 2.1, 2.5); what
+           it adds -- fixtures, structures, scenery, people, targets -- is
+           Standard's, greyed with the level's words. */
+        for (QAction *a : addMenu->actions())
+            if (!a->isSeparator())
+                ShowLevel::instance()->bind(a, QStringLiteral("studio.structures"));
         addBtn->setMenu(addMenu);
     }
     m_graphicsToolBar->addWidget(addBtn);
@@ -2871,17 +2880,49 @@ void Monitor::applyShowFeatures()
     /* The Power overlay, with the Power estimate on for the show (Q293). */
     if (m_overlayCombo != nullptr)
     {
+        /* Power (with the Power estimate on for the show, Q293), and DMX,
+           Network and Owner (Standard level, WORKSPACE_LEVELS.md §2): the
+           box keeps Normal and Stage only at Student, and its tooltip says
+           where the rest are. */
         const bool power = ShowFeatures::isOn(ShowFeatures::Power);
-        const int at = m_overlayCombo->findData(int(ViewPower));
-        if (!power && at >= 0)
+        const bool more = ShowLevel::shown(QStringLiteral("studio.overlays"));
+        struct Entry { QString text; int data; bool on; };
+        const QList<Entry> want = {
+            { tr("Normal"), ViewNormal, true },
+            { tr("Power"), ViewPower, power && more },
+            { tr("DMX"), ViewDMX, more },
+            { tr("Network"), ViewNet, more },
+            { tr("Owner"), ViewOwner, more },
+            { tr("Stage only"), ViewStage, true },
+        };
+        QList<int> have;
+        for (int i = 0; i < m_overlayCombo->count(); ++i)
+            have << m_overlayCombo->itemData(i).toInt();
+        QList<int> wanted;
+        for (const Entry &e : want)
+            if (e.on)
+                wanted << e.data;
+        if (have != wanted)
         {
-            if (m_overlayCombo->currentIndex() == at)
-                m_overlayCombo->setCurrentIndex(qMax(0, m_overlayCombo->findData(int(ViewNormal))));
-            m_overlayCombo->removeItem(at);
+            const int current = m_overlayCombo->currentData().toInt();
+            const QSignalBlocker quiet(m_overlayCombo);
+            m_overlayCombo->clear();
+            for (const Entry &e : want)
+                if (e.on)
+                    m_overlayCombo->addItem(e.text, e.data);
+            const int back = m_overlayCombo->findData(current);
+            m_overlayCombo->setCurrentIndex(back >= 0 ? back : 0);
+            if (m_overlayCombo->currentData().toInt() != m_mapView)
+            {
+                m_mapView = m_overlayCombo->currentData().toInt();
+                applyMapView(m_mapView);
+            }
         }
-        else if (power && at < 0)
-            m_overlayCombo->insertItem(m_overlayCombo->findData(int(ViewNormal)) + 1, tr("Power"),
-                                       int(ViewPower));
+        if (!m_overlayCombo->property("levelBaseTip").isValid())
+            m_overlayCombo->setProperty("levelBaseTip", m_overlayCombo->toolTip());
+        const QString base = m_overlayCombo->property("levelBaseTip").toString();
+        m_overlayCombo->setToolTip(more ? base : base + QStringLiteral("\n")
+                                   + ShowLevel::whyHidden(QStringLiteral("studio.overlays")));
     }
 
     /* The follow-spot operator's own views (where they stand is set on the
