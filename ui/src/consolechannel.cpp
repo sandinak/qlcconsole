@@ -32,6 +32,7 @@
 #include "qlcchannel.h"
 #include "qlccapability.h"
 
+#include "inputoutputmap.h"
 #include "qlcinputsource.h"
 #include "channelsgroup.h"
 #include "doc.h"
@@ -236,10 +237,19 @@ void ConsoleChannel::slotInputValueChanged(quint32 channel, uchar value)
     ChannelsGroup *grp = m_doc->channelsGroup(m_group);
     QSharedPointer<QLCInputSource> src = grp != NULL ? grp->inputSource() : QSharedPointer<QLCInputSource>();
     // Another fader drives the group now: where the old one was is no guide
+    bool sendBack = false;
+    InputOutputMap *iom = m_doc->inputOutputMap();
     if (!src.isNull() && src->isValid())
+    {
         m_pickup.setSource(src->universe(), src->channel());
-    if (m_pickup.accept(value, m_slider->value()))
+        // Its type's declared fact sets the rule (S2)
+        m_pickup.setFact(iom->faderFact(src->universe(), src->channel()));
+    }
+    if (m_pickup.accept(value, m_slider->value(), &sendBack))
         setValue(value);
+    // A motor fader starts to wait: it is sent the group's value once
+    if (sendBack && !src.isNull() && src->isValid())
+        iom->sendFeedBack(src->universe(), src->channel(), uchar(m_slider->value()), QVariant());
     const QString hint = pickupHint();
     if (!hint.isEmpty())
         m_slider->setToolTip(hint);

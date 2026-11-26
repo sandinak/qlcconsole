@@ -216,6 +216,12 @@ QStringList SurfaceLayout::builtInFiles()
     return out;
 }
 
+QString SurfaceLayout::builtInTypePath(const QString &fileName)
+{
+    initLayoutResources();
+    return QStringLiteral(":/surfacetypes/") + fileName;
+}
+
 SurfaceLayout SurfaceLayout::forProfile(const QString &profileName)
 {
     if (profileName.isEmpty())

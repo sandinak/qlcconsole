@@ -13,4 +13,9 @@
     <file alias="MaizeDMX-Playback-Controller.Colour.pageset.json">../../resources/inputprofiles/pagesets/MaizeDMX-Playback-Controller.Colour.pageset.json</file>
     <file alias="PMJ-Black-1.Pages.pageset.json">../../resources/inputprofiles/pagesets/PMJ-Black-1.Pages.pageset.json</file>
 </qresource>
+<!-- Surface types whose roles a board's own overlay reads (the PMJ's), as shipped:
+     never a user's edited copy (Q307, a type is fixed). -->
+<qresource prefix="/surfacetypes">
+    <file alias="PMJ-Black-1.qxi">../../resources/inputprofiles/PMJ-Black-1.qxi</file>
+</qresource>
 </RCC>

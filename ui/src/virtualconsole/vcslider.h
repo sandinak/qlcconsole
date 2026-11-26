@@ -831,8 +831,11 @@ protected slots:
 protected:
     FaderPickup m_pickup;
     void updatePickupHint();
-    /** Catch values is on and the mode is not a master (those never wait) */
+    /** Catch values is on, and the fader waits: not Relative, and not a
+     *  master unless its type declares it Absolute (FaderPickup) */
     bool picksUp() const;
+    /** Grand Master, Submaster or Group master: lowering it is the safe way */
+    bool isMasterMode() const;
     /** An input value as the slider reads it (flipped when inverted) */
     int pickupValue(uchar input) const;
     /** The slider's value on the input's 0..255 scale */

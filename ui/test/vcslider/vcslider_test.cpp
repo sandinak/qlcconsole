@@ -49,6 +49,11 @@
 #undef protected
 
 #include "qlcinputsource.h"
+#include "qlcinputprofile.h"
+#include "qlcinputchannel.h"
+#include "ioplugincache.h"
+#include "inputpatch.h"
+#include "qlcioplugin.h"
 #include "consolechannel.h"
 #include "vcframe.h"
 #include "channelsgroup.h"
@@ -950,6 +955,84 @@ void VCSlider_Test::masterSlidersFollowAtOnce()
     emit iom->inputValueChanged(0, 22, 40);
     QCOMPARE(slider.sliderValue(), 200);
     m_doc->setMode(Doc::Design);
+}
+
+/* S2: the fader's surface type declares what it is. A master on a fader
+   declared Absolute waits for a raise -- and a pull-down still never waits,
+   from the first report on (the Grand Master is a safety). A fader
+   declared Relative never waits. Before S2 every master followed both ways
+   (the raise below jumped it) and every non-master waited. */
+void VCSlider_Test::aDeclaredMasterRaiseWaitsButAPullDownNeverDoes()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    m_doc->ioPluginCache()->load(QDir(QStringLiteral("../../../engine/test/iopluginstub")));
+    QLCIOPlugin *stub = m_doc->ioPluginCache()->plugin(QStringLiteral("I/O Plugin Stub"));
+    QVERIFY2(stub != nullptr, "the I/O plugin stub did not load");
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer(QStringLiteral("S2"));
+    prof->setModel(QStringLiteral("Fader box"));
+    prof->setSurfaceVersion(1);
+    QLCInputChannel *gmFader = new QLCInputChannel();
+    gmFader->setType(QLCInputChannel::Slider);
+    gmFader->setRole(QStringLiteral("GrandMaster"));
+    gmFader->setDeclaredFaderFact(FaderFact::Absolute);
+    prof->insertChannel(30, gmFader);
+    QLCInputChannel *knob = new QLCInputChannel();
+    knob->setType(QLCInputChannel::Slider);
+    knob->setDeclaredFaderFact(FaderFact::Relative);
+    prof->insertChannel(31, knob);
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0, prof->name()));
+    QCOMPARE(iom->faderFact(0, 30), FaderFact::Absolute);
+    QCOMPARE(iom->faderFact(0, 29), FaderFact::Unknown);    // not in the profile
+
+    QWidget w;
+    VCSlider gm(&w, m_doc);
+    gm.setSliderMode(VCSlider::GrandMaster);
+    gm.setCatchValues(true);
+    gm.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 30)),
+                      VCSlider::sliderInputSourceId);
+    m_doc->setMode(Doc::Operate);
+    gm.setSliderValue(255, false);
+    gm.m_pickup.reset();                            // a start
+    // The first report, half way down: taken at once
+    emit iom->inputValueChanged(0, 30, 120);
+    QCOMPARE(gm.sliderValue(), 120);
+    QCOMPARE(int(iom->grandMasterValue()), 120);
+    // The master raised on screen; the fader pushed up past where it was
+    // but not to the master: it waits (before S2 the master jumped to it)
+    gm.setSliderValue(180, false);
+    emit iom->inputValueChanged(0, 30, 150);
+    emit iom->inputValueChanged(0, 30, 170);
+    QCOMPARE(gm.sliderValue(), 180);
+    // An emergency pull-down from there: at once
+    emit iom->inputValueChanged(0, 30, 0);
+    QCOMPARE(gm.sliderValue(), 0);
+    QCOMPARE(int(iom->grandMasterValue()), 0);
+    // A raise from below, above the master, waits; then a pull-down is taken
+    gm.setSliderValue(100, false);
+    gm.m_pickup.reset();
+    emit iom->inputValueChanged(0, 30, 220);
+    QCOMPARE(gm.sliderValue(), 100);
+    QVERIFY(!gm.pickupHint().isEmpty());
+    emit iom->inputValueChanged(0, 30, 60);
+    QCOMPARE(gm.sliderValue(), 60);
+    QVERIFY(gm.pickupHint().isEmpty());
+
+    // A level fader declared Relative never waits
+    VCSlider level(&w, m_doc);
+    level.setSliderMode(VCSlider::Level);
+    level.setCatchValues(true);
+    level.setInputSource(QSharedPointer<QLCInputSource>(new QLCInputSource(0, 31)),
+                         VCSlider::sliderInputSourceId);
+    level.setSliderValue(200, false);
+    level.m_pickup.reset();
+    emit iom->inputValueChanged(0, 31, 10);
+    QCOMPARE(level.sliderValue(), 10);
+    QVERIFY(level.pickupHint().isEmpty());
+
+    m_doc->setMode(Doc::Design);
+    iom->setInputPatch(0, KInputNone, QString(), QLCIOPlugin::invalidLine());
 }
 
 /* A parked fader's jitter never moves a control that waits: a level fader

@@ -44,6 +44,7 @@ class QXmlStreamReader;
 #define KXMLQLCInputProfileColor            QStringLiteral("Color")
 #define KXMLQLCInputProfileMidiChannelTable QStringLiteral("MidiChannelTable")
 #define KXMLQLCInputProfileMidiChannel      QStringLiteral("Channel")
+#define KXMLQLCInputProfileSurface          QStringLiteral("Surface")
 
 class QLCInputProfile final : public QObject
 {
@@ -108,6 +109,39 @@ protected:
     QString m_model;
     QString m_path;
     Type m_type;
+
+    /********************************************************************
+     * Surface type (docs/design/CONTROL_SCOPES.md section 2)
+     ********************************************************************/
+public:
+    /** A profile with <Surface Version="1" .../> is a surface type: its
+     *  channels may carry static roles and declared facts
+     *  (QLCInputChannel::role(), faderFact()). 0: not one (every profile
+     *  written before surface types, and QLC+'s own). */
+    int surfaceVersion() const;
+    void setSurfaceVersion(int version);
+    bool isSurfaceType() const { return m_surfaceVersion > 0; }
+
+    /** How the surface map draws it when it has no layout file: "list"
+     *  (one row per control) or "grid" (surfaceColumns() to a row) */
+    QString surfaceLayout() const;
+    void setSurfaceLayout(const QString &layout);
+    int surfaceColumns() const;
+    void setSurfaceColumns(int columns);
+
+    /** The channel whose static role is @p role ("GrandMaster", "Go",
+     *  "Select 3"); QLCChannel::invalid() when none has it */
+    quint32 roleChannel(const QString &role) const;
+
+    /** Every problem with the type's roles: an unknown role, a role on
+     *  two channels, the stop on a control that is not a button, the
+     *  Grand Master on one that is not a fader. Empty: it holds. */
+    QStringList roleProblems() const;
+
+protected:
+    int m_surfaceVersion;
+    QString m_surfaceLayout;
+    int m_surfaceColumns;
 
     /********************************************************************
      * Plugin-specific global settings

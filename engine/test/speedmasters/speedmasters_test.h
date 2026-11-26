@@ -54,6 +54,8 @@ private slots:
     void aMasterFollowsTheShowTimeline();
     void aControlSurfaceDrivesAMaster();
     void aFaderIsPickedUpBeforeItFollows();
+    void declaredFactsSetThePickUpRule();
+    void aMasterPullDownNeverWaits();
     void aRateFaderWaitsToBePickedUp();
     void onlyTheMastersSomethingIsOnAreUsed();
 

@@ -52,6 +52,47 @@ namespace ControlSurface
         bool isValid() const { return type != RoleType::None; }
     };
 
+    /** The role a surface type's profile names for a control
+     *  (QLCInputChannel::role(): "GrandMaster", "Go", "Select 3", "Page 0").
+     *  Invalid for no role, and for the desk's roles that are not this
+     *  vocabulary's (EmergencyStop, SpeedRate n, SpeedTap n). */
+    inline Role roleFromText(const QString &text)
+    {
+        const QString t = text.simplified();
+        const int sp = t.indexOf(QLatin1Char(' '));
+        const QString kind = sp < 0 ? t : t.left(sp);
+        bool ok = sp < 0;
+        const int n = sp < 0 ? -1 : t.mid(sp + 1).toInt(&ok);
+        if (!ok)
+            return Role();
+        struct Named { const char *name; RoleType type; int index; };
+        static const Named fixed[] = {
+            { "Go", RoleType::Transport, Go },       { "Back", RoleType::Transport, Back },
+            { "Next", RoleType::Transport, Next },   { "Prev", RoleType::Transport, Prev },
+            { "Left", RoleType::Transport, Left },   { "Right", RoleType::Transport, Right },
+            { "Blackout", RoleType::Static, Blackout }, { "GrandMaster", RoleType::Static, GrandMaster },
+            { "Blind", RoleType::Static, Blind },    { "Tap", RoleType::Static, Tap },
+            { "AutoMIB", RoleType::Static, AutoMIB }, { "Clear", RoleType::Static, Clear },
+            { "Record", RoleType::Static, Record },
+        };
+        static const Named indexed[] = {
+            { "Select", RoleType::Select, 0 }, { "Load", RoleType::Load, 0 },
+            { "Level", RoleType::Level, 0 },   { "Reset", RoleType::Reset, 0 },
+            { "Param", RoleType::Param, 0 },   { "Page", RoleType::Page, 0 },
+        };
+        if (sp < 0)
+        {
+            for (const Named &f : fixed)
+                if (kind == QLatin1String(f.name))
+                    return Role(f.type, f.index);
+            return Role();
+        }
+        for (const Named &f : indexed)
+            if (kind == QLatin1String(f.name))
+                return Role(f.type, n);
+        return Role();
+    }
+
     /** Context-aware LED state for a role, computed from the app right now. */
     enum class State
     {

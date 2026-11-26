@@ -30,6 +30,7 @@
 #include <QDir>
 
 #include "qlcinputprofile.h"
+#include "faderpickup.h"
 #include "universe.h"
 #include "grandmaster.h"
 #include "../../plugins/interfaces/qlcioplugin.h"
@@ -588,6 +589,14 @@ public:
      * @param universe The internal input universe to get mapping for
      */
     InputPatch* inputPatch(quint32 universe) const;
+
+    /**
+     * What the fader on @p universe's input @p channel is, as the input
+     * profile patched there declares it (QLCInputChannel::faderFact()):
+     * Unknown when the universe has no patch, no profile, or the profile
+     * has no such channel. FaderPickup's rule follows it.
+     */
+    FaderFact faderFact(quint32 universe, quint32 channel) const;
 
     /**
      * Get the output mapping for a QLC universe.

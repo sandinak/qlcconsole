@@ -31,6 +31,7 @@
 #include "scene.h"
 #include "qlcpalette.h"
 #include "doc.h"
+#include "inputoutputmap.h"
 
 #define KXMLMaster  QStringLiteral("Master")
 #define KXMLIndex   QStringLiteral("Index")
@@ -674,12 +675,20 @@ void SpeedMasters::slotInputValue(quint32 universe, quint32 channel, uchar value
                 // near the centre detent runs the master at its tempo.
                 // Pick-up: a fader that is not where the rate is does
                 // nothing until it reaches it.
-                bool take = false;
+                // Its type's declared fact sets the rule (S2): Relative never
+                // waits; a motor fader is sent the rate when it starts to.
+                const FaderFact fact = m_doc != nullptr
+                    ? m_doc->inputOutputMap()->faderFact(universe, channel) : FaderFact::Unknown;
+                bool take = false, sendBack = false;
+                int cur = 0;
                 {
                     QMutexLocker locker(&m_mutex);
-                    const int cur = qBound(0, int(m_masters[h.index].rate * 127.5 + 0.5), 255);
-                    take = m_masters[h.index].ratePickup.accept(value, cur);
+                    cur = qBound(0, int(m_masters[h.index].rate * 127.5 + 0.5), 255);
+                    m_masters[h.index].ratePickup.setFact(fact);
+                    take = m_masters[h.index].ratePickup.accept(value, cur, &sendBack);
                 }
+                if (sendBack)
+                    m_doc->inputOutputMap()->sendFeedBack(universe, channel, uchar(cur), QVariant());
                 if (!take)
                 {
                     emit changed(h.index);   // the footer shows the hint

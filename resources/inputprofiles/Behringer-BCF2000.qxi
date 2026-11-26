@@ -9,6 +9,7 @@
  <Manufacturer>Behringer</Manufacturer>
  <Model>BCF2000</Model>
  <Type>MIDI</Type>
+ <Surface Version="1"/>
  <Channel Number="1">
   <Name>Encoder 1 - Group A</Name>
   <Type>Knob</Type>
@@ -332,34 +333,43 @@
  <Channel Number="81">
   <Name>Slider 1</Name>
   <Type>Slider</Type>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="82">
   <Name>Slider 2</Name>
   <Type>Slider</Type>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="83">
   <Name>Slider 3</Name>
   <Type>Slider</Type>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="84">
   <Name>Slider 4</Name>
   <Type>Slider</Type>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="85">
   <Name>Slider 5</Name>
   <Type>Slider</Type>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="86">
   <Name>Slider 6</Name>
   <Type>Slider</Type>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="87">
   <Name>Slider 7</Name>
   <Type>Slider</Type>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="88">
   <Name>Slider 8</Name>
   <Type>Slider</Type>
+  <Role>GrandMaster</Role>
+  <Facts Fader="Motorised"/>
  </Channel>
  <Channel Number="89">
   <Name>Button 9 Top</Name>
@@ -384,5 +394,6 @@
  <Channel Number="94">
   <Name>Foot Controller</Name>
   <Type>Slider</Type>
+  <Facts Fader="Absolute"/>
  </Channel>
 </InputProfile>

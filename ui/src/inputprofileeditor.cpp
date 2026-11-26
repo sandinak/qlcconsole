@@ -36,6 +36,7 @@
 #include <QDir>
 
 #include "qlcinputprofile.h"
+#include "qlcinputchannel.h"
 #include "qlcchannel.h"
 
 #include "inputchanneleditor.h"
@@ -151,6 +152,23 @@ InputProfileEditor::InputProfileEditor(QWidget* parent, QLCInputProfile* profile
 
     m_behaviourBox->hide();
     m_feedbackGroup->hide();
+
+    /* Surface type (CONTROL_SCOPES.md section 2): the profile says it is
+       one; then each control can have a static role and say what it is */
+    m_roleCombo->addItem(tr("None (free for a show)"), QString());
+    for (const QString &kind : QLCInputChannel::roleKinds())
+        m_roleCombo->addItem(roleKindLabel(kind), kind);
+    m_faderFactCombo->addItem(tr("Not declared"), int(FaderFact::Unknown));
+    m_faderFactCombo->addItem(tr("Plain fader (waits to be picked up)"), int(FaderFact::Absolute));
+    m_faderFactCombo->addItem(tr("Motor fader (sent the value)"), int(FaderFact::Motorised));
+    m_faderFactCombo->addItem(tr("Endless knob (never waits)"), int(FaderFact::Relative));
+    m_surfaceCheck->setChecked(m_profile->isSurfaceType());
+    m_surfaceColumnsSpin->setValue(m_profile->surfaceColumns());
+    m_surfaceColumnsSpin->setEnabled(m_profile->isSurfaceType());
+    connect(m_surfaceCheck, &QCheckBox::toggled, this, &InputProfileEditor::slotSurfaceToggled);
+    connect(m_roleCombo, SIGNAL(activated(int)), this, SLOT(slotRoleChanged()));
+    connect(m_roleIndexSpin, SIGNAL(valueChanged(int)), this, SLOT(slotRoleChanged()));
+    connect(m_faderFactCombo, SIGNAL(activated(int)), this, SLOT(slotFaderFactChanged(int)));
 
     /* Fill up the tree with profile's channels */
     fillTree();
@@ -283,6 +301,19 @@ void InputProfileEditor::setOptionsVisibility(QLCInputChannel::Type type)
     else
         showBox = false;
 
+    /* A surface type's role, on every control; the fader fact on a fader
+       or knob */
+    const bool surface = m_surfaceCheck->isChecked() && type != QLCInputChannel::NoType;
+    const QString kind = m_roleCombo->currentData().toString();
+    m_roleLabel->setVisible(surface);
+    m_roleCombo->setVisible(surface);
+    m_roleIndexLabel->setVisible(surface && QLCInputChannel::roleTakesIndex(kind));
+    m_roleIndexSpin->setVisible(surface && QLCInputChannel::roleTakesIndex(kind));
+    m_faderFactLabel->setVisible(surface && showMovement);
+    m_faderFactCombo->setVisible(surface && showMovement);
+    if (surface)
+        showBox = true;
+
     m_movementLabel->setVisible(showMovement);
     m_movementCombo->setVisible(showMovement);
     m_sensitivityLabel->setVisible(showSensitivity);
@@ -330,6 +361,24 @@ void InputProfileEditor::accept()
 
     if (currentProfileType() == QLCInputProfile::MIDI)
         m_profile->setMidiSendNoteOff(m_noteOffCheck->isChecked());
+
+    m_profile->setSurfaceVersion(m_surfaceCheck->isChecked() ? 1 : 0);
+    m_profile->setSurfaceColumns(m_surfaceCheck->isChecked() ? m_surfaceColumnsSpin->value() : 0);
+    m_profile->setSurfaceLayout(m_profile->surfaceColumns() > 0 ? QStringLiteral("grid") : QString());
+
+    /* A type's roles hold its rules (one stop, on a button; one Grand
+       Master, on a fader; no role twice): said, and the editor stays open */
+    if (m_profile->isSurfaceType())
+    {
+        const QStringList problems = m_profile->roleProblems();
+        if (!problems.isEmpty())
+        {
+            QMessageBox::warning(this, tr("Surface type"),
+                                 tr("The roles need a fix before the profile is saved:\n%1")
+                                     .arg(problems.join(QLatin1Char('\n'))));
+            return;
+        }
+    }
 
     /* Check that we have at least the bare necessities to save the profile */
     if (m_profile->manufacturer().isEmpty() == true ||
@@ -552,6 +601,7 @@ void InputProfileEditor::slotItemClicked(QTreeWidgetItem *item, int col)
     QLCInputChannel *ich = m_profile->channel(chNum);
     if (ich != NULL)
     {
+        showChannelRole(ich);
         setOptionsVisibility(ich->type());
 
         if (ich->type() == QLCInputChannel::Slider || ich->type() == QLCInputChannel::Knob)
@@ -589,6 +639,83 @@ void InputProfileEditor::slotItemClicked(QTreeWidgetItem *item, int col)
     }
     else
         setOptionsVisibility(QLCInputChannel::NoType);
+}
+
+QString InputProfileEditor::roleKindLabel(const QString &kind)
+{
+    if (kind == QLatin1String("GrandMaster"))
+        return tr("Grand Master");
+    if (kind == QLatin1String("EmergencyStop"))
+        return tr("Emergency stop");
+    if (kind == QLatin1String("Go"))
+        return tr("GO");
+    if (kind == QLatin1String("SpeedRate"))
+        return tr("Speed master rate");
+    if (kind == QLatin1String("SpeedTap"))
+        return tr("Speed master tap");
+    if (kind == QLatin1String("AutoMIB"))
+        return tr("Auto move in black");
+    if (kind == QLatin1String("Prev"))
+        return tr("Previous");
+    if (kind == QLatin1String("Level"))
+        return tr("Level (strip)");
+    if (kind == QLatin1String("Select"))
+        return tr("Select (strip)");
+    if (kind == QLatin1String("Load"))
+        return tr("Load (strip)");
+    if (kind == QLatin1String("Reset"))
+        return tr("Reset (strip)");
+    if (kind == QLatin1String("Param"))
+        return tr("Parameter (encoder)");
+    if (kind == QLatin1String("Page"))
+        return tr("Page key");
+    return kind;
+}
+
+void InputProfileEditor::showChannelRole(const QLCInputChannel *ich)
+{
+    const QString role = ich->role();
+    const int sp = role.indexOf(QLatin1Char(' '));
+    const QString kind = sp < 0 ? role : role.left(sp);
+    m_roleCombo->blockSignals(true);
+    m_roleIndexSpin->blockSignals(true);
+    m_faderFactCombo->blockSignals(true);
+    m_roleCombo->setCurrentIndex(qMax(0, m_roleCombo->findData(kind)));
+    m_roleIndexSpin->setValue(sp < 0 ? 1 : role.mid(sp + 1).toInt());
+    m_faderFactCombo->setCurrentIndex(qMax(0, m_faderFactCombo->findData(int(ich->declaredFaderFact()))));
+    m_roleCombo->blockSignals(false);
+    m_roleIndexSpin->blockSignals(false);
+    m_faderFactCombo->blockSignals(false);
+}
+
+void InputProfileEditor::slotSurfaceToggled(bool on)
+{
+    m_surfaceColumnsSpin->setEnabled(on);
+    QTreeWidgetItem *item = m_tree->currentItem();
+    QLCInputChannel *ich = item != NULL ? m_profile->channel(item->text(KColumnNumber).toUInt() - 1) : NULL;
+    setOptionsVisibility(ich != NULL ? ich->type() : QLCInputChannel::NoType);
+}
+
+void InputProfileEditor::slotRoleChanged()
+{
+    const QString kind = m_roleCombo->currentData().toString();
+    QString role = kind;
+    if (QLCInputChannel::roleTakesIndex(kind))
+        role += QStringLiteral(" %1").arg(m_roleIndexSpin->value());
+    foreach (QLCInputChannel *channel, selectedChannels())
+        channel->setRole(role);
+    m_roleIndexLabel->setVisible(QLCInputChannel::roleTakesIndex(kind));
+    m_roleIndexSpin->setVisible(QLCInputChannel::roleTakesIndex(kind));
+}
+
+void InputProfileEditor::slotFaderFactChanged(int index)
+{
+    const FaderFact fact = FaderFact(m_faderFactCombo->itemData(index).toInt());
+    foreach (QLCInputChannel *channel, selectedChannels())
+    {
+        if (channel->type() == QLCInputChannel::Slider || channel->type() == QLCInputChannel::Knob)
+            channel->setDeclaredFaderFact(fact);
+    }
 }
 
 void InputProfileEditor::slotMovementComboChanged(int index)

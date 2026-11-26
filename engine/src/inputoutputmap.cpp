@@ -975,6 +975,17 @@ InputPatch *InputOutputMap::inputPatch(quint32 universe) const
     return m_universeArray.at(universe)->inputPatch();
 }
 
+FaderFact InputOutputMap::faderFact(quint32 universe, quint32 channel) const
+{
+    // A pseudo universe (computer keys, a pad) or one past the patch: none
+    if (universe >= universesCount())
+        return FaderFact::Unknown;
+    const InputPatch *ip = m_universeArray.at(universe)->inputPatch();
+    const QLCInputProfile *profile = ip != nullptr ? ip->profile() : nullptr;
+    const QLCInputChannel *ich = profile != nullptr ? profile->channel(channel) : nullptr;
+    return ich != nullptr ? ich->faderFact() : FaderFact::Unknown;
+}
+
 OutputPatch *InputOutputMap::outputPatch(quint32 universe, int index) const
 {
     if (universe >= universesCount())

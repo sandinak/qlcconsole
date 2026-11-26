@@ -159,6 +159,10 @@ public:
     static SurfaceLayout forProfile(const QString &profileName);
     /** Every built-in layout file (resource paths). */
     static QStringList builtInFiles();
+    /** The shipped surface type profile @p fileName ("PMJ-Black-1.qxi"),
+     *  as built into the engine: its resource path, to read with
+     *  QLCInputProfile::loader(). The installed copy may be a user's. */
+    static QString builtInTypePath(const QString &fileName);
 
     /** Every problem of this layout against @p profile: a channel of the
      *  profile not placed, or placed twice; a channel the profile lacks;

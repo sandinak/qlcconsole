@@ -42,6 +42,9 @@ private slots:
 
     /** The overlay's controls are the profile's, by channel and name. */
     void theOverlayIsTheProfile();
+    /* S2: its roles are its profile's, and they are the table the overlay
+       had in code: the same controls acted on */
+    void theRolesFromItsTypeAreTheOldTable();
     /** Every control reaches the surface engine as its role, or is a key
      *  documented free (for a show to learn). */
     void everyControlReachesItsRole();

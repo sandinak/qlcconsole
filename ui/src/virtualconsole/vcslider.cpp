@@ -523,12 +523,21 @@ void VCSlider::setCatchValues(bool enable)
     m_catchValues = enable;
 }
 
+bool VCSlider::isMasterMode() const
+{
+    return m_sliderMode == GrandMaster || m_sliderMode == Submaster || m_sliderMode == GroupMaster;
+}
+
 bool VCSlider::picksUp() const
 {
     /* A master never waits (Q313): the Grand Master, a submaster and a group
-       master follow their fader at once, both ways. */
-    return catchValues() && m_sliderMode != GrandMaster && m_sliderMode != Submaster &&
-           m_sliderMode != GroupMaster;
+       master follow their fader at once, both ways -- unless the fader's
+       surface type declares it a plain (Absolute) fader: then a raise waits
+       and a pull-down still never does (FaderPickup). A fader declared
+       Relative never waits. The fact is the input's (slotInputValueChanged). */
+    if (!catchValues() || m_pickup.fact() == FaderFact::Relative)
+        return false;
+    return !isMasterMode() || m_pickup.fact() == FaderFact::Absolute;
 }
 
 int VCSlider::pickupValue(uchar input) const
@@ -2557,6 +2566,10 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             QSharedPointer<QLCInputSource> src = inputSource(sliderInputSourceId);
             const bool absolute = src.isNull() ||
                                   src->workingMode() == QLCInputSource::Absolute;
+            /* What the fader is, as its surface type declares it (S2): the
+               pick-up's rule follows it */
+            m_pickup.setFact(m_doc->inputOutputMap()->faderFact(universe, channel));
+            m_pickup.setMaster(isMasterMode());
             if ((!absolute || !picksUp()) && m_pickup.last() >= 0)
             {
                 m_pickup.reset();       // made an encoder since: no wait left
@@ -2566,8 +2579,13 @@ void VCSlider::slotInputValueChanged(quint32 universe, quint32 channel, uchar va
             if (picksUp() && absolute)
             {
                 m_pickup.setSource(universe, pagedCh);   // another fader: start over
-                if (m_pickup.accept(value, pickupCurrent()) == false)
+                bool sendBack = false;
+                if (m_pickup.accept(value, pickupCurrent(), &sendBack) == false)
                 {
+                    /* A motor fader starts to wait: it is sent the slider's
+                       value once and drives itself there */
+                    if (sendBack)
+                        updateFeedback();
                     updatePickupHint();
                     return;
                 }
