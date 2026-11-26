@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE InputProfile>
+<InputProfile xmlns="http://www.qlcplus.org/InputProfile">
+ <Creator>
+  <Name>Q Light Controller Plus</Name>
+  <Version>4.14.4</Version>
+  <Author>Branson Matheson</Author>
+ </Creator>
+ <Manufacturer>PreSonus</Manufacturer>
+ <Model>FaderPort 2</Model>
+ <Type>MIDI</Type>
+ <Surface Version="1"/>
+ <MIDISendNoteOff>False</MIDISendNoteOff>
+ <Channel Number="16">
+  <Name>Knob</Name>
+  <Type>Knob</Type>
+  <Movement Sensitivity="1" Encoding="SignedBit">Relative</Movement>
+ </Channel>
+ <Channel Number="128">
+  <Name>Arm</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="136">
+  <Name>Solo</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="144">
+  <Name>Mute</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="153">
+  <Name>Button 25 (unconfirmed)</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="160">
+  <Name>Knob push</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="174">
+  <Name>Prev</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="198">
+  <Name>Shift</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="202">
+  <Name>Read</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="203">
+  <Name>Write</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="204">
+  <Name>Trim</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="205">
+  <Name>Touch</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="212">
+  <Name>Marker</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="213">
+  <Name>Nudge</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="214">
+  <Name>Loop</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="217">
+  <Name>Click</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="219">
+  <Name>Rewind</Name>
+  <Type>Button</Type>
+  <Role>Back</Role>
+ </Channel>
+ <Channel Number="220">
+  <Name>Fast Forward</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="221">
+  <Name>Stop</Name>
+  <Type>Button</Type>
+  <Role>EmergencyStop</Role>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="222">
+  <Name>Play</Name>
+  <Type>Button</Type>
+  <Role>Go</Role>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="223">
+  <Name>Record</Name>
+  <Type>Button</Type>
+  <Feedback LowerValue="0" UpperValue="127"/>
+ </Channel>
+ <Channel Number="232">
+  <Name>Fader touch</Name>
+  <Type>Button</Type>
+ </Channel>
+ <Channel Number="513">
+  <Name>Fader</Name>
+  <Type>Slider</Type>
+  <Role>GrandMaster</Role>
+  <Facts Fader="Motorised"/>
+ </Channel>
+</InputProfile>

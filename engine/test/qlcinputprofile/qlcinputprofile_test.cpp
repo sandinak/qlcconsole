@@ -29,6 +29,7 @@
 #include "qlcchannel.h"
 #include "surfacelayout.h"
 #include "controlsurface.h"
+#include "faderpickup.h"
 
 #include "../common/resource_paths.h"
 
@@ -538,6 +539,47 @@ void QLCInputProfile_Test::shippedSurfaceTypesHoldTheirRules()
             else if (ich->type() == QLCInputChannel::Slider)
                 QCOMPARE(ich->faderFact(), FaderFact::Absolute);   // the BCF2000's pedal
     }
+}
+
+/* The PreSonus FaderPort 2 (Mackie mode, MIDI channel 1): one motor fader
+   (pitch bend) that is the Grand Master, Play = GO, Rewind = Back, Stop =
+   the stop; the knob is a relative one (1..63 up, 65..127 down); the Play,
+   Stop, Record and Loop keys have lamps. Its fader is Motorised, so its
+   pick-up sends the value back once and waits for the motor. The fader's
+   touch (note 104) has no place in a type (no role or fact for it): it is
+   a plain button. */
+void QLCInputProfile_Test::faderPort2IsATypeWithAMotorFader()
+{
+    QScopedPointer<QLCInputProfile> prof(QLCInputProfile::loader(INTERNAL_PROFILEDIR "PreSonus-FaderPort-2.qxi"));
+    QVERIFY(!prof.isNull());
+    QCOMPARE(prof->name(), QString("PreSonus FaderPort 2"));
+    QVERIFY(prof->isSurfaceType());
+    QVERIFY2(prof->roleProblems().isEmpty(), qPrintable(prof->roleProblems().join('\n')));
+    QCOMPARE(prof->roleChannel("GrandMaster"), quint32(513));
+    QCOMPARE(prof->roleChannel("Go"), quint32(128 + 94));
+    QCOMPARE(prof->roleChannel("Back"), quint32(128 + 91));
+    QCOMPARE(prof->roleChannel("EmergencyStop"), quint32(128 + 93));
+    const QLCInputChannel *fader = prof->channel(513);
+    QVERIFY(fader != nullptr);
+    QCOMPARE(fader->type(), QLCInputChannel::Slider);
+    QCOMPARE(fader->faderFact(), FaderFact::Motorised);
+    const QLCInputChannel *knob = prof->channel(16);
+    QVERIFY(knob != nullptr);
+    QCOMPARE(knob->faderFact(), FaderFact::Relative);
+    QCOMPARE(knob->relativeEncoding(), QLCInputChannel::SignedBit);
+    QCOMPARE(prof->channel(128 + 104)->name(), QString("Fader touch"));
+    QVERIFY(prof->channel(128 + 104)->role().isEmpty());
+    for (int note : { 93, 94, 95, 86 })
+        QCOMPARE(prof->channel(128 + note)->upperValue(), uchar(127));
+
+    // The pick-up follows the declared fact: it asks for the value to be
+    // sent to the motor once, then takes the fader when it arrives.
+    FaderPickup pick;
+    pick.setFact(fader->faderFact());
+    bool sendBack = false;
+    QVERIFY(!pick.accept(10, 200, &sendBack));
+    QVERIFY(sendBack);
+    QVERIFY(pick.accept(199, 200, &sendBack));
 }
 
 void QLCInputProfile_Test::loader()

@@ -165,6 +165,7 @@ These come as surface types:
 |---|---|---|
 | **PMJ Black 1** | Master = Grand Master; Go, Back, Left, Right, page arrows; O = Blackout, Set = Blind; the five mode keys = pages; strip keys Select / Load / Up (reset); encoders | plain |
 | **Akai APC mini** and **APC mini mk2** | Slider 9 = Grand Master; scene keys: **Clip Stop** = GO, **Solo** = Back, **Stop All Clips** = stop | plain |
+| **PreSonus FaderPort 2** | Fader = Grand Master; **Play** = GO, **Rewind** = Back, **Stop** = stop | motor |
 | **PMJ 9 Faders**, **KORG nanoKONTROL2**, **Behringer BCF2000** | the last fader = Grand Master | plain (BCF2000: motor) |
 
 Today the roles are what the board's own overlay does (the PMJ's) and what
@@ -332,8 +333,8 @@ this computer's -- so nothing there is accepted or saved with the show.
 **Each board you patch is drawn as it is, every control where it sits,
 with what it does now.** It is under **This computer's desk** in
 **Connections ▸ Control surfaces**, one map per board, for the **Akai
-APC40 mk2**, the **Akai APC64**, the **PMJ Black 1** and the
-**MaizeDMX Playback Controller**. The footer has a chip per drawn board
+APC40 mk2**, the **Akai APC64**, the **PMJ Black 1**, the
+**MaizeDMX Playback Controller** and the **PreSonus FaderPort 2**. The footer has a chip per drawn board
 (**APC40**, **APC64**, **PMJ**, **MaizeDMX**):
 a click opens its map.
 
@@ -381,6 +382,33 @@ USB MIDI boxes share): patch it with the profile **MaizeDMX Playback
 Controller**. The map and its default roles come from the profile, never the
 port's name. Its **BO** key is printed Blackout; it has no job yet in
 qlcconsole (the map says *Blackout (coming)*).
+
+## The PreSonus FaderPort 2
+
+The 2017 FaderPort 2 (its MIDI port is **PreSonus FP2**) is a one-fader desk
+with a motor. It speaks Mackie Control on MIDI channel 1 once it is in its
+native mode; patch it on that channel with the profile **PreSonus FaderPort
+2**, with its feedback line (the lamps and the motor need it).
+
+- **The fader** is a motor fader (pitch bend). It is the Grand Master, and
+  the show moves it: when the Grand Master is somewhere else the fader is
+  sent there and picked up when it arrives, as for any motor fader
+  ([above](#a-fader-is-picked-up-before-it-follows)). Its **touch** (note
+  104) is a plain button in the profile: a surface type has no place for a
+  touch, so it is drawn on the map and free to learn, but nothing uses it
+  yet.
+- **The knob** (CC 16) is an endless one, 1 to 63 clockwise and 65 to 127
+  counter-clockwise; its push is note 32.
+- **Roles** (this computer's desk, seeded the first time it is patched, as
+  for the APC40): **Play** is GO, **Rewind** is Back, **Stop** is STOP, the
+  fader is the Grand Master. **Play**, **Stop**, **Record** and **Loop**
+  have lamps and follow [the lamp rule](#what-a-controls-light-says); the
+  other keys are free to assign. The map draws the board; every key is on it.
+- Names are the board's own labels where PreSonus's documents confirm them
+  (the Mackie set: Arm, Solo, Mute, Shift, Read, Write, Trim, Touch,
+  Marker, Nudge, Click, Loop, Rewind, Fast Forward, Stop, Play, Record).
+  **Prev** (note 46) and key **25** are not confirmed by a PreSonus document;
+  rename them in the profile once the manual says.
 
 ## Pages
 
@@ -971,6 +999,27 @@ and never surprises you when it comes back.
 
 These steps need the hardware. Do them once on the desk you will use,
 after any build that changes a surface, and say which build.
+
+**PreSonus FaderPort 2**
+
+1. Put the FaderPort 2 in native mode (MIDI channel 1) and patch it with the
+   profile PreSonus FaderPort 2 and its feedback line. *Expect:* a map of
+   the board under Control surfaces, a **FaderPort** chip in the footer,
+   *GO is PLAY · Back is REW · STOP is STOP · GM is Fader*.
+2. Move the Grand Master on screen. *Expect:* the fader's motor follows it
+   to the new place and the Grand Master does not jump.
+3. Set the Grand Master to 50%, then pull the fader to the bottom and push
+   it up past 50%. *Expect:* a pull down is taken at once; a raise takes
+   over where the fader meets the master.
+4. Touch the fader without moving it, then let go. *Expect:* the **Fader
+   touch** key lights on the map while touched; nothing in the show changes.
+5. Start a cue list and look at the board. *Expect:* **Play** is lit, **Stop**
+   and **Record** as the show says; **Stop** is lit while ALL OFF holds.
+6. Press **Play**, then **Rewind**, then **Stop**. *Expect:* GO fires the
+   Run tab's list, Back steps back, Stop is ALL OFF (the footer says *held:
+   emergency stop*); one **Play** starts the list again.
+7. Turn the knob a click each way. *Expect:* its dial on the map turns the
+   way the knob does.
 
 **PMJ Black 1**
 

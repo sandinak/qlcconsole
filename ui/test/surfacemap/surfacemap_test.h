@@ -56,6 +56,9 @@ private slots:
     void aBoardWithNoLayoutFallsBackToTheRows();
     /** The footer's chip per board opens its map. */
     void theFooterChipOpensItsMap();
+    /** The FaderPort 2 is drawn: its fader, knob and transport keys, its
+     *  jobs GO / Back / STOP / GM, and what is pressed lights. */
+    void theFaderPort2IsDrawn();
     /** A map never clips: under its smallest cell it asks for the width. */
     void theMapScrollsRatherThanClips();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */

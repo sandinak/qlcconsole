@@ -1,0 +1,288 @@
+{
+ "format": 1,
+ "profile": "PreSonus FaderPort 2",
+ "name": "PreSonus FaderPort 2",
+ "short": "FaderPort",
+ "width": 7.5,
+ "height": 9.25,
+ "pages": [],
+ "sections": [
+  {
+   "label": "Channel",
+   "x": 0,
+   "y": 0.5,
+   "w": 1,
+   "h": 4.25
+  },
+  {
+   "label": "Fader",
+   "x": 1.5,
+   "y": 0.5,
+   "w": 1,
+   "h": 7.25
+  },
+  {
+   "label": "Automation",
+   "x": 3.25,
+   "y": 0.5,
+   "w": 1,
+   "h": 4
+  },
+  {
+   "label": "Navigate",
+   "x": 4.5,
+   "y": 0.5,
+   "w": 1,
+   "h": 5.25
+  },
+  {
+   "label": "Pan knob",
+   "x": 6,
+   "y": 0.5,
+   "w": 1.5,
+   "h": 3
+  },
+  {
+   "label": "Transport",
+   "x": 0,
+   "y": 8.25,
+   "w": 7.25,
+   "h": 1
+  }
+ ],
+ "controls": [
+  {
+   "ch": 144,
+   "x": 0,
+   "y": 0.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "MUTE"
+  },
+  {
+   "ch": 136,
+   "x": 0,
+   "y": 1.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "SOLO"
+  },
+  {
+   "ch": 128,
+   "x": 0,
+   "y": 2.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "ARM"
+  },
+  {
+   "ch": 198,
+   "x": 0,
+   "y": 3.75,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "SHIFT"
+  },
+  {
+   "ch": 513,
+   "x": 1.5,
+   "y": 0.5,
+   "w": 1,
+   "h": 6,
+   "kind": "fader",
+   "face": "Fader"
+  },
+  {
+   "ch": 232,
+   "x": 1.5,
+   "y": 6.75,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "Fader touch"
+  },
+  {
+   "ch": 202,
+   "x": 3.25,
+   "y": 0.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "READ"
+  },
+  {
+   "ch": 203,
+   "x": 3.25,
+   "y": 1.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "WRITE"
+  },
+  {
+   "ch": 204,
+   "x": 3.25,
+   "y": 2.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "TRIM"
+  },
+  {
+   "ch": 205,
+   "x": 3.25,
+   "y": 3.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "TOUCH"
+  },
+  {
+   "ch": 212,
+   "x": 4.5,
+   "y": 0.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "MARKER"
+  },
+  {
+   "ch": 213,
+   "x": 4.5,
+   "y": 1.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "NUDGE"
+  },
+  {
+   "ch": 217,
+   "x": 4.5,
+   "y": 2.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "CLICK"
+  },
+  {
+   "ch": 153,
+   "x": 4.5,
+   "y": 3.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "25"
+  },
+  {
+   "ch": 174,
+   "x": 4.5,
+   "y": 4.5,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "PREV"
+  },
+  {
+   "ch": 16,
+   "x": 6,
+   "y": 0.5,
+   "w": 1.5,
+   "h": 1.5,
+   "kind": "encoder",
+   "face": "Knob"
+  },
+  {
+   "ch": 160,
+   "x": 6.25,
+   "y": 2.25,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "Push"
+  },
+  {
+   "ch": 214,
+   "x": 0,
+   "y": 8.25,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "LOOP",
+   "lamp": "led"
+  },
+  {
+   "ch": 219,
+   "x": 1.25,
+   "y": 8.25,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "REW"
+  },
+  {
+   "ch": 220,
+   "x": 2.5,
+   "y": 8.25,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "FF"
+  },
+  {
+   "ch": 221,
+   "x": 3.75,
+   "y": 8.25,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "STOP",
+   "lamp": "led"
+  },
+  {
+   "ch": 222,
+   "x": 5,
+   "y": 8.25,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "PLAY",
+   "lamp": "led"
+  },
+  {
+   "ch": 223,
+   "x": 6.25,
+   "y": 8.25,
+   "w": 1,
+   "h": 1,
+   "kind": "button",
+   "face": "REC",
+   "lamp": "led"
+  }
+ ],
+ "roles": [
+  {
+   "role": "go",
+   "ch": 222,
+   "seed": true
+  },
+  {
+   "role": "back",
+   "ch": 219,
+   "seed": true
+  },
+  {
+   "role": "gm",
+   "ch": 513,
+   "seed": true
+  },
+  {
+   "role": "stop",
+   "ch": 221,
+   "seed": true
+  }
+ ]
+}

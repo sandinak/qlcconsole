@@ -311,6 +311,31 @@ void SurfaceMap_Test::theFooterChipOpensItsMap()
     QVERIFY2(scroll.verticalScrollBar()->value() > 0, "the page did not scroll to the map");
 }
 
+void SurfaceMap_Test::theFaderPort2IsDrawn()
+{
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    SurfaceMaps maps(m_doc);
+    settle();
+    SurfaceMapView *mv = maps.view(0);
+    QVERIFY2(mv != nullptr, "no map of the FaderPort 2");
+    const quint32 kFader = 513, kKnob = 16, kPlayKey = 128 + 94, kRew = 128 + 91, kStopKey = 128 + 93;
+    QCOMPARE(mv->layout().controls().size(), 22);
+    QVERIFY(mv->layout().controls().at(mv->layout().indexOf(kFader)).isFader());
+    QVERIFY(mv->layout().controls().at(mv->layout().indexOf(kKnob)).turns());
+    QCOMPARE(mv->layout().roleOn(kPlayKey), QStringLiteral("go"));
+    QCOMPARE(mv->layout().roleOn(kRew), QStringLiteral("back"));
+    QCOMPARE(mv->layout().roleOn(kStopKey), QStringLiteral("stop"));
+    QCOMPARE(mv->layout().roleOn(kFader), QStringLiteral("gm"));
+    QVERIFY(!mv->isHighlighted(kPlayKey));
+    QVERIFY(fp.press(QStringLiteral("Play")));
+    settle();
+    QVERIFY2(mv->isHighlighted(kPlayKey), "Play is not lit on the map");
+    QVERIFY(!mv->isHighlighted(kStopKey));
+    QVERIFY(fp.release(QStringLiteral("Play")));
+}
+
 void SurfaceMap_Test::theMapScrollsRatherThanClips()
 {
     SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
@@ -354,6 +379,9 @@ void SurfaceMap_Test::shots()
     SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 DAW"), 3, QStringLiteral("Akai APC64"),
                         profile("Akai-APC64.qxi"));
     QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
+    SimMidiDevice fp2(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 4, QStringLiteral("PreSonus FaderPort 2"),
+                      profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp2.plug(), qPrintable(fp2.lastError()));
     settle();
     // A show with a few triggers, one only in a cue; a lit pad; a fader moved.
     ControlMap *cm = m_doc->controlMap();
@@ -370,7 +398,7 @@ void SurfaceMap_Test::shots()
 
     const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
     const QList<QPair<quint32, QString>> boards = { { 0, QStringLiteral("apc40") }, { 1, QStringLiteral("pmj") },
-                                                    { 2, QStringLiteral("maizedmx") }, { 3, QStringLiteral("apc64") } };
+                                                    { 2, QStringLiteral("maizedmx") }, { 3, QStringLiteral("apc64") }, { 4, QStringLiteral("faderport2") } };
     for (const QSize &size : sizes)
     {
         QScrollArea scroll;
@@ -395,6 +423,8 @@ void SurfaceMap_Test::shots()
                 maize.press(QStringLiteral("X3"));
             if (b.first == 3)
                 apc64.set(QStringLiteral("Touch strip 2"), 70);
+            if (b.first == 4)
+                fp2.set(QStringLiteral("Fader"), 80);
             settle();
             const QString file = QStringLiteral("%1/%2-surfacemap-%3-%4x%5.png")
                                      .arg(dir, prefix, b.second).arg(size.width()).arg(size.height());
