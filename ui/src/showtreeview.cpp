@@ -2798,14 +2798,21 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             // Esc: back out first, then the Library's selection goes.
             EditKeys::Verbs keys;
             keys.backOut = [this]() { return backOutOneLevel(); };
-            // Q215: a reusable cue copies, pastes and duplicates in the library.
+            // Q215: a reusable cue copies, pastes and duplicates in the library;
+            // a palette duplicates too (⌘D), as in Build.
             keys.copy = [this]() { copyLibraryReusable(); };
             keys.paste = [this]() { pasteReusableCue(); };
-            keys.duplicate = [this]() { duplicateLibraryReusable(); };
+            keys.duplicate = [this]() {
+                if (!duplicateLibraryPalettes())
+                    duplicateLibraryReusable();
+            };
             keys.hasSelection = [this]() {
                 QTreeWidgetItem *it = m_library->currentItem();
-                return it != nullptr && it->isSelected() && it->data(0, KindRole).toInt() == LibReusable
-                       && m_st->reusableCue(it->data(0, IdRole).toUInt()) != nullptr;
+                if (it == nullptr || !it->isSelected())
+                    return false;
+                const int kind = it->data(0, KindRole).toInt();
+                return (kind == LibReusable && m_st->reusableCue(it->data(0, IdRole).toUInt()) != nullptr)
+                       || (kind == LibPalette && m_doc->palette(it->data(0, IdRole).toUInt()) != nullptr);
             };
             EditKeys::install(m_library, keys);
         }
@@ -9938,6 +9945,33 @@ bool ShowTreeView::duplicateLibraryReusable()
         || m_st->reusableCue(item->data(0, IdRole).toUInt()) == nullptr)
         return false;
     return duplicateReusableCueRow(item->data(0, IdRole).toUInt());
+}
+
+bool ShowTreeView::duplicateLibraryPalettes()
+{
+    QList<quint32> pids;
+    for (QTreeWidgetItem *sel : m_library->selectedItems())
+        if (sel->data(0, KindRole).toInt() == LibPalette && !pids.contains(sel->data(0, IdRole).toUInt())
+            && m_doc->palette(sel->data(0, IdRole).toUInt()) != nullptr)
+            pids << sel->data(0, IdRole).toUInt();
+    if (pids.isEmpty())
+        return false;
+    // One undo step on the shared history for all of them (PaletteOps).
+    const QList<quint32> made = m_doc->paletteOps()->duplicate(pids);
+    if (made.isEmpty())
+        return false;
+    reloadLibrary();
+    selectLibraryPalette(made.last());
+    const QLCPalette *copy = m_doc->palette(made.last());
+    if (made.size() == 1 && copy != nullptr)
+    {
+        // One: the copy opens to edit, as the menu's Duplicate and Build's ⌘D.
+        m_hint->setText(tr("Duplicated palette as “%1”").arg(copy->name()));
+        editPalette(copy->id());
+    }
+    else
+        m_hint->setText(tr("Duplicated %1 palettes").arg(made.size()));
+    return true;
 }
 
 void ShowTreeView::importChaser(quint32 chaserId, bool showReport)

@@ -48,6 +48,7 @@
 #include <climits>
 
 #include "fixturegroupeditor.h"
+#include "fixturemanager.h"
 #include "rigowner.h"
 #include "fixturetreewidget.h"
 #include "fixtureselection.h"
@@ -152,11 +153,22 @@ FixtureGroupEditor::FixtureGroupEditor(FixtureGroup* grp, Doc* doc, QWidget* par
 
     connect(m_nameEdit, SIGNAL(textEdited(const QString&)),
             this, SLOT(slotNameEdited(const QString&)));
-    // Renamed elsewhere (in place in the Fixtures tree, Layers): follow it.
-    // Typing here sets the same name, so this leaves the field alone then.
+    // The name typed here is one rig undo step once the field is left
+    // (Return, Tab, a click away), not one a key.
+    m_nameBefore = m_grp->name();
+    connect(m_nameEdit, &QLineEdit::editingFinished, this, [this]() {
+        FixtureManager::recordGroupRename(m_doc, m_grp->id(), m_nameBefore);
+        m_nameBefore = m_grp->name();
+    });
+    // Renamed elsewhere (in place in the Fixtures tree, Layers, an undo):
+    // follow it. Typing here sets the same name, so this leaves the field
+    // alone then.
     connect(m_grp, &FixtureGroup::nameChanged, this, [this]() {
         if (m_nameEdit->text() != m_grp->name())
+        {
             m_nameEdit->setText(m_grp->name());
+            m_nameBefore = m_grp->name();
+        }
     });
     connect(m_xSpin, SIGNAL(valueChanged(int)),
             this, SLOT(slotXSpinValueChanged(int)));

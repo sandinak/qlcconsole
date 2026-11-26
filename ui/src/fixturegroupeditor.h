@@ -120,6 +120,7 @@ private slots:
 private:
     FixtureGroup* m_grp; //! The group being edited
     Doc* m_doc;          //! The QLC engine object
+    QString m_nameBefore; //! The name as the last undo step left it (editingFinished)
     int m_row;           //! Currently selected row
     int m_column;        //! Currently selected column
     QTimer* m_resizeTimer; //! Coalesces sectionResized bursts into one relayout

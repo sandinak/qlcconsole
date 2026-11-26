@@ -116,6 +116,9 @@ private slots:
     void newHereMakesAGroupInTheFolder();
     /** Output Rules…: a group's members with mixed rules (tri-state), the
      *  Fixture Manager's and Build's menus, the row's tooltip. */
+    /** Duplicate, a new group and a group renamed: each one ⌘Z on the
+     *  rig's history, and ⇧⌘Z does it again. */
+    void duplicateNewGroupAndRenameAreUndoSteps();
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();
     /** A show read rebuilds each list once, not once per fixture (0.5.1). */

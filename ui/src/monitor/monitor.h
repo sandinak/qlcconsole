@@ -249,6 +249,9 @@ public:
     /** One undo step that @p undo puts back (fixtures added with their
      *  universes, say: more than a rig snapshot holds). */
     void pushUndoCallback(const std::function<void()> &undo);
+    /** The same, with @p redo to do it again after the undo (⇧⌘Z): a
+     *  duplicate, a new group, a rename on the Fixtures tab. */
+    void pushUndoCallback(const std::function<void()> &undo, const std::function<void()> &redo);
 
     /** "Centre the pan on the stage" (PanTurn::centre) for @p fids: one
      *  undo step, and the notice line says what changed. Fixture
@@ -278,6 +281,10 @@ public:
     void undo();
     /** Something to undo on the rig (Edit ▸ Undo, Q81). */
     bool canUndo() const;
+    /** Do again the last step undone, if it can be (⇧⌘Z). */
+    void redo();
+    /** Something undone that redo() can do again. */
+    bool canRedo() const;
 
     /** Focus mode's current head: ring it on the plot and in the Rig
      *  Overview. UINT_MAX clears it. */

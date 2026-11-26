@@ -3346,8 +3346,10 @@ void App::initMenuBar()
             }
             else if (Monitor *m = studio())
             {
-                // The rig's undo has no names and no redo.
+                // The rig's undo has no names; its redo, only for what the
+                // Fixtures tab makes and renames.
                 u = m->canUndo() ? tr("rig change") : QString();
+                r = m->canRedo() ? tr("rig change") : QString();
             }
             else if (connections() != nullptr)
             {
@@ -3385,11 +3387,13 @@ void App::initMenuBar()
             else if (InputOutputManager *io = connections())
                 io->slotUndoPatch();
         });
-        connect(redo, &QAction::triggered, this, [programming, treeView]() {
+        connect(redo, &QAction::triggered, this, [programming, treeView, studio]() {
             if (ProgrammingManager *pm = programming())
                 QMetaObject::invokeMethod(pm, "slotRedo");
             else if (ShowTreeView *v = treeView())
                 QMetaObject::invokeMethod(v, "slotRedo");
+            else if (Monitor *m = studio())
+                m->redo();
         });
 
         /* ⇧⌘N, New (here): named for what it would make where you are

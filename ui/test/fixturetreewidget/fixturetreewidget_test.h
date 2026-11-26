@@ -62,6 +62,8 @@ private slots:
      *  the editor renames the group, and the row is no longer editable. */
     void enterOnAGroupRowRenamesItInPlace();
     /** Esc in that editor keeps the old name and disarms the row. */
+    /** A group renamed in place is one rig undo step (⌘Z), redone by ⇧⌘Z. */
+    void aGroupRenamedInPlaceIsOneUndoStep();
     void escCancelsAGroupRename();
     /** F2 does the same; an empty name keeps the old one. */
     void f2OnAGroupAndAnEmptyNameIsRejected();

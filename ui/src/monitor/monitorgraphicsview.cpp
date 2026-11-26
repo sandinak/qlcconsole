@@ -223,6 +223,10 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
     QShortcut *undoSc = new QShortcut(QKeySequence::Undo, this);
     undoSc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(undoSc, &QShortcut::activated, this, &MonitorGraphicsView::undoLastMove);
+    // Cmd/Ctrl+Shift+Z does again what was undone, where it can.
+    QShortcut *redoSc = new QShortcut(QKeySequence::Redo, this);
+    redoSc->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(redoSc, &QShortcut::activated, this, &MonitorGraphicsView::redoLast);
 
     // Cmd/Ctrl+A selects everything that can be selected.
     QShortcut *allSc = new QShortcut(QKeySequence::SelectAll, this);
@@ -12886,6 +12890,9 @@ void MonitorGraphicsView::pushUndo(UndoEntry e)
     m_moveUndo.append(e);
     while (m_moveUndo.count() > 50)
         m_moveUndo.removeFirst();
+    // A new edit: what was undone before it cannot be done again on top.
+    if (!m_redoing)
+        m_moveRedo.clear();
     emit undoChanged();
 }
 
@@ -12898,8 +12905,29 @@ void MonitorGraphicsView::undoLastMove()
     // The whole drag: every entry it recorded, newest first.
     const UndoEntry last = m_moveUndo.takeLast();
     undoOne(last);
+    // A step with a way forward can be redone; one without ends the redo
+    // run (a later step redone over it would not be what was there).
+    if (last.type == UndoEntry::Callback && last.redo && last.batch == 0)
+        m_moveRedo.append(last);
+    else
+        m_moveRedo.clear();
     while (last.batch != 0 && !m_moveUndo.isEmpty() && m_moveUndo.last().batch == last.batch)
         undoOne(m_moveUndo.takeLast());
+}
+
+void MonitorGraphicsView::redoLast()
+{
+    if (m_moveRedo.isEmpty())
+        return;
+    auto refreshBadges = qScopeGuard([this]() { refreshFixtureCountBadges(); emit undoChanged(); });
+    const UndoEntry next = m_moveRedo.takeLast();
+    {
+        QScopedValueRollback<bool> redoing(m_redoing, true);
+        QScopedValueRollback<bool> quiet(m_quietMoves, true);
+        next.redo();
+        // Done again: its undo is the next Ctrl+Z.
+        pushUndo(next);
+    }
 }
 
 void MonitorGraphicsView::pushRigUndo(const QByteArray &before)
@@ -12917,6 +12945,18 @@ void MonitorGraphicsView::pushUndoCallback(const std::function<void()> &undo)
     UndoEntry e;
     e.type = UndoEntry::Callback;
     e.callback = undo;
+    pushUndo(e);
+}
+
+void MonitorGraphicsView::pushUndoCallback(const std::function<void()> &undo,
+                                           const std::function<void()> &redo)
+{
+    if (!undo)
+        return;
+    UndoEntry e;
+    e.type = UndoEntry::Callback;
+    e.callback = undo;
+    e.redo = redo;
     pushUndo(e);
 }
 

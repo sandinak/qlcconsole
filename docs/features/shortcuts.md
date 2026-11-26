@@ -80,6 +80,7 @@ a universe is not duplicated.
 | ⌘F | To Plot layers' search |
 | Esc | Out of an assembly first; then let go of the selection |
 | ⌘Z | Undo the last move, paste or edit |
+| ⇧⌘Z | Redo what the Fixtures tab made or renamed (a duplicate, a new group, a group's name) after ⌘Z |
 | ] / [ | Turn the selection 15° clockwise / anticlockwise |
 | } / { | Turn it 1° |
 | ⌘G / ⇧⌘G | New group of the selection (made at once, its name ready to type in Plot layers) / ungroup it |
@@ -183,6 +184,7 @@ Build is a tab of the Everything view; the qlcconsole view hides it.
 | **⌘/** (in the tree) | Skip the selected cues, or put them back |
 | **⌘]** / **⌘[** (in the tree) | The selected cues become sub-cues of the first of them (one: of the cue before) / the selected sub-cues become main cues after their cue ([Sub-cue ↔ main cue](show-tree.md#sub-cue--main-cue)) |
 | **⌥↩** (Library) | A layer for each group selected |
+| **⌘D** (Library) | Duplicate the selected palettes (one: the copy opens to edit) or reusable cue; one ⌘Z undoes it |
 | ↓ / Esc (Library filter) | Into the list / back to the tree |
 | **F2** / ⌫ (Library) | Rename / delete the palette or folder |
 | **?** typed first, or **F1** (command line) | The syntax lines |
@@ -211,7 +213,8 @@ Build is a tab of the Everything view; the qlcconsole view hides it.
 | ⌘D | Duplicate: a new fixture like each selected one, unpatched in the **Inventory**, named on (Front → Front #2); a group, a copy of it in the same folder |
 | ⌘C then ⌘V | The same, from what was copied |
 | Esc | Let go of the selection |
-| ⌘Z | Undo the rig's last change: a Patch dialog **Apply**, properties, renames, plot symbols, output rules |
+| ⌘Z | Undo the rig's last change: a Patch dialog **Apply**, properties, renames, plot symbols, output rules, a duplicate, a new group |
+| ⇧⌘Z | Redo a duplicate, a new group or a group's rename that ⌘Z undid |
 | Drag fixtures or a group onto a universe | The **Patch** dialog, packed into that universe, to review and apply |
 
 ## Build ▸ Scenes (what the Functions window had)

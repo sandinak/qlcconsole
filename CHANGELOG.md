@@ -14,6 +14,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Fixtures tab: duplicate and group edits undo**: a duplicate (⌘D, or ⌘C
+  then ⌘V), a new group and a group's rename are each one ⌘Z on the rig's
+  history, and ⇧⌘Z (Edit ▸ Redo) does them again; ⌘D in the Show Tree
+  Library duplicates the selected palettes too.
+
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or
   hit is refused on a fader, a latching button turns a Toggle into Start only

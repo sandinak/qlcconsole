@@ -75,6 +75,8 @@
 #include "ledlayouteditor.h"
 #include "measurementunits.h"
 #include <QShortcut>
+#include <QPointer>
+#include <QSharedPointer>
 #include "fixtureremap.h"
 #include "monitor/rigeditsession.h"
 #include <QActionGroup>
@@ -168,12 +170,20 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     Q_ASSERT(doc != NULL);
 
     /* ⌘Z here undoes the rig's last change -- a patch included (the Patch
-       dialog records one undo step for what it applied). */
+       dialog records one undo step for what it applied), a duplicate, a new
+       group, a group renamed. ⇧⌘Z does those last three again. */
     QShortcut *undo = new QShortcut(QKeySequence::Undo, this);
     undo->setContext(Qt::WidgetWithChildrenShortcut);
     connect(undo, &QShortcut::activated, this, []() {
         if (Monitor *mon = Monitor::instance())
             mon->undo();
+    });
+    QShortcut *redo = new QShortcut(QKeySequence::Redo, this);
+    redo->setObjectName(QStringLiteral("fmRedo"));
+    redo->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(redo, &QShortcut::activated, this, []() {
+        if (Monitor *mon = Monitor::instance())
+            mon->redo();
     });
     /* ⇧⌘N: a new group beside the group (or in the folder) selected. */
     QShortcut *newHereSc = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N), this);
@@ -1329,6 +1339,7 @@ QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const Q
     if (m_doc->mode() != Doc::Design)
         return QList<quint32>();
     QList<quint32> made;
+    QList<quint32> madeGroups;
     /* A fixture: a new one like it -- definition, mode, power, rules --
        unpatched, in the Inventory, named on ("Spot #2"). Patch it from
        there. */
@@ -1385,11 +1396,14 @@ QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const Q
             delete grp;
             continue;
         }
+        madeGroups << grp->id();
     }
-    if (!made.isEmpty() || !groups.isEmpty())
+    if (!made.isEmpty() || !madeGroups.isEmpty())
     {
         m_fixtures_tree->updateTree();
         m_doc->setModified();
+        // All of it one ⌘Z: the copies go, with whatever patched them since.
+        recordMade(m_doc, made, madeGroups);
     }
     // The new fixtures selected, to patch or rename next.
     if (!made.isEmpty())
@@ -3991,7 +4005,10 @@ void FixtureManager::slotContextMenuRequested(const QPoint &pos)
             grp->setName(cfg.name());
             grp->setSize(cfg.size());
             grp->setPath(newGroupPath);
-            m_doc->addFixtureGroup(grp);
+            if (m_doc->addFixtureGroup(grp))
+                recordMade(m_doc, QList<quint32>(), { grp->id() });
+            else
+                delete grp;
             updateGroupMenu();
             updateView();
         }
@@ -4533,6 +4550,7 @@ quint32 FixtureManager::newHere()
         delete grp;
         return FixtureGroup::invalidId();
     }
+    recordMade(m_doc, QList<quint32>(), { grp->id() });
     updateGroupMenu();
     updateView();
     QTreeWidgetItem *item = m_fixtures_tree->groupItem(grp->id());
@@ -4553,6 +4571,104 @@ quint32 FixtureManager::newHere()
             edit->selectAll();
         }
     return grp->id();
+}
+
+void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups)
+{
+    Monitor *mon = Monitor::instance();
+    if (doc == NULL || mon == NULL || (fixtures.isEmpty() && groups.isEmpty()))
+        return;
+    /* What the undo took away, as XML, for the redo to put back -- the
+       state at the undo, so a rename or a patch made since comes back too. */
+    struct Taken
+    {
+        QList<QByteArray> fixtures;
+        QList<QByteArray> groups;
+    };
+    QSharedPointer<Taken> taken(new Taken);
+    QPointer<Doc> d(doc);
+    auto refresh = []() {
+        if (FixtureManager *fm = FixtureManager::instance())
+        {
+            fm->updateGroupMenu();
+            fm->updateView();
+        }
+    };
+    // Fixtures come and go only in Design, as everywhere else on this tab.
+    auto undo = [d, fixtures, groups, taken, refresh]() {
+        if (d.isNull() || d->mode() != Doc::Design)
+            return;
+        taken->fixtures.clear();
+        taken->groups.clear();
+        for (quint32 gid : groups)
+            if (FixtureGroup *grp = d->fixtureGroup(gid))
+            {
+                QByteArray xml;
+                QXmlStreamWriter w(&xml);
+                w.writeStartDocument();
+                grp->saveXML(&w);
+                w.writeEndDocument();
+                taken->groups << xml;
+                d->deleteFixtureGroup(gid);
+            }
+        for (quint32 fid : fixtures)
+            if (Fixture *fx = d->fixture(fid))
+            {
+                QByteArray xml;
+                QXmlStreamWriter w(&xml);
+                w.writeStartDocument();
+                fx->saveXML(&w);
+                w.writeEndDocument();
+                taken->fixtures << xml;
+                d->deleteFixture(fid);
+            }
+        d->setModified();
+        refresh();
+    };
+    auto redo = [d, taken, refresh]() {
+        if (d.isNull() || d->mode() != Doc::Design)
+            return;
+        for (const QByteArray &xml : taken->fixtures)
+        {
+            QXmlStreamReader r(xml);
+            while (!r.atEnd() && !r.isStartElement())
+                r.readNext();
+            Fixture *fx = new Fixture(d);
+            if (!r.isStartElement() || !fx->loadXML(r, d, d->fixtureDefCache())
+                || !d->addFixture(fx, fx->id()))
+                delete fx;
+        }
+        for (const QByteArray &xml : taken->groups)
+        {
+            QXmlStreamReader r(xml);
+            while (!r.atEnd() && !r.isStartElement())
+                r.readNext();
+            FixtureGroup *grp = new FixtureGroup(d);
+            if (!r.isStartElement() || !grp->loadXML(r) || !d->addFixtureGroup(grp, grp->id()))
+                delete grp;
+        }
+        d->setModified();
+        refresh();
+    };
+    mon->pushUndoCallback(undo, redo);
+}
+
+void FixtureManager::recordGroupRename(Doc *doc, quint32 gid, const QString &before)
+{
+    Monitor *mon = Monitor::instance();
+    FixtureGroup *grp = doc != NULL ? doc->fixtureGroup(gid) : NULL;
+    if (mon == NULL || grp == NULL || grp->name() == before)
+        return;
+    const QString after = grp->name();
+    QPointer<Doc> d(doc);
+    auto name = [d, gid](const QString &n) {
+        FixtureGroup *g = d.isNull() ? NULL : d->fixtureGroup(gid);
+        if (g == NULL)
+            return;
+        g->setName(n);
+        d->setModified();
+    };
+    mon->pushUndoCallback([name, before]() { name(before); }, [name, after]() { name(after); });
 }
 
 int FixtureManager::selectAllSimilar()

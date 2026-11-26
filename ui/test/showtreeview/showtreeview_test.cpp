@@ -11899,6 +11899,63 @@ void ShowTreeView_Test::listsProductionsAndReusableCuesDuplicateCopyAndPaste()
     QCOMPARE(st->reusableCues().count(), 1);
 }
 
+/* ⌘D on the Library's palettes, as Build's palette list has it: one
+   selected, a copy that opens to edit; two, both copied in one undo step
+   on the shared history. */
+void ShowTreeView_Test::libraryPalettesDuplicateOnCmdD()
+{
+    const quint32 half = m_doc->paletteOps()->create(QLCPalette::Dimmer, QString(), "Half");
+    const quint32 full = m_doc->paletteOps()->create(QLCPalette::Dimmer, QString(), "Full");
+    QVERIFY(m_doc->palette(half) != nullptr && m_doc->palette(full) != nullptr);
+    ShowTreeController *st = m_doc->showTree();
+    const int before = m_doc->palettes().count();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1200, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QMetaObject::invokeMethod(&view, "reloadLibrary");
+    QTreeWidget *lib = view.library();
+    view.selectLibraryPalette(half);
+    QTreeWidgetItem *row = lib->currentItem();
+    QVERIFY(row != nullptr);
+    QCOMPARE(row->data(0, ShowTreeView::IdRole).toUInt(), half);
+    lib->setFocus();
+    QTest::keySequence(lib, QKeySequence(Qt::CTRL | Qt::Key_D));
+    QCOMPARE(m_doc->palettes().count(), before + 1);
+    QLCPalette *copy = nullptr;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p->id() != half && p->id() != full && p->type() == QLCPalette::Dimmer)
+            copy = p;
+    QVERIFY(copy != nullptr);
+    QVERIFY2(copy->name().startsWith("Half"), qPrintable(copy->name()));
+    // The copy is what the Library selects now.
+    QVERIFY(lib->currentItem() != nullptr);
+    QCOMPARE(lib->currentItem()->data(0, ShowTreeView::IdRole).toUInt(), copy->id());
+    QVERIFY(st->canUndoShared());
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->palettes().count(), before);
+
+    // Two selected: both copied, one ⌘Z takes both.
+    QMetaObject::invokeMethod(&view, "reloadLibrary");
+    view.selectLibraryPalette(half);
+    view.selectLibraryPalette(full);
+    for (QTreeWidgetItemIterator it(lib); *it; ++it)
+    {
+        QTreeWidgetItem *top = *it;
+        while (top->parent() != nullptr)
+            top = top->parent();
+        if ((*it)->data(0, ShowTreeView::KindRole).toInt() == ShowTreeView::LibPalette
+            && (*it)->data(0, ShowTreeView::IdRole).toUInt() == half && top->data(0, ShowTreeView::IdRole).toUInt() == 2)
+            (*it)->setSelected(true);
+    }
+    lib->setFocus();
+    QTest::keySequence(lib, QKeySequence(Qt::CTRL | Qt::Key_D));
+    QCOMPARE(m_doc->palettes().count(), before + 2);
+    QVERIFY(st->undoShared());
+    QCOMPARE(m_doc->palettes().count(), before);
+}
+
 void ShowTreeView_Test::releaseSaysWhenItAlsoChangesOtherUses()
 {
     FixtureGroup *towers = group("Towers", 0, 2);
