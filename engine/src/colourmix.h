@@ -51,7 +51,7 @@ public:
     struct Wheel
     {
         quint32 channel = 0;
-        QVector<Slot> slots;
+        QVector<Slot> slotList;
     };
 
     /** Every Colour-group channel of @p mode with at least one coloured

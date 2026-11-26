@@ -3311,7 +3311,7 @@ EffectInstance::parseIntents(const QJSValue &intents,
                     const int best = ColourMix::nearest(wh, tR, tG, tB);
                     if (best < 0)
                         continue;
-                    DmxWrite w{uniIdx, addrBase + (int)wh.channel, wh.slots.at(best).dmx, fxid, wh.channel};
+                    DmxWrite w{uniIdx, addrBase + (int)wh.channel, wh.slotList.at(best).dmx, fxid, wh.channel};
                     w.snap = true;
                     writes.append(w);
                 }

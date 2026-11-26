@@ -40,7 +40,7 @@ QVector<ColourMix::Wheel> ColourMix::wheels(const QLCFixtureMode *mode)
         w.channel = quint32(c);
         for (const QLCCapability *cap : ch->capabilities())
         {
-            QColor col = cap->resource(0).value<QColor>();
+            QColor col = const_cast<QLCCapability *>(cap)->resource(0).value<QColor>();
             if (!col.isValid())
                 col = QColor(cap->name().trimmed());
             if (!col.isValid())
@@ -50,9 +50,9 @@ QVector<ColourMix::Wheel> ColourMix::wheels(const QLCFixtureMode *mode)
             s.g = col.green();
             s.b = col.blue();
             s.dmx = cap->middle();
-            w.slots << s;
+            w.slotList << s;
         }
-        if (!w.slots.isEmpty())
+        if (!w.slotList.isEmpty())
             out << w;
     }
     return out;
@@ -62,9 +62,9 @@ int ColourMix::nearest(const Wheel &wheel, int r, int g, int b)
 {
     int best = -1;
     int bestDist = INT_MAX;
-    for (int i = 0; i < wheel.slots.size(); ++i)
+    for (int i = 0; i < wheel.slotList.size(); ++i)
     {
-        const Slot &s = wheel.slots.at(i);
+        const Slot &s = wheel.slotList.at(i);
         const int dr = s.r - r, dg = s.g - g, db = s.b - b;
         const int d = dr * dr + dg * dg + db * db;
         if (d < bestDist)
@@ -103,7 +103,7 @@ bool ColourMix::showsRgbWithoutRgb(const QLCFixtureMode *mode)
     if (hasCMY(mode))
         return true;
     for (const Wheel &w : wheels(mode))
-        if (w.slots.size() >= 2)
+        if (w.slotList.size() >= 2)
             return true;
     return false;
 }

@@ -3733,7 +3733,7 @@ void EffectInstance_Test::aRainbowStepsAWheelToTheNearestSlot()
     // The slots are read once for the fixture's mode.
     QCOMPARE(inst.m_wheelSlots.size(), 1);
     QCOMPARE(inst.m_wheelSlots.value(spot->id()).second.size(), 1);
-    QCOMPARE(inst.m_wheelSlots.value(spot->id()).second.first().slots.size(), 5);
+    QCOMPARE(inst.m_wheelSlots.value(spot->id()).second.first().slotList.size(), 5);
 }
 
 void EffectInstance_Test::aRainbowRunsOnTheRivaleProfile()
