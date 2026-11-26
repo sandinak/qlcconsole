@@ -693,8 +693,11 @@ bool DeskRecord::seedDefaults()
             for (Role r : roles())
                 if (m_bindings[r].isSet() && m_bindings[r].identity == id && m_bindings[r].channel == lr.channel)
                     taken = true;
-            // Q315: the show's emergency stop is never GO, Back or the master.
-            if (taken || (role != Stop && isShowStop(u, lr.channel)))
+            /* A control the open show already uses is left to it: the desk
+               would win on it (Q309) and silently block the show's trigger
+               (the show's stop included, Q315). The role stays free to learn. */
+            ControlMap *cm = m_doc->controlMap();
+            if (taken || (cm != nullptr && !cm->bindingsOn(u, lr.channel).isEmpty()))
                 continue;
             Binding b;
             b.identity = id;

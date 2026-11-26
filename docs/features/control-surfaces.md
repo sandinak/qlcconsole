@@ -315,8 +315,9 @@ a click opens its map.
   STOP and the **GM** fader; on the **APC64**, as on the APC40, **PLAY**
   GO, **RECORD** Back, **STOP ALL CLIPS** STOP, and touch strip 8 the Grand
   Master. A role you have learned already (on any board)
-  is never changed, and a board is set up once: a role you clear stays
-  cleared. The PMJ Black 1's **Go**, **Back** and **Master** are its own
+  is never changed, a control the open show already uses keeps its job
+  (that role is left for you to learn), and a board is set up once: a role
+  you clear stays cleared. The PMJ Black 1's **Go**, **Back** and **Master** are its own
   (the board's overlay does them) and are drawn as GO, Back and GM.
 - **A board with no drawing** (an APC mini, a fader box) is named in one line
   under the maps; what its controls do stays in the rows below.

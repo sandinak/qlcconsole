@@ -929,6 +929,40 @@ void SurfaceSim_Test::aClearedDefaultStaysCleared()
     QVERIFY(!desk->seedDefaults());
 }
 
+void SurfaceSim_Test::aDefaultLeavesTheShowsTriggerAlone()
+{
+    QVERIFY(mapProfile(m_doc, apcFile()) != nullptr);
+    // The open show already has PLAY: a scene's trigger.
+    Fixture *fxi = new Fixture(m_doc);
+    fxi->setAddress(0);
+    fxi->setUniverse(0);
+    fxi->setChannels(1);
+    m_doc->addFixture(fxi);
+    Scene *sc = new Scene(m_doc);
+    sc->addFixture(fxi->id());
+    sc->setValue(fxi->id(), 0, 255);
+    m_doc->addFunction(sc);
+    m_doc->controlMap()->setDumpWindowMs(0);
+    m_doc->controlMap()->setBinding({ 0, kApcPlay, ControlMap::function(sc->id()), ControlMap::Toggle });
+    DeskRecord *desk = m_doc->deskRecord();
+    QVERIFY2(!desk->anySet(), "not a fresh computer");
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc);
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    settle();
+    // GO is left to learn; the other defaults are seeded.
+    QVERIFY2(!desk->isSet(DeskRecord::Go), qPrintable(desk->stateText(DeskRecord::Go)));
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, kApcRecord);
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, kApcStopAll);
+    // PLAY still plays the show's scene.
+    QTest::qWait(300);
+    QVERIFY(apc.tap(QStringLiteral("#%1").arg(kApcPlay)));
+    settle();
+    m_doc->masterTimer()->timerTick();
+    QCoreApplication::processEvents();
+    QVERIFY2(sc->isRunning(), "the seeded desk GO took PLAY from the show's trigger");
+    m_doc->controlMap()->setDumpWindowMs(500);
+}
+
 void SurfaceSim_Test::theMaizeDmxSeedsItsDefaults()
 {
     const QString name = QStringLiteral("MaizeDMX Playback Controller");

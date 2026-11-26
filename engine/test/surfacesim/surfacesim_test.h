@@ -83,6 +83,9 @@ private slots:
     void aLearnedRoleWinsOverTheDefault();
     /** A default cleared stays cleared: a board is seeded once. */
     void aClearedDefaultStaysCleared();
+    /** A default role is not seeded onto a control the open show already
+     *  uses (the desk would block the show's trigger). */
+    void aDefaultLeavesTheShowsTriggerAlone();
     /** The MaizeDMX Playback Controller: GO, Back, the Grand Master and
      *  STOP (X10) from its layout. */
     void theMaizeDmxSeedsItsDefaults();

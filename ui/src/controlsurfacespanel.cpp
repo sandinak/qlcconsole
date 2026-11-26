@@ -22,7 +22,6 @@
 #include <QLabel>
 #include <QShowEvent>
 #include <QFrame>
-#include <QVBoxLayout>
 
 #include "controlsurfacespanel.h"
 #include "desksetuppanel.h"
