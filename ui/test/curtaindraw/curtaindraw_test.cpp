@@ -305,16 +305,31 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     QTRY_VERIFY_WITH_TIMEOUT(!markShown(sid), 1000);
     QCOMPARE(drawnOpen(sid, fid, "GO, opened:"), 1.0);
 
-    // Picked while it opens: held where it is, drawn where the cue puts it.
-    stopAll();
-    jump(c, 0);
-    settle(300);
-    stopAll();
-    {
+    /* The same from a start that is not the Run's (a VC cue list, OSC): the
+       list is already playing the curtain's scene, at full under the hold,
+       when the preview lets go -- still the cue's fade from where it was. */
+    auto closeIt = [&]() {
+        stopAll();
+        jump(c, 0);
+        settle(300);
+        stopAll();
         QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
         ua.at(3)->reset(0, 2);
         doc->inputOutputMap()->releaseUniverses(true);
+    };
+    closeIt();
+    QTRY_COMPARE_WITH_TIMEOUT(onWire(fid, 0), 0, 1000);
+    st->pickCue(c1);
+    settle(2500);                              // the scene at full, held
+    QCOMPARE(onWire(fid, 0), 0);
+    jump(c, 1);
+    {
+        const QString why = travels(fid, 0, 255, 1200, 4000);
+        QVERIFY2(why.isEmpty(), qPrintable("a list started after a pick: " + why));
     }
+
+    // Picked while it opens: held where it is, drawn where the cue puts it.
+    closeIt();
     QTRY_COMPARE_WITH_TIMEOUT(onWire(fid, 0), 0, 1000);
     loadAndGo(c, n1);
     QTRY_VERIFY_WITH_TIMEOUT(onWire(fid, 0) > 20, 1500);
