@@ -1465,8 +1465,9 @@ void AppViews_Test::theViewMenuIsOnlyViews()
             view = a->menu();
     QVERIFY(view != nullptr);
     QStringList items;
+    // What it shows (the level's More line is there only while it folds).
     foreach (QAction *a, view->actions())
-        if (!a->isSeparator())
+        if (!a->isSeparator() && a->isVisible())
             items << a->text();
     // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too.
     QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "DMX Monitor" << "Rig Overview…"
@@ -3412,6 +3413,8 @@ static QStringList windowJumpsAsShown(App *app)
                 out << "|";
             continue;
         }
+        if (!a->isVisible())        // the level's More Tabs line, while nothing is hidden
+            continue;
         const QString key = a->shortcut().toString(QKeySequence::PortableText);
         out << (key.isEmpty() ? a->text() : a->text() + " " + key.right(1));
     }
