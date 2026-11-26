@@ -766,10 +766,11 @@ void Levels_Test::theL2RowsGreyAndSayTheirLevel()
     ShowTreeView *view = ShowTreeView::instance();
     QVERIFY(view != nullptr);
     QList<QWidget *> treeRows;
-    treeRows << view->findChild<QWidget *>(QStringLiteral("stOpenWorkbench")) << view->m_listMib
-             << view->m_cueNoMib << view->m_cueMix << view->m_cueColour << view->m_cueTcRow
-             << view->m_listFollowTc << view->m_prodTimecode << view->m_cueFocusCall << view->m_cueRefine
-             << view->m_listConvert << view->m_listDetach;
+    for (QWidget *w : std::initializer_list<QWidget *>{
+             view->findChild<QWidget *>(QStringLiteral("stOpenWorkbench")), view->m_listMib, view->m_cueNoMib,
+             view->m_cueMix, view->m_cueColour, view->m_cueTcRow, view->m_listFollowTc, view->m_prodTimecode,
+             view->m_cueFocusCall, view->m_cueRefine, view->m_listConvert, view->m_listDetach })
+        treeRows.append(w);
     for (QWidget *w : treeRows)
         QVERIFY(w != nullptr);
     QVERIFY(m_app->requestLevel(ShowLevel::Student));
