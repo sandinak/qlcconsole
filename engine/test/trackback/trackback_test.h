@@ -75,6 +75,8 @@ private slots:
     void courseShows_data();
     void courseShows();
     void aRealShow();
+    /** Diagnostic, env-gated (QLC_CURTAIN_SHOW): his show's curtain. */
+    void hisCurtain();
 
 private:
     enum Step { Go, Back, Jump };

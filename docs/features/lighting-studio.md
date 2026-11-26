@@ -821,10 +821,6 @@ one, how many). Nothing moves it after that: not the cue letting go, not
 the rig going to rest, not a list stopped or a look played and let go of.
 The next **GO** carries on with what that cue plays.
 
-**Back and jumps.** Loading or jumping to a later cue, or going Back, puts
-the curtain where playing from the top would have left it, as it does the
-lights — a jump while it's still opening still ends open.
-
 **Check it on the real curtain.** With the curtain fixture patched to the
 motor controller (or its relay box), in Operate:
 

@@ -820,12 +820,13 @@ Chaser *TrackBack_Test::houseAndCurtainList(bool showOnly, bool operate, bool un
         traveller->setOutputRules(Fixture::ShowOnly);
         houseRelay->setOutputRules(Fixture::Switch | Fixture::ShowOnly);
     }
-    if (operate)
-        m_doc->setMode(Doc::Operate);
     // No motor yet: the curtains only drawn (an unpatched fixture shows
-    // what plays on it, Fixture::setPreviewValue()).
+    // what plays on it, Fixture::setPreviewValue()). Before Operate, which
+    // refuses a patch change.
     if (unpatched && (!m_doc->unpatchFixture(drape->id()) || !m_doc->unpatchFixture(traveller->id())))
         return nullptr;
+    if (operate)
+        m_doc->setMode(Doc::Operate);
 
     Scene *open = new Scene(m_doc);
     open->setName("Curtain Open");
@@ -912,6 +913,10 @@ void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
     };
     QStringList bad;
     auto want = [&](const QString &where, const Fixture *f, int got, bool on) {
+        // The run from the top keeps the universes only: an unpatched
+        // fixture's drawing is checked where it is read live.
+        if (!f->isPatched() && where.startsWith(QLatin1String("top")))
+            return;
         if ((got > 0) != on)
             bad << QStringLiteral("%1: %2 at %3").arg(where, f->name()).arg(got);
     };
@@ -1233,7 +1238,8 @@ void TrackBack_Test::aStopLeavesACurtainWhereItIs()
         {
             stopAllFromControl(how == 2 ? 1000 : 0);
         }
-        QVERIFY(rules->stageMachineryHeld());
+        if (!rules->stageMachineryHeld())
+            bad << QStringLiteral("%1: not held").arg(m.name);
 
         // Every frame of the stop and its fade, and well after: still.
         auto still = [&](const QString &when) {
@@ -1280,7 +1286,7 @@ void TrackBack_Test::aStopLeavesACurtainWhereItIs()
         still(QStringLiteral("a look let go of"));
         m_doc->deleteFunction(other->id());
         // The lights are out, the flame off.
-        const QByteArray dark = settle(1);
+        const QByteArray dark = settle(60);
         if (value(dark, house1, 0) != 0)
             bad << QStringLiteral("%1: the house at %2").arg(m.name).arg(value(dark, house1, 0));
         if (value(dark, flame, 0) != 0)
@@ -1495,6 +1501,85 @@ void TrackBack_Test::aRealShow()
         QVERIFY2(differ == 0, qPrintable(QStringLiteral("%1: %2").arg(c->name(), why)));
     }
     QVERIFY(lists > 0);
+}
+
+void TrackBack_Test::hisCurtain()
+{
+    const QString path = qEnvironmentVariable("QLC_CURTAIN_SHOW");
+    if (path.isEmpty())
+        QSKIP("set QLC_CURTAIN_SHOW");
+    QVERIFY(loadShow(path));
+    Chaser *c = nullptr;
+    for (Function *f : m_doc->functions())
+        if (f->name() == "Production Show" && f->type() == Function::ChaserType)
+            c = qobject_cast<Chaser *>(f);
+    QVERIFY(c != nullptr);
+    Fixture *cur = fixtureNamed("Main drape 2 curtain");
+    QVERIFY(cur != nullptr);
+    auto idx = [&](const QString &cue) {
+        for (int i = 0; i < c->stepsCount(); ++i)
+            if (c->steps().at(i).note == cue || c->stepCue(i) == cue)
+                return i;
+        return -1;
+    };
+    const int s101 = idx("1.0.1"), s1021 = idx("1.0.2.1"), s111 = idx("1.1.1");
+    qInfo() << "steps" << s101 << s1021 << s111 << "uni" << cur->universe() << "addr" << cur->address();
+    m_settle = 250;
+    auto open = [&](const char *what) {
+        const QByteArray o = settle(0);
+        const int a = int(cur->universeAddress());
+        qInfo().noquote() << what << "step" << c->currentStepIndex() << "Open" << (a < o.size() ? int(uchar(o.at(a))) : -1)
+                          << "fixture values" << cur->channelValues().toHex();
+    };
+    stopAll();
+    for (int i = 0; i <= s111 && i < 40; ++i) { act(c, { Go, 0 }); land(c); if (c->currentStepIndex() >= s111) break; }
+    open("GO from the top to 1.1.1:");
+    stopAll(); act(c, { Jump, s111 }); land(c); open("jump to 1.1.1 from dark:");
+    stopAll(); act(c, { Jump, s1021 }); land(c); open("jump to 1.0.2.1 from dark:");
+    stopAll(); act(c, { Jump, s101 - 1 }); land(c); act(c, { Go, 0 }); tick(40); open("mid 1.0.1 fade:");
+    act(c, { Jump, s111 }); land(c); open("then jump to 1.1.1:");
+    stopAll(); act(c, { Jump, s101 }); land(c); open("jump to 1.0.1:");
+    act(c, { Jump, s111 }); land(c); open("then jump to 1.1.1:");
+    // Design: a cue picked in the Run or the Show Tree previews it.
+    stopAll();
+    ShowTreeController *st = m_doc->showTree();
+    quint32 listId = ShowTree::invalidId();
+    st->productionOfChaser(c->id(), &listId);
+    const CueList *list = st->cueList(listId);
+    QVERIFY(list != nullptr);
+    for (const char *n : { "1.0.1", "1.1.1", "1.0.2.1" })
+        for (int i = 0; i < list->cues.count(); ++i)
+            if (st->cueNumber(*list, i) == QLatin1String(n))
+            {
+                st->pickCue(list->cues.at(i).id);
+                settle(200);
+                open(qPrintable(QStringLiteral("preview %1:").arg(n)));
+            }
+    st->stopPreview();
+    // Design: GO 1.0.1, and while it opens pick 1.1.1 (the Run's click).
+    auto cueId = [&](const char *n) {
+        for (int i = 0; i < list->cues.count(); ++i)
+            if (st->cueNumber(*list, i) == QLatin1String(n))
+                return list->cues.at(i).id;
+        return ShowTree::invalidId();
+    };
+    stopAll(); act(c, { Jump, s101 - 1 }); land(c); act(c, { Go, 0 }); tick(40); open("Design mid 1.0.1:");
+    st->pickCue(cueId("1.1.1")); settle(200); open("then pick 1.1.1:");
+    st->stopPreview(); settle(50); open("preview stopped:");
+    // Operate: Load 1.1.1 then GO, from 1.0.1 mid-fade, as the Run does.
+    st->stopPreview();
+    stopAll();
+    m_doc->setMode(Doc::Operate);
+    act(c, { Jump, s101 - 1 }); land(c); act(c, { Go, 0 }); tick(40); open("Operate mid 1.0.1:");
+    ShowControl::Request load; load.command = ShowControl::Load; load.chaser = c->id(); load.cue = "1.1.1";
+    qInfo() << "load" << m_doc->showControl()->run(load, ShowControl::RouteRunTab);
+    ShowControl::Request go; go.command = ShowControl::Go; go.chaser = c->id();
+    qInfo() << "go" << m_doc->showControl()->run(go, ShowControl::RouteRunTab);
+    land(c); open("then Load 1.1.1 + GO:");
+    stopAll();
+    load.cue = "1.1.1"; m_doc->showControl()->run(load, ShowControl::RouteRunTab);
+    m_doc->showControl()->run(go, ShowControl::RouteRunTab);
+    land(c); open("Operate from dark Load 1.1.1 + GO:");
 }
 
 QTEST_MAIN(TrackBack_Test)

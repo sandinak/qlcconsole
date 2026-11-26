@@ -394,11 +394,12 @@ void OutputRuleKeeper::emergencyStop()
        sends it to its safe value. Only the rest goes safe. A curtain
        stops where it is, mid-move too: it could be dragging a set piece. */
     FixtureRest::holdShowOnlyHeads(m_doc);
-    holdStageMachinery();
     // E2: a new live session -- every stamp from before is old now, so
     // every writer is held from its next write on (a function's gate at
     // its next tick: the generation moved).
     Function::startLiveSession();
+    // Read before the cut below, stamped in the new session.
+    holdStageMachinery();
     const quint32 session = GenericFader::liveEpoch();
     m_stopEpoch.store(session, std::memory_order_relaxed);
     // E1: the cut first -- stored values to safe and a frame sent, now,
@@ -502,6 +503,13 @@ QVector<OutputRuleKeeper::Machine> OutputRuleKeeper::machinesNow() const
         m.base = fx->universeAddress();
         m.channels = fx->channels();
         m.showOnly = (fx->outputRules() & Fixture::ShowOnly) != 0;
+        m.intensity = QByteArray(int(m.channels), char(0));
+        for (quint32 i = 0; i < m.channels; ++i)
+        {
+            const QLCChannel *ch = fx->channel(i);
+            if (ch != nullptr && ch->group() == QLCChannel::Intensity)
+                m.intensity[int(i)] = char(1);
+        }
         out << m;
     }
     return out;
@@ -541,33 +549,60 @@ void OutputRuleKeeper::holdStageMachinery()
             const int a = int(abs & 0x1ff);
             if (a < it.value().size())
                 values[int(i)] = it.value().at(a);
-            // A Show-only one is held as its pan and tilt would be.
-            if (!m.showOnly)
-                levels << OutputLayer::Level { m.fixture, i, uchar(values.at(int(i))) };
+            // Over everything that plays, a Show-only one too (held as its
+            // pan and tilt are as well: Universe::holdShowOnlyPositions()).
+            levels << OutputLayer::Level { m.fixture, i, uchar(values.at(int(i))) };
         }
         held.insert(m.fixture, values);
     }
     {
         QMutexLocker locker(&m_machineMutex);
         m_machineHeld = held;
+        m_machinesHeld = machines;
         if (++m_machineGen == 0)
             ++m_machineGen;
     }
-    m_machineLayer->set(levels);
+    /* Stamped now, in this session (the emergency stop calls this once its
+       new session has started): the levels count on a Show-only curtain,
+       so nothing played after the stop moves it either. */
+    m_machineLayer->set(levels, [](const OutputLayer::Level &) { return true; });
     emitMachineryChanged();
 }
 
 void OutputRuleKeeper::releaseStageMachinery()
 {
+    QVector<Machine> machines;
     {
         QMutexLocker locker(&m_machineMutex);
         if (m_machineHeld.isEmpty())
             return;
         m_machineHeld.clear();
+        machines = m_machinesHeld;
+        m_machinesHeld.clear();
         if (++m_machineGen == 0)
             ++m_machineGen;
     }
     m_machineLayer->clear();
+    /* A Show-only curtain's intensity (a relay given the Curtain symbol):
+       the stop's hold there goes too -- the GO's cue at 0 writes nothing
+       there, so it would never be let go. Its other channels go at the
+       cue's first write there, as a head's pan and tilt do. */
+    const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
+    for (const Machine &m : std::as_const(machines))
+    {
+        if (!m.showOnly)
+            continue;
+        for (quint32 i = 0; i < m.channels; ++i)
+        {
+            const quint32 abs = m.base + i;
+            const int u = int(abs >> 9);
+            if (i >= quint32(m.intensity.size()) || m.intensity.at(int(i)) == 0
+                || u >= ua.size() || ua.at(u) == nullptr)
+                continue;
+            ua.at(u)->setShowOnlyHoldsPosition(int(abs & 0x1ff), false);
+            ua.at(u)->setShowOnlyHoldsPosition(int(abs & 0x1ff), true);
+        }
+    }
     emitMachineryChanged();
 }
 

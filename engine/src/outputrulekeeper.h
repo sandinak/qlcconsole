@@ -378,6 +378,9 @@ private:
         quint32 base = 0;       //!< absolute address (universe << 9 | address)
         quint32 channels = 0;
         bool showOnly = false;
+        /** Per channel, 1 where it is intensity (HTP): a Show-only one's
+         *  hold there is let go at the GO, as a 0 is no write there */
+        QByteArray intensity;
     };
     QVector<Machine> machinesNow() const;
     void emitMachineryChanged();
@@ -385,6 +388,8 @@ private:
     QVector<Machine> m_machines;
     /** What is held now: fixture -> its channels' values (guarded) */
     QHash<quint32, QByteArray> m_machineHeld;
+    /** The machines held (guarded): what a release lets go of */
+    QVector<Machine> m_machinesHeld;
     /** Counts holds and releases (guarded): a GO's late release lets go
      *  only of the hold it found */
     quint32 m_machineGen = 0;
