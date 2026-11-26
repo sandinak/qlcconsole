@@ -85,6 +85,10 @@ private slots:
     /* The review of c79f0e553: each fails there */
     void anUnsetFocusStoresWhatTheStageShows();
 
+    /* The review of 5c48eaa11: each fails there */
+    void anUnsetFocusStoredTwiceStaysWhereTheStageIs();
+    void anUnsetZoomStoredTwiceStaysWhereTheStageIs();
+
 private:
     bool show();
     void go();

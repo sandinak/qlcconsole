@@ -52,6 +52,8 @@
 #include "qlcchannel.h"
 #include "qlcfile.h"
 #include "fixture.h"
+#include "qlcphysical.h"
+#include "qlcfixturemode.h"
 #include "chaser.h"
 #include "scene.h"
 #include "doc.h"
@@ -1068,6 +1070,79 @@ void EditLive_Test::aRefusedControlStaysTheShows()
     InputOutputMap *iom = m_doc->inputOutputMap();
     QVERIFY(iom->isPageControl(0, 16));          // pan: Edit Live's
     QVERIFY(!iom->isPageControl(0, 22));         // gobo: still the show's
+}
+
+namespace
+{
+/** @p preset's channel on @p f (invalid: none). */
+quint32 presetChannel(Fixture *f, QLCChannel::Preset a, QLCChannel::Preset b)
+{
+    for (quint32 ch = 0; ch < f->channels(); ++ch)
+        if (f->channel(ch)->preset() == a || f->channel(ch)->preset() == b)
+            return ch;
+    return QLCChannel::invalid();
+}
+}
+
+void EditLive_Test::anUnsetFocusStoredTwiceStaysWhereTheStageIs()
+{
+    Fixture *a = m_doc->fixture(m_alpha);
+    const quint32 focusCh = presetChannel(a, QLCChannel::BeamFocusFarNear, QLCChannel::BeamFocusNearFar);
+    QVERIFY(focusCh != QLCChannel::invalid());
+    Scene *over = new Scene(m_doc);
+    over->setValue(m_alpha, focusCh, 127);
+    QVERIFY(m_doc->addFunction(over));
+    m_doc->setMode(Doc::Operate);
+    go();
+    over->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(5);
+    const int addr = int(a->address() + focusCh);
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_alpha };
+    QString why;
+    QVERIFY(m_apc->set(QStringLiteral("#18"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#18"), 63));
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    // Again: the child sets focus now; the second move adds to what it holds.
+    QVERIFY(m_apc->set(QStringLiteral("#18"), 65));
+    const int stage = uchar(frame().at(addr));
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    const int stored = lookValue(childOf(m_c1, m_mixed, m_alpha), KeyBeam, 0);
+    const int expected = a->channel(focusCh)->preset() == QLCChannel::BeamFocusFarNear ? 255 - stage : stage;
+    QVERIFY2(qAbs(stored - expected) <= 1, qPrintable(QStringLiteral("%1 %2").arg(stored).arg(expected)));
+}
+
+void EditLive_Test::anUnsetZoomStoredTwiceStaysWhereTheStageIs()
+{
+    Fixture *a = m_doc->fixture(m_alpha);
+    const quint32 zoomCh = presetChannel(a, QLCChannel::BeamZoomBigSmall, QLCChannel::BeamZoomSmallBig);
+    QVERIFY(zoomCh != QLCChannel::invalid());
+    Scene *over = new Scene(m_doc);
+    over->setValue(m_alpha, zoomCh, 127);
+    QVERIFY(m_doc->addFunction(over));
+    m_doc->setMode(Doc::Operate);
+    go();
+    over->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(5);
+    const int addr = int(a->address() + zoomCh);
+    QVERIFY(m_live->setOn(true));
+    m_selection = { m_alpha };
+    QString why;
+    // Device knob 4 on the Move page is zoom.
+    QVERIFY(m_apc->set(QStringLiteral("#19"), 60));
+    QVERIFY(m_apc->set(QStringLiteral("#19"), 63));
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    QVERIFY(m_apc->set(QStringLiteral("#19"), 65));
+    const int stage = uchar(frame().at(addr));
+    QVERIFY2(m_live->store(&why), qPrintable(why));
+    const ShowTree::Layer *child = childOf(m_c1, m_mixed, m_alpha);
+    QVERIFY(child != nullptr && child->look(KeyZoom) != nullptr);
+    const QLCPalette *p = m_doc->palette(child->look(KeyZoom)->palettes.first());
+    const QLCPhysical phy = a->fixtureMode()->physical();
+    const int d = a->channel(zoomCh)->preset() == QLCChannel::BeamZoomBigSmall ? 255 - stage : stage;
+    const double expected = phy.lensDegreesMin() + (phy.lensDegreesMax() - phy.lensDegreesMin()) * d / 255.0;
+    QVERIFY2(qAbs(p->values().at(0).toDouble() - expected) <= 0.3,
+             qPrintable(QStringLiteral("%1 %2").arg(p->values().at(0).toDouble()).arg(expected)));
 }
 
 QTEST_MAIN(EditLive_Test)

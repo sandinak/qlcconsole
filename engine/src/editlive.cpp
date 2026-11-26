@@ -700,7 +700,8 @@ bool EditLive::store(QString *why)
         return false;
     }
     const Snapshot snap = snapshot();
-    if (!storeSnapshot(snap, why))
+    QHash<quint64, int> written;
+    if (!storeSnapshot(snap, why, &written))
         return false;
     /* Stored: the running cue plays it from its next GO, so it stays on the
        rig until then -- held, not pending (Drop or an undo lets go). */
@@ -713,7 +714,6 @@ bool EditLive::store(QString *why)
         fixtures.insert(t.fixture);
     for (quint32 fid : fixtures)
     {
-        const qreal s0 = snap.scale.value(fid, 1.0);
         for (const SceneValue &v : m_trim->values())
         {
             if (v.fxi != fid)
@@ -723,10 +723,11 @@ bool EditLive::store(QString *why)
             if (delta == 0)
                 continue;
             h.stage.insert(k, v.value);
-            const qreal d = isIntensity(fid, v.channel) && s0 > 0.0 ? delta / s0 : delta;
-            h.look.insert(k, qBound(0, qRound(m_look.value(k) + d), 255));
         }
     }
+    // The look's levels as Store wrote them (an attribute the cue did not
+    // set is the stage's): what the next Store adds its move to.
+    h.look = written;
     m_holds << h;
     m_pending.clear();
     m_slotChannels.clear();
@@ -808,7 +809,7 @@ QString typeOf(const Fixture *f)
 }
 }
 
-bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
+bool EditLive::storeSnapshot(const Snapshot &snap, QString *why, QHash<quint64, int> *written)
 {
     ShowTreeController *st = m_doc->showTree();
     const CueList *list = st != nullptr ? st->listOfCue(snap.cue) : nullptr;
@@ -1124,6 +1125,50 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
         return look;
     };
 
+    // The channels a look of @p key sets on @p f.
+    auto keyChannels = [](Fixture *f, const QString &key) {
+        QList<quint32> out;
+        auto add = [&out](quint32 ch) {
+            if (ch != QLCChannel::invalid() && !out.contains(ch))
+                out << ch;
+        };
+        if (key == KeyDimmer)
+            add(dimmerChannel(f));
+        else if (key == KeyColour)
+        {
+            for (int h = 0; h < qMax(1, f->heads()); ++h)
+                for (int type : { int(QLCChannel::Red), int(QLCChannel::Green), int(QLCChannel::Blue),
+                                  int(QLCChannel::White), int(QLCChannel::Amber), int(QLCChannel::UV) })
+                    add(f->channelNumber(type, QLCChannel::MSB, h));
+        }
+        else if (key == KeyPosition)
+        {
+            for (int type : { int(QLCChannel::Pan), int(QLCChannel::Tilt) })
+            {
+                add(f->channelNumber(type, QLCChannel::MSB));
+                add(f->channelNumber(type, QLCChannel::LSB));
+            }
+        }
+        else
+        {
+            for (quint32 ch = 0; ch < f->channels(); ++ch)
+            {
+                const QLCChannel *c = f->channel(ch);
+                if (c == nullptr)
+                    continue;
+                const QLCChannel::Preset p = c->preset();
+                const bool zoom = p == QLCChannel::BeamZoomSmallBig || p == QLCChannel::BeamZoomBigSmall;
+                const bool beam = p == QLCChannel::BeamFocusNearFar || p == QLCChannel::BeamFocusFarNear
+                                  || p == QLCChannel::ShutterIrisMinToMax || p == QLCChannel::ShutterIrisMaxToMin
+                                  || (c->group() == QLCChannel::Beam
+                                      && c->name().contains(QLatin1String("frost"), Qt::CaseInsensitive));
+                if ((key == KeyZoom && zoom) || (key == KeyBeam && beam))
+                    add(ch);
+            }
+        }
+        return out;
+    };
+
     QStringList notes;
     st->beginBatch(tr("Store Edit Live trims (cue %1)").arg(cueText(snap.cue)));
     bool ok = true;
@@ -1300,6 +1345,12 @@ bool EditLive::storeSnapshot(const Snapshot &snap, QString *why)
         }
         if (!ok)
             break;
+        // What was written, channel by channel, in the look's terms.
+        if (written != nullptr)
+            for (quint32 fid : std::as_const(mine))
+                if (Fixture *f = m_doc->fixture(fid))
+                    for (quint32 ch : keyChannels(f, g.key))
+                        written->insert(chanKey(fid, ch), lookNow(fid, ch));
         const QString layerName = rl.name.isEmpty() ? st->targetLabel(rl.target) : rl.name;
         notes << (placeCue == snap.cue
                   ? tr("%1 of %2 in cue %3").arg(keyLabel(g.key), layerName, cueText(placeCue))

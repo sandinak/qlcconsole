@@ -194,7 +194,8 @@ private:
     void afterEdit();
     void push();
     Snapshot snapshot() const;
-    bool storeSnapshot(const Snapshot &snap, QString *why);
+    /** @p written: each channel's look level as written (the hold's). */
+    bool storeSnapshot(const Snapshot &snap, QString *why, QHash<quint64, int> *written = nullptr);
     void clearAll();
     void connectSources();
     void connectMaster();
