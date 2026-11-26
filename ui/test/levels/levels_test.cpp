@@ -54,6 +54,7 @@
 #include "app.h"
 #include "showsettingsdialog.h"
 #include "showtreeview.h"
+#include "moveinblackbutton.h"
 #include "fixturemanager.h"
 #include "monitor.h"
 #undef private
