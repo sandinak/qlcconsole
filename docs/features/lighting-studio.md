@@ -821,6 +821,15 @@ one, how many). Nothing moves it after that: not the cue letting go, not
 the rig going to rest, not a list stopped or a look played and let go of.
 The next **GO** carries on with what that cue plays.
 
+**Picking cues in Design holds it.** Click from cue to cue in the Show
+Tree while you build the show and the curtain stays where it is on stage —
+the motor never runs just because you looked at a cue. The plot and the
+Rig Overview draw it where the cue you picked puts it (open, if an earlier
+cue opened it and nothing since closed it), with a small **held while
+editing** mark under its name. A **GO** (Back, a jump) from the Run moves
+it for real, in Design and in Operate; stop the preview and it stays where
+it is until something plays on it. Blind changes only what is drawn.
+
 **Check it on the real curtain.** With the curtain fixture patched to the
 motor controller (or its relay box), in Operate:
 
@@ -830,6 +839,10 @@ motor controller (or its relay box), in Operate:
 3. GO again. It carries on with that cue's move.
 4. Do 1–3 with the emergency stop, while it's closing and while it's
    flying out. Each time it stops where it is.
+5. In Design, with it closed, click the cue that opens it in the Show
+   Tree, then a later cue. The curtain doesn't move; the plot draws it
+   open, marked **held while editing**.
+6. GO that cue from the Run. It opens; the mark goes.
 
 ### Fountains
 

@@ -241,6 +241,12 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     QVERIFY(layer(c1, open->id()) && layer(c1, half->id()));
     const quint32 c2 = st->addCue(listId, 1, "Song");
     QVERIFY(layer(c2, open->id()) && layer(c2, full->id()));
+    {
+        // His curtain cue: a Mix, fading in over 2 s.
+        Cue timed = *st->cue(c1);
+        timed.fadeIn = 2000;
+        QVERIFY(st->setCue(timed));
+    }
     const CueList *list = st->cueList(listId);
     QVERIFY(list != nullptr);
     Chaser *c = qobject_cast<Chaser *>(doc->function(list->chaser));
