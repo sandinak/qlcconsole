@@ -80,8 +80,9 @@ private:
     Chaser *everyModeList();
     /** House to half, House out + the curtains open, two stage cues. */
     /** @a showOnly: the curtains and the house relay Show only; @a operate:
-     *  the show in Operate (else Design). */
-    Chaser *houseAndCurtainList(bool showOnly = false, bool operate = false);
+     *  the show in Operate (else Design); @a unpatched: the curtain
+     *  fixtures unpatched (only drawn). */
+    Chaser *houseAndCurtainList(bool showOnly = false, bool operate = false, bool unpatched = false);
     void curtainRows();
 
     bool rig();

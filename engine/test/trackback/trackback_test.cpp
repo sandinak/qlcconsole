@@ -123,6 +123,11 @@ void TrackBack_Test::stopAll()
     for (Universe *u : ua)
         u->reset();
     m_doc->inputOutputMap()->releaseUniverses(false);
+    // An unpatched fixture's drawing, dark too.
+    for (Fixture *f : m_doc->fixtures())
+        if (!f->isPatched())
+            for (quint32 i = 0; i < f->channels(); ++i)
+                f->setPreviewValue(i, 0);
 }
 
 /* As the footer and show control drive a list (ShowControl::go / Back). */
@@ -760,7 +765,7 @@ void TrackBack_Test::skippedCuesPlayAsIfDeleted()
     }
 }
 
-Chaser *TrackBack_Test::houseAndCurtainList(bool showOnly, bool operate)
+Chaser *TrackBack_Test::houseAndCurtainList(bool showOnly, bool operate, bool unpatched)
 {
     if (!rig())
         return nullptr;
@@ -813,6 +818,10 @@ Chaser *TrackBack_Test::houseAndCurtainList(bool showOnly, bool operate)
     }
     if (operate)
         m_doc->setMode(Doc::Operate);
+    // No motor yet: the curtains only drawn (an unpatched fixture shows
+    // what plays on it, Fixture::setPreviewValue()).
+    if (unpatched && (!m_doc->unpatchFixture(drape->id()) || !m_doc->unpatchFixture(traveller->id())))
+        return nullptr;
 
     Scene *open = new Scene(m_doc);
     open->setName("Curtain Open");
@@ -854,9 +863,12 @@ void TrackBack_Test::curtainRows()
 {
     QTest::addColumn<bool>("showOnly");
     QTest::addColumn<bool>("operate");
-    QTest::newRow("Design") << false << false;
-    QTest::newRow("Operate") << false << true;
-    QTest::newRow("Operate, Show only") << true << true;
+    QTest::addColumn<bool>("unpatched");
+    QTest::newRow("Design") << false << false << false;
+    QTest::newRow("Operate") << false << true << false;
+    QTest::newRow("Operate, Show only") << true << true << false;
+    QTest::newRow("Design, unpatched curtains") << false << false << true;
+    QTest::newRow("Operate, unpatched curtains") << false << true << true;
 }
 
 void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump_data()
@@ -868,7 +880,8 @@ void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
 {
     QFETCH(bool, showOnly);
     QFETCH(bool, operate);
-    Chaser *c = houseAndCurtainList(showOnly, operate);
+    QFETCH(bool, unpatched);
+    Chaser *c = houseAndCurtainList(showOnly, operate, unpatched);
     QVERIFY(c != nullptr);
     QCOMPARE(c->stepsCount(), 4);
     const QMap<int, QByteArray> ref = straightRun(c);
@@ -887,7 +900,10 @@ void TrackBack_Test::curtainsHouseAndRelaysTrackOnAJump()
             relay = f;
     }
     QVERIFY(drape && traveller && house1 && relay);
+    // A patched fixture's output; an unpatched one's what plays on it.
     auto at = [](const QByteArray &out, const Fixture *f, int ch = 0) {
+        if (!f->isPatched())
+            return int(uchar(const_cast<Fixture *>(f)->channelValues().at(ch)));
         return int(uchar(out.at(int(f->universeAddress()) + ch)));
     };
     QStringList bad;
@@ -967,7 +983,8 @@ void TrackBack_Test::aJumpDuringTheOpeningFadeEndsOpen()
 {
     QFETCH(bool, showOnly);
     QFETCH(bool, operate);
-    Chaser *c = houseAndCurtainList(showOnly, operate);
+    QFETCH(bool, unpatched);
+    Chaser *c = houseAndCurtainList(showOnly, operate, unpatched);
     QVERIFY(c != nullptr);
     ShowTreeController *st = m_doc->showTree();
     // Cue 2 opens the curtains over 2 s.
@@ -991,7 +1008,8 @@ void TrackBack_Test::aJumpDuringTheOpeningFadeEndsOpen()
     // What the plot draws: the fixture's values from the output, as the
     // App hands them over, read by Scenery.
     auto pose = [](Fixture *f, const QByteArray &out) {
-        f->setChannelValues(out);
+        if (f->isPatched())
+            f->setChannelValues(out);
         return Scenery::poseFromValues(f->fixtureMode(), f->channelValues()).open;
     };
     const int fadeTicks = int(2000 / MasterTimer::tick());
@@ -1014,7 +1032,8 @@ void TrackBack_Test::aJumpDuringTheOpeningFadeEndsOpen()
         act(c, w.goToOpening ? Move { Go, 0 } : Move { Jump, 1 });
         tick(fadeTicks / 3);
         const QByteArray mid = settle(0);
-        const int midOpen = int(uchar(mid.at(int(traveller->universeAddress()))));
+        const int midOpen = traveller->isPatched() ? int(uchar(mid.at(int(traveller->universeAddress()))))
+                                                   : int(uchar(traveller->channelValues().at(0)));
         if (midOpen <= 0 || midOpen >= 255)
             bad << QStringLiteral("%1: not mid-fade (%2)").arg(w.name).arg(midOpen);
         for (const Move &m : w.then)
@@ -1028,7 +1047,8 @@ void TrackBack_Test::aJumpDuringTheOpeningFadeEndsOpen()
             bad << QStringLiteral("%1: at cue %2").arg(w.name).arg(c->currentStepIndex() + 1);
         for (Fixture *f : { drape, traveller })
         {
-            const int v = int(uchar(out.at(int(f->universeAddress()))));
+            const int v = f->isPatched() ? int(uchar(out.at(int(f->universeAddress()))))
+                                         : int(uchar(f->channelValues().at(0)));
             const double open = pose(f, out);
             if (v != 255 || open < 0.999)
                 bad << QStringLiteral("%1: %2 at %3 (drawn %4 open)").arg(w.name, f->name()).arg(v).arg(open);
