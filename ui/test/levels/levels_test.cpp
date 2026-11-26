@@ -798,7 +798,7 @@ void Levels_Test::theL2RowsGreyAndSayTheirLevel()
     FixtureManager *fm = FixtureManager::instance();
     QVERIFY(fm != nullptr);
     for (QAction *a : { fm->m_addAction, fm->m_addInventoryAction, fm->m_patchInventoryAction,
-                        fm->m_addRGBAction, fm->m_removeAction, fm->m_patchListAction, fm->m_fadeConfigAction })
+                        fm->m_addRGBAction, fm->m_removeAction })
     {
         QVERIFY2(!a->isEnabled(), qPrintable(a->text()));
         QVERIFY2(a->toolTip().contains(QStringLiteral("Standard level")), qPrintable(a->text()));
@@ -939,7 +939,7 @@ const QMultiMap<QString, QString> &coursePhrases()
         { QStringLiteral("fixtures.inventory"), QStringLiteral("Patch Inventory") },
         { QStringLiteral("fixtures.inventory"), QStringLiteral("Add to Inventory") },
         { QStringLiteral("fixtures.inventory"), QStringLiteral("Add Fixture") },
-        { QStringLiteral("fixtures.patchlist"), QStringLiteral("Print Labels") },
+        { QStringLiteral("fixtures.tools"), QStringLiteral("Print Labels") },
         { QStringLiteral("fixtures.rules"), QStringLiteral("Plot Symbol") },
         { QStringLiteral("studio.venues"), QStringLiteral("Edit Focus Calls") },
         { QStringLiteral("studio.structures"), QStringLiteral("Add Truss") },

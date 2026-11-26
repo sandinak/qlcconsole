@@ -74,8 +74,7 @@ const QList<LevelRegistry::Row> &LevelRegistry::rows()
         // Fixtures
         makeRow("fixtures.inventory",   L::Standard, L::Grey, tr("The inventory, patching and removing fixtures")),
         makeRow("fixtures.groups",      L::Standard, L::Grey, tr("Fixture group folders and the head-layout grid")),
-        makeRow("fixtures.rules",       L::Standard, L::Grey, tr("Output rules, definitions, plot symbols and power")),
-        makeRow("fixtures.patchlist",   L::Standard, L::Grey, tr("The patch list and printing labels")),
+        makeRow("fixtures.rules",       L::Standard, L::Grey, tr("Changing a fixture's definition, its plot symbol and its power circuit")),
         // Lighting Studio
         makeRow("studio.overlays",      L::Standard, L::Grey, tr("The Power, DMX, Network and Owner views")),
         makeRow("studio.structures",    L::Standard, L::Grey, tr("Stage structures, mounting, scenery and the plot's locks")),

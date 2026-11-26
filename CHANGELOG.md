@@ -18,7 +18,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   Studio grey what a class only reads, each with its level in the tooltip
   (the ✎ Workbench, move in black, a cue's mixing, text colour and timecode,
   Focus This Cue, convert and detach; the inventory, patching, group folders,
-  definitions, power and patch list; the Studio's Add menu, Power / DMX /
+  definitions, plot symbols and power; the Studio's Add menu, Power / DMX /
   Network / Owner views and Edit Focus Calls) and keep what the lessons use;
   a command (`mib`, `wb`, `detach`…), a double-click on a cue and the shortcut
   of a put-away item answer in the line above the tabs with the level and

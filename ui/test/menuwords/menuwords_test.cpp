@@ -455,7 +455,7 @@ void MenuWords_Test::noStudentTextSendsYouToAHiddenPlace()
         { QStringLiteral("Detach to Plain"), QStringLiteral("showtree.reuse") },
         { QStringLiteral("Patch Inventory"), QStringLiteral("fixtures.inventory") },
         { QStringLiteral("Add to Inventory"), QStringLiteral("fixtures.inventory") },
-        { QStringLiteral("Print Labels"), QStringLiteral("fixtures.patchlist") },
+        { QStringLiteral("Print Labels"), QStringLiteral("fixtures.tools") },
         { QStringLiteral("Plot Symbol"), QStringLiteral("fixtures.rules") },
         { QStringLiteral("Edit Focus Calls"), QStringLiteral("studio.venues") },
         { QStringLiteral("Add Truss"), QStringLiteral("studio.structures") },

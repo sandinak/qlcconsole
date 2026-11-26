@@ -1918,8 +1918,8 @@ void FixtureManager::initActions()
     for (QAction *a : { m_addAction, m_addInventoryAction, m_patchInventoryAction, m_addRGBAction,
                         m_removeAction })
         lv->bind(a, QStringLiteral("fixtures.inventory"));
-    lv->bind(m_patchListAction, QStringLiteral("fixtures.patchlist"));
-    lv->bind(m_fadeConfigAction, QStringLiteral("fixtures.rules"));
+    // The patch list and Channel Behaviour… are in the Fixtures menu, which
+    // folds them to its More line at Student (fixtures.tools).
 }
 
 void FixtureManager::updateGroupMenu()

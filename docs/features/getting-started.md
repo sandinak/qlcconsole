@@ -256,7 +256,7 @@ to a class carries its level to every student's computer.
   Show Tree's **✎ Workbench**, move in black, a cue's mixing, text colour
   and timecode, **Focus This Cue** and the venue focus cue, converting and
   detaching a list; the Fixtures tab's inventory, patching, group folders,
-  definitions, plot symbols, power and patch list; the Lighting Studio's
+  definitions, plot symbols and power; the Lighting Studio's
   Add menu, its Power, DMX, Network and Owner views, and **Edit Focus
   Calls** and the Venues. **Venue Focus…** and **Practice** stay. The
   footer shows **STUDENT**.
