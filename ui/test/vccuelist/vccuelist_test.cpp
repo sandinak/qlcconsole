@@ -1530,7 +1530,7 @@ void VCCueList_Test::keysAndClicksOnASectionRowKeepTheCueSelected()
     QWidget w;
     w.resize(600, 500);
     VCCueList cl(&w, m_doc);
-    cl.resize(600, 500);
+    cl.resize(QSize(600, 500));
     cl.setChaser(ch->id());
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
