@@ -315,6 +315,15 @@ private:
     /** The "Next: 12.5 — name — note" line. */
     void updateStandby();
     bool m_listIsUpdating;
+    /** A mouse button is down on the list: a section row reached now was
+     *  clicked (its song's first cue), not stepped onto with a key. */
+    bool m_treeMouseDown = false;
+
+protected:
+    /** Tracks m_treeMouseDown from the list's viewport. */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+private:
 
     /*************************************************************************
      * Sub-cues (docs/design/SUBCUES_DESIGN.md)

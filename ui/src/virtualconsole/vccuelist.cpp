@@ -32,6 +32,7 @@
 #include <QString>
 #include <QLabel>
 #include <QDebug>
+#include <QEvent>
 #include <QTimer>
 
 #include "vccuelistproperties.h"
@@ -183,8 +184,11 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
             updateSectionLabel();   // the picked cue's song
             return;
         }
+        // A click on a header means that song: its first cue. Only the Up key
+        // from that first cue (the row just below the header) goes on up.
         const int first = current->data(COL_NUM, PROP_SECTION_STEP).toInt();
-        const int target = topLevelIndexOf(previous) == first && first > 0 ? first - 1 : first;
+        const bool upKey = !m_treeMouseDown && topLevelIndexOf(previous) == first;
+        const int target = upKey && first > 0 ? first - 1 : first;
         QTreeWidgetItem *cue = stepItem(target);
         if (cue == NULL)
             return;
@@ -199,6 +203,8 @@ VCCueList::VCCueList(QWidget *parent, Doc *doc) : VCWidget(parent, doc)
                 m_tree->setCurrentItem(picked);
         });
     });
+
+    m_tree->viewport()->installEventFilter(this);
 
     /* The song section of the cue playing (Q190), over the list so it stays
        in sight however far the list scrolls; shown only for a list with
@@ -1236,6 +1242,26 @@ void VCCueList::slotItemActivated(QTreeWidgetItem *item)
     const int index = topLevelIndexOf(item);
     if (index >= 0)
         playCueAtIndex(index);
+}
+
+bool VCCueList::eventFilter(QObject *watched, QEvent *event)
+{
+    if (m_tree != NULL && watched == m_tree->viewport())
+    {
+        switch (event->type())
+        {
+            case QEvent::MouseButtonPress:
+            case QEvent::MouseButtonDblClick:
+                m_treeMouseDown = true;
+            break;
+            case QEvent::MouseButtonRelease:
+                m_treeMouseDown = false;
+            break;
+            default:
+            break;
+        }
+    }
+    return VCWidget::eventFilter(watched, event);
 }
 
 int VCCueList::topLevelIndexOf(QTreeWidgetItem *item) const

@@ -1568,6 +1568,23 @@ void VCCueList_Test::keysAndClicksOnASectionRowKeepTheCueSelected()
                       tree->visualItemRect(header).center());
     QCOMPARE(tree->currentItem(), cl.stepItem(4));
     QTRY_COMPARE(onlySelected(), cl.stepItem(4));
+
+    // A click on a song's header while its own first cue is picked: that cue
+    // stays (it is not taken as Up onto the previous song's last cue).
+    tree->setCurrentItem(cl.stepItem(2));
+    header = tree->topLevelItem(3);
+    QVERIFY(isSectionRow(header));
+    tree->scrollToItem(header);
+    QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      tree->visualItemRect(header).center());
+    QCOMPARE(tree->currentItem(), cl.stepItem(2));
+    QTRY_COMPARE(onlySelected(), cl.stepItem(2));
+    QCOMPARE(cl.getCurrentIndex(), 2);
+
+    // The Up key from that cue still goes on to the previous song's last cue.
+    QTest::keyClick(tree, Qt::Key_Up);
+    QCOMPARE(tree->currentItem(), cl.stepItem(1));
+    QTRY_COMPARE(onlySelected(), cl.stepItem(1));
 }
 
 void VCCueList_Test::aListWithNoSectionsLooksAsBefore()
