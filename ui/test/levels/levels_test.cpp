@@ -21,6 +21,8 @@
 #include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QLineEdit>
+#include <QToolButton>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
