@@ -60,6 +60,17 @@ private slots:
      *  leaves it -- the channel and the plot's pose of it. */
     void aJumpDuringTheOpeningFadeEndsOpen_data();
     void aJumpDuringTheOpeningFadeEndsOpen();
+    /** Board 2026-11-26 (safety): Stop ALL, Fade and stop or the
+     *  emergency stop while a curtain moves -- opening, closing, flying
+     *  out -- stops it where it is (it could be dragging a set piece), and
+     *  it stays there: the cue letting go, putting the rig at rest, a
+     *  function started and stopped after, never move it. The lights still
+     *  go out, a flame relay off. The next GO carries on. */
+    void aStopLeavesACurtainWhereItIs_data();
+    void aStopLeavesACurtainWhereItIs();
+    /** And the footer says so: "Curtain stopped at 40% — GO to carry on";
+     *  gone at the GO. */
+    void theFooterSaysWhereTheCurtainStopped();
     void courseShows_data();
     void courseShows();
     void aRealShow();
@@ -107,6 +118,14 @@ private:
     /** Every short sequence and a set of random walks over @a c. */
     int everyWay(Chaser *c, int randomWalks, QString *why);
     bool loadShow(const QString &path);
+    /** The house list with cue 2 opening the curtains over @a fadeMs, a
+     *  Block cue 5 closing them (the house at half, a flame on) and a cue 6
+     *  flying the drape out, both over @a fadeMs. */
+    Chaser *movingCurtainList(bool showOnly, int fadeMs);
+    /** Stop ALL (@a fadeMs > 0: Fade and stop), as Control ▸ Stop all
+     *  does it, the timer played here meanwhile. */
+    void stopAllFromControl(int fadeMs);
+    Fixture *fixtureNamed(const QString &name) const;
 
     Doc *m_doc = nullptr;
     QMap<int, QByteArray> m_moving;   //!< per cue of the straight run: channels an effect moves

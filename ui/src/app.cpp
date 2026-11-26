@@ -9475,6 +9475,9 @@ void App::initStatusBar()
     {
         connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::showOnlyChanged,
                 this, &App::updateShowOnlyFooter);
+        // A stop left a curtain where it was: said here until the GO.
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::stageMachineryChanged,
+                this, &App::updateShowOnlyFooter);
         connect(m_doc, &Doc::fixtureChanged, this, [this](quint32) { updateShowOnlyFooter(); });
         updateShowOnlyFooter();
     }
@@ -11552,7 +11555,12 @@ void App::updateShowOnlyFooter()
     if (m_statusShowOnlyLabel == nullptr || m_doc == NULL || m_doc->outputRuleKeeper() == nullptr)
         return;
     const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
-    const QString text = k->showOnlyHeldText();
+    // A curtain a stop left where it was comes first: the operator's next
+    // move (GO) depends on it.
+    const QString machinery = k->stageMachineryHeldText();
+    QString text = k->showOnlyHeldText();
+    if (!machinery.isEmpty())
+        text = text.isEmpty() ? machinery : machinery + QStringLiteral(" · ") + text;
     if (text.isEmpty())
     {
         if (!m_statusShowOnlyLabel->isHidden())
@@ -11581,6 +11589,10 @@ void App::updateShowOnlyFooter()
                      "draws what it would do."))
         << tr("A GO in Operate drives it.")
         << QString() << list << QString() << tr("Click to see their Output Rules.");
+    if (!machinery.isEmpty())
+        tip = QStringList() << tr("A stop leaves a curtain where it is, mid-move too: it could be dragging "
+                                  "a set piece. The next GO carries on from there.")
+                            << (names.isEmpty() ? QStringList() : (QStringList() << QString() << tip));
     m_statusShowOnlyLabel->setToolTip(tip.join(QLatin1Char('\n')));
     if (m_statusShowOnlyLabel->isHidden())
     {

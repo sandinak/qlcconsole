@@ -26,12 +26,16 @@
 #include <QList>
 #include <QHash>
 #include <QPair>
+#include <QMutex>
+#include <QVector>
+#include <memory>
 
 #include "fixture.h"
 #include "doc.h"
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
+class OutputLayer;
 class QXmlStreamWriter;
 
 #define KXMLQLCOutputRuleSettings QStringLiteral("OutputRuleSettings")
@@ -222,6 +226,7 @@ public:
     static constexpr bool defaultBlindHoldsExempt() { return true; }
 
     explicit OutputRuleKeeper(Doc *doc);
+    ~OutputRuleKeeper() override;
 
     /** Rebuild every universe's rule bits now (normally done for you,
      *  coalesced) */
@@ -269,8 +274,31 @@ public:
      *  GO after it (noteGo()), a switch of mode or another show. It holds
      *  nothing itself -- the rules do (E4: no release). */
     bool emergencyStopped() const;
-    /** A GO was carried out (ShowControl, a VC cue list, the Show tab) */
+    /** A GO was carried out (ShowControl, a VC cue list, the Show tab).
+     *  The first one after a stop lets the stage machinery it held go
+     *  (holdStageMachinery()); an automatic GO (a StampScope) does not. */
     void noteGo();
+
+    /** Stage machinery stopped where it is (FixtureRest::freezesOnStop():
+     *  a curtain, mid-move or at rest). Stop ALL, Fade and stop and the
+     *  emergency stop call it before anything stops: every channel of each
+     *  such fixture is held at what it has now, over everything that plays
+     *  (Universe::Park, Override), so neither the cue letting go, its fade
+     *  out, putting the rig at rest, a list stopped later nor a timer moves
+     *  it. A Show-only one is held the way its pan and tilt would be
+     *  (Universe::holdShowOnlyPositions()). Held until the operator's next
+     *  GO (noteGo()) or releaseStageMachinery(). Safe from any thread (an
+     *  OSC or MSC emergency stop): the fixtures are read on the main thread
+     *  when the rig changes, the levels from the universes now. */
+    void holdStageMachinery();
+    /** Let go of what holdStageMachinery() holds: the channels keep the
+     *  value they have (LTP) until something drives them. Any thread. */
+    void releaseStageMachinery();
+    bool stageMachineryHeld() const;
+    /** "Curtain stopped at 40% — GO to carry on" (how far open, as the
+     *  plot draws it: Scenery::poseFromValues()); "2 curtains stopped —
+     *  GO to carry on"; empty when nothing is held. For the footer. */
+    QString stageMachineryHeldText() const;
 
     /** A Show-only channel's safe value: 0 for an intensity channel, and
      *  where nothing drives it (FixtureRest::restValue()) for the rest: a
@@ -309,6 +337,9 @@ signals:
      *  thread. The pad's red follows it (PadRun::stopEnded()): the pad and
      *  the footer read one source. */
     void emergencyStopEnded();
+    /** holdStageMachinery() held, or let go of, the machinery. On the main
+     *  thread. */
+    void stageMachineryChanged();
 
 private:
     void scheduleRebuild();
@@ -337,6 +368,28 @@ private:
     QHash<quint32, const class QLCFixtureMode *> m_showOnlyMode;
     int m_rebuilds = 0;
     class QTimer *m_rebuildTimer = nullptr;
+
+    /** Stage machinery (FixtureRest::freezesOnStop()) as the rig is now:
+     *  worked out on the main thread (rebuild(), a stop there), read by a
+     *  stop from any thread. */
+    struct Machine
+    {
+        quint32 fixture = 0;
+        quint32 base = 0;       //!< absolute address (universe << 9 | address)
+        quint32 channels = 0;
+        bool showOnly = false;
+    };
+    QVector<Machine> machinesNow() const;
+    void emitMachineryChanged();
+    mutable QMutex m_machineMutex;
+    QVector<Machine> m_machines;
+    /** What is held now: fixture -> its channels' values (guarded) */
+    QHash<quint32, QByteArray> m_machineHeld;
+    /** Counts holds and releases (guarded): a GO's late release lets go
+     *  only of the hold it found */
+    quint32 m_machineGen = 0;
+    /** The held levels on the output (non-Show-only machinery) */
+    std::unique_ptr<OutputLayer> m_machineLayer;
 };
 
 /** @} */

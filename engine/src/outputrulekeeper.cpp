@@ -34,12 +34,16 @@
 #include "mastertimer.h"
 #include "lastlookeffect.h"
 #include "genericfader.h"
+#include "outputlayer.h"
+#include "fadechannel.h"
+#include "scenery.h"
 
 #define KXMLQLCOutputRuleOnAtOpen QStringLiteral("OnAtOpen")
 
 OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     : QObject(doc)
     , m_doc(doc)
+    , m_machineLayer(new OutputLayer(doc, Universe::Park, FadeChannel::Override, QStringLiteral("Curtain stopped")))
 {
     /* A Show-only fixture added, moved or (re)patched -- mid-show too: its
        new address is held at once, not after the event loop comes round
@@ -63,6 +67,7 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         // Another show: its own start, no emergency stop carried over, no
         // automatic widget armed.
         const bool wasStopped = m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0;
+        releaseStageMachinery();
         Function::clearAutoSources();
         startSession();
         m_onAtOpenWhen = defaultOnAtOpenWhen();
@@ -98,6 +103,10 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     connect(doc->inputOutputMap(), &InputOutputMap::universeAdded, this, [this](quint32) { scheduleRebuild(); });
     connect(doc->inputOutputMap(), &InputOutputMap::universeRemoved, this, [this](quint32) { scheduleRebuild(); });
     m_seenOperate = doc->mode() == Doc::Operate;
+}
+
+OutputRuleKeeper::~OutputRuleKeeper()
+{
 }
 
 void OutputRuleKeeper::startSession()
@@ -170,7 +179,8 @@ void OutputRuleKeeper::markNow(quint32 id)
             if (u < ua.size() && ua.at(u) != nullptr)
             {
                 ua.at(u)->markShowOnly(int(abs & 0x1ff), true, safeValue(fx, i), moved);
-                ua.at(u)->setShowOnlyHoldsPosition(int(abs & 0x1ff), FixtureRest::holdsPosition(fx->channel(i)));
+                ua.at(u)->setShowOnlyHoldsPosition(int(abs & 0x1ff), FixtureRest::holdsPosition(fx->channel(i))
+                                                                       || FixtureRest::freezesOnStop(fx));
             }
         }
         m_showOnlyAt.insert(id, qMakePair(fx->universeAddress(), fx->channels()));
@@ -359,16 +369,18 @@ QByteArray OutputRuleKeeper::safeValuesFor(quint32 universe) const
 
 QByteArray OutputRuleKeeper::positionsFor(quint32 universe) const
 {
-    // Q326: the one rule the Simple Desk and the VC sliders keep too.
+    // Q326: the one rule the Simple Desk and the VC sliders keep too. A
+    // curtain is held whole (FixtureRest::freezesOnStop()).
     QByteArray pos(UNIVERSE_SIZE, char(0));
     foreach (Fixture *fx, m_doc->fixtures())
     {
         if ((fx->outputRules() & Fixture::ShowOnly) == 0 || fx->isPatched() == false)
             continue;
+        const bool machine = FixtureRest::freezesOnStop(fx);
         for (quint32 i = 0; i < fx->channels(); i++)
         {
             const quint32 abs = fx->universeAddress() + i;
-            if ((abs >> 9) == universe && FixtureRest::holdsPosition(fx->channel(i)))
+            if ((abs >> 9) == universe && (machine || FixtureRest::holdsPosition(fx->channel(i))))
                 pos[int(abs & 0x1ff)] = char(1);
         }
     }
@@ -379,8 +391,10 @@ void OutputRuleKeeper::emergencyStop()
 {
     /* Q326: a Show-only head stays where it is -- its pan and tilt held at
        what went out last, before the new session, so no frame between
-       sends it to its safe value. Only the rest goes safe. */
+       sends it to its safe value. Only the rest goes safe. A curtain
+       stops where it is, mid-move too: it could be dragging a set piece. */
     FixtureRest::holdShowOnlyHeads(m_doc);
+    holdStageMachinery();
     // E2: a new live session -- every stamp from before is old now, so
     // every writer is held from its next write on (a function's gate at
     // its next tick: the generation moved).
@@ -444,12 +458,147 @@ void OutputRuleKeeper::noteGo()
        list: a StampScope) is no GO at all. */
     if (GenericFader::stampOverridden())
         return;
+    /* The curtains a stop held carry on with what this GO plays. A few
+       frames later, so the cue it starts writes first: let go before it,
+       a curtain on a relay (intensity) would drop for a frame. A stop in
+       between holds them again, and that hold stays. */
+    quint32 gen = 0;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        gen = m_machineHeld.isEmpty() ? 0 : m_machineGen;
+    }
+    if (gen != 0)
+        QMetaObject::invokeMethod(this, [this, gen]() {
+            QTimer::singleShot(4 * int(MasterTimer::tick()), this, [this, gen]() {
+                {
+                    QMutexLocker locker(&m_machineMutex);
+                    if (m_machineGen != gen)
+                        return;
+                }
+                releaseStageMachinery();
+            });
+        }, Qt::QueuedConnection);
     if (m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0)
         QMetaObject::invokeMethod(this, [this]() {
             m_lastHeldBy = showOnlyHeldBy();
             emit showOnlyChanged();
             emit emergencyStopEnded();
         }, thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
+}
+
+/****************************************************************************
+ * Stage machinery: a stop leaves a curtain where it is
+ ****************************************************************************/
+
+QVector<OutputRuleKeeper::Machine> OutputRuleKeeper::machinesNow() const
+{
+    QVector<Machine> out;
+    foreach (Fixture *fx, m_doc->fixtures())
+    {
+        if (fx == nullptr || !fx->isPatched() || !FixtureRest::freezesOnStop(fx))
+            continue;
+        Machine m;
+        m.fixture = fx->id();
+        m.base = fx->universeAddress();
+        m.channels = fx->channels();
+        m.showOnly = (fx->outputRules() & Fixture::ShowOnly) != 0;
+        out << m;
+    }
+    return out;
+}
+
+void OutputRuleKeeper::holdStageMachinery()
+{
+    QVector<Machine> machines;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        // The rig as it is now, when the fixture list is ours to read.
+        if (thread() == QThread::currentThread())
+            m_machines = machinesNow();
+        machines = m_machines;
+    }
+    if (machines.isEmpty())
+        return;
+
+    /* Where each one is now: what the faders built last frame (its cue's
+       fade part way, or what it was left at). Before anything stops. */
+    const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
+    QHash<int, QByteArray> pre;
+    QHash<quint32, QByteArray> held;
+    QList<OutputLayer::Level> levels;
+    for (const Machine &m : std::as_const(machines))
+    {
+        QByteArray values(int(m.channels), char(0));
+        for (quint32 i = 0; i < m.channels; ++i)
+        {
+            const quint32 abs = m.base + i;
+            const int u = int(abs >> 9);
+            if (u >= ua.size() || ua.at(u) == nullptr)
+                continue;
+            auto it = pre.find(u);
+            if (it == pre.end())
+                it = pre.insert(u, ua.at(u)->preGMValues());
+            const int a = int(abs & 0x1ff);
+            if (a < it.value().size())
+                values[int(i)] = it.value().at(a);
+            // A Show-only one is held as its pan and tilt would be.
+            if (!m.showOnly)
+                levels << OutputLayer::Level { m.fixture, i, uchar(values.at(int(i))) };
+        }
+        held.insert(m.fixture, values);
+    }
+    {
+        QMutexLocker locker(&m_machineMutex);
+        m_machineHeld = held;
+        if (++m_machineGen == 0)
+            ++m_machineGen;
+    }
+    m_machineLayer->set(levels);
+    emitMachineryChanged();
+}
+
+void OutputRuleKeeper::releaseStageMachinery()
+{
+    {
+        QMutexLocker locker(&m_machineMutex);
+        if (m_machineHeld.isEmpty())
+            return;
+        m_machineHeld.clear();
+        if (++m_machineGen == 0)
+            ++m_machineGen;
+    }
+    m_machineLayer->clear();
+    emitMachineryChanged();
+}
+
+bool OutputRuleKeeper::stageMachineryHeld() const
+{
+    QMutexLocker locker(&m_machineMutex);
+    return !m_machineHeld.isEmpty();
+}
+
+QString OutputRuleKeeper::stageMachineryHeldText() const
+{
+    QHash<quint32, QByteArray> held;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        held = m_machineHeld;
+    }
+    if (held.isEmpty())
+        return QString();
+    if (held.size() > 1)
+        return tr("%n curtains stopped — GO to carry on", "", int(held.size()));
+    const Fixture *fx = m_doc->fixture(held.constBegin().key());
+    if (fx == nullptr || fx->fixtureMode() == nullptr)
+        return tr("Curtain stopped — GO to carry on");
+    const double open = Scenery::poseFromValues(fx->fixtureMode(), held.constBegin().value()).open;
+    return tr("Curtain stopped at %1% — GO to carry on").arg(qRound(open * 100.0));
+}
+
+void OutputRuleKeeper::emitMachineryChanged()
+{
+    QMetaObject::invokeMethod(this, [this]() { emit stageMachineryChanged(); },
+                              thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
 }
 
 OutputRuleKeeper::HeldBy OutputRuleKeeper::showOnlyHeldBy() const
@@ -537,6 +686,10 @@ void OutputRuleKeeper::rebuild()
             m_showOnlyMode.insert(fx->id(), fx->fixtureMode());
         }
     m_count = count;
+    {
+        QMutexLocker locker(&m_machineMutex);
+        m_machines = machinesNow();
+    }
     const bool showOnlyListChanged = showOnly != m_showOnly;
     m_showOnly = showOnly;
     // With none, a function never walks what started it (Function).

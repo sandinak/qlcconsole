@@ -22,6 +22,7 @@
 #include <QRandomGenerator>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <future>
 
 #include "../common/stdprelude.h"
 #define private public
@@ -48,6 +49,9 @@
 #include "fixture.h"
 #include "scene.h"
 #include "scenery.h"
+#include "fixturerest.h"
+#include "outputrulekeeper.h"
+#include "showcontrol.h"
 #include "qlcchannel.h"
 #include "chaser.h"
 #include "doc.h"
@@ -1057,6 +1061,293 @@ void TrackBack_Test::aJumpDuringTheOpeningFadeEndsOpen()
             bad << QStringLiteral("%1: the stage is not cue %2's").arg(w.name).arg(w.lands + 1);
     }
     QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QStringLiteral("; "))));
+}
+
+Fixture *TrackBack_Test::fixtureNamed(const QString &name) const
+{
+    for (Fixture *f : m_doc->fixtures())
+        if (f->name() == name)
+            return f;
+    return nullptr;
+}
+
+Chaser *TrackBack_Test::movingCurtainList(bool showOnly, int fadeMs)
+{
+    if (houseAndCurtainList(showOnly, true) == nullptr)
+        return nullptr;
+    Fixture *drape = fixtureNamed("Main drape curtain");
+    Fixture *traveller = fixtureNamed("Traveller relay");
+    if (drape == nullptr || traveller == nullptr)
+        return nullptr;
+    quint32 address = 0;
+    for (Fixture *f : m_doc->fixtures())
+        address = qMax(address, f->address() + f->channels());
+    Fixture *flame = new Fixture(m_doc);
+    flame->setName("Flame relay");
+    flame->setChannels(1);
+    flame->setAddress(address);
+    flame->setOutputRules(Fixture::Switch | Fixture::ShowOnly);
+    m_doc->addFixture(flame);
+    FixtureGroup *flames = new FixtureGroup(m_doc);
+    flames->setName("Flames");
+    m_doc->addFixtureGroup(flames);
+    flames->assignFixture(flame->id());
+    quint32 house = 0, travellers = 0;
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+    {
+        if (g->name() == "House Lights")
+            house = g->id();
+        else if (g->name() == "Traveller")
+            travellers = g->id();
+    }
+    quint32 out = 0;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p->name() == "Out")
+            out = p->id();
+
+    auto scene = [&](const QString &name, quint32 channel, uchar value) {
+        Scene *s = new Scene(m_doc);
+        s->setName(name);
+        s->setValue(drape->id(), channel, value);
+        m_doc->addFunction(s);
+        return s->id();
+    };
+    ShowTreeController *st = m_doc->showTree();
+    Target close;
+    close.function = scene("Curtain Close", 0, 0);
+    Target fly;
+    fly.function = scene("Fly Out", 1, 255);
+    const quint32 c5 = st->addCue(m_list, 3, "Curtains close");
+    st->setCueMode(c5, CueMode::Block);
+    if (st->addLayer(c5, close) == ShowTree::invalidId())
+        return nullptr;
+    set(c5, travellers, out);
+    set(c5, house, m_half);
+    set(c5, flames->id(), m_full);
+    const quint32 c6 = st->addCue(m_list, 4, "Fly out");
+    if (st->addLayer(c6, fly) == ShowTree::invalidId())
+        return nullptr;
+    QList<Cue> cues = st->cueList(m_list)->cues;
+    for (int i : { 1, 4, 5 })
+    {
+        cues[i].fadeIn = uint(fadeMs);
+        if (!st->setCue(cues.at(i)))
+            return nullptr;
+    }
+    // Cue 4's traveller goes out under its own fade out into cue 5.
+    cues = st->cueList(m_list)->cues;
+    cues[3].fadeOut = uint(fadeMs);
+    if (!st->setCue(cues.at(3)))
+        return nullptr;
+    // The rig as it is (the keeper rebuilds on the event loop).
+    m_doc->outputRuleKeeper()->rebuild();
+    return chaserOf(m_list);
+}
+
+void TrackBack_Test::stopAllFromControl(int fadeMs)
+{
+    /* Stop all waits for the timer thread to stop the functions: here it
+       runs beside this thread, which plays the timer. */
+    MasterTimer *mt = m_doc->masterTimer();
+    Doc *doc = m_doc;
+    std::future<void> done = std::async(std::launch::async, [doc, fadeMs]() {
+        FixtureRest::stopAll(doc, fadeMs);
+    });
+    QElapsedTimer guard;
+    guard.start();
+    while (!mt->m_stopAllFunctions && done.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready
+           && guard.elapsed() < 10000)
+        QThread::msleep(1);
+    while (done.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready && guard.elapsed() < 20000)
+        tick(1);
+    QVERIFY(done.wait_for(std::chrono::seconds(1)) == std::future_status::ready);
+}
+
+void TrackBack_Test::aStopLeavesACurtainWhereItIs_data()
+{
+    QTest::addColumn<int>("how");       // 0 emergency stop, 1 Stop ALL, 2 Fade and stop
+    QTest::addColumn<bool>("showOnly");
+    QTest::newRow("emergency stop") << 0 << false;
+    QTest::newRow("Stop ALL") << 1 << false;
+    QTest::newRow("Fade and stop") << 2 << false;
+    QTest::newRow("emergency stop, Show only") << 0 << true;
+    QTest::newRow("Stop ALL, Show only") << 1 << true;
+}
+
+void TrackBack_Test::aStopLeavesACurtainWhereItIs()
+{
+    QFETCH(int, how);
+    QFETCH(bool, showOnly);
+    const int fadeMs = 2000;
+    Chaser *c = movingCurtainList(showOnly, fadeMs);
+    QVERIFY(c != nullptr);
+    QCOMPARE(c->stepsCount(), 6);
+    Fixture *drape = fixtureNamed("Main drape curtain");
+    Fixture *traveller = fixtureNamed("Traveller relay");
+    Fixture *house1 = fixtureNamed("House 1");
+    Fixture *flame = fixtureNamed("Flame relay");
+    QVERIFY(drape && traveller && house1 && flame);
+    ShowControl *sc = m_doc->showControl();
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    const int fadeTicks = int(uint(fadeMs) / MasterTimer::tick());
+    auto value = [](const QByteArray &out, const Fixture *f, int ch) {
+        return int(uchar(out.at(int(f->universeAddress()) + ch)));
+    };
+
+    struct Motion { const char *name; int cue; QList<QPair<Fixture *, int> > moving; int target; };
+    const QList<Motion> motions = {
+        { "opening", 1, { { drape, 0 }, { traveller, 0 } }, 255 },
+        { "closing", 4, { { drape, 0 }, { traveller, 0 } }, 0 },
+        { "flying out", 5, { { drape, 1 } }, 255 },
+    };
+    QStringList bad;
+    for (const Motion &m : motions)
+    {
+        stopAll();
+        rules->releaseStageMachinery();
+        m_settle = 8;
+        for (int i = 0; i < m.cue; ++i)
+        {
+            act(c, { Go, 0 });
+            settle(fadeTicks + 10);
+        }
+        act(c, { Go, 0 });
+        tick(fadeTicks / 3);
+        QCOMPARE(c->currentStepIndex(), m.cue);
+        const QByteArray before = settle(0);
+        QList<int> at;
+        for (const QPair<Fixture *, int> &fc : m.moving)
+        {
+            at << value(before, fc.first, fc.second);
+            if (at.last() <= 0 || at.last() >= 255)
+                bad << QStringLiteral("%1: %2 not moving (%3)").arg(m.name, fc.first->name()).arg(at.last());
+        }
+
+        if (how == 0)
+        {
+            ShowControl::Request off;
+            off.command = ShowControl::AllOff;
+            sc->execute(off);
+        }
+        else
+        {
+            stopAllFromControl(how == 2 ? 1000 : 0);
+        }
+        QVERIFY(rules->stageMachineryHeld());
+
+        // Every frame of the stop and its fade, and well after: still.
+        auto still = [&](const QString &when) {
+            const QByteArray o = settle(0);
+            for (int k = 0; k < m.moving.count(); ++k)
+            {
+                const int v = value(o, m.moving.at(k).first, m.moving.at(k).second);
+                if (v != at.at(k))
+                {
+                    bad << QStringLiteral("%1, %2: %3 moved %4 -> %5").arg(m.name, when, m.moving.at(k).first->name())
+                           .arg(at.at(k)).arg(v);
+                    return false;
+                }
+            }
+            return true;
+        };
+        for (int i = 0; i < fadeTicks + 60; ++i)
+        {
+            tick(1);
+            if (!still(QStringLiteral("frame %1 of the stop").arg(i)))
+                break;
+        }
+        // Putting the rig at rest after the fades (a timer), a look
+        // started and let go of, a list told to stop: nothing moves it.
+        QTest::qWait(300);
+        tick(4);
+        still(QStringLiteral("at rest"));
+        Scene *other = new Scene(m_doc);
+        other->setValue(drape->id(), 0, 0);
+        other->setValue(drape->id(), 1, 0);
+        other->setValue(traveller->id(), 0, 0);
+        m_doc->addFunction(other);
+        other->start(m_doc->masterTimer(), FunctionParent::master());
+        tick(5);
+        still(QStringLiteral("a look on it"));
+        other->stop(FunctionParent::master());
+        tick(5);
+        ShowControl::Request stop;
+        stop.command = ShowControl::Stop;
+        stop.chaser = c->id();
+        sc->execute(stop);
+        QTest::qWait(300);
+        tick(5);
+        still(QStringLiteral("a look let go of"));
+        m_doc->deleteFunction(other->id());
+        // The lights are out, the flame off.
+        const QByteArray dark = settle(1);
+        if (value(dark, house1, 0) != 0)
+            bad << QStringLiteral("%1: the house at %2").arg(m.name).arg(value(dark, house1, 0));
+        if (value(dark, flame, 0) != 0)
+            bad << QStringLiteral("%1: the flame at %2").arg(m.name).arg(value(dark, flame, 0));
+
+        // GO (the moving cue loaded): it carries on to where it goes.
+        const CueList *list = m_doc->showTree()->cueList(m_list);
+        ShowControl::Request load;
+        load.command = ShowControl::Load;
+        load.chaser = c->id();
+        load.cue = m_doc->showTree()->cueNumber(*list, m.cue);
+        sc->execute(load);
+        ShowControl::Request go;
+        go.command = ShowControl::Go;
+        go.chaser = c->id();
+        sc->execute(go);
+        tick(2);
+        QTest::qWait(int(4 * MasterTimer::tick()) + 100);
+        if (rules->stageMachineryHeld())
+            bad << QStringLiteral("%1: still held after the GO").arg(m.name);
+        const QByteArray after = settle(fadeTicks + 10);
+        for (const QPair<Fixture *, int> &fc : m.moving)
+            if (value(after, fc.first, fc.second) != m.target)
+                bad << QStringLiteral("%1: after the GO %2 at %3").arg(m.name, fc.first->name())
+                       .arg(value(after, fc.first, fc.second));
+    }
+    QVERIFY2(bad.isEmpty(), qPrintable(bad.join(QStringLiteral("; "))));
+}
+
+void TrackBack_Test::theFooterSaysWhereTheCurtainStopped()
+{
+    const int fadeMs = 2000;
+    Chaser *c = movingCurtainList(false, fadeMs);
+    QVERIFY(c != nullptr);
+    // The drape alone: the traveller gone.
+    Fixture *traveller = fixtureNamed("Traveller relay");
+    QVERIFY(traveller != nullptr);
+    QVERIFY(m_doc->deleteFixture(traveller->id()));
+    m_doc->outputRuleKeeper()->rebuild();
+    c = chaserOf(m_list);
+    QVERIFY(c != nullptr);
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    QCOMPARE(rules->stageMachineryHeldText(), QString());
+    stopAll();
+    act(c, { Go, 0 });
+    settle(8);
+    act(c, { Go, 0 });
+    // 40% of the way: the drape's Open at 102 of 255.
+    const int ticks = int(uint(fadeMs) / MasterTimer::tick());
+    tick(int(ticks * 0.4) + 1);
+    Fixture *drape = fixtureNamed("Main drape curtain");
+    const int open = int(uchar(settle(0).at(int(drape->universeAddress()))));
+    QVERIFY2(open > 90 && open < 115, qPrintable(QString::number(open)));
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    m_doc->showControl()->execute(off);
+    QCOMPARE(rules->stageMachineryHeldText(),
+             QStringLiteral("Curtain stopped at %1% — GO to carry on").arg(qRound(open * 100.0 / 255.0)));
+    QVERIFY(rules->stageMachineryHeldText().startsWith(QStringLiteral("Curtain stopped at 4")));
+    // The next GO: gone.
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = c->id();
+    m_doc->showControl()->execute(go);
+    tick(2);
+    QTest::qWait(int(4 * MasterTimer::tick()) + 100);
+    QCOMPARE(rules->stageMachineryHeldText(), QString());
 }
 
 bool TrackBack_Test::loadShow(const QString &path)

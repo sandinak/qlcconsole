@@ -16,6 +16,8 @@
 #include "qlcfixturedef.h"
 #include "qlcchannel.h"
 #include "fixturerest.h"
+#include "outputrulekeeper.h"
+#include "scenery.h"
 #include "universe.h"
 #include "genericfader.h"
 #include "mastertimer.h"
@@ -58,6 +60,11 @@ bool FixtureRest::holdsPosition(const QLCChannel *ch)
         && (ch->group() == QLCChannel::Pan || ch->group() == QLCChannel::Tilt);
 }
 
+bool FixtureRest::freezesOnStop(const Fixture *fx)
+{
+    return fx != nullptr && Scenery::isCurtainFixture(fx);
+}
+
 bool FixtureRest::holdsPosition(const Doc *doc, quint32 fixtureId, quint32 channel)
 {
     const Fixture *fx = doc != nullptr ? doc->fixture(fixtureId) : nullptr;
@@ -95,6 +102,9 @@ int FixtureRest::putAllAtRest(Doc *doc)
     for (Fixture *fx : doc->fixtures())
     {
         if (fx == nullptr || !fx->isPatched())
+            continue;
+        // A curtain stays where it is: its rest (0, closed) is a move.
+        if (freezesOnStop(fx))
             continue;
         const quint32 base = fx->universeAddress();
         for (quint32 i = 0; i < fx->channels(); ++i)
@@ -167,6 +177,9 @@ void FixtureRest::stopAll(Doc *doc, int fadeMs)
        before anything stops, so a fade out fades its pan and tilt to where
        they are (nothing) while the rest fades to safe. */
     holdShowOnlyHeads(doc);
+    // And every curtain where it is, mid-move too, before its cue lets go.
+    if (OutputRuleKeeper *rules = doc->outputRuleKeeper())
+        rules->holdStageMachinery();
     MasterTimer *mt = doc->masterTimer();
     // Both return once every function has stopped; their faders may still
     // be fading out (a scene's own fade out, or this one).

@@ -50,6 +50,17 @@ namespace FixtureRest
      *  it is, so no head swings to its definition's default. */
     QLC_ENGINE_EXPORT bool holdsPosition(const QLCChannel *ch);
 
+    /** Stage machinery: a fixture that moves scenery, so a stop must not
+     *  move it -- it could be dragging a set piece. Today a curtain fixture
+     *  (Scenery::isCurtainFixture(): the bundled Stage Curtain, or any
+     *  fixture given the Curtain plot symbol) and nothing else; the one
+     *  place a per-fixture behaviour (board Q351: turntables, drops) is
+     *  added. Stop ALL, Fade and stop and the emergency stop freeze every
+     *  channel of it where it is (OutputRuleKeeper::holdStageMachinery())
+     *  and putAllAtRest() leaves it. Read when the rig changes or a stop
+     *  comes, never per frame. */
+    QLC_ENGINE_EXPORT bool freezesOnStop(const Fixture *fx);
+
     /** holdsPosition() for channel @p channel of fixture @p fixtureId:
      *  what a stop that lets go of a held level (the Simple Desk's, a VC
      *  slider's) keeps, so no head swings. False for no such fixture. */
@@ -62,7 +73,8 @@ namespace FixtureRest
     /** Every patched fixture's channels to their rest value, in the
      *  universes, for whatever no longer drives them: fog and haze off,
      *  effects stopped, gobos and colour wheels back to open; pan and tilt
-     *  are left where they are (holdsPosition()). What plays
+     *  are left where they are (holdsPosition()), and stage machinery
+     *  (freezesOnStop()) is left whole. What plays
      *  still drives its own channels the next frame. Returns how many
      *  channels were written. */
     QLC_ENGINE_EXPORT int putAllAtRest(Doc *doc);

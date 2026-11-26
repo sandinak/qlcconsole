@@ -811,6 +811,30 @@ To have a cue move the real curtain, patch the curtain fixture to the address
 of the curtain's motor controller, or to a DMX relay box that runs it.
 Signals to the crew (standby and go cue lights) aren't built yet.
 
+**A stop leaves it where it is.** **Stop all**, **Fade and stop** and the
+emergency stop never move a curtain: one that's opening, closing or flying
+stops where it is, and one at rest stays put — it could be dragging a set
+piece. That's every curtain fixture, a relay given the **Curtain** symbol
+too. The lights still go out and flame, fog and laser relays still go off.
+The footer says **Curtain stopped at 40% — GO to carry on** (with more than
+one, how many). Nothing moves it after that: not the cue letting go, not
+the rig going to rest, not a list stopped or a look played and let go of.
+The next **GO** carries on with what that cue plays.
+
+**Back and jumps.** Loading or jumping to a later cue, or going Back, puts
+the curtain where playing from the top would have left it, as it does the
+lights — a jump while it's still opening still ends open.
+
+**Check it on the real curtain.** With the curtain fixture patched to the
+motor controller (or its relay box), in Operate:
+
+1. GO the cue that opens it. While it's opening, hit **Stop all**. It
+   stops at once and stays there; the footer says how far open it is.
+2. Wait a minute. It doesn't move, and the stage lights stay out.
+3. GO again. It carries on with that cue's move.
+4. Do 1–3 with the emergency stop, while it's closing and while it's
+   flying out. Each time it stops where it is.
+
 ### Fountains
 
 **Add → Add Fountain…** builds one from its sizes — a drawing beside the

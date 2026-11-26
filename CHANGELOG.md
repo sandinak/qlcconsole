@@ -193,6 +193,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A stop leaves a curtain where it is**: Stop all, Fade and stop and the emergency stop no longer close a curtain (or let a relay-driven one drop) — one opening, closing or flying stops where it is and stays there until the next GO; the footer says "Curtain stopped at 40% — GO to carry on". The lights still go out, flame and fog relays still off.
 - **Control surfaces hub and the PMJ's lamps**: moving the Grand Master no
   longer sends a PMJ key the show learned (a GO, a hit, the stop on
   Favorites or a Down key) dark: the Control Map is its one lamp writer. In
