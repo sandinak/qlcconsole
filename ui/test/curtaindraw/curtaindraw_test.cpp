@@ -307,6 +307,20 @@ void CurtainDraw_Test::aPickedCueDrawsTheCurtainAndHoldsTheStage()
     QCOMPARE(onWire(fid, 0), stopped);
     QCOMPARE(drawnOpen(sid, fid, "2 picked mid-move:"), 1.0);
     QVERIFY(markShown(sid));
+    // For the UX review: the plot with the drape marked.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            m_app->resize(size);
+            settle(300);
+            mon->m_graphicsView->grab().save(QDir(shots).filePath(
+                QStringLiteral("curtain-held-while-editing-%1x%2.png").arg(size.width()).arg(size.height())));
+        }
+        m_app->resize(1280, 800);
+    }
 
     // The Rig Overview draws it the same.
     {
