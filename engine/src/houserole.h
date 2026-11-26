@@ -29,6 +29,7 @@
 #include "qlcengine_export.h"
 
 class FixtureGroup;
+class Fixture;
 class Doc;
 
 /** @addtogroup engine Engine
@@ -158,7 +159,7 @@ namespace HouseRole
      *  the Switch rule, or whose definition's channel only says Off and On,
      *  or whose name says Relay (an Eos circuit's label: a generic dimmer
      *  carries nothing else to tell it by). */
-    QLC_ENGINE_EXPORT bool isRelay(const class Fixture *fx);
+    QLC_ENGINE_EXPORT bool isRelay(const Fixture *fx);
 
     /** Every role group's lights that are not House (a group from an old
      *  file, an owner changed since) taken out: a standard cue never drives
