@@ -58,6 +58,7 @@
 #include "fixture.h"
 #include "qlcfile.h"
 #include "scene.h"
+#include "fixturerest.h"
 #include "doc.h"
 #include "movespeed.h"
 #include "stagetarget.h"
@@ -1151,6 +1152,25 @@ void ShowReview_Test::fix20fix21()
     rp.laserClass = 2;                      // Class 2: a light anyway
     m_doc->monitorProperties()->setFixtureRigProps(laser->id(), rp);
     QVERIFY(quiet("FIX-21"));
+}
+
+void ShowReview_Test::fix22fix23()
+{
+    Fixture *jet = dimmer("CO2 jet", 30);
+    QCOMPARE(FixtureRest::behaviour(jet), Fixture::HazardBurstBehaviour);
+    QVERIFY(quiet("FIX-22"));               // nothing fires it
+    QVERIFY(fires("FIX-23"));
+    QCOMPARE(findings("FIX-23").first().severity, ReviewFinding::Note);
+    QVERIFY(findings("FIX-23").first().message.contains(QStringLiteral("Hazard — Burst")));
+    Scene *s = new Scene(m_doc);
+    s->setName(QStringLiteral("Blast"));
+    s->setValue(jet->id(), 0, 255);
+    m_doc->addFunction(s);
+    QVERIFY(fires("FIX-22"));               // a scene fires it, no Hazard hold here
+    QCOMPARE(findings("FIX-22").first().severity, ReviewFinding::Blocker);
+    QVERIFY(findings("FIX-22").first().message.contains(QStringLiteral("Hazard hold")));
+    s->setValue(jet->id(), 0, 0);
+    QVERIFY(quiet("FIX-22"));
 }
 
 /****************************************************************************

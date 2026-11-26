@@ -70,6 +70,9 @@ private slots:
     /** Board Q351: Behaves as set by hand (FIX-20) and a 3R+ laser as a
      *  Light (FIX-21) */
     void fix20fix21();
+    /** Board Q352/Q353: hazard cues with no spotter's control (FIX-22, an
+     *  error); every hazard and switch with its kind (FIX-23, notes) */
+    void fix22fix23();
     void file01();
     void file02();
     void name01();
