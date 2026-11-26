@@ -130,6 +130,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Two identical boards are two controllers**: a patch asks for its own line, so a second board of the same MIDI name opens its own line instead of the first board's and is heard (found by the surface simulator); a show saved with just a name still opens the first of the name.
 
 - **Control surfaces and pads are tested as the device**: the gate now drives every input profile, the PMJ Black 1 and the DualSense, DualShock 4 and Xbox pads the way the hardware does (its MIDI bytes, its USB reports, through the plugins' own decoders) and checks every lamp, MIDI message and pad light sent back; `tools/surface-capture.py` records a device on the bench for replay (docs/dev/SURFACE_TESTS.md).
+- **House relays switch, not dim**: Fill Roles (and New Venue from a Show's last step) sets each relay it puts in House Lights to Switch for that venue -- a one-channel light whose definition only says Off and On, or whose name says Relay as an Eos export names it -- so House to half leaves the room's house relays on and House out turns them off; the note names them (Q348).
+
+- **The PMS visit rehearsed**: a test walks New Venue from a Show, Fill Roles, the six house cues, a save and reopen and the switch back to the office, on a made-up show and room and (on the developer's Mac) on copies of the real files; the on-site checklist for 2026-12-08 is docs/project/PMS_ONSITE_CHECKLIST.md.
 
 - **Back on a desk, and Learn knows a fader**: a cue list's Learn Trigger…
   learns its Back as well as its GO (two controls, one list); a GO, Back or

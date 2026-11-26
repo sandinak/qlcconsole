@@ -56,6 +56,7 @@
 #include "qlcpalette.h"
 #include "qlcfixturedef.h"
 #include "qlcfixturemode.h"
+#include "qlccapability.h"
 #include "qlcfixturehead.h"
 #include "qlcphysical.h"
 #include "qlcchannel.h"
@@ -3673,6 +3674,84 @@ void VenueRig_Test::houseToHalfOnRelayIsOn()
     QCOMPARE(relayOut, 255);       // a relay: on at 50% and over
     QCOMPARE(dimOut, 128);         // a dimmer: at half
     half->stop(FunctionParent::master());
+    tick(4);
+}
+
+void VenueRig_Test::houseRelaysBecomeSwitch()
+{
+    VenueCorrections *v = venues(m_doc);
+    m_doc->showTree()->addProduction(QStringLiteral("Tour"));
+    const QString a = v->addVenue(QStringLiteral("PMS Auditeria"));
+    QVERIFY(v->setActiveVenue(a));
+    Fixture *relay = addFixture(m_doc, QStringLiteral("Ch 15 Relay Linear House Lights"), 0, 14, 1, RigOwner::House);
+    Fixture *dim = addFixture(m_doc, QStringLiteral("Ch 16 House"), 0, 15, 1, RigOwner::House);
+    Fixture *power = addFixture(m_doc, QStringLiteral("Ch 2 Relay FOH"), 0, 1, 1, RigOwner::House);
+    // A definition whose one channel only says Off and On.
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer(QStringLiteral("Test"));
+    def->setModel(QStringLiteral("Relay Pack"));
+    def->setType(QLCFixtureDef::Dimmer);
+    QLCChannel *ch = new QLCChannel();
+    ch->setName(QStringLiteral("Circuit"));
+    ch->setGroup(QLCChannel::Intensity);
+    ch->addCapability(new QLCCapability(0, 127, QStringLiteral("Off")));
+    ch->addCapability(new QLCCapability(128, 255, QStringLiteral("On")));
+    def->addChannel(ch);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName(QStringLiteral("1ch"));
+    mode->insertChannel(ch, 0);
+    def->addMode(mode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(def));
+    Fixture *pack = new Fixture(m_doc);
+    pack->setName(QStringLiteral("Ch 24 Down"));
+    pack->setFixtureDefinition(def, mode);
+    pack->setUniverse(0);
+    pack->setAddress(23);
+    pack->setOwner(RigOwner::House);
+    QVERIFY(m_doc->addFixture(pack));
+    QVERIFY(relay != nullptr && dim != nullptr && power != nullptr);
+    QVERIFY(HouseRole::isRelay(relay) && HouseRole::isRelay(pack) && HouseRole::isRelay(power));
+    QVERIFY(!HouseRole::isRelay(dim));
+
+    QMap<HouseRole::Role, QList<quint32>> rows = row(HouseRole::HouseLights, { relay->id(), dim->id(), pack->id() });
+    rows.insert(HouseRole::Front, { power->id() });
+    HouseRole::Made made;
+    QString why;
+    QVERIFY2(HouseRole::fillRoles(m_doc, a, rows, {}, &made, &why), qPrintable(why));
+    QVERIFY(relay->outputRules() & Fixture::Switch);
+    QVERIFY(pack->outputRules() & Fixture::Switch);
+    QVERIFY(!(dim->outputRules() & Fixture::Switch));       // a dimmer dims
+    QVERIFY(!(power->outputRules() & Fixture::Switch));     // not House Lights: not ours to change
+    QCOMPARE(made.switched, QStringList({ QStringLiteral("Ch 15 Relay Linear House Lights"),
+                                          QStringLiteral("Ch 24 Down") }));
+    // Kept in the venue, with the house light.
+    bool kept = false;
+    for (const VenueRig::HouseFixture &hf : v->venue(a).rig.fixtures)
+        if (hf.id == relay->id())
+            kept = hf.xml.contains("Switch");
+    QVERIFY(kept);
+
+    auto out = [this](quint32 address) {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        const int value = uchar(ua.at(0)->postGMValues()->at(int(address)));
+        m_doc->inputOutputMap()->releaseUniverses(false);
+        return value;
+    };
+    Function *half = hitFunction(m_doc, QStringLiteral("House to half"));
+    Function *houseOut = hitFunction(m_doc, QStringLiteral("House out"));
+    QVERIFY(half != nullptr && houseOut != nullptr);
+    half->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(300);
+    QCOMPARE(out(14), 255);         // the relay: on
+    QCOMPARE(out(23), 255);
+    QCOMPARE(out(15), 128);         // the dimmer: half
+    houseOut->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(300);
+    QCOMPARE(out(14), 0);           // House out: off
+    QCOMPARE(out(23), 0);
+    QCOMPARE(out(15), 0);
+    half->stop(FunctionParent::master());
+    houseOut->stop(FunctionParent::master());
     tick(4);
 }
 

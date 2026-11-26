@@ -443,12 +443,22 @@ The first Fill Roles also makes what plays on them:
 
 Each layer sets the dimmer **and Open White**, so a light with no
 dimmer channel (a ColorSource patched in 3-channel RGB) comes up white
-at the level; a relay is on at 50% and over, so House to half leaves it
-on. Positions are never set. The cues' levels and fades are yours to
+at the level. Positions are never set. The cues' levels and fades are yours to
 change, and so are their names: each is found by what it is, not what
 it is called. A later Fill Roles adds back a standard cue you deleted,
 with its hit; a hit you deleted from a cue that is still there stays
 deleted, and a cue you edited is never changed.
+
+**Relays in House Lights.** A house circuit on a relay is on or off; it
+can't dim. Fill Roles sets each relay it puts in House Lights to
+**Switch** for this venue (the light is the venue's, so the show is not
+changed), and its note names them. A relay is a one-channel light whose
+definition only says Off and On, or whose name says Relay, as an Eos
+export names it ("Ch 15 Relay Linear House Lights"). With Switch, a
+level of 50% and over is full on and anything less is off, so **House to
+half** leaves the relays on and **House out** turns them off. To make
+one dim again, apply the venue, right-click the light in the Fixture
+Manager, choose **Output Rules…** and untick Switch.
 
 Switching venues re-plans the standard cues for the new room's lights.
 During the show (Operate) that waits for Design, as a venue's head turns
