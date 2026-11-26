@@ -16,8 +16,9 @@ Lengths are in feet and inches, as the app shows them by default
 DanceHysteria-0.6 and PMS Stage.qlcc (2026-11-25). End to end it works:
 the venue is made from the menu, all 69 PMS lights come in as House on
 one universe, all 16 PMS groups are held for later, the clash check flags
-the output, the chip is amber, Fill Roles suggests five roles, all six
-house cues reach only PMS's lights, the venue survives a save and reopen,
+the output, the chip is amber, Fill Roles suggests five roles and sets PMS's two
+house relays to Switch (Q348), all six house cues reach only PMS's
+lights (House to half: the relays full on; House out: off), the venue survives a save and reopen,
 a USB interface chosen on the venue page clears the clash, and switching
 back to the office leaves DH exactly as it was. Nothing was sent to any
 network.
@@ -49,14 +50,26 @@ What it measured, for the room:
       a show copied without it has no PMS venue.
 - [ ] **PMS Stage.qlcc** on both Macs (for **Line Up the Room** or making
       the venue again on site).
-- [ ] **Mark DH's spare universe as House** before you make the venue:
-      Connections ▸ Universes, select the universe you keep for the room
-      (U79, "Universe 79", has nothing on it), **Slot ▸ House**. Without
-      it, New Venue from a Show suggests the first empty universe, which in
-      DH is **U16 "Effect-Mode"**.
+Two changes to DH first, made by you in the app on your own show (we
+never edit the show file). Save after each.
+
+- [ ] **U79 is the room's universe (Q345).** Open DanceHysteria-0.6.qlcc.
+      **Connections** tab ▸ **Universes** ▸ select **U79 "Universe 79"**
+      (nothing is on it) ▸ on the toolbar, **Slot ▸ House**. Rename it
+      if you like ("U79-PMS House"). **Expected:** New Venue from a Show
+      then suggests U79. Without it, it suggests the first empty universe,
+      which in DH is **U16 "Effect-Mode"**.
+- [ ] **The plot 40' deep (Q347).** **Lighting Studio** ▸ the plot's footer
+      bar ▸ **Grid** ▸ stage size: depth **40'** (it is 36' now; width 50'
+      stays). **Expected:** PMS's FOH truss (about 38' 7" from the plot's
+      upstage edge once lined up) lands on the plot instead of past its
+      downstage edge. DH's own lights, trusses and targets don't move.
 - [ ] **Make the PMS venue at home** (venue chip ▸ New Venue… ▸ From a
-      Show…, name it "PMS Auditeria", Output in this room: **Not yet**),
-      then **Fill Roles** and save. On site you only choose the output.
+      Show…, name it "PMS Auditeria", check "Its fixtures go on" says
+      **U79**, Output in this room: **Not yet**), then **Fill Roles** and
+      save. Fill Roles' note should say **Relays in House Lights set to
+      Switch in PMS Auditeria: Ch 15 Relay Linear House Lights, Ch 24 Relay
+      Down House Lights** (Q348). On site you only choose the output.
 - [ ] **USB DMX interface**: the one you will use, tested at home on any
       DMX fixture (it must show under Connections as a DMX USB output when
       plugged in). Take a spare if there is one.
@@ -93,10 +106,12 @@ What it measured, for the room:
 1. **Dark test**: Blackout on. **Expected:** stage dark; PMS's house,
    work and hall circuits stay as they are (they ignore Blackout and the
    Grand Master by design). Blackout off.
-2. **House to half** (the Global hit). **Expected:** the house lights go
-   to half over 5 s. PMS's house circuits are relays (Ch 15, Ch 24) and
-   we send them 50%: **note whether they come on, stay off or flicker.**
-3. **House out**. **Expected:** the house goes out over 5 s.
+2. **House to half** (the Global hit). **Expected:** PMS's house
+   circuits are relays (Ch 15, Ch 24), set to Switch when the venue was
+   made (Q348): they **stay on** (a relay can't be at half). **Note what
+   they really do: on, off, or flicker.**
+3. **House out**. **Expected:** the relays go **off** (about halfway
+   through the 5 s fade, where the level passes 50%).
 4. **Stage up**. **Expected:** FOH (Ch 51–62) and the 1st and 2nd
    electrics (Ch 101–113, 201–212) come up full white over 3 s, the cyc
    lights (Ch 301–305) stay out.
@@ -105,16 +120,43 @@ What it measured, for the room:
 6. **Work lights**, then let go. **Expected:** Ch 17 on, then off.
 7. **Flash** each Fill Roles row (venue page ▸ Roles ▸ Fill Roles…):
    the lights that come up are that row's. Untick a wrong row.
-8. **Walk the targets**: stand on CenterStage, Announcer, Line 1 and
-   Horns 2 and look at where the plot puts you against PMS's main drape
-   and proscenium. Put a Ref Point marker on DSC and on the plaster line
-   and measure each from the cyc and the centre line.
-9. **The drape**: measure where DH's upstage edge (its drape or cyc) will
-   hang against PMS's Cyclorama 2. Type it in Rig and Universes ▸ Room ▸
-   **Drape downstage of Cyclorama 2 by** (a negative number is upstage).
-   **Expected:** PMS's lights move on the plot; DH's do not.
-10. One DH tour light up through DH's own Art-Net node. **Expected:** it
-    comes up as at home; PMS's lights don't move.
+8. One DH tour light up through DH's own Art-Net node. **Expected:** it
+   comes up as at home; PMS's lights don't move.
+
+## Lining DH up in the room (Q346), after the first 15 minutes
+
+Measure first, then move; everything here is kept **for PMS Auditeria
+only** (in the venues file), never in DH's show.
+
+1. **Measure the apron**: from the plaster line (the proscenium's
+   upstage face) to the stage edge, at centre and at each side. Also cyc
+   to main drape (the file says 18' 9"), cyc to plaster line, and the
+   main drape's open gap (the file says 26' 3"). Write them down.
+2. **Decide where DH's deck stands.** At home DH's downstage platforms
+   reach 20' 7" downstage of DH's upstage line; in PMS that is about
+   1' 10" past the main drape. If the set moves upstage so it clears the
+   main drape, measure how far DH's upstage line (DH's drape or cyc) then
+   hangs from PMS's Cyclorama 2.
+3. **Type it in**: venue chip ▸ **Rig and Universes…** ▸ **Room** ▸
+   **Drape downstage of Cyclorama 2 by**: the distance, negative if DH's
+   line is upstage of PMS's cyc. **Expected:** on the plot PMS's lights,
+   drape and proscenium move by that much; DH's rig and targets stay put.
+4. **Walk the three odd targets** with PMS applied. In the Lighting
+   Studio show the **Stage Targets** layer and unlock it (Plot layers:
+   its eye and lock). Stand where each really goes and drag it there on
+   the plot:
+   - **Announcer**: lands about 8' 3" downstage of PMS's main drape.
+     Put it where the announcer really stands (on the apron if it is
+     deep enough, else on the house floor).
+   - **Line 1**: about 8' 4" downstage of the main drape; move it to
+     the line's real place.
+   - **Horns 2**: outside the proscenium opening; move it inside, or
+     leave it if the horns really play from there.
+   **Expected:** with a venue applied a target moved on the plot is kept
+   for that venue only. Switch to the office venue and back: the office
+   positions are as they were, PMS's as you left them.
+5. Re-run **Stage up** and the follow spot on CenterStage, Announcer and
+   Line 1. Note any light that misses.
 
 ## What to note for us
 

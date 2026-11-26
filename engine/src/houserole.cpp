@@ -33,6 +33,8 @@
 #include "eosimporter.h"
 #include "qlcpalette.h"
 #include "qlcchannel.h"
+#include "qlccapability.h"
+#include "outputrulekeeper.h"
 #include "venuerig.h"
 #include "fixture.h"
 #include "rigowner.h"
@@ -635,6 +637,27 @@ bool HouseRole::fillRoles(Doc *doc, const QString &venue, const QMap<Role, QList
         }
     }
     touched.unite(keepHouseOnly(doc, false));
+    /* Board Q348: a relay in House Lights is on or off. Without the Switch
+       rule House to half would send it 50% and the relay pack's own
+       threshold would decide; with it, half is on and out is off. */
+    QStringList switched;
+    for (auto it = wanted.constBegin(); it != wanted.constEnd(); ++it)
+    {
+        if (it.value() != HouseLights)
+            continue;
+        Fixture *fx = doc->fixture(it.key());
+        if (fx == nullptr || (fx->outputRules() & Fixture::Switch) || !isRelay(fx))
+            continue;
+        fx->setOutputRules(fx->outputRules() | Fixture::Switch);
+        switched << fx->name();
+    }
+    if (!switched.isEmpty())
+    {
+        std::sort(switched.begin(), switched.end());
+        doc->outputRuleKeeper()->rebuild();
+        if (made != nullptr)
+            made->switched = switched;
+    }
     // Said once per group changed, the rig followed once at the end.
     for (FixtureGroup *g : touched)
         emit g->changed(g->id());
@@ -644,6 +667,32 @@ bool HouseRole::fillRoles(Doc *doc, const QString &venue, const QMap<Role, QList
     if (ShowTreeController *st = doc->showTree())
         st->bake();
     return vc->recordRig(why);
+}
+
+bool HouseRole::isRelay(const Fixture *fx)
+{
+    if (fx == nullptr || fx->channels() != 1)
+        return false;
+    if (fx->outputRules() & Fixture::Switch)
+        return true;
+    // A definition whose one channel is a switch: Off and On, nothing between.
+    if (const QLCChannel *ch = fx->channel(0))
+    {
+        const QList<QLCCapability *> caps = ch->capabilities();
+        if (caps.size() == 2)
+        {
+            static const QRegularExpression offOn(QStringLiteral("^\\s*(off|on)\\b"),
+                                                  QRegularExpression::CaseInsensitiveOption);
+            if (offOn.match(caps.at(0)->name()).hasMatch() && offOn.match(caps.at(1)->name()).hasMatch()
+                && caps.at(0)->name().trimmed().left(2).toLower() != caps.at(1)->name().trimmed().left(2).toLower())
+                return true;
+        }
+    }
+    static const QRegularExpression nonLetters(QStringLiteral("[^a-z]+"));
+    for (const QString &w : fx->name().toLower().split(nonLetters, Qt::SkipEmptyParts))
+        if (w == QLatin1String("relay") || w == QLatin1String("relays"))
+            return true;
+    return false;
 }
 
 QSet<FixtureGroup *> HouseRole::keepHouseOnly(Doc *doc, bool tell)

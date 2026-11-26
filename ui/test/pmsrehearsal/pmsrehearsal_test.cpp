@@ -447,7 +447,11 @@ void PmsRehearsal_Test::rehearseTheVisit()
     {
         QVERIFY(writeFile(showPath, tourXml()));
         QVERIFY(writeFile(VenueCorrections::sidecarPath(showPath), tourVenuesXml(QFileInfo(showPath).fileName())));
-        QVERIFY(writeFile(roomPath, PmsLikeShow::xml(QStringLiteral("172.18.2.10"), true, true)));
+        // Its house circuits named as PMS's Eos export names them: relays.
+        QByteArray xml = PmsLikeShow::xml(QStringLiteral("172.18.2.10"), true, true);
+        xml.replace("<Name>Ch 15 Linear</Name>", "<Name>Ch 15 Relay Linear House Lights</Name>");
+        xml.replace("<Name>Ch 24 Down</Name>", "<Name>Ch 24 Relay Down House Lights</Name>");
+        QVERIFY(writeFile(roomPath, xml));
     }
     const QByteArray roomBytes = readFile(roomPath);
 
@@ -685,6 +689,8 @@ void PmsRehearsal_Test::rehearseTheVisit()
     QVERIFY(roles->fillButton()->isEnabled());
     roles->fillButton()->click();
     QVERIFY2(roles->statusLabel()->text().startsWith(QStringLiteral("Filled")), qPrintable(roles->statusLabel()->text()));
+    QVERIFY2(roles->statusLabel()->text().contains(QStringLiteral("Relays in House Lights set to Switch")),
+             qPrintable(roles->statusLabel()->text()));
     report << roles->statusLabel()->text();
     roles->close();
     for (auto it = want.constBegin(); it != want.constEnd(); ++it)
@@ -713,14 +719,24 @@ void PmsRehearsal_Test::rehearseTheVisit()
         standardHit(doc, key)->start(doc->masterTimer(), FunctionParent::master());
         tick(doc, 300);
     };
+    // Q348: the house relays were made Switch by Fill Roles, in the venue.
+    QStringList houseRelays;
+    for (quint32 id : house)
+    {
+        const Fixture *fx = doc->fixture(id);
+        if (fx->name().contains(QStringLiteral("Relay")))
+        {
+            QVERIFY2(fx->outputRules() & Fixture::Switch, qPrintable(fx->name()));
+            houseRelays << fx->name();
+        }
+    }
+    QVERIFY(houseRelays.size() >= 2);
+    report << QStringLiteral("house relays set to Switch: %1").arg(houseRelays.join(QStringLiteral(", ")));
     fire(QStringLiteral("house-half"));
     const QPair<int, int> half = levels(doc, house);
-    QVERIFY2(half.first >= 127 && half.second <= 255, qPrintable(QStringLiteral("%1-%2").arg(half.first).arg(half.second)));
+    QCOMPARE(half, qMakePair(255, 255));            // relays: half is on
     QCOMPARE(levels(doc, stage).second, 0);
     report << QStringLiteral("House to half: house lights at %1-%2 of 255").arg(half.first).arg(half.second);
-    if (half.second < 255)
-        rough << QStringLiteral("House to half sends %1 to the house circuits: no Switch rule on them, so a relay "
-                                "there sees 50% and its own threshold decides").arg(half.second);
     stopAll(doc);
     fire(QStringLiteral("house-full"));
     QCOMPARE(levels(doc, house).first, 255);
@@ -825,6 +841,7 @@ void PmsRehearsal_Test::rehearseTheVisit()
         for (quint32 id : it.value())
             roleNames[it.key()] << doc->fixture(id)->name();
     const int clashCount = clashes.size();
+    const QStringList relaysSwitched = houseRelays;
     QVERIFY(saveShow(doc, showPath));
     const QByteArray savedShow = readFile(showPath);
     for (const VenueRig::HouseFixture &hf : src.fixtures)
@@ -868,6 +885,9 @@ void PmsRehearsal_Test::rehearseTheVisit()
     QCOMPARE(VenueRig::outputText(doc->inputOutputMap()->universe(roomU)->outputPatchDescriptions()),
              QStringLiteral("none"));
     QCOMPARE(v->clashes(kRoom).size(), clashCount);
+    for (quint32 id : v->rig()->venueFixtures())
+        if (relaysSwitched.contains(doc->fixture(id)->name()))
+            QVERIFY2(doc->fixture(id)->outputRules() & Fixture::Switch, qPrintable(doc->fixture(id)->name()));
     for (const HouseRole::StandardCue &c : HouseRole::standardCues())
         QVERIFY2(standardHit(doc, c.key) != nullptr, qPrintable(c.name));
     QStringList stageNames = roleNames.value(HouseRole::Front) + roleNames.value(HouseRole::Top);

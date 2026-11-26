@@ -138,6 +138,9 @@ namespace HouseRole
         QStringList besides;
         /** No production yet: the standard cues and hits wait for one. */
         bool waiting = false;
+        /** House Lights' relays set to Switch by this Fill Roles (board
+         *  Q348): their names. */
+        QStringList switched;
     };
 
     /** Make what is missing, never changing what is there: the role groups
@@ -151,6 +154,12 @@ namespace HouseRole
      *  deleted is made again. */
     QLC_ENGINE_EXPORT Made ensure(Doc *doc, const QSet<Role> &useExisting = QSet<Role>());
 
+    /** A relay, not a dimmer (board Q348): one channel that already has
+     *  the Switch rule, or whose definition's channel only says Off and On,
+     *  or whose name says Relay (an Eos circuit's label: a generic dimmer
+     *  carries nothing else to tell it by). */
+    QLC_ENGINE_EXPORT bool isRelay(const class Fixture *fx);
+
     /** Every role group's lights that are not House (a group from an old
      *  file, an owner changed since) taken out: a standard cue never drives
      *  a tour light (board Q289). The groups changed; with @p tell each
@@ -160,7 +169,9 @@ namespace HouseRole
     /** Fill Roles (section 3.5): with venue @p venue applied, each role in
      *  @p rows becomes filled by exactly those of its house fixtures (the
      *  tour heads in the group are kept); roles not in @p rows are left
-     *  as they are. ensure() first. Written to the venue's file. False,
+     *  as they are. ensure() first. A relay put in House Lights (isRelay())
+     *  gets the Switch rule, in the venue (its house light is the venue's):
+     *  House to half leaves it on, House out off. Written to the venue's file. False,
      *  with @p why, when @p venue is not the venue applied. */
     QLC_ENGINE_EXPORT bool fillRoles(Doc *doc, const QString &venue, const QMap<Role, QList<quint32>> &rows,
                                      const QSet<Role> &useExisting = QSet<Role>(), Made *made = nullptr,

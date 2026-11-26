@@ -176,6 +176,11 @@ private slots:
     void stageUpLightsRgbOnlyHead();
     /** House to half on a relay (the Switch rule) is on; on a dimmer, half */
     void houseToHalfOnRelayIsOn();
+    /** Board Q348: a relay put in House Lights (by its name, its Off/On
+     *  definition) gets the Switch rule in the venue: House to half is on,
+     *  House out off; a dimmer stays a dimmer, a relay in another role is
+     *  left alone; said in what Fill Roles made, kept in the venue */
+    void houseRelaysBecomeSwitch();
     /** A role the room lacks sends nothing and says "none in <venue>" (the
      *  house desk when the room keeps channels); Show Review VEN-11 */
     void emptyRoleLayerSendsNothingAndSaysSo();

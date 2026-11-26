@@ -337,6 +337,10 @@ bool RoleFillDialog::fillRoles()
     for (const QString &g : made.besides)
         text += QLatin1Char(' ') + tr("Your group \"%1\" holds tour lights, so its role was made beside it: "
                                       "a house cue never drives a tour light.").arg(g);
+    if (!made.switched.isEmpty())
+        text += QLatin1Char(' ') + tr("Relays in House Lights set to Switch in %1: %2. House to half leaves "
+                                      "them on, House out turns them off.")
+                                       .arg(m_venue, made.switched.join(QStringLiteral(", ")));
     if (made.waiting)
         text += QLatin1Char(' ') + tr("The standard cues and their hits are made the first time you fill the "
                                       "roles after the show has a production.");
