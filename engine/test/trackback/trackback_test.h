@@ -25,6 +25,7 @@
 #include <QMap>
 
 class Chaser;
+class Fixture;
 class Doc;
 
 /* The output at a cue is the same however the cue was reached: GO from the
