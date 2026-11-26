@@ -525,7 +525,7 @@ void Levels_Test::theMenuCountFallsOrStaysFlat()
     const int itemsAtStudent = itemCount(m_app);
     QVERIFY2(itemsAtStudent < itemsAtStandard, qPrintable(QString::number(itemsAtStudent)));
     QVERIFY(m_app->requestLevel(ShowLevel::Advanced));
-    qWarning() << "ITEMS" << itemsAtStandard << itemsAtStudent << itemCount(m_app);
+    QFAIL(qPrintable(QStringLiteral("ITEMS %1 %2 %3").arg(itemsAtStandard).arg(itemsAtStudent).arg(itemCount(m_app))));
     QCOMPARE(itemCount(m_app), itemsAtStandard);
     QVERIFY(m_app->requestLevel(ShowLevel::Standard));
 
