@@ -56,6 +56,7 @@
 #include "qlcchannel.h"
 #include "fixture.h"
 #include "scene.h"
+#include "qlcfile.h"
 #include "doc.h"
 
 namespace

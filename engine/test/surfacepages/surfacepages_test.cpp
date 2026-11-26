@@ -38,6 +38,8 @@
 #include "deskrecord.h"
 #include "inputoutputmap.h"
 #include "qlcinputprofile.h"
+#include "ioplugincache.h"
+#include "qlcfile.h"
 #include "doc.h"
 
 namespace

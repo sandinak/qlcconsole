@@ -862,7 +862,7 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
     };
     QList<Key> shown = keys;
     if (m_doc->controlMap()->surfacePages()->pageSet(universe).isValid())
-        shown.insert(1, { kPage, tr("This page (Design)") });
+        shown.insert(1, Key{ kPage, tr("This page (Design)") });
     for (const Key &k : std::as_const(shown))
     {
         QLabel *swatch = new QLabel(block);
