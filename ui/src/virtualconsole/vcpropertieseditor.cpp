@@ -442,10 +442,18 @@ void VCPropertiesEditor::takeGrandMasterInput(quint32 universe, quint32 channel)
     {
         ControlOwners::Owner self;
         self.kind = ControlOwners::GrandMaster;
-        const QList<ControlOwners::Owner> taken = ControlOwners::others(doc, universe, channel, self);
+        const QList<ControlOwners::Job> jobs = ControlOwners::jobsFor(doc, universe, channel);
+        QList<ControlOwners::Owner> taken;
+        for (const ControlOwners::Owner &o : ControlOwners::listenersOf(doc, jobs))
+            if (ControlOwners::collides(self, o))
+                taken << o;
         if (!taken.isEmpty())
         {
             m_gmCollision->refuse(doc, universe, channel, taken);
+            const QString pages = ControlOwners::pageJobsText(jobs);
+            if (!pages.isEmpty())
+                m_gmCollision->appendText(tr("It is also a surface page control: %1. The page keeps it "
+                                             "in Design.").arg(pages));
             return;
         }
     }
@@ -456,7 +464,8 @@ void VCPropertiesEditor::takeGrandMasterInput(quint32 universe, quint32 channel)
 
 void VCPropertiesEditor::slotChooseGrandMasterInputClicked()
 {
-    SelectInputChannel sic(this, m_ioMap);
+    VirtualConsole *vc = VirtualConsole::instance();
+    SelectInputChannel sic(this, m_ioMap, vc != nullptr ? vc->getDoc() : nullptr);
     if (sic.exec() == QDialog::Accepted)
         takeGrandMasterInput(sic.universe(), sic.channel());
 }

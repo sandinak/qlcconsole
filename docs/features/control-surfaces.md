@@ -55,6 +55,20 @@ take a control from anything except the PMJ's controls and the encoder
 bank's runs). Two Virtual Console widgets on one input are Show Review's
 *Same input twice* (VC-06), not refused here.
 
+**What a control does now.** In the pickers of a widget's External Input,
+a speed master's Inputs… and the Grand Master's input, **Choose…** lists
+each control with what it does now in a **Does now** column (*free* when
+nothing has it), and **Auto Detect** says it under the fields the moment
+you move a control, before you press OK: *Fader 10: Grand Master (this
+computer's desk)*. The refusal names every job the control has, this
+computer's desk roles (STOP, Grand Master, GO, Back) and a surface page's
+controls too (*It is also a surface page control: page Move: Pan, on page
+Move only*; the page keeps it in Design). In these pickers **Move It Here**
+may take a desk role: it is cleared on this computer when you press OK
+(set it up again in Connections ▸ Control surfaces). A show's PIN keeps a
+locked desk where it is. Assign to Control…'s *press any control* line
+names the same jobs.
+
 **This computer's own controls.** Two more owners are the computer's, not
 the show's, and can never be moved. A **game pad's** buttons and triggers
 are its Run map: a Control Map trigger or the emergency stop learned on

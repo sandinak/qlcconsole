@@ -126,6 +126,10 @@ protected:
      *  or by the preset it was set for, when one picker edits many). */
     void commitMove();
     bool isLocal(const ControlOwners::Owner &owner) const;
+    /** Shows what @a channelWithPage of @a universe does now under the
+     *  fields ("Now: Grand Master (this computer's desk)", or "free"),
+     *  before anything is accepted. */
+    void showJobs(quint32 universe, quint32 channelWithPage);
 
 private:
     Doc *m_doc;
@@ -148,6 +152,7 @@ private:
 
     ControlOwners::Owner m_self;
     ControlCollisionBox *m_collision;
+    QLabel *m_jobLabel = nullptr;
     bool m_pendingKeepFeedback = false;
     LocalOwners m_local;
     /** One Move It Here waiting for OK: the source it set, weakly (a

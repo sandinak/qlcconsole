@@ -356,12 +356,12 @@ void ControlSurfacesPanel::pressedAny(quint32 universe, quint32 channel)
     if (!isVisible() || (m_pressedKey == ((quint64(universe) << 32) | channel)))
         return;
     m_pressedKey = (quint64(universe) << 32) | channel;
-    const QList<ControlOwners::Owner> owners = ControlOwners::owners(m_doc, universe, channel);
+    const QList<ControlOwners::Job> owners = ControlOwners::jobsFor(m_doc, universe, channel);
     const QString control = ControlOwners::controlName(m_doc, universe, channel);
     m_pressAny->setText(owners.isEmpty()
         ? tr("%1: free, nothing has it. Right-click a cue list, cue or hit ▸ Assign to Control… to "
              "give it a job.").arg(control)
-        : tr("%1: %2.").arg(control, ControlOwners::ownersText(owners)));
+        : tr("%1: %2.").arg(control, ControlOwners::jobsText(owners)));
 }
 
 QStringList ControlSurfacesPanel::keys()

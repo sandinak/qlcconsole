@@ -27,6 +27,7 @@
 #include <QList>
 #include <QHash>
 #include <QSet>
+#include <functional>
 
 #include "controlmap.h"
 #include "qlcui_export.h"
@@ -225,6 +226,34 @@ public:
      *  pad, in @a family's words (PadNames::Family): "GO with L2 held",
      *  "the arm, with R1", "the armed hit (hits fire by their place)". */
     static QString padJob(int role, int family);
+
+    /** One job a control has now, for a person (jobsFor()). */
+    struct Job
+    {
+        /** "Grand Master", "Main Tap", "page Move: Pan". */
+        QString name;
+        /** Extra: "on page Move only", "this computer's desk". */
+        QString note;
+        /** A surface page's job (not a listener: never refuses or moves). */
+        bool isPage = false;
+        /** The listener behind it (unused for a page job). */
+        Owner owner;
+    };
+    /** The ONE read-only query: every job @a channel of @a universe has now
+     *  -- the show's listeners (owners()), this computer's desk roles and
+     *  the surface pages' controls. Empty: free. */
+    static QList<Job> jobsFor(Doc *doc, quint32 universe, quint32 channel);
+    /** @a jobs in words ("Grand Master (this computer's desk)"), or "free". */
+    static QString jobsText(const QList<Job> &jobs);
+    /** The surface-page jobs of @a jobs, in words (empty: none). */
+    static QString pageJobsText(const QList<Job> &jobs);
+    /** The listeners of @a jobs, with this computer's desk roles made
+     *  movable: what a picker's Move It Here takes the control from (the
+     *  desk role is cleared). A locked desk stays put. */
+    static QList<Owner> listenersOf(Doc *doc, const QList<Job> &jobs);
+    /** releaseAll() that hands back how to put it all back (empty:
+     *  nothing was released). */
+    static std::function<void()> releaseAllUndoable(Doc *doc, const QList<Owner> &owners);
 
     /** The desk owner of @a universe / @a channel when it is one of this
      *  computer's desk roles. */

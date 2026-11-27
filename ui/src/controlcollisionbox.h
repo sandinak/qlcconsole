@@ -66,6 +66,9 @@ public:
      *  the control only then (ControlOwners::moveOnOkNote()). */
     void setMovesOnOk(bool onOk);
     bool movesOnOk() const { return m_onOk; }
+    /** Adds a line under the refusal (the surface pages' jobs of the
+     *  control, which a move doesn't take). */
+    void appendText(const QString &line);
     /** Hides it and forgets the owners. */
     void clear();
 
@@ -77,6 +80,10 @@ public:
     QPushButton *moveButton() const { return m_move; }
     QPushButton *cancelButton() const { return m_cancel; }
 
+protected:
+    void resizeEvent(QResizeEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+
 signals:
     /** Move It Here was pressed (the owners are not released yet). */
     void moveRequested();
@@ -86,6 +93,11 @@ signals:
     void cancelled();
 
 private:
+    /** Gives each wrapped label the height its text needs at the width
+     *  it has (a wrapped QLabel in a nested layout is otherwise sized for
+     *  one line more or less, and clips). */
+    void fitLabels();
+
     QLabel *m_text;
     QLabel *m_note;
     QPushButton *m_move;

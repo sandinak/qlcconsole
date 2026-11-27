@@ -29,6 +29,7 @@ class QLCInputProfile;
 class QLCInputChannel;
 class InputOutputMap;
 class InputPatch;
+class Doc;
 
 /** @addtogroup ui UI
  * @{
@@ -43,7 +44,10 @@ class SelectInputChannel final : public QDialog, public Ui_SelectInputChannel
      * Initialization
      ********************************************************************/
 public:
-    SelectInputChannel(QWidget* parent, InputOutputMap* ioMap);
+    /** @a doc: when given, each control lists what it does now in a second
+     *  column ("Grand Master (this computer's desk)"; "free" for a free one),
+     *  from ControlOwners::jobsFor(). */
+    SelectInputChannel(QWidget* parent, InputOutputMap* ioMap, Doc* doc = nullptr);
     ~SelectInputChannel();
 
 protected:
@@ -56,6 +60,7 @@ protected slots:
 
 private:
     InputOutputMap* m_ioMap;
+    Doc* m_doc;
 
     /********************************************************************
      * Selection
