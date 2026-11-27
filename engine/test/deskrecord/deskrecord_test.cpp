@@ -1160,7 +1160,7 @@ void DeskRecord_Test::theShiftGuardsAreTheShowsAndKeepTheDefault()
         QVERIFY(cm->saveXML(&w));
         w.writeEndDocument();
     }
-    cm->clear();
+    cm->reset();
     QCOMPARE(cm->shiftGuardStopSetting(), int(ControlMap::GuardAuto));
     buf.close();
     buf.open(QIODevice::ReadOnly);
