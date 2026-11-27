@@ -2097,6 +2097,8 @@ void ShowTreeWorkbench_Test::openingSeveralSelectedLayersEditsThemAll()
         item->setSelected(true);
     }
     QCOMPARE(view.selectedLayerRefs().size(), 3);
+    QVERIFY2(view.currentCueId() == s.c1 && view.currentKind() == ShowTreeView::LayerNode,
+             qPrintable(QString("cue %1 kind %2").arg(view.currentCueId()).arg(int(view.currentKind()))));
     QVERIFY(view.openSelectionInWorkbench());
     Workbench *bench = view.dockedWorkbench();
     QVERIFY(bench != nullptr);
