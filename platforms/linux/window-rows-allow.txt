@@ -44,6 +44,7 @@ InputChannelEditor               virtual console
 InputProfileEditor               deep
 LedLayoutDialog                  deep
 LiveCaptureDialog                not yet walked
+NumberInPlotOrderDialog         deep: opened from the plot's right-click on a selection of fixtures
 OutputRulesDialog                not yet walked
 PaletteEditDialog                deep
 PaletteManager                   not yet walked
