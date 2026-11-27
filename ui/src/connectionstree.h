@@ -144,6 +144,10 @@ private:
     /** Patch an existing or new universe to this plugin line. */
     void patchUniverseTo(const QString &pluginName, quint32 line, bool output,
                          bool feedback = false);
+    /** The feedback entries on a universe row's menu (null where they cannot act). */
+    struct FeedbackMenu { class QAction *remove = nullptr; class QMenu *send = nullptr; };
+    FeedbackMenu addFeedbackActions(class QMenu &menu, quint32 universe);
+    bool handleFeedbackAction(class QAction *chosen, const FeedbackMenu &fb, quint32 universe);
     /** Say something short beside the toolbar ("Feedback goes back to X"). */
     void postNote(const QString &text);
     /** Pair a universe's feedback to its input's own output (MIDI, HID),

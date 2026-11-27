@@ -3136,11 +3136,14 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            row shows it there): no window for it here. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
         QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
+        FeedbackMenu fb = addFeedbackActions(menu, uni);
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
+        if (handleFeedbackAction(chosen, fb, uni))
             return;
         if (chosen == ren)
             renameUniverse(uni);
@@ -3263,31 +3266,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            Conflating the two would quietly destroy a fan-out. */
         QAction *unp = menu.addAction(tr("Unpatch from This Interface"));
 
-        /* Feedback: only where it can act. A universe with an input and no
-           feedback offers the lines that can carry it; one that has it
-           offers to drop it. */
-        InputOutputMap *fbMap = m_doc->inputOutputMap();
-        QAction *rmFb = NULL;
-        QMenu *fbMenu = NULL;
-        QList<InputOutputMap::FeedbackLine> fbLines;
-        if (fbMap != NULL && fbMap->inputPatch(uni) != NULL)
-        {
-            if (fbMap->feedbackPatch(uni) != NULL)
-                rmFb = menu.addAction(tr("Remove Feedback"));
-            else
-            {
-                fbLines = fbMap->feedbackLines();
-                if (fbLines.isEmpty() == false)
-                {
-                    fbMenu = menu.addMenu(tr("Send Feedback To…"));
-                    foreach (const InputOutputMap::FeedbackLine &fl, fbLines)
-                    {
-                        QAction *a = fbMenu->addAction(tr("%1: %2").arg(fl.plugin, fl.name));
-                        a->setData(QVariantList() << fl.plugin << fl.line);
-                    }
-                }
-            }
-        }
+        FeedbackMenu fb = addFeedbackActions(menu, uni);
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
@@ -3296,18 +3275,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == NULL)
             return;
-        if (rmFb != NULL && chosen == rmFb)
-        {
-            setFeedback(uni, QString(), 0);
+        if (handleFeedbackAction(chosen, fb, uni))
             return;
-        }
-        if (fbMenu != NULL && chosen->data().canConvert<QVariantList>()
-            && chosen->data().toList().count() == 2)
-        {
-            const QVariantList d = chosen->data().toList();
-            setFeedback(uni, d.at(0).toString(), d.at(1).toUInt());
-            return;
-        }
         if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == plist)
@@ -3940,6 +3909,51 @@ void ConnectionsTree::setFeedback(quint32 universe, const QString &pluginName,
         postNote(tr("Feedback goes back to %1")
                      .arg(int(line) < outs.count() ? outs.at(int(line)) : pluginName));
     }
+}
+
+ConnectionsTree::FeedbackMenu ConnectionsTree::addFeedbackActions(QMenu &menu, quint32 uni)
+{
+    /* Feedback: only where it can act. A universe with an input and no
+       feedback offers the lines that can carry it; one that has it offers
+       to drop it. */
+    FeedbackMenu fb;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == NULL || iom->inputPatch(uni) == NULL)
+        return fb;
+    if (iom->feedbackPatch(uni) != NULL)
+    {
+        fb.remove = menu.addAction(tr("Remove Feedback"));
+        return fb;
+    }
+    const QList<InputOutputMap::FeedbackLine> lines = iom->feedbackLines();
+    if (lines.isEmpty())
+        return fb;
+    fb.send = menu.addMenu(tr("Send Feedback To…"));
+    foreach (const InputOutputMap::FeedbackLine &fl, lines)
+    {
+        QAction *a = fb.send->addAction(tr("%1: %2").arg(fl.plugin, fl.name));
+        a->setData(QVariantList() << fl.plugin << fl.line);
+    }
+    return fb;
+}
+
+bool ConnectionsTree::handleFeedbackAction(QAction *chosen, const FeedbackMenu &fb, quint32 uni)
+{
+    if (chosen == NULL)
+        return false;
+    if (fb.remove != NULL && chosen == fb.remove)
+    {
+        setFeedback(uni, QString(), 0);
+        return true;
+    }
+    if (fb.send != NULL && chosen->data().canConvert<QVariantList>()
+        && chosen->data().toList().count() == 2)
+    {
+        const QVariantList d = chosen->data().toList();
+        setFeedback(uni, d.at(0).toString(), d.at(1).toUInt());
+        return true;
+    }
+    return false;
 }
 
 void ConnectionsTree::postNote(const QString &text)

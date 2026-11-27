@@ -4417,6 +4417,20 @@ void ConnectionsTree_Test::feedbackIsPatchedFromAUniverseAndUndone()
     QVERIFY(seen.join("|").contains("Remove Feedback"));
     QVERIFY(seen.join("|").contains("Send Feedback To") == false);
 
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (shotDir.isEmpty() == false)
+    {
+        QDir().mkpath(shotDir);
+        const QList<QSize> sizes { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+        foreach (const QSize &z, sizes)
+        {
+            tree.resize(z);
+            QApplication::processEvents();
+            tree.grab().save(QStringLiteral("%1/feedback-connections-%2x%3.png")
+                                 .arg(shotDir).arg(z.width()).arg(z.height()));
+        }
+    }
+
     // Undo puts the universe back as it was.
     QVERIFY(iom->patchUndo()->canUndo());
     iom->patchUndo()->undo();

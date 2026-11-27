@@ -258,6 +258,8 @@ void SurfaceSetupUi_Test::patchFeedbackIsOneClick()
     SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj, profile("PMJ-Black-1.qxi"));
     QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
     SimOpenDeck deck(m_stub, &pmj);
+    // plug() patches the feedback line as a person does: take it off.
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, QString(), QString(), 0, true, 0));
     QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) == nullptr);
 
     ControlSurfacesPanel hub(m_doc);
@@ -273,6 +275,20 @@ void SurfaceSetupUi_Test::patchFeedbackIsOneClick()
     QPushButton *dlgBtn = button(&d, "surfaceSetupPatchFeedback");
     QVERIFY(dlgBtn != nullptr && dlgBtn->isVisibleTo(&d));
 
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (shotDir.isEmpty() == false)
+    {
+        QDir().mkpath(shotDir);
+        const QList<QSize> sizes { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+        for (const QSize &z : sizes)
+        {
+            hub.resize(z);
+            d.resize(z.width() / 2, qMax(320, z.height() / 2));
+            settle();
+            hub.grab().save(QStringLiteral("%1/feedback-hub-%2x%3.png").arg(shotDir).arg(z.width()).arg(z.height()));
+            d.grab().save(QStringLiteral("%1/feedback-setup-%2x%3.png").arg(shotDir).arg(z.width()).arg(z.height()));
+        }
+    }
     // The dialog's button first: one click, and it is gone.
     dlgBtn->click();
     settle();
