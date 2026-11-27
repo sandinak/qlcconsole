@@ -1997,9 +1997,9 @@ void CueRunner::updateStates()
             if (item->text(ColState) != state)
                 item->setText(ColState, state);
             // The row the list follows: what plays (its sub-cue's row when
-            // it has one), else what stands by.
-            if (state.startsWith(QStringLiteral("▶")) || (active == nullptr && state.contains(QStringLiteral("STANDBY"))) ||
-                (active == nullptr && !running && step == standby && sub < 0))
+            // it has one). A click that only loads STANDBY leaves the list
+            // where it is: it must not move under the mouse.
+            if (state.startsWith(QStringLiteral("▶")))
                 active = item;
             QFont f = item->font(ColName);
             const bool bold = !state.isEmpty();
@@ -2023,7 +2023,7 @@ void CueRunner::updateStates()
         }
         // Follow it when it changes (the list's rule, CueListFollow), never on
         // every refresh: a hand on the list is left alone.
-        const qint64 key = (qint64(running ? cur : -1 - standby) << 16) + (curSub + 1) + 1;
+        const qint64 key = (qint64(cur) << 16) + (curSub + 1) + 1;
         if (active != nullptr && key != m_followKey)
         {
             m_followKey = key;
