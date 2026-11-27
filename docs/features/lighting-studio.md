@@ -1615,13 +1615,12 @@ them).
 ### Label fields
 
 **Show ▸ Label Fields** chooses what each fixture's label says on the plot, any of
-**Name**, **Unit #**, **Channel / ID**, **Address (U.ch)**, **Purpose**, **Colour /
-gel**, **Mode** and **Owner**. The short ids (Unit #, Channel, Address) sit above
-the icon on one line; the words (Name, Purpose, Gel, Mode, Owner) sit below it,
+**Name**, **Unit #**, **Channel / ID**, **Address (U.ch)**, **Colour / gel**,
+**Mode** and **Owner**. The short ids (Unit #, Channel, Address) sit above
+the icon on one line; the words (Name, Gel, Mode, Owner) sit below it,
 one a line. They stay upright when the plot is turned. The choice is saved with
 the show; a show that never chose has the name only, as before. Unit # and
-Channel are set by Number… (right-click on the plot); Purpose is read from the
-show where it is set.
+Channel are set by Number… (right-click on the plot).
 
 ## Locks
 

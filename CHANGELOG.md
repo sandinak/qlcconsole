@@ -30,7 +30,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   channel 512 and unpatched fixtures, from Show Review's patch checks, with a
   tooltip naming the clash.
 - **Label fields on the plot.** Show ▸ Label Fields: Name, Unit #, Channel,
-  Address, Purpose, Colour / gel, Mode, Owner, round the icon and upright;
+  Address, Colour / gel, Mode, Owner, round the icon and upright;
   saved with the show.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up

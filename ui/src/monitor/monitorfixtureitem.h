@@ -255,7 +255,6 @@ public:
     QPolygonF labelPolygon() const;
     QPolygonF labelPolygonAbove() const;
 
-public:
     /** What the label says for @p fid under the field mask @p fields
      *  (MonitorProperties::LabelField): the short ids (Unit #, Channel,
      *  Address) go in @p above the icon, the words (Name, Purpose, Gel, Mode,
@@ -268,7 +267,6 @@ public:
     QString labelBelow() const { return m_labelTextBelow; }
     /** The label's boxes in scene coordinates, for the overlap test. */
     QList<QRectF> labelSceneRects() const;
-private:
 
     /** "Isolated" = drilled into its group to select this ONE fixture (double-
      *  click). Draws a distinct bright dashed border so it's obvious the sub-

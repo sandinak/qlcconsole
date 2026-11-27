@@ -1225,7 +1225,6 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
             { MonitorProperties::LabelUnit, "Unit #", "labelFieldUnit" },
             { MonitorProperties::LabelChannel, "Channel / ID", "labelFieldChannel" },
             { MonitorProperties::LabelAddress, "Address (U.ch)", "labelFieldAddress" },
-            { MonitorProperties::LabelPurpose, "Purpose", "labelFieldPurpose" },
             { MonitorProperties::LabelGel, "Colour / gel", "labelFieldGel" },
             { MonitorProperties::LabelMode, "Mode", "labelFieldMode" },
             { MonitorProperties::LabelOwner, "Owner", "labelFieldOwner" } };

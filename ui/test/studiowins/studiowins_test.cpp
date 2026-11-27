@@ -408,7 +408,7 @@ void StudioWins_Test::numberingCanPatchInThatOrderIntoFreeAddresses()
         doc.monitorProperties()->setFixturePosition(fx->id(), 0, 0, QVector3D(float(xs[i]), 2000.0f, 3000.0f));
         ids << fx->id();
     }
-    // Something else holds 100-111: the three start at the lowest of theirs, 100, and skip it.
+    // Another fixture holds 120-125; the three start at the lowest of theirs, 100.
     Fixture *other = makePar(&doc, 0);
     QVERIFY(other != nullptr);
     QVERIFY(doc.patchFixtures({ Doc::FixturePatch{ other->id(), 0, 120 } }));
@@ -575,6 +575,7 @@ void StudioWins_Test::theLabelSaysTheChosenFieldsAroundTheIcon()
     // The menu in Show sets it, per field.
     QAction *nameAct = mon.findChild<QAction *>(QStringLiteral("labelFieldName"));
     QVERIFY(nameAct != nullptr);
+    nameAct->setChecked(false);                     // the menu starts as the show did: Name on
     nameAct->setChecked(true);
     QCOMPARE(props->labelFields(), int(MonitorProperties::LabelUnit | MonitorProperties::LabelName));
     QCOMPARE(it->labelBelow(), QStringLiteral("Wash 1"));

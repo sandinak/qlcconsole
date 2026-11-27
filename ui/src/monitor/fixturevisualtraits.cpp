@@ -1231,8 +1231,10 @@ bool fixtureLiveState(Fixture *fx, const QByteArray &v, QColor &colour, uchar &d
    carry no preset for them, so the name is what there is. */
 static bool nameHas(const QString &name, const char *const *words)
 {
+    // Word starts, so "Vector" is not a CTO.
     for (; *words != nullptr; ++words)
-        if (name.contains(QLatin1String(*words), Qt::CaseInsensitive))
+        if (QRegularExpression(QStringLiteral("\\b") + QLatin1String(*words),
+                               QRegularExpression::CaseInsensitiveOption).match(name).hasMatch())
             return true;
     return false;
 }
@@ -1244,9 +1246,11 @@ BeamExtras beamExtras(const Fixture *fx, const QByteArray &v, bool complete)
     if (mode == nullptr || v.isEmpty())
         return out;
     static const char *const frostWords[] = { "frost", "diffus", nullptr };
-    static const char *const ctoWords[] = { "cto", "color temp orange", "colour temp orange", nullptr };
-    static const char *const ctbWords[] = { "ctb", "color temp blue", "colour temp blue", nullptr };
-    static const char *const cctWords[] = { "cct", "color temp", "colour temp", "colortemp", nullptr };
+    static const char *const ctoWords[] = { "cto\\b", "color temp orange", "colour temp orange", nullptr };
+    static const char *const ctbWords[] = { "ctb\\b", "color temp blue", "colour temp blue", nullptr };
+    static const char *const cctWords[] = { "cct\\b", "color temp", "colour temp", "colortemp", nullptr };
+    double cto = 0.0, ctb = 0.0, cct = 0.0;
+    bool haveCct = false;
     const int count = qMin(int(fx->channels()), int(v.size()));
     for (int c = 0; c < count; ++c)
     {
@@ -1281,29 +1285,23 @@ BeamExtras beamExtras(const Fixture *fx, const QByteArray &v, bool complete)
             }
             continue;
         }
-        if (ch->group() == QLCChannel::Beam || ch->group() == QLCChannel::Effect
-            || ch->group() == QLCChannel::Nothing)
-        {
-            if (nameHas(name, frostWords))
-                out.frost = qMax(out.frost, val / 255.0);
+        if (ch->colour() != QLCChannel::NoColour)
             continue;
-        }
-        if (ch->group() == QLCChannel::Colour || ch->group() == QLCChannel::Beam)
+        if (nameHas(name, frostWords))
+            out.frost = qMax(out.frost, val / 255.0);
+        else if (nameHas(name, ctbWords))
+            ctb = qMax(ctb, val / 255.0);
+        else if (nameHas(name, ctoWords))
+            cto = qMax(cto, val / 255.0);
+        else if (nameHas(name, cctWords))
         {
-            if (ch->colour() != QLCChannel::NoColour)
-                continue;
-            if (nameHas(name, ctbWords))
-                out.warmth = qMin(out.warmth, -val / 255.0);
-            else if (nameHas(name, ctoWords))
-                out.warmth = qMax(out.warmth, val / 255.0);
-            else if (nameHas(name, cctWords))
-            {
-                // 0 = 2700 K (warm) ... 255 = 6500 K (cool); 5600 K is daylight, no tint.
-                const double kelvin = 2700.0 + 3800.0 * val / 255.0;
-                out.warmth = qBound(-1.0, (5600.0 - kelvin) / 2900.0, 1.0);
-            }
+            // 0 = 2700 K (warm) ... 255 = 6500 K (cool); 5600 K is daylight, no tint.
+            const double kelvin = 2700.0 + 3800.0 * val / 255.0;
+            cct = qBound(-1.0, (5600.0 - kelvin) / 2900.0, 1.0);
+            haveCct = true;
         }
     }
+    out.warmth = haveCct ? cct : qBound(-1.0, cto - ctb, 1.0);
     return out;
 }
 
