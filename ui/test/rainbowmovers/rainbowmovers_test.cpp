@@ -65,7 +65,7 @@ const QString kUniverse = QStringLiteral("U01-Rainbow-Probe");
 
 /* The OLA probe (the Pi on the show VLAN): Art-Net 0:0:15, unicast. Never
    0:0:0, which is the office rig's. */
-const QString kProbeIp = QStringLiteral("172.18.2.17");
+const QString kProbeIp = QStringLiteral("172.18.2.218");
 const int kProbeUniverse = 15;
 
 void settle(int ms = 0)

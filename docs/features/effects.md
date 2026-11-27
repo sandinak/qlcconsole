@@ -277,7 +277,7 @@ blue emitters, and the effect browser lists them for it:
 
 To see both at once on a test rig, a ready-made show has one of each beside an RGB par:
 
-1. Open **test-workspaces/rainbow-movers.qlcc** (File ▸ Open; it sends Art-Net to the OLA probe, 172.18.2.17 universe 0:0:15, never 0:0:0).
+1. Open **test-workspaces/rainbow-movers.qlcc** (File ▸ Open; it sends Art-Net to the OLA probe, 172.18.2.218 universe 0:0:15, never 0:0:0).
 2. In Run, **GO** the cue **Rainbow on**.
 3. Watch the **CMY Mover** mix through the hues like the **RGB Par**, and the **Wheel Mover** step from slot to slot. **GO** *Rainbow off* to stop it.
 

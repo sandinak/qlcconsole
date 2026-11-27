@@ -102,7 +102,7 @@
    <NetworkServer Type="Native" AutoStart="False" Name="" Password=""/>
    <Universe Name="U01-Rainbow-Probe" ID="0">
     <Output Plugin="ArtNet" UID="172.18.2.219" Line="2" Network="172.18.2.0/24">
-     <PluginParameters outputIP="172.18.2.17" outputUni="15"/>
+     <PluginParameters outputIP="172.18.2.218" outputUni="15"/>
     </Output>
    </Universe>
    <Universe Name="Universe 2" ID="1"/>
