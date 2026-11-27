@@ -2461,7 +2461,9 @@ void FixtureManager_Test::duplicateAndUndoKeepTheViewAndSelectTheRow()
     mgr.show();
     QVERIFY(QTest::qWaitForWindowExposed(&mgr));
     FixtureTreeWidget *tree = mgr.m_fixtures_tree;
-    // Something shut that a rebuild would open by default.
+    // Every row open, so the 60 fixtures are rows; but one shut that a rebuild
+    // would open by default.
+    tree->expandAll();
     QTreeWidgetItem *grpRoot = tree->topLevelItem(0);
     QVERIFY(grpRoot != nullptr);
     grpRoot->setExpanded(false);
