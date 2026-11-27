@@ -1215,7 +1215,14 @@ void LayoutSanity_Test::initTestCase()
     m_app->init();
     QVERIFY(m_app->doc()->fixtureDefCache()->loadMap(QDir(QString(QLC_TEST_RESOURCE_ROOT) + "fixtures")));
     // A finished course show: fixtures, groups, looks, scenes, a production.
-    QCOMPARE(m_app->loadXML(QStringLiteral(COURSE_DIR "/shows/lesson-3-9-finish.qlcc")), QFile::NoError);
+    // A copy in a folder of our own: a venue is saved beside its show
+    // (<show>.venues.xml), and the one in docs/course is shared with every
+    // other test program running at the same time.
+    static QTemporaryDir showDir;
+    QVERIFY(showDir.isValid());
+    const QString showCopy = showDir.filePath(QStringLiteral("lesson-3-9-finish.qlcc"));
+    QVERIFY(QFile::copy(QStringLiteral(COURSE_DIR "/shows/lesson-3-9-finish.qlcc"), showCopy));
+    QCOMPARE(m_app->loadXML(showCopy), QFile::NoError);
     // The course files are saved at their lesson's level (Student for this
     // one); these screens are the whole app's, so they are checked at Standard.
     ShowLevel::instance()->setLevel(ShowLevel::Standard);
