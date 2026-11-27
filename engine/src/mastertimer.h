@@ -174,6 +174,7 @@ private:
     friend class SurfacePages_Test;
     friend class PadSim_Test;
     friend class PmjSim_Test;
+    friend class UniverseSched_Test;  // the matrix share, ticked by hand
 
 private:
     /** The timer tick frequency in Hertz */
