@@ -450,6 +450,62 @@ bool DeskRecord::setBinding(Role role, const Binding &binding)
     return true;
 }
 
+bool DeskRecord::assignRole(Role role, quint32 universe, quint32 channel, QString *why)
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    const QString id = identityOfUniverse(universe);
+    auto refuse = [why](const QString &text) {
+        if (why != nullptr)
+            *why = text;
+        return false;
+    };
+    if (ip == nullptr || id.isEmpty())
+        return refuse(tr("That board is not patched here."));
+    if (isLocked())
+    {
+        emit refused(lockedText());
+        return refuse(lockedText());
+    }
+    bool known = false;
+    const bool fader = isFaderOnProfile(universe, channel, &known);
+    if (known && fader != takesFader(role))
+        return refuse(takesFader(role) ? tr("The Grand Master takes a fader.") : tr("%1 takes a button.").arg(roleName(role)));
+    if (role != Stop && isShowStop(universe, channel))
+        return refuse(tr("That control is the show's emergency stop."));
+    Binding b;
+    b.identity = id;
+    b.plugin = ip->plugin() != nullptr ? ip->plugin()->name() : QString();
+    b.device = ControllerJobs::midiModelName(ip->inputName());
+    b.channel = channel;
+    b.control = controlName(universe, channel);
+    b.on = true;
+    // Another role on this control gives it up.
+    for (Role r : roles())
+        if (r != role && m_bindings[r].isSet() && m_bindings[r].identity == id && m_bindings[r].channel == channel)
+        {
+            m_bindings[r] = Binding();
+            m_lastUniverses[r] = kInvalid;
+        }
+    m_unlocked = false;
+    if (m_bindings[role] == b)
+    {
+        save();
+        rebind();
+        emit changed();
+        return true;
+    }
+    if (m_bindings[role].identity != b.identity)
+        m_lastUniverses[role] = kInvalid;
+    m_bindings[role] = b;
+    save();
+    rebind();
+    if (role == GrandMaster)
+        rearmGrandMaster();     // it picks up before it moves the master
+    emit changed();
+    return true;
+}
+
 bool DeskRecord::clear(Role role)
 {
     return setBinding(role, Binding());

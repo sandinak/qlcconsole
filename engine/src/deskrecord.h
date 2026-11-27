@@ -189,6 +189,14 @@ public:
     /** Q317: one static role off (or on again) on this computer. */
     bool setOn(Role role, bool on);
 
+    /** The map's click-to-assign (Q355): make @p universe's control
+     *  @p channel this computer's @p role, as a learn would, without the
+     *  press. Refused (false, @p why says it) while locked, for a fader on a
+     *  button role or a button on the Grand Master, and for the show's
+     *  emergency stop on GO, Back and the Grand Master; the role's old
+     *  control is let go, and another role on this control gives it up. */
+    bool assignRole(Role role, quint32 universe, quint32 channel, QString *why = nullptr);
+
     /** Why the last change was refused ("Enter the show's PIN…"). */
     QString lockedText() const;
 

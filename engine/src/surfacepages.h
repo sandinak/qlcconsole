@@ -89,6 +89,30 @@ public:
     /** The next (+1) or previous (-1) page, round the set. */
     void stepPage(quint32 universe, int direction);
 
+    /** The keys this computer gives the board (Q356: the map lets you choose
+     *  them; kept per board in the settings, like the set): Page ◀ (-1) and
+     *  Page ▶ (+1), and the key of page @p page. Invalid (0xFFFFFFFF): none.
+     *  A key leaves any other page job it had; never a desk role's
+     *  control, nor one that is not a key (button or pad). False: refused. */
+    quint32 stepKey(quint32 universe, int direction) const;
+    quint32 pageKey(quint32 universe, int page) const;
+    bool setStepKey(quint32 universe, int direction, quint32 channel);
+    bool setPageKey(quint32 universe, int page, quint32 channel);
+    /** All of this computer's page keys of the board, to put back (the map's Undo). */
+    struct KeyState
+    {
+        quint32 previous = 0xFFFFFFFF;
+        quint32 next = 0xFFFFFFFF;
+        QList<quint32> pages;
+    };
+    KeyState keyState(quint32 universe) const;
+    void setKeyState(quint32 universe, const KeyState &state);
+    /** Take @p channel off every page job on @p universe's board (No job). */
+    bool clearKey(quint32 universe, quint32 channel);
+    /** "Page ◀", "Page ▶" or the page's name when @p channel is a page key
+     *  now; empty otherwise. */
+    QString keyJob(quint32 universe, quint32 channel) const;
+
     /** The labels of the page on now (each control's own channel). */
     QHash<quint32, QString> labels(quint32 universe) const;
     /** The job of the control that hears @p channel on the page now; null:
@@ -189,6 +213,13 @@ private:
      *  knob's @p knobDelta (kNotAKnob: not a position knob). */
     int turnDetents(Board &b, quint32 channel, uchar value, int knobDelta);
     bool encoderBankOn(quint32 universe) const;
+    /** Settings of this computer's keys of @p b's board and set. */
+    QString keysGroup(const Board &b) const;
+    /** Put this computer's choice of keys in @p b's set. */
+    void applyKeyChoices(Board &b) const;
+    static constexpr int kSlotNext = -1;
+    static constexpr int kSlotPrevious = -2;
+    bool assignKey(quint32 universe, quint32 channel, int slot);
 
 private:
     Doc *m_doc;

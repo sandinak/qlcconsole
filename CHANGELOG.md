@@ -104,6 +104,18 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   **Send Feedback To...** and **Remove Feedback** on a universe do it by
   hand, with undo; Control surfaces and Controller Setup get a **Patch
   Feedback** button where a board's lamps were dark for want of it.
+- **The surface maps are drawn like the boards.** The PMJ Black 1 (Master,
+  Go and Back left of the strips, a 3 x 4 grid of keys, four round
+  encoders), the FaderPort 2, the APC40 mk2 and the APC64 have their real
+  proportions and parts, with the printed groups outlined. Above each map is
+  a sortable, filterable table (Control, Page, Job, Lamp, Picks up) that
+  selects the control on the drawing and back. Click a control to give it a
+  job (GO, Back, STOP, Grand Master, Page ◀, Page ▶, a key per page, Other,
+  No job) with Undo and the show's PIN in Operate; the footer chip always
+  says the page, and its page name picks one. **Print Key Labels…** makes a
+  PDF sheet at the board's key sizes, or tape labels for a Brother P-touch
+  CUBE on 12 mm (½ in), 18 mm (¾ in) or 24 mm (1 in) tape.
+
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

@@ -18,17 +18,26 @@
 */
 
 #include <QPainterPath>
+#include <cmath>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QComboBox>
 #include <QPushButton>
 #include <QCheckBox>
 #include <QSignalBlocker>
+#include <QTableWidget>
+#include <QHeaderView>
+#include <QLineEdit>
+#include <QCollator>
+#include <QMenu>
+#include <QAction>
+#include <QActionGroup>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHelpEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QToolTip>
 #include <QLabel>
@@ -36,6 +45,7 @@
 #include <QFrame>
 
 #include "surfacemap.h"
+#include "surfacekeylabels.h"
 #include "controlowners.h"
 #include "inputoutputmap.h"
 #include "qlcinputprofile.h"
@@ -46,6 +56,8 @@
 #include "pageset.h"
 #include "inputpatch.h"
 #include "universe.h"
+#include "showsettingsdialog.h"
+#include "showoperate.h"
 #include "doc.h"
 
 namespace
@@ -389,6 +401,87 @@ void SurfaceMapView::refresh()
         cell.tip = lines.join(QStringLiteral("<br>"));
     }
     update();
+    emit refreshed();
+}
+
+QList<SurfaceMapView::Row> SurfaceMapView::rows() const
+{
+    QList<Row> out;
+    SurfacePages *pages = m_doc->controlMap() != nullptr ? m_doc->controlMap()->surfacePages() : nullptr;
+    DeskRecord *desk = m_doc->deskRecord();
+    const QList<SurfaceLayout::Control> controls = m_layout.controls();
+    for (int i = 0; i < controls.size(); ++i)
+    {
+        const SurfaceLayout::Control &c = controls.at(i);
+        const Cell &cell = m_cells.at(i);
+        Row r;
+        r.channel = c.channel;
+        r.control = c.face;
+        r.job = cell.job;
+        r.group = cell.group;
+        if (pages != nullptr && pages->pageSet(m_universe).isValid())
+        {
+            if (cell.group == Page && pages->bindingFor(m_universe, c.channel) != nullptr)
+                r.page = pages->pageName(m_universe);
+            else if (!pages->keyJob(m_universe, c.channel).isEmpty())
+                r.page = tr("Every page");
+        }
+        if (c.lamp != SurfaceLayout::NoLamp)
+            r.lamp = cell.lamp < 0 ? QString() : cell.lamp > 0 ? tr("On") : tr("Off");
+        if (c.isFader() && (cell.group == Page || (cell.role == QLatin1String("gm") && desk != nullptr)))
+            r.picksUp = tr("Yes");
+        out << r;
+    }
+    return out;
+}
+
+PageSet SurfaceMapView::pageSet() const
+{
+    SurfacePages *pages = m_doc->controlMap() != nullptr ? m_doc->controlMap()->surfacePages() : nullptr;
+    return pages != nullptr ? pages->pageSet(m_universe) : PageSet();
+}
+
+QString SurfaceMapView::jobTextNoPage(quint32 channel) const
+{
+    const int i = cellIndex(channel);
+    return i < 0 || m_cells.at(i).group == Page ? QString() : m_cells.at(i).job;
+}
+
+void SurfaceMapView::setSelected(qint64 channel)
+{
+    if (channel >= 0 && cellIndex(quint32(channel)) < 0)
+        channel = -1;
+    if (channel >= 0)
+        channel = m_layout.controls().at(cellIndex(quint32(channel))).channel;
+    if (channel == m_selected)
+        return;
+    m_selected = channel;
+    update();
+    emit selectionChanged(m_selected);
+}
+
+qint64 SurfaceMapView::controlAt(const QPoint &pos) const
+{
+    const QList<SurfaceLayout::Control> controls = m_layout.controls();
+    for (int i = 0; i < controls.size(); ++i)
+        if (toWidget(controls.at(i).rect).contains(pos))
+            return controls.at(i).channel;
+    return -1;
+}
+
+void SurfaceMapView::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        const qint64 ch = controlAt(event->position().toPoint());
+        if (ch >= 0)
+        {
+            setSelected(ch);
+            emit controlClicked(quint32(ch), event->globalPosition().toPoint());
+            return;
+        }
+    }
+    QWidget::mousePressEvent(event);
 }
 
 SurfaceMapView::Group SurfaceMapView::group(quint32 channel) const
@@ -501,19 +594,51 @@ void SurfaceMapView::paintEvent(QPaintEvent *event)
     p.setBrush(kBoard);
     p.drawRoundedRect(board, 8, 8);
 
-    // The panel's printed section names, above their controls.
+    // The panel's printed groups: an outline round them, the name on its top edge.
     QFont sf = font();
-    sf.setPixelSize(qMax(10, int(s * 0.26)));
-    p.setFont(sf);
-    p.setPen(kSectionText);
+    sf.setPixelSize(qMax(9, int(s * 0.17)));
+    sf.setBold(true);
+    sf.setCapitalization(QFont::AllUppercase);
+    sf.setLetterSpacing(QFont::PercentageSpacing, 104);
     for (const SurfaceLayout::Section &sec : m_layout.sections())
     {
-        const QRectF r = toWidget(QRectF(sec.rect.x(), sec.rect.y() - 0.5, qMax(sec.rect.width(), 1.0), 0.5));
-        p.drawText(r.adjusted(3, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
-                   p.fontMetrics().elidedText(sec.label, Qt::ElideRight, int(r.width()) - 3));
+        const QRectF r = toWidget(sec.rect);
+        p.setPen(QPen(QColor(0xff, 0xff, 0xff, 46), 1));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r, 6, 6);
+        if (sec.label.isEmpty())
+            continue;
+        p.setFont(sf);
+        if (p.fontMetrics().horizontalAdvance(sec.label) > r.width() - 14)
+        {
+            // Narrower than its name: the name wraps inside the outline, the way a panel prints it.
+            p.setPen(kSectionText);
+            QFont small = sf;
+            small.setPixelSize(qMax(8, int(s * 0.12)));
+            small.setLetterSpacing(QFont::PercentageSpacing, 100);
+            p.setFont(small);
+            p.drawText(r.adjusted(2, 3, -2, 0), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, sec.label);
+            continue;
+        }
+        const QString text = p.fontMetrics().elidedText(sec.label, Qt::ElideRight, int(r.width()) - 14);
+        const QRectF chip(r.left() + 6, r.top() - p.fontMetrics().height() / 2.0,
+                          p.fontMetrics().horizontalAdvance(text) + 8, p.fontMetrics().height());
+        p.setPen(Qt::NoPen);
+        p.setBrush(kBoard);
+        p.drawRect(chip);
+        p.setPen(kSectionText);
+        p.drawText(chip, Qt::AlignCenter, text);
     }
     for (int i = 0; i < m_cells.size(); ++i)
         paintCell(p, i);
+    // The control the table has selected.
+    const int sel = m_selected >= 0 ? cellIndex(quint32(m_selected)) : -1;
+    if (sel >= 0)
+    {
+        p.setPen(QPen(QColor(0xff, 0xd3, 0x4d), 3));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(toWidget(m_layout.controls().at(sel).rect).adjusted(0, 0, 0, 0), 5, 5);
+    }
 }
 
 void SurfaceMapView::paintCell(QPainter &p, int i)
@@ -584,17 +709,21 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     QRectF textRect = r.adjusted(3, 2, -3, -2);
     if (c.turns())
     {
-        // A knob or an encoder: a disc, its value as an arc.
-        const double d = qMin(r.width(), r.height()) * 0.62;
-        const QRectF disc(r.center().x() - d / 2, r.top() + 2, d, d);
+        // A knob or an encoder: a round cap filling its place, its value as an arc round it.
+        const double d = qMin(r.width(), r.height()) - 4;
+        const QRectF disc(r.center().x() - d / 2, r.center().y() - d / 2, d, d);
         p.drawEllipse(disc);
         if (cell.value >= 0)
         {
             p.setPen(QPen(kHighlight, 2));
             const int span = -int(cell.value / 255.0 * 270 * 16);
             p.drawArc(disc.adjusted(-2, -2, 2, 2), 225 * 16, span);
+            const double ang = (225 - cell.value / 255.0 * 270) * M_PI / 180.0;
+            p.drawLine(disc.center(), disc.center() + QPointF(std::cos(ang), -std::sin(ang)) * d * 0.42);
         }
-        textRect = QRectF(r.left(), disc.bottom(), r.width(), r.bottom() - disc.bottom());
+        textRect = disc.adjusted(d * 0.12, d * 0.12, -d * 0.12, -d * 0.12);
+        if (d < 34)
+            textRect = QRectF();
     }
     else if (c.isFader())
     {
@@ -615,9 +744,17 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
         textRect = vertical ? QRectF(r.left() + 2, r.top() + 2, r.width() - 4, s * 0.85)
                             : QRectF(r.left() + 2, r.top() + 1, r.width() - 4, r.height() / 2);
     }
+    else if (c.shape == SurfaceLayout::Round)
+    {
+        const double d = qMin(r.width(), r.height());
+        const QRectF disc(r.center().x() - d / 2, r.center().y() - d / 2, d, d);
+        p.drawEllipse(disc);
+        textRect = d < 30 ? QRectF() : disc.adjusted(d * 0.1, d * 0.1, -d * 0.1, -d * 0.1);
+    }
     else
     {
-        p.drawRoundedRect(r, 4, 4);
+        const double rad = qMin(4.0, qMin(r.width(), r.height()) / 3);
+        p.drawRoundedRect(r, rad, rad);
     }
 
     // The light: what the app last sent the board.
@@ -631,7 +768,7 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
         else
             led = cell.lamp > 0 ? QColor::fromHsv(45, 200, qBound(90, 90 + cell.lamp * 165 / 255, 255))
                                 : QColor(0x20, 0x20, 0x20);
-        const double d = qMax(6.0, s * 0.16);
+        const double d = qMin(qMax(5.0, s * 0.16), r.height() * 0.45);
         p.setPen(QPen(QColor(0, 0, 0, 160), 1));
         p.setBrush(led);
         p.drawEllipse(QRectF(r.right() - d - 2, r.top() + 2, d, d));
@@ -672,18 +809,39 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     if (c.turns())
     {
         // Under a knob: one line, its job if it has one, else its name.
-        const QString one = words.isEmpty() ? face : words;
+        QString one = words.isEmpty() ? face : words;
+        // A small cap with a long name: its number is enough ("Knob 3" is "3").
+        if (QFontMetricsF(f).horizontalAdvance(one) > textRect.width() && words.isEmpty()
+            && one.section(QLatin1Char(' '), -1).toInt() > 0)
+            one = one.section(QLatin1Char(' '), -1);
         f.setBold(!words.isEmpty());
         f = fitted(f, one, textRect.width());
         p.setFont(f);
-        p.drawText(textRect, Qt::AlignHCenter | Qt::AlignTop,
+        p.drawText(textRect, Qt::AlignCenter,
                    QFontMetricsF(f).elidedText(one, Qt::ElideRight, textRect.width()));
+        return;
+    }
+    if (textRect.isEmpty())
+        return;     // too small to write on: the tooltip and the table say it
+    if (textRect.height() < px * 2.4 && !words.isEmpty())
+    {
+        // A thin key: one line, the job.
+        f.setBold(true);
+        f = fitted(f, words, textRect.width());
+        p.setFont(f);
+        p.drawText(textRect, Qt::AlignCenter, QFontMetricsF(f).elidedText(words, Qt::ElideRight, textRect.width()));
         return;
     }
     if (words.isEmpty())
     {
         f = fitted(f, face, textRect.width());
         p.setFont(f);
+        if (textRect.height() < px * 2.4)
+        {
+            // A thin key: one line, cut with an ellipsis, never through a letter.
+            p.drawText(textRect, Qt::AlignCenter, QFontMetricsF(f).elidedText(face, Qt::ElideRight, textRect.width()));
+            return;
+        }
         p.drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, face);
         return;
     }
@@ -705,6 +863,205 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     if (fm.boundingRect(rest, Qt::TextWordWrap, words).height() > rest.height() + 0.5)
         shown = fm.elidedText(words, Qt::ElideRight, rest.width() * lines - fm.averageCharWidth() * 2);
     p.drawText(rest, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, shown);
+}
+
+
+/*****************************************************************************
+ * SurfaceControlTable
+ *****************************************************************************/
+
+namespace
+{
+/** A cell that sorts by what a person reads: "Clip 1-2" before "Clip 1-10". */
+class SortItem final : public QTableWidgetItem
+{
+public:
+    using QTableWidgetItem::QTableWidgetItem;
+    bool operator<(const QTableWidgetItem &other) const override
+    {
+        static QCollator collator = []() {
+            QCollator c;
+            c.setNumericMode(true);
+            c.setCaseSensitivity(Qt::CaseInsensitive);
+            return c;
+        }();
+        // The layout's own order breaks a tie, so a sort is stable.
+        const int cmp = collator.compare(text(), other.text());
+        return cmp != 0 ? cmp < 0 : data(Qt::UserRole + 1).toInt() < other.data(Qt::UserRole + 1).toInt();
+    }
+};
+}
+
+QStringList SurfaceControlTable::columns()
+{
+    return { tr("Control"), tr("Page"), tr("Job"), tr("Lamp"), tr("Picks up") };
+}
+
+SurfaceControlTable::SurfaceControlTable(SurfaceMapView *view, QWidget *parent)
+    : QWidget(parent)
+    , m_view(view)
+    , m_table(new QTableWidget(this))
+    , m_filter(new QLineEdit(this))
+{
+    setObjectName(QStringLiteral("surfaceTable%1").arg(view->universe()));
+    QVBoxLayout *v = new QVBoxLayout(this);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(4);
+    m_filter->setObjectName(QStringLiteral("surfaceTableFilter%1").arg(view->universe()));
+    m_filter->setPlaceholderText(tr("Filter the controls (a name, a job, a page)"));
+    m_filter->setClearButtonEnabled(true);
+    m_filter->setAccessibleName(tr("Filter the controls"));
+    v->addWidget(m_filter);
+
+    m_table->setObjectName(QStringLiteral("surfaceTableView%1").arg(view->universe()));
+    m_table->setColumnCount(columns().size());
+    m_table->setHorizontalHeaderLabels(columns());
+    m_table->verticalHeader()->hide();
+    m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    m_table->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_table->setAlternatingRowColors(true);
+    m_table->setSortingEnabled(true);
+    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
+    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);      // the job has the room
+    m_table->setColumnWidth(0, 170);
+    m_table->setColumnWidth(1, 110);
+    m_table->setColumnWidth(3, 70);
+    m_table->setColumnWidth(4, 90);
+    m_table->horizontalHeader()->setSortIndicatorShown(true);
+    m_table->setMinimumHeight(120);
+    m_table->setMaximumHeight(220);
+    m_table->setAccessibleName(tr("What each control does"));
+    v->addWidget(m_table);
+
+    connect(m_filter, &QLineEdit::textChanged, this, [this](const QString &t) { setFilter(t); });
+    // A person's sort is kept when the rows are read again.
+    connect(m_table->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, [this]() {
+        if (!m_syncing)
+            m_sorted = m_table->horizontalHeader()->sortIndicatorSection() >= 0;
+    });
+    connect(m_table, &QTableWidget::itemSelectionChanged, this, &SurfaceControlTable::rowSelected);
+    connect(m_view, &SurfaceMapView::refreshed, this, &SurfaceControlTable::rebuild);
+    connect(m_view, &SurfaceMapView::selectionChanged, this, &SurfaceControlTable::selectionFromMap);
+    // The lights change faster than the jobs: read them once a second, while shown.
+    QTimer *t = new QTimer(this);
+    t->setInterval(1000);
+    connect(t, &QTimer::timeout, this, [this]() { if (isVisible()) rebuild(); });
+    t->start();
+    rebuild();
+}
+
+void SurfaceControlTable::rebuild()
+{
+    const QList<SurfaceMapView::Row> rows = m_view->rows();
+    QHeaderView *h = m_table->horizontalHeader();
+    const int sortCol = h->sortIndicatorSection();
+    const Qt::SortOrder order = h->sortIndicatorOrder();
+    const bool sorted = m_sorted;
+    m_syncing = true;
+    m_table->setSortingEnabled(false);
+    m_table->setRowCount(rows.size());
+    for (int i = 0; i < rows.size(); ++i)
+    {
+        const SurfaceMapView::Row &r = rows.at(i);
+        const QStringList cells = { r.control, r.page, r.job.isEmpty() ? tr("Free") : r.job, r.lamp, r.picksUp };
+        for (int c = 0; c < cells.size(); ++c)
+        {
+            QTableWidgetItem *it = m_table->item(i, c);
+            if (it == nullptr)
+            {
+                it = new SortItem();
+                m_table->setItem(i, c, it);
+            }
+            it->setText(cells.at(c));
+            it->setData(Qt::UserRole, r.channel);
+            it->setData(Qt::UserRole + 1, i);
+            if (c == 2 && r.job.isEmpty())
+                it->setForeground(palette().color(QPalette::Disabled, QPalette::Text));
+            else
+                it->setForeground(palette().color(QPalette::Text));
+        }
+    }
+    m_table->setSortingEnabled(true);
+    if (sorted)
+        m_table->sortByColumn(sortCol, order);
+    else
+        m_table->horizontalHeader()->setSortIndicator(-1, Qt::AscendingOrder);
+    m_syncing = false;
+    applyFilter();
+    selectionFromMap(m_view->selected());
+}
+
+void SurfaceControlTable::applyFilter()
+{
+    const QString needle = m_filterText.trimmed();
+    for (int r = 0; r < m_table->rowCount(); ++r)
+    {
+        bool match = needle.isEmpty();
+        for (int c = 0; c < m_table->columnCount() && !match; ++c)
+            match = m_table->item(r, c) != nullptr
+                    && m_table->item(r, c)->text().contains(needle, Qt::CaseInsensitive);
+        m_table->setRowHidden(r, !match);
+    }
+}
+
+int SurfaceControlTable::visibleRows() const
+{
+    int n = 0;
+    for (int r = 0; r < m_table->rowCount(); ++r)
+        n += m_table->isRowHidden(r) ? 0 : 1;
+    return n;
+}
+
+int SurfaceControlTable::rowOfChannel(quint32 channel) const
+{
+    for (int r = 0; r < m_table->rowCount(); ++r)
+        if (m_table->item(r, 0) != nullptr && m_table->item(r, 0)->data(Qt::UserRole).toUInt() == channel)
+            return m_table->isRowHidden(r) ? -1 : r;
+    return -1;
+}
+
+QString SurfaceControlTable::text(int row, int col) const
+{
+    const QTableWidgetItem *it = m_table->item(row, col);
+    return it != nullptr ? it->text() : QString();
+}
+
+void SurfaceControlTable::rowSelected()
+{
+    if (m_syncing)
+        return;
+    const QList<QTableWidgetItem *> sel = m_table->selectedItems();
+    if (sel.isEmpty())
+        return;
+    m_syncing = true;
+    m_view->setSelected(sel.first()->data(Qt::UserRole).toUInt());
+    m_syncing = false;
+}
+
+void SurfaceControlTable::selectionFromMap(qint64 channel)
+{
+    if (m_syncing)
+        return;
+    m_syncing = true;
+    if (channel < 0)
+    {
+        m_table->clearSelection();
+    }
+    else
+    {
+        const int row = rowOfChannel(quint32(channel));
+        if (row >= 0)
+        {
+            m_table->selectRow(row);
+            m_table->scrollToItem(m_table->item(row, 0));
+        }
+        else
+        {
+            m_table->clearSelection();
+        }
+    }
+    m_syncing = false;
 }
 
 /*****************************************************************************
@@ -932,15 +1289,32 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
         v->addWidget(screen);
     }
     addPagesRow(v, block, universe);
-    QLabel *hint = new QLabel(tr("Press or move a control on the board: it lights here. Hover a control for "
-                                 "what it does and where."), block);
+    QLabel *hint = new QLabel(tr("Press or move a control on the board: it lights here. Click a control, or "
+                                 "its row, to select it; clicking the drawing offers the control a job."), block);
     hint->setWordWrap(true);
     hint->setStyleSheet(QStringLiteral("color: gray;"));
     v->addWidget(hint);
 
     SurfaceMapView *mv = new SurfaceMapView(m_doc, universe, layout, block);
+    QPushButton *labels = new QPushButton(tr("Print Key Labels…"), block);
+    labels->setObjectName(QStringLiteral("surfaceKeyLabels%1").arg(universe));
+    labels->setToolTip(tr("A sheet of cut-out labels at the board's key sizes, or tape labels for a Brother "
+                          "P-touch CUBE (TZe tape in its three widths), with what each key does on each page."));
+    connect(labels, &QPushButton::clicked, this, [this, mv, block]() {
+        SurfaceKeyLabelsDialog dlg(mv, block);
+        dlg.exec();
+    });
+    QHBoxLayout *tools = new QHBoxLayout();
+    tools->addWidget(labels);
+    tools->addStretch(1);
+    v->addLayout(tools);
+    SurfaceControlTable *table = new SurfaceControlTable(mv, block);
+    v->addWidget(table);
     v->addWidget(mv);
     m_views.insert(universe, mv);
+    m_tables.insert(universe, table);
+    connect(mv, &SurfaceMapView::controlClicked, this,
+            [this, universe](quint32 ch, const QPoint &pos) { showJobMenu(universe, ch, pos); });
     return block;
 }
 
@@ -951,6 +1325,7 @@ void SurfaceMaps::rebuild()
         w->deleteLater();
     m_parts.clear();
     m_views.clear();
+    m_tables.clear();
     m_roleLines.clear();
     m_pageLines.clear();
     m_offers.clear();
@@ -1233,6 +1608,288 @@ void SurfaceMaps::refreshPages()
                 l->setText(tr("This show was built with the page set %1 on this board.").arg(name));
         }
     }
+}
+
+/*****************************************************************************
+ * Clicking a control: a job for it (Q355)
+ *****************************************************************************/
+
+namespace
+{
+SurfaceMaps::PinAsker g_pinAsker = nullptr;
+
+bool askPin(QWidget *parent, const QString &why, Doc *doc)
+{
+    if (g_pinAsker != nullptr)
+        return g_pinAsker(parent, why);
+    return ShowSettingsDialog::askForPin(parent, doc->operateSettings()->pinHash(), why);
+}
+}
+
+void SurfaceMaps::setPinAsker(PinAsker asker)
+{
+    g_pinAsker = asker;
+}
+
+bool SurfaceMaps::unlocked(const QString &why)
+{
+    // Operate: a job is the running show's, so it asks for the PIN when the show has one.
+    if (!m_doc->operateSettings()->hasPin() || m_doc->mode() != Doc::Operate)
+        return true;
+    return askPin(this, why, m_doc);
+}
+
+QList<SurfaceMaps::Job> SurfaceMaps::jobsFor(quint32 universe, quint32 channel) const
+{
+    QList<Job> out;
+    SurfaceMapView *mv = m_views.value(universe);
+    if (mv == nullptr)
+        return out;
+    const int i = mv->layout().indexOf(channel);
+    if (i < 0)
+        return out;
+    const SurfaceLayout::Control &c = mv->layout().controls().at(i);
+    if (c.kind == SurfaceLayout::Indicator)
+        return out;
+    DeskRecord *desk = m_doc->deskRecord();
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    const QString here = desk->identityOfUniverse(universe);
+    auto isRole = [&](DeskRecord::Role r) {
+        const DeskRecord::Binding b = desk->binding(r);
+        return b.isSet() && b.identity == here && c.hears(b.channel);
+    };
+    auto add = [&out](const QString &key, const QString &text, bool checked = false, bool enabled = true) {
+        Job j;
+        j.key = key;
+        j.text = text;
+        j.checked = checked;
+        j.enabled = enabled;
+        out << j;
+    };
+    const bool key = c.kind == SurfaceLayout::Button || c.kind == SurfaceLayout::Pad;
+    if (key)
+    {
+        add(QStringLiteral("go"), tr("GO"), isRole(DeskRecord::Go));
+        add(QStringLiteral("back"), tr("Back"), isRole(DeskRecord::Back));
+        add(QStringLiteral("stop"), tr("STOP (all off)"), isRole(DeskRecord::Stop));
+        const PageSet set = pages->pageSet(universe);
+        if (set.isValid())
+        {
+            add(QStringLiteral("page-prev"), tr("Page ◀ (previous page)"), set.previousKey() == c.channel);
+            add(QStringLiteral("page-next"), tr("Page ▶ (next page)"), set.nextKey() == c.channel);
+            for (int p = 0; p < set.pages().size(); ++p)
+                add(QStringLiteral("page:%1").arg(p), tr("Page: %1").arg(set.pages().at(p).name),
+                    set.pages().at(p).key == c.channel);
+        }
+    }
+    else if (c.isFader())
+    {
+        add(QStringLiteral("gm"), tr("Grand Master"), isRole(DeskRecord::GrandMaster));
+    }
+    add(QStringLiteral("other"), tr("Other… (Assign to Control)"));
+    // No job: what this control has of the desk, the pages or the Control Map.
+    bool has = false;
+    for (const Job &j : std::as_const(out))
+        has = has || j.checked;
+    has = has || !m_doc->controlMap()->bindingsOn(universe, channel).isEmpty();
+    add(QStringLiteral("none"), tr("No job"), false, has);
+    return out;
+}
+
+QMenu *SurfaceMaps::jobMenu(quint32 universe, quint32 channel)
+{
+    SurfaceMapView *mv = m_views.value(universe);
+    const QList<Job> jobs = jobsFor(universe, channel);
+    if (mv == nullptr || jobs.isEmpty())
+        return nullptr;
+    QMenu *menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("surfaceJobMenu%1").arg(universe));
+    const int i = mv->layout().indexOf(channel);
+    const SurfaceLayout::Control &c = mv->layout().controls().at(i);
+    const QString now = mv->jobText(channel);
+    QAction *title = menu->addAction(now.isEmpty() ? tr("%1 · Free").arg(c.face) : tr("%1 · %2").arg(c.face, now));
+    title->setEnabled(false);
+    menu->addSeparator();
+    auto addJob = [&](const Job &j) {
+        QAction *a = menu->addAction(j.text);
+        a->setData(j.key);
+        a->setCheckable(j.key != QLatin1String("other") && j.key != QLatin1String("none"));
+        a->setChecked(j.checked);
+        a->setEnabled(j.enabled);
+        connect(a, &QAction::triggered, this, [this, universe, channel, key = j.key]() {
+            QString why;
+            if (!applyJob(universe, channel, key, &why) && !why.isEmpty())
+                QToolTip::showText(QCursor::pos(), why, this);
+        });
+    };
+    bool sep = false;
+    for (const Job &j : jobs)
+    {
+        if (!sep && (j.key == QLatin1String("other")))
+        {
+            menu->addSeparator();
+            sep = true;
+        }
+        addJob(j);
+    }
+    if (c.turns())
+    {
+        QAction *note = new QAction(tr("A knob turns what the page says."), menu);
+        note->setEnabled(false);
+        menu->insertAction(menu->actions().at(2), note);
+    }
+    if (!m_undo.text.isEmpty())
+    {
+        menu->addSeparator();
+        QAction *u = menu->addAction(tr("Undo: %1").arg(m_undo.text));
+        u->setObjectName(QStringLiteral("surfaceJobUndo"));
+        connect(u, &QAction::triggered, this, [this]() { undoLast(); });
+    }
+    return menu;
+}
+
+void SurfaceMaps::showJobMenu(quint32 universe, quint32 channel, const QPoint &globalPos)
+{
+    QMenu *menu = jobMenu(universe, channel);
+    if (menu == nullptr)
+        return;
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->popup(globalPos);
+}
+
+bool SurfaceMaps::undoLast()
+{
+    if (!m_undo.undo)
+        return false;
+    if (!unlocked(tr("Enter the show's PIN to change a control's job.")))
+        return false;
+    const std::function<void()> undo = m_undo.undo;
+    m_undo = Undo();
+    undo();
+    refresh();
+    return true;
+}
+
+bool SurfaceMaps::applyJob(quint32 universe, quint32 channel, const QString &key, QString *why)
+{
+    auto refuse = [why](const QString &text) {
+        if (why != nullptr)
+            *why = text;
+        return false;
+    };
+    SurfaceMapView *mv = m_views.value(universe);
+    const int idx = mv != nullptr ? mv->layout().indexOf(channel) : -1;
+    if (idx < 0)
+        return refuse(tr("That control is not on this board."));
+    const SurfaceLayout::Control c = mv->layout().controls().at(idx);
+    DeskRecord *desk = m_doc->deskRecord();
+    ControlMap *cm = m_doc->controlMap();
+    SurfacePages *pages = cm->surfacePages();
+
+    if (key == QLatin1String("other"))
+    {
+        // The thing is assigned from where it is; the control is told which one to press.
+        QMessageBox *box = new QMessageBox(QMessageBox::Information, tr("Assign to Control"),
+                                           tr("Right-click the cue list, cue, hit, scene or effect, choose "
+                                              "Assign to Control…, and press %1 on the board.").arg(c.face), QMessageBox::Ok, this);
+        box->setAttribute(Qt::WA_DeleteOnClose);
+        box->setObjectName(QStringLiteral("surfaceJobOther"));
+        box->open();
+        return true;
+    }
+    if (!unlocked(tr("Enter the show's PIN to change a control's job.")))
+        return refuse(tr("The show's PIN is needed to change a job in Operate."));
+
+    // One step of Undo: the desk's roles, the board's page keys and the control's triggers, as they were.
+    QList<DeskRecord::Binding> roles;
+    for (DeskRecord::Role r : DeskRecord::roles())
+        roles << desk->binding(r);
+    const SurfacePages::KeyState keys = pages->keyState(universe);
+    const QList<ControlMap::Binding> triggers = cm->bindingsOn(universe, channel);
+    QString text;
+    bool ok = false;
+    QString reason;
+
+    auto assign = [&](DeskRecord::Role r) {
+        // The PIN was asked above, for this change: the desk takes it once.
+        desk->setUnlocked(true);
+        ok = desk->assignRole(r, universe, c.channel, &reason);
+        desk->relock();
+        // The show's trigger on a desk control is kept, not armed (Q309); the page key leaves.
+        if (ok)
+            pages->clearKey(universe, c.channel);
+        text = tr("%1 is %2").arg(c.face, DeskRecord::roleName(r));
+    };
+    if (key == QLatin1String("go"))
+        assign(DeskRecord::Go);
+    else if (key == QLatin1String("back"))
+        assign(DeskRecord::Back);
+    else if (key == QLatin1String("stop"))
+        assign(DeskRecord::Stop);
+    else if (key == QLatin1String("gm"))
+        assign(DeskRecord::GrandMaster);
+    else if ((key == QLatin1String("page-prev") || key == QLatin1String("page-next") || key.startsWith(QLatin1String("page:")))
+             && desk->isDeskControl(universe, c.channel))
+    {
+        return refuse(tr("%1 is one of this computer's desk controls: give it \"No job\" first.").arg(c.face));
+    }
+    else if (key == QLatin1String("page-prev") || key == QLatin1String("page-next"))
+    {
+        ok = pages->setStepKey(universe, key == QLatin1String("page-next") ? 1 : -1, c.channel);
+        if (!ok)
+            reason = tr("This board has no pages, or %1 is a desk control.").arg(c.face);
+        text = tr("%1 is %2").arg(c.face, key == QLatin1String("page-next") ? tr("Page ▶") : tr("Page ◀"));
+    }
+    else if (key.startsWith(QLatin1String("page:")))
+    {
+        const int p = key.mid(5).toInt();
+        ok = pages->setPageKey(universe, p, c.channel);
+        if (!ok)
+            reason = tr("This board has no pages, or %1 is a desk control.").arg(c.face);
+        text = tr("%1 brings page %2").arg(c.face, p >= 0 && p < pages->pageSet(universe).pages().size()
+                                                       ? pages->pageSet(universe).pages().at(p).name : QString());
+    }
+    else if (key == QLatin1String("none"))
+    {
+        ok = true;
+        desk->setUnlocked(true);
+        for (DeskRecord::Role r : DeskRecord::roles())
+        {
+            const DeskRecord::Binding b = desk->binding(r);
+            if (b.isSet() && b.identity == desk->identityOfUniverse(universe) && c.hears(b.channel))
+                desk->clear(r);
+        }
+        desk->relock();
+        pages->clearKey(universe, c.channel);
+        for (const ControlMap::Binding &b : triggers)
+            cm->removeBinding(b.target);
+        text = tr("%1: no job").arg(c.face);
+    }
+    else
+    {
+        return refuse(tr("Unknown job."));
+    }
+    if (!ok)
+        return refuse(reason);
+
+    m_undo.text = text;
+    m_undo.undo = [this, universe, roles, keys, triggers]() {
+        DeskRecord *d = m_doc->deskRecord();
+        d->setUnlocked(true);
+        int n = 0;
+        for (DeskRecord::Role r : DeskRecord::roles())
+        {
+            d->setUnlocked(true);
+            d->setBinding(r, roles.at(n++));
+        }
+        d->relock();
+        m_doc->controlMap()->surfacePages()->setKeyState(universe, keys);
+        for (const ControlMap::Binding &b : triggers)
+            m_doc->controlMap()->setBinding(b, true);
+    };
+    refresh();
+    refreshPages();
+    return true;
 }
 
 void SurfaceMaps::refresh()

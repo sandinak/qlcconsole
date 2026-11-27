@@ -412,9 +412,56 @@ a click opens its map.
   board lets go of them (cleared, or its Learn replaced).
 - **A board with no drawing** (an APC mini, a fader box) is named in one line
   under the maps; what its controls do stays in the rows below.
-- The map reads; it changes nothing. Assign a free control from the thing
-  (right-click a cue list, cue or hit ▸ **Assign to Control…**; a scene or
-  effect in the Classic QLC+ view).
+- **Drawn like the board.** Each map keeps the real board's proportions and
+  its parts: round knobs and encoders, wide clip pads, square pads, long
+  fader slots, round transport keys, and the groups the panel prints
+  (**DEVICE CONTROL**, **SCENE LAUNCH**, **BANK SELECT**) outlined with their
+  names. The **PMJ Black 1** has its Master fader and its red and white
+  **Go** and **Back** keys on the left under the 3 x 4 grid of keys, four
+  big encoders over ten strips (a row of keys, the Load keys, the faders, and
+  two rows of keys under them). The map is drawn by the app, not copied from
+  a photo.
+- **A table of the controls.** Above each map is a table in the look of the
+  Connections lists: one row per control, with **Control**, **Page**,
+  **Job**, **Lamp** and **Picks up** (a fader that waits to reach the value
+  before it moves it). Click a heading to sort (numbers sort as numbers:
+  *Clip 1-2* before *Clip 1-10*); type in **Filter the controls** to narrow
+  it to a name, a job or a page. A row you select is the control outlined on
+  the drawing, and a control you click on the drawing is the selected row.
+- **Click a control to give it a job.** A click on a key offers **GO**,
+  **Back**, **STOP (all off)**, **Page ◀**, **Page ▶** and a key for each
+  page; on a fader, **Grand Master**; on a knob or encoder the page decides.
+  Every list ends with **Other… (Assign to Control)** (it tells you how to
+  assign a scene, cue or hit to the control) and **No job**. The job ticked is
+  the one it has. GO, Back, STOP and the Grand Master are this computer's
+  desk (the same as **Learn…**, without the press); the page keys are this
+  computer's too. The last change has an **Undo** at the foot of the list. In
+  Operate, a show with a PIN asks for it first, as **Assign to Control…** does.
+  Jobs such as Sub GO, Blackout, Blind and Flash a group, and a Shift guard
+  on STOP, are not in the list yet.
+- **Page ◀ and Page ▶.** A board with pages (the APC40 mk2, the APC64, the
+  PMJ, the MaizeDMX) has its page keys chosen here: give any key **Page ◀**
+  or **Page ▶**, and a key of its own to a page. They are lit while there is
+  a page that way, a key has one job (giving it another takes it off the
+  first), and they are kept for this computer. The footer's chip and the
+  map always say the page (*APC40 · Move*, in Operate too, where the page
+  waits for Design); click the page name on the chip to pick one. A page change lights the chip for
+  a second, so a board with no lamps and no screen still shows it; the page
+  keys' lamps show it on the board, and a board's own screen is written
+  with it where its device setup supports one (not built yet).
+- **Print Key Labels….** Under the board's name: a sheet of cut-out squares
+  at the board's real key sizes with what each key does, a set for each page
+  (the desk's and the show's jobs on every page), as an A4 PDF; or one label
+  a key on TZe tape, 12 mm (½ in), 18 mm (¾ in) or 24 mm (1 in) wide, for a Brother P-touch CUBE, at its 180
+  dpi, saved as a PDF or as pictures, or printed through the system's print
+  dialog (the Brother is picked when it is installed; there is no Bluetooth
+  setup in qlcconsole: pair it with the computer first). The key sizes follow
+  **Settings ▸ Units**. They are measured off each board's published size:
+  check one against a rule before you cut a sheet.
+- The map is a picture of the board's jobs: assign a scene, cue or hit
+  from the thing (right-click a cue list, cue or hit ▸ **Assign to
+  Control…**; a scene or effect in the Classic QLC+ view) or from the
+  control's click.
 
 The **MaizeDMX Playback Controller** shows up as **USB2.0-MIDI** (a name many
 USB MIDI boxes share): patch it with the profile **MaizeDMX Playback

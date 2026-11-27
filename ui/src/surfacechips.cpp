@@ -34,6 +34,61 @@
 #include "surfacepages.h"
 #include "controlmap.h"
 #include "doc.h"
+#include <QMouseEvent>
+#include <QFontMetrics>
+#include <QMenu>
+#include <QAction>
+
+bool SurfaceChips::onPageName(quint32 universe, int x) const
+{
+    QToolButton *b = m_chips.value(universe);
+    if (b == nullptr)
+        return false;
+    const int dot = b->text().indexOf(QStringLiteral(" · "));
+    if (dot < 0)
+        return false;
+    QFont f = b->font();
+    f.setBold(true);
+    // The name's end, and the 6 px padding either side of the text (the chip's style).
+    return x >= 6 + QFontMetrics(f).horizontalAdvance(b->text().left(dot)) + 2;
+}
+
+QMenu *SurfaceChips::pageMenu(quint32 universe)
+{
+    SurfacePages *pages = m_doc->controlMap()->surfacePages();
+    const PageSet set = pages->pageSet(universe);
+    if (!set.isValid())
+        return nullptr;
+    QMenu *menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("footerSurfacePages%1").arg(universe));
+    for (int i = 0; i < set.pages().size(); ++i)
+    {
+        QAction *a = menu->addAction(set.pages().at(i).name);
+        a->setCheckable(true);
+        a->setChecked(i == pages->page(universe));
+        connect(a, &QAction::triggered, this, [pages, universe, i]() { pages->setPage(universe, i); });
+    }
+    return menu;
+}
+
+bool SurfaceChips::eventFilter(QObject *watched, QEvent *event)
+{
+    if (event->type() == QEvent::MouseButtonPress)
+    {
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        for (auto it = m_chips.constBegin(); it != m_chips.constEnd(); ++it)
+            if (it.value() == watched && me->button() == Qt::LeftButton && onPageName(it.key(), int(me->position().x())))
+            {
+                if (QMenu *menu = pageMenu(it.key()))
+                {
+                    menu->setAttribute(Qt::WA_DeleteOnClose);
+                    menu->popup(it.value()->mapToGlobal(QPoint(0, it.value()->height())));
+                    return true;
+                }
+            }
+    }
+    return QWidget::eventFilter(watched, event);
+}
 
 /* A generic controller: a board with a fader slot, two knobs and a row of
    keys. Drawn in the footer's text colour, never a brand's mark. */
@@ -82,7 +137,14 @@ SurfaceChips::SurfaceChips(Doc *doc, QWidget *parent)
     connect(m_doc, &Doc::loaded, this, queue);
     // "APC40 · Move": the page on now.
     SurfacePages *pages = m_doc->controlMap()->surfacePages();
-    connect(pages, &SurfacePages::pageChanged, this, queue);
+    connect(pages, &SurfacePages::pageChanged, this, [this, queue](quint32 u) {
+        queue();
+        m_flash.insert(u);
+        QTimer::singleShot(1000, this, [this, u, queue]() {
+            m_flash.remove(u);
+            queue();
+        });
+    });
     connect(pages, &SurfacePages::setsChanged, this, queue);
     rebuild();
 }
@@ -114,12 +176,21 @@ void SurfaceChips::rebuild()
         b->setProperty("helpTopic", QStringLiteral("control-surfaces.md#the-surface-map"));
         // In Operate the controls are the show's: the page is not said.
         SurfacePages *pages = m_doc->controlMap()->surfacePages();
-        const QString withPage = pages->isActive(u) ? pages->chipText(u) : QString();
+        // The page is always said, in Operate too (where the controls are the show's: the tooltip says so).
+        const QString withPage = pages->chipText(u);
         b->setText(withPage.isEmpty() ? layout.shortName() : withPage);
-        b->setToolTip(tr("%1 on Universe %2: click for its map (what each control does now).")
-                          .arg(layout.name()).arg(u + 1));
+        QString tip = tr("%1 on Universe %2: click for its map (what each control does now).")
+                          .arg(layout.name()).arg(u + 1);
+        if (!withPage.isEmpty())
+            tip += QStringLiteral(" ") + (pages->isActive(u) ? tr("Click the page name to pick a page.")
+                                                             : tr("The page is on again in Design: in Operate the controls are the show's."));
+        b->setToolTip(tip);
+        b->installEventFilter(this);
         b->setAccessibleName(tr("Map of the %1").arg(layout.name()));
-        b->setStyleSheet(QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px 0 4px; border: none; }"));
+        b->setStyleSheet(m_flash.contains(u)
+                             ? QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px 0 4px; border: none; "
+                                              "background: #5b4a9e; color: white; border-radius: 3px; }")
+                             : QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px 0 4px; border: none; }"));
         if (m_height > 0)
             b->setFixedHeight(m_height);
         connect(b, &QToolButton::clicked, this, [this, u]() { emit mapRequested(u); });

@@ -144,6 +144,7 @@ SurfaceLayout SurfaceLayout::fromJson(const QByteArray &json, QString *error)
     l.m_displayChars = display.value(QStringLiteral("chars")).toInt();
     for (const QJsonValue &v : display.value(QStringLiteral("shows")).toArray())
         l.m_displayShows << v.toString();
+    l.m_unitMm = root.value(QStringLiteral("unitMm")).toDouble();
     l.m_size = QSizeF(root.value(QStringLiteral("width")).toDouble(), root.value(QStringLiteral("height")).toDouble());
 
     for (const QJsonValue &v : root.value(QStringLiteral("sections")).toArray())
@@ -175,6 +176,7 @@ SurfaceLayout SurfaceLayout::fromJson(const QByteArray &json, QString *error)
         c.job = o.value(QStringLiteral("job")).toString();
         const QString lamp = o.value(QStringLiteral("lamp")).toString();
         c.lamp = lamp == QLatin1String("rgb") ? Rgb : lamp == QLatin1String("led") ? Led : NoLamp;
+        c.shape = o.value(QStringLiteral("shape")).toString() == QLatin1String("round") ? Round : Rectangle;
         l.m_controls << c;
     }
     for (int i = 0; i < l.m_controls.size(); ++i)
