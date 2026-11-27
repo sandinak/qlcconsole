@@ -1983,6 +1983,26 @@ void ShowTreeWorkbench_Test::theCuePageIsTabbedInTheWorkbench()
     QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
     QVERIFY(!view.findChild<QWidget *>("stCueNumber")->isVisibleTo(&view));
     view.showCueTab(ShowTreeView::CueEditTab);
+    // The tree's own page, tabbed, at three sizes (UX review).
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+    {
+        QDir().mkpath(shots);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            view.resize(sz);
+            for (int t : { int(ShowTreeView::CueEditTab), int(ShowTreeView::CueTimingTab) })
+            {
+                view.showCueTab(ShowTreeView::CueTab(t));
+                QTest::qWait(150);
+                QVERIFY(view.grab().save(QDir(shots).filePath(
+                    QStringLiteral("cue-tree-tab%1-%2x%3.png").arg(t).arg(sz.width()).arg(sz.height()))));
+            }
+        }
+        view.resize(1024, 640);
+        view.showCueTab(ShowTreeView::CueEditTab);
+        QTest::qWait(100);
+    }
 
     QVERIFY(view.openInWorkbench(s.c2));
     Workbench *bench = view.dockedWorkbench();

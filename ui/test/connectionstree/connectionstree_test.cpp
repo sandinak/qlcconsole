@@ -2180,7 +2180,7 @@ void ConnectionsTree_Test::aBoardPatchedWhereAnotherWasTakesItsLampsWithIt()
     QCOMPARE(iom->feedbackPatch(0)->output(), quint32(2));
     // A lamp sent on the universe reaches the PMJ, not the RTP session.
     stub->m_feedbackLines.clear();
-    QVERIFY(iom->sendFeedBack(0, 5, 127));
+    QVERIFY(iom->sendFeedBack(0, 5, 127, QVariant()));
     QCOMPARE(stub->m_feedbackLines, QList<quint32>({ 2u }));
 
     // No feedback at all: the board's own is patched with it.
