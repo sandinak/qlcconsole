@@ -3918,7 +3918,7 @@ ConnectionsTree::FeedbackMenu ConnectionsTree::addFeedbackActions(QMenu &menu, q
        to drop it. */
     FeedbackMenu fb;
     InputOutputMap *iom = m_doc->inputOutputMap();
-    if (iom == NULL || iom->inputPatch(uni) == NULL)
+    if (iom == NULL || iom->inputPatch(uni) == NULL || iom->inputPatch(uni)->plugin() == NULL)
         return fb;
     if (iom->feedbackPatch(uni) != NULL)
     {

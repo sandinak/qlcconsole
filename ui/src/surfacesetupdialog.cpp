@@ -230,6 +230,7 @@ void SurfaceSetupDialog::updateState()
     {
         InputOutputMap *fbm = m_doc->inputOutputMap();
         m_patchFeedback->setVisible(u != UINT_MAX && fbm->inputPatch(u) != nullptr
+                                    && fbm->inputPatch(u)->plugin() != nullptr
                                     && fbm->feedbackPatch(u) == nullptr);
     }
     m_device->setVisible(m_device->count() > 1);

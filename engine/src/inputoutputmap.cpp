@@ -2129,7 +2129,7 @@ InputOutputMap::FeedbackLine InputOutputMap::feedbackLineFor(quint32 universe)
 
 QString InputOutputMap::pairFeedback(quint32 universe)
 {
-    if (universe >= universesCount() || inputPatch(universe) == NULL
+    if (universe >= universesCount() || inputPatch(universe) == NULL || inputPatch(universe)->plugin() == NULL
         || feedbackPatch(universe) != NULL)
         return QString();
     const FeedbackLine fl = feedbackLineFor(universe);
