@@ -204,6 +204,9 @@
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="16" Height="10" Depth="16" ExactWidth="16.4042" ExactHeight="9.84252" ExactDepth="16.4042" Units="1"/>
+   <FxItem ID="0" XPos="671.2" YPos="4390.4"/>
+   <FxItem ID="1" XPos="4938.4" YPos="2561.6"/>
+   <FxItem ID="2" XPos="2500" YPos="4085.6" ZPos="4.8768"/>
    <MonitorLayer ID="0" Name="Default" Visible="1" Order="0"/>
    <MonitorLayer ID="1" Name="Stage" Visible="1" Order="1"/>
    <StagePieces Layer="1">
@@ -212,6 +215,11 @@
     <StagePiece Kind="Number" Visible="0"/>
     <StagePiece Kind="Apron" Visible="0" Auto="1"/>
    </StagePieces>
+   <Pipe ID="0" Name="FOH Pipe" Orientation="1" OriginX="0.976" OriginY="4.086" BaseZ="4.877" Length="3.048" RunAngle="0.0" Diameter="0.048" BaseRadius="0.000" Color="#9696a0"/>
+   <StageTarget ID="0" Name="DSC" X="2.500" Y="3.476" Z="0.000" Color="#ffb400"/>
+   <FixtureRig FID="0" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0"/>
+   <FixtureRig FID="1" Truss="4294967295" Offset="0.000" Mounting="FloorMounted" PanZero="0.0"/>
+   <FixtureRig FID="2" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="-180.0" AimDown="83.2" Boom="0" BoomOfs="1.524" BoomAng="0.0"/>
   </Monitor>
  </Engine>
  <VirtualConsole>

@@ -7,7 +7,7 @@
   <Author>branson</Author>
  </Creator>
  <Embedded>
-  <EffectScript File="rainbow.js" SHA256="3715ecc919dbad5b6c38a039eb1afa55dfcb3f69d8d3fe264d48eaf1e582cc65" From="user" FromModified="2026-11-27T15:46:11Z" Embedded="2026-11-27T16:27:55Z"><![CDATA[/*
+  <EffectScript File="rainbow.js" SHA256="3715ecc919dbad5b6c38a039eb1afa55dfcb3f69d8d3fe264d48eaf1e582cc65" From="user" FromModified="2026-11-27T22:47:39Z" Embedded="2026-11-27T22:51:08Z"><![CDATA[/*
   QLC+ Effect Script: Rainbow
   Cycles fixtures through the full colour spectrum, spreading the hue
   across the fixture array so adjacent lights show different colours.
@@ -145,6 +145,8 @@
   <Palette ID="3" Type="Effect" Name="Rainbow">
    <EffectScript>rainbow</EffectScript>
   </Palette>
+  <Palette ID="4" Type="Aim" Name="Aim DSR" StageTarget="0"/>
+  <Palette ID="5" Type="Aim" Name="Aim DSC" StageTarget="1"/>
   <Function ID="0" Type="Chaser" Name="Main" Path="Productions/Rainbow Movers">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
    <Direction>Forward</Direction>
@@ -155,9 +157,13 @@
   </Function>
   <Function ID="1" Type="Collection" Name="1-Rainbow on" Hidden="True" Path="Productions/Rainbow Movers/Main">
    <Step Number="0">5</Step>
+   <Step Number="1">7</Step>
+   <Step Number="2">8</Step>
   </Function>
   <Function ID="2" Type="Collection" Name="2-Rainbow off" Hidden="True" Path="Productions/Rainbow Movers/Main">
    <Step Number="0">6</Step>
+   <Step Number="1">7</Step>
+   <Step Number="2">8</Step>
   </Function>
   <Function ID="5" Type="Scene" Name="1-Rainbow on · CMY Mover + Wheel Mover + RGB Par" Hidden="True" Path="Productions/Rainbow Movers/Main">
    <Speed FadeIn="0" FadeOut="0" Duration="0"/>
@@ -175,9 +181,19 @@
    <FixtureVal ID="2"/>
    <Palette ID="1"/>
   </Function>
+  <Function ID="7" Type="Scene" Name="1-Rainbow on · CMY Mover" Hidden="True" Path="Productions/Rainbow Movers/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="0"/>
+   <Palette ID="4"/>
+  </Function>
+  <Function ID="8" Type="Scene" Name="1-Rainbow on · Wheel Mover" Hidden="True" Path="Productions/Rainbow Movers/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureVal ID="1"/>
+   <Palette ID="5"/>
+  </Function>
   <ShutterAutoOpen Enabled="1"/>
   <ShowControl MainCueList="0"/>
-  <ShowTree NextId="7" Current="1">
+  <ShowTree NextId="11" Current="1">
    <Production ID="1" Name="Rainbow Movers" MainList="2">
     <CueList ID="2" Name="Main" Mode="NonTracking" Chaser="0">
      <Cue ID="3" Number="1" Name="Rainbow on" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="1">
@@ -186,15 +202,27 @@
        <Look Key="Shutter" Palettes="2"/>
        <Look Key="Effect.Color" Palettes="3" FadeIn="cue" FadeOut="cue"/>
       </Layer>
+      <Layer ID="7" Fixtures="0">
+       <Look Key="Position" Palettes="4"/>
+      </Layer>
+      <Layer ID="8" Fixtures="1">
+       <Look Key="Position" Palettes="5"/>
+      </Layer>
      </Cue>
      <Cue ID="4" Number="2" Name="Rainbow off" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="2">
       <Layer ID="6" Fixtures="0,1,2">
        <Look Key="Dimmer" Palettes="1"/>
       </Layer>
+      <Layer ID="9" Fixtures="0">
+       <Look Key="Position" Palettes="4"/>
+      </Layer>
+      <Layer ID="10" Fixtures="1">
+       <Look Key="Position" Palettes="5"/>
+      </Layer>
      </Cue>
     </CueList>
    </Production>
-   <Generated Scenes="5,6" Collections="1,2" Chasers="0"/>
+   <Generated Scenes="5,6,7,8" Collections="1,2" Chasers="0"/>
    <InlinePalettes IDs=""/>
   </ShowTree>
   <MoveInBlack Auto="0" DarkGapMs="800"/>
@@ -203,6 +231,9 @@
    <ChannelStyle>0</ChannelStyle>
    <ValueStyle>0</ValueStyle>
    <Grid Width="16" Height="10" Depth="16" ExactWidth="16.4042" ExactHeight="9.84252" ExactDepth="16.4042" Units="1"/>
+   <FxItem ID="0" XPos="671.2" YPos="4085.6" ZPos="4.8768"/>
+   <FxItem ID="1" XPos="2500" YPos="4085.6" ZPos="4.8768"/>
+   <FxItem ID="2" XPos="4328.8" YPos="4085.6" ZPos="4.8768"/>
    <MonitorLayer ID="0" Name="Default" Visible="1" Order="0"/>
    <MonitorLayer ID="1" Name="Stage" Visible="1" Order="1"/>
    <StagePieces Layer="1">
@@ -211,6 +242,13 @@
     <StagePiece Kind="Number" Visible="0"/>
     <StagePiece Kind="Apron" Visible="0" Auto="1"/>
    </StagePieces>
+   <Pipe ID="0" Name="FOH Pipe" Orientation="1" OriginX="0.366" OriginY="4.086" BaseZ="4.877" Length="4.267" RunAngle="0.0" Diameter="0.048" BaseRadius="0.000" Color="#9696a0"/>
+   <StageTarget ID="0" Name="DSR" X="1.281" Y="3.476" Z="0.000" Color="#ffb400"/>
+   <StageTarget ID="1" Name="DSC" X="2.500" Y="3.476" Z="0.000" Color="#ffb400"/>
+   <StageTarget ID="2" Name="DSL" X="3.719" Y="3.476" Z="0.000" Color="#ffb400"/>
+   <FixtureRig FID="0" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Boom="0" BoomOfs="0.305" BoomAng="0.0"/>
+   <FixtureRig FID="1" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="0.0" Boom="0" BoomOfs="2.134" BoomAng="0.0"/>
+   <FixtureRig FID="2" Truss="4294967295" Offset="0.000" Mounting="TopHung" PanZero="133.8" AimDown="80.2" Boom="0" BoomOfs="3.962" BoomAng="0.0"/>
   </Monitor>
  </Engine>
  <VirtualConsole>
