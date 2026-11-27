@@ -968,6 +968,11 @@ bool Chaser::stepRunStamped(int step) const
            && stamp == m_runSerial.load(std::memory_order_acquire) && runStamped();
 }
 
+void Chaser::stopRequested()
+{
+    m_stopSerial.store(m_routeSerial.load(std::memory_order_acquire), std::memory_order_release);
+}
+
 void Chaser::clearRunStamp()
 {
     m_runSerial.store(0, std::memory_order_release);
@@ -1227,21 +1232,24 @@ void Chaser::postRun(MasterTimer* timer, QList<Universe *> universes)
         if (isPaused())
             m_runner->setPause(false, universes);
 
+        m_runner->postRun(timer, universes);
+
         /* A stop that ends the list takes the Run's stamp: what plays next
-           is no GO's until a GO (R2: a start alone). A Run GO that came
-           before the stop was carried out started the list again -- the
-           timer restarts it (from its first cue, as ever) rather than
-           ending it, and stopped() is false then -- and keeps it: the new
-           run's first step is that GO's (fifth review 3: a GO during Fade
-           and stop). */
+           is no GO's until a GO (R2: a start alone). Started again before
+           the stop was carried out, the timer restarts it (from its first
+           cue, as ever; stopped() is false then): the new run's first step
+           is a Run's only if a Run action came after the stop (fifth review
+           3: a GO during Fade and stop). A plain start (the web's, a VC
+           button's) moves no serial: it restarts unstamped (sixth review). */
         if (!m_restarting)
         {
-            const quint32 stamp = m_runner->stepStamp();
+            const quint32 run = m_runSerial.load(std::memory_order_acquire);
             if (stopped())
                 clearRunStamp();
-            else if (stamp != 0 && stamp == m_runSerial.load(std::memory_order_acquire) && runStamped()
+            else if (run != 0 && runStamped()
+                     && run != m_stopSerial.load(std::memory_order_acquire)
                      && m_startupAction.m_runStamp == 0)
-                m_startupAction.m_runStamp = stamp;
+                m_startupAction.m_runStamp = run;
         }
 
         delete m_runner;

@@ -1493,10 +1493,10 @@ void HazardArming_Test::aStepInFlightKeepsItsOwnStamp()
     m_doc->setMode(Doc::Design);
 }
 
-void HazardArming_Test::aGoDuringFadeAndStopStillFires()
+void HazardArming_Test::fadeAndStopThenRestart(bool byGo)
 {
     QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
-    // The preset sends the jet here: a GO that restarts the list plays it.
+    // The preset sends the jet here: a restart of the list plays it.
     {
         ShowTreeController *st = m_doc->showTree();
         ShowTree::Target t;
@@ -1523,21 +1523,39 @@ void HazardArming_Test::aGoDuringFadeAndStopStillFires()
         m_doc->inputOutputMap()->releaseUniverses();
     }
     m_chaser->stop(FunctionParent::master());
-    // ...and a GO from the Run before it has, the Hold held.
+    // ...and before it has, the Hold held, the list started again: by a GO
+    // from the Run, or by a plain start (the web's setFunctionStatus, a VC
+    // button) that moves no stamp.
     QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
-    ShowControl::Request r;
-    r.command = ShowControl::Go;
-    r.chaser = m_chaser->id();
-    m_doc->showControl()->execute(r);
+    if (byGo)
+    {
+        ShowControl::Request r;
+        r.command = ShowControl::Go;
+        r.chaser = m_chaser->id();
+        m_doc->showControl()->execute(r);
+    }
+    else
+    {
+        m_chaser->start(m_doc->masterTimer(), FunctionParent::master());
+    }
     tick(5);
     waitForCheck();
-    // The GO started the list again (its first cue, as a GO after a stop
-    // does): that GO's, so held, the jet is out.
+    // Started again from its first cue, as after a stop.
     QVERIFY(m_chaser->isRunning());
     QCOMPARE(m_chaser->currentStepIndex(), 0);
-    QCOMPARE(at("CO2 jet"), 255);
+    QCOMPARE(at("CO2 jet"), byGo ? 255 : 0);
     QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
     m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aGoDuringFadeAndStopStillFires()
+{
+    fadeAndStopThenRestart(true);
+}
+
+void HazardArming_Test::aStartDuringFadeAndStopNeverFires()
+{
+    fadeAndStopThenRestart(false);
 }
 
 QTEST_GUILESS_MAIN(HazardArming_Test)

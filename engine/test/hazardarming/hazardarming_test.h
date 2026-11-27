@@ -152,10 +152,14 @@ private slots:
     void aStepInFlightKeepsItsOwnStamp();
     /** 3: a GO while Fade and stop fades keeps its stamp and fires. */
     void aGoDuringFadeAndStopStillFires();
+    /** Sixth review: a plain start then (the web's, a VC button's) restarts
+     *  it unstamped: nothing fires. */
+    void aStartDuringFadeAndStopNeverFires();
 
 private:
     void setHold(quint32 cue, uint ms);
     quint32 jetSubCues();
+    void fadeAndStopThenRestart(bool byGo);
     void tick(int n = 1);
     int at(const char *fixture);
     void go();

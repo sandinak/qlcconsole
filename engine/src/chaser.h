@@ -406,6 +406,13 @@ public:
     /** The stamp taken away (a mode switch, the show closed). */
     void clearRunStamp();
 
+protected:
+    /** @reimp: the route serial at the stop, so a restart knows whether a
+     *  Run action came after it (sixth review). */
+    void stopRequested() override;
+
+public:
+
     /** Get the current step number */
     int currentStepIndex() const;
 
@@ -447,6 +454,8 @@ private:
     /** The step the runner last started (+ 1, low half) and the stamp it
      *  started with (high half; 0: none). */
     std::atomic<quint64> m_stepRun { 0 };
+    /** m_routeSerial when stop() asked it to stop. */
+    std::atomic<quint32> m_stopSerial { 0 };
     quint32 nextRouteSerial();
 
 public:
