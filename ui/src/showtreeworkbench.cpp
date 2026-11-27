@@ -118,7 +118,7 @@ bool ShowTreeView::openSelectionInWorkbench()
     }
     const NodeKind kind = currentKind();
     if (kind == LayerNode)
-        return openInWorkbench(cueId, currentId());
+        return openInWorkbench(cueId, currentId(), QString(), alsoSelectedLayers(cueId, currentId()));
     if (kind == TrackedLayerNode)
         return openInWorkbench(cueId, invalidId(), m_tree->currentItem()->data(0, TargetRole).toString());
     return openInWorkbench(cueId);
@@ -208,7 +208,18 @@ bool ShowTreeView::dockWorkbench()
     return true;
 }
 
-bool ShowTreeView::openInWorkbench(quint32 cueId, quint32 layerId, const QString &trackedSignature)
+/* The other layers of cue @a cueId selected in the tree beside @a current. */
+QList<quint32> ShowTreeView::alsoSelectedLayers(quint32 cueId, quint32 current) const
+{
+    QList<quint32> out;
+    for (const QPair<quint32, quint32> &ref : selectedLayerRefs())
+        if (ref.first == cueId && ref.second != current)
+            out << ref.second;
+    return out;
+}
+
+bool ShowTreeView::openInWorkbench(quint32 cueId, quint32 layerId, const QString &trackedSignature,
+                                   const QList<quint32> &alsoLayers)
 {
     if (m_st.isNull() || m_st->cue(cueId) == nullptr)
         return false;
@@ -245,9 +256,26 @@ bool ShowTreeView::openInWorkbench(quint32 cueId, quint32 layerId, const QString
             }
             if (!bench->selectRow(r))
                 bench->rows()->setCurrentItem(bench->rows()->layerItem(index));
+            // Several layers selected: all of them, in the tree and the rows,
+            // so an edit reaches every one (not only the last picked).
+            for (quint32 id : alsoLayers)
+            {
+                const int other = cs->indexOfLayer(id);
+                if (QTreeWidgetItem *rowItem = other < 0 ? nullptr : bench->rows()->layerItem(other))
+                    rowItem->setSelected(true);
+            }
         }
     }
     m_wb->syncing = false;
+    if (!alsoLayers.isEmpty())
+    {
+        m_wb->syncing = true;
+        for (quint32 id : alsoLayers)
+            if (QTreeWidgetItem *item = findItem(id, cueId))
+                item->setSelected(true);
+        m_wb->syncing = false;
+        bench->refreshEditor();           // the page for all of them
+    }
     m_hint->setText(tr("%1 is in the Workbench: ↩ Show Tree puts the page back").arg(bench->stack()->title()));
     updateButtons();
     slotPreviewChanged();
@@ -503,19 +531,21 @@ void ShowTreeView::workbenchFollowTree()
     }
     const NodeKind kind = currentKind();
     if (kind == LayerNode)
-        openInWorkbench(cueId, currentId());
+        openInWorkbench(cueId, currentId(), QString(), alsoSelectedLayers(cueId, currentId()));
     else if (kind == TrackedLayerNode)
         openInWorkbench(cueId, invalidId(), m_tree->currentItem()->data(0, TargetRole).toString());
     else if (cueId != m_wb->cue)
         openInWorkbench(cueId);
 }
 
-QWidget *ShowTreeView::lendInspector(quint32 cueId, quint32 layerId, const QString &signature)
+QWidget *ShowTreeView::lendInspector(quint32 cueId, quint32 layerId, const QString &signature,
+                                     const QList<quint32> &alsoLayers)
 {
     if (!isWorkbenchDocked())
         return nullptr;
     // The page follows the tree's selection: select what it is to show.
     selectForWorkbench(cueId, layerId, signature);
+    selectAlsoForWorkbench(cueId, alsoLayers);
     updateInspector();
     m_wb->inspectorLent = true;
     setCueTabsOn(true);          // docked: the cue page's rows go in tabs
@@ -569,6 +599,20 @@ void ShowTreeView::destroyWorkbenchDock()
     }
     delete m_wb;
     m_wb = nullptr;
+}
+
+/* Several layers selected in the Workbench's rows: the tree's page (its
+   multi-layer page, every edit one undo step) is for all of them, so they
+   are selected in the tree beside the current one. */
+void ShowTreeView::selectAlsoForWorkbench(quint32 cueId, const QList<quint32> &layers)
+{
+    if (!isWorkbenchDocked() || m_wb->syncing || layers.isEmpty())
+        return;
+    m_wb->syncing = true;
+    for (quint32 id : layers)
+        if (QTreeWidgetItem *item = findItem(id, cueId))
+            item->setSelected(true);
+    m_wb->syncing = false;
 }
 
 void ShowTreeView::selectForWorkbench(quint32 cueId, quint32 layerId, const QString &signature)

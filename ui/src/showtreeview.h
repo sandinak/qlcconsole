@@ -949,8 +949,10 @@ public:
      *  layer @a layerId -- or the layer carried in on @a trackedSignature
      *  -- selected. False: no such cue. */
     bool openInWorkbench(quint32 cueId, quint32 layerId = 0xFFFFFFFF,
-                         const QString &trackedSignature = QString());
-    /** The tree's selection (a cue, a look, a layer) in the Workbench. */
+                         const QString &trackedSignature = QString(),
+                         const QList<quint32> &alsoLayers = QList<quint32>());
+    /** The tree's selection (a cue, a look, a layer -- every layer of several
+     *  selected) in the Workbench: an edit there reaches all of them. */
     bool openSelectionInWorkbench();
     /** Function @a functionId (a scene, a collection, a chaser...) in the
      *  Workbench, docked here with no cue (board Q228: Build is not a tab
@@ -1411,10 +1413,13 @@ private:
     quint32 m_lastPickedCue = 0xFFFFFFFF;
     /** The tree's selection moved while docked: the Workbench follows. */
     void workbenchFollowTree();
+    QList<quint32> alsoSelectedLayers(quint32 cueId, quint32 current) const;
+    void selectAlsoForWorkbench(quint32 cueId, const QList<quint32> &layers);
     /** The page (the inspector) lent to the docked Workbench's editor pane,
      *  for cue @a cueId's layer @a layerId / carried-in @a signature (none:
      *  the cue's page). */
-    QWidget *lendInspector(quint32 cueId, quint32 layerId, const QString &signature);
+    QWidget *lendInspector(quint32 cueId, quint32 layerId, const QString &signature,
+                           const QList<quint32> &alsoLayers = QList<quint32>());
     void takeBackInspector();
     /** The Workbench selected a layer (or, none, the cue): the tree too,
      *  without the tree moving the Workbench in turn. */

@@ -109,6 +109,7 @@ private slots:
      *  1920x1080: lists the pane's controls; QLC_SHOT_DIR also shoots it. */
     void aBusyCourseCueAtThreeSizes();
     void theCuePageIsTabbedInTheWorkbench();
+    void openingSeveralSelectedLayersEditsThemAll();
     void theTrackedListWrapsAtASmallSize();
     void aRealMouseDragMovesALookRowAndAltCopiesIt();
     void aFunctionLayerCanBeReleasedFromTheDockedWorkbench();

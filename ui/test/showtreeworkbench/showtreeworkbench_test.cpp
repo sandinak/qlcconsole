@@ -2065,6 +2065,67 @@ void ShowTreeWorkbench_Test::theTrackedListWrapsAtASmallSize()
     view.showCueTab(ShowTreeView::CueEditTab);
 }
 
+/* Branson, 2026-11-27: "I see the indicators, but when I open the Workbench on
+   the group it only does the last one." Three layers selected in the tree and
+   opened in the Workbench are three selected there: a level changed reaches
+   all three, and Undo puts all three back in one step. */
+void ShowTreeWorkbench_Test::openingSeveralSelectedLayersEditsThemAll()
+{
+    const Show s = SHOW();
+    ShowTreeController *st = m_doc->showTree();
+    FixtureGroup *third = new FixtureGroup(m_doc);
+    third->setName("Rail");
+    m_doc->addFixtureGroup(third);
+    third->assignFixture(m_fixtures[4]);
+    Target rt;
+    rt.groups << third->id();
+    const quint32 railLayer = st->addLayer(s.c1, rt);
+    QVERIFY(st->setLayerLook(s.c1, railLayer, st->lookForPalette(s.low)));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    // Three layer rows of the cue, selected in the tree.
+    const QList<quint32> layers = { s.towersLayer1, s.ustsLayer1, railLayer };
+    QVERIFY(view.selectNode(layers.at(0), s.c1));
+    for (quint32 id : layers)
+    {
+        QTreeWidgetItem *item = view.findItem(id, s.c1);
+        QVERIFY(item != nullptr);
+        item->setSelected(true);
+    }
+    QCOMPARE(view.selectedLayerRefs().size(), 3);
+    QVERIFY(view.openSelectionInWorkbench());
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    QCoreApplication::processEvents();
+
+    // All three are selected in the Workbench's rows and in the tree.
+    int selectedLayers = 0;
+    for (const ProgrammingOutline::Row &r : bench->rows()->selectedRows())
+        selectedLayers += r.kind == ProgrammingOutline::CueLayerRow ? 1 : 0;
+    QCOMPARE(selectedLayers, 3);
+    QCOMPARE(view.selectedLayerRefs().size(), 3);
+    QCOMPARE(view.multiLayers().size(), 3);
+
+    // A level changed there is all three, in one undo step.
+    const quint32 cur = view.currentId();
+    QVERIFY(view.applyLook(s.c1, cur, Target(), st->lookForPalette(s.full)));
+    for (quint32 id : layers)
+    {
+        const Layer *l = st->cue(s.c1)->layer(id);
+        QVERIFY(l != nullptr && !l->looks.isEmpty());
+        QCOMPARE(l->looks.first().palettes.value(0), s.full);
+    }
+    QVERIFY(st->undo());
+    const quint32 want[] = { s.full, s.half, s.low };
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(st->cue(s.c1)->layer(layers.at(i))->looks.first().palettes.value(0), want[i]);
+    QVERIFY(!st->canUndo());
+}
+
 QTEST_MAIN(ShowTreeWorkbench_Test)
 
 /* 0.4 changelog: drag a cue layer's look row onto another layer in the
