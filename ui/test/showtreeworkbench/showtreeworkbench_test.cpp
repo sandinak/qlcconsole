@@ -55,6 +55,7 @@
 
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
+#include "showlevel.h"
 #include "showcontrol.h"
 #include "chaserwalker.h"
 #include "inputoutputmap.h"
@@ -2099,7 +2100,9 @@ void ShowTreeWorkbench_Test::openingSeveralSelectedLayersEditsThemAll()
     QCOMPARE(view.selectedLayerRefs().size(), 3);
     QVERIFY2(view.currentCueId() == s.c1 && view.currentKind() == ShowTreeView::LayerNode,
              qPrintable(QString("cue %1 kind %2").arg(view.currentCueId()).arg(int(view.currentKind()))));
-    QVERIFY(view.openSelectionInWorkbench());
+    QVERIFY2(ShowLevel::shown(QStringLiteral("showtree.workbench")), "level hides the Workbench");
+    QVERIFY2(view.openInWorkbench(s.c1, view.currentId(), QString(), view.alsoSelectedLayers(s.c1, view.currentId())),
+             "openInWorkbench");
     Workbench *bench = view.dockedWorkbench();
     QVERIFY(bench != nullptr);
     QCoreApplication::processEvents();
