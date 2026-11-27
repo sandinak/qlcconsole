@@ -623,6 +623,14 @@ void UniverseSched_Test::aRunningUniverseTakesAChangeAtItsNextFrame()
 
     QTRY_COMPARE_WITH_TIMEOUT(Universe::threadScheduling(), Universe::ThreadsNormal, 5000);
 
+#if defined(Q_OS_MACOS)
+    // Responsive: a QoS class, granted to the thread as it runs, and back
+    Universe::setThreadPriority(Universe::PriorityResponsive);
+    QTRY_COMPARE_WITH_TIMEOUT(Universe::threadScheduling(), Universe::ThreadsElevated, 5000);
+    Universe::setThreadPriority(Universe::PriorityStandard);
+    QTRY_COMPARE_WITH_TIMEOUT(Universe::threadScheduling(), Universe::ThreadsNormal, 5000);
+#endif
+
     // Real-time where there is one: taken by the thread already running
     Universe::setThreadPriority(Universe::PriorityRealtime);
     if (Universe::threadPrioritySupported(Universe::PriorityRealtime))

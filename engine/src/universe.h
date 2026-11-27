@@ -962,6 +962,7 @@ protected:
     std::unique_ptr<std::atomic<quint32>[]> m_sendLatency;
     /** The thread's own: the setThreadPriority() generation it applied */
     int m_priorityApplied = -1;
+    int m_priorityAsked = PriorityStandard;   ///< ...and what it asked for
 
     /** Indicated if the DMX writer worker thread is running. Atomic: set
      *  by the thread, cleared by the destructor on another one. */

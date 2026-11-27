@@ -588,8 +588,9 @@ Universe::ThreadPriority Universe::threadPriority()
     return threadPrioritySupported(p) ? p : PriorityStandard;
 }
 
-static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, bool first)
+static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, int previous)
 {
+    const bool first = previous < 0;
     /* A new thread left Standard is the thread as ever: nothing asked */
     if (first && priority == Universe::PriorityStandard)
     {
@@ -598,26 +599,27 @@ static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, boo
     }
 #if defined(Q_OS_MACOS)
     const thread_act_t self = pthread_mach_thread_np(pthread_self());
-    /* Back to an ordinary thread first: each of the others is asked of one */
-    thread_standard_policy_data_t standard;
-    thread_policy_set(self, THREAD_STANDARD_POLICY, reinterpret_cast<thread_policy_t>(&standard),
-                      THREAD_STANDARD_POLICY_COUNT);
-    pthread_set_qos_class_self_np(priority == Universe::PriorityResponsive
-                                  ? QOS_CLASS_USER_INTERACTIVE : QOS_CLASS_DEFAULT, 0);
+    /* Undo only what was asked before: a thread given an explicit Mach
+       policy (even the standard one) can no longer take a QoS class */
+    if (previous == Universe::PriorityRealtime)
+    {
+        thread_standard_policy_data_t standard;
+        thread_policy_set(self, THREAD_STANDARD_POLICY, reinterpret_cast<thread_policy_t>(&standard),
+                          THREAD_STANDARD_POLICY_COUNT);
+    }
+    if (previous == Universe::PriorityResponsive && priority != Universe::PriorityResponsive)
+        pthread_set_qos_class_self_np(QOS_CLASS_DEFAULT, 0);
     if (priority == Universe::PriorityStandard)
     {
         s_universeThreadScheduling.store(Universe::ThreadsNormal, std::memory_order_relaxed);
     }
     else if (priority == Universe::PriorityResponsive)
     {
-        qos_class_t qos = QOS_CLASS_UNSPECIFIED;
-        int relative = 0;
-        const bool ok = pthread_get_qos_class_np(pthread_self(), &qos, &relative) == 0
-                        && qos == QOS_CLASS_USER_INTERACTIVE;
-        s_universeThreadScheduling.store(ok ? Universe::ThreadsElevated : Universe::ThreadsRefused,
+        const int rc = pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+        s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsElevated : Universe::ThreadsRefused,
                                          std::memory_order_relaxed);
-        if (!ok)
-            qWarning() << "Universe: user-interactive QoS refused";
+        if (rc != 0)
+            qWarning() << "Universe: user-interactive QoS refused:" << rc;
     }
     else
     {
@@ -1576,9 +1578,10 @@ void Universe::applyThreadPriority()
     const int generation = s_priorityGeneration.load(std::memory_order_acquire);
     if (generation == m_priorityApplied)
         return;
-    const bool first = m_priorityApplied < 0;
+    const int previous = m_priorityApplied < 0 ? -1 : m_priorityAsked;
     m_priorityApplied = generation;
-    applyUniverseThreadScheduling(threadPriority(), first);
+    m_priorityAsked = threadPriority();
+    applyUniverseThreadScheduling(ThreadPriority(m_priorityAsked), previous);
 }
 
 void Universe::run()
