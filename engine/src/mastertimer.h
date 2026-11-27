@@ -96,6 +96,11 @@ public:
     static constexpr int kMaxCatchUpPerSecond = 10;
     static constexpr double kCatchUpHeadroom = 0.75;   // of the period
 
+    /** Whether the calling thread is inside a frame of the running timer
+     *  (timerTick(true)), not a tick by hand: what may be left to finish
+     *  off the tick (RGBMatrix::mapsAhead()) only there */
+    static bool inTimerFrame();
+
     /** Compute time of the most recent tick, in milliseconds. This is how
      *  long the engine spent producing DMX for one tick (functions + DMX
      *  sources), i.e. the engine load against the per-tick budget (tick()).
