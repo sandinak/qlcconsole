@@ -1,4 +1,5 @@
 #include <QDockWidget>
+#include <QComboBox>
 #include <QDir>
 #include <QtTest>
 #include "../../../engine/test/common/stdprelude.h"
