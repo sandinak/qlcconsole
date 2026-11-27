@@ -73,6 +73,7 @@ private slots:
     void shots();
 
 private:
+    void dropDoc();
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;
     QTemporaryDir m_settings;

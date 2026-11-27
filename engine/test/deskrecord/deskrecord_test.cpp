@@ -1063,7 +1063,7 @@ void DeskRecord_Test::theFaderPort2StopNeedsShift()
 {
     D *desk = m_doc->deskRecord();
     fpPatch();
-    learn(D::Stop, 0, kFpStop);
+    QVERIFY(desk->isLive(D::Stop));     // seeded by the board's layout
     QVERIFY(desk->hasShift(0));
     QVERIFY(desk->shiftGuardsStop(0));
     QSignalSpy fired(desk, &D::fired);
@@ -1103,8 +1103,7 @@ void DeskRecord_Test::theFaderPort2ReleaseNeedsShift()
     fpPatch();
     quint32 act2 = 0;
     cm->setRunTabList(twoLists(&act2));
-    learn(D::Stop, 0, kFpStop);
-    learn(D::Go, 0, kFpPlay);
+    QVERIFY(desk->isLive(D::Stop) && desk->isLive(D::Go));     // seeded by the board's layout
     // No stop: GO is GO, no Shift.
     QSignalSpy fired(desk, &D::fired);
     QSignalSpy refused(desk, &D::refused);

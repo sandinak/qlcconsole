@@ -1451,9 +1451,9 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
     // The desk's STOP comes before anything, a learn included.
     if (desk && role == Stop && value > 0)
     {
-        /* A board that asks for Shift: a bare STOP does nothing, and says so
-           (a learn of STOP still hears it). Held, it says it once. */
-        if (shiftGuardsStop(universe) && !shiftHeld(universe) && !(m_learning && m_learnRole == Stop))
+        /* A board that asks for Shift: a bare STOP does nothing, and says so.
+           Held, it says it once. */
+        if (shiftGuardsStop(universe) && !shiftHeld(universe))
         {
             if (m_down.contains(k))
                 return;

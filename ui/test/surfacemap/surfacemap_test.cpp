@@ -112,9 +112,12 @@ void SurfaceMap_Test::init()
 
 void SurfaceMap_Test::cleanup()
 {
-    m_stub->m_lineNames.clear();
-    m_stub->m_linesAreHardware = false;
-    m_stub->m_networkDmx = true;
+    if (m_stub != nullptr)
+    {
+        m_stub->m_lineNames.clear();
+        m_stub->m_linesAreHardware = false;
+        m_stub->m_networkDmx = true;
+    }
     delete m_doc;
     m_doc = nullptr;
     m_stub = nullptr;
@@ -346,6 +349,15 @@ void SurfaceMap_Test::theFaderPort2IsDrawn()
     QVERIFY(fp.release(QStringLiteral("Play")));
 }
 
+/* The stub plugin is one instance per process: an App's cache takes it over,
+   so the test's own Doc lets go of it first (cleanup() copes with none). */
+void SurfaceMap_Test::dropDoc()
+{
+    delete m_doc;
+    m_doc = nullptr;
+    m_stub = nullptr;
+}
+
 namespace
 {
 IOPluginStub *stubOf(Doc *doc)
@@ -359,6 +371,7 @@ IOPluginStub *stubOf(Doc *doc)
 
 void SurfaceMap_Test::theFaderPortChipIsInTheFooterAtSmallSizes()
 {
+    dropDoc();
     App app;
     app.init();
     Doc *doc = app.doc();
@@ -395,6 +408,7 @@ void SurfaceMap_Test::theFaderPortChipIsInTheFooterAtSmallSizes()
 
 void SurfaceMap_Test::aBareStopSaysShiftStopInTheFooter()
 {
+    dropDoc();
     App app;
     app.init();
     Doc *doc = app.doc();
