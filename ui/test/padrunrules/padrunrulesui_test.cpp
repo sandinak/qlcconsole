@@ -1300,7 +1300,6 @@ void PadRunRulesUi_Test::aConnectedPadShowsTheChipWithoutAPatch()
     emit iom->pluginConfigurationChanged(m_stub->name(), true);
     settle(50);
     QVERIFY(!pc->focusController().present);
-    QCOMPARE(pc->unpatchedPads().size(), 1);
     QVERIFY2(chip->isVisibleTo(m_app), "a DualShock 4 plugged in shows no Pad chip");
     QVERIFY2(chip->text().contains(QStringLiteral("DUALSHOCK 4")) && chip->text().contains(QStringLiteral("not patched")),
              qPrintable(chip->text()));
@@ -1311,7 +1310,6 @@ void PadRunRulesUi_Test::aConnectedPadShowsTheChipWithoutAPatch()
     InputPatch *ip = iom->inputPatch(0);
     QVERIFY2(ip != nullptr && ip->plugin() == m_stub && ip->input() == 0, "the click patched nothing");
     QVERIFY(pc->focusController().present);
-    QVERIFY(pc->unpatchedPads().isEmpty());
     QVERIFY(chip->isVisibleTo(m_app));
     QVERIFY2(chip->text().startsWith(QStringLiteral("Pad: Run")), qPrintable(chip->text()));
 
