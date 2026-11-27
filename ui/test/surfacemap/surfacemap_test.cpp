@@ -502,6 +502,7 @@ void SurfaceMap_Test::theControlTableAndTheDrawingSelectEachOther()
     t->table()->sortByColumn(0, Qt::DescendingOrder);
     QCollator collator;
     collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);     // as the table's own sort
     for (int r = 1; r < t->table()->rowCount(); ++r)
         QVERIFY2(collator.compare(t->text(r - 1, 0), t->text(r, 0)) >= 0, qPrintable(t->text(r, 0)));
     t->table()->sortByColumn(2, Qt::AscendingOrder);
