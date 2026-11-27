@@ -1194,14 +1194,16 @@ void HazardArming_Test::aLiveHazardIsLaidInPlace()
     waitForCheck();
     QCOMPARE(at("Hazer"), 255);
     Universe *u = m_doc->inputOutputMap()->universe(0);
+    // Each fader by its token (unique per fader asked for: an address can
+    // be reused by a new one).
     auto fireFaders = [u]() {
-        QList<GenericFader *> out;
+        QList<quint32> out;
         for (const QSharedPointer<GenericFader> &f : u->faders())
             if (!f.isNull() && !f->deleteRequested() && f->name().startsWith(QStringLiteral("Hazard fired")))
-                out << f.data();
+                out << f->token();
         return out;
     };
-    const QList<GenericFader *> before = fireFaders();
+    const QList<quint32> before = fireFaders();
     QVERIFY(!before.isEmpty());
     k->rebuild();                           // the rig read again: nothing changed
     tick(1);
