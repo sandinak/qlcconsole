@@ -2412,6 +2412,16 @@ QList<bool> openRows(FixtureManager &mgr)
     return out;
 }
 
+QString viewState(FixtureManager &mgr, QTreeWidgetItem *it)
+{
+    const QRect r = it != nullptr ? mgr.m_fixtures_tree->visualItemRect(it) : QRect();
+    return QString("rect %1,%2 %3x%4 viewport h %5 scroll %6/%7")
+        .arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())
+        .arg(mgr.m_fixtures_tree->viewport()->height())
+        .arg(mgr.m_fixtures_tree->verticalScrollBar()->value())
+        .arg(mgr.m_fixtures_tree->verticalScrollBar()->maximum());
+}
+
 bool inView(FixtureManager &mgr, QTreeWidgetItem *it)
 {
     if (it == nullptr)
@@ -2476,20 +2486,20 @@ void FixtureManager_Test::duplicateAndUndoKeepTheViewAndSelectTheRow()
     const quint32 copy = currentFixtureId(mgr);
     QVERIFY(copy != orig && copy != Fixture::invalidId());
     QVERIFY(m_doc->fixture(copy) != nullptr);
-    QVERIFY(inView(mgr, tree->currentItem()));
+    QVERIFY2(inView(mgr, tree->currentItem()), qPrintable(viewState(mgr, tree->currentItem())));
     steady("scroll after duplicate");
 
     mon.undo();
     QCoreApplication::processEvents();
     QVERIFY(m_doc->fixture(copy) == nullptr);
     QCOMPARE(currentFixtureId(mgr), orig);
-    QVERIFY(inView(mgr, tree->currentItem()));
+    QVERIFY2(inView(mgr, tree->currentItem()), qPrintable(viewState(mgr, tree->currentItem())));
     steady("scroll after undo");
 
     mon.redo();
     QCoreApplication::processEvents();
     QCOMPARE(currentFixtureId(mgr), copy);      // the re-created one
-    QVERIFY(inView(mgr, tree->currentItem()));
+    QVERIFY2(inView(mgr, tree->currentItem()), qPrintable(viewState(mgr, tree->currentItem())));
     steady("scroll after redo");
 }
 
@@ -2524,13 +2534,13 @@ void FixtureManager_Test::renameUndoSelectsTheGroupAndKeepsExpansion()
     QTreeWidgetItem *cur = tree->currentItem();
     QVERIFY(cur != nullptr);
     QCOMPARE(cur->data(KColumnName, PROP_GROUP).toUInt(), grp->id());
-    QVERIFY(inView(mgr, cur));
+    QVERIFY2(inView(mgr, cur), qPrintable(viewState(mgr, cur)));
     QCOMPARE(openRows(mgr), open);
     mon.redo();
     QCoreApplication::processEvents();
     QCOMPARE(grp->name(), QString("Back"));
     QCOMPARE(tree->currentItem()->data(KColumnName, PROP_GROUP).toUInt(), grp->id());
-    QVERIFY(inView(mgr, tree->currentItem()));
+    QVERIFY2(inView(mgr, tree->currentItem()), qPrintable(viewState(mgr, tree->currentItem())));
 }
 
 void FixtureManager_Test::operateLocksTheFixturesTab()
