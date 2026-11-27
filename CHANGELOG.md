@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Timeline: drop audio and video from Finder, right-click the track column.** Files land on the track and time under the drop, in name order, with a ghost of where; below the tracks they make a track; an unusable file says why under the timeline; one ⌘Z undoes the drop. The track column's right-click menus (empty space, a track, an item) add tracks, audio, video and functions, duplicate, mute, solo, lock, rename in place, move and delete; ⌘D / F2 / Esc work like the other lists.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

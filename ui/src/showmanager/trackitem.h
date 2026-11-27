@@ -83,13 +83,13 @@ protected:
     void contextMenuEvent(QGraphicsSceneContextMenuEvent *) override;
     void mouseDoubleClickEvent(QGraphicsSceneMouseEvent *) override;
 
+public:
     /** Begin editing the track name inline (embedded line edit over the title). */
     void startInlineRename();
 
     /** Fill @p menu with this track's right-click entries (exec'd by
      *  contextMenuEvent; split out so it can be inspected). */
     void buildContextMenu(QMenu *menu);
-    bool isMute() const { return m_isMute; }
     bool isSolo() const { return m_isSolo; }
     bool isLockedFlag() const { return m_isLocked; }
     /** Same as clicking the header's M / S / L buttons. */
