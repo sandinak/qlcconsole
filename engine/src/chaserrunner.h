@@ -113,6 +113,8 @@ public:
      *  brought it, or kept from the step before for one it went on to by
      *  itself. 0: none (Chaser::stepRunStamped()). */
     quint32 stepStamp() const { return m_stepStamp; }
+    /** The stamp of the first step when no action brings one. */
+    void setStartStamp(quint32 stamp) { m_stepStamp = stamp; }
 
     /** Effective duration (ms) of the currently running step (speed-mode aware).
      *  0 = holds until a manual GO. */

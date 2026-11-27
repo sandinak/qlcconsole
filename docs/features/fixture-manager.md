@@ -1125,7 +1125,7 @@ editor's **Test**, a web widget, a start alone (the web's function
 switch, the **startup function**, sub-cues started on their own), and
 every step after a stop or a switch between Design and Operate until the
 next GO — the footer says **CO2 jet held — fire it from Run**. A GO during
-**Fade and stop** starts the list again from that GO and fires. Two kinds,
+**Fade and stop** starts the list again and fires what it plays. Two kinds,
 picked in **Behaves as**:
 
 - **Hazard — Burst** (flame, CO₂ jets, confetti, cannons, sparkulars,

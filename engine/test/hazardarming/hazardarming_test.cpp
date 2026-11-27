@@ -1496,9 +1496,24 @@ void HazardArming_Test::aStepInFlightKeepsItsOwnStamp()
 void HazardArming_Test::aGoDuringFadeAndStopStillFires()
 {
     QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    // The preset sends the jet here: a GO that restarts the list plays it.
+    {
+        ShowTreeController *st = m_doc->showTree();
+        ShowTree::Target t;
+        for (FixtureGroup *g : m_doc->fixtureGroups())
+            if (g->name() == QLatin1String("CO2 jet"))
+                t.groups << g->id();
+        quint32 full = 0;
+        for (QLCPalette *p : m_doc->palettes())
+            if (p->name() == QLatin1String("Full"))
+                full = p->id();
+        QVERIFY(st->setTargetLook(m_c1, t, st->lookForPalette(full)));
+        m_chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(m_list)->chaser));
+    }
     m_doc->setMode(Doc::Operate);
-    go();                                   // the preset
+    go();                                   // the preset, unheld: skipped
     waitForCheck();
+    QCOMPARE(at("CO2 jet"), 0);
     // Fade and stop, as MasterTimer::fadeAndStopAll() starts it: the faders
     // fade out, the list asked to stop...
     {
@@ -1516,8 +1531,10 @@ void HazardArming_Test::aGoDuringFadeAndStopStillFires()
     m_doc->showControl()->execute(r);
     tick(5);
     waitForCheck();
+    // The GO started the list again (its first cue, as a GO after a stop
+    // does): that GO's, so held, the jet is out.
     QVERIFY(m_chaser->isRunning());
-    QCOMPARE(m_chaser->currentStepIndex(), 1);
+    QCOMPARE(m_chaser->currentStepIndex(), 0);
     QCOMPARE(at("CO2 jet"), 255);
     QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
     m_doc->setMode(Doc::Design);
