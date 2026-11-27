@@ -260,8 +260,23 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
     out->washGroup = group("Washes", out->washes, QSize(16, 2));
     out->lanternGroup = group("Lanterns", out->lanterns, QSize(18, 3));
     out->houseGroup = group("House", out->dimmers, QSize(34, 1));
-    const quint32 ustGroup = group("USTs", out->usts, QSize(30, 1));
-    const quint32 barGroup = group("Bars", out->bars, QSize(26, 3));
+    // The pixel bars by kind, each bar a row of its pixels
+    auto rows = [&](const QString &name, const QList<quint32> &fixtures, int width) {
+        FixtureGroup *g = new FixtureGroup(doc);
+        g->setName(name);
+        g->setSize(QSize(width, int(fixtures.size())));
+        for (int r = 0; r < fixtures.size(); ++r)
+            g->assignFixture(fixtures.at(r), QLCPoint(0, r));
+        if (!doc->addFixtureGroup(g))
+        {
+            delete g;
+            return quint32(FixtureGroup::invalidId());
+        }
+        out->groups << g->id();
+        return g->id();
+    };
+    const quint32 ustGroup = rows("USTs", out->usts, 96);
+    const quint32 barGroup = rows("Bars", out->bars, 42);
 
     lap("groups");
 

@@ -460,6 +460,25 @@ baseline yet (another machine's, say) and lists them without judging them.
 `QLC_PERF_ONLY=<prefix>` runs only the matching operations of
 `cpuPerRigOperation`, to profile one.
 
+### The size check: the shows we run
+
+`ui/test/showscale` (in the gate, serial) runs the whole app on a made-up
+show the size and shape of ours ([STRATEGY.md](project/STRATEGY.md),
+guardrail 7): 260 fixtures and 26,364 channels over 80 universes, 50 of
+them holding one or two devices for cabling, mostly pixel bars
+(`engine/test/common/scalerig.h`). With a Show Tree cue list fading, an RGB
+matrix (Plasma) over all 6,156 pixels, an EFX on all 32 movers and three
+chasers running in Operate, it holds the MasterTimer's frame at 50 Hz
+(p95 and max under the 20 ms period, nothing late), every universe sent
+every frame (a counting output), the Rig Overview, the Lighting Studio's
+plot and the UI thread's longest stall, memory flat over a minute of the
+show, and Open/Save to budgets measured on the pool (the numbers are next
+to the asserts; Release asserts them, Debug reports them). On newaudio
+(Release): a frame's p95 17.4 ms wall but 1.8 ms of CPU -- the matrix's
+script map, five a second, is made on the script thread while the tick
+waits, ~16 ms each, the largest cost in the frame; the Rig Overview 49 ms a
+frame (3.5 fps under Operate's share); Open 0.9 s.
+
 ### Work counts in the gate
 
 Timing can't fail the gate without flaking it, but how much work the
