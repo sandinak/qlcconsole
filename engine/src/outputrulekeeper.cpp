@@ -1311,7 +1311,8 @@ void OutputRuleKeeper::disarmHazards(const QString &why)
     const bool armed = m_hazardArmed.exchange(false, std::memory_order_acq_rel);
     const bool held = m_hazardHold.exchange(false, std::memory_order_acq_rel) || m_holdShown;
     // Still down on the device: it must be let go of and pressed again.
-    m_hazardHoldNeedsRelease.store(true, std::memory_order_relaxed);
+    if (held)
+        m_hazardHoldNeedsRelease.store(true, std::memory_order_relaxed);
     bool granted = false;
     {
         QMutexLocker locker(&m_hazardMutex);

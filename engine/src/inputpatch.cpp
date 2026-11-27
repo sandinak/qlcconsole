@@ -126,17 +126,10 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
            second review's 7): on the plugin's own thread, before anything
            is queued to the main thread -- a busy GUI never keeps a hazard
            out. Only those two controls do anything (HazardFastPath). */
-        m_hazardConnection = connect(m_plugin, &QLCIOPlugin::valueChanged, this,
-            [this](quint32 universe, quint32 input, quint32 channel, uchar value, const QString &) {
-                if (input != m_pluginLine || (universe != UINT_MAX && universe != m_universe))
-                    return;
-                {
-                    QMutexLocker locker(&m_inputBufferMutex);
-                    if (channel < quint32(m_channelMap.size()))
-                        channel = m_channelMap.at(int(channel));
-                }
-                HazardFastPath::feed(m_universe, channel, value);
-            }, Qt::DirectConnection);
+        // By name: every plugin DLL has its own QLCIOPlugin (dllsignals_test).
+        m_hazardConnection = connect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
+                                     this, SLOT(slotHazardValue(quint32,quint32,quint32,uchar,QString)),
+                                     Qt::DirectConnection);
         connect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
                 this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         connect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
@@ -312,6 +305,20 @@ QMap<QString, QVariant> InputPatch::getPluginParameters()
         return m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Input);
 
     return QMap<QString, QVariant>();
+}
+
+void InputPatch::slotHazardValue(quint32 universe, quint32 input, quint32 channel,
+                                 uchar value, const QString &key)
+{
+    Q_UNUSED(key)
+    if (input != m_pluginLine || (universe != UINT_MAX && universe != m_universe))
+        return;
+    {
+        QMutexLocker locker(&m_inputBufferMutex);
+        if (channel < quint32(m_channelMap.size()))
+            channel = m_channelMap.at(int(channel));
+    }
+    HazardFastPath::feed(m_universe, channel, value);
 }
 
 void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 channel,
