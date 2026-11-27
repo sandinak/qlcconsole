@@ -26,7 +26,17 @@
 #include <QSettings>
 #include <QLabel>
 #include <QDir>
+#include <QStatusBar>
+#include <QCheckBox>
 #include <QtTest>
+
+#include "../../../engine/test/common/stdprelude.h"
+#define private public
+#define protected public
+#include "app.h"
+#undef protected
+#undef private
+#include "iopluginstub.h"
 
 #include "surfacemap_test.h"
 #include "simmididevice.h"
@@ -334,6 +344,125 @@ void SurfaceMap_Test::theFaderPort2IsDrawn()
     QVERIFY2(mv->isHighlighted(kPlayKey), "Play is not lit on the map");
     QVERIFY(!mv->isHighlighted(kStopKey));
     QVERIFY(fp.release(QStringLiteral("Play")));
+}
+
+namespace
+{
+IOPluginStub *stubOf(Doc *doc)
+{
+    for (QLCIOPlugin *p : doc->ioPluginCache()->plugins())
+        if (IOPluginStub *s = dynamic_cast<IOPluginStub *>(p))
+            return s;
+    return nullptr;
+}
+}
+
+void SurfaceMap_Test::theFaderPortChipIsInTheFooterAtSmallSizes()
+{
+    App app;
+    app.init();
+    Doc *doc = app.doc();
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = stubOf(doc);
+    QVERIFY2(stub != nullptr, "no I/O plugin stub");
+    stub->m_lineNames.clear();
+    SimMidiDevice fp(doc, stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    doc->setMode(Doc::Operate);     // a show running
+    for (const QSize &size : { QSize(1024, 640), QSize(1440, 900) })
+    {
+        app.resize(size);
+        app.show();
+        settle();
+        QTest::qWait(200);
+        settle();
+        SurfaceChips *chips = app.m_statusSurfaceChips;
+        QVERIFY(chips != nullptr);
+        QVERIFY2(chips->isVisibleTo(app.statusBar()), qPrintable(QStringLiteral("no chip at %1").arg(size.width())));
+        QToolButton *chip = chips->chip(0);
+        QVERIFY(chip != nullptr);
+        QCOMPARE(chip->text(), QStringLiteral("FaderPort"));
+        const QRect where(chip->mapTo(app.statusBar(), QPoint(0, 0)), chip->size());
+        QVERIFY2(chip->width() > 20 && app.statusBar()->rect().contains(where),
+                 qPrintable(QStringLiteral("chip squeezed or clipped at %1: %2 wide")
+                                .arg(size.width()).arg(chip->width())));
+    }
+}
+
+void SurfaceMap_Test::aBareStopSaysShiftStopInTheFooter()
+{
+    App app;
+    app.init();
+    Doc *doc = app.doc();
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = stubOf(doc);
+    QVERIFY(stub != nullptr);
+    stub->m_lineNames.clear();
+    SimMidiDevice fp(doc, stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    app.show();
+    settle();
+    QVERIFY(doc->deskRecord()->isLive(DeskRecord::Stop));
+    QSignalSpy fired(doc->deskRecord(), &DeskRecord::fired);
+    QVERIFY(fp.press(QStringLiteral("Stop")));
+    QVERIFY(fp.release(QStringLiteral("Stop")));
+    settle();
+    QCOMPARE(fired.count(), 0);
+    QCOMPARE(app.statusBar()->currentMessage(), QStringLiteral("FaderPort: Shift+Stop stops."));
+    QVERIFY(fp.press(QStringLiteral("Shift")));
+    QVERIFY(fp.press(QStringLiteral("Stop")));
+    QVERIFY(fp.release(QStringLiteral("Stop")));
+    QVERIFY(fp.release(QStringLiteral("Shift")));
+    settle();
+    QCOMPARE(fired.count(), 1);
+}
+
+void SurfaceMap_Test::theFaderPortMapSaysTheShiftCombosAndHasItsOptions()
+{
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    SurfaceMaps maps(m_doc);
+    settle();
+    SurfaceMapView *mv = maps.view(0);
+    QVERIFY(mv != nullptr);
+    const quint32 kStopKey = 221, kPlayKey = 222, kShiftKey = 198;
+    QCOMPARE(mv->jobText(kStopKey), QStringLiteral("Shift+STOP"));
+    QVERIFY(mv->toolTipFor(kStopKey).contains("Shift"));
+    QCOMPARE(mv->jobText(kPlayKey), QStringLiteral("GO"));
+    QVERIFY2(mv->toolTipFor(kPlayKey).contains("After a stop, Shift+PLAY releases it"), qPrintable(mv->toolTipFor(kPlayKey)));
+    QCOMPARE(mv->jobText(kShiftKey), QStringLiteral("Shift"));
+    // Every control has its words: a job, or free.
+    for (const SurfaceLayout::Control &c : mv->layout().controls())
+        QVERIFY2(!mv->toolTipFor(c.channel).isEmpty(), qPrintable(c.face));
+
+    // The options, in the map's header.
+    QCheckBox *stop = maps.findChild<QCheckBox *>(QStringLiteral("surfaceMapShiftStop0"));
+    QCheckBox *rel = maps.findChild<QCheckBox *>(QStringLiteral("surfaceMapShiftRelease0"));
+    QPushButton *setUp = maps.findChild<QPushButton *>(QStringLiteral("surfaceMapOptSetUp0"));
+    QVERIFY(stop != nullptr && rel != nullptr && setUp != nullptr);
+    QCOMPARE(stop->text(), QStringLiteral("Stop needs Shift"));
+    QCOMPARE(rel->text(), QStringLiteral("Releasing a stop needs Shift"));
+    QVERIFY(stop->isChecked() && rel->isChecked());
+    QVERIFY(maps.findChild<QPushButton *>(QStringLiteral("surfaceMapOptLampTest0")) == nullptr);   // not a PMJ
+    QSignalSpy setUpAsked(&maps, &SurfaceMaps::controllerSetupRequested);
+    setUp->click();
+    QCOMPARE(setUpAsked.count(), 1);
+    // Unticking is the show's word, kept; the map's words follow.
+    stop->setChecked(false);
+    settle();
+    QCOMPARE(m_doc->controlMap()->shiftGuardStopSetting(), int(ControlMap::GuardOff));
+    QVERIFY(!m_doc->deskRecord()->shiftGuardsStop(0));
+    QCOMPARE(mv->jobText(kStopKey), QStringLiteral("STOP"));
+    // A board with no Shift key has no such boxes (the APC).
 }
 
 void SurfaceMap_Test::theMapScrollsRatherThanClips()

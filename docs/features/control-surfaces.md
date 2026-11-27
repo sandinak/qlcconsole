@@ -165,7 +165,7 @@ These come as surface types:
 |---|---|---|
 | **PMJ Black 1** | Master = Grand Master; Go, Back, Left, Right, page arrows; O = Blackout, Set = Blind; the five mode keys = pages; strip keys Select / Load / Up (reset); encoders | plain |
 | **Akai APC mini** and **APC mini mk2** | Slider 9 = Grand Master; scene keys: **Clip Stop** = GO, **Solo** = Back, **Stop All Clips** = stop | plain |
-| **PreSonus FaderPort 2** | Fader = Grand Master; **Play** = GO, **Rewind** = Back, **Stop** = stop | motor |
+| **PreSonus FaderPort 2** | Fader = Grand Master; **Play** = GO, **Rewind** = Back, **Shift+Stop** = stop (Shift+Play releases it) | motor |
 | **PMJ 9 Faders**, **KORG nanoKONTROL2**, **Behringer BCF2000** | the last fader = Grand Master | plain (BCF2000: motor) |
 
 Today the roles are what the board's own overlay does (the PMJ's) and what
@@ -393,10 +393,14 @@ native mode; patch it on that channel with the profile **PreSonus FaderPort
 - **The fader** is a motor fader (pitch bend). It is the Grand Master, and
   the show moves it: when the Grand Master is somewhere else the fader is
   sent there and picked up when it arrives, as for any motor fader
-  ([above](#a-fader-is-picked-up-before-it-follows)). Its **touch** (note
-  104) is a plain button in the profile: a surface type has no place for a
-  touch, so it is drawn on the map and free to learn, but nothing uses it
-  yet.
+  ([above](#a-fader-is-picked-up-before-it-follows)). Its **touch**
+  sensor is a plain button in the profile, drawn on the map; the desk reads
+  it for one job: while a hand is on the fader nothing is sent to the
+  motor, and the moment it lets go the motor is sent the Grand Master, so
+  the fader stays where you left it instead of driving back to the last
+  place the app sent it. A board with no touch sensor does the same a
+  moment (150 ms) after the last move. A move still waiting to pick up is
+  not taken: the motor goes to the master, not to your hand.
 - **The knob** (CC 16) is an endless one, 1 to 63 clockwise and 65 to 127
   counter-clockwise; its push is note 32.
 - **Roles** (this computer's desk, seeded the first time it is patched, as
@@ -404,6 +408,19 @@ native mode; patch it on that channel with the profile **PreSonus FaderPort
   fader is the Grand Master. **Play**, **Stop**, **Record** and **Loop**
   have lamps and follow [the lamp rule](#what-a-controls-light-says); the
   other keys are free to assign. The map draws the board; every key is on it.
+- **Shift guards the stop.** **Stop** sits where a hand lands by accident,
+  so on this board the emergency stop is **Shift+Stop**: Stop alone does
+  nothing (its lamp stays dim) and the footer says *FaderPort: Shift+Stop
+  stops.* for a moment. After a stop, the GO that releases it is
+  **Shift+Play** too: a bare **Play** does not release a stop (the footer
+  says so); with no stop active **Play** is GO as ever. **Rewind** (Back)
+  is never guarded. The keyboard's, the footer's and every other stop stay
+  one press, and the stop is always reachable with Shift held. Both are
+  options of the board's map (the **FaderPort** footer chip, one click):
+  **Stop needs Shift** and **Releasing a stop needs Shift**, saved with the
+  show; untick them for a show that wants the single press. A board's
+  layout file says which key is its Shift and what it guards by default
+  (`"shift"`, `"guards"`); only the FaderPort 2 asks for it.
 - Names are the board's own labels where PreSonus's documents confirm them
   (the Mackie set: Arm, Solo, Mute, Shift, Read, Write, Trim, Touch,
   Marker, Nudge, Click, Loop, Rewind, Fast Forward, Stop, Play, Record).
@@ -1015,11 +1032,26 @@ after any build that changes a surface, and say which build.
    touch** key lights on the map while touched; nothing in the show changes.
 5. Start a cue list and look at the board. *Expect:* **Play** is lit, **Stop**
    and **Record** as the show says; **Stop** is lit while ALL OFF holds.
-6. Press **Play**, then **Rewind**, then **Stop**. *Expect:* GO fires the
-   Run tab's list, Back steps back, Stop is ALL OFF (the footer says *held:
-   emergency stop*); one **Play** starts the list again.
-7. Turn the knob a click each way. *Expect:* its dial on the map turns the
+6. Press **Play**, then **Rewind**. *Expect:* GO fires the Run tab's list,
+   Back steps back.
+7. Press **Stop** alone. *Expect:* nothing stops; the footer says *FaderPort:
+   Shift+Stop stops.* and the Stop lamp stays dim.
+8. Hold **Shift** and press **Stop**. *Expect:* ALL OFF (the footer says
+   *held: emergency stop*); the Stop lamp is lit.
+9. Press **Play** alone. *Expect:* the show does not restart; the footer says
+   *FaderPort: stopped. Shift+Play releases the stop.* Then hold **Shift**
+   and press **Play**. *Expect:* the stop is released and the list GOes.
+10. Turn the knob a click each way. *Expect:* its dial on the map turns the
    way the knob does.
+11. Put a finger on the fader and move it from 100% down to about 30%, then
+   let go. *Expect:* the Grand Master follows your hand to 30% and the
+   footer's GM stays at 30%; the fader stays at 30% (it does not drive back
+   to 0 or to where it was).
+12. Click the **FaderPort** chip in the footer, at 1024 x 640 too. *Expect:*
+   the map opens with **Set Up…**, **Stop needs Shift** and **Releasing a
+   stop needs Shift** (both ticked) in its header; **STOP** reads
+   *Shift+STOP*, **Shift** is drawn as the board's own key. Untick **Stop
+   needs Shift**: **Stop** alone now stops.
 
 **PMJ Black 1**
 

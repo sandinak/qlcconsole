@@ -14,6 +14,14 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **FaderPort 2 bench fixes.** The motor fader no longer drives back to zero
+  after you move it: the motor is sent the Grand Master when your hand lets
+  go (its touch), or 150 ms after the last move. The emergency stop on the
+  FaderPort is **Shift+Stop**, and releasing a stop is **Shift+Play**: a
+  bare press does nothing and the footer says so. Both are options in the
+  board's map (its footer chip: **Set Up…**, **Stop needs Shift**,
+  **Releasing a stop needs Shift**, saved with the show); the map shows
+  *Shift+STOP*.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is
