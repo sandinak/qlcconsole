@@ -524,13 +524,24 @@ Universe::ThreadScheduling Universe::threadScheduling()
     return ThreadScheduling(s_universeThreadScheduling.load(std::memory_order_relaxed));
 }
 
+/* Real-time on macOS and Linux: measured on the show's rig (an M4 Pro at 80
+   and 160 universes: the send's p99.9 a third, no more CPU; a Pi 5 at 160:
+   the tick's p99 halved for ~10% more CPU). Windows: not measured. */
 Universe::ThreadPriority Universe::defaultThreadPriority()
 {
 #if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
-    return PriorityStandard;
+    return PriorityRealtime;
 #else
     return PriorityStandard;
 #endif
+}
+
+/* One warning per run, not one per universe thread */
+static void warnOnce(const char *what, int code)
+{
+    static std::atomic<bool> warned { false };
+    if (!warned.exchange(true))
+        qWarning() << "Universe threads:" << what << code << "- they run at normal priority";
 }
 
 bool Universe::threadPrioritySupported(ThreadPriority priority)
@@ -619,7 +630,7 @@ static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, int
         s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsElevated : Universe::ThreadsRefused,
                                          std::memory_order_relaxed);
         if (rc != 0)
-            qWarning() << "Universe: user-interactive QoS refused:" << rc;
+            warnOnce("user-interactive QoS refused:", rc);
     }
     else
     {
@@ -641,7 +652,7 @@ static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, int
         s_universeThreadScheduling.store(kr == KERN_SUCCESS ? Universe::ThreadsRealtime : Universe::ThreadsRefused,
                                          std::memory_order_relaxed);
         if (kr != KERN_SUCCESS)
-            qWarning() << "Universe: time-constraint policy refused:" << kr;
+            warnOnce("time-constraint policy refused:", int(kr));
     }
 #elif defined(Q_OS_LINUX)
     struct sched_param sp;
@@ -664,7 +675,7 @@ static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, int
     s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsRealtime : Universe::ThreadsRefused,
                                      std::memory_order_relaxed);
     if (rc != 0)
-        qWarning() << "Universe: SCHED_FIFO refused:" << rc;
+        warnOnce("SCHED_FIFO refused (no rtprio limit for this user):", rc);
 #else
     Q_UNUSED(priority)
     Q_UNUSED(first)

@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Steadier output on big shows**: an RGB matrix's next map is made ahead
+  of its step, so the DMX frame never waits for the script (a Plasma matrix
+  over 6,000 pixels took the frame's p95 from 17.5 to 1.7 ms); a late frame
+  no longer stretches a fade (show time follows the clock); and **Settings ▸
+  Performance ▸ Universe threads** (Standard / Responsive / Real-time, per
+  computer) defaults to Real-time on macOS and Linux.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is
