@@ -628,7 +628,7 @@ void ShowScale_Test::theEngineKeepsItsFrame()
        that wait; the rest cost under a millisecond. So the budget is the
        frame itself, measured: p95 and max under the period, nothing late;
        the CPU the tick spends under half of it (1.8-2.1 ms on newaudio and
-       ender, 6.3 ms on Linux CI, which counts the tick's wait differently). A second matrix like
+       ender, 6.3 ms on Linux CI). A second matrix like
        this one, or a slower machine, takes frames late: the fix is a map
        made ahead of its step, off the tick (reported, not made here). */
     const double f = slowFactor();
