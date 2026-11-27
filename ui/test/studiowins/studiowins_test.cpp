@@ -578,7 +578,10 @@ void StudioWins_Test::theLabelSaysTheChosenFieldsAroundTheIcon()
     QCOMPARE(props->labelFields(), int(MonitorProperties::LabelUnit | MonitorProperties::LabelName));
     QCOMPARE(it->labelBelow(), QStringLiteral("Wash 1"));
 
-    // Nothing touches its neighbours, at three plot sizes.
+    // Nothing touches its neighbours, at three plot sizes: icons a fixture-and-a-half
+    // of label apart (the scene's own units, whatever the plot's scale).
+    for (int i = 0; i < fxs.size(); ++i)
+        gv->fixtureItemForId(fxs.at(i)->id())->setPos(100.0 + i * 160.0, 300.0);
     props->setLabelFields(all);
     gv->refreshFixtureLabels();
     for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
