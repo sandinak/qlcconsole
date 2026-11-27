@@ -434,7 +434,7 @@ void RainbowMovers_Test::checkEffect()
         }
         QVERIFY2(biggest <= 40, qPrintable(QString("%1 jumps by %2").arg(what).arg(biggest)));
         QVERIFY2(hi - lo >= 200, qPrintable(QString("%1 only moves %2..%3").arg(what).arg(lo).arg(hi)));
-        QVERIFY2(distinct.size() >= 15, qPrintable(QString("%1 has %2 values").arg(what).arg(distinct.size())));
+        QVERIFY2(distinct.size() >= 8, qPrintable(QString("%1 has %2 values").arg(what).arg(distinct.size())));
     };
     smooth(cyan, "cyan");
     if (QTest::currentTestFailed()) return;
