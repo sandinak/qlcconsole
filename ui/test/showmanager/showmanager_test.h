@@ -64,7 +64,22 @@ private slots:
      *  the editor goes with it, and Operate calls nothing on the freed one */
     void theItemEditorGoesWithItsFunction();
 
+    /** Audio and video files dropped from the desktop land on the track and
+     *  time under the drop, one after another in name order; a file that
+     *  can't be used says why; the whole drop is one Undo. */
+    void droppedAudioLandsOnTheTrack();
+    void droppedAudioBelowTheTracksMakesATrack();
+    void droppedVideoLandsOnTheTrack();
+    void anUnsupportedDropSaysWhy();
+    /** The sidebar's right-click menus offer what can act on the row. */
+    void sidebarMenusOfferWhatCanAct();
+    void addTrackFromTheMenuIsOneUndo();
+    void renameInPlaceAndMoveUpDown();
+
 private:
+    QString makeWav(const QString &name);
+    bool loadAudioDecoders();
+    void dropFiles(const QStringList &files, quint32 timeMs, int row);
     Doc *m_doc = nullptr;
     ShowManager *m_manager = nullptr;
     Show *m_show = nullptr;

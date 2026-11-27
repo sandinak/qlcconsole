@@ -17,6 +17,8 @@
 #include "showmanager.h"
 #include "multitrackview.h"
 #include "sequenceitem.h"
+#include "trackitem.h"
+#include "showitem.h"
 #undef protected
 #undef private
 
@@ -39,6 +41,14 @@
 #include "audio.h"
 #include "efx.h"
 #include <QBuffer>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QTemporaryDir>
+#include <QLineEdit>
+#include <QMenu>
+#include <QUrl>
+#include "video.h"
+#include "audioplugincache.h"
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
 
@@ -506,6 +516,218 @@ void ShowManager_Test::timecodeDrivesAShowOnlyFixtureOnlyWhenArmedInOperate()
     QVERIFY(talk->previewGate()->load());
     stopAll();
     m_doc->setMode(Doc::Design);
+}
+
+/* Drop from the desktop onto the timeline (Branson: drag/drop for audio, and
+   video). */
+
+static QTemporaryDir *dropDir()
+{
+    static QTemporaryDir dir;
+    return &dir;
+}
+
+QString ShowManager_Test::makeWav(const QString &name)
+{
+    // One second of 8 kHz mono 8-bit silence.
+    const int rate = 8000;
+    QByteArray d;
+    auto le32 = [&d](quint32 v) { for (int i = 0; i < 4; i++) d.append(char((v >> (8 * i)) & 0xff)); };
+    auto le16 = [&d](quint16 v) { d.append(char(v & 0xff)); d.append(char(v >> 8)); };
+    d.append("RIFF"); le32(36 + rate); d.append("WAVEfmt "); le32(16);
+    le16(1); le16(1); le32(rate); le32(rate); le16(1); le16(8);
+    d.append("data"); le32(rate); d.append(QByteArray(rate, char(0x80)));
+    const QString path = dropDir()->filePath(name);
+    QFile f(path);
+    f.open(QIODevice::WriteOnly);
+    f.write(d);
+    return path;
+}
+
+bool ShowManager_Test::loadAudioDecoders()
+{
+    QDir dir(QCoreApplication::applicationDirPath());
+    for (int i = 0; i < 8; i++, dir.cdUp())
+        if (dir.exists("plugins/Audio"))
+        {
+            m_doc->audioPluginCache()->load(QDir(dir.filePath("plugins/Audio")));
+            break;
+        }
+    return m_doc->audioPluginCache()->getSupportedFormats().contains("*.wav");
+}
+
+void ShowManager_Test::dropFiles(const QStringList &files, quint32 timeMs, int row)
+{
+    MultiTrackView *v = m_manager->m_showview;
+    QMimeData md;
+    QList<QUrl> urls;
+    for (const QString &f : files)
+        urls << QUrl::fromLocalFile(f);
+    md.setUrls(urls);
+    const QPointF sp(v->getPositionFromTime(timeMs), TRACKS_TOP + row * TRACK_HEIGHT + 5);
+    const QPoint vp = v->mapFromScene(sp);
+    QDragEnterEvent enter(vp, Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    v->dragEnterEvent(&enter);
+    QVERIFY(enter.isAccepted());
+    QDragMoveEvent move(vp, Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    v->dragMoveEvent(&move);
+    QDropEvent drop(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    v->dropEvent(&drop);
+}
+
+void ShowManager_Test::droppedAudioLandsOnTheTrack()
+{
+    if (!loadAudioDecoders())
+        QSKIP("no wav decoder (libsndfile) in this build");
+    // Name order, not the order given.
+    const QString b = makeWav("b-second.wav");
+    const QString a = makeWav("a-first.wav");
+    MultiTrackView *v = m_manager->m_showview;
+    quint32 want = 0;
+    Track *trk = nullptr;
+    QVERIFY(v->dropTarget(v->mapFromScene(QPointF(v->getPositionFromTime(20000), TRACKS_TOP + 5)),
+                          &want, &trk));
+    dropFiles(QStringList() << b << a, 20000, 0);
+
+    Track *t = m_show->tracks().first();
+    QCOMPARE(t->showFunctions().count(), 3);       // the scene + two files
+    QCOMPARE(m_doc->functionsByType(Function::AudioType).count(), 2);
+    ShowFunction *first = nullptr, *second = nullptr;
+    for (ShowFunction *sf : t->showFunctions())
+    {
+        Function *f = m_doc->function(sf->functionID());
+        if (f->name() == "a-first.wav") first = sf;
+        if (f->name() == "b-second.wav") second = sf;
+    }
+    QVERIFY(first && second);
+    QCOMPARE(first->startTime(), want);
+    QVERIFY(first->duration() > 0);
+    QCOMPARE(second->startTime(), first->startTime() + first->duration());
+    QVERIFY(m_manager->m_statusLabel->text().contains("Added 2"));
+
+    // One Undo takes both back.
+    m_manager->slotUndo();
+    QCOMPARE(m_show->tracks().first()->showFunctions().count(), 1);
+}
+
+void ShowManager_Test::droppedAudioBelowTheTracksMakesATrack()
+{
+    if (!loadAudioDecoders())
+        QSKIP("no wav decoder (libsndfile) in this build");
+    dropFiles(QStringList() << makeWav("song.wav"), 5000, 3);   // row 3: no such track
+    QCOMPARE(m_show->tracks().count(), 2);
+    Track *t = m_show->tracks().last();
+    QCOMPARE(t->showFunctions().count(), 1);
+    QCOMPARE(m_doc->function(t->showFunctions().first()->functionID())->name(),
+             QStringLiteral("song.wav"));
+    m_manager->slotUndo();
+    QCOMPARE(m_show->tracks().count(), 1);
+}
+
+void ShowManager_Test::droppedVideoLandsOnTheTrack()
+{
+    const QString path = dropDir()->filePath("clip.mp4");
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("not really a movie");
+    f.close();
+    dropFiles(QStringList() << path, 30000, 0);
+    QCOMPARE(m_doc->functionsByType(Function::VideoType).count(), 1);
+    Track *t = m_show->tracks().first();
+    QCOMPARE(t->showFunctions().count(), 2);
+    m_manager->slotUndo();
+    QCOMPARE(m_show->tracks().first()->showFunctions().count(), 1);
+}
+
+void ShowManager_Test::anUnsupportedDropSaysWhy()
+{
+    const QString path = dropDir()->filePath("notes.txt");
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("hello");
+    f.close();
+    dropFiles(QStringList() << path, 20000, 0);
+    QVERIFY(m_manager->m_statusLabel->text().startsWith("Can't use notes.txt:"));
+    QVERIFY(!m_manager->m_statusLabel->isHidden());
+    QCOMPARE(m_show->tracks().first()->showFunctions().count(), 1);
+    QVERIFY(!m_manager->m_undoAction->isEnabled());
+}
+
+static QAction *named(const QMenu &m, const char *name)
+{
+    for (QAction *a : m.actions())
+        if (a->objectName() == name)
+            return a;
+    return nullptr;
+}
+
+void ShowManager_Test::sidebarMenusOfferWhatCanAct()
+{
+    MultiTrackView *v = m_manager->m_showview;
+    m_manager->updateMultiTrackView();
+
+    QMenu blank;
+    v->buildBlankSidebarMenu(&blank);
+    for (const char *n : { "addTrack", "addAudio", "addVideo", "addFunction" })
+        QVERIFY2(named(blank, n) && named(blank, n)->isEnabled(), n);
+    QVERIFY(!named(blank, "rename"));
+    QVERIFY(!named(blank, "delete"));
+
+    QMenu track;
+    v->trackItemFor(m_show->tracks().first())->buildContextMenu(&track);
+    for (const char *n : { "addTrack", "addAudio", "addVideo", "addFunction", "duplicate",
+                           "mute", "solo", "lock", "rename", "colour", "moveDown", "delete" })
+        QVERIFY2(named(track, n), n);
+    QVERIFY(!named(track, "moveUp"));              // already the top row
+
+    QVERIFY(!v->m_items.isEmpty());
+    QMenu item;
+    v->m_items.first()->buildContextMenu(&item);
+    for (const char *n : { "duplicate", "rename", "moveToTrack", "snapToGrid",
+                           "showInFunctions", "delete" })
+        QVERIFY2(named(item, n), n);
+    QVERIFY(!named(item, "addTrack"));
+    // The shared toolbar actions, not copies.
+    QCOMPARE(named(item, "snapToGrid"), m_manager->m_snapGridAction);
+    QCOMPARE(named(item, "delete"), m_manager->m_deleteAction);
+    QCOMPARE(named(blank, "addAudio"), m_manager->m_addAudioAction);
+}
+
+void ShowManager_Test::addTrackFromTheMenuIsOneUndo()
+{
+    QMenu blank;
+    m_manager->m_showview->buildBlankSidebarMenu(&blank);
+    named(blank, "addTrack")->trigger();
+    QCOMPARE(m_show->tracks().count(), 2);
+    QVERIFY(m_manager->m_undoAction->isEnabled());
+    m_manager->slotUndo();
+    QCOMPARE(m_show->tracks().count(), 1);
+}
+
+void ShowManager_Test::renameInPlaceAndMoveUpDown()
+{
+    Track *other = new Track();
+    other->setName("Sound");
+    QVERIFY(m_show->addTrack(other));
+    m_manager->updateMultiTrackView();
+    MultiTrackView *v = m_manager->m_showview;
+
+    TrackItem *ti = v->trackItemFor(m_show->tracks().first());
+    ti->m_changeName->trigger();                    // the menu's Rename: inline
+    QVERIFY(ti->m_nameProxy != nullptr);
+    QLineEdit *e = qobject_cast<QLineEdit *>(ti->m_nameProxy->widget());
+    QVERIFY(e);
+    e->setText("Front");
+    ti->slotRenameCommitted();
+    QCOMPARE(m_show->tracks().first()->name(), QStringLiteral("Front"));
+
+    ti = v->trackItemFor(m_show->tracks().first());
+    ti->m_moveDown->trigger();
+    QCOMPARE(m_show->tracks().first()->name(), QStringLiteral("Sound"));
+    QCOMPARE(m_show->tracks().last()->name(), QStringLiteral("Front"));
+    ti = v->trackItemFor(m_show->tracks().last());
+    ti->m_moveUp->trigger();
+    QCOMPARE(m_show->tracks().first()->name(), QStringLiteral("Front"));
 }
 
 QTEST_MAIN(ShowManager_Test)

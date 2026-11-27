@@ -27,6 +27,7 @@
 #include "headeritems.h"
 #include "trackitem.h"
 #include "showitem.h"
+#include "multitrackview.h"
 #include "function.h"
 
 /** Pixels at each end of an item that act as a stretch handle. */
@@ -381,16 +382,15 @@ void ShowItem::hoverMoveEvent(QGraphicsSceneHoverEvent *event)
     QGraphicsItem::hoverMoveEvent(event);
 }
 
-void ShowItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+void ShowItem::buildContextMenu(QMenu *menu)
 {
-    Q_UNUSED(event)
-
-    QMenu menu;
     QFont menuFont = qApp->font();
     menuFont.setPixelSize(14);
-    menu.setFont(menuFont);
+    menu->setFont(menuFont);
 
-    menu.addAction(m_alignToCursor);
+    m_alignToCursor->setObjectName("alignToCursor");
+    m_lockAction->setObjectName("lockItem");
+    menu->addAction(m_alignToCursor);
     if (isLocked())
     {
         m_lockAction->setText(tr("Unlock Item"));
@@ -401,7 +401,22 @@ void ShowItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         m_lockAction->setText(tr("Lock Item"));
         m_lockAction->setIcon(QIcon(":/lock.png"));
     }
-    menu.addAction(m_lockAction);
+    menu->addAction(m_lockAction);
+    if (MultiTrackView *v = MultiTrackView::viewOf(this))
+        v->fillContextMenu(menu, NULL, this);
+}
+
+void ShowItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    Q_UNUSED(event)
+    // A right-click acts on the item under it: select it first.
+    if (isSelected() == false && scene() != NULL)
+    {
+        scene()->clearSelection();
+        setSelected(true);
+    }
+    QMenu menu;
+    buildContextMenu(&menu);
     menu.exec(QCursor::pos());
 }
 
