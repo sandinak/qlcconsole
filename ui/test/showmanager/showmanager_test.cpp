@@ -18,6 +18,7 @@
 #include "multitrackview.h"
 #include "sequenceitem.h"
 #include "trackitem.h"
+#include "showtimelineeditor.h"
 #include "showitem.h"
 #undef protected
 #undef private
@@ -559,9 +560,10 @@ bool ShowManager_Test::loadAudioDecoders()
     return m_doc->audioPluginCache()->getSupportedFormats().contains("*.wav");
 }
 
-void ShowManager_Test::dropFiles(const QStringList &files, quint32 timeMs, int row)
+void ShowManager_Test::dropFiles(const QStringList &files, quint32 timeMs, int row, bool drop,
+                                 MultiTrackView *view)
 {
-    MultiTrackView *v = m_manager->m_showview;
+    MultiTrackView *v = view ? view : m_manager->m_showview;
     QMimeData md;
     QList<QUrl> urls;
     for (const QString &f : files)
@@ -574,8 +576,10 @@ void ShowManager_Test::dropFiles(const QStringList &files, quint32 timeMs, int r
     QVERIFY(enter.isAccepted());
     QDragMoveEvent move(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
     v->dragMoveEvent(&move);
-    QDropEvent drop(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
-    v->dropEvent(&drop);
+    if (!drop)
+        return;
+    QDropEvent dropEv(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    v->dropEvent(&dropEv);
 }
 
 void ShowManager_Test::droppedAudioLandsOnTheTrack()
@@ -694,6 +698,96 @@ void ShowManager_Test::sidebarMenusOfferWhatCanAct()
     QCOMPARE(named(item, "snapToGrid"), m_manager->m_snapGridAction);
     QCOMPARE(named(item, "delete"), m_manager->m_deleteAction);
     QCOMPARE(named(blank, "addAudio"), m_manager->m_addAudioAction);
+}
+
+void ShowManager_Test::theEmbeddedTimelineTakesTheSameDrops()
+{
+    ShowTimelineEditor ed(nullptr, m_show, m_doc);
+    QVERIFY(ed.m_showview->acceptsFileDrops());
+
+    const QString clip = dropDir()->filePath("embedded.mp4");
+    QFile f(clip);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("not really a movie");
+    f.close();
+    const QString txt = dropDir()->filePath("embedded.txt");
+    QFile g(txt);
+    QVERIFY(g.open(QIODevice::WriteOnly));
+    g.write("hello");
+    g.close();
+
+    dropFiles(QStringList() << clip, 30000, 0, true, ed.m_showview);
+    QCOMPARE(m_doc->functionsByType(Function::VideoType).count(), 1);
+    QCOMPARE(m_show->tracks().first()->showFunctions().count(), 2);
+    QVERIFY(ed.m_statusLabel->text().startsWith("Added embedded.mp4"));
+
+    // Below the tracks: a track of its own.
+    dropFiles(QStringList() << clip, 5000, 4, true, ed.m_showview);
+    QCOMPARE(m_show->tracks().count(), 2);
+
+    dropFiles(QStringList() << txt, 20000, 0, true, ed.m_showview);
+    QVERIFY(ed.m_statusLabel->text().startsWith("Can't use embedded.txt:"));
+    QCOMPARE(m_doc->functionsByType(Function::VideoType).count(), 2);
+
+    if (loadAudioDecoders())
+    {
+        dropFiles(QStringList() << makeWav("emb-b.wav") << makeWav("emb-a.wav"), 60000, 0,
+                  true, ed.m_showview);
+        QCOMPARE(m_doc->functionsByType(Function::AudioType).count(), 2);
+    }
+}
+
+void ShowManager_Test::shootsTheTimelineDrop()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        return;
+    // Audio where a decoder is built; a clip's name otherwise (same drop).
+    const bool audio = loadAudioDecoders();
+    QStringList files;
+    const QString ext = audio ? "wav" : "mp4";
+    for (const char *n : { "1-Intro", "2-Verse" })
+    {
+        if (audio)
+            files << makeWav(QString("%1.%2").arg(n, ext));
+        else
+        {
+            const QString p = dropDir()->filePath(QString("%1.%2").arg(n, ext));
+            QFile f(p);
+            if (f.open(QIODevice::WriteOnly))
+                f.write("x");
+            files << p;
+        }
+    }
+    const QList<QSize> sizes = { QSize(900, 500), QSize(1280, 720), QSize(1600, 900) };
+    for (const QSize &sz : sizes)
+    {
+        const QString tag = QString("%1x%2").arg(sz.width()).arg(sz.height());
+        m_manager->resize(sz);
+        m_manager->show();
+        QCoreApplication::processEvents();
+        MultiTrackView *v = m_manager->m_showview;
+        m_manager->slotFilesDragEntered(files);
+        dropFiles(files, 8000, 0, false);
+        QCoreApplication::processEvents();
+        m_manager->grab().save(QDir(dir).filePath("ghost-" + tag + ".png"));
+        dropFiles(files, 8000, 0, true);
+        QCoreApplication::processEvents();
+        m_manager->grab().save(QDir(dir).filePath("dropped-" + tag + ".png"));
+
+        QMenu blank;
+        v->buildBlankSidebarMenu(&blank);
+        blank.ensurePolished();
+        blank.resize(blank.sizeHint());
+        blank.grab().save(QDir(dir).filePath("menu-sidebar-" + tag + ".png"));
+        QMenu track;
+        v->trackItemFor(m_show->tracks().first())->buildContextMenu(&track);
+        track.ensurePolished();
+        track.resize(track.sizeHint());
+        track.grab().save(QDir(dir).filePath("menu-track-" + tag + ".png"));
+
+        m_manager->slotUndo();
+    }
 }
 
 void ShowManager_Test::addTrackFromTheMenuIsOneUndo()

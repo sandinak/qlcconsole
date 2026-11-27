@@ -73,13 +73,19 @@ private slots:
     void anUnsupportedDropSaysWhy();
     /** The sidebar's right-click menus offer what can act on the row. */
     void sidebarMenusOfferWhatCanAct();
+    /** The Timeline embedded in Build takes the same drops. */
+    void theEmbeddedTimelineTakesTheSameDrops();
+    /** UX shots (QLC_SHOT_DIR): the drop ghost, the dropped items and the
+     *  sidebar menu at three sizes. */
+    void shootsTheTimelineDrop();
     void addTrackFromTheMenuIsOneUndo();
     void renameInPlaceAndMoveUpDown();
 
 private:
     QString makeWav(const QString &name);
     bool loadAudioDecoders();
-    void dropFiles(const QStringList &files, quint32 timeMs, int row);
+    void dropFiles(const QStringList &files, quint32 timeMs, int row, bool drop = true,
+                   class MultiTrackView *view = nullptr);
     Doc *m_doc = nullptr;
     ShowManager *m_manager = nullptr;
     Show *m_show = nullptr;

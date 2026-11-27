@@ -53,6 +53,7 @@
 #include "rgbmatrixeditor.h"
 #include "multitrackview.h"
 #include "editkeys.h"
+#include "timelinefiledrop.h"
 #include "chasereditor.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
@@ -1562,15 +1563,6 @@ void ShowManager::slotAddVideo()
  * Files dropped from the desktop
  *****************************************************************************/
 
-static bool fileMatches(const QString &path, const QStringList &patterns)
-{
-    const QString ext = QStringLiteral("*.") + QFileInfo(path).suffix().toLower();
-    for (const QString &p : patterns)
-        if (p.toLower() == ext)
-            return true;
-    return false;
-}
-
 void ShowManager::setStatus(const QString &text)
 {
     if (m_statusLabel == NULL)
@@ -1592,22 +1584,7 @@ void ShowManager::setStatus(const QString &text)
 
 void ShowManager::slotFilesDragEntered(const QStringList &paths)
 {
-    // Work out the lengths the files will have, so the drop ghost can show
-    // them end to end. Capped: opening many decoders on a drag is not free.
-    const QStringList audioFmt = m_doc->audioPluginCache()->getSupportedFormats();
-    QList<quint32> lengths;
-    for (int i = 0; i < paths.count() && i < 8; i++)
-    {
-        quint32 len = 0;
-        if (fileMatches(paths.at(i), audioFmt) && QFileInfo(paths.at(i)).isFile())
-        {
-            Audio probe(m_doc);
-            if (probe.setSourceFileName(paths.at(i)))
-                len = probe.totalDuration();
-        }
-        lengths << len;
-    }
-    m_showview->setDropGhostLengths(lengths);
+    m_showview->setDropGhostLengths(TimelineFileDrop::probeLengths(m_doc, paths));
 }
 
 void ShowManager::slotFilesDropped(const QStringList &paths, quint32 startTime, Track *track)
@@ -1629,41 +1606,9 @@ void ShowManager::slotFilesDropped(const QStringList &paths, quint32 startTime, 
     }
     stopForStructuralEdit();
 
-    const QStringList audioFmt = m_doc->audioPluginCache()->getSupportedFormats();
-    const QStringList videoFmt = Video::getVideoCapabilities();
-
-    QList<Function *> made;
-    QStringList errors;
-    foreach (const QString &path, paths)
-    {
-        const QString name = QFileInfo(path).fileName();
-        if (QFileInfo(path).isFile() == false)
-            errors << tr("Can't use %1: it is not a file.").arg(name);
-        else if (fileMatches(path, audioFmt))
-        {
-            Audio *a = new Audio(m_doc);
-            if (a->setSourceFileName(path) == false)
-            {
-                delete a;
-                errors << tr("Can't use %1: no audio decoder could open it.").arg(name);
-            }
-            else
-                made << a;
-        }
-        else if (fileMatches(path, videoFmt))
-        {
-            Video *v = new Video(m_doc);
-            if (v->setSourceUrl(path) == false)
-            {
-                delete v;
-                errors << tr("Can't use %1: this video can't be played.").arg(name);
-            }
-            else
-                made << v;
-        }
-        else
-            errors << tr("Can't use %1: not an audio or video format that can be played.").arg(name);
-    }
+    const TimelineFileDrop::Result prepared = TimelineFileDrop::prepare(m_doc, paths);
+    const QList<Function *> made = prepared.made;
+    const QStringList errors = prepared.errors;
 
     if (made.isEmpty())
     {
@@ -1705,10 +1650,7 @@ void ShowManager::slotFilesDropped(const QStringList &paths, quint32 startTime, 
     m_showview->setEmptyMessage(QString());
     m_showview->updateViewSize();
 
-    QString msg = (made.count() == 1) ? tr("Added %1.").arg(made.first()->name())
-                                      : tr("Added %1 files.").arg(made.count());
-    if (errors.isEmpty() == false)
-        msg += QStringLiteral("  ") + errors.join(QStringLiteral("  "));
+    const QString msg = TimelineFileDrop::summary(prepared);
     setStatus(msg);
 }
 
