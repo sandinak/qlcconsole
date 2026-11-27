@@ -1084,6 +1084,21 @@ void ConnectionEditor::slotInputChanged()
     /* Rows that do not apply stay, greyed, so the window keeps its shape. */
     m_midiChannel->setEnabled(plugin.contains(QLatin1String("MIDI"), Qt::CaseInsensitive));
     m_artnetInUni->setEnabled(plugin == QLatin1String("ArtNet"));
+    /* A board picked: its lamps go back to it. Feedback still on None or on
+       another line of the same plugin (the board patched here before) moves
+       to the board's own output; one on another plugin is left. */
+    if (m_loading || !any)
+        return;
+    const QString fbPlugin = m_feedbackCombo->currentData(ROLE_PLUGIN).toString();
+    if (!fbPlugin.isEmpty() && fbPlugin != plugin)
+        return;
+    const int partner = m_doc->inputOutputMap()->partnerOutput(plugin, m_inputCombo->currentData(ROLE_LINE).toUInt());
+    if (partner < 0)
+        return;
+    for (int i = 1; i < m_feedbackCombo->count(); i++)
+        if (m_feedbackCombo->itemData(i, ROLE_PLUGIN).toString() == plugin
+                && m_feedbackCombo->itemData(i, ROLE_LINE).toInt() == partner)
+            m_feedbackCombo->setCurrentIndex(i);
 }
 
 void ConnectionEditor::slotFeedbackChanged()

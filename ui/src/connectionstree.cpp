@@ -3492,6 +3492,9 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
             return;
         }
         done = iomap->setInputPatch(uniId, pluginName, QString(), line);
+        // A board's lamps go back to it, not to the line the last one used.
+        if (done)
+            iomap->feedbackFollowsInput(uniId);
     }
 
     if (done == false)

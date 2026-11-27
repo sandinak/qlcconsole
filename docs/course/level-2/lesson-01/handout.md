@@ -88,7 +88,8 @@ Switch roles after each part.
    **(1)** the chorus sets 1 layer, 4 track in, and **(2)** the grey
    rows on its page.
 
-4. Scroll down the chorus's page.
+4. Click the **Tracking** tab on the chorus's page (it reads
+   **Tracking · 4**: four layers carried in).
    - *You should see:* **Tracked in**, each grey layer with where it came
      from and its values, and **Next cue receives**: all five layers.
 
@@ -141,7 +142,7 @@ released leaving cue 1.0.1 Verse*.
 10. Drag **StepTops** (Groups → Steps) onto the dashed box, then drag
     **White** and **Full** onto its row.
     - *You should see:* the riser tops white.
-11. On the Flash's page, set **Mode** to **Cue-only**.
+11. On the Flash's page (**Tracking** tab), set **Mode** to **Cue-only**.
     - *You should see:* **C** under **M**, and the top bar reads
       **Changed: 1.0.3 Scream**. **Next cue receives** begins *what this
       cue started from (it is cue-only)*, with no StepTops in it.
@@ -178,7 +179,7 @@ it doesn't light them.
 
 1. Click **1.0.0 Pose**. Drag **StepTops** onto its dashed box, then
    **Blue** and **10%** onto its row.
-2. On the Pose's page, tick **The list's base cue (released layers go
+2. On the Pose's page (**Tracking** tab), tick **The list's base cue (released layers go
    back to it)**. The Pose's row shows **base** under **F**.
 3. Click **1.0.1 Verse** and read **Next cue receives**: *StepTops (Blue,
    10%) — back to the base*. Click **1.0.2 Chorus**: the step tops glow a

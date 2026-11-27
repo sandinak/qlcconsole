@@ -21,6 +21,7 @@
 #define CONTROLCOLLISIONBOX_H
 
 #include <QFrame>
+#include <climits>
 
 #include "controlowners.h"
 #include "qlcui_export.h"
@@ -78,6 +79,14 @@ public:
     quint32 channel() const { return m_channel; }
     QString text() const;
     QPushButton *moveButton() const { return m_move; }
+    /** The plain fix under the refusal ("Recommended: use another control,
+     *  a free one on this board: …", or Move It Here from its job). */
+    QString recommendation() const;
+    /** "Use <control>": the first free button on the board, one click
+     *  (shown only to a Learn that takes useFreeRequested()). */
+    QPushButton *useFreeButton() const { return m_useFree; }
+    /** The free control offered (UINT_MAX: none). */
+    quint32 freeChannel() const { return m_free; }
     QPushButton *cancelButton() const { return m_cancel; }
 
 protected:
@@ -91,6 +100,9 @@ signals:
     void stepThroughRequested();
     /** Cancel was pressed: the control is not taken. */
     void cancelled();
+    /** "Use <control>" was pressed: learn @a channel of @a universe
+     *  instead (it was free when offered). */
+    void useFreeRequested(quint32 universe, quint32 channel);
 
 private:
     /** Gives each wrapped label the height its text needs at the width
@@ -100,7 +112,10 @@ private:
 
     QLabel *m_text;
     QLabel *m_note;
+    QLabel *m_fix;
     QPushButton *m_move;
+    QPushButton *m_useFree;
+    quint32 m_free = UINT_MAX;
     QPushButton *m_step;
     QPushButton *m_cancel;
     QLabel *m_stepNote;

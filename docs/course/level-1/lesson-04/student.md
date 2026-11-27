@@ -44,7 +44,7 @@ To enter a time: click the box, **⌘A**, type the number, press
 1. **File ▸ Open** → `lesson-1-4-start.qlcc`.
 2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
-3. Click **1.0.0 Pose**; set **Fade in** to **3**.
+3. Click **1.0.0 Pose**; on its **Timing** tab set **Fade in** to **3**.
 4. Click **1.0.1 Verse**; set **Fade in** to **2**.
 5. Leave **1.0.2 Chorus** at 0.00 s, so it snaps.
 6. Click **1.0.3 Scream**; set **Hold** to **2** and **Fade out** to

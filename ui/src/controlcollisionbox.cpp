@@ -21,6 +21,7 @@
 #include <QVBoxLayout>
 #include <QPushButton>
 #include <QLabel>
+#include <QMetaMethod>
 
 #include "controlcollisionbox.h"
 
@@ -36,6 +37,13 @@ ControlCollisionBox::ControlCollisionBox(QWidget *parent)
     m_text->setWordWrap(true);
     m_text->setTextFormat(Qt::PlainText);
     lay->addWidget(m_text);
+    m_fix = new QLabel(this);
+    m_fix->setObjectName(QStringLiteral("collisionFix"));
+    m_fix->setWordWrap(true);
+    m_fix->setTextFormat(Qt::PlainText);
+    m_fix->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    m_fix->hide();
+    lay->addWidget(m_fix);
     m_note = new QLabel(ControlOwners::moveNote(), this);
     m_note->setObjectName(QStringLiteral("collisionNote"));
     m_note->setWordWrap(true);
@@ -51,6 +59,12 @@ ControlCollisionBox::ControlCollisionBox(QWidget *parent)
     lay->addWidget(m_stepNote);
     QHBoxLayout *buttons = new QHBoxLayout();
     buttons->addStretch(1);
+    m_useFree = new QPushButton(this);
+    m_useFree->setObjectName(QStringLiteral("collisionUseFree"));
+    m_useFree->setToolTip(tr("Learn this free control instead: nothing else is taken"));
+    m_useFree->setAutoDefault(false);
+    m_useFree->hide();
+    buttons->addWidget(m_useFree);
     m_move = new QPushButton(tr("Move It Here"), this);
     m_move->setObjectName(QStringLiteral("collisionMove"));
     m_move->setToolTip(tr("Take the control from where it is now and give it to this one"));
@@ -71,6 +85,14 @@ ControlCollisionBox::ControlCollisionBox(QWidget *parent)
     lay->addLayout(buttons);
     connect(m_move, &QPushButton::clicked, this, &ControlCollisionBox::moveRequested);
     connect(m_step, &QPushButton::clicked, this, &ControlCollisionBox::stepThroughRequested);
+    connect(m_useFree, &QPushButton::clicked, this, [this]() {
+        const quint32 universe = m_universe;
+        const quint32 channel = m_free;
+        if (channel == UINT_MAX)
+            return;
+        clear();
+        emit useFreeRequested(universe, channel);
+    });
     connect(m_cancel, &QPushButton::clicked, this, [this]() {
         clear();
         emit cancelled();
@@ -93,6 +115,14 @@ void ControlCollisionBox::refuse(Doc *doc, quint32 universe, quint32 channel,
     const bool movable = ControlOwners::canMove(owners);
     m_move->setVisible(movable);
     m_note->setVisible(movable);
+    // The plain fix, and the first free button as one click.
+    m_free = ControlOwners::firstFreeButton(doc, universe, channel);
+    m_fix->setText(ControlOwners::recommendedFix(doc, universe, m_free, owners));
+    m_fix->setVisible(!m_fix->text().isEmpty());
+    const bool offer = m_free != UINT_MAX
+                       && isSignalConnected(QMetaMethod::fromSignal(&ControlCollisionBox::useFreeRequested));
+    m_useFree->setText(offer ? tr("Use %1").arg(ControlOwners::controlName(doc, universe, m_free)) : QString());
+    m_useFree->setVisible(offer);
     setStepThrough(false);
     show();
     fitLabels();
@@ -133,7 +163,7 @@ void ControlCollisionBox::appendText(const QString &line)
 
 void ControlCollisionBox::fitLabels()
 {
-    for (QLabel *l : { m_text, m_note, m_stepNote })
+    for (QLabel *l : { m_text, m_fix, m_note, m_stepNote })
     {
         const int w = l->width();
         if (w > 0 && l->wordWrap())
@@ -157,8 +187,17 @@ void ControlCollisionBox::clear()
 {
     m_owners.clear();
     m_text->clear();
+    m_fix->clear();
+    m_fix->hide();
+    m_free = UINT_MAX;
+    m_useFree->hide();
     setStepThrough(false);
     hide();
+}
+
+QString ControlCollisionBox::recommendation() const
+{
+    return m_fix->text();
 }
 
 QString ControlCollisionBox::text() const

@@ -43,7 +43,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    **Follow timecode**.
 
    ![Follow timecode on the list](../../images/lesson-3-5/follow-timecode.png)
-4. Click **1.0.0 Pose**. In **At timecode**, type `00:00:02:00` and press
+4. Click **1.0.0 Pose**. On its **Timing** tab, in **At timecode**, type `00:00:02:00` and press
    **Return**. Do the same for each cue in the table below.
 
    ![The At timecode box on the Verse](../../images/lesson-3-5/cue-time.png)
@@ -73,7 +73,7 @@ Roles: **Driver** (mouse), **Navigator** (reads each step aloud and checks *You 
    Leave it off. Read its tooltip.
 8. **File ▸ Save As** → `Lesson3-5-yourname.qlcc`.
 
-**Stuck?** No **At timecode** box: click a cue, not the list. A red box
+**Stuck?** No **At timecode** box: click a cue, not the list, then its **Timing** tab. A red box
 around the time: write all four parts, `hh:mm:ss:ff`. No times on the
 Run tab: tick **Follow timecode** on the list first.
 

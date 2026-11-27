@@ -996,6 +996,9 @@ public:
     void showCueTab(CueTab tab);            //!< switch to it (an action that needs it)
     CueTab cueTab() const;
     bool cueTabsShown() const;              //!< the bar is up (more than one tab has content)
+    /** The tab that holds the cue page's row of @a w (a field, or a widget
+     *  inside one); -1: none (the header, or not the cue page's). */
+    int cueTabOf(const QWidget *w) const;
     /** Where the Workbench comes from: Build's (App sets it) -- @a borrow
      *  takes it out of Build, @a giveBack puts it back as it was. Without
      *  one, the tree makes a Workbench of its own (tests). */

@@ -65,8 +65,9 @@ To enter a time, click in the box, select what's there (⌘A), type the
 number and press **Return**. Tab, or clicking the next cue, keeps it too;
 **Esc** puts the old time back.
 
-3. Click **1.0.0 Pose**, then in **Fade in** type **3** and press
-   **Return**.
+3. Click **1.0.0 Pose**, then click the **Timing** tab on its page
+   (the times live there; the tab stays picked as you click other cues).
+   In **Fade in** type **3** and press **Return**.
    - *You should see:* **Fade in 3.00 s**.
 4. Click **1.0.1 Verse** and set **Fade in** to **2** (press Return).
 5. Leave **1.0.2 Chorus** at **0.00 s**, so it snaps.

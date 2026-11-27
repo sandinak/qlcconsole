@@ -148,6 +148,7 @@
 #include "timecodecues.h"
 #include "timecodesource.h"
 #include "showtreeview_test.h"
+#include "../common/cuetabs.h"
 #include "../common/dragpos.h"
 
 using namespace ShowTree;
@@ -8868,6 +8869,7 @@ void ShowTreeView_Test::cuesAtATimecodeAreSetOnTheCueAndListPages()
     // The cue's page: the time, typed; a bad one refused; cleared.
     QVERIFY(view.selectNode(c[1]));
     QLineEdit *tc = view.findChild<QLineEdit *>("stCueTimecode");
+    QVERIFY(clickCueTabOf(&view, tc));
     QVERIFY(tc != nullptr && tc->isVisibleTo(&view));
     QVERIFY(tc->text().isEmpty());
     tc->setText("00:01:23:10");
@@ -9106,6 +9108,7 @@ void ShowTreeView_Test::theCuePagePicksTheBlocking()
 
     QVERIFY(view.selectNode(c[1]));
     QComboBox *combo = view.findChild<QComboBox *>("stCueBlocking");
+    QVERIFY(clickCueTabOf(&view, combo));
     QVERIFY(combo != nullptr && combo->isVisibleTo(&view));
     QCOMPARE(combo->count(), 3);
     QCOMPARE(combo->itemText(0), QString("Tracks (Default)"));
@@ -10111,6 +10114,7 @@ void ShowTreeView_Test::typedTimesAreKeptWhenFocusLeaves()
         QTest::mouseClick(tree->viewport(), Qt::LeftButton, Qt::NoModifier, r.center());
     };
     auto typeIn = [&](QDoubleSpinBox *box, const QString &text) {
+        QVERIFY(clickCueTabOf(&view, box));
         box->setFocus();
         QTRY_VERIFY(box->hasFocus());
         box->selectAll();
@@ -10190,6 +10194,7 @@ void ShowTreeView_Test::aTimeNotYetLeftIsWhatGoPlays()
     QVERIFY(view.selectNode(c1));
 
     // Typed, no Return, the focus still there: GO.
+    QVERIFY(clickCueTabOf(&view, fadeIn));
     fadeIn->setFocus();
     QTRY_VERIFY(fadeIn->hasFocus());
     fadeIn->selectAll();
@@ -10240,6 +10245,7 @@ void ShowTreeView_Test::aTimeTakesEitherDecimalMark()
     QDoubleSpinBox *fadeOut = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
     QVERIFY(fadeIn != nullptr && fadeOut != nullptr);
     auto typeIn = [&](QDoubleSpinBox *box, const QString &text) {
+        QVERIFY(clickCueTabOf(&view, box));
         box->setFocus();
         QTRY_VERIFY(box->hasFocus());
         box->selectAll();
@@ -11465,6 +11471,7 @@ void ShowTreeView_Test::theHitPageFadeBoxesSetTheHitsFades()
     QVERIFY(view.selectNode(hit));
     QDoubleSpinBox *in = view.findChild<QDoubleSpinBox *>("stCueFadeIn");
     QDoubleSpinBox *out = view.findChild<QDoubleSpinBox *>("stCueFadeOut");
+    QVERIFY(clickCueTabOf(&view, in));
     QVERIFY(in->isVisibleTo(&view) && out->isVisibleTo(&view));
     const QString before = treeState(m_doc);
 

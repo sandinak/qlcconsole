@@ -1104,6 +1104,96 @@ void ControlMapUi_Test::theInputPickersRefuseAndMove()
     QVERIFY(cm->isEmpty());
 }
 
+namespace { IOPluginStub *loadStub(Doc *doc); }
+
+/* Branson, build 4910: "worked, got error; however no recommended fix". The
+   refusal says what to do in one plain line, and offers the first free
+   button on the board as one click: a speed master's Tap auto-detected on
+   a control the Rate has takes the free one instead, and the Rate keeps
+   its own. The Learn dialog offers the same. */
+void ControlMapUi_Test::aRefusalSaysTheFixAndOffersAFreeButton()
+{
+    IOPluginStub *stub = loadStub(m_doc);
+    QVERIFY(stub != nullptr);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("Fake");
+    prof->setModel("Buttons");
+    for (quint32 ch : { 60u, 61u, 62u })
+    {
+        QLCInputChannel *b = new QLCInputChannel();
+        b->setType(QLCInputChannel::Button);
+        b->setName(QString("Pad %1").arg(ch));
+        prof->insertChannel(ch, b);
+    }
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+    Scene *a = scene("Warm");
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, 60, ControlMap::function(a->id()), ControlMap::Toggle });
+    SpeedMasters *sm = m_doc->speedMasters();
+    sm->setInput(1, SpeedMasters::RateControl, 0, 61);
+    QCOMPARE(ControlOwners::firstFreeButton(m_doc, 0, 61), 62u);
+
+    // His path: a speed master's Tap, auto-detected on the Rate's control.
+    new VirtualConsole(nullptr, m_doc);
+    auto vcGone = qScopeGuard([]() { delete VirtualConsole::instance(); });
+    InputSelectionWidget tap(m_doc);
+    ControlOwners::Owner self;
+    self.kind = ControlOwners::SpeedMaster;
+    self.index = 0;
+    self.part = SpeedMasters::TapControl;
+    tap.setListener(self);
+    tap.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&tap));
+    QSignalSpy picked(&tap, &InputSelectionWidget::inputValueChanged);
+    tap.m_autoDetectInputButton->setChecked(true);
+    emit iom->inputValueChanged(0, 61, 127);
+    tap.m_autoDetectInputButton->setChecked(false);
+    ControlCollisionBox *box = tap.collisionBox();
+    QVERIFY(box->isRefusing());
+    const QString fix = box->recommendation();
+    const QString freeName = ControlOwners::controlName(m_doc, 0, 62);
+    QVERIFY2(fix.startsWith("Recommended: use another control, a free one on this board: " + freeName),
+             qPrintable(fix));
+    QVERIFY2(fix.contains("Or Move It Here to take it from"), qPrintable(fix));
+    QLabel *fixLabel = box->findChild<QLabel *>("collisionFix");
+    QVERIFY(fixLabel != nullptr && fixLabel->isVisible());
+    QPushButton *use = box->useFreeButton();
+    QVERIFY(use->isVisible());
+    QCOMPARE(use->text(), QString("Use %1").arg(freeName));
+    QTest::mouseClick(use, Qt::LeftButton);
+    QVERIFY(!box->isRefusing());
+    QVERIFY(!tap.inputSource().isNull());
+    QCOMPARE(tap.inputSource()->channel(), 62u);
+    QCOMPARE(picked.count(), 1);
+    quint32 u = 0, ch = 0;
+    QVERIFY(sm->input(1, SpeedMasters::RateControl, &u, &ch));     // the Rate kept its own
+    QCOMPARE(ch, 61u);
+
+    // The Learn dialog: a hit learnt on the trigger's control.
+    Scene *b = scene("Cold");
+    ControlLearnDialog d(m_doc, ControlMap::function(b->id()));
+    d.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&d));
+    emit iom->inputValueChanged(0, 60, 127);
+    QCoreApplication::processEvents();
+    ControlCollisionBox *lbox = d.findChild<ControlCollisionBox *>("controlCollision");
+    QVERIFY(lbox->isRefusing());
+    QVERIFY2(lbox->recommendation().startsWith("Recommended:"), qPrintable(lbox->recommendation()));
+    if (lbox->freeChannel() != UINT_MAX)
+    {
+        const quint32 offered = lbox->freeChannel();
+        QVERIFY(lbox->useFreeButton()->isVisible());
+        QTest::mouseClick(lbox->useFreeButton(), Qt::LeftButton);
+        QVERIFY(!lbox->isRefusing());
+        QVERIFY(d.hasControl());
+        QCOMPARE(d.channel(), offered);
+    }
+    d.reject();
+}
+
 /* Move It Here inside a window that applies on OK (a widget's Properties,
    the Virtual Console's Properties): the control is taken from the other
    listener on OK, never before -- Cancel leaves both as they were. */

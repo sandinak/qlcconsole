@@ -39,7 +39,7 @@ Why is the stomp a Sub GO, and its end automatic?
 1. **File ▸ Open** → `lesson-2-7-start.qlcc`.
 2. Click the **Show Tree** tab (⇧⌘5); open **View ▸ Rig Overview** (⇧⌘R)
    beside it.
-3. Click **1.0.2 Chorus**; in its **Sub-cues** row click **+ Sub-cue**.
+3. Click **1.0.2 Chorus**; on its **Timing** tab, in the **Sub-cues** row click **+ Sub-cue**.
    Name it `Chorus`, **Return**.
 4. **More ▾ → + Sub-cue**: `Stomp`. Drag **Lanterns** onto the dashed
    box; **White** and **Full** onto its row.

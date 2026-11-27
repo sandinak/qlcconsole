@@ -5371,6 +5371,17 @@ ShowTreeView::CueTab ShowTreeView::cueTab() const
     return CueTab(s_cueTab);
 }
 
+int ShowTreeView::cueTabOf(const QWidget *w) const
+{
+    for (; w != nullptr; w = w->parentWidget())
+    {
+        const auto it = m_cueRowTab.constFind(const_cast<QWidget *>(w));
+        if (it != m_cueRowTab.constEnd())
+            return it.value();
+    }
+    return -1;
+}
+
 bool ShowTreeView::cueTabsShown() const
 {
     return m_cueTabBar != nullptr && m_cueTabsFilter;

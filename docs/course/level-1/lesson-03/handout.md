@@ -105,7 +105,7 @@ Switch roles after each part.
    **Return**.
    - *You should see:* **1.0.4 Solo**, with a long list of grey rows:
      everything from the earlier cues is still on, red included.
-8. On the Solo's page, set **Mode** to **Block**.
+8. On the Solo's page, click the **Tracking** tab and set **Mode** to **Block**.
    - *You should see:* the grey rows disappear, **B** (Block) appears in
      the tree's **M** (Mode) column beside 1.0.4, and the stage goes dark.
 9. From **Groups → AT**, drag **AT-Spots** onto the dashed box, then drag

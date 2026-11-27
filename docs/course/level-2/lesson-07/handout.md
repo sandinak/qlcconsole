@@ -64,7 +64,7 @@ Switch roles after each part.
 
 ### The sub-cues
 
-3. Click **1.0.2 Chorus**. On its page, in the **Sub-cues** row, click
+3. Click **1.0.2 Chorus**. On its page's **Timing** tab, in the **Sub-cues** row, click
    **+ Sub-cue**.
    - *You should see:* **1.0.2.1** under the chorus in the tree, its page
      open. Name it `Chorus` and press **Return**.

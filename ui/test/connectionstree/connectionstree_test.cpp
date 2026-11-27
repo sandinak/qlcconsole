@@ -2154,6 +2154,45 @@ void ConnectionsTree_Test::retargetOffersTheVisiblePortsWithTheCurrentOne()
     QCOMPARE(p, quint32(3));
 }
 
+/* Branson, build 4910: "LEDs are not lighting on the PMJ still". On dink the
+   show's U01 had had an APC40 with its feedback on another line (Network RTP
+   Session 1); he patched the PMJ there and the feedback stayed behind, so
+   every PMJ lamp went to the RTP session. A board patched onto a universe
+   takes the feedback with it, to its own output of the same name; a
+   feedback on another plugin is left. */
+void ConnectionsTree_Test::aBoardPatchedWhereAnotherWasTakesItsLampsWithIt()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_lineNames = QStringList({ "APC40 mkII", "Network RTP Session 1", "OpenDeck | PMJ_BLACK_1" });
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(iom->setOutputPatch(0, stub->name(), QString(), 1, true));     // his file: feedback on the RTP line
+    QCOMPARE(iom->partnerOutput(stub->name(), 2), 2);
+
+    ConnectionsTree tree(m_doc);
+    {
+        // Patch universe 1 (the first in the list) to the PMJ, as he did.
+        DialogAnswers answers(QStringList() << "#0");
+        tree.patchUniverseTo(stub->name(), 2, false);
+    }
+    QCOMPARE(iom->inputPatch(0)->input(), quint32(2));
+    QVERIFY(iom->feedbackPatch(0) != nullptr);
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(2));
+    // A lamp sent on the universe reaches the PMJ, not the RTP session.
+    stub->m_feedbackLines.clear();
+    QVERIFY(iom->sendFeedBack(0, 5, 127));
+    QCOMPARE(stub->m_feedbackLines, QList<quint32>({ 2u }));
+
+    // No feedback at all: the board's own is patched with it.
+    QVERIFY(iom->setOutputPatch(0, QString(), QString(), 0, true));
+    {
+        DialogAnswers answers(QStringList() << "#0");
+        tree.patchUniverseTo(stub->name(), 0, false);
+    }
+    QVERIFY(iom->feedbackPatch(0) != nullptr && iom->feedbackPatch(0)->isPatched());
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(0));
+}
+
 static QTreeWidgetItem *rowNamed(QTreeWidget *tree, const QString &prefix)
 {
     foreach (QTreeWidgetItem *it, allItems(tree))

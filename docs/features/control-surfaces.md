@@ -32,7 +32,12 @@ when you learn it for another, naming the owner: *Note 60 already does
 Button "House lights" (Virtual Console). One job per control.* Press
 **Move It Here** to take it from there and give it to what you are
 learning (the old owner stops reacting at once), or **Cancel** to leave it
-where it is -- Cancel changes nothing, on either side. Move It Here takes
+where it is -- Cancel changes nothing, on either side. Under the refusal a
+**Recommended:** line says what to do: when the board's profile has a
+button nothing uses yet, it names the first one (*Recommended: use another
+control, a free one on this board: …*) and **Use …** beside Move It Here
+learns that one instead, in one click, taking nothing from anyone; with no
+free button left it says to Move It Here or press a control with no job. Move It Here takes
 the control from every owner or from none: if one of them cannot let go,
 each keeps it. Every Learn says this the same way: Assign to Control…, the
 emergency stop, the encoder bank (a Learn, a preset, Custom turned back on
@@ -1073,7 +1078,11 @@ after any build that changes a surface, and say which build.
 **PMJ Black 1**
 
 1. Patch the PMJ as an input on any MIDI channel with the feedback line and
-   the profile PMJ Black 1 (no restart). *Expect:* **O** and **Set** glow
+   the profile PMJ Black 1 (no restart). Patching a board as a universe's
+   input (in Inputs/Outputs, or its universe's editor) moves the feedback to
+   the board's own MIDI output too, when the feedback was empty or on
+   another MIDI line -- left there by the board patched before; a feedback
+   on another plugin is left as it is. *Expect:* **O** and **Set** glow
    lit at once and **Looks** blinks (the page in use; Groups and Fix Cont
    lit, Effects and Macros dim); **Go** is lit when
    the show has a cue list. The strip buttons light only with a scene open
