@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <QFile>
 #include <QUrl>
+#include <climits>
 
 #include "controllerkeepalive.h"
 #include "programmercontroller.h"
@@ -558,6 +559,12 @@ void DeskRecord::rebind()
         m_lastPassthrough[r] = pass;
     }
     checkHazardRolesLost();
+    // The Hold let go and the Kill reach the output from the input thread.
+    if (OutputRuleKeeper *k = m_doc != nullptr ? m_doc->outputRuleKeeper() : nullptr)
+        k->setHazardControls(isLive(HazardHold) ? m_universes[HazardHold] : UINT_MAX,
+                             m_bindings[HazardHold].channel,
+                             isLive(HazardKill) ? m_universes[HazardKill] : UINT_MAX,
+                             m_bindings[HazardKill].channel);
     if (moved)
         emit changed();
 }
@@ -592,14 +599,26 @@ QString DeskRecord::learnRefusal(Role role, quint32 universe, quint32 channel) c
     {
         if (r == role || !m_bindings[r].isSet() || m_bindings[r].identity != id || m_bindings[r].channel != channel)
             continue;
-        const bool clash = isHazardRole(role) ? (r == Stop || r == Go || r == Back || r == GrandMaster)
-                                              : isHazardRole(r);
+        // A hazard role shares no control: not GO's, Back's, a STOP's nor
+        // another hazard role's (Hold on Kill's would lose the Kill).
+        const bool clash = isHazardRole(role) || isHazardRole(r);
         if (clash)
             return tr("%1 is this computer's %2: the %3 can't share a control with it. Choose another control.")
                 .arg(name, roleName(r), isHazardRole(role) ? roleName(role) : roleName(r));
     }
     if (!isHazardRole(role))
         return QString();
+    /* Hold and Arm only from a device on a cable (second review, 5): a
+       network input (OSC, Art-Net, sACN, the web) never says it went
+       away, so a lost Hold would never let go. A Kill may come from
+       anything. */
+    if (role != HazardKill && m_doc != nullptr && m_doc->inputOutputMap() != nullptr)
+        if (InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe))
+            if (ip->plugin() != nullptr && !ip->plugin()->linesAreHardware())
+                return tr("%1 comes over the network (%2): a network input never says it was lost, so "
+                          "it can't hold or arm a hazard. Use a button on a device plugged into this "
+                          "computer (USB, MIDI). The Hazard kill may be anything.")
+                    .arg(name, ip->plugin()->name());
     // The show's own GO, Back or stop on this control.
     if (ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr)
         for (const ControlMap::Binding &b : cm->bindingsOn(universe, channel))
@@ -1402,6 +1421,17 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
         if (k != m_pendingKey)
             return;
         m_pendingReleased = true;
+        if (m_holdLearnTimer != nullptr)
+            m_holdLearnTimer->stop();
+        /* The Hold (second review, 9): pressed, held about a second, let
+           go -- a button that lets go when the hand does. */
+        if (m_learnRole == HazardHold && m_pendingAt.elapsed() < kHoldLearnMs)
+        {
+            refuseLearn(k, tr("Hold %1 down about a second, then let go: the Hazard hold is learned "
+                              "from a press held, so it is a button that lets go with the hand.").arg(name));
+            m_learnRefused.remove(k);       // the same button, held this time
+            return;
+        }
         // GO and Back: one press and its release.
         if (m_learnRole != Stop)
             finishLearn(universe, channel, value);
@@ -1417,6 +1447,25 @@ void DeskRecord::learnHeard(quint32 universe, quint32 channel, uchar value)
         m_pendingAt.start();
         if (m_learnRole == Stop)
             emit learnConfirming(Stop);
+        // The Hold: a release must come (a latching button never lets go).
+        if (m_learnRole == HazardHold)
+        {
+            if (m_holdLearnTimer == nullptr)
+            {
+                m_holdLearnTimer = new QTimer(this);
+                m_holdLearnTimer->setSingleShot(true);
+                connect(m_holdLearnTimer, &QTimer::timeout, this, [this]() {
+                    if (!m_learning || m_learnRole != HazardHold || m_pendingReleased
+                        || m_pendingKey == ~quint64(0))
+                        return;
+                    refuseLearn(m_pendingKey, tr("No release came: a latching or toggle button stays on "
+                                                 "when the hand lets go, so it can't be the Hazard hold. "
+                                                 "Choose a momentary button."));
+                });
+            }
+            m_holdLearnTimer->start(kHoldReleaseMs);
+            emit learnConfirming(HazardHold);
+        }
         return;
     }
     if (!m_pendingReleased)

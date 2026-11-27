@@ -382,6 +382,11 @@ private:
 
     // Learning
     bool m_learning = false;
+    /** The Hold: held at least this long when learned, and let go of
+     *  within kHoldReleaseMs (second review, 9) */
+    static constexpr qint64 kHoldLearnMs = 800;
+    static constexpr int kHoldReleaseMs = 5000;
+    QTimer *m_holdLearnTimer = nullptr;
     Role m_learnRole = Stop;
     int m_confirmMs = 3000;
     quint64 m_pendingKey = ~quint64(0);

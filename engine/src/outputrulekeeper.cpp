@@ -42,7 +42,20 @@
 #include "teachinglog.h"
 #include "scene.h"
 #include "qlcpalette.h"
+#include "hazardfastpath.h"
+#include "controllerkeepalive.h"
+#include "showtreecontroller.h"
+#include "chaserstep.h"
+#include "collection.h"
+#include "chaser.h"
 #include <QDateTime>
+#include <climits>
+
+std::atomic<HazardFastPath *> &HazardFastPath::current()
+{
+    static std::atomic<HazardFastPath *> s_current { nullptr };
+    return s_current;
+}
 
 #define KXMLQLCOutputRuleOnAtOpen QStringLiteral("OnAtOpen")
 
@@ -146,10 +159,66 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     connect(doc->inputOutputMap(), &InputOutputMap::universeAdded, this, [this](quint32) { scheduleRebuild(); });
     connect(doc->inputOutputMap(), &InputOutputMap::universeRemoved, this, [this](quint32) { scheduleRebuild(); });
     m_seenOperate = doc->mode() == Doc::Operate;
+
+    /* Hazard arming's fire layers (board Q352/Q353, second review): on top
+       of the safe hold, each writing only while its gate is open. */
+    m_burstGate.flag = &m_hazardHold;
+    m_burstGate.grant = &m_hazardGrant;
+    m_burstGate.epoch = &m_hazardStep;
+    m_runningGate.flag = &m_hazardArmed;
+    m_runningGate.grant = &m_hazardGrant;
+    m_runningGate.epoch = &m_hazardStep;
+    m_burstLayer.reset(new OutputLayer(doc, Universe::Park, FadeChannel::Override | FadeChannel::PastGM,
+                                       QStringLiteral("Hazard fired by its cue: Burst")));
+    m_runningLayer.reset(new OutputLayer(doc, Universe::Park, FadeChannel::Override | FadeChannel::PastGM,
+                                         QStringLiteral("Hazard fired by its cue: Running")));
+    m_burstLayer->setOnTop(true);
+    m_runningLayer->setOnTop(true);
+    m_burstLayer->setGate(&m_burstGate);
+    m_runningLayer->setGate(&m_runningGate);
+    // The Hold let go and the Kill, from the input thread itself.
+    m_fast.reset(new HazardFastPath);
+    m_fast->hold = &m_hazardHold;
+    m_fast->armed = &m_hazardArmed;
+    m_fast->epoch = &m_hazardStep;
+    HazardFastPath::current().store(m_fast.get(), std::memory_order_release);
+    // Every list's every step, whatever moves it.
+    foreach (Function *f, doc->functions())
+        watchChaser(qobject_cast<Chaser *>(f));
+    connect(doc, &Doc::functionAdded, this, [this](quint32 id) {
+        watchChaser(qobject_cast<Chaser *>(m_doc->function(id)));
+    });
+    // A laser class, a scenery, a symbol changed a guess: laid again now.
+    Fixture::addGuessListener(this, [this]() {
+        if (thread() == QThread::currentThread())
+            guessesChanged();
+        else
+            QMetaObject::invokeMethod(this, [this]() { guessesChanged(); }, Qt::QueuedConnection);
+    });
+    if (ProgrammerController *pc = doc->programmer())
+    {
+        // Sleep and wake disarm: the spotter's device was gone meanwhile.
+        if (ControllerKeepAlive *ka = pc->controllerKeepAlive())
+            connect(ka, &ControllerKeepAlive::systemStateChanged, this,
+                    [this](ControllerKeepAlive::SystemState st) {
+                        if (st == ControllerKeepAlive::Asleep)
+                            disarmHazards(tr("the computer went to sleep"));
+                        else if (st == ControllerKeepAlive::Waking)
+                            disarmHazards(tr("the computer woke"));
+                    });
+        // A programmer edit after a Design run: what the run granted goes.
+        connect(pc, &ProgrammerController::programmerDirtyChanged, this, [this](bool dirty) {
+            if (dirty && m_doc->mode() == Doc::Design)
+                revokeHazards();
+        });
+    }
 }
 
 OutputRuleKeeper::~OutputRuleKeeper()
 {
+    HazardFastPath *mine = m_fast.get();
+    HazardFastPath::current().compare_exchange_strong(mine, nullptr);
+    Fixture::removeGuessListener(this);
 }
 
 void OutputRuleKeeper::startSession()
@@ -547,21 +616,7 @@ void OutputRuleKeeper::noteGo()
                 emitMachineryChanged();
             });
         }, Qt::QueuedConnection);
-    /* The hazards this GO's cue reaches, once it is writing -- with the
-       spotter's Hold and arming as they are NOW, at the GO: a hold that
-       comes after never fires it late (Q352). */
-    {
-        const bool held = m_hazardHold.load(std::memory_order_relaxed);
-        const bool armed = m_hazardArmed.load(std::memory_order_relaxed);
-        const quint32 gen = m_hazardGoGen.fetch_add(1, std::memory_order_relaxed) + 1;
-        QMetaObject::invokeMethod(this, [this, gen, held, armed]() {
-            if (m_hazards.isEmpty() && m_hazardsSkipped.isEmpty())
-                return;
-            QTimer::singleShot(4 * int(MasterTimer::tick()), this, [this, gen, held, armed]() {
-                checkHazardsAtGo(gen, held, armed);
-            });
-        }, Qt::QueuedConnection);
-    }
+    // The hazards: every step a list reaches is watched (watchChaser()).
     if (m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0)
         QMetaObject::invokeMethod(this, [this]() {
             m_lastHeldBy = showOnlyHeldBy();
@@ -933,12 +988,33 @@ void OutputRuleKeeper::layHazards()
 {
     QHash<quint32, Hazard> hazards;
     QList<quint32> order;
+    QList<QPair<Fixture *, bool> > stays;
+    QHash<quint32, Hazard> was;
+    {
+        QMutexLocker locker(&m_hazardMutex);
+        was = m_hazards;
+    }
     foreach (Fixture *fx, m_doc->fixtures())
     {
-        if (fx == nullptr || !fx->isPatched() || !FixtureRest::isHazard(fx))
+        if (fx == nullptr || !fx->isPatched())
             continue;
-        hazards.insert(fx->id(), hazardOf(fx));
+        /* Once a hazard, a hazard until set to something else by hand
+           (second review, 8): a guess that changed keeps it one. */
+        if (!FixtureRest::isHazard(fx) && was.contains(fx->id()) && !fx->behaviourOverridden())
+            stays << qMakePair(fx, was.value(fx->id()).burst);
+        else if (!FixtureRest::isHazard(fx))
+            continue;
+        Hazard h = hazardOf(fx);
+        if (!FixtureRest::isHazard(fx))
+            h.burst = was.value(fx->id()).burst;
+        hazards.insert(fx->id(), h);
         order << fx->id();
+    }
+    for (const auto &st : std::as_const(stays))
+    {
+        st.first->setBehaviourSetting(st.second ? Fixture::HazardBurstBehaviour : Fixture::HazardRunningBehaviour);
+        logHazard(tr("%1 stays a hazard (its name or definition no longer says so): set its "
+                     "Behaves as by hand to change it").arg(st.first->name()));
     }
     bool changed = false;
     {
@@ -953,100 +1029,114 @@ void OutputRuleKeeper::layHazards()
         }
         m_hazards = hazards;
         m_hazardOrder = order;
-        // A fixture no longer a hazard, or parked, keeps no permission.
-        for (auto it = m_hazardPermitted.begin(); it != m_hazardPermitted.end();)
-            it = hazards.contains(*it) && !hazards.value(*it).parked ? std::next(it) : m_hazardPermitted.erase(it);
-        for (auto it = m_hazardOut.begin(); it != m_hazardOut.end();)
-            it = hazards.contains(*it) ? std::next(it) : m_hazardOut.erase(it);
     }
     {
         // Every universe told again (one added since has none of it).
         QMutexLocker apply(&m_hazardApplyMutex);
         m_passForce = true;
     }
-    applyHazards();
+    // The rig changed under the grants: worked out again from the steps.
+    if (changed)
+        grantHazards(Function::invalidId());
+    else
+        applyHazards();
     if (changed)
         emitHazardsChanged();
 }
 
 void OutputRuleKeeper::layHazardNow(quint32 fixtureId)
 {
-    const Fixture *fx = m_doc->fixture(fixtureId);
-    const bool hazard = fx != nullptr && fx->isPatched() && FixtureRest::isHazard(fx);
+    Fixture *fx = m_doc->fixture(fixtureId);
+    bool hazard = fx != nullptr && fx->isPatched() && FixtureRest::isHazard(fx);
+    bool was = false;
+    Hazard old;
+    {
+        QMutexLocker locker(&m_hazardMutex);
+        was = m_hazards.contains(fixtureId);
+        old = m_hazards.value(fixtureId);
+    }
+    if (!hazard && !was)
+        return;             // a light stays a light: nothing to lay
+    /* Once a hazard, a hazard until someone sets it to something else by
+       hand (the second review, 8): a rename ("CO2 jet" -> "DS Jet") or a
+       definition's change that loses the guess keeps it one, set by hand
+       to its kind now, said in the log and listed in Show Review. */
+    if (!hazard && was && fx != nullptr && fx->isPatched() && !fx->behaviourOverridden())
+    {
+        fx->setBehaviourSetting(old.burst ? Fixture::HazardBurstBehaviour : Fixture::HazardRunningBehaviour);
+        logHazard(tr("%1 stays a hazard (its name or definition no longer says so): set its "
+                     "Behaves as by hand to change it").arg(fx->name()));
+        return;             // its changed() comes back here as a hazard
+    }
     bool changed = false;
     {
         QMutexLocker locker(&m_hazardMutex);
-        const bool was = m_hazards.contains(fixtureId);
-        if (!hazard && !was)
-            return;         // a light stays a light: nothing to lay
         if (hazard)
         {
             const Hazard h = hazardOf(fx);
-            const Hazard old = m_hazards.value(fixtureId);
             changed = !was || old.base != h.base || old.channels != h.channels || old.burst != h.burst
                       || old.parked != h.parked || old.name != h.name;
             m_hazards.insert(fixtureId, h);
             if (!was)
                 m_hazardOrder << fixtureId;
-            // Moved, re-patched or of another kind: what a run let fire is gone.
-            if (changed)
-                m_hazardPermitted.remove(fixtureId);
         }
         else
         {
             m_hazards.remove(fixtureId);
             m_hazardOrder.removeAll(fixtureId);
-            m_hazardPermitted.remove(fixtureId);
-            m_hazardOut.remove(fixtureId);
             changed = true;
         }
     }
     if (!changed)
         return;
-    applyHazards();
+    if (was && !hazard && fx != nullptr && fx->behaviourOverridden())
+        logHazard(tr("%1 set to %2 by hand: no longer a hazard")
+                      .arg(fx->name(), Fixture::behaviourName(Fixture::Behaviour(fx->behaviourSetting()))));
+    // Moved, re-patched, of another kind, or new: what it was granted is gone.
+    grantHazards(Function::invalidId());
     emitHazardsChanged();
+}
+
+void OutputRuleKeeper::guessesChanged()
+{
+    // Many at once while a show loads: it is laid when the load ends.
+    if (m_doc->loadStatus() == Doc::Loading)
+    {
+        scheduleRebuild();
+        return;
+    }
+    layHazards();
 }
 
 void OutputRuleKeeper::applyHazards()
 {
     QMutexLocker apply(&m_hazardApplyMutex);
-    QList<OutputLayer::Level> levels;
+    QList<OutputLayer::Level> safe, burst, running;
     QSet<quint32> passHeld;
-    QStringList fired, safe;
     {
         QMutexLocker locker(&m_hazardMutex);
-        const bool hold = m_hazardHold.load(std::memory_order_relaxed);
-        const bool armed = m_hazardArmed.load(std::memory_order_relaxed);
-        QSet<quint32> out;
         for (quint32 id : std::as_const(m_hazardOrder))
         {
             const Hazard &h = m_hazards[id];
-            const bool live = !h.parked && m_hazardPermitted.contains(id) && (h.burst ? hold : armed);
-            if (live)
-            {
-                out.insert(id);
-                if (!m_hazardOut.contains(id))
-                    fired << (h.burst ? tr("%1 fired (Hold held)").arg(h.name)
-                                      : tr("%1 on (armed)").arg(h.name));
-                continue;
-            }
-            if (m_hazardOut.contains(id))
-                safe << h.name;
             // Off: a hazard's every channel rests at 0 (FixtureRest::restValue()).
             for (quint32 i = 0; i < h.channels; ++i)
             {
-                levels << OutputLayer::Level { id, i, uchar(0) };
+                safe << OutputLayer::Level { id, i, uchar(0) };
                 passHeld.insert(h.base + i);
             }
+            if (h.parked)
+                continue;           // Park wins: at 0
+            const QHash<quint32, QByteArray> &grant = h.burst ? m_burstGrant : m_runningGrant;
+            auto g = grant.constFind(id);
+            if (g == grant.constEnd())
+                continue;
+            for (quint32 i = 0; i < h.channels && int(i) < g.value().size(); ++i)
+                (h.burst ? burst : running) << OutputLayer::Level { id, i, uchar(g.value().at(int(i))) };
         }
-        m_hazardOut = out;
     }
-    if (levels.isEmpty())
-        m_hazardLayer->clear();
-    else
-        m_hazardLayer->set(levels, [](const OutputLayer::Level &) { return true; });
     /* The input passthrough never reaches a hazard held safe (053p
-       review): it merges over every fader, the hold's too. */
+       review): it merges over every fader. Held before the layers move
+       (second review, 11): never a frame where it could leak. */
     if (passHeld != m_passHeld || m_passForce)
     {
         m_passForce = false;
@@ -1056,18 +1146,25 @@ void OutputRuleKeeper::applyHazards()
             if (u < ua.size() && ua.at(u) != nullptr)
                 ua.at(u)->setPassthroughHeld(int(abs & 0x1ff), held);
         };
+        for (quint32 abs : std::as_const(passHeld))
+            mark(abs, true);
         for (quint32 abs : std::as_const(m_passHeld))
             if (!passHeld.contains(abs))
                 mark(abs, false);
-        for (quint32 abs : std::as_const(passHeld))
-            mark(abs, true);
         m_passHeld = passHeld;
     }
-    apply.unlock();
-    for (const QString &line : std::as_const(fired))
-        logHazard(line);
-    if (!safe.isEmpty())
-        logHazard(tr("%1 back to safe").arg(safe.join(QStringLiteral(", "))));
+    if (safe.isEmpty())
+        m_hazardLayer->clear();
+    else
+        m_hazardLayer->set(safe, [](const OutputLayer::Level &) { return true; });
+    /* The fire layers laid again over the safe one, every time: a fader
+       asked for later sits above (Universe::requestTopFader()). */
+    m_burstLayer->clear();
+    m_runningLayer->clear();
+    if (!burst.isEmpty())
+        m_burstLayer->set(burst, [](const OutputLayer::Level &) { return true; });
+    if (!running.isEmpty())
+        m_runningLayer->set(running, [](const OutputLayer::Level &) { return true; });
 }
 
 QList<quint32> OutputRuleKeeper::hazards() const
@@ -1089,10 +1186,65 @@ bool OutputRuleKeeper::isParkedHazard(quint32 fixtureId) const
     return m_hazards.value(fixtureId).parked;
 }
 
-bool OutputRuleKeeper::hazardLive(quint32 fixtureId) const
+QByteArray OutputRuleKeeper::hazardOutput(quint32 fixtureId) const
 {
     QMutexLocker locker(&m_hazardMutex);
-    return m_hazardOut.contains(fixtureId);
+    auto it = m_hazards.constFind(fixtureId);
+    if (it == m_hazards.constEnd() || it.value().parked)
+        return QByteArray();
+    const bool burst = it.value().burst;
+    const FaderGate &gate = burst ? m_burstGate : m_runningGate;
+    if (!gate.open())
+        return QByteArray();
+    const QByteArray v = (burst ? m_burstGrant : m_runningGrant).value(fixtureId);
+    for (char c : v)
+        if (c != 0)
+            return v;
+    return QByteArray();
+}
+
+bool OutputRuleKeeper::hazardLive(quint32 fixtureId) const
+{
+    return !hazardOutput(fixtureId).isEmpty();
+}
+
+void OutputRuleKeeper::logHazardOutputs(const QString &why)
+{
+    QList<quint32> order;
+    QHash<quint32, QString> names;
+    {
+        QMutexLocker locker(&m_hazardMutex);
+        order = m_hazardOrder;
+        for (quint32 id : std::as_const(order))
+            names.insert(id, m_hazards.value(id).name);
+    }
+    QHash<quint32, QByteArray> now;
+    for (quint32 id : std::as_const(order))
+    {
+        const QByteArray out = hazardOutput(id);
+        if (!out.isEmpty())
+            now.insert(id, out);
+    }
+    auto level = [](const QByteArray &v) {
+        int top = 0;
+        for (char c : v)
+            top = qMax(top, int(uchar(c)));
+        return top;
+    };
+    for (quint32 id : std::as_const(order))
+    {
+        const int was = level(m_lastOut.value(id)), is = level(now.value(id));
+        if (was == is)
+            continue;
+        if (is == 0)
+            logHazard(tr("%1 back to safe (%2)").arg(names.value(id), why));
+        else if (was == 0)
+            logHazard(isBurstHazard(id) ? tr("%1 fired at %2 (%3)").arg(names.value(id)).arg(is).arg(why)
+                                        : tr("%1 on at %2 (%3)").arg(names.value(id)).arg(is).arg(why));
+        else
+            logHazard(tr("%1 %2 → %3 (%4)").arg(names.value(id)).arg(was).arg(is).arg(why));
+    }
+    m_lastOut = now;
 }
 
 void OutputRuleKeeper::setHazardHold(bool down)
@@ -1100,24 +1252,27 @@ void OutputRuleKeeper::setHazardHold(bool down)
     if (!down)
     {
         m_hazardHoldNeedsRelease.store(false, std::memory_order_relaxed);
-        if (!m_hazardHold.exchange(false, std::memory_order_relaxed))
+        m_hazardHold.store(false, std::memory_order_release);
+        if (!m_holdShown)
             return;
+        m_holdShown = false;
     }
     else
     {
         // A Hold that was down through a disarm counts once let go of.
         if (m_hazardHoldNeedsRelease.load(std::memory_order_relaxed))
             return;
-        if (m_hazardHold.exchange(true, std::memory_order_relaxed))
+        if (m_hazardHold.exchange(true, std::memory_order_acq_rel) && m_holdShown)
             return;
+        m_holdShown = true;
     }
-    applyHazards();
+    logHazardOutputs(down ? tr("Hold held") : tr("Hold let go"));
     emitHazardsChanged();
 }
 
 void OutputRuleKeeper::armHazards()
 {
-    if (m_hazardArmed.exchange(true, std::memory_order_relaxed))
+    if (m_hazardArmed.exchange(true, std::memory_order_acq_rel))
         return;
     QStringList running;
     {
@@ -1129,157 +1284,253 @@ void OutputRuleKeeper::armHazards()
     logHazard(running.isEmpty() ? tr("Armed (no Running hazard in the show)")
                                 : tr("Armed: %1 fire from the next cue that sets them")
                                       .arg(running.join(QStringLiteral(", "))));
-    applyHazards();
     emitHazardsChanged();
 }
 
 void OutputRuleKeeper::killHazards()
 {
-    bool any = m_hazardArmed.exchange(false, std::memory_order_relaxed);
+    // The input thread may have closed it all already (HazardFastPath).
+    m_hazardArmed.store(false, std::memory_order_release);
+    m_hazardHold.store(false, std::memory_order_release);
+    m_holdShown = false;
+    bool any = false;
     {
         QMutexLocker locker(&m_hazardMutex);
-        any = any || !m_hazardPermitted.isEmpty();
-        m_hazardPermitted.clear();
+        any = !m_reach.isEmpty() || !m_burstGrant.isEmpty() || !m_runningGrant.isEmpty();
     }
-    // A next GO's check of a GO before the Kill finds nothing to let fire.
-    m_hazardGoGen.fetch_add(1, std::memory_order_relaxed);
-    applyHazards();
+    revokeHazards();
     logHazard(any ? tr("Kill: every hazard off, disarmed") : tr("Kill pressed (nothing was armed)"));
     emitHazardsChanged();
 }
 
 void OutputRuleKeeper::disarmHazards(const QString &why)
 {
-    bool any = m_hazardArmed.exchange(false, std::memory_order_relaxed);
-    if (m_hazardHold.exchange(false, std::memory_order_relaxed))
-    {
-        any = true;
-        // Still down on the device: it must be let go of and pressed again.
-        m_hazardHoldNeedsRelease.store(true, std::memory_order_relaxed);
-    }
+    const bool armed = m_hazardArmed.exchange(false, std::memory_order_acq_rel);
+    const bool held = m_hazardHold.exchange(false, std::memory_order_acq_rel) || m_holdShown;
+    // Still down on the device: it must be let go of and pressed again.
+    m_hazardHoldNeedsRelease.store(true, std::memory_order_relaxed);
+    bool granted = false;
     {
         QMutexLocker locker(&m_hazardMutex);
-        any = any || !m_hazardPermitted.isEmpty() || !m_hazardOut.isEmpty();
-        m_hazardPermitted.clear();
+        granted = !m_burstGrant.isEmpty() || !m_runningGrant.isEmpty() || !m_reach.isEmpty();
+        m_reach.clear();
+        m_granting.clear();
+        m_burstGrant.clear();
+        m_runningGrant.clear();
     }
-    m_hazardGoGen.fetch_add(1, std::memory_order_relaxed);
-    if (!any)
+    m_hazardStep.fetch_add(1, std::memory_order_acq_rel);
+    if (!armed && !held && !granted)
         return;
+    if (thread() != QThread::currentThread())
+    {
+        QMetaObject::invokeMethod(this, [this, why]() {
+            m_holdShown = false;
+            applyHazards();
+            logHazardOutputs(why);
+            logHazard(tr("Disarmed: %1").arg(why));
+            emitHazardsChanged();
+        }, Qt::QueuedConnection);
+        return;
+    }
+    m_holdShown = false;
     applyHazards();
+    logHazardOutputs(why);
     logHazard(tr("Disarmed: %1").arg(why));
     emitHazardsChanged();
 }
 
 void OutputRuleKeeper::revokeHazards()
 {
-    m_hazardGoGen.fetch_add(1, std::memory_order_relaxed);
+    m_hazardStep.fetch_add(1, std::memory_order_acq_rel);
     {
         QMutexLocker locker(&m_hazardMutex);
-        if (m_hazardPermitted.isEmpty())
+        if (m_reach.isEmpty() && m_burstGrant.isEmpty() && m_runningGrant.isEmpty())
             return;
-        m_hazardPermitted.clear();
+        m_reach.clear();
+        m_granting.clear();
+        m_burstGrant.clear();
+        m_runningGrant.clear();
+    }
+    if (thread() != QThread::currentThread())
+    {
+        QMetaObject::invokeMethod(this, [this]() {
+            applyHazards();
+            logHazardOutputs(tr("taken back"));
+            emitHazardsChanged();
+        }, Qt::QueuedConnection);
+        return;
     }
     applyHazards();
+    logHazardOutputs(tr("taken back"));
     emitHazardsChanged();
 }
 
-void OutputRuleKeeper::checkHazardsAtGo(quint32 gen, bool held, bool armed)
+void OutputRuleKeeper::setHazardControls(quint32 holdUniverse, quint32 holdChannel,
+                                         quint32 killUniverse, quint32 killChannel)
 {
-    // A later GO, a stop, a Kill or an edit since: that one decides.
-    if (gen != m_hazardGoGen.load(std::memory_order_relaxed))
+    m_fast->holdKey.store(holdUniverse == UINT_MAX ? HazardFastPath::kNone
+                                                   : HazardFastPath::key(holdUniverse, holdChannel));
+    m_fast->killKey.store(killUniverse == UINT_MAX ? HazardFastPath::kNone
+                                                   : HazardFastPath::key(killUniverse, killChannel));
+}
+
+void OutputRuleKeeper::watchChaser(Chaser *chaser)
+{
+    if (chaser == nullptr || m_watched.contains(chaser->id()))
         return;
-    QList<quint32> order;
-    QHash<quint32, Hazard> hazards;
+    m_watched.insert(chaser->id());
+    const quint32 id = chaser->id();
+    // On the thread the step comes on (the MasterTimer's): closed at once.
+    connect(chaser, &Chaser::currentStepChanged, this, [this, id](int step) { hazardStepReached(id, step); },
+            Qt::DirectConnection);
+    connect(chaser, &Function::stopped, this, [this](quint32 fid) { hazardStepReached(fid, -1); },
+            Qt::DirectConnection);
+    connect(chaser, &QObject::destroyed, this, [this, id]() { m_watched.remove(id); });
+}
+
+void OutputRuleKeeper::hazardStepReached(quint32 chaserId, int step)
+{
+    Reach r;
+    r.step = step;
+    r.held = m_hazardHold.load(std::memory_order_acquire);
+    r.armed = m_hazardArmed.load(std::memory_order_acquire);
+    r.blind = m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited();
+    bool close = false;
     {
         QMutexLocker locker(&m_hazardMutex);
-        order = m_hazardOrder;
-        hazards = m_hazards;
+        if (m_hazardOrder.isEmpty())
+            return;
+        close = m_granting.contains(chaserId);
+        if (step < 0)
+            m_reach.remove(chaserId);
+        else
+            m_reach.insert(chaserId, r);
     }
-    /* What drives each hazard above off: a fader under the Park ones
-       (every hold here sits at Park) with a target there. On a GO only,
-       never per frame. */
-    QSet<quint32> driven;
-    const QList<Universe *> ua = m_doc->inputOutputMap()->universesSnapshot();
-    for (quint32 id : std::as_const(order))
-    {
-        const Fixture *fx = m_doc->fixture(id);
-        if (fx == nullptr)
-            continue;
-        bool any = false;
-        for (quint32 i = 0; i < fx->channels() && !any; ++i)
-        {
-            const quint32 abs = fx->universeAddress() + i;
-            const int u = int(abs >> 9);
-            if (u >= ua.size() || ua.at(u) == nullptr)
-                continue;
-            const uchar safe = 0;           // as applyHazards() holds it
-            for (const QSharedPointer<GenericFader> &f : ua.at(u)->faders())
+    // What this list granted closes now, before its next cue writes.
+    if (close)
+        m_hazardStep.fetch_add(1, std::memory_order_acq_rel);
+    QMetaObject::invokeMethod(this, [this, chaserId]() { grantHazards(chaserId); },
+                              thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
+}
+
+QHash<quint32, QByteArray> OutputRuleKeeper::hazardStepLevels(quint32 chaserId, int step) const
+{
+    QHash<quint32, QByteArray> levels;
+    Chaser *c = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    if (c == nullptr || step < 0)
+        return levels;
+    // A Show Tree list: its cue as it plays (tracked, included, its own).
+    if (ShowTreeController *st = m_doc->showTree())
+        for (const ShowTree::Production &p : st->productions())
+            for (const ShowTree::CueList &l : p.lists)
             {
-                if (f.isNull() || f->priority() >= int(Universe::Park))
+                if (l.looks || l.chaser != chaserId)
                     continue;
-                FadeChannel fc;
-                if (f->peekAddress(abs & 0x1ff, &fc) && fc.target(0) != safe)
-                {
-                    any = true;
-                    break;
-                }
+                quint32 cueId = Function::invalidId();
+                if (!l.isSubCues())
+                    cueId = st->cueOfStep(l.id, step);
+                else if (step < l.cues.count())
+                    cueId = l.cues.at(step).id;
+                return cueId != Function::invalidId() ? st->cueLevels(cueId) : levels;
+            }
+    // Any other list: its step's scene, or the scenes of its collection.
+    ChaserStep *cs = c->stepAt(step);
+    if (cs == nullptr)
+        return levels;
+    QList<quint32> fids { cs->fid };
+    for (int i = 0; i < fids.size() && i < 64; ++i)
+    {
+        Function *f = m_doc->function(fids.at(i));
+        if (const Collection *coll = qobject_cast<const Collection *>(f))
+            fids << coll->functions();
+        else if (const Scene *sc = qobject_cast<const Scene *>(f))
+        {
+            const QList<SceneValue> vals = (cs->fid == sc->id() && !cs->values.isEmpty()) ? cs->values : sc->values();
+            for (const SceneValue &v : vals)
+            {
+                const Fixture *fx = m_doc->fixture(v.fxi);
+                if (fx == nullptr || v.channel >= fx->channels())
+                    continue;
+                QByteArray &b = levels[v.fxi];
+                if (b.size() != int(fx->channels()))
+                    b = QByteArray(int(fx->channels()), 0);
+                b[int(v.channel)] = char(qMax(uchar(b.at(int(v.channel))), v.value));
             }
         }
-        if (any)
-            driven.insert(id);
     }
+    return levels;
+}
 
-    QList<quint32> skipped;
-    QHash<quint32, bool> skippedBurst;
+void OutputRuleKeeper::grantHazards(quint32 stepped)
+{
+    const quint32 epoch = m_hazardStep.load(std::memory_order_acquire);
+    QHash<quint32, Reach> reach;
+    QHash<quint32, Hazard> hazards;
+    QList<quint32> order;
     {
         QMutexLocker locker(&m_hazardMutex);
-        if (gen != m_hazardGoGen.load(std::memory_order_relaxed))
-            return;
+        reach = m_reach;
+        hazards = m_hazards;
+        order = m_hazardOrder;
+    }
+    QHash<quint32, QByteArray> burst, running;
+    QSet<quint32> granting;
+    QList<quint32> skipped;
+    QHash<quint32, bool> skippedBurst;
+    for (auto it = reach.constBegin(); it != reach.constEnd(); ++it)
+    {
+        Chaser *c = qobject_cast<Chaser *>(m_doc->function(it.key()));
+        // Only while that step is current.
+        if (c == nullptr || !c->isRunning() || c->currentStepIndex() != it.value().step)
+            continue;
+        const QHash<quint32, QByteArray> levels = hazardStepLevels(it.key(), it.value().step);
         for (quint32 id : std::as_const(order))
         {
             const Hazard &h = hazards[id];
-            if (h.burst)
+            const QByteArray v = levels.value(id);
+            bool any = false;
+            for (char ch : v)
+                any = any || ch != 0;
+            if (!any)
+                continue;           // the cue sets it to 0, or not at all: 0
+            const bool let = !it.value().blind && !h.parked && (h.burst ? it.value().held : it.value().armed);
+            if (!let)
             {
-                /* Each cue its own: let fire only when the Hold was down
-                   as it was reached. Not held then: skipped, and a hold
-                   that comes after fires nothing (Q352 A). */
-                if (driven.contains(id) && held)
-                    m_hazardPermitted.insert(id);
-                else
-                {
-                    m_hazardPermitted.remove(id);
-                    if (driven.contains(id))
-                    {
-                        skipped << id;
-                        skippedBurst.insert(id, true);
-                    }
-                }
-            }
-            else if (driven.contains(id))
-            {
-                /* Armed: on from this cue until the Kill, across cues.
-                   Unarmed: skipped, until the next cue that sets it
-                   after the arming (Q353 A). */
-                if (armed)
-                    m_hazardPermitted.insert(id);
-                else if (!m_hazardPermitted.contains(id))
+                if (it.key() == stepped && !h.parked && !skipped.contains(id))
                 {
                     skipped << id;
-                    skippedBurst.insert(id, false);
+                    skippedBurst.insert(id, h.burst);
                 }
+                continue;
             }
+            QHash<quint32, QByteArray> &into = h.burst ? burst : running;
+            QByteArray &b = into[id];
+            if (b.size() != v.size())
+                b = QByteArray(v.size(), 0);
+            for (int i = 0; i < v.size(); ++i)
+                b[i] = char(qMax(uchar(b.at(i)), uchar(v.at(i))));
+            granting.insert(it.key());
         }
     }
+    {
+        QMutexLocker locker(&m_hazardMutex);
+        m_burstGrant = burst;
+        m_runningGrant = running;
+        m_granting = granting;
+    }
+    applyHazards();
+    // Open only if no step, Kill or stop came meanwhile.
+    m_hazardGrant.store(epoch, std::memory_order_release);
     for (quint32 id : std::as_const(skipped))
         logHazard(skippedBurst.value(id) ? tr("%1 skipped: not held").arg(hazards.value(id).name)
                                          : tr("%1 skipped: not armed").arg(hazards.value(id).name));
-    applyHazards();
-    if (skipped != m_hazardsSkipped || skippedBurst != m_hazardSkippedBurst)
+    if (stepped != Function::invalidId() && (skipped != m_hazardsSkipped || skippedBurst != m_hazardSkippedBurst))
     {
         m_hazardsSkipped = skipped;
         m_hazardSkippedBurst = skippedBurst;
         emitMachineryChanged();
     }
+    logHazardOutputs(tr("cue reached"));
     emitHazardsChanged();
 }
 
@@ -1343,7 +1594,7 @@ void OutputRuleKeeper::noteHandOnHazard(quint32 fixtureId)
     {
         QMutexLocker locker(&m_hazardMutex);
         auto it = m_hazards.constFind(fixtureId);
-        if (it == m_hazards.constEnd() || m_hazardOut.contains(fixtureId))
+        if (it == m_hazards.constEnd())
             return;
         burst = it.value().burst;
         name = it.value().name;
@@ -1353,10 +1604,10 @@ void OutputRuleKeeper::noteHandOnHazard(quint32 fixtureId)
         return;
     m_handSaidAt.insert(fixtureId, now);
     emit handHeldOnHazard(burst
-        ? tr("%1 is a hazard (Burst): it stays off. Only a cue fires it, while the spotter holds "
-             "Hazard hold.").arg(name)
-        : tr("%1 is a hazard (Running): it stays off. Only a cue fires it, once the spotter has armed "
-             "it (Hazard arm).").arg(name));
+        ? tr("%1 is a hazard (Burst): a slider or the desk never drives it. Only a cue fires it, at the "
+             "cue's level, while the spotter holds Hazard hold.").arg(name)
+        : tr("%1 is a hazard (Running): a slider or the desk never drives it. Only a cue fires it, at "
+             "the cue's level, once the spotter has armed it (Hazard arm).").arg(name));
 }
 
 QList<quint32> OutputRuleKeeper::hazardsCued() const

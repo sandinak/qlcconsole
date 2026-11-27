@@ -1126,6 +1126,13 @@ static void fix22(ReviewContext &ctx, QList<ReviewFinding> &out)
                "fire. Set the spotter's Hazard hold in Connections ▸ Control surfaces.")
                 .arg(burst.join(QStringLiteral(", "))),
             fixtureKeys(ids), QByteArray("hold"), QStringLiteral("fixtures"), variantIds(ids));
+    // A show that fires hazards with no Kill: nothing turns one off at once.
+    const QList<quint32> cued = hazardsCued(ctx.doc());
+    if (!cued.isEmpty() && (desk == nullptr || !desk->isSet(DeskRecord::HazardKill)))
+        out << ReviewContext::make(QStringLiteral("FIX-22"), ReviewFinding::Warning,
+            tr("Cues fire hazards, but no Hazard kill is set on this computer: the spotter has nothing "
+               "that turns them all off at once. Set it in Connections ▸ Control surfaces."),
+            fixtureKeys(cued), QByteArray("kill"), QStringLiteral("fixtures"), variantIds(cued));
     if (!running.isEmpty())
         out << ReviewContext::make(QStringLiteral("FIX-22"), ReviewFinding::Blocker,
             tr("Cues fire %1 (a Running hazard), but no Hazard arm is set on this computer: they never "

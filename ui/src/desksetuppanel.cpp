@@ -81,9 +81,10 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
         { tr("GO"), tr("GO on the Run tab's list, one press. Learn: press the button.") },
         { tr("Back"), tr("Back on the Run tab's list. Learn: press the button.") },
         { tr("Hazard hold"), tr("The spotter's deadman: a Burst hazard (flame, CO2, confetti) fires only "
-                                "while it is held down. Learn: press the button.") },
+                                "while it is held down. A momentary button on a plugged-in device. Learn: "
+                                "press it, hold about a second, let go.") },
         { tr("Hazard arm"), tr("Arms the Running hazards (fog, haze, lasers): on from the next cue that "
-                               "sets them. Learn: press the button.") },
+                               "sets them. A button on a plugged-in device. Learn: press the button.") },
         { tr("Hazard kill"), tr("Every hazard off at once, and disarmed. Learn: press the button.") },
     };
     int r = 1;
@@ -94,8 +95,9 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
             m_hazardHead = new QLabel(QStringLiteral("<b>%1</b><br>%2")
                                           .arg(tr("Hazards — the spotter's controls").toHtmlEscaped(),
                                                tr("For the spotter or laser safety officer, not the operator: "
-                                                  "never GO's, Back's or a STOP's control, never a computer key. "
-                                                  "Lost (unplugged), every hazard is disarmed.").toHtmlEscaped()),
+                                                  "never GO's, Back's, a STOP's or each other's control, never a "
+                                                  "computer key; Hold and Arm only on a plugged-in device, not the "
+                                                  "network. Lost (unplugged), every hazard is disarmed.").toHtmlEscaped()),
                                       this);
             m_hazardHead->setObjectName(QStringLiteral("deskHazardHead"));
             m_hazardHead->setWordWrap(true);
@@ -190,8 +192,9 @@ DeskSetupPanel::DeskSetupPanel(Doc *doc, QWidget *parent)
         m_learnLine->setVisible(!why.isEmpty());
         refresh();
     });
-    connect(m_desk, &DeskRecord::learnConfirming, this, [this]() {
-        m_learnLine->setText(tr("Release it and press it again."));
+    connect(m_desk, &DeskRecord::learnConfirming, this, [this](DeskRecord::Role role) {
+        m_learnLine->setText(role == DeskRecord::HazardHold ? tr("Keep holding it… then let go.")
+                                                            : tr("Release it and press it again."));
         m_learnLine->show();
     });
     connect(m_desk, &DeskRecord::grandMasterWaitingChanged, this, &DeskSetupPanel::refresh);
@@ -257,6 +260,8 @@ void DeskSetupPanel::startLearn(DeskRecord::Role role)
                              ? tr("Move the fader for %1. Press Cancel to stop.").arg(DeskRecord::roleName(role))
                              : role == DeskRecord::Stop
                                    ? tr("Press the button for STOP, release it, and press it again.")
+                             : role == DeskRecord::HazardHold
+                                   ? tr("Press the button for the Hazard hold, hold it about a second, and let go.")
                                    : tr("Press the button for %1.").arg(DeskRecord::roleName(role)));
     m_learnLine->show();
     refresh();

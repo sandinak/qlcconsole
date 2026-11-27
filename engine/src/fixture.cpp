@@ -23,6 +23,7 @@
 #include <QString>
 #include <QtMath>
 #include <QDebug>
+#include <QMutex>
 #include <QCoreApplication>
 
 #include "qlcfixturedefcache.h"
@@ -104,6 +105,47 @@ quint32 Fixture::invalidId()
  *****************************************************************************/
 
 std::atomic<quint32> Fixture::s_guessEpoch { 1 };
+
+namespace
+{
+QMutex &guessListenersMutex()
+{
+    static QMutex m;
+    return m;
+}
+QList<QPair<const void *, std::function<void()>>> &guessListeners()
+{
+    static QList<QPair<const void *, std::function<void()>>> l;
+    return l;
+}
+}
+
+void Fixture::invalidateGuesses()
+{
+    s_guessEpoch.fetch_add(1, std::memory_order_relaxed);
+    QList<QPair<const void *, std::function<void()>>> copy;
+    {
+        QMutexLocker locker(&guessListenersMutex());
+        copy = guessListeners();
+    }
+    for (const auto &l : copy)
+        l.second();
+}
+
+void Fixture::addGuessListener(const void *owner, const std::function<void()> &listener)
+{
+    QMutexLocker locker(&guessListenersMutex());
+    guessListeners().append(qMakePair(owner, listener));
+}
+
+void Fixture::removeGuessListener(const void *owner)
+{
+    QMutexLocker locker(&guessListenersMutex());
+    auto &l = guessListeners();
+    for (int i = int(l.size()) - 1; i >= 0; --i)
+        if (l.at(i).first == owner)
+            l.removeAt(i);
+}
 
 void Fixture::setName(const QString& name)
 {

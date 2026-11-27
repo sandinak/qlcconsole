@@ -22,6 +22,7 @@
 #define FIXTURE_H
 
 #include <QObject>
+#include <functional>
 #include <atomic>
 #include <QMutex>
 #include <QAtomicInt>
@@ -770,7 +771,11 @@ public:
         m_guess.store(guess, std::memory_order_relaxed);
         m_guessEpoch.store(s_guessEpoch.load(std::memory_order_relaxed), std::memory_order_release);
     }
-    static void invalidateGuesses() { s_guessEpoch.fetch_add(1, std::memory_order_relaxed); }
+    static void invalidateGuesses();
+    /** Told on every invalidateGuesses() (on its thread): the hazards are
+     *  laid again (OutputRuleKeeper). @p owner removes it. */
+    static void addGuessListener(const void *owner, const std::function<void()> &listener);
+    static void removeGuessListener(const void *owner);
 
 protected:
     void invalidateGuess() { m_guessEpoch.store(0, std::memory_order_relaxed); }

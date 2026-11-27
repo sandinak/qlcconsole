@@ -34,6 +34,7 @@
 #include "fixture.h"
 #include "doc.h"
 #include "outputlayer.h"
+#include "genericfader.h"
 #include "qlcengine_export.h"
 
 class QXmlStreamReader;
@@ -336,29 +337,38 @@ public:
      * Hazards and arming (board Q351, Q352 A, Q353 A)
      *********************************************************************/
     /** Every patched hazard (FixtureRest::isHazard(): fog, haze, flame,
-     *  CO2, confetti, a 3R+ laser), in the show's order. Each
-     *  is held at its safe value (off) on the output, over everything
-     *  that plays, in Design and Operate -- an edit pick, a preview, a stop
-     *  -- unless a run reached it while the spotter let it fire:
-     *  - a Burst (Fixture::HazardBurstBehaviour) only while the spotter's
-     *    Hold control is held down (the deadman), and only for a cue that
-     *    reached it while it was held: a cue reached while not held SKIPS
-     *    it, and it never fires late when the hold comes after;
-     *  - a Running one (Fixture::HazardRunningBehaviour) once the spotter
-     *    has armed it (their Arm control), from the first cue that sets it
-     *    after the arming, until their Kill control (off at once,
-     *    disarmed). A cue reached unarmed is skipped; arming then fires
-     *    nothing until the next GO whose cue sets it.
-     *  Disarmed (Hold let go of, Running disarmed, every permission gone)
-     *  on a show opened, the emergency stop, Stop All / Fade and stop, and
-     *  the spotter's device lost (DeskRecord). A Park wins: a parked one
-     *  stays held at off, whatever the Park saved (an old show's hazer
-     *  parked at 40 %), and the hold sits on top of every Park (a light
-     *  overlapping its address parked later); an edit pick never fires one (it takes away
-     *  what the last GO let fire). The controls are this computer's desk
-     *  roles (DeskRecord::HazardHold, HazardArm, HazardKill). No per-frame
-     *  work: the hold is an OutputLayer laid again on a change only.
-     *  Main thread. */
+     *  CO2, confetti, a 3R+ laser), in the show's order.
+     *
+     *  The rule (board Q352 A / Q353 A, second review): the only thing that
+     *  ever puts a value other than safe on a hazard's channel is the value
+     *  the cue a run stepped to sets for it, while that step is current.
+     *  Three layers sit on top of everything (Park priority, on top of every
+     *  Park): one holds every hazard channel at 0, always; over it a fire
+     *  layer per kind lays the current step's own values -- read from the
+     *  cue (ShowTreeController::cueLevels(), tracking and includes in) or
+     *  the step's scene, never from what plays underneath -- and writes
+     *  only while its gate is open (FaderGate): the Hold down (Burst) or
+     *  the arming on (Running), and the grant still the current step's.
+     *  So the Simple Desk, Edit Live, the Virtual Console, the web, input
+     *  passthrough, override hits, Focus, the programmer, a fixture on the
+     *  same address or a stray function never reach a hazard, armed or not;
+     *  a cue that sets it to 0 puts it at 0.
+     *
+     *  At every step a list reaches -- a GO, Back, a jump, a timecode or
+     *  audio step, an auto-follow, a sub-cue, a VC cue list, a chaser's own
+     *  step -- what it granted before is closed at once (on the thread the
+     *  step comes on) and the new step is granted on the main thread: a
+     *  Burst if the Hold was down as it was reached, a Running hazard if
+     *  armed then; never in Blind. Re-pressing the Hold within the same cue
+     *  fires a Burst again (a flame operator's repeated bursts).
+     *
+     *  Disarmed on a show opened, the emergency stop, Stop ALL / Fade and
+     *  stop, sleep and wake, and the spotter's device lost (DeskRecord); a
+     *  Hold still down then counts only once let go of. The Hold let go and
+     *  the Kill take effect from the input thread (HazardFastPath), with
+     *  the main thread busy or not. A Park wins (parked: held at 0). An edit
+     *  pick, Design and a programmer edit after a Design run take back what
+     *  a run granted. Per frame: one gate read per fire fader. */
     QList<quint32> hazards() const;
     /** Whether @p fixtureId is a hazard of the Burst kind (main thread) */
     bool isBurstHazard(quint32 fixtureId) const;
@@ -380,6 +390,13 @@ public:
     bool hazardsArmed() const { return m_hazardArmed.load(std::memory_order_relaxed); }
     /** The spotter's Kill control: every hazard off at once and disarmed. */
     void killHazards();
+    /** Where the spotter's Hold and Kill are (universe, channel), for the
+     *  input thread's own path (HazardFastPath); invalid universe: none. */
+    void setHazardControls(quint32 holdUniverse, quint32 holdChannel,
+                           quint32 killUniverse, quint32 killChannel);
+    /** What hazard @p fixtureId sends now (granted and its gate open); empty
+     *  when it is at safe. Main thread. */
+    QByteArray hazardOutput(quint32 fixtureId) const;
     /** Every hazard safe and disarmed, for @p why ("the emergency stop").
      *  Logged when anything was armed, held or out. Any thread. */
     void disarmHazards(const QString &why);
@@ -527,18 +544,30 @@ private:
     /** The hazards read again as the rig and the Park are now (main
      *  thread), then applyHazards() */
     void layHazards();
-    /** The hazards' hold laid from the hold, the arming and what each
-     *  run reached: safe on every hazard not live. Any thread. */
+    /** The three layers laid from the hazards and the grants: the
+     *  passthrough held first, then safe everywhere, then the grants. Main
+     *  thread (and stops on any thread). */
     void applyHazards();
-    /** A GO a few frames on (@p gen its number): what its cue reached,
-     *  with the Hold @p held and Running @p armed as they were at the GO */
-    void checkHazardsAtGo(quint32 gen, bool held, bool armed);
-    /** A run's permissions taken away (an edit pick, Design): nothing
-     *  fires until the next GO. Any thread. */
+    /** A list's step changed (any thread): its grant closed now, the new
+     *  step granted on the main thread with the Hold / arming / Blind as
+     *  they are at this moment. Also a list stopped (@p step -1). */
+    void hazardStepReached(quint32 chaserId, int step);
+    /** The grants worked out again from every running list's step and what
+     *  each step was reached with (main thread); @p stepped: the list whose
+     *  step this is for, whose skips the footer says. */
+    void grantHazards(quint32 stepped);
+    /** What step @p step of list @p chaserId sets the hazards to */
+    QHash<quint32, QByteArray> hazardStepLevels(quint32 chaserId, int step) const;
+    /** Every grant taken back now (an edit pick, Design, a Kill, a stop). */
     void revokeHazards();
+    /** Each hazard's output now, compared with the last: every change logged */
+    void logHazardOutputs(const QString &why);
     /** One line in the hazard log (queued to the main thread) */
     void logHazard(const QString &line);
     void emitHazardsChanged();
+    /** The rig's guesses changed (a laser class, a scenery, a symbol) */
+    void guessesChanged();
+    void watchChaser(class Chaser *chaser);
     void emitMachineryChanged();
     mutable QMutex m_machineMutex;
     QVector<Machine> m_machines;
@@ -581,20 +610,41 @@ private:
     /** Every hazard (written on the main thread, guarded by m_hazardMutex) */
     QHash<quint32, Hazard> m_hazards;
     QList<quint32> m_hazardOrder;
-    /** What a run reached while it was let fire (guarded) */
-    QSet<quint32> m_hazardPermitted;
-    /** What is out now (guarded): a change is logged */
-    QSet<quint32> m_hazardOut;
+    /** How each running list's current step was reached (guarded) */
+    struct Reach
+    {
+        int step = -1;
+        bool held = false;
+        bool armed = false;
+        bool blind = false;
+        quint32 epoch = 0;
+    };
+    QHash<quint32, Reach> m_reach;
+    /** The lists whose step grants something now (guarded): only their
+     *  steps close the gates (an effect chaser stepping elsewhere does not) */
+    QSet<quint32> m_granting;
+    /** What the grants lay (guarded): fixture -> values */
+    QHash<quint32, QByteArray> m_burstGrant, m_runningGrant;
+    /** What went out last, for the log (main thread) */
+    QHash<quint32, QByteArray> m_lastOut;
     mutable QMutex m_hazardMutex;
-    /** One applyHazards() at a time, so the layer is laid in order */
+    /** One applyHazards() at a time, so the layers are laid in order */
     QMutex m_hazardApplyMutex;
     std::atomic<bool> m_hazardHold { false };
     std::atomic<bool> m_hazardArmed { false };
     /** After a disarm: a Hold already down counts once let go of */
     std::atomic<bool> m_hazardHoldNeedsRelease { false };
-    /** Each GO's number: a check of an older one does nothing */
-    std::atomic<quint32> m_hazardGoGen { 0 };
+    /** The step epoch: moved on by every step that closes a grant, a Kill,
+     *  a stop; the grant is open only while m_hazardGrant equals it */
+    std::atomic<quint32> m_hazardStep { 1 };
+    std::atomic<quint32> m_hazardGrant { 0 };
+    FaderGate m_burstGate, m_runningGate;
     std::unique_ptr<OutputLayer> m_hazardLayer;
+    std::unique_ptr<OutputLayer> m_burstLayer, m_runningLayer;
+    /** The Hold as the log last said it (main thread) */
+    bool m_holdShown = false;
+    std::unique_ptr<class HazardFastPath> m_fast;
+    QSet<quint32> m_watched;
     /** hazardsSkipped() and why each (true: a Burst not held) (main thread) */
     QList<quint32> m_hazardsSkipped;
     QHash<quint32, bool> m_hazardSkippedBurst;

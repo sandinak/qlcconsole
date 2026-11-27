@@ -49,6 +49,23 @@ class FadeChannel;
  *  any lookup
  */
 
+/** A gate on a fader (board Q352/Q353: the hazards' fire layers): the
+ *  fader writes only while @a flag is set (the spotter's Hold, or the
+ *  arming) and the grant it was laid for is still the current one (a new
+ *  step, a Kill or a stop moves @a epoch on: closed at once, from any
+ *  thread, without the main thread). Read once a frame per gated fader. */
+struct FaderGate
+{
+    const std::atomic<bool> *flag = nullptr;
+    const std::atomic<quint32> *grant = nullptr;
+    const std::atomic<quint32> *epoch = nullptr;
+    bool open() const
+    {
+        return flag->load(std::memory_order_acquire)
+               && grant->load(std::memory_order_acquire) == epoch->load(std::memory_order_acquire);
+    }
+};
+
 class GenericFader final : public QObject
 {
     Q_OBJECT
@@ -85,6 +102,10 @@ public:
      *  Tree preview's are Override too). */
     bool onTopOfPriority() const { return m_onTopOfPriority; }
     void setOnTopOfPriority(bool on) { m_onTopOfPriority = on; }
+
+    /** Write only while @p gate is open (FaderGate); nullptr: always. */
+    void setGate(const FaderGate *gate) { m_gate = gate; }
+    const FaderGate *gate() const { return m_gate; }
 
     /** Get/Set if this fader should handle primary/secondary channels
      *  when a caller requests a FadeChannel */
@@ -486,6 +507,7 @@ private:
     Universe::BlendMode m_blendMode;
     bool m_monitoring;
     bool m_zeroAll = false;
+    const FaderGate *m_gate = nullptr;
     std::atomic<bool> m_holdsShowOnly { false };
     std::atomic<bool> m_liveBound { false };
     std::atomic<quint32> m_liveEpoch { 0 };

@@ -29,6 +29,7 @@
 #include "qlcinputchannel.h"
 #include "qlcioplugin.h"
 #include "inputpatch.h"
+#include "hazardfastpath.h"
 #include "iodeferral.h"
 
 #define GRACE_MS 1
@@ -320,6 +321,8 @@ void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 chann
         QMutexLocker inputBufferLocker(&m_inputBufferMutex);
         if (channel < quint32(m_channelMap.size()))
             channel = m_channelMap.at(int(channel));
+        // The spotter's Hold let go, their Kill: safe now, on this thread.
+        HazardFastPath::feed(m_universe, channel, value);
         QHash<quint32, InputValue>::iterator it = m_inputBuffer.find(channel);
         if (it == m_inputBuffer.end())
         {

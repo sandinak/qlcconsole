@@ -129,6 +129,7 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
             slot.fader = m_onTop ? uni->requestTopFader(m_priority) : uni->requestFader(m_priority);
             slot.fader->setHoldsShowOnly(m_holdsShowOnly || stale);
             slot.fader->setName(m_name);
+            slot.fader->setGate(m_gate);
             slot.fader->setDoc(doc);
         }
         // Park, Mark, a held last look: what was set in this session is the

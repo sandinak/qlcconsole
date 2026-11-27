@@ -35,6 +35,7 @@
 #include "universe.h"
 
 class GenericFader;
+struct FaderGate;
 class Doc;
 
 class OutputLayer
@@ -96,6 +97,9 @@ public:
      *  over a layer of the same priority laid after it (the hazards' hold
      *  over a Park, board 053p review). Set before the first set(). */
     void setOnTop(bool onTop) { m_onTop = onTop; }
+    /** Each fader writes only while @p gate is open (GenericFader::setGate());
+     *  @p gate outlives the layer. Set before the first set(). */
+    void setGate(const FaderGate *gate) { m_gate = gate; }
     bool holdsShowOnly() const { return m_holdsShowOnly; }
 
     /** The channels the layer writes, per universe index (for tests) */
@@ -130,6 +134,7 @@ private:
     const QString m_name;
     bool m_holdsShowOnly = false;
     bool m_onTop = false;
+    const FaderGate *m_gate = nullptr;
 
     /** Serialises set()/clear(); guards m_slots */
     mutable QMutex m_mutex;
