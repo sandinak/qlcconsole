@@ -290,7 +290,7 @@ QStringList SurfaceKeyLabels::writeTapePngs(const QString &dir, const QList<Key>
     int n = 0;
     for (const Key &k : keys)
     {
-        const QString path = QStringLiteral("%1/%2-%3-%4mm.png")
+        const QString path = QStringLiteral("%1/%2-%3-tape%4.png")
                                  .arg(dir).arg(++n, 3, 10, QLatin1Char('0')).arg(safeName(k.face)).arg(tapeMm);
         if (!tapeLabel(k, tapeMm).save(path))
         {

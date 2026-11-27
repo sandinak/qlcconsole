@@ -1604,7 +1604,7 @@ QMenu *SurfaceMaps::jobMenu(quint32 universe, quint32 channel)
     const int i = mv->layout().indexOf(channel);
     const SurfaceLayout::Control &c = mv->layout().controls().at(i);
     const QString now = mv->jobText(channel);
-    QAction *title = menu->addAction(now.isEmpty() ? tr("%1 · free").arg(c.face) : tr("%1 · %2").arg(c.face, now));
+    QAction *title = menu->addAction(now.isEmpty() ? tr("%1 · Free").arg(c.face) : tr("%1 · %2").arg(c.face, now));
     title->setEnabled(false);
     menu->addSeparator();
     auto addJob = [&](const Job &j) {
