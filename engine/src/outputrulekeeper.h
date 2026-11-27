@@ -645,6 +645,8 @@ private:
     bool m_holdShown = false;
     std::unique_ptr<class HazardFastPath> m_fast;
     QSet<quint32> m_watched;
+    /** Doc::clearing() to cleared(): nothing of the rig is read */
+    bool m_clearing = false;
     /** hazardsSkipped() and why each (true: a Burst not held) (main thread) */
     QList<quint32> m_hazardsSkipped;
     QHash<quint32, bool> m_hazardSkippedBurst;

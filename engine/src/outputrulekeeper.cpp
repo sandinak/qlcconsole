@@ -99,7 +99,9 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     });
     // Another show: a new show's setting, and OnAtOperate waits for its
     // own first Operate.
+    connect(doc, &Doc::clearing, this, [this]() { m_clearing = true; });
     connect(doc, &Doc::cleared, this, [this]() {
+        m_clearing = false;
         // Another show: its own start, no emergency stop carried over, no
         // automatic widget armed.
         const bool wasStopped = m_stopEpoch.exchange(0, std::memory_order_relaxed) != 0;
@@ -1102,6 +1104,9 @@ void OutputRuleKeeper::layHazardNow(quint32 fixtureId)
 
 void OutputRuleKeeper::guessesChanged()
 {
+    // The show going away (clearContents(), ~Doc): its definitions with it.
+    if (m_clearing)
+        return;
     // Many at once while a show loads: it is laid when the load ends.
     if (m_doc->loadStatus() == Doc::Loading)
     {
