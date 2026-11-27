@@ -69,6 +69,7 @@ private slots:
     void backAndJumpsFollowTheSameRule();
     void aHandOnTheListIsNotFought();
     void songHeadersScrollLikeAnyRow();
+    void followShots();
     /** An arrow key or a click landing on a section row leaves the cue it
      *  goes on to highlighted, not only current. */
     void keysAndClicksOnASectionRowKeepTheCueSelected();

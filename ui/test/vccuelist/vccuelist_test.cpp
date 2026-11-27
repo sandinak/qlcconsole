@@ -23,6 +23,7 @@
 #include <QTreeWidgetItem>
 #include <QTreeWidget>
 #include <QScrollBar>
+#include <QDir>
 #include <QHeaderView>
 #include <QSignalSpy>
 #include <QtTest>
@@ -1901,6 +1902,37 @@ void VCCueList_Test::songHeadersScrollLikeAnyRow()
     QVERIFY(isSectionRow(header));
     QVERIFY(rowY(tree, header) >= 0);
     QVERIFY(rowY(tree, header) < rowY(tree, cl.stepItem(26)));
+    m_doc->masterTimer()->stopAllFunctions();
+}
+
+/* The list at the top, in the middle of the show and at the end, at three
+   frame sizes (only when QLC_SHOT_DIR is set; pictures for the review). */
+void VCCueList_Test::followShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    shotUseDarkTheme();
+    Chaser *ch = longChaser(m_doc, 40);
+    m_doc->setMode(Doc::Operate);
+    const QSize sizes[] = { QSize(260, 180), QSize(320, 260), QSize(420, 420) };
+    for (const QSize &size : sizes)
+    {
+        QWidget w;
+        w.resize(size + QSize(20, 20));
+        VCCueList cl(&w, m_doc);
+        cl.resize(size);
+        cl.setChaser(ch->id());
+        w.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&w));
+        for (int step : { 0, 5, 20, 39 })
+        {
+            cl.slotCurrentStepChanged(step);
+            QApplication::processEvents();
+            w.grab().save(QString("%1/cuelist-%2x%3-cue%4.png").arg(dir).arg(size.width()).arg(size.height()).arg(step + 1));
+        }
+    }
     m_doc->masterTimer()->stopAllFunctions();
 }
 
