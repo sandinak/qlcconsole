@@ -5,6 +5,9 @@
  "short": "FaderPort",
  "width": 7.5,
  "height": 9.25,
+ "shift": 198,
+ "gmTouch": 232,
+ "guards": ["stop", "release"],
  "pages": [],
  "sections": [
   {
