@@ -72,8 +72,8 @@ void StudioShots_Test::picturesForReview()
     for (int i = 0; i < 4; ++i)
     {
         Fixture *f = makeFixture(&doc, QString::fromLatin1(names[i]), quint32(i * 10));
-        props->setFixturePosition(f->id(), 0, 0, QVector3D(float(3000 + i * 3500), 4000.0f, 0.0f));
-        gv->addFixture(f->id(), QPointF(3000 + i * 3500, 4000.0));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(float(600 + i * 750), 2200.0f, 0.0f));
+        gv->addFixture(f->id(), QPointF(600 + i * 750, 2200.0));
         fxs << f;
     }
     // Wash 2 sits on Wash 1's channels; Wash 4 runs past 512.
@@ -99,9 +99,19 @@ void StudioShots_Test::picturesForReview()
         mon.resize(sz);
         QApplication::processEvents();
         mon.applyMapView(Monitor::ViewNormal);
+        if (mon.m_overlayCombo != nullptr)
+        {
+            QSignalBlocker block(mon.m_overlayCombo);
+            mon.m_overlayCombo->setCurrentIndex(mon.m_overlayCombo->findData(int(Monitor::ViewNormal)));
+        }
         QApplication::processEvents();
         parent.grab().save(QString("%1/plot-labels-%2x%3.png").arg(dir).arg(sz.width()).arg(sz.height()));
         mon.applyMapView(Monitor::ViewDMX);
+        if (mon.m_overlayCombo != nullptr)
+        {
+            QSignalBlocker block(mon.m_overlayCombo);
+            mon.m_overlayCombo->setCurrentIndex(mon.m_overlayCombo->findData(int(Monitor::ViewDMX)));
+        }
         QApplication::processEvents();
         parent.grab().save(QString("%1/plot-dmx-overlay-%2x%3.png").arg(dir).arg(sz.width()).arg(sz.height()));
     }

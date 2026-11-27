@@ -778,8 +778,9 @@ void MonitorFixtureItem::refreshLabel()
     QRect aboveRect;
     if (!above.isEmpty())
     {
-        aboveRect = fm.boundingRect(QRect(-10, 0, m_width + 20, 30),
-                                    Qt::AlignHCenter | Qt::TextWrapAnywhere, above);
+        // One line, never broken in the middle of "Ch 101": centred on the icon.
+        aboveRect = fm.boundingRect(QRect(-200, 0, int(m_width) + 400, 30), Qt::AlignHCenter, above);
+        aboveRect.moveCenter(QPoint(int(m_width) / 2, aboveRect.center().y()));
         aboveRect.moveBottom(-3);
     }
     if (belowRect == m_labelRect && aboveRect == m_labelRectAbove && below == m_labelTextBelow
@@ -1801,7 +1802,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
            the text is pinned. */
         const double viewTurn = qRadiansToDegrees(qAtan2(painter->transform().m12(),
                                                          painter->transform().m11()));
-        auto drawLabel = [&](const QRect &box, const QString &text) {
+        auto drawLabel = [&](const QRect &box, const QString &text, int flags) {
             if (box.isEmpty() || text.isEmpty())
                 return;
             painter->save();
@@ -1816,11 +1817,11 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             painter->setBrush(QBrush(QColor(33, 33, 33)));
             painter->drawRoundedRect(box, 2, 2);
             painter->setPen(QPen(Qt::white, 1));
-            painter->drawText(box, Qt::AlignHCenter | Qt::TextWrapAnywhere, text);
+            painter->drawText(box, flags, text);
             painter->restore();
         };
-        drawLabel(m_labelRect, m_labelTextBelow);
-        drawLabel(m_labelRectAbove, m_labelTextAbove);
+        drawLabel(m_labelRect, m_labelTextBelow, Qt::AlignHCenter | Qt::TextWrapAnywhere);
+        drawLabel(m_labelRectAbove, m_labelTextAbove, Qt::AlignHCenter);
     }
 }
 
