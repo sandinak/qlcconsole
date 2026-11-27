@@ -191,7 +191,12 @@ void MainBar_Test::showTab(const QString &label)
 int MainBar_Test::topChrome()
 {
     showTab(QStringLiteral("Fixtures"));
-    QWidget *content = FixtureManager::instance()->layout()->itemAt(0)->widget();
+    // The first of the page, past Operate's "patch is locked" bar (hidden in Design).
+    QWidget *content = nullptr;
+    for (int i = 0; i < FixtureManager::instance()->layout()->count() && content == nullptr; ++i)
+        if (QWidget *w = FixtureManager::instance()->layout()->itemAt(i)->widget())
+            if (w->objectName() != QLatin1String("patchLockBar"))
+                content = w;
     const QWidget *mb = m_app->menuWidget();
     const int menu = (mb != nullptr && mb->isVisible()) ? mb->geometry().bottom() + 1 : 0;
     return content->mapTo(m_app, QPoint(0, 0)).y() - menu;
