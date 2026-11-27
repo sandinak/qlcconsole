@@ -30,6 +30,7 @@
 #include "surfacesetup.h"
 #include "surfaceautopatch.h"
 #include "surfaceboardlog.h"
+#include "outputpatch.h"
 #include "opendecklink.h"
 #include "controllerkeepalive.h"
 #include "programmercontroller.h"
