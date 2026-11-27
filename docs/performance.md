@@ -351,6 +351,108 @@ the user an rtprio limit (for example `@audio - rtprio 95` in
 `/etc/security/limits.d/` and the user in `audio`), or the binary
 `cap_sys_nice`. The i7 container could not grant it at all.
 
+## Universe threads
+
+Each universe has a thread that builds its frame and sends it, woken by
+the MasterTimer every tick. The timer is real-time (a time-constraint
+thread on macOS, SCHED_FIFO on Linux when granted); the universe threads
+used to be ordinary threads. Since 0.5.3 they are real-time too by default
+on macOS and Linux (**Settings ▸ Performance ▸ Universe threads**: Standard /
+Responsive / Real-time, saved per computer; `QLC_UNIVERSE_SCHED=standard|qos|rt`
+overrides it for a run). Windows keeps Standard: not measured there.
+
+The A/B behind the default is `UniverseSched_Test::abOnTheShowsRig`
+(`QLC_SCHED_AB=1`, off in the gate): the show's rig (80 universes, 50
+sparse, 260 fixtures, 26,364 channels; a Plasma matrix over every pixel, a
+circle EFX on the movers, three chasers with fades) and a second copy of it
+for 160 universes, to a counting output, offscreen, Release, each mode
+20 s after 5 s of warm-up, in one process back to back, the order turned
+round every round, the 1-minute load read before each run. 27 November 2026,
+`perf/053-faster`, Qt 6.12. Medians of 4 runs (2 for the second newaudio set):
+
+| Host | Universes | Mode | Load | Tick p50 / p99 / p99.9 | Stall p99 | Send p99.9 (worst run) | CPU |
+|---|---|---|---|---|---|---|---|
+| newaudio (M4 Pro, 8 perf cores) | 80 | Standard | 5.2-13.4 | 0.05 / 7.5 / 11.9 ms | 0.00 | 3.9 ms (9.8) | 37.0% |
+| | | Real-time | 5.8-10.5 | 0.07 / 10.2 / 11.9 ms | 0.00 | **1.1 ms** (1.3) | 38.0% |
+| | 160 | Standard | 1.5-7.5 | 0.07 / 17.2 / 18.6 ms | 0.01 | 2.3 ms (2.8) | 60.5% |
+| | | Real-time | 1.2-3.8 | 0.07 / 17.1 / 18.0 ms | 0.01 | **1.5 ms** (1.5) | 55.7% |
+| newaudio, again | 80 | Standard | 5.7-12.0 | 0.05 / 7.4 / 10.2 ms | 0.00 | 3.6 ms (4.0) | 37.5% |
+| | | Real-time | 6.7-7.5 | 0.05 / 7.5 / 9.4 ms | 0.00 | **1.3 ms** (1.3) | 36.3% |
+| evoms (M5, 4 perf cores) | 80 | Standard | 1.7-5.6 | 0.08 / 11.3 / 12.5 ms | 0.00 | 1.3 ms (8.0) | 42.8% |
+| | | Real-time | 1.9-4.4 | 0.07 / 11.3 / 12.1 ms | 0.00 | **0.8 ms** (0.8) | 38.4% |
+| | 160 | Standard | 1.6-2.8 | 0.06 / 16.6 / 17.8 ms | 0.00 | 1.5 ms (1.5) | 63.0% |
+| | | Real-time | 1.5-5.8 | 0.05 / 15.3 / 16.2 ms | 0.00 | **1.0 ms** (1.3) | 52.3% |
+| dink (M4, 4 perf cores), a gate running beside it | 80 | Standard | 2.6-7.4 | 0.02 / 4.7 / 9.2 ms | 0.00 | 1.4 ms (2.5) | 22.4% |
+| | | Real-time | 2.8-5.2 | 0.03 / 5.8 / 7.1 ms | 0.00 | **0.5 ms** (1.0) | 18.1% |
+| | 160 | Standard | 2.8-4.4 | 0.06 / 9.9 / 12.6 ms | 0.01 | 6.5 ms (13.5) | 47.2% |
+| | | Real-time | 3.0-3.7 | 0.04 / 13.7 / 17.2 ms | 0.00 | **1.1 ms** (1.3) | 36.8% |
+
+"Tick" is the MasterTimer's compute (wall) per frame, "stall" that minus
+the timer thread's CPU (time it was runnable but not running), "send" the
+time from the tick to a universe's frame having gone to its output (every
+universe's frames together). Responsive (user-interactive QoS) was refused
+to the threads in these runs (a Mach policy set ahead of it; fixed since)
+and measured the same as Standard.
+
+- **On a Mac the timer does not stall**: its stall p99 is 0 in every mode,
+  so the tick's tails are its own work, not scheduling, and real-time
+  universe threads leave them as they were. Their p99 here is the RGB
+  matrix's step (one tick in ten, below).
+- **The send's tail is the universe threads**, and real-time ones cut it:
+  p99.9 to a third to a half, and the worst run's from up to 13.5 ms to
+  1.5 ms or less, on all three Macs at both sizes.
+- **No more CPU, often less**: 4 to 11 points less at 160 universes (likely
+  fewer preemptions and core moves mid-frame; not measured).
+- On a Raspberry Pi 5 (Linux, 160 universes, real-time timer granted) the
+  same change took stall p99 from 16.7 to 5.0 ms, tick p99 from 20.0 to
+  9.7 ms and send p99.9 from 24 to 13.8 ms, for about 10% more CPU: there
+  the timer did wait on ordinary universe threads.
+- Not measured: an M-series Mac with 10 or more performance cores (brm went
+  off the network mid-run and ender could not be used for it), Windows.
+
+## RGB matrix maps ahead
+
+An RGB matrix running a script (Plasma, Fire, ...) gets a new map from
+the script at each step. Scripts run on the one script thread, and the
+tick used to wait there for the map: Plasma over the show's 6,156 pixels
+took about 16 ms, five times a second. Since 0.5.3 the next step's map is
+asked for as a step begins and made on the script thread while the frames
+go on (`RGBMatrix::mapsAhead()`; `QLC_MAPS_AHEAD=0` for the old way); a
+map that is not ready at its step leaves the last one out until it is,
+counted as a late map. On time, the output is the same frame for frame
+(`RGBMatrix_Test::mapsAheadSendTheSameFrames`). A run's first map, a tick
+by hand and a matrix without a script are made at the step as before.
+
+`ui/test/showscale` on newaudio, on / off / on / off, Release:
+
+| Maps ahead | Tick p50 | p95 | max | p95 CPU | Late frames | Late maps |
+|---|---|---|---|---|---|---|
+| on | 0.01 ms | **1.71 ms** | 2.72 ms | 1.71 ms | 0 | 0 |
+| off | 0.01 ms | 17.50 ms | 17.75 ms | 1.86 ms | 0 | -- |
+| on | 0.01 ms | **1.76 ms** | 2.77 ms | 1.76 ms | 0 | 0 |
+| off | 0.01 ms | 17.57 ms | 17.75 ms | 1.95 ms | 0 | -- |
+
+showscale's budget is now the guardrail's, the p95 under half the period.
+What is left of a matrix step is its own CPU, writing the map to the
+faders (`updateMapChannels`): ~2 ms in showscale, but 7-11 ms in the A/B's
+rig above, not explained yet. A worker pool for matrices was not built:
+the rig has one matrix, so there is nothing to spread; caching each head's
+channels per run is the next candidate.
+
+## Show time follows the clock
+
+Every fade, hold and effect advances one tick (20 ms at 50 Hz) per frame.
+The timer used to run one catch-up frame after a late one and start its
+schedule again from there, so the frames a stall missed were lost and a
+fade with a 100 ms stall in it ended ~80 ms late. Now the frames it missed
+follow at once, back to back, so the count of frames keeps to the clock
+(`MasterTimer::catchesUp()`), unless the frame just run took a period or
+more itself (the show is more than the computer computes in time) or the
+gap is over half a second (a computer that slept): then it starts again
+from now, as before. `MasterTimer_Test::aLateTickDoesNotStretchAFade`: a
+600 ms fade with a 100 ms stall a third of the way in ends within a frame
+of its time.
+
 ## Tuning your computer
 
 **Settings ▸ Performance** checks the computer a show runs on for what
@@ -484,7 +586,8 @@ each, the largest cost in the frame; the Rig Overview 49 ms a frame
 (3.6 fps under Operate's share); Open 0.9 s; memory +95 MB in the first
 seconds of the show, then flat. On val (an Intel i7 iMac, busy) everything
 took four to five times as long and about one frame in ten was dropped:
-the script map blocking the tick is the first thing to move off it.
+the script map blocking the tick was the first thing to move off it, and
+has ([RGB matrix maps ahead](#rgb-matrix-maps-ahead): p95 1.7 ms).
 
 ### Work counts in the gate
 
