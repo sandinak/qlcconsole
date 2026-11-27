@@ -34,6 +34,7 @@
 #include "showcontrol.h"
 #include "mastertimer.h"
 #include "controlmap.h"
+#include "surfacelayout.h"
 #include "deskrecord.h"
 #include "encoderbank.h"
 #include "surfacepages.h"
@@ -2573,6 +2574,20 @@ void ControlMap::sendLampValue(const Binding &b, uchar value, bool force)
     if (!force && m_lampSent.value(k, -1) == int(value))
         return;     // nothing changed here: a mode switch sends nothing
     m_lampSent.insert(k, int(value));
+    /* A trigger learned on another board (the PMJ's MIDI channel 9 note 1)
+       sits on a universe whose board is a drawn surface that has no such
+       control: its light would be a note the board answers with some other
+       lamp (an APC pad blinking at 8,2). The board has no lamp there. */
+    {
+        InputPatch *own = iom->inputPatch(b.universe);
+        if (own != nullptr && own->profile() != nullptr)
+        {
+            const SurfaceLayout layout = SurfaceLayout::forProfile(own->profile()->name());
+            if (layout.isValid() && layout.indexOf(b.channel) < 0
+                && own->profile()->channel(b.channel) == nullptr)
+                return;
+        }
+    }
     // The profile's own parameters for the control (a MIDI note's channel
     // and message), as a VC button's feedback takes them.
     QVariant params;

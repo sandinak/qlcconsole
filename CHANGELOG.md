@@ -74,6 +74,20 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   `test-workspaces/rainbow-movers.qlcc` (a CMY mover, a colour-wheel mover
   and an RGB par on the OLA probe, cues *Rainbow on* / *Rainbow off*), with a
   gate test of the values and a three-step how-to in Effects.
+- **Control surfaces on the bench: the right profile by itself.** A board
+  patched with no profile gets the one made for its device (APC40, APC40 mkII,
+  APC64's DAW port, APC mini and mini mk2, FaderPort 2: a profile's `Match`),
+  so its init, map and desk roles work without choosing anything; the APC mini
+  mk2 is now a drawn surface (GO, Back, STOP ALL CLIPS, the master fader); an
+  older copy of a board's profile in your user folder (a legacy link to the
+  old QLC+ one) no longer shadows the built-in one, and Control surfaces says
+  so; when the board holding GO, Back, STOP and the Grand Master is gone and a
+  new surface comes online, they move to it with a notice and Undo (never
+  while the old board is still here); a lamp for a control the drawn board
+  does not have is not sent (an APC pad blinking at 8,2); the MaizeDMX's LEDs
+  are drawn as lights, not knobs, and it has a Colour and a Move page on X7
+  and X9.
+
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

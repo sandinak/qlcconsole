@@ -144,6 +144,23 @@ protected:
     int m_surfaceColumns;
 
     /********************************************************************
+     * The device it is for (auto-selected when that device is patched)
+     ********************************************************************/
+public:
+    /** Device names this profile is for, one <Match>APC40 mkII*</Match>
+     *  each: a glob (* and ?), case-insensitive, against the input's name
+     *  as the system gives it (a Windows "2- " unit prefix is ignored).
+     *  A line whose name matches gets this profile when it is patched with
+     *  none (InputOutputMap::profileForDevice()). Empty: never chosen by
+     *  name (a board whose port is a name many boxes share). */
+    QStringList deviceMatches() const { return m_deviceMatches; }
+    void setDeviceMatches(const QStringList &matches) { m_deviceMatches = matches; }
+    bool matchesDevice(const QString &deviceName) const;
+
+protected:
+    QStringList m_deviceMatches;
+
+    /********************************************************************
      * Plugin-specific global settings
      ********************************************************************/
 public:

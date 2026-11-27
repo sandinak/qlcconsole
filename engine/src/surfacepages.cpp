@@ -347,6 +347,9 @@ void SurfacePages::sendLamps(quint32 universe)
         for (const PageSet::Page &p : b->set.pages())
             if (p.key != kNone)
                 iom->sendFeedBack(universe, p.key, 0, QVariant());
+        for (quint32 k : { b->set.nextKey(), b->set.previousKey() })
+            if (k != kNone)
+                iom->sendFeedBack(universe, k, 0, QVariant());
         if (ControlMap *cm = m_doc->controlMap())
             cm->resendFeedback();
         return;
@@ -356,6 +359,11 @@ void SurfacePages::sendLamps(quint32 universe)
     for (const PageSet::Page &p : b->set.pages())
         if (p.key != kNone)
             iom->sendFeedBack(universe, p.key, p.key == on ? 255 : 0, QVariant());
+    // Page ◀ ▶ (the APC mini's Left and Right): lit while there is a page to go to.
+    const bool several = b->set.pages().size() > 1;
+    for (quint32 k : { b->set.nextKey(), b->set.previousKey() })
+        if (k != kNone)
+            iom->sendFeedBack(universe, k, several ? 255 : 0, QVariant());
 }
 
 /*****************************************************************************

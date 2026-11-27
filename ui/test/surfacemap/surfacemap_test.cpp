@@ -52,6 +52,8 @@
 #include "qlcfile.h"
 #include "scene.h"
 #include "doc.h"
+#include <QTemporaryDir>
+#include <QRegularExpression>
 
 namespace
 {
@@ -557,6 +559,72 @@ void SurfaceMap_Test::theFaderPortMapSaysTheShiftCombosAndHasItsOptions()
     // A board with no Shift key has no such boxes (the APC).
 }
 
+void SurfaceMap_Test::theMaizeLedsAreLightsNotKnobs()
+{
+    SimMidiDevice maize(m_doc, m_stub, QStringLiteral("USB2.0-MIDI Port 1"), 0, kMaize,
+                        profile("MaizeDMX-Playback-Controller.qxi"));
+    QVERIFY2(maize.plug(), qPrintable(maize.lastError()));
+    SurfaceMaps maps(m_doc);
+    settle();
+    SurfaceMapView *mv = maps.view(0);
+    QVERIFY(mv != nullptr);
+    const quint32 kLed1 = 173, kX7 = 171, kX9 = 172;
+    const SurfaceLayout::Control &led = mv->layout().controls().at(mv->layout().indexOf(kLed1));
+    QCOMPARE(led.kind, SurfaceLayout::Indicator);
+    QVERIFY(!led.turns());
+    QVERIFY2(mv->toolTipFor(kLed1).contains(QStringLiteral("A light on the board: not a knob or a button.")),
+             qPrintable(mv->toolTipFor(kLed1)));
+    // The page keys say their page; the one on is the Colour page.
+    QVERIFY2(mv->toolTipFor(kX9).contains(QStringLiteral("Move")), qPrintable(mv->toolTipFor(kX9)));
+    QVERIFY2(mv->toolTipFor(kX7).contains(QStringLiteral("Colour")), qPrintable(mv->toolTipFor(kX7)));
+    // Lit as last sent.
+    QVERIFY(m_doc->inputOutputMap()->sendFeedBack(0, kLed1, 255, QVariant()));
+    settle();
+    QVERIFY(mv->lamp(kLed1) > 0);
+}
+
+void SurfaceMap_Test::theApcMiniMk2IsDrawnAndAnOlderCopyIsSaid()
+{
+    SimMidiDevice mini(m_doc, m_stub, QStringLiteral("APC mini mk2 Control"), 0, QStringLiteral("Akai APC Mini mk2"),
+                       profile("Akai-APCMini-mk2.qxi"));
+    QVERIFY2(mini.plug(), qPrintable(mini.lastError()));
+    SurfaceChips chips(m_doc);
+    ControlSurfacesPanel hub(m_doc);
+    settle();
+    QCOMPARE(chips.universes(), QList<quint32>({ 0 }));
+    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC mini \u00B7 Colour"));
+    SurfaceMapView *mv = hub.surfaceMaps()->view(0);
+    QVERIFY(mv != nullptr);
+    QCOMPARE(mv->layout().roleOn(240), QStringLiteral("go"));
+    QCOMPARE(mv->layout().roleOn(56), QStringLiteral("gm"));
+    QVERIFY2(!hub.status(QStringLiteral("setup")).contains(QStringLiteral("older")), "no older copy yet");
+
+    // A copy of the APC40 mkII profile without its track-channel knobs, in the user's folder.
+    QFile built(profile("Akai-APC40-mkII.qxi"));
+    QVERIFY(built.open(QIODevice::ReadOnly));
+    QString text = QString::fromUtf8(built.readAll());
+    text.remove(QRegularExpression(QStringLiteral("<Channel Number=\"4117\">.*?</Channel>\\r?\\n"),
+                                   QRegularExpression::DotMatchesEverythingOption));
+    QTemporaryDir user;
+    QVERIFY(user.isValid());
+    QFile out(user.filePath(QStringLiteral("Akai-APC40-mkII.qxi")));
+    QVERIFY(out.open(QIODevice::WriteOnly));
+    out.write(text.toUtf8());
+    out.close();
+    QDir ud(user.path());
+    ud.setFilter(QDir::Files);
+    ud.setNameFilters(QStringList() << QStringLiteral("*.qxi"));
+    QDir sd(QStringLiteral(QLC_TEST_RESOURCE_ROOT) + QStringLiteral("inputprofiles"));
+    sd.setFilter(QDir::Files);
+    sd.setNameFilters(QStringList() << QStringLiteral("*.qxi"));
+    m_doc->inputOutputMap()->loadProfiles(ud);
+    m_doc->inputOutputMap()->loadProfiles(sd);
+    hub.refresh();
+    const QString say = hub.status(QStringLiteral("setup"));
+    QVERIFY2(say.contains(QStringLiteral("Your copy of the Akai APC40 mkII profile"))
+                 && say.contains(QStringLiteral("older than the one built in")), qPrintable(say));
+}
+
 void SurfaceMap_Test::theMapScrollsRatherThanClips()
 {
     SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
@@ -618,7 +686,11 @@ void SurfaceMap_Test::shots()
     iom->sendFeedBack(1, 32896, 254, QVariant());
 
     const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
-    const QList<QPair<quint32, QString>> boards = { { 0, QStringLiteral("apc40") }, { 1, QStringLiteral("pmj") },
+    SimMidiDevice mini(m_doc, m_stub, QStringLiteral("APC mini mk2 Control"), 5, QStringLiteral("Akai APC Mini mk2"),
+                       profile("Akai-APCMini-mk2.qxi"));
+    QVERIFY2(mini.plug(), qPrintable(mini.lastError()));
+    settle();
+    const QList<QPair<quint32, QString>> boards = { { 5, QStringLiteral("apcmini-mk2") }, { 0, QStringLiteral("apc40") }, { 1, QStringLiteral("pmj") },
                                                     { 2, QStringLiteral("maizedmx") }, { 3, QStringLiteral("apc64") }, { 4, QStringLiteral("faderport2") } };
     for (const QSize &size : sizes)
     {

@@ -9,6 +9,7 @@
  <Manufacturer>PreSonus</Manufacturer>
  <Model>FaderPort 2</Model>
  <Type>MIDI</Type>
+ <Match>PreSonus FP2</Match>
  <Surface Version="1"/>
  <MIDISendNoteOff>False</MIDISendNoteOff>
  <Channel Number="16">

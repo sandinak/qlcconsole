@@ -18,6 +18,7 @@
 */
 
 #include <QXmlStreamReader>
+#include <QRegularExpression>
 #include <QXmlStreamWriter>
 #include <QSaveFile>
 #include <QString>
@@ -37,6 +38,7 @@
 #define KXMLQLCInputProfileTypeEnttec QStringLiteral("Enttec")
 
 #define KXMLQLCInputProfileValue QStringLiteral("Value")
+#define KXMLQLCInputProfileMatch QStringLiteral("Match")
 #define KXMLQLCInputProfileLabel QStringLiteral("Label")
 #define KXMLQLCInputProfileColorRGB QStringLiteral("RGB")
 
@@ -71,6 +73,7 @@ QLCInputProfile *QLCInputProfile::createCopy()
     copy->setSurfaceVersion(this->surfaceVersion());
     copy->setSurfaceLayout(this->surfaceLayout());
     copy->setSurfaceColumns(this->surfaceColumns());
+    copy->setDeviceMatches(this->deviceMatches());
 
     /* Copy the other profile's channels */
     QMapIterator <quint32,QLCInputChannel*> it(this->channels());
@@ -114,6 +117,7 @@ QLCInputProfile& QLCInputProfile::operator=(const QLCInputProfile& profile)
         m_surfaceVersion = profile.m_surfaceVersion;
         m_surfaceLayout = profile.m_surfaceLayout;
         m_surfaceColumns = profile.m_surfaceColumns;
+        m_deviceMatches = profile.m_deviceMatches;
 
         /* Destroy all existing channels */
         destroyChannels();
@@ -628,6 +632,12 @@ bool QLCInputProfile::loadXML(QXmlStreamReader& doc)
             {
                 loadMidiChannelTableXML(doc);
             }
+            else if (doc.name() == KXMLQLCInputProfileMatch)
+            {
+                const QString m = doc.readElementText().trimmed();
+                if (!m.isEmpty())
+                    m_deviceMatches << m;
+            }
             else if (doc.name() == KXMLQLCInputProfileSurface)
             {
                 const QXmlStreamAttributes attrs = doc.attributes();
@@ -678,6 +688,9 @@ bool QLCInputProfile::saveXML(const QString& fileName)
 
     if (midiSendNoteOff() == false)
         doc.writeTextElement(KXMLQLCInputProfileMidiSendNoteOff, QString(KXMLQLCFalse));
+
+    for (const QString &m : std::as_const(m_deviceMatches))
+        doc.writeTextElement(KXMLQLCInputProfileMatch, m);
 
     /* A surface type says so; any other profile saves as it always did */
     if (isSurfaceType())
@@ -747,3 +760,21 @@ bool QLCInputProfile::saveXML(const QString& fileName)
     return true;
 }
 
+
+bool QLCInputProfile::matchesDevice(const QString &deviceName) const
+{
+    if (m_deviceMatches.isEmpty())
+        return false;
+    QString name = deviceName.trimmed();
+    // Windows numbers a second port of one name "2- APC MINI".
+    static const QRegularExpression unit(QStringLiteral("^\\d+- "));
+    name.remove(unit);
+    for (const QString &m : m_deviceMatches)
+    {
+        const QRegularExpression re(QRegularExpression::wildcardToRegularExpression(m.trimmed()),
+                                    QRegularExpression::CaseInsensitiveOption);
+        if (re.match(name).hasMatch())
+            return true;
+    }
+    return false;
+}
