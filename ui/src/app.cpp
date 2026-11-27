@@ -5426,11 +5426,11 @@ QList<QWidget *> App::statusChipsByPriority() const
     const QList<QWidget *> order = {
         m_statusStage, m_statusDirtyLabel,
         goHeld ? m_statusStandby : nullptr,
-        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusHazardLabel,
+        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusHazardLabel, m_statusLevelLabel,
         m_statusShowOnlyLabel, m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusMastersHeldLabel, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
-        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusLevelLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
+        goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
         m_statusShowTreeNotice, m_statusTimecodeLabel, m_statusLoadLabel,
         m_statusPowerLabel, m_statusDangleLabel, m_statusTimelineLabel
     };
