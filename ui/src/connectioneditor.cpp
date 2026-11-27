@@ -420,6 +420,7 @@ void ConnectionEditor::buildForm()
     QWidget *profileRow = new QWidget(m_inputBox);
     QHBoxLayout *profileLay = new QHBoxLayout(profileRow);
     profileLay->setContentsMargins(0, 0, 0, 0);
+    profileLay->setSpacing(2);
     profileLay->addWidget(m_profileEdit);
     m_profileNew = new QPushButton(tr("New…"), m_inputBox);
     m_profileNew->setObjectName(QStringLiteral("connProfileNew"));
@@ -430,6 +431,8 @@ void ConnectionEditor::buildForm()
     m_profileDelete->setEnabled(false);
     profileLay->addWidget(m_profileNew);
     profileLay->addWidget(m_profileDelete);
+    foreach (QPushButton *b, QList<QPushButton *>() << m_profileEdit << m_profileNew << m_profileDelete)
+        b->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);   // shrink with the pane, not widen it
     connect(m_profileNew, &QPushButton::clicked, this, &ConnectionEditor::slotNewProfile);
     connect(m_profileDelete, &QPushButton::clicked, this, &ConnectionEditor::slotDeleteProfile);
     inf->addRow(tr("Input Profile:"), m_profileCombo);
