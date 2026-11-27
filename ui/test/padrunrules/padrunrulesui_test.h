@@ -78,6 +78,10 @@ private slots:
     /** No game controller: no Pad chip. One connects (patched): it shows;
      *  unplugged: it goes again. */
     void noPadNoChip();
+    /** Build 4910, Branson's path: a DualShock 4 plugged in (no patch)
+     *  shows the chip, one click patches it; one patched by hand (no
+     *  rescan after) shows the chip at once. */
+    void aConnectedPadShowsTheChipWithoutAPatch();
 private:
     /** Two spots on the plot, a group, a target, one focus call; a
      *  Pre-show list (Focus, a venue focus cue, then House) the list is on

@@ -1265,6 +1265,69 @@ void PadRunRulesUi_Test::noPadNoChip()
                               PadRun::noticeMs() + 3000);
 }
 
+void PadRunRulesUi_Test::aConnectedPadShowsTheChipWithoutAPatch()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    ProgrammerController *pc = doc->programmer();
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+        iom->setInputPatch(u, QString(), QString(), QLCIOPlugin::invalidLine());
+    // Run role: what the pad would do once it is patched.
+    if (pc->padRun()->state() == PadRun::Tools)
+    {
+        QToolButton *btn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+        QVERIFY(btn != nullptr);
+        btn->click();
+    }
+    m_stub->m_lineNames = { QStringLiteral(" DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)"),
+                            QStringLiteral("OpenDeck | PMJ_BLACK_1") };
+    m_stub->m_lineDeviceKind.clear();
+    m_stub->m_lineDeviceKind[0] = QStringLiteral("dualshock4");
+    m_stub->m_lineDeviceKind[1] = QString();
+    m_stub->m_lineChannelRoles.clear();
+    m_stub->m_lineChannelRoles[1] = QMap<quint32, QString>();     // the PMJ is no pad
+    auto cleanup = qScopeGuard([this, iom]() {
+        iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+        m_stub->m_lineNames.clear();
+        m_stub->m_lineDeviceKind.clear();
+        m_stub->m_lineChannelRoles.clear();
+        m_app->doc()->resetModified();
+    });
+
+    // Plugged in, as the HID plugin's rescan says: the chip, naming it, not patched.
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    settle(50);
+    QVERIFY(!pc->focusController().present);
+    QCOMPARE(pc->unpatchedPads().size(), 1);
+    QVERIFY2(chip->isVisibleTo(m_app), "a DualShock 4 plugged in shows no Pad chip");
+    QVERIFY2(chip->text().contains(QStringLiteral("DUALSHOCK 4")) && chip->text().contains(QStringLiteral("not patched")),
+             qPrintable(chip->text()));
+
+    // One click patches it, to a universe with no input, and the chip is the Run role's.
+    QTest::mouseClick(chip, Qt::LeftButton);
+    settle(50);
+    InputPatch *ip = iom->inputPatch(0);
+    QVERIFY2(ip != nullptr && ip->plugin() == m_stub && ip->input() == 0, "the click patched nothing");
+    QVERIFY(pc->focusController().present);
+    QVERIFY(pc->unpatchedPads().isEmpty());
+    QVERIFY(chip->isVisibleTo(m_app));
+    QVERIFY2(chip->text().startsWith(QStringLiteral("Pad: Run")), qPrintable(chip->text()));
+
+    // Unpatched, and patched again by hand in Inputs/Outputs (no rescan
+    // after): the chip at once, as Branson did.
+    m_stub->m_lineDeviceKind.clear();       // so no "not patched" offer stands in for it
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    QTRY_VERIFY_WITH_TIMEOUT(!chip->isVisibleTo(m_app), PadRun::noticeMs() + 3000);
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    settle(50);
+    QVERIFY(pc->focusController().present);
+    QVERIFY2(chip->isVisibleTo(m_app), "a pad patched by hand shows no Pad chip until something else changes");
+    QVERIFY2(chip->text().startsWith(QStringLiteral("Pad: Run")), qPrintable(chip->text()));
+}
+
 int main(int argc, char **argv)
 {
     // A home of its own: nothing touches yours (as padbenchshow).

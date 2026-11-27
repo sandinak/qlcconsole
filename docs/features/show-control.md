@@ -114,8 +114,10 @@ A Back (or another command) held after a GO says when instead:
 > BACK held: Laptop's GO took it 0.3 s ago
 
 It shows under the header of the **Run** tab, in the footer's **Next:**
-chip, on the phone's Run page (which buzzes too), and on the pad: one long
-rumble, and the words aloud when the voice is on. It stays a few seconds.
+chip, on the phone's Run page (which buzzes too), and aloud when the voice
+is on. The pad rumbles once, long, only when the held press was its own: a
+Back held from a board (the PMJ, a FaderPort), a key or OSC never buzzes a
+pad nobody pressed. It stays a few seconds.
 
 Set the time in **Settings ▸ General ▸ Show Controls ▸ Double-GO guard**
 (up to 5 s, in tenths): the longest a GO is held, and the whole window
@@ -148,9 +150,16 @@ time. Its tooltip shows the button map in the words of the pad you're
 holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused and how to leave Walk), and **Settings → Advanced → Game controllers → Controller Test…** lists what each
 button does in the Run role (**Run: GO (armed, LT held)**).
 
+**A controller plugged in but not patched.** An Xbox pad, a DualShock 4
+or a DualSense that no universe takes input from runs nothing yet, so the
+footer says so: *Pad: DUALSHOCK 4 · not patched, click to use it*. Click
+the chip: the pad is patched to the first universe with no input (one is
+added if every universe has one), the footer says which, and the chip
+shows the Run role. **Edit ▸ Undo** takes the patch back.
+
 **One state, shown the same everywhere.** The Run tab's **Pad:** button,
 the frame round the Run tab, the footer's **Pad** chip (from every tab; it shows only while a game
-controller is connected, appears when one is plugged in and goes when it is
+controller is connected, appears when one is plugged in or patched and goes when it is
 unplugged -- **Show Review** lists the controllers the show maps) and
 the pad's own light all show the same state, from one place in the app:
 
