@@ -42,7 +42,8 @@ QString qs(CFStringRef s)
     if (s == nullptr)
         return QString();
     const CFIndex len = CFStringGetLength(s);
-    QString out(int(len), QChar());
+    QString out;
+    out.resize(qsizetype(len));
     CFStringGetCharacters(s, CFRangeMake(0, len), reinterpret_cast<UniChar *>(out.data()));
     return out;
 }
