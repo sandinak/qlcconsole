@@ -327,6 +327,18 @@ void ShowScale_Test::cleanupTestCase()
 #endif
             qPrintable(g_report.join(QStringLiteral("\n  "))));
     fflush(stderr);
+    // With QLC_SHOT_DIR (the pool's --shots), the numbers come back as a file.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty() && QDir().mkpath(shots))
+    {
+#if defined(QT_NO_DEBUG)
+        QFile out(QDir(shots).filePath(QStringLiteral("showscale-release.txt")));
+#else
+        QFile out(QDir(shots).filePath(QStringLiteral("showscale-debug.txt")));
+#endif
+        if (out.open(QIODevice::WriteOnly | QIODevice::Text))
+            out.write(g_report.join(QLatin1Char('\n')).toUtf8() + '\n');
+    }
     if (m_app != nullptr)
     {
         stopShow();
