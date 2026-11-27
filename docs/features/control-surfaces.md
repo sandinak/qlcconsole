@@ -409,7 +409,14 @@ a click opens its map.
   moved to APC64 from FaderPort 2.*) with **Undo**, which puts them back and
   keeps them there. While the old board is still plugged in nothing moves:
   the new one gets only the roles nobody holds, and the rest when the old
-  board lets go of them (cleared, or its Learn replaced).
+  board lets go of them (cleared, or its Learn replaced). Its own STOP key
+  or fader then says where that job is (*FaderPort: this computer's STOP is
+  on APC64 DAW (APC64). Click it on this board's map to move it here.*)
+  rather than doing nothing silently.
+- **A board's lamps stay on its own port.** Its feedback line follows the
+  port by name: when another MIDI port goes, or the board itself is
+  switched off and on, the lamps never land on whatever port took its place
+  in the list (a network session, another board); they come back with it.
 - **A board with no drawing** (an APC mini, a fader box) is named in one line
   under the maps; what its controls do stays in the rows below.
 - **Drawn like the board.** Each map keeps the real board's proportions and

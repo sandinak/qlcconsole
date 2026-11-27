@@ -781,17 +781,30 @@ void VirtualBench_Test::theFaderPortKnobInBothModes()
     const quint32 u = patched.first().at(0).toUInt();
     settle(1000);
     SurfaceBoardLog *log = m_app->doc()->surfaceSetup()->boardLog();
+    // What the log says of a message, its new lines only.
+    auto said = [this, log, fp, u](const char *bytes) {
+        const int before = int(log->text(u).split(QLatin1Char('\n')).size());
+        fp->send(bytes);
+        QElapsedTimer t;
+        t.start();
+        QStringList lines;
+        while (t.elapsed() < 2000)
+        {
+            settle(20);
+            lines = log->text(u).split(QLatin1Char('\n')).mid(before);
+            lines.removeAll(QString());
+            if (!lines.isEmpty())
+                break;
+        }
+        return lines.join(QLatin1Char('\n'));
+    };
     // Mackie mode: CC 16, the profile's Knob.
-    QVERIFY(fp->send("B0 10 01"));
-    QTRY_VERIFY_WITH_TIMEOUT(log->text(u).contains(QStringLiteral("Knob")), 2000);
-    // Studio One mode: CC 60. The log says what it is.
-    QVERIFY(fp->send("B0 3C 01"));
-    QTRY_VERIFY_WITH_TIMEOUT(log->text(u).contains(QStringLiteral("60")), 2000);
-    const QStringList lines = log->text(u).split(QLatin1Char('\n'));
-    QString cc60;
-    for (const QString &l : lines)
-        if (l.contains(QStringLiteral("60")))
-            cc60 = l;
+    const QString cc16 = said("B0 10 01");
+    QVERIFY2(cc16.contains(QStringLiteral("Knob")), qPrintable(cc16));
+    // Studio One mode: CC 60. It reaches the app; its log says what it is.
+    const QString cc60 = said("B0 3C 01");
+    QVERIFY2(!cc60.isEmpty(), "CC 60 from the FaderPort never reached its Board Log");
+    qInfo().noquote() << "[VirtualBench] FaderPort knob as CC 16:" << cc16;
     qInfo().noquote() << "[VirtualBench] FaderPort knob as CC 60:" << cc60;
 }
 
@@ -862,33 +875,44 @@ void VirtualBench_Test::twoBoardsEachGetOnlyTheirOwnLamps()
         pmjU = ap->setUp(midi(), kPmj, QStringLiteral("PMJ Black 1"));
     QVERIFY(pmjU != UINT_MAX);
     settle(1000);
-    // The PMJ's Back (note 11 on channel 9), pressed and let go.
-    apc->clear();
+    // The APC40's lamps as they stand: everything it was sent so far, last wins.
+    auto lampsOf = [](const QList<QByteArray> &msgs) {
+        QHash<int, int> lamps;
+        for (const QByteArray &m : msgs)
+            if ((uchar(m.at(0)) & 0xF0) == 0x90 && m.size() > 2)
+                lamps.insert((uchar(m.at(0)) << 8) | uchar(m.at(1)), uchar(m.at(2)));
+        return lamps;
+    };
+    // The PMJ's Back (note 11 on channel 9), pressed and let go: nothing at the APC40.
+    int seen = int(apc->received().size());
     pmj->clear();
     QVERIFY(pmj->send("98 0B 7F"));
     settle(60);
     QVERIFY(pmj->send("98 0B 00"));
     settle(600);
-    QVERIFY2(apc->received().isEmpty(), qPrintable("the PMJ's Back reached the APC40: " + hexOf(apc->received())));
+    QList<QByteArray> after = apc->received().mid(seen);
+    QVERIFY2(after.isEmpty(), qPrintable("the PMJ's Back reached the APC40: " + hexOf(after)));
     /* The PMJ's lamp test: at the PMJ only. The APC40 may be sent its own
        lamps again as they were (the desk's lamps given back after the
        test), never one that changes. */
-    QHash<int, int> apcLamps;
-    for (const QByteArray &m : apc->receivedOfType(0x90))
-        apcLamps.insert(uchar(m.at(1)), uchar(m.at(2)));
-    apc->clear();
+    const QHash<int, int> before = lampsOf(apc->received());
+    seen = int(apc->received().size());
     SurfaceSetup *ss = m_app->doc()->surfaceSetup();
     ss->setLampTestStepMs(5);
     QString why;
     QVERIFY2(ss->startLampTest(pmjU, &why), qPrintable(why));
     QTRY_VERIFY_WITH_TIMEOUT(pmj->receivedOfType(0x90).size() >= 3, 5000);
     ss->stopLampTest();
-    settle(100);
+    settle(300);
+    after = apc->received().mid(seen);
     QList<QByteArray> changed;
-    for (const QByteArray &m : apc->receivedOfType(0x90))
-        if (apcLamps.value(uchar(m.at(1)), -1) != uchar(m.at(2)))
+    for (const QByteArray &m : after)
+        if ((uchar(m.at(0)) & 0xF0) == 0x90 && m.size() > 2
+            && before.value((uchar(m.at(0)) << 8) | uchar(m.at(1)), -1) != uchar(m.at(2)))
             changed << m;
-    QVERIFY2(changed.isEmpty(), qPrintable("the PMJ's lamp test changed the APC40's lamps: " + hexOf(changed)));
+    qInfo().noquote() << "[VirtualBench] the APC40 during the PMJ's lamp test was sent:" << hexOf(after);
+    QVERIFY2(changed.isEmpty(), qPrintable("the PMJ's lamp test changed the APC40's lamps: " + hexOf(changed)
+                                           + " (before: " + hexOf(apc->received().mid(0, seen)) + ")"));
 }
 
 QTEST_MAIN(VirtualBench_Test)

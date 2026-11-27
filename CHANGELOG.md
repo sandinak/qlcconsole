@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A board's lamps stay on its own port** when another MIDI port goes or the board itself is power-cycled (the PMJ's lamps went to an RTP network session and the show was saved that way); a FaderPort plugged in is sent the Grand Master at once; Ableton mode goes out twice on a plug, not four times; a board's own STOP or fader whose job is another board's says so in the footer instead of nothing. Found by the new virtual bench: his boards as real CoreMIDI ports through the real MIDI plugin.
 - **A board plugged in is set up by itself** (bench 2026-11-27: the APC40 mkII, APC64, APC mini mk2 and MaizeDMX were not found). A known board is patched with its profile and feedback line, its init sent, with a notice and Undo; port names are matched loosely (case, "(APC64)", port words), a multi-port board on its own port only (its other ports are "part of APC64"); the MaizeDMX's shared "USB2.0-MIDI" name is asked about once and remembered.
 - **Connections ▸ Control surfaces lists every plugged-in MIDI device**, patched or not: unknown ones a click from a profile or "Not a Control Surface", unplugged boards greyed "not connected"; the list follows a patch at once.
 - **The footer shows one message at a time**, never drawn over or under another chip's words.
