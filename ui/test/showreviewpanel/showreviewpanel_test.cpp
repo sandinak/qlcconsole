@@ -413,10 +413,12 @@ void ShowReviewPanel_Test::fixSeveralAtOnce()
         ++visits;
         return true;
     });
+    Fixture *spare = dimmer(m_doc, "Spare", 100);
+    QVERIFY(m_doc->unpatchFixture(spare->id()));
     ShowReviewPanel panel(m_doc);
     panel.recheck();
     panel.tree()->clearSelection();
-    for (const char *check : { "FIX-14", "FIX-03", "PAT-01" })
+    for (const char *check : { "FIX-14", "FIX-03", "PAT-03" })
     {
         QTreeWidgetItem *row = rowOf(panel.tree(), check);
         QVERIFY2(row != nullptr, check);
@@ -607,7 +609,7 @@ void ShowReviewPanel_Test::iMeantItFromTheRow()
     panel.tree()->clearSelection();
     row->setSelected(true);
     QCOMPARE(panel.acceptButton()->text(), QStringLiteral("Not a Problem…"));
-    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix ▸"));
+    QCOMPARE(panel.fixButton()->text(), QStringLiteral("Fix"));      // PAT-01 is a one-click fix
 }
 
 void ShowReviewPanel_Test::showTreeMarksBreachingCues()

@@ -919,6 +919,7 @@ void ShowReviewPanel::fixOrSay()
 {
     // Never a click that does nothing: the finding's place may be gone.
     m_gone.clear();
+    QList<ReviewFinding> oneClicks;
     {
         // One-click rows are fixed here, together, as one undo step; any
         // other selected row is left for a visit of its own.
@@ -933,19 +934,24 @@ void ShowReviewPanel::fixOrSay()
             else
                 ++others;
         }
-        if (!ones.isEmpty())
+        if (!ones.isEmpty() && others == 0)
         {
             applyOneClick(ones);
-            if (others > 0)
-                m_summary->setText(m_said + QLatin1Char(' ')
-                                   + tr("%1 more need you at their place: select one and Go There.").arg(others));
             return;
         }
+        oneClicks = ones;
     }
     const int n = int(m_tree->selectedItems().count());
     if (n > 1)
     {
         const bool any = fixSelected();
+        if (!oneClicks.isEmpty())
+        {
+            // The one-click rows were counted as waiting for a visit: they are fixed here.
+            const int one = applyOneClick(oneClicks);
+            m_fixed += one;
+            m_left = qMax(0, m_left - oneClicks.count());
+        }
         QStringList said;
         if (m_fixed > 0)
             said << tr("Fixed %1.").arg(m_fixed);
@@ -961,6 +967,8 @@ void ShowReviewPanel::fixOrSay()
                                   : tr("1 was left as it was."));
         if (!any && m_left == 0 && m_stayed == 0)
             said << tr("Re-check to see what is left.");
+        if (!oneClicks.isEmpty() && !m_said.isEmpty())
+            said << m_said;
         m_summary->setText(said.join(QLatin1Char(' ')));
         return;
     }

@@ -351,9 +351,9 @@ void ShowReview_Test::howToFixCoversEveryCheck()
     f.targets = QStringList() << QStringLiteral("fx:%1").arg(a->id());
     QVERIFY(ShowReview::howToFix(f, m_doc).contains("'Spot 3'"));
     // Findings carry it after a run.
-    a->setAddress(10);
-    Fixture *b = par("Par 2", 12);
+    Fixture *b = par("Par 2", 20);
     QVERIFY(b != nullptr);
+    b->setAddress(2);                       // as a hand-edited file can have it
     const QList<ReviewFinding> got = findings("PAT-01");
     QVERIFY(!got.isEmpty());
     QVERIFY(!got.first().howToFix.isEmpty());
