@@ -45,6 +45,7 @@ private slots:
     void theRigIsTheShowsSize();
     void abOnTheShowsRig_data();
     void abOnTheShowsRig();
+    void matrixShareOfTheTick();
 };
 
 #endif

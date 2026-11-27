@@ -547,6 +547,102 @@ void MasterTimer_Test::anOverrunningTickRunsAlone()
              qPrintable(QString("%1 ticks in %2 ms after the overrun").arg(fastWrites).arg(fastMs)));
 }
 
+namespace
+{
+/* A DMX source whose Nth tick takes @a ms: one late frame, then none */
+class OneSlowTick final : public DMXSource
+{
+public:
+    OneSlowTick(int at, int ms) : m_at(at), m_ms(ms) {}
+    void writeDMX(MasterTimer *, QList<Universe *>) override
+    {
+        if (++m_calls == m_at)
+            QThread::msleep(m_ms);
+    }
+    const int m_at, m_ms;
+    int m_calls = 0;
+};
+}
+
+void MasterTimer_Test::aLateTickDoesNotStretchAFade()
+{
+    SKIP_IF_CLOCK_UNTRUSTWORTHY();
+    const int tick = int(MasterTimer::tick());
+    const int fadeMs = tick * 30;               // 600 ms at 50 Hz
+
+    Doc *doc = new Doc(this);
+    MasterTimer *mt = doc->masterTimer();
+    Fixture *fx = new Fixture(doc);
+    fx->setChannels(1);
+    fx->setUniverse(0);
+    fx->setAddress(0);
+    QVERIFY(doc->addFixture(fx));
+    Scene *scene = new Scene(doc);
+    scene->setValue(fx->id(), 0, 255);
+    scene->setFadeInSpeed(uint(fadeMs));
+    QVERIFY(doc->addFunction(scene));
+
+    // Every frame the universe sends: when, and the dimmer's level
+    QMutex lock;
+    QList<QPair<qint64, int>> frames;
+    QElapsedTimer clock;
+    clock.start();
+    Universe *uni = doc->inputOutputMap()->universe(0);
+    QVERIFY(uni != nullptr);
+    connect(uni, &Universe::universeWritten, uni, [&](quint32, const QByteArray &data) {
+        QMutexLocker l(&lock);
+        frames.append(qMakePair(clock.nsecsElapsed(), data.isEmpty() ? 0 : int(uchar(data.at(0)))));
+    }, Qt::DirectConnection);
+
+    // A third of the way in, one tick takes five frames' time
+    OneSlowTick slow(10, tick * 5);
+    doc->inputOutputMap()->startUniverses();
+    QTRY_VERIFY(uni->isRunning());
+    mt->registerDMXSource(&slow);
+    auto guard = qScopeGuard([&] {
+        mt->stop();
+        mt->unregisterDMXSource(&slow);
+        delete doc;
+    });
+    mt->start();
+    scene->start(mt, FunctionParent::master());
+    QTRY_VERIFY_WITH_TIMEOUT(slow.m_calls > 10, 5000);
+    QTest::qWait(fadeMs + tick * 10);
+    mt->stop();
+
+    QMutexLocker l(&lock);
+    qint64 first = -1, full = -1;
+    for (const QPair<qint64, int> &f : frames)
+    {
+        if (first < 0 && f.second > 0)
+            first = f.first;
+        if (full < 0 && f.second == 255)
+            full = f.first;
+    }
+    QVERIFY2(first >= 0 && full > first, "the fade never ran");
+    // The first frame with light is one tick into the fade
+    const double tookMs = (full - first) / 1.0e6;
+    const double wantMs = fadeMs - tick;
+    QVERIFY2(qAbs(tookMs - wantMs) <= tick,
+             qPrintable(QStringLiteral("the %1 ms fade took %2 ms from its first frame (want %3 +- %4)")
+                        .arg(fadeMs).arg(tookMs, 0, 'f', 1).arg(wantMs).arg(tick)));
+}
+
+void MasterTimer_Test::theTimerCatchesUpOnlyWhatItCan()
+{
+    const double period = MasterTimer::tick();
+    // A late frame, the tick itself quick: catch up
+    QVERIFY(MasterTimer::catchesUp(qint64(period * 3 * 1e6), period / 4));
+    QVERIFY(MasterTimer::catchesUp(0, 0));
+    // The tick overran its own period: the show is more than fits, don't
+    QVERIFY(!MasterTimer::catchesUp(qint64(period * 1e6), period));
+    QVERIFY(!MasterTimer::catchesUp(qint64(period * 1e6), period * 3));
+    // A computer that slept: start again from now
+    QVERIFY(MasterTimer::catchesUp(MasterTimer::kMaxCatchUpNs, 1));
+    QVERIFY(!MasterTimer::catchesUp(MasterTimer::kMaxCatchUpNs + 1, 1));
+    QVERIFY(!MasterTimer::catchesUp(qint64(3600) * 1000000000, 1));
+}
+
 /* stop() during a tick returns only once that tick is over, so whatever the
    tick was using can be freed right after. */
 void MasterTimer_Test::stopWaitsForATickInProgress()

@@ -25,6 +25,7 @@
 #include "qlcui_export.h"
 
 class QCheckBox;
+class QComboBox;
 class QTreeWidget;
 class QLabel;
 class QPlainTextEdit;
@@ -65,6 +66,9 @@ public:
     QPlainTextEdit *commandEdit() const { return m_command; }
     QPushButton *copyButton() const { return m_copy; }
     QLabel *fullCheckLabel() const { return m_fullCheck; }
+    /** Universe threads: Standard / Responsive / Real-time, each item's
+     *  data a Universe::ThreadPriority; hidden where there is no choice */
+    QComboBox *universeThreadsCombo() const { return m_universeThreads; }
 
 private:
     void showSelected();
@@ -78,6 +82,7 @@ private:
     QList<SystemTuning::Item> m_items;
 
     QCheckBox *m_fullSpeed;
+    QComboBox *m_universeThreads = nullptr;
     QCheckBox *m_display;
     QCheckBox *m_warn;
     QTreeWidget *m_tree;

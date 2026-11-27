@@ -320,6 +320,12 @@ uint MasterTimer::tick()
     return s_tick;
 }
 
+bool MasterTimer::catchesUp(qint64 lateNs, double tickComputeMs)
+{
+    const double periodMs = 1000.0 / double(s_frequency);
+    return lateNs >= 0 && lateNs <= kMaxCatchUpNs && tickComputeMs < periodMs;
+}
+
 double MasterTimer::tickComputeMs() const
 {
     return m_tickComputeUs.loadRelaxed() / 1000.0;

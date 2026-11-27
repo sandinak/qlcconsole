@@ -24,6 +24,8 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QCheckBox>
+#include <QComboBox>
+#include <QFormLayout>
 #include <QClipboard>
 #include <QLabel>
 #include <QLocale>
@@ -75,6 +77,36 @@ SystemTuningPage::SystemTuningPage(Doc *doc, QWidget *parent)
     opLayout->addWidget(m_display);
     opLayout->addWidget(m_warn);
     layout->addWidget(operate);
+
+    /* How the universe threads are scheduled: this computer's, saved here */
+    QGroupBox *engine = new QGroupBox(tr("DMX output"), this);
+    engine->setObjectName(QStringLiteral("tuningEngine"));
+    QFormLayout *engineLayout = new QFormLayout(engine);
+    m_universeThreads = new QComboBox(engine);
+    m_universeThreads->setObjectName(QStringLiteral("tuningUniverseThreads"));
+    const Universe::ThreadPriority def = Universe::defaultThreadPriority();
+    for (Universe::ThreadPriority pr : { Universe::PriorityStandard, Universe::PriorityResponsive,
+                                         Universe::PriorityRealtime })
+    {
+        if (!Universe::threadPrioritySupported(pr))
+            continue;
+        QString text = SystemTuning::universeThreadsText(pr);
+        if (pr == def)
+            text = tr("%1 (default)").arg(text);
+        m_universeThreads->addItem(text, int(pr));
+    }
+    m_universeThreads->setCurrentIndex(qMax(0, m_universeThreads->findData(int(SystemTuning::universeThreads()))));
+    m_universeThreads->setToolTip(tr("How the system schedules the threads that compute and send each "
+                                     "universe. Real-time keeps frames on time on a busy computer, for a "
+                                     "little more CPU. Standard: ordinary threads."));
+    if (Universe::threadPriorityOverridden())
+    {
+        m_universeThreads->setEnabled(false);
+        m_universeThreads->setToolTip(tr("Set for this run by QLC_UNIVERSE_SCHED, which overrides it."));
+    }
+    engineLayout->addRow(tr("Universe threads"), m_universeThreads);
+    engine->setVisible(m_universeThreads->count() > 1);
+    layout->addWidget(engine);
 
     QGroupBox *check = new QGroupBox(tr("This computer"), this);
     QVBoxLayout *checkLayout = new QVBoxLayout(check);
@@ -231,6 +263,8 @@ void SystemTuningPage::apply()
     SystemTuning::setFullSpeedInOperate(m_fullSpeed->isChecked());
     SystemTuning::setKeepDisplayAwakeInOperate(m_display->isChecked());
     SystemTuning::setWarnInOperate(m_warn->isChecked());
+    if (m_universeThreads->count() > 1 && m_universeThreads->isEnabled())
+        SystemTuning::setUniverseThreads(Universe::ThreadPriority(m_universeThreads->currentData().toInt()));
     if (SystemTuning::instance() != nullptr)
         SystemTuning::instance()->apply();
 }

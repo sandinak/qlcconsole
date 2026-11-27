@@ -322,12 +322,19 @@ void MasterTimerPrivate::run()
                      << "budget_us:" << (nsTickTime / 1000);
             /* No need to sleep. Immediately process the next tick */
             mt->timerTick(true);
-            /* Now the finish time needs to be recalibrated */
+            /* Show time is wall-clock time: the deadlines stay where they
+               were, so the frames a late one missed follow it back to back
+               and a fade ends when it should -- unless this tick overran
+               itself or the gap is too long (MasterTimer::catchesUp()):
+               then the clock starts again from now, the missed time lost. */
+            if (!MasterTimer::catchesUp(qint64(lateUs) * 1000, mt->tickComputeMs()))
+            {
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
-            clock_get_time(cclock, finish);
+                clock_get_time(cclock, finish);
 #else
-            clock_gettime(CLOCK_MONOTONIC, finish);
+                clock_gettime(CLOCK_MONOTONIC, finish);
 #endif
+            }
             continue;
         }
 

@@ -272,34 +272,38 @@ void SystemTuning::appendHostItems(const Probe &p, QList<Item> *items)
         it.key = QStringLiteral("universes");
         it.title = tr("Universe threads");
         it.what = tr("One thread per universe computes its frame and sends it. If only the timer "
-                     "is real-time, it can end up waiting on them.");
+                     "is real-time, it can end up waiting on them. Set in Universe threads above.");
+        /* Which is in use, and who chose it */
+        const QString asked = p.universePriorityOverridden
+            ? tr("%1, from QLC_UNIVERSE_SCHED").arg(universeThreadsText(p.universePriority))
+            : universeThreadsText(p.universePriority);
         switch (p.universeScheduling)
         {
             case Universe::ThreadsRealtime:
                 it.status = Good;
-                it.state = tr("real-time");
+                it.state = tr("real-time (%1)").arg(asked);
             break;
             case Universe::ThreadsElevated:
                 it.status = Good;
-                it.state = tr("high priority");
+                it.state = tr("high priority (%1)").arg(asked);
             break;
             case Universe::ThreadsRefused:
                 it.status = CanImprove;
-                it.state = tr("real-time asked for, refused");
+                it.state = tr("%1 asked for, refused").arg(asked);
                 if (p.os == OsLinux)
                     it.howTo = tr("Give this user a real-time limit: see Real-time DMX timer.");
             break;
             case Universe::ThreadsNormal:
-                it.state = tr("normal priority; patched universes: %1").arg(p.patchedUniverses);
-                if (p.os == OsLinux && p.patchedUniverses >= 64
+                it.state = tr("normal priority (%1); patched universes: %2").arg(asked).arg(p.patchedUniverses);
+                if (p.os != OsWindows && p.patchedUniverses >= 64
+                    && p.universePriority == Universe::PriorityStandard
                     && p.scheduling == MasterTimer::SchedulingRealtime)
                 {
                     it.status = CanImprove;
                     it.what += QLatin1Char(' ')
                             + tr("On a Raspberry Pi 5 at 160 universes, making them real-time too "
                                  "halved the worst frame times, for about 10% more CPU.");
-                    it.command = QStringLiteral("QLC_UNIVERSE_SCHED=rt '%1' -o your-show.qlcc").arg(p.binary);
-                    it.howTo = tr("Experimental: start the app this way to try it.");
+                    it.howTo = tr("Set Universe threads to Real-time.");
                 }
                 else
                 {

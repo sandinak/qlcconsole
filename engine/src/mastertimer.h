@@ -77,6 +77,16 @@ public:
     /** Get the length of one timer tick in milliseconds */
     static uint tick();
 
+    /** Show time follows the wall clock: every tick is tick() ms of every
+     *  fade, hold and effect, so a frame that comes @a lateNs late is
+     *  followed by the ones it missed, back to back. Not when the tick just
+     *  run took a period or more itself (@a tickComputeMs: the show is more
+     *  than the computer computes in time, and catching up would only fall
+     *  further behind) nor past kMaxCatchUpNs (a computer that slept): then
+     *  the timer starts again from now and that time is lost. */
+    static bool catchesUp(qint64 lateNs, double tickComputeMs);
+    static constexpr qint64 kMaxCatchUpNs = 500000000;  // 25 frames at 50 Hz
+
     /** Compute time of the most recent tick, in milliseconds. This is how
      *  long the engine spent producing DMX for one tick (functions + DMX
      *  sources), i.e. the engine load against the per-tick budget (tick()).

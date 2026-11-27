@@ -129,8 +129,10 @@ MasterTimerPrivate::~MasterTimerPrivate()
  * tick, move the deadline on by one period. Deadlines are absolute (kept on
  * the performance counter), so the rate doesn't drift by the time each tick
  * takes. If a tick finishes past the next deadline, the next tick runs at
- * once and the deadline is re-anchored to now -- missed ticks are dropped,
- * never queued -- exactly the unix overrun behaviour.
+ * once; the ticks missed follow it back to back (show time is wall-clock
+ * time) unless MasterTimer::catchesUp() says the gap is the ticks' own
+ * doing or too long, when the deadline is re-anchored to now and they are
+ * dropped -- never queued as threads -- exactly the unix overrun behaviour.
  */
 void MasterTimerPrivate::start()
 {
@@ -283,8 +285,7 @@ void MasterTimerPrivate::run()
             /* Running late: the last tick took longer than its period, or the
                thread wasn't scheduled back in time. Same report as the unix
                timer -- "late" vs the previous tick's compute time tells the
-               two apart. Tick now, and re-anchor rather than trying to catch
-               up: the ticks that were missed are not run. */
+               two apart. Tick now. */
             const long lateUs = long((current - deadline) * 1000000LL / countsPerSec);
             qDebug() << Q_FUNC_INFO << "MasterTimer is running late!"
                      << "late_us:" << lateUs
@@ -292,7 +293,11 @@ void MasterTimerPrivate::run()
                      << "cpu_us:" << long(m_masterTimer->tickCpuMs() * 1000.0)
                      << "budget_us:" << budgetUs;
             m_masterTimer->timerTick(true);
-            deadline = now();
+            /* Show time is wall-clock time (MasterTimer::catchesUp()): the
+               missed frames follow back to back, unless this tick overran
+               itself or the gap is too long */
+            if (!MasterTimer::catchesUp(qint64(lateUs) * 1000, m_masterTimer->tickComputeMs()))
+                deadline = now();
             continue;
         }
 

@@ -727,4 +727,65 @@ void UniverseSched_Test::abOnTheShowsRig()
     }
 }
 
+/* How much of the tick the RGB matrix is (docs/performance.md), ticked by
+   hand so no scheduling is in it: the rig's functions with and without the
+   matrix, every tick timed, a matrix step (a new map) every tenth tick.
+   QLC_SCHED_AB=1, as the A/B. */
+void UniverseSched_Test::matrixShareOfTheTick()
+{
+    if (qgetenv("QLC_SCHED_AB").isEmpty())
+        QSKIP("a measurement: QLC_SCHED_AB=1");
+    const int ticks = 1000;
+    QStringList lines;
+    for (int withMatrix = 1; withMatrix >= 0; --withMatrix)
+    {
+        std::unique_ptr<Doc> doc(newDoc(kRigUniverses));
+        Rig rig;
+        QString why;
+        QVERIFY2(buildRig(doc.get(), 1, &rig, &why), qPrintable(why));
+        MasterTimer *mt = doc->masterTimer();
+        doc->setMode(Doc::Operate);
+        for (quint32 id : rig.running)
+        {
+            Function *f = doc->function(id);
+            if (f != nullptr && (withMatrix || f->type() != Function::RGBMatrixType))
+                f->start(mt, FunctionParent::master());
+        }
+        std::vector<double> ms;
+        QElapsedTimer t;
+        for (int i = 0; i < ticks + 50; ++i)
+        {
+            t.start();
+            mt->timerTick();
+            const double took = t.nsecsElapsed() / 1.0e6;
+            if (i >= 50)
+                ms.push_back(took);
+        }
+        double sum = 0;
+        for (double v : ms)
+            sum += v;
+        const QString line = QStringLiteral("SCHED_AB matrix share %1: tick mean %2 p50 %3 p90 %4 p99 %5 max %6 ms")
+            .arg(withMatrix ? "with the matrix" : "without it")
+            .arg(sum / ms.size(), 0, 'f', 3).arg(percentile(ms, 50), 0, 'f', 3)
+            .arg(percentile(ms, 90), 0, 'f', 3).arg(percentile(ms, 99), 0, 'f', 3)
+            .arg(percentile(ms, 100), 0, 'f', 3);
+        qInfo().noquote() << line;
+        lines << line;
+        for (quint32 id : rig.running)
+            if (Function *f = doc->function(id))
+                f->stop(FunctionParent::master());
+        for (int i = 0; i < 20 && mt->runningFunctions() > 0; ++i)
+            mt->timerTick();
+    }
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        QFile f(QDir(shotDir).filePath(QStringLiteral("matrixshare-%1.txt")
+                                       .arg(QSysInfo::machineHostName().section('.', 0, 0))));
+        if (f.open(QIODevice::Append | QIODevice::Text))
+            f.write(lines.join('\n').toUtf8() + '\n');
+    }
+}
+
 QTEST_GUILESS_MAIN(UniverseSched_Test)
