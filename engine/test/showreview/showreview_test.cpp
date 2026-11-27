@@ -30,6 +30,7 @@
 
 #include "showreview_test.h"
 #include "showreviewcli.h"
+#include "audioplugincache.h"
 #include "teachingsettings.h"
 #include "venuecorrections.h"
 #include "showembedding.h"
