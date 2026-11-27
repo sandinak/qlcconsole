@@ -2389,35 +2389,17 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
     QVERIFY(row != nullptr);
     tree->setCurrentItem(row);
 
-    QVERIFY2(!PatchLock::of(fm)->isLocked() && tree->isEnabled() && tree->editTriggers() != QAbstractItemView::NoEditTriggers,
-             qPrintable(QString("locked %1 enabled %2 triggers %3 mode %4")
-                        .arg(PatchLock::of(fm)->isLocked()).arg(tree->isEnabled())
-                        .arg(int(tree->editTriggers())).arg(int(doc->mode()))));
+    // The row must be on show: updateTree() keeps folders as they were.
+    for (QTreeWidgetItem *p = row->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    tree->scrollToItem(row);
     // Return opens the name's editor; type, Return.
     QTest::keyClick(tree, Qt::Key_Return);
     QLineEdit *editor = nullptr;
     QTRY_VERIFY((editor = tree->viewport()->findChild<QLineEdit *>()) != nullptr);
     editor->selectAll();
     QTest::keyClicks(editor, "New name");
-    QVERIFY2(editor->text() == "New name", qPrintable("typed: " + editor->text()));
-    QPointer<QLineEdit> editorGuard(editor);
-    static QStringList dbg;
-    dbg.clear();
-    static QtMessageHandler prev = nullptr;
-    prev = qInstallMessageHandler([](QtMsgType t, const QMessageLogContext &c, const QString &m) {
-        if (m.contains("DBG"))
-            dbg << m;
-        else if (prev != nullptr)
-            prev(t, c, m);
-    });
-    auto restore = qScopeGuard([]() { qInstallMessageHandler(prev); });
     QTest::keyClick(editor, Qt::Key_Return);
-    QTest::qWait(300);
-    QVERIFY2(doc->fixture(fid)->name() == "New name",
-             qPrintable(QString("after Return: name '%1', editor alive %2, flags %3 | %4")
-                        .arg(doc->fixture(fid)->name()).arg(!editorGuard.isNull())
-                        .arg(int(tree->currentItem() != nullptr ? int(tree->currentItem()->flags()) : -1))
-                        .arg(dbg.filter("updateTree").join(" ## "))));
     QTRY_COMPARE(doc->fixture(fid)->name(), QString("New name"));
 
     QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
