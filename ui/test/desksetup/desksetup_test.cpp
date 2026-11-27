@@ -85,6 +85,7 @@ void DeskSetup_Test::cleanup()
     {
         m_stub->m_nameOverride.clear();
         m_stub->m_lineNames.clear();
+        m_stub->m_linesAreHardware = false;
     }
     delete m_doc;
     m_doc = nullptr;
@@ -546,6 +547,8 @@ void DeskSetup_Test::assignShowsTheDeskAsThisComputers()
 
 void DeskSetup_Test::theSpottersControlsAreSetHere()
 {
+    // A device on a cable (the Hold and the Arm refuse the network).
+    m_stub->m_linesAreHardware = true;
     DeskSetupPanel panel(m_doc);
     D *desk = m_doc->deskRecord();
     QVERIFY(!panel.hazardRowsShown());
@@ -572,8 +575,15 @@ void DeskSetup_Test::theSpottersControlsAreSetHere()
     // A computer key: refused, said.
     QTest::keyClick(&panel, Qt::Key_H);
     QVERIFY2(panel.learnLine()->text().contains(QStringLiteral("keyboard")), qPrintable(panel.learnLine()->text()));
-    // A button of its own: learned. On GO's device, so the panel says so.
+    // A tap: refused (the Hold is learned from a press held); then a
+    // button of its own held about a second: learned. On GO's device, so
+    // the panel says so.
     send(0, 210, 127);
+    send(0, 210, 0);
+    QVERIFY(!desk->isSet(D::HazardHold));
+    QVERIFY2(panel.learnLine()->text().contains(QStringLiteral("about a second")), qPrintable(panel.learnLine()->text()));
+    send(0, 210, 127);
+    QTest::qWait(1100);
     send(0, 210, 0);
     QVERIFY(desk->isSet(D::HazardHold));
     QVERIFY(panel.hazardNote()->isVisibleTo(&panel));

@@ -82,7 +82,10 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         scheduleRebuild();      // the rest, once, coalesced
     };
     connect(doc, &Doc::fixtureAdded, this, changed);
-    connect(doc, &Doc::fixtureRemoved, this, [this](quint32) { scheduleRebuild(); });
+    connect(doc, &Doc::fixtureRemoved, this, [this](quint32 id) {
+        layHazardNow(id);       // gone now: its id may come back as another fixture
+        scheduleRebuild();
+    });
     connect(doc, &Doc::fixtureChanged, this, changed);
     connect(doc, &Doc::loaded, this, [this]() {
         // E2 (R6-7): a show loaded -- over the web while in Operate too --

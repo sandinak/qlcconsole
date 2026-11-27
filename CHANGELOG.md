@@ -33,7 +33,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   confetti, sparkulars, pyro: fires only while the spotter holds **Hazard
   hold**, safe the frame it is let go) or **Running** (fog, haze, 3R+
   lasers: **Hazard arm** arms it, on from the next cue that sets it until
-  **Hazard kill**). A cue reached unheld or unarmed skips it ("CO2 jet
+  **Hazard kill**). Only the cue's own level ever reaches a hazard -- not
+  the Simple Desk, a slider, passthrough or the programmer -- and every
+  step of a list (timecode, auto-follow, a sub-cue too) closes what the
+  step before let fire. Hold and Kill act from the device's input thread;
+  the Hold is learned from a held press on a plugged-in device. A cue reached unheld or unarmed skips it ("CO2 jet
   skipped — not held") and never fires late; a show opened, the emergency
   stop, Stop ALL and the spotter's device lost disarm. The three controls
   are this computer's desk roles, refused on GO/Back/STOP and the keyboard;

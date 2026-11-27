@@ -615,6 +615,10 @@ void HazardArming_Test::showReviewSaysWhatIsMissing()
     QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
     QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
     got = findings();
+    // Still no Kill: a warning says so.
+    QCOMPARE(got.filter(QStringLiteral("FIX-22:1:")).size(), 1);
+    QVERIFY(bindRole(D::HazardKill, QStringLiteral("3-Down")));
+    got = findings();
     QCOMPARE(got.filter(QStringLiteral("FIX-22")).size(), 0);
     QCOMPARE(got.filter(QStringLiteral("FIX-23")).size(), 2);
     // This computer's lines name the spotter's controls.
@@ -640,7 +644,8 @@ void HazardArming_Test::everyEventIsLogged()
     QVERIFY(m_pmj->tap(QStringLiteral("3-Down")));
     const QString log = k->hazardLog().join(QLatin1Char('\n'));
     for (const char *line : { "CO2 jet skipped: not held", "Hazer skipped: not armed", "Armed:",
-                              "CO2 jet fired (Hold held)", "Hazer on (armed)", "back to safe",
+                              "CO2 jet fired at 255 (cue reached)", "Hazer on at 255 (cue reached)",
+                              "CO2 jet back to safe (Hold let go)", "Hazer back to safe",
                               "Kill: every hazard off, disarmed" })
         QVERIFY2(log.contains(QLatin1String(line)), qPrintable(QStringLiteral("%1 not in:\n%2").arg(line, log)));
     m_doc->setMode(Doc::Design);

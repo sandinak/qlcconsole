@@ -1104,30 +1104,50 @@ is doing — and stays off parked, whatever an older show saved for it.
 ## Hazards and arming
 
 A hazard fires only when **the spotter** — or the laser safety officer —
-lets it, on controls of their own, never the operator's GO. Two kinds,
-picked in **Behaves as**:
+lets it, on controls of their own, never the operator's GO. And then
+**only at the level its cue sets**: nothing else ever reaches a hazard's
+channels — not the Simple Desk, Edit Live, a Virtual Console slider, the
+web page, input passthrough, an override hit, Focus or Highlight, the
+programmer, a fixture sharing its address, or a function left running.
+A cue that sets it to 0 puts it at 0. The level goes out at once (a
+hazard does not fade in with its cue). Two kinds, picked in **Behaves
+as**:
 
 - **Hazard — Burst** (flame, CO₂ jets, confetti, cannons, sparkulars,
-  pyro): the spotter's **deadman**. It sends its cue's value **only while
-  Hazard hold is held down**; let go, it is off that same frame. A cue that
-  reaches it while the hold is up **skips** it — the footer says **CO2 jet
-  skipped — not held** — and it never fires late when the hold comes
-  after: the next cue that sets it, reached while held, fires it.
+  pyro): the spotter's **deadman**. When a cue is reached — by a GO,
+  Back, a jump, an auto-follow, a timecode or audio step, a sub-cue, a
+  Virtual Console cue list, anything that steps the list — it fires only
+  if **Hazard hold is held down at that moment**, and only while it stays
+  held: let go, it is off that same frame. **Pressing it again within the
+  same cue fires again**: that is how a flame operator gives repeated
+  bursts. A cue reached while the hold is up **skips** it — the footer
+  says **CO2 jet skipped — not held** — and a hold that comes after
+  fires nothing until a later cue is reached held.
 - **Hazard — Running** (fog, haze, Class 3R/3B/4 lasers): **Hazard arm**
-  arms it with one press, and it stays armed; the first cue after the
-  arming that sets it turns it on, and it stays on across cues.
-  **Hazard kill** turns it off at once and disarms. A cue that reached it
-  unarmed skips it (**Hazer skipped — not armed**); arming then fires
-  nothing until the next GO whose cue sets it (a cue that tracks it on
-  counts).
+  arms it with one press, and it stays armed; each cue reached while
+  armed sends its own level (tracking and includes count, so a hazer a
+  cue tracks on stays on). **Hazard kill** turns everything off at once
+  and disarms. A cue reached unarmed skips it (**Hazer skipped — not
+  armed**); arming then fires nothing until the next cue is reached.
+
+Every step closes what the step before let fire, at once; a GO in
+**Blind** lets nothing fire.
 
 **Disarmed, always:** every show opened, the emergency stop, **Stop ALL**
-and **Fade and stop**, and the spotter's device lost (unplugged, its
-patch gone, its role turned off). A Hold still held through a disarm
-counts only once it is let go of and pressed again. A **Park** wins (a
-parked hazard stays off), and picking a cue in Design never fires one,
-armed or not: it takes back what the last GO let fire. Input passthrough
-never reaches a hazard held off.
+and **Fade and stop**, the computer going to sleep or waking, and the
+spotter's device lost (unplugged, its patch gone, its role turned off).
+A Hold still held through a disarm counts only once it is let go of and
+pressed again. Letting go of the Hold and the Kill act straight from the
+device's input, even when the app is busy. A **Park** wins (a parked
+hazard stays off), and picking a cue in Design — or a programmer edit
+after a run in Design — takes back what a run let fire.
+
+**Once a hazard, a hazard.** A fixture guessed a Hazard stays one when
+its guess changes (renamed "CO2 jet" to "DS Jet", say): it is set to its
+kind by hand and the hazard log says so. Only setting **Behaves as** to
+something else by hand makes it a light again (logged, and listed in
+Show Review). A laser given a class of 3R or more, a scenery or a symbol
+change re-reads every guess at once.
 
 **Where to see it.** The footer's **Hazards** chip, whenever the show has
 one: **DISARMED**, **ARMED** (the Running ones), **HELD** (the Hold is
@@ -1148,12 +1168,24 @@ each is a `hazard:` line in `~/qlcconsole.log`.
 **The controls** are three of this computer's desk roles — **Hazard
 hold**, **Hazard arm** and **Hazard kill** — in **Connections ▸ Control
 surfaces ▸ This computer's desk** (they show once the show has a hazard).
-Each is learned with **Learn…** and a press of a button. They are
-refused on the control of **GO**, **Back** or a **STOP** (the desk's, or
-the show's own GO, Back or emergency stop) and on a computer key. They
-may share a device with the operator's GO, but the setup says so: a
+Each is learned with **Learn…**: the Hold by **pressing a button, holding
+it about a second and letting go**; the others with a press. Limits:
+
+- never the control of **GO**, **Back**, a **STOP** (the desk's, or the
+  show's own GO, Back or emergency stop) or another hazard role (the Hold
+  on the Kill's button would lose the Kill);
+- never a computer key;
+- the Hold and the Arm only on a device plugged into this computer (USB,
+  MIDI): an input over the network (OSC, Art-Net, sACN, the web) never
+  says it was lost. The Kill may be anything;
+- the Hold must be a **momentary button**: a fader, knob or encoder, a
+  tap too short, or a latching / toggle button (one that does not let go
+  when the hand does) is refused.
+
+They may share a device with the operator's GO, but the setup says so: a
 device of the spotter's own, away from the operator's hands, is better.
-Hazard kill works even while a Learn or Identify is open. One set for the
+Hazard kill works even while a Learn or Identify is open. Show Review
+warns when cues fire hazards and no Hazard kill is set. One set for the
 show; a hold per group of hazards is not there yet.
 
 **Set it up on a real board** (a FaderPort 2, a PMJ Black 1, an APC40 or
@@ -1166,8 +1198,9 @@ APC64 — any MIDI button box):
    Running**; give each 3R+ laser its **Laser class**.
 3. Open **Connections ▸ Control surfaces ▸ This computer's desk**. Under
    **Hazards — the spotter's controls**, press **Learn…** beside **Hazard
-   hold** and press the button the spotter will hold. Do the same for
-   **Hazard arm** and **Hazard kill** (three different buttons).
+   hold**, then press the button the spotter will hold, keep it down
+   about a second and let go. Learn **Hazard arm** and **Hazard kill**
+   with a press each (three different buttons).
 4. Try learning one on the board's GO: it is refused. If the board is
    also the operator's, the panel says so; prefer a second board.
 5. Open **Show Review**: **FIX-22** is gone; **FIX-23** lists each hazard
@@ -1175,7 +1208,8 @@ APC64 — any MIDI button box):
 6. In Operate, GO to a CO₂ cue **without** holding: the jet stays off and
    the footer says **CO2 jet skipped — not held**. Hold now: nothing.
 7. Hold **Hazard hold**, GO the next cue that sets the jet: it fires; let
-   go mid-cue: it stops at once. The chip reads **HELD** while held.
+   go mid-cue: it stops at once; press again: it fires again. The chip
+   reads **HELD** while held. Push the jet up on the Simple Desk: nothing.
 8. Press **Hazard arm** (chip **ARMED**), GO the hazer's cue: it runs, and
    stays on through the next cues. Press **Hazard kill**: it is off at
    once and the chip reads **DISARMED**.
