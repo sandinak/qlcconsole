@@ -153,7 +153,7 @@ void OneJob_Test::aDeskRoleIsNamedAndMovedFromTheSpeedMastersDialog()
     InputOutputMap *iom = m_doc->inputOutputMap();
     SpeedMastersPanel panel(m_doc);
 
-    QString freeLabel, label, boxText;
+    QString freeLabel, label, boxText, moved, changed;
     bool refused = false, moveShown = false;
     QTimer::singleShot(0, this, [&]() {
         QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
@@ -178,8 +178,17 @@ void OneJob_Test::aDeskRoleIsNamedAndMovedFromTheSpeedMastersDialog()
         tap->stopAutoDetection();
         QVERIFY(!tap->inputSource().isNull());
         QCOMPARE(tap->inputSource()->channel(), kMasterFader);
-        // Nothing is taken until OK.
+        // Nothing is taken until OK; the line says so, and is read afresh.
         QVERIFY(desk->isSet(DeskRecord::GrandMaster));
+        moved = tap->findChild<QLabel *>("currentJob")->text();
+        // A job given to that control by someone else shows at the next move of it.
+        sm->setInput(1, SpeedMasters::TapControl, 0, kMasterFader);
+        emit iom->inputValueChanged(0, kMasterFader, 127);
+        tap->m_autoDetectInputButton->setChecked(true);
+        emit iom->inputValueChanged(0, kMasterFader, 127);
+        tap->stopAutoDetection();
+        changed = tap->findChild<QLabel *>("currentJob")->text();
+        sm->clearInput(1, SpeedMasters::TapControl);
     });
     panel.row(0).inputs->click();
     QVERIFY2(freeLabel.contains(QStringLiteral("free")), qPrintable(freeLabel));
@@ -188,6 +197,8 @@ void OneJob_Test::aDeskRoleIsNamedAndMovedFromTheSpeedMastersDialog()
     QVERIFY2(boxText.contains(QStringLiteral("Grand Master")) && boxText.contains(QStringLiteral("One job per control")),
              qPrintable(boxText));
     QVERIFY(moveShown);
+    QVERIFY2(moved.contains(QStringLiteral("taken from Grand Master when you press OK")), qPrintable(moved));
+    QVERIFY2(changed.contains(QStringLiteral("Speed 2 Tap")) || changed.contains(QStringLiteral("Tap")), qPrintable(changed));
     // OK: the Tap is on the fader and the desk's Grand Master is cleared.
     quint32 u = 99, c = 99;
     QVERIFY(sm->input(0, SpeedMasters::TapControl, &u, &c));

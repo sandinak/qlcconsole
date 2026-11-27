@@ -176,6 +176,7 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
             pm.source = m_inputSource.toWeakRef();
             m_pendingMoves << pm;
         }
+        showJobs(universe, channel);
         emit inputValueChanged(universe, channel);
     });
 
@@ -394,10 +395,8 @@ bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage
 
 void InputSelectionWidget::showJobs(quint32 universe, quint32 channelWithPage)
 {
-    const quint64 key = (quint64(universe) << 32) | channelWithPage;
-    if (key == m_jobsKey)
-        return;
-    m_jobsKey = key;
+    // Always read afresh: the control's jobs change under the dialog (a
+    // Move It Here, another window, the desk learning).
     QList<ControlOwners::Job> jobs = ControlOwners::jobsFor(m_doc, universe, channelWithPage);
     for (int i = jobs.count() - 1; i >= 0; --i)
         if (!jobs.at(i).isPage && (isLocal(jobs.at(i).owner) || m_self.sameAs(jobs.at(i).owner)))
@@ -411,9 +410,23 @@ void InputSelectionWidget::showJobs(quint32 universe, quint32 channelWithPage)
             j.note = o.where;
             jobs << j;
         }
-    m_jobLabel->setText(tr("%1: %2")
-                            .arg(ControlOwners::controlName(m_doc, universe, channelWithPage),
-                                 ControlOwners::jobsText(jobs)));
+    // What Move It Here takes when the window is accepted: said, not listed as a job.
+    QStringList moving;
+    const QList<ControlOwners::Owner> pending = pendingMove();
+    for (int i = jobs.count() - 1; i >= 0; --i)
+        for (const ControlOwners::Owner &p : pending)
+            if (!jobs.at(i).isPage && jobs.at(i).owner.sameAs(p))
+            {
+                moving.prepend(jobs.at(i).name);
+                jobs.removeAt(i);
+                break;
+            }
+    QString text = tr("%1: %2")
+                       .arg(ControlOwners::controlName(m_doc, universe, channelWithPage),
+                            ControlOwners::jobsText(jobs));
+    if (!moving.isEmpty())
+        text += tr(" -- taken from %1 when you press OK").arg(moving.join(tr(" and ")));
+    m_jobLabel->setText(text);
     m_jobLabel->show();
 }
 

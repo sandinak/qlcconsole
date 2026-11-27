@@ -153,7 +153,6 @@ private:
     ControlOwners::Owner m_self;
     ControlCollisionBox *m_collision;
     QLabel *m_jobLabel = nullptr;
-    quint64 m_jobsKey = ~quint64(0);
     bool m_pendingKeepFeedback = false;
     LocalOwners m_local;
     /** One Move It Here waiting for OK: the source it set, weakly (a
