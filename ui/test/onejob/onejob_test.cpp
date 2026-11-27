@@ -174,6 +174,20 @@ void OneJob_Test::aDeskRoleIsNamedAndMovedFromTheSpeedMastersDialog()
         refused = tap->collisionBox()->isRefusing();
         boxText = tap->collisionBox()->text();
         moveShown = tap->collisionBox()->moveButton()->isVisibleTo(dlg);
+        // The window at three sizes, when the pool asks for shots.
+        const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (!shotDir.isEmpty())
+        {
+            QDir().mkpath(shotDir);
+            const QString prefix = qEnvironmentVariable("QLC_SHOT_PREFIX", QStringLiteral("after"));
+            for (const QSize &sz : { QSize(640, 640), QSize(900, 800), QSize(1200, 900) })
+            {
+                dlg->resize(sz);
+                settle();
+                dlg->grab().save(QStringLiteral("%1/%2-onejob-speedmaster-inputs-%3x%4.png")
+                                     .arg(shotDir, prefix).arg(sz.width()).arg(sz.height()));
+            }
+        }
         tap->collisionBox()->moveButton()->click();
         tap->stopAutoDetection();
         QVERIFY(!tap->inputSource().isNull());
