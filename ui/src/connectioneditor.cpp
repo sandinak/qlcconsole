@@ -415,10 +415,11 @@ void ConnectionEditor::buildForm()
     m_profileEdit->setObjectName(QStringLiteral("connProfileEdit"));
     m_profileEdit->setToolTip(tr("Open the chosen input profile in the profile editor: what each "
                                  "control of the board is called and does"));
+    /* The buttons on a row of their own: three beside the list made the
+       pane wider than a small window's. */
     QWidget *profileRow = new QWidget(m_inputBox);
     QHBoxLayout *profileLay = new QHBoxLayout(profileRow);
     profileLay->setContentsMargins(0, 0, 0, 0);
-    profileLay->addWidget(m_profileCombo, 1);
     profileLay->addWidget(m_profileEdit);
     m_profileNew = new QPushButton(tr("New…"), m_inputBox);
     m_profileNew->setObjectName(QStringLiteral("connProfileNew"));
@@ -431,7 +432,9 @@ void ConnectionEditor::buildForm()
     profileLay->addWidget(m_profileDelete);
     connect(m_profileNew, &QPushButton::clicked, this, &ConnectionEditor::slotNewProfile);
     connect(m_profileDelete, &QPushButton::clicked, this, &ConnectionEditor::slotDeleteProfile);
-    inf->addRow(tr("Input Profile:"), profileRow);
+    inf->addRow(tr("Input Profile:"), m_profileCombo);
+    profileLay->addStretch(1);
+    inf->addRow(QString(), profileRow);
     connect(m_profileCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int) {
                 const bool has = !m_profileCombo->currentData().toString().isEmpty();

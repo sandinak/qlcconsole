@@ -61,6 +61,12 @@ AudioSettingsPanel::AudioSettingsPanel(Doc *doc, QWidget *parent)
     }
     m_input->setCurrentIndex(qMax(0, m_input->findData(inName)));
     m_output->setCurrentIndex(qMax(0, m_output->findData(outName)));
+    /* A long device name must not make the pane wider than its window. */
+    foreach (QComboBox *c, QList<QComboBox *>() << m_input << m_output)
+    {
+        c->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        c->setMinimumContentsLength(8);
+    }
     form->addRow(tr("Input device:"), m_input);
     form->addRow(tr("Output device:"), m_output);
 
