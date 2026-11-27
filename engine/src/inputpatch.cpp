@@ -89,6 +89,7 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     {
         disconnect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
                    this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
+        disconnect(m_hazardConnection);
         disconnect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
                    this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         disconnect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
@@ -121,6 +122,21 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     {
         connect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
                 this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
+        /* The spotter's Hold let go and their Kill (board Q352/Q353, the
+           second review's 7): on the plugin's own thread, before anything
+           is queued to the main thread -- a busy GUI never keeps a hazard
+           out. Only those two controls do anything (HazardFastPath). */
+        m_hazardConnection = connect(m_plugin, &QLCIOPlugin::valueChanged, this,
+            [this](quint32 universe, quint32 input, quint32 channel, uchar value, const QString &) {
+                if (input != m_pluginLine || (universe != UINT_MAX && universe != m_universe))
+                    return;
+                {
+                    QMutexLocker locker(&m_inputBufferMutex);
+                    if (channel < quint32(m_channelMap.size()))
+                        channel = m_channelMap.at(int(channel));
+                }
+                HazardFastPath::feed(m_universe, channel, value);
+            }, Qt::DirectConnection);
         connect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
                 this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         connect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
@@ -321,8 +337,6 @@ void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 chann
         QMutexLocker inputBufferLocker(&m_inputBufferMutex);
         if (channel < quint32(m_channelMap.size()))
             channel = m_channelMap.at(int(channel));
-        // The spotter's Hold let go, their Kill: safe now, on this thread.
-        HazardFastPath::feed(m_universe, channel, value);
         QHash<quint32, InputValue>::iterator it = m_inputBuffer.find(channel);
         if (it == m_inputBuffer.end())
         {

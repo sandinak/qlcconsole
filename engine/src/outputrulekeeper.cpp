@@ -1383,7 +1383,7 @@ void OutputRuleKeeper::watchChaser(Chaser *chaser)
     // On the thread the step comes on (the MasterTimer's): closed at once.
     connect(chaser, &Chaser::currentStepChanged, this, [this, id](int step) { hazardStepReached(id, step); },
             Qt::DirectConnection);
-    connect(chaser, &Function::stopped, this, [this](quint32 fid) { hazardStepReached(fid, -1); },
+    connect(chaser, QOverload<quint32>::of(&Function::stopped), this, [this](quint32 fid) { hazardStepReached(fid, -1); },
             Qt::DirectConnection);
     connect(chaser, &QObject::destroyed, this, [this, id]() { m_watched.remove(id); });
 }

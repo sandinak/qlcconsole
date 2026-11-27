@@ -52,7 +52,14 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "chaser.h"
+#include "chaseraction.h"
+#include "genericfader.h"
+#include "fadechannel.h"
+#include "scene.h"
+#include "monitorproperties.h"
+#include "controllerkeepalive.h"
 #include "doc.h"
+#include <thread>
 
 using D = DeskRecord;
 using K = OutputRuleKeeper;
@@ -136,7 +143,7 @@ void HazardArming_Test::init()
     const quint32 jet = dimmer(QStringLiteral("CO2 jet"));
     const quint32 hazer = dimmer(QStringLiteral("Hazer"));
     const quint32 full = level(QStringLiteral("Full"), 255), half = level(QStringLiteral("Half"), 128),
-                  out = level(QStringLiteral("Out"), 0);
+                  out = level(QStringLiteral("Out"), 0), low = level(QStringLiteral("Low"), 50);
     ShowTreeController *st = m_doc->showTree();
     auto set = [st](quint32 cue, quint32 group, quint32 palette) {
         ShowTree::Target t;
@@ -154,6 +161,11 @@ void HazardArming_Test::init()
     QVERIFY(set(m_c2, hazer, full));
     m_c3 = st->addCue(m_list, 1, QStringLiteral("After"));
     QVERIFY(set(m_c3, wash, full));      // the jet and the hazer track on
+    m_c4 = st->addCue(m_list, 2, QStringLiteral("Low haze"));
+    QVERIFY(set(m_c4, hazer, low));
+    QVERIFY(set(m_c4, jet, out));
+    m_c5 = st->addCue(m_list, 3, QStringLiteral("Haze out"));
+    QVERIFY(set(m_c5, hazer, out));
     const ShowTree::CueList *list = st->cueList(m_list);
     QVERIFY(list != nullptr);
     m_chaser = qobject_cast<Chaser *>(m_doc->function(list->chaser));
@@ -632,6 +644,319 @@ void HazardArming_Test::everyEventIsLogged()
                               "Kill: every hazard off, disarmed" })
         QVERIFY2(log.contains(QLatin1String(line)), qPrintable(QStringLiteral("%1 not in:\n%2").arg(line, log)));
     m_doc->setMode(Doc::Design);
+}
+
+/****************************************************************************
+ * The second review
+ ****************************************************************************/
+
+void HazardArming_Test::deskPush(const char *fixture, uchar value)
+{
+    const Fixture *fx = named(fixture);
+    Universe *u = m_doc->inputOutputMap()->universe(fx->universe());
+    QSharedPointer<GenericFader> f = u->requestFader(Universe::SimpleDesk);
+    FadeChannel fc(m_doc, fx->id(), 0);
+    fc.setStart(value);
+    fc.setCurrent(value);
+    fc.setTarget(value);
+    fc.setReady(true);
+    f->replaceAll({ fc });
+}
+
+Scene *HazardArming_Test::strayScene(int value)
+{
+    Scene *sc = new Scene(m_doc);
+    sc->setName(QStringLiteral("Stray"));
+    sc->setValue(named("CO2 jet")->id(), 0, uchar(value));
+    sc->setValue(named("Hazer")->id(), 0, uchar(value));
+    m_doc->addFunction(sc);
+    sc->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    return sc;
+}
+
+void HazardArming_Test::aCueThatSetsItOutLeavesItOut()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));          // armed
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));        // held
+    // The Simple Desk pushes both up; the GO's cue sets them out.
+    deskPush("CO2 jet", 255);
+    deskPush("Hazer", 255);
+    go();                                                   // the preset: jet, hazer OUT
+    waitForCheck();
+    QCOMPARE(at("CO2 jet"), 0);
+    QCOMPARE(at("Hazer"), 0);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::onlyTheCuesOwnValueGoesOut()
+{
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    K *k = m_doc->outputRuleKeeper();
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    for (int i = 0; i < 4; ++i)
+    {
+        go();
+        waitForCheck();
+    }
+    QCOMPARE(m_chaser->currentStepIndex(), 3);             // "Low haze": the hazer at 50
+    QCOMPARE(at("Hazer"), 50);
+    // The Simple Desk and a scene push it up: still the cue's 50.
+    deskPush("Hazer", 255);
+    strayScene(255);
+    tick(5);
+    QCOMPARE(at("Hazer"), 50);
+    QCOMPARE(at("CO2 jet"), 0);
+    // A cue that sets it to 0: 0, armed or not.
+    go();
+    waitForCheck();
+    QCOMPARE(m_chaser->currentStepIndex(), 4);
+    QCOMPARE(at("Hazer"), 0);
+    QVERIFY(k->hazardsArmed());
+    // Every change of what went out is in the log.
+    const QString log = k->hazardLog().join(QLatin1Char('\n'));
+    QVERIFY2(log.contains(QStringLiteral("Hazer 255 → 50")), qPrintable(log));
+    QVERIFY2(log.contains(QStringLiteral("Hazer back to safe")), qPrintable(log));
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aLaserClassSetLaterIsHeldAtOnce()
+{
+    K *k = m_doc->outputRuleKeeper();
+    Fixture *beam = new Fixture(m_doc);
+    beam->setName(QStringLiteral("Sky beam"));
+    beam->setChannels(1);
+    beam->setUniverse(0);
+    beam->setAddress(20);
+    QVERIFY(m_doc->addFixture(beam));
+    QCOMPARE(FixtureRest::behaviour(beam), Fixture::LightBehaviour);
+    Scene *sc = new Scene(m_doc);
+    sc->setValue(beam->id(), 0, 255);
+    m_doc->addFunction(sc);
+    sc->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(3);
+    QCOMPARE(at("Sky beam"), 255);
+    // Fixture Properties: Laser class 3B. No event loop between.
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(beam->id());
+    rp.laserClass = 4;
+    m_doc->monitorProperties()->setFixtureRigProps(beam->id(), rp);
+    tick(1);
+    QCOMPARE(at("Sky beam"), 0);
+    QVERIFY(k->hazards().contains(beam->id()));
+}
+
+void HazardArming_Test::everyStepTakesTheBurstBack()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Operate);
+    go();
+    waitForCheck();
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    go();                                                   // the blast, held: out
+    waitForCheck();
+    QCOMPARE(at("CO2 jet"), 255);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    tick(1);
+    QCOMPARE(at("CO2 jet"), 0);
+    // The chaser steps on by itself (no GO: an auto-follow, the editor's
+    // Test, a timecode), to cue 3 that tracks the jet on, hold up.
+    ChaserAction next;
+    next.m_action = ChaserNextStep;
+    next.m_stepIndex = 0;
+    next.m_masterIntensity = 1.0;
+    next.m_stepIntensity = 1.0;
+    next.m_fadeMode = Chaser::FromFunction;
+    m_chaser->setAction(next);
+    tick(3);
+    waitForCheck();
+    QCOMPARE(m_chaser->currentStepIndex(), 2);
+    // A Hold pressed now never fires it: its step was reached unheld.
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    tick(3);
+    QTest::qWait(150);
+    tick(3);
+    QCOMPARE(at("CO2 jet"), 0);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::holdAndArmAreRefusedOnTheNetwork()
+{
+    D *desk = m_doc->deskRecord();
+    const quint32 ch = m_pmj->channelOf(QStringLiteral("2-Down"));
+    m_stub->m_linesAreHardware = false;     // the stub as Art-Net, sACN, OSC
+    const QString hold = desk->learnRefusal(D::HazardHold, kBoardUniverse, ch);
+    const QString arm = desk->learnRefusal(D::HazardArm, kBoardUniverse, ch);
+    const QString kill = desk->learnRefusal(D::HazardKill, kBoardUniverse, ch);
+    m_stub->m_linesAreHardware = true;
+    QVERIFY2(hold.contains(QStringLiteral("network")), qPrintable(hold));
+    QVERIFY2(arm.contains(QStringLiteral("network")), qPrintable(arm));
+    QVERIFY2(kill.isEmpty(), qPrintable(kill));
+}
+
+void HazardArming_Test::sleepAndWakeDisarm()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    K *k = m_doc->outputRuleKeeper();
+    ControllerKeepAlive *ka = m_doc->programmer()->controllerKeepAlive();
+    QVERIFY(ka != nullptr);
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    QVERIFY(k->hazardsArmed());
+    QVERIFY(k->hazardHeld());
+    emit ka->systemStateChanged(ControllerKeepAlive::Asleep);
+    QCoreApplication::processEvents();
+    QVERIFY(!k->hazardsArmed());
+    QVERIFY(!k->hazardHeld());
+    emit ka->systemStateChanged(ControllerKeepAlive::Waking);
+    QCoreApplication::processEvents();
+    // Woken with the Hold still down: not a hold until let go and pressed.
+    k->setHazardHold(true);
+    QVERIFY(!k->hazardHeld());
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    QVERIFY(k->hazardHeld());
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+}
+
+void HazardArming_Test::releaseAndKillNeedNoMainThread()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    QVERIFY(bindRole(D::HazardKill, QStringLiteral("3-Down")));
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    go();
+    waitForCheck();
+    go();
+    waitForCheck();
+    QCOMPARE(at("CO2 jet"), 255);
+    QCOMPARE(at("Hazer"), 255);
+    Universe *u = m_doc->inputOutputMap()->universe(0);
+    auto frame = [this, u]() {
+        // A frame, nothing else: no input flush, no event loop.
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        u->processFaders();
+        m_doc->inputOutputMap()->releaseUniverses(false);
+    };
+    const quint32 line = quint32(m_pmj->line());
+    // The Hold let go, from the plugin's own thread; the main thread
+    // never turns (no processEvents) before the next frame.
+    std::thread([this, line]() {
+        m_stub->emitValueChanged(UINT_MAX, line, m_pmj->channelOf(QStringLiteral("1-Down")), 0);
+    }).join();
+    frame();
+    QCOMPARE(at("CO2 jet"), 0);
+    QCOMPARE(at("Hazer"), 255);
+    // The Kill, the same way: the hazer off.
+    std::thread([this, line]() {
+        m_stub->emitValueChanged(UINT_MAX, line, m_pmj->channelOf(QStringLiteral("3-Down")), 127);
+    }).join();
+    frame();
+    QCOMPARE(at("Hazer"), 0);
+    QCoreApplication::processEvents();
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aRenamedHazardStaysAHazard()
+{
+    K *k = m_doc->outputRuleKeeper();
+    Fixture *jet = named("CO2 jet");
+    QVERIFY(!jet->behaviourOverridden());
+    jet->setName(QStringLiteral("DS Jet"));
+    QCoreApplication::processEvents();
+    QVERIFY(FixtureRest::isHazard(jet));
+    QCOMPARE(FixtureRest::behaviour(jet), Fixture::HazardBurstBehaviour);
+    QVERIFY(k->hazards().contains(jet->id()));
+    QVERIFY(k->hazardLog().join(QLatin1Char('\n')).contains(QStringLiteral("DS Jet stays a hazard")));
+    // Set to a Light by hand: then it is one, and said.
+    jet->setBehaviourSetting(Fixture::LightBehaviour);
+    QCoreApplication::processEvents();
+    QVERIFY(!k->hazards().contains(jet->id()));
+    QVERIFY(k->hazardLog().join(QLatin1Char('\n')).contains(QStringLiteral("DS Jet set to Light by hand")));
+}
+
+void HazardArming_Test::theHoldIsLearnedFromAPressHeld()
+{
+    D *desk = m_doc->deskRecord();
+    QSignalSpy refused(desk, &D::learnRefused);
+    QVERIFY(desk->learn(D::HazardHold));
+    // A tap: refused, said.
+    QVERIFY(m_pmj->tap(QStringLiteral("1-Down"), 40));
+    QVERIFY(!desk->isSet(D::HazardHold));
+    QVERIFY(refused.count() >= 1);
+    // A press never let go (a latching button): refused when no release comes.
+    QVERIFY(m_pmj->press(QStringLiteral("4-Down")));
+    QTRY_VERIFY_WITH_TIMEOUT(refused.count() >= 2, 8000);
+    QVERIFY(!desk->isSet(D::HazardHold));
+    QVERIFY(m_pmj->release(QStringLiteral("4-Down")));
+    // Held about a second, then let go: learned.
+    QVERIFY(m_pmj->tap(QStringLiteral("1-Down"), 1100));
+    QVERIFY(desk->isSet(D::HazardHold));
+    QCOMPARE(desk->binding(D::HazardHold).channel, m_pmj->channelOf(QStringLiteral("1-Down")));
+}
+
+void HazardArming_Test::aGoInBlindGrantsNothing()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    go();
+    waitForCheck();
+    m_doc->inputOutputMap()->setOutputInhibited(true);     // Blind
+    go();                                                   // the blast, in Blind
+    waitForCheck();
+    m_doc->inputOutputMap()->setOutputInhibited(false);
+    tick(3);
+    QCOMPARE(at("CO2 jet"), 0);
+    QCOMPARE(at("Hazer"), 0);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::theHoldIsRefusedOnTheKill()
+{
+    D *desk = m_doc->deskRecord();
+    QVERIFY(bindRole(D::HazardKill, QStringLiteral("3-Down")));
+    const QString why = desk->learnRefusal(D::HazardHold, kBoardUniverse, m_pmj->channelOf(QStringLiteral("3-Down")));
+    QVERIFY2(why.contains(QStringLiteral("Hazard kill")), qPrintable(why));
+    // Show Review: hazard cues with no Kill are flagged.
+    QVERIFY(desk->clear(D::HazardKill));
+    ShowReview::Options o;
+    o.checks = QStringList() << QStringLiteral("FIX-22");
+    o.record = false;
+    bool noKill = false;
+    for (const ReviewFinding &f : m_doc->showReview()->run(o).findings)
+        noKill = noKill || f.message.contains(QStringLiteral("no Hazard kill"));
+    QVERIFY(noKill);
+}
+
+void HazardArming_Test::aProgrammerEditNeverDrivesAHazard()
+{
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    // Design: a run to the low haze (50).
+    for (int i = 0; i < 4; ++i)
+    {
+        go();
+        waitForCheck();
+    }
+    QCOMPARE(at("Hazer"), 50);
+    m_doc->programmer()->setProgrammerValue(named("Hazer")->id(), 0, 200);
+    tick(5);
+    QCoreApplication::processEvents();
+    tick(5);
+    QVERIFY2(at("Hazer") != 200, "the programmer drove a hazard");
+    QVERIFY(at("Hazer") <= 50);
 }
 
 QTEST_GUILESS_MAIN(HazardArming_Test)

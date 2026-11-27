@@ -196,6 +196,8 @@ private:
     /** Device channel -> show channel (setChannelMap()); guarded by
      *  m_inputBufferMutex, which every value takes anyway */
     QVector<quint32> m_channelMap;
+    /** The plugin's values to HazardFastPath, on its own thread */
+    QMetaObject::Connection m_hazardConnection;
 
     /************************************************************************
      * Pages

@@ -72,6 +72,41 @@ private slots:
     /** Every fire, skip, arm, kill and disarm is in the hazard log. */
     void everyEventIsLogged();
 
+    /* The second review (each fails on 4975d59a5). */
+    /** P1: a GO to a cue that sets the jet and the hazer out leaves them
+     *  out, whatever the Simple Desk or a stray scene sends. */
+    void aCueThatSetsItOutLeavesItOut();
+    /** P2: armed at the cue's 50, nothing raises it (the Simple Desk, a
+     *  scene); a later cue that sets it to 0 puts it at 0; every output
+     *  change is logged. */
+    void onlyTheCuesOwnValueGoesOut();
+    /** P3: a laser given class 3B in Fixture Properties is held at once
+     *  and listed. */
+    void aLaserClassSetLaterIsHeldAtOnce();
+    /** P4: a step no GO made (the chaser's own step: auto-follow, the
+     *  editor's Test, a timecode) takes the burst back; a Hold pressed
+     *  after never fires it. */
+    void everyStepTakesTheBurstBack();
+    /** 5: Hold and Arm are refused on a network input; Kill is not. */
+    void holdAndArmAreRefusedOnTheNetwork();
+    /** 6: sleep and wake disarm; after it the Hold needs a fresh press. */
+    void sleepAndWakeDisarm();
+    /** 7: the Hold let go and the Kill reach the output with the main
+     *  thread blocked (sent from the plugin's own thread). */
+    void releaseAndKillNeedNoMainThread();
+    /** 8: a guessed hazard renamed stays a hazard until set by hand. */
+    void aRenamedHazardStaysAHazard();
+    /** 9: the Hold is learned from a press held about a second; a quick
+     *  tap and a press never let go are refused. */
+    void theHoldIsLearnedFromAPressHeld();
+    /** 10: a GO in Blind grants nothing. */
+    void aGoInBlindGrantsNothing();
+    /** 12: the Hold is refused on Kill's control; hazard cues with no Kill
+     *  are flagged in Show Review. */
+    void theHoldIsRefusedOnTheKill();
+    /** A programmer edit never drives a hazard, after a Design run too. */
+    void aProgrammerEditNeverDrivesAHazard();
+
 private:
     void tick(int n = 1);
     int at(const char *fixture);
@@ -86,7 +121,10 @@ private:
     IOPluginStub *m_stub = nullptr;
     SimMidiDevice *m_pmj = nullptr;
     Chaser *m_chaser = nullptr;
-    quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0, m_list = 0;
+    quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0, m_c4 = 0, m_c5 = 0, m_list = 0;
+    /** The Simple Desk's own fader on @p fixture's channel 0 at @p value */
+    void deskPush(const char *fixture, uchar value);
+    class Scene *strayScene(int value);
 };
 
 #endif
