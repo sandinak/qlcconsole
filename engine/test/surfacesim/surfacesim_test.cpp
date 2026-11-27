@@ -1847,7 +1847,7 @@ namespace
 // dink's MIDI ports on 2026-11-27, in CoreMIDI's order.
 const QStringList kDinkPorts = { QStringLiteral("Launchkey MK4 49 MIDI Out"), QStringLiteral("Launchkey MK4 49 DAW Out"),
                                  QStringLiteral("Network RTP Session 1"), QStringLiteral("OpenDeck | PMJ_BLACK_1") };
-const QString kPmj = QStringLiteral("OpenDeck | PMJ_BLACK_1");
+const QString kPmjPort = QStringLiteral("OpenDeck | PMJ_BLACK_1");
 }
 
 /* Branson, build 4910: "LEDs are not lighting on the PMJ still" -- and "when
@@ -1860,7 +1860,7 @@ const QString kPmj = QStringLiteral("OpenDeck | PMJ_BLACK_1");
 void SurfaceSim_Test::aBoardBackWithAStaleFeedbackIsRepaired()
 {
     loadAllProfiles(m_doc);
-    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmj);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmjPort);
     InputOutputMap *iom = m_doc->inputOutputMap();
     SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
     ap->setDelay(0);
@@ -1870,7 +1870,7 @@ void SurfaceSim_Test::aBoardBackWithAStaleFeedbackIsRepaired()
     m_stub->m_acceptShowControl = true;
     m_stub->m_lineNames = kDinkPorts;
     emit m_stub->configurationChanged();
-    QCOMPARE(iom->profileForDevice(kPmj), QString("PMJ Black 1"));
+    QCOMPARE(iom->profileForDevice(kPmjPort), QString("PMJ Black 1"));
     QCOMPARE(iom->profileForDevice("Network RTP Session 1"), QString());
     auto hisPatch = [&]() {
         QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 3, QStringLiteral("PMJ Black 1")));
@@ -1886,14 +1886,14 @@ void SurfaceSim_Test::aBoardBackWithAStaleFeedbackIsRepaired()
     QCOMPARE(repaired.first().at(0).toUInt(), 0u);
     QCOMPARE(repaired.first().at(1).toString(), QString("PMJ Black 1"));
     QCOMPARE(repaired.first().at(2).toString(), QString("feedback repaired to its own port"));
-    QCOMPARE(iom->feedbackPatch(0)->outputName(), kPmj);
+    QCOMPARE(iom->feedbackPatch(0)->outputName(), kPmjPort);
     QCOMPARE(iom->inputPatch(0)->profileName(), QString("PMJ Black 1"));
     const QString log = m_doc->surfaceSetup()->boardLog()->text(0);
     QVERIFY2(log.contains("Repaired PMJ Black 1: feedback repaired to its own port (it was Network RTP Session 1)"),
              qPrintable(log));
     // A lamp now reaches the PMJ's port.
     m_stub->m_feedbackLines.clear();
-    QVERIFY(iom->sendFeedBack(0, 5, 127));
+    QVERIFY(iom->sendFeedBack(0, 5, 127, QVariant()));
     QCOMPARE(m_stub->m_feedbackLines, QList<quint32>({ 3u }));
     // Nothing more to do on the next scan.
     ap->scanNow();
@@ -1904,7 +1904,7 @@ void SurfaceSim_Test::aBoardBackWithAStaleFeedbackIsRepaired()
     QCOMPARE(iom->feedbackPatch(0)->outputName(), QString("Network RTP Session 1"));
     ap->scanNow();
     QCOMPARE(repaired.count(), 1);
-    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmj);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmjPort);
 
     // Plugged out and in again with the stale patch: repaired on its return.
     ap->scanNow();
@@ -1916,7 +1916,7 @@ void SurfaceSim_Test::aBoardBackWithAStaleFeedbackIsRepaired()
     m_stub->m_lineNames = kDinkPorts;
     emit m_stub->configurationChanged();
     QTRY_COMPARE(repaired.count(), 3);
-    QCOMPARE(iom->feedbackPatch(0)->outputName(), kPmj);
+    QCOMPARE(iom->feedbackPatch(0)->outputName(), kPmjPort);
 
     ap->setEnabled(false);
     m_stub->m_hasFeedback = false;
@@ -1929,7 +1929,7 @@ void SurfaceSim_Test::aBoardBackWithAStaleFeedbackIsRepaired()
 void SurfaceSim_Test::aFeedbackChosenOnPurposeIsLeft()
 {
     loadAllProfiles(m_doc);
-    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmj);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmjPort);
     InputOutputMap *iom = m_doc->inputOutputMap();
     SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
     ap->setDelay(0);
