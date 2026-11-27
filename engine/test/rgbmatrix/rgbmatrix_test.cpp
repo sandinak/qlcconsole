@@ -872,9 +872,10 @@ void RGBMatrix_Test::aMatrixDeletedMidMapWaitsForIt()
     m_doc->addFunction(mtx);
     const int before = RGBScript::deletedWhileMapping();
     mtx->start(m_doc->masterTimer(), FunctionParent::master());
-    timerFrame(m_doc);                      // the first map asked for: 300 ms
-    QTRY_VERIFY_WITH_TIMEOUT(mtx->mapJobsQueued() > 0, 1000);
-    QThread::msleep(50);                    // ...and running on the scripts' thread
+    timerFrame(m_doc);                      // a map asked for: 300 ms
+    timerFrame(m_doc);
+    // ...and being made on the scripts' thread
+    QTRY_VERIFY_WITH_TIMEOUT(script->mapping(), 2000);
     // Deleted while it runs (Doc::deleteFunction: removed, postRun, deleted)
     mtx->stop(FunctionParent::master());
     timerFrame(m_doc);

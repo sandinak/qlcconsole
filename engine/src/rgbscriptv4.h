@@ -79,6 +79,8 @@ public:
     static void waitForScriptThread();
     /** Scripts deleted while rgbMap() ran on them (a bug: tests check it) */
     static int deletedWhileMapping();
+    /** rgbMap() is running on this script now (tests) */
+    bool mapping() const { return m_mapping.load(std::memory_order_acquire) > 0; }
 
 private:
     static void initEngine();
