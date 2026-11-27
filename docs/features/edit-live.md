@@ -19,7 +19,8 @@ Anyone at this computer can turn it on, but a show with a PIN
 chip is red, **EDIT LIVE**, with the number of trims, and it never hides.
 Edit Live is a **Standard** level tool (**View ▸ Workspace**): in a
 Student show, a Teaching show included, the switch and the chip are greyed
-and say so.
+and say so on their face (the chip reads **Edit Live · Standard**); a click
+explains in the line above the tabs, with **Switch to Standard**.
 
 Edit Live turns itself off, and lets go of its trims, when you go back to
 Design, when the show is closed, at the emergency stop, and when the show

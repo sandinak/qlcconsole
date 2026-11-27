@@ -36,6 +36,9 @@ class PadRunRulesUi_Test final : public QObject
 private slots:
     void initTestCase();
     void cleanupTestCase();
+    /** No game controller: no Pad chip. One connects (patched): it shows;
+     *  unplugged: it goes again. */
+    void noPadNoChip();
     void everySurfaceAgreesAtEveryStep();
     /** Rule 6 on the real surfaces: a venue focus cue waiting, ARMED, LT +
      *  Menu -- Pad: FOCUS in its blue on the button, the frame, the chip

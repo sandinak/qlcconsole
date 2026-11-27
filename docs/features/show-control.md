@@ -149,7 +149,9 @@ holding; the footer's **Pad** chip shows the same map as a table when you hover 
 button does in the Run role (**Run: GO (armed, LT held)**).
 
 **One state, shown the same everywhere.** The Run tab's **Pad:** button,
-the frame round the Run tab, the footer's **Pad** chip (from every tab) and
+the frame round the Run tab, the footer's **Pad** chip (from every tab; it shows only while a game
+controller is connected, appears when one is plugged in and goes when it is
+unplugged -- **Show Review** lists the controllers the show maps) and
 the pad's own light all show the same state, from one place in the app:
 
 | State | Button and footer | Colour | Pad light |

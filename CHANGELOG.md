@@ -14,6 +14,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A test show for Rainbow on CMY and wheel movers**:
+  `test-workspaces/rainbow-movers.qlcc` (a CMY mover, a colour-wheel mover
+  and an RGB par on the OLA probe, cues *Rainbow on* / *Rainbow off*), with a
+  gate test of the values and a three-step how-to in Effects.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is
@@ -226,6 +230,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   their surface type declares them (Q313).
 
 ### Fixed
+
+- **The footer says why**: the **Pad** chip no longer shows with no game
+  controller connected (it appears on connect, goes on unplug); a control
+  greyed by the workspace level names the level on its face (**Edit Live ·
+  Standard**) and a click explains in the notice line with **Switch**.
 
 - **A stop leaves a curtain where it is**: Stop all, Fade and stop and the emergency stop no longer close a curtain (or let a relay-driven one drop) — one opening, closing or flying stops where it is and stays there until the next GO; the footer says "Curtain stopped at 40% — GO to carry on". The lights still go out, flame and fog relays still off.
 - **Picking cues in Design no longer moves the curtain** (board Q350): clicking between cues in the Show Tree holds the curtain where it is on stage, and the plot and Rig Overview draw it where the picked cue puts it, marked "held while editing" — it used to be drawn closed after a pick, or stopped part way when picked again mid-move. A GO (or going into Operate) moves it for real, from where it was held over the cue's fade, never a jump.

@@ -152,6 +152,34 @@ void PadRunRulesUi_Test::cleanupTestCase()
     m_pluginDir = nullptr;
 }
 
+void PadRunRulesUi_Test::noPadNoChip()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    QVERIFY(iom->setInputPatch(0, QString(), QString(), 0));
+    doc->programmer()->padRun()->setEnabled(true, false);
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    settle(50);
+    QVERIFY(!doc->programmer()->focusController().present);
+    QVERIFY2(!chip->isVisibleTo(m_app), "the Pad chip shows with no controller");
+
+    // Hot-plug: it connects.
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    settle(50);
+    QVERIFY(doc->programmer()->focusController().present);
+    QVERIFY2(chip->isVisibleTo(m_app), "the Pad chip stays hidden with a controller connected");
+    QVERIFY(chip->text().startsWith(QStringLiteral("Pad")));
+
+    // Unplugged: it goes.
+    QVERIFY(iom->setInputPatch(0, QString(), QString(), 0));
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    settle(50);
+    QVERIFY2(!chip->isVisibleTo(m_app), "the Pad chip stays after the controller is gone");
+}
+
 void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
 {
     Doc *doc = m_app->doc();
