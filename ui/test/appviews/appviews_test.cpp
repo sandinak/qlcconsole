@@ -2401,12 +2401,23 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
     QTest::keyClicks(editor, "New name");
     QVERIFY2(editor->text() == "New name", qPrintable("typed: " + editor->text()));
     QPointer<QLineEdit> editorGuard(editor);
+    static QStringList dbg;
+    dbg.clear();
+    static QtMessageHandler prev = nullptr;
+    prev = qInstallMessageHandler([](QtMsgType t, const QMessageLogContext &c, const QString &m) {
+        if (m.contains("DBG"))
+            dbg << m;
+        else if (prev != nullptr)
+            prev(t, c, m);
+    });
+    auto restore = qScopeGuard([]() { qInstallMessageHandler(prev); });
     QTest::keyClick(editor, Qt::Key_Return);
     QTest::qWait(300);
     QVERIFY2(doc->fixture(fid)->name() == "New name",
-             qPrintable(QString("after Return: name '%1', editor alive %2, flags %3")
+             qPrintable(QString("after Return: name '%1', editor alive %2, flags %3 | %4")
                         .arg(doc->fixture(fid)->name()).arg(!editorGuard.isNull())
-                        .arg(int(tree->currentItem() != nullptr ? int(tree->currentItem()->flags()) : -1))));
+                        .arg(int(tree->currentItem() != nullptr ? int(tree->currentItem()->flags()) : -1))
+                        .arg(dbg.join(" ## "))));
     QTRY_COMPARE(doc->fixture(fid)->name(), QString("New name"));
 
     QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
