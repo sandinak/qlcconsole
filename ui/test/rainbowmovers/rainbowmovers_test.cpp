@@ -392,6 +392,7 @@ void RainbowMovers_Test::checkPlot()
     const Pipe *pipe = mp->pipes().first();
     QCOMPARE(pipe->name(), kPipe);
     QVERIFY(!pipe->isVertical());
+    QVERIFY(!pipe->hasStand());              // hung, not on a stand
     QVERIFY(qAbs(pipe->baseZ() - 16.0f * PlotPlacement::kFoot) < 0.01f);
     QList<float> xs;
     for (const QString &name : { kCmy, kWheel, kRgb })

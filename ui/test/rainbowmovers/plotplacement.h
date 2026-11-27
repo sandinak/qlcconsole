@@ -51,6 +51,7 @@ inline Pipe *addFrontPipe(MonitorProperties *mp, const QString &name, float leng
     p->setRunAngle(0.0f);                           // along X
     p->setLength(length);
     p->setBaseZ(trim);
+    p->setBaseRadius(0.0f);                         // hung: no stand under it
     p->setOriginX(mp->stageCentre().x() - length / 2.0f);
     p->setOriginY(mp->downstageEdgeY() - upstage);
     p->setLayerId(mp->placementLayerId());
