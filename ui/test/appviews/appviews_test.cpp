@@ -1470,9 +1470,10 @@ void AppViews_Test::theViewMenuIsOnlyViews()
     foreach (QAction *a, view->actions())
         if (!a->isSeparator() && a->isVisible())
             items << a->text();
-    // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too.
+    // 0.3.1 (k): QLC+ 4's Monitor and Full Screen are ways of looking too; the Footer
+    // submenu is which of the footer's chips to look at.
     QCOMPARE(items, QStringList() << "Workspace" << "Address Tool" << "DMX Monitor" << "Rig Overview…"
-                                  << "Quick Focus…" << "Venue…" << "Blind" << "Full Screen");
+                                  << "Quick Focus…" << "Venue…" << "Footer" << "Blind" << "Full Screen");
 }
 
 void AppViews_Test::theGridFollowsTheUnitPreference()
