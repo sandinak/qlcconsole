@@ -1154,7 +1154,7 @@ void SurfaceSim_Test::anOlderCopyOfASurfaceProfileIsNotUsed()
     QVERIFY(fresh.isValid());
     const QString goodPath = fresh.filePath(QStringLiteral("Akai-APC40-mkII.qxi"));
     QVERIFY(QFile::copy(apcFile(), goodPath));
-    Doc other;
+    Doc other(this);
     other.inputOutputMap()->loadProfiles(dirOf(fresh.path()));
     other.inputOutputMap()->loadProfiles(dirOf(profileDir()));
     QCOMPARE(other.inputOutputMap()->profile(kApc)->path(), goodPath);
