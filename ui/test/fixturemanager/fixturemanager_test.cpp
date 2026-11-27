@@ -2479,9 +2479,11 @@ void FixtureManager_Test::duplicateAndUndoKeepTheViewAndSelectTheRow()
     QCoreApplication::processEvents();
     const int scrolled = tree->verticalScrollBar()->value();
     QVERIFY(scrolled > 0);
-    const int rowH = tree->visualItemRect(row).height();
-    QVERIFY(rowH > 0);
-    // A real long list: the whole of it is rows, far taller than the view.
+    QVERIFY(tree->visualItemRect(row).height() > 0);
+    // One row, in the scroll bar's own unit (rows per item, else pixels).
+    const int rowH = tree->verticalScrollMode() == QAbstractItemView::ScrollPerItem
+                         ? 1 : tree->visualItemRect(row).height();
+    // A real long list: far more rows than the view shows.
     QVERIFY2(tree->verticalScrollBar()->maximum() > 20 * rowH, qPrintable(viewState(mgr, row)));
     const QList<bool> open = openRows(mgr);
     auto steady = [&](const char *what) {

@@ -3872,7 +3872,10 @@ void ProgrammingManager_Test::duplicatePaletteKeepsTheListWhereItWas()
     QScrollBar *bar = mgr.m_paletteTree->verticalScrollBar();
     const int was = bar->value();
     QVERIFY(was > 0);
-    const int rowH = mgr.m_paletteTree->visualItemRect(row).height();
+    // One row, in the scroll bar's own unit (rows per item, else pixels).
+    const int rowH = mgr.m_paletteTree->verticalScrollMode() == QAbstractItemView::ScrollPerItem
+                         ? 1 : mgr.m_paletteTree->visualItemRect(row).height();
+    QVERIFY(bar->maximum() > 20 * rowH);
 
     mgr.duplicatePalette(ids.at(30));
     QCoreApplication::processEvents();
