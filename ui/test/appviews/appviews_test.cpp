@@ -2399,7 +2399,19 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
     QTRY_VERIFY((editor = tree->viewport()->findChild<QLineEdit *>()) != nullptr);
     editor->selectAll();
     QTest::keyClicks(editor, "New name");
+    QPointer<QLineEdit> editorGuardX(editor);
+    QStringList trail;
+    QAbstractItemDelegate *del = tree->itemDelegate();
+    QObject::connect(del, &QAbstractItemDelegate::commitData, tree, [&trail](QWidget *w) { trail << QString("commitData %1").arg(w->metaObject()->className()); });
+    QObject::connect(del, &QAbstractItemDelegate::closeEditor, tree, [&trail](QWidget *, QAbstractItemDelegate::EndEditHint h) { trail << QString("closeEditor %1").arg(int(h)); });
+    QObject::connect(tree->model(), &QAbstractItemModel::dataChanged, tree, [&trail]() { trail << "dataChanged"; });
+    trail << QString("before: visible %1 focus %2 text '%3' parent %4 isViewport %5")
+                 .arg(editor->isVisible()).arg(editor->hasFocus()).arg(editor->text())
+                 .arg(editor->parentWidget() != nullptr ? editor->parentWidget()->metaObject()->className() : "none")
+                 .arg(editor->parentWidget() == tree->viewport());
     QTest::keyClick(editor, Qt::Key_Return);
+    trail << QString("after Return: name '%1' alive %2").arg(doc->fixture(fid)->name()).arg(!editorGuardX.isNull());
+    QVERIFY2(doc->fixture(fid)->name() == "New name", qPrintable(trail.join(" | ")));
     QTRY_COMPARE(doc->fixture(fid)->name(), QString("New name"));
 
     QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
