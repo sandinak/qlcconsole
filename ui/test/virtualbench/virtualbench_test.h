@@ -69,6 +69,10 @@ private slots:
     /** A port listed before the PMJ's goes (an APC40 unplugged): the PMJ's
      *  lamps stay on the PMJ, never on the port that moved into its place. */
     void aPortGoingKeepsThePmjLampsOnThePmj();
+    /** The PMJ itself unplugged and plugged back (its power), the session
+     *  listed after it: its feedback never becomes the session's line, and
+     *  it is back on the PMJ when the PMJ is. */
+    void thePmjsOwnReplugKeepsItsFeedback();
     /** His saved patch (2026-11-27): U01 input the PMJ, feedback the RTP
      *  session. When the PMJ appears its feedback is put on its own port
      *  (fix/053-board-repair; skipped before it). */
