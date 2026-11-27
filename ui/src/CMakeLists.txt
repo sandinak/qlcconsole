@@ -265,6 +265,7 @@ add_library(${module_name}
     importsheet.cpp importsheet.h
     showconverter.cpp showconverter.h
     cuerunner.cpp cuerunner.h
+    cuelistfollow.cpp cuelistfollow.h
     groupmasterstrip.cpp groupmasterstrip.h
     teachingtips.cpp teachingtips.h
     updatechecker.cpp updatechecker.h

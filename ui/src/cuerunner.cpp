@@ -58,6 +58,7 @@
 #include "padrun.h"
 #include "controllerjobs.h"
 #include "cuerunner.h"
+#include "cuelistfollow.h"
 #include "editlivechip.h"
 #include "showlevel.h"
 #include "editlive.h"
@@ -582,6 +583,7 @@ void CueRunner::makeTree()
 {
     m_tree = new QTreeWidget(this);
     m_tree->setObjectName(QStringLiteral("crCues"));
+    m_follow = new CueListFollow(m_tree);
     m_tree->setHeaderLabels({ QString(), tr("Cue"), tr("Name"), tr("Timing"), tr("Note") });
     m_tree->setRootIsDecorated(true);
     m_tree->setUniformRowHeights(true);
@@ -1759,6 +1761,7 @@ void CueRunner::rebuildTree()
             if (h->data(ColCue, RoleSection).toBool() && !h->isExpanded())
                 folded.insert(h->data(ColCue, RoleSectionKey).toString());
     m_tree->clear();
+    m_followKey = -1;       // the new rows: find the active one again
     fitStateColumn();
     if (ch == nullptr)
         return;
@@ -1992,6 +1995,11 @@ void CueRunner::updateStates()
                 state = tr("▷ STANDBY");
             if (item->text(ColState) != state)
                 item->setText(ColState, state);
+            // The row the list follows: what plays (its sub-cue's row when
+            // it has one), else what stands by.
+            if (state.startsWith(QStringLiteral("▶")) || (active == nullptr && state.contains(QStringLiteral("STANDBY"))) ||
+                (active == nullptr && !running && step == standby && sub < 0))
+                active = item;
             QFont f = item->font(ColName);
             const bool bold = !state.isEmpty();
             if (f.bold() != bold)
@@ -2011,6 +2019,14 @@ void CueRunner::updateStates()
                     item->setForeground(c, fg);
             if (item->foreground(ColState) != (done ? grey : normal))
                 item->setForeground(ColState, done ? grey : normal);
+        }
+        // Follow it when it changes (the list's rule, CueListFollow), never on
+        // every refresh: a hand on the list is left alone.
+        const qint64 key = (qint64(running ? cur : -1 - standby) << 16) + (curSub + 1) + 1;
+        if (active != nullptr && key != m_followKey)
+        {
+            m_followKey = key;
+            m_follow->follow(active);
         }
     }
 

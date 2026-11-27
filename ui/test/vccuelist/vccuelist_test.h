@@ -64,6 +64,11 @@ private slots:
     /** Next / Previous / GO pass a section row; a click on one picks no
      *  section; the current cue's section stays in sight. */
     void goStepsPastASectionRow();
+    void theActiveCueStaysInTheMiddle();
+    void theLastCueReachesTheMiddleOverBlankSpace();
+    void backAndJumpsFollowTheSameRule();
+    void aHandOnTheListIsNotFought();
+    void songHeadersScrollLikeAnyRow();
     /** An arrow key or a click landing on a section row leaves the cue it
      *  goes on to highlighted, not only current. */
     void keysAndClicksOnASectionRowKeepTheCueSelected();
