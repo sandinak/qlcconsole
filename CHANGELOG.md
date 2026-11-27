@@ -14,10 +14,19 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A board plugged in is set up by itself** (bench 2026-11-27: the APC40 mkII, APC64, APC mini mk2 and MaizeDMX were not found). A known board is patched with its profile and feedback line, its init sent, with a notice and Undo; port names are matched loosely (case, "(APC64)", port words), a multi-port board on its own port only (its other ports are "part of APC64"); the MaizeDMX's shared "USB2.0-MIDI" name is asked about once and remembered.
+- **Connections ▸ Control surfaces lists every plugged-in MIDI device**, patched or not: unknown ones a click from a profile or "Not a Control Surface", unplugged boards greyed "not connected"; the list follows a patch at once.
+- **The footer shows one message at a time**, never drawn over or under another chip's words.
+- **A moved fader keeps its name on the map**; its value is a small number under it.
+- **The APC40 mkII's init goes out again once its port has settled**, and every init send says in the Board Log where it went or why it could not.
+- **No "midi:None" desk entry** for a patch whose device line is gone.
 - **MP3 and every other sound failed on the CI macOS build.** The app's audio libraries (libsndfile's codecs: Ogg, Vorbis, FLAC, Opus, mpg123, LAME) were never copied into the app, so no sound could play. CI now bundles every dependency like the release build, a check fails the build on any library not in the app, the release DMG decodes MP3, and a sound that can't be added says why (Show Review FILE-07 warns when the audio library didn't load).
 
 ### Added
 
+- **Board menu on each footer chip** (▾ or right-click): Map, Send Init Again, Profile, Feedback, Lamp Test, Board Log, Set Up.
+- **Board Log**: the last 500 MIDI messages in and out of each board, decoded with the control's name, with the app's own steps (init, motor fader, a refused pick-up or STOP); Copy for a report.
+- **Lamp Test for every board** with a feedback line (the MaizeDMX's too).
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
   One-shot, Switch or Hazard -- guessed from its definition and plot
   symbol (old shows load unchanged), set in Fixture Properties, shown in

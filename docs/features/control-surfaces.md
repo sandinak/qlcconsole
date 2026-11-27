@@ -511,6 +511,18 @@ native mode; patch it on that channel with the profile **PreSonus FaderPort
   show; untick them for a show that wants the single press. A board's
   layout file says which key is its Shift and what it guards by default
   (`"shift"`, `"guards"`); only the FaderPort 2 asks for it.
+- **What PreSonus's MIDI protocol says** (the FaderPort owner's manual,
+  appendix *FaderPort Multichannel Controller MIDI Protocol*, for its native
+  Studio One mode): the fader is pitch bend on MIDI channel 1, both ways
+  (the board sends it when moved; the same message moves the motor); the
+  touch sensor is note 104 (0x68), 127 touched, 0 let go; **Shift** is note
+  70 (0x46), **Stop** 93 (0x5D), **Play** 94 (0x5E), **Record** 95,
+  **Rewind** 91, **Fast Forward** 92, **Loop** 86. The profile matches all
+  of these. There is no init message: the mode is chosen on the board, by
+  holding **Next** while it powers on and pressing **Solo** (Studio One). A
+  lamp is note on: 127 on, 0 off, 1 flashing. The manual gives the knob as
+  CC 60 (0x3C); the profile has CC 16, which is what the board sends in its
+  Mackie modes. If the knob does nothing, its Board Log says which it is.
 - Names are the board's own labels where PreSonus's documents confirm them
   (the Mackie set: Arm, Solo, Mute, Shift, Read, Write, Trim, Touch,
   Marker, Nudge, Click, Loop, Rewind, Fast Forward, Stop, Play, Record).
@@ -986,6 +998,73 @@ means that LED is an RGB one).
 
 The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
 
+## A board is set up when you plug it in
+
+Plug in a board the app knows (APC40 mkII, APC64, APC mini mk2, FaderPort
+2, PMJ Black 1, and any other with a built-in profile) and it is set up by
+itself: its input is patched with its profile, its feedback goes to the same
+device's output, and its init goes out (the APC40 mkII's Ableton mode, the
+APC64's display). It goes on the universe it had on this computer last time
+when that one is free, else on the first free universe (a new one when
+none is). A notice says so, *Akai APC40 mkII ready on universe 5*, with
+**Undo**: Undo lets it go, and it is not set up by itself again on this
+computer until you patch it by hand. A board the show already has, or
+waits for while it is unplugged, is left to the show's own patch.
+
+The name the computer gives the board is matched loosely: case, a trailing
+*(APC64)*, port words such as *MIDI 1* or *Port 1*, and the maker's name do
+not matter, but another model's word does (an *APC40 mkII* is never taken
+for an *APC40*). A board with several ports is set up on the one its
+profile uses: the APC64 on **APC64 DAW**, the APC mini mk2 on its
+**Control** port. Its other ports show under it in **Connections ▸ Control
+surfaces** as *part of APC64 (not used by qlcconsole)*; nothing to patch
+there.
+
+The **MaizeDMX** shows up as **USB2.0-MIDI Port 1**, a name many cheap
+USB MIDI cables share (its chip, USB 1a86:752d, is a generic one), so it
+is never set up by itself. The notice asks *USB2.0-MIDI Port 1: is this a
+MaizeDMX Playback Controller?* with **Use It**; one click sets it up and
+this computer remembers the answer.
+
+**Connections ▸ Control surfaces** lists every MIDI input device plugged
+in, patched or not: the boards set up, each with its universe, profile,
+feedback line and init; a known board not set up yet (*APC64 DAW (APC64):
+Akai APC64, not set up*); an unknown device (*Launchkey MK4 49 MIDI Out:
+not set up*). Click one of the last two for its menu: **Use as** its
+profile, **Another Profile**, or **Not a Control Surface** (it is hidden on
+this computer). A board the show knows that is unplugged stays in the list,
+greyed, *not connected*.
+
+## A board's menu and its Board Log
+
+Each board has a chip in the footer (**APC40**, **FaderPort**). A click on
+it opens the board's map. The **▾** beside it, or a right-click on the chip,
+opens the board's menu:
+
+- **Map**: the board's map.
+- **Send Init Again**: its init now (Ableton mode, the APC64's display).
+- **Profile**: the profiles that fit this device, the one in use ticked.
+  Choosing another patches the board again with it and sends its init.
+- **Feedback**: *Paired to* its output, **Pair**, or **None**.
+- **Lamp Test**: lights each of the board's lamps in turn, then all of
+  them, then gives them back to the show. It needs a feedback line; without
+  one the menu says *Feedback ▸ Pair first*.
+- **Board Log…**: what the board sent and was sent.
+- **Set Up…**: the board's [controller setup](#setting-up-a-controller).
+
+The **Board Log** keeps the last 500 MIDI messages in and out of each
+board, newest last: the time to the millisecond, **IN** or **OUT**, the
+bytes, and what they are (*Note 93 on, ch 1, velocity 127 (Stop)*, *Pitch
+bend, ch 1 = 8192 of 16383 (Fader)*, *SysEx (12 bytes)*). The app's own
+steps are in it too, marked **--**: the board recognised and patched, its
+profile chosen, each init with the port it went out of (or why it could
+not go), the motor fader sent to the Grand Master, a fader move not taken
+because the Grand Master waits for it to pick up, a STOP refused because
+Shift was not held. **Copy** puts the whole log, with the board's input,
+profile and feedback line at the top, on the clipboard for a report.
+**Clear** empties it. The map's options row has **Lamp Test…** and **Board
+Log…** too.
+
 ## Setting up a controller
 
 Some controllers need a setting on the device itself before their profile
@@ -1107,6 +1186,65 @@ and never surprises you when it comes back.
 
 These steps need the hardware. Do them once on the desk you will use,
 after any build that changes a surface, and say which build.
+
+**Plugged in, set up by itself (053 boards)**
+
+Start with the app open and a show loaded, every board unplugged.
+
+1. Plug in the **APC40 mkII**. *Expect:* within a second a notice *Akai
+   APC40 mkII ready on universe N* with **Undo**; an **APC40** chip and a
+   **▾** in the footer; the pads go dark and light only from the app
+   (Ableton mode). Click **▾ ▸ Board Log…**. *Expect:* lines *Recognised
+   APC40 mkII as Akai APC40 mkII*, then two **OUT** lines *F0 47 7F 29 60 00
+   04 41 09 00 05 F7 … Init (Ableton mode), on patch, to APC40 mkII* and
+   *… again, after its port opened*. If the pads are still not in Ableton
+   mode: **▾ ▸ Send Init Again**, then **Copy** the log and send it.
+2. Click **Undo** on the notice. *Expect:* the chip goes. Unplug and replug
+   it. *Expect:* no notice (it is not set up by itself again). Patch it by
+   hand in Connections. *Expect:* from then on it is set up by itself again.
+3. Plug in the **APC64**. *Expect:* *Akai APC64 ready on universe N*; its
+   display says *qlc console*; in **Connections ▸ Control surfaces** one
+   row *APC64 DAW (APC64)* with *Notes*, *MIDI* and *Custom* folded under
+   it as *part of Akai APC64 (not used by qlcconsole)*, and no *not set
+   up* line for them.
+4. Plug in the **APC mini mk2**. *Expect:* *Akai APC Mini mk2 ready* on its
+   *Control* port; its *Notes* port folded under it. Open its map and move
+   fader 1. *Expect:* the fader keeps its name, and its value (*50 %*) is a
+   small number under it.
+5. Plug in the **MaizeDMX**. *Expect:* a notice *USB2.0-MIDI Port 1: is
+   this a MaizeDMX Playback Controller?* with **Use It**. Click it.
+   *Expect:* set up with its feedback line; **X7** lit (Colour page). **▾
+   ▸ Lamp Test**. *Expect:* each LED and key lamp lights in turn, then all,
+   then the show's lamps come back; the Board Log has an **OUT** line per
+   lamp. Unplug and replug: *Expect:* set up by itself, no question.
+6. Plug in something that is no board (a keyboard, the Launchkey). *Expect:*
+   **Connections ▸ Control surfaces** lists it *…: not set up*; click it,
+   **Not a Control Surface**. *Expect:* it is gone from the list.
+7. Unplug a board that is set up. *Expect:* its row in Control surfaces is
+   grey and says *not connected*; plug it back: it is back, not grey.
+8. Click a footer chip's **Design mode** chip and then press a board's
+   Stop without Shift, one after the other. *Expect:* one message at a time
+   in the footer, never two drawn over each other, and never under another
+   chip's words.
+
+**FaderPort 2: what it really sends (053 boards)**
+
+1. Plug in the FaderPort 2. *Expect:* *PreSonus FaderPort 2 ready on
+   universe N*, a **FaderPort** chip.
+2. **▾ ▸ Board Log…**, then **Clear**.
+3. Touch the fader, move it from the bottom to about the middle, let go,
+   and wait two seconds. *Expect:* **IN** *Note 104 on … (Fader touch)*, a
+   run of **IN** *Pitch bend … (Fader)* lines, *Note 104 off*, then one
+   **--** *Motor fader sent to the Grand Master* and an **OUT** *Pitch
+   bend* at the place you left it. The fader stays there. If it drives
+   back, the log says why (a *not taken … pick-up* line, or the **OUT**
+   value).
+4. Hold **Shift**, press **Stop**, let go of both. *Expect:* **IN** *Note
+   70 on (Shift)*, *Note 93 on (Stop)* and **--** *STOP: the desk stops*;
+   the show stops. Press **Stop** alone. *Expect:* **--** *STOP refused:
+   Shift … is not held* and the footer says *FaderPort: Shift+Stop stops.*
+5. Turn the knob a few clicks each way.
+6. **Copy**, and send the log to Claude with the build number.
 
 **APC boards and the MaizeDMX (053 bench)**
 

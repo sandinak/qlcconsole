@@ -86,6 +86,7 @@
 #include "preshowcheck.h"
 #include "showreviewpanel.h"
 #include "pmjlamplogdialog.h"
+#include "boardlogdialog.h"
 
 #include "windowsanity_test.h"
 
@@ -381,7 +382,10 @@ QList<Row> windows()
             })
          // Connections ▸ Control surfaces ▸ Controller setup ▸ Set Up…
          << row("SurfaceSetupDialog", QStringLiteral("Controller setup"),
-                [](App *a) { SurfaceSetupDialog::open(a->doc(), a); });
+                [](App *a) { SurfaceSetupDialog::open(a->doc(), a); })
+         // A footer board chip ▸ ▾ ▸ Board Log… (App::openBoardLog()).
+         << row("BoardLogDialog", QStringLiteral("Board log"),
+                [](App *a) { a->openBoardLog(0, false); });
 
     return list;
 }
