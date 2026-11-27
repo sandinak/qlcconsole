@@ -18,6 +18,7 @@
 */
 
 #include <QTimer>
+#include <QLineEdit>
 #include <QDebug>
 #include <QHeaderView>
 #include <QMimeData>
@@ -304,6 +305,7 @@ void FixtureTreeWidget::updateUniverseLabels()
 
 void FixtureTreeWidget::slotItemChanged(QTreeWidgetItem* item, int column)
 {
+    qWarning() << "DBG slotItemChanged" << column << (item ? item->text(0) : QString()) << (item ? int(item->flags()) : -1);
     if (column != KColumnName || !item)
         return;
 
@@ -1286,6 +1288,7 @@ static void applyExpansion(QTreeWidgetItem *it, const QString &parentKey, const 
 void FixtureTreeWidget::updateTree()
 {
     const Selection keep = currentSelection();
+    qWarning() << "DBG updateTree state" << int(state()) << "editorsOpen" << findChildren<QLineEdit *>().size();
     /* The view stays where it was: scroll position and which rows were open
        (a rebuild would otherwise jump to the top and re-open its defaults). */
     const int scrollWas = verticalScrollBar()->value();
