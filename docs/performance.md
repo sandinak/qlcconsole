@@ -472,12 +472,17 @@ chasers running in Operate, it holds the MasterTimer's frame at 50 Hz
 (p95 and max under the 20 ms period, nothing late), every universe sent
 every frame (a counting output), the Rig Overview, the Lighting Studio's
 plot and the UI thread's longest stall, memory flat over a minute of the
-show, and Open/Save to budgets measured on the pool (the numbers are next
-to the asserts; Release asserts them, Debug reports them). On newaudio
-(Release): a frame's p95 17.4 ms wall but 1.8 ms of CPU -- the matrix's
-script map, five a second, is made on the script thread while the tick
-waits, ~16 ms each, the largest cost in the frame; the Rig Overview 49 ms a
-frame (3.5 fps under Operate's share); Open 0.9 s.
+show, and Open/Save to budgets measured on the pool's newaudio (the
+numbers are next to the asserts; Release asserts them, Debug reports them),
+each scaled by how much slower the machine running it is than newaudio (a
+fixed C++ and JavaScript workload, timed first). On newaudio (Release): a
+frame's p95 17.4 ms wall but 1.8 ms of CPU -- the matrix's script map,
+five a second, is made on the script thread while the tick waits, ~16 ms
+each, the largest cost in the frame; the Rig Overview 49 ms a frame
+(3.6 fps under Operate's share); Open 0.9 s; memory +95 MB in the first
+seconds of the show, then flat. On val (an Intel i7 iMac, busy) everything
+took four to five times as long and about one frame in ten was dropped:
+the script map blocking the tick is the first thing to move off it.
 
 ### Work counts in the gate
 
