@@ -583,7 +583,7 @@ void CueRunner::makeTree()
 {
     m_tree = new QTreeWidget(this);
     m_tree->setObjectName(QStringLiteral("crCues"));
-    m_follow = new CueListFollow(m_tree);
+    m_scrollFollow = new CueListFollow(m_tree);
     m_tree->setHeaderLabels({ QString(), tr("Cue"), tr("Name"), tr("Timing"), tr("Note") });
     m_tree->setRootIsDecorated(true);
     m_tree->setUniformRowHeights(true);
@@ -2026,7 +2026,7 @@ void CueRunner::updateStates()
         if (active != nullptr && key != m_followKey)
         {
             m_followKey = key;
-            m_follow->follow(active);
+            m_scrollFollow->follow(active);
         }
     }
 

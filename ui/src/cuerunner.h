@@ -314,7 +314,7 @@ private:
     QLabel *m_timecode = nullptr;
     QLabel *m_mode = nullptr;
     QTreeWidget *m_tree = nullptr;
-    CueListFollow *m_follow = nullptr;
+    CueListFollow *m_scrollFollow = nullptr;
     qint64 m_followKey = -1;     // what the list last scrolled to
     QLabel *m_now = nullptr;
     QLabel *m_next = nullptr;
