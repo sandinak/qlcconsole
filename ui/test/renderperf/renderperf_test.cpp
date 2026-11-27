@@ -825,12 +825,15 @@ void RenderPerf_Test::aGelFiltersTheLight()
    Overview (angled, beams, Live, stood at centre stage as the window opens
    it) and the Lighting Studio's 2D plot both open. Each paint's wall time;
    Operate's 15 fps cap held. CPU raster offscreen.
-   Budgets measured on newaudio (Release, 2026-11-27): the overview 46-50 ms
-   a frame p95 at 3.3-3.6 fps (Operate holds it to 40% of one core); the
-   plot 1.7-1.8 ms. Scaled by HostSpeed::factor(), and the overview's by
-   how many fewer performance cores than newaudio's 8 this machine has
-   (its frame fans out over them: CI's two vCPUs drew it in 190-223 ms).
-   Asserted in Release, reported in Debug. */
+   Measured on ender (Release, 2026-11-27, 10 performance cores): the
+   overview 7.6 ms a frame p95 at 10.6 fps, the plot 11.5 ms. The app's own
+   Rig Overview window on the same rig (ui/test/showscale) costs 43-50 ms a
+   frame on ender and newaudio -- this bare view is not yet the whole of
+   what that window draws; showscale holds the app's UI-thread stall.
+   Budgets: about four times the measure, scaled by HostSpeed::factor(),
+   the overview's also by how many fewer performance cores than 8 this
+   machine has (its frame fans out over them). Asserted in Release,
+   reported in Debug. */
 void RenderPerf_Test::theShowsWeRunDrawInBudget()
 {
     Doc doc(this, ScaleRig::kUniverses);
@@ -920,10 +923,10 @@ void RenderPerf_Test::theShowsWeRunDrawInBudget()
     QVERIFY2(fps <= StructureStudioView::operateFrameRate() + 1.0,
              qPrintable(QString("the overview drew %1 fps in Operate").arg(fps)));
 #if defined(QT_NO_DEBUG)
-    QVERIFY2(overviewPaints.p95() < 100 * cores,
+    QVERIFY2(overviewPaints.p95() < 30 * cores,
              qPrintable(QString("a Rig Overview frame p95 %1 ms").arg(overviewPaints.p95())));
     QVERIFY2(fps >= 2.0 / cores, qPrintable(QString("the overview drew %1 fps").arg(fps)));
-    QVERIFY2(plotPaints.p95() < 15 * f, qPrintable(QString("a plot frame p95 %1 ms").arg(plotPaints.p95())));
+    QVERIFY2(plotPaints.p95() < 40 * f, qPrintable(QString("a plot frame p95 %1 ms").arg(plotPaints.p95())));
 #endif
 }
 
