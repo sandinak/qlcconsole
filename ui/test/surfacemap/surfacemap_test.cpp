@@ -586,7 +586,9 @@ void SurfaceMap_Test::theFaderPortMapSaysTheShiftCombosAndHasItsOptions()
     QCOMPARE(stop->text(), QStringLiteral("Stop needs Shift"));
     QCOMPARE(rel->text(), QStringLiteral("Releasing a stop needs Shift"));
     QVERIFY(stop->isChecked() && rel->isChecked());
-    QVERIFY(maps.findChild<QPushButton *>(QStringLiteral("surfaceMapOptLampTest0")) == nullptr);   // not a PMJ
+    // Every board has a lamp test and its Board Log (2026-11-27; the PMJ alone had one).
+    QVERIFY(maps.findChild<QPushButton *>(QStringLiteral("surfaceMapOptLampTest0")) != nullptr);
+    QVERIFY(maps.findChild<QPushButton *>(QStringLiteral("surfaceMapOptBoardLog0")) != nullptr);
     QSignalSpy setUpAsked(&maps, &SurfaceMaps::controllerSetupRequested);
     setUp->click();
     QCOMPARE(setUpAsked.count(), 1);
@@ -1246,6 +1248,7 @@ void SurfaceMap_Test::everyPluggedInDeviceIsUnderControlSurfaces()
                                         "APC64 Custom (APC64)", "Mystery Keys" });
     emit m_stub->configurationChanged();
     ConnectionsTree tree(m_doc);
+    tree.setShowControlPanel(new QWidget(&tree));
     tree.setShowControlRows({ { "surfaces", "Control surfaces", "" } });
     tree.refresh();
     QTreeWidget *tw = tree.findChild<QTreeWidget *>();
@@ -1464,6 +1467,7 @@ void SurfaceMap_Test::boardShots()
         }
         {
             ConnectionsTree tree(m_doc);
+            tree.setShowControlPanel(new QWidget(&tree));
             tree.setShowControlRows({ { "surfaces", "Control surfaces", "" } });
             tree.resize(size);
             tree.show();

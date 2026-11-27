@@ -1188,8 +1188,10 @@ void SurfaceSim_Test::aGoneBoardHandsItsRolesToTheNewOne()
     QCOMPARE(cut.count(), 1);
     const QString apcId = desk->identityOfUniverse(1);
     QVERIFY(apcId != maizeId);
+    // The core roles (the spotter's hazard roles are learned, never seeded).
     for (DeskRecord::Role r : DeskRecord::roles())
-        QCOMPARE(desk->binding(r).identity, apcId);
+        if (!DeskRecord::isHazardRole(r))
+            QCOMPARE(desk->binding(r).identity, apcId);
     QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 91));
     QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(128 + 92));
     QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(128 + 119));
@@ -1228,7 +1230,8 @@ void SurfaceSim_Test::aBoardThatIsHereKeepsItsRoles()
     settle();
     QCOMPARE(cut.count(), 0);
     for (DeskRecord::Role r : DeskRecord::roles())
-        QCOMPARE(desk->binding(r).identity, maizeId);
+        if (!DeskRecord::isHazardRole(r))
+            QCOMPARE(desk->binding(r).identity, maizeId);
     QVERIFY(!desk->canUndoCutOver());
     // Its replug moves nothing either.
     QVERIFY(SurfaceScenarios::unplugReplug(&apc64));
@@ -1820,7 +1823,7 @@ void SurfaceSim_Test::aSharedPortNameIsAskedAboutThenRemembered()
     m_stub->m_hasFeedback = true;
     QSignalSpy patched(ap, &SurfaceAutoPatch::autoPatched);
     QSignalSpy asked(ap, &SurfaceAutoPatch::askToUse);
-    m_stub->m_lineNames = QStringList() << maize << QStringLiteral("USB2.0-MIDI Port 2");
+    m_stub->m_lineNames = QStringList() << maize;     // its Port 2 is an output only
     emit m_stub->configurationChanged();
     QTRY_COMPARE(asked.count(), 1);
     QCOMPARE(asked.first().at(1).toString(), maize);
@@ -1863,11 +1866,12 @@ void SurfaceSim_Test::theBoardLogSaysWhatTheBoardSentAndWasSent()
     const QString text = log->text(0);
     QVERIFY2(text.contains("Input: PreSonus FP2"), qPrintable(text));
     QVERIFY2(text.contains("Profile: PreSonus FaderPort 2"), qPrintable(text));
-    QVERIFY2(text.contains("IN   90 46 7F") && text.contains("Note 70 on, ch 1, velocity 127 (Shift)"), qPrintable(text));
+    QVERIFY2(text.contains(QRegularExpression("IN +90 46 7F +Note 70 on, ch 1, velocity 127 \\(Shift\\)")), qPrintable(text));
     QVERIFY2(text.contains("Note 93 on, ch 1, velocity 127 (Stop)"), qPrintable(text));
     // A lamp out: its bytes as the plugin sends them.
     QVERIFY(m_doc->inputOutputMap()->sendFeedBack(0, 222, 255, QVariant()));
-    QVERIFY2(log->text(0).contains("OUT  90 5E 7F  Note 94 on, ch 1, velocity 127 (Play)"), qPrintable(log->text(0)));
+    QVERIFY2(log->text(0).contains(QRegularExpression("OUT +90 5E 7F +Note 94 on, ch 1, velocity 127 \\(Play\\)")),
+             qPrintable(log->text(0)));
     // The motor fader sent to the Grand Master: an out line, and the why.
     QVERIFY(m_doc->inputOutputMap()->sendFeedBack(0, 513, 128, QVariant()));
     QVERIFY2(log->text(0).contains("Pitch bend, ch 1 = 8192 of 16383 (Fader)"), qPrintable(log->text(0)));
@@ -1945,6 +1949,8 @@ void SurfaceSim_Test::theLampTestLightsEveryLampThenGivesThemBack()
 void SurfaceSim_Test::aBoardWithParenthesesKeepsItsRoles()
 {
     QSettings().remove(DeskRecord::settingsGroup());
+    // As the MIDI plugin: its identity is "midi:<port>".
+    m_stub->m_nameOverride = QStringLiteral("MIDI");
     const QString name = QStringLiteral("APC64 DAW (APC64)");
     QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64.qxi")) != nullptr);
     {
@@ -1968,6 +1974,7 @@ void SurfaceSim_Test::aBoardWithParenthesesKeepsItsRoles()
     dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
     m_doc->ioPluginCache()->load(dir);
     m_stub = static_cast<IOPluginStub *>(m_doc->ioPluginCache()->plugins().at(0));
+    m_stub->m_nameOverride = QStringLiteral("MIDI");
     // Another device first: the board on line 1.
     m_stub->m_lineNames = QStringList() << QStringLiteral("Other Box");
     QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64.qxi")) != nullptr);
@@ -1986,6 +1993,7 @@ void SurfaceSim_Test::aBoardWithParenthesesKeepsItsRoles()
     desk->seedDefaults();
     QVERIFY(!desk->seededDevices().contains("midi:None"));
     QSettings().remove(DeskRecord::settingsGroup());
+    m_stub->m_nameOverride.clear();
 }
 
 QTEST_MAIN(SurfaceSim_Test)
