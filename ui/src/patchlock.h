@@ -27,6 +27,7 @@
 #include "doc.h"
 
 class QWidget;
+class QAction;
 class QPushButton;
 class QLabel;
 
@@ -78,6 +79,7 @@ private:
     PatchLock(QWidget *page, Doc *doc);
     void applyTo(bool locked);
     void lockOne(QWidget *w, bool locked);
+    void lockAction(QAction *a, bool locked);
 
     QPointer<QWidget> m_page;
     QPointer<Doc> m_doc;

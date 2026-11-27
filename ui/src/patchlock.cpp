@@ -28,6 +28,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QToolBar>
+#include <QToolButton>
 #include <QAction>
 #include <QEvent>
 #include <QApplication>
@@ -206,6 +207,38 @@ void PatchLock::applyTo(bool locked)
     const QList<QWidget *> widgets = m_page->findChildren<QWidget *>();
     for (QWidget *w : widgets)
         lockOne(w, locked);
+    // The actions (toolbar buttons, menus and shortcuts follow them).
+    const QList<QAction *> actions = m_page->findChildren<QAction *>();
+    for (QAction *a : actions)
+        lockAction(a, locked);
+}
+
+void PatchLock::lockAction(QAction *a, bool locked)
+{
+    if (a->isSeparator() || a->menu() != nullptr || isViewOnly(a) || menuItemIsReadOnly(a))
+        return;
+    if (locked)
+    {
+        if (!a->property(kLockedProp).isValid())
+        {
+            a->setProperty(kLockedProp, a->isEnabled());
+            a->setProperty(kTipProp, a->toolTip());
+        }
+        a->setEnabled(false);
+        a->setToolTip(sentence());
+    }
+    else if (a->property(kLockedProp).isValid())
+    {
+        const bool was = a->property(kLockedProp).toBool();
+        const QString t = a->property(kTipProp).toString();
+        a->setProperty(kLockedProp, QVariant());
+        a->setProperty(kTipProp, QVariant());
+        a->setToolTip(t);
+        // Design's own state wins (the page set it): only a lock-time enabled
+        // action that is still off comes back.
+        if (was && !a->isEnabled())
+            a->setEnabled(true);
+    }
 }
 
 /* One control, idempotent: what it was is kept in a property and put back
@@ -248,23 +281,14 @@ void PatchLock::lockOne(QWidget *w, bool locked)
     {
         // A tool button of a toolbar is its action's (below); a spin box's or
         // combo's own line edit goes with it.
-        if (qobject_cast<QToolBar *>(par) != nullptr && qobject_cast<QAbstractButton *>(w) != nullptr)
-            return;
+        if (QToolButton *tbtn = qobject_cast<QToolButton *>(w))
+            if (tbtn->defaultAction() != nullptr)
+                return;
         if (qobject_cast<QLineEdit *>(w) != nullptr
             && (qobject_cast<QAbstractSpinBox *>(par) != nullptr || qobject_cast<QComboBox *>(par) != nullptr))
             return;
         lock(w, w->isEnabled(), w->toolTip(),
              [w](bool on) { w->setEnabled(on); }, [w](const QString &t) { w->setToolTip(t); });
-    }
-    else if (QToolBar *tb = qobject_cast<QToolBar *>(w))
-    {
-        for (QAction *a : tb->actions())
-        {
-            if (a->isSeparator() || isViewOnly(a))
-                continue;
-            lock(a, a->isEnabled(), a->toolTip(),
-                 [a](bool on) { a->setEnabled(on); }, [a](const QString &t) { a->setToolTip(t); });
-        }
     }
     else if (QAbstractItemView *v = qobject_cast<QAbstractItemView *>(w))
     {

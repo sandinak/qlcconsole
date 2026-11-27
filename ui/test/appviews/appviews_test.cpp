@@ -2362,6 +2362,10 @@ void AppViews_Test::editUndoFollowsTheTabInFront()
 void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
 {
     Doc *doc = m_app->m_doc;
+    // Renaming is the patch's: Design only (Operate locks Fixtures).
+    if (doc->mode() == Doc::Operate)
+        m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Design);
     Fixture *fx = new Fixture(doc);
     fx->setName("Old name");
     fx->setChannels(1);

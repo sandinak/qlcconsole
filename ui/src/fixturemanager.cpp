@@ -753,15 +753,6 @@ void FixtureManager::showEvent(QShowEvent *event)
 
 void FixtureManager::updateView()
 {
-    // Record which top level items are open
-    QList <QVariant> openGroups;
-    for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
-    {
-        QTreeWidgetItem* item = m_fixtures_tree->topLevelItem(i);
-        if (item->isExpanded() == true)
-            openGroups << item->data(KColumnName, PROP_GROUP);
-    }
-
     if (m_doc->fixtures().count() > 0)
     {
         m_exportAction->setEnabled(true);
@@ -781,18 +772,7 @@ void FixtureManager::updateView()
 
     m_fixtures_tree->updateTree();
 
-    // Reopen groups that were open before update
-    for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
-    {
-        QTreeWidgetItem* item = m_fixtures_tree->topLevelItem(i);
-        QVariant var = item->data(KColumnName, PROP_GROUP);
-        if (openGroups.contains(var) == true)
-        {
-            item->setExpanded(true);
-            openGroups.removeAll(var);
-        }
-    }
-
+    // updateTree() keeps what was open (and the scroll position).
     updateGroupMenu();
     slotModeChanged(m_doc->mode());
 
