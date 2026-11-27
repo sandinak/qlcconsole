@@ -950,6 +950,40 @@ void ShowReviewPanel_Test::threeStatesEverywhere()
 /* Pictures of the three states (Q207), only when QLC_WARN_SHOTS names a
    folder: the cue rows, the hover, the right-click menus and the Review
    panel, dark theme, at the widgets' minimum, 1280x800 and 1920x1080. */
+/* The panel with a show that has findings of every kind (QLC_SHOT_DIR, set
+   by check-all --shots): the how-to line, the Fix / Go There buttons and the
+   right-click menu, at three sizes. */
+void ShowReviewPanel_Test::fixShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    const QPalette was = qApp->palette();
+    qApp->setPalette(App::themePalette(App::ThemeVSCodeDark, was));
+    Fixture *spare = dimmer(m_doc, "Spot 3", 200);
+    m_doc->unpatchFixture(spare->id());
+    Fixture *past = dimmer(m_doc, "Wash 9", 300);
+    past->setAddress(512);
+    ShowReviewPanel panel(m_doc);
+    panel.setFilter(ShowReviewPanel::All);
+    panel.recheck();
+    const QList<QPair<QString, QSize>> sizes {
+        { "min", QSize(520, 360) }, { "1280x800", QSize(1280, 800) }, { "1920x1080", QSize(1920, 1080) } };
+    for (const auto &sz : sizes)
+    {
+        panel.resize(sz.second);
+        panel.show();
+        QApplication::processEvents();
+        panel.grab().save(QStringLiteral("%1/review-fix-%2.png").arg(dir, sz.first));
+    }
+    panel.selectCheck("PAT-01");
+    QMenu *menu = panel.buildRowMenu(&panel);
+    menu->grab().save(QStringLiteral("%1/review-fix-menu.png").arg(dir));
+    delete menu;
+    qApp->setPalette(was);
+}
+
 void ShowReviewPanel_Test::screenshots()
 {
     const QString dir = qEnvironmentVariable("QLC_WARN_SHOTS");

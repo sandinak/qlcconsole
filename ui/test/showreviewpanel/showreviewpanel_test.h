@@ -64,6 +64,7 @@ private slots:
     void goThereSelectsAndRowMenuOffersTheFix();
     void fixAllSafeSkipsTheRest();
     void screenshots();
+    void fixShots();
     void onlyTheWarningBadgeIsColoured();
     void propsKeepTheirOwnColourOnTheRig();
 
