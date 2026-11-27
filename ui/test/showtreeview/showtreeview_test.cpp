@@ -6615,7 +6615,7 @@ void ShowTreeView_Test::trackingIsABadgeWithDetailsOnHover()
     QVERIFY(view.cueTrackedText().contains("    Dimmer: Half"));
     QLabel *page = view.findChild<QLabel *>("stCueTracked");
     QVERIFY(page != nullptr && page->isVisibleTo(&view));
-    QVERIFY(page->text().contains("    Colour: Blue"));
+    QVERIFY(page->text().contains("Colour: Blue"));
 
     // However long the text, the names keep their column: the badge
     // column stays narrow, nothing runs past the pane, and every layer's

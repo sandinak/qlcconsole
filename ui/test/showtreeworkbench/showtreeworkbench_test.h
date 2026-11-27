@@ -108,6 +108,8 @@ private slots:
     /** A real busy cue (a course show, copied) at 1024x640, 1440x900 and
      *  1920x1080: lists the pane's controls; QLC_SHOT_DIR also shoots it. */
     void aBusyCourseCueAtThreeSizes();
+    void theCuePageIsTabbedInTheWorkbench();
+    void theTrackedListWrapsAtASmallSize();
     void aRealMouseDragMovesALookRowAndAltCopiesIt();
     void aFunctionLayerCanBeReleasedFromTheDockedWorkbench();
     void aHoldTypedInTheStepHeaderIsWhatGoPlays();

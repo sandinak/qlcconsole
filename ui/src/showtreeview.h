@@ -989,6 +989,11 @@ public:
     bool isWorkbenchDocked() const;
     /** The Workbench docked here (null: none). */
     class Workbench *dockedWorkbench() const;
+    /** The cue page's tabs (visible while the Workbench has it docked). */
+    enum CueTab { CueEditTab = 0, CueTrackingTab, CueTimingTab, CueNotesTab, CueTabCount };
+    void showCueTab(CueTab tab);            //!< switch to it (an action that needs it)
+    CueTab cueTab() const;
+    bool cueTabsShown() const;              //!< the bar is up (docked, and more than one tab has content)
     /** Where the Workbench comes from: Build's (App sets it) -- @a borrow
      *  takes it out of Build, @a giveBack puts it back as it was. Without
      *  one, the tree makes a Workbench of its own (tests). */
@@ -1465,6 +1470,22 @@ private:
 
     // R3: the Looks section
     QFormLayout *m_cueForm = nullptr;
+    // The cue page's tabs, while the Workbench has it docked (Edit | Tracking | Timing | Notes).
+    class QTabBar *m_cueTabBar = nullptr;
+    QHash<QWidget *, int> m_cueRowTab;          //!< a form row's field widget -> its tab
+    QHash<QWidget *, bool> m_cueRowWanted;      //!< what the page wants of it, before the tab
+    bool m_cueTabsOn = false;                   //!< docked: the tabs are in use
+    bool m_cueTabsFilter = false;               //!< ... and more than one has something to show
+    bool m_cueTabsSyncing = false;
+    static int s_cueTab;                        //!< the last tab, for the session
+    static QString cueTabName(CueTab tab);
+    void setCueTabsOn(bool on);
+    static QString trackedHtml(const QString &text);
+    void registerCueTabs();
+    void setCueRow(QWidget *w, bool wanted);
+    bool inCueTab(QWidget *w) const;
+    void applyCueTabs();
+    void updateCueTabTitles(int tracked, bool timing, bool notes);
     QFormLayout *m_listForm = nullptr;
     QLabel *m_lookFiredBy = nullptr;
     QLabel *m_hitWhen = nullptr;        //!< a hit's place: when it fires (Q154)

@@ -1101,6 +1101,12 @@ private:
 class CueLayerList final : public QListWidget
 {
 public:
+    void resizeEvent(QResizeEvent *e) override
+    {
+        QListWidget::resizeEvent(e);
+        if (e->size().width() != e->oldSize().width())
+            QMetaObject::invokeMethod(this, [this]() { fitHeight(); }, Qt::QueuedConnection);
+    }
     CueLayerList(ShowTreeView *view, DropPage *page, QWidget *parent)
         : QListWidget(parent), m_view(view), m_page(page)
     {
@@ -1110,6 +1116,21 @@ public:
         setSelectionMode(QAbstractItemView::NoSelection);
         setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        // A long row wraps under itself instead of running off the page.
+        setWordWrap(true);
+        setTextElideMode(Qt::ElideNone);
+        setResizeMode(QListView::Adjust);
+    }
+    /** Tall enough for every row, wrapped at the width it has now. */
+    void fitHeight()
+    {
+        if (count() == 0)
+            return;
+        int h = 0;
+        for (int r = 0; r < count(); ++r)
+            h += qMax(sizeHintForRow(r), (item(r)->text().count(QLatin1Char('\n')) + 1) * fontMetrics().height() + 6);
+        if (h + 2 * frameWidth() + 2 != height())
+            setFixedHeight(h + 2 * frameWidth() + 2);
     }
     /** Per row: a carried-in layer's target (empty: the cue's own layer). */
     QList<ShowTree::Target> targets;
@@ -2228,6 +2249,25 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             head->addWidget(focus);
             f->addRow(head);
         }
+        /* The Workbench docks this page under the cue's layer rows: its
+           many rows go in tabs there (Edit | Tracking | Timing | Notes).
+           In the tree's own inspector the bar stays hidden and every row shows. */
+        m_cueTabBar = new QTabBar(inner);
+        m_cueTabBar->setObjectName("stCueTabs");
+        m_cueTabBar->setExpanding(false);
+        m_cueTabBar->setDrawBase(true);
+        for (int t = 0; t < CueTabCount; ++t)
+            m_cueTabBar->addTab(cueTabName(CueTab(t)));
+        m_cueTabBar->setToolTip(tr("Edit: number, name, layers. Tracking: what carries in, mode, base, includes. "
+                                   "Timing: fades, hold, timecode. Notes: the note and what needs work."));
+        m_cueTabBar->hide();
+        f->addRow(m_cueTabBar);
+        connect(m_cueTabBar, &QTabBar::currentChanged, this, [this](int i) {
+            if (i < 0 || m_cueTabsSyncing)
+                return;
+            s_cueTab = i;
+            applyCueTabs();
+        });
         f->addRow(tr("Number"), m_cueNumber);
         f->addRow(tr("Name"), m_cueName);
         f->addRow(tr("Note"), m_cueNote);
@@ -2403,8 +2443,9 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueFocusState = new QLabel(inner);
         m_cueFocusState->setObjectName("stCueFocusState");
         m_cueFocusState->setStyleSheet(QStringLiteral("color: #d08a1c; font-weight: bold;"));
-        m_cueFocusState->hide();
         f->addRow(QString(), m_cueFocusState);
+        m_cueRowWanted.insert(m_cueFocusState, false);
+        m_cueForm->setRowVisible(m_cueFocusState, false);
         if (FocusCallCue *fcc = m_doc->programmer()->focusCallCue())
             connect(fcc, &FocusCallCue::stateChanged, this, &ShowTreeView::refreshFocusCallState);
         /* Focus this cue (docs/design/FOCUS_REFINE_DESIGN.md): this cue's own values
@@ -2625,11 +2666,14 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
         m_cueTracked = new QLabel(inner);
         m_cueTracked->setObjectName("stCueTracked");
         m_cueTracked->setWordWrap(true);
+        m_cueTracked->setTextFormat(Qt::RichText);
+        m_cueTracked->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // wraps; never widens the page
         m_cueTracked->setTextInteractionFlags(Qt::TextSelectableByMouse);
         f->addRow(tr("Tracked in"), m_cueTracked);
         m_cueNext = new QLabel(inner);
         m_cueNext->setWordWrap(true);
         f->addRow(tr("Next cue receives"), m_cueNext);
+        registerCueTabs();
         for (QLineEdit *e : { m_cueNumber, m_cueName })
             connect(e, &QLineEdit::editingFinished, this, &ShowTreeView::slotCueEdited);
         connect(m_cueNote, &NoteEdit::editingFinished, this, &ShowTreeView::slotCueEdited);
@@ -4967,8 +5011,8 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     // (Q180) are how the button brings it up and takes it away.
     {
         const bool cueRows = !list.looks;
-        m_cueForm->setRowVisible(m_cueFadeIn, true);
-        m_cueForm->setRowVisible(m_cueFadeOut, true);
+        setCueRow(m_cueFadeIn, true);
+        setCueRow(m_cueFadeOut, true);
         m_cueFadeIn->setToolTip(list.looks ? tr("How long the hit takes to come up when a button fires it.")
                                            : QString());
         m_cueFadeOut->setToolTip(list.looks ? tr("How long the hit takes to go when the button lets it go.")
@@ -4979,12 +5023,12 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
                             static_cast<QWidget *>(m_cueTracked), static_cast<QWidget *>(m_cueSkip),
                             static_cast<QWidget *>(m_cueNoMib), static_cast<QWidget *>(m_cueFocusCall),
                             m_cueBlockingRow })
-            m_cueForm->setRowVisible(w, cueRows);
-        m_cueForm->setRowVisible(m_cueTcRow, cueRows && !list.isSubCues());
-        m_cueForm->setRowVisible(m_cueFast, cueRows && !list.isSubCues());
-        m_cueForm->setRowVisible(m_lookFiredBy, list.looks);
-        m_cueForm->setRowVisible(m_hitWhen, list.looks);
-        m_cueForm->setRowVisible(m_hitOverride, list.looks);
+            setCueRow(w, cueRows);
+        setCueRow(m_cueTcRow, cueRows && !list.isSubCues());
+        setCueRow(m_cueFast, cueRows && !list.isSubCues());
+        setCueRow(m_lookFiredBy, list.looks);
+        setCueRow(m_hitWhen, list.looks);
+        setCueRow(m_hitOverride, list.looks);
         {
             QSignalBlocker block(m_hitOverride);
             m_hitOverride->setChecked(list.looks && cue.override);
@@ -5004,9 +5048,9 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         for (QWidget *w : { static_cast<QWidget *>(m_cueMode), static_cast<QWidget *>(m_cueBase),
                             m_cueIncludes->parentWidget(), static_cast<QWidget *>(m_cueHold) })
             if (sub)
-                m_cueForm->setRowVisible(w, false);
-        m_cueForm->setRowVisible(m_cueAdvanceRow, sub);
-        m_cueForm->setRowVisible(m_cueSubCues, !list.looks && !sub);
+                setCueRow(w, false);
+        setCueRow(m_cueAdvanceRow, sub);
+        setCueRow(m_cueSubCues, !list.looks && !sub);
         if (list.looks)
         {
             const QStringList fired = lookFiredBy(cue.id);
@@ -5196,11 +5240,7 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
     }
     else
     {
-        int h = 0;
-        for (int r = 0; r < rows->count(); ++r)
-            h += qMax(rows->sizeHintForRow(r),
-                      (rows->item(r)->text().count(QLatin1Char('\n')) + 1) * fontMetrics().height() + 6);
-        rows->setFixedHeight(h + 2 * rows->frameWidth() + 2);
+        rows->fitHeight();
         rows->show();
         m_cueDropZone->setMinimumHeight(0);
     }
@@ -5210,11 +5250,135 @@ void ShowTreeView::showCuePage(const CueList &list, int index)
         if (m_st->lastBakeChanged().contains(cue.id))
             tracked = (tracked.isEmpty() ? QString() : tracked + QStringLiteral("\n"))
                       + tr("Changed by the last edit (re-baked).");
-        m_cueTracked->setText(tracked.isEmpty() ? tr("— (nothing: every layer is set here)") : tracked);
+        m_cueTracked->setText(tracked.isEmpty() ? tr("— (nothing: every layer is set here)").toHtmlEscaped()
+                                                : trackedHtml(tracked));
         if (!list.looks)
-            m_cueForm->setRowVisible(m_cueTracked, list.mode == ListMode::Tracking || !tracked.isEmpty());
+            setCueRow(m_cueTracked, list.mode == ListMode::Tracking || !tracked.isEmpty());
     }
+    {
+        // What needs a look gets a mark in its tab's title.
+        int carried = 0;
+        for (const ResolvedLayer &rl : resolved.at(index).layers)
+            carried += rl.own ? 0 : 1;
+        updateCueTabTitles(carried, cue.timecode >= 0,
+                           !cue.note.trimmed().isEmpty() || cue.needsWork || cue.focusCall);
+    }
+    applyCueTabs();
     m_pages->setCurrentWidget(m_cuePage);
+}
+
+QString ShowTreeView::cueTabName(CueTab t)
+{
+    switch (t)
+    {
+    case CueEditTab: return tr("Edit");
+    case CueTrackingTab: return tr("Tracking");
+    case CueTimingTab: return tr("Timing");
+    case CueNotesTab: return tr("Notes");
+    default: break;
+    }
+    return QString();
+}
+
+int ShowTreeView::s_cueTab = 0;
+
+void ShowTreeView::registerCueTabs()
+{
+    auto put = [this](std::initializer_list<QWidget *> ws, CueTab t) {
+        for (QWidget *w : ws)
+            m_cueRowTab.insert(w, int(t));
+    };
+    put({ m_cueNumber, m_cueName, m_cueColour, m_lookFiredBy, m_hitWhen, m_cueReuse, m_hitOverride,
+          m_cueLooks->parentWidget(), m_cueLayers->parentWidget() }, CueEditTab);
+    put({ m_cueMode, m_cueBlockingRow, m_cueBase, m_cueMix, m_cueIncludes->parentWidget(), m_cueTracked,
+          m_cueNext }, CueTrackingTab);
+    put({ m_cueFadeIn, m_cueFadeOut, m_cueHold, m_cueAdvanceRow, m_cueSubCues, m_cueTcRow, m_cueNoMib, m_cueSkip,
+          m_cueFast }, CueTimingTab);
+    put({ m_cueNote, m_cueNeedsWork, m_cueFocusCall, m_cueFocusState, m_cueRefine }, CueNotesTab);
+}
+
+void ShowTreeView::setCueRow(QWidget *w, bool wanted)
+{
+    if (w == nullptr)
+        return;
+    m_cueRowWanted.insert(w, wanted);
+    m_cueForm->setRowVisible(w, wanted && inCueTab(w));
+}
+
+bool ShowTreeView::inCueTab(QWidget *w) const
+{
+    if (!m_cueTabsFilter)
+        return true;
+    const auto it = m_cueRowTab.constFind(w);
+    return it == m_cueRowTab.constEnd() || it.value() == s_cueTab;
+}
+
+void ShowTreeView::applyCueTabs()
+{
+    if (m_cueTabBar == nullptr)
+        return;
+    // A tab with nothing to show is dropped (a look has no tracking; Student hides much).
+    int shown = 0;
+    int first = -1;
+    bool present[CueTabCount] = {};
+    for (int t = 0; t < CueTabCount; ++t)
+    {
+        bool any = false;
+        for (auto it = m_cueRowTab.constBegin(); it != m_cueRowTab.constEnd() && !any; ++it)
+            any = it.value() == t && m_cueRowWanted.value(it.key(), true);
+        present[t] = any;
+        m_cueTabBar->setTabVisible(t, any);
+        shown += any ? 1 : 0;
+        if (any && first < 0)
+            first = t;
+    }
+    // One tab or none: no bar, nothing filtered, everything shows.
+    m_cueTabsFilter = m_cueTabsOn && shown > 1;
+    if (m_cueTabsFilter && !present[s_cueTab])
+        s_cueTab = first;
+    m_cueTabsSyncing = true;
+    if (m_cueTabsFilter)
+        m_cueTabBar->setCurrentIndex(s_cueTab);
+    m_cueTabsSyncing = false;
+    m_cueForm->setRowVisible(m_cueTabBar, m_cueTabsFilter);
+    for (auto it = m_cueRowTab.constBegin(); it != m_cueRowTab.constEnd(); ++it)
+        m_cueForm->setRowVisible(it.key(), m_cueRowWanted.value(it.key(), true) && inCueTab(it.key()));
+}
+
+void ShowTreeView::updateCueTabTitles(int tracked, bool timing, bool notes)
+{
+    if (m_cueTabBar == nullptr)
+        return;
+    m_cueTabBar->setTabText(CueTrackingTab, tracked > 0 ? tr("%1 · %2").arg(cueTabName(CueTrackingTab)).arg(tracked)
+                                                        : cueTabName(CueTrackingTab));
+    m_cueTabBar->setTabText(CueTimingTab, timing ? tr("%1 ●").arg(cueTabName(CueTimingTab))
+                                                  : cueTabName(CueTimingTab));
+    m_cueTabBar->setTabText(CueNotesTab, notes ? tr("%1 ●").arg(cueTabName(CueNotesTab))
+                                                : cueTabName(CueNotesTab));
+}
+
+void ShowTreeView::showCueTab(CueTab tab)
+{
+    if (tab < 0 || tab >= CueTabCount)
+        return;
+    s_cueTab = tab;
+    applyCueTabs();
+}
+
+ShowTreeView::CueTab ShowTreeView::cueTab() const
+{
+    return CueTab(s_cueTab);
+}
+
+bool ShowTreeView::cueTabsShown() const
+{
+    return m_cueTabBar != nullptr && m_cueTabsFilter;
+}
+
+void ShowTreeView::setCueTabsOn(bool on)
+{
+    m_cueTabsOn = on;
+    applyCueTabs();
 }
 
 QString ShowTreeView::nextCueText() const
@@ -5331,6 +5495,22 @@ QString ShowTreeView::carriedDetail(const ResolvedLayer &rl) const
         lines << line;
     }
     return lines.join(QStringLiteral("\n"));
+}
+
+/* One layer a block: its name and where it comes from on a line, its values
+   under it, hung in from the left, so a long one wraps under itself. */
+QString ShowTreeView::trackedHtml(const QString &text)
+{
+    QString out;
+    for (const QString &line : text.split(QLatin1Char('\n')))
+    {
+        if (line.startsWith(QLatin1String("    ")))
+            out += QStringLiteral("<div style=\"margin-left: 14px; margin-bottom: 0px;\">%1</div>")
+                       .arg(line.trimmed().toHtmlEscaped());
+        else
+            out += QStringLiteral("<div style=\"margin-top: 5px;\"><b>%1</b></div>").arg(line.toHtmlEscaped());
+    }
+    return out;
 }
 
 QString ShowTreeView::cueTrackedText() const
@@ -6954,7 +7134,7 @@ void ShowTreeView::refreshFocusCallState()
         m_cueFocusState->setText(tr("Venue focus: name the venue on the laptop"));
     else if (mine && fcc->state() == FocusCallCue::Running)
         m_cueFocusState->setText(m_doc->programmer()->padText(tr("Venue focus running: {Menu} ends it and goes on")));
-    m_cueFocusState->setVisible(mine && fcc->state() != FocusCallCue::Idle);
+    setCueRow(m_cueFocusState, mine && fcc->state() != FocusCallCue::Idle);
 }
 
 void ShowTreeView::slotCueNoMibToggled(bool on)
