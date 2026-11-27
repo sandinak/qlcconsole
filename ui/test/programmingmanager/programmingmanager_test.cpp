@@ -70,6 +70,7 @@
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
 #include "lookeditor.h"
+#include "capabilitybar.h"
 #include "scene.h"
 #include "sequence.h"
 #include "chaserstep.h"
