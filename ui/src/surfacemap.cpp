@@ -1024,7 +1024,7 @@ void SurfaceMaps::addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe
         h->addWidget(rel);
         m_guardBoxes.insert(universe, qMakePair(stop, rel));
     }
-    QPushButton *all = new QPushButton(tr("All boards"), block);
+    QPushButton *all = new QPushButton(tr("All Boards"), block);
     all->setObjectName(QStringLiteral("surfaceMapAllBoards%1").arg(universe));
     all->setToolTip(tr("Show the maps of every patched board again."));
     all->setVisible(false);

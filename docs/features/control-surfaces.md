@@ -1051,7 +1051,7 @@ after any build that changes a surface, and say which build.
    in Design and the footer says where Operate is (Control ▸ Operate).
 13. Click the **FaderPort** chip in the footer, at 1024 x 640 too. *Expect:*
    the chip has a small controller glyph; the map of that board alone
-   opens (an **All boards** button brings back the rest) with **Set Up…**, **Stop needs Shift** and **Releasing a
+   opens (an **All Boards** button brings back the rest) with **Set Up…**, **Stop needs Shift** and **Releasing a
    stop needs Shift** (both ticked) in its header; **STOP** reads
    *Shift+STOP*, **Shift** is drawn as the board's own key. Untick **Stop
    needs Shift**: **Stop** alone now stops.
