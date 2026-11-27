@@ -2419,7 +2419,10 @@ QString viewState(FixtureManager &mgr, QTreeWidgetItem *it)
         .arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())
         .arg(mgr.m_fixtures_tree->viewport()->height())
         .arg(mgr.m_fixtures_tree->verticalScrollBar()->value())
-        .arg(mgr.m_fixtures_tree->verticalScrollBar()->maximum());
+        .arg(mgr.m_fixtures_tree->verticalScrollBar()->maximum())
+        + QString(" rows %1 open %2")
+              .arg([&mgr]() { int n = 0; for (QTreeWidgetItemIterator i(mgr.m_fixtures_tree); *i; ++i) n++; return n; }())
+              .arg([&mgr]() { QStringList o; for (bool b : openRows(mgr)) o << (b ? "1" : "0"); return o.join(""); }());
 }
 
 bool inView(FixtureManager &mgr, QTreeWidgetItem *it)
@@ -2477,7 +2480,8 @@ void FixtureManager_Test::duplicateAndUndoKeepTheViewAndSelectTheRow()
     QVERIFY(rowH > 0);
     const QList<bool> open = openRows(mgr);
     auto steady = [&](const char *what) {
-        QVERIFY2(qAbs(tree->verticalScrollBar()->value() - scrolled) <= rowH, what);
+        QVERIFY2(qAbs(tree->verticalScrollBar()->value() - scrolled) <= rowH,
+                 qPrintable(QString("%1: was %2, %3").arg(what).arg(scrolled).arg(viewState(mgr, tree->currentItem()))));
         QCOMPARE(openRows(mgr), open);
     };
 
