@@ -11268,8 +11268,10 @@ void App::updatePadRoleChip()
     const PadRun *run = pc->padRun();
     /* No game controller connected: no chip. It shows when one connects
        and goes when it is unplugged (focusControllerChanged); the Show
-       Review's "Controllers connected" line says what the show maps. */
-    if (!pc->focusController().present)
+       Review's "Controllers connected" line says what the show maps. An
+       arm or a stop still standing, or a notice (the pad was lost), is
+       said whether or not the pad is there. */
+    if (!pc->focusController().present && !run->stateColour().isValid() && run->chipNotice().isEmpty())
     {
         m_statusPadRoleLabel->hide();
         if (m_statusFitTimer != nullptr)
