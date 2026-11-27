@@ -110,7 +110,7 @@ SurfaceChips::SurfaceChips(Doc *doc, QWidget *parent)
     connect(pages, &SurfacePages::pageChanged, this, [this, queue](quint32 u) {
         queue();
         m_flash.insert(u);
-        QTimer::singleShot(1000, this, [this, u]() {
+        QTimer::singleShot(1000, this, [this, u, queue]() {
             m_flash.remove(u);
             queue();
         });
