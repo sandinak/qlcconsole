@@ -270,6 +270,9 @@ public:
 
     /** Friendly name of the assigned output line */
     QString outputName() const;
+    /** The name of the line when it was last opened (a hardware port that
+     *  may since have moved or gone); empty when never opened. */
+    QString openedLineName() const { return m_lineName; }
 
     /** Returns true if a valid plugin line has been set */
     bool isPatched() const;

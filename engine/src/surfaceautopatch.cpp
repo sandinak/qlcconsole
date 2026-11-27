@@ -241,8 +241,11 @@ quint32 SurfaceAutoPatch::setUp(QLCIOPlugin *plugin, const QString &device, cons
         ss->boardLog()->note(u, tr("Recognised %1 as %2: patched on universe %3, feedback %4")
                                     .arg(device, profile).arg(u + 1)
                                     .arg(fb.isEmpty() ? tr("none (no output of that name)") : fb));
-        // Its init now the feedback line is there too (it went once on the patch).
-        ss->sendInit(u, tr("after the auto-patch"));
+        /* Its init now the feedback line is there too, unless it goes again
+           in a moment anyway (it went once on the patch, out of the port of
+           its name). */
+        if (!ss->initAgainPending(u))
+            ss->sendInit(u, tr("after the auto-patch"));
     }
     emit autoPatched(u, profile, device);
     emit devicesChanged();

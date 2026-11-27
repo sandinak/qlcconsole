@@ -139,6 +139,14 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
             if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
                 rearmGrandMaster();
         });
+        /* The Grand Master's board given its feedback line (an auto-patch
+           pairs it just after the input, when the motor was sent nowhere):
+           its motor fader is sent the master now (the virtual bench,
+           2026-11-27: the FaderPort plugged in was never sent it). */
+        connect(iom, &InputOutputMap::feedbackPatchChanged, this, [this](quint32 universe) {
+            if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
+                sendGrandMasterToMotor();
+        });
         /* A motor fader as the Grand Master follows the master when
            something else moves it (the footer, a VC slider, a fade). */
         connect(iom, &InputOutputMap::grandMasterValueChanged, this, [this](uchar) {
@@ -1290,6 +1298,46 @@ void DeskRecord::grandMaster(uchar value)
     notifyGrandMasterWaiting();
 }
 
+bool DeskRecord::sayRoleElsewhere(quint32 universe, quint32 channel, uchar value, quint64 k)
+{
+    /* The virtual bench (2026-11-27): STOP and the Grand Master learned on
+       the APC64, the FaderPort plugged in beside it -- its Shift+Stop and
+       its fader did nothing, and nothing said why. One STOP and one Grand
+       Master per computer stays the rule (the old board is here, so
+       nothing moves); the board says where they are. */
+    if (value == 0)
+    {
+        m_down.remove(k);
+        return false;
+    }
+    if (m_down.contains(k))
+        return false;
+    const SurfaceLayout lay = layoutOf(universe);
+    if (!lay.isValid())
+        return false;
+    for (const SurfaceLayout::Role &r : lay.roles())
+    {
+        const Role role = r.role == roleKey(Stop) ? Stop
+                        : r.role == roleKey(GrandMaster) ? GrandMaster : Go;
+        if (role == Go || r.channel != channel || !isSet(role) || universeOf(role) == universe)
+            continue;
+        if (role == Stop)
+            m_down.insert(k);       // once a press
+        else if (now() - m_elsewhereSaidAt < 2000)
+            return false;           // a fader: once in a while, not on every value
+        m_elsewhereSaidAt = now();
+        const QString where = m_bindings[role].device.isEmpty() ? m_bindings[role].identity
+                                                                : m_bindings[role].device;
+        if (SurfaceSetup *ss = m_doc->surfaceSetup())
+            ss->boardLog()->note(universe, tr("%1 here does nothing: this computer's %1 is on %2")
+                                               .arg(roleName(role), where));
+        emit refused(tr("%1: this computer's %2 is on %3. Click it on this board's map to move it here.")
+                         .arg(lay.shortName(), roleName(role), where));
+        return true;
+    }
+    return false;
+}
+
 void DeskRecord::goPressed(bool back)
 {
     ControlMap *cm = m_doc->controlMap();
@@ -1889,7 +1937,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
     }
 
     if (!desk)
+    {
+        sayRoleElsewhere(universe, channel, value, k);
         return;
+    }
     /* A controller's setup is listening to this board (Identify Lamps):
        its presses pair lamps, they do no job. The STOP went above. */
     if (value > 0 && m_doc != nullptr && m_doc->inputOutputMap()->isSetupHeld(universe))

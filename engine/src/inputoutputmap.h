@@ -1117,6 +1117,15 @@ private:
      * has one), never by the line number alone.
      */
     void followInputDevices(QLCIOPlugin *plugin);
+    /**
+     * The same for feedback patches on @p plugin's devices (a board's lamp
+     * port): one whose port moved to another line is reopened there, one
+     * whose port went is KEPT offline by that port's name and comes back
+     * with it -- never left on the line number another port moved onto
+     * (the virtual bench, 2026-11-27: the PMJ's lamps went to an RTP
+     * session, and the show was saved that way).
+     */
+    void followFeedbackDevices(QLCIOPlugin *plugin);
 
     /** A hand patch of @p universe (setInputPatch()) with a slot on it:
      *  kept when the device is one of the slot's, else the slot goes. */
@@ -1290,6 +1299,11 @@ signals:
     /** @p universe's input was patched or unpatched (setInputPatch()), by
      *  hand or by its controller slot. */
     void inputPatchChanged(quint32 universe);
+
+    /** @p universe's feedback line was patched or unpatched
+     *  (setOutputPatch() with isFeedback): what is sent to a board's lamps
+     *  and motor goes out there from now on. */
+    void feedbackPatchChanged(quint32 universe);
 
     /** Every input value, the desk's controls included: for what reads
      *  raw input (Learn, the activity lights, the desk itself). A show

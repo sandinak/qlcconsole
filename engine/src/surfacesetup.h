@@ -122,6 +122,9 @@ public:
     bool sendInit(quint32 universe, const QString &why = QString());
     /** How long after a patch its init goes once more (ms; tests shorten it). */
     void setInitAgainDelay(int ms) { m_initAgainMs = ms; }
+    /** An init went out moments ago and goes once more when the port has
+     *  settled: another now would be a third. */
+    bool initAgainPending(quint32 universe) const { return m_initAgain.contains(universe); }
 
     /* ---- lamp test: any board with a feedback line ---- */
     /** Light each of @p universe's lamps in turn (the layout's lamps, else
