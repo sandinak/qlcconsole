@@ -4624,8 +4624,57 @@ void ConnectionsTree_Test::theUniversesTabHasADevicesCounterpart()
         QVERIFY2(inMenu || inTree || inPane,
                  qPrintable(QString("%1 is not in Devices as %2").arg(name, there)));
     }
-    // The profile editor too: Edit… beside the profile in the pane.
-    QVERIFY(tree->m_connPane->findChild<QPushButton *>("connProfileEdit") != nullptr);
+
+    /* The universe's own editor (the Universes tab's right side): its profile
+       Edit, New and Delete, and its Audio page. Each is in the pane too. */
+    mgr.m_ioTabs->setCurrentIndex(1);
+    mgr.selectUniverse(0);
+    QVERIFY(mgr.m_editor != nullptr);
+    const QMap<QString, QStringList> editorCounterpart = {
+        { "profileEdit", { "connProfileEdit" } },
+        { "profileNew", { "connProfileNew" } },
+        { "profileDelete", { "connProfileDelete" } },
+        { "m_audioMapTree", { "connAudioInput", "connAudioOutput" } },
+        { "m_srateCombo", { "connAudioRate" } },
+        { "m_chansCombo", { "connAudioChannels" } },
+        { "m_audioPreviewButton", { "connAudioPreview" } },
+        { "m_levelProgress", { "connAudioLevel" } },
+    };
+    QStringList editorOffers;
+    foreach (QWidget *w, mgr.m_editor->findChildren<QWidget *>())
+    {
+        const QString n = w->objectName();
+        if (n.startsWith("profile") || n.startsWith("m_audio") || n.startsWith("m_srate")
+            || n.startsWith("m_chans") || n.startsWith("m_level"))
+            editorOffers << n;
+    }
+    editorOffers.removeDuplicates();
+    QVERIFY2(editorOffers.count() >= editorCounterpart.count(), qPrintable(editorOffers.join(", ")));
+    foreach (const QString &name, editorOffers)
+    {
+        QVERIFY2(editorCounterpart.contains(name),
+                 qPrintable(QString("the Universes tab's editor offers %1 with no Devices counterpart listed").arg(name)));
+        foreach (const QString &there, editorCounterpart.value(name))
+            QVERIFY2(tree->m_connPane->findChild<QWidget *>(there) != nullptr,
+                     qPrintable(QString("%1 is not in the Devices pane as %2").arg(name, there)));
+    }
+
+    /* And they work: a rate chosen in the pane is the setting the Universes
+       tab reads; New and Delete follow the profile chosen. */
+    QComboBox *rate = tree->m_connPane->findChild<QComboBox *>("connAudioRate");
+    QSettings audio;
+    const QVariant before = audio.value("audio/samplerate");
+    rate->setCurrentIndex(rate->findText("48000"));
+    QCOMPARE(QSettings().value("audio/samplerate").toInt(), 48000);
+    rate->setCurrentIndex(rate->findText("44100"));
+    QVERIFY(QSettings().value("audio/samplerate").isValid() == false);
+    if (before.isValid())
+        QSettings().setValue("audio/samplerate", before);
+    QPushButton *del = tree->m_connPane->findChild<QPushButton *>("connProfileDelete");
+    QPushButton *neu = tree->m_connPane->findChild<QPushButton *>("connProfileNew");
+    QVERIFY(neu != nullptr && neu->isEnabled());
+    tree->m_connPane->m_profileCombo->setCurrentIndex(0);
+    QVERIFY(del->isEnabled() == false);                     // no profile chosen: nothing to delete
 }
 
 /** Every branch of the tree says what it is; an empty one says why. */

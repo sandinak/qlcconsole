@@ -40,6 +40,7 @@ add_library(${module_name}
     windowplacement.cpp windowplacement.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui
     audiobar.cpp audiobar.h
+    audiosettingspanel.cpp audiosettingspanel.h
     audioeditor.cpp audioeditor.h audioeditor.ui
     audiotriggerwidget.cpp audiotriggerwidget.h
     channelmodifiereditor.cpp channelmodifiereditor.h channelmodifiereditor.ui

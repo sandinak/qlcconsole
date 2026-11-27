@@ -704,10 +704,10 @@ try it on your own devices before relying on it for a show.
 Select a universe on **Devices** (the tick on **By universe** lists them all)
 and its settings are the pane beside the list: **Name**, **Slot** (Tour or
 House), the protocol and interface, the input with its **Input Profile**
-(**Edit…** opens the profile editor), **Feedback**, **Passthrough**.
+(**Edit…**, **New…** and **Delete** beside it work on the profile), **Feedback**, **Passthrough**.
 **Add Universe** and **Delete Universe…** are on any row's right-click,
 **Undo Patch Change** and **Rescan** are above the list. The **Universes**
-tab is QLC+'s own page, kept for people who know it: nothing is only there.
+tab is QLC+'s own page, kept for people who know it: nothing is only there. The computer's audio input and output device, sample rate, channels and level meter are the **Audio** box at the bottom of the pane.
 
 **Show control & sync ▸ Control surfaces** lists each board recognised as a
 control surface (its name, universe, profile, and whether it has a feedback
