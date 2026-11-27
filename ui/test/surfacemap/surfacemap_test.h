@@ -74,6 +74,10 @@ private slots:
     /** Page ◀ and ▶ the map lets you choose: they step the pages, are kept
      *  for this computer, and the chip's page name picks a page. */
     void pagesHaveKeysTheMapChooses();
+    /** Print Key Labels: a sheet at the real key sizes, one set per page,
+     *  as a PDF; tape labels at 180 dpi for the 12, 18 and 24 mm tapes as
+     *  PNGs and a PDF; sizes through the units setting. */
+    void keyLabelsAtTheRealKeySizes();
     /** A map never clips: under its smallest cell it asks for the width. */
     void theMapScrollsRatherThanClips();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */

@@ -87,5 +87,6 @@
     {"role": "go", "ch": 32896, "seed": false},
     {"role": "back", "ch": 32907, "seed": false},
     {"role": "gm", "ch": 32768, "seed": false}
-  ]
+  ],
+  "unitMm": 19.05
 }

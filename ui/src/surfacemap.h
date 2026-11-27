@@ -28,6 +28,7 @@
 #include <functional>
 
 #include "surfacelayout.h"
+#include "pageset.h"
 #include "qlcui_export.h"
 
 class QVBoxLayout;
@@ -115,6 +116,11 @@ public:
     };
     QList<Row> rows() const;
 
+    /** The board's page set now (invalid: none): the key label sheets go page by page. */
+    PageSet pageSet() const;
+    /** What the control does apart from the page on now (the desk's, the
+     *  board's or the show's job); empty when the page gives it its job. */
+    QString jobTextNoPage(quint32 channel) const;
     /** The control the table and the drawing both have selected (-1: none). */
     qint64 selected() const { return m_selected; }
     void setSelected(qint64 channel);

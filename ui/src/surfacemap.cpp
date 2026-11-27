@@ -43,6 +43,7 @@
 #include <QFrame>
 
 #include "surfacemap.h"
+#include "surfacekeylabels.h"
 #include "controlowners.h"
 #include "inputoutputmap.h"
 #include "qlcinputprofile.h"
@@ -412,6 +413,18 @@ QList<SurfaceMapView::Row> SurfaceMapView::rows() const
         out << r;
     }
     return out;
+}
+
+PageSet SurfaceMapView::pageSet() const
+{
+    SurfacePages *pages = m_doc->controlMap() != nullptr ? m_doc->controlMap()->surfacePages() : nullptr;
+    return pages != nullptr ? pages->pageSet(m_universe) : PageSet();
+}
+
+QString SurfaceMapView::jobTextNoPage(quint32 channel) const
+{
+    const int i = cellIndex(channel);
+    return i < 0 || m_cells.at(i).group == Page ? QString() : m_cells.at(i).job;
 }
 
 void SurfaceMapView::setSelected(qint64 channel)
@@ -1228,6 +1241,18 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
     v->addWidget(hint);
 
     SurfaceMapView *mv = new SurfaceMapView(m_doc, universe, layout, block);
+    QPushButton *labels = new QPushButton(tr("Print Key Labels…"), block);
+    labels->setObjectName(QStringLiteral("surfaceKeyLabels%1").arg(universe));
+    labels->setToolTip(tr("A sheet of cut-out labels at the board's key sizes, or tape labels for a Brother "
+                          "P-touch CUBE (TZe tape in its three widths), with what each key does on each page."));
+    connect(labels, &QPushButton::clicked, this, [this, mv, block]() {
+        SurfaceKeyLabelsDialog dlg(mv, block);
+        dlg.exec();
+    });
+    QHBoxLayout *tools = new QHBoxLayout();
+    tools->addWidget(labels);
+    tools->addStretch(1);
+    v->addLayout(tools);
     SurfaceControlTable *table = new SurfaceControlTable(mv, block);
     v->addWidget(table);
     v->addWidget(mv);

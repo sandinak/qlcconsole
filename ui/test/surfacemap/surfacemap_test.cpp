@@ -46,6 +46,10 @@
 #include <QHeaderView>
 #include <QLineEdit>
 #include <QCollator>
+#include <QImage>
+#include <QFile>
+#include "surfacekeylabels.h"
+#include "measurementunits.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "qlcfile.h"
@@ -590,7 +594,7 @@ void SurfaceMap_Test::aClickGivesAControlAJob()
 
     // A desk control is not a page key until it is let go.
     QVERIFY(!maps.applyJob(0, kPlay, QStringLiteral("page-next"), &why));
-    QVERIFY(why.contains(QStringLiteral("No job")), qPrintable(why));
+    QVERIFY2(why.contains(QStringLiteral("No job")), qPrintable(why));
     QVERIFY(pages->keyJob(0, kPlay).isEmpty());
 
     // In Operate, with a PIN, a job asks for it; a wrong one changes nothing.
@@ -694,6 +698,88 @@ void SurfaceMap_Test::pagesHaveKeysTheMapChooses()
         pop->close();
     QTest::mouseClick(chip, Qt::LeftButton, Qt::NoModifier, QPoint(4, chip->height() / 2));
     QCOMPARE(asked.count(), 1);
+}
+
+void SurfaceMap_Test::keyLabelsAtTheRealKeySizes()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    SurfaceMaps maps(m_doc);
+    settle();
+    SurfaceMapView *mv = maps.view(0);
+    const SurfaceLayout &layout = mv->layout();
+    QVERIFY(layout.unitMm() > 0);
+    const QList<SurfaceKeyLabels::Page> pages = SurfaceKeyLabels::pages(mv);
+    QCOMPARE(pages.size(), int(m_doc->controlMap()->surfacePages()->pageSet(0).pages().size()));
+    QVERIFY(!pages.isEmpty());
+    // Only keys and pads, at the drawing's size in millimetres.
+    int keys = 0;
+    for (const SurfaceLayout::Control &c : layout.controls())
+        if (c.kind == SurfaceLayout::Button || c.kind == SurfaceLayout::Pad)
+            ++keys;
+    QCOMPARE(pages.first().keys.size(), keys);
+    for (const SurfaceKeyLabels::Key &k : pages.first().keys)
+    {
+        const SurfaceLayout::Control &c = ctl(layout, k.channel);
+        QCOMPARE(k.mm.width(), c.rect.width() * layout.unitMm());
+        QVERIFY(k.mm.width() > 5 && k.mm.height() > 5);
+    }
+    // A page says its own jobs: the page key of Beam is on the Beam page.
+    const PageSet set = m_doc->controlMap()->surfacePages()->pageSet(0);
+    for (int p = 0; p < pages.size(); ++p)
+        for (const SurfaceKeyLabels::Key &k : pages.at(p).keys)
+            if (set.labels(p).contains(k.channel))
+                QCOMPARE(k.text, set.labels(p).value(k.channel));
+    // The desk's PLAY says GO on every page.
+    for (const SurfaceKeyLabels::Page &pg : pages)
+        for (const SurfaceKeyLabels::Key &k : pg.keys)
+            if (k.channel == kPlay)
+                QCOMPARE(k.text, QStringLiteral("GO"));
+
+    // The sheet is a PDF.
+    QTemporaryDir out;
+    const QString pdf = out.filePath(QStringLiteral("sheet.pdf"));
+    QString error;
+    QVERIFY2(SurfaceKeyLabels::writeSheet(pdf, QStringLiteral("APC40 mkII"), pages, &error), qPrintable(error));
+    QFile f(pdf);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray head = f.read(8);
+    QVERIFY2(head.startsWith("%PDF"), head.constData());
+    QVERIFY(f.size() > 2000);
+    f.close();
+
+    // Tape: 180 dpi, the tape's printable width high, the key's length long.
+    const SurfaceKeyLabels::Key key = pages.first().keys.first();
+    for (int mm : SurfaceKeyLabels::tapeWidths())
+    {
+        const QImage img = SurfaceKeyLabels::tapeLabel(key, mm);
+        QCOMPARE(img.height(), int(SurfaceKeyLabels::printableMm(mm) * 180 / 25.4));
+        QVERIFY(img.width() >= int(key.mm.width() * 180 / 25.4) - 1);
+    }
+    QCOMPARE(SurfaceKeyLabels::printableMm(12), 9.0);
+    QCOMPARE(SurfaceKeyLabels::printableMm(18), 12.0);
+    QCOMPARE(SurfaceKeyLabels::printableMm(24), 18.0);
+
+    // The dialog: the sheet or each tape, the page, the sizes in the units chosen.
+    SurfaceKeyLabelsDialog dlg(mv);
+    QCOMPARE(dlg.tapeMm(), 0);
+    QCOMPARE(dlg.keys().size(), keys * int(pages.size()));
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Millimetres);
+    QVERIFY2(dlg.sizeLine().contains(QStringLiteral("mm")), qPrintable(dlg.sizeLine()));
+    dlg.setTapeMm(12);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
+    dlg.setTapeMm(24);
+    dlg.setTapeMm(12);
+    QVERIFY2(!dlg.sizeLine().contains(QStringLiteral("mm")), qPrintable(dlg.sizeLine()));   // feet and inches, as Settings says
+    QVERIFY(dlg.sizeLine().contains(QStringLiteral("dpi")));
+    QStringList made;
+    QVERIFY2(dlg.savePngs(out.filePath(QStringLiteral("png")), &made, &error), qPrintable(error));
+    QCOMPARE(made.size(), dlg.keys().size());
+    QVERIFY(QImage(made.first()).height() == int(SurfaceKeyLabels::printableMm(12) * 180 / 25.4));
+    const QString tapePdf = out.filePath(QStringLiteral("tape.pdf"));
+    QVERIFY2(dlg.savePdf(tapePdf, &error), qPrintable(error));
+    QVERIFY(QFile(tapePdf).size() > 2000);
+    MeasurementUnits::setPreferredLength(MeasurementUnits::Feet);
 }
 
 void SurfaceMap_Test::theMapScrollsRatherThanClips()

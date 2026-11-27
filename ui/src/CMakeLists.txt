@@ -235,6 +235,7 @@ add_library(${module_name}
     surfacechips.cpp surfacechips.h
     editlivechip.cpp editlivechip.h
     surfacemap.cpp surfacemap.h
+    surfacekeylabels.cpp surfacekeylabels.h
     qrencoder.cpp qrencoder.h
     controlcollisionbox.cpp controlcollisionbox.h
     controllearndialog.cpp controllearndialog.h

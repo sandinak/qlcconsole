@@ -39,5 +39,6 @@
     {"role": "back", "ch": 219, "seed": true},
     {"role": "gm", "ch": 513, "seed": true},
     {"role": "stop", "ch": 221, "seed": true}
-  ]
+  ],
+  "unitMm": 17.5
 }

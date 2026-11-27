@@ -39,6 +39,11 @@ def save(name, d):
     with open(D + name + ".layout.json", "w") as f:
         f.write("\n".join(out) + "\n")
 
+# Millimetres of the real board in one grid unit, from each board's published
+# size (key pitch for the PMJ): to be checked with a rule before a sheet is cut.
+UNIT_MM = {"PreSonus-FaderPort-2": 17.5, "PMJ-Black-1": 19.05,
+           "Akai-APC40-mkII": 36.2, "Akai-APC64": 24.5}
+
 class Board:
     def __init__(self, name, U, W, H):
         self.d = load(name)
@@ -47,6 +52,7 @@ class Board:
         self.by = {c["ch"]: c for c in self.d["controls"]}
         self.done = set()
         self.d["sections"] = []
+        self.d["unitMm"] = UNIT_MM[name]
 
     def r(self, x, y, w, h):
         u = self.U

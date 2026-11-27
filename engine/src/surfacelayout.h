@@ -121,6 +121,10 @@ public:
     /** For a footer chip: "APC40" */
     QString shortName() const { return m_short.isEmpty() ? m_name : m_short; }
     QSizeF size() const { return m_size; }
+    /** Millimetres of the real board in one grid unit (its key sizes for
+     *  the key label sheets); 0: not known. Measured off the board's
+     *  published size, to be checked with a rule. */
+    double unitMm() const { return m_unitMm; }
 
     const QList<Control> &controls() const { return m_controls; }
     const QList<Section> &sections() const { return m_sections; }
@@ -184,6 +188,7 @@ private:
     int m_displayChars = 0;
     QStringList m_displayShows;
     QSizeF m_size;
+    double m_unitMm = 0;
     QList<Control> m_controls;
     QList<Section> m_sections;
     QList<Role> m_roles;

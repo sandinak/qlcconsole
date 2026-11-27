@@ -136,6 +136,7 @@ SurfaceLayout SurfaceLayout::fromJson(const QByteArray &json, QString *error)
     l.m_displayChars = display.value(QStringLiteral("chars")).toInt();
     for (const QJsonValue &v : display.value(QStringLiteral("shows")).toArray())
         l.m_displayShows << v.toString();
+    l.m_unitMm = root.value(QStringLiteral("unitMm")).toDouble();
     l.m_size = QSizeF(root.value(QStringLiteral("width")).toDouble(), root.value(QStringLiteral("height")).toDouble());
 
     for (const QJsonValue &v : root.value(QStringLiteral("sections")).toArray())
