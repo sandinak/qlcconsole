@@ -504,7 +504,9 @@ void GoGuard_Test::thePadBuzzesLongForEveryHold()
     // Every other source's GO held after the pad's, and the pad's after each.
     for (ShowControl::Route source : sources())
     {
-        // The pad's GO first: the other's is held, and the pad buzzes long.
+        /* The pad's GO first: the other's is held and said -- but the pad
+           buzzes only for its own press (build 4910: Back on the PMJ, held,
+           rumbled the DualShock nobody pressed). */
         stopAll();
         m_now += 10000;
         QVERIFY(pad->trigger(PadRun::Go));
@@ -515,9 +517,13 @@ void GoGuard_Test::thePadBuzzesLongForEveryHold()
         QVERIFY2(!send(ShowControl::Go, source, list), qPrintable(name(source) + " after the pad"));
         QCOMPARE(list->currentStepIndex(), 0);
         const QString afterPad = starting(QStringLiteral("1"), ShowControl::RoutePad);
-        QVERIFY2(buzz.count() == 1, qPrintable(name(source) + ": buzzed " + QString::number(buzz.count())));
-        QCOMPARE(buzz.first().at(0).toInt(), 1);
-        QCOMPARE(buzz.first().at(1).toInt(), ControllerScheme::rumbleLongMs());
+        const int want = source == ShowControl::RoutePad ? 1 : 0;
+        QVERIFY2(buzz.count() == want, qPrintable(name(source) + ": buzzed " + QString::number(buzz.count())));
+        if (want == 1)
+        {
+            QCOMPARE(buzz.first().at(0).toInt(), 1);
+            QCOMPARE(buzz.first().at(1).toInt(), ControllerScheme::rumbleLongMs());
+        }
         QCOMPARE(said.count(), 1);
         QCOMPARE(said.first().at(0).toString(), afterPad);
 
