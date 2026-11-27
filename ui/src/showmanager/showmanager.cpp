@@ -40,6 +40,9 @@
 #include <QLabel>
 #include <QTimer>
 #include <QDebug>
+#include <QPointer>
+#include <QFileInfo>
+#include <QTreeWidget>
 #include <QUrl>
 
 #include "mainbar.h"
@@ -49,6 +52,8 @@
 #include "audioplugincache.h"
 #include "rgbmatrixeditor.h"
 #include "multitrackview.h"
+#include "editkeys.h"
+#include "timelinefiledrop.h"
 #include "chasereditor.h"
 #include "showtreecontroller.h"
 #include "showtreeview.h"
@@ -130,10 +135,22 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     layout()->setSpacing(0);
 
     initActions();
+    // Stable names: the right-click menus reuse these very actions.
+    m_addTrackAction->setObjectName("addFunction");
+    m_addAudioAction->setObjectName("addAudio");
+    m_addVideoAction->setObjectName("addVideo");
+    m_deleteAction->setObjectName("delete");
+    m_snapGridAction->setObjectName("snapToGrid");
     initToolbar();
 
     m_splitter = new QSplitter(Qt::Vertical, this);
     layout()->addWidget(m_splitter);
+    m_statusLabel = new QLabel(this);
+    m_statusLabel->setObjectName("timelineStatus");
+    m_statusLabel->setContentsMargins(8, 2, 8, 2);
+    m_statusLabel->setWordWrap(true);
+    m_statusLabel->hide();
+    layout()->addWidget(m_statusLabel);
     //initMultiTrackView();
     m_showview = new MultiTrackView();
     // add container for multitrack & function editors view
@@ -200,6 +217,31 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
 
     connect(m_showview, SIGNAL(functionDropped(quint32,quint32,Track*)),
             this, SLOT(slotFunctionDropped(quint32,quint32,Track*)));
+    m_showview->setAcceptFileDrops(true);
+    connect(m_showview, &MultiTrackView::filesDropped,
+            this, &ShowManager::slotFilesDropped);
+    connect(m_showview, &MultiTrackView::filesDragEntered,
+            this, &ShowManager::slotFilesDragEntered);
+    m_showview->setContextMenuHook([this](QMenu *m, Track *t, ShowItem *i)
+                                   { fillContextMenu(m, t, i); });
+    // The edit keys every list has (EditKeys): Cmd+D duplicates the selected
+    // item, else the current track, while the timeline has the focus (Cmd+D
+    // is Add Video anywhere else); F2 renames; Esc clears the selection.
+    {
+        EditKeys::Verbs keys;
+        keys.hasSelection = [this]() {
+            return m_showview->selectedItems().isEmpty() == false || m_currentTrack != NULL; };
+        keys.duplicate = [this]() { slotDuplicate(); };
+        keys.rename = [this]() {
+            ShowItem *it = m_showview->getSelectedItem();
+            if (it != NULL)
+                renameItem(it);
+            else if (TrackItem *ti = m_showview->trackItemFor(m_currentTrack))
+                ti->startInlineRename();
+        };
+        keys.clearSelection = [this]() { m_showview->scene()->clearSelection(); };
+        EditKeys::install(m_showview, keys);
+    }
     connect(m_showview, SIGNAL(addAtRequested(quint32,Track*)),
             this, SLOT(slotAddAtRequested(quint32,Track*)));
     connect(m_showview, SIGNAL(newTrackRequested()),
@@ -1451,6 +1493,7 @@ void ShowManager::slotAddAudio()
         delete f;
         return;
     }
+    pushUndoSnapshot();
     if (m_doc->addFunction(f) == true)
     {
         m_showview->addAudio(audio, m_currentTrack);
@@ -1509,10 +1552,322 @@ void ShowManager::slotAddVideo()
         delete f;
         return;
     }
+    pushUndoSnapshot();
     if (m_doc->addFunction(f) == true)
     {
         m_showview->addVideo(video, m_currentTrack);
     }
+}
+
+/*****************************************************************************
+ * Files dropped from the desktop
+ *****************************************************************************/
+
+void ShowManager::setStatus(const QString &text)
+{
+    if (m_statusLabel == NULL)
+        return;
+    m_statusLabel->setText(text);
+    m_statusLabel->setVisible(text.isEmpty() == false);
+    if (text.isEmpty())
+        return;
+    QPointer<ShowManager> guard(this);
+    QTimer::singleShot(12000, this, [guard, text]()
+    {
+        if (guard && guard->m_statusLabel->text() == text)
+        {
+            guard->m_statusLabel->clear();
+            guard->m_statusLabel->hide();
+        }
+    });
+}
+
+void ShowManager::slotFilesDragEntered(const QStringList &paths)
+{
+    m_showview->setDropGhostLengths(TimelineFileDrop::probeLengths(m_doc, paths));
+}
+
+void ShowManager::slotFilesDropped(const QStringList &paths, quint32 startTime, Track *track)
+{
+    if (m_show == NULL)
+    {
+        setStatus(tr("Can't add files: no show is open."));
+        return;
+    }
+    if (m_doc->isShowLocked())
+    {
+        setStatus(tr("Can't add files: the show is locked."));
+        return;
+    }
+    if (track != NULL && track->isLocked())
+    {
+        setStatus(tr("Can't add files: track \"%1\" is locked.").arg(track->name()));
+        return;
+    }
+    stopForStructuralEdit();
+
+    const TimelineFileDrop::Result prepared = TimelineFileDrop::prepare(m_doc, paths);
+    const QList<Function *> made = prepared.made;
+    const QStringList errors = prepared.errors;
+
+    if (made.isEmpty())
+    {
+        setStatus(errors.join(QStringLiteral("  ")));
+        return;
+    }
+
+    pushUndoSnapshot();   // the whole drop is one step
+    if (track == NULL)
+    {
+        track = new Track();
+        track->setName(tr("Track %1").arg(m_show->tracks().count() + 1));
+        m_show->addTrack(track);
+        m_showview->addTrack(track);
+    }
+    m_currentTrack = track;
+    m_showview->activateTrack(track);
+
+    quint32 t = startTime;
+    foreach (Function *f, made)
+    {
+        if (m_doc->addFunction(f) == false)
+        {
+            delete f;
+            continue;
+        }
+        ShowFunction *sf = addFunctionToTrack(f, track, t);
+        if (sf == NULL)
+            continue;
+        m_showview->resolveCollisions(track, sf);
+        t += (sf->duration() > 0) ? sf->duration() : 10000;
+    }
+
+    m_doc->setModified();
+    m_addSequenceAction->setEnabled(true);
+    m_addAudioAction->setEnabled(true);
+    m_addVideoAction->setEnabled(true);
+    m_deleteAction->setEnabled(true);
+    m_showview->setEmptyMessage(QString());
+    m_showview->updateViewSize();
+
+    const QString msg = TimelineFileDrop::summary(prepared);
+    setStatus(msg);
+}
+
+/*****************************************************************************
+ * Right-click menus (track sidebar and items)
+ *****************************************************************************/
+
+void ShowManager::fillContextMenu(QMenu *menu, Track *track, ShowItem *item)
+{
+    const bool editable = (m_show != NULL && m_doc->isShowLocked() == false);
+    auto mk = [menu](const QString &text, const char *name) {
+        QAction *a = menu->addAction(text);
+        a->setObjectName(name);
+        return a;
+    };
+
+    if (item != NULL)
+    {
+        menu->addSeparator();
+        QAction *dup = mk(tr("Duplicate"), "duplicate");
+        dup->setEnabled(editable);
+        connect(dup, &QAction::triggered, this, [this, item]() { duplicateItem(item); });
+        QAction *ren = mk(tr("Rename…"), "rename");
+        ren->setEnabled(editable);
+        connect(ren, &QAction::triggered, this, [this, item]() { renameItem(item); });
+
+        QMenu *mv = menu->addMenu(tr("Move to Track"));
+        mv->menuAction()->setObjectName("moveToTrack");
+        mv->menuAction()->setEnabled(editable);
+        if (m_show != NULL)
+        {
+            Track *cur = NULL;
+            foreach (Track *t, m_show->tracks())
+                if (t->showFunctions().contains(item->showFunction()))
+                    cur = t;
+            foreach (Track *t, m_show->tracks())
+            {
+                QAction *a = mv->addAction(t->name());
+                a->setObjectName("moveTo");
+                a->setEnabled(t != cur && t->isLocked() == false);
+                connect(a, &QAction::triggered, this, [this, item, t]() { moveItemToTrack(item, t); });
+            }
+        }
+        menu->addAction(m_snapGridAction);
+        QAction *show = mk(tr("Show in Functions"), "showInFunctions");
+        connect(show, &QAction::triggered, this, [this, item]()
+        {
+            Function *f = m_doc->function(item->functionID());
+            QTreeWidgetItem *ti = (f != NULL) ? m_funcTree->functionItem(f) : NULL;
+            if (ti != NULL)
+            {
+                m_funcTree->setCurrentItem(ti);
+                m_funcTree->scrollToItem(ti);
+            }
+        });
+        menu->addSeparator();
+        menu->addAction(m_deleteAction);
+        return;
+    }
+
+    if (track == NULL)
+    {
+        // Blank sidebar space.
+        QAction *add = mk(tr("Add Track"), "addTrack");
+        add->setEnabled(editable);
+        connect(add, &QAction::triggered, this, &ShowManager::slotNewTrackRequested);
+    }
+    else
+    {
+        // The add entries below act on the track that was clicked.
+        m_currentTrack = track;
+        m_showview->activateTrack(track);
+    }
+    menu->addAction(m_addAudioAction);
+    menu->addAction(m_addVideoAction);
+    menu->addAction(m_addTrackAction);
+
+    if (track != NULL)
+    {
+        menu->addSeparator();
+        QAction *dup = mk(tr("Duplicate"), "duplicate");
+        dup->setEnabled(editable);
+        connect(dup, &QAction::triggered, this, [this, track]() { duplicateTrack(track); });
+
+        if (TrackItem *ti = m_showview->trackItemFor(track))
+        {
+            QAction *mute = mk(tr("Mute"), "mute");
+            mute->setCheckable(true);
+            mute->setChecked(ti->isMute());
+            connect(mute, &QAction::triggered, this, [ti]() { ti->toggleMute(); });
+            QAction *solo = mk(tr("Solo"), "solo");
+            solo->setCheckable(true);
+            solo->setChecked(ti->isSolo());
+            connect(solo, &QAction::triggered, this, [ti]() { ti->toggleSolo(); });
+            QAction *lock = mk(tr("Lock"), "lock");
+            lock->setCheckable(true);
+            lock->setChecked(track->isLocked());
+            connect(lock, &QAction::triggered, this, [ti]() { ti->toggleLock(); });
+        }
+        menu->addSeparator();
+    }
+}
+
+void ShowManager::slotDuplicate()
+{
+    if (m_show == NULL || m_doc->isShowLocked())
+        return;
+    ShowItem *item = m_showview->getSelectedItem();
+    if (item != NULL)
+        duplicateItem(item);
+    else if (m_currentTrack != NULL)
+        duplicateTrack(m_currentTrack);
+}
+
+void ShowManager::duplicateTrack(Track *track)
+{
+    if (track == NULL || m_show == NULL || m_doc->isShowLocked())
+        return;
+    stopForStructuralEdit();
+    pushUndoSnapshot();
+
+    Track *copy = new Track();
+    copy->setName(tr("%1 copy").arg(track->name()));
+    copy->setColor(track->color());
+    copy->setHoldLast(track->isHoldLast());
+    copy->setSoloSafe(track->isSoloSafe());
+    copy->setPriority(track->priority());
+    copy->setIntensity(track->intensity());
+    m_show->addTrack(copy);
+    foreach (ShowFunction *sf, track->showFunctions())
+    {
+        ShowFunction *n = copy->createShowFunction(sf->functionID());
+        n->setStartTime(sf->startTime());
+        n->setDuration(sf->duration());
+        n->setColor(sf->color());
+    }
+    m_currentTrack = copy;
+    m_doc->setModified();
+    updateMultiTrackView();
+    setStatus(tr("Duplicated track \"%1\".").arg(track->name()));
+}
+
+void ShowManager::duplicateItem(ShowItem *item)
+{
+    if (item == NULL || item->showFunction() == NULL || m_show == NULL || m_doc->isShowLocked())
+        return;
+    ShowFunction *sf = item->showFunction();
+    Track *owner = NULL;
+    foreach (Track *t, m_show->tracks())
+        if (t->showFunctions().contains(sf))
+            owner = t;
+    if (owner == NULL)
+        return;
+
+    // The copy goes right after the original, if the track has the room.
+    const quint32 start = sf->startTime() + sf->duration();
+    foreach (ShowFunction *o, owner->showFunctions())
+    {
+        if (o != sf && o->startTime() < start + sf->duration()
+            && o->startTime() + o->duration() > start)
+        {
+            setStatus(tr("Can't duplicate %1: no room after it on its track.")
+                      .arg(item->functionName()));
+            return;
+        }
+    }
+    stopForStructuralEdit();
+    pushUndoSnapshot();
+    ShowFunction *n = owner->createShowFunction(sf->functionID());
+    n->setStartTime(start);
+    n->setDuration(sf->duration());
+    n->setColor(sf->color());
+    m_doc->setModified();
+    updateMultiTrackView();
+}
+
+void ShowManager::renameItem(ShowItem *item)
+{
+    if (item == NULL || m_show == NULL || m_doc->isShowLocked())
+        return;
+    Function *f = m_doc->function(item->functionID());
+    if (f == NULL)
+        return;
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Rename"), tr("Name:"),
+                                               QLineEdit::Normal, f->name(), &ok).trimmed();
+    if (ok && name.isEmpty() == false && name != f->name())
+    {
+        // The name belongs to the function (every show that uses it shows the
+        // new name), so this is not a timeline undo step.
+        f->setName(name);
+        m_doc->setModified();
+        updateMultiTrackView();
+    }
+}
+
+void ShowManager::moveItemToTrack(ShowItem *item, Track *dest)
+{
+    if (item == NULL || dest == NULL || item->showFunction() == NULL
+        || m_show == NULL || m_doc->isShowLocked())
+        return;
+    ShowFunction *sf = item->showFunction();
+    foreach (ShowFunction *o, dest->showFunctions())
+    {
+        if (o->startTime() < sf->startTime() + sf->duration()
+            && o->startTime() + o->duration() > sf->startTime())
+        {
+            setStatus(tr("Can't move %1 to %2: it would overlap.")
+                      .arg(item->functionName(), dest->name()));
+            return;
+        }
+    }
+    stopForStructuralEdit();
+    pushUndoSnapshot();
+    m_showview->moveItemToTrack(item, dest);
+    m_doc->setModified();
+    updateMultiTrackView();
 }
 
 void ShowManager::slotCopy()
@@ -2002,6 +2357,7 @@ void ShowManager::slotFunctionDropped(quint32 funcID, quint32 startTime, Track *
     if (sf != NULL)
         m_showview->resolveCollisions(track, sf); // DAW-style push
 
+    m_showview->setEmptyMessage(QString());
     m_doc->setModified();
     m_addSequenceAction->setEnabled(true);
     m_addAudioAction->setEnabled(true);
@@ -2212,6 +2568,7 @@ void ShowManager::slotNewTrackRequested()
     m_currentTrack = track;
     m_showview->activateTrack(track);
     m_doc->setModified();
+    m_showview->setEmptyMessage(QString());
     m_showview->updateViewSize();
 }
 
@@ -2968,8 +3325,7 @@ void ShowManager::updateMultiTrackView()
 
     // Empty-canvas hint: an existing show with no tracks yet.
     if (firstTrack == NULL)
-        m_showview->setEmptyMessage(tr("Empty show — drop a scene, chaser or "
-            "collection here, or right-click to add a track."));
+        m_showview->setEmptyMessage(tr("No tracks: drop audio here or right-click ▸ Add Track"));
     else
         m_showview->setEmptyMessage(QString());
 

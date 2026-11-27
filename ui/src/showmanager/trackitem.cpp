@@ -25,6 +25,8 @@
 #include <QLineEdit>
 #include <QPainter>
 #include <QMenu>
+#include <functional>
+#include "multitrackview.h"
 
 #include "trackitem.h"
 #include "track.h"
@@ -91,7 +93,14 @@ TrackItem::TrackItem(Track *track, int number)
     connect(m_newTrack, SIGNAL(triggered()),
             this, SLOT(slotNewTrackClicked()));
 
+    m_moveUp->setObjectName("moveUp");
+    m_moveDown->setObjectName("moveDown");
+    m_changeName->setObjectName("rename");
+    m_delete->setObjectName("delete");
+    m_newTrack->setObjectName("addTrack");
+
     m_color = new QAction(QIcon(":/color.png"), tr("Track Colour…"), this);
+    m_color->setObjectName("colour");
     connect(m_color, SIGNAL(triggered()),
             this, SLOT(slotColorClicked()));
 }
@@ -251,61 +260,84 @@ void TrackItem::mouseReleaseEvent(QGraphicsSceneMouseEvent *event)
     QGraphicsItem::mouseReleaseEvent(event);
 }
 
-void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
+void TrackItem::buildContextMenu(QMenu *menu)
 {
-    QMenu menu;
     QFont menuFont = qApp->font();
     menuFont.setPixelSize(14);
-    menu.setFont(menuFont);
+    menu->setFont(menuFont);
 
-    menu.addAction(m_newTrack);
-    menu.addAction(m_changeName);
-    menu.addAction(m_color);
-    menu.addSeparator();
+    menu->addAction(m_newTrack);
+    // The timeline's own add actions (audio, video, function) and the
+    // duplicate / mute / solo / lock entries come from its owner.
+    if (MultiTrackView *v = MultiTrackView::viewOf(this))
+        v->fillContextMenu(menu, m_track, NULL);
+    menu->addAction(m_changeName);
+    menu->addAction(m_color);
+    menu->addSeparator();
 
     // Per-track flags (act directly on the model; the view saves + repaints).
-    QAction *aSoloSafe = NULL, *aHoldLast = NULL;
-    QAction *aBg = NULL, *aNormal = NULL, *aOverride = NULL;
     if (m_track != NULL)
     {
-        aSoloSafe = menu.addAction(tr("Solo-safe (mute-exempt)"));
-        aSoloSafe->setCheckable(true);
-        aSoloSafe->setChecked(m_track->isSoloSafe());
-
-        aHoldLast = menu.addAction(tr("Hold at End (stays up between cues)"));
-        aHoldLast->setCheckable(true);
-        aHoldLast->setChecked(m_track->isHoldLast());
-
-        QMenu *prio = menu.addMenu(tr("Priority / Role"));
-        aBg = prio->addAction(tr("Background (yields to all)"));
-        aNormal = prio->addAction(tr("Normal (last-writer wins)"));
-        aOverride = prio->addAction(tr("Override (wins LTP)"));
-        for (QAction *a : { aBg, aNormal, aOverride })
+        Track *t = m_track;
+        auto flag = [this, t](QMenu *into, const QString &text, const char *name,
+                                    bool checked, std::function<void()> apply)
+        {
+            QAction *a = into->addAction(text);
+            a->setObjectName(name);
             a->setCheckable(true);
-        aBg->setChecked(m_track->priority() == Track::Background);
-        aNormal->setChecked(m_track->priority() == Track::Normal);
-        aOverride->setChecked(m_track->priority() == Track::Override);
-        menu.addSeparator();
+            a->setChecked(checked);
+            connect(a, &QAction::triggered, this, [this, t, apply]()
+                { apply(); update(); emit itemPropertiesChanged(t); });
+            return a;
+        };
+        flag(menu, tr("Solo-safe (mute-exempt)"), "soloSafe", t->isSoloSafe(),
+             [t]() { t->setSoloSafe(!t->isSoloSafe()); });
+        flag(menu, tr("Hold at End (stays up between cues)"), "holdLast", t->isHoldLast(),
+             [t]() { t->setHoldLast(!t->isHoldLast()); });
+
+        QMenu *prio = menu->addMenu(tr("Priority / Role"));
+        flag(prio, tr("Background (yields to all)"), "prioBackground",
+             t->priority() == Track::Background, [t]() { t->setPriority(Track::Background); });
+        flag(prio, tr("Normal (last-writer wins)"), "prioNormal",
+             t->priority() == Track::Normal, [t]() { t->setPriority(Track::Normal); });
+        flag(prio, tr("Override (wins LTP)"), "prioOverride",
+             t->priority() == Track::Override, [t]() { t->setPriority(Track::Override); });
+        menu->addSeparator();
     }
 
     if (m_number > 0)
-        menu.addAction(m_moveUp);
-    menu.addAction(m_moveDown);
-    menu.addSeparator();
-    menu.addAction(m_delete);
+        menu->addAction(m_moveUp);
+    menu->addAction(m_moveDown);
+    menu->addSeparator();
+    menu->addAction(m_delete);
+}
 
-    QAction *chosen = menu.exec(QCursor::pos());
-    if (chosen != NULL && m_track != NULL)
-    {
-        if (chosen == aSoloSafe)        m_track->setSoloSafe(aSoloSafe->isChecked());
-        else if (chosen == aHoldLast)   m_track->setHoldLast(aHoldLast->isChecked());
-        else if (chosen == aBg)         m_track->setPriority(Track::Background);
-        else if (chosen == aNormal)     m_track->setPriority(Track::Normal);
-        else if (chosen == aOverride)   m_track->setPriority(Track::Override);
-        else return;
-        update();
-        emit itemPropertiesChanged(m_track);
-    }
+void TrackItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *)
+{
+    QMenu menu;
+    buildContextMenu(&menu);
+    menu.exec(QCursor::pos());
+}
+
+void TrackItem::toggleMute()
+{
+    m_isMute = !m_isMute;
+    emit itemMuteFlagChanged(this, m_isMute);
+}
+
+void TrackItem::toggleSolo()
+{
+    m_isSolo = !m_isSolo;
+    emit itemSoloFlagChanged(this, m_isSolo);
+}
+
+void TrackItem::toggleLock()
+{
+    m_isLocked = !m_isLocked;
+    if (m_track != NULL)
+        m_track->setLocked(m_isLocked);
+    update();
+    emit itemLockChanged(this, m_isLocked);
 }
 
 void TrackItem::mouseDoubleClickEvent(QGraphicsSceneMouseEvent *event)

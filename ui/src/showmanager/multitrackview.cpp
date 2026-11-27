@@ -38,6 +38,8 @@
 #include <QLineEdit>
 #include <QGraphicsProxyWidget>
 #include <QDebug>
+#include <QFileInfo>
+#include <QUrl>
 #include <algorithm>
 
 #include "showitem.h"
@@ -1051,8 +1053,89 @@ void MultiTrackView::drawBackground(QPainter *painter, const QRectF &rect)
     }
 }
 
+static QStringList localFilesOf(const QMimeData *md)
+{
+    QStringList paths;
+    for (const QUrl &u : md->urls())
+        if (u.isLocalFile())
+            paths << u.toLocalFile();
+    // Name order, the order the files then go onto the timeline.
+    std::sort(paths.begin(), paths.end(), [](const QString &a, const QString &b)
+        { return QFileInfo(a).fileName().compare(QFileInfo(b).fileName(),
+                                                 Qt::CaseInsensitive) < 0; });
+    return paths;
+}
+
+bool MultiTrackView::urlsAcceptable(const QMimeData *md) const
+{
+    return m_editable && m_acceptFileDrops && md->hasUrls()
+           && localFilesOf(md).isEmpty() == false;
+}
+
+MultiTrackView *MultiTrackView::viewOf(const QGraphicsItem *item)
+{
+    if (item == NULL || item->scene() == NULL)
+        return NULL;
+    foreach (QGraphicsView *v, item->scene()->views())
+        if (MultiTrackView *m = qobject_cast<MultiTrackView *>(v))
+            return m;
+    return NULL;
+}
+
+TrackItem *MultiTrackView::trackItemFor(Track *track) const
+{
+    foreach (TrackItem *t, m_tracks)
+        if (t->getTrack() == track)
+            return t;
+    return NULL;
+}
+
+void MultiTrackView::buildBlankSidebarMenu(QMenu *menu)
+{
+    if (m_menuHook)
+    {
+        m_menuHook(menu, NULL, NULL);
+        return;
+    }
+    QAction *newAct = menu->addAction(tr("New Track"));
+    newAct->setObjectName("addTrack");
+    connect(newAct, &QAction::triggered, this, &MultiTrackView::newTrackRequested);
+}
+
+bool MultiTrackView::dropTarget(const QPoint &pos, quint32 *timeMs, Track **track) const
+{
+    const QPointF sp = mapToScene(pos);
+    if (sp.x() < TRACK_WIDTH || sp.y() < TRACKS_TOP)
+        return false;
+    if (timeMs != NULL)
+        *timeMs = snapTimeMs(getTimeFromPosition(sp.x()));
+    if (track != NULL)
+    {
+        *track = NULL;
+        const int row = int((sp.y() - TRACKS_TOP) / TRACK_HEIGHT);
+        if (row >= 0 && row < m_tracks.count())
+            *track = m_tracks.at(row)->getTrack();
+    }
+    return true;
+}
+
+void MultiTrackView::setDropGhostLengths(const QList<quint32> &lengthsMs)
+{
+    m_ghostLengths = lengthsMs;
+    if (viewport() != NULL)
+        viewport()->update();
+}
+
 void MultiTrackView::dragEnterEvent(QDragEnterEvent *event)
 {
+    if (urlsAcceptable(event->mimeData()))
+    {
+        m_ghostLengths.clear();
+        emit filesDragEntered(localFilesOf(event->mimeData()));
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        return;
+    }
     if (m_editable && event->mimeData()->hasFormat(SM_FUNCTION_MIME))
     {
         event->setDropAction(Qt::CopyAction);
@@ -1062,8 +1145,35 @@ void MultiTrackView::dragEnterEvent(QDragEnterEvent *event)
         event->ignore();
 }
 
+void MultiTrackView::dragLeaveEvent(QDragLeaveEvent *event)
+{
+    m_ghostOn = false;
+    m_ghostLengths.clear();
+    viewport()->update();
+    QGraphicsView::dragLeaveEvent(event);
+}
+
 void MultiTrackView::dragMoveEvent(QDragMoveEvent *event)
 {
+    if (urlsAcceptable(event->mimeData()))
+    {
+        quint32 t = 0;
+        Track *trk = NULL;
+        if (dropTarget(qlcEventPos(event), &t, &trk) == false || (trk != NULL && trk->isLocked()))
+        {
+            m_ghostOn = false;
+            viewport()->update();
+            event->ignore();
+            return;
+        }
+        m_ghostOn = true;
+        m_ghostStart = t;
+        m_ghostRow = (trk == NULL) ? m_tracks.count() : getTrackIndex(trk);
+        viewport()->update();
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        return;
+    }
     if (m_editable && event->mimeData()->hasFormat(SM_FUNCTION_MIME))
     {
         event->setDropAction(Qt::CopyAction);
@@ -1075,6 +1185,22 @@ void MultiTrackView::dragMoveEvent(QDragMoveEvent *event)
 
 void MultiTrackView::dropEvent(QDropEvent *event)
 {
+    if (urlsAcceptable(event->mimeData()))
+    {
+        m_ghostOn = false;
+        viewport()->update();
+        quint32 t = 0;
+        Track *trk = NULL;
+        if (dropTarget(qlcEventPos(event), &t, &trk) == false)
+        {
+            event->ignore();
+            return;
+        }
+        event->setDropAction(Qt::CopyAction);
+        event->accept();
+        emit filesDropped(localFilesOf(event->mimeData()), t, trk);
+        return;
+    }
     if (m_editable == false || !event->mimeData()->hasFormat(SM_FUNCTION_MIME))
     {
         event->ignore();
@@ -1193,9 +1319,8 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
     {
         // Blank part of the track-header column (no item here): offer to create a track.
         QMenu hmenu;
-        QAction *newAct = hmenu.addAction(tr("New Track"));
-        if (hmenu.exec(event->globalPos()) == newAct)
-            emit newTrackRequested();
+        buildBlankSidebarMenu(&hmenu);
+        hmenu.exec(event->globalPos());
         return;
     }
 
@@ -1344,6 +1469,25 @@ bool MultiTrackView::paintLaneWaveform(QPainter *painter, const QRectF &rect, qr
 void MultiTrackView::drawForeground(QPainter *painter, const QRectF &rect)
 {
     QGraphicsView::drawForeground(painter, rect);
+
+    // Drop ghost: where files being dragged in will land.
+    if (m_ghostOn)
+    {
+        quint32 total = 0;
+        foreach (quint32 l, m_ghostLengths)
+            total += l;
+        const qreal x0 = getPositionFromTime(m_ghostStart);
+        const qreal y0 = TRACKS_TOP + m_ghostRow * TRACK_HEIGHT;
+        painter->save();
+        painter->setPen(QPen(QColor(255, 255, 255, 220), 1, Qt::DashLine));
+        painter->setBrush(QColor(255, 255, 255, 60));
+        if (total > 0)
+            painter->drawRect(QRectF(x0, y0, qMax<qreal>(3.0, getPositionFromTime(m_ghostStart + total) - x0),
+                                     TRACK_HEIGHT - 3));
+        else
+            painter->drawRect(QRectF(x0 - 1, y0, 3, TRACK_HEIGHT - 3));
+        painter->restore();
+    }
 
     // Empty-canvas hint (no show defined / no tracks yet). Pinned to the
     // viewport centre so it's obvious there's nowhere to drop yet.

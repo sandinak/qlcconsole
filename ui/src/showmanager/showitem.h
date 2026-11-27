@@ -49,6 +49,7 @@ class QGraphicsSceneHoverEvent;
  *                         the lock icon and the dragging time
  */
 
+class QMenu;
 class ShowItem : public QObject, public QGraphicsItem
 {
     Q_OBJECT
@@ -209,6 +210,9 @@ public:
      * @return the ShowFuntion pointer
      */
     ShowFunction *showFunction() const;
+
+    /** Fill @p menu with the right-click entries (see contextMenuEvent). */
+    void buildContextMenu(QMenu *menu);
 
     /**
      * @brief functionName pure virtual method that returns the item's associated

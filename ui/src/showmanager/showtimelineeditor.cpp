@@ -7,6 +7,9 @@
 
 #include <QVBoxLayout>
 #include <QToolBar>
+#include <QLabel>
+#include <QTimer>
+#include <QPointer>
 #include <QAction>
 #include <QMessageBox>
 #include <QInputDialog>
@@ -22,6 +25,7 @@
 #include "showtimelineeditor.h"
 #include "functionselection.h"
 #include "multitrackview.h"
+#include "timelinefiledrop.h"
 #include "sceneitem.h"
 #include "showitem.h"
 #include "showfunction.h"
@@ -110,6 +114,17 @@ ShowTimelineEditor::ShowTimelineEditor(QWidget *parent, Show *show, Doc *doc)
     // Size to the actual track count so unused rows don't render / scroll.
     m_showview->setCompact(true);
     lay->addWidget(m_showview, 1);
+    m_statusLabel = new QLabel(this);
+    m_statusLabel->setObjectName("timelineStatus");
+    m_statusLabel->setContentsMargins(8, 2, 8, 2);
+    m_statusLabel->setWordWrap(true);
+    m_statusLabel->hide();
+    lay->addWidget(m_statusLabel);
+    m_showview->setAcceptFileDrops(true);
+    connect(m_showview, &MultiTrackView::filesDropped,
+            this, &ShowTimelineEditor::slotFilesDropped);
+    connect(m_showview, &MultiTrackView::filesDragEntered,
+            this, &ShowTimelineEditor::slotFilesDragEntered);
 
     // Building
     connect(m_showview, SIGNAL(functionDropped(quint32,quint32,Track*)),
@@ -387,6 +402,86 @@ void ShowTimelineEditor::slotFunctionDropped(quint32 funcID, quint32 startTime,
     m_showview->setEmptyMessage(QString());
     m_doc->setModified();
     m_showview->updateViewSize();
+}
+
+void ShowTimelineEditor::setStatus(const QString &text)
+{
+    m_statusLabel->setText(text);
+    m_statusLabel->setVisible(text.isEmpty() == false);
+    if (text.isEmpty())
+        return;
+    QPointer<ShowTimelineEditor> guard(this);
+    QTimer::singleShot(12000, this, [guard, text]()
+    {
+        if (guard && guard->m_statusLabel->text() == text)
+        {
+            guard->m_statusLabel->clear();
+            guard->m_statusLabel->hide();
+        }
+    });
+}
+
+void ShowTimelineEditor::slotFilesDragEntered(const QStringList &paths)
+{
+    m_showview->setDropGhostLengths(TimelineFileDrop::probeLengths(m_doc, paths));
+}
+
+void ShowTimelineEditor::slotFilesDropped(const QStringList &paths, quint32 startTime,
+                                          Track *track)
+{
+    if (m_show == NULL)
+    {
+        setStatus(tr("Can't add files: no show is open."));
+        return;
+    }
+    if (m_doc->isShowLocked())
+    {
+        setStatus(tr("Can't add files: the show is locked."));
+        return;
+    }
+    if (track != NULL && track->isLocked())
+    {
+        setStatus(tr("Can't add files: track \"%1\" is locked.").arg(track->name()));
+        return;
+    }
+    stopForStructuralEdit();
+
+    const TimelineFileDrop::Result prepared = TimelineFileDrop::prepare(m_doc, paths);
+    if (prepared.made.isEmpty())
+    {
+        setStatus(prepared.errors.join(QStringLiteral("  ")));
+        return;
+    }
+
+    if (track == NULL)
+    {
+        track = new Track();
+        track->setName(tr("Track %1").arg(m_show->tracks().count() + 1));
+        m_show->addTrack(track);
+        m_showview->addTrack(track);
+    }
+    m_currentTrack = track;
+    m_showview->activateTrack(track);
+
+    quint32 t = startTime;
+    foreach (Function *f, prepared.made)
+    {
+        if (m_doc->addFunction(f) == false)
+        {
+            delete f;
+            continue;
+        }
+        ShowFunction *sf = addFunctionToTrack(f, track, t);
+        if (sf == NULL)
+            continue;
+        m_showview->resolveCollisions(track, sf);
+        t += (sf->duration() > 0) ? sf->duration() : 10000;
+    }
+
+    m_showview->setEmptyMessage(QString());
+    m_doc->setModified();
+    m_showview->updateViewSize();
+    setStatus(TimelineFileDrop::summary(prepared));
 }
 
 void ShowTimelineEditor::slotAddAtRequested(quint32 startTime, Track *track)

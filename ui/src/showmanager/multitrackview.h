@@ -21,6 +21,8 @@
 #define MULTITRACKVIEW_H
 
 #include <QGraphicsItem>
+#include <QStringList>
+#include <functional>
 #include <QGraphicsScene>
 #include <QGraphicsView>
 #include <QSlider>
@@ -46,6 +48,8 @@
  */
 
 class QTimer;
+class QMenu;
+class QMimeData;
 class QGraphicsProxyWidget;
 class QRubberBand;
 
@@ -113,6 +117,33 @@ public:
     /** Delete a specific ShowFuntion and related ShowItem from the
      *  given track */
     void deleteShowItem(Track *track, ShowFunction *sf);
+
+    /** Accept audio/video files dragged from the desktop (filesDropped).
+     *  Off by default: a host that doesn't handle filesDropped must not
+     *  accept a drop it would silently ignore. */
+    void setAcceptFileDrops(bool accept) { m_acceptFileDrops = accept; }
+    bool acceptsFileDrops() const { return m_acceptFileDrops; }
+
+    /** Lengths (ms) of the files being dragged over, once known; the drop
+     *  ghost shows them end to end, else a marker. */
+    void setDropGhostLengths(const QList<quint32> &lengthsMs);
+
+    /** What a drop at viewport position @p pos would do: the snapped time
+     *  and the track row (NULL = a new track). False: not on the timeline. */
+    bool dropTarget(const QPoint &pos, quint32 *timeMs, Track **track) const;
+
+    /** Hook that fills the right-click menus of the sidebar (blank space:
+     *  track and item NULL; a track header: track set; an item: item set). */
+    typedef std::function<void(QMenu *, Track *, ShowItem *)> MenuHook;
+    void setContextMenuHook(const MenuHook &hook) { m_menuHook = hook; }
+    void fillContextMenu(QMenu *menu, Track *track, ShowItem *item) const
+    { if (m_menuHook) m_menuHook(menu, track, item); }
+    bool hasContextMenuHook() const { return bool(m_menuHook); }
+    /** The menu of the blank part of the track-header column. */
+    void buildBlankSidebarMenu(QMenu *menu);
+    TrackItem *trackItemFor(Track *track) const;
+    /** The view a graphics item sits in. */
+    static MultiTrackView *viewOf(const QGraphicsItem *item);
 
     /** Master read-only gate for the whole timeline (e.g. the show lock). */
     void setEditable(bool editable);
@@ -245,6 +276,13 @@ private:
     bool m_editable;
     /** Size to actual track count instead of the 600px/6-row minimum. */
     bool m_compact = false;
+    bool m_acceptFileDrops = false;
+    QList<quint32> m_ghostLengths;
+    quint32 m_ghostStart = 0;
+    int m_ghostRow = -1;
+    bool m_ghostOn = false;
+    MenuHook m_menuHook;
+    bool urlsAcceptable(const QMimeData *md) const;
     QString m_emptyMessage;    // centred hint when the canvas has no content
 
     QRubberBand *m_rubberBand; // marquee selection in the tracks area
@@ -310,6 +348,7 @@ protected:
      *  the track row / time position under the cursor. */
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragMoveEvent(QDragMoveEvent *event) override;
+    void dragLeaveEvent(QDragLeaveEvent *event) override;
     void dropEvent(QDropEvent *event) override;
 
     /** Right-click on an empty part of the timeline to insert a function at
@@ -349,6 +388,13 @@ protected slots:
     void slotAnimatePlayhead();
 
 signals:
+    /** Files were dragged onto the timeline (first time they enter): the
+     *  host may work out their lengths for the ghost. */
+    void filesDragEntered(const QStringList &paths);
+    /** Files were dropped: paths in name order, the snapped time, and the
+     *  track under the drop (NULL: below the tracks, make a new track). */
+    void filesDropped(const QStringList &paths, quint32 startTime, Track *track);
+
     /** A function was dragged from a tree and dropped on the timeline.
      *  @param funcID the dropped function id
      *  @param startTime start time (ms) computed from the drop x position

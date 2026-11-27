@@ -51,6 +51,20 @@ Right-click a track's header:
 - **Add a track or a function** — ⌘N: a new empty track, or a scene /
   sequence / chaser / EFX / RGB matrix / audio dropped at the cursor
   (dragging one from the **Functions — drag onto a track** list works too).
+- **Drop audio or video from Finder** — drag files onto a track and
+  they land there, at the time under the cursor (snapped like the grid),
+  one after another in name order, each named after its file. A ghost
+  shows where they will land (as long as the audio, once it is known).
+  Drop below the last track to make a new track for them. A file that
+  can't be used says so under the timeline ("Can't use notes.txt: ...").
+  The whole drop is one ⌘Z. The files are referenced where they are, as
+  with the toolbar's audio and video buttons.
+- **Right-click the track column** — empty space: Add Track, Add Audio,
+  Add Video, Add a function. A track: those, plus Duplicate, Mute, Solo,
+  Lock, Rename (in place), Colour, its flags, Move Up / Down, Delete. An
+  item: Duplicate, Rename, Move to Track, Snap to Grid, Show in
+  Functions, Delete. ⌘D duplicates, F2 renames, Esc clears the selection
+  while the timeline has the focus.
 - **New sequence on a track** — ⌘E; **audio** — ⌘A; **video** — ⌘D.
 - **Edit an item** — double-click it (a scene clip opens its scene).
 - **Time an item exactly** — ⌘T: its start and length. A sequence or

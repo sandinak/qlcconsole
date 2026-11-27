@@ -279,6 +279,7 @@ add_library(${module_name}
     scripteditor.cpp scripteditor.h scripteditor.ui
     selectinputchannel.cpp selectinputchannel.h selectinputchannel.ui
     showmanager/audioitem.cpp showmanager/audioitem.h
+    showmanager/timelinefiledrop.cpp showmanager/timelinefiledrop.h
     showmanager/waveformpeaks.cpp showmanager/waveformpeaks.h
     showmanager/collectionitem.cpp showmanager/collectionitem.h
     showmanager/efxitem.cpp showmanager/efxitem.h

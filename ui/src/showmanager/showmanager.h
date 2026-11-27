@@ -39,6 +39,7 @@ class QToolButton;
 class QSpinBox;
 class QAction;
 class QLabel;
+class QMenu;
 class QTimer;
 class Doc;
 class Function;
@@ -198,6 +199,11 @@ private:
     QToolButton *m_followMtcButton; //!< authoritative Timer/MTC toggle for this show (m_followMtcAction)
     QComboBox *m_showsCombo;
     QLabel *m_timeLabel;
+    /** The timeline's status line: what a drop did, or why it didn't. */
+    QLabel *m_statusLabel = nullptr;
+    void setStatus(const QString &text);
+    /** Right-click entries of the track sidebar / an item (the hook of the view). */
+    void fillContextMenu(QMenu *menu, Track *track, ShowItem *item);
     QAction *m_addShowAction;
     QAction *m_renameShowAction;
     QAction *m_deleteShowAction;
@@ -238,6 +244,15 @@ protected slots:
     void slotAddSequence();
     void slotAddAudio();
     void slotAddVideo();
+    /** Audio / video files dropped on the timeline (see MultiTrackView). */
+    void slotFilesDropped(const QStringList &paths, quint32 startTime, Track *track);
+    void slotFilesDragEntered(const QStringList &paths);
+    /** Duplicate the selected item, else the current track (Cmd+D with the timeline focused). */
+    void slotDuplicate();
+    void duplicateTrack(Track *track);
+    void duplicateItem(ShowItem *item);
+    void renameItem(ShowItem *item);
+    void moveItemToTrack(ShowItem *item, Track *dest);
 
     void slotCopy();
     void slotPaste();

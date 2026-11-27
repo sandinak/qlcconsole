@@ -27,6 +27,7 @@ class MultiTrackView;
 class ShowFunction;
 class ShowItem;
 class QAction;
+class QLabel;
 class Function;
 class Track;
 class Show;
@@ -68,6 +69,10 @@ private slots:
     // Building
     void slotFunctionDropped(quint32 funcID, quint32 startTime, Track *track);
     void slotAddAtRequested(quint32 startTime, Track *track);
+    /** Audio / video files dropped from the desktop (TimelineFileDrop; this
+     *  editor has no undo, so the drop is not undoable here). */
+    void slotFilesDropped(const QStringList &paths, quint32 startTime, Track *track);
+    void slotFilesDragEntered(const QStringList &paths);
     void slotNewTrackRequested();
     void slotDeleteSelected();
     void slotShowItemMoved(ShowItem *item, quint32 time, bool moved);
@@ -104,6 +109,8 @@ private:
     QAction *m_playAction;
     QAction *m_stopAction;
     QAction *m_deleteAction;
+    QLabel *m_statusLabel = nullptr;
+    void setStatus(const QString &text);
 };
 
 /** @} */
