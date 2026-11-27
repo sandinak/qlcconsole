@@ -45,6 +45,8 @@
 #include <QMimeData>
 #include <QTemporaryDir>
 #include <QLineEdit>
+#include <QLabel>
+#include <QGraphicsProxyWidget>
 #include <QMenu>
 #include <QUrl>
 #include "video.h"
@@ -539,7 +541,8 @@ QString ShowManager_Test::makeWav(const QString &name)
     d.append("data"); le32(rate); d.append(QByteArray(rate, char(0x80)));
     const QString path = dropDir()->filePath(name);
     QFile f(path);
-    f.open(QIODevice::WriteOnly);
+    if (!f.open(QIODevice::WriteOnly))
+        return QString();
     f.write(d);
     return path;
 }
@@ -566,10 +569,10 @@ void ShowManager_Test::dropFiles(const QStringList &files, quint32 timeMs, int r
     md.setUrls(urls);
     const QPointF sp(v->getPositionFromTime(timeMs), TRACKS_TOP + row * TRACK_HEIGHT + 5);
     const QPoint vp = v->mapFromScene(sp);
-    QDragEnterEvent enter(vp, Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
     v->dragEnterEvent(&enter);
     QVERIFY(enter.isAccepted());
-    QDragMoveEvent move(vp, Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent move(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
     v->dragMoveEvent(&move);
     QDropEvent drop(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
     v->dropEvent(&drop);
