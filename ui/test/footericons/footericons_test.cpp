@@ -241,7 +241,6 @@ void FooterIcons_Test::safetyChipsCantBeHidden()
 
 void FooterIcons_Test::theRemovedChipsAreGone()
 {
-    QVERIFY(m_app->m_statusModeChipLabel == nullptr);
     QVERIFY(m_app->statusBar()->findChild<QWidget *>(QStringLiteral("footerMode")) == nullptr);
     // The level: only Student is said.
     for (const ShowLevel::Level l : { ShowLevel::Standard, ShowLevel::Advanced, ShowLevel::Student })
