@@ -4530,6 +4530,8 @@ void ConnectionsTree_Test::thePaneSetsTheSlotLikeTheToolbar()
     QVERIFY(iom->patchUndo()->canUndo());
     iom->patchUndo()->undo();
     QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
+    mgr.m_devicesTree->refresh();           // as the tree's Undo button does: the pane reads it again
+    QCOMPARE(pane->m_slotCombo->currentData().toInt(), int(RigOwner::Tour));
 
     // Saved and loaded again.
     pane->m_slotCombo->setCurrentIndex(pane->m_slotCombo->findData(int(RigOwner::House)));
