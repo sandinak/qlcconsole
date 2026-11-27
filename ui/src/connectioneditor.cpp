@@ -436,7 +436,9 @@ void ConnectionEditor::buildForm()
     connect(m_profileNew, &QPushButton::clicked, this, &ConnectionEditor::slotNewProfile);
     connect(m_profileDelete, &QPushButton::clicked, this, &ConnectionEditor::slotDeleteProfile);
     inf->addRow(tr("Input Profile:"), m_profileCombo);
-    profileLay->addStretch(1);
+    /* No stretch after them: an Ignored button next to a stretch is given
+       no width at all (layoutsanity: zero-size Edit…, New…, Delete). They
+       share the row instead. */
     inf->addRow(QString(), profileRow);
     connect(m_profileCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int) {
