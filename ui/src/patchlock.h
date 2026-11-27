@@ -23,6 +23,7 @@
 #include <QIcon>
 #include <QString>
 
+#include "qlcui_export.h"
 #include "doc.h"
 
 class QWidget;
