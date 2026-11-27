@@ -25,6 +25,7 @@
 #include <QSignalSpy>
 #include <QScrollBar>
 #include <QMenu>
+#include <QDir>
 #include <QPainter>
 #include <QSettings>
 #include <QSplitter>
@@ -4555,7 +4556,24 @@ void ConnectionsTree_Test::operateLocksTheConnectionsTab()
     QVERIFY(!lock->bar()->isVisibleTo(&mgr));
     QVERIFY(mgr.m_addUniverseAction->isEnabled());
 
+    auto shots = [](QWidget *w, const QString &prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        const QSize was = w->size();
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+        w->resize(was);
+        QTest::qWait(20);
+    };
+    shots(&mgr, "connections-design");
     m_doc->setMode(Doc::Operate);
+    shots(&mgr, "connections-operate-locked");
     QVERIFY(lock->bar()->isVisibleTo(&mgr));
     for (QAction *a : { mgr.m_addUniverseAction, mgr.m_deleteUniverseAction, mgr.m_undoPatchAction })
     {
