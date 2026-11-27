@@ -17,6 +17,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 class Doc;
 
@@ -58,6 +59,8 @@ struct Built
 
     quint32 cueList = 0;        ///< the Show Tree list: kCues cues with fades
     quint32 cueChaser = 0;      ///< ...and the chaser it bakes to
+
+    QStringList timings;        ///< how long each part took to build ("fixtures 120 ms")
 };
 
 /** Build the rig and its show into @a doc, whose fixture definitions and

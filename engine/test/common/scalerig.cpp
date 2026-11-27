@@ -9,6 +9,7 @@
 #include <QColor>
 #include <QSet>
 #include <QSize>
+#include <QElapsedTimer>
 
 #include "scalerig.h"
 
@@ -111,6 +112,11 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
     if (mover == nullptr || wash == nullptr || lantern == nullptr)
         return false;
 
+    QElapsedTimer clock;
+    clock.start();
+    auto lap = [&](const char *what) {
+        out->timings << QStringLiteral("%1 %2 ms").arg(QLatin1String(what)).arg(clock.restart());
+    };
     MonitorProperties *mp = doc->monitorProperties();
     // The plot: a 20 m wide, 14 m deep stage, 8 m up (metres).
     mp->setGridSize(QVector3D(20, 8, 14));
@@ -215,6 +221,8 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
         return false;
     }
 
+    lap("fixtures");
+
     // ---- groups: what the cues and the effects point at --------------------
     auto group = [&](const QString &name, const QList<quint32> &fixtures, const QSize &size) {
         FixtureGroup *g = new FixtureGroup(doc);
@@ -254,6 +262,8 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
     out->houseGroup = group("House", out->dimmers, QSize(34, 1));
     const quint32 ustGroup = group("USTs", out->usts, QSize(30, 1));
     const quint32 barGroup = group("Bars", out->bars, QSize(26, 3));
+
+    lap("groups");
 
     // ---- the effects --------------------------------------------------------
     RGBMatrix *mtx = new RGBMatrix(doc);
@@ -317,6 +327,8 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
     chaser("Wash chase", out->washes, 3);
     chaser("House chase", out->dimmers, 6);
 
+    lap("effects and chasers");
+
     // ---- the Show Tree: 40 cues with fades over the groups ------------------
     QList<quint32> dimmers, cols, positions;
     for (int i = 0; i < 6; ++i)
@@ -362,7 +374,6 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
             st->setTargetLook(c, groupTarget(out->houseGroup),
                               st->lookForPalette(dimmers.at(i % dimmers.size())));
     }
-    st->endBatch(true);
     for (int i = 0; i < cueIds.size(); ++i)
     {
         const ShowTree::Cue *cue = st->cue(cueIds.at(i));
@@ -373,6 +384,8 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
         c.fadeOut = c.fadeIn;
         st->setCue(c);
     }
+    st->endBatch(true);
+    lap("Show Tree");
     const ShowTree::CueList *list = st->cueList(out->cueList);
     out->cueChaser = list != nullptr ? list->chaser : 0;
     if (list == nullptr || doc->function(out->cueChaser) == nullptr)
