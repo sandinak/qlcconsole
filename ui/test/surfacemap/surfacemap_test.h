@@ -59,6 +59,10 @@ private slots:
     /** The FaderPort 2 is drawn: its fader, knob and transport keys, its
      *  jobs GO / Back / STOP / GM, and what is pressed lights. */
     void theFaderPort2IsDrawn();
+    /** The MaizeDMX's LEDs are lights (their tooltip says so), its pager keys are on the map. */
+    void theMaizeLedsAreLightsNotKnobs();
+    /** The APC mini mk2 is drawn, and an older user copy of a profile is named in the setup row. */
+    void theApcMiniMk2IsDrawnAndAnOlderCopyIsSaid();
     /** A map never clips: under its smallest cell it asks for the width. */
     void theMapScrollsRatherThanClips();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */
