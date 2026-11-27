@@ -2447,10 +2447,11 @@ quint32 currentFixtureId(FixtureManager &mgr)
    in view, and a folder closed stays closed. */
 void FixtureManager_Test::duplicateAndUndoKeepTheViewAndSelectTheRow()
 {
-    const QList<quint32> fids = addDimmers(m_doc, 60, 1, "Par");
-    QCOMPARE(fids.size(), 60);
-    // A staged one, so the Inventory and its folders exist before the copy.
-    stagedDimmer(m_doc, "Staged");
+    /* Sixty staged fixtures: the copy of one lands beside it (a copy is
+       unpatched, so it goes to the Inventory, where the original is). */
+    QList<quint32> fids;
+    for (int i = 0; i < 60; i++)
+        fids << stagedDimmer(m_doc, QString("Par %1").arg(i, 2, 10, QChar('0')))->id();
     FixtureGroup *grp = addGroup(m_doc, "Front", "", fids.mid(0, 2));
     Q_UNUSED(grp);
 

@@ -1711,6 +1711,18 @@ void FixtureTreeWidget::updateTree()
     }
 }
 
+void FixtureTreeWidget::scrollToRow(QTreeWidgetItem *item)
+{
+    if (item == nullptr)
+        return;
+    scrollToItem(item, QAbstractItemView::EnsureVisible);
+    const QRect r = visualItemRect(item);
+    const int over = r.bottom() + 1 - viewport()->height();
+    if (over > 0 && r.top() > 0)
+        verticalScrollBar()->setValue(verticalScrollBar()->value()
+            + (verticalScrollMode() == QAbstractItemView::ScrollPerItem ? 1 : over));
+}
+
 void FixtureTreeWidget::setShowFound(bool on)
 {
     if (m_showFound == on)

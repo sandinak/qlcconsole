@@ -1409,8 +1409,7 @@ QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const Q
                 m_fixtures_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
             }
         // Only as far as needed: the view stays where it was.
-        if (QTreeWidgetItem *cur = m_fixtures_tree->currentItem())
-            m_fixtures_tree->scrollToItem(cur, QAbstractItemView::EnsureVisible);
+        m_fixtures_tree->scrollToRow(m_fixtures_tree->currentItem());
     }
     else if (!madeGroups.isEmpty())
         revealRows(QList<quint32>(), madeGroups);
@@ -4606,7 +4605,7 @@ void FixtureManager::revealRows(const QList<quint32> &fixtures, const QList<quin
         it->setSelected(true);
     }
     m_fixtures_tree->setCurrentItem(rows.first(), 0, QItemSelectionModel::NoUpdate);
-    m_fixtures_tree->scrollToItem(rows.first(), QAbstractItemView::EnsureVisible);
+    m_fixtures_tree->scrollToRow(rows.first());
 }
 
 void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups,

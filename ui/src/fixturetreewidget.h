@@ -67,6 +67,10 @@ public:
 
     void updateTree();
 
+    /** Scrolls @p item into view only as far as needed -- and all of its row,
+     *  not the half Qt counts as shown at the bottom edge. */
+    void scrollToRow(QTreeWidgetItem *item);
+
     /** Relabel the Inventory root and its folders with their fixture counts,
      *  dropping folders left empty. updateTree() does this after a rebuild; a
      *  caller that removes fixture rows in place calls it to catch up. */
