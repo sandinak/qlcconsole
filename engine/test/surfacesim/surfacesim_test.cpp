@@ -1115,7 +1115,7 @@ void SurfaceSim_Test::anOlderCopyOfASurfaceProfileIsNotUsed()
     QFile built(apcFile());
     QVERIFY(built.open(QIODevice::ReadOnly));
     QString text = QString::fromUtf8(built.readAll());
-    const QRegularExpression block(QStringLiteral("<Channel Number=\"4117\">.*?</Channel>\\n"),
+    const QRegularExpression block(QStringLiteral("<Channel Number=\"4117\">.*?</Channel>\\r?\\n"),
                                    QRegularExpression::DotMatchesEverythingOption);
     QVERIFY(text.contains(block));
     QString old = text;

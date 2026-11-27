@@ -382,7 +382,7 @@ void SurfaceMap_Test::theApcMiniMk2IsDrawnAndAnOlderCopyIsSaid()
     QFile built(profile("Akai-APC40-mkII.qxi"));
     QVERIFY(built.open(QIODevice::ReadOnly));
     QString text = QString::fromUtf8(built.readAll());
-    text.remove(QRegularExpression(QStringLiteral("<Channel Number=\"4117\">.*?</Channel>\\n"),
+    text.remove(QRegularExpression(QStringLiteral("<Channel Number=\"4117\">.*?</Channel>\\r?\\n"),
                                    QRegularExpression::DotMatchesEverythingOption));
     QTemporaryDir user;
     QVERIFY(user.isValid());
