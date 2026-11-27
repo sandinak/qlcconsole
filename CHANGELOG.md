@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Show Review: how to fix** every finding, with a **Fix** (one click, one undo step: PAT-01/02 move to a free address) or **Go There** button on the row and in the right-click menu, **How to Fix…**, **Copy** and **Fix All Safe**; safety findings are Go There only.
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
   One-shot, Switch or Hazard -- guessed from its definition and plot
   symbol (old shows load unchanged), set in Fixture Properties, shown in
