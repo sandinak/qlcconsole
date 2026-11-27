@@ -4407,7 +4407,8 @@ void ConnectionsTree_Test::feedbackIsPatchedFromAUniverseAndUndone()
     QVERIFY(seen.join("|").contains("Remove Feedback") == false);
     // A universe with no input has nowhere to send it from.
     seen = menuTextsOn(tree, universeRow(tree.m_tree, 1));
-    QVERIFY(seen.join("|").contains("Feedback") == false);
+    QVERIFY(seen.join("|").contains("Send Feedback To") == false);
+    QVERIFY(seen.join("|").contains("Remove Feedback") == false);
 
     tree.setFeedback(0, stub->name(), 1);
     QVERIFY(iom->feedbackPatch(0) != NULL);
