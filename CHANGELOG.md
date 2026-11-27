@@ -14,6 +14,8 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Footer icons and View ▸ Footer**: every footer chip has a small icon that says what it reports (bolt for power, clock for timecode, map pin for the venue, a cue glyph for the next cue, fader for the Grand Master, checklist for Review, controller board for surfaces, game controller for Pad, pencil for Edit Live, lamp for the selected fixtures, disk for Saved), with its name in the tooltip; a squeezed chip shrinks to its icon before it goes. **View ▸ Footer** ticks each chip on or off for this computer, **Reset Footer** puts them back; safety chips are always shown. The Design / Operate chip, the ADVANCED mark and the Desk chip while all is well are gone; STUDENT and a red *Desk not patched: Patch It* stay.
+
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
   One-shot, Switch or Hazard -- guessed from its definition and plot
   symbol (old shows load unchanged), set in Fixture Properties, shown in

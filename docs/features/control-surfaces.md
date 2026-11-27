@@ -327,16 +327,16 @@ role is on now (*APC MINI · Note 82 · on Universe 1*), an **On** tick and
   another computer sets that computer's desk from it, for a room of laptops
   set up the same way.
 
-**The footer chip.** While a role is learned the status bar shows
-**Desk**: green when every role that is on works, amber when one is off,
-its device is not plugged in, two devices of one name can't be told apart
-or the Grand Master waits to pick up, and **grey** when its device is here
-but this show's patch does not have it yet -- not set up, not a fault: *Desk:
-APC MINI not patched · Patch It*. A click on grey patches the device to the first universe with a
+**The footer warning.** The boards are named by the surface chips; there is
+no Desk chip while all is well. A **red** *Desk not patched: Patch It* shows
+when a learned role's device is here but this show's patch does not have it
+(the tooltip names it), and an **amber** one when a role is off, its device is
+not plugged in, two devices of one name can't be told apart or the Grand
+Master waits to pick up. A click on red patches the device to the first universe with a
 free input (never one with passthrough on) and says so (*Patched APC MINI
 to Universe 3's input.*); the chip then reads *Undo* for a moment, and a
 click takes it off the patch again. Opening another show ends the Undo:
-it never changes a show you did not patch. A click on green or amber opens Control surfaces.
+it never changes a show you did not patch. A click on amber opens Control surfaces.
 
 **Show Review** has a **This computer** section: each role, and whether
 it reaches the program now. It is not a check of the file -- the roles are
@@ -1061,8 +1061,9 @@ after any build that changes a surface, and say which build.
    let go. *Expect:* the Grand Master follows your hand to 30% and the
    footer's GM stays at 30%; the fader stays at 30% (it does not drive back
    to 0 or to where it was).
-12. In Design, click the footer's **Design** chip. *Expect:* the show stays
-   in Design and the footer says where Operate is (Control ▸ Operate).
+12. Look for a Design or Operate chip in the footer. *Expect:* there is
+   none (the Design / Operate switch says the mode); nothing in the footer
+   takes the show live when clicked.
 13. Click the **FaderPort** chip in the footer, at 1024 x 640 too. *Expect:*
    the chip has a small controller glyph; the map of that board alone
    opens (an **All Boards** button brings back the rest) with **Set Up…**, **Stop needs Shift** and **Releasing a

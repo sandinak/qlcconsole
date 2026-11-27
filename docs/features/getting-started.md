@@ -183,16 +183,43 @@ The measurements, charts and method are on the
    only: the Blind view).
 2. **The open tab** — here the Show Tree.
 3. **The tabs**, along the bottom.
-4. **The footer** — is the show ready to run, what GO plays next, Design
-   or Operate (below).
+4. **The footer** — is the show ready to run, what GO plays next, what is
+   unsaved, the venue and the boards. Each chip has a small icon that says
+   what it reports; hover one for its name.
+
+   | Icon | Chip |
+   |---|---|
+   | check in a circle | Readiness (Ready / Not ready) |
+   | map pin | Venue |
+   | lightning bolt | Power estimate |
+   | clock | Timecode |
+   | play and bar | The next cue |
+   | fader | Grand Master (and a master held below full) |
+   | gauge | Engine load |
+   | checklist | Show Review |
+   | game controller | Pad |
+   | controller board | Control surfaces (one chip per board) |
+   | pencil in a circle | Edit Live |
+   | lamp | Selected fixtures |
+   | warning triangle | Hazards, move in black |
+   | disk | Saved / unsaved |
+
+   **View ▸ Footer** lists every chip with its icon: untick one to put it
+   away on this computer, **Reset Footer** brings them all back. The chips
+   that report a safety state (Ready / Not ready, hazards, Edit Live, the
+   Pad, overrides, test mode, a desk that is not patched) and the
+   **STUDENT** mark are greyed and ticked: they are always shown. When the
+   window is narrow the footer drops the least important chips first; a
+   chip that loses its room shrinks to its icon before it goes. The mode
+   is the **Design** / **Operate** switch, not a footer chip.
 
 **Settings ▸ General ▸ Show Controls** can put the show controls in the status bar
 instead, at its right end beside Ready and the other show chips: the top
 is then the tab's own tools alone. It changes at once, no restart, and the
 shortcuts are the same either way (⌘⇧Esc (Ctrl+Shift+Backspace on Windows and Linux) Stop all, ⌘F12 Design / Operate).
 There, they are icons only (their tooltips name them) unless
-**Settings ▸ Appearance ▸ Toolbar style** is **Text only**, and the footer's own DESIGN and
-BLACKOUT chips step aside for them. A tab moved to a window of its own
+**Settings ▸ Appearance ▸ Toolbar style** is **Text only**, and the footer's own
+BLACKOUT chip step aside for them. A tab moved to a window of its own
 keeps its tools at its own top.
 
 The tabs follow the order a show is built in:
@@ -228,7 +255,7 @@ Which of these you see depends on the view (below).
   Connections tab), with QLC+'s toolbars: the main one (New, Open, Save,
   Save As, the [DMX Monitor](#the-dmx-monitor), the Rig Overview, the
   address tool, Full Screen, help, dump, live edit) and the Fixtures and
-  Functions tabs' full rows of buttons. The footer shows only the mode,
+  Functions tabs' full rows of buttons. The footer shows only
   the Grand Master and Ready.
 - **Everything** — every tab (Shows reads Timeline here too).
 
@@ -263,8 +290,8 @@ to a class carries its level to every student's computer.
 - **Standard** — every qlcconsole tool. A show made before levels opens
   at Standard, exactly as it did.
 - **Advanced** — Standard, and the expert tools: the Look Editor's
-  **Script ▾** (writing your own effect scripts) is here. The footer shows
-  **ADVANCED**.
+  **Script ▾** (writing your own effect scripts) is here. The footer says nothing at Standard or Advanced:
+  View ▸ Workspace has the ticked level.
 
 Nothing is ever a dead end. A menu that has items put away ends with
 **More at Standard…**, and the **Window** menu has **More Tabs at
@@ -274,7 +301,7 @@ put-away tab says the same thing, and so does a Show Tree command
 (`mib`, `wb`, `detach`…), a double-click that would open the Workbench, and
 the shortcut of a put-away item: each answers in that line, with the
 level's name and **Switch**, never silently. It never switches by itself. Click the
-footer's **STUDENT** or **ADVANCED** chip for the three levels.
+footer's **STUDENT** mark, or use View ▸ Workspace, for the three levels.
 
 What a level puts away is **hidden, never stopped**. A cue that uses an
 effect still plays it at Student. These are never put away, at any
