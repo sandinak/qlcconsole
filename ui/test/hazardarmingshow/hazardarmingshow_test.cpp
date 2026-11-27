@@ -45,6 +45,7 @@
 #include "doc.h"
 
 #include "hazardarmingshow_test.h"
+#include "../rainbowmovers/plotplacement.h"
 
 using namespace ShowTree;
 
@@ -57,6 +58,7 @@ const QString kJet = QStringLiteral("CO2 jet");
 const QString kHazer = QStringLiteral("Hazer");
 const QString kWash = QStringLiteral("Wash");
 const QString kUniverse = QStringLiteral("U01-Hazard-Probe");
+const QString kPipe = QStringLiteral("FOH Pipe");
 const QStringList kCues = { QStringLiteral("Preset"), QStringLiteral("CO2 hit"), QStringLiteral("Haze on"),
                             QStringLiteral("Haze off"), QStringLiteral("Blackout") };
 
@@ -208,6 +210,21 @@ void HazardArmingShow_Test::build(const QString &path)
 
     doc->inputOutputMap()->setUniverseName(0, kUniverse);
 
+    /* ---- the plot: the CO2 jet and the hazer standing on the deck (the
+       jet downstage right, the hazer upstage left), the wash hung on a pipe
+       across the front at 16', pointed at a target downstage centre. */
+    {
+        using namespace PlotPlacement;
+        MonitorProperties *mp = doc->monitorProperties();
+        standOnDeck(mp, fixtureNamed(doc, kJet), -6.0f * kFoot, 2.0f * kFoot);
+        standOnDeck(mp, fixtureNamed(doc, kHazer), 8.0f * kFoot, 8.0f * kFoot);
+        Pipe *pipe = addFrontPipe(mp, kPipe, 10.0f * kFoot, 16.0f * kFoot, 3.0f * kFoot);
+        hang(mp, fixtureNamed(doc, kWash), pipe, 5.0f * kFoot);
+        StageTarget *dsc = addTarget(mp, QStringLiteral("DSC"), 0.0f, 5.0f * kFoot);
+        dsc->setLayerId(mp->placementLayerId());
+        pointFixedAt(mp, fixtureNamed(doc, kWash), dsc);
+    }
+
     // ---- levels
     auto level = [&](const QString &name, int v) {
         QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, doc);
@@ -354,6 +371,27 @@ void HazardArmingShow_Test::check(const QString &path)
     QCOMPARE(setOn(doc, list->cues.at(2), gJet->id()), QStringLiteral("Out"));
     QCOMPARE(setOn(doc, list->cues.at(3), gHazer->id()), QStringLiteral("Out"));
     QCOMPARE(setOn(doc, list->cues.at(4), gWash->id()), QStringLiteral("Out"));
+
+    // Every fixture on the plot: the two hazards on the deck, the wash on the pipe.
+    MonitorProperties *mp = doc->monitorProperties();
+    const QList<quint32> placed = mp->fixtureItemsID();
+    for (Fixture *fx : doc->fixtures())
+    {
+        QVERIFY2(placed.contains(fx->id()), qPrintable(fx->name() + " is not on the plot"));
+        QVERIFY2(mp->layer(mp->fixtureLayer(fx->id())).visible, qPrintable(fx->name()));
+    }
+    for (Fixture *fx : { jet, hazer })
+    {
+        const FixtureRigProps rp = mp->fixtureRigProps(fx->id());
+        QVERIFY2(!rp.onPipe() && rp.trussId == Truss::invalidId(), qPrintable(fx->name()));
+        QVERIFY2(qAbs(mp->fixtureRigPosition(fx->id()).z()) < 0.01f, qPrintable(fx->name() + " is not on the deck"));
+    }
+    QCOMPARE(mp->pipes().count(), 1);
+    const FixtureRigProps washRp = mp->fixtureRigProps(wash->id());
+    QCOMPARE(washRp.pipeId, mp->pipes().first()->id());
+    QVERIFY(qAbs(mp->pipes().first()->baseZ() - 16.0f * PlotPlacement::kFoot) < 0.01f);
+    QVERIFY(washRp.fixedAim);
+    QCOMPARE(mp->stageTargets().count(), 1);
 
     /* The desk's Hazard hold / arm / kill: unlearned, so they are learned
        on the bench's own board (this computer's desk, not the show's). */

@@ -14,7 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
-- **A hazard bench show**: `test-workspaces/hazard-arming.qlcc` -- a CO2 jet (Hazard — Burst), a hazer (Hazard — Running) and a wash on the OLA probe's Art-Net 0:0:15, cues Preset, CO2 hit, Haze on, Haze off, Blackout, the desk's Hazard controls left to learn on the board; built and checked by the app's own engine in the gate.
+- **A hazard bench show**: `test-workspaces/hazard-arming.qlcc` -- a CO2 jet (Hazard — Burst), a hazer (Hazard — Running) and a wash on the OLA probe's Art-Net 0:0:15, cues Preset, CO2 hit, Haze on, Haze off, Blackout, the desk's Hazard controls left to learn on the board; the jet and the hazer stand on the deck and the wash hangs on a front pipe at 16'; built and checked by the app's own engine in the gate.
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
   One-shot, Switch or Hazard -- guessed from its definition and plot
   symbol (old shows load unchanged), set in Fixture Properties, shown in
@@ -294,6 +294,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **rainbow-movers.qlcc is on the plot**: its three fixtures hang on one front pipe at 16', 6' apart, aimed at three targets downstage centre, so the Lighting Studio's Top and Rig Overview show them (they were all under **Not on the plot**); both bench shows' tests fail if any fixture is off the plot.
 - **Edit Live chip at Student takes a click again**: the footer chip reading **Edit Live · Standard** greys itself but stays clickable, so a click shows the line with **Switch to Standard** (build 4910: greyed by disabling it, it took no click).
 - **The footer says why**: the **Pad** chip no longer shows with no game
   controller connected (it appears on connect, goes on unplug); a control
