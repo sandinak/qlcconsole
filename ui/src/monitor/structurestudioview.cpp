@@ -8493,7 +8493,13 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     {
         QColor live = col;
         uchar dim = 0;
-        if (fixtureLiveState(fx, vals, live, dim, valsComplete))
+        /* The dark half of a strobe flash, and a shut shutter: the lens goes
+           dark with the beam; CTO / CTB tint the lens as they do the light. */
+        const BeamExtras lensEx = beamExtras(fx, vals, valsComplete);
+        if (lensEx.strobeHz > 0.0)
+            markOpticsAnimating();
+        if (fixtureLiveState(fx, vals, live, dim, valsComplete)
+            && beamExtrasPass(lensEx, opticsTime(), live))
         {
             col = shadeLive(live, dim, unlit, visibility);
             emitting = true;

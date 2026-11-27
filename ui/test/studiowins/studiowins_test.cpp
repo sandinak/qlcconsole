@@ -539,8 +539,8 @@ void StudioWins_Test::theLabelSaysTheChosenFieldsAroundTheIcon()
         props->setFixtureUnit(f->id(), 20 + i);
         props->setFixtureChannel(f->id(), 100 + i);
         props->setFixturePurpose(f->id(), QStringLiteral("Front"));
-        props->setFixturePosition(f->id(), 0, 0, QVector3D(float(2000 + i * 3000), 4000.0f, 0.0f));
-        gv->addFixture(f->id(), QPointF(2000 + i * 3000, 4000.0));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(float(2000 + i * 12000), 4000.0f, 0.0f));
+        gv->addFixture(f->id(), QPointF(2000 + i * 12000, 4000.0));
         fxs << f;
     }
     gv->showFixturesLabels(true);
