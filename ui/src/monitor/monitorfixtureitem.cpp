@@ -727,6 +727,15 @@ void MonitorFixtureItem::refreshName()
     update();
 }
 
+void MonitorFixtureItem::setPatchClash(const QColor &colour, const QString &reason)
+{
+    if (m_clashColour == colour && m_clashReason == reason)
+        return;
+    m_clashColour = colour;
+    m_clashReason = colour.isValid() ? reason : QString();
+    update();
+}
+
 void MonitorFixtureItem::setViewTint(const QColor &color)
 {
     m_viewTint = color;
@@ -1528,6 +1537,16 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         painter->setPen(QPen(ring, 2.0));
         painter->setBrush(Qt::NoBrush);
         drawBody(painter, QRectF(1.5, 1.5, m_width - 3, m_height - 3));
+    }
+
+    // A patch problem on the DMX overlay: a thick outline, a step outside the body.
+    if (m_clashColour.isValid())
+    {
+        QPen clashPen(m_clashColour, 3.0);
+        clashPen.setCosmetic(true);
+        painter->setPen(clashPen);
+        painter->setBrush(Qt::NoBrush);
+        drawBody(painter, QRectF(-2.0, -2.0, m_width + 4.0, m_height + 4.0));
     }
 
     // Marked (move-in-black): a thin dashed violet outline so a pre-positioned-

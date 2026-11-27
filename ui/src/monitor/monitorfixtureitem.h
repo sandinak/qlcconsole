@@ -163,6 +163,14 @@ public:
      *  circuit, universe, group, etc.; an invalid colour restores normal fill. */
     void setViewTint(const QColor &color);
 
+    /** Outline this fixture as a patch problem (the DMX overlay: overlapping
+     *  addresses, past channel 512, unpatched), @p reason as the tooltip; an
+     *  invalid colour clears it. */
+    void setPatchClash(const QColor &colour, const QString &reason);
+    bool hasPatchClash() const { return m_clashColour.isValid(); }
+    QString patchClashReason() const { return m_clashReason; }
+    QColor patchClashColour() const { return m_clashColour; }
+
     /** Return the fixture ID associated to this item */
     quint32 fixtureID() const { return m_fid; }
 
@@ -455,6 +463,8 @@ private:
     qreal m_viewTurn = 0.0;
 
     bool m_boundToTruss  = false;
+    QColor m_clashColour;       ///< a patch problem's outline (invalid = none)
+    QString m_clashReason;
     bool m_trussGroupSelected = false;
     bool m_escapeMode    = false;
     bool m_attachMode    = false;

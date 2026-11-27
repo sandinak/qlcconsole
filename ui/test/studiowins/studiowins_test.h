@@ -41,6 +41,8 @@ private slots:
     void numberingFollowsThePlotOrderAndOneUndoRestores();
     void numberingCanPatchInThatOrderIntoFreeAddresses();
     void theNumberItemIsOnTheSelectionMenuOfThePlot();
+
+    void theDmxOverlayOutlinesPatchClashesAndFixingClearsThem();
 };
 
 #endif

@@ -460,6 +460,8 @@ public:
      *  behind others, it is brought forward rather than shut unseen. */
     void toggleStageOverview();
     /** Rig Overview saved views (named cameras, saved with the show). */
+    /** The patch problems the DMX overlay outlines: fixture -> (colour, what). */
+    QHash<quint32, QPair<QColor, QString> > patchProblems() const;
     void saveCurrentView(class StructureStudioView *view, const QString &name);
     bool applySavedView(class StructureStudioView *view, const QString &name);
     /** The Rig Overview's view (Q212: a note's snapshot of the view); with

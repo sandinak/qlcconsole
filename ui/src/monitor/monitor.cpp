@@ -176,6 +176,7 @@
 #include "qlccapability.h"
 #include "monitor.h"
 #include "plotnumbering.h"
+#include "showreview.h"
 #include "showlevel.h"
 #include "masklenswidget.h"
 #include "planmapwidget.h"
@@ -3212,6 +3213,36 @@ void Monitor::slotMapViewChanged(int)
     updateModeIndicator();
 }
 
+QHash<quint32, QPair<QColor, QString> > Monitor::patchProblems() const
+{
+    QHash<quint32, QPair<QColor, QString> > out;
+    if (m_doc->showReview() == nullptr)
+        return out;
+    ShowReview::Options opt;
+    opt.checks = { QStringLiteral("PAT-01"), QStringLiteral("PAT-02"), QStringLiteral("PAT-03") };
+    opt.record = false;
+    const ShowReview::Result res = m_doc->showReview()->run(opt);
+    for (const ReviewFinding &f : res.findings)
+    {
+        if (f.state == ReviewFinding::Accepted)
+            continue;
+        const QColor colour = f.severity == ReviewFinding::Blocker ? QColor(235, 40, 40)
+                                                                   : QColor(240, 170, 30);
+        for (const QString &t : f.targets)
+        {
+            if (!t.startsWith(QLatin1String("fx:")))
+                continue;
+            const quint32 fid = t.mid(3).toUInt();
+            const auto have = out.constFind(fid);
+            if (have != out.constEnd())
+                out[fid].second += QStringLiteral("\n") + f.message;
+            else
+                out.insert(fid, qMakePair(colour, f.message));
+        }
+    }
+    return out;
+}
+
 void Monitor::applyMapView(int view)
 {
     if (m_graphicsView == NULL)
@@ -3224,6 +3255,10 @@ void Monitor::applyMapView(int view)
     // The Network overlay also draws each port's cable run, node -> fixtures in
     // address order, with its stats on hover.
     m_graphicsView->setNetworkRunsVisible(view == ViewNet);
+    if (view != ViewDMX)
+        foreach (Fixture *fx, m_doc->fixtures())
+            if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id()))
+                it->setPatchClash(QColor(), QString());
 
     if (view == ViewPower)
     {
@@ -3313,15 +3348,24 @@ void Monitor::applyMapView(int view)
             }
         }
 
+        /* The problems, from Show Review's own patch checks (PAT-01 overlap,
+           PAT-02 past channel 512, PAT-03 unpatched), so the plot and the
+           review never disagree; a finding someone accepted stays quiet. */
+        const QHash<quint32, QPair<QColor, QString> > problems = patchProblems();
+
         foreach (Fixture *fx, fixtures)
         {
             if (fx == NULL) continue;
             MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
             if (it == NULL) continue;
+            const auto prob = problems.constFind(fx->id());
+            it->setPatchClash(prob != problems.constEnd() ? prob->first : QColor(),
+                              prob != problems.constEnd() ? prob->second : QString());
             if (!fx->isPatched())
             {
                 it->setViewTint(QColor(70, 70, 70));
-                it->setToolTip(tr("Unpatched (inventory)"));
+                it->setToolTip(prob != problems.constEnd() ? tr("Unpatched: %1").arg(prob->second)
+                                                           : tr("Unpatched (inventory)"));
                 continue;
             }
             const quint32 uni = fx->universe() + 1;        // 1-based for display
@@ -3344,6 +3388,8 @@ void Monitor::applyMapView(int view)
                 it->setToolTip(tr("Universe %1%2 · A %3–%4 (%5 ch)")
                                .arg(uni).arg(via).arg(a0).arg(a1).arg(fx->channels()));
             }
+            if (prob != problems.constEnd())
+                it->setToolTip(it->toolTip() + QStringLiteral("\n⚠ ") + prob->second);
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
     }

@@ -41,6 +41,8 @@
 #include "fixture.h"
 #include "truss.h"
 #include "plotnumbering.h"
+#include "monitorgraphicsview.h"
+#include "monitorfixtureitem.h"
 #include "doc.h"
 
 #include "studiowins_test.h"
@@ -436,6 +438,64 @@ void StudioWins_Test::theNumberItemIsOnTheSelectionMenuOfThePlot()
         ContextMenus::rig(cm, &doc, QList<quint32>(), ids, rig);
         QCOMPARE(menu.findChild<QAction *>(QStringLiteral("ctxNumber")) != nullptr, offer);
     }
+}
+
+void StudioWins_Test::theDmxOverlayOutlinesPatchClashesAndFixingClearsThem()
+{
+    Doc doc(nullptr);
+    doc.setMode(Doc::Design);
+    QWidget parent;
+    Monitor mon(&parent, &doc);
+    MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    // a and b overlap (0 and 3 of 6 channels); c is fine; d runs past 512; e is unpatched.
+    Fixture *a = makePar(&doc, 0);
+    Fixture *b = makePar(&doc, 100);
+    Fixture *c = makePar(&doc, 200);
+    Fixture *d = makePar(&doc, 300);
+    Fixture *e = makePar(&doc, 400);
+    QVERIFY(a && b && c && d && e);
+    // The doc refuses these placements, so write them as a loaded show could hold them.
+    b->setAddress(3);
+    d->setAddress(510);
+    doc.unpatchFixture(e->id());
+    int x = 1000;
+    for (Fixture *f : { a, b, c, d, e })
+    {
+        doc.monitorProperties()->setFixturePosition(f->id(), 0, 0, QVector3D(float(x), 2000.0f, 0.0f));
+        if (gv->fixtureItemForId(f->id()) == nullptr)
+            gv->addFixture(f->id(), QPointF(x, 2000.0));
+        x += 1500;
+    }
+
+    mon.applyMapView(Monitor::ViewDMX);
+    auto item = [&](Fixture *f) { return gv->fixtureItemForId(f->id()); };
+    QVERIFY(item(a)->hasPatchClash());
+    QVERIFY(item(b)->hasPatchClash());
+    QVERIFY(item(a)->patchClashReason().contains(QStringLiteral("share channels")));
+    QVERIFY(item(d)->hasPatchClash());
+    QVERIFY(item(d)->patchClashReason().contains(QStringLiteral("past the end")));
+    QVERIFY(item(e)->hasPatchClash());
+    QVERIFY(item(e)->toolTip().contains(QStringLiteral("patched")));
+    QVERIFY(!item(c)->hasPatchClash());
+    QVERIFY(item(a)->toolTip().contains(item(a)->patchClashReason().section('\n', 0, 0)));
+
+    // Fix the patch: the outlines go.
+    b->setAddress(100);
+    d->setAddress(300);
+    e->setPatched(true);
+    e->setUniverse(0);
+    e->setAddress(400);
+    mon.applyMapView(Monitor::ViewDMX);
+    for (Fixture *f : { a, b, c, d, e })
+        QVERIFY2(!item(f)->hasPatchClash(), qPrintable(item(f)->patchClashReason()));
+
+    // And another view never draws them.
+    b->setAddress(3);
+    mon.applyMapView(Monitor::ViewDMX);
+    QVERIFY(item(a)->hasPatchClash());
+    mon.applyMapView(Monitor::ViewNormal);
+    QVERIFY(!item(a)->hasPatchClash());
 }
 
 QTEST_MAIN(StudioWins_Test)
