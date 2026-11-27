@@ -132,10 +132,8 @@ int redPixels(const QImage &img)
     return n;
 }
 
-QImage frame(StructureStudioView &v, const QByteArray &values, double seconds)
+QImage frame(StructureStudioView &v, double seconds)
 {
-    Doc *doc = nullptr;
-    Q_UNUSED(doc);
     v.m_opticsTime = seconds;
     return v.grab().toImage().convertToFormat(QImage::Format_ARGB32);
 }
@@ -319,10 +317,10 @@ void StudioWins_Test::aClosedShutterDrawsNoBeamInTheRigOverview()
     v.reload();
 
     fx->setOwnChannelValues(vals(255, 255, 15));
-    const int open = redPixels(frame(v, QByteArray(), 0.0));
+    const int open = redPixels(frame(v, 0.0));
     QVERIFY2(open > 300, qPrintable(QString("an open shutter lights %1 px").arg(open)));
     fx->setOwnChannelValues(vals(255, 255, 5));
-    const int closed = redPixels(frame(v, QByteArray(), 0.0));
+    const int closed = redPixels(frame(v, 0.0));
     QCOMPARE(closed, 0);
 }
 
@@ -341,11 +339,11 @@ void StudioWins_Test::aStrobeBlinksInTheRigOverview()
     v.reload();
 
     fx->setOwnChannelValues(vals(255, 255, 20));            // the slowest strobe, about 1 Hz
-    const int on = redPixels(frame(v, QByteArray(), 0.1));
-    const int off = redPixels(frame(v, QByteArray(), 0.7));
+    const int on = redPixels(frame(v, 0.1));
+    const int off = redPixels(frame(v, 0.7));
     QVERIFY2(on > 300, qPrintable(QString("lit half: %1 px").arg(on)));
     QCOMPARE(off, 0);
-    QVERIFY(redPixels(frame(v, QByteArray(), 1.1)) > 300);   // and again a second on
+    QVERIFY(redPixels(frame(v, 1.1)) > 300);   // and again a second on
 }
 
 void StudioWins_Test::numberingFollowsThePlotOrderAndOneUndoRestores()
