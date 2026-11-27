@@ -109,7 +109,7 @@ void DeskChip::refresh()
     else if (!red.isEmpty())
     {
         m_colour = NotPatched;
-        text = tr("Desk: %1 not patched · Patch It").arg(red.join(QStringLiteral(", ")));
+        text = tr("Desk not patched: Patch It");
     }
     else if (!amber.isEmpty())
     {
@@ -125,8 +125,8 @@ void DeskChip::refresh()
     {
         case Green: colour = QStringLiteral("#43a047"); setProperty("deskState", QStringLiteral("green")); break;
         case Amber: colour = QStringLiteral("#a06000"); setProperty("deskState", QStringLiteral("amber")); break;
-        // Not set up yet, not a fault: the readiness chip's grey (UX-29).
-        case NotPatched: colour = QStringLiteral("#909090"); setProperty("deskState", QStringLiteral("notpatched")); break;
+        // The desk is on this computer but not in this show's patch: red, with Patch It.
+        case NotPatched: colour = QStringLiteral("#d32f2f"); setProperty("deskState", QStringLiteral("notpatched")); break;
         case Hidden: break;
     }
     setStyleSheet(QStringLiteral("QToolButton { color: %1; font-weight: bold; padding: 0 6px; border: none; }")
@@ -142,14 +142,19 @@ void DeskChip::refresh()
     if (!desk->isLive(DeskRecord::Go) && !desk->isLive(DeskRecord::Back))
         tip << desk->goTargetText();
     if (m_colour == NotPatched && m_patched.isEmpty())
+    {
+        tip << tr("Not in this show's patch: %1.").arg(red.join(QStringLiteral(", ")));
         tip << tr("Click to patch it into this show (Undo stays here for a moment).");
+    }
     else if (!m_patched.isEmpty())
         tip << tr("Click to take it off the patch again.");
     else
         tip << tr("Click to open Connections ▸ Control surfaces.");
     setToolTip(tip.join(QStringLiteral("\n")));
     setAccessibleName(text);
-    show();
+    /* Only a warning is footer business: the boards the desk is made of are
+       the surface chips, so a desk that is fine says nothing. */
+    setVisible(m_colour != Green || !m_patched.isEmpty());
 }
 
 void DeskChip::slotClicked()
