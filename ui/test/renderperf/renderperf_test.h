@@ -59,6 +59,8 @@ private slots:
     void aGelFiltersTheLight();
     void hoveringARunningShowKeepsTheRigStill();
 
+    void studioFeatureFrames();
+    void anIdleRigWithFrostAndNoStrobeDrawsNothing();
     void cpuPerFrame();
 
 private:

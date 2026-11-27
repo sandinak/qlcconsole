@@ -18,6 +18,8 @@
 */
 
 #include <QSet>
+#include <QMutex>
+#include <QHash>
 
 #include "headlayout.h"
 #include "fixturevisualtraits.h"
@@ -1239,68 +1241,128 @@ static bool nameHas(const QString &name, const char *const *words)
     return false;
 }
 
+namespace
+{
+/** What each channel of a mode is for the beam, worked out once per mode
+ *  (names matched by regex are not a thing to do every frame). */
+struct ExtraRoles
+{
+    QVector<int> frost, cto, ctb, cct, shutter;
+    int channels = 0;
+    const QLCChannel *first = nullptr;
+};
+
+ExtraRoles rolesOf(QLCFixtureMode *mode, int channels)
+{
+    static const char *const frostWords[] = { "frost", "diffus", nullptr };
+    static const char *const ctoWords[] = { "cto\\b", "color temp orange", "colour temp orange", nullptr };
+    static const char *const ctbWords[] = { "ctb\\b", "color temp blue", "colour temp blue", nullptr };
+    static const char *const cctWords[] = { "cct\\b", "color temp", "colour temp", "colortemp", nullptr };
+    ExtraRoles r;
+    r.channels = channels;
+    r.first = channels > 0 ? mode->channel(0) : nullptr;
+    for (int c = 0; c < channels; ++c)
+    {
+        const QLCChannel *ch = mode->channel(quint32(c));
+        if (ch == nullptr)
+            continue;
+        if (ch->group() == QLCChannel::Shutter)
+        {
+            r.shutter << c;
+            continue;
+        }
+        if (ch->colour() != QLCChannel::NoColour)
+            continue;
+        const QString name = ch->name();
+        if (nameHas(name, frostWords))
+            r.frost << c;
+        else if (nameHas(name, ctbWords))
+            r.ctb << c;
+        else if (nameHas(name, ctoWords))
+            r.cto << c;
+        else if (nameHas(name, cctWords))
+            r.cct << c;
+    }
+    return r;
+}
+
+const ExtraRoles &rolesFor(QLCFixtureMode *mode, int channels)
+{
+    // The renderer calls this from its worker threads.
+    static QMutex lock;
+    static QHash<const QLCFixtureMode *, ExtraRoles> cache;
+    QMutexLocker locker(&lock);
+    auto it = cache.find(mode);
+    if (it != cache.end() && it->channels == channels
+        && it->first == (channels > 0 ? mode->channel(0) : nullptr))
+        return *it;
+    return *cache.insert(mode, rolesOf(mode, channels));
+}
+}
+
 BeamExtras beamExtras(const Fixture *fx, const QByteArray &v, bool complete)
 {
     BeamExtras out;
     QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
     if (mode == nullptr || v.isEmpty())
         return out;
-    static const char *const frostWords[] = { "frost", "diffus", nullptr };
-    static const char *const ctoWords[] = { "cto\\b", "color temp orange", "colour temp orange", nullptr };
-    static const char *const ctbWords[] = { "ctb\\b", "color temp blue", "colour temp blue", nullptr };
-    static const char *const cctWords[] = { "cct\\b", "color temp", "colour temp", "colortemp", nullptr };
+    const int count = qMin(int(fx->channels()), int(v.size()));
+    ExtraRoles roles;
+    {
+        // A copy of the small lists, so the lock is not held while reading values.
+        roles = rolesFor(mode, int(fx->channels()));
+    }
+    if (roles.frost.isEmpty() && roles.cto.isEmpty() && roles.ctb.isEmpty()
+        && roles.cct.isEmpty() && roles.shutter.isEmpty())
+        return out;
     double cto = 0.0, ctb = 0.0, cct = 0.0;
     bool haveCct = false;
-    const int count = qMin(int(fx->channels()), int(v.size()));
-    for (int c = 0; c < count; ++c)
+    for (int c : roles.shutter)
     {
+        if (c >= count)
+            continue;
         const QLCChannel *ch = mode->channel(quint32(c));
-        if (ch == nullptr)
-            continue;
         const int val = uchar(v.at(c));
-        const QString name = ch->name();
-        if (ch->group() == QLCChannel::Shutter)
+        if (const QLCCapability *cap = ch->searchCapability(uchar(val)))
         {
-            if (const QLCCapability *cap = ch->searchCapability(uchar(val)))
+            if (complete && cap->preset() == QLCCapability::ShutterClose)
+                out.shutterClosed = true;
+            const QLCCapability::Preset pr = cap->preset();
+            const bool strobe = pr == QLCCapability::StrobeSlowToFast
+                                || pr == QLCCapability::StrobeFastToSlow
+                                || pr == QLCCapability::StrobeRandom
+                                || pr == QLCCapability::StrobeRandomSlowToFast
+                                || pr == QLCCapability::StrobeRandomFastToSlow
+                                || pr == QLCCapability::StrobeFrequency
+                                || pr == QLCCapability::StrobeFreqRange
+                                || cap->name().contains(QLatin1String("strobe"), Qt::CaseInsensitive);
+            if (strobe)
             {
-                if (complete && cap->preset() == QLCCapability::ShutterClose)
-                    out.shutterClosed = true;
-                const QLCCapability::Preset pr = cap->preset();
-                const bool strobe = pr == QLCCapability::StrobeSlowToFast
-                                    || pr == QLCCapability::StrobeFastToSlow
-                                    || pr == QLCCapability::StrobeRandom
-                                    || pr == QLCCapability::StrobeRandomSlowToFast
-                                    || pr == QLCCapability::StrobeRandomFastToSlow
-                                    || pr == QLCCapability::StrobeFrequency
-                                    || pr == QLCCapability::StrobeFreqRange
-                                    || cap->name().contains(QLatin1String("strobe"), Qt::CaseInsensitive);
-                if (strobe)
-                {
-                    const double span = qMax(1, int(cap->max()) - int(cap->min()));
-                    double at = (val - int(cap->min())) / span;     // 0 slow ... 1 fast
-                    if (pr == QLCCapability::StrobeFastToSlow || pr == QLCCapability::StrobeRandomFastToSlow)
-                        at = 1.0 - at;
-                    out.strobeHz = qMax(out.strobeHz, 1.0 + 5.0 * qBound(0.0, at, 1.0));
-                }
+                const double span = qMax(1, int(cap->max()) - int(cap->min()));
+                double at = (val - int(cap->min())) / span;     // 0 slow ... 1 fast
+                if (pr == QLCCapability::StrobeFastToSlow || pr == QLCCapability::StrobeRandomFastToSlow)
+                    at = 1.0 - at;
+                out.strobeHz = qMax(out.strobeHz, 1.0 + 5.0 * qBound(0.0, at, 1.0));
             }
-            continue;
         }
-        if (ch->colour() != QLCChannel::NoColour)
-            continue;
-        if (nameHas(name, frostWords))
-            out.frost = qMax(out.frost, val / 255.0);
-        else if (nameHas(name, ctbWords))
-            ctb = qMax(ctb, val / 255.0);
-        else if (nameHas(name, ctoWords))
-            cto = qMax(cto, val / 255.0);
-        else if (nameHas(name, cctWords))
+    }
+    for (int c : roles.frost)
+        if (c < count)
+            out.frost = qMax(out.frost, uchar(v.at(c)) / 255.0);
+    for (int c : roles.ctb)
+        if (c < count)
+            ctb = qMax(ctb, uchar(v.at(c)) / 255.0);
+    for (int c : roles.cto)
+        if (c < count)
+            cto = qMax(cto, uchar(v.at(c)) / 255.0);
+    for (int c : roles.cct)
+        if (c < count)
         {
             // 0 = 2700 K (warm) ... 255 = 6500 K (cool); 5600 K is daylight, no tint.
-            const double kelvin = 2700.0 + 3800.0 * val / 255.0;
+            const double kelvin = 2700.0 + 3800.0 * uchar(v.at(c)) / 255.0;
             cct = qBound(-1.0, (5600.0 - kelvin) / 2900.0, 1.0);
             haveCct = true;
         }
-    }
     out.warmth = haveCct ? cct : qBound(-1.0, cto - ctb, 1.0);
     return out;
 }

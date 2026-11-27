@@ -445,6 +445,66 @@ double BeamOptics::maskContrast(const QImage &mask)
     return (hi - lo) / 255.0;
 }
 
+/* The frosted picture of a mask: a box blur of radius r (of 64 pixels), twice.
+   A static gobo frosted at a steady value is the same picture every frame, so
+   the result is kept by the mask's content and r, and only worked out when
+   either changes (a turning gobo is a new mask each frame, and is worked out). */
+static QImage blurredMask(const QImage &mask, int r)
+{
+    static QMutex lock;
+    static QHash<QPair<uint, int>, QImage> cache;
+    const uint key = qHashBits(mask.constBits(), size_t(mask.sizeInBytes()), 0x51ed);
+    const QPair<uint, int> k(key, r);
+    {
+        QMutexLocker locker(&lock);
+        const auto it = cache.constFind(k);
+        if (it != cache.constEnd())
+            return *it;
+    }
+    QImage img = mask;
+    const int w = img.width(), h = img.height();
+    for (int pass = 0; pass < 2; ++pass)
+    {
+        QImage tmp = img.copy();
+        for (int y = 0; y < h; ++y)
+        {
+            const uchar *src = img.constScanLine(y);
+            uchar *dst = tmp.scanLine(y);
+            for (int x = 0; x < w; ++x)
+            {
+                int sum = 0, n = 0;
+                for (int kk = -r; kk <= r; ++kk)
+                {
+                    const int xx = x + kk;
+                    if (xx >= 0 && xx < w) { sum += src[xx]; ++n; }
+                }
+                dst[x] = uchar(sum / qMax(1, n));
+            }
+        }
+        QImage out2 = tmp.copy();
+        for (int y = 0; y < h; ++y)
+        {
+            uchar *dst = out2.scanLine(y);
+            for (int x = 0; x < w; ++x)
+            {
+                int sum = 0, n = 0;
+                for (int kk = -r; kk <= r; ++kk)
+                {
+                    const int yy = y + kk;
+                    if (yy >= 0 && yy < h) { sum += tmp.constScanLine(yy)[x]; ++n; }
+                }
+                dst[x] = uchar(sum / qMax(1, n));
+            }
+        }
+        img = out2;
+    }
+    QMutexLocker locker(&lock);
+    if (cache.size() > 96)
+        cache.clear();
+    cache.insert(k, img);
+    return img;
+}
+
 BeamOptics::Optics BeamOptics::frosted(const Optics &in, double frost)
 {
     Optics out = in;
@@ -455,45 +515,8 @@ BeamOptics::Optics BeamOptics::frosted(const Optics &in, double frost)
     out.softness = qMax(in.softness, frost);
     if (!in.mask.isNull() && in.mask.format() == QImage::Format_Grayscale8)
     {
-        // A box blur, wider with the frost (up to 8 of 64 pixels each way), twice.
         const int r = qMax(1, qRound(frost * 8.0));
-        QImage img = in.mask;
-        const int w = img.width(), h = img.height();
-        for (int pass = 0; pass < 2; ++pass)
-        {
-            QImage tmp = img.copy();
-            for (int y = 0; y < h; ++y)
-            {
-                const uchar *src = img.constScanLine(y);
-                uchar *dst = tmp.scanLine(y);
-                for (int x = 0; x < w; ++x)
-                {
-                    int sum = 0, n = 0;
-                    for (int k = -r; k <= r; ++k)
-                    {
-                        const int xx = x + k;
-                        if (xx >= 0 && xx < w) { sum += src[xx]; ++n; }
-                    }
-                    dst[x] = uchar(sum / qMax(1, n));
-                }
-            }
-            QImage out2 = tmp.copy();
-            for (int y = 0; y < h; ++y)
-            {
-                uchar *dst = out2.scanLine(y);
-                for (int x = 0; x < w; ++x)
-                {
-                    int sum = 0, n = 0;
-                    for (int k = -r; k <= r; ++k)
-                    {
-                        const int yy = y + k;
-                        if (yy >= 0 && yy < h) { sum += tmp.constScanLine(yy)[x]; ++n; }
-                    }
-                    dst[x] = uchar(sum / qMax(1, n));
-                }
-            }
-            img = out2;
-        }
+        QImage img = blurredMask(in.mask, r);
         out.mask = img;
         // Edge softness of a pictured beam is the picture's own: stays 0 there,
         // the blur carries it. (The cone's edge still goes soft below.)

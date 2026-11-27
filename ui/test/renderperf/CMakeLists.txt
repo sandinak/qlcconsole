@@ -27,3 +27,9 @@ target_link_libraries(${module_name} PRIVATE
     qlcplusengine
     qlcplusui
 )
+
+# The cases that need this branch's own API (label fields, strobe in the rig
+# view); the same file measures the commit before it without them.
+if(EXISTS ${CMAKE_SOURCE_DIR}/ui/src/monitor/plotnumbering.h)
+    target_compile_definitions(${module_name} PRIVATE STUDIO_LABEL_FIELDS=1)
+endif()
