@@ -1713,7 +1713,7 @@ void VCCueList_Test::theActiveCueStaysInTheMiddle()
     QWidget w;
     w.resize(320, 260);
     VCCueList cl(&w, m_doc);
-    cl.resize(300, 240);
+    cl.resize(QSize(300, 240));
     cl.setChaser(ch->id());
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
@@ -1755,7 +1755,7 @@ void VCCueList_Test::theLastCueReachesTheMiddleOverBlankSpace()
     QWidget w;
     w.resize(320, 260);
     VCCueList cl(&w, m_doc);
-    cl.resize(300, 240);
+    cl.resize(QSize(300, 240));
     cl.setChaser(ch->id());
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
@@ -1787,7 +1787,7 @@ void VCCueList_Test::backAndJumpsFollowTheSameRule()
     QWidget w;
     w.resize(320, 260);
     VCCueList cl(&w, m_doc);
-    cl.resize(300, 240);
+    cl.resize(QSize(300, 240));
     cl.setChaser(ch->id());
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
@@ -1830,7 +1830,7 @@ void VCCueList_Test::aHandOnTheListIsNotFought()
     QWidget w;
     w.resize(320, 260);
     VCCueList cl(&w, m_doc);
-    cl.resize(300, 240);
+    cl.resize(QSize(300, 240));
     cl.setChaser(ch->id());
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
@@ -1870,7 +1870,7 @@ void VCCueList_Test::songHeadersScrollLikeAnyRow()
     QWidget w;
     w.resize(320, 260);
     VCCueList cl(&w, m_doc);
-    cl.resize(300, 240);
+    cl.resize(QSize(300, 240));
     cl.setChaser(ch->id());
     w.show();
     QVERIFY(QTest::qWaitForWindowExposed(&w));
