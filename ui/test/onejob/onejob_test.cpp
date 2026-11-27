@@ -52,7 +52,7 @@ namespace
 const QString kApc = QStringLiteral("Akai APC40 mkII");
 const quint32 kMasterFader = 14;        // the APC's seeded Grand Master
 const quint32 kKnob1 = 16;              // Pan on the Move page
-const quint32 kFreeFader = 3;
+const quint32 kFreeFader = 128 + 34;   // a clip pad nothing uses
 
 void settle()
 {
