@@ -369,6 +369,11 @@ QList<Row> windows()
                 v->m_confirmed = false;
                 FocusCallsDialog::confirmVenue(a->doc(), a);
             })
+         // The plot's right-click ▸ Number… on a selection of fixtures.
+         << row("NumberInPlotOrderDialog", QStringLiteral("Number in plot order"), [](App *a) {
+                if (Monitor *m = Monitor::instance())
+                    m->numberInPlotOrder(someFixtures(a->doc(), 3), a);
+            }, 0, heldPlot)
          << row("VenueRigDialog", QStringLiteral("Venue rig"),
                 [](App *a) { VenueRigDialog::open(a->doc(), a, g_venue); })
          << row("VenueFromShowDialog", QStringLiteral("New venue from a show"),
