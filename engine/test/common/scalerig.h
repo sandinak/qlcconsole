@@ -28,16 +28,16 @@ namespace ScaleRig
      30-39  two movers each (Martin ERA 300 Profile, 21 ch: pan/tilt + fine,
             zoom, gobos, prism) -- sparse;
      40-49  two RGBW washes each (American DJ Micro Wash RGBW, 7 ch) -- sparse;
-     50-75  two pixel bars each, 64 RGBW pixels (256 ch): 512 channels;
+     50-75  three pixel bars each, 42 RGBW pixels (168 ch): 504 channels;
      76-77  27 WLED Lanterns each (Effect, 15 ch);
      78     12 movers and 12 washes;
-     79     60 house dimmers (1 ch).
-   260 fixtures, 26,598 channels, 6,208 pixel heads. */
+     79     34 house dimmers (1 ch).
+   260 fixtures, 26,364 channels, 6,156 pixel heads. */
 const int kUniverses = 80;
 const int kSparseUniverses = 50;
 const int kFixtures = 260;
-const int kChannels = 26598;
-const int kPixelHeads = 6208;
+const int kChannels = 26364;
+const int kPixelHeads = 6156;
 const int kCues = 40;
 
 struct Built

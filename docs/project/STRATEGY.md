@@ -106,9 +106,12 @@ big-console clone, and not a media server.
 6. **Reliability beats features.** Every change passes the three-leg gate.
    A bug found at a show outranks any roadmap item. Nothing installs
    during a show, and a pad picked up mid-show never moves it.
-7. **Small rigs, small machines.** Design for a laptop at a school, a few
-   hundred fixtures and Art-Net/sACN nodes. Don't design for 40 universes
-   of pixels or a networked multi-console session.
+7. **The shows we run, on small machines.** Design for a laptop at a
+   school and for the shows we run: about 260 fixtures and 26,000 channels
+   over 80 universes, many holding one or two devices for cabling; the
+   gate's size check holds that
+   ([ui/test/showscale](../../ui/test/showscale/showscale_test.cpp), board
+   Q360). Don't design for a networked multi-console session.
 8. **Respect for upstream.** qlcconsole stands on QLC+. It takes fixes and
    fixtures from upstream with credit, sends useful fixes back, and never
    markets itself against QLC+ 5.

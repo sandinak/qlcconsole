@@ -29,7 +29,7 @@ class CountingOutput;
 
 /** The gate's size check (board Q360, docs/project/STRATEGY.md guardrail 7):
  *  the whole app on a show the size and shape of the ones we run --
- *  engine/test/common/scalerig.h: 260 fixtures, 26,598 channels over 80
+ *  engine/test/common/scalerig.h: 260 fixtures, 26,364 channels over 80
  *  universes, 50 of them holding one or two devices -- with a Show Tree
  *  cue list fading, an RGB matrix over every pixel, an EFX on every mover
  *  and three chasers all running, in Operate.
@@ -48,11 +48,14 @@ class ShowScale_Test final : public QObject
 private slots:
     void initTestCase();
     void cleanupTestCase();
+    void init();
+    void cleanup();
 
     void theRigHasTheShowsShape();
     void theShowSavesAndLoadsInTime();
     void theEngineKeepsItsFrame();
     void theStudioAndOverviewKeepUp();
+    void whereAFrameGoes();
     void memoryStaysFlatOverAMinute();
 
 private:
@@ -66,6 +69,7 @@ private:
     App *m_app = nullptr;
     CountingOutput *m_output = nullptr;
     ScaleRig::Built m_rig;
+    qint64 m_slotStart = 0;     ///< when the running test function started (ms)
     double m_loadedMB = 0;      ///< resident memory with the show loaded, nothing run
 };
 

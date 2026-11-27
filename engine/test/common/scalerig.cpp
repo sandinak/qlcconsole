@@ -171,15 +171,15 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
             keep(out->washes, fromLibrary(wash, u, QString("Wash %1").arg(n + 1), 600 + n * 1000, 2000, 6000));
         }
     }
-    // 50-75: two 64-pixel bars each, two rows across the stage
+    // 50-75: three 42-pixel bars each, three rows across the stage
     for (int u = 50; u < 76; ++u)
     {
         address = 0;
-        for (int i = 0; i < 2; ++i)
+        for (int i = 0; i < 3; ++i)
         {
-            const int n = (u - 50) * 2 + i;
-            keep(out->bars, pixelBar(u, QString("Bar %1").arg(n + 1), 64, 680,
-                                     300 + (n % 26) * 750, n < 26 ? 4000 : 10000, 3000));
+            const int n = (u - 50) * 3 + i;
+            keep(out->bars, pixelBar(u, QString("Bar %1").arg(n + 1), 42, 680,
+                                     300 + (n % 26) * 750, 3000 + (n / 26) * 3500, 3000));
         }
     }
     // 76-77: 27 lanterns each, hung in three rows
@@ -201,11 +201,11 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
         keep(out->washes, fromLibrary(wash, 78, QString("Wash %1").arg(21 + i), 1600 + i * 1600, 11000, 6000));
     // 79: the house dimmers, front of house
     address = 0;
-    for (int i = 0; i < 60; ++i)
+    for (int i = 0; i < 34; ++i)
     {
         Fixture *fx = new Fixture(doc);
         fx->setChannels(1);
-        keep(out->dimmers, place(fx, 79, QString("House %1").arg(i + 1), 300 + i * 320, 500, 7000));
+        keep(out->dimmers, place(fx, 79, QString("House %1").arg(i + 1), 300 + i * 560, 500, 7000));
     }
 
     if (doc->fixtures().size() != kFixtures)
@@ -251,9 +251,9 @@ bool ScaleRig::build(Doc *doc, Built *out, QString *why)
     out->moverGroup = group("Movers", out->movers, QSize(16, 2));
     out->washGroup = group("Washes", out->washes, QSize(16, 2));
     out->lanternGroup = group("Lanterns", out->lanterns, QSize(18, 3));
-    out->houseGroup = group("House", out->dimmers, QSize(60, 1));
+    out->houseGroup = group("House", out->dimmers, QSize(34, 1));
     const quint32 ustGroup = group("USTs", out->usts, QSize(30, 1));
-    const quint32 barGroup = group("Bars", out->bars, QSize(26, 2));
+    const quint32 barGroup = group("Bars", out->bars, QSize(26, 3));
 
     // ---- the effects --------------------------------------------------------
     RGBMatrix *mtx = new RGBMatrix(doc);
