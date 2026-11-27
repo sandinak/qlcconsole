@@ -2478,6 +2478,8 @@ void FixtureManager_Test::duplicateAndUndoKeepTheViewAndSelectTheRow()
     QVERIFY(scrolled > 0);
     const int rowH = tree->visualItemRect(row).height();
     QVERIFY(rowH > 0);
+    // A real long list: the whole of it is rows, far taller than the view.
+    QVERIFY2(tree->verticalScrollBar()->maximum() > 20 * rowH, qPrintable(viewState(mgr, row)));
     const QList<bool> open = openRows(mgr);
     auto steady = [&](const char *what) {
         QVERIFY2(qAbs(tree->verticalScrollBar()->value() - scrolled) <= rowH,
