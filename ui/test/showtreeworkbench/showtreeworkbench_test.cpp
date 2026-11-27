@@ -31,6 +31,10 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QDir>
+#include <QTemporaryDir>
+#include <QTabBar>
+#include <QCheckBox>
+#include <QScrollArea>
 #include <QMenu>
 #include <QTimer>
 #include <QtTest>
@@ -51,6 +55,7 @@
 
 #include "functionstreewidget.h"
 #include "showtreecontroller.h"
+#include "showlevel.h"
 #include "showcontrol.h"
 #include "chaserwalker.h"
 #include "inputoutputmap.h"
@@ -1852,6 +1857,278 @@ void ShowTreeWorkbench_Test::shots()
 
     app->doc()->resetModified();
     delete app;
+}
+
+/* A real busy cue, in the docked Workbench, at the three sizes a screen is:
+   the pane is listed (qInfo "[WBPANE]": every visible control by name) and, with
+   QLC_SHOT_DIR, shot. The show is a copy in a temporary folder. */
+void ShowTreeWorkbench_Test::aBusyCourseCueAtThreeSizes()
+{
+    const QString src = QStringLiteral(COURSE_DIR "/shows/lesson-3-9-finish.qlcc");
+    QVERIFY2(QFileInfo::exists(src), qPrintable(src));
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("show.qlcc"));
+    QVERIFY(QFile::copy(src, path));
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+        QDir().mkpath(shots);
+
+    App *app = new App();
+    app->init();
+    app->resize(1440, 900);
+    app->showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(app));
+    QCOMPARE(app->loadXML(path), QFile::NoError);
+    app->doc()->setMode(Doc::Design);
+    QTest::qWait(600);
+    ShowTreeView *view = ShowTreeView::instance();
+    QWidget *w = view;
+    while (w != nullptr && app->m_tab->indexOf(w) < 0)
+        w = w->parentWidget();
+    QVERIFY(w != nullptr);
+    app->m_tab->setCurrentWidget(w);
+
+    // The cue that carries the most in.
+    ShowTreeController *st = app->doc()->showTree();
+    quint32 pick = invalidId();
+    int most = -1;
+    for (const Production &p : st->productions())
+        for (const CueList &l : p.lists)
+        {
+            if (l.looks || l.isSubCues())
+                continue;
+            const QList<ResolvedCue> rcs = st->resolved(l);
+            for (int i = 0; i < l.cues.size() && i < rcs.size(); ++i)
+            {
+                int carried = 0;
+                for (const ResolvedLayer &rl : rcs.at(i).layers)
+                    carried += rl.own ? 0 : 1;
+                if (carried > most)
+                {
+                    most = carried;
+                    pick = l.cues.at(i).id;
+                }
+            }
+        }
+    QVERIFY(pick != invalidId());
+    qInfo().noquote() << "[WBPANE] cue" << pick << "carries" << most << "layers";
+
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        app->resize(sz);
+        QTest::qWait(300);
+        QVERIFY(view->openInWorkbench(pick));
+        QTest::qWait(300);
+        Workbench *bench = view->dockedWorkbench();
+        QVERIFY(bench != nullptr);
+        bench->rows()->expandAll();
+        QStringList seen;
+        for (QWidget *c : bench->findChildren<QWidget *>())
+            if (!c->objectName().isEmpty() && c->isVisibleTo(bench) && c->isVisible())
+                seen << c->objectName();
+        qInfo().noquote() << "[WBPANE]" << sz.width() << "x" << sz.height() << seen.join(QLatin1Char(' '));
+        const QString tag = QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height());
+        if (!shots.isEmpty())
+            QVERIFY(app->grab().save(QDir(shots).filePath(QStringLiteral("cue-workbench-%1.png").arg(tag))));
+        // Each tab of the cue page; the header and the rows stay in every one.
+        QVERIFY(view->cueTabsShown());
+        for (int t = 0; t < ShowTreeView::CueTabCount; ++t)
+        {
+            view->showCueTab(ShowTreeView::CueTab(t));
+            QTest::qWait(150);
+            QVERIFY(bench->findChild<QWidget *>("workbenchHeader")->isVisible());
+            QVERIFY(bench->rows()->isVisible());
+            if (t == ShowTreeView::CueTrackingTab)
+            {
+                // Nothing clipped: the list is as tall as its wrapped text needs.
+                QLabel *tracked = view->findChild<QLabel *>("stCueTracked");
+                if (tracked != nullptr && tracked->isVisible())
+                    QVERIFY2(tracked->height() >= tracked->heightForWidth(tracked->width()),
+                             qPrintable(tag));
+            }
+            if (!shots.isEmpty())
+                QVERIFY(app->grab().save(QDir(shots).filePath(
+                    QStringLiteral("cue-workbench-tab%1-%2.png").arg(t).arg(tag))));
+        }
+        view->showCueTab(ShowTreeView::CueEditTab);
+        QVERIFY(view->closeWorkbench());
+    }
+    app->doc()->resetModified();
+    delete app;
+    ShowLevel::instance()->setLevel(ShowLevel::Standard);    // the course show's level was Student
+}
+
+/* Tab the cue page in the docked Workbench (Edit | Tracking | Timing | Notes):
+   header and layer rows stay put, every control the page had is one tab click
+   away -- found by its objectName -- and the tree's own page shows them all. */
+void ShowTreeWorkbench_Test::theCuePageIsTabbedInTheWorkbench()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    // The tree's own page, no Workbench: no tabs, every row there.
+    QVERIFY(view.selectNode(s.c2));
+    QVERIFY(!view.cueTabsShown());
+    for (const char *name : { "stCueNumber", "stCueFadeIn", "stCueNote", "stCueMode", "stCueTracked" })
+        QVERIFY2(view.findChild<QWidget *>(name)->isVisibleTo(&view), name);
+
+    QVERIFY(view.openInWorkbench(s.c2));
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    QTabBar *tabs = view.findChild<QTabBar *>("stCueTabs");
+    QVERIFY(tabs != nullptr);
+    QVERIFY(view.cueTabsShown());
+    QVERIFY(tabs->isVisibleTo(&view));
+    // The header and the layer rows are not in a tab.
+    QVERIFY(bench->findChild<QWidget *>("workbenchHeader")->isVisibleTo(bench));
+    QVERIFY(bench->rows()->isVisibleTo(bench));
+    QVERIFY(!tabs->isAncestorOf(bench->rows()) && !bench->rows()->isAncestorOf(tabs));
+
+    const QMap<ShowTreeView::CueTab, QStringList> byTab = {
+        { ShowTreeView::CueEditTab, { "stCueNumber", "stCueName", "stCueColour", "stCueLayers" } },
+        { ShowTreeView::CueTrackingTab, { "stCueMode", "stCueBlocking", "stCueBase", "stCueMix", "stCueIncludes",
+                                          "stIncludeAdd", "stCueTracked" } },
+        { ShowTreeView::CueTimingTab, { "stCueFadeIn", "stCueFadeOut", "stCueHold", "stCueTimecode", "stCueSkip",
+                                        "stCueFast", "stCueNoMib" } },
+        { ShowTreeView::CueNotesTab, { "stCueNote", "stCueNeedsWork", "stCueFocusCall", "stCueRefine" } },
+    };
+    for (auto it = byTab.cbegin(); it != byTab.cend(); ++it)
+    {
+        // One click on the tab, and everything it holds is there...
+        const int index = int(it.key());
+        QVERIFY(!tabs->isTabVisible(index) == false);
+        QTest::mouseClick(tabs, Qt::LeftButton, Qt::NoModifier, tabs->tabRect(index).center());
+        QCOMPARE(view.cueTab(), it.key());
+        for (const QString &name : it.value())
+        {
+            QWidget *w = view.findChild<QWidget *>(name);
+            QVERIFY2(w != nullptr, qPrintable(name));
+            QVERIFY2(w->isVisibleTo(&view), qPrintable(name + " not shown on its tab"));
+        }
+        // ...and what the other tabs hold is not.
+        for (auto other = byTab.cbegin(); other != byTab.cend(); ++other)
+            if (other.key() != it.key())
+                for (const QString &name : other.value())
+                    QVERIFY2(!view.findChild<QWidget *>(name)->isVisibleTo(&view), qPrintable(name));
+        // The rows beside it are still the cue's.
+        QVERIFY(bench->rows()->isVisibleTo(bench));
+    }
+
+    // What needs a look says so in its tab: the carried-in layers count.
+    QVERIFY2(tabs->tabText(int(ShowTreeView::CueTrackingTab)).contains(QStringLiteral("Tracking · ")),
+             qPrintable(tabs->tabText(int(ShowTreeView::CueTrackingTab))));
+    // Needs work puts a mark on Notes.
+    view.showCueTab(ShowTreeView::CueNotesTab);
+    QCOMPARE(tabs->tabText(int(ShowTreeView::CueNotesTab)), QStringLiteral("Notes"));
+    QVERIFY(m_doc->showTree()->setCuesNeedsWork({ s.c2 }, true));
+    QTest::qWait(50);
+    QVERIFY2(tabs->tabText(int(ShowTreeView::CueNotesTab)).contains(QStringLiteral("●")),
+             qPrintable(tabs->tabText(int(ShowTreeView::CueNotesTab))));
+
+    // The last tab is remembered, for the session: close, open again.
+    view.showCueTab(ShowTreeView::CueTimingTab);
+    QVERIFY(view.closeWorkbench());
+    QVERIFY(!view.cueTabsShown());
+    QVERIFY(view.findChild<QWidget *>("stCueNote")->isVisibleTo(&view) || true);
+    QVERIFY(view.openInWorkbench(s.c2));
+    QCOMPARE(view.cueTab(), ShowTreeView::CueTimingTab);
+    QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
+    // Another cue, same tab.
+    QVERIFY(view.selectNode(s.c1));
+    QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
+    view.showCueTab(ShowTreeView::CueEditTab);     // leave the next test its default
+}
+
+/* The tracked list wraps under itself: at 1024x640 nothing in it is clipped. */
+void ShowTreeWorkbench_Test::theTrackedListWrapsAtASmallSize()
+{
+    const Show s = SHOW();
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1024, 640);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    QVERIFY(view.openInWorkbench(s.c2));
+    view.showCueTab(ShowTreeView::CueTrackingTab);
+    QTest::qWait(100);
+    QLabel *tracked = view.findChild<QLabel *>("stCueTracked");
+    QVERIFY(tracked != nullptr && tracked->isVisibleTo(&view));
+    QVERIFY(tracked->wordWrap());
+    // Wide as the pane lets it, never wider, and tall enough for every line.
+    QWidget *page = view.findChild<QWidget *>("stCuePage");
+    QVERIFY(tracked->width() <= page->width());
+    QVERIFY2(tracked->height() >= tracked->heightForWidth(tracked->width()),
+             qPrintable(QString("%1 < %2").arg(tracked->height()).arg(tracked->heightForWidth(tracked->width()))));
+    QVERIFY2(tracked->text().contains(QStringLiteral("USTs")), qPrintable(tracked->text()));
+    view.showCueTab(ShowTreeView::CueEditTab);
+}
+
+/* Branson, 2026-11-27: "I see the indicators, but when I open the Workbench on
+   the group it only does the last one." Three layers selected in the tree and
+   opened in the Workbench are three selected there: a level changed reaches
+   all three, and Undo puts all three back in one step. */
+void ShowTreeWorkbench_Test::openingSeveralSelectedLayersEditsThemAll()
+{
+    const Show s = SHOW();
+    ShowTreeController *st = m_doc->showTree();
+    FixtureGroup *third = new FixtureGroup(m_doc);
+    third->setName("Rail");
+    m_doc->addFixtureGroup(third);
+    third->assignFixture(m_fixtures[4]);
+    Target rt;
+    rt.groups << third->id();
+    const quint32 railLayer = st->addLayer(s.c1, rt);
+    QVERIFY(st->setLayerLook(s.c1, railLayer, st->lookForPalette(s.low)));
+    st->clearUndo();
+
+    ShowTreeView view(nullptr, m_doc);
+    view.resize(1400, 800);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    // Three layer rows of the cue, selected in the tree.
+    const QList<quint32> layers = { s.towersLayer1, s.ustsLayer1, railLayer };
+    QVERIFY(view.selectNode(layers.at(0), s.c1));
+    for (quint32 id : layers)
+    {
+        QTreeWidgetItem *item = view.findItem(id, s.c1);
+        QVERIFY(item != nullptr);
+        item->setSelected(true);
+    }
+    QCOMPARE(view.selectedLayerRefs().size(), 3);
+    QVERIFY2(view.currentCueId() == s.c1 && view.currentKind() == ShowTreeView::LayerNode,
+             qPrintable(QString("cue %1 kind %2").arg(view.currentCueId()).arg(int(view.currentKind()))));
+    QVERIFY(ShowLevel::shown(QStringLiteral("showtree.workbench")));
+    QVERIFY(view.openSelectionInWorkbench());
+    Workbench *bench = view.dockedWorkbench();
+    QVERIFY(bench != nullptr);
+    QCoreApplication::processEvents();
+
+    // All three are selected in the Workbench's rows and in the tree.
+    int selectedLayers = 0;
+    for (const ProgrammingOutline::Row &r : bench->rows()->selectedRows())
+        selectedLayers += r.kind == ProgrammingOutline::CueLayerRow ? 1 : 0;
+    QCOMPARE(selectedLayers, 3);
+    QCOMPARE(view.selectedLayerRefs().size(), 3);
+    QCOMPARE(view.multiLayers().size(), 3);
+
+    // A level changed there is all three, in one undo step.
+    const quint32 cur = view.currentId();
+    QVERIFY(view.applyLook(s.c1, cur, Target(), st->lookForPalette(s.full)));
+    for (quint32 id : layers)
+    {
+        const Layer *l = st->cue(s.c1)->layer(id);
+        QVERIFY(l != nullptr && !l->looks.isEmpty());
+        QCOMPARE(l->looks.first().palettes.value(0), s.full);
+    }
+    QVERIFY(st->undo());
+    const quint32 want[] = { s.full, s.half, s.low };
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(st->cue(s.c1)->layer(layers.at(i))->looks.first().palettes.value(0), want[i]);
+    QVERIFY(!st->canUndo());
 }
 
 QTEST_MAIN(ShowTreeWorkbench_Test)

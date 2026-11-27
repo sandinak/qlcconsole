@@ -111,6 +111,7 @@ public:
     void fillLayerMenu(QMenu *menu, int layer);
     bool clearAttribute(int layer, int attribute) override;
     QWidget *lendPane(int layer, int attribute) override;
+    void setAlsoSelectedLayers(const QList<int> &layers) override { m_alsoLayers = layers; }
     void returnPane(QWidget *pane) override;
     QList<quint32> layerFixtures(int layer) const override;
     int layerOfFixture(quint32 fixtureId) const override;
@@ -130,6 +131,7 @@ public:
     quint32 soloScene() const { return m_soloScene; }
 
 private:
+    QList<int> m_alsoLayers;       //!< the other layers selected in the rows
     struct Row
     {
         quint32 layerId = 0xFFFFFFFF;   //!< invalid: carried in

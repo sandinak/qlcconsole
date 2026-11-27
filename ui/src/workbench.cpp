@@ -2949,6 +2949,18 @@ void Workbench::showStackRow(const ProgrammingOutline::Row &row)
     clearEditors();
     m_stack->setFocusLayer(layer);
     m_stackLayer = layer;
+    {
+        // The other layers selected beside it: the back end's page edits them together.
+        QList<int> also;
+        for (const ProgrammingOutline::Row &r : m_rows->selectedRows())
+        {
+            const int l = r.kind == ProgrammingOutline::CueLayerRow ? int(r.id)
+                          : r.kind == ProgrammingOutline::AttributeRow ? int(r.scene) : -1;
+            if (l >= 0 && l != layer && !also.contains(l))
+                also << l;
+        }
+        m_stack->setAlsoSelectedLayers(also);
+    }
 
     // The selected layer, highlighted on the 2D view; Flash / Park follow.
     const QList<quint32> fixtures = m_stack->layerFixtures(layer);

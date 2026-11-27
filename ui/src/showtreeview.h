@@ -949,8 +949,10 @@ public:
      *  layer @a layerId -- or the layer carried in on @a trackedSignature
      *  -- selected. False: no such cue. */
     bool openInWorkbench(quint32 cueId, quint32 layerId = 0xFFFFFFFF,
-                         const QString &trackedSignature = QString());
-    /** The tree's selection (a cue, a look, a layer) in the Workbench. */
+                         const QString &trackedSignature = QString(),
+                         const QList<quint32> &alsoLayers = QList<quint32>());
+    /** The tree's selection (a cue, a look, a layer -- every layer of several
+     *  selected) in the Workbench: an edit there reaches all of them. */
     bool openSelectionInWorkbench();
     /** Function @a functionId (a scene, a collection, a chaser...) in the
      *  Workbench, docked here with no cue (board Q228: Build is not a tab
@@ -989,6 +991,11 @@ public:
     bool isWorkbenchDocked() const;
     /** The Workbench docked here (null: none). */
     class Workbench *dockedWorkbench() const;
+    /** The cue page's tabs (visible while the Workbench has it docked). */
+    enum CueTab { CueEditTab = 0, CueTrackingTab, CueTimingTab, CueNotesTab, CueTabCount };
+    void showCueTab(CueTab tab);            //!< switch to it (an action that needs it)
+    CueTab cueTab() const;
+    bool cueTabsShown() const;              //!< the bar is up (docked, and more than one tab has content)
     /** Where the Workbench comes from: Build's (App sets it) -- @a borrow
      *  takes it out of Build, @a giveBack puts it back as it was. Without
      *  one, the tree makes a Workbench of its own (tests). */
@@ -1406,10 +1413,13 @@ private:
     quint32 m_lastPickedCue = 0xFFFFFFFF;
     /** The tree's selection moved while docked: the Workbench follows. */
     void workbenchFollowTree();
+    QList<quint32> alsoSelectedLayers(quint32 cueId, quint32 current) const;
+    void selectAlsoForWorkbench(quint32 cueId, const QList<quint32> &layers);
     /** The page (the inspector) lent to the docked Workbench's editor pane,
      *  for cue @a cueId's layer @a layerId / carried-in @a signature (none:
      *  the cue's page). */
-    QWidget *lendInspector(quint32 cueId, quint32 layerId, const QString &signature);
+    QWidget *lendInspector(quint32 cueId, quint32 layerId, const QString &signature,
+                           const QList<quint32> &alsoLayers = QList<quint32>());
     void takeBackInspector();
     /** The Workbench selected a layer (or, none, the cue): the tree too,
      *  without the tree moving the Workbench in turn. */
@@ -1465,6 +1475,22 @@ private:
 
     // R3: the Looks section
     QFormLayout *m_cueForm = nullptr;
+    // The cue page's tabs, while the Workbench has it docked (Edit | Tracking | Timing | Notes).
+    class QTabBar *m_cueTabBar = nullptr;
+    QHash<QWidget *, int> m_cueRowTab;          //!< a form row's field widget -> its tab
+    QHash<QWidget *, bool> m_cueRowWanted;      //!< what the page wants of it, before the tab
+    bool m_cueTabsOn = false;                   //!< docked: the tabs are in use
+    bool m_cueTabsFilter = false;               //!< ... and more than one has something to show
+    bool m_cueTabsSyncing = false;
+    static int s_cueTab;                        //!< the last tab, for the session
+    static QString cueTabName(CueTab tab);
+    void setCueTabsOn(bool on);
+    static QString trackedHtml(const QString &text);
+    void registerCueTabs();
+    void setCueRow(QWidget *w, bool wanted);
+    bool inCueTab(QWidget *w) const;
+    void applyCueTabs();
+    void updateCueTabTitles(int tracked, bool timing, bool notes);
     QFormLayout *m_listForm = nullptr;
     QLabel *m_lookFiredBy = nullptr;
     QLabel *m_hitWhen = nullptr;        //!< a hit's place: when it fires (Q154)

@@ -105,6 +105,12 @@ private slots:
     /** W3_SHOTS=<dir> W3_SHOW_06=<copy of DanceHysteria-0.6.qlcc>
      *  W3_SHOW_01=<copy of DanceHysteria-0.1.qlcc>: real-cue pictures. */
     void shots();
+    /** A real busy cue (a course show, copied) at 1024x640, 1440x900 and
+     *  1920x1080: lists the pane's controls; QLC_SHOT_DIR also shoots it. */
+    void aBusyCourseCueAtThreeSizes();
+    void theCuePageIsTabbedInTheWorkbench();
+    void openingSeveralSelectedLayersEditsThemAll();
+    void theTrackedListWrapsAtASmallSize();
     void aRealMouseDragMovesALookRowAndAltCopiesIt();
     void aFunctionLayerCanBeReleasedFromTheDockedWorkbench();
     void aHoldTypedInTheStepHeaderIsWhatGoPlays();

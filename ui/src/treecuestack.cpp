@@ -937,9 +937,14 @@ QWidget *TreeCueStack::lendPane(int layer, int attribute)
     const QList<Row> rs = rows();
     if (layer < 0 || layer >= rs.size())
         return m_view->lendInspector(m_cue, ShowTree::invalidId(), QString());
+    QList<quint32> also;
+    if (rs.at(layer).layerId != ShowTree::invalidId())
+        for (int other : m_alsoLayers)
+            if (other != layer && other >= 0 && other < rs.size() && rs.at(other).layerId != ShowTree::invalidId())
+                also << rs.at(other).layerId;
     return m_view->lendInspector(m_cue, rs.at(layer).layerId,
                                  rs.at(layer).layerId == ShowTree::invalidId() ? rs.at(layer).target.signature()
-                                                                                : QString());
+                                                                                : QString(), also);
 }
 
 void TreeCueStack::returnPane(QWidget *pane)

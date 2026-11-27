@@ -70,6 +70,7 @@
 #include "functionstreewidget.h"
 #include "fixturegroupsource.h"
 #include "lookeditor.h"
+#include "capabilitybar.h"
 #include "scene.h"
 #include "sequence.h"
 #include "chaserstep.h"
@@ -2228,6 +2229,81 @@ void ProgrammingManager_Test::scenesDragIntoAFolderAndBackOut()
     QVERIFY(plan.startsWith("!") && plan.contains("Workbench"));
     QVERIFY(!outlineDrop(o, mime, o->sceneItem(c)));
     QCOMPARE(m_doc->function(b)->path(true), QString());
+}
+
+/* Branson, 2026-11-27: "I see the indicators, but when I open the Workbench on
+   the group it only does the last one." A collection (the group) loaded in
+   Build, three looks of its layers picked in the navigator: all three are
+   selected in the Workbench and a level changed there reaches all three, in
+   one undo step. (Only the last one's own scene was mirrored.) */
+void ProgrammingManager_Test::severalLooksOfAGroupsLayersOpenTogether()
+{
+    PaletteOps *ops = m_doc->paletteOps();
+    QList<quint32> scenes, looks;
+    for (int i = 0; i < 3; ++i)
+    {
+        Scene *sc = new Scene(m_doc);
+        sc->setName(QString("Layer %1").arg(i));
+        m_doc->addFunction(sc);
+        const quint32 pid = ops->create(QLCPalette::Dimmer, QString(), QString("Level %1").arg(i), { 40 + i });
+        sc->addPalette(pid);
+        scenes << sc->id();
+        looks << pid;
+    }
+    Collection *group = new Collection(m_doc);
+    group->setName("Stack");
+    m_doc->addFunction(group);
+    for (quint32 id : scenes)
+        group->addFunction(id);
+    ops->clearUndo();
+
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(1400, 800);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    mgr.setSection(ProgrammingManager::ScenesSection);
+    ProgrammingOutline *o = mgr.m_outline;
+    o->rebuild();
+    mgr.workbench()->load(group->id());
+    QCoreApplication::processEvents();
+
+    QList<QTreeWidgetItem *> items;
+    for (int i = 0; i < 3; ++i)
+    {
+        ProgrammingOutline::Row r;
+        r.kind = ProgrammingOutline::PaletteRow;
+        r.scene = scenes.at(i);
+        r.id = looks.at(i);
+        o->expandItem(o->sceneItem(scenes.at(i)));
+        QTreeWidgetItem *it = o->itemFor(r);
+        QVERIFY2(it != nullptr, "the navigator has no look row");
+        items << it;
+    }
+    o->clearSelection();
+    o->setCurrentItem(items.at(0));
+    for (QTreeWidgetItem *it : items)
+        it->setSelected(true);
+    o->setCurrentItem(items.last(), 0, QItemSelectionModel::NoUpdate);   // the last one picked
+    mgr.slotOutlineSelectionChanged();
+    QCoreApplication::processEvents();
+
+    Workbench *wb = mgr.workbench();
+    int selectedLooks = 0;
+    for (const ProgrammingOutline::Row &r : wb->rows()->selectedRows())
+        selectedLooks += r.kind == ProgrammingOutline::PaletteRow ? 1 : 0;
+    QCOMPARE(selectedLooks, 3);
+    QCOMPARE(wb->currentPage(), Workbench::LookPage);
+    QCOMPARE(wb->lookEditor()->paletteId(), looks.last());
+    QCOMPARE(wb->lookEditor()->alsoEditing().size(), 2);
+
+    // A level changed there is all three; one Undo puts all three back.
+    wb->lookEditor()->m_dimmerBar->setValue(200);
+    for (quint32 pid : looks)
+        QCOMPARE(m_doc->palette(pid)->intValue1(), 200);
+    QVERIFY(m_doc->showTree()->undoShared());
+    for (int i = 0; i < 3; ++i)
+        QCOMPARE(m_doc->palette(looks.at(i))->intValue1(), 40 + i);
+    QVERIFY(!ops->canUndo());
 }
 
 void ProgrammingManager_Test::newHereMakesASceneInTheFolder()

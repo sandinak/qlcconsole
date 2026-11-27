@@ -28,3 +28,8 @@ target_link_libraries(${module_name} PRIVATE
 target_link_libraries(${module_name} PRIVATE
     Qt6::Qml
 )
+
+# The course lives in the repo: a busy cue to look at (a copy of its show is used).
+target_compile_definitions(${module_name} PRIVATE
+    COURSE_DIR="${CMAKE_SOURCE_DIR}/docs/course"
+)

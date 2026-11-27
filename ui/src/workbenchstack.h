@@ -176,6 +176,9 @@ public:
     /** A page of the back end's own for the editor pane (layer @a layer,
      *  -1: the whole), lent: handed back with returnPane(). Null: none. */
     virtual QWidget *lendPane(int layer, int attribute);
+    /** The layers selected beside the current one in the rows (the back end's
+     *  page may edit them together). */
+    virtual void setAlsoSelectedLayers(const QList<int> &) {}
     virtual void returnPane(QWidget *pane);
     /** The fixtures layer @a layer lights (the 2D view highlights them). */
     virtual QList<quint32> layerFixtures(int layer) const;

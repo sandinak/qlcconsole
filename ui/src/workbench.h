@@ -277,6 +277,9 @@ public:
      *  Build -- never a Show Tree cue (the Record is already beside it). */
     bool recordPointerWanted() const;
     QLabel *recordPointer() const { return m_recordPointer; }
+    /** The editor pane follows the rows' selection again (after rows were
+     *  selected from outside). */
+    void refreshEditor() { slotRowsSelectionChanged(); }
     /** The line that says the rows selected cannot be edited together (empty: hidden). */
     QString selectionNote() const;
 
