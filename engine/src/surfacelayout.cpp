@@ -131,6 +131,14 @@ SurfaceLayout SurfaceLayout::fromJson(const QByteArray &json, QString *error)
     l.m_name = root.value(QStringLiteral("name")).toString(l.m_profile);
     l.m_short = root.value(QStringLiteral("short")).toString();
     l.m_lampKind = root.value(QStringLiteral("lampKind")).toString();
+    // "shift": the modifier's channel; "guards": what it guards by default.
+    l.m_shift = quint32(root.value(QStringLiteral("shift")).toInt(-1));
+    l.m_gmTouch = quint32(root.value(QStringLiteral("gmTouch")).toInt(-1));
+    for (const QJsonValue &g : root.value(QStringLiteral("guards")).toArray())
+    {
+        l.m_guardStop = l.m_guardStop || g.toString() == QLatin1String("stop");
+        l.m_guardRelease = l.m_guardRelease || g.toString() == QLatin1String("release");
+    }
     const QJsonObject display = root.value(QStringLiteral("display")).toObject();
     l.m_displayLines = display.value(QStringLiteral("lines")).toInt();
     l.m_displayChars = display.value(QStringLiteral("chars")).toInt();
@@ -286,6 +294,10 @@ QStringList SurfaceLayout::selfTest(const QLCInputProfile *profile) const
                 out << QStringLiteral("channels %1 and %2 overlap").arg(a.channel).arg(m_controls.at(j).channel);
         }
     }
+    if (m_shift != 0xFFFFFFFF && indexOf(m_shift) < 0)
+        out << QStringLiteral("shift is on channel %1, which no control has").arg(m_shift);
+    if (m_gmTouch != 0xFFFFFFFF && indexOf(m_gmTouch) < 0)
+        out << QStringLiteral("gmTouch is on channel %1, which no control has").arg(m_gmTouch);
     QSet<QString> roles;
     for (const Role &r : m_roles)
     {

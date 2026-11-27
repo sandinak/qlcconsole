@@ -1344,7 +1344,7 @@ a key is one press (auto-repeat is ignored); letting go is the release,
 so **Momentary** and **GO while held** work. A hit's key fires and lets
 go exactly as its MIDI trigger would.
 
-- **When a key fires.** In **Operate** (⌘F12, the mode chip), always. In
+- **When a key fires.** In **Operate** (⌘F12, Control ▸ Operate), always. In
   **Design** only what is **armed**, so you can try hits and cues while
   you build:
   - **The Run tab's cue list** arms its own key, its cues' keys and the

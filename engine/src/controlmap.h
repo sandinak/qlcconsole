@@ -616,6 +616,15 @@ public:
      *  never dimmed away by it: a panic button is always findable. */
     bool dimWhenReady() const { return m_dimWhenReady; }
     void setDimWhenReady(bool on);
+    /** A board with a Shift key asks for it on its STOP and on the GO that
+     *  releases a stop (SurfaceLayout::shiftGuardsStop()): the board's own
+     *  default, or this show's word, saved with it (ShiftStop /
+     *  ShiftRelease). Auto follows the board. */
+    enum ShiftGuard { GuardAuto = -1, GuardOff = 0, GuardOn = 1 };
+    int shiftGuardStopSetting() const { return m_shiftStop; }
+    int shiftGuardReleaseSetting() const { return m_shiftRelease; }
+    void setShiftGuardStop(int setting);
+    void setShiftGuardRelease(int setting);
     /** The light a running hit or function shows on universe @a universe's
      *  board, in place of its profile's lit level: a board that blinks by
      *  the value it is sent (the PMJ Black 1's OpenDeck) blinks what runs
@@ -672,6 +681,8 @@ signals:
      *  reads lamp() again. Not per frame: on a GO, a list stopped, a
      *  function started or stopped, the arming, the mode, the stop. */
     void lampsChanged();
+    /** A Shift guard setting changed (setShiftGuardStop() / Release()). */
+    void shiftGuardsChanged();
 
     /*********************************************************************
      * Load & Save
@@ -909,6 +920,8 @@ private:
     /** A control that is ready glows dim; off for a pad whose LEDs take a
      *  colour in the velocity (the APCs) and show nothing at a dim level. */
     bool m_dimWhenReady = true;
+    int m_shiftStop = GuardAuto;
+    int m_shiftRelease = GuardAuto;
     QHash<quint32, uchar> m_runningLamp;     ///< setRunningLampValue()
     /** Each place a trigger has, while it is in the show: its production
      *  and its name (placeKey()). */
