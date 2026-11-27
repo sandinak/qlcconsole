@@ -66,6 +66,8 @@ QString fileOf(const QString &profile)
         return profileFile(QStringLiteral("Akai-APC64.qxi"));
     if (profile == kPmj)
         return profileFile(QStringLiteral("PMJ-Black-1.qxi"));
+    if (profile == QLatin1String("Akai APC Mini mk2"))
+        return profileFile(QStringLiteral("Akai-APCMini-mk2.qxi"));
     return profileFile(QStringLiteral("MaizeDMX-Playback-Controller.qxi"));
 }
 

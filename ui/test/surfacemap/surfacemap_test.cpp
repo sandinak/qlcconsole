@@ -371,7 +371,7 @@ void SurfaceMap_Test::theApcMiniMk2IsDrawnAndAnOlderCopyIsSaid()
     ControlSurfacesPanel hub(m_doc);
     settle();
     QCOMPARE(chips.universes(), QList<quint32>({ 0 }));
-    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC mini"));
+    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC mini \u00B7 Colour"));
     SurfaceMapView *mv = hub.surfaceMaps()->view(0);
     QVERIFY(mv != nullptr);
     QCOMPARE(mv->layout().roleOn(240), QStringLiteral("go"));

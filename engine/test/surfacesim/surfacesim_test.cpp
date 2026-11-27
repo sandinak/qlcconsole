@@ -1102,6 +1102,9 @@ void SurfaceSim_Test::theApcMiniMk2SeedsItsDefaults()
     QVERIFY2(sets.first().check(SurfaceLayout::forProfile(QStringLiteral("Akai APC Mini mk2")),
                                 m_doc->inputOutputMap()->profile(QStringLiteral("Akai APC Mini mk2"))).isEmpty(),
              "the page set holds to the layout");
+    // A press of Right steps to Move and lights both page keys (there is a page each way).
+    QVERIFY(mini.tap(QStringLiteral("#235")));
+    settle();
     QVERIFY(mini.lamp(235) > 0);
     QVERIFY(mini.lamp(234) > 0);
 }

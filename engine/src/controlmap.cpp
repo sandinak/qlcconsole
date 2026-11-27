@@ -2562,7 +2562,8 @@ void ControlMap::sendLampValue(const Binding &b, uchar value, bool force)
         if (own != nullptr && own->profile() != nullptr)
         {
             const SurfaceLayout layout = SurfaceLayout::forProfile(own->profile()->name());
-            if (layout.isValid() && layout.indexOf(b.channel) < 0)
+            if (layout.isValid() && layout.indexOf(b.channel) < 0
+                && own->profile()->channel(b.channel) == nullptr)
                 return;
         }
     }
