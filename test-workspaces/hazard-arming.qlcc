@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Workspace>
+<Workspace xmlns="http://www.qlcplus.org/Workspace" CurrentWindow="InputOutputManager" View="qlcconsole">
+ <Creator>
+  <Name>qlcconsole</Name>
+  <Version>4.14.4+qlcconsole.0</Version>
+  <Author>branson</Author>
+ </Creator>
+ <Engine>
+  <InputOutputMap>
+   <BeatGenerator BeatType="Disabled" BPM="0"/>
+   <NetworkServer Type="Native" AutoStart="False" Name="" Password=""/>
+   <Universe Name="U01-Hazard-Probe" ID="0">
+    <Output Plugin="ArtNet" UID="172.18.2.219" Line="2" Network="172.18.2.0/24">
+     <PluginParameters outputIP="172.18.2.218" outputUni="15"/>
+    </Output>
+   </Universe>
+   <Universe Name="Universe 2" ID="1"/>
+   <Universe Name="Universe 3" ID="2"/>
+   <Universe Name="Universe 4" ID="3"/>
+  </InputOutputMap>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic</Model>
+   <Mode>1 Channel</Mode>
+   <ID>0</ID>
+   <Name>CO2 jet</Name>
+   <Universe>0</Universe>
+   <Address>0</Address>
+   <Channels>1</Channels>
+   <BehavesAs>HazardBurst</BehavesAs>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Generic</Manufacturer>
+   <Model>Generic</Model>
+   <Mode>1 Channel</Mode>
+   <ID>1</ID>
+   <Name>Hazer</Name>
+   <Universe>0</Universe>
+   <Address>1</Address>
+   <Channels>1</Channels>
+   <BehavesAs>HazardRunning</BehavesAs>
+  </Fixture>
+  <Fixture>
+   <Manufacturer>Chauvet</Manufacturer>
+   <Model>SlimPAR 56</Model>
+   <Mode>7-Ch</Mode>
+   <ID>2</ID>
+   <Name>Wash</Name>
+   <Universe>0</Universe>
+   <Address>2</Address>
+   <Channels>7</Channels>
+   <BehavesAs>Light</BehavesAs>
+  </Fixture>
+  <FixtureGroup ID="0">
+   <Name>CO2 jet</Name>
+   <Size X="1" Y="1"/>
+   <Head X="0" Y="0" Fixture="0">0</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="1">
+   <Name>Hazer</Name>
+   <Size X="1" Y="1"/>
+   <Head X="0" Y="0" Fixture="1">0</Head>
+  </FixtureGroup>
+  <FixtureGroup ID="2">
+   <Name>Wash</Name>
+   <Size X="1" Y="1"/>
+   <Head X="0" Y="0" Fixture="2">0</Head>
+  </FixtureGroup>
+  <Palette ID="0" Type="Dimmer" Name="Full" Value="255"/>
+  <Palette ID="1" Type="Dimmer" Name="Half" Value="128"/>
+  <Palette ID="2" Type="Dimmer" Name="Out" Value="0"/>
+  <Function ID="0" Type="Chaser" Name="Main" Path="Productions/Hazard Arming">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <Direction>Forward</Direction>
+   <RunOrder>SingleShot</RunOrder>
+   <SpeedModes FadeIn="PerStep" FadeOut="PerStep" Duration="PerStep"/>
+   <Step Number="0" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="1">1</Step>
+   <Step Number="1" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="2">2</Step>
+   <Step Number="2" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="3">3</Step>
+   <Step Number="3" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="4">4</Step>
+   <Step Number="4" FadeIn="0" Hold="4294967294" FadeOut="0" Cue="5">5</Step>
+  </Function>
+  <Function ID="1" Type="Collection" Name="1-Preset" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Step Number="0">6</Step>
+   <Step Number="1">7</Step>
+   <Step Number="2">8</Step>
+  </Function>
+  <Function ID="2" Type="Collection" Name="2-CO2 hit" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Step Number="0">8</Step>
+   <Step Number="1">9</Step>
+   <Step Number="2">10</Step>
+  </Function>
+  <Function ID="3" Type="Collection" Name="3-Haze on" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Step Number="0">7</Step>
+   <Step Number="1">11</Step>
+   <Step Number="2">6</Step>
+  </Function>
+  <Function ID="4" Type="Collection" Name="4-Haze off" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Step Number="0">7</Step>
+   <Step Number="1">6</Step>
+   <Step Number="2">8</Step>
+  </Function>
+  <Function ID="5" Type="Collection" Name="5-Blackout" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Step Number="0">12</Step>
+   <Step Number="1">7</Step>
+   <Step Number="2">8</Step>
+  </Function>
+  <Function ID="6" Type="Scene" Name="1-Preset · Wash" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="2"/>
+   <Palette ID="0"/>
+  </Function>
+  <Function ID="7" Type="Scene" Name="1-Preset · CO2 jet" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="0"/>
+   <Palette ID="2"/>
+  </Function>
+  <Function ID="8" Type="Scene" Name="1-Preset · Hazer" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="2"/>
+  </Function>
+  <Function ID="9" Type="Scene" Name="2-CO2 hit · CO2 jet" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="0"/>
+   <Palette ID="0"/>
+  </Function>
+  <Function ID="10" Type="Scene" Name="2-CO2 hit · Wash" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="2"/>
+   <Palette ID="1"/>
+  </Function>
+  <Function ID="11" Type="Scene" Name="3-Haze on · Hazer" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="1"/>
+   <Palette ID="0"/>
+  </Function>
+  <Function ID="12" Type="Scene" Name="5-Blackout · Wash" Hidden="True" Path="Productions/Hazard Arming/Main">
+   <Speed FadeIn="0" FadeOut="0" Duration="0"/>
+   <FixtureGroup ID="2"/>
+   <Palette ID="2"/>
+  </Function>
+  <ShutterAutoOpen Enabled="1"/>
+  <ShowControl MainCueList="0"/>
+  <ShowTree NextId="20" Current="1">
+   <Production ID="1" Name="Hazard Arming" MainList="2">
+    <CueList ID="2" Name="Main" Mode="Tracking" Chaser="0">
+     <Cue ID="3" Number="1" Name="Preset" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="1">
+      <Layer ID="8" Groups="2">
+       <Look Key="Dimmer" Palettes="0"/>
+      </Layer>
+      <Layer ID="9" Groups="0">
+       <Look Key="Dimmer" Palettes="2"/>
+      </Layer>
+      <Layer ID="10" Groups="1">
+       <Look Key="Dimmer" Palettes="2"/>
+      </Layer>
+     </Cue>
+     <Cue ID="4" Number="2" Name="CO2 hit" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="2">
+      <Layer ID="11" Groups="0">
+       <Look Key="Dimmer" Palettes="0"/>
+      </Layer>
+      <Layer ID="12" Groups="2">
+       <Look Key="Dimmer" Palettes="1"/>
+      </Layer>
+     </Cue>
+     <Cue ID="5" Number="3" Name="Haze on" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="3">
+      <Layer ID="13" Groups="0">
+       <Look Key="Dimmer" Palettes="2"/>
+      </Layer>
+      <Layer ID="14" Groups="1">
+       <Look Key="Dimmer" Palettes="0"/>
+      </Layer>
+      <Layer ID="15" Groups="2">
+       <Look Key="Dimmer" Palettes="0"/>
+      </Layer>
+     </Cue>
+     <Cue ID="6" Number="4" Name="Haze off" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="4">
+      <Layer ID="16" Groups="1">
+       <Look Key="Dimmer" Palettes="2"/>
+      </Layer>
+     </Cue>
+     <Cue ID="7" Number="5" Name="Blackout" FadeIn="0" FadeOut="0" Hold="4294967294" Collection="5">
+      <Layer ID="17" Groups="2">
+       <Look Key="Dimmer" Palettes="2"/>
+      </Layer>
+      <Layer ID="18" Groups="0">
+       <Look Key="Dimmer" Palettes="2"/>
+      </Layer>
+      <Layer ID="19" Groups="1">
+       <Look Key="Dimmer" Palettes="2"/>
+      </Layer>
+     </Cue>
+    </CueList>
+   </Production>
+   <Generated Scenes="6,7,8,9,10,11,12" Collections="1,2,3,4,5" Chasers="0"/>
+   <InlinePalettes IDs=""/>
+  </ShowTree>
+  <ControlMap RunList="2"/>
+  <MoveInBlack Auto="0" DarkGapMs="800"/>
+  <Monitor DisplayMode="1" ShowLabels="1" AimSubjectHeight="1.4" ItemLocks="1">
+   <Font>Arial,12,-1,5,400,0,0,0,0,0,0,0,0,0,0,1,,0,0</Font>
+   <ChannelStyle>0</ChannelStyle>
+   <ValueStyle>0</ValueStyle>
+   <Grid Width="16" Height="10" Depth="16" ExactWidth="16.4042" ExactHeight="9.84252" ExactDepth="16.4042" Units="1"/>
+   <MonitorLayer ID="0" Name="Default" Visible="1" Order="0"/>
+   <MonitorLayer ID="1" Name="Stage" Visible="1" Order="1"/>
+   <StagePieces Layer="1">
+    <StagePiece Kind="Centre" Visible="0" Mark="1" Line="0"/>
+    <StagePiece Kind="Curtain" Visible="0"/>
+    <StagePiece Kind="Number" Visible="0"/>
+    <StagePiece Kind="Apron" Visible="0" Auto="1"/>
+   </StagePieces>
+  </Monitor>
+ </Engine>
+ <VirtualConsole>
+  <Frame Caption="">
+   <Appearance>
+    <FrameStyle>None</FrameStyle>
+    <ForegroundColor>Default</ForegroundColor>
+    <BackgroundColor>Default</BackgroundColor>
+    <BackgroundImage>None</BackgroundImage>
+    <Font>Default</Font>
+   </Appearance>
+  </Frame>
+  <Properties>
+   <Size Width="1920" Height="1080"/>
+   <GrandMaster Visible="1" ChannelMode="Intensity" ValueMode="Reduce" SliderMode="Normal"/>
+  </Properties>
+ </VirtualConsole>
+ <SimpleDesk>
+  <Engine/>
+ </SimpleDesk>
+ <AppState/>
+</Workspace>
