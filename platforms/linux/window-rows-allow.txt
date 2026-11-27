@@ -49,6 +49,7 @@ PaletteEditDialog                deep
 PaletteManager                   not yet walked
 PatchInventoryDialog             not yet walked
 PatchLabelsDialog                deep
+SurfaceKeyLabelsDialog            deep: opened from a surface map (Print Key Labels…), which needs a patched board; its own test walks it (surfacemap_test)
 PerformersDialog                 not yet walked
 PositionTool                     not yet walked
 PowerMeasureDialog               deep
