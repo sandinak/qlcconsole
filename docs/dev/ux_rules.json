@@ -1481,5 +1481,53 @@
       "right": "Follow Mode: Hold Last Position (the sentence in the tooltip)",
       "wrong": "On scene change: hold the last beam position, or snap to the bound followTarget"
     }
+  },
+  {
+    "id": "UX-82",
+    "theme": "Context-awareness",
+    "title": "An empty place says why and what to do",
+    "rule": "Any section, list or tree branch that can be empty shows a line saying why it is empty and what to do about it; never a bare empty space.",
+    "check": "test:connectionstree_test::everyConnectionsBranchIsExplained",
+    "checks": [
+      "test:connectionstree_test::everyConnectionsBranchIsExplained"
+    ],
+    "enforced": true,
+    "why": "2026-11-27: Connections ▸ Devices ▸ Control surfaces showed nothing on his show, boards patched with no profile: \"What is 'Control Surfaces' in Devices if I have one and I don't see it configured under there?\"",
+    "example": {
+      "right": "No control surface: plug in a board, or patch a MIDI input with a profile.",
+      "wrong": "An empty Control surfaces branch with nothing under it"
+    }
+  },
+  {
+    "id": "UX-83",
+    "theme": "Consistency across views",
+    "title": "Nothing is only on a legacy page",
+    "rule": "A setting or action reachable only from a legacy or reference page (the Universes tab, the Classic view) is a finding: it is also reachable where the current workflow lives.",
+    "check": "test:connectionstree_test::theUniversesTabHasADevicesCounterpart",
+    "checks": [
+      "test:connectionstree_test::theUniversesTabHasADevicesCounterpart"
+    ],
+    "enforced": true,
+    "why": "2026-11-27: a universe's Slot was only on the Universes tab's toolbar: \"I really do NOT want to have to go to that page to make this change. We should stay in the Connections tab. That old tab (Universes) is only for reference for old QLC users.\"",
+    "example": {
+      "right": "Slot is in the universe pane on Connections ▸ Devices as well as on the Universes toolbar",
+      "wrong": "Slot only on the Universes toolbar"
+    }
+  },
+  {
+    "id": "UX-84",
+    "theme": "Words",
+    "title": "A row says what it is",
+    "rule": "A row or section whose name is not self-explanatory has a one-line purpose in its pane or its tooltip.",
+    "check": "test:connectionstree_test::everyConnectionsBranchIsExplained",
+    "checks": [
+      "test:connectionstree_test::everyConnectionsBranchIsExplained"
+    ],
+    "enforced": true,
+    "why": "2026-11-27: \"What is 'Control Surfaces' in Devices ... What's the purpose? ... Anything that's not explained should generate a check.\"",
+    "example": {
+      "right": "Control surfaces are the boards you run the show from: their jobs (GO, Back, GM…), lamps and map.",
+      "wrong": "A row named Control surfaces with a blank pane"
+    }
   }
 ]

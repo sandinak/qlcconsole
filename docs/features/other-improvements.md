@@ -699,6 +699,23 @@ So far the WLED output has been checked against a stand-in that answers
 like a WLED device, not yet against real WLED hardware on a show network —
 try it on your own devices before relying on it for a show.
 
+### Everything for a universe is on Devices
+
+Select a universe on **Devices** (the tick on **By universe** lists them all)
+and its settings are the pane beside the list: **Name**, **Slot** (Tour or
+House), the protocol and interface, the input with its **Input Profile**
+(**Edit…** opens the profile editor), **Feedback**, **Passthrough**.
+**Add Universe** and **Delete Universe…** are on any row's right-click,
+**Undo Patch Change** and **Rescan** are above the list. The **Universes**
+tab is QLC+'s own page, kept for people who know it: nothing is only there.
+
+**Show control & sync ▸ Control surfaces** lists each board recognised as a
+control surface (its name, universe, profile, and whether it has a feedback
+line). A MIDI or USB input patched with no profile is listed as *not set
+up*: click it and choose or confirm its profile on the right. With no board
+the row says so. Every branch of the list has a tooltip saying what it is,
+and an empty one has a grey line saying why and what to do.
+
 ### Feedback to a control surface
 
 Feedback is what the app sends back to a board so its lamps and motor

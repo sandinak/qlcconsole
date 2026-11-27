@@ -56,6 +56,10 @@ private slots:
     void inputPairsItsOwnOutputAsFeedback();
     /** The universe pane has a Slot row; it is the Universes toolbar's Slot, undoable, saved. */
     void thePaneSetsTheSlotLikeTheToolbar();
+    /** Everything the Universes tab offers for a universe is also in Connections ▸ Devices (UX-83). */
+    void theUniversesTabHasADevicesCounterpart();
+    /** Every branch says what it is, and an empty one says why (UX-82, UX-84); sample and empty show. */
+    void everyConnectionsBranchIsExplained();
 
     /* Which lines are worth showing */
     void unpatchedLineIsHiddenByDefault();

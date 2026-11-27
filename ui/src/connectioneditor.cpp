@@ -34,6 +34,7 @@
 #include <QTimer>
 
 #include "connectioneditor.h"
+#include "inputprofileeditor.h"
 #include "inputdevicenotices.h"
 #include "wleddevicesdialog.h"
 #include "wledconfigcheck.h"
@@ -402,7 +403,31 @@ void ConnectionEditor::buildForm()
         foreach (const QString &pn, profiles)
             m_profileCombo->addItem(pn, pn);
     }
-    inf->addRow(tr("Input Profile:"), m_profileCombo);
+    /* Edit the profile chosen, as the Universes tab's profile cell does. */
+    m_profileEdit = new QPushButton(tr("Edit…"), m_inputBox);
+    m_profileEdit->setObjectName(QStringLiteral("connProfileEdit"));
+    m_profileEdit->setToolTip(tr("Open the chosen input profile in the profile editor: what each "
+                                 "control of the board is called and does"));
+    QWidget *profileRow = new QWidget(m_inputBox);
+    QHBoxLayout *profileLay = new QHBoxLayout(profileRow);
+    profileLay->setContentsMargins(0, 0, 0, 0);
+    profileLay->addWidget(m_profileCombo, 1);
+    profileLay->addWidget(m_profileEdit);
+    inf->addRow(tr("Input Profile:"), profileRow);
+    connect(m_profileCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { m_profileEdit->setEnabled(!m_profileCombo->currentData().toString().isEmpty()); });
+    connect(m_profileEdit, &QPushButton::clicked, this, [this]() {
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        QLCInputProfile *profile = iom != nullptr ? iom->profile(m_profileCombo->currentData().toString()) : nullptr;
+        if (profile == nullptr)
+            return;
+        InputProfileEditor ite(this, profile, iom);
+        if (ite.exec() != QDialog::Accepted)
+            return;
+        *profile = *ite.profile();
+        if (!profile->saveXML(profile->path()))
+            QMessageBox::warning(this, tr("Saving failed"), tr("Unable to save %1").arg(profile->name()));
+    });
     m_midiChannel = new QComboBox(m_inputBox);
     m_midiChannel->setObjectName(QStringLiteral("connMidiChannel"));
     /* The MIDI plugin's own numbering: 0-15 are channels 1-16, and 16

@@ -24,6 +24,15 @@
 #include <QScrollArea>
 #include <QDir>
 #include <QtTest>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <QDialog>
+#include <QFormLayout>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QCheckBox>
+#include <QSplitter>
+#include <QStackedWidget>
 
 #include "surfacesetupui_test.h"
 #include "simmididevice.h"
@@ -32,8 +41,15 @@
 #include "controlsurfacespanel.h"
 #include "showcontrolsyncpage.h"
 #include "inputoutputmanager.h"
-#include "connectionstree.h"
 #include "surfacesetup.h"
+#include "inputpatch.h"
+#include "outputpatch.h"
+
+#include "../../../engine/test/common/stdprelude.h"
+#define private public
+#include "connectionstree.h"
+#include "connectioneditor.h"
+#include "inputoutputmanager.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "qlcfile.h"
@@ -360,6 +376,63 @@ void SurfaceSetupUi_Test::noUniqueMatchLandsOnConnections()
     QCOMPARE(tree->selectedUniverse(), quint32(0));          // the board's input is selected
     QCOMPARE(tree->noteText(), QString::fromUtf8("No single output matches this board. Right-click "
                  "the board's output \u25b8 Patch a Universe Here (feedback)\u2026"));
+}
+
+void SurfaceSetupUi_Test::theSurfacesRowExplainsItselfAndListsBoards()
+{
+    m_stub->m_hasFeedback = true;
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.show();
+    settle();
+    ConnectionsTree *tree = mgr.findChild<ConnectionsTree *>();
+    ControlSurfacesPanel *panel = mgr.findChild<ControlSurfacesPanel *>();
+    QVERIFY(tree != nullptr && panel != nullptr);
+    // The pane begins with one plain sentence.
+    QLabel *purpose = panel->findChild<QLabel *>("surfacesPurpose");
+    QVERIFY(purpose != nullptr);
+    QCOMPARE(purpose->text(), QString("Control surfaces are the boards you run the show from: their "
+                                      "jobs (GO, Back, GM…), lamps and map."));
+
+    auto surfaceRow = [tree]() -> QTreeWidgetItem * {
+        QTreeWidgetItemIterator it(tree->m_tree);
+        for (; *it != nullptr; ++it)
+            if ((*it)->data(0, Qt::UserRole + 1).toString() == QLatin1String("surfaces")
+                && (*it)->data(0, Qt::UserRole).toInt() == 10)
+                return *it;
+        return nullptr;
+    };
+    // Nothing at all: one grey line saying what to do.
+    tree->refresh();
+    QTreeWidgetItem *row = surfaceRow();
+    QVERIFY(row != nullptr);
+    QCOMPARE(row->childCount(), 1);
+    QCOMPARE(row->child(0)->text(0), QString("No control surface: plug in a board, or patch a MIDI input "
+                                              "with a profile."));
+    QVERIFY(row->toolTip(0).isEmpty() == false);
+
+    // A board with its profile: named, with its universe, profile and feedback.
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj, profile("PMJ-Black-1.qxi"));
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    tree->refresh();
+    row = surfaceRow();
+    QVERIFY(row != nullptr && row->childCount() == 1);
+    QCOMPARE(row->child(0)->data(0, Qt::UserRole).toInt(), 12);
+    QVERIFY2(row->child(0)->text(1).contains("universe 1") && row->child(0)->text(1).contains("PMJ Black 1")
+             && row->child(0)->text(1).contains("feedback yes"), qPrintable(row->child(0)->text(1)));
+
+    // An input patched with no profile: "not set up", one click to the pane that sets it.
+    SimMidiDevice bare(m_doc, m_stub, QStringLiteral("Mystery Pad"), 1);
+    QVERIFY2(bare.plug(), qPrintable(bare.lastError()));
+    tree->refresh();
+    row = surfaceRow();
+    QVERIFY(row != nullptr && row->childCount() == 2);
+    QTreeWidgetItem *unset = row->child(1);
+    QCOMPARE(unset->data(0, Qt::UserRole).toInt(), 13);
+    QVERIFY2(unset->text(0).contains("Mystery Pad: not set up"), qPrintable(unset->text(0)));
+    tree->m_tree->setCurrentItem(unset);
+    unset->setSelected(true);
+    settle();
+    QCOMPARE(tree->m_connPane->universe(), quint32(1));
 }
 
 void SurfaceSetupUi_Test::shots()

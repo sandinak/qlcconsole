@@ -153,6 +153,12 @@ private:
     struct FeedbackMenu { class QAction *remove = nullptr; class QMenu *send = nullptr; };
     FeedbackMenu addFeedbackActions(class QMenu &menu, quint32 universe);
     bool handleFeedbackAction(class QAction *chosen, const FeedbackMenu &fb, quint32 universe);
+    /** Tooltips on every branch, and a grey child line in each empty one. */
+    void explainBranches();
+    /** What a Show control & sync row is, in a sentence (its tooltip). */
+    static QString showControlTip(const QString &key);
+    /** Control surfaces' children: each board, each unset input, or a line saying none. */
+    void addSurfaceRows(QTreeWidgetItem *parent);
     /** Say something short beside the toolbar ("Feedback goes back to X"). */
     void postNote(const QString &text);
     /** Pair a universe's feedback to its input's own output (MIDI, HID),

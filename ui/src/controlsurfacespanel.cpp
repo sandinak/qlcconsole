@@ -180,6 +180,11 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
     m_maps = new SurfaceMaps(m_doc, this);
     QVBoxLayout *top = new QVBoxLayout();
     top->setContentsMargins(0, 0, 0, 0);
+    QLabel *purpose = new QLabel(tr("Control surfaces are the boards you run the show from: their jobs "
+                                    "(GO, Back, GM…), lamps and map."), this);
+    purpose->setObjectName(QStringLiteral("surfacesPurpose"));
+    purpose->setWordWrap(true);
+    top->addWidget(purpose);
     top->addWidget(m_desk);
     top->addWidget(m_maps);
     grid->addLayout(top, 0, 0, 1, 3);

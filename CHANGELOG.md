@@ -14,6 +14,13 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Connections ▸ Devices holds everything the Universes tab does** (Slot,
+  Input Profile Edit…, Add/Delete, Undo, Rescan are all on Devices, and a test
+  fails if the Universes tab gains a setting Devices lacks). **Control surfaces**
+  lists each board with its universe, profile and feedback, each unprofiled
+  input as *not set up*, or says none; its pane opens with what a control
+  surface is. Every branch has a tooltip and an empty one says why; three new
+  UX rules (UX-82 to UX-84) check it.
 - **A universe's Slot (Tour or House) is in the Devices universe pane** under
   Name, as well as on the Universes toolbar; either shows what the other set,
   and a pane edit is one undo step.

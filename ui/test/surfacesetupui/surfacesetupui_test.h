@@ -54,6 +54,8 @@ private slots:
     void everyBoardOffersPatchFeedback();
     /** No single output matches: Connections opens on that board's input and says what to do. */
     void noUniqueMatchLandsOnConnections();
+    /** Connections ▸ Devices ▸ Control surfaces lists boards, unset inputs, or says none; the pane says what it is. */
+    void theSurfacesRowExplainsItselfAndListsBoards();
     /** With QLC_SHOT_DIR: the dialog and the hub at three sizes. */
     void shots();
 

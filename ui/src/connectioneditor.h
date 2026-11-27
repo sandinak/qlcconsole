@@ -245,6 +245,7 @@ private:
     QGroupBox *m_inputBox = nullptr;
     QComboBox *m_inputCombo = nullptr;
     QComboBox *m_profileCombo = nullptr;
+    class QPushButton *m_profileEdit = nullptr;
     QComboBox *m_midiChannel = nullptr;
     QSpinBox *m_artnetInUni = nullptr;
     QComboBox *m_feedbackCombo = nullptr;
