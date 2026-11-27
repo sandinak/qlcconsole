@@ -139,6 +139,11 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     });
     connect(m_showControlPage, &ShowControlSyncPage::virtualConsoleRequested,
             this, &InputOutputManager::virtualConsoleRequested);
+    connect(m_showControlPage, &ShowControlSyncPage::patchFeedbackRequested, this, [this](quint32 universe) {
+        m_ioTabs->setCurrentWidget(m_devicesTree);
+        m_devicesTree->clearShowControlSelection();
+        m_devicesTree->showFeedbackNeeded(universe);
+    });
     connect(m_showControlPage, &ShowControlSyncPage::patchMidiInputRequested, this, [this]() {
         m_ioTabs->setCurrentWidget(m_devicesTree);
         m_devicesTree->clearShowControlSelection();

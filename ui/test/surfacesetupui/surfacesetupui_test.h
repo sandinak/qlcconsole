@@ -50,6 +50,10 @@ private slots:
     void theHubRowAndRescan();
     /** No feedback line: the hub row and the dialog offer Patch Feedback, one click pairs the board's own output. */
     void patchFeedbackIsOneClick();
+    /** Every profiled board with no feedback (a FaderPort, an APC) is listed and paired by one button. */
+    void everyBoardOffersPatchFeedback();
+    /** No single output matches: Connections opens on that board's input and says what to do. */
+    void noUniqueMatchLandsOnConnections();
     /** With QLC_SHOT_DIR: the dialog and the hub at three sizes. */
     void shots();
 

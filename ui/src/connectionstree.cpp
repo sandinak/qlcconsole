@@ -841,7 +841,7 @@ bool ConnectionsTree::setTestMode(bool on)
         // Said in the banner, not a window: why Test is not allowed now.
         m_testBanner->setText(why);
         m_testBanner->show();
-        QTimer::singleShot(8000, this, [this]() {
+        QTimer::singleShot(15000, this, [this]() {
             if (!m_doc->testChannels()->isOn())
                 m_testBanner->hide();
         });
@@ -3956,6 +3956,44 @@ bool ConnectionsTree::handleFeedbackAction(QAction *chosen, const FeedbackMenu &
     return false;
 }
 
+void ConnectionsTree::showFeedbackNeeded(quint32 universe)
+{
+    refresh();
+    QTreeWidgetItem *best = NULL;
+    QTreeWidgetItemIterator it(m_tree);
+    for (; *it != NULL; ++it)
+    {
+        QTreeWidgetItem *i = *it;
+        const int k = i->data(COL_NAME, ROLE_KIND).toInt();
+        if ((k != KIND_UNIVERSE && k != KIND_UNPATCHED_UNIVERSE)
+            || i->data(COL_NAME, ROLE_UNIVERSE).toUInt() != universe)
+            continue;
+        if (best == NULL || (i->data(COL_NAME, ROLE_OUTPUT).toBool() == false
+                             && best->data(COL_NAME, ROLE_OUTPUT).toBool()))
+            best = i;
+    }
+    if (best != NULL)
+    {
+        for (QTreeWidgetItem *p = best->parent(); p != NULL; p = p->parent())
+            p->setExpanded(true);
+        m_tree->setCurrentItem(best);
+        m_tree->scrollToItem(best);
+    }
+    postNote(tr("No single output matches this board. Right-click the board's output %1 "
+                "Patch a Universe Here (feedback)…").arg(QString::fromUtf8("\u25b8")));
+}
+
+quint32 ConnectionsTree::selectedUniverse() const
+{
+    QTreeWidgetItem *cur = m_tree->currentItem();
+    if (cur == NULL)
+        return UINT_MAX;
+    const int k = cur->data(COL_NAME, ROLE_KIND).toInt();
+    if (k != KIND_UNIVERSE && k != KIND_UNPATCHED_UNIVERSE && k != KIND_PENDING_UNIVERSE)
+        return UINT_MAX;
+    return cur->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+}
+
 void ConnectionsTree::postNote(const QString &text)
 {
     if (m_note == NULL)
@@ -3963,7 +4001,7 @@ void ConnectionsTree::postNote(const QString &text)
     m_note->setText(text);
     m_note->setVisible(text.isEmpty() == false);
     QPointer<QLabel> note(m_note);
-    QTimer::singleShot(8000, this, [note, text]() {
+    QTimer::singleShot(15000, this, [note, text]() {
         if (note != NULL && note->text() == text)
             note->hide();
     });

@@ -306,6 +306,62 @@ void SurfaceSetupUi_Test::patchFeedbackIsOneClick()
     QVERIFY2(hub.status("pmj").contains("with its feedback line"), qPrintable(hub.status("pmj")));
 }
 
+void SurfaceSetupUi_Test::everyBoardOffersPatchFeedback()
+{
+    m_stub->m_hasFeedback = true;
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40"), 1, QStringLiteral("APC40"),
+                      profile("Akai-APC40.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, QString(), QString(), 0, true, 0));
+    QVERIFY(iom->setOutputPatch(1, QString(), QString(), 0, true, 0));
+
+    ControlSurfacesPanel hub(m_doc);
+    hub.show();
+    settle();
+    QPushButton *b = hub.setUpButton("feedback");
+    QVERIFY(b != nullptr && b->isVisibleTo(&hub));
+    QVERIFY2(hub.status("feedback").contains("Universe 1:") && hub.status("feedback").contains("Universe 2:"),
+             qPrintable(hub.status("feedback")));
+    QSignalSpy spy(&hub, &ControlSurfacesPanel::patchFeedbackRequested);
+    b->click();
+    settle();
+    QVERIFY(iom->feedbackPatch(0) != nullptr && iom->feedbackPatch(1) != nullptr);
+    QCOMPARE(spy.count(), 0);
+    QVERIFY(b->isHidden());
+}
+
+void SurfaceSetupUi_Test::noUniqueMatchLandsOnConnections()
+{
+    m_stub->m_hasFeedback = true;
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    // A second output of the same name: no single match to pick.
+    m_stub->m_lineNames << QStringLiteral("FaderPort 2");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, QString(), QString(), 0, true, 0));
+    QVERIFY(iom->feedbackPatch(0) == nullptr);
+
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.show();
+    settle();
+    ControlSurfacesPanel *panel = mgr.findChild<ControlSurfacesPanel *>();
+    ConnectionsTree *tree = mgr.findChild<ConnectionsTree *>();
+    QVERIFY(panel != nullptr && tree != nullptr);
+    QPushButton *b = panel->setUpButton("feedback");
+    QVERIFY(b != nullptr);
+    b->click();
+    settle();
+    QVERIFY(iom->feedbackPatch(0) == nullptr);              // nothing guessed
+    QCOMPARE(tree->selectedUniverse(), quint32(0));          // the board's input is selected
+    QCOMPARE(tree->noteText(), QString::fromUtf8("No single output matches this board. Right-click "
+                 "the board's output \u25b8 Patch a Universe Here (feedback)\u2026"));
+}
+
 void SurfaceSetupUi_Test::shots()
 {
     const QByteArray env = qgetenv("QLC_SHOT_DIR");

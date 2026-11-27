@@ -715,8 +715,10 @@ that has the board's input.
   Universe Here (feedback)**, then the universe. Or right-click the universe
   and choose **Send Feedback To…** and the line. **Remove Feedback** takes it
   off again. Each is one step of **Undo Patch Change**.
-- **From Control surfaces.** A board with no feedback line says so, and
-  **Patch Feedback** beside it pairs the board's own output in one click.
+- **From Control surfaces.** **Boards without feedback** lists every patched
+  controller with a profile (FaderPort, APC, PMJ, any surface) that has no
+  feedback line, and **Patch Feedback** pairs each one's own output in one
+  click. A board with no single match opens Connections on its input instead.
 
 The menu items appear only where they can act: the feedback item on a line
 of a protocol that can send it, and **Send Feedback To…** on a universe that

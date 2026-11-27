@@ -94,6 +94,8 @@ public slots:
 signals:
     /** A Set up… was pressed. */
     void setUpRequested(const QString &key);
+    /** No single output matches this board: Connections, on @p universe's input. */
+    void patchFeedbackRequested(quint32 universe);
     /** Some status line changed (the Devices row follows). */
     void summaryChanged();
 
@@ -107,6 +109,10 @@ private:
     /** The universe whose PMJ Black 1 input has no feedback line (UINT_MAX: none). */
     quint32 pmjNoFeedbackUniverse() const;
     void patchPmjFeedback();
+    /** Universes with a profiled hardware board and no feedback line. */
+    QList<quint32> noFeedbackUniverses() const;
+    /** Pair each one's own output; the first with no single match is asked for in Connections. */
+    void patchFeedbackFor(const QList<quint32> &universes);
     QString setupText() const;
     /** What the PMJ's lit lamps mean (the help's "What the lamps mean"). */
     static QString pmjLampsText();

@@ -81,6 +81,8 @@ public:
 signals:
     /** "Patch a MIDI input…": take the user to where inputs are patched. */
     void patchMidiInputRequested();
+    /** A board has no single output to pair as feedback: Connections, on @p universe's input. */
+    void patchFeedbackRequested(quint32 universe);
     /** What summary() returns has changed. */
     void summaryChanged();
     /** A Control surfaces Set up… wants the row @p key ("map", "web") picked

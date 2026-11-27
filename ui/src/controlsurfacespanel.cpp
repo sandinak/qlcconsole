@@ -66,6 +66,7 @@ const Row kRows[] = {
     { "masters", "surfaceMasters" },
     { "gm",      "surfaceGrandMaster" },
     { "pmj",     "surfacePmj" },
+    { "feedback", "surfaceFeedback" },
     { "setup",   "surfaceDeviceSetup" },
     { "web",     "surfaceCompanion" },
     { "pads",    "surfacePads" },
@@ -125,6 +126,13 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             tr("Set Up…"),
             tr("Go to the patch: patch the PMJ as an input with the profile PMJ Black 1, and its "
                "output as the feedback line so its lamps light.") } },
+        { QStringLiteral("feedback"),
+          { tr("Boards without feedback"),
+            tr("A patched controller (FaderPort, APC40, PMJ, MaizeDMX, any profiled surface) whose "
+               "lamps and motor faders stay dark until its output is patched as feedback."),
+            tr("Patch Feedback"),
+            tr("Send each board's lamps and faders back to its own output. With no single match, "
+               "opens Connections on that board's input to pick one.") } },
         { QStringLiteral("setup"),
           { tr("Controller setup"),
             tr("What a controller needs set on the device itself: the PMJ Black 1's lamps under "
@@ -227,7 +235,10 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
         btn->setObjectName(QString::fromLatin1(row.object) + QStringLiteral("SetUp"));
         btn->setToolTip(t.tip);
         btn->setAccessibleName(tr("Set up %1").arg(t.name));
-        connect(btn, &QPushButton::clicked, this, [this, key]() { emit setUpRequested(key); });
+        if (key == QLatin1String("feedback"))
+            connect(btn, &QPushButton::clicked, this, [this]() { patchFeedbackFor(noFeedbackUniverses()); });
+        else
+            connect(btn, &QPushButton::clicked, this, [this, key]() { emit setUpRequested(key); });
         grid->addWidget(status, r, 1);
         if (key == QLatin1String("pmj"))
         {
@@ -530,26 +541,59 @@ QString ControlSurfacesPanel::grandMasterText() const
 quint32 ControlSurfacesPanel::pmjNoFeedbackUniverse() const
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
-    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    for (quint32 u : noFeedbackUniverses())
     {
         InputPatch *ip = iom->inputPatch(u);
-        if (ip != nullptr && ip->profileName().compare(PMJOverlay::deviceId, Qt::CaseInsensitive) == 0
-            && iom->feedbackPatch(u) == nullptr)
+        if (ip != nullptr && ip->profileName().compare(PMJOverlay::deviceId, Qt::CaseInsensitive) == 0)
             return u;
     }
     return UINT_MAX;
 }
 
+QList<quint32> ControlSurfacesPanel::noFeedbackUniverses() const
+{
+    /* Every universe with a hardware board on its input (a profile says it
+       is a surface), on a plugin that can send feedback, and no feedback. */
+    QList<quint32> out;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || ip->plugin() == nullptr || ip->profile() == nullptr
+            || !ip->plugin()->linesAreHardware()
+            || (ip->plugin()->capabilities() & QLCIOPlugin::Feedback) == 0
+            || iom->feedbackPatch(u) != nullptr)
+            continue;
+        out << u;
+    }
+    return out;
+}
+
+void ControlSurfacesPanel::patchFeedbackFor(const QList<quint32> &universes)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    quint32 unpaired = UINT_MAX;
+    for (quint32 u : universes)
+    {
+        if (iom->pairFeedback(u).isEmpty())
+        {
+            if (unpaired == UINT_MAX)
+                unpaired = u;
+        }
+        else
+            m_doc->setModified();
+    }
+    refresh();
+    // No single match: Connections, on that board's input.
+    if (unpaired != UINT_MAX)
+        emit patchFeedbackRequested(unpaired);
+}
+
 void ControlSurfacesPanel::patchPmjFeedback()
 {
     const quint32 u = pmjNoFeedbackUniverse();
-    if (u == UINT_MAX)
-        return;
-    if (m_doc->inputOutputMap()->pairFeedback(u).isEmpty())
-        emit setUpRequested(QStringLiteral("pmj"));     // no single match: Connections, to pick
-    else
-        m_doc->setModified();
-    refresh();
+    if (u != UINT_MAX)
+        patchFeedbackFor(QList<quint32>() << u);
 }
 
 QString ControlSurfacesPanel::pmjText() const
@@ -779,6 +823,18 @@ void ControlSurfacesPanel::refresh()
     m_status["pmj"]->setText(pmjText());
     if (m_pmjFeedback != nullptr)
         m_pmjFeedback->setVisible(pmjNoFeedbackUniverse() != UINT_MAX);
+    {
+        QStringList lines;
+        InputOutputMap *fiom = m_doc->inputOutputMap();
+        for (quint32 u : noFeedbackUniverses())
+            lines << tr("Universe %1: %2 has no feedback line, so its lamps stay dark")
+                         .arg(u + 1).arg(fiom->inputPatch(u)->inputName());
+        const bool any = !lines.isEmpty();
+        m_status["feedback"]->setText(lines.join(QStringLiteral("\n")));
+        m_status["feedback"]->setVisible(any);
+        m_what["feedback"]->setVisible(any);
+        m_buttons["feedback"]->setVisible(any);
+    }
     m_status["setup"]->setText(setupText());
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());

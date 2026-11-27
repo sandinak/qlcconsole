@@ -512,6 +512,8 @@ QGroupBox *ShowControlSyncPage::buildSurfacesGroup()
     lay->addWidget(m_surfaces);
     connect(m_surfaces, &ControlSurfacesPanel::summaryChanged, this, &ShowControlSyncPage::checkSummary);
     connect(m_surfaces, &ControlSurfacesPanel::setUpRequested, this, &ShowControlSyncPage::setUpSurface);
+    connect(m_surfaces, &ControlSurfacesPanel::patchFeedbackRequested,
+            this, &ShowControlSyncPage::patchFeedbackRequested);
     return box;
 }
 
