@@ -113,26 +113,26 @@ QMutex &guessListenersMutex()
     static QMutex m;
     return m;
 }
-QList<QPair<const void *, std::function<void()>>> &guessListeners()
+QList<QPair<const void *, std::function<void(const void *)>>> &guessListeners()
 {
-    static QList<QPair<const void *, std::function<void()>>> l;
+    static QList<QPair<const void *, std::function<void(const void *)>>> l;
     return l;
 }
 }
 
-void Fixture::invalidateGuesses()
+void Fixture::invalidateGuesses(const void *context)
 {
     s_guessEpoch.fetch_add(1, std::memory_order_relaxed);
-    QList<QPair<const void *, std::function<void()>>> copy;
+    QList<QPair<const void *, std::function<void(const void *)>>> copy;
     {
         QMutexLocker locker(&guessListenersMutex());
         copy = guessListeners();
     }
     for (const auto &l : copy)
-        l.second();
+        l.second(context);
 }
 
-void Fixture::addGuessListener(const void *owner, const std::function<void()> &listener)
+void Fixture::addGuessListener(const void *owner, const std::function<void(const void *)> &listener)
 {
     QMutexLocker locker(&guessListenersMutex());
     guessListeners().append(qMakePair(owner, listener));

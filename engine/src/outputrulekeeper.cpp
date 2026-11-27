@@ -194,7 +194,10 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
         watchChaser(qobject_cast<Chaser *>(m_doc->function(id)));
     });
     // A laser class, a scenery, a symbol changed a guess: laid again now.
-    Fixture::addGuessListener(this, [this]() {
+    Fixture::addGuessListener(this, [this](const void *context) {
+        // Another show's plot is not this one's (a definition is every show's).
+        if (context != nullptr && context != static_cast<const void *>(m_doc->monitorProperties()))
+            return;
         if (thread() == QThread::currentThread())
             guessesChanged();
         else

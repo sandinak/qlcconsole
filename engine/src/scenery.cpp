@@ -560,5 +560,5 @@ bool Scenery::saveXML(QXmlStreamWriter *doc) const
 void Scenery::setDriverFixture(quint32 fid)
 {
     m_driver = fid;
-    Fixture::invalidateGuesses();       // the driver of a drape is Machinery
+    Fixture::invalidateGuesses(parent());   // the driver of a drape is Machinery
 }
