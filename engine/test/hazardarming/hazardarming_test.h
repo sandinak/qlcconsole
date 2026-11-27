@@ -143,8 +143,19 @@ private slots:
     /** R4: an effect chase never closes the fire layers. */
     void anEffectChaseNeverClosesTheFireLayers();
 
+    /* The fifth review */
+    /** 1: a cue's sub-cues started alone (on a list a GO made the Run's)
+     *  fire nothing; reached by the Run's GO, they fire. */
+    void aSubCueStartedAloneNeverFires();
+    void aSubCueTheRunBringsStillFires();
+    /** 2: a step already being taken keeps its own (no) stamp. */
+    void aStepInFlightKeepsItsOwnStamp();
+    /** 3: a GO while Fade and stop fades keeps its stamp and fires. */
+    void aGoDuringFadeAndStopStillFires();
+
 private:
     void setHold(quint32 cue, uint ms);
+    quint32 jetSubCues();
     void tick(int n = 1);
     int at(const char *fixture);
     void go();

@@ -46,6 +46,9 @@ typedef struct ChaserAction
     int m_fadeMode;
     int m_stepIndex;
     int m_subStepIndex = -1;    //! ChaserSubSetStep: the sub-cue
+    /** The Run's stamp it carries (Chaser::setAction(), fifth review):
+     *  the step it brings is the Run's only with it. 0: none. */
+    quint32 m_runStamp = 0;
 } ChaserAction;
 
 #endif /* CHASERACTION_H */

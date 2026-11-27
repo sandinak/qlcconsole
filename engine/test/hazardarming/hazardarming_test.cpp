@@ -30,6 +30,7 @@
 #include "mastertimer.h"
 #include "universe.h"
 #include "outputrulekeeper.h"
+#include "chaser.h"
 #undef protected
 #undef private
 
@@ -1391,6 +1392,133 @@ void HazardArming_Test::anEffectChaseNeverClosesTheFireLayers()
     tick(3);
     QCOMPARE(at("CO2 jet"), 255);
     chase->stop(FunctionParent(FunctionParent::ManualVCWidget, 9));
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
+/****************************************************************************
+ * The fifth review
+ ****************************************************************************/
+
+quint32 HazardArming_Test::jetSubCues()
+{
+    // Cue 4 ("Low haze": the jet out) with a sub-cue that sends the jet.
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 s1 = st->addSubCue(m_c4, QStringLiteral("Jet hit"));
+    if (s1 == ShowTree::invalidId())
+        return 0;
+    ShowTree::Target t;
+    for (FixtureGroup *g : m_doc->fixtureGroups())
+        if (g->name() == QLatin1String("CO2 jet"))
+            t.groups << g->id();
+    quint32 full = 0;
+    for (QLCPalette *p : m_doc->palettes())
+        if (p->name() == QLatin1String("Full"))
+            full = p->id();
+    if (!st->setTargetLook(s1, t, st->lookForPalette(full)))
+        return 0;
+    m_doc->outputRuleKeeper()->rebuild();
+    m_chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(m_list)->chaser));
+    const ShowTree::CueList *subs = st->cueList(st->subCueList(m_c4));
+    return subs != nullptr ? subs->chaser : 0;
+}
+
+void HazardArming_Test::aSubCueStartedAloneNeverFires()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    const quint32 subId = jetSubCues();
+    Chaser *sub = qobject_cast<Chaser *>(m_doc->function(subId));
+    QVERIFY(sub != nullptr);
+    m_doc->setMode(Doc::Operate);
+    go();                                   // the preset: the list is the Run's
+    waitForCheck();
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    // Cue 4's sub-cues started alone (the web's setFunctionStatus, a VC
+    // button, the Function Manager).
+    sub->start(m_doc->masterTimer(), FunctionParent::master());
+    tick(5);
+    waitForCheck();
+    QVERIFY(sub->isRunning());
+    QCOMPARE(at("CO2 jet"), 0);
+    sub->stop(FunctionParent::master());
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aSubCueTheRunBringsStillFires()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    QVERIFY(jetSubCues() != 0);
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < 3; ++i)             // to "After", unheld
+    {
+        go();
+        waitForCheck();
+    }
+    QCOMPARE(at("CO2 jet"), 0);
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    go();                                   // "Low haze": its first sub-cue sends the jet
+    tick(3);
+    waitForCheck();
+    QCOMPARE(at("CO2 jet"), 255);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    tick(1);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aStepInFlightKeepsItsOwnStamp()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Operate);
+    go();                                   // the preset
+    waitForCheck();
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    // A programmer/VC step, taken by the runner...
+    ChaserAction next;
+    next.m_action = ChaserNextStep;
+    next.m_stepIndex = 0;
+    next.m_masterIntensity = 1.0;
+    next.m_stepIntensity = 1.0;
+    next.m_fadeMode = Chaser::FromFunction;
+    m_chaser->setAction(next);
+    // ...while a GO's stamp lands before that step is started (the GO's own
+    // action not yet taken): the stamp alone, as the race leaves it.
+    m_chaser->m_runSerial.store(m_chaser->m_routeSerial.load());
+    tick(3);
+    waitForCheck();
+    QCOMPARE(m_chaser->currentStepIndex(), 1);
+    QCOMPARE(at("CO2 jet"), 0);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aGoDuringFadeAndStopStillFires()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Operate);
+    go();                                   // the preset
+    waitForCheck();
+    // Fade and stop, as MasterTimer::fadeAndStopAll() starts it: the faders
+    // fade out, the list asked to stop...
+    {
+        QList<Universe *> ua = m_doc->inputOutputMap()->claimUniverses();
+        for (Universe *u : ua)
+            u->setFaderFadeOut(1000);
+        m_doc->inputOutputMap()->releaseUniverses();
+    }
+    m_chaser->stop(FunctionParent::master());
+    // ...and a GO from the Run before it has, the Hold held.
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    ShowControl::Request r;
+    r.command = ShowControl::Go;
+    r.chaser = m_chaser->id();
+    m_doc->showControl()->execute(r);
+    tick(5);
+    waitForCheck();
+    QVERIFY(m_chaser->isRunning());
+    QCOMPARE(m_chaser->currentStepIndex(), 1);
+    QCOMPARE(at("CO2 jet"), 255);
     QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
     m_doc->setMode(Doc::Design);
 }

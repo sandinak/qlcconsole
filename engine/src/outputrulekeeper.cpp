@@ -1517,9 +1517,12 @@ void OutputRuleKeeper::hazardStepReached(Chaser *chaser, int step)
            from anywhere else -- a VC button, the programmer's step, a web
            start, the startup function, the editor's Test -- is no run. */
         Chaser *holder = m_runLists.value(chaserId, nullptr);
-        // Its own list: stamped at the step itself; sub-cues: their cue's list's.
-        const bool run = step >= 0 && holder != nullptr
-                         && (holder == chaser ? chaser->stepRunStamped(step) : holder->runStamped());
+        /* Stamped at the step itself; sub-cues need both (fifth review 1):
+           their cue's list still the Run's, and this sub step brought by that
+           list's runner (Sub GO, a jump, the cue's first) or gone on to by
+           itself after one -- never a start or a step of their own. */
+        const bool run = step >= 0 && holder != nullptr && chaser->stepRunStamped(step)
+                         && (holder == chaser || holder->runStamped());
         auto was = m_reach.constFind(chaserId);
         const bool had = was != m_reach.constEnd() || m_granting.contains(chaserId);
         if (!run)

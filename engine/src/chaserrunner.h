@@ -109,6 +109,11 @@ public:
      */
     int currentStepIndex() const;
 
+    /** The Run's stamp the step playing was started with: the action's that
+     *  brought it, or kept from the step before for one it went on to by
+     *  itself. 0: none (Chaser::stepRunStamped()). */
+    quint32 stepStamp() const { return m_stepStamp; }
+
     /** Effective duration (ms) of the currently running step (speed-mode aware).
      *  0 = holds until a manual GO. */
     uint currentStepDuration() const { return stepDuration(currentStepIndex()); }
@@ -212,6 +217,7 @@ private:
     quint32 m_startOffset;                  //! Start step offset time in milliseconds
     ChaserAction m_pendingAction;           //! Action to be performed on steps at the next write call
     int m_lastRunStepIdx;                   //! Index of the last step ran
+    quint32 m_stepStamp = 0;                //! stepStamp()
     bool m_externalClock;                   //! If true, steps advance only on explicit action (show-clock driven)
     bool m_subCueHeld = false;              //! Played as sub-cues: steps change only on an action
     bool m_subCueFollow = false;            //! ...except a finite hold, which follows on (SubGoFollow)

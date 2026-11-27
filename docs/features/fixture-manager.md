@@ -1112,15 +1112,20 @@ programmer, a fixture sharing its address, or a function left running.
 A cue that sets it to 0 puts it at 0. An effect on a hazard — an EFX,
 an RGB matrix, an effect look, a chase inside the cue — never drives it
 (Show Review notes it on the cue, **FIX-24**). Only a **run** fires one,
-**step by step**: a step of the show's own lists that the Run's GO, Back,
-jump or Sub GO brought (from the Run tab, the keys, a pad, a timecode or
-audio-bar GO, a Virtual Console cue list on a Show Tree list), or that the
-list went on to by itself after one (an auto-follow, sub-cues). Any other
-step never fires one, even on a list a GO started: a Virtual Console
-button, the programmer's step, the chaser editor's **Test**, a web
-widget, a start alone (the web's, the **startup function**'s), and every
-step after a stop or a switch between Design and Operate until the next
-GO — the footer says **CO2 jet held — fire it from Run**. Two kinds,
+**step by step**: a step of the show's own lists that a **Run GO** brought
+— GO, Back, a jump or Sub GO — or that the list went on to by itself after
+one (an auto-follow). Every GO that goes through the show's GO is a Run
+GO: the Run tab and the keys, the web page's **Run** GO, a pad, OSC or
+MIDI GO through the controller map, a timecode or audio-bar GO, and a
+Virtual Console cue list on a Show Tree list. A cue's **sub-cues** fire
+only when that Run GO (its Sub GO, a jump, or the cue's GO for its first
+sub-cue) brought them. Any other step never fires one, even on a list a GO
+started: a Virtual Console button, the programmer's step, the chaser
+editor's **Test**, a web widget, a start alone (the web's function
+switch, the **startup function**, sub-cues started on their own), and
+every step after a stop or a switch between Design and Operate until the
+next GO — the footer says **CO2 jet held — fire it from Run**. A GO during
+**Fade and stop** starts the list again from that GO and fires. Two kinds,
 picked in **Behaves as**:
 
 - **Hazard — Burst** (flame, CO₂ jets, confetti, cannons, sparkulars,

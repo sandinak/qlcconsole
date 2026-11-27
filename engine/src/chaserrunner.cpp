@@ -306,6 +306,7 @@ void ChaserRunner::setAction(ChaserAction &action)
                 m_pendingAction.m_masterIntensity = action.m_masterIntensity;
                 m_pendingAction.m_stepIntensity = action.m_stepIntensity;
                 m_pendingAction.m_fadeMode = action.m_fadeMode;
+                m_pendingAction.m_runStamp = action.m_runStamp;
                 m_pendingAction.m_action = ChaserSetStepIndex;
             }
             m_pendingSubAction = action;
@@ -317,6 +318,7 @@ void ChaserRunner::setAction(ChaserAction &action)
             m_pendingAction.m_masterIntensity = action.m_masterIntensity;
             m_pendingAction.m_stepIntensity = action.m_stepIntensity;
             m_pendingAction.m_fadeMode = action.m_fadeMode;
+            m_pendingAction.m_runStamp = action.m_runStamp;
             m_pendingAction.m_action = action.m_action;
         break;
     }
@@ -1146,7 +1148,8 @@ void ChaserRunner::applySubAction(const ChaserAction &action)
     a.m_masterIntensity = inner->getAttributeValue(Function::Intensity);
     a.m_stepIntensity = 1.0;
     a.m_fadeMode = Chaser::FromFunction;
-    inner->setAction(a);
+    // The Run's Sub GO or jump drives it: its own stamp (fifth review 1).
+    inner->setAction(a, action.m_runStamp != 0);
 }
 
 void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity, qreal sIntensity,
@@ -1288,8 +1291,9 @@ void ChaserRunner::startNewStep(int index, MasterTimer *timer, qreal mIntensity,
         first.m_masterIntensity = inner->getAttributeValue(Function::Intensity);
         first.m_stepIntensity = 1.0;
         first.m_fadeMode = Chaser::FromFunction;
+        // Its own stamp only from a step of ours that a Run action brought.
         if (first.m_stepIndex >= 0)
-            inner->setAction(first);
+            inner->setAction(first, m_stepStamp != 0);
         fadeIn = Function::defaultSpeed();
         fadeOut = Function::defaultSpeed();
     }
@@ -1567,6 +1571,7 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
                     m_lastRunStepIdx = randomStepIndex(m_pendingAction.m_stepIndex);
                 else
                     m_lastRunStepIdx = m_pendingAction.m_stepIndex;
+                m_stepStamp = m_pendingAction.m_runStamp;
 
                 qDebug() << "[ChaserRunner] Starting from step" << m_lastRunStepIdx << "@ offset" << m_startOffset;
                 startNewStep(m_lastRunStepIdx, timer, m_pendingAction.m_masterIntensity,
@@ -1685,6 +1690,10 @@ bool ChaserRunner::write(MasterTimer *timer, QList<Universe *> universes)
         if (m_lastRunStepIdx != -1)
         {
             int blend = m_pendingAction.m_action == ChaserNoAction ? Chaser::FromFunction : m_pendingAction.m_fadeMode;
+            // A GO or Back brings it with its stamp; one it went on to by
+            // itself keeps the step before's (an auto-follow after a GO).
+            if (m_pendingAction.m_action != ChaserNoAction)
+                m_stepStamp = m_pendingAction.m_runStamp;
 
             startNewStep(m_lastRunStepIdx, timer, m_pendingAction.m_masterIntensity,
                          m_pendingAction.m_stepIntensity, blend, prevStepRoundElapsed);

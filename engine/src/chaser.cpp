@@ -748,6 +748,7 @@ bool Chaser::beginRestart()
         return false;
     m_restarting = true;
     m_startupAction.m_action = ChaserNoAction;
+    m_startupAction.m_runStamp = 0;
     return true;
 }
 
@@ -959,7 +960,12 @@ bool Chaser::runStamped() const
 
 bool Chaser::stepRunStamped(int step) const
 {
-    return step >= 0 && m_stepRun.load(std::memory_order_acquire) == step + 1 && runStamped();
+    if (step < 0)
+        return false;
+    const quint64 v = m_stepRun.load(std::memory_order_acquire);
+    const quint32 stamp = quint32(v >> 32);
+    return quint32(v) == quint32(step + 1) && stamp != 0
+           && stamp == m_runSerial.load(std::memory_order_acquire) && runStamped();
 }
 
 void Chaser::clearRunStamp()
@@ -976,6 +982,8 @@ void Chaser::setAction(ChaserAction &action, bool fromRun)
         const quint32 s = nextRouteSerial();
         if (fromRun)
             m_runSerial.store(s, std::memory_order_release);
+        // On the action itself: the runner takes the stamp with the step.
+        action.m_runStamp = fromRun ? s : 0;
     }
     /* A Back, from any route (the Run tab, a VC cue list, the pad, the
        chaser editor's Test, a web or Simple Desk step): a one-shot is
@@ -1002,6 +1010,7 @@ void Chaser::setAction(ChaserAction &action, bool fromRun)
         m_startupAction.m_stepIntensity = action.m_stepIntensity;
         m_startupAction.m_fadeMode = action.m_fadeMode;
         m_startupAction.m_subStepIndex = action.m_subStepIndex;
+        m_startupAction.m_runStamp = action.m_runStamp;
     }
 }
 
@@ -1128,6 +1137,7 @@ void Chaser::createRunner(quint32 startTime)
     m_runner->setSubCueFollow(m_subCueFollow);
     m_runner->setAction(m_startupAction);
     m_startupAction.m_action = ChaserNoAction;
+    m_startupAction.m_runStamp = 0;
 }
 
 void Chaser::preRun(MasterTimer* timer)
@@ -1135,10 +1145,13 @@ void Chaser::preRun(MasterTimer* timer)
     {
         QMutexLocker runnerLocker(&m_runnerMutex);
         createRunner(elapsed());
-        /* Each step's stamp, where the step starts (first: a direct
-           connection runs before the queued one is even posted). */
-        connect(m_runner, &ChaserRunner::currentStepChanged, m_runner, [this](int step) {
-            m_stepRun.store(runStamped() ? step + 1 : 0, std::memory_order_release);
+        /* Each step with the stamp it was started with, where it starts
+           (first: a direct connection runs before the queued one is even
+           posted) -- the runner's, from the action it took, never the live
+           stamp (fifth review 2). */
+        ChaserRunner *runner = m_runner;
+        connect(runner, &ChaserRunner::currentStepChanged, runner, [this, runner](int step) {
+            m_stepRun.store((quint64(runner->stepStamp()) << 32) | quint32(step + 1), std::memory_order_release);
         }, Qt::DirectConnection);
         connect(m_runner, SIGNAL(currentStepChanged(int)), this, SIGNAL(currentStepChanged(int)));
     }
@@ -1212,10 +1225,28 @@ void Chaser::postRun(MasterTimer* timer, QList<Universe *> universes)
         if (isPaused())
             m_runner->setPause(false, universes);
 
-        m_runner->postRun(timer, universes);
-        // Stopped: what plays next is no GO's until a GO (R2: a start alone).
+        /* A stop that ends the list takes the Run's stamp: what plays next
+           is no GO's until a GO (R2: a start alone). A Run GO that came
+           before the stop was carried out -- it started the list again, so
+           the timer restarts it rather than ending it (stopped() is false
+           then) -- keeps it, and the new run goes on from that GO's step
+           (fifth review 3: a GO during Fade and stop). */
         if (!m_restarting)
-            clearRunStamp();
+        {
+            const quint32 stamp = m_runner->stepStamp();
+            if (stopped())
+                clearRunStamp();
+            else if (stamp != 0 && stamp == m_runSerial.load(std::memory_order_acquire) && runStamped()
+                     && m_startupAction.m_action == ChaserNoAction && m_runner->currentStepIndex() >= 0)
+            {
+                m_startupAction.m_action = ChaserSetStepIndex;
+                m_startupAction.m_stepIndex = m_runner->currentStepIndex();
+                m_startupAction.m_masterIntensity = 1.0;
+                m_startupAction.m_stepIntensity = 1.0;
+                m_startupAction.m_fadeMode = Chaser::FromFunction;
+                m_startupAction.m_runStamp = stamp;
+            }
+        }
 
         delete m_runner;
         m_runner = NULL;
