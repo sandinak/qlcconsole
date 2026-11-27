@@ -4406,9 +4406,12 @@ void ConnectionsTree_Test::feedbackIsPatchedFromAUniverseAndUndone()
     QVERIFY(seen.join("|").contains("Pad") && seen.join("|").contains("Other"));
     QVERIFY2(seen.join("|").contains("Remove Feedback") == false, qPrintable(seen.join("|")));
     // A universe with no input has nowhere to send it from.
-    seen = menuTextsOn(tree, universeRow(tree.m_tree, 1));
-    QVERIFY2(seen.join("|").contains("Send Feedback To") == false, qPrintable(seen.join("|")));
-    QVERIFY2(seen.join("|").contains("Remove Feedback") == false, qPrintable(seen.join("|")));
+    {
+        QMenu bare;
+        const ConnectionsTree::FeedbackMenu none = tree.addFeedbackActions(bare, 1);
+        QVERIFY(none.send == NULL && none.remove == NULL);
+        QVERIFY(bare.actions().isEmpty());
+    }
 
     tree.setFeedback(0, stub->name(), 1);
     QVERIFY(iom->feedbackPatch(0) != NULL);
