@@ -321,7 +321,7 @@ void SurfaceMap_Test::theFaderPort2IsDrawn()
     SurfaceMapView *mv = maps.view(0);
     QVERIFY2(mv != nullptr, "no map of the FaderPort 2");
     const quint32 kFader = 513, kKnob = 16, kPlayKey = 128 + 94, kRew = 128 + 91, kStopKey = 128 + 93;
-    QCOMPARE(mv->layout().controls().size(), 23);
+    QCOMPARE(mv->layout().controls().size(), 22);     // the knob and its push are one control
     QVERIFY(mv->layout().controls().at(mv->layout().indexOf(kFader)).isFader());
     QVERIFY(mv->layout().controls().at(mv->layout().indexOf(kKnob)).turns());
     QCOMPARE(mv->layout().roleOn(kPlayKey), QStringLiteral("go"));

@@ -64,6 +64,9 @@ public:
     /** Indicator: a light only (the MaizeDMX's LEDs): it hears nothing. */
     enum Kind { Button, Pad, Fader, CrossFader, Knob, Encoder, Indicator };
     enum Lamp { NoLamp, Led, Rgb };
+    /** How a control is cut: a key is a rounded rectangle, a transport
+     *  button or an encoder cap is round ("shape": "round"). */
+    enum Shape { Rectangle, Round };
 
     struct Control
     {
@@ -78,6 +81,7 @@ public:
          *  has one (the PMJ's); empty otherwise. */
         QString job;
         Lamp lamp = NoLamp;
+        Shape shape = Rectangle;
 
         bool isFader() const { return kind == Fader || kind == CrossFader; }
         bool turns() const { return kind == Knob || kind == Encoder; }

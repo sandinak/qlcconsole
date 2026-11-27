@@ -18,6 +18,7 @@
 */
 
 #include <QPainterPath>
+#include <cmath>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QComboBox>
@@ -481,16 +482,29 @@ void SurfaceMapView::paintEvent(QPaintEvent *event)
     p.setBrush(kBoard);
     p.drawRoundedRect(board, 8, 8);
 
-    // The panel's printed section names, above their controls.
+    // The panel's printed groups: an outline round them, the name on its top edge.
     QFont sf = font();
-    sf.setPixelSize(qMax(10, int(s * 0.26)));
-    p.setFont(sf);
-    p.setPen(kSectionText);
+    sf.setPixelSize(qMax(9, int(s * 0.17)));
+    sf.setBold(true);
+    sf.setCapitalization(QFont::AllUppercase);
+    sf.setLetterSpacing(QFont::PercentageSpacing, 104);
     for (const SurfaceLayout::Section &sec : m_layout.sections())
     {
-        const QRectF r = toWidget(QRectF(sec.rect.x(), sec.rect.y() - 0.5, qMax(sec.rect.width(), 1.0), 0.5));
-        p.drawText(r.adjusted(3, 0, 0, 0), Qt::AlignLeft | Qt::AlignVCenter,
-                   p.fontMetrics().elidedText(sec.label, Qt::ElideRight, int(r.width()) - 3));
+        const QRectF r = toWidget(sec.rect);
+        p.setPen(QPen(QColor(0xff, 0xff, 0xff, 46), 1));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(r, 6, 6);
+        if (sec.label.isEmpty())
+            continue;
+        p.setFont(sf);
+        const QString text = p.fontMetrics().elidedText(sec.label, Qt::ElideRight, int(r.width()) - 14);
+        const QRectF chip(r.left() + 6, r.top() - p.fontMetrics().height() / 2.0,
+                          p.fontMetrics().horizontalAdvance(text) + 8, p.fontMetrics().height());
+        p.setPen(Qt::NoPen);
+        p.setBrush(kBoard);
+        p.drawRect(chip);
+        p.setPen(kSectionText);
+        p.drawText(chip, Qt::AlignCenter, text);
     }
     for (int i = 0; i < m_cells.size(); ++i)
         paintCell(p, i);
@@ -551,17 +565,21 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     QRectF textRect = r.adjusted(3, 2, -3, -2);
     if (c.turns())
     {
-        // A knob or an encoder: a disc, its value as an arc.
-        const double d = qMin(r.width(), r.height()) * 0.62;
-        const QRectF disc(r.center().x() - d / 2, r.top() + 2, d, d);
+        // A knob or an encoder: a round cap filling its place, its value as an arc round it.
+        const double d = qMin(r.width(), r.height()) - 4;
+        const QRectF disc(r.center().x() - d / 2, r.center().y() - d / 2, d, d);
         p.drawEllipse(disc);
         if (cell.value >= 0)
         {
             p.setPen(QPen(kHighlight, 2));
             const int span = -int(cell.value / 255.0 * 270 * 16);
             p.drawArc(disc.adjusted(-2, -2, 2, 2), 225 * 16, span);
+            const double ang = (225 - cell.value / 255.0 * 270) * M_PI / 180.0;
+            p.drawLine(disc.center(), disc.center() + QPointF(std::cos(ang), -std::sin(ang)) * d * 0.42);
         }
-        textRect = QRectF(r.left(), disc.bottom(), r.width(), r.bottom() - disc.bottom());
+        textRect = disc.adjusted(d * 0.12, d * 0.12, -d * 0.12, -d * 0.12);
+        if (d < 34)
+            textRect = QRectF();
     }
     else if (c.isFader())
     {
@@ -582,9 +600,17 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
         textRect = vertical ? QRectF(r.left() + 2, r.top() + 2, r.width() - 4, s * 0.85)
                             : QRectF(r.left() + 2, r.top() + 1, r.width() - 4, r.height() / 2);
     }
+    else if (c.shape == SurfaceLayout::Round)
+    {
+        const double d = qMin(r.width(), r.height());
+        const QRectF disc(r.center().x() - d / 2, r.center().y() - d / 2, d, d);
+        p.drawEllipse(disc);
+        textRect = disc.adjusted(d * 0.1, d * 0.1, -d * 0.1, -d * 0.1);
+    }
     else
     {
-        p.drawRoundedRect(r, 4, 4);
+        const double rad = qMin(4.0, qMin(r.width(), r.height()) / 3);
+        p.drawRoundedRect(r, rad, rad);
     }
 
     // The light: what the app last sent the board.
@@ -598,7 +624,7 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
         else
             led = cell.lamp > 0 ? QColor::fromHsv(45, 200, qBound(90, 90 + cell.lamp * 165 / 255, 255))
                                 : QColor(0x20, 0x20, 0x20);
-        const double d = qMax(6.0, s * 0.16);
+        const double d = qMin(qMax(5.0, s * 0.16), r.height() * 0.45);
         p.setPen(QPen(QColor(0, 0, 0, 160), 1));
         p.setBrush(led);
         p.drawEllipse(QRectF(r.right() - d - 2, r.top() + 2, d, d));
@@ -643,8 +669,19 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
         f.setBold(!words.isEmpty());
         f = fitted(f, one, textRect.width());
         p.setFont(f);
-        p.drawText(textRect, Qt::AlignHCenter | Qt::AlignTop,
+        p.drawText(textRect, Qt::AlignCenter,
                    QFontMetricsF(f).elidedText(one, Qt::ElideRight, textRect.width()));
+        return;
+    }
+    if (textRect.isEmpty())
+        return;     // too small to write on: the tooltip and the table say it
+    if (textRect.height() < px * 2.4 && !words.isEmpty())
+    {
+        // A thin key: one line, the job.
+        f.setBold(true);
+        f = fitted(f, words, textRect.width());
+        p.setFont(f);
+        p.drawText(textRect, Qt::AlignCenter, QFontMetricsF(f).elidedText(words, Qt::ElideRight, textRect.width()));
         return;
     }
     if (words.isEmpty())
