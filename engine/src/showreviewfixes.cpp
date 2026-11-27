@@ -50,17 +50,17 @@ const QHash<QString, Row> &rows()
     { "PAT-05", { F::GoThere, tr("Two venue files claim the same channels: change the address of one in Fixtures, or edit the venue's kept channels.") } },
     { "PAT-06", { F::GoThere, tr("Give this universe an output in Connections ▸ Devices, or move its fixtures to a universe that has one.") } },
     { "FIX-01", { F::GoThere, tr("Install the definition for %f (Fixture Editor, or copy its .qxf into the user fixtures folder), or open the show where it was built and save it as .qlcc so it carries the definition.") } },
-    { "FIX-02", { F::GoThere, tr("Open %f's definition in the Fixture Editor and fix what it lists, or pick a corrected definition for the fixture.") } },
+    { "FIX-02", { F::GoThere, tr("Open the definition of %f in the Fixture Editor and fix what it lists, or pick a corrected definition for the fixture.") } },
     { "FIX-05", { F::GoThere, tr("Put %f on the plot: drop it on the stage in Rig Overview so focus calls can aim it.") } },
-    { "FIX-07", { F::GoThere, tr("Enter lumens and watts on %f's definition, Physical tab, so the plot and power checks stop guessing.") } },
+    { "FIX-07", { F::GoThere, tr("Enter lumens and watts on the definition of %f, Physical tab, so the plot and power checks stop guessing.") } },
     { "FIX-08", { F::GoThere, tr("Mark %f as working again in Fixtures, or take it out of the scenes and cues that still use it.") } },
     { "FIX-14", { F::GoThere, tr("Give each of %f its own name: Fix runs the footer's Number Them (Name 2, Name 3), or rename them in Fixtures.") } },
     { "FIX-15", { F::GoThere, tr("Raise %f above the floor in Rig Overview (its height), or move it out of the set piece it sits inside.") } },
     { "FIX-16", { F::GoThere, tr("Set %f's height on the plot, or tell the plot which deck it is on, so it isn't drawn on the floor row.") } },
     { "FIX-17", { F::GoThere, tr("Fit a picture to the gobo slots of %f in Gobo Wheels, or leave it: only the preview is plain.") } },
-    { "FIX-18", { F::GoThere, tr("Set the beam angle and the pan/tilt range on %f's definition, Physical tab, so the plot can draw its beam.") } },
+    { "FIX-18", { F::GoThere, tr("Set the beam angle and the pan/tilt range on the definition of %f, Physical tab, so the plot can draw its beam.") } },
     { "FIX-19", { F::GoThere, tr("Load the missing gobo into %f in Gobo Wheels, or choose another slot in the cues that use it.") } },
-    { "FIX-20", { F::GoThere, tr("Check %f's by-hand setting in Fixtures; clear it if the show should drive it normally.") } },
+    { "FIX-20", { F::GoThere, tr("Check the by-hand setting on %f in Fixtures; clear it if the show should drive it normally.") } },
     { "FIX-21", { F::GoThere, tr("Treat %f as a laser: mark it as a laser in Fixtures and set its safety zones. This is a safety decision, so it is never done for you.") } },
     { "FIX-22", { F::GoThere, tr("Give the hazard cues a spotter's control: put a Hold or Go button for them on the board, where the spotter has it. Safety: only you can decide who holds it.") } },
     { "FIX-23", { F::GoThere, tr("Look at %f in Fixtures and confirm it is a hazard (fog, haze, pyro, a switch) with its safe state set. Safety: never changed for you.") } },
@@ -135,10 +135,13 @@ QString fixtureNames(Doc *doc, const QStringList &targets)
     {
         if (!t.startsWith(QLatin1String("fx:")))
             continue;
-        ++n;
         Fixture *fx = doc != nullptr ? doc->fixture(t.mid(3).toUInt()) : nullptr;
+        const QString quoted = fx != nullptr ? QStringLiteral("'%1'").arg(fx->name()) : QString();
+        if (!quoted.isEmpty() && names.contains(quoted))
+            continue;           // two fixtures of one name: say it once
+        ++n;
         if (fx != nullptr && names.count() < 3)
-            names << QStringLiteral("'%1'").arg(fx->name());
+            names << quoted;
     }
     if (names.isEmpty())
         return QCoreApplication::translate("ShowReview", "the fixture");
