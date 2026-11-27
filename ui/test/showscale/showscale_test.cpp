@@ -258,8 +258,8 @@ struct TickSamples
    runs on), each against newaudio's time, the larger of the two, at least
    1 and at most kMaxFactor. A machine slower than that fails its budgets:
    it is not one a show of this size should run on. */
-const double kRefCppMs = 0.0;   // newaudio, Release: set from the first measured run
-const double kRefJsMs = 0.0;
+const double kRefCppMs = 23.0;  // newaudio, Release, 2026-11-27 (2.3 ms at a tenth of the passes)
+const double kRefJsMs = 32.9;   // newaudio, Release, 2026-11-27
 const double kMaxFactor = 6.0;
 double g_factor = 1.0;
 QString g_factorText;
@@ -288,7 +288,7 @@ void calibrate()
             to[i] = (unsigned char)(i * 13 + 5);
         }
         unsigned sum = 0;
-        for (int pass = 0; pass < 400; ++pass)
+        for (int pass = 0; pass < 4000; ++pass)
         {
             const unsigned k = unsigned(pass % 256);
             for (size_t i = 0; i < out.size(); ++i)
