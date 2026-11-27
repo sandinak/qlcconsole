@@ -2417,7 +2417,7 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
              qPrintable(QString("after Return: name '%1', editor alive %2, flags %3 | %4")
                         .arg(doc->fixture(fid)->name()).arg(!editorGuard.isNull())
                         .arg(int(tree->currentItem() != nullptr ? int(tree->currentItem()->flags()) : -1))
-                        .arg(dbg.join(" ## "))));
+                        .arg(dbg.filter("updateTree").join(" ## "))));
     QTRY_COMPARE(doc->fixture(fid)->name(), QString("New name"));
 
     QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
