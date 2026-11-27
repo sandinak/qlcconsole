@@ -571,10 +571,10 @@ void ShowManager_Test::dropFiles(const QStringList &files, quint32 timeMs, int r
     md.setUrls(urls);
     const QPointF sp(v->getPositionFromTime(timeMs), TRACKS_TOP + row * TRACK_HEIGHT + 5);
     const QPoint vp = v->mapFromScene(sp);
-    QDragEnterEvent enter(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    QDragEnterEvent enter(vp, Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
     v->dragEnterEvent(&enter);
     QVERIFY(enter.isAccepted());
-    QDragMoveEvent move(QPointF(vp), Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
+    QDragMoveEvent move(vp, Qt::CopyAction, &md, Qt::LeftButton, Qt::NoModifier);
     v->dragMoveEvent(&move);
     if (!drop)
         return;
