@@ -3983,6 +3983,11 @@ void ConnectionsTree::showFeedbackNeeded(quint32 universe)
                 "Patch a Universe Here (feedback)…").arg(QString::fromUtf8("\u25b8")));
 }
 
+QString ConnectionsTree::noteText() const
+{
+    return m_note != NULL ? m_note->text() : QString();
+}
+
 quint32 ConnectionsTree::selectedUniverse() const
 {
     QTreeWidgetItem *cur = m_tree->currentItem();

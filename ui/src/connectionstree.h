@@ -76,7 +76,7 @@ public:
     void showFeedbackNeeded(quint32 universe);
     /** The universe of the selected row (UINT_MAX: none) and the note beside the toolbar. */
     quint32 selectedUniverse() const;
-    QString noteText() const { return m_note != nullptr ? m_note->text() : QString(); }
+    QString noteText() const;
     /** Back to the wiring: nothing picked, the output view on the right. */
     void clearShowControlSelection();
 
