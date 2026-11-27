@@ -1212,4 +1212,184 @@ void HazardArming_Test::aLiveHazardIsLaidInPlace()
     m_doc->setMode(Doc::Design);
 }
 
+/****************************************************************************
+ * The fourth review
+ ****************************************************************************/
+
+void HazardArming_Test::setHold(quint32 cue, uint ms)
+{
+    ShowTreeController *st = m_doc->showTree();
+    QList<ShowTree::Cue> cues = st->cueList(m_list)->cues;
+    for (ShowTree::Cue &c : cues)
+        if (c.id == cue)
+        {
+            c.hold = ms;
+            QVERIFY(st->setCue(c));
+        }
+    m_chaser = qobject_cast<Chaser *>(m_doc->function(st->cueList(m_list)->chaser));
+    QVERIFY(m_chaser != nullptr);
+}
+
+void HazardArming_Test::aStepFromAnotherRouteNeverFires()
+{
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    K *k = m_doc->outputRuleKeeper();
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    go();                                   // the preset, from the Run
+    waitForCheck();
+    // Design: the list plays on (its sources still the master's).
+    m_doc->setMode(Doc::Design);
+    QVERIFY(m_chaser->isRunning());
+    QVERIFY(k->m_hazardArmed.load());
+    // A step as the programmer's step button (or any VC widget) takes it.
+    ChaserAction next;
+    next.m_action = ChaserNextStep;
+    next.m_stepIndex = 0;
+    next.m_masterIntensity = 1.0;
+    next.m_stepIntensity = 1.0;
+    next.m_fadeMode = Chaser::FromFunction;
+    m_chaser->setAction(next);
+    tick(3);
+    waitForCheck();
+    QCOMPARE(m_chaser->currentStepIndex(), 1);
+    QCOMPARE(at("Hazer"), 0);
+    QVERIFY2(k->hazardSkippedText().contains(QStringLiteral("Hazer held — fire it from Run")),
+             qPrintable(k->hazardSkippedText()));
+}
+
+void HazardArming_Test::aWebStartNeverFires()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    setHold(m_c1, 100);                     // the preset goes on by itself
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    // As the web's setFunctionStatus starts it.
+    m_chaser->start(m_doc->masterTimer(), FunctionParent::master());
+    for (int i = 0; i < 20 && m_chaser->currentStepIndex() != 1; ++i)
+        tick(1);
+    waitForCheck();
+    QCOMPARE(m_chaser->currentStepIndex(), 1);
+    QCOMPARE(at("CO2 jet"), 0);
+    QCOMPARE(at("Hazer"), 0);
+    QCOMPARE(at("Stage wash"), 128);        // the cue itself plays
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aStartupFunctionNeverFires()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    QVERIFY(bindRole(D::HazardArm, QStringLiteral("2-Down")));
+    setHold(m_c1, 100);
+    m_doc->setStartupFunction(m_chaser->id());
+    m_doc->setMode(Doc::Operate);           // starts it
+    QVERIFY(m_pmj->tap(QStringLiteral("2-Down")));
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    for (int i = 0; i < 20 && m_chaser->currentStepIndex() != 1; ++i)
+        tick(1);
+    waitForCheck();
+    QVERIFY(m_chaser->isRunning());
+    QCOMPARE(m_chaser->currentStepIndex(), 1);
+    QCOMPARE(at("CO2 jet"), 0);
+    QCOMPARE(at("Hazer"), 0);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setStartupFunction(Function::invalidId());
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::aGoStillFiresInDesignAndOperate()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    for (Doc::Mode mode : { Doc::Design, Doc::Operate })
+    {
+        m_doc->setMode(mode);
+        go();                               // the preset
+        waitForCheck();
+        QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+        go();                               // the blast, held
+        waitForCheck();
+        QVERIFY2(at("CO2 jet") == 255, mode == Doc::Design ? "Design" : "Operate");
+        QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+        tick(1);
+        QCOMPARE(at("CO2 jet"), 0);
+        m_chaser->stop(FunctionParent::master());
+        tick(3);
+    }
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::anAutoFollowAfterAHeldGoStillFires()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    setHold(m_c2, 100);                     // the blast goes on to "After"
+    m_doc->setMode(Doc::Operate);
+    go();
+    waitForCheck();
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    go();                                   // the blast, held
+    waitForCheck();
+    QCOMPARE(at("CO2 jet"), 255);
+    for (int i = 0; i < 20 && m_chaser->currentStepIndex() != 2; ++i)
+        tick(1);
+    waitForCheck();
+    QCOMPARE(m_chaser->currentStepIndex(), 2);
+    // "After" tracks the jet on, reached held: still out.
+    QCOMPARE(at("CO2 jet"), 255);
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    tick(1);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->setMode(Doc::Design);
+}
+
+void HazardArming_Test::anEffectChaseNeverClosesTheFireLayers()
+{
+    QVERIFY(bindRole(D::HazardHold, QStringLiteral("1-Down")));
+    K *k = m_doc->outputRuleKeeper();
+    m_doc->setMode(Doc::Operate);
+    go();
+    waitForCheck();
+    QVERIFY(m_pmj->press(QStringLiteral("1-Down")));
+    go();                                   // the blast, held
+    waitForCheck();
+    QCOMPARE(at("CO2 jet"), 255);
+    // A wash chase stepping every 60 ms (an effect's, a VC button's).
+    Scene *up = new Scene(m_doc), *down = new Scene(m_doc);
+    up->setValue(named("Stage wash")->id(), 0, 255);
+    down->setValue(named("Stage wash")->id(), 0, 20);
+    m_doc->addFunction(up);
+    m_doc->addFunction(down);
+    Chaser *chase = new Chaser(m_doc);
+    chase->setName(QStringLiteral("Wash chase"));
+    m_doc->addFunction(chase);
+    chase->addStep(ChaserStep(up->id()));
+    chase->addStep(ChaserStep(down->id()));
+    chase->setDuration(60);
+    chase->start(m_doc->masterTimer(), FunctionParent(FunctionParent::ManualVCWidget, 9));
+    const quint32 before = k->m_hazardStep.load();
+    // The frames on their own thread, the main thread busy (no event loop).
+    int lowest = 255, steps = 0, last = -1;
+    std::thread([&]() {
+        for (int i = 0; i < 40; ++i)
+        {
+            tick(1);
+            lowest = qMin(lowest, at("CO2 jet"));
+            if (chase->currentStepIndex() != last)
+            {
+                last = chase->currentStepIndex();
+                ++steps;
+            }
+        }
+    }).join();
+    QVERIFY2(steps >= 5, qPrintable(QString::number(steps)));
+    QCOMPARE(lowest, 255);
+    QCOMPARE(k->m_hazardStep.load(), before);
+    QCoreApplication::processEvents();
+    chase->stop(FunctionParent(FunctionParent::ManualVCWidget, 9));
+    QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
+    m_doc->setMode(Doc::Design);
+}
+
 QTEST_GUILESS_MAIN(HazardArming_Test)

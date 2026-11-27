@@ -95,7 +95,18 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     });
     // Another show: a new show's setting, and OnAtOperate waits for its
     // own first Operate.
-    connect(doc, &Doc::clearing, this, [this]() { m_clearing = true; });
+    connect(doc, &Doc::clearing, this, [this]() {
+        m_clearing = true;
+        QMutexLocker locker(&m_hazardMutex);
+        m_runLists.clear();
+    });
+    // A list removed leaves the Run's lists before it is deleted.
+    connect(doc, &Doc::functionRemoved, this, [this](quint32 id) {
+        QMutexLocker locker(&m_hazardMutex);
+        m_runLists.remove(id);
+        for (auto it = m_runLists.begin(); it != m_runLists.end();)
+            it = it.value() != nullptr && it.value()->id() == id ? m_runLists.erase(it) : std::next(it);
+    });
     connect(doc, &Doc::cleared, this, [this]() {
         m_clearing = false;
         // Another show: its own start, no emergency stop carried over, no
@@ -129,10 +140,15 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
            universes live. Before anything else hears of Operate. */
         if (mode == Doc::Operate)
             startSession();
-        /* Design: nothing a run let fire stays out (an edit never fires a
-           hazard). The spotter's arming stays theirs. */
-        if (mode == Doc::Design)
-            revokeHazards();
+        /* No list carries a GO's stamp across a mode switch (R1): what plays
+           on fires a hazard again only from the next GO. */
+        for (Function *f : m_doc->functions())
+            if (Chaser *c = qobject_cast<Chaser *>(f))
+                c->clearRunStamp();
+        /* Either way, nothing a run let fire stays out (an edit never fires
+           a hazard; Operate's show starts from its own GO). The spotter's
+           arming stays theirs. */
+        revokeHazards();
         if (!m_hazardsSkipped.isEmpty())
         {
             m_hazardsSkipped.clear();
@@ -203,6 +219,7 @@ OutputRuleKeeper::OutputRuleKeeper(Doc *doc)
     connect(doc, &Doc::functionAdded, this, [this](quint32 id) {
         watchChaser(qobject_cast<Chaser *>(m_doc->function(id)));
     });
+    refreshRunLists();
     // A laser class, a scenery, a symbol changed a guess: laid again now.
     Fixture::addGuessListener(this, [this](const void *context) {
         // Another show's plot is not this one's (a definition is every show's).
@@ -1442,17 +1459,19 @@ void OutputRuleKeeper::watchChaser(Chaser *chaser)
     m_watched.insert(chaser->id());
     const quint32 id = chaser->id();
     // On the thread the step comes on (the MasterTimer's): closed at once.
+    // The chaser's own signals: it is alive while they come.
     m_chaserConnections << connect(chaser, &Chaser::currentStepChanged, this,
-                                   [this, id](int step) { hazardStepReached(id, step); }, Qt::DirectConnection);
+                                   [this, chaser](int step) { hazardStepReached(chaser, step); }, Qt::DirectConnection);
     m_chaserConnections << connect(chaser, QOverload<quint32>::of(&Function::stopped), this,
-                                   [this](quint32 fid) { hazardStepReached(fid, -1); }, Qt::DirectConnection);
+                                   [this, chaser](quint32) { hazardStepReached(chaser, -1); }, Qt::DirectConnection);
     connect(chaser, &QObject::destroyed, this, [this, id]() { m_watched.remove(id); });
 }
 
 void HazardFastPath::detach()
 {
-    m_alive.store(false, std::memory_order_release);
-    while (m_users.load(std::memory_order_acquire) != 0)
+    // seq_cst both: the other half of feed()'s handshake (R3, see there).
+    m_alive.store(false, std::memory_order_seq_cst);
+    while (m_users.load(std::memory_order_seq_cst) != 0)
         QThread::yieldCurrentThread();
     holdKey.store(kNone);
     killKey.store(kNone);
@@ -1478,51 +1497,132 @@ void OutputRuleKeeper::shutdownHazards()
     m_runningLayer->clear();
 }
 
-void OutputRuleKeeper::hazardStepReached(quint32 chaserId, int step)
+void OutputRuleKeeper::hazardStepReached(Chaser *chaser, int step)
 {
+    const quint32 chaserId = chaser->id();
     Reach r;
     r.step = step;
     r.held = m_hazardHold.load(std::memory_order_acquire);
     r.armed = m_hazardArmed.load(std::memory_order_acquire);
     r.blind = m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->outputInhibited();
     bool close = false;
+    bool grant = true;
     {
         QMutexLocker locker(&m_hazardMutex);
         if (m_hazardOrder.isEmpty())
             return;
-        /* A step that is no new step (a VC cue list's crossfade ending
-           says the same step again, N5): no new reach -- a skipped flame
-           never fires late. */
+        /* Granted per step, by the Run's stamp (fourth review R1/R2): a
+           show list's step that ShowControl's GO, Back, jump or Sub GO
+           brought, or that the list went on to by itself after one. A step
+           from anywhere else -- a VC button, the programmer's step, a web
+           start, the startup function, the editor's Test -- is no run. */
+        Chaser *holder = m_runLists.value(chaserId, nullptr);
+        const bool run = step >= 0 && holder != nullptr && holder->runStamped();
         auto was = m_reach.constFind(chaserId);
-        if (step >= 0 && was != m_reach.constEnd() && was.value().step == step)
-            return;
-        /* Every step of a list that has a reach closes the grants (N6): a
-           grant worked out for the step before never opens under this one. */
-        close = m_granting.contains(chaserId) || was != m_reach.constEnd();
-        if (step < 0)
-            m_reach.remove(chaserId);
+        const bool had = was != m_reach.constEnd() || m_granting.contains(chaserId);
+        if (!run)
+        {
+            /* Not a run's (R4): no reach, nothing closed and no grant asked
+               -- an effect chase stepping every 60 ms never touches the fire
+               layers -- unless this list had a run's step, whose grant this
+               step ends. */
+            if (!had)
+            {
+                if (step < 0 || m_unrunPending.contains(chaserId))
+                    return;
+                m_unrunPending.insert(chaserId);
+                grant = false;
+            }
+            else
+            {
+                m_reach.remove(chaserId);
+                close = true;
+            }
+        }
         else
+        {
+            /* A step that is no new step (a VC cue list's crossfade ending
+               says the same step again, N5): no new reach -- a skipped flame
+               never fires late. */
+            if (was != m_reach.constEnd() && was.value().step == step)
+                return;
+            /* Every step of a list that has a reach closes the grants (N6): a
+               grant worked out for the step before never opens under this one. */
+            close = had;
             m_reach.insert(chaserId, r);
+        }
     }
     // What this list granted closes now, before its next cue writes.
     if (close)
         m_hazardStep.fetch_add(1, std::memory_order_acq_rel);
-    QMetaObject::invokeMethod(this, [this, chaserId]() { grantHazards(chaserId); },
-                              thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection);
+    const Qt::ConnectionType how = thread() == QThread::currentThread() ? Qt::DirectConnection : Qt::QueuedConnection;
+    if (grant)
+        QMetaObject::invokeMethod(this, [this, chaserId]() { grantHazards(chaserId); }, how);
+    else
+        QMetaObject::invokeMethod(this, [this, chaserId]() { noteUnrunStep(chaserId); }, how);
 }
 
-bool OutputRuleKeeper::isRunRoute(const Chaser *c) const
+void OutputRuleKeeper::refreshRunLists()
 {
-    // A list of the show's (the Show Tree's), played from the Run: started
-    // by ShowControl (the master parent), or a cue's sub-cues.
-    ShowTreeController *st = m_doc->showTree();
-    if (c == nullptr || st == nullptr)
-        return false;
-    for (const ShowTree::Production &p : st->productions())
-        for (const ShowTree::CueList &l : p.lists)
-            if (!l.looks && l.chaser == c->id())
-                return l.isSubCues() || c->sources().contains(FunctionParent::master());
-    return false;
+    QHash<quint32, Chaser *> lists;
+    if (ShowTreeController *st = m_doc->showTree())
+        for (const ShowTree::Production &p : st->productions())
+            for (const ShowTree::CueList &l : p.lists)
+            {
+                if (l.looks)
+                    continue;
+                Chaser *own = qobject_cast<Chaser *>(m_doc->function(l.chaser));
+                if (own == nullptr)
+                    continue;
+                Chaser *holder = own;
+                if (l.isSubCues())
+                {
+                    const ShowTree::CueList *parent = st->listOfCue(l.subOf);
+                    holder = parent != nullptr ? qobject_cast<Chaser *>(m_doc->function(parent->chaser)) : nullptr;
+                }
+                if (holder != nullptr)
+                    lists.insert(own->id(), holder);
+            }
+    QMutexLocker locker(&m_hazardMutex);
+    m_runLists = lists;
+}
+
+void OutputRuleKeeper::noteUnrunStep(quint32 chaserId)
+{
+    QHash<quint32, Hazard> hazards;
+    QList<quint32> order;
+    {
+        QMutexLocker locker(&m_hazardMutex);
+        m_unrunPending.remove(chaserId);
+        hazards = m_hazards;
+        order = m_hazardOrder;
+    }
+    Chaser *c = qobject_cast<Chaser *>(m_doc->function(chaserId));
+    if (c == nullptr || !c->isRunning())
+        return;
+    const QHash<quint32, QByteArray> levels = hazardStepLevels(chaserId, c->currentStepIndex());
+    QList<quint32> skipped;
+    for (quint32 id : std::as_const(order))
+    {
+        if (hazards.value(id).parked)
+            continue;
+        const QByteArray v = levels.value(id);
+        if (std::any_of(v.cbegin(), v.cend(), [](char ch) { return ch != 0; }))
+            skipped << id;
+    }
+    if (skipped.isEmpty())
+        return;                 // the step sets no hazard: nothing to say
+    QHash<quint32, int> why;
+    for (quint32 id : std::as_const(skipped))
+        why.insert(id, 2);
+    if (skipped == m_hazardsSkipped && why == m_hazardSkippedBurst)
+        return;
+    m_hazardsSkipped = skipped;
+    m_hazardSkippedBurst = why;
+    for (quint32 id : std::as_const(skipped))
+        logHazard(tr("%1 held: not fired from Run").arg(hazards.value(id).name));
+    emitMachineryChanged();
+    emitHazardsChanged();
 }
 
 uint OutputRuleKeeper::stepFadeMs(const Chaser *c, int step) const
@@ -1622,10 +1722,9 @@ void OutputRuleKeeper::grantHazards(quint32 stepped)
         // Only while that step is current.
         if (c == nullptr || !c->isRunning() || c->currentStepIndex() != it.value().step)
             continue;
-        /* Only a run (N1): the show's lists, played from the Run (GO, Back,
-           a jump, the Run tab, a cue list on the Run list, sub-cues). A VC
-           button, the chaser editor's Test or a web widget never fires one. */
-        const bool run = isRunRoute(c);
+        /* Only a run's step is reached at all (N1, R1): hazardStepReached()
+           records none for any other route. */
+        const bool run = true;
         const uint fade = stepFadeMs(c, it.value().step);
         const QHash<quint32, QByteArray> levels = hazardStepLevels(it.key(), it.value().step);
         for (quint32 id : std::as_const(order))
@@ -1971,6 +2070,7 @@ void OutputRuleKeeper::pushShowOnlyLive()
 
 void OutputRuleKeeper::rebuild()
 {
+    refreshRunLists();
     m_pending = false;
     if (m_rebuildTimer != nullptr)
         m_rebuildTimer->stop();     // this is the one it would have run

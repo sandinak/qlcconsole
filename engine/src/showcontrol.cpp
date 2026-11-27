@@ -133,13 +133,22 @@ void ShowControl::go(Chaser *chaser, int step)
     action.m_masterIntensity = 1.0;
     action.m_stepIntensity = 1.0;
     action.m_fadeMode = Chaser::FromFunction;
-    chaser->setAction(action);
+    // The Run's own GO: the step it brings may fire a hazard (R1).
+    noteRunList();
+    chaser->setAction(action, true);
 
     if (!chaser->isRunning())
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
     else
         claim(chaser);
     noteGo();
+}
+
+void ShowControl::noteRunList()
+{
+    // Before the stamp: the keeper knows the show's lists when the step comes.
+    if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+        rules->refreshRunLists();
 }
 
 void ShowControl::noteGo()
@@ -164,7 +173,8 @@ void ShowControl::goSubCue(Chaser *chaser, int step, int subCue)
 {
     // A jump to a sub-cue: its parent first, if that isn't the one playing
     // (the runner sees to it); a stopped list starts there.
-    chaser->jumpToSubCue(step, subCue);
+    noteRunList();
+    chaser->jumpToSubCue(step, subCue, true);
     if (!chaser->isRunning())
     {
         chaser->start(m_doc->masterTimer(), FunctionParent::master());
@@ -673,7 +683,8 @@ bool ShowControl::execute(const Request &request)
             }
             // A Back never fires a one-shot again (board Q350): each is
             // held where it is until the next GO (Chaser::setAction()).
-            chaser->setAction(action);
+            noteRunList();
+            chaser->setAction(action, true);
             claim(chaser);
             m_loaded.remove(chaser->id());
             return finish(true, name);
@@ -707,10 +718,11 @@ bool ShowControl::execute(const Request &request)
                                          : tr("%1 is at its first sub-cue").arg(parent));
                 what += tr(" cue %1").arg(chaser->subCue(current, target));
             }
+            noteRunList();
             if (request.command == SubGo)
-                chaser->subGo();
+                chaser->subGo(true);
             else
-                chaser->subBack();
+                chaser->subBack(true);
             claim(chaser);
             return finish(true, name);
         }

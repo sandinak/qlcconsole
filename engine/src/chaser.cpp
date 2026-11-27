@@ -713,22 +713,22 @@ ChaserAction subAction(ChaserActionType type, int index = -1, int subIndex = -1)
 }
 }
 
-void Chaser::subGo()
+void Chaser::subGo(bool fromRun)
 {
     ChaserAction action = subAction(ChaserSubNextStep);
-    setAction(action);
+    setAction(action, fromRun);
 }
 
-void Chaser::subBack()
+void Chaser::subBack(bool fromRun)
 {
     ChaserAction action = subAction(ChaserSubPreviousStep);
-    setAction(action);
+    setAction(action, fromRun);
 }
 
-void Chaser::jumpToSubCue(int index, int subIndex)
+void Chaser::jumpToSubCue(int index, int subIndex, bool fromRun)
 {
     ChaserAction action = subAction(ChaserSubSetStep, index, subIndex);
-    setAction(action);
+    setAction(action, fromRun);
 }
 
 void Chaser::setSubCueHeld(bool held)
@@ -943,8 +943,35 @@ void Chaser::tap()
         m_runner->tap();
 }
 
-void Chaser::setAction(ChaserAction &action)
+quint32 Chaser::nextRouteSerial()
 {
+    quint32 s = m_routeSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+    if (s == 0)                 // 0 is "no stamp"
+        s = m_routeSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+    return s;
+}
+
+bool Chaser::runStamped() const
+{
+    const quint32 stamp = m_runSerial.load(std::memory_order_acquire);
+    return stamp != 0 && stamp == m_routeSerial.load(std::memory_order_acquire);
+}
+
+void Chaser::clearRunStamp()
+{
+    m_runSerial.store(0, std::memory_order_release);
+    nextRouteSerial();
+}
+
+void Chaser::setAction(ChaserAction &action, bool fromRun)
+{
+    /* The Run's stamp, before the action is stored: the step it brings is
+       seen (on the MasterTimer's thread) only after this (R1). */
+    {
+        const quint32 s = nextRouteSerial();
+        if (fromRun)
+            m_runSerial.store(s, std::memory_order_release);
+    }
     /* A Back, from any route (the Run tab, a VC cue list, the pad, the
        chaser editor's Test, a web or Simple Desk step): a one-shot is
        never fired again (board Q350). Its level read now, before the Back
@@ -1176,6 +1203,9 @@ void Chaser::postRun(MasterTimer* timer, QList<Universe *> universes)
             m_runner->setPause(false, universes);
 
         m_runner->postRun(timer, universes);
+        // Stopped: what plays next is no GO's until a GO (R2: a start alone).
+        if (!m_restarting)
+            clearRunStamp();
 
         delete m_runner;
         m_runner = NULL;

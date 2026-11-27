@@ -314,9 +314,9 @@ public:
     /** Sub GO, Sub Back, and a jump to sub-cue @a subIndex of step @a index
      *  (that step first, if it isn't the one playing). ChaserActions, as
      *  setAction() takes them; a stopped chase plays the jump when started. */
-    void subGo();
-    void subBack();
-    void jumpToSubCue(int index, int subIndex);
+    void subGo(bool fromRun = false);
+    void subBack(bool fromRun = false);
+    void jumpToSubCue(int index, int subIndex, bool fromRun = false);
 
     /** This chase plays as a step's sub-cues (ChaserRunner::setSubCueHeld):
      *  set by the chase whose step it is, before it starts it. */
@@ -384,7 +384,19 @@ public:
     /** Set an action to be performed on steps.
      *  Depending on the action type, it might be applied immediately
      *  or deferred to the next write() call */
-    void setAction(ChaserAction &action);
+    void setAction(ChaserAction &action, bool fromRun = false);
+
+    /** The Run's stamp (hazard arming, fourth review R1/R2): true while the
+     *  step playing came from ShowControl's own GO, Back, jump or Sub GO
+     *  (setAction() with @a fromRun), or from the list going on by itself
+     *  after one (a timed auto-follow moves no action). Any other action
+     *  (a VC button, the programmer's step, the editor's Test, a web or
+     *  show-clock step), a stop and clearRunStamp() take it away; a start
+     *  alone (the startup function, the web's start) never gives it. Any
+     *  thread. */
+    bool runStamped() const;
+    /** The stamp taken away (a mode switch, the show closed). */
+    void clearRunStamp();
 
     /** Get the current step number */
     int currentStepIndex() const;
@@ -420,6 +432,11 @@ public:
 
 private:
     ChaserAction m_startupAction;
+    /** Every action and every stop moves it on; the stamp is the value a
+     *  Run action left (runStamped(): unchanged since). */
+    std::atomic<quint32> m_routeSerial { 0 };
+    std::atomic<quint32> m_runSerial { 0 };
+    quint32 nextRouteSerial();
 
 public:
     /** @reimp */

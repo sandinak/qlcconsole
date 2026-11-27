@@ -281,6 +281,12 @@ public:
      *  (holdStageMachinery()); an automatic GO (a StampScope) does not. */
     void noteGo();
 
+    /** The show's lists the Run plays, read again (main thread; ShowControl
+     *  calls it before each Run action): each with the list whose stamp
+     *  (Chaser::runStamped()) its steps go by -- itself, or for a cue's
+     *  sub-cues the list of that cue. Only their steps fire a hazard. */
+    void refreshRunLists();
+
     /** Stage machinery stopped where it is (FixtureRest::freezesOnStop():
      *  a curtain, mid-move or at rest). Stop ALL, Fade and stop and the
      *  emergency stop call it before anything stops: every channel of each
@@ -556,14 +562,15 @@ private:
     /** A list's step changed (any thread): its grant closed now, the new
      *  step granted on the main thread with the Hold / arming / Blind as
      *  they are at this moment. Also a list stopped (@p step -1). */
-    void hazardStepReached(quint32 chaserId, int step);
+    void hazardStepReached(class Chaser *chaser, int step);
+    /** A step no GO brought (not run-stamped) that sets a hazard: said on
+     *  the footer, "held — fire it from Run"; nothing is granted or closed
+     *  (main thread, once per list however fast it steps). */
+    void noteUnrunStep(quint32 chaserId);
     /** The grants worked out again from every running list's step and what
      *  each step was reached with (main thread); @p stepped: the list whose
      *  step this is for, whose skips the footer says. */
     void grantHazards(quint32 stepped);
-    /** A list played from the Run (N1): the show's own lists, started by
-     *  ShowControl, and sub-cues; never a VC button's or a Test's */
-    bool isRunRoute(const class Chaser *c) const;
     /** Step @p step's fade in, as the chaser plays it (ms) */
     uint stepFadeMs(const class Chaser *c, int step) const;
     /** What step @p step of list @p chaserId sets the hazards to */
@@ -633,6 +640,10 @@ private:
     /** The lists whose step grants something now (guarded): only their
      *  steps close the gates (an effect chaser stepping elsewhere does not) */
     QSet<quint32> m_granting;
+    /** refreshRunLists(): a Run list's chaser -> the chaser holding its
+     *  stamp (m_hazardMutex; a removed one leaves at once). */
+    QHash<quint32, class Chaser *> m_runLists;
+    QSet<quint32> m_unrunPending;
     /** What the grants lay (guarded): fixture -> values */
     QHash<quint32, QByteArray> m_burstGrant, m_runningGrant;
     /** A Running grant's fade: from what the step before laid, over the

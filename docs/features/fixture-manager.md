@@ -1111,12 +1111,17 @@ web page, input passthrough, an override hit, Focus or Highlight, the
 programmer, a fixture sharing its address, or a function left running.
 A cue that sets it to 0 puts it at 0. An effect on a hazard — an EFX,
 an RGB matrix, an effect look, a chase inside the cue — never drives it
-(Show Review notes it on the cue, **FIX-24**). Only a **run** fires one:
-the show's own lists played from the Run (GO, Back, a jump, an
-auto-follow, a timecode or audio step, the Run tab, a cue list on the Run
-list, sub-cues); a Virtual Console button, the chaser editor's **Test**
-or a web widget never does — the footer says **CO2 jet held — fire it
-from Run**. Two kinds, picked in **Behaves as**:
+(Show Review notes it on the cue, **FIX-24**). Only a **run** fires one,
+**step by step**: a step of the show's own lists that the Run's GO, Back,
+jump or Sub GO brought (from the Run tab, the keys, a pad, a timecode or
+audio-bar GO, a Virtual Console cue list on a Show Tree list), or that the
+list went on to by itself after one (an auto-follow, sub-cues). Any other
+step never fires one, even on a list a GO started: a Virtual Console
+button, the programmer's step, the chaser editor's **Test**, a web
+widget, a start alone (the web's, the **startup function**'s), and every
+step after a stop or a switch between Design and Operate until the next
+GO — the footer says **CO2 jet held — fire it from Run**. Two kinds,
+picked in **Behaves as**:
 
 - **Hazard — Burst** (flame, CO₂ jets, confetti, cannons, sparkulars,
   pyro): the spotter's **deadman**. When a cue is reached by a run it
@@ -1135,12 +1140,16 @@ from Run**. Two kinds, picked in **Behaves as**:
   armed sends its own level (tracking and includes count, so a hazer a
   cue tracks on stays on), **following the cue's fade**: a haze cue with
   a 10 s fade fades in over 10 s, and a later cue that sets it lower fades
-  it down. **Hazard kill** turns everything off at once and disarms, as a
+  it down. A very long fade down carries on through the cues after it
+  until a step sets the hazard again (which starts from where the fade
+  has got to). **Hazard kill** turns everything off at once and disarms, as a
   stop or a lost device do. A cue reached unarmed skips it (**Hazer skipped — not
   armed**); arming then fires nothing until the next cue is reached.
 
 Every step closes what the step before let fire, at once; a GO in
-**Blind** lets nothing fire.
+**Blind** lets nothing fire. A GO onto the cue that is already playing
+(a re-GO) is no new step: the cue keeps what it was first reached with,
+so a hold pressed since fires nothing until the next cue.
 
 **Disarmed, always:** every show opened, the emergency stop, **Stop ALL**
 and **Fade and stop**, the computer going to sleep or waking, and the

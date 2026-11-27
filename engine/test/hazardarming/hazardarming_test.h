@@ -130,7 +130,21 @@ private slots:
     /** N8: a live hazard's fire layer laid in place, never anew. */
     void aLiveHazardIsLaidInPlace();
 
+    /* The fourth review */
+    /** R1: a step from another route, on a list a GO started, fires nothing. */
+    void aStepFromAnotherRouteNeverFires();
+    /** R2: a start alone (the web's, the startup function's) never fires. */
+    void aWebStartNeverFires();
+    void aStartupFunctionNeverFires();
+    /** The Run's own GO still fires, in Design and in Operate; and the
+     *  list going on by itself after a held GO. */
+    void aGoStillFiresInDesignAndOperate();
+    void anAutoFollowAfterAHeldGoStillFires();
+    /** R4: an effect chase never closes the fire layers. */
+    void anEffectChaseNeverClosesTheFireLayers();
+
 private:
+    void setHold(quint32 cue, uint ms);
     void tick(int n = 1);
     int at(const char *fixture);
     void go();

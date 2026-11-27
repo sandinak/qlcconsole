@@ -64,8 +64,14 @@ public:
      *  -> not held, not armed, every grant closed. */
     void feed(quint32 universe, quint32 channel, uchar value)
     {
-        m_users.fetch_add(1, std::memory_order_acq_rel);
-        if (m_alive.load(std::memory_order_acquire))
+        /* The handshake with detach() (fourth review R3): this side is
+           "users++ then read alive", detach()'s is "alive = false then read
+           users" -- a store followed by a load of another variable on each
+           side (Dekker's pattern). Acquire/release does not order a store
+           before a later load, so each side could miss the other's write: a
+           feed reaching freed flags. All four are seq_cst, which does. */
+        m_users.fetch_add(1, std::memory_order_seq_cst);
+        if (m_alive.load(std::memory_order_seq_cst))
         {
             const quint64 k = key(universe, channel);
             if (value == 0 && k == holdKey.load(std::memory_order_relaxed))
@@ -77,7 +83,7 @@ public:
                 m_epoch->fetch_add(1, std::memory_order_acq_rel);
             }
         }
-        m_users.fetch_sub(1, std::memory_order_acq_rel);
+        m_users.fetch_sub(1, std::memory_order_seq_cst);
     }
 
 private:
