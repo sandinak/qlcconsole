@@ -593,7 +593,11 @@ void SurfaceMapView::paintEvent(QPaintEvent *event)
         {
             // Narrower than its name: the name wraps inside the outline, the way a panel prints it.
             p.setPen(kSectionText);
-            p.drawText(r.adjusted(3, 3, -3, 0), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, sec.label);
+            QFont small = sf;
+            small.setPixelSize(qMax(8, int(s * 0.12)));
+            small.setLetterSpacing(QFont::PercentageSpacing, 100);
+            p.setFont(small);
+            p.drawText(r.adjusted(2, 3, -2, 0), Qt::AlignHCenter | Qt::AlignTop | Qt::TextWordWrap, sec.label);
             continue;
         }
         const QString text = p.fontMetrics().elidedText(sec.label, Qt::ElideRight, int(r.width()) - 14);
@@ -886,7 +890,11 @@ SurfaceControlTable::SurfaceControlTable(SurfaceMapView *view, QWidget *parent)
     m_table->setAlternatingRowColors(true);
     m_table->setSortingEnabled(true);
     m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
-    m_table->horizontalHeader()->setStretchLastSection(true);
+    m_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);      // the job has the room
+    m_table->setColumnWidth(0, 170);
+    m_table->setColumnWidth(1, 110);
+    m_table->setColumnWidth(3, 70);
+    m_table->setColumnWidth(4, 90);
     m_table->horizontalHeader()->setSortIndicatorShown(true);
     m_table->setMinimumHeight(120);
     m_table->setMaximumHeight(220);

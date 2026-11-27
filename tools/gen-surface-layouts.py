@@ -203,7 +203,7 @@ def apc40():
     b.section("Device control", 1033, 296, 437, 372)
     b.section("", 1040, 100, 90, 195)
     b.section("", 1148, 170, 322, 124)
-    b.section("Bank select", 1050, 676, 132, 108)
+    b.section("", 1050, 676, 132, 108)
     b.section("Crossfader", 1210, 770, 210, 120)
     b.finish()
 
