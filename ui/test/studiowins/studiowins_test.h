@@ -43,6 +43,9 @@ private slots:
     void theNumberItemIsOnTheSelectionMenuOfThePlot();
 
     void theDmxOverlayOutlinesPatchClashesAndFixingClearsThem();
+
+    void labelFieldsRoundTripWithTheShow();
+    void theLabelSaysTheChosenFieldsAroundTheIcon();
 };
 
 #endif

@@ -3672,7 +3672,10 @@ void MonitorGraphicsView::refreshFixtureLabels()
     // Rendering is driven purely by each item's LAYER labels flag.
     MonitorProperties *props = m_doc->monitorProperties();
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+    {
+        it.value()->refreshLabel();
         it.value()->showLabel(props->layer(props->fixtureLayer(it.key())).labels);
+    }
 
     foreach (PlatformItem *pi, m_platformItems)
         if (StagePlatform *p = pi->platform())

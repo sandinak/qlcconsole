@@ -1214,6 +1214,39 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     labelsBtn->setChecked(m_props->labelsVisible());
     connect(labelsBtn, &QAction::toggled, this, [this](bool on) { slotShowLabels(on); });
 
+    /* What the labels say: any of the fields, per show. A submenu of Show, so
+       the menu count is the same. */
+    {
+        QMenu *fieldsMenu = showMenu->addMenu(tr("Label Fields"));
+        fieldsMenu->setObjectName(QStringLiteral("labelFieldsMenu"));
+        fieldsMenu->setToolTip(tr("What each fixture's label says on the plot. Saved with the show."));
+        const struct { int bit; const char *name; const char *obj; } fields[] = {
+            { MonitorProperties::LabelName, "Name", "labelFieldName" },
+            { MonitorProperties::LabelUnit, "Unit #", "labelFieldUnit" },
+            { MonitorProperties::LabelChannel, "Channel / ID", "labelFieldChannel" },
+            { MonitorProperties::LabelAddress, "Address (U.ch)", "labelFieldAddress" },
+            { MonitorProperties::LabelPurpose, "Purpose", "labelFieldPurpose" },
+            { MonitorProperties::LabelGel, "Colour / gel", "labelFieldGel" },
+            { MonitorProperties::LabelMode, "Mode", "labelFieldMode" },
+            { MonitorProperties::LabelOwner, "Owner", "labelFieldOwner" } };
+        for (const auto &f : fields)
+        {
+            QAction *a = fieldsMenu->addAction(tr(f.name));
+            a->setObjectName(QString::fromLatin1(f.obj));
+            a->setCheckable(true);
+            a->setChecked((m_props->labelFields() & f.bit) != 0);
+            const int bit = f.bit;
+            connect(a, &QAction::toggled, this, [this, bit](bool on) {
+                RigEditSession edit(this);
+                int mask = m_props->labelFields();
+                mask = on ? (mask | bit) : (mask & ~bit);
+                m_props->setLabelFields(mask);
+                if (m_graphicsView != nullptr)
+                    m_graphicsView->refreshFixtureLabels();
+            });
+        }
+    }
+
     /* Fixtures left on Auto drawn as their closest stage look (an LED PAR,
        a moving head spot...) instead of by their definition's type. Per
        show, saved with it; one Ctrl+Z, like any change to the plot. */
@@ -2058,8 +2091,11 @@ bool Monitor::numberInPlotOrder(const QList<quint32> &fids, QWidget *parent)
     }
     pushRigUndo(before);
     if (m_graphicsView != nullptr)
+    {
         for (quint32 fid : fids)
             m_graphicsView->updateFixture(fid);
+        m_graphicsView->refreshFixtureLabels();     // Unit # and Channel may be on them
+    }
     return true;
 }
 

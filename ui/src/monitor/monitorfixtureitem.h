@@ -253,6 +253,22 @@ public:
     void setViewHint(qreal scale, qreal turnDeg);
     /** The name label as painted, upright on screen, in item coordinates. */
     QPolygonF labelPolygon() const;
+    QPolygonF labelPolygonAbove() const;
+
+public:
+    /** What the label says for @p fid under the field mask @p fields
+     *  (MonitorProperties::LabelField): the short ids (Unit #, Channel,
+     *  Address) go in @p above the icon, the words (Name, Purpose, Gel, Mode,
+     *  Owner) in @p below it, one line each. */
+    static void labelTexts(Doc *doc, quint32 fid, int fields, QString *above, QString *below);
+    /** Read the label's fields again (they are a show-wide setting, and the
+     *  numbers behind them change from the dialogs). */
+    void refreshLabel();
+    QString labelAbove() const { return m_labelTextAbove; }
+    QString labelBelow() const { return m_labelTextBelow; }
+    /** The label's boxes in scene coordinates, for the overlap test. */
+    QList<QRectF> labelSceneRects() const;
+private:
 
     /** "Isolated" = drilled into its group to select this ONE fixture (double-
      *  click). Draws a distinct bright dashed border so it's obvious the sub-
@@ -457,6 +473,8 @@ private:
     QFont m_font;
 
     QRect m_labelRect;
+    QRect m_labelRectAbove;
+    QString m_labelTextAbove, m_labelTextBelow;
 
     /** setViewHint(): the view's scale and turn. */
     qreal m_viewScale = 1.0;

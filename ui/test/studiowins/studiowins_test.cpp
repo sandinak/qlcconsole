@@ -41,6 +41,7 @@
 #include "fixture.h"
 #include "truss.h"
 #include "plotnumbering.h"
+#include "qlcfixturemode.h"
 #include "monitorgraphicsview.h"
 #include "monitorfixtureitem.h"
 #include "doc.h"
@@ -496,6 +497,110 @@ void StudioWins_Test::theDmxOverlayOutlinesPatchClashesAndFixingClearsThem()
     QVERIFY(item(a)->hasPatchClash());
     mon.applyMapView(Monitor::ViewNormal);
     QVERIFY(!item(a)->hasPatchClash());
+}
+
+void StudioWins_Test::labelFieldsRoundTripWithTheShow()
+{
+    MonitorProperties mp;
+    QCOMPARE(mp.labelFields(), int(MonitorProperties::LabelName));
+    mp.setLabelFields(MonitorProperties::LabelName | MonitorProperties::LabelUnit | MonitorProperties::LabelOwner);
+    mp.setFixtureUnit(7, 12);
+    mp.setFixtureChannel(7, 101);
+    mp.setFixturePurpose(7, QStringLiteral("Front wash"));
+    QByteArray buf;
+    QXmlStreamWriter writer(&buf);
+    writer.writeStartDocument();
+    mp.saveXML(&writer, nullptr);
+    writer.writeEndDocument();
+    MonitorProperties mp2;
+    QXmlStreamReader reader(buf);
+    while (reader.readNextStartElement())
+        if (reader.name() == QStringLiteral("Monitor"))
+            QVERIFY(mp2.loadXML(reader, nullptr));
+    QCOMPARE(mp2.labelFields(), mp.labelFields());
+    QCOMPARE(mp2.fixtureUnit(7), 12);
+    QCOMPARE(mp2.fixtureChannel(7), 101);
+    QCOMPARE(mp2.fixturePurpose(7), QStringLiteral("Front wash"));
+}
+
+void StudioWins_Test::theLabelSaysTheChosenFieldsAroundTheIcon()
+{
+    Doc doc(nullptr);
+    doc.setMode(Doc::Design);
+    QWidget parent;
+    Monitor mon(&parent, &doc);
+    MonitorGraphicsView *gv = mon.findChild<MonitorGraphicsView *>();
+    QVERIFY(gv != nullptr);
+    MonitorProperties *props = doc.monitorProperties();
+    QList<Fixture *> fxs;
+    for (int i = 0; i < 4; ++i)
+    {
+        Fixture *f = makePar(&doc, quint32(i * 10));
+        QVERIFY(f != nullptr);
+        f->setName(QStringLiteral("Wash %1").arg(i + 1));
+        props->setFixtureUnit(f->id(), 20 + i);
+        props->setFixtureChannel(f->id(), 100 + i);
+        props->setFixturePurpose(f->id(), QStringLiteral("Front"));
+        props->setFixturePosition(f->id(), 0, 0, QVector3D(float(2000 + i * 3000), 4000.0f, 0.0f));
+        gv->addFixture(f->id(), QPointF(2000 + i * 3000, 4000.0));
+        fxs << f;
+    }
+    gv->showFixturesLabels(true);
+
+    // Name only, as every show always had it.
+    MonitorFixtureItem *it = gv->fixtureItemForId(fxs.first()->id());
+    QVERIFY(it != nullptr);
+    QCOMPARE(it->labelBelow(), QStringLiteral("Wash 1"));
+    QCOMPARE(it->labelAbove(), QString());
+
+    const int all = MonitorProperties::LabelName | MonitorProperties::LabelUnit
+                    | MonitorProperties::LabelChannel | MonitorProperties::LabelAddress
+                    | MonitorProperties::LabelPurpose | MonitorProperties::LabelMode
+                    | MonitorProperties::LabelOwner;
+    props->setLabelFields(all);
+    gv->refreshFixtureLabels();
+    QCOMPARE(it->labelAbove(), QStringLiteral("U20 · Ch 100 · 1.1"));
+    const QStringList below = it->labelBelow().split(QLatin1Char('\n'));
+    QCOMPARE(below.value(0), QStringLiteral("Wash 1"));
+    QCOMPARE(below.value(1), QStringLiteral("Front"));
+    QCOMPARE(below.value(2), fxs.first()->fixtureMode()->name());
+    QCOMPARE(below.size(), 4);                      // + the owner
+
+    // Only the unit number: nothing below at all.
+    props->setLabelFields(MonitorProperties::LabelUnit);
+    gv->refreshFixtureLabels();
+    QCOMPARE(it->labelAbove(), QStringLiteral("U20"));
+    QCOMPARE(it->labelBelow(), QString());
+
+    // The menu in Show sets it, per field.
+    QAction *nameAct = mon.findChild<QAction *>(QStringLiteral("labelFieldName"));
+    QVERIFY(nameAct != nullptr);
+    nameAct->setChecked(true);
+    QCOMPARE(props->labelFields(), int(MonitorProperties::LabelUnit | MonitorProperties::LabelName));
+    QCOMPARE(it->labelBelow(), QStringLiteral("Wash 1"));
+
+    // Nothing touches its neighbours, at three plot sizes.
+    props->setLabelFields(all);
+    gv->refreshFixtureLabels();
+    for (const QSize &sz : { QSize(1024, 640), QSize(1280, 800), QSize(1920, 1080) })
+    {
+        parent.resize(sz);
+        mon.resize(sz);
+        gv->resize(sz);
+        QApplication::processEvents();
+        QList<QRectF> rects;
+        for (Fixture *f : fxs)
+            rects << gv->fixtureItemForId(f->id())->labelSceneRects();
+        QVERIFY(rects.size() >= 8);
+        for (int a = 0; a < rects.size(); ++a)
+            for (int b = a + 1; b < rects.size(); ++b)
+            {
+                // Two boxes of one fixture sit above and below its icon: never touching.
+                QVERIFY2(!rects.at(a).intersects(rects.at(b)),
+                         qPrintable(QStringLiteral("labels %1 and %2 overlap at %3x%4")
+                                        .arg(a).arg(b).arg(sz.width()).arg(sz.height())));
+            }
+    }
 }
 
 QTEST_MAIN(StudioWins_Test)

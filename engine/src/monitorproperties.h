@@ -538,6 +538,17 @@ public:
     inline void setLabelsVisible(bool visible) { m_showLabels = visible; }
     inline bool labelsVisible() const { return m_showLabels; }
 
+    /** What a fixture's plot label says (Show ▸ Label Fields): a mask of
+     *  LabelField values, saved with the show. Name only is the default and
+     *  how every older show reads. */
+    enum LabelField
+    {
+        LabelName = 1, LabelUnit = 2, LabelChannel = 4, LabelAddress = 8,
+        LabelPurpose = 16, LabelGel = 32, LabelMode = 64, LabelOwner = 128
+    };
+    inline int labelFields() const { return m_labelFields; }
+    inline void setLabelFields(int mask) { m_labelFields = mask; }
+
     /** Draw fixtures left on Auto as their closest stage look
      *  (Fixture::autoStageLook()) in the plot and the studio, rather than by
      *  their definition's type as always. Per show, saved with it (only when
@@ -620,6 +631,7 @@ public:
 
 private:
     bool m_showLabels;
+    int m_labelFields = 1;
     std::atomic<bool> m_autoStageLooks { false };
     QMap <quint32, FixturePreviewItem> m_fixtureItems;
 

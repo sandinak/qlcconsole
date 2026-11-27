@@ -72,6 +72,7 @@
 #define KXMLQLCMonitorOriginY       QStringLiteral("OriginY")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
+#define KXMLQLCMonitorLabelFields   QStringLiteral("LabelFields")
 #define KXMLQLCMonitorAutoStageLooks QStringLiteral("AutoStageLooks")
 #define KXMLQLCMonitorStageMarks    QStringLiteral("StageMarks")
 #define KXMLQLCMonitorCurtainLineY  QStringLiteral("CurtainLineY")
@@ -1173,6 +1174,7 @@ void MonitorProperties::reset()
     m_numberLineY = 0.0f;
     m_targetPositionsVisible = true;
     m_showLabels = true;
+    m_labelFields = 1;
     /* Quietly: a load or an undo snapshot sets it again straight after, and
        its setter says so then if it differs. */
     m_autoStageLooks.store(false, std::memory_order_relaxed);
@@ -3792,6 +3794,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         else
             setLabelsVisible(false);
     }
+    if (attrs.hasAttribute(KXMLQLCMonitorLabelFields))
+        setLabelFields(qBound(0, attrs.value(KXMLQLCMonitorLabelFields).toString().toInt(), 255));
 
     if (attrs.hasAttribute(KXMLQLCMonitorAutoStageLooks))
         setAutoStageLooks(attrs.value(KXMLQLCMonitorAutoStageLooks).toString() == "1");
@@ -4868,6 +4872,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
     doc->writeStartElement(KXMLQLCMonitorProperties);
     doc->writeAttribute(KXMLQLCMonitorDisplay, QString::number(displayMode()));
     doc->writeAttribute(KXMLQLCMonitorShowLabels, QString::number(labelsVisible()));
+    if (labelFields() != LabelName)
+        doc->writeAttribute(KXMLQLCMonitorLabelFields, QString::number(labelFields()));
     // Only when on: a show that never turned it on saves as it always has.
     if (autoStageLooks())
         doc->writeAttribute(KXMLQLCMonitorAutoStageLooks, QString::number(1));
