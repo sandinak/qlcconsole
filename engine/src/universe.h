@@ -203,6 +203,10 @@ public:
         if (channel >= 0 && channel < int(m_passthroughHeld.size()))
             m_passthroughHeld[size_t(channel)].store(held, std::memory_order_relaxed);
     }
+    /** The show's spotter controls' own path (HazardFastPath, held by the
+     *  InputOutputMap): the input patch feeds it on the plugin's thread. */
+    void setHazardFastPath(class HazardFastPath *path) { m_hazardFast.store(path, std::memory_order_release); }
+    class HazardFastPath *hazardFastPath() const { return m_hazardFast.load(std::memory_order_acquire); }
     bool passthroughHeld(int channel) const
     {
         return channel >= 0 && channel < int(m_passthroughHeld.size())
@@ -271,6 +275,7 @@ protected:
     bool m_passthrough;
     /** setPassthroughHeld(): a hazard held safe, per channel */
     std::array<std::atomic<bool>, 512> m_passthroughHeld {};
+    std::atomic<class HazardFastPath *> m_hazardFast { nullptr };
     /** Flag to monitor the universe changes */
     bool m_monitor;
     /** Fork Blind: when true, dumpOutput() skips the physical plugins. Set

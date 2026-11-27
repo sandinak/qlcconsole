@@ -1173,6 +1173,36 @@ void ShowReview_Test::fix22fix23()
     QVERIFY(findings("FIX-22").first().message.contains(QStringLiteral("Hazard hold")));
     s->setValue(jet->id(), 0, 0);
     QVERIFY(quiet("FIX-22"));
+
+    // FIX-24: an effect on a hazard in a cue is said on the cue.
+    QVERIFY(quiet("FIX-24"));
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName(QStringLiteral("Jets"));
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(jet->id());
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName(QStringLiteral("Full"));
+    full->setValue(255);
+    m_doc->addPalette(full);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction(QStringLiteral("Show")), QStringLiteral("Main"));
+    const quint32 cueId = st->addCue(list, -1, QStringLiteral("Blast"));
+    ShowTree::Target t;
+    t.groups << g->id();
+    QVERIFY(st->setTargetLook(cueId, t, st->lookForPalette(full->id())));
+    Collection *coll = nullptr;
+    for (const ShowTree::Cue &c : st->cueList(list)->cues)
+        if (c.id == cueId)
+            coll = qobject_cast<Collection *>(m_doc->function(c.collection));
+    QVERIFY(coll != nullptr);
+    QVERIFY(quiet("FIX-24"));               // its own level: nothing to say
+    EFX *efx = new EFX(m_doc);
+    efx->setName(QStringLiteral("Jet sweep"));
+    m_doc->addFunction(efx);
+    efx->addFixture(jet->id(), 0);
+    QVERIFY(coll->addFunction(efx->id()));
+    QVERIFY(fires("FIX-24"));
+    QCOMPARE(findings("FIX-24").first().severity, ReviewFinding::Note);
 }
 
 /****************************************************************************

@@ -49,6 +49,15 @@ public:
         quint32 fixtureId;
         quint32 channel;
         uchar value;
+        /** A fade into @a value from @a from over @a fadeMs (a Running
+         *  hazard following its cue's fade); 0: at @a value at once */
+        uchar from = 0;
+        uint fadeMs = 0;
+        bool operator==(const Level &o) const
+        {
+            return fixtureId == o.fixtureId && channel == o.channel && value == o.value
+                   && from == o.from && fadeMs == o.fadeMs;
+        }
     };
 
     /** @p flags are FadeChannel flags added to every channel (Override,
@@ -70,7 +79,7 @@ public:
      *  fixture patched later) is stamped by no session. A level stamped
      *  before this session goes out on a fader that holds Show-only
      *  channels. */
-    void set(const QList<Level> &levels,
+    bool set(const QList<Level> &levels,
              const std::function<bool(const Level &)> &renewed = std::function<bool(const Level &)>());
 
     /** Let go of everything */
@@ -99,7 +108,7 @@ public:
     void setOnTop(bool onTop) { m_onTop = onTop; }
     /** Each fader writes only while @p gate is open (GenericFader::setGate());
      *  @p gate outlives the layer. Set before the first set(). */
-    void setGate(const FaderGate *gate) { m_gate = gate; }
+    void setGate(const FaderGate *gate);
     bool holdsShowOnly() const { return m_holdsShowOnly; }
 
     /** The channels the layer writes, per universe index (for tests) */

@@ -22,6 +22,7 @@
 
 #include <QtGlobal>
 #include <atomic>
+#include <thread>
 
 #include "qlcengine_export.h"
 
@@ -40,33 +41,59 @@ public:
     static constexpr quint64 kNone = ~quint64(0);
     static quint64 key(quint32 universe, quint32 channel) { return (quint64(universe) << 32) | channel; }
 
+    /* One per show (the second review's N2): its InputOutputMap holds it,
+       every Universe of that map points at it, and the show's
+       OutputRuleKeeper attaches its flags while it lives. Another Doc (an
+       import's scratch, Fixture Remap, the CLI) has its own. */
     std::atomic<quint64> holdKey { kNone };
     std::atomic<quint64> killKey { kNone };
-    std::atomic<bool> *hold = nullptr;
-    std::atomic<bool> *armed = nullptr;
-    /** Moved on by a Kill: every grant closed (FaderGate::epoch) */
-    std::atomic<quint32> *epoch = nullptr;
 
-    /** The one in use (OutputRuleKeeper's); nullptr: none. */
-    static std::atomic<HazardFastPath *> &current();
+    /** The keeper's flags (attach()); until then and after detach(), the
+     *  path does nothing. */
+    void attach(std::atomic<bool> *hold, std::atomic<bool> *armed, std::atomic<quint32> *epoch)
+    {
+        m_hold = hold;
+        m_armed = armed;
+        m_epoch = epoch;
+        m_alive.store(true, std::memory_order_release);
+    }
+    /** Nothing reaches the flags after this returns: a feed in flight on a
+     *  plugin's thread is waited for (the quiescence point, N4). */
+    void detach()
+    {
+        m_alive.store(false, std::memory_order_release);
+        while (m_users.load(std::memory_order_acquire) != 0)
+            std::this_thread::yield();
+        holdKey.store(kNone);
+        killKey.store(kNone);
+    }
 
     /** One input value, any thread: Hold let go -> not held; Kill pressed
      *  -> not held, not armed, every grant closed. */
-    static void feed(quint32 universe, quint32 channel, uchar value)
+    void feed(quint32 universe, quint32 channel, uchar value)
     {
-        HazardFastPath *h = current().load(std::memory_order_acquire);
-        if (h == nullptr)
-            return;
-        const quint64 k = key(universe, channel);
-        if (value == 0 && k == h->holdKey.load(std::memory_order_relaxed))
-            h->hold->store(false, std::memory_order_release);
-        else if (value > 0 && k == h->killKey.load(std::memory_order_relaxed))
+        m_users.fetch_add(1, std::memory_order_acq_rel);
+        if (m_alive.load(std::memory_order_acquire))
         {
-            h->hold->store(false, std::memory_order_release);
-            h->armed->store(false, std::memory_order_release);
-            h->epoch->fetch_add(1, std::memory_order_acq_rel);
+            const quint64 k = key(universe, channel);
+            if (value == 0 && k == holdKey.load(std::memory_order_relaxed))
+                m_hold->store(false, std::memory_order_release);
+            else if (value > 0 && k == killKey.load(std::memory_order_relaxed))
+            {
+                m_hold->store(false, std::memory_order_release);
+                m_armed->store(false, std::memory_order_release);
+                m_epoch->fetch_add(1, std::memory_order_acq_rel);
+            }
         }
+        m_users.fetch_sub(1, std::memory_order_acq_rel);
     }
+
+private:
+    std::atomic<bool> *m_hold = nullptr;
+    std::atomic<bool> *m_armed = nullptr;
+    std::atomic<quint32> *m_epoch = nullptr;
+    std::atomic<bool> m_alive { false };
+    std::atomic<int> m_users { 0 };
 };
 
 #endif

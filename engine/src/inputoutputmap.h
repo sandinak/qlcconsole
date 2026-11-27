@@ -33,6 +33,7 @@
 #include "faderpickup.h"
 #include "universe.h"
 #include "grandmaster.h"
+#include "hazardfastpath.h"
 #include "../../plugins/interfaces/qlcioplugin.h"
 
 class QXmlStreamReader;
@@ -288,6 +289,14 @@ public:
 
     /** Get the current Blind (output-inhibited) state. */
     bool outputInhibited() const;
+
+    /** This show's spotter controls' path from the input threads (board
+     *  Q352/Q353, second review N2): one per InputOutputMap, so another
+     *  Doc never touches it. */
+    HazardFastPath *hazardFastPath() { return &m_hazardFast; }
+private:
+    HazardFastPath m_hazardFast;
+public:
 
 signals:
     /**

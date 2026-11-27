@@ -152,6 +152,11 @@ void MasterTimer::start()
     d_ptr->start();
 }
 
+bool MasterTimer::running() const
+{
+    return d_ptr != NULL && d_ptr->isRunning();
+}
+
 void MasterTimer::stop()
 {
     Q_ASSERT(d_ptr != NULL);

@@ -66,6 +66,15 @@ struct FaderGate
     }
 };
 
+/** A gate that never opens: a keeper going away closes its layers with it */
+inline const FaderGate *closedFaderGate()
+{
+    static std::atomic<bool> never { false };
+    static std::atomic<quint32> a { 0 }, b { 1 };
+    static const FaderGate gate { &never, &a, &b };
+    return &gate;
+}
+
 class GenericFader final : public QObject
 {
     Q_OBJECT

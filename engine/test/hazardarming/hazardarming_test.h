@@ -107,6 +107,29 @@ private slots:
     /** A programmer edit never drives a hazard, after a Design run too. */
     void aProgrammerEditNeverDrivesAHazard();
 
+    /* The third review (each fails on bce438577 unless said). */
+    /** N1: a plain chaser stepped by a VC button or a Test never fires a
+     *  hazard; the footer says to fire it from Run. */
+    void aVcOrTestStepNeverFires();
+    /** N2: another Doc made and deleted never kills this show's fast path. */
+    void aSecondDocNeverKillsTheFastPath();
+    /** N3: the Hold refused on a network MIDI session; held past its limit
+     *  it counts as let go and the footer says so. */
+    void holdIsRefusedOverTheAir();
+    void aHoldHeldTooLongTimesOut();
+    /** N4: a show with a live hazard deleted with its timer running. */
+    void teardownUnderLoad();
+    /** N5: the same step said again (a crossfade ending) is no new step. */
+    void aCrossfadeEndIsNoNewStep();
+    /** N6: every step of a list that has a reach closes the grants. */
+    void everyStepOfAReachedListClosesTheGrants();
+    /** N7: a Running hazard follows its cue's fade; an effect on a hazard
+     *  is noted in Show Review. */
+    void aRunningHazardFollowsItsCuesFade();
+    void anEffectOnAHazardIsNoted();
+    /** N8: a live hazard's fire layer laid in place, never anew. */
+    void aLiveHazardIsLaidInPlace();
+
 private:
     void tick(int n = 1);
     int at(const char *fixture);
@@ -121,7 +144,7 @@ private:
     IOPluginStub *m_stub = nullptr;
     SimMidiDevice *m_pmj = nullptr;
     Chaser *m_chaser = nullptr;
-    quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0, m_c4 = 0, m_c5 = 0, m_list = 0;
+    quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0, m_c4 = 0, m_c5 = 0, m_c6 = 0, m_list = 0;
     /** The Simple Desk's own fader on @p fixture's channel 0 at @p value */
     void deskPush(const char *fixture, uchar value);
     class Scene *strayScene(int value);

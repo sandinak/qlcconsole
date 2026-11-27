@@ -51,6 +51,8 @@
 #include "placementcheck.h"
 #include "nolightzone.h"
 #include "efx.h"
+#include "efxfixture.h"
+#include "chaser.h"
 #include "monitorproperties.h"
 #include "fixturedefcheck.h"
 #include "qlcfixturemode.h"
@@ -1141,6 +1143,92 @@ static void fix22(ReviewContext &ctx, QList<ReviewFinding> &out)
             fixtureKeys(ids), QByteArray("arm"), QStringLiteral("fixtures"), variantIds(ids));
 }
 
+/* Third review N7: a hazard takes only its cue's own level -- an effect on
+   it (an EFX, an RGB matrix, an effect look, a chaser inside the cue) never
+   drives it. Said on the cue, so nobody waits for a haze chase that never
+   comes. */
+static void fix24(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    ShowTreeController *st = doc->showTree();
+    if (st == nullptr)
+        return;
+    QSet<quint32> hazards;
+    for (Fixture *fx : doc->fixtures())
+        if (fx != nullptr && FixtureRest::isHazard(fx))
+            hazards.insert(fx->id());
+    if (hazards.isEmpty())
+        return;
+    for (const ShowTree::Production &p : st->productions())
+        for (const ShowTree::CueList &l : p.lists)
+            for (const ShowTree::Cue &c : l.cues)
+            {
+                QStringList what;
+                QSet<quint32> on;
+                QList<quint32> fids;
+                if (const Collection *coll = qobject_cast<const Collection *>(doc->function(c.collection)))
+                    fids = coll->functions();
+                for (int i = 0; i < fids.size() && i < 256; ++i)
+                {
+                    Function *f = doc->function(fids.at(i));
+                    if (f == nullptr)
+                        continue;
+                    if (const Collection *sub = qobject_cast<const Collection *>(f))
+                    {
+                        fids << sub->functions();
+                        continue;
+                    }
+                    QSet<quint32> fxs;
+                    if (const EFX *efx = qobject_cast<const EFX *>(f))
+                        for (const EFXFixture *ef : efx->fixtures())
+                            fxs.insert(ef->head().fxi);
+                    else if (const RGBMatrix *m = qobject_cast<const RGBMatrix *>(f))
+                    {
+                        if (const FixtureGroup *g = doc->fixtureGroup(m->fixtureGroup()))
+                            for (quint32 id : g->fixtureList())
+                                fxs.insert(id);
+                    }
+                    else if (qobject_cast<const Chaser *>(f) != nullptr)
+                        fxs = hazards;      // a chase inside a cue: anything it may reach
+                    else if (const Scene *sc = qobject_cast<const Scene *>(f))
+                    {
+                        bool effect = false;
+                        for (quint32 pid : sc->palettes())
+                            if (const QLCPalette *pal = doc->palette(pid))
+                                effect = effect || pal->type() == QLCPalette::Effect;
+                        if (effect)
+                        {
+                            for (quint32 id : sc->fixtures())
+                                fxs.insert(id);
+                            for (quint32 gid : sc->fixtureGroups())
+                                if (const FixtureGroup *g = doc->fixtureGroup(gid))
+                                    for (quint32 id : g->fixtureList())
+                                        fxs.insert(id);
+                        }
+                    }
+                    const QSet<quint32> hit = fxs & hazards;
+                    if (!hit.isEmpty())
+                    {
+                        on += hit;
+                        what << f->name();
+                    }
+                }
+                if (on.isEmpty())
+                    continue;
+                QStringList names;
+                QList<quint32> ids = on.values();
+                std::sort(ids.begin(), ids.end());
+                for (quint32 id : ids)
+                    if (const Fixture *fx = doc->fixture(id))
+                        names << fx->name();
+                const QString cueName = c.number.isEmpty() ? c.name : c.number + QLatin1Char(' ') + c.name;
+                out << ReviewContext::make(QStringLiteral("FIX-24"), ReviewFinding::Note,
+                    tr("Cue %1: %2 does not drive %3 -- a hazard takes only its cue's own level, never an "
+                       "effect's.").arg(cueName, what.join(QStringLiteral(", ")), names.join(QStringLiteral(", "))),
+                    fixtureKeys(ids), QByteArray::number(c.id), QStringLiteral("fixtures"), variantIds(ids));
+            }
+}
+
 /* Every hazard and every switch, guessed or set: what a stop and a run do
    to it differ from a light, so a show handed on says so. The kind is in
    the fingerprint: a rename that changes it comes back. */
@@ -1704,6 +1792,10 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
           tr("Every hazard (Burst or Running) and every switch, guessed from its definition and name or "
              "set by hand: a stop and a run treat them differently from a light. Check each is what it "
              "is, then accept it; one that changes (a rename can) is listed again."), fix23 },
+        { QStringLiteral("FIX-24"), tr("An effect on a hazard"), S::Fixtures,
+          tr("A hazard takes only its cue's own level: an EFX, an RGB matrix, an effect look or a chase "
+             "inside the cue never drives it (a Running hazard follows the cue's fade, a Burst snaps). "
+             "Set its level in the cue itself."), fix24 },
         { QStringLiteral("FIX-18"), tr("No beam angle or pan/tilt range"), S::Fixtures,
           tr("A definition that says 0 for its lens or its pan/tilt range gives the rig view nothing to "
              "draw and the aim solver nothing to turn. They assume a default by fixture type (a moving "

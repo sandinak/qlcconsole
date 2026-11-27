@@ -23,6 +23,7 @@
 #include <QTimer>
 #include <QFile>
 #include <QUrl>
+#include <QRegularExpression>
 #include <climits>
 
 #include "controllerkeepalive.h"
@@ -614,11 +615,24 @@ QString DeskRecord::learnRefusal(Role role, quint32 universe, quint32 channel) c
        anything. */
     if (role != HazardKill && m_doc != nullptr && m_doc->inputOutputMap() != nullptr)
         if (InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe))
-            if (ip->plugin() != nullptr && !ip->plugin()->linesAreHardware())
-                return tr("%1 comes over the network (%2): a network input never says it was lost, so "
-                          "it can't hold or arm a hazard. Use a button on a device plugged into this "
-                          "computer (USB, MIDI). The Hazard kill may be anything.")
-                    .arg(name, ip->plugin()->name());
+            if (ip->plugin() != nullptr)
+            {
+                /* Over the air too (third review N3): an ENTTEC Wing is UDP
+                   whatever its lines say; a CoreMIDI network session or a
+                   Bluetooth MIDI device is MIDI over a link that can drop. */
+                const QString line = ip->inputName().toLower();
+                const bool wireless = ip->plugin()->name() == QLatin1String("ENTTEC Wing")
+                                      || line.contains(QLatin1String("network session"))
+                                      || line.contains(QLatin1String("network midi"))
+                                      || line.contains(QLatin1String("rtp"))
+                                      || line.contains(QLatin1String("bluetooth"))
+                                      || line.contains(QRegularExpression(QStringLiteral("\\bble\\b")));
+                if (!ip->plugin()->linesAreHardware() || wireless)
+                    return tr("%1 comes over the network or the air (%2): a link that drops never says "
+                              "the button was let go, so it can't hold or arm a hazard. Use a button on a "
+                              "device plugged into this computer (USB, MIDI cable). The Hazard kill may be "
+                              "anything.").arg(name, ip->plugin()->name());
+            }
     // The show's own GO, Back or stop on this control.
     if (ControlMap *cm = m_doc != nullptr ? m_doc->controlMap() : nullptr)
         for (const ControlMap::Binding &b : cm->bindingsOn(universe, channel))

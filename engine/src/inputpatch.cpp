@@ -30,6 +30,7 @@
 #include "qlcioplugin.h"
 #include "inputpatch.h"
 #include "hazardfastpath.h"
+#include "universe.h"
 #include "iodeferral.h"
 
 #define GRACE_MS 1
@@ -318,7 +319,10 @@ void InputPatch::slotHazardValue(quint32 universe, quint32 input, quint32 channe
         if (channel < quint32(m_channelMap.size()))
             channel = m_channelMap.at(int(channel));
     }
-    HazardFastPath::feed(m_universe, channel, value);
+    // This show's own path (its Universe's; another Doc's never).
+    if (Universe *uni = qobject_cast<Universe *>(parent()))
+        if (HazardFastPath *h = uni->hazardFastPath())
+            h->feed(m_universe, channel, value);
 }
 
 void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 channel,

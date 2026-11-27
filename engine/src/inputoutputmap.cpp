@@ -328,6 +328,7 @@ bool InputOutputMap::addUniverse(quint32 id)
             while (id > universesCount())
             {
                 uni = new Universe(universesCount(), m_grandMaster);
+                uni->setHazardFastPath(&m_hazardFast);
                 // In Blind: inhibited from its first frame, as the others are.
                 uni->setInhibitOutput(m_outputInhibited);
                 uni->setLoadHold(m_loadHold);
@@ -342,6 +343,7 @@ bool InputOutputMap::addUniverse(quint32 id)
            (added, or recreated by a show loaded in Blind): inhibited from
            its first frame, matching the others. */
         uni = new Universe(id, m_grandMaster);
+        uni->setHazardFastPath(&m_hazardFast);
         uni->setInhibitOutput(m_outputInhibited);
         uni->setLoadHold(m_loadHold);
         connect(uni, SIGNAL(universeWritten(quint32,QByteArray)), this, SIGNAL(universeWritten(quint32,QByteArray)));

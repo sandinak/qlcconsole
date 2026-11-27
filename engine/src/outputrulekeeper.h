@@ -394,6 +394,11 @@ public:
      *  input thread's own path (HazardFastPath); invalid universe: none. */
     void setHazardControls(quint32 holdUniverse, quint32 holdChannel,
                            quint32 killUniverse, quint32 killChannel);
+    /** Quiescence before the keeper goes (second review N4): the input
+     *  threads' path detached (a feed in flight waited for), every list's
+     *  signals let go, and the fire layers closed and cleared. Called by
+     *  ~Doc before the keeper is deleted, and by the destructor. */
+    void shutdownHazards();
     /** What hazard @p fixtureId sends now (granted and its gate open); empty
      *  when it is at safe. Main thread. */
     QByteArray hazardOutput(quint32 fixtureId) const;
@@ -556,6 +561,11 @@ private:
      *  each step was reached with (main thread); @p stepped: the list whose
      *  step this is for, whose skips the footer says. */
     void grantHazards(quint32 stepped);
+    /** A list played from the Run (N1): the show's own lists, started by
+     *  ShowControl, and sub-cues; never a VC button's or a Test's */
+    bool isRunRoute(const class Chaser *c) const;
+    /** Step @p step's fade in, as the chaser plays it (ms) */
+    uint stepFadeMs(const class Chaser *c, int step) const;
     /** What step @p step of list @p chaserId sets the hazards to */
     QHash<quint32, QByteArray> hazardStepLevels(quint32 chaserId, int step) const;
     /** Every grant taken back now (an edit pick, Design, a Kill, a stop). */
@@ -625,6 +635,12 @@ private:
     QSet<quint32> m_granting;
     /** What the grants lay (guarded): fixture -> values */
     QHash<quint32, QByteArray> m_burstGrant, m_runningGrant;
+    /** A Running grant's fade: from what the step before laid, over the
+     *  step's own fade (guarded) */
+    QHash<quint32, QByteArray> m_runningFrom;
+    QHash<quint32, uint> m_runningFadeMs;
+    /** What each layer last laid (apply mutex): unchanged, untouched (N8) */
+    QList<OutputLayer::Level> m_lastSafe, m_lastBurst, m_lastRunning;
     /** What went out last, for the log (main thread) */
     QHash<quint32, QByteArray> m_lastOut;
     mutable QMutex m_hazardMutex;
@@ -643,13 +659,20 @@ private:
     std::unique_ptr<OutputLayer> m_burstLayer, m_runningLayer;
     /** The Hold as the log last said it (main thread) */
     bool m_holdShown = false;
-    std::unique_ptr<class HazardFastPath> m_fast;
+    /** The Hold timed out (N3): said until the next fresh press */
+    bool m_holdTimedOut = false;
+    QTimer *m_holdLimit = nullptr;
+    int m_holdLimitMs = 15000;
+    class HazardFastPath *m_fast = nullptr;
+    QList<QMetaObject::Connection> m_chaserConnections;
+    bool m_shutDown = false;
     QSet<quint32> m_watched;
     /** Doc::clearing() to cleared(): nothing of the rig is read */
     bool m_clearing = false;
     /** hazardsSkipped() and why each (true: a Burst not held) (main thread) */
     QList<quint32> m_hazardsSkipped;
-    QHash<quint32, bool> m_hazardSkippedBurst;
+    /** Why each was skipped: 0 not held, 1 not armed, 2 not from Run */
+    QHash<quint32, int> m_hazardSkippedBurst;
     QStringList m_hazardLog;
     QHash<quint32, qint64> m_handSaidAt;
 };

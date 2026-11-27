@@ -25,7 +25,7 @@ OutputLayer::~OutputLayer()
     clear();
 }
 
-void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const Level &)> &renewed)
+bool OutputLayer::set(const QList<Level> &levels, const std::function<bool(const Level &)> &renewed)
 {
     /* Built outside the lock: a FadeChannel looks its fixture up. A level
        that never fades: it is at its value from the first frame. Each goes
@@ -64,12 +64,26 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
             FadeChannel fc(doc, l.fixtureId, l.channel);
             if (fc.isInert() || fc.addressInUniverse() == QLCChannel::invalid())
                 continue;
-            fc.removeFlag(FadeChannel::CanFade);
             fc.addFlag(m_flags);
-            fc.setStart(l.value);
-            fc.setCurrent(l.value);
-            fc.setTarget(l.value);
-            fc.setReady(true);
+            if (l.fadeMs > 0 && l.from != l.value)
+            {
+                // A fade, from where it is into the level (a Running hazard).
+                fc.addFlag(FadeChannel::CanFade);
+                fc.setStart(l.from);
+                fc.setCurrent(l.from);
+                fc.setTarget(l.value);
+                fc.setFadeTime(l.fadeMs);
+                fc.setElapsed(0);
+                fc.setReady(false);
+            }
+            else
+            {
+                fc.removeFlag(FadeChannel::CanFade);
+                fc.setStart(l.value);
+                fc.setCurrent(l.value);
+                fc.setTarget(l.value);
+                fc.setReady(true);
+            }
             const quint64 key = (quint64(l.fixtureId) << 32) | l.channel;
             const quint32 st = stamps.value(key).epoch;
             const bool stale = !m_holdsShowOnly && st < epoch;
@@ -93,6 +107,7 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
 
     QMutexLocker locker(&m_mutex);
     m_stamps = stamps;
+    bool created = false;
 
     // Let go where the layer no longer writes, or the universe went away.
     for (auto it = m_slots.begin(); it != m_slots.end(); )
@@ -127,6 +142,7 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
             // show stopping captures its last look in postRun()).
             GenericFader::CreationScope noFunction(nullptr);
             slot.fader = m_onTop ? uni->requestTopFader(m_priority) : uni->requestFader(m_priority);
+            created = true;
             slot.fader->setHoldsShowOnly(m_holdsShowOnly || stale);
             slot.fader->setName(m_name);
             slot.fader->setGate(m_gate);
@@ -139,6 +155,17 @@ void OutputLayer::set(const QList<Level> &levels, const std::function<bool(const
             slot.fader->setLiveEpoch(slotStamps.value(it.key()));
         slot.fader->replaceAll(it.value());
     }
+    return created;
+}
+
+void OutputLayer::setGate(const FaderGate *gate)
+{
+    // The faders already out too: a keeper going away closes them now.
+    QMutexLocker locker(&m_mutex);
+    m_gate = gate;
+    for (auto it = m_slots.begin(); it != m_slots.end(); ++it)
+        if (!it.value().fader.isNull())
+            it.value().fader->setGate(gate);
 }
 
 void OutputLayer::setHoldsShowOnly(bool hold)
