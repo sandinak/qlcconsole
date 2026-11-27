@@ -1315,7 +1315,10 @@ void MultiTrackView::contextMenuEvent(QContextMenuEvent *event)
         }
     }
 
-    if (scenePos.x() < TRACK_WIDTH)
+    // The header column is pinned to the viewport's left edge, so it is
+    // where the pointer is in the viewport, not in the scene (scrolled
+    // sideways, the scene x of the column is the scroll offset).
+    if (event->pos().x() < TRACK_WIDTH)
     {
         // Blank part of the track-header column (no item here): offer to create a track.
         QMenu hmenu;

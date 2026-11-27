@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- Timeline: right-click the Functions list to add a function at the playhead (on the picked track or a new one), open it, or make a new Scene/Chaser/Collection/RGB Matrix/EFX; a right-click on the blank track-header column works with the timeline scrolled sideways.
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
   One-shot, Switch or Hazard -- guessed from its definition and plot
   symbol (old shows load unchanged), set in Fixture Properties, shown in

@@ -50,6 +50,12 @@
 #include <QGraphicsProxyWidget>
 #include <QMenu>
 #include <QUrl>
+#include <QPainter>
+#include "headeritems.h"
+#include "functionstreewidget.h"
+#include <QTimer>
+#include <QContextMenuEvent>
+#include <QScrollBar>
 #include "video.h"
 #include "audioplugincache.h"
 #include <QXmlStreamWriter>
@@ -790,6 +796,24 @@ void ShowManager_Test::shootsTheTimelineDrop()
         track.ensurePolished();
         track.resize(track.sizeHint());
         track.grab().save(QDir(dir).filePath("menu-track-" + tag + ".png"));
+        // The Functions sidebar's right-click, beside the timeline.
+        m_manager->m_funcTree->updateTree();
+        m_manager->m_funcTree->expandAll();
+        if (QTreeWidgetItem *fi = m_manager->m_funcTree->functionItem(m_doc->function(m_sceneB)))
+        {
+            QMenu side;
+            m_manager->fillFunctionTreeMenu(&side, fi);
+            side.ensurePolished();
+            side.resize(side.sizeHint());
+            side.grab().save(QDir(dir).filePath("menu-functions-" + tag + ".png"));
+            QPixmap whole = m_manager->grab();
+            QPainter p(&whole);
+            const QPoint at = m_manager->m_funcTree->viewport()->mapTo(
+                m_manager, m_manager->m_funcTree->visualItemRect(fi).center());
+            p.drawPixmap(at, side.grab());
+            p.end();
+            whole.save(QDir(dir).filePath("menu-functions-in-place-" + tag + ".png"));
+        }
 
         m_manager->slotUndo();
     }
@@ -830,6 +854,153 @@ void ShowManager_Test::renameInPlaceAndMoveUpDown()
     ti = v->trackItemFor(m_show->tracks().last());
     ti->m_moveUp->trigger();
     QCOMPARE(m_show->tracks().first()->name(), QStringLiteral("Front"));
+}
+
+/* A right-click as the window system delivers it: a QContextMenuEvent to
+   the widget under the pointer. The menu that comes up is read (its
+   entries' object names) and closed -- or, with @a trigger, that entry is
+   chosen. "<no menu>": nothing came up. */
+static QStringList rightClick(QWidget *target, const QPoint &pos, const QString &trigger = QString(),
+                              QString *text = nullptr)
+{
+    QStringList names;
+    bool seen = false;
+    QTimer::singleShot(0, target, [&]() {
+        seen = true;
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == nullptr)
+        {
+            names << QStringLiteral("<no menu>");
+            return;
+        }
+        QAction *pick = nullptr;
+        for (QAction *a : m->actions())
+        {
+            names << a->objectName();
+            if (!trigger.isEmpty() && a->objectName() == trigger)
+                pick = a;
+        }
+        if (pick != nullptr && text != nullptr)
+            *text = pick->text();
+        if (pick != nullptr && pick->isEnabled())
+            pick->activate(QAction::Trigger);
+        m->close();
+    });
+    QContextMenuEvent ev(QContextMenuEvent::Mouse, pos, target->mapToGlobal(pos));
+    QApplication::sendEvent(target, &ev);
+    for (int i = 0; i < 20 && !seen; ++i)
+        QCoreApplication::processEvents();
+    if (names.isEmpty())
+        names << QStringLiteral("<no menu>");
+    return names;
+}
+
+/* Branson, build 4910: "nothing on right click". The track header's menus,
+   reached the way a real right-click reaches them -- through the view's
+   viewport, the graphics scene and its items -- not by calling the menu
+   builder; and still there with the timeline scrolled sideways (the header
+   column is pinned, so where it is in the scene moves). */
+void ShowManager_Test::rightClickOnTheTimelineOpensItsMenus()
+{
+    m_manager->resize(1200, 700);
+    m_manager->show();
+    QVERIFY(QTest::qWaitForWindowExposed(m_manager));
+    m_manager->updateMultiTrackView();
+    MultiTrackView *v = m_manager->m_showview;
+    v->setConfiguredLength(30 * 60 * 1000);       // wide enough to scroll
+    QCoreApplication::processEvents();
+
+    TrackItem *ti = v->trackItemFor(m_show->tracks().first());
+    QVERIFY(ti != nullptr);
+    const QPoint onTrack = v->mapFromScene(ti->sceneBoundingRect().center());
+    QStringList got = rightClick(v->viewport(), onTrack);
+    QVERIFY2(got.contains("duplicate") && got.contains("mute"), qPrintable(got.join(',')));
+
+    const QPoint blank(40, TRACKS_TOP + m_show->tracks().count() * TRACK_HEIGHT + 30);
+    QVERIFY(blank.y() < v->viewport()->height());
+    got = rightClick(v->viewport(), blank);
+    QVERIFY2(got.contains("addTrack"), qPrintable(got.join(',')));
+
+    // Scrolled: the header is still where the person sees it.
+    QScrollBar *h = v->horizontalScrollBar();
+    QVERIFY(h->maximum() > 0);
+    h->setValue(h->maximum() / 2);
+    QCoreApplication::processEvents();
+    got = rightClick(v->viewport(), blank);
+    QVERIFY2(got.contains("addTrack"), qPrintable(got.join(',')));
+    got = rightClick(v->viewport(), v->mapFromScene(ti->sceneBoundingRect().center()));
+    QVERIFY2(got.contains("duplicate"), qPrintable(got.join(',')));
+}
+
+/* Branson, build 4910, the Timeline's "Functions — drag onto a track"
+   sidebar: "no add, nothing on right click" (he asked for "right click in
+   the sidebar to add things"). A function: add it at the playhead on the
+   selected track, or on a new track, or open it. A category: a new one of
+   that kind; empty space: every kind. */
+void ShowManager_Test::rightClickInTheFunctionsSidebarAdds()
+{
+    m_manager->resize(1200, 700);
+    m_manager->show();
+    QVERIFY(QTest::qWaitForWindowExposed(m_manager));
+    m_manager->updateMultiTrackView();
+    MultiTrackView *v = m_manager->m_showview;
+    FunctionsTreeWidget *tree = m_manager->m_funcTree;
+    tree->updateTree();
+    tree->expandAll();
+    QCoreApplication::processEvents();
+
+    // The track he picked (a right-click on its header selects it).
+    Track *lights = m_show->tracks().first();
+    rightClick(v->viewport(), v->mapFromScene(v->trackItemFor(lights)->sceneBoundingRect().center()));
+    QCOMPARE(m_manager->m_currentTrack, lights);
+
+    QTreeWidgetItem *b = tree->functionItem(m_doc->function(m_sceneB));
+    QVERIFY(b != nullptr);
+    tree->scrollToItem(b);
+    const QPoint onB = tree->visualItemRect(b).center();
+    QString label;
+    QStringList got = rightClick(tree->viewport(), onB, "addAtPlayhead", &label);
+    for (const char *n : { "addAtPlayhead", "addOnNewTrack", "openInEditor" })
+        QVERIFY2(got.contains(n), qPrintable(got.join(',')));
+    QVERIFY2(label.contains("Lights"), qPrintable(label));
+    QCOMPARE(m_show->tracks().count(), 1);
+    QCOMPARE(m_show->tracks().first()->showFunctions().count(), 2);
+    bool hasB = false;
+    for (ShowFunction *sf : m_show->tracks().first()->showFunctions())
+        hasB = hasB || sf->functionID() == m_sceneB;
+    QVERIFY(hasB);
+
+    got = rightClick(tree->viewport(), tree->visualItemRect(tree->functionItem(m_doc->function(m_sceneB))).center(),
+                     "addOnNewTrack");
+    QCOMPARE(m_show->tracks().count(), 2);
+    QCOMPARE(m_show->tracks().last()->showFunctions().count(), 1);
+
+    // The show itself can't go into itself.
+    if (QTreeWidgetItem *self = tree->functionItem(m_show))
+    {
+        tree->scrollToItem(self);
+        rightClick(tree->viewport(), tree->visualItemRect(self).center(), "addOnNewTrack");
+        QCOMPARE(m_show->tracks().count(), 2);
+    }
+
+    // A category: a new one of its kind, nothing else.
+    QTreeWidgetItem *scenes = b->parent();
+    while (scenes != nullptr && scenes->parent() != nullptr)
+        scenes = scenes->parent();
+    QVERIFY(scenes != nullptr);
+    tree->scrollToItem(scenes);
+    const int before = m_doc->functionsByType(Function::SceneType).count();
+    got = rightClick(tree->viewport(), tree->visualItemRect(scenes).center(), "newScene");
+    QCOMPARE(got, QStringList() << "newScene");
+    QCOMPARE(m_doc->functionsByType(Function::SceneType).count(), before + 1);
+
+    // Empty space: every kind.
+    QMenu empty;
+    m_manager->fillFunctionTreeMenu(&empty, nullptr);
+    QStringList kinds;
+    for (QAction *a : empty.actions())
+        kinds << a->objectName();
+    QCOMPARE(kinds, QStringList() << "newScene" << "newChaser" << "newCollection" << "newRGBMatrix" << "newEFX");
 }
 
 QTEST_MAIN(ShowManager_Test)

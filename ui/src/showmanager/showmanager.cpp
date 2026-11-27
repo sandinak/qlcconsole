@@ -69,6 +69,10 @@
 #include "sequence.h"
 #include "chaser.h"
 #include "collection.h"
+#include "rgbmatrix.h"
+#include "efx.h"
+#include "scene.h"
+#include "programmingmanager.h"
 #include "functionstreewidget.h"
 #include "timecodesource.h"
 #include "mastertimer.h"
@@ -208,6 +212,15 @@ ShowManager::ShowManager(QWidget* parent, Doc* doc)
     m_funcTree->setExternalDragMode(true);
     m_funcTree->setHeaderLabel(tr("Functions — drag onto a track"));
     m_funcTree->updateTree();
+    // Right-click: add at the playhead, open, or make a new one (Branson,
+    // build 4910: "no add, nothing on right click" in this sidebar).
+    m_funcTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_funcTree, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QMenu menu(m_funcTree);
+        fillFunctionTreeMenu(&menu, m_funcTree->itemAt(pos));
+        if (menu.isEmpty() == false)
+            menu.exec(m_funcTree->viewport()->mapToGlobal(pos));
+    });
     m_funcTree->setMaximumWidth(280);
     timelineSplit->addWidget(m_funcTree);
     timelineSplit->addWidget(m_showview);
@@ -1752,6 +1765,120 @@ void ShowManager::fillContextMenu(QMenu *menu, Track *track, ShowItem *item)
         }
         menu->addSeparator();
     }
+}
+
+void ShowManager::fillFunctionTreeMenu(QMenu *menu, QTreeWidgetItem *item)
+{
+    const bool editable = (m_show != NULL && m_doc->isShowLocked() == false);
+    auto mk = [menu](const QString &text, const char *name) {
+        QAction *a = menu->addAction(text);
+        a->setObjectName(name);
+        return a;
+    };
+
+    const quint32 fid = m_funcTree->itemFunctionId(item);
+    Function *f = m_doc->function(fid);
+    if (f != NULL)
+    {
+        m_funcTree->setCurrentItem(item);
+        // Not the show into itself, directly or through another.
+        const bool fits = editable && m_show != NULL && f->id() != m_show->id()
+                          && f->contains(m_show->id()) == false;
+        const bool trackFree = m_currentTrack == NULL || m_currentTrack->isLocked() == false;
+        QAction *here = mk(m_currentTrack != NULL
+                               ? tr("Add to Timeline at Playhead (%1)").arg(m_currentTrack->name())
+                               : tr("Add to Timeline at Playhead"),
+                           "addAtPlayhead");
+        here->setEnabled(fits && trackFree);
+        connect(here, &QAction::triggered, this, [this, fid]() {
+            slotFunctionDropped(fid, m_showview->getTimeFromCursor(), m_currentTrack);
+        });
+        QAction *fresh = mk(tr("Add on a New Track"), "addOnNewTrack");
+        fresh->setEnabled(fits);
+        connect(fresh, &QAction::triggered, this, [this, fid]() {
+            slotFunctionDropped(fid, m_showview->getTimeFromCursor(), NULL);
+        });
+        menu->addSeparator();
+        QAction *open = mk(tr("Open in Editor"), "openInEditor");
+        connect(open, &QAction::triggered, this, [this, fid]() { openFunctionEditor(fid); });
+        return;
+    }
+
+    // A category (or a folder in one): new ones of its kind; empty space: all.
+    QList<int> types = { Function::SceneType, Function::ChaserType, Function::CollectionType,
+                         Function::RGBMatrixType, Function::EFXType };
+    if (item != NULL)
+    {
+        // A folder inside a category is of the category's kind.
+        QTreeWidgetItem *top = item;
+        while (top->parent() != NULL)
+            top = top->parent();
+        const int kind = top->data(0, Qt::UserRole + 1).toInt();
+        types = types.contains(kind) ? QList<int>{ kind } : QList<int>();
+    }
+    for (int type : types)
+    {
+        QAction *a = mk(newFunctionLabel(type),
+                        type == Function::SceneType ? "newScene"
+                        : type == Function::ChaserType ? "newChaser"
+                        : type == Function::CollectionType ? "newCollection"
+                        : type == Function::RGBMatrixType ? "newRGBMatrix" : "newEFX");
+        connect(a, &QAction::triggered, this, [this, type]() { newFunctionFromSidebar(type); });
+    }
+}
+
+QString ShowManager::newFunctionLabel(int type)
+{
+    switch (type)
+    {
+    case Function::SceneType: return tr("New Scene");
+    case Function::ChaserType: return tr("New Chaser");
+    case Function::CollectionType: return tr("New Collection");
+    case Function::RGBMatrixType: return tr("New RGB Matrix");
+    case Function::EFXType: return tr("New EFX");
+    default: break;
+    }
+    return QString();
+}
+
+quint32 ShowManager::newFunctionFromSidebar(int type)
+{
+    Function *f = NULL;
+    switch (type)
+    {
+    case Function::SceneType: f = new Scene(m_doc); break;
+    case Function::ChaserType: f = new Chaser(m_doc); break;
+    case Function::CollectionType: f = new Collection(m_doc); break;
+    case Function::RGBMatrixType: f = new RGBMatrix(m_doc); break;
+    case Function::EFXType: f = new EFX(m_doc); break;
+    default: return Function::invalidId();
+    }
+    if (m_doc->addFunction(f) == false)
+    {
+        delete f;
+        return Function::invalidId();
+    }
+    f->setName(QString("%1 %2").arg(newFunctionLabel(type)).arg(f->id()));
+    m_funcTree->updateTree();
+    if (QTreeWidgetItem *ti = m_funcTree->functionItem(f))
+    {
+        m_funcTree->setCurrentItem(ti);
+        m_funcTree->scrollToItem(ti);
+    }
+    setStatus(tr("Made \"%1\": drag it onto a track, or right-click it to add it at the playhead.")
+                  .arg(f->name()));
+    return f->id();
+}
+
+void ShowManager::openFunctionEditor(quint32 fid)
+{
+    if (ProgrammingManager::openFunction(fid))
+        return;
+    Function *f = m_doc->function(fid);
+    if (Scene *scene = qobject_cast<Scene *>(f))
+        showSceneEditor(scene);
+    else
+        showRightEditor(f);
 }
 
 void ShowManager::slotDuplicate()

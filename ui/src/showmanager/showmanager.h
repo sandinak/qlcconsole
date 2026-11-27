@@ -40,6 +40,7 @@ class QSpinBox;
 class QAction;
 class QLabel;
 class QMenu;
+class QTreeWidgetItem;
 class QTimer;
 class Doc;
 class Function;
@@ -204,6 +205,17 @@ private:
     void setStatus(const QString &text);
     /** Right-click entries of the track sidebar / an item (the hook of the view). */
     void fillContextMenu(QMenu *menu, Track *track, ShowItem *item);
+    /** Right-click entries of the Functions sidebar: on a function, add it
+     *  at the playhead (the selected track, or a new one) or open it; on a
+     *  category or empty space, make a new one of that kind. */
+    void fillFunctionTreeMenu(QMenu *menu, QTreeWidgetItem *item);
+    /** A new function of @a type (Scene, Chaser, Collection, RGB Matrix,
+     *  EFX), selected in the sidebar. Its id (invalid: none made). */
+    quint32 newFunctionFromSidebar(int type);
+    static QString newFunctionLabel(int type);
+    /** Function @a fid in its editor: Build's Workbench, or (no Build tab)
+     *  the editor beside the timeline. */
+    void openFunctionEditor(quint32 fid);
     QAction *m_addShowAction;
     QAction *m_renameShowAction;
     QAction *m_deleteShowAction;
