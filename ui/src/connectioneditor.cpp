@@ -40,6 +40,7 @@
 #include "connectioneditor.h"
 #include "inputprofileeditor.h"
 #include "audiosettingspanel.h"
+#include "qlcfile.h"
 #include "qlcinputprofile.h"
 #include "inputdevicenotices.h"
 #include "wleddevicesdialog.h"
