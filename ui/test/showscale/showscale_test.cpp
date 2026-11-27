@@ -74,6 +74,7 @@
 #include "hostspeed.h"
 #include "../common/painttimer.h"
 #include "showscale_test.h"
+#include "rgbmatrix.h"
 
 static QStringList g_report;
 #define REPORT(...) do { const QString l = QString::asprintf(__VA_ARGS__); qInfo("%s", qPrintable(l)); g_report << l; } while (0)
@@ -515,6 +516,8 @@ void ShowScale_Test::theEngineKeepsItsFrame()
            "%llu frames, %llu late, %llu dropped",
            MasterTimer::frequency(), periodMs, quantile(walls, 0.5), quantile(walls, 0.95),
            quantile(walls, 1.0), quantile(cpus, 0.95), frames, late, dropped);
+    REPORT("matrix maps ahead: %s; late maps so far %llu",
+           RGBMatrix::mapsAhead() ? "on" : "off (QLC_MAPS_AHEAD=0)", (unsigned long long)RGBMatrix::mapsLate());
     REPORT("universe frame tick-to-output p50 %.2f p95 %.2f p99 %.2f ms; sent per universe %d-%d (fewest: U%d)",
            histQuantile(0.5), histQuantile(0.95), histQuantile(0.99), fewest, most, fewestAt + 1);
 

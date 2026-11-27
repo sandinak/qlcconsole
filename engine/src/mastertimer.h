@@ -85,6 +85,11 @@ public:
      *  further behind) nor past kMaxCatchUpNs (a computer that slept): then
      *  the timer starts again from now and that time is lost. */
     static bool catchesUp(qint64 lateNs, double tickComputeMs);
+
+    /** Whether the calling thread is inside a frame of the running timer
+     *  (timerTick(true)), not a tick by hand: what may be left to finish
+     *  off the tick (RGBMatrix::mapsAhead()) only there */
+    static bool inTimerFrame();
     static constexpr qint64 kMaxCatchUpNs = 500000000;  // 25 frames at 50 Hz
 
     /** Compute time of the most recent tick, in milliseconds. This is how

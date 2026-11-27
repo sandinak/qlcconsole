@@ -30,6 +30,7 @@
 #include <QPair>
 #include <QMap>
 #include <QMutex>
+#include <QSharedPointer>
 
   #include "rgbscriptv4.h"
 #include "function.h"
@@ -212,8 +213,30 @@ public:
     /** Get the preview of the current algorithm at the given step */
     void previewMap(int step, RGBMatrixStep *handler);
 
+    /** A script's next map is computed ahead of its step, on the scripts'
+     *  thread, so the tick never waits for the script (Plasma's 96 x 82
+     *  map took ~16 ms there, every fifth of a second). A map not ready at
+     *  its step: the last one stays until it is (counted, mapsLate()).
+     *  Off: every map computed at its step, the tick waiting (tests). */
+    static void setMapsAhead(bool on);
+    static bool mapsAhead();
+    /** Steps whose map was not ready in time, every matrix, since start */
+    static quint64 mapsLate();
+
 private:
     int algorithmStepsCount();
+    /** The next step's map, asked of the scripts' thread (m_algorithmMutex held) */
+    void askNextMap(const QSize &size);
+    /** Forget the map asked for; @a wait: until the scripts' thread has let
+     *  go of the script, before it is deleted (m_algorithmMutex held) */
+    void dropNextMap(bool wait);
+
+    struct NextMap;
+    QSharedPointer<NextMap> m_nextMap;
+    /** The step began without its map: it goes out as soon as it is ready */
+    bool m_waitingForMap = false;
+    /** Bumped by every edit that changes what a map would be */
+    std::atomic<int> m_mapGeneration { 0 };
 
 private:
     bool m_requestEngineCreation;

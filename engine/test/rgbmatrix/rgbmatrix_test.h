@@ -44,6 +44,12 @@ private slots:
     void anUninstalledScriptSurvivesASave();
     void anUninstalledScriptSurvivesInAShowWithANamespace();
     void aMatrixDoesNotStartTheAudioCapture();
+    /** A script's next map computed ahead, off the tick: the same output,
+     *  frame for frame, as computed at its step */
+    void mapsAheadSendTheSameFrames();
+    /** A map not ready at its step: the last one stays, counted late, and
+     *  the new one goes out the frame it is ready */
+    void aLateMapKeepsTheLastOneUntilReady();
     /** Running (coverage campaign: preRun/write/postRun were never run):
      *  a Plain matrix writes its colour to every head and follows a change;
      *  stopped, it lets go; a scripted one steps on its duration */

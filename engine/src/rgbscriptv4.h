@@ -23,6 +23,7 @@
 #include <QHash>
 #include <QJSValue>
 #include <atomic>
+#include <functional>
 
 #include "rgbalgorithm.h"
 #include "rgbscriptproperty.h"
@@ -68,6 +69,14 @@ public:
 
     /** Evaluate the script's contents and see if it checks out */
     bool evaluate();
+
+    /** Run @a job on the scripts' thread, not waiting for it (a matrix
+     *  computing its next map ahead of the step). False, and nothing run,
+     *  where there is no scripts' thread yet. */
+    static bool runOnScriptThread(std::function<void()> job);
+    /** Return once everything asked of the scripts' thread so far has run
+     *  (at once when called on that thread, or with none) */
+    static void waitForScriptThread();
 
 private:
     static void initEngine();

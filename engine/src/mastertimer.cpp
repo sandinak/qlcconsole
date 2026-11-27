@@ -95,6 +95,9 @@ static quint64 threadCpuNs()
 }
 
 /** The timer tick frequency in Hertz */
+/* Set by timerTick(true) for its own duration, on the timer thread */
+static thread_local bool t_inTimerFrame = false;
+
 uint MasterTimer::s_frequency = 50;
 uint MasterTimer::s_tick = 20;
 
@@ -236,6 +239,13 @@ void MasterTimer::timerTick(bool wakeUniverses)
 
     QList<Universe *> universes = doc->inputOutputMap()->claimUniverses();
 
+    struct FrameScope
+    {
+        explicit FrameScope(bool on) : was(t_inTimerFrame) { t_inTimerFrame = on; }
+        ~FrameScope() { t_inTimerFrame = was; }
+        const bool was;
+    } frameScope(wakeUniverses);
+
     const bool tlog = tickLogEnabled();
     // Always measure the tick compute time — it is a single QElapsedTimer and
     // feeds the always-on load indicator (m_tickComputeUs). The verbose
@@ -318,6 +328,11 @@ uint MasterTimer::frequency()
 uint MasterTimer::tick()
 {
     return s_tick;
+}
+
+bool MasterTimer::inTimerFrame()
+{
+    return t_inTimerFrame;
 }
 
 bool MasterTimer::catchesUp(qint64 lateNs, double tickComputeMs)

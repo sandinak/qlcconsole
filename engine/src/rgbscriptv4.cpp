@@ -360,6 +360,20 @@ QVector<uint> RGBScript::rgbMapGetColors()
     return colArray;
 }
 
+bool RGBScript::runOnScriptThread(std::function<void()> job)
+{
+    if (s_jsThread == NULL || s_jsThread->engine == nullptr)
+        return false;
+    return QMetaObject::invokeMethod(s_jsThread->engine, std::move(job), Qt::QueuedConnection);
+}
+
+void RGBScript::waitForScriptThread()
+{
+    if (s_jsThread == NULL || s_jsThread->engine == nullptr || QThread::currentThread() == s_jsThread)
+        return;
+    QMetaObject::invokeMethod(s_jsThread->engine, []{}, Qt::BlockingQueuedConnection);
+}
+
 void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
 {
     if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
