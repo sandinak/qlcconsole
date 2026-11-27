@@ -677,4 +677,36 @@ void QLCInputProfile_Test::save()
     delete prof;
 }
 
+void QLCInputProfile_Test::deviceMatch()
+{
+    QLCInputProfile ip;
+    ip.setManufacturer("Akai");
+    ip.setModel("APC40 mkII");
+    QVERIFY(!ip.matchesDevice("APC40 mkII"));           // no Match: never chosen by name
+    ip.setDeviceMatches(QStringList() << "APC40 mkII" << "APC64 DAW*");
+    QVERIFY(ip.matchesDevice("APC40 mkII"));
+    QVERIFY(ip.matchesDevice("apc40 MKII"));            // case does not matter
+    QVERIFY(ip.matchesDevice("2- APC40 mkII"));         // Windows' unit prefix
+    QVERIFY(ip.matchesDevice("APC64 DAW (APC64)"));
+    QVERIFY(!ip.matchesDevice("APC40"));                // a glob is the whole name
+    QVERIFY(!ip.matchesDevice("APC40 mkII Notes"));
+    QVERIFY(!ip.matchesDevice("APC64 Notes (APC64)"));
+
+    // Kept by a copy and by the file.
+    QScopedPointer<QLCInputProfile> copy(ip.createCopy());
+    QCOMPARE(copy->deviceMatches(), ip.deviceMatches());
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath("match.qxi");
+    QLCInputChannel *ich = new QLCInputChannel();
+    ich->setName("Button");
+    ich->setType(QLCInputChannel::Button);
+    ip.insertChannel(0, ich);
+    QVERIFY(ip.saveXML(path));
+    QScopedPointer<QLCInputProfile> back(QLCInputProfile::loader(path));
+    QVERIFY(!back.isNull());
+    QCOMPARE(back->deviceMatches(), QStringList() << "APC40 mkII" << "APC64 DAW*");
+    QVERIFY(back->matchesDevice("APC64 DAW (APC64)"));
+}
+
 QTEST_APPLESS_MAIN(QLCInputProfile_Test)

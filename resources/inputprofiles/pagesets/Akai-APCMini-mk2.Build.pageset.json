@@ -1,0 +1,89 @@
+{
+  "format": 1,
+  "name": "Build",
+  "description": "Colour and Move pages on the faders; Left and Right (the track buttons) step the pages, lit when there is a page that way. Fader 9 is the Grand Master.",
+  "fits": {
+    "profile": "Akai APC Mini mk2",
+    "layout": 1
+  },
+  "keys": {
+    "next": 235,
+    "previous": 234
+  },
+  "pages": [
+    {
+      "name": "Colour",
+      "controls": [
+        {
+          "ch": 48,
+          "param": "red"
+        },
+        {
+          "ch": 49,
+          "param": "green"
+        },
+        {
+          "ch": 50,
+          "param": "blue"
+        },
+        {
+          "ch": 51,
+          "param": "white"
+        },
+        {
+          "ch": 52,
+          "param": "amber"
+        },
+        {
+          "ch": 53,
+          "param": "uv"
+        },
+        {
+          "ch": 54,
+          "param": "hue"
+        },
+        {
+          "ch": 55,
+          "param": "saturation"
+        }
+      ]
+    },
+    {
+      "name": "Move",
+      "controls": [
+        {
+          "ch": 48,
+          "param": "pan"
+        },
+        {
+          "ch": 49,
+          "param": "tilt"
+        },
+        {
+          "ch": 50,
+          "param": "zoom"
+        },
+        {
+          "ch": 51,
+          "param": "focus"
+        },
+        {
+          "ch": 52,
+          "param": "iris"
+        },
+        {
+          "ch": 53,
+          "param": "gobo"
+        },
+        {
+          "ch": 54,
+          "param": "gobo-rotation"
+        },
+        {
+          "ch": 55,
+          "param": "frost"
+        }
+      ]
+    }
+  ]
+}

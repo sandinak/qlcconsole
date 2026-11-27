@@ -93,6 +93,26 @@ private slots:
      *  STOP ALL CLIPS STOP, touch strip 8 the GM; pads on MIDI channel 7
      *  apart from the buttons on 1. */
     void theApc64SeedsItsDefaults();
+    /** 053 surfaces on the bench: a board patched with no profile gets the
+     *  one made for its device (a profile's Match) -- the init, the map and
+     *  the roles follow; a chosen profile and an unknown name are left. */
+    void aProfileIsChosenByTheDevice();
+    /** The APC mini mk2 is a drawn surface with the APC40's default roles. */
+    void theApcMiniMk2SeedsItsDefaults();
+    /** A user's copy of a surface profile older than the built-in one (a
+     *  legacy link) is not used, and the panel says so; a good copy is. */
+    void anOlderCopyOfASurfaceProfileIsNotUsed();
+    /** The board holding the core roles is gone when a new one comes
+     *  online: the roles move, with a notice and an Undo. */
+    void aGoneBoardHandsItsRolesToTheNewOne();
+    /** The old board is still here: nothing moves; the new one is given a
+     *  role only when the old lets go of it. */
+    void aBoardThatIsHereKeepsItsRoles();
+    /** A trigger learned on another board does not light a lamp on a drawn
+     *  surface that has no such control (an APC pad blinking at 8,2). */
+    void aLampForAControlTheBoardLacksIsNotSent();
+    /** The MaizeDMX has two pages, each on its own X key. */
+    void theMaizeDmxHasAPager();
 
     /* Setting up a controller (SurfaceSetup, the OpenDeck model in
        simopendeck.h): the device's own config, read and written over SysEx. */

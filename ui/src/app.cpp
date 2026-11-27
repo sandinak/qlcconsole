@@ -123,6 +123,7 @@
 #include <QProgressDialog>
 #include <QDialogButtonBox>
 #include <QListWidget>
+#include "deskrecord.h"
 #include "doc.h"
 #include "testchannels.h"
 #include "fixturerest.h"
@@ -1049,6 +1050,17 @@ void App::init()
             m_inputNotices->centreSticks(p.data(), input);
         });
     });
+    /* A new board came online where the one that held this computer's GO,
+       Back, STOP and Grand Master is gone: they moved to it, said once in
+       the notice line, with Undo (nothing is blocked, nothing to unmap). */
+    if (DeskRecord *desk = m_doc->deskRecord())
+        connect(desk, &DeskRecord::cutOver, this, [this](const QString &text) {
+            showViewNotice(text, tr("Undo"), [this]() {
+                hideViewNotice();
+                if (m_doc->deskRecord() != nullptr)
+                    m_doc->deskRecord()->undoCutOver();
+            });
+        });
     connect(m_inputNotices, &InputDeviceNotices::offer, this,
             [this](const QString &text, const QString &button, quint32 universe,
                    const QString &plugin, const QString &device) {
