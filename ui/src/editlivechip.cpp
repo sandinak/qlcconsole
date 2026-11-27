@@ -39,6 +39,10 @@ std::function<bool(QWidget *, const QString &)> s_pinAsker;
 const char *kOffStyle = "QToolButton { font-weight: bold; padding: 0 6px; border: none; }";
 const char *kOnStyle = "QToolButton { color: #ffffff; background: #c62828; font-weight: bold; "
                        "padding: 0 6px; border: none; border-radius: 3px; }";
+/* Below its level: the face of a greyed control, but the button stays
+   enabled so a click always lands (build 4910: greyed by setEnabled(false)
+   the chip took no click at all) and is answered with the Switch. */
+const char *kLevelStyle = "QToolButton { color: palette(mid); font-weight: bold; padding: 0 6px; border: none; }";
 const char *kLeftStyle = "QToolButton { color: #000000; background: #f5a623; font-weight: bold; "
                          "padding: 0 6px; border: none; border-radius: 3px; }";
 }
@@ -92,9 +96,10 @@ EditLiveChip::EditLiveChip(Doc *doc, QWidget *parent)
         connect(map->surfacePages(), &SurfacePages::setsChanged, this, &EditLiveChip::refresh);
     connect(m_doc, &Doc::modeChanged, this, &EditLiveChip::refresh);
     /* Standard and up (it edits the show live): greyed at Student, saying
-       the level; a step down to Student turns it off. */
+       the level, a click offering the Switch; a step down to Student turns
+       it off. Not bound to ShowLevel's greying, which disables the button:
+       the chip greys itself and stays clickable (refresh(), clicked()). */
     refresh();
-    ShowLevel::instance()->bind(m_chip, levelKey());
     connect(ShowLevel::instance(), &ShowLevel::changed, this, [this]() {
         EditLive *el = live();
         if (el != nullptr && el->isOn() && !ShowLevel::shown(levelKey()))
@@ -175,19 +180,21 @@ void EditLiveChip::refresh()
     }
     else
     {
-        m_chip->setStyleSheet(QLatin1String(kOffStyle));
-        /* Greyed by the level (ShowLevel): the face names the level that
-           unlocks it, a click says why in the notice line with the Switch,
-           and its tooltip says it too. */
+        /* Below its level: greyed, the face naming the level that unlocks
+           it, a click saying why in the notice line with the Switch, and
+           its tooltip saying it too. */
         if (ShowLevel::shown(levelKey()))
         {
+            m_chip->setStyleSheet(QLatin1String(kOffStyle));
             m_chip->setText(tr("Edit Live"));
             m_chip->setToolTip(tr("Turn on Edit Live: the board's page controls trim the running cue, "
                                   "and Store keeps the trims in its looks."));
         }
         else
         {
+            m_chip->setStyleSheet(QLatin1String(kLevelStyle));
             m_chip->setText(tr("Edit Live · %1").arg(ShowLevel::name(ShowLevel::levelOf(levelKey()))));
+            m_chip->setToolTip(ShowLevel::whyHidden(levelKey()));
         }
     }
     const bool left = el != nullptr && el->hasLeftBehind() && m_leftTimer->isActive();
@@ -241,6 +248,12 @@ void EditLiveChip::clicked()
     EditLive *el = live();
     if (el == nullptr)
         return;
+    if (!el->isOn() && !ShowLevel::shown(levelKey()))
+    {
+        // Greyed by the level: the notice line says so, with the Switch.
+        ShowLevel::instance()->offer(levelKey());
+        return;
+    }
     if (!el->isOn())
     {
         QString why;

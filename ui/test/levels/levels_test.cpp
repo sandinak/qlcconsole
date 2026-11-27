@@ -40,6 +40,8 @@
 #include "levels_test.h"
 #include "levelregistry.h"
 #include <QMouseEvent>
+#include <QSignalSpy>
+#include <QWindow>
 #include "editlivechip.h"
 #include "showlevel.h"
 #include "showoperate.h"
@@ -53,6 +55,8 @@
 #define private public
 #define protected public
 #include "doc.h"
+#include "controlmap.h"
+#include "editlive.h"
 #include "app.h"
 #include "virtualconsole.h"
 #include "showsettingsdialog.h"
@@ -610,24 +614,40 @@ void Levels_Test::aGreyedFooterChipSaysItsLevelOnItsFace()
     level->setLevel(ShowLevel::Student);
     level->apply();
     QTest::qWait(30);
-    QVERIFY(!chip->chip()->isEnabled());
     QCOMPARE(chip->chip()->text(), QStringLiteral("Edit Live \u00B7 Standard"));
+    QVERIFY2(chip->chip()->toolTip().contains(QStringLiteral("Standard")), qPrintable(chip->chip()->toolTip()));
 
-    // A click is answered in the notice line, with the Switch.
+    /* Branson's path (build 4910): Operate, the chip in the footer, a real
+       click on it -- through the window, as the mouse does. It was greyed
+       with setEnabled(false) and took no click at all. */
+    m_app->doc()->setMode(Doc::Operate);
+    QTest::qWait(30);
+    chip->show();                  // the board that shows it in Operate (no MIDI here)
+    QTest::qWait(30);
+    QVERIFY(chip->chip()->isVisible());
+    QVERIFY(chip->chip()->isEnabled());
     m_app->hideViewNotice();
-    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(3, 3), QPointF(3, 3),
-                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-    QApplication::sendEvent(chip->chip(), &release);
+    QSignalSpy offered(level, &ShowLevel::switchOffered);
+    QWindow *win = m_app->windowHandle();
+    QVERIFY(win != nullptr);
+    QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier,
+                      chip->chip()->mapTo(m_app, chip->chip()->rect().center()));
+    QTest::qWait(30);
+    QCOMPARE(offered.count(), 1);
     QVERIFY(m_app->m_viewNotice->isVisibleTo(m_app));
     QVERIFY2(m_app->m_viewNoticeText->text().contains(QStringLiteral("Standard")),
              qPrintable(m_app->m_viewNoticeText->text()));
     QCOMPARE(m_app->m_viewNoticeButton->text(), QStringLiteral("Switch to Standard"));
+    // The click refused the action: Edit Live stays off.
+    QVERIFY(!m_app->doc()->controlMap()->editLive()->isOn());
 
     // Switch: the face is plain again.
     m_app->m_viewNoticeButton->click();
     QTest::qWait(30);
     QCOMPARE(chip->chip()->text(), QStringLiteral("Edit Live"));
     QVERIFY(chip->chip()->isEnabled());
+    m_app->doc()->setMode(Doc::Design);
+    QTest::qWait(30);
 }
 
 void Levels_Test::aHiddenTabIsInTheWindowMenuSwitchLine()
