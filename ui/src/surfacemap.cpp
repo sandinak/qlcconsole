@@ -941,6 +941,7 @@ void SurfaceMaps::rebuild()
     m_offers.clear();
     m_setBoxes.clear();
     m_guardBoxes.clear();
+    m_allButtons.clear();
     m_blocks.clear();
     m_fallback.clear();
     while (QLayoutItem *it = m_box->takeAt(0))
@@ -975,6 +976,7 @@ void SurfaceMaps::rebuild()
         m_parts << l;
     }
     setVisible(!m_parts.isEmpty());
+    applyFilter();
     refreshPages();
 }
 
@@ -1022,7 +1024,14 @@ void SurfaceMaps::addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe
         h->addWidget(rel);
         m_guardBoxes.insert(universe, qMakePair(stop, rel));
     }
+    QPushButton *all = new QPushButton(tr("All boards"), block);
+    all->setObjectName(QStringLiteral("surfaceMapAllBoards%1").arg(universe));
+    all->setToolTip(tr("Show the maps of every patched board again."));
+    all->setVisible(false);
+    connect(all, &QPushButton::clicked, this, &SurfaceMaps::showAll);
     h->addStretch(1);
+    h->addWidget(all);
+    m_allButtons.insert(universe, all);
     v->addLayout(h);
 }
 
@@ -1215,6 +1224,48 @@ void SurfaceMaps::refresh()
 {
     for (SurfaceMapView *mv : std::as_const(m_views))
         mv->refresh();
+}
+
+void SurfaceMaps::showOnly(quint32 universe)
+{
+    if (m_rebuildQueued)
+        rebuild();
+    if (!m_blocks.contains(universe))
+        return;
+    m_only = universe;
+    applyFilter();
+    showMap(universe);
+}
+
+void SurfaceMaps::showAll()
+{
+    m_only = 0xFFFFFFFF;
+    applyFilter();
+}
+
+bool SurfaceMaps::isBoardShown(quint32 universe) const
+{
+    const QWidget *b = m_blocks.value(universe);
+    return b != nullptr && !b->isHidden();
+}
+
+void SurfaceMaps::hideEvent(QHideEvent *event)
+{
+    QWidget::hideEvent(event);
+    // Leaving the page ends "this board alone": Connections lists them all.
+    if (m_only != 0xFFFFFFFF)
+        showAll();
+}
+
+void SurfaceMaps::applyFilter()
+{
+    const bool one = m_only != 0xFFFFFFFF && m_blocks.contains(m_only);
+    for (auto it = m_blocks.constBegin(); it != m_blocks.constEnd(); ++it)
+        it.value()->setVisible(!one || it.key() == m_only);
+    for (QPushButton *b : std::as_const(m_allButtons))
+        b->setVisible(one && m_blocks.size() > 1);
+    if (QWidget *f = findChild<QWidget *>(QStringLiteral("surfaceMapFallback")))
+        f->setVisible(!one);
 }
 
 void SurfaceMaps::showMap(quint32 universe)

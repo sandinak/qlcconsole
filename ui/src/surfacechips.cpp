@@ -20,6 +20,11 @@
 #include <QToolButton>
 #include <QHBoxLayout>
 #include <QTimer>
+#include <QPainter>
+#include <QPixmap>
+#include <QIcon>
+#include <QApplication>
+#include <QPalette>
 
 #include "surfacechips.h"
 #include "surfacelayout.h"
@@ -29,6 +34,31 @@
 #include "surfacepages.h"
 #include "controlmap.h"
 #include "doc.h"
+
+/* A generic controller: a board with a fader slot, two knobs and a row of
+   keys. Drawn in the footer's text colour, never a brand's mark. */
+QIcon SurfaceChips::boardIcon(const QColor &colour, int size)
+{
+    const qreal dpr = qApp != nullptr ? qApp->devicePixelRatio() : 1.0;
+    QPixmap pm(QSize(size, size) * dpr);
+    pm.setDevicePixelRatio(dpr);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    QPen pen(colour, 1.2);
+    p.setPen(pen);
+    p.setBrush(Qt::NoBrush);
+    const qreal u = size / 14.0;
+    p.drawRoundedRect(QRectF(1 * u, 2 * u, 12 * u, 10 * u), 1.5 * u, 1.5 * u);
+    p.setBrush(colour);
+    p.drawRect(QRectF(3 * u, 4 * u, 1.2 * u, 6 * u));      // the fader slot
+    p.drawEllipse(QPointF(8 * u, 5.5 * u), 1.1 * u, 1.1 * u);   // two knobs
+    p.drawEllipse(QPointF(11 * u, 5.5 * u), 1.1 * u, 1.1 * u);
+    p.drawRect(QRectF(7 * u, 8.5 * u, 1.6 * u, 1.6 * u));   // keys
+    p.drawRect(QRectF(10 * u, 8.5 * u, 1.6 * u, 1.6 * u));
+    p.end();
+    return QIcon(pm);
+}
 
 SurfaceChips::SurfaceChips(Doc *doc, QWidget *parent)
     : QWidget(parent)
@@ -76,7 +106,10 @@ void SurfaceChips::rebuild()
         QToolButton *b = new QToolButton(this);
         b->setObjectName(QStringLiteral("footerSurface%1").arg(u));
         b->setAutoRaise(true);
-        b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        // A small controller glyph, so the chip reads as "a board".
+        b->setIcon(boardIcon(b->palette().color(QPalette::WindowText)));
+        b->setIconSize(QSize(14, 14));
+        b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         b->setCursor(Qt::PointingHandCursor);
         b->setProperty("helpTopic", QStringLiteral("control-surfaces.md#the-surface-map"));
         // In Operate the controls are the show's: the page is not said.
@@ -86,7 +119,7 @@ void SurfaceChips::rebuild()
         b->setToolTip(tr("%1 on Universe %2: click for its map (what each control does now).")
                           .arg(layout.name()).arg(u + 1));
         b->setAccessibleName(tr("Map of the %1").arg(layout.name()));
-        b->setStyleSheet(QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px; border: none; }"));
+        b->setStyleSheet(QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px 0 4px; border: none; }"));
         if (m_height > 0)
             b->setFixedHeight(m_height);
         connect(b, &QToolButton::clicked, this, [this, u]() { emit mapRequested(u); });

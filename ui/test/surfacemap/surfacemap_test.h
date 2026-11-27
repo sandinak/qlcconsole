@@ -67,6 +67,12 @@ private slots:
     /** The map says each job, the Shift combos too; its header has the
      *  board's options: Set Up…, the Shift guards (the show's). */
     void theFaderPortMapSaysTheShiftCombosAndHasItsOptions();
+    /** Bench 2026-11-27: a footer click never takes a Design show to Operate. */
+    void aFooterClickNeverGoesLive();
+    /** A surface chip has a controller glyph and says it opens the map. */
+    void aSurfaceChipReadsAsABoard();
+    /** A chip's click shows that board's map alone; Connections lists all. */
+    void aChipOpensOnlyItsBoard();
     /** A map never clips: under its smallest cell it asks for the width. */
     void theMapScrollsRatherThanClips();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */

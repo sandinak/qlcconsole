@@ -439,6 +439,84 @@ void SurfaceMap_Test::aBareStopSaysShiftStopInTheFooter()
     QCOMPARE(fired.count(), 1);
 }
 
+void SurfaceMap_Test::aFooterClickNeverGoesLive()
+{
+    dropDoc();
+    App app;
+    app.init();
+    Doc *doc = app.doc();
+    QDir dir(QStringLiteral("../../../engine/test/iopluginstub"));
+    dir.setFilter(QDir::Files);
+    dir.setNameFilters(QStringList() << QString("*%1").arg(KExtPlugin));
+    doc->ioPluginCache()->load(dir);
+    IOPluginStub *stub = stubOf(doc);
+    QVERIFY(stub != nullptr);
+    stub->m_lineNames.clear();
+    SimMidiDevice fp(doc, stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    app.resize(1440, 900);
+    app.show();
+    settle();
+    QCOMPARE(doc->mode(), Doc::Design);
+    // The Design/Operate chip does not go live.
+    QVERIFY(app.m_statusModeChipLabel->isVisibleTo(app.statusBar()));
+    QTest::mouseClick(app.m_statusModeChipLabel, Qt::LeftButton);
+    settle();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY2(app.statusBar()->currentMessage().contains("Operate"), qPrintable(app.statusBar()->currentMessage()));
+    // Nor does a board's chip (it opens a map).
+    for (quint32 u : app.m_statusSurfaceChips->universes())
+    {
+        app.m_statusSurfaceChips->chip(u)->click();
+        settle();
+        QCOMPARE(doc->mode(), Doc::Design);
+    }
+}
+
+void SurfaceMap_Test::aSurfaceChipReadsAsABoard()
+{
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    SurfaceChips chips(m_doc);
+    settle();
+    QToolButton *chip = chips.chip(0);
+    QVERIFY(chip != nullptr);
+    QVERIFY2(!chip->icon().isNull(), "no controller glyph on the chip");
+    QCOMPARE(chip->toolButtonStyle(), Qt::ToolButtonTextBesideIcon);
+    QCOMPARE(chip->text(), QStringLiteral("FaderPort"));
+    QVERIFY(chip->toolTip().contains("click for its map"));
+}
+
+void SurfaceMap_Test::aChipOpensOnlyItsBoard()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 1, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    SurfaceMaps maps(m_doc);
+    maps.show();
+    settle();
+    // Connections lists every board.
+    QVERIFY(maps.isBoardShown(0) && maps.isBoardShown(1));
+    maps.showOnly(1);
+    settle();
+    QVERIFY2(!maps.isBoardShown(0), "another board's map is stacked above");
+    QVERIFY(maps.isBoardShown(1));
+    QPushButton *all = maps.findChild<QPushButton *>(QStringLiteral("surfaceMapAllBoards1"));
+    QVERIFY(all != nullptr && !all->isHidden());
+    all->click();
+    QVERIFY(maps.isBoardShown(0) && maps.isBoardShown(1));
+    // Leaving the page ends it.
+    maps.showOnly(0);
+    QVERIFY(!maps.isBoardShown(1));
+    maps.hide();
+    settle();
+    QVERIFY(maps.isBoardShown(0) && maps.isBoardShown(1));
+}
+
 void SurfaceMap_Test::theFaderPortMapSaysTheShiftCombosAndHasItsOptions()
 {
     SimMidiDevice fp(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),

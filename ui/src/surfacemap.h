@@ -189,6 +189,14 @@ public slots:
     void refresh();
     /** Scroll to @p universe's map (the footer's chip). */
     void showMap(quint32 universe);
+    /** The footer chip's click: that board's map alone (the others hidden,
+     *  an "All boards" button to bring them back); the filter ends when the
+     *  page is left. Connections ▸ Control surfaces lists every board. */
+    void showOnly(quint32 universe);
+    /** The universe shown alone; invalidUniverse() while every board is. */
+    quint32 onlyUniverse() const { return m_only; }
+    void showAll();
+    bool isBoardShown(quint32 universe) const;
 
 signals:
     /** Set Up GO… (a DeskRecord::Role): the desk's own Learn. */
@@ -198,7 +206,11 @@ signals:
     /** Lamp Test… in a board's options (a board that has one). */
     void lampTestRequested(quint32 universe);
 
+protected:
+    void hideEvent(QHideEvent *event) override;
+
 private:
+    void applyFilter();
     QWidget *buildBlock(quint32 universe, const SurfaceLayout &layout);
     void addPagesRow(QVBoxLayout *v, QWidget *block, quint32 universe);
     void addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe, const SurfaceLayout &layout);
@@ -218,6 +230,8 @@ private:
     QList<QWidget *> m_parts;
     QStringList m_fallback;
     bool m_rebuildQueued = false;
+    quint32 m_only = 0xFFFFFFFF;
+    QMap<quint32, class QPushButton *> m_allButtons;
 };
 
 /** @} */

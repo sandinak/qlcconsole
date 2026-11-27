@@ -9862,7 +9862,7 @@ void App::initStatusBar()
             switchToTabContaining(io);
             io->showShowControlSection(QStringLiteral("surfaces"));
             if (SurfaceMaps *maps = io->findChild<SurfaceMaps *>())
-                maps->showMap(universe);
+                maps->showOnly(universe);   // this board alone, not every board stacked
         }
     });
     sb->addPermanentWidget(m_statusSurfaceChips);
@@ -10326,10 +10326,17 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     // Click the footer Design/Operate chip → same action the toolbar
     // toggle button triggers (trigger(), not a direct slot call, so it
     // still respects the action's own enabled state).
+    /* A click in the footer never takes the show live (bench 2026-11-27: a
+       click meant for a neighbouring chip put a Design show in Operate): in
+       Design the chip says where Operate is; Operate back to Design stays. */
     if (watched == m_statusModeChipLabel && event->type() == QEvent::MouseButtonPress
         && m_modeToggleAction != NULL)
     {
-        m_modeToggleAction->trigger();
+        if (m_doc != NULL && m_doc->mode() == Doc::Design)
+            statusBar()->showMessage(tr("Design mode. The footer does not go live: use Control ▸ Operate (%1).")
+                                         .arg(m_modeToggleAction->shortcut().toString(QKeySequence::NativeText)), 6000);
+        else
+            m_modeToggleAction->trigger();
         return true;
     }
 

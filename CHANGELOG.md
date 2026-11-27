@@ -14,6 +14,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Footer and map.** A click on the footer's Design/Operate chip no longer
+  takes a Design show live (it says where Operate is; Operate back to Design
+  still works). A surface chip has a small controller glyph beside its name
+  and opens that board's map alone, with an **All boards** button;
+  Connections ▸ Control surfaces still lists every board.
 - **FaderPort 2 bench fixes.** The motor fader no longer drives back to zero
   after you move it: the motor is sent the Grand Master when your hand lets
   go (its touch), or 150 ms after the last move. The emergency stop on the

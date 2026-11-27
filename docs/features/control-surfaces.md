@@ -1047,8 +1047,11 @@ after any build that changes a surface, and say which build.
    let go. *Expect:* the Grand Master follows your hand to 30% and the
    footer's GM stays at 30%; the fader stays at 30% (it does not drive back
    to 0 or to where it was).
-12. Click the **FaderPort** chip in the footer, at 1024 x 640 too. *Expect:*
-   the map opens with **Set Up…**, **Stop needs Shift** and **Releasing a
+12. In Design, click the footer's **Design** chip. *Expect:* the show stays
+   in Design and the footer says where Operate is (Control ▸ Operate).
+13. Click the **FaderPort** chip in the footer, at 1024 x 640 too. *Expect:*
+   the chip has a small controller glyph; the map of that board alone
+   opens (an **All boards** button brings back the rest) with **Set Up…**, **Stop needs Shift** and **Releasing a
    stop needs Shift** (both ticked) in its header; **STOP** reads
    *Shift+STOP*, **Shift** is drawn as the board's own key. Untick **Stop
    needs Shift**: **Stop** alone now stops.
