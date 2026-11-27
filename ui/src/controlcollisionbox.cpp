@@ -121,6 +121,12 @@ void ControlCollisionBox::setMovesOnOk(bool onOk)
     m_note->setText(onOk ? ControlOwners::moveOnOkNote() : ControlOwners::moveNote());
 }
 
+void ControlCollisionBox::appendText(const QString &line)
+{
+    if (!line.isEmpty())
+        m_text->setText(m_text->text() + QStringLiteral("\n") + line);
+}
+
 void ControlCollisionBox::clear()
 {
     m_owners.clear();

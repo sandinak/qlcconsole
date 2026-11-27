@@ -29,10 +29,13 @@
 #include "inputoutputmap.h"
 #include "qlcchannel.h"
 #include "inputpatch.h"
+#include "controlowners.h"
+#include "doc.h"
 
 #define KColumnName     0
 #define KColumnUniverse 1
 #define KColumnChannel  2
+#define KColumnJob      3
 
 #define SETTINGS_GEOMETRY "selectinputchannel/geometry"
 #define SETTINGS_ALLOWUNPATCHED "selectinputchannel/allowunpatched"
@@ -41,9 +44,10 @@
  * Initialization
  ****************************************************************************/
 
-SelectInputChannel::SelectInputChannel(QWidget* parent, InputOutputMap *ioMap)
+SelectInputChannel::SelectInputChannel(QWidget* parent, InputOutputMap *ioMap, Doc *doc)
     : QDialog(parent)
     , m_ioMap(ioMap)
+    , m_doc(doc)
 {
     Q_ASSERT(ioMap != NULL);
 
@@ -61,7 +65,14 @@ SelectInputChannel::SelectInputChannel(QWidget* parent, InputOutputMap *ioMap)
 
     connect(m_allowUnpatchedCb, SIGNAL(clicked()), this, SLOT(slotUnpatchedClicked()));
 
+    if (m_doc != nullptr)
+    {
+        m_tree->setHeaderLabels({ tr("Name"), tr("Universe"), tr("Channel"), tr("Does now") });
+        m_tree->setColumnHidden(KColumnUniverse, true);
+        m_tree->setColumnHidden(KColumnChannel, true);
+    }
     fillTree();
+    m_tree->resizeColumnToContents(KColumnName);
 
     /* Listen to item changed signals so that we can catch user's
        manual input for <...> nodes. Connect AFTER filling the tree
@@ -215,6 +226,9 @@ void SelectInputChannel::updateChannelItem(QTreeWidgetItem* item,
         item->setText(KColumnName, QString("%1: %2")
                       .arg(profile->channelNumber(channel) + 1)
                       .arg(channel->name()));
+        if (m_doc != nullptr)
+            item->setText(KColumnJob, ControlOwners::jobsText(
+                                          ControlOwners::jobsFor(m_doc, universe, profile->channelNumber(channel))));
         item->setText(KColumnChannel, QString("%1")
                       .arg(profile->channelNumber(channel)));
 

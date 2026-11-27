@@ -66,6 +66,9 @@ public:
      *  the control only then (ControlOwners::moveOnOkNote()). */
     void setMovesOnOk(bool onOk);
     bool movesOnOk() const { return m_onOk; }
+    /** Adds a line under the refusal (the surface pages' jobs of the
+     *  control, which a move doesn't take). */
+    void appendText(const QString &line);
     /** Hides it and forgets the owners. */
     void clear();
 

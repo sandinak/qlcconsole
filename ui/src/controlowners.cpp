@@ -40,6 +40,9 @@
 #include "deskrecord.h"
 #include "showtreecontroller.h"
 #include "doc.h"
+#include "controlmap.h"
+#include "surfacepages.h"
+#include "pageset.h"
 
 namespace
 {
@@ -590,8 +593,13 @@ bool ControlOwners::release(Doc *doc, const Owner &owner)
         case Pmj:
         case Pad:
         case Keyboard:
-        case Desk:
             return false;
+        case Desk:
+        {
+            // Only a desk role a picker made movable (listenersOf()).
+            DeskRecord *d = doc->deskRecord();
+            return d != nullptr && d->clear(DeskRecord::Role(owner.index));
+        }
         case Encoder:
         {
             EncoderBank *enc = doc->controlMap()->encoderBank();
@@ -653,8 +661,10 @@ bool ControlOwners::canRelease(Doc *doc, const Owner &owner)
         case Pmj:
         case Pad:
         case Keyboard:
-        case Desk:
             return false;
+        case Desk:
+            return doc->deskRecord() != nullptr && !doc->deskRecord()->isLocked()
+                   && doc->deskRecord()->isSet(DeskRecord::Role(owner.index));
         case Encoder:
             return doc->controlMap()->encoderBank()->isEnabled()
                    && (owner.part == BankNext || owner.part == BankPrevious);
@@ -687,6 +697,7 @@ struct Held
     QSharedPointer<QLCInputSource> source;
     quint32 universe = 0;
     quint32 channel = 0;
+    DeskRecord::Binding desk;
 };
 
 Held holdOf(Doc *doc, const ControlOwners::Owner &o)
@@ -728,7 +739,10 @@ Held holdOf(Doc *doc, const ControlOwners::Owner &o)
         case ControlOwners::Pmj:
         case ControlOwners::Pad:
         case ControlOwners::Keyboard:
+            break;
         case ControlOwners::Desk:
+            if (doc->deskRecord() != nullptr)
+                h.desk = doc->deskRecord()->binding(DeskRecord::Role(o.index));
             break;
     }
     return h;
@@ -768,7 +782,10 @@ void putBack(Doc *doc, const Held &h)
         case ControlOwners::Pmj:
         case ControlOwners::Pad:
         case ControlOwners::Keyboard:
+            break;
         case ControlOwners::Desk:
+            if (doc->deskRecord() != nullptr)
+                doc->deskRecord()->setBinding(DeskRecord::Role(h.owner.index), h.desk);
             break;
     }
 }
@@ -798,6 +815,132 @@ bool ControlOwners::releaseAll(Doc *doc, const QList<Owner> &owners)
         released << h;
     }
     return true;
+}
+
+std::function<void()> ControlOwners::releaseAllUndoable(Doc *doc, const QList<Owner> &owners)
+{
+    if (!canMove(owners))
+        return std::function<void()>();
+    QSharedPointer<QList<Held>> held(new QList<Held>());
+    for (const Owner &o : owners)
+        *held << holdOf(doc, o);
+    if (!releaseAll(doc, owners))
+        return std::function<void()>();
+    QPointer<Doc> d(doc);
+    return [d, held]() {
+        if (d.isNull())
+            return;
+        for (int i = held->count() - 1; i >= 0; --i)
+            putBack(d.data(), held->at(i));
+    };
+}
+
+QList<ControlOwners::Job> ControlOwners::jobsFor(Doc *doc, quint32 universe, quint32 channel)
+{
+    QList<Job> out;
+    if (doc == nullptr)
+        return out;
+    for (const Owner &o : owners(doc, universe, channel))
+    {
+        Job j;
+        j.owner = o;
+        if (o.kind == Desk)
+        {
+            j.name = DeskRecord::roleName(DeskRecord::Role(o.index));
+            j.note = tr("this computer's desk");
+        }
+        else if (o.kind == EmergencyStop)
+        {
+            j.name = tr("Emergency Stop");
+            j.note = o.where;
+        }
+        else if (o.kind == GrandMaster)
+        {
+            j.name = tr("Grand Master");
+            j.note = o.where;
+        }
+        else
+        {
+            j.name = o.thing;
+            j.note = o.where;
+        }
+        out << j;
+    }
+    // The surface pages' controls: a page job is the page's, in Design.
+    ControlMap *cm = doc->controlMap();
+    SurfacePages *sp = cm != nullptr ? cm->surfacePages() : nullptr;
+    if (sp != nullptr && universe != ControlMap::KeyboardUniverse && sp->universes().contains(universe))
+    {
+        const PageSet set = sp->pageSet(universe);
+        const quint32 ch = channel & 0xFFFF;
+        QStringList pages;
+        QString text;
+        for (int p = 0; p < set.pages().count(); ++p)
+            if (const PageSet::Binding *b = set.binding(p, ch))
+            {
+                if (b->param == QLatin1String("none"))
+                    continue;
+                pages << set.pages().at(p).name;
+                if (text.isEmpty())
+                    text = b->text();
+            }
+        if (!pages.isEmpty())
+        {
+            Job j;
+            j.isPage = true;
+            if (pages.count() == set.pages().count())
+                j.name = tr("every page: %1").arg(text);
+            else
+            {
+                j.name = tr("page %1: %2").arg(pages.join(QStringLiteral(", ")), text);
+                j.note = tr("on page %1 only").arg(pages.join(QStringLiteral(", ")));
+            }
+            out << j;
+        }
+    }
+    return out;
+}
+
+QString ControlOwners::jobsText(const QList<Job> &jobs)
+{
+    if (jobs.isEmpty())
+        return tr("free");
+    QStringList lines;
+    for (const Job &j : jobs)
+    {
+        const QString l = j.note.isEmpty() ? j.name : tr("%1 (%2)").arg(j.name, j.note);
+        if (!lines.contains(l))
+            lines << l;
+    }
+    return lines.join(QStringLiteral("; "));
+}
+
+QString ControlOwners::pageJobsText(const QList<Job> &jobs)
+{
+    QStringList lines;
+    for (const Job &j : jobs)
+        if (j.isPage)
+            lines << (j.note.isEmpty() ? j.name : tr("%1 (%2)").arg(j.name, j.note));
+    return lines.join(QStringLiteral("; "));
+}
+
+QList<ControlOwners::Owner> ControlOwners::listenersOf(Doc *doc, const QList<Job> &jobs)
+{
+    QList<Owner> out;
+    DeskRecord *desk = doc != nullptr ? doc->deskRecord() : nullptr;
+    for (const Job &j : jobs)
+    {
+        if (j.isPage)
+            continue;
+        Owner o = j.owner;
+        if (o.kind == Desk && desk != nullptr && !desk->isLocked())
+        {
+            o.movable = true;
+            o.fixedWhy.clear();
+        }
+        out << o;
+    }
+    return out;
 }
 
 QList<ControlOwners::Collision> ControlOwners::collisions(Doc *doc)

@@ -186,7 +186,7 @@ void VCMatrixProperties::slotSliderInputValueChanged(quint32 universe, quint32 c
 
 void VCMatrixProperties::slotChooseSliderInputClicked()
 {
-    SelectInputChannel sic(this, m_doc->inputOutputMap());
+    SelectInputChannel sic(this, m_doc->inputOutputMap(), m_doc);
     if (sic.exec() == QDialog::Accepted)
     {
         m_sliderInputSource = QSharedPointer<QLCInputSource>(new QLCInputSource(sic.universe(), sic.channel()));

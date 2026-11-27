@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A control says what it does** (one job per control): Choose… lists each control's job in a *Does now* column, Auto Detect names it under the fields before OK, and the conflict box names every job, this computer's desk roles and surface-page controls included; Move It Here may take a desk role (Grand Master, GO...) in the widget, speed master and Grand Master pickers.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

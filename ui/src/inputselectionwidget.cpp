@@ -179,13 +179,21 @@ InputSelectionWidget::InputSelectionWidget(Doc *doc, QWidget *parent)
         emit inputValueChanged(universe, channel);
     });
 
+    m_jobLabel = new QLabel(this);
+    m_jobLabel->setObjectName(QStringLiteral("currentJob"));
+    m_jobLabel->setWordWrap(true);
+    m_jobLabel->setTextFormat(Qt::PlainText);
+    m_jobLabel->hide();
+
     if (QGridLayout *gl = qobject_cast<QGridLayout *>(layout()))
     {
+        gl->addWidget(m_jobLabel, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
         gl->addWidget(m_collision, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
         gl->addWidget(m_relativeGroup, gl->rowCount(), 0, 1, qMax(1, gl->columnCount()));
     }
     else if (layout() != NULL)
     {
+        layout()->addWidget(m_jobLabel);
         layout()->addWidget(m_collision);
         layout()->addWidget(m_relativeGroup);
     }
@@ -302,6 +310,7 @@ void InputSelectionWidget::slotAutoDetectInputToggled(bool checked)
 void InputSelectionWidget::slotInputValueChanged(quint32 universe, quint32 channel)
 {
     const quint32 chWithPage = (m_widgetPage << 16) | channel;
+    showJobs(universe, chWithPage);
     if (refuseTaken(universe, chWithPage, false))
         return;
 
@@ -332,10 +341,11 @@ void InputSelectionWidget::slotInputValueChanged(quint32 universe, quint32 chann
 
 void InputSelectionWidget::slotChooseInputClicked()
 {
-    SelectInputChannel sic(this, m_doc->inputOutputMap());
+    SelectInputChannel sic(this, m_doc->inputOutputMap(), m_doc);
     if (sic.exec() == QDialog::Accepted)
     {
         const quint32 chWithPage = (m_widgetPage << 16) | sic.channel();
+        showJobs(sic.universe(), chWithPage);
         if (refuseTaken(sic.universe(), chWithPage, true))
             return;
         takeSource(sic.universe(), chWithPage, true);
@@ -356,8 +366,9 @@ bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage
     // The show's listeners, but those this window sets on OK as its other
     // pickers hold them now (a speed master's own Tap, Rate and Pause).
     QList<ControlOwners::Owner> taken;
-    for (const ControlOwners::Owner &o : ControlOwners::others(m_doc, universe, channelWithPage, m_self))
-        if (!isLocal(o))
+    const QList<ControlOwners::Job> jobs = ControlOwners::jobsFor(m_doc, universe, channelWithPage);
+    for (const ControlOwners::Owner &o : ControlOwners::listenersOf(m_doc, jobs))
+        if (!isLocal(o) && ControlOwners::collides(m_self, o))
             taken << o;
     if (m_local.owners)
         for (const ControlOwners::Owner &o : m_local.owners(universe, channelWithPage & 0xFFFF))
@@ -365,6 +376,7 @@ bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage
                 taken << o;
     if (taken.isEmpty())
     {
+        // A page's job is only said (the label), nothing to take it from.
         m_collision->clear();
         return false;
     }
@@ -373,7 +385,36 @@ bool InputSelectionWidget::refuseTaken(quint32 universe, quint32 channelWithPage
     m_collision->setProperty("learnUniverse", universe);
     m_collision->setProperty("learnChannel", channelWithPage);
     m_collision->refuse(m_doc, universe, channelWithPage, taken);
+    const QString pages = ControlOwners::pageJobsText(jobs);
+    if (!pages.isEmpty())
+        m_collision->appendText(tr("It is also a surface page control: %1. The page keeps it in Design.")
+                                    .arg(pages));
     return true;
+}
+
+void InputSelectionWidget::showJobs(quint32 universe, quint32 channelWithPage)
+{
+    const quint64 key = (quint64(universe) << 32) | channelWithPage;
+    if (key == m_jobsKey)
+        return;
+    m_jobsKey = key;
+    QList<ControlOwners::Job> jobs = ControlOwners::jobsFor(m_doc, universe, channelWithPage);
+    for (int i = jobs.count() - 1; i >= 0; --i)
+        if (!jobs.at(i).isPage && (isLocal(jobs.at(i).owner) || m_self.sameAs(jobs.at(i).owner)))
+            jobs.removeAt(i);
+    if (m_local.owners)
+        for (const ControlOwners::Owner &o : m_local.owners(universe, channelWithPage & 0xFFFF))
+        {
+            ControlOwners::Job j;
+            j.owner = o;
+            j.name = o.thing;
+            j.note = o.where;
+            jobs << j;
+        }
+    m_jobLabel->setText(tr("%1: %2")
+                            .arg(ControlOwners::controlName(m_doc, universe, channelWithPage),
+                                 ControlOwners::jobsText(jobs)));
+    m_jobLabel->show();
 }
 
 bool InputSelectionWidget::isLocal(const ControlOwners::Owner &owner) const
