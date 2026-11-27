@@ -82,6 +82,7 @@ private slots:
      *  shows the chip, one click patches it; one patched by hand (no
      *  rescan after) shows the chip at once. */
     void aConnectedPadShowsTheChipWithoutAPatch();
+    void aPadThatAppearsIsSetUpWithNoClick();
 private:
     /** Two spots on the plot, a group, a target, one focus call; a
      *  Pre-show list (Focus, a venue focus cue, then House) the list is on

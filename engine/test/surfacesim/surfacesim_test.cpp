@@ -1956,6 +1956,154 @@ void SurfaceSim_Test::aFeedbackChosenOnPurposeIsLeft()
     m_stub->m_hasFeedback = false;
 }
 
+namespace
+{
+const QString kDs4 = QStringLiteral(" DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)");
+
+/* A universe's patch, as a person reads it in Connections: input (plugin,
+   line, profile, its parameters) and feedback (plugin, line, parameters). */
+QString patchState(InputOutputMap *iom, quint32 u)
+{
+    QStringList out;
+    if (InputPatch *ip = iom->inputPatch(u))
+    {
+        out << QStringLiteral("in %1 %2 %3").arg(ip->pluginName()).arg(ip->input()).arg(ip->profileName());
+        const QMap<QString, QVariant> pp = ip->getPluginParameters();
+        for (auto it = pp.cbegin(); it != pp.cend(); ++it)
+            out << QStringLiteral("in.%1=%2").arg(it.key(), it.value().toString());
+    }
+    if (OutputPatch *fb = iom->feedbackPatch(u))
+    {
+        out << QStringLiteral("fb %1 %2 %3").arg(fb->pluginName()).arg(fb->output()).arg(fb->outputName());
+        const QMap<QString, QVariant> pp = fb->getPluginParameters();
+        for (auto it = pp.cbegin(); it != pp.cend(); ++it)
+            out << QStringLiteral("fb.%1=%2").arg(it.key(), it.value().toString());
+    }
+    return out.join(QStringLiteral("; "));
+}
+}
+
+/* Branson, build 4910: the DualShock 4 had to be patched and its profile set
+   by hand: "this needs to be automagic when it appears". A pad line that
+   appears is patched as the pad by itself, on the first free universe, with
+   no input profile (its roles come from its HID profile), and said. */
+void SurfaceSim_Test::aPadIsSetUpWhenItAppears()
+{
+    loadAllProfiles(m_doc);
+    SurfaceAutoPatch::setDeclined(kDs4, false);
+    QSettings().remove(QStringLiteral("surfaces/lastUniverse/") + kDs4.trimmed());
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
+    ap->setDelay(0);
+    ap->setEnabled(true, false);
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_networkDmx = false;
+    m_stub->m_lineNames = QStringList() << QStringLiteral("Launchkey MK4 49 MIDI Out");
+    emit m_stub->configurationChanged();
+    QSignalSpy pad(ap, &SurfaceAutoPatch::padPatched);
+    m_stub->m_lineNames << kDs4;
+    m_stub->m_lineDeviceKind[1] = QStringLiteral("dualshock4");
+    emit m_stub->configurationChanged();
+    QTRY_COMPARE(pad.count(), 1);
+    const quint32 u = pad.first().at(0).toUInt();
+    QCOMPARE(pad.first().at(1).toString(), QString("DUALSHOCK 4"));
+    QCOMPARE(pad.first().at(2).toString(), kDs4);
+    InputPatch *ip = iom->inputPatch(u);
+    QVERIFY(ip != nullptr && ip->plugin() == m_stub);
+    QCOMPARE(ip->input(), 1u);
+    QCOMPARE(ip->profileName(), QString());
+    QVERIFY(m_doc->programmer()->isPadUniverse(u));
+    QVERIFY2(m_doc->surfaceSetup()->boardLog()->text(u).contains("as a game pad (dualshock4)"),
+             qPrintable(m_doc->surfaceSetup()->boardLog()->text(u)));
+    // The Launchkey (no board, no pad) is left.
+    QVERIFY(iom->universesWithInputOn(m_stub->name(), 0).isEmpty());
+    // Undo: let go, and not set up by itself again on this computer.
+    QVERIFY(ap->undo(u));
+    QVERIFY(iom->universesWithInputOn(m_stub->name(), 1).isEmpty());
+    ap->scanNow();
+    QCOMPARE(pad.count(), 1);
+    SurfaceAutoPatch::setDeclined(kDs4, false);
+    ap->setEnabled(false);
+    m_stub->m_lineDeviceKind.clear();
+}
+
+/* His U04-Control: the DualShock 4 patched by hand on HID line 0 with no
+   input profile -- right for a pad: nothing to repair, and it is a pad. A
+   pad left with a board's profile and the board's feedback (a universe an
+   APC had) is put right when it comes online. */
+void SurfaceSim_Test::aHandPatchedPadIsRepaired()
+{
+    loadAllProfiles(m_doc);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kDs4.trimmed());
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
+    ap->setDelay(0);
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_networkDmx = false;
+    m_stub->m_hasFeedback = true;
+    m_stub->m_lineNames = QStringList() << kDs4 << QStringLiteral("Network RTP Session 1");
+    m_stub->m_lineDeviceKind[0] = QStringLiteral("dualshock4");
+    emit m_stub->configurationChanged();
+    while (iom->universesCount() < 4)
+        QVERIFY(iom->addUniverse());
+    QVERIFY(iom->setInputPatch(3, m_stub->name(), QString(), 0));
+    QSignalSpy repaired(ap, &SurfaceAutoPatch::repaired);
+    QSignalSpy pad(ap, &SurfaceAutoPatch::padPatched);
+    ap->setEnabled(true, true);
+    QCOMPARE(repaired.count(), 0);
+    QCOMPARE(pad.count(), 0);                  // the show has it: not patched again
+    QVERIFY(m_doc->programmer()->isPadUniverse(3));
+
+    // A board's profile and a session's feedback on it: repaired.
+    QVERIFY(iom->setInputProfile(3, QStringLiteral("Akai APC40 mkII")));
+    QVERIFY(iom->setOutputPatch(3, m_stub->name(), QString(), 1, true));
+    ap->scanNow();
+    QCOMPARE(repaired.count(), 1);
+    QCOMPARE(repaired.first().at(1).toString(), QString("DUALSHOCK 4"));
+    QCOMPARE(repaired.first().at(2).toString(),
+             QString("feedback back on its own line, board profile Akai APC40 mkII taken off"));
+    QCOMPARE(iom->inputPatch(3)->profileName(), QString());
+    QVERIFY(iom->feedbackPatch(3) == nullptr || !iom->feedbackPatch(3)->isPatched());
+    QCOMPARE(iom->inputPatch(3)->input(), 0u);
+    ap->setEnabled(false);
+    m_stub->m_hasFeedback = false;
+    m_stub->m_lineDeviceKind.clear();
+}
+
+/* 5.1: Branson fixed his U01 by patching the PMJ again by hand. The repair
+   on appear leaves exactly that patch: the same input line, profile and
+   parameters (his MIDI channel), the same feedback line and parameters. */
+void SurfaceSim_Test::theRepairIsTheSameAsAHandRepatch()
+{
+    loadAllProfiles(m_doc);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmjPort);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
+    ap->setDelay(0);
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_networkDmx = false;
+    m_stub->m_hasFeedback = true;
+    m_stub->m_lineNames = kDinkPorts;
+    emit m_stub->configurationChanged();
+    auto hisPatch = [&]() {
+        QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 3, QStringLiteral("PMJ Black 1")));
+        iom->inputPatch(0)->setPluginParameter(QStringLiteral("midichannel"), 16);    // his: Omni
+        QVERIFY(iom->setOutputPatch(0, m_stub->name(), QString(), 2, true));
+    };
+    // By hand: the PMJ's port picked for its feedback, as in Connections.
+    hisPatch();
+    QVERIFY(iom->setOutputPatch(0, m_stub->name(), QString(), 3, true));
+    const QString byHand = patchState(iom, 0);
+    QVERIFY2(byHand.contains("fb " + m_stub->name() + " 3 " + kPmjPort), qPrintable(byHand));
+    // The same stale patch, repaired when the board comes online.
+    hisPatch();
+    QVERIFY(patchState(iom, 0) != byHand);
+    ap->setEnabled(true, true);
+    QCOMPARE(patchState(iom, 0), byHand);
+    ap->setEnabled(false);
+    m_stub->m_hasFeedback = false;
+}
+
 void SurfaceSim_Test::theBoardLogSaysWhatTheBoardSentAndWasSent()
 {
     const QString fp = QStringLiteral("PreSonus FaderPort 2");

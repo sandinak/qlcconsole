@@ -1090,6 +1090,14 @@ void App::init()
                 ap->undoRepair(universe);
             });
         });
+        // A game pad plugged in: the pad, no click. "DUALSHOCK 4 ready as the pad".
+        connect(ap, &SurfaceAutoPatch::padPatched, this,
+                [this, ap](quint32 universe, const QString &name, const QString &) {
+            showViewNotice(tr("%1 ready as the pad").arg(name), tr("Undo"), [this, ap, universe]() {
+                hideViewNotice();
+                ap->undo(universe);
+            });
+        });
         connect(ap, &SurfaceAutoPatch::askToUse, this,
                 [this, ap](const QString &plugin, const QString &device, const QString &profile) {
             showViewNotice(tr("%1: is this a %2?").arg(device, profile), tr("Use It"),

@@ -31,6 +31,7 @@
 #include "qlcioplugin.h"
 #include "outputpatch.h"
 #include "patchundo.h"
+#include "programmercontroller.h"
 #include "inputpatch.h"
 #include "universe.h"
 #include "doc.h"
@@ -181,6 +182,14 @@ void SurfaceAutoPatch::consider(QLCIOPlugin *plugin, const QString &device)
     }
     if (isDeclined(device) || InputOutputMap::isNotSurface(device))
         return;
+    // A game pad: patched as the pad, no click (build 4910: the DualShock
+    // 4 had to be patched and its profile set by hand).
+    const int padLine = int(plugin->inputs().indexOf(device));
+    if (padLine >= 0 && !plugin->inputDeviceKind(quint32(padLine)).isEmpty())
+    {
+        setUpPad(plugin, device, quint32(padLine));
+        return;
+    }
     const QString profile = iom->profileForDevice(device);
     if (profile.isEmpty())
     {
@@ -319,6 +328,8 @@ QString SurfaceAutoPatch::repair(quint32 universe)
     const QString device = ip->inputName();
     if (device.trimmed().isEmpty() || !plugin->inputs().contains(device) || InputOutputMap::isNotSurface(device))
         return QString();
+    if (!plugin->inputDeviceKind(ip->input()).isEmpty())
+        return repairPad(universe);
     const QString want = iom->profileForDevice(device);
     if (want.isEmpty())
         return QString();          // not a board this app knows
@@ -378,6 +389,89 @@ QString SurfaceAutoPatch::repair(quint32 universe)
         ss->sendInit(universe, tr("after the repair"));
     }
     emit repaired(universe, want, text);
+    emit devicesChanged();
+    return text;
+}
+
+quint32 SurfaceAutoPatch::setUpPad(QLCIOPlugin *plugin, const QString &device, quint32 line)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (plugin == nullptr || int(line) >= plugin->inputs().size() || plugin->inputs().at(int(line)) != device)
+        return UINT_MAX;
+    const QString kind = plugin->inputDeviceKind(line);
+    const QString name = ProgrammerController::shortPadName(device, kind);
+    const quint32 u = freeUniverse(device);
+    if (u == UINT_MAX)
+        return UINT_MAX;
+    if (PatchUndo *pu = iom->patchUndo())
+        pu->capture(QList<quint32>() << u, tr("set up %1 as the pad on universe %2").arg(name).arg(u + 1));
+    m_patched.insert(u, device);
+    if (!iom->setInputPatch(u, plugin->name(), device, line))
+    {
+        m_patched.remove(u);
+        return UINT_MAX;
+    }
+    QSettings().setValue(kLastUniverse + keyOf(device), u);
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+        ss->boardLog()->note(u, tr("Recognised %1 as a game pad (%2): patched on universe %3; its light bar "
+                                   "and rumble go back on its own line").arg(device.trimmed(), kind).arg(u + 1));
+    m_doc->setModified();
+    emit padPatched(u, name, device);
+    emit devicesChanged();
+    return u;
+}
+
+QString SurfaceAutoPatch::repairPad(quint32 universe)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom->inputPatch(universe);
+    if (ip == nullptr || ip->plugin() == nullptr)
+        return QString();
+    const QString device = ip->inputName();
+    if (QSettings().value(kKeepPatch + keyOf(device), false).toBool())
+        return QString();
+    const QString name = ProgrammerController::shortPadName(device, ip->plugin()->inputDeviceKind(ip->input()));
+    // A board's input profile on a pad (a pad needs none: its HID profile has its roles).
+    bool fixProfile = false;
+    if (!ip->profileName().isEmpty())
+    {
+        QLCInputProfile *cp = iom->profile(ip->profileName());
+        fixProfile = cp == nullptr || !cp->deviceMatches().isEmpty();
+    }
+    // A feedback patch left by a board: a pad's feedback goes on its own line.
+    bool fixFeedback = false;
+    QString was;
+    OutputPatch *fb = iom->feedbackPatch(universe);
+    if (fb != nullptr && fb->plugin() != nullptr && fb->isPatched())
+    {
+        was = fb->outputName();
+        const QStringList outs = fb->plugin()->outputs();
+        const bool gone = int(fb->output()) >= outs.size();
+        const bool board = !was.isEmpty() && !iom->profileForDevice(was).isEmpty();
+        fixFeedback = gone || board || isNetworkSession(was);
+    }
+    if (!fixProfile && !fixFeedback)
+        return QString();
+    QStringList what;
+    if (fixFeedback)
+        what << tr("feedback back on its own line");
+    if (fixProfile)
+        what << tr("board profile %1 taken off").arg(ip->profileName());
+    const QString text = what.join(tr(", "));
+    const QString summary = tr("repair %1 on universe %2").arg(name).arg(universe + 1);
+    if (PatchUndo *pu = iom->patchUndo())
+    {
+        pu->capture(QList<quint32>() << universe, summary);
+        m_repairUndo.insert(universe, summary);
+    }
+    if (fixProfile)
+        iom->setInputProfile(universe, QString());
+    if (fixFeedback)
+        iom->setOutputPatch(universe, KOutputNone, QString(), 0, true);
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+        ss->boardLog()->note(universe, tr("Repaired %1: %2%3").arg(name, text,
+                                 was.isEmpty() ? QString() : tr(" (its feedback was %1)").arg(was)));
+    emit repaired(universe, name, text);
     emit devicesChanged();
     return text;
 }

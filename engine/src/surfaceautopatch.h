@@ -78,6 +78,13 @@ public:
     quint32 setUp(QLCIOPlugin *plugin, const QString &device, const QString &profile = QString(),
                   QString *why = nullptr);
 
+    /** Set up the game pad @p device (line @p line of @p plugin): its input
+     *  patched (the pad's roles come from its HID profile, chosen by its
+     *  USB ids; light bar and rumble go back on its own line), on the
+     *  universe it had last on this computer when free, else the first
+     *  free one. padPatched() says it. UINT_MAX: nothing done. */
+    quint32 setUpPad(QLCIOPlugin *plugin, const QString &device, quint32 line);
+
     /** Undo the auto-patch of @p universe: its input and feedback let go,
      *  and its device is not set up by itself again on this computer
      *  until it is patched by hand. */
@@ -110,6 +117,11 @@ public:
      * @return what was repaired, in words (empty: nothing).
      */
     QString repair(quint32 universe);
+    /** repair() for a game pad's universe: an input profile of a board's
+     *  (a pad needs none) is cleared, a feedback patch on another board, a
+     *  network session or a gone port is let go (its light bar and rumble
+     *  go back on its own input line). */
+    QString repairPad(quint32 universe);
     /** Undo the last repair() of @p universe (PatchUndo), and leave that
      *  universe's patch as it is on this computer from now on. */
     bool undoRepair(quint32 universe);
@@ -128,6 +140,9 @@ signals:
     /** @p universe's board (@p profile) had its patch put right: @p what
      *  ("feedback repaired to its own port"). */
     void repaired(quint32 universe, const QString &profile, const QString &what);
+    /** The game pad @p device was set up on @p universe: "DUALSHOCK 4
+     *  ready as the pad" (with Undo: undo()). @p name: its short name. */
+    void padPatched(quint32 universe, const QString &name, const QString &device);
     /** @p device may be the board of @p profile (a shared port name): ask. */
     void askToUse(const QString &plugin, const QString &device, const QString &profile);
     /** A device of @p plugin came or went (the Control surfaces list follows). */

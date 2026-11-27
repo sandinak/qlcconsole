@@ -20,6 +20,7 @@
 #include <QApplication>
 #include <QTemporaryDir>
 #include <QToolButton>
+#include <QPushButton>
 #include <QLabel>
 #include <QtTest>
 #include <QScopeGuard>
@@ -37,6 +38,8 @@
 #include "refinesession.h"
 #include "inputoutputmap.h"
 #include "inputpatch.h"
+#include "surfacesetup.h"
+#include "surfaceautopatch.h"
 #include "ioplugincache.h"
 #include "iopluginstub.h"
 #include "qlcioplugin.h"
@@ -1324,6 +1327,64 @@ void PadRunRulesUi_Test::aConnectedPadShowsTheChipWithoutAPatch()
     QVERIFY(pc->focusController().present);
     QVERIFY2(chip->isVisibleTo(m_app), "a pad patched by hand shows no Pad chip until something else changes");
     QVERIFY2(chip->text().startsWith(QStringLiteral("Pad: Run")), qPrintable(chip->text()));
+}
+
+/* Branson, build 4910: "having to hand configure the profile and connect
+   [the DualShock 4]: this needs to be automagic when it appears". A pad that
+   appears is patched as the pad by itself: the notice says so with Undo, and
+   the Pad chip is there, with no click. */
+void PadRunRulesUi_Test::aPadThatAppearsIsSetUpWithNoClick()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    ProgrammerController *pc = doc->programmer();
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+        iom->setInputPatch(u, QString(), QString(), QLCIOPlugin::invalidLine());
+    const QString ds4 = QStringLiteral(" DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)");
+    SurfaceAutoPatch::setDeclined(ds4, false);
+    SurfaceAutoPatch *ap = doc->surfaceSetup()->autoPatch();
+    ap->setDelay(0);
+    ap->setEnabled(true, false);
+    const bool wasHardware = m_stub->m_linesAreHardware;
+    m_stub->m_linesAreHardware = true;
+    auto cleanup = qScopeGuard([this, iom, ap, wasHardware, ds4]() {
+        ap->setEnabled(false);
+        for (quint32 u = 0; u < iom->universesCount(); ++u)
+            iom->setInputPatch(u, QString(), QString(), QLCIOPlugin::invalidLine());
+        m_stub->m_linesAreHardware = wasHardware;
+        m_stub->m_lineNames.clear();
+        m_stub->m_lineDeviceKind.clear();
+        m_stub->m_lineChannelRoles.clear();
+        SurfaceAutoPatch::setDeclined(ds4, false);
+        m_app->doc()->resetModified();
+    });
+    m_stub->m_lineNames = { QStringLiteral("OpenDeck | PMJ_BLACK_1") };
+    m_stub->m_lineDeviceKind.clear();
+    emit m_stub->configurationChanged();
+    settle(50);
+    // The DualShock 4 comes on (Bluetooth: no maker, so a leading space).
+    m_stub->m_lineNames = { QStringLiteral("OpenDeck | PMJ_BLACK_1"), ds4 };
+    m_stub->m_lineDeviceKind[1] = QStringLiteral("dualshock4");
+    m_stub->m_lineChannelRoles[0] = QMap<quint32, QString>();     // the PMJ is no pad
+    emit m_stub->configurationChanged();
+    QTRY_VERIFY2(!iom->universesWithInputOn(m_stub->name(), 1).isEmpty(), "the pad was not patched by itself");
+    const quint32 u = iom->universesWithInputOn(m_stub->name(), 1).first();
+    QCOMPARE(iom->inputPatch(u)->inputName(), ds4);
+    QVERIFY(pc->isPadUniverse(u));
+    settle(50);
+    QVERIFY(!m_app->m_viewNotice->isHidden());
+    QCOMPARE(m_app->m_viewNoticeText->text(), QStringLiteral("DUALSHOCK 4 ready as the pad"));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QStringLiteral("Undo"));
+    QVERIFY2(chip->isVisibleTo(m_app), "the Pad chip did not come with the pad");
+    QVERIFY2(chip->text().startsWith(QStringLiteral("Pad: ")) && !chip->text().contains("not patched"),
+             qPrintable(chip->text()));
+    // Undo: let go, and left alone on this computer.
+    m_app->m_viewNoticeButton->click();
+    settle(50);
+    QVERIFY(iom->universesWithInputOn(m_stub->name(), 1).isEmpty());
+    QVERIFY(SurfaceAutoPatch::isDeclined(ds4));
 }
 
 int main(int argc, char **argv)

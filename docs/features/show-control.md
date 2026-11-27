@@ -150,12 +150,20 @@ time. Its tooltip shows the button map in the words of the pad you're
 holding; the footer's **Pad** chip shows the same map as a table when you hover it (it also names a press the pad refused and how to leave Walk), and **Settings → Advanced → Game controllers → Controller Test…** lists what each
 button does in the Run role (**Run: GO (armed, LT held)**).
 
-**A controller plugged in but not patched.** An Xbox pad, a DualShock 4
-or a DualSense that no universe takes input from runs nothing yet, so the
-footer says so: *Pad: DUALSHOCK 4 · not patched, click to use it*. Click
-the chip: the pad is patched to the first universe with no input (one is
-added if every universe has one), the footer says which, and the chip
-shows the Run role. **Edit ▸ Undo** takes the patch back.
+**A controller is set up when it appears.** Plug in (or pair) an Xbox
+pad, a DualShock 4 or a DualSense that no universe takes input from and it
+is patched as the pad by itself, with no click: on the universe it had last
+on this computer when that one is free, else the first free one (one is
+added if every universe has one). It needs no input profile: its buttons
+and sticks come from its HID profile, picked by its USB ids, and its light
+bar and rumble go back on its own line. A notice says *DUALSHOCK 4 ready
+as the pad* with **Undo**, and the Pad chip shows the Run role. Undo lets
+it go, and it is not set up by itself again on this computer until you
+patch it by hand; then the footer offers it: *Pad: DUALSHOCK 4 · not
+patched, click to use it*, and a click patches it. A pad the show already
+has is put right when it comes online: a board's input profile on it is
+taken off, and a feedback left on another board or a network session is
+let go (*DUALSHOCK 4: feedback back on its own line*, with **Undo**).
 
 **One state, shown the same everywhere.** The Run tab's **Pad:** button,
 the frame round the Run tab, the footer's **Pad** chip (from every tab; it shows only while a game
