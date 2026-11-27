@@ -75,6 +75,7 @@ private slots:
     void fix22fix23();
     void file01();
     void file02();
+    void file07();
     void name01();
     void name02();
     void pal01();

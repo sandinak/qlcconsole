@@ -30,6 +30,7 @@
 
 #include "showreview_test.h"
 #include "showreviewcli.h"
+#include "audioplugincache.h"
 #include "teachingsettings.h"
 #include "venuecorrections.h"
 #include "showembedding.h"
@@ -1242,6 +1243,23 @@ void ShowReview_Test::file02()
                                                   "<Source>%1/gone.wav</Source></Function>").arg(m_dir.path())));
     QVERIFY(fires("FILE-02"));
     QCOMPARE(findings("FILE-02").first().severity, ReviewFinding::Blocker);
+}
+
+void ShowReview_Test::file07()
+{
+    QVERIFY(loadFunctionXml(m_doc, QStringLiteral("<Function ID=\"1\" Type=\"Audio\" Name=\"Song\">"
+                                                  "<Source>song.mp3</Source></Function>")));
+    // Plugins never loaded in this Doc: no verdict.
+    QVERIFY(quiet("FILE-07"));
+    // Loaded from a folder with no decoder in it: the library didn't load.
+    QVERIFY(m_dir.isValid());
+    m_doc->audioPluginCache()->load(QDir(m_dir.path()));
+    QVERIFY(fires("FILE-07"));
+    QCOMPARE(findings("FILE-07").first().message,
+             QStringLiteral("Audio can't play: the audio library didn't load."));
+    // No Audio function: nothing to say.
+    m_doc->deleteFunction(1);
+    QVERIFY(quiet("FILE-07"));
 }
 
 /****************************************************************************

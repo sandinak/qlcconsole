@@ -71,6 +71,17 @@ echo "  ~/qlcconsole.app will be replaced (backup: ~/qlcconsole.app.prev)"
 step "Build + bundle (package-local.sh)"
 REPO="$REPO" "$REPO/platforms/macos/package-local.sh"
 
+step "Bundle check (bundle-check.py): every library a binary names is in the app"
+python3 "$REPO/platforms/macos/bundle-check.py" "$APP" || { echo "ERROR: the bundle references libraries outside it; not signing."; exit 1; }
+for l in libsndfile libmpg123 libmp3lame; do
+  ls "$APP"/Contents/Frameworks/$l.*dylib >/dev/null 2>&1 || { echo "ERROR: no $l in the app (MP3 would not play); not signing."; exit 1; }
+done
+if command -v lame >/dev/null; then
+  "$REPO/platforms/macos/audio-decode-check.sh" "$APP" || { echo "ERROR: the app's audio library does not decode; not signing."; exit 1; }
+else
+  echo "WARNING: no lame on this Mac: the WAV/MP3 decode check was skipped (brew install lame)"
+fi
+
 step "Sign + notarize + staple (sign-notarize.sh)"
 REPO="$REPO" APP="$APP" SIGN_ID="$SIGN_ID" NOTARY_PROFILE="$NOTARY_PROFILE" \
   "$REPO/platforms/macos/sign-notarize.sh"

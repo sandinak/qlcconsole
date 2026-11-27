@@ -182,8 +182,11 @@ Manage Certificates, and `xcrun notarytool store-credentials qlc-notary
     /tmp/aqt/bin/aqt install-qt mac desktop 6.9.3 clang_64 -O ~/Qt-aqt -m
     qt3d qtimageformats qtmultimedia qtserialport qtwebsockets qtshadertools`
     -- Homebrew's Qt is this Mac's arch only;
-  - the plugins' libraries (libusb, libftdi, fftw, libsndfile) built
-    universal into `~/unideps`: `platforms/macos/universal-deps.sh`.
+  - the plugins' libraries (libusb, libftdi, fftw, libsndfile with MP3 via
+    mpg123 + LAME) built universal into `~/unideps`:
+    `platforms/macos/universal-deps.sh` (rerun it after a change there:
+    delete `~/unideps` first, or a stale libsndfile without MP3 stays);
+    `lame` (`brew install lame`) for the decode check below.
 
   `UNIVERSAL=0 platforms/macos/package-local.sh` is the old Homebrew build,
   for this Mac's arch only. `bundlefix.py` copies every framework or library
@@ -326,6 +329,21 @@ for `make dmg` / `make release-check`): it is then reported as
 release notes. None of them ever opens a window --
 every run of the app is `QT_QPA_PLATFORM=offscreen` + `-platform offscreen`
 with its own HOME/settings -- or launches a quarantined app.
+
+**The bundle check** (a gate test can't see a packaged app, so it lives in
+the packaging scripts): `platforms/macos/bundle-check.py <App.app>` reads
+every Mach-O in the app with `otool -L`, resolves `@executable_path`,
+`@loader_path` and `@rpath` the way dyld does, and fails on any library that is
+neither inside the bundle nor in `/usr/lib` or `/System`.
+`platforms/macos/audio-decode-check.sh <App.app>` then decodes a generated 1 s
+WAV and MP3 through the app's own libsndfile. Both run in CI's macOS job
+(after `bundlefix.py`), and `bundle-check.py` also in `package-local.sh` (so
+`make test`/`make rc`/`make dmg`) and in `make-release.sh` before signing
+(the decode check too when `lame` is on the Mac). Windows and Linux have their
+own: the Windows job's `ldd` "not found" failure on the deploy folder,
+`appimage-bundle.sh`'s "not found" failure; the AppImage leaves libsndfile and
+its codecs to the host (MP3 needs the host's libsndfile 1.1 or later with
+mpg123), the Pi `.deb` names them through `dpkg-shlibdeps`.
 
 | Platform | Command | Where |
 |---|---|---|

@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Fixed
+
+- **MP3 and every other sound failed on the CI macOS build.** The app's audio libraries (libsndfile's codecs: Ogg, Vorbis, FLAC, Opus, mpg123, LAME) were never copied into the app, so no sound could play. CI now bundles every dependency like the release build, a check fails the build on any library not in the app, the release DMG decodes MP3, and a sound that can't be added says why (Show Review FILE-07 warns when the audio library didn't load).
+
 ### Added
 
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
