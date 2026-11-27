@@ -90,7 +90,7 @@ class Board:
 
 # ---------------------------------------------------------------- FaderPort 2
 def faderport():
-    b = Board("PreSonus-FaderPort-2", 63, 475, 770)
+    b = Board("PreSonus-FaderPort-2", 63, 475, 625)
     b.put(513, 62, 150, 66, 387, face="Fader")
     b.center(232, 95, 132, 22, kind="button", shape="round", face="Fader touch")
     cols = [189.5, 253, 317.5, 381]
@@ -99,7 +99,7 @@ def faderport():
     for ch, cx in zip((204, 205, 203, 202), cols):      # (Bypass) Touch Write Read
         b.center(ch, cx, 186, 42, 28)
     b.put(174, 189, 242, 42, 28)                         # Prev
-    b.put(16, 253, 218, 64, 64, kind="encoder", shape="round", face="Knob (push)", also=[160])
+    b.put(16, 253, 218, 64, 64, kind="encoder", shape="round", face="Knob", also=[160])
     for ch, cx in zip((153, 217, 213, 212), cols):      # Master Click Section Marker
         b.center(ch, cx, 374, 42, 28)
     b.center(214, 222, 468, 40, kind="button", shape="round")

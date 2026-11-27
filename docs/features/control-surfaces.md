@@ -407,6 +407,15 @@ a click opens its map.
   first), and they are kept for this computer. The footer's chip and the
   map always say the page (*APC40 · Move*, in Operate too, where the page
   waits for Design); click the page name on the chip to pick one.
+- **Print Key Labels….** Under the board's name: a sheet of cut-out squares
+  at the board's real key sizes with what each key does, a set for each page
+  (the desk's and the show's jobs on every page), as an A4 PDF; or one label
+  a key on TZe tape (12, 18 or 24 mm) for a Brother P-touch CUBE, at its 180
+  dpi, saved as a PDF or as pictures, or printed through the system's print
+  dialog (the Brother is picked when it is installed; there is no Bluetooth
+  setup in qlcconsole: pair it with the computer first). The key sizes follow
+  **Settings ▸ Units**. They are measured off each board's published size:
+  check one against a rule before you cut a sheet.
 - The map is a picture of the board's jobs: assign a scene, cue or hit
   from the thing (right-click a cue list, cue or hit ▸ **Assign to
   Control…**; a scene or effect in the Classic QLC+ view) or from the

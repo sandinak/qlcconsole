@@ -4,7 +4,7 @@
   "name": "PreSonus FaderPort 2",
   "short": "FaderPort",
   "width": 7.54,
-  "height": 12.22,
+  "height": 9.92,
   "pages": [],
   "sections": [
     {"label": "", "x": 0.905, "y": 1.873, "w": 1.206, "h": 6.651},
@@ -26,7 +26,7 @@
     {"ch": 217, "x": 3.683, "y": 5.714, "w": 0.667, "h": 0.444, "kind": "button", "face": "CLICK"},
     {"ch": 153, "x": 2.675, "y": 5.714, "w": 0.667, "h": 0.444, "kind": "button", "face": "25"},
     {"ch": 174, "x": 3.0, "y": 3.841, "w": 0.667, "h": 0.444, "kind": "button", "face": "PREV"},
-    {"ch": 16, "also": [160], "x": 4.016, "y": 3.46, "w": 1.016, "h": 1.016, "kind": "encoder", "shape": "round", "face": "Knob (push)"},
+    {"ch": 16, "also": [160], "x": 4.016, "y": 3.46, "w": 1.016, "h": 1.016, "kind": "encoder", "shape": "round", "face": "Knob"},
     {"ch": 214, "x": 3.206, "y": 7.111, "w": 0.635, "h": 0.635, "kind": "button", "shape": "round", "face": "LOOP", "lamp": "led"},
     {"ch": 219, "x": 4.222, "y": 7.127, "w": 0.603, "h": 0.603, "kind": "button", "shape": "round", "face": "REW"},
     {"ch": 220, "x": 5.254, "y": 7.127, "w": 0.603, "h": 0.603, "kind": "button", "shape": "round", "face": "FF"},

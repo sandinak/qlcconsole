@@ -22,7 +22,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   selects the control on the drawing and back. Click a control to give it a
   job (GO, Back, STOP, Grand Master, Page ◀, Page ▶, a key per page, Other,
   No job) with Undo and the show's PIN in Operate; the footer chip always
-  says the page, and its page name picks one.
+  says the page, and its page name picks one. **Print Key Labels…** makes a
+  PDF sheet at the board's key sizes, or tape labels for a Brother P-touch
+  CUBE (12, 18, 24 mm).
 
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
