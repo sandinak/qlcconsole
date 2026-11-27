@@ -1155,6 +1155,53 @@ void PadRun_Test::theControllerTestTakesThePad()
     stub->m_buttonActions.clear();
 }
 
+void PadRun_Test::aBoardsHeldBackBuzzesNoPad()
+{
+    IOPluginStub *stub = loadStub();
+    QVERIFY2(stub != nullptr, "no I/O plugin stub in ../iopluginstub");
+    // Two devices, as on Branson's bench: a DualShock 4 (roles) and the PMJ (none).
+    stub->m_lineChannelRoles[0] = xboxRoles();
+    stub->m_lineChannelRoles[1] = QMap<quint32, QString>();
+    stub->m_lineDeviceKind[0] = QStringLiteral("dualshock4");
+    stub->m_lineDeviceKind[1] = QString();
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, stub->name(), QString(), 0));
+    QVERIFY(m_doc->inputOutputMap()->setInputPatch(1, stub->name(), QString(), 1));
+    ProgrammerController *pc = m_doc->programmer();
+    QVERIFY(pc->isPadUniverse(0));
+    QVERIFY(!pc->isPadUniverse(1));
+    PadRun *run = pc->padRun();
+    run->setEnabled(true);
+    arm(true);                         // hooks the guard's notice, as in use
+    QSignalSpy rumbles(pc, &ProgrammerController::padRumbled);
+    stub->m_feedbackParams.clear();
+    stub->m_feedbackLines.clear();
+    auto rumbleSent = [stub]() {
+        for (const QVariant &v : std::as_const(stub->m_feedbackParams))
+            if (v.toMap().value(QStringLiteral("gamepad")).toString() == QLatin1String("rumble"))
+                return true;
+        return false;
+    };
+
+    // Back from the PMJ's desk role (the Control Map route), held: no buzz on the pad.
+    emit m_doc->showControl()->commandHeld(QStringLiteral("BACK held: Laptop's GO took it 0.3 s ago"),
+                                           0, ShowControl::RouteControlMap);
+    QCOMPARE(rumbles.count(), 0);
+    QVERIFY(!rumbleSent());
+    // A press on the PMJ itself, while it is the device acting: no pad buzzes.
+    emit m_doc->inputOutputMap()->inputValueChanged(1, 7, 255, QString());
+    emit m_doc->inputOutputMap()->inputValueChanged(1, 7, 0, QString());
+    QVERIFY(!rumbleSent());
+
+    // The pad's own held press: its long buzz, on its own line.
+    emit m_doc->showControl()->commandHeld(QStringLiteral("BACK held"), 0, ShowControl::RoutePad);
+    QCOMPARE(rumbles.count(), 1);
+    QVERIFY(rumbleSent());
+    QVERIFY(!stub->m_feedbackLines.contains(1));
+    run->setEnabled(false);
+    stub->m_lineChannelRoles.clear();
+    stub->m_lineDeviceKind.clear();
+}
+
 void PadRun_Test::theLightBarAndRumble()
 {
     IOPluginStub *stub = loadStub();

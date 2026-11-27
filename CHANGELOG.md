@@ -349,6 +349,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **The Pad chip finds a game controller as it is plugged in** (build 4910): a DualShock 4, DualSense or Xbox pad connected but not patched says *not patched, click to use it*, and one click patches it to a free universe; a pad patched by hand shows the chip at once (it waited for some other change).
+- **A press on a board never buzzes the pad** (build 4910): Back on the PMJ, held by the double-GO guard, rumbled the DualShock; a hold buzzes the pad only for its own press, and no pad buzzes for a board's.
+
 - **The footer says why**: the **Pad** chip no longer shows with no game
   controller connected (it appears on connect, goes on unplug); a control
   greyed by the workspace level names the level on its face (**Edit Live ·

@@ -136,12 +136,15 @@ void PadRun::hookShowControl()
        -- one long buzz, and the voice. Not its notice: the footer's Next
        chip already shows the words, and the two together crowded the
        footer. In the Run role only: in Tools the pad isn't running the
-       show. */
-    connect(sc, &ShowControl::commandHeld, this, [this](const QString &text, quint32, ShowControl::Route) {
+       show. The buzz only for the pad's own press: a GO or Back held from
+       a board, a key or OSC is said, never buzzed on a pad nobody pressed
+       (Branson, build 4910: Back on the PMJ buzzed the DualShock). */
+    connect(sc, &ShowControl::commandHeld, this, [this](const QString &text, quint32, ShowControl::Route route) {
         m_heldNow = true;
         if (!m_enabled || m_pc == nullptr)
             return;
-        m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
+        if (route == ShowControl::RoutePad)
+            m_pc->padRumble(1, ControllerScheme::rumbleLongMs());
         m_pc->tellOperator(text, ControllerScheme::ConfirmPriority);
     });
 }

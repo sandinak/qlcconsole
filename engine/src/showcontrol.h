@@ -181,8 +181,8 @@ public:
      *      source, the same one twice included.
      *   2. A hold is said on every surface at once, in one text
      *      (heldNotice(), commandHeld()): the Run tab, the footer's Next
-     *      chip, the phone Run page, and the pad (a long rumble and its
-     *      notice) -- naming why, whose command was taken and that the
+     *      chip, the phone Run page, and the pad (its notice; a long
+     *      rumble only when the held press was the pad's own) -- naming why, whose command was taken and that the
      *      second was held: "Second GO held: cue 3 still starting
      *      (Laptop's GO)"; rule 3's: "BACK held: Laptop's GO took it 0.3
      *      s ago".
