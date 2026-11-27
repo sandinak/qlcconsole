@@ -801,6 +801,7 @@ RGBScript *slowScript(Doc *doc, int ms, QTemporaryDir &dir)
         "  algo.apiVersion = 2;\n"
         "  algo.name = \"Slow %1\";\n"
         "  algo.author = \"test\";\n"
+        "  algo.properties = new Array();\n"
         "  algo.rgbMapStepCount = function(width, height) { return 8; };\n"
         "  algo.rgbMap = function(width, height, rgb, step) {\n"
         "    var until = Date.now() + %1;\n"
