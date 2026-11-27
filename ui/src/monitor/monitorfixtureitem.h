@@ -21,6 +21,7 @@
 #define MONITORFIXTUREITEM_H
 
 #include <QGraphicsItem>
+#include <QStaticText>
 #include <QAbstractGraphicsShapeItem>
 #include <QFont>
 #include <QElapsedTimer>
@@ -473,6 +474,7 @@ private:
     QRect m_labelRect;
     QRect m_labelRectAbove;
     QString m_labelTextAbove, m_labelTextBelow;
+    QStaticText m_labelStaticAbove, m_labelStaticBelow;   ///< laid out once, drawn each frame
 
     /** setViewHint(): the view's scale and turn. */
     qreal m_viewScale = 1.0;

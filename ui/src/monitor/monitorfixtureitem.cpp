@@ -791,6 +791,19 @@ void MonitorFixtureItem::refreshLabel()
     m_labelTextAbove = above;
     m_labelRect = belowRect;
     m_labelRectAbove = aboveRect;
+    // Laid out here, once: a frame only draws them.
+    auto prep = [this](QStaticText &st, const QRect &box, const QString &text, QTextOption::WrapMode wrap) {
+        st.setText(text);
+        st.setTextFormat(Qt::PlainText);
+        st.setPerformanceHint(QStaticText::AggressiveCaching);
+        QTextOption opt(Qt::AlignHCenter);
+        opt.setWrapMode(wrap);
+        st.setTextOption(opt);
+        st.setTextWidth(box.width());
+        st.prepare(QTransform(), m_font);
+    };
+    prep(m_labelStaticBelow, belowRect, below, QTextOption::WrapAnywhere);
+    prep(m_labelStaticAbove, aboveRect, above, QTextOption::NoWrap);
     update();
 }
 
@@ -1802,7 +1815,7 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
            the text is pinned. */
         const double viewTurn = qRadiansToDegrees(qAtan2(painter->transform().m12(),
                                                          painter->transform().m11()));
-        auto drawLabel = [&](const QRect &box, const QString &text, int flags) {
+        auto drawLabel = [&](const QRect &box, const QString &text, const QStaticText &st) {
             if (box.isEmpty() || text.isEmpty())
                 return;
             painter->save();
@@ -1817,11 +1830,11 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
             painter->setBrush(QBrush(QColor(33, 33, 33)));
             painter->drawRoundedRect(box, 2, 2);
             painter->setPen(QPen(Qt::white, 1));
-            painter->drawText(box, flags, text);
+            painter->drawStaticText(box.topLeft(), st);
             painter->restore();
         };
-        drawLabel(m_labelRect, m_labelTextBelow, Qt::AlignHCenter | Qt::TextWrapAnywhere);
-        drawLabel(m_labelRectAbove, m_labelTextAbove, Qt::AlignHCenter);
+        drawLabel(m_labelRect, m_labelTextBelow, m_labelStaticBelow);
+        drawLabel(m_labelRectAbove, m_labelTextAbove, m_labelStaticAbove);
     }
 }
 
