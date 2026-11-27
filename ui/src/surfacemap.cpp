@@ -282,6 +282,8 @@ void SurfaceMapView::refresh()
 
         QStringList lines;
         lines << QStringLiteral("<b>%1</b>").arg(c.face.toHtmlEscaped());
+        if (c.kind == SurfaceLayout::Indicator)
+            lines << tr("A light on the board: not a knob or a button.");
         const ControlOwners::Owner *deskOwner = nullptr;
         const ControlOwners::Owner *boardOwner = nullptr;
         QList<const ControlOwners::Owner *> show;
@@ -529,11 +531,24 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
 
     if (c.kind == SurfaceLayout::Indicator)
     {
-        // A light only: a dot, lit as last sent.
-        const double d = qMin(r.width(), r.height());
+        /* A light only, never a knob: a small lamp in a dark bezel, lit as
+           last sent, with a glow when it is on. A knob is a big disc with an
+           arc; this is none of that. */
+        const double d = qMin(r.width(), r.height()) * 0.55;
         const QRectF dot(r.center().x() - d / 2, r.center().y() - d / 2, d, d);
-        p.setPen(QPen(kFreeText, 1));
-        p.setBrush(cell.lamp > 0 ? QColor(0x4f, 0x9d, 0xff) : kFree);
+        const bool on = cell.lamp > 0;
+        const QColor lamp(0xff, 0xb0, 0x20);
+        if (on)
+        {
+            QRadialGradient glow(dot.center(), d * 1.1);
+            glow.setColorAt(0, QColor(lamp.red(), lamp.green(), lamp.blue(), 150));
+            glow.setColorAt(1, QColor(lamp.red(), lamp.green(), lamp.blue(), 0));
+            p.setPen(Qt::NoPen);
+            p.setBrush(glow);
+            p.drawEllipse(dot.center(), d * 1.1, d * 1.1);
+        }
+        p.setPen(QPen(QColor(0x15, 0x15, 0x15), 2));
+        p.setBrush(on ? lamp : QColor(0x3a, 0x3a, 0x3a));
         p.drawEllipse(dot);
         return;
     }

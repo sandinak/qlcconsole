@@ -9,6 +9,7 @@
  <Manufacturer>Akai</Manufacturer>
  <Model>APC40</Model>
  <Type>MIDI</Type>
+ <Match>APC40</Match>
  <Channel Number="7">
   <Name>Track 1 Volume</Name>
   <Type>Slider</Type>

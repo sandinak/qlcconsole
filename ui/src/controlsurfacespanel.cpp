@@ -333,6 +333,8 @@ QString ControlSurfacesPanel::setupText() const
             lines << tr("%1: %2").arg(setup->title(u), setup->lastCheck(u).text);
     if (lines.isEmpty())
         lines << tr("All patched controllers are set up · Rescan to look for a new one");
+    // A copy of a board's profile in the user's folder that is older than the built-in one.
+    lines << m_doc->inputOutputMap()->shadowedProfileNotes();
     if (!m_rescanNote.isEmpty())
         lines << m_rescanNote;
     return lines.join(QStringLiteral("\n"));

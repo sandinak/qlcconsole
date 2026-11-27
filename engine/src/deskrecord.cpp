@@ -66,6 +66,8 @@ const QLatin1String kFileRoot("ThisComputersDesk");
 /* The boards seedDefaults() has seeded, by identity (beside the roles in
    the group, kept by save()). */
 const QLatin1String kSeeded("seeded");
+/* Roles a board waited on because another board held them ("identity|role"). */
+const QLatin1String kDeferred("deferred");
 }
 
 DeskRecord::DeskRecord(Doc *doc, QObject *parent)
@@ -100,8 +102,8 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::inputSlotChanged, this, [this](quint32 u) { portChanged(u); });
         // A board given its profile: its type's default roles (seedDefaults()).
         connect(iom, &InputOutputMap::profileChanged, this, [this](quint32 u) { portChanged(u); });
-        connect(iom, &InputOutputMap::offlinePatchesChanged, this, [this]() { portChanged(kInvalid); });
-        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, [this]() { portChanged(kInvalid); });
+        connect(iom, &InputOutputMap::offlinePatchesChanged, this, [this]() { portChanged(kInvalid, true); });
+        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, [this]() { portChanged(kInvalid, true); });
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, [this](quint32 universe) {
             forgetHeld(universe);
             rebind();
@@ -117,6 +119,7 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
            box on another universe (that would freeze a fade mid-show). */
         connect(iom, &InputOutputMap::inputDeviceConnected, this, [this](quint32 universe) {
             forgetHeld(universe);
+            seedFor(universe, false);       // a board found: its roles, or the ones its predecessor held
             rebind();
             if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
                 rearmGrandMaster();
@@ -248,10 +251,13 @@ void DeskRecord::save() const
 {
     QSettings s;
     const QVariant seeded = s.value(settingsGroup() + QLatin1Char('/') + kSeeded);
+    const QVariant deferred = s.value(settingsGroup() + QLatin1Char('/') + kDeferred);
     s.remove(settingsGroup());
     s.beginGroup(settingsGroup());
     if (seeded.isValid())
         s.setValue(kSeeded, seeded);
+    if (deferred.isValid())
+        s.setValue(kDeferred, deferred);
     for (Role r : roles())
     {
         const Binding &b = m_bindings[r];
@@ -544,10 +550,10 @@ void DeskRecord::rebind()
         emit changed();
 }
 
-void DeskRecord::portChanged(quint32 universe)
+void DeskRecord::portChanged(quint32 universe, bool anyComesOnline)
 {
     const QString was = m_gmLiveKey;
-    seedDefaults();
+    seedFor(universe, anyComesOnline);
     rebind();
     /* The Grand Master's port (re)opened, or it moved to another: the
        device may dump its fader where it sits (a parked 0 would black the
@@ -659,12 +665,23 @@ QStringList DeskRecord::seededDevices() const
     return QSettings().value(settingsGroup() + QLatin1Char('/') + kSeeded).toStringList();
 }
 
+QStringList DeskRecord::deferredRoles() const
+{
+    return QSettings().value(settingsGroup() + QLatin1Char('/') + kDeferred).toStringList();
+}
+
 bool DeskRecord::seedDefaults()
+{
+    return seedFor(kInvalid, true);
+}
+
+bool DeskRecord::seedFor(quint32 cutOverOn, bool cutOverAll)
 {
     InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
     if (iom == nullptr || isLocked())
         return false;
     QStringList seeded = seededDevices();
+    QStringList deferred = deferredRoles();
     bool marked = false;
     bool learnedAny = false;
     for (quint32 u = 0; u < iom->universesCount(); ++u)
@@ -676,10 +693,16 @@ bool DeskRecord::seedDefaults()
         if (!layout.isValid())
             continue;
         const QString id = identityOfUniverse(u);
-        if (id.isEmpty() || seeded.contains(id))
+        if (id.isEmpty())
             continue;
-        seeded << id;
-        marked = true;
+        const bool seen = seeded.contains(id);
+        if (!seen)
+        {
+            seeded << id;
+            marked = true;
+        }
+        const bool mayCut = cutOverAll || u == cutOverOn;
+        CutOver cut;
         for (const SurfaceLayout::Role &lr : layout.roles())
         {
             if (!lr.seed)
@@ -692,8 +715,29 @@ bool DeskRecord::seedDefaults()
                     role = r;
                     known = true;
                 }
-            // Never over a role learned (here or on another device).
-            if (!known || m_bindings[role].isSet())
+            if (!known)
+                continue;
+            const QString dk = id + QLatin1Char('|') + roleKey(role);
+            const bool held = m_bindings[role].isSet();
+            bool cutting = false;
+            if (held)
+            {
+                if (m_bindings[role].identity == id)
+                    continue;
+                /* Another board's: it keeps it while it is here. Gone, and
+                   this one just came online: it hands the role over. */
+                if (state(role) != NotConnected || !mayCut
+                    || m_cutRefused.contains(id + QLatin1Char('|') + m_bindings[role].identity))
+                {
+                    if (!deferred.contains(dk))
+                        deferred << dk;
+                    marked = true;
+                    continue;
+                }
+                cutting = true;
+            }
+            // A cleared default stays cleared, unless it waited for the board that held it.
+            else if (seen && !deferred.contains(dk))
                 continue;
             bool taken = false;
             for (Role r : roles())
@@ -712,21 +756,71 @@ bool DeskRecord::seedDefaults()
             b.channel = lr.channel;
             b.control = controlName(u, lr.channel);
             b.on = true;
+            if (cutting)
+            {
+                cut.roles << role;
+                cut.was << m_bindings[role];
+            }
             m_bindings[role] = b;
             m_lastUniverses[role] = kInvalid;
+            if (deferred.removeAll(dk) > 0)
+                marked = true;
             learnedAny = true;
+        }
+        if (!cut.roles.isEmpty())
+        {
+            QStringList names;
+            for (Role r : std::as_const(cut.roles))
+                names << roleName(r);
+            QString list = names.value(0);
+            if (names.size() > 1)
+                list = names.mid(0, names.size() - 1).join(QStringLiteral(", ")) + tr(" and ") + names.last();
+            const QString from = cut.was.first().device;
+            cut.newIdentity = id;
+            cut.text = tr("%1 moved to %2 from %3.").arg(list, layout.shortName(), from);
+            m_cut = cut;
         }
     }
     if (learnedAny)
         save();
     if (marked)
+    {
         QSettings().setValue(settingsGroup() + QLatin1Char('/') + kSeeded, seeded);
+        QSettings().setValue(settingsGroup() + QLatin1Char('/') + kDeferred, deferred);
+    }
     if (learnedAny)
     {
         rebind();
         emit changed();
+        if (!m_cut.text.isEmpty() && m_cut.roles.size() > 0 && m_cutAnnounced != m_cut.text + m_cut.newIdentity)
+        {
+            m_cutAnnounced = m_cut.text + m_cut.newIdentity;
+            emit cutOver(m_cut.text);
+        }
     }
     return learnedAny;
+}
+
+bool DeskRecord::undoCutOver()
+{
+    if (m_cut.roles.isEmpty() || isLocked())
+        return false;
+    for (int i = 0; i < m_cut.roles.size(); ++i)
+    {
+        const Role r = m_cut.roles.at(i);
+        if (m_bindings[r].identity == m_cut.newIdentity)
+        {
+            m_cutRefused.insert(m_cut.newIdentity + QLatin1Char('|') + m_cut.was.at(i).identity);
+            m_bindings[r] = m_cut.was.at(i);
+            m_lastUniverses[r] = kInvalid;
+        }
+    }
+    m_cut = CutOver();
+    m_cutAnnounced.clear();
+    save();
+    rebind();
+    emit changed();
+    return true;
 }
 
 QStringList DeskRecord::missingDevices() const

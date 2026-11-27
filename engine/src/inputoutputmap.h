@@ -1223,6 +1223,9 @@ private:
 signals:
     /** Signal emitted when a profile is changed */
     void profileChanged(quint32 universe, const QString& profileName);
+    /** A patch with no profile was given @p profileName for its device
+     *  (profileForDevice()); said once, for a notice. */
+    void profileAutoSelected(quint32 universe, const QString &profileName, const QString &deviceName);
 
     /** Notifies (InputOutputManager) of plugin configuration changes */
     void pluginConfigurationChanged(const QString& pluginName, bool success);
@@ -1269,6 +1272,32 @@ signals:
 public:
     /** Load all input profiles from the given directory using QDir filters */
     void loadProfiles(const QDir& dir);
+
+    /** The profile a hardware input line named @p deviceName is for: the
+     *  first profile (a user's copy first, else a built-in one) whose
+     *  <Match> fits it; empty when none does. A built-in profile a user's
+     *  copy of the same name replaced still counts (its Match is the
+     *  type's, the user's copy may predate it). */
+    QString profileForDevice(const QString &deviceName) const;
+
+    /** A profile file another of the same name replaced: what was loaded
+     *  first (a user's copy) wins, unless it is a copy of a surface type
+     *  that no longer holds to its built-in layout (a legacy link to an old
+     *  QLC+ profile: it lacks controls the surface map draws), when the
+     *  built-in one is used instead. Nothing is ever deleted. */
+    struct ShadowedProfile
+    {
+        QString name;           ///< the profile's name
+        QString path;           ///< the file that is not used
+        QString usedPath;       ///< the file that is
+        bool builtInUsed = false;   ///< the built-in one was used over the user's copy
+        QStringList problems;   ///< why the user's copy fails its layout (builtInUsed only)
+    };
+    QList<ShadowedProfile> shadowedProfiles() const { return m_shadowed; }
+    /** One line each for the Control surfaces panel: "Your copy of the
+     *  Akai APC40 mkII profile (…/InputProfiles/…) is older than the
+     *  built-in one: the built-in one is used." Empty: none. */
+    QStringList shadowedProfileNotes() const;
 
     /** Get a list of available profile names */
     /**
@@ -1356,6 +1385,11 @@ public:
 
     QStringList profileNames();
 
+private:
+    /** @p prof has the name @p have has: one is used, the other is kept as shadowed. */
+    void keepOneOf(QLCInputProfile *have, QLCInputProfile *prof);
+public:
+
     /** Get a profile by its name */
     QLCInputProfile* profile(const QString& name);
 
@@ -1398,6 +1432,10 @@ public:
 private:
     /** List that contains all available profiles */
     QList <QLCInputProfile*> m_profiles;
+    /** Profiles whose name another already had (profileForDevice() reads
+     *  their Match), and the record of which file won (loadProfiles()). */
+    QList <QLCInputProfile*> m_shadowedProfiles;
+    QList <ShadowedProfile> m_shadowed;
 
     /** Operator-supplied names for output targets, keyed by address. */
     QMap<QString, QString> m_targetAliases;

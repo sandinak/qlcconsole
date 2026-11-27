@@ -9,6 +9,7 @@
  <Manufacturer>Akai</Manufacturer>
  <Model>APC Mini</Model>
  <Type>MIDI</Type>
+ <Match>APC MINI</Match>
  <Surface Version="1"/>
  <MIDISendNoteOff>False</MIDISendNoteOff>
  <Channel Number="48">

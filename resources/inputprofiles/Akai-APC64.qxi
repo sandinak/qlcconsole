@@ -9,6 +9,7 @@
  <Manufacturer>Akai</Manufacturer>
  <Model>APC64</Model>
  <Type>MIDI</Type>
+ <Match>APC64 DAW*</Match>
  <Channel Number="90">
   <Name>Encoder</Name>
   <Type>Encoder</Type>

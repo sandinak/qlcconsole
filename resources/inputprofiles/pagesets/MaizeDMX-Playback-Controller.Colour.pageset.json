@@ -1,7 +1,7 @@
 {
   "format": 1,
   "name": "Colour",
-  "description": "Faders 1-6 red, green, blue, white, amber, UV; 7 and 8 hue and saturation; 10 intensity.",
+  "description": "Faders 1-6 red, green, blue, white, amber, UV; 7 and 8 hue and saturation; 10 intensity. X7 is the Colour page, X9 the Move page (pan, tilt, zoom, focus, iris, gobo, gobo rotation, frost), each lit while it is on.",
   "fits": {
     "profile": "MaizeDMX Playback Controller",
     "layout": 1
@@ -9,6 +9,7 @@
   "pages": [
     {
       "name": "Colour",
+      "key": 171,
       "controls": [
         {
           "ch": 0,
@@ -41,6 +42,48 @@
         {
           "ch": 7,
           "param": "saturation"
+        },
+        {
+          "ch": 9,
+          "param": "intensity"
+        }
+      ]
+    },
+    {
+      "name": "Move",
+      "key": 172,
+      "controls": [
+        {
+          "ch": 0,
+          "param": "pan"
+        },
+        {
+          "ch": 1,
+          "param": "tilt"
+        },
+        {
+          "ch": 2,
+          "param": "zoom"
+        },
+        {
+          "ch": 3,
+          "param": "focus"
+        },
+        {
+          "ch": 4,
+          "param": "iris"
+        },
+        {
+          "ch": 5,
+          "param": "gobo"
+        },
+        {
+          "ch": 6,
+          "param": "gobo-rotation"
+        },
+        {
+          "ch": 7,
+          "param": "frost"
         },
         {
           "ch": 9,

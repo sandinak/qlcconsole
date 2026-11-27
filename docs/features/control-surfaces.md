@@ -366,11 +366,36 @@ a click opens its map.
   on the **MaizeDMX Playback Controller** its **GO** and **BACK** keys, **X10**
   STOP and the **GM** fader; on the **APC64**, as on the APC40, **PLAY**
   GO, **RECORD** Back, **STOP ALL CLIPS** STOP, and touch strip 8 the Grand
-  Master. A role you have learned already (on any board)
+  Master; on the **APC mini mk2** the top scene key **Clip Stop** is GO,
+  **Solo** Back, **Stop All Clips** STOP and **Slider 9** the Grand Master.
+  A role you have learned already (on any board)
   is never changed, a control the open show already uses keeps its job
   (that role is left for you to learn), and a board is set up once: a role
   you clear stays cleared. The PMJ Black 1's **Go**, **Back** and **Master** are its own
   (the board's overlay does them) and are drawn as GO, Back and GM.
+- **The profile comes with the device.** A board patched with no profile
+  gets the one made for it, by the name the system gives its port: **APC40**,
+  **APC40 mkII**, the **APC64's DAW port**, **APC mini** and **mini mk2**
+  (its *Control* port), the **FaderPort 2** (*PreSonus FP2*). A profile you
+  pick yourself is kept. The MaizeDMX's port is *USB2.0-MIDI*, a name many
+  boxes share, so it is never chosen by name: pick its profile. The
+  profile's init follows at once (the APC40 mkII's Ableton mode, the APC64's
+  display), so a board that was patched with no profile starts working when
+  it is patched or the show is opened.
+- **An older copy of a profile in your folder.** A profile of the same name
+  in your user folder is used before the built-in one, unless it no longer
+  holds to the board's drawing (the old QLC+ APC40 mkII profile, without the
+  knobs on the track channels): then the built-in one is used, your file is
+  left as it is, and the **Controller setup** line under Control surfaces
+  says which file and why. Rename your copy to keep both.
+- **Another board takes over.** When the board that holds this computer's
+  GO, Back, STOP and Grand Master is gone (unplugged, not here) and a new
+  surface with defaults for them is patched or found, the roles move to it
+  by themselves; the notice line says so (*GO, Back, STOP and Grand Master
+  moved to APC64 from FaderPort 2.*) with **Undo**, which puts them back and
+  keeps them there. While the old board is still plugged in nothing moves:
+  the new one gets only the roles nobody holds, and the rest when the old
+  board lets go of them (cleared, or its Learn replaced).
 - **A board with no drawing** (an APC mini, a fader box) is named in one line
   under the maps; what its controls do stays in the rows below.
 - The map reads; it changes nothing. Assign a free control from the thing
@@ -381,7 +406,11 @@ The **MaizeDMX Playback Controller** shows up as **USB2.0-MIDI** (a name many
 USB MIDI boxes share): patch it with the profile **MaizeDMX Playback
 Controller**. The map and its default roles come from the profile, never the
 port's name. Its **BO** key is printed Blackout; it has no job yet in
-qlcconsole (the map says *Blackout (coming)*).
+qlcconsole (the map says *Blackout (coming)*). The small circles above the
+faders (*LED 1* to *LED 11*) are lights on the board, not knobs: the map
+draws them as lamps. **X7** is its **Colour** page and **X9** its **Move**
+page (see [Pages](#pages)), each lit while it is on; its lamps need its
+feedback line patched.
 
 ## The PreSonus FaderPort 2
 
@@ -443,7 +472,7 @@ names the page: **APC40 · Move**.
 | **APC40 mk2** (*Build*) | **Move**: device knobs 1, 2 pan and pan fine; 3, 4 focus and zoom; 5, 6 tilt and tilt fine; 7, 8 gobo and gobo rotation. **Beam**: zoom, focus, iris, frost, strobe, shutter, prism, prism rotation. On every page: faders 1-6 red, green, blue, white, amber, UV, fader 8 intensity; track knobs 1, 2 hue and saturation. | **Pan** (Move) and **Sends** (Beam), lit when on; **Device ◀ ▶** step |
 | **APC64** (*Build*) | **Colour**: touch strips 1-7 red, green, blue, white, amber, UV, intensity. **Move**: pan, tilt, zoom, focus, iris, gobo, intensity. The pads stay free; strip 8 is the GM. | Turn the **encoder** |
 | **PMJ Black 1** (*Pages*) | **Looks** (on at start): the faders edit the open look (a colour look: 1-6 R G B W A UV; a dimmer look: 1), else the intensity of selected fixture N; encoders pan, tilt, hue, saturation. **Fix Cont**: faders 1-6 colour, 10 intensity, encoders pan, tilt, zoom, focus; press it again for gobo, gobo rotation, prism, iris. **Groups**: fader N is the level of the open scene's group N. **Effects** and **Macros**: nothing yet (their keys dim; the map and the Workbench say *Effects: coming*). Every fader picks up first; **1-Up…10-Up** zero the open look's channel on any page. | The mode keys, the lit one is the page |
-| **MaizeDMX** (*Colour*) | Faders 1-6 red, green, blue, white, amber, UV; 7, 8 hue and saturation; 10 intensity. | One page |
+| **MaizeDMX** (*Colour*) | **Colour**: faders 1-6 red, green, blue, white, amber, UV; 7, 8 hue and saturation; 10 intensity. **Move**: faders 1-8 pan, tilt, zoom, focus, iris, gobo, gobo rotation, frost; 10 intensity. | **X7** (Colour) and **X9** (Move), lit when on |
 
 **Which set, and sharing one.** The **Pages** row over each map picks the
 set this board uses **on this computer** (by the device, like this
@@ -760,6 +789,7 @@ pad read -- so no two surfaces can disagree.
 | **dark** | Pressing it does nothing here, now: a hit whose place is not live, a cue list or cue that is not armed in Design (rules 2 and 3 above), a *Stop only* control with nothing to stop, a cue list with every cue cut, or the thing it fired is gone. The footer says which when you press it. |
 | **dim** | Ready: a press would fire it. |
 | **bright** | What it fires is running. |
+| **no light** | A trigger learned on another board (the PMJ's channel 9 note 1) on a universe whose drawn board has no such control: it sends no lamp, so an APC pad never blinks for a control it does not have. |
 | **two blinks** | The double-GO guard held a command on that cue list ([Two GOs at once](show-control.md#two-gos-at-once)). The light then goes back to what it was saying. |
 | **the emergency stop's button** | Dim at every other moment -- it always works, so it is always findable on a dark stage -- and **lit** from an ALL OFF until the next GO. Every other light is dark while it is lit: after an ALL OFF nothing is ready until the show runs again. |
 
@@ -999,6 +1029,36 @@ and never surprises you when it comes back.
 
 These steps need the hardware. Do them once on the desk you will use,
 after any build that changes a surface, and say which build.
+
+**APC boards and the MaizeDMX (053 bench)**
+
+1. Patch the **APC40 mkII**'s port with no profile (leave the profile on
+   *None*). *Expect:* it is given **Akai APC40 mkII**, the pads go to
+   Ableton mode (they light only from the app), an **APC40** chip is in the
+   footer. Unplug and replug it: *Expect:* Ableton mode again.
+2. Open Control surfaces with the old QLC+ copy of the APC40 mkII profile
+   still in your user folder. *Expect:* the Controller setup line names that
+   file as older, the knobs on the track channels move their map dials, and
+   the file is untouched.
+3. Patch the **APC mini mk2** (its *Control* port) with no profile. *Expect:*
+   **Akai APC Mini mk2**, a map of 64 pads, the scene keys, the faders and a
+   chip; **Clip Stop** is GO, **Solo** Back, **Stop All Clips** STOP,
+   **Slider 9** the Grand Master (when no other board holds them).
+4. Patch the **APC64**'s *DAW* port with no profile, in Session mode.
+   *Expect:* **Akai APC64**; its display says *qlc console*; **PLAY** is GO,
+   **RECORD** Back, **STOP ALL CLIPS** STOP, touch strip 8 the Grand Master.
+5. Open a show with a trigger learned on the PMJ, with an APC patched.
+   *Expect:* no pad blinks at row 8, column 2 (or anywhere else the APC
+   has no control for the trigger).
+6. Patch the **MaizeDMX** with its profile and feedback line. *Expect:* the
+   LEDs above the faders look like lamps, not knobs; **X7** is lit (Colour),
+   press **X9**: it lights, X7 goes dark, faders 1-8 are pan to frost (the
+   map says so); press **X7** to go back.
+7. With the PMJ or FaderPort holding the roles and an APC64 plugged in too,
+   nothing moves. Unplug the FaderPort and patch (or replug) the APC64.
+   *Expect:* a notice *GO, Back, STOP and Grand Master moved to APC64 from
+   PreSonus FP2* with **Undo**; PLAY is GO at once; **Undo** puts the roles
+   back on the FaderPort's controls.
 
 **PreSonus FaderPort 2**
 

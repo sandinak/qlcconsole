@@ -38,6 +38,11 @@
 #include "controlmap.h"
 #include "deskrecord.h"
 #include "surfacelayout.h"
+#include "pageset.h"
+#include <QTemporaryDir>
+#include <QRegularExpression>
+#include <memory>
+#include <vector>
 #include "showtreecontroller.h"
 #include "outputrulekeeper.h"
 #include "fixturegroup.h"
@@ -1023,6 +1028,252 @@ void SurfaceSim_Test::theApc64SeedsItsDefaults()
     QVERIFY(apc64.tap(QStringLiteral("#%1").arg((6 << 12) | (128 + 23))));
     settle();
     QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+}
+
+void SurfaceSim_Test::aProfileIsChosenByTheDevice()
+{
+    for (const char *f : { "Akai-APC40-mkII.qxi", "Akai-APC40.qxi", "Akai-APC64.qxi", "Akai-APCMini-mk2.qxi",
+                           "Akai-APCMini.qxi", "PreSonus-FaderPort-2.qxi" })
+        QVERIFY(mapProfile(m_doc, profileDir() + QLatin1String(f)) != nullptr);
+    struct Row { const char *device; const char *profile; };
+    const Row rows[] = {
+        { "APC40 mkII", "Akai APC40 mkII" },
+        { "APC40", "Akai APC40" },                          // not the mkII's
+        { "APC64 DAW (APC64)", "Akai APC64" },              // its DAW port only
+        { "APC mini mk2 Control", "Akai APC Mini mk2" },
+        { "APC MINI", "Akai APC Mini" },                    // not the mk2
+        { "PreSonus FP2", "PreSonus FaderPort 2" },
+        { "APC64 Notes (APC64)", "" },                      // another port of the APC64
+        { "USB2.0-MIDI Port 1", "" },                       // a name many boxes share
+    };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    std::vector<std::unique_ptr<SimMidiDevice>> boards;
+    quint32 u = 0;
+    for (const Row &r : rows)
+    {
+        boards.emplace_back(new SimMidiDevice(m_doc, m_stub, QLatin1String(r.device), u));
+        QVERIFY2(boards.back()->plug(), qPrintable(boards.back()->lastError()));
+        InputPatch *ip = iom->inputPatch(u);
+        QVERIFY(ip != nullptr);
+        QCOMPARE(ip->profile() != nullptr ? ip->profile()->name() : QString(), QLatin1String(r.profile));
+        ++u;
+    }
+    // A name with Windows' unit prefix is the same board.
+    QCOMPARE(iom->profileForDevice(QStringLiteral("2- APC MINI")), QStringLiteral("Akai APC Mini"));
+    QCOMPARE(iom->profileForDevice(QStringLiteral("apc40 MKII")), kApc);
+
+    // A profile chosen by a person is kept, whatever the device is called.
+    SimMidiDevice chosen(m_doc, m_stub, QStringLiteral("APC40 mkII"), u, QStringLiteral("Akai APC Mini"));
+    QVERIFY2(chosen.plug(), qPrintable(chosen.lastError()));
+    QCOMPARE(iom->inputPatch(u)->profile()->name(), QStringLiteral("Akai APC Mini"));
+}
+
+void SurfaceSim_Test::theApcMiniMk2SeedsItsDefaults()
+{
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APCMini-mk2.qxi")) != nullptr);
+    const SurfaceLayout layout = SurfaceLayout::forProfile(QStringLiteral("Akai APC Mini mk2"));
+    QVERIFY(layout.isValid());
+    QCOMPARE(layout.controls().size(), 64 + 8 + 8 + 1 + 9);
+    // Patched by its port's name only (as the show has it): no profile chosen.
+    SimMidiDevice mini(m_doc, m_stub, QStringLiteral("APC mini mk2 Control"), 0);
+    QVERIFY2(mini.plug(), qPrintable(mini.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(240));      // the top scene button
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(241));
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(247));    // STOP ALL CLIPS
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32(56));
+    runList(m_doc);
+    QList<int> commands;
+    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+        commands << int(r.command);
+        return true;
+    });
+    QVERIFY(mini.tap(QStringLiteral("#240")));
+    settle();
+    QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+}
+
+void SurfaceSim_Test::anOlderCopyOfASurfaceProfileIsNotUsed()
+{
+    // A copy that lacks controls the layout draws: the old QLC+ APC40 mkII.
+    QFile built(apcFile());
+    QVERIFY(built.open(QIODevice::ReadOnly));
+    QString text = QString::fromUtf8(built.readAll());
+    const QRegularExpression block(QStringLiteral("<Channel Number=\"4117\">.*?</Channel>\\n"),
+                                   QRegularExpression::DotMatchesEverythingOption);
+    QVERIFY(text.contains(block));
+    QString old = text;
+    old.remove(block);
+    QTemporaryDir user;
+    QVERIFY(user.isValid());
+    const QString oldPath = user.filePath(QStringLiteral("Akai-APC40-mkII.qxi"));
+    QFile out(oldPath);
+    QVERIFY(out.open(QIODevice::WriteOnly));
+    out.write(old.toUtf8());
+    out.close();
+
+    auto dirOf = [](const QString &path) {
+        QDir d(path);
+        d.setFilter(QDir::Files);
+        d.setNameFilters(QStringList() << QStringLiteral("*.qxi"));
+        return d;
+    };
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->loadProfiles(dirOf(user.path()));              // the user's folder first, as the app does
+    iom->loadProfiles(dirOf(profileDir()));
+    QLCInputProfile *used = iom->profile(kApc);
+    QVERIFY(used != nullptr);
+    QVERIFY2(used->channel(4117) != nullptr, "the user's older copy shadows the built-in profile");
+    QVERIFY(used->path() != oldPath);
+    QCOMPARE(iom->shadowedProfiles().size(), 1);
+    QVERIFY(iom->shadowedProfiles().first().builtInUsed);
+    QCOMPARE(iom->shadowedProfiles().first().path, oldPath);
+    const QStringList notes = iom->shadowedProfileNotes();
+    QCOMPARE(notes.size(), 1);
+    QVERIFY2(notes.first().contains(oldPath) && notes.first().contains(QStringLiteral("older")),
+             qPrintable(notes.first()));
+    QVERIFY2(QFileInfo::exists(oldPath), "the user's file is left alone");
+    // The board's Match is still the type's: a patch by name finds it.
+    QCOMPARE(iom->profileForDevice(QStringLiteral("APC40 mkII")), kApc);
+
+    // A copy that still fits the layout is the user's own, and is used.
+    QTemporaryDir fresh;
+    QVERIFY(fresh.isValid());
+    const QString goodPath = fresh.filePath(QStringLiteral("Akai-APC40-mkII.qxi"));
+    QVERIFY(QFile::copy(apcFile(), goodPath));
+    Doc other;
+    other.inputOutputMap()->loadProfiles(dirOf(fresh.path()));
+    other.inputOutputMap()->loadProfiles(dirOf(profileDir()));
+    QCOMPARE(other.inputOutputMap()->profile(kApc)->path(), goodPath);
+    QVERIFY(other.inputOutputMap()->shadowedProfileNotes().isEmpty());
+}
+
+void SurfaceSim_Test::aGoneBoardHandsItsRolesToTheNewOne()
+{
+    const QString maizeName = QStringLiteral("MaizeDMX Playback Controller");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("MaizeDMX-Playback-Controller.qxi")) != nullptr);
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64.qxi")) != nullptr);
+    SimMidiDevice maize(m_doc, m_stub, QStringLiteral("USB2.0-MIDI Port 1"), 0, maizeName);
+    QVERIFY2(maize.plug(), qPrintable(maize.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    const QString maizeId = desk->identityOfUniverse(0);
+    QCOMPARE(desk->binding(DeskRecord::Go).identity, maizeId);
+    // The old board is unplugged; a new surface comes online.
+    QVERIFY(maize.unplug());
+    settle();
+    QSignalSpy cut(desk, &DeskRecord::cutOver);
+    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 DAW"), 1, QStringLiteral("Akai APC64"));
+    QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
+    settle();
+    QCOMPARE(cut.count(), 1);
+    const QString apcId = desk->identityOfUniverse(1);
+    QVERIFY(apcId != maizeId);
+    for (DeskRecord::Role r : DeskRecord::roles())
+        QCOMPARE(desk->binding(r).identity, apcId);
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 91));
+    QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(128 + 92));
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(128 + 119));
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32((7 << 12) | 513));
+    const QString text = cut.first().first().toString();
+    QVERIFY2(text.contains(QStringLiteral("GO, Back, STOP and Grand Master moved to APC64 from USB2.0-MIDI Port 1")),
+             qPrintable(text));
+    QVERIFY(desk->isLive(DeskRecord::Go));
+
+    // Undo: the roles go back to the board they came from, and stay there.
+    QVERIFY(desk->canUndoCutOver());
+    QVERIFY(desk->undoCutOver());
+    QCOMPARE(desk->binding(DeskRecord::Go).identity, maizeId);
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 13));
+    QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32(10));
+    QVERIFY(!desk->canUndoCutOver());
+    QVERIFY(!desk->seedDefaults());
+    QCOMPARE(desk->binding(DeskRecord::Go).identity, maizeId);
+    QCOMPARE(cut.count(), 1);
+}
+
+void SurfaceSim_Test::aBoardThatIsHereKeepsItsRoles()
+{
+    const QString maizeName = QStringLiteral("MaizeDMX Playback Controller");
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("MaizeDMX-Playback-Controller.qxi")) != nullptr);
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APC64.qxi")) != nullptr);
+    SimMidiDevice maize(m_doc, m_stub, QStringLiteral("USB2.0-MIDI Port 1"), 0, maizeName);
+    QVERIFY2(maize.plug(), qPrintable(maize.lastError()));
+    settle();
+    DeskRecord *desk = m_doc->deskRecord();
+    const QString maizeId = desk->identityOfUniverse(0);
+    QSignalSpy cut(desk, &DeskRecord::cutOver);
+    // A role the Maize has no default for: free, so the APC64 may take it later.
+    SimMidiDevice apc64(m_doc, m_stub, QStringLiteral("APC64 DAW"), 1, QStringLiteral("Akai APC64"));
+    QVERIFY2(apc64.plug(), qPrintable(apc64.lastError()));
+    settle();
+    QCOMPARE(cut.count(), 0);
+    for (DeskRecord::Role r : DeskRecord::roles())
+        QCOMPARE(desk->binding(r).identity, maizeId);
+    QVERIFY(!desk->canUndoCutOver());
+    // Its replug moves nothing either.
+    QVERIFY(SurfaceScenarios::unplugReplug(&apc64));
+    settle();
+    QCOMPARE(desk->binding(DeskRecord::Go).identity, maizeId);
+
+    // The Maize lets go of GO: the APC64, which waited for it, is given it.
+    QVERIFY(desk->clear(DeskRecord::Go));
+    QVERIFY(desk->seedDefaults());
+    QCOMPARE(desk->binding(DeskRecord::Go).identity, desk->identityOfUniverse(1));
+    QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(128 + 91));
+    QCOMPARE(desk->binding(DeskRecord::Back).identity, maizeId);
+    QCOMPARE(cut.count(), 0);
+}
+
+void SurfaceSim_Test::aLampForAControlTheBoardLacksIsNotSent()
+{
+    QVERIFY(mapProfile(m_doc, profileDir() + QStringLiteral("Akai-APCMini-mk2.qxi")) != nullptr);
+    SimMidiDevice mini(m_doc, m_stub, QStringLiteral("APC mini mk2 Control"), 0);
+    QVERIFY2(mini.plug(), qPrintable(mini.lastError()));
+    const quint32 list = runList(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    mini.forgetLamps();
+    const quint32 mine = 128 + 10;              // a pad of the board
+    const quint32 foreign = (8 << 12) | 129;    // MIDI channel 9, note 1: learned on the PMJ
+    cm->setBinding({ 0, mine, ControlMap::cueList(list), ControlMap::Toggle });
+    cm->setBinding({ 0, foreign, ControlMap::cueList(list), ControlMap::Toggle });
+    cm->resendFeedback();
+    settle(50);
+    QVERIFY2(mini.lampMessages(mine) >= 1, "the board's own pad gets its lamp");
+    QCOMPARE(mini.lampMessages(foreign), 0);
+}
+
+void SurfaceSim_Test::theMaizeDmxHasAPager()
+{
+    const QString name = QStringLiteral("MaizeDMX Playback Controller");
+    QLCInputProfile *p = mapProfile(m_doc, profileDir() + QStringLiteral("MaizeDMX-Playback-Controller.qxi"));
+    QVERIFY(p != nullptr);
+    const QList<PageSet> sets = PageSet::forProfile(name);
+    QVERIFY(!sets.isEmpty());
+    const PageSet &set = sets.first();
+    QCOMPARE(set.pages().size(), 2);
+    QCOMPARE(set.pages().at(0).name, QStringLiteral("Colour"));
+    QCOMPARE(set.pages().at(1).name, QStringLiteral("Move"));
+    QCOMPARE(set.pages().at(0).key, quint32(171));      // X7
+    QCOMPARE(set.pages().at(1).key, quint32(172));      // X9
+    QVERIFY2(set.check(SurfaceLayout::forProfile(name), p).isEmpty(),
+             qPrintable(set.check(SurfaceLayout::forProfile(name), p).join(QStringLiteral("\n"))));
+    // The keys are neither a desk role nor a lamp-less control: both have a lamp.
+    const SurfaceLayout layout = SurfaceLayout::forProfile(name);
+    for (quint32 k : { quint32(171), quint32(172) })
+    {
+        QVERIFY(layout.roleOn(k).isEmpty());
+        QCOMPARE(layout.controls().at(layout.indexOf(k)).lamp, SurfaceLayout::Led);
+    }
+    // The LEDs above the faders are lights, never knobs.
+    int leds = 0;
+    for (const SurfaceLayout::Control &c : layout.controls())
+    {
+        QVERIFY2(c.kind != SurfaceLayout::Knob && c.kind != SurfaceLayout::Encoder, qPrintable(c.face));
+        leds += c.kind == SurfaceLayout::Indicator ? 1 : 0;
+    }
+    QCOMPARE(leds, 11);
 }
 
 /****************************************************************************

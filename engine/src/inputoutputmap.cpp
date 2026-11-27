@@ -45,6 +45,7 @@
 #include "networkroute.h"
 #include "rignetwork.h"
 #include "qlcfile.h"
+#include "surfacelayout.h"
 #include "doc.h"
 
 #if !defined(Q_OS_WIN)
@@ -144,6 +145,7 @@ InputOutputMap::~InputOutputMap()
     delete m_grandMaster;
     delete m_beatTime;
     qDeleteAll(m_profiles);
+    qDeleteAll(m_shadowedProfiles);
 }
 
 /*****************************************************************************
@@ -713,8 +715,25 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         }
     }
 
+    /* A hardware line patched with no profile gets the one made for its
+       device (a profile's <Match>): the surface's init, map and roles work
+       without a person choosing it. A choice made afterwards (None) holds. */
+    QString useProfile = profileName;
+    bool autoSelected = false;
+    if ((useProfile.isEmpty() || useProfile == KInputNone) && plugin != NULL && plugin->linesAreHardware()
+        && (plugin->capabilities() & QLCIOPlugin::Input) && input != QLCIOPlugin::invalidLine())
+    {
+        const QString deviceName = plugin->inputs().value(int(input));
+        const QString found = profileForDevice(deviceName);
+        if (!found.isEmpty())
+        {
+            useProfile = found;
+            autoSelected = true;
+        }
+    }
+
     if (m_universeArray.at(universe)->setInputPatch(
-                plugin, input, profile(profileName)) == true)
+                plugin, input, profile(useProfile)) == true)
     {
         ip = m_universeArray.at(universe)->inputPatch();
         if (ip != NULL)
@@ -747,6 +766,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
     const bool opened = io.finish();
     if (ip != NULL && currProfile != ip->profile())
         emit profileChanged(universe, ip->profileName());
+    if (autoSelected && ip != NULL && ip->profile() != NULL)
+        emit profileAutoSelected(universe, ip->profileName(), ip->inputName());
     emit inputPatchChanged(universe);
 
     return opened;
@@ -2642,16 +2663,77 @@ void InputOutputMap::loadProfiles(const QDir& dir)
         if (prof != NULL)
         {
             /* Check for duplicates */
-            if (profile(prof->name()) == NULL)
+            QLCInputProfile *have = profile(prof->name());
+            if (have == NULL)
                 addProfile(prof);
             else
-                delete prof;
+                keepOneOf(have, prof);
         }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unable to find an input profile from" << path;
         }
     }
+}
+
+void InputOutputMap::keepOneOf(QLCInputProfile *have, QLCInputProfile *prof)
+{
+    ShadowedProfile rec;
+    rec.name = prof->name();
+    /* The layout of a surface type draws every control its profile has:
+       a user's copy that predates them (a link to the old QLC+ folder's
+       APC40 mkII) leaves the board's knobs and roles dead, so the type
+       the app ships is used, and the panel says so. */
+    const SurfaceLayout layout = SurfaceLayout::forProfile(have->name());
+    if (layout.isValid() && have->path() != prof->path())
+    {
+        const QStringList problems = layout.selfTest(have);
+        const QStringList builtIn = layout.selfTest(prof);
+        if (!problems.isEmpty() && builtIn.isEmpty())
+        {
+            const int i = m_profiles.indexOf(have);
+            rec.path = have->path();
+            rec.usedPath = prof->path();
+            rec.builtInUsed = true;
+            rec.problems = problems;
+            m_profiles[i] = prof;
+            m_shadowedProfiles << have;
+            m_shadowed << rec;
+            return;
+        }
+    }
+    rec.path = prof->path();
+    rec.usedPath = have->path();
+    m_shadowedProfiles << prof;
+    m_shadowed << rec;
+}
+
+QStringList InputOutputMap::shadowedProfileNotes() const
+{
+    QStringList out;
+    for (const ShadowedProfile &s : m_shadowed)
+    {
+        if (!s.builtInUsed)
+            continue;
+        out << tr("Your copy of the %1 profile (%2) is older than the one built in: it lacks "
+                  "controls the board's map draws (%3). The built-in one is used; your file is "
+                  "left as it is.").arg(s.name, s.path, s.problems.value(0));
+    }
+    return out;
+}
+
+QString InputOutputMap::profileForDevice(const QString &deviceName) const
+{
+    if (deviceName.trimmed().isEmpty())
+        return QString();
+    for (const QLCInputProfile *p : m_profiles)
+        if (p->matchesDevice(deviceName))
+            return p->name();
+    // A copy that replaced a built-in profile: the type's Match still says which it is.
+    for (const QLCInputProfile *p : m_shadowedProfiles)
+        if (p->matchesDevice(deviceName) && const_cast<InputOutputMap *>(this)->profile(p->name()) != nullptr)
+            return p->name();
+    return QString();
 }
 
 QStringList InputOutputMap::profileNames()
