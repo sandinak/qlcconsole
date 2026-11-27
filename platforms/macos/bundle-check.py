@@ -19,7 +19,8 @@ named libogg, libvorbis, libFLAC, libopus, libmpg123 and libmp3lame under
 @executable_path/../Frameworks while none of them had been copied in: the
 audio plugin could not load, so no sound played, WAV included.
 
-Usage: bundle-check.py /path/to/App.app        (exit 0 clean, 1 on a miss)
+Usage: bundle-check.py [--signed] /path/to/App.app   (exit 0 clean, 1 on a miss)
+       --signed also fails a file whose code signature is invalid
 Run by: .github/workflows/build.yml (macOS job) after bundling;
         platforms/macos/make-release.sh before signing;
         platforms/macos/package-local.sh (make test, make rc, make dmg).
@@ -105,17 +106,25 @@ def check(app):
                       if os.path.exists(c) and (c + os.sep).startswith(app + os.sep)]
             if not inside:
                 bad.append((p, dep, "not in the bundle"))
+    if "--signed" in sys.argv:
+        # A library whose signature install_name_tool broke is killed at load
+        # on an arm64 Mac (exit 137), however well it resolves.
+        for p in files:
+            r = subprocess.run(["codesign", "--verify", p], capture_output=True, text=True)
+            if r.returncode != 0:
+                bad.append((p, "(its own signature)", "invalid: " + r.stderr.strip().splitlines()[0]))
     return files, bad
 
 
 def main():
-    if len(sys.argv) != 2 or not os.path.isdir(sys.argv[1]):
+    args = [a for a in sys.argv[1:] if a != "--signed"]
+    if len(args) != 1 or not os.path.isdir(args[0]):
         print(__doc__)
         return 2
-    app = os.path.abspath(sys.argv[1])
+    app = os.path.abspath(args[0])
     files, bad = check(app)
     if bad:
-        print("FAIL: %d references leave the bundle:" % len(bad))
+        print("FAIL: %d problems in the bundle:" % len(bad))
         for p, dep, why in bad[:60]:
             print("  %s -> %s  (%s)" % (os.path.relpath(p, app), dep, why))
         return 1

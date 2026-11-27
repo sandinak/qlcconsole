@@ -754,12 +754,21 @@ jobs:
             -executable=$HOME/qlcconsole.app/Contents/MacOS/qlcconsole-fixtureeditor
           chmod -R u+w ~/qlcconsole.app
           python3 platforms/macos/bundlefix.py ~/qlcconsole.app
+          # install_name_tool leaves the libraries' signatures invalid, and an
+          # arm64 Mac kills a binary that loads one (exit 137): sign it all
+          # again, ad hoc, as package-local.sh does.
+          APP=$HOME/qlcconsole.app
+          find "$APP/Contents/Frameworks" "$APP/Contents/PlugIns" "$APP/Contents/MacOS" -type f | while IFS= read -r f; do
+            file "$f" | grep -q 'Mach-O' && codesign --force --sign - "$f"
+          done
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
 
       - name: Check the bundle is self-contained
         shell: bash
         if: ${{ matrix.task == 'build-v4' }}
         run: |-
-          python3 platforms/macos/bundle-check.py ~/qlcconsole.app
+          python3 platforms/macos/bundle-check.py --signed ~/qlcconsole.app
           # The audio libraries by name: every dependency of libsndfile's
           # plugin must be inside the app, MP3 included (mpg123 + LAME).
           for l in libsndfile libmpg123 libmp3lame; do
