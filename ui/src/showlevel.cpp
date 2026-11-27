@@ -21,6 +21,7 @@
 #include <QHash>
 #include <QEvent>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QShortcut>
 #include <QWidget>
 
@@ -378,7 +379,15 @@ bool ShowLevel::eventFilter(QObject *watched, QEvent *event)
     QWidget *w = qobject_cast<QWidget *>(watched);
     if (w == nullptr || !w->property(KPropGreyed).toBool())
         return QObject::eventFilter(watched, event);
-    if (event->type() == QEvent::EnabledChange)
+    if (event->type() == QEvent::MouseButtonRelease)
+    {
+        /* A click on a greyed control is answered in the notice line, with
+           the Switch: greyed is never silent. */
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton && w->rect().contains(me->position().toPoint()))
+            offer(w->property(KPropLevelKey).toString());
+    }
+    else if (event->type() == QEvent::EnabledChange)
     {
         // Something else (a page refresh) enabled it: the level wins.
         if (w->isEnabled())

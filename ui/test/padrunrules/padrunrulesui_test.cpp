@@ -248,7 +248,11 @@ void PadRunRulesUi_Test::everySurfaceAgreesAtEveryStep()
         const QColor colour = run->stateColour();
         const QString name = colour.isValid() ? colour.name() : QString();
         QVERIFY2(btn->text() == words, qPrintable(QString("%1: button '%2', state '%3'").arg(when, btn->text(), words)));
-        if (run->state() == PadRun::Tools)
+        /* No chip in Tools, nor for a plain Run with no controller here
+           (nothing to say); an arm, a stop or a notice is always said. */
+        const bool padHere = m_app->doc()->programmer()->focusController().present;
+        if (run->state() == PadRun::Tools
+            || (!padHere && !colour.isValid() && run->chipNotice().isEmpty()))
             QVERIFY2(chip->isHidden(), when);
         else
             QVERIFY2(chip->isVisible() && chip->text().startsWith(words),
@@ -1222,6 +1226,43 @@ void PadRunRulesUi_Test::q253TheFollowChipSaysWhyItHolds()
     QCOMPARE(pc->followSpotStatus().heldBy, QString("Focus This Look"));
     r->stop();
     QTRY_VERIFY2_WITH_TIMEOUT(!shown().contains(QStringLiteral("holds")), qPrintable(shown()), 2000);
+}
+
+void PadRunRulesUi_Test::noPadNoChip()
+{
+    Doc *doc = m_app->doc();
+    InputOutputMap *iom = doc->inputOutputMap();
+    QLabel *chip = m_app->padRoleChip();
+    QVERIFY(chip != nullptr);
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    settle(50);
+    QVERIFY(!doc->programmer()->focusController().present);
+    QVERIFY2(!chip->isVisibleTo(m_app), "the Pad chip shows with no controller");
+
+    // Hot-plug: it connects.
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 0));
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    settle(50);
+    QVERIFY(doc->programmer()->focusController().present);
+    // In the Run role (Tools has no chip, pad or not).
+    if (doc->programmer()->padRun()->state() == PadRun::Tools)
+    {
+        QToolButton *btn = m_app->findChild<QToolButton *>(QStringLiteral("crPadRun"));
+        QVERIFY(btn != nullptr);
+        btn->click();
+        settle(50);
+    }
+    QVERIFY2(chip->isVisibleTo(m_app), "the Pad chip stays hidden with a controller connected");
+    QVERIFY(chip->text().startsWith(QStringLiteral("Pad")));
+
+    // Unplugged: it goes.
+    iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
+    emit iom->pluginConfigurationChanged(m_stub->name(), true);
+    settle(50);
+    // A notice (the pad was lost) is said for its few seconds, then the chip goes.
+    QTRY_VERIFY2_WITH_TIMEOUT(!chip->isVisibleTo(m_app), "the Pad chip stays after the controller is gone",
+                              PadRun::noticeMs() + 3000);
 }
 
 int main(int argc, char **argv)

@@ -75,6 +75,9 @@ private slots:
     void aChangedDeviceDisarmsOnTheChip();
     void q253TheFollowChipSaysWhyItHolds();
 
+    /** No game controller: no Pad chip. One connects (patched): it shows;
+     *  unplugged: it goes again. */
+    void noPadNoChip();
 private:
     /** Two spots on the plot, a group, a target, one focus call; a
      *  Pre-show list (Focus, a venue focus cue, then House) the list is on

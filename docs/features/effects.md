@@ -275,6 +275,12 @@ blue emitters, and the effect browser lists them for it:
   rather than fading. Matched by hue at full, so a breathing colour stays on
   its slot.
 
+To see both at once on a test rig, a ready-made show has one of each beside an RGB par:
+
+1. Open **test-workspaces/rainbow-movers.qlcc** (File ▸ Open; it sends Art-Net to the OLA probe, 172.18.2.218 universe 0:0:15, never 0:0:0).
+2. In Run, **GO** the cue **Rainbow on**.
+3. Watch the **CMY Mover** mix through the hues like the **RGB Par**, and the **Wheel Mover** step from slot to slot. **GO** *Rainbow off* to stop it.
+
 Black from an effect leaves the filters or the wheel to the look; the
 fixture's dimmer makes it dark. Pixel (matrix) effects stay for RGB pixels.
 

@@ -39,6 +39,8 @@
 
 #include "levels_test.h"
 #include "levelregistry.h"
+#include <QMouseEvent>
+#include "editlivechip.h"
 #include "showlevel.h"
 #include "showoperate.h"
 #include "showfeatures.h"
@@ -598,6 +600,34 @@ void Levels_Test::aStudentShowSavedOnFunctionsOpensQuietly()
     QVERIFY2(said.contains(QStringLiteral("Functions")) && said.contains(QStringLiteral("Standard")),
              qPrintable(said));
     m_app->doc()->resetModified();
+}
+
+void Levels_Test::aGreyedFooterChipSaysItsLevelOnItsFace()
+{
+    ShowLevel *level = ShowLevel::instance();
+    EditLiveChip *chip = m_app->editLiveChip();
+    QVERIFY(chip != nullptr);
+    level->setLevel(ShowLevel::Student);
+    level->apply();
+    QTest::qWait(30);
+    QVERIFY(!chip->chip()->isEnabled());
+    QCOMPARE(chip->chip()->text(), QStringLiteral("Edit Live \u00B7 Standard"));
+
+    // A click is answered in the notice line, with the Switch.
+    m_app->hideViewNotice();
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(3, 3), QPointF(3, 3),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(chip->chip(), &release);
+    QVERIFY(m_app->m_viewNotice->isVisibleTo(m_app));
+    QVERIFY2(m_app->m_viewNoticeText->text().contains(QStringLiteral("Standard")),
+             qPrintable(m_app->m_viewNoticeText->text()));
+    QCOMPARE(m_app->m_viewNoticeButton->text(), QStringLiteral("Switch to Standard"));
+
+    // Switch: the face is plain again.
+    m_app->m_viewNoticeButton->click();
+    QTest::qWait(30);
+    QCOMPARE(chip->chip()->text(), QStringLiteral("Edit Live"));
+    QVERIFY(chip->chip()->isEnabled());
 }
 
 void Levels_Test::aHiddenTabIsInTheWindowMenuSwitchLine()

@@ -60,6 +60,9 @@ private slots:
      *  Student; the Window menu's More Tabs line names them and switches. */
     void aStudentShowSavedOnFunctionsOpensQuietly();
     void aHiddenTabIsInTheWindowMenuSwitchLine();
+    /** A footer control greyed by the level says the level on its face, and
+     *  a click says why in the notice line with the Switch. */
+    void aGreyedFooterChipSaysItsLevelOnItsFace();
     /** Stop All, GO, Back, Blackout, Blind, the Grand Master and the
      *  readiness footer stay at every level; bind() refuses them. */
     void safetyControlsAreNeverHidden();

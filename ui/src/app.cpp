@@ -11319,6 +11319,18 @@ void App::updatePadRoleChip()
         return;
     ProgrammerController *pc = m_doc->programmer();
     const PadRun *run = pc->padRun();
+    /* No game controller connected: no chip. It shows when one connects
+       and goes when it is unplugged (focusControllerChanged); the Show
+       Review's "Controllers connected" line says what the show maps. An
+       arm or a stop still standing, or a notice (the pad was lost), is
+       said whether or not the pad is there. */
+    if (!pc->focusController().present && !run->stateColour().isValid() && run->chipNotice().isEmpty())
+    {
+        m_statusPadRoleLabel->hide();
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+        return;
+    }
     /* Tools: no chip -- but for a View + Menu held on the pad (Q251), which
        is told where Run / Tools is switched, on the screen too. */
     if (run->state() == PadRun::Tools && run->notice() != PadRun::roleSwitchText())

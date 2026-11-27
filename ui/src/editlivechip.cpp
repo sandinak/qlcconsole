@@ -175,12 +175,20 @@ void EditLiveChip::refresh()
     }
     else
     {
-        m_chip->setText(tr("Edit Live"));
         m_chip->setStyleSheet(QLatin1String(kOffStyle));
-        // Greyed by the level (ShowLevel): its tooltip says the level.
+        /* Greyed by the level (ShowLevel): the face names the level that
+           unlocks it, a click says why in the notice line with the Switch,
+           and its tooltip says it too. */
         if (ShowLevel::shown(levelKey()))
+        {
+            m_chip->setText(tr("Edit Live"));
             m_chip->setToolTip(tr("Turn on Edit Live: the board's page controls trim the running cue, "
                                   "and Store keeps the trims in its looks."));
+        }
+        else
+        {
+            m_chip->setText(tr("Edit Live · %1").arg(ShowLevel::name(ShowLevel::levelOf(levelKey()))));
+        }
     }
     const bool left = el != nullptr && el->hasLeftBehind() && m_leftTimer->isActive();
     if (left)
