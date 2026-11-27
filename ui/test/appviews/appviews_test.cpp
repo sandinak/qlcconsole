@@ -2404,11 +2404,9 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
     QTest::keyClick(editor, Qt::Key_Return);
     QTest::qWait(300);
     QVERIFY2(doc->fixture(fid)->name() == "New name",
-             qPrintable(QString("after Return: name '%1', editor alive %2, row '%3' flags %4, state %5")
+             qPrintable(QString("after Return: name '%1', editor alive %2, flags %3")
                         .arg(doc->fixture(fid)->name()).arg(!editorGuard.isNull())
-                        .arg(row != nullptr ? "?" : "")
-                        .arg(int(tree->currentItem() != nullptr ? int(tree->currentItem()->flags()) : -1))
-                        .arg(int(tree->state()))));
+                        .arg(int(tree->currentItem() != nullptr ? int(tree->currentItem()->flags()) : -1))));
     QTRY_COMPARE(doc->fixture(fid)->name(), QString("New name"));
 
     QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
