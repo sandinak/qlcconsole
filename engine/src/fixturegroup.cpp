@@ -177,8 +177,12 @@ bool FixtureGroup::assignFixture(quint32 id, const QLCPoint& pt)
 
 bool FixtureGroup::assignHead(const QLCPoint& pt, const GroupHead& head)
 {
-    if (m_heads.values().contains(head) == true)
-        return false;
+    /* Looked for in place: values() copied every head of the group for
+       each one added, which made a 6,000-pixel group quadratic in copies
+       (seconds to build; ui/test/showscale). */
+    for (auto it = m_heads.cbegin(); it != m_heads.cend(); ++it)
+        if (it.value() == head)
+            return false;
 
     /* A house role holds the venue's lights only (board Q289): a standard
        cue on it must never drive a tour or rental light. */

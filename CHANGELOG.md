@@ -62,6 +62,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   endless knob never waits, a motor fader is sent the value, and a master
   on a plain fader waits only to be raised -- a pull-down never waits.
   Profiles without these load and save as before.
+- **A size check in the gate at the size of the shows we run** (board
+  Q360): 260 fixtures, 26,000 channels over 80 universes, many holding one
+  or two devices, the show running in Operate; it holds the engine's frame,
+  every universe sent every frame, the Rig Overview and plot, memory and
+  Open/Save to measured budgets. It found two crashes at quit with the Rig
+  Overview open (WLED lanterns patched; any show's features), now fixed.
 
 ### Changed
 

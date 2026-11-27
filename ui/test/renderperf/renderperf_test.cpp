@@ -22,6 +22,7 @@
 #include <QTimer>
 #include <QElapsedTimer>
 #include <QScopeGuard>
+#include <QDir>
 #include <QMouseEvent>
 #include <QFile>
 #include <QTextStream>
@@ -55,6 +56,14 @@
 #include "doc.h"
 #include "showbuilder.h"
 #include "resource_paths.h"
+#include "qlcfixturedefcache.h"
+#include "rgbscriptscache.h"
+#include "inputoutputmap.h"
+#include "mastertimer.h"
+#include "function.h"
+#include "scalerig.h"
+#include "hostspeed.h"
+#include "../common/painttimer.h"
 
 namespace
 {
@@ -805,6 +814,120 @@ void RenderPerf_Test::aGelFiltersTheLight()
     QCOMPARE(StructureStudioView::gelled(QColor(255, 0, 0), blue), QColor(0, 0, 0));
     QCOMPARE(StructureStudioView::gelled(QColor(200, 100, 50), QColor()), QColor(200, 100, 50));
     QCOMPARE(StructureStudioView::gelled(QColor(255, 255, 255), QColor(255, 128, 0)), QColor(255, 128, 0));
+}
+
+/* The shows we run (board Q360, ui/test/showscale's rig: 260 fixtures,
+   26,364 channels over 80 universes, 6,156 pixel heads -- engine/test/
+   common/scalerig.h), running for real in Operate: the cue list fading,
+   the RGB matrix over every pixel, the EFX on the movers, the chasers;
+   the engine's own threads, and the values reaching the fixtures on this
+   thread as the app hands them over (App::slotUniverseWritten). The Rig
+   Overview (angled, beams, Live, stood at centre stage as the window opens
+   it) and the Lighting Studio's 2D plot both open. Each paint's wall time;
+   Operate's 15 fps cap held. CPU raster offscreen.
+   Measured on ender (Release, 2026-11-27, 10 performance cores): the
+   overview 7.6 ms a frame p95 at 10.6 fps, the plot 11.5 ms. The app's own
+   Rig Overview window on the same rig (ui/test/showscale) costs 43-50 ms a
+   frame on ender and newaudio -- this bare view is not yet the whole of
+   what that window draws; showscale holds the app's UI-thread stall.
+   Budgets: about four times the measure, scaled by HostSpeed::factor(),
+   the overview's also by how many fewer performance cores than 8 this
+   machine has (its frame fans out over them). Asserted in Release,
+   reported in Debug. */
+void RenderPerf_Test::theShowsWeRunDrawInBudget()
+{
+    Doc doc(this, ScaleRig::kUniverses);
+    QDir defs(INTERNAL_FIXTUREDIR);
+    defs.setFilter(QDir::Files);
+    QVERIFY(doc.fixtureDefCache()->loadMap(defs));
+    QVERIFY(doc.rgbScriptsCache()->load(QDir(INTERNAL_SCRIPTDIR)));
+    ScaleRig::Built rig;
+    QString why;
+    QVERIFY2(ScaleRig::build(&doc, &rig, &why), qPrintable(why));
+    QString factorText;
+    const double f = HostSpeed::factor(&factorText);
+    const double cores = f * qMax(1.0, 8.0 / qMax(1, SystemProbe::performanceCores()));
+
+    // The values to the fixtures, on this thread, as the app does it.
+    connect(doc.inputOutputMap(), &InputOutputMap::universeWritten, this,
+            [&doc](quint32 idx, const QByteArray &ua) {
+        for (Fixture *fx : doc.fixtures())
+            if (fx->universe() == idx)
+                fx->setChannelValues(ua);
+    });
+    doc.setMode(Doc::Operate);
+    doc.inputOutputMap()->startUniverses();
+    doc.masterTimer()->start();
+    auto stop = qScopeGuard([&doc]() {
+        for (Function *fn : doc.functions())
+            if (fn->isRunning())
+                fn->stop(FunctionParent::master());
+        doc.masterTimer()->stop();
+        doc.setMode(Doc::Design);
+    });
+
+    QWidget parent;
+    Monitor mon(&parent, &doc);
+    parent.resize(1000, 700);
+    parent.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&parent));
+    MonitorGraphicsView *plot = mon.m_graphicsView;
+    QVERIFY(plot != nullptr);
+    QCOMPARE(int(plot->m_fixtures.size()), ScaleRig::kFixtures);
+
+    StructureStudioView overview(&doc, StructureStudioView::StageKind, 0);
+    overview.resize(1100, 700);
+    overview.reload();
+    overview.setPlane(StructureStudioView::Angled);
+    overview.setStandOnCentreStage(true);
+    overview.setLocked(true);
+    overview.setBeams(true);
+    overview.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&overview));
+    overview.setLiveValues(true);
+
+    for (quint32 id : QList<quint32> { rig.cueChaser, rig.matrix, rig.efx } + rig.chasers)
+        doc.function(id)->start(doc.masterTimer(), FunctionParent::master());
+    QTest::qWait(1000);                     // the first cue up, the rate settled to Operate's
+
+    PaintTimer plotPaints(plot->viewport()), overviewPaints(&overview);
+    const int frames0 = overview.paintCount();
+    QElapsedTimer wall;
+    wall.start();
+    while (wall.elapsed() < 3000)
+        QTest::qWait(20);
+    const double fps = (overview.paintCount() - frames0) / (wall.elapsed() / 1000.0);
+    qInfo("%s; the shows we run: overview %.1f fps (cap %d), paint p95 %.1f ms; plot %d paints, "
+          "p95 %.1f ms (overview budgets x%.2f)", qPrintable(factorText), fps,
+          StructureStudioView::operateFrameRate(), overviewPaints.p95(), int(plotPaints.ms.size()),
+          plotPaints.p95(), cores);
+    overview.setLiveValues(false);
+    // With QLC_SHOT_DIR (the pool's --shots), the numbers come back as a file.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty() && QDir().mkpath(shots))
+    {
+#if defined(QT_NO_DEBUG)
+        QFile out(QDir(shots).filePath(QStringLiteral("renderperf-showscale-release.txt")));
+#else
+        QFile out(QDir(shots).filePath(QStringLiteral("renderperf-showscale-debug.txt")));
+#endif
+        if (out.open(QIODevice::WriteOnly | QIODevice::Text))
+            out.write(QString::asprintf("%s\noverview %.1f fps, paint p95 %.1f ms; plot %d paints, p95 %.1f ms; "
+                                        "overview budgets x%.2f (%d performance cores)\n",
+                                        qPrintable(factorText), fps, overviewPaints.p95(),
+                                        int(plotPaints.ms.size()), plotPaints.p95(), cores,
+                                        SystemProbe::performanceCores()).toUtf8());
+    }
+
+    QVERIFY(!overviewPaints.ms.empty() && !plotPaints.ms.empty());
+    QVERIFY2(fps <= StructureStudioView::operateFrameRate() + 1.0,
+             qPrintable(QString("the overview drew %1 fps in Operate").arg(fps)));
+#if defined(QT_NO_DEBUG)
+    QVERIFY2(overviewPaints.p95() < 30 * cores,
+             qPrintable(QString("a Rig Overview frame p95 %1 ms").arg(overviewPaints.p95())));
+    QVERIFY2(fps >= 2.0 / cores, qPrintable(QString("the overview drew %1 fps").arg(fps)));
+    QVERIFY2(plotPaints.p95() < 40 * f, qPrintable(QString("a plot frame p95 %1 ms").arg(plotPaints.p95())));
+#endif
 }
 
 /* Nothing asserted (see the class comment). QLC_PERF_REPS scales the
