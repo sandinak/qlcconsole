@@ -40,6 +40,7 @@
 #include "inputoutputmap.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
+#include "qlcfile.h"
 #include "speedmasters.h"
 #include "deskrecord.h"
 #include "controlmap.h"
