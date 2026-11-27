@@ -378,6 +378,12 @@ round every round, the 1-minute load read before each run. 27 November 2026,
 | | | Real-time | 1.2-3.8 | 0.07 / 17.1 / 18.0 ms | 0.01 | **1.5 ms** (1.5) | 55.7% |
 | newaudio, again | 80 | Standard | 5.7-12.0 | 0.05 / 7.4 / 10.2 ms | 0.00 | 3.6 ms (4.0) | 37.5% |
 | | | Real-time | 6.7-7.5 | 0.05 / 7.5 / 9.4 ms | 0.00 | **1.3 ms** (1.3) | 36.3% |
+| newaudio, Responsive fixed (3 runs) | 80 | Standard | 4.6-7.7 | 0.05 / 6.9 / 8.0 ms | 0.00 | 3.0 ms (3.0) | 36.9% |
+| | | Responsive | 3.9-6.3 | 0.06 / 7.6 / 10.4 ms | 0.00 | 1.8 ms (2.3) | 36.1% |
+| | | Real-time | 4.9-8.7 | 0.06 / 7.0 / 9.0 ms | 0.00 | **1.0 ms** (1.3) | 35.4% |
+| | 160 | Standard | 2.8-11.1 | 0.07 / 17.4 / 20.1 ms | 0.01 | 2.3 ms (2.5) | 60.3% |
+| | | Responsive | 2.1-13.2 | 0.07 / 16.6 / 18.4 ms | 0.01 | 1.5 ms (1.5) | 57.0% |
+| | | Real-time | 1.7-9.1 | 0.07 / 17.2 / 18.2 ms | 0.01 | **1.5 ms** (1.5) | 55.7% |
 | evoms (M5, 4 perf cores) | 80 | Standard | 1.7-5.6 | 0.08 / 11.3 / 12.5 ms | 0.00 | 1.3 ms (8.0) | 42.8% |
 | | | Real-time | 1.9-4.4 | 0.07 / 11.3 / 12.1 ms | 0.00 | **0.8 ms** (0.8) | 38.4% |
 | | 160 | Standard | 1.6-2.8 | 0.06 / 16.6 / 17.8 ms | 0.00 | 1.5 ms (1.5) | 63.0% |
@@ -390,9 +396,9 @@ round every round, the 1-minute load read before each run. 27 November 2026,
 "Tick" is the MasterTimer's compute (wall) per frame, "stall" that minus
 the timer thread's CPU (time it was runnable but not running), "send" the
 time from the tick to a universe's frame having gone to its output (every
-universe's frames together). Responsive (user-interactive QoS) was refused
-to the threads in these runs (a Mach policy set ahead of it; fixed since)
-and measured the same as Standard.
+universe's frames together). In the first sets Responsive (user-interactive
+QoS) was refused to the threads (a Mach policy set ahead of it) and is left
+out; granted, it sits between Standard and Real-time.
 
 - **On a Mac the timer does not stall**: its stall p99 is 0 in every mode,
   so the tick's tails are its own work, not scheduling, and real-time
