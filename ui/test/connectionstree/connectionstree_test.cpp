@@ -4404,11 +4404,11 @@ void ConnectionsTree_Test::feedbackIsPatchedFromAUniverseAndUndone()
     QStringList seen = menuTextsOn(tree, row);
     QVERIFY2(seen.join("|").contains("Send Feedback To"), qPrintable(seen.join("|")));
     QVERIFY(seen.join("|").contains("Pad") && seen.join("|").contains("Other"));
-    QVERIFY(seen.join("|").contains("Remove Feedback") == false);
+    QVERIFY2(seen.join("|").contains("Remove Feedback") == false, qPrintable(seen.join("|")));
     // A universe with no input has nowhere to send it from.
     seen = menuTextsOn(tree, universeRow(tree.m_tree, 1));
-    QVERIFY(seen.join("|").contains("Send Feedback To") == false);
-    QVERIFY(seen.join("|").contains("Remove Feedback") == false);
+    QVERIFY2(seen.join("|").contains("Send Feedback To") == false, qPrintable(seen.join("|")));
+    QVERIFY2(seen.join("|").contains("Remove Feedback") == false, qPrintable(seen.join("|")));
 
     tree.setFeedback(0, stub->name(), 1);
     QVERIFY(iom->feedbackPatch(0) != NULL);
@@ -4416,7 +4416,7 @@ void ConnectionsTree_Test::feedbackIsPatchedFromAUniverseAndUndone()
     QCOMPARE(tree.m_note->text(), QString("Feedback goes back to Other"));
     seen = menuTextsOn(tree, universeRow(tree.m_tree, 0));
     QVERIFY(seen.join("|").contains("Remove Feedback"));
-    QVERIFY(seen.join("|").contains("Send Feedback To") == false);
+    QVERIFY2(seen.join("|").contains("Send Feedback To") == false, qPrintable(seen.join("|")));
 
     const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
     if (shotDir.isEmpty() == false)
