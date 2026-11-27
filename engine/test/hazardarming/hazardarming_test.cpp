@@ -1385,8 +1385,11 @@ void HazardArming_Test::anEffectChaseNeverClosesTheFireLayers()
     }).join();
     QVERIFY2(steps >= 5, qPrintable(QString::number(steps)));
     QCOMPARE(lowest, 255);
-    QCOMPARE(k->m_hazardStep.load(), before);
+    // The main thread free again: the chase's steps (queued) close nothing.
     QCoreApplication::processEvents();
+    QCOMPARE(k->m_hazardStep.load(), before);
+    tick(3);
+    QCOMPARE(at("CO2 jet"), 255);
     chase->stop(FunctionParent(FunctionParent::ManualVCWidget, 9));
     QVERIFY(m_pmj->release(QStringLiteral("1-Down")));
     m_doc->setMode(Doc::Design);

@@ -395,6 +395,11 @@ public:
      *  alone (the startup function, the web's start) never gives it. Any
      *  thread. */
     bool runStamped() const;
+    /** Step @a step was started (on the MasterTimer's thread) under the
+     *  Run's stamp, and the stamp still holds. Its currentStepChanged()
+     *  reaches the main thread later, queued: a GO's stamp given meanwhile
+     *  never counts for a step another route brought. */
+    bool stepRunStamped(int step) const;
     /** The stamp taken away (a mode switch, the show closed). */
     void clearRunStamp();
 
@@ -436,6 +441,8 @@ private:
      *  Run action left (runStamped(): unchanged since). */
     std::atomic<quint32> m_routeSerial { 0 };
     std::atomic<quint32> m_runSerial { 0 };
+    /** The step the runner last started with the stamp, + 1; 0: none. */
+    std::atomic<int> m_stepRun { 0 };
     quint32 nextRouteSerial();
 
 public:

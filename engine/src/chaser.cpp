@@ -957,6 +957,11 @@ bool Chaser::runStamped() const
     return stamp != 0 && stamp == m_routeSerial.load(std::memory_order_acquire);
 }
 
+bool Chaser::stepRunStamped(int step) const
+{
+    return step >= 0 && m_stepRun.load(std::memory_order_acquire) == step + 1 && runStamped();
+}
+
 void Chaser::clearRunStamp()
 {
     m_runSerial.store(0, std::memory_order_release);
@@ -1130,6 +1135,11 @@ void Chaser::preRun(MasterTimer* timer)
     {
         QMutexLocker runnerLocker(&m_runnerMutex);
         createRunner(elapsed());
+        /* Each step's stamp, where the step starts (first: a direct
+           connection runs before the queued one is even posted). */
+        connect(m_runner, &ChaserRunner::currentStepChanged, m_runner, [this](int step) {
+            m_stepRun.store(runStamped() ? step + 1 : 0, std::memory_order_release);
+        }, Qt::DirectConnection);
         connect(m_runner, SIGNAL(currentStepChanged(int)), this, SIGNAL(currentStepChanged(int)));
     }
 

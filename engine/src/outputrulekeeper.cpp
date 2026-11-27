@@ -1517,7 +1517,9 @@ void OutputRuleKeeper::hazardStepReached(Chaser *chaser, int step)
            from anywhere else -- a VC button, the programmer's step, a web
            start, the startup function, the editor's Test -- is no run. */
         Chaser *holder = m_runLists.value(chaserId, nullptr);
-        const bool run = step >= 0 && holder != nullptr && holder->runStamped();
+        // Its own list: stamped at the step itself; sub-cues: their cue's list's.
+        const bool run = step >= 0 && holder != nullptr
+                         && (holder == chaser ? chaser->stepRunStamped(step) : holder->runStamped());
         auto was = m_reach.constFind(chaserId);
         const bool had = was != m_reach.constEnd() || m_granting.contains(chaserId);
         if (!run)

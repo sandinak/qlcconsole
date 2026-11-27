@@ -39,7 +39,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   step before let fire. Hold and Kill act from the device's input thread;
   the Hold is learned from a held press on a plugged-in device (not the
   network, a Wing, a MIDI network session or Bluetooth) and counts 15 s at
-  most. Only a run fires a hazard (never a VC button or a Test); a Running
+  most. Only a run fires a hazard, step by step: a step the Run's GO, Back,
+  jump or Sub GO brought, or an auto-follow after one -- never a VC
+  button, a Test, the programmer's step, a web start or the startup
+  function, nor a step after a stop or a mode switch until the next GO; a Running
   one follows its cue's fade; an effect on a hazard is noted (FIX-24). A cue reached unheld or unarmed skips it ("CO2 jet
   skipped — not held") and never fires late; a show opened, the emergency
   stop, Stop ALL and the spotter's device lost disarm. The three controls
