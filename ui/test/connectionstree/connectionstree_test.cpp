@@ -4546,7 +4546,7 @@ void ConnectionsTree_Test::thePaneSetsTheSlotLikeTheToolbar()
         w.writeEndDocument();
     }
     Doc other(this);
-    other.ioPluginCache()->load(testPluginDir());
+    // No plugins loaded here: the stub is one instance, the first Doc owns it.
     QXmlStreamReader r(xml);
     while (r.readNextStartElement() == false && r.atEnd() == false) {}
     QVERIFY(other.inputOutputMap()->loadXML(r));
