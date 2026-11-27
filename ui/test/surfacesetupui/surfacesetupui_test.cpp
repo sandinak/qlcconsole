@@ -309,9 +309,9 @@ void SurfaceSetupUi_Test::patchFeedbackIsOneClick()
 void SurfaceSetupUi_Test::everyBoardOffersPatchFeedback()
 {
     m_stub->m_hasFeedback = true;
-    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("FaderPort 2"),
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("PreSonus FaderPort 2"),
                      profile("PreSonus-FaderPort-2.qxi"));
-    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40"), 1, QStringLiteral("APC40"),
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40"), 1, QStringLiteral("Akai APC40"),
                       profile("Akai-APC40.qxi"));
     QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
     QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
@@ -337,7 +337,7 @@ void SurfaceSetupUi_Test::everyBoardOffersPatchFeedback()
 void SurfaceSetupUi_Test::noUniqueMatchLandsOnConnections()
 {
     m_stub->m_hasFeedback = true;
-    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("FaderPort 2"),
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("PreSonus FaderPort 2"),
                      profile("PreSonus-FaderPort-2.qxi"));
     QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
     // A second output of the same name: no single match to pick.
