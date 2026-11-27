@@ -738,14 +738,35 @@ jobs:
           APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
           echo "APPVERSION=$APPVERSION" >> $GITHUB_ENV
 
-      - name: Fix v4 dylib dependencies
+      # Bundle every non-system dependency of every Mach-O in the app,
+      # recursively (libsndfile's codecs, Qt's own, the plugins'), the way the
+      # release build does (platforms/macos/bundlefix.py), then fail when any
+      # reference still leaves the bundle (platforms/macos/bundle-check.py).
+      # The old fix_dylib_deps.sh copied libsndfile's codecs into ~/QLC+.app,
+      # not this app: no sound could play, WAV included.
+      - name: Bundle dependencies
         shell: bash
         if: ${{ matrix.task == 'build-v4' }}
         run: |-
-          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/Frameworks/libsndfile.1.dylib
-          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/MacOS/qlcconsole
-          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/MacOS/qlcconsole-fixtureeditor
-          ${{ env.QTDIR }}/bin/macdeployqt ~/qlcconsole.app
+          export QTDIR="${{ env.QTDIR }}"
+          ${{ env.QTDIR }}/bin/macdeployqt ~/qlcconsole.app \
+            -executable=$HOME/qlcconsole.app/Contents/MacOS/qlcconsole \
+            -executable=$HOME/qlcconsole.app/Contents/MacOS/qlcconsole-fixtureeditor
+          chmod -R u+w ~/qlcconsole.app
+          python3 platforms/macos/bundlefix.py ~/qlcconsole.app
+
+      - name: Check the bundle is self-contained
+        shell: bash
+        if: ${{ matrix.task == 'build-v4' }}
+        run: |-
+          python3 platforms/macos/bundle-check.py ~/qlcconsole.app
+          # The audio libraries by name: every dependency of libsndfile's
+          # plugin must be inside the app, MP3 included (mpg123 + LAME).
+          for l in libsndfile libmpg123 libmp3lame; do
+            ls ~/qlcconsole.app/Contents/Frameworks/$l.*dylib >/dev/null \
+              || { echo "no $l in the app"; exit 1; }
+          done
+          test -f ~/qlcconsole.app/Contents/PlugIns/Audio/libsndfileplugin.dylib
 
       - name: Create DMG
         # Use retry loop to work around a race condition on macOS causing

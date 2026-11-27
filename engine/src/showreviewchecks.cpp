@@ -63,6 +63,7 @@
 #include "scene.h"
 #include "video.h"
 #include "audio.h"
+#include "audioplugincache.h"
 #include "doc.h"
 
 static QString tr(const char *text)
@@ -1117,6 +1118,30 @@ static void file02(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+static void file07(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    // Only when this run knows the verdict: a Doc that never loaded the
+    // audio plugins (a headless tool) says nothing about this computer.
+    AudioPluginCache *cache = ctx.doc()->audioPluginCache();
+    if (cache == nullptr || !cache->loadAttempted() || cache->decoderCount() > 0)
+        return;
+    QStringList targets;
+    QVariantList ids;
+    for (Function *f : ctx.doc()->functions())
+    {
+        if (qobject_cast<Audio *>(f))
+        {
+            targets << QStringLiteral("fn:%1").arg(f->id());
+            ids << f->id();
+        }
+    }
+    if (targets.isEmpty())
+        return;
+    out << ReviewContext::make(QStringLiteral("FILE-07"), ReviewFinding::Blocker,
+        tr("Audio can't play: the audio library didn't load."),
+        targets, QByteArray("nodecoder"), QStringLiteral("function"), ids.mid(0, 1));
+}
+
 /****************************************************************************
  * Naming (NAME)
  ****************************************************************************/
@@ -1631,6 +1656,9 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
              "Collect for Transfer copies it in beside the show."), file01 },
         { QStringLiteral("FILE-02"), tr("Missing media"), S::Files,
           tr("A sound or video the show plays that isn't there: the cue plays nothing."), file02 },
+        { QStringLiteral("FILE-07"), tr("Audio can't play"), S::Files,
+          tr("The app's audio library didn't load, so no sound in the show can play: not WAV, "
+             "not MP3. Reinstall the app; if it persists, report it."), file07 },
         { QStringLiteral("NAME-01"), tr("Names off the folder's pattern"), S::Naming,
           tr("When a folder's scenes are named SS-PP.II-Description, one that isn't is hard to "
              "find and sorts in the wrong place."), name01 },

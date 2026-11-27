@@ -69,6 +69,7 @@ private slots:
     void pwr06();
     void file01();
     void file02();
+    void file07();
     void name01();
     void name02();
     void pal01();

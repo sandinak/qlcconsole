@@ -142,7 +142,7 @@ step "4/7 Resources: the repo's only (cmake --install put them there)"
 chmod -R u+w "$APP"
 
 step "5/7 Bundle & rewrite ALL dependencies (deterministic, framework-aware)"
-# We do NOT use macdeployqt or platforms/macos/fix_dylib_deps.sh here. Both
+# We do NOT use macdeployqt or the old fix_dylib_deps.sh (removed). Both
 # assume official Qt (which uses @rpath install names). Homebrew's Qt5 uses
 # ABSOLUTE install names (/opt/homebrew/opt/qt@5/...), so macdeployqt leaves
 # absolute refs in the executables AND inside the Qt framework binaries, and
@@ -192,6 +192,9 @@ while IFS= read -r f; do
 done < <(find "$APP/Contents" -type f \( -perm -u+x -o -name "*.dylib" \))
 [ "$missing" = 0 ] || { echo "ERROR: the bundle is incomplete"; exit 1; }
 echo "  every reference resolves in the bundle ($FLAVOUR)"
+# Every Mach-O, every reference kind (@executable_path, @loader_path, absolute
+# too): the same check CI and make-release.sh run (bundle-check.py).
+python3 "$SCRIPTDIR/bundle-check.py" "$APP" || { echo "ERROR: the bundle is incomplete"; exit 1; }
 
 # A bundle with no platform plugin builds and signs fine but cannot launch.
 # Check it here rather than discovering it on a fresh machine.
