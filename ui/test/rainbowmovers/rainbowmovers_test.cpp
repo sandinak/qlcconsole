@@ -482,7 +482,11 @@ void RainbowMovers_Test::buildSaveAndCheck()
     // The pool's --shots brings this back: that is how the committed file is made.
     const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
     if (!shots.isEmpty() && !QTest::currentTestFailed())
-        QVERIFY(QFile::copy(path, QDir(shots).filePath(QStringLiteral("rainbow-movers.qlcc"))));
+    {
+        const QString dest = QDir(shots).filePath(QStringLiteral("rainbow-movers.qlcc"));
+        QFile::remove(dest);        // a second leg's run writes over the first's
+        QVERIFY(QFile::copy(path, dest));
+    }
 }
 
 void RainbowMovers_Test::theCommittedShowChecksOut()
