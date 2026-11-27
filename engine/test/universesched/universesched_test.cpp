@@ -424,6 +424,9 @@ struct RunResult
     double cpu = 0;                                   ///< process, % of one core
     quint64 writes = 0;
     int late = 0;                                     ///< frames > 1.5 periods apart
+    double cpuP99 = 0;                                ///< the timer thread's CPU in a tick, ms
+    int spikes = 0, spikesAtStep = 0;                 ///< ticks over 5 ms; of them, at a matrix step
+    quint64 mapsLate = 0;
 };
 
 RunResult measure(int universes, Universe::ThreadPriority priority, int warmupS, int seconds)
@@ -449,7 +452,13 @@ RunResult measure(int universes, Universe::ThreadPriority priority, int warmupS,
     MasterTimer *mt = doc->masterTimer();
     const double period = 1000.0 / MasterTimer::frequency();
     QMutex lock;
-    std::vector<double> compute, gaps, stalls;
+    std::vector<double> compute, gaps, stalls, cpus;
+    int spikes = 0, spikesAtStep = 0;
+    const Function *matrixFn = nullptr;
+    for (quint32 id : rig.running)
+        if (Function *f = doc->function(id))
+            if (f->type() == Function::RGBMatrixType && matrixFn == nullptr)
+                matrixFn = f;
     compute.reserve(size_t(seconds + 2) * 60);
     std::atomic<bool> recording { false };
     QElapsedTimer clock;
@@ -463,7 +472,16 @@ RunResult measure(int universes, Universe::ThreadPriority priority, int warmupS,
             return;
         const double comp = mt->tickComputeMs();
         const double cpu = mt->tickCpuMs();
+        const Function *mf = matrixFn;
+        const bool atStep = mf != nullptr && mf->elapsed() <= 2 * MasterTimer::tick();
         QMutexLocker l(&lock);
+        cpus.push_back(cpu);
+        if (comp > 5.0)
+        {
+            spikes++;
+            if (atStep)
+                spikesAtStep++;
+        }
         compute.push_back(comp);
         stalls.push_back(qMax(0.0, comp - cpu));
         if (gap >= 0)
@@ -486,6 +504,7 @@ RunResult measure(int universes, Universe::ThreadPriority priority, int warmupS,
     }
     r.load = loadAverage();
     out->m_writes.store(0);
+    const quint64 late0 = RGBMatrix::mapsLate();
     const double cpu0 = processCpuSeconds();
     QElapsedTimer wall;
     wall.start();
@@ -495,6 +514,7 @@ RunResult measure(int universes, Universe::ThreadPriority priority, int warmupS,
     const double wallS = wall.elapsed() / 1000.0;
     r.cpu = 100.0 * (processCpuSeconds() - cpu0) / qMax(0.001, wallS);
     r.writes = out->m_writes.load();
+    r.mapsLate = RGBMatrix::mapsLate() - late0;
     r.granted = QLatin1String(grantedName(Universe::threadScheduling()));
 
     std::vector<quint64> send(Universe::kSendLatencyBuckets, 0);
@@ -536,6 +556,9 @@ RunResult measure(int universes, Universe::ThreadPriority priority, int warmupS,
         r.tickP999 = percentile(compute, 99.9);
         r.gapP99 = percentile(gaps, 99);
         r.stallP99 = percentile(stalls, 99);
+        r.cpuP99 = percentile(cpus, 99);
+        r.spikes = spikes;
+        r.spikesAtStep = spikesAtStep;
         for (double g : gaps)
             if (g > period * 1.5)
                 r.late++;
@@ -677,7 +700,7 @@ void UniverseSched_Test::abOnTheShowsRig()
         const bool fresh = !csv.exists();
         if (csv.open(QIODevice::Append | QIODevice::Text) && fresh)
             csv.write("host,perf_cores,universes,round,mode,granted,load1,ticks,tick_p50,tick_p99,"
-                      "tick_p999,gap_p99,stall_p99,send_p99,send_p999,cpu_pct,late,writes\n");
+                      "tick_p999,gap_p99,stall_p99,send_p99,send_p999,cpu_pct,late,writes,tick_cpu_p99,spikes,spikes_at_step,maps_late\n");
     }
 
     QMap<QString, QList<RunResult>> byMode;
@@ -693,13 +716,14 @@ void UniverseSched_Test::abOnTheShowsRig()
             QVERIFY2(r.writes > 0, "nothing went to the output");
             byMode[r.mode] << r;
             const QString line = QStringLiteral(
-                "%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18")
+                "%1,%2,%3,%4,%5,%6,%7,%8,%9,%10,%11,%12,%13,%14,%15,%16,%17,%18,%19,%20,%21,%22")
                 .arg(host).arg(performanceCores()).arg(universes).arg(round + 1).arg(r.mode, r.granted)
                 .arg(r.load, 0, 'f', 2).arg(r.ticks)
                 .arg(r.tickP50, 0, 'f', 2).arg(r.tickP99, 0, 'f', 2).arg(r.tickP999, 0, 'f', 2)
                 .arg(r.gapP99, 0, 'f', 2).arg(r.stallP99, 0, 'f', 2)
                 .arg(r.sendP99, 0, 'f', 2).arg(r.sendP999, 0, 'f', 2)
-                .arg(r.cpu, 0, 'f', 1).arg(r.late).arg(r.writes);
+                .arg(r.cpu, 0, 'f', 1).arg(r.late).arg(r.writes)
+                .arg(r.cpuP99, 0, 'f', 2).arg(r.spikes).arg(r.spikesAtStep).arg(r.mapsLate);
             qInfo().noquote() << "SCHED_AB" << line;
             if (csv.isOpen())
             {
