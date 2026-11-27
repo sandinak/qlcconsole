@@ -38,17 +38,17 @@ that have one. Change both files together.
 | Theme | Rules | Count | Enforced |
 |---|---|---|---|
 | Units & numbers | UX-01, UX-02, UX-03, UX-04, UX-05, UX-06, UX-63 | 7 | 5 |
-| Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77 | 14 | 8 |
-| Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25 | 6 | 5 |
+| Words | UX-07, UX-08, UX-09, UX-10, UX-11, UX-12, UX-13, UX-14, UX-15, UX-16, UX-17, UX-18, UX-19, UX-77, UX-84 | 15 | 9 |
+| Context-awareness | UX-20, UX-21, UX-22, UX-23, UX-24, UX-25, UX-82 | 7 | 6 |
 | Feedback & state | UX-26, UX-27, UX-28, UX-29, UX-30, UX-31, UX-32, UX-33 | 8 | 6 |
 | Layout | UX-34, UX-35, UX-36, UX-37, UX-38, UX-39, UX-40, UX-78, UX-79, UX-80, UX-81 | 11 | 9 |
-| Consistency across views | UX-41, UX-42, UX-43, UX-44, UX-45, UX-46, UX-47, UX-48 | 8 | 6 |
+| Consistency across views | UX-41, UX-42, UX-43, UX-44, UX-45, UX-46, UX-47, UX-48, UX-83 | 9 | 7 |
 | Safety in Operate | UX-49, UX-50, UX-51, UX-52, UX-53, UX-54, UX-55, UX-56 | 8 | 6 |
 | Teaching & course voice | UX-57, UX-58, UX-59, UX-60 | 4 | 1 |
 | Ease of use | UX-61, UX-62, UX-64, UX-65, UX-66, UX-76 | 6 | 0 |
 | Does what it says | UX-67, UX-68, UX-69, UX-70, UX-71, UX-72, UX-73, UX-74, UX-75 | 9 | 3 |
 
-Main check: 49 tests, 23 review, 6 walker, 3 manual. 49 of 81 enforced.
+Main check: 52 tests, 23 review, 6 walker, 3 manual. 52 of 84 enforced.
 
 ## Units & numbers
 
@@ -802,6 +802,33 @@ A row, field or form label is a short name (a few words, no identifier, no sente
 - **Not yet checked:** the Look Editor's palette-slot rows, and the wrap-instead-of-clip layout half.
 - **Right:** `Follow Mode: Hold Last Position (the sentence in the tooltip)`
 - **Wrong:** `On scene change: hold the last beam position, or snap to the bound followTarget`
+
+### UX-82 An empty place says why and what to do
+
+Any section, list or tree branch that can be empty shows a line saying why it is empty and what to do about it; never a bare empty space.
+
+- **Why:** 2026-11-27: Connections ▸ Devices ▸ Control surfaces showed nothing on his show, boards patched with no profile: "What is 'Control Surfaces' in Devices if I have one and I don't see it configured under there?"
+- **Check:** `connectionstree_test::everyConnectionsBranchIsExplained` (enforced)
+- **Right:** `No control surface: plug in a board, or patch a MIDI input with a profile.`
+- **Wrong:** `An empty Control surfaces branch with nothing under it`
+
+### UX-83 Nothing is only on a legacy page
+
+A setting or action reachable only from a legacy or reference page (the Universes tab, the Classic view) is a finding: it is also reachable where the current workflow lives.
+
+- **Why:** 2026-11-27: a universe's Slot was only on the Universes tab's toolbar: "I really do NOT want to have to go to that page to make this change. We should stay in the Connections tab. That old tab (Universes) is only for reference for old QLC users."
+- **Check:** `connectionstree_test::theUniversesTabHasADevicesCounterpart` (enforced)
+- **Right:** `Slot is in the universe pane on Connections ▸ Devices as well as on the Universes toolbar`
+- **Wrong:** `Slot only on the Universes toolbar`
+
+### UX-84 A row says what it is
+
+A row or section whose name is not self-explanatory has a one-line purpose in its pane or its tooltip.
+
+- **Why:** 2026-11-27: "What is 'Control Surfaces' in Devices ... What's the purpose? ... Anything that's not explained should generate a check."
+- **Check:** `connectionstree_test::everyConnectionsBranchIsExplained` (enforced)
+- **Right:** `Control surfaces are the boards you run the show from: their jobs (GO, Back, GM…), lamps and map.`
+- **Wrong:** `A row named Control surfaces with a blank pane`
 
 ## Complexity and ease of use
 

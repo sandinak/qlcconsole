@@ -2099,6 +2099,70 @@ bool InputOutputMap::pluginSupportsFeedback(const QString& pluginName)
         return false;
 }
 
+QList<InputOutputMap::FeedbackLine> InputOutputMap::feedbackLines()
+{
+    QList<FeedbackLine> out;
+    if (m_doc->ioPluginCache() == NULL)
+        return out;
+    foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+    {
+        if (p == NULL || (p->capabilities() & QLCIOPlugin::Feedback) == 0
+            || (p->capabilities() & QLCIOPlugin::Output) == 0)
+            continue;
+        const QStringList outs = p->outputs();
+        /* Network protocols (Art-Net, sACN, OSC) need an address, which a
+           name cannot give. */
+        const bool network = p->supportsOutputTargets() || p->isNetworkDmxOutput()
+                || p->name().contains(QLatin1String("OSC"), Qt::CaseInsensitive);
+        for (int i = 0; i < outs.count(); i++)
+        {
+            FeedbackLine fl;
+            fl.plugin = p->name();
+            fl.line = quint32(i);
+            fl.name = outs.at(i);
+            fl.pairable = !network;
+            out << fl;
+        }
+    }
+    return out;
+}
+
+InputOutputMap::FeedbackLine InputOutputMap::feedbackLineFor(quint32 universe)
+{
+    FeedbackLine none;
+    InputPatch *ip = inputPatch(universe);
+    if (ip == NULL || ip->plugin() == NULL)
+        return none;
+    const QStringList ins = ip->plugin()->inputs();
+    if (int(ip->input()) >= ins.count())
+        return none;
+    const QString want = ins.at(int(ip->input()));
+    int hits = 0;
+    FeedbackLine found;
+    foreach (const FeedbackLine &fl, feedbackLines())
+    {
+        if (fl.plugin == ip->pluginName() && fl.pairable && fl.name == want)
+        {
+            found = fl;
+            hits++;
+        }
+    }
+    return hits == 1 ? found : none;
+}
+
+QString InputOutputMap::pairFeedback(quint32 universe)
+{
+    if (universe >= universesCount() || inputPatch(universe) == NULL || inputPatch(universe)->plugin() == NULL
+        || feedbackPatch(universe) != NULL)
+        return QString();
+    const FeedbackLine fl = feedbackLineFor(universe);
+    if (fl.plugin.isEmpty())
+        return QString();
+    if (setOutputPatch(universe, fl.plugin, QString(), fl.line, true, 0) == false)
+        return QString();
+    return fl.name;
+}
+
 void InputOutputMap::configurePlugin(const QString& pluginName)
 {
     QLCIOPlugin* outputPlugin = m_doc->ioPluginCache()->plugin(pluginName);

@@ -72,6 +72,11 @@ public:
     /** Pick the show-control row for @p key ("osc", "msc", "mtc"), or the
      *  branch itself when empty. */
     void selectShowControlRow(const QString &key);
+    /** Select @p universe's input row and say how to patch its feedback by hand. */
+    void showFeedbackNeeded(quint32 universe);
+    /** The universe of the selected row (UINT_MAX: none) and the note beside the toolbar. */
+    quint32 selectedUniverse() const;
+    QString noteText() const;
     /** Back to the wiring: nothing picked, the output view on the right. */
     void clearShowControlSelection();
 
@@ -142,7 +147,23 @@ private:
     static void markUnreachable(QTreeWidgetItem *item, const QStringList &reasons);
 
     /** Patch an existing or new universe to this plugin line. */
-    void patchUniverseTo(const QString &pluginName, quint32 line, bool output);
+    void patchUniverseTo(const QString &pluginName, quint32 line, bool output,
+                         bool feedback = false);
+    /** The feedback entries on a universe row's menu (null where they cannot act). */
+    struct FeedbackMenu { class QAction *remove = nullptr; class QMenu *send = nullptr; };
+    FeedbackMenu addFeedbackActions(class QMenu &menu, quint32 universe);
+    bool handleFeedbackAction(class QAction *chosen, const FeedbackMenu &fb, quint32 universe);
+    /** Tooltips on every branch, and a grey child line in each empty one. */
+    void explainBranches();
+    /** What a Show control & sync row is, in a sentence (its tooltip). */
+    static QString showControlTip(const QString &key);
+    /** Control surfaces' children: each board, each unset input, or a line saying none. */
+    void addSurfaceRows(QTreeWidgetItem *parent);
+    /** Say something short beside the toolbar ("Feedback goes back to X"). */
+    void postNote(const QString &text);
+    /** Pair a universe's feedback to its input's own output (MIDI, HID),
+     *  noting it. Returns the device paired, or empty. */
+    QString autoPairFeedback(quint32 universe);
     /** Resolve which of a plugin's lines an action should apply to: the only
      *  one if there is only one, otherwise a picker. False if the plugin has
      *  no line in that direction at all, or the user cancelled the picker.
@@ -383,6 +404,7 @@ private:
     class QPushButton *m_rescan;
     class QPushButton *m_undo;
     class QLabel *m_status;
+    class QLabel *m_note = nullptr;
     /* Which branches are open, by full path, so the periodic rebuild does not
        fight the operator. Tracked as EXPANDED rather than collapsed because
        the default is now "protocol and interface open, devices closed": with a

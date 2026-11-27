@@ -699,6 +699,48 @@ So far the WLED output has been checked against a stand-in that answers
 like a WLED device, not yet against real WLED hardware on a show network —
 try it on your own devices before relying on it for a show.
 
+### Everything for a universe is on Devices
+
+Select a universe on **Devices** (the tick on **By universe** lists them all)
+and its settings are the pane beside the list: **Name**, **Slot** (Tour or
+House), the protocol and interface, the input with its **Input Profile**
+(**Edit…**, **New…** and **Delete** beside it work on the profile), **Feedback**, **Passthrough**.
+**Add Universe** and **Delete Universe…** are on any row's right-click,
+**Undo Patch Change** and **Rescan** are above the list. The **Universes**
+tab is QLC+'s own page, kept for people who know it: nothing is only there. The computer's audio input and output device, sample rate, channels and level meter are the **Audio** box at the bottom of the pane.
+
+**Show control & sync ▸ Control surfaces** lists each board recognised as a
+control surface (its name, universe, profile, and whether it has a feedback
+line). A MIDI or USB input patched with no profile is listed as *not set
+up*: click it and choose or confirm its profile on the right. With no board
+the row says so. Every branch of the list has a tooltip saying what it is,
+and an empty one has a grey line saying why and what to do.
+
+### Feedback to a control surface
+
+Feedback is what the app sends back to a board so its lamps and motor
+faders follow the show: a lit GO button, a fader that moves with the Grand
+Master. It is an output line of the same device, patched on the universe
+that has the board's input.
+
+- **Patching the input pairs it for you.** Patch a MIDI or USB board as a
+  universe's input and, when the same device has an output with the same
+  name and that universe has no feedback yet, the app sets it and says so
+  beside the toolbar: *Feedback goes back to* the device. Art-Net, sACN and
+  OSC are never paired this way: they need an address.
+- **By hand.** Right-click the board's interface line and choose **Patch a
+  Universe Here (feedback)**, then the universe. Or right-click the universe
+  and choose **Send Feedback To…** and the line. **Remove Feedback** takes it
+  off again. Each is one step of **Undo Patch Change**.
+- **From Control surfaces.** **Boards without feedback** lists every patched
+  controller with a profile (FaderPort, APC, PMJ, any surface) that has no
+  feedback line, and **Patch Feedback** pairs each one's own output in one
+  click. A board with no single match opens Connections on its input instead.
+
+The menu items appear only where they can act: the feedback item on a line
+of a protocol that can send it, and **Send Feedback To…** on a universe that
+has an input and no feedback yet.
+
 ## Window menu
 
 Every tab is in **Window**. The tabs the [workspace view](getting-started.md#views)

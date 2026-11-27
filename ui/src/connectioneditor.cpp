@@ -22,6 +22,10 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
+#include <QFileDialog>
+#include <QFileInfo>
+#include <QDir>
+#include <QFile>
 #include <QPushButton>
 #include <QGroupBox>
 #include <QComboBox>
@@ -34,6 +38,10 @@
 #include <QTimer>
 
 #include "connectioneditor.h"
+#include "inputprofileeditor.h"
+#include "audiosettingspanel.h"
+#include "qlcfile.h"
+#include "qlcinputprofile.h"
 #include "inputdevicenotices.h"
 #include "wleddevicesdialog.h"
 #include "wledconfigcheck.h"
@@ -140,6 +148,17 @@ void ConnectionEditor::buildForm()
     m_nameEdit = new QLineEdit(this);
     m_nameEdit->setObjectName(QStringLiteral("connName"));
     top->addRow(tr("Name:"), m_nameEdit);
+
+    /* The same Slot as the Universes toolbar (board Q138): Tour, or House. */
+    m_slotCombo = new QComboBox(this);
+    m_slotCombo->setObjectName(QStringLiteral("connSlot"));
+    m_slotCombo->addItem(RigOwner::displayName(RigOwner::Tour), int(RigOwner::Tour));
+    m_slotCombo->addItem(RigOwner::displayName(RigOwner::House), int(RigOwner::House));
+    m_slotCombo->setToolTip(tr("Which kind of fixture the show means to put in this universe: the tour "
+                               "package, or a venue's house rig. The clash check lists a fixture in the "
+                               "other kind's slot. With a venue applied, an output changed here is "
+                               "that venue's (its file), and the show keeps its own."));
+    top->addRow(tr("Slot:"), m_slotCombo);
 
     m_protocolCombo = new QComboBox(this);
     m_protocolCombo->setObjectName(QStringLiteral("connProtocol"));
@@ -391,7 +410,52 @@ void ConnectionEditor::buildForm()
         foreach (const QString &pn, profiles)
             m_profileCombo->addItem(pn, pn);
     }
+    /* Edit the profile chosen, as the Universes tab's profile cell does. */
+    m_profileEdit = new QPushButton(tr("Edit…"), m_inputBox);
+    m_profileEdit->setObjectName(QStringLiteral("connProfileEdit"));
+    m_profileEdit->setToolTip(tr("Open the chosen input profile in the profile editor: what each "
+                                 "control of the board is called and does"));
+    /* The buttons on a row of their own: three beside the list made the
+       pane wider than a small window's. */
+    QWidget *profileRow = new QWidget(m_inputBox);
+    QHBoxLayout *profileLay = new QHBoxLayout(profileRow);
+    profileLay->setContentsMargins(0, 0, 0, 0);
+    profileLay->setSpacing(2);
+    profileLay->addWidget(m_profileEdit);
+    m_profileNew = new QPushButton(tr("New…"), m_inputBox);
+    m_profileNew->setObjectName(QStringLiteral("connProfileNew"));
+    m_profileNew->setToolTip(tr("Make a new input profile, for a controller none of these describes"));
+    m_profileDelete = new QPushButton(tr("Delete"), m_inputBox);
+    m_profileDelete->setObjectName(QStringLiteral("connProfileDelete"));
+    m_profileDelete->setToolTip(tr("Delete the chosen input profile's file"));
+    m_profileDelete->setEnabled(false);
+    profileLay->addWidget(m_profileNew);
+    profileLay->addWidget(m_profileDelete);
+    foreach (QPushButton *b, QList<QPushButton *>() << m_profileEdit << m_profileNew << m_profileDelete)
+        b->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);   // shrink with the pane, not widen it
+    connect(m_profileNew, &QPushButton::clicked, this, &ConnectionEditor::slotNewProfile);
+    connect(m_profileDelete, &QPushButton::clicked, this, &ConnectionEditor::slotDeleteProfile);
     inf->addRow(tr("Input Profile:"), m_profileCombo);
+    profileLay->addStretch(1);
+    inf->addRow(QString(), profileRow);
+    connect(m_profileCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) {
+                const bool has = !m_profileCombo->currentData().toString().isEmpty();
+                m_profileEdit->setEnabled(has);
+                m_profileDelete->setEnabled(has);
+            });
+    connect(m_profileEdit, &QPushButton::clicked, this, [this]() {
+        InputOutputMap *iom = m_doc->inputOutputMap();
+        QLCInputProfile *profile = iom != nullptr ? iom->profile(m_profileCombo->currentData().toString()) : nullptr;
+        if (profile == nullptr)
+            return;
+        InputProfileEditor ite(this, profile, iom);
+        if (ite.exec() != QDialog::Accepted)
+            return;
+        *profile = *ite.profile();
+        if (!profile->saveXML(profile->path()))
+            QMessageBox::warning(this, tr("Saving failed"), tr("Unable to save %1").arg(profile->name()));
+    });
     m_midiChannel = new QComboBox(m_inputBox);
     m_midiChannel->setObjectName(QStringLiteral("connMidiChannel"));
     /* The MIDI plugin's own numbering: 0-15 are channels 1-16, and 16
@@ -594,6 +658,7 @@ void ConnectionEditor::load()
     if (m_paneTitle != nullptr)
         m_paneTitle->setText(tr("Universe %1: %2").arg(m_universe + 1).arg(u->name()));
     m_nameEdit->setText(u->name());
+    m_slotCombo->setCurrentIndex(qMax(0, m_slotCombo->findData(int(iom->universeSlotOwner(int(m_universe))))));
     m_protocolCombo->setCurrentIndex(qMax(0, m_protocolCombo->findData(m_origPlugin)));
     m_loading = false;
     slotProtocolChanged();
@@ -1094,6 +1159,83 @@ void ConnectionEditor::slotFeedbackChanged()
     m_feedbackPort->setEnabled(targets);
 }
 
+void ConnectionEditor::slotNewProfile()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return;
+    /* As the Universes tab: edit a new profile, save it in the user's
+       profile folder (asking before a file of the same name is replaced),
+       and use it here. */
+    InputProfileEditor ite(this, nullptr, iom);
+    while (ite.exec() == QDialog::Accepted)
+    {
+        QString path = QStringLiteral("%1/%2-%3%4").arg(QDir(InputOutputMap::userProfileDirectory()).absolutePath())
+                           .arg(ite.profile()->manufacturer().remove(QChar(' ')))
+                           .arg(ite.profile()->model().remove(QChar(' '))).arg(KExtInputProfile);
+        if (QFile::exists(path))
+        {
+            const int r = QMessageBox::warning(this, tr("Existing Input Profile"),
+                    tr("An input profile at %1 already exists. Do you wish to overwrite it?")
+                        .arg(QDir::toNativeSeparators(path)),
+                    QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::No);
+            if (r == QMessageBox::Cancel)
+                continue;
+            if (r == QMessageBox::No)
+            {
+                path = QFileDialog::getSaveFileName(this, tr("Save Input Profile"), path,
+                                                    tr("Input Profiles (*%1)").arg(KExtInputProfile));
+                if (path.isEmpty())
+                    continue;
+            }
+        }
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QLCInputProfile *profile = ite.profile()->createCopy();
+        if (profile->saveXML(path) == false)
+        {
+            delete profile;
+            QMessageBox::warning(this, tr("Saving failed"),
+                                 tr("Unable to save the profile to %1").arg(QDir::toNativeSeparators(path)));
+            continue;
+        }
+        const QString name = profile->name();
+        if (iom->profile(name) != nullptr)
+            iom->removeProfile(name);
+        iom->addProfile(profile);
+        if (m_profileCombo->findData(name) < 0)
+            m_profileCombo->addItem(name, name);
+        m_profileCombo->setCurrentIndex(m_profileCombo->findData(name));    // used here, as picked from the list
+        return;
+    }
+}
+
+void ConnectionEditor::slotDeleteProfile()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    const QString name = m_profileCombo->currentData().toString();
+    QLCInputProfile *profile = iom != nullptr ? iom->profile(name) : nullptr;
+    if (profile == nullptr)
+        return;
+    if (QMessageBox::question(this, tr("Delete profile"),
+                              tr("Do you wish to permanently delete profile \"%1\"?").arg(name),
+                              QMessageBox::Yes, QMessageBox::No) != QMessageBox::Yes)
+        return;
+    QFile file(profile->path());
+    if (file.remove() == false)
+    {
+        QMessageBox::warning(this, tr("File deletion failed"),
+                             tr("Unable to delete file %1").arg(file.errorString()));
+        return;
+    }
+    /* Every universe that used it has none now. */
+    m_profileCombo->setCurrentIndex(0);
+    for (quint32 u = 0; u < iom->universesCount(); u++)
+        if (iom->inputPatch(u) != nullptr && iom->inputPatch(u)->profileName() == name)
+            iom->setInputProfile(u, QString());
+    iom->removeProfile(name);
+    m_profileCombo->removeItem(m_profileCombo->findData(name));
+}
+
 void ConnectionEditor::slotConfigurePlugin()
 {
     QLCIOPlugin *p = pickedPlugin();
@@ -1363,6 +1505,9 @@ bool ConnectionEditor::apply()
         iom->setUniversePassthrough(int(m_universe), m_passthrough->isChecked());
         iom->saveDefaults();
     }
+    const RigOwner::Owner slot = RigOwner::Owner(m_slotCombo->currentData().toInt());
+    if (iom->universeSlotOwner(int(m_universe)) != slot)
+        iom->setUniverseSlotOwner(int(m_universe), slot);
     const QString name = m_nameEdit->text().trimmed();
     if (name.isEmpty() == false && name != u->name())
         iom->setUniverseName(int(m_universe), name);
@@ -1431,7 +1576,7 @@ ConnectionEditor *ConnectionEditor::createPane(Doc *doc, QWidget *parent)
     auto commit = [ed]() { ed->schedulePaneCommit(); };
     foreach (QComboBox *c, QList<QComboBox *>() << ed->m_transmitMode << ed->m_sacnMode
              << ed->m_midiMode << ed->m_inputCombo << ed->m_profileCombo << ed->m_midiChannel
-             << ed->m_feedbackCombo)
+             << ed->m_feedbackCombo << ed->m_slotCombo)
         connect(c, QOverload<int>::of(&QComboBox::currentIndexChanged), ed, commit);
     foreach (QLineEdit *e, QList<QLineEdit *>() << ed->m_targetIP << ed->m_sacnIP
              << ed->m_feedbackIP << ed->m_feedbackPort << ed->m_nameEdit)
@@ -1440,6 +1585,10 @@ ConnectionEditor *ConnectionEditor::createPane(Doc *doc, QWidget *parent)
              << ed->m_artnetInUni)
         connect(sp, &QSpinBox::editingFinished, ed, commit);
     connect(ed->m_passthrough, &QCheckBox::toggled, ed, commit);
+    /* The computer's audio, as the Universes tab's Audio page has it. */
+    if (QWidget *body = ed->m_paneNote->parentWidget())
+        if (QVBoxLayout *vl = qobject_cast<QVBoxLayout *>(body->layout()))
+            vl->insertWidget(qMax(0, vl->count() - 1), new AudioSettingsPanel(doc, ed));
     ed->markClean();
     return ed;
 }
@@ -1490,7 +1639,8 @@ QString ConnectionEditor::formState() const
       << QString::number(m_artnetInUni->value())
       << QString::number(m_feedbackCombo->currentIndex())
       << m_feedbackIP->text().trimmed() << m_feedbackPort->text().trimmed()
-      << QString::number(m_passthrough->isChecked()) << m_nameEdit->text().trimmed();
+      << QString::number(m_passthrough->isChecked()) << m_nameEdit->text().trimmed()
+      << QString::number(m_slotCombo->currentData().toInt());
     return v.join(QChar(0x1f));
 }
 

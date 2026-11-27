@@ -29,6 +29,7 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QTabWidget>
+#include <QSignalBlocker>
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QComboBox>
@@ -139,6 +140,11 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     });
     connect(m_showControlPage, &ShowControlSyncPage::virtualConsoleRequested,
             this, &InputOutputManager::virtualConsoleRequested);
+    connect(m_showControlPage, &ShowControlSyncPage::patchFeedbackRequested, this, [this](quint32 universe) {
+        m_ioTabs->setCurrentWidget(m_devicesTree);
+        m_devicesTree->clearShowControlSelection();
+        m_devicesTree->showFeedbackNeeded(universe);
+    });
     connect(m_showControlPage, &ShowControlSyncPage::patchMidiInputRequested, this, [this]() {
         m_ioTabs->setCurrentWidget(m_devicesTree);
         m_devicesTree->clearShowControlSelection();
@@ -153,6 +159,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
        toolbar it belongs to says it means. */
     m_addUniverseAction = new QAction(QIcon(":/edit_add.png"),
                                    tr("Add U&niverse"), detailed);
+    m_addUniverseAction->setObjectName(QStringLiteral("uniAddUniverse"));
     m_addUniverseAction->setShortcut(QKeySequence("CTRL+N"));
     m_addUniverseAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     detailed->addAction(m_addUniverseAction);
@@ -161,6 +168,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
 
     m_deleteUniverseAction = new QAction(QIcon(":/edit_remove.png"),
                                    tr("&Delete Universe"), detailed);
+    m_deleteUniverseAction->setObjectName(QStringLiteral("uniDeleteUniverse"));
     /* No shortcut of its own: Delete / Backspace in the universe list (the
        same key as every other list's remove, EditKeys below). Cmd/Ctrl+D is
        Duplicate everywhere, and a universe is not duplicated (decided: a
@@ -184,6 +192,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
        drift apart between tabs. */
     m_undoPatchAction = new QAction(QIcon(":/back.png"),
                                     tr("&Undo Patch Change"), this);
+    m_undoPatchAction->setObjectName(QStringLiteral("uniUndoPatch"));
     m_undoPatchAction->setShortcut(QKeySequence::Undo);
     m_undoPatchAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     m_undoPatchAction->setEnabled(false);
@@ -217,6 +226,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
 
     QLabel *uniLabel = new QLabel(tr("Universe name:"));
     m_uniNameEdit = new QLineEdit(this);
+    m_uniNameEdit->setObjectName(QStringLiteral("uniName"));
     QFont font = QApplication::font();
     //font.setBold(true);
     font.setPixelSize(18);
@@ -226,6 +236,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     m_toolbar->addWidget(m_uniNameEdit);
 
     m_uniPassthroughCheck = new QCheckBox(tr("Passthrough"), this);
+    m_uniPassthroughCheck->setObjectName(QStringLiteral("uniPassthrough"));
     m_uniPassthroughCheck->setLayoutDirection(Qt::RightToLeft);
     m_uniPassthroughCheck->setFont(font);
     m_toolbar->addWidget(m_uniPassthroughCheck);
@@ -256,6 +267,16 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     });
 
     m_splitter->widget(0)->layout()->addWidget(m_toolbar);
+
+    /* The Slot is also set in Devices' universe pane: back here, show what it set. */
+    connect(m_ioTabs, &QTabWidget::currentChanged, this, [this](int) {
+        const quint32 uniIdx = currentUniverse();
+        if (uniIdx == InputOutputMap::invalidUniverse() || m_ioMap == NULL)
+            return;
+        const QSignalBlocker block(m_uniSlotCombo);
+        m_uniSlotCombo->setCurrentIndex(
+            qMax(0, m_uniSlotCombo->findData(int(m_ioMap->universeSlotOwner(int(uniIdx))))));
+    });
 
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();
@@ -308,6 +329,7 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
             QIcon(":/refresh.png"), tr("Rescan Connections"), this);
         rescanBtn->setToolTip(tr("Re-enumerate input/output devices "
                                  "(use after plugging in a controller)"));
+        rescanBtn->setObjectName(QStringLiteral("uniRescan"));
         connect(rescanBtn, SIGNAL(clicked()), this, SLOT(slotRescanPlugins()));
         m_splitter->widget(0)->layout()->addWidget(rescanBtn);
     }

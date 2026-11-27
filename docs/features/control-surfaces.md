@@ -1130,6 +1130,22 @@ after any build that changes a surface, and say which build.
    *Shift+STOP*, **Shift** is drawn as the board's own key. Untick **Stop
    needs Shift**: **Stop** alone now stops.
 
+**Feedback patch (any board with lamps or motors: FaderPort 2, APC, PMJ, MaizeDMX)**
+
+1. Patch the board's input on a universe, then in Connections remove its
+   feedback (the universe's right-click, **Remove Feedback**). *Expect:* the
+   lamps go dark and Control surfaces says *no feedback line* with a **Patch
+   Feedback** button.
+2. Unpatch the input and patch it again. *Expect:* the status beside the
+   Connections toolbar says *Feedback goes back to* the board, the lamps
+   light and the fader follows the Grand Master, without touching feedback.
+3. Remove feedback again and press **Patch Feedback** in Control surfaces
+   (or in Controller Setup). *Expect:* the lamps light at once.
+4. With two outputs of the board's name (or none that matches), press **Patch
+   Feedback** under **Boards without feedback**. *Expect:* Connections opens
+   with the board's input selected and says *Right-click the board's output,
+   Patch a Universe Here (feedback)*; nothing is patched by guess.
+
 **PMJ Black 1**
 
 1. Patch the PMJ as an input on any MIDI channel with the feedback line and

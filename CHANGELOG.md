@@ -88,6 +88,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   are drawn as lights, not knobs, and it has a Colour and a Move page on X7
   and X9.
 
+- **Connections ▸ Devices holds everything the Universes tab does** (Slot,
+  Input Profile Edit…, Add/Delete, Undo, Rescan are all on Devices, and a test
+  fails if the Universes tab gains a setting Devices lacks). **Control surfaces**
+  lists each board with its universe, profile and feedback, each unprofiled
+  input as *not set up*, or says none; its pane opens with what a control
+  surface is. Every branch has a tooltip and an empty one says why; three new
+  UX rules (UX-82 to UX-84) check it.
+- **A universe's Slot (Tour or House) is in the Devices universe pane** under
+  Name, as well as on the Universes toolbar; either shows what the other set,
+  and a pane edit is one undo step.
+- **Feedback is patched like input and output.** Patching a MIDI or USB board's
+  input pairs its own output as the feedback line (Connections says *Feedback
+  goes back to ...*); **Patch a Universe Here (feedback)** on a line,
+  **Send Feedback To...** and **Remove Feedback** on a universe do it by
+  hand, with undo; Control surfaces and Controller Setup get a **Patch
+  Feedback** button where a board's lamps were dark for want of it.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

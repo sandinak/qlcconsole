@@ -1013,6 +1013,38 @@ public:
     bool pluginSupportsFeedback(const QString& pluginName);
 
     /**
+     * A device line that can carry feedback back to a control surface:
+     * an output line of a plugin with QLCIOPlugin::Feedback.
+     */
+    struct FeedbackLine
+    {
+        QString plugin;
+        quint32 line = 0;
+        QString name;
+        /** An address-less line a board's own output can be paired to
+         *  (not a network protocol: those need an address) */
+        bool pairable = false;
+    };
+
+    /** Every feedback-capable output line of every plugin. */
+    QList<FeedbackLine> feedbackLines();
+
+    /**
+     * The feedback line that is the same device as the input patched on
+     * @p universe: a hardware (MIDI, HID) line of the input's plugin with
+     * the input's name, and only one of them. Network protocols never
+     * pair. Empty plugin if none.
+     */
+    FeedbackLine feedbackLineFor(quint32 universe);
+
+    /**
+     * Set @p universe's feedback to feedbackLineFor() when it has an input
+     * and no feedback yet.
+     * @return the device name paired, or an empty string (nothing done)
+     */
+    QString pairFeedback(quint32 universe);
+
+    /**
      * Open a configuration dialog for the given plugin
      *
      * @param pluginName Name of the plugin to configure

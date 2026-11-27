@@ -203,6 +203,8 @@ public:
     QMap<int, QString> m_lineDescriptions;
     bool m_linesAreHardware;
     bool m_supportsTargets;
+    /** capabilities() adds Feedback (a MIDI-like line that can light a board) */
+    bool m_hasFeedback = false;
     int m_rescanCalled;
     QStringList m_probed;
     /** Number of lines outputs()/inputs() advertise; 4 unless a test says otherwise. */

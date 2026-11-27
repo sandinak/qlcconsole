@@ -109,8 +109,9 @@ another venue's rig. Use groups for house lights.
 
 ## Universes: slots, the room's patch, not ours
 
-On **Connections ▸ Universes**, select a universe and set its **Slot**
-on the toolbar, beside **Universe name**: **Tour** or **House**. It says which kind of fixture you mean to
+Change a universe's **Slot** here, on the **Connections ▸ Universes**
+toolbar (beside **Universe name**) or in the universe pane on
+**Connections ▸ Devices** (under **Name**): **Tour** or **House**. It says which kind of fixture you mean to
 put there ("U1 to U4 Tour, U5 and U6 House"). The clash check lists a
 house fixture in a Tour slot and a tour fixture in a House slot.
 

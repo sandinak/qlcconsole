@@ -136,6 +136,10 @@ private slots:
     void slotInputChanged();
     void slotFeedbackChanged();
     void slotConfigurePlugin();
+    /** Make a new input profile (as the Universes tab's New…) and use it here. */
+    void slotNewProfile();
+    /** Delete the chosen input profile's file (as the Universes tab's Delete). */
+    void slotDeleteProfile();
     void slotWledDevices();
 
 private:
@@ -191,6 +195,7 @@ private:
 
     QComboBox *m_universeCombo = nullptr;
     QLineEdit *m_nameEdit = nullptr;
+    QComboBox *m_slotCombo = nullptr;       ///< Slot: Tour or House
     QComboBox *m_protocolCombo = nullptr;
     QComboBox *m_interfaceCombo = nullptr;
     QLabel *m_interfaceAuto = nullptr;
@@ -244,6 +249,9 @@ private:
     QGroupBox *m_inputBox = nullptr;
     QComboBox *m_inputCombo = nullptr;
     QComboBox *m_profileCombo = nullptr;
+    class QPushButton *m_profileEdit = nullptr;
+    class QPushButton *m_profileNew = nullptr;
+    class QPushButton *m_profileDelete = nullptr;
     QComboBox *m_midiChannel = nullptr;
     QSpinBox *m_artnetInUni = nullptr;
     QComboBox *m_feedbackCombo = nullptr;

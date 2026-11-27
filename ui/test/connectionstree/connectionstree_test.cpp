@@ -25,6 +25,9 @@
 #include <QSignalSpy>
 #include <QScrollBar>
 #include <QMenu>
+#include <QBuffer>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 #include <QPainter>
 #include <QSettings>
 #include <QSplitter>
@@ -4326,6 +4329,398 @@ void ConnectionsTree_Test::byUniverseCellsEditThePatch()
         QTest::keyClick(name, Qt::Key_Escape);
     }
     QCOMPARE(iom->universe(4)->outputPatchesCount(), 0);
+}
+
+
+/****************************************************************************
+ * Feedback patched like input and output
+ ****************************************************************************/
+
+/** The texts of the context menu on @p item (the menu is closed again). */
+static QStringList menuTextsOn(ConnectionsTree &tree, QTreeWidgetItem *item)
+{
+    QStringList seen;
+    QTimer::singleShot(0, [&seen]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        foreach (QAction *a, m->actions())
+        {
+            seen << a->text();
+            if (a->menu() != NULL)
+            {
+                foreach (QAction *sub, a->menu()->actions())
+                    seen << QStringLiteral("  > ") + sub->text();
+            }
+        }
+        m->close();
+    });
+    tree.slotContextMenu(tree.m_tree->visualItemRect(item).center());
+    QApplication::processEvents();
+    return seen;
+}
+
+void ConnectionsTree_Test::feedbackMenuItemOnlyOnAFeedbackLine()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pad";
+    const QString item = QStringLiteral("Patch a Universe Here (feedback)");
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        stub->m_hasFeedback = (pass == 1);
+        ConnectionsTree tree(m_doc);
+        tree.show();
+        tree.m_tree->expandAll();
+        QList<QTreeWidgetItem *> lines = itemsOfKind(tree.m_tree, KIND_LINE);
+        QVERIFY(lines.isEmpty() == false);
+        tree.m_tree->scrollToItem(lines.first());
+        const QStringList seen = menuTextsOn(tree, lines.first());
+        QVERIFY2(seen.isEmpty() == false, "no menu opened");
+        bool has = false;
+        foreach (const QString &t, seen)
+            has = has || t.startsWith(item);
+        QCOMPARE(has, pass == 1);
+        // The other two patches are there both times.
+        QVERIFY2(seen.join("|").contains("Patch a Universe Here (input)"), qPrintable(seen.join("|")));
+    }
+}
+
+void ConnectionsTree_Test::feedbackIsPatchedFromAUniverseAndUndone()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_hasFeedback = true;
+    stub->m_lineNames = QStringList() << "Pad" << "Other";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+
+    ConnectionsTree tree(m_doc);
+    tree.m_byUniverse->setChecked(true);
+    tree.show();
+    tree.refresh();
+    QTreeWidgetItem *row = universeRow(tree.m_tree, 0);
+    QVERIFY(row != NULL);
+    QStringList seen = menuTextsOn(tree, row);
+    QVERIFY2(seen.join("|").contains("Send Feedback To"), qPrintable(seen.join("|")));
+    QVERIFY(seen.join("|").contains("Pad") && seen.join("|").contains("Other"));
+    QVERIFY2(seen.join("|").contains("Remove Feedback") == false, qPrintable(seen.join("|")));
+    // A universe with no input has nowhere to send it from.
+    {
+        QMenu bare;
+        const ConnectionsTree::FeedbackMenu none = tree.addFeedbackActions(bare, 1);
+        QVERIFY(none.send == NULL && none.remove == NULL);
+        QVERIFY(bare.actions().isEmpty());
+    }
+
+    tree.setFeedback(0, stub->name(), 1);
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(1));
+    QCOMPARE(tree.m_note->text(), QString("Feedback goes back to Other"));
+    seen = menuTextsOn(tree, universeRow(tree.m_tree, 0));
+    QVERIFY(seen.join("|").contains("Remove Feedback"));
+    QVERIFY2(seen.join("|").contains("Send Feedback To") == false, qPrintable(seen.join("|")));
+
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (shotDir.isEmpty() == false)
+    {
+        QDir().mkpath(shotDir);
+        const QList<QSize> sizes { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+        foreach (const QSize &z, sizes)
+        {
+            tree.resize(z);
+            QApplication::processEvents();
+            tree.grab().save(QStringLiteral("%1/feedback-connections-%2x%3.png")
+                                 .arg(shotDir).arg(z.width()).arg(z.height()));
+        }
+    }
+
+    // Undo puts the universe back as it was.
+    QVERIFY(iom->patchUndo()->canUndo());
+    iom->patchUndo()->undo();
+    QVERIFY(iom->feedbackPatch(0) == NULL);
+
+    tree.setFeedback(0, stub->name(), 0);
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+    tree.setFeedback(0, QString(), 0);
+    QVERIFY(iom->feedbackPatch(0) == NULL);
+    iom->patchUndo()->undo();
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+}
+
+void ConnectionsTree_Test::inputPairsItsOwnOutputAsFeedback()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_hasFeedback = true;
+    stub->m_lineNames = QStringList() << "Pad" << "Other";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 3)
+        iom->addUniverse();
+    ConnectionsTree tree(m_doc);
+
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 1));
+    QCOMPARE(tree.autoPairFeedback(0), QString("Other"));
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(1));
+    QCOMPARE(tree.m_note->text(), QString("Feedback goes back to Other"));
+    // Already has one: left alone.
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QCOMPARE(tree.autoPairFeedback(0), QString());
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(1));
+
+    // Two outputs of the same name: no unique match, no guess.
+    stub->m_lineNames = QStringList() << "Twin" << "Twin";
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 0));
+    QCOMPARE(iom->pairFeedback(1), QString());
+    QVERIFY(iom->feedbackPatch(1) == NULL);
+
+    // A network protocol needs an address: never paired by name.
+    stub->m_lineNames = QStringList() << "Pad";
+    stub->m_linesAreHardware = false;
+    stub->m_supportsTargets = true;
+    QVERIFY(iom->setInputPatch(2, stub->name(), QString(), 0));
+    QCOMPARE(iom->pairFeedback(2), QString());
+    QVERIFY(iom->feedbackPatch(2) == NULL);
+}
+
+void ConnectionsTree_Test::thePaneSetsTheSlotLikeTheToolbar()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.show();
+    mgr.m_devicesTree->m_byUniverse->setChecked(true);
+    mgr.m_devicesTree->refresh();
+    ConnectionEditor *pane = mgr.m_devicesTree->m_connPane;
+    QVERIFY(pane != nullptr && pane->m_slotCombo != nullptr);
+    // Beside Name, in the pane.
+    QVERIFY(pane->m_topForm->labelForField(pane->m_slotCombo) != nullptr);
+    QLabel *slotLabel = qobject_cast<QLabel *>(pane->m_topForm->labelForField(pane->m_slotCombo));
+    QVERIFY(slotLabel != nullptr);
+    QCOMPARE(slotLabel->text(), QString("Slot:"));
+
+    pane->setUniverse(1, QString(), 0);
+    QCOMPARE(pane->universe(), quint32(1));
+    QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
+    QCOMPARE(pane->m_slotCombo->currentData().toInt(), int(RigOwner::Tour));
+
+    pane->m_slotCombo->setCurrentIndex(pane->m_slotCombo->findData(int(RigOwner::House)));
+    QTRY_COMPARE(iom->universeSlotOwner(1), RigOwner::House);
+    QVERIFY(m_doc->isModified());
+
+    // The Universes toolbar shows it for that universe.
+    mgr.m_ioTabs->setCurrentIndex(1);
+    mgr.selectUniverse(1);
+    QCOMPARE(mgr.m_uniSlotCombo->currentData().toInt(), int(RigOwner::House));
+    // And back: set there, shown in the pane.
+    mgr.m_uniSlotCombo->setCurrentIndex(mgr.m_uniSlotCombo->findData(int(RigOwner::Tour)));
+    QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
+    mgr.m_ioTabs->setCurrentIndex(0);
+    pane->reloadIfClean();
+    QCOMPARE(pane->m_slotCombo->currentData().toInt(), int(RigOwner::Tour));
+
+    // Undoable like the other edits in the pane.
+    pane->m_slotCombo->setCurrentIndex(pane->m_slotCombo->findData(int(RigOwner::House)));
+    QTRY_COMPARE(iom->universeSlotOwner(1), RigOwner::House);
+    QVERIFY(iom->patchUndo()->canUndo());
+    iom->patchUndo()->undo();
+    QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
+    mgr.m_devicesTree->refresh();           // as the tree's Undo button does: the pane reads it again
+    QCOMPARE(pane->m_slotCombo->currentData().toInt(), int(RigOwner::Tour));
+
+    // Saved and loaded again.
+    pane->m_slotCombo->setCurrentIndex(pane->m_slotCombo->findData(int(RigOwner::House)));
+    QTRY_COMPARE(iom->universeSlotOwner(1), RigOwner::House);
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        QVERIFY(iom->saveXML(&w));
+        w.writeEndDocument();
+    }
+    Doc other(this);
+    // No plugins loaded here: the stub is one instance, the first Doc owns it.
+    QXmlStreamReader r(xml);
+    while (r.readNextStartElement() == false && r.atEnd() == false) {}
+    QVERIFY(other.inputOutputMap()->loadXML(r));
+    QCOMPARE(other.inputOutputMap()->universeSlotOwner(1), RigOwner::House);
+    QCOMPARE(other.inputOutputMap()->universeSlotOwner(0), RigOwner::Tour);
+}
+
+/** The objectNames of the actions on the context menu of @p item (closed again). */
+static QStringList menuActionNamesOn(ConnectionsTree &tree, QTreeWidgetItem *item)
+{
+    QStringList names;
+    QTimer::singleShot(0, [&names]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        foreach (QAction *a, m->actions())
+            names << a->objectName();
+        m->close();
+    });
+    tree.slotContextMenu(tree.m_tree->visualItemRect(item).center());
+    QApplication::processEvents();
+    return names;
+}
+
+void ConnectionsTree_Test::theUniversesTabHasADevicesCounterpart()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pad";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.show();
+    ConnectionsTree *tree = mgr.m_devicesTree;
+    tree->m_byUniverse->setChecked(true);
+    tree->refresh();
+    QTreeWidgetItem *row = universeRow(tree->m_tree, 0);
+    QVERIFY(row != NULL);
+    tree->m_tree->setCurrentItem(row);
+    QTRY_VERIFY(tree->m_connPane->universe() == 0);
+    const QStringList menu = menuActionNamesOn(*tree, row);
+
+    /* What the Universes tab offers, each by objectName, and where the same
+       thing is in Devices. A new one with no entry here fails: add it to
+       Devices and to this table. */
+    const QMap<QString, QString> counterpart = {
+        { "uniAddUniverse", "connAddUniverse" },        // the row menu
+        { "uniDeleteUniverse", "connDeleteUniverse" },  // the row menu
+        { "uniUndoPatch", "connUndo" },                 // the tree's button
+        { "uniName", "connName" },                      // the universe pane
+        { "uniPassthrough", "connPassthrough" },
+        { "uniSlotOwner", "connSlot" },
+        { "uniRescan", "connRescan" },                  // the tree's button
+    };
+    QStringList offered;
+    foreach (QAction *a, mgr.findChildren<QAction *>())
+        if (a->objectName().startsWith("uni"))
+            offered << a->objectName();
+    foreach (QWidget *w, mgr.findChildren<QWidget *>())
+        if (w->objectName().startsWith("uni") && w->objectName() != "universe"
+            && w->objectName().startsWith("universe") == false)
+            offered << w->objectName();
+    QVERIFY2(offered.count() >= counterpart.count(), qPrintable(offered.join(", ")));
+    foreach (const QString &name, offered)
+    {
+        QVERIFY2(counterpart.contains(name),
+                 qPrintable(QString("the Universes tab offers %1 with no Devices counterpart listed").arg(name)));
+        const QString there = counterpart.value(name);
+        const bool inMenu = menu.contains(there);
+        const bool inTree = tree->findChild<QWidget *>(there) != nullptr;
+        const bool inPane = tree->m_connPane->findChild<QWidget *>(there) != nullptr;
+        QVERIFY2(inMenu || inTree || inPane,
+                 qPrintable(QString("%1 is not in Devices as %2").arg(name, there)));
+    }
+
+    /* The universe's own editor (the Universes tab's right side): its profile
+       Edit, New and Delete, and its Audio page. Each is in the pane too. */
+    mgr.m_ioTabs->setCurrentIndex(1);
+    mgr.selectUniverse(0);
+    QVERIFY(mgr.m_editor != nullptr);
+    const QMap<QString, QStringList> editorCounterpart = {
+        { "profileEdit", { "connProfileEdit" } },
+        { "profileNew", { "connProfileNew" } },
+        { "profileDelete", { "connProfileDelete" } },
+        { "m_audioMapTree", { "connAudioInput", "connAudioOutput" } },
+        { "m_srateCombo", { "connAudioRate" } },
+        { "m_chansCombo", { "connAudioChannels" } },
+        { "m_audioPreviewButton", { "connAudioPreview" } },
+        { "m_levelProgress", { "connAudioLevel" } },
+    };
+    QStringList editorOffers;
+    foreach (QWidget *w, mgr.m_editor->findChildren<QWidget *>())
+    {
+        const QString n = w->objectName();
+        if (n.startsWith("profile") || n.startsWith("m_audio") || n.startsWith("m_srate")
+            || n.startsWith("m_chans") || n.startsWith("m_level"))
+            editorOffers << n;
+    }
+    editorOffers.removeDuplicates();
+    QVERIFY2(editorOffers.count() >= editorCounterpart.count(), qPrintable(editorOffers.join(", ")));
+    foreach (const QString &name, editorOffers)
+    {
+        QVERIFY2(editorCounterpart.contains(name),
+                 qPrintable(QString("the Universes tab's editor offers %1 with no Devices counterpart listed").arg(name)));
+        foreach (const QString &there, editorCounterpart.value(name))
+            QVERIFY2(tree->m_connPane->findChild<QWidget *>(there) != nullptr,
+                     qPrintable(QString("%1 is not in the Devices pane as %2").arg(name, there)));
+    }
+
+    /* And they work: a rate chosen in the pane is the setting the Universes
+       tab reads; New and Delete follow the profile chosen. */
+    QComboBox *rate = tree->m_connPane->findChild<QComboBox *>("connAudioRate");
+    QSettings audio;
+    const QVariant before = audio.value("audio/samplerate");
+    rate->setCurrentIndex(rate->findText("48000"));
+    QCOMPARE(QSettings().value("audio/samplerate").toInt(), 48000);
+    rate->setCurrentIndex(rate->findText("44100"));
+    QVERIFY(QSettings().value("audio/samplerate").isValid() == false);
+    if (before.isValid())
+        QSettings().setValue("audio/samplerate", before);
+    QPushButton *del = tree->m_connPane->findChild<QPushButton *>("connProfileDelete");
+    QPushButton *neu = tree->m_connPane->findChild<QPushButton *>("connProfileNew");
+    QVERIFY(neu != nullptr && neu->isEnabled());
+    tree->m_connPane->m_profileCombo->setCurrentIndex(0);
+    QVERIFY(del->isEnabled() == false);                     // no profile chosen: nothing to delete
+}
+
+/** Every branch of the tree says what it is; an empty one says why. */
+static void checkBranchesExplained(ConnectionsTree &tree, const QString &where)
+{
+    tree.m_showUnused->setChecked(true);
+    tree.refresh();
+    QTreeWidget *t = tree.m_tree;
+    QList<QTreeWidgetItem *> level;
+    for (int i = 0; i < t->topLevelItemCount(); i++)
+    {
+        level << t->topLevelItem(i);
+        for (int c = 0; c < t->topLevelItem(i)->childCount(); c++)
+            level << t->topLevelItem(i)->child(c);
+    }
+    QVERIFY2(level.isEmpty() == false, qPrintable(where + ": an empty tree says nothing"));
+    foreach (QTreeWidgetItem *it, level)
+    {
+        const int k = it->data(COL_NAME, ROLE_KIND).toInt();
+        const bool branch = k == 1 || k == 2 || k == 8 || k == 9 || k == 0;     // plugin, line, host, show control, folder
+        if (branch == false)
+            continue;
+        const QString name = where + ": " + it->text(COL_NAME);
+        QVERIFY2(it->toolTip(COL_NAME).isEmpty() == false, qPrintable(name + " has no tooltip"));
+        QVERIFY2(it->childCount() > 0, qPrintable(name + " is empty and says nothing"));
+        if (it->childCount() == 1 && it->child(0)->data(COL_NAME, ROLE_KIND).toInt() == 14)
+            QVERIFY2(it->child(0)->text(COL_NAME).isEmpty() == false, qPrintable(name + ": a blank placeholder"));
+    }
+}
+
+void ConnectionsTree_Test::everyConnectionsBranchIsExplained()
+{
+    // An empty show: the plugin, nothing patched.
+    {
+        ConnectionsTree tree(m_doc);
+        tree.show();
+        checkBranchesExplained(tree, "empty show");
+    }
+    // A sample show: a node, patched universes, an input.
+    IOPluginStub *stub = fourPortNode(m_doc);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, stub->name(), "", 1, false, 0));
+    QVERIFY(iom->setInputPatch(2, stub->name(), QString(), 0));
+    ConnectionsTree tree(m_doc);
+    tree.show();
+    checkBranchesExplained(tree, "sample show");
 }
 
 /****************************************************************************

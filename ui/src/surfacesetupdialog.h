@@ -75,6 +75,8 @@ public slots:
     void startIdentify();
     void skipLamp();
     void finishIdentify();
+    /** Pair the board's own output as its feedback line, or say where to. */
+    void patchFeedback();
 
 private:
     /** Whether a write may go ahead (in Operate: asked). */
@@ -98,6 +100,7 @@ private:
     QPushButton *m_identify = nullptr;
     QPushButton *m_send = nullptr;
     QPushButton *m_mode = nullptr;
+    QPushButton *m_patchFeedback = nullptr;
     QWidget *m_identifyBox = nullptr;
     QLabel *m_identifyText = nullptr;
     QPushButton *m_skip = nullptr;
