@@ -396,8 +396,8 @@ void SurfaceSetupUi_Test::theSurfacesRowExplainsItselfAndListsBoards()
     auto surfaceRow = [tree]() -> QTreeWidgetItem * {
         QTreeWidgetItemIterator it(tree->m_tree);
         for (; *it != nullptr; ++it)
-            if ((*it)->data(0, Qt::UserRole + 1).toString() == QLatin1String("surfaces")
-                && (*it)->data(0, Qt::UserRole).toInt() == 10)
+            if ((*it)->data(0, Qt::UserRole + 2).toString() == QLatin1String("surfaces")
+                && (*it)->data(0, Qt::UserRole + 1).toInt() == 10)
                 return *it;
         return nullptr;
     };
@@ -416,7 +416,7 @@ void SurfaceSetupUi_Test::theSurfacesRowExplainsItselfAndListsBoards()
     tree->refresh();
     row = surfaceRow();
     QVERIFY(row != nullptr && row->childCount() == 1);
-    QCOMPARE(row->child(0)->data(0, Qt::UserRole).toInt(), 12);
+    QCOMPARE(row->child(0)->data(0, Qt::UserRole + 1).toInt(), 12);
     QVERIFY2(row->child(0)->text(1).contains("universe 1") && row->child(0)->text(1).contains("PMJ Black 1")
              && row->child(0)->text(1).contains("feedback yes"), qPrintable(row->child(0)->text(1)));
 
@@ -427,7 +427,7 @@ void SurfaceSetupUi_Test::theSurfacesRowExplainsItselfAndListsBoards()
     row = surfaceRow();
     QVERIFY(row != nullptr && row->childCount() == 2);
     QTreeWidgetItem *unset = row->child(1);
-    QCOMPARE(unset->data(0, Qt::UserRole).toInt(), 13);
+    QCOMPARE(unset->data(0, Qt::UserRole + 1).toInt(), 13);
     QVERIFY2(unset->text(0).contains("Mystery Pad: not set up"), qPrintable(unset->text(0)));
     tree->m_tree->setCurrentItem(unset);
     unset->setSelected(true);

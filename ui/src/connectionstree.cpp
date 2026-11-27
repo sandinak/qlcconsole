@@ -2489,6 +2489,7 @@ void ConnectionsTree::refresh()
             depths << depth + 1;
         }
     }
+    explainBranches();
     m_knownLines = curLines;
     m_linesBaselined = true;
     m_populatedOnce = true;

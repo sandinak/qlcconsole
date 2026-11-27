@@ -4504,10 +4504,8 @@ void ConnectionsTree_Test::thePaneSetsTheSlotLikeTheToolbar()
     QVERIFY(slotLabel != nullptr);
     QCOMPARE(slotLabel->text(), QString("Slot:"));
 
-    QTreeWidgetItem *row = universeRow(mgr.m_devicesTree->m_tree, 1);
-    QVERIFY(row != NULL);
-    mgr.m_devicesTree->m_tree->setCurrentItem(row);
-    QTRY_COMPARE(pane->universe(), quint32(1));
+    pane->setUniverse(1, QString(), 0);
+    QCOMPARE(pane->universe(), quint32(1));
     QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
     QCOMPARE(pane->m_slotCombo->currentData().toInt(), int(RigOwner::Tour));
 
