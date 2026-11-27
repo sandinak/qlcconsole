@@ -31,6 +31,8 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QDir>
+#include <QTemporaryDir>
+#include <QScrollArea>
 #include <QMenu>
 #include <QTimer>
 #include <QtTest>
@@ -1850,6 +1852,85 @@ void ShowTreeWorkbench_Test::shots()
         view->closeWorkbench();
     }
 
+    app->doc()->resetModified();
+    delete app;
+}
+
+/* A real busy cue, in the docked Workbench, at the three sizes a screen is:
+   the pane is listed (qInfo "[WBPANE]": every visible control by name) and, with
+   QLC_SHOT_DIR, shot. The show is a copy in a temporary folder. */
+void ShowTreeWorkbench_Test::aBusyCourseCueAtThreeSizes()
+{
+    const QString src = QStringLiteral(COURSE_DIR "/shows/lesson-3-9-finish.qlcc");
+    QVERIFY2(QFileInfo::exists(src), qPrintable(src));
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const QString path = tmp.filePath(QStringLiteral("show.qlcc"));
+    QVERIFY(QFile::copy(src, path));
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+        QDir().mkpath(shots);
+
+    App *app = new App();
+    app->init();
+    app->resize(1440, 900);
+    app->showNormal();
+    QVERIFY(QTest::qWaitForWindowExposed(app));
+    QCOMPARE(app->loadXML(path), QFile::NoError);
+    app->doc()->setMode(Doc::Design);
+    QTest::qWait(600);
+    ShowTreeView *view = ShowTreeView::instance();
+    QWidget *w = view;
+    while (w != nullptr && app->m_tab->indexOf(w) < 0)
+        w = w->parentWidget();
+    QVERIFY(w != nullptr);
+    app->m_tab->setCurrentWidget(w);
+
+    // The cue that carries the most in.
+    ShowTreeController *st = app->doc()->showTree();
+    quint32 pick = invalidId();
+    int most = -1;
+    for (const Production &p : st->productions())
+        for (const CueList &l : p.lists)
+        {
+            if (l.looks || l.isSubCues())
+                continue;
+            const QList<ResolvedCue> rcs = st->resolved(l);
+            for (int i = 0; i < l.cues.size() && i < rcs.size(); ++i)
+            {
+                int carried = 0;
+                for (const ResolvedLayer &rl : rcs.at(i).layers)
+                    carried += rl.own ? 0 : 1;
+                if (carried > most)
+                {
+                    most = carried;
+                    pick = l.cues.at(i).id;
+                }
+            }
+        }
+    QVERIFY(pick != invalidId());
+    qInfo().noquote() << "[WBPANE] cue" << pick << "carries" << most << "layers";
+
+    const QList<QSize> sizes = { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+    for (const QSize &sz : sizes)
+    {
+        app->resize(sz);
+        QTest::qWait(300);
+        QVERIFY(view->openInWorkbench(pick));
+        QTest::qWait(300);
+        Workbench *bench = view->dockedWorkbench();
+        QVERIFY(bench != nullptr);
+        bench->rows()->expandAll();
+        QStringList seen;
+        for (QWidget *c : bench->findChildren<QWidget *>())
+            if (!c->objectName().isEmpty() && c->isVisibleTo(bench) && c->isVisible())
+                seen << c->objectName();
+        qInfo().noquote() << "[WBPANE]" << sz.width() << "x" << sz.height() << seen.join(QLatin1Char(' '));
+        const QString tag = QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height());
+        if (!shots.isEmpty())
+            QVERIFY(app->grab().save(QDir(shots).filePath(QStringLiteral("cue-workbench-%1.png").arg(tag))));
+        QVERIFY(view->closeWorkbench());
+    }
     app->doc()->resetModified();
     delete app;
 }
