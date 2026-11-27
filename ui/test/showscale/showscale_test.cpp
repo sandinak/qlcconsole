@@ -1,0 +1,608 @@
+/*
+  Q Light Controller Plus
+  showscale_test.cpp
+
+  Copyright (C) Branson Matheson
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0.txt
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
+
+#include <QtTest>
+#include <QApplication>
+#include <QElapsedTimer>
+#include <QTemporaryDir>
+#include <QTimer>
+#include <QDir>
+#include <algorithm>
+#include <atomic>
+#include <climits>
+#include <vector>
+#if defined(Q_OS_MACOS)
+#include <mach/mach.h>
+#elif defined(Q_OS_WIN)
+#define NOMINMAX
+#define PSAPI_VERSION 2
+#include <windows.h>
+#include <psapi.h>
+#elif defined(Q_OS_UNIX)
+#include <unistd.h>
+#include <cstdio>
+#endif
+
+#include "../../../engine/test/common/stdprelude.h"
+// The plugin is put in the Doc's cache by hand; the views are read inside.
+#define private public
+#define protected public
+#include "ioplugincache.h"
+#include "mastertimer.h"
+#include "universe.h"
+#include "app.h"
+#include "monitor.h"
+#include "monitorgraphicsview.h"
+#include "structurestudioview.h"
+#undef protected
+#undef private
+
+#include "qlcfixturedefcache.h"
+#include "rgbscriptscache.h"
+#include "inputoutputmap.h"
+#include "chaseraction.h"
+#include "qlcioplugin.h"
+#include "function.h"
+#include "fixture.h"
+#include "chaser.h"
+#include "doc.h"
+#include "resource_paths.h"
+
+#include "showscale_test.h"
+
+static QStringList g_report;
+#define REPORT(...) do { const QString l = QString::asprintf(__VA_ARGS__); qInfo("%s", qPrintable(l)); g_report << l; } while (0)
+
+/* An output with a line per universe that counts what it is given: every
+   frame of every universe, from the universes' own threads. Sends nowhere. */
+class CountingOutput final : public QLCIOPlugin
+{
+public:
+    void init() override {}
+    QString name() const override { return QStringLiteral("Scale Counter"); }
+    int capabilities() const override { return Output; }
+    QString pluginInfo() const override { return QStringLiteral("counts frames, sends nothing"); }
+    QStringList outputs() override
+    {
+        QStringList lines;
+        for (int i = 0; i < ScaleRig::kUniverses; ++i)
+            lines << QStringLiteral("Count %1").arg(i + 1);
+        return lines;
+    }
+    bool openOutput(quint32, quint32) override { return true; }
+    void closeOutput(quint32, quint32) override {}
+    void writeUniverse(quint32 universe, quint32, const QByteArray &, bool) override
+    {
+        if (universe < quint32(kMax))
+            m_frames[universe].fetch_add(1, std::memory_order_relaxed);
+    }
+
+    static constexpr int kMax = 128;
+    std::atomic<int> m_frames[kMax] {};
+};
+
+namespace
+{
+/** Resident memory in MB: the physical footprint on macOS (what Activity
+ *  Monitor shows), the resident set elsewhere */
+double residentMB()
+{
+#if defined(Q_OS_MACOS)
+    task_vm_info_data_t info;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&info, &count) == KERN_SUCCESS)
+        return double(info.phys_footprint) / 1048576.0;
+    return -1;
+#elif defined(Q_OS_WIN)
+    PROCESS_MEMORY_COUNTERS pmc;
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+        return double(pmc.WorkingSetSize) / 1048576.0;
+    return -1;
+#else
+    long pages = 0, resident = 0;
+    FILE *f = fopen("/proc/self/statm", "r");
+    if (f != nullptr)
+    {
+        if (fscanf(f, "%ld %ld", &pages, &resident) != 2)
+            resident = 0;
+        fclose(f);
+    }
+    return resident > 0 ? double(resident) * double(sysconf(_SC_PAGESIZE)) / 1048576.0 : -1;
+#endif
+}
+
+/** The value at fraction @a q (0.95: p95) of @a v */
+double quantile(std::vector<double> v, double q)
+{
+    if (v.empty())
+        return 0;
+    std::sort(v.begin(), v.end());
+    const size_t i = std::min(v.size() - 1, size_t(q * double(v.size() - 1) + 0.5));
+    return v[i];
+}
+
+void settle(int ms)
+{
+    QElapsedTimer t;
+    t.start();
+    while (t.elapsed() < ms)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+}
+
+/** The UI thread's longest stall: a 5 ms timer that should keep firing;
+ *  any gap past its interval is time the thread was held by something */
+class Stall final : public QObject
+{
+public:
+    explicit Stall(QObject *parent = nullptr) : QObject(parent)
+    {
+        m_timer.setTimerType(Qt::PreciseTimer);
+        m_timer.setInterval(5);
+        connect(&m_timer, &QTimer::timeout, this, [this]() {
+            const qint64 now = m_clock.nsecsElapsed();
+            if (m_last > 0)
+            {
+                const double gap = (now - m_last) / 1e6;
+                m_gaps.push_back(gap);
+                m_worst = qMax(m_worst, gap);
+            }
+            m_last = now;
+        });
+    }
+    void start() { m_clock.start(); m_last = 0; m_gaps.clear(); m_worst = 0; m_timer.start(); }
+    void stop() { m_timer.stop(); }
+    double worst() const { return m_worst; }
+    double p95() const { return quantile(m_gaps, 0.95); }
+
+private:
+    QTimer m_timer;
+    QElapsedTimer m_clock;
+    qint64 m_last = 0;
+    std::vector<double> m_gaps;
+    double m_worst = 0;
+};
+
+/** How long each paint of a widget takes on the wall clock: the paint is
+ *  delivered from inside this filter, timed, and then not again */
+class PaintTimer final : public QObject
+{
+public:
+    explicit PaintTimer(QWidget *w) : QObject(w) { w->installEventFilter(this); }
+    std::vector<double> ms;
+    double p95() const { return quantile(ms, 0.95); }
+    double worst() const { return ms.empty() ? 0 : *std::max_element(ms.begin(), ms.end()); }
+
+protected:
+    bool eventFilter(QObject *o, QEvent *e) override
+    {
+        if (e->type() != QEvent::Paint || m_inside)
+            return false;
+        m_inside = true;
+        QElapsedTimer t;
+        t.start();
+        QCoreApplication::sendEvent(o, e);
+        ms.push_back(t.nsecsElapsed() / 1e6);
+        m_inside = false;
+        return true;
+    }
+
+private:
+    bool m_inside = false;
+};
+
+/** The MasterTimer's own measure of each frame it computes, collected on
+ *  its thread as each tick ends */
+struct TickSamples
+{
+    static constexpr int kMax = 2000;
+    double wall[kMax] {};
+    double cpu[kMax] {};
+    std::atomic<int> n { 0 };
+    std::atomic<bool> on { false };
+
+    void record(MasterTimer *mt)
+    {
+        if (!on.load(std::memory_order_relaxed))
+            return;
+        const int i = n.load(std::memory_order_relaxed);
+        if (i >= kMax)
+            return;
+        wall[i] = mt->tickComputeMs();
+        cpu[i] = mt->tickCpuMs();
+        n.store(i + 1, std::memory_order_release);
+    }
+    std::vector<double> walls() const { return std::vector<double>(wall, wall + n.load()); }
+    std::vector<double> cpus() const { return std::vector<double>(cpu, cpu + n.load()); }
+};
+
+/* Budgets are scaled where the machine is known to be slower: a Debug
+   build (the gate's Qt6 and Werror legs) does the same work unoptimised,
+   and CI's shared runners are slower again (Windows' and Linux's most). */
+double slowFactor()
+{
+    double f = 1.0;
+#if !defined(QT_NO_DEBUG)
+    f *= 2.0;
+#endif
+    if (!qEnvironmentVariableIsEmpty("CI"))
+        f *= 2.0;
+    return f;
+}
+}
+
+/*****************************************************************************
+ * The show
+ *****************************************************************************/
+
+void ShowScale_Test::initTestCase()
+{
+    QElapsedTimer t;
+    t.start();
+    m_app = new App();
+    m_app->init();
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    QDir defs(INTERNAL_FIXTUREDIR);
+    defs.setFilter(QDir::Files);
+    QVERIFY(doc->fixtureDefCache()->loadMap(defs));
+    QVERIFY(doc->rgbScriptsCache()->load(QDir(INTERNAL_SCRIPTDIR)));
+
+    m_output = new CountingOutput();
+    doc->ioPluginCache()->m_plugins.append(m_output);   // the cache deletes it
+
+    QString why;
+    QVERIFY2(ScaleRig::build(doc, &m_rig, &why), qPrintable(why));
+    QCOMPARE(int(doc->inputOutputMap()->universesCount()), ScaleRig::kUniverses);
+    for (int u = 0; u < ScaleRig::kUniverses; ++u)
+        QVERIFY(doc->inputOutputMap()->setOutputPatch(quint32(u), m_output->name(), QString(), quint32(u)));
+    m_app->resize(1440, 900);
+    m_app->show();
+    QVERIFY(QTest::qWaitForWindowExposed(m_app));
+    settle(200);
+    REPORT("showscale: %d fixtures, %d channels, %d universes (%d sparse); built in %lld ms",
+           int(doc->fixtures().size()), ScaleRig::channels(doc), int(doc->inputOutputMap()->universesCount()),
+           ScaleRig::sparseUniverses(doc), t.elapsed());
+}
+
+void ShowScale_Test::cleanupTestCase()
+{
+    if (m_app != nullptr)
+    {
+        stopShow();
+        m_app->doc()->resetModified();
+        delete m_app;
+        m_app = nullptr;
+    }
+    qInfo("showscale summary:\n  %s", qPrintable(g_report.join(QStringLiteral("\n  "))));
+}
+
+void ShowScale_Test::startShow()
+{
+    Doc *doc = m_app->doc();
+    doc->setMode(Doc::Operate);
+    MasterTimer *mt = doc->masterTimer();
+    for (quint32 id : QList<quint32> { m_rig.cueChaser, m_rig.matrix, m_rig.efx } + m_rig.chasers)
+    {
+        Function *f = doc->function(id);
+        QVERIFY(f != nullptr);
+        if (!f->isRunning())
+            f->start(mt, FunctionParent::master());
+    }
+}
+
+void ShowScale_Test::stopShow()
+{
+    Doc *doc = m_app->doc();
+    for (Function *f : doc->functions())
+        if (f->isRunning())
+            f->stop(FunctionParent::master());
+    settle(200);
+    doc->setMode(Doc::Design);
+}
+
+void ShowScale_Test::go()
+{
+    Chaser *list = qobject_cast<Chaser *>(m_app->doc()->function(m_rig.cueChaser));
+    if (list == nullptr)
+        return;
+    ChaserAction a;
+    a.m_action = ChaserNextStep;
+    a.m_stepIndex = -1;
+    a.m_masterIntensity = 1.0;
+    a.m_stepIntensity = 1.0;
+    a.m_fadeMode = Chaser::FromFunction;
+    list->setAction(a);
+}
+
+/* The rig is the shape of the real show: about 260 fixtures and 26,000
+   channels over 80 universes, 50 of them with one or two devices; the
+   pixel bars carry most of the channels. */
+void ShowScale_Test::theRigHasTheShowsShape()
+{
+    Doc *doc = m_app->doc();
+    QCOMPARE(int(doc->fixtures().size()), ScaleRig::kFixtures);
+    QCOMPARE(ScaleRig::channels(doc), ScaleRig::kChannels);
+    QCOMPARE(ScaleRig::sparseUniverses(doc), ScaleRig::kSparseUniverses);
+    int pixelHeads = 0, pixelChannels = 0;
+    for (quint32 id : m_rig.usts + m_rig.bars)
+    {
+        pixelHeads += doc->fixture(id)->heads();
+        pixelChannels += int(doc->fixture(id)->channels());
+    }
+    QCOMPARE(pixelHeads, ScaleRig::kPixelHeads);
+    QVERIFY(pixelChannels > ScaleRig::kChannels * 9 / 10);
+    QCOMPARE(int(m_rig.movers.size()), 32);
+    QCOMPARE(int(m_rig.lanterns.size()), 54);
+    Chaser *list = qobject_cast<Chaser *>(doc->function(m_rig.cueChaser));
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->stepsCount(), ScaleRig::kCues);
+    QCOMPARE(int(m_rig.chasers.size()), 3);
+}
+
+/* Saved as the app saves it and opened as the app opens it (App::saveXML,
+   App::loadXML): what a show this size costs at File > Save and Open.
+   The rest of the test runs on the show as loaded. */
+void ShowScale_Test::theShowSavesAndLoadsInTime()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString file = dir.filePath(QStringLiteral("scale.qlcc"));
+    QElapsedTimer t;
+    t.start();
+    QCOMPARE(m_app->saveXML(file), QFile::NoError);
+    const double saveMs = t.nsecsElapsed() / 1e6;
+    const qint64 bytes = QFileInfo(file).size();
+    m_app->clearDocument();
+    settle(100);
+    t.restart();
+    QCOMPARE(m_app->loadXML(file), QFile::NoError);
+    const double loadMs = t.nsecsElapsed() / 1e6;
+    settle(300);    // what the load left queued (the views catching up)
+    const double settledMs = t.nsecsElapsed() / 1e6;
+    Doc *doc = m_app->doc();
+    REPORT("save %.0f ms (%.1f MB), load %.0f ms (%.0f ms with the views settled)",
+           saveMs, bytes / 1048576.0, loadMs, settledMs - 300);
+
+    // It came back whole, patched to the same outputs.
+    QCOMPARE(int(doc->fixtures().size()), ScaleRig::kFixtures);
+    QCOMPARE(ScaleRig::channels(doc), ScaleRig::kChannels);
+    QCOMPARE(int(doc->inputOutputMap()->universesCount()), ScaleRig::kUniverses);
+    Chaser *list = qobject_cast<Chaser *>(doc->function(m_rig.cueChaser));
+    QVERIFY(list != nullptr);
+    QCOMPARE(list->stepsCount(), ScaleRig::kCues);
+    QVERIFY(doc->function(m_rig.matrix) != nullptr && doc->function(m_rig.efx) != nullptr);
+    for (Universe *u : doc->inputOutputMap()->universes())
+        QVERIFY2(u->outputPatchesCount() == 1, qPrintable(QString("universe %1 lost its output").arg(u->id() + 1)));
+    m_loadedMB = residentMB();
+
+    // Budgets: TODO measured on the pool
+    const double f = slowFactor();
+    QVERIFY2(saveMs < 3000 * f, qPrintable(QString("saving took %1 ms").arg(saveMs)));
+    QVERIFY2(loadMs < 8000 * f, qPrintable(QString("loading took %1 ms").arg(loadMs)));
+}
+
+/* The engine at the configured rate (MasterTimer::frequency(), 50 Hz) in
+   Operate with everything running: a cue fading (a GO every second, each
+   cue 2-3 s, so always mid-crossfade), the RGB matrix over all 6,208
+   pixels, the EFX on all 32 movers, three chasers. Each frame's compute
+   (the timer's own measure), and each universe's frame from the tick to
+   its output; and every universe goes out every frame. */
+void ShowScale_Test::theEngineKeepsItsFrame()
+{
+    Doc *doc = m_app->doc();
+    MasterTimer *mt = doc->masterTimer();
+    const double periodMs = 1000.0 / MasterTimer::frequency();
+    TickSamples samples;
+    QMetaObject::Connection c = connect(mt, &MasterTimer::tickReady, this,
+                                        [&samples, mt]() { samples.record(mt); }, Qt::DirectConnection);
+    startShow();
+    settle(1000);                           // the first cue up, the matrix's first maps
+
+    for (Universe *u : doc->inputOutputMap()->universes())
+        u->resetSendLatency();
+    int before[CountingOutput::kMax];
+    for (int u = 0; u < ScaleRig::kUniverses; ++u)
+        before[u] = m_output->m_frames[u].load();
+    const MasterTimer::FrameTiming t0 = mt->frameTiming();
+    samples.on = true;
+    for (int s = 0; s < 4; ++s)
+    {
+        go();
+        settle(1000);
+    }
+    samples.on = false;
+    const MasterTimer::FrameTiming t1 = mt->frameTiming();
+    disconnect(c);
+    int fewest = INT_MAX, most = 0, fewestAt = -1;
+    for (int u = 0; u < ScaleRig::kUniverses; ++u)
+    {
+        const int sent = m_output->m_frames[u].load() - before[u];
+        if (sent < fewest)
+        {
+            fewest = sent;
+            fewestAt = u;
+        }
+        most = qMax(most, sent);
+    }
+    // Every universe's tick-to-output time
+    QVector<quint64> hist(Universe::kSendLatencyBuckets, 0);
+    for (Universe *u : doc->inputOutputMap()->universes())
+    {
+        const QVector<quint32> h = u->sendLatencyHistogram();
+        for (int i = 0; i < h.size(); ++i)
+            hist[i] += h.at(i);
+    }
+    quint64 total = 0;
+    for (quint64 n : hist)
+        total += n;
+    auto histQuantile = [&](double q) {
+        quint64 acc = 0;
+        for (int i = 0; i < hist.size(); ++i)
+        {
+            acc += hist.at(i);
+            if (total > 0 && double(acc) >= q * double(total))
+                return (i + 1) * Universe::kSendLatencyBucketUs / 1000.0;
+        }
+        return hist.size() * Universe::kSendLatencyBucketUs / 1000.0;
+    };
+    const quint64 frames = t1.frames - t0.frames, late = t1.late - t0.late, dropped = t1.dropped - t0.dropped;
+    const std::vector<double> walls = samples.walls(), cpus = samples.cpus();
+    REPORT("engine at %u Hz (%.0f ms): tick p50 %.2f p95 %.2f max %.2f ms wall, p95 %.2f ms CPU; "
+           "%llu frames, %llu late, %llu dropped",
+           MasterTimer::frequency(), periodMs, quantile(walls, 0.5), quantile(walls, 0.95),
+           quantile(walls, 1.0), quantile(cpus, 0.95), frames, late, dropped);
+    REPORT("universe frame tick-to-output p50 %.2f p95 %.2f p99 %.2f ms; sent per universe %d-%d (fewest: U%d)",
+           histQuantile(0.5), histQuantile(0.95), histQuantile(0.99), fewest, most, fewestAt + 1);
+
+    QVERIFY(walls.size() > 100);
+    // Every universe, every frame: as many sends as the timer had frames
+    // (a frame or two either side at the window's edges).
+    QVERIFY2(fewest >= int(frames) - 3 && most <= int(frames) + 3,
+             qPrintable(QString("universes sent %1-%2 frames of %3").arg(fewest).arg(most).arg(frames)));
+
+    // Budgets: TODO measured on the pool
+    const double f = slowFactor();
+    const double p95 = quantile(walls, 0.95);
+    QVERIFY2(p95 < periodMs * 0.5 * f,
+             qPrintable(QString("a frame's p95 took %1 ms of its %2").arg(p95).arg(periodMs)));
+    QVERIFY2(histQuantile(0.95) < periodMs * f,
+             qPrintable(QString("a universe's frame p95 reached its output %1 ms after the tick").arg(histQuantile(0.95))));
+}
+
+/* What the operator watches while the show runs: the Lighting Studio's
+   2D plot (the tab in front) and the Rig Overview (its window, Live on),
+   in Operate, where the overview is held to operateFrameRate() (15 fps).
+   CPU raster offscreen. Each paint's wall time, the frames drawn, and the
+   UI thread's longest stall -- the values from 80 universes arriving 50
+   times a second each, the plot's items updating, the overview's frames. */
+void ShowScale_Test::theStudioAndOverviewKeepUp()
+{
+    Doc *doc = m_app->doc();
+    Monitor *mon = Monitor::instance();
+    QVERIFY(mon != nullptr);
+    m_app->m_tab->setCurrentWidget(mon);
+    settle(300);
+    MonitorGraphicsView *plot = mon->m_graphicsView;
+    QVERIFY(plot != nullptr);
+    QCOMPARE(int(plot->m_fixtures.size()), ScaleRig::kFixtures);
+    StructureStudioView *overview = mon->stageOverviewView(true);
+    QVERIFY(overview != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(overview->isVisible(), 3000);
+    QCOMPARE(overview->renderBackendLabel(), QStringLiteral("CPU"));
+    QVERIFY(overview->m_liveValues);
+
+    startShow();
+    settle(1500);                           // the overview's rate settles to Operate's
+
+    PaintTimer plotPaints(plot->viewport()), overviewPaints(overview);
+    const int overviewFrames0 = overview->paintCount();
+    MasterTimer *mt = doc->masterTimer();
+    TickSamples samples;
+    QMetaObject::Connection c = connect(mt, &MasterTimer::tickReady, this,
+                                        [&samples, mt]() { samples.record(mt); }, Qt::DirectConnection);
+    Stall stall;
+    QElapsedTimer wall;
+    wall.start();
+    stall.start();
+    samples.on = true;
+    for (int s = 0; s < 4; ++s)
+    {
+        go();
+        settle(1000);
+    }
+    samples.on = false;
+    stall.stop();
+    disconnect(c);
+    const double secs = wall.elapsed() / 1000.0;
+    const int overviewFrames = overview->paintCount() - overviewFrames0;
+    const double fps = overviewFrames / secs;
+    REPORT("Operate, plot + Rig Overview open: overview %.1f fps (cap %d), paint p95 %.1f max %.1f ms; "
+           "plot %d paints, p95 %.1f max %.1f ms; UI thread stall p95 %.1f worst %.1f ms; "
+           "engine tick p95 %.2f ms meanwhile",
+           fps, StructureStudioView::operateFrameRate(), overviewPaints.p95(), overviewPaints.worst(),
+           int(plotPaints.ms.size()), plotPaints.p95(), plotPaints.worst(), stall.p95(), stall.worst(),
+           quantile(samples.walls(), 0.95));
+    stopShow();
+
+    QVERIFY(overviewFrames > 0);
+    QVERIFY(!plotPaints.ms.empty());
+    // Operate's cap holds (a frame either side of the window's edges).
+    QVERIFY2(fps <= StructureStudioView::operateFrameRate() + 1.0,
+             qPrintable(QString("the overview drew %1 fps in Operate").arg(fps)));
+
+    // Budgets: TODO measured on the pool
+    const double f = slowFactor();
+    const double frameMs = 1000.0 / StructureStudioView::operateFrameRate();
+    QVERIFY2(overviewPaints.p95() < frameMs * 2 * f,
+             qPrintable(QString("a Rig Overview frame p95 %1 ms").arg(overviewPaints.p95())));
+    QVERIFY2(plotPaints.p95() < frameMs * 2 * f,
+             qPrintable(QString("a plot frame p95 %1 ms").arg(plotPaints.p95())));
+    QVERIFY2(stall.worst() < 250 * f,
+             qPrintable(QString("the UI thread was held %1 ms").arg(stall.worst())));
+    QVERIFY2(quantile(samples.walls(), 0.95) < 1000.0 / MasterTimer::frequency() * 0.5 * f,
+             qPrintable(QString("with the views drawing, a frame's p95 took %1 ms").arg(quantile(samples.walls(), 0.95))));
+}
+
+/* A minute of the show (3,000 frames at 50 Hz), driven frame by frame so
+   it takes the time the work does, not a minute: the timer's tick, every
+   universe's frame, the values to the rig views as the app hands them
+   over, a GO every two seconds. Resident memory after it against the show
+   loaded; and no growth over the second half (sampled every 5 s). */
+void ShowScale_Test::memoryStaysFlatOverAMinute()
+{
+    Doc *doc = m_app->doc();
+    MasterTimer *mt = doc->masterTimer();
+    mt->stop();                             // the frames are ours now
+    startShow();
+    const int perSecond = int(MasterTimer::frequency());
+    QElapsedTimer wall;
+    wall.start();
+    QList<double> samples;
+    for (int s = 0; s < 60; ++s)
+    {
+        if (s % 2 == 0)
+            go();
+        for (int i = 0; i < perSecond; ++i)
+        {
+            mt->timerTick();
+            for (Universe *u : doc->inputOutputMap()->universes())
+                u->processFaders();
+        }
+        QCoreApplication::processEvents();
+        if (s % 5 == 4)
+            samples << residentMB();
+    }
+    const double wallS = wall.elapsed() / 1000.0;
+    stopShow();
+    mt->start();
+    QVERIFY(m_loadedMB > 0 && !samples.isEmpty());
+    const double growth = samples.last() - m_loadedMB;
+    const double secondHalf = samples.last() - samples.at(samples.size() / 2 - 1);
+    QStringList at;
+    for (double mb : samples)
+        at << QString::number(mb, 'f', 1);
+    REPORT("memory: %.1f MB loaded; every 5 s of the show: %s MB; growth %.1f MB, second half %.1f MB "
+           "(60 s of show in %.1f s)", m_loadedMB, qPrintable(at.join(' ')), growth, secondHalf, wallS);
+
+    // Budgets: TODO measured on the pool
+    QVERIFY2(growth < 150, qPrintable(QString("a minute of the show grew memory %1 MB").arg(growth)));
+    QVERIFY2(secondHalf < 10, qPrintable(QString("memory still growing: %1 MB over the second half").arg(secondHalf)));
+}
+
+QTEST_MAIN(ShowScale_Test)
