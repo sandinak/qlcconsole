@@ -2389,6 +2389,10 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
     QVERIFY(row != nullptr);
     tree->setCurrentItem(row);
 
+    QVERIFY2(!PatchLock::of(fm)->isLocked() && tree->isEnabled() && tree->editTriggers() != QAbstractItemView::NoEditTriggers,
+             qPrintable(QString("locked %1 enabled %2 triggers %3 mode %4")
+                        .arg(PatchLock::of(fm)->isLocked()).arg(tree->isEnabled())
+                        .arg(int(tree->editTriggers())).arg(int(doc->mode()))));
     // Return opens the name's editor; type, Return.
     QTest::keyClick(tree, Qt::Key_Return);
     QLineEdit *editor = nullptr;
@@ -2396,6 +2400,7 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
     editor->selectAll();
     QTest::keyClicks(editor, "New name");
     QTest::keyClick(editor, Qt::Key_Return);
+    QVERIFY2(editor->isEnabled(), "the name editor is greyed");
     QTRY_COMPARE(doc->fixture(fid)->name(), QString("New name"));
 
     QAction *undo = m_app->menuBar()->findChild<QAction *>("editUndo");
