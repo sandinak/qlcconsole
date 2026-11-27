@@ -27,7 +27,11 @@
 #include <QtTest>
 
 #include "../../../engine/test/common/stdprelude.h"
+#define private public
+#define protected public
 #include "app.h"
+#undef protected
+#undef private
 #include "showtreecontroller.h"
 #include "effectscriptrunner.h"
 #include "effectscriptcache.h"
@@ -356,20 +360,20 @@ void RainbowMovers_Test::checkEffect()
     for (Fixture *f : { cmy, wheel, rgb })
         QVERIFY2(inst.effectiveFixtureIds().contains(f->id()), qPrintable(f->name()));
 
-    // The colour wheel's slots, as the definition names them.
-    QList<QPair<int, int>> slots;
+    // The colour wheel's wslots, as the definition names them.
+    QList<QPair<int, int>> wslots;
     for (quint32 c = 0; c < wheel->channels(); ++c)
     {
-        QLCChannel *ch = wheel->channel(c);
+        const QLCChannel *ch = wheel->channel(c);
         if (ch->group() != QLCChannel::Colour)
             continue;
         for (QLCCapability *cap : ch->capabilities())
             if (cap->presetType() == QLCCapability::SingleColor)
-                slots << qMakePair(int(cap->min()), int(cap->max()));
+                wslots << qMakePair(int(cap->min()), int(cap->max()));
     }
-    QVERIFY(slots.size() >= 6);
+    QVERIFY(wslots.size() >= 6);
     auto onASlot = [&](int v) {
-        for (const auto &s : slots)
+        for (const auto &s : wslots)
             if (v >= s.first && v <= s.second)
                 return true;
         return false;
@@ -453,13 +457,13 @@ void RainbowMovers_Test::checkEffect()
     for (int i = 0; i < wheelValues.size(); ++i)
     {
         QVERIFY2(onASlot(wheelValues.at(i)), qPrintable(QString("wheel value %1 is on no colour slot").arg(wheelValues.at(i))));
-        for (int s = 0; s < slots.size(); ++s)
-            if (wheelValues.at(i) >= slots.at(s).first && wheelValues.at(i) <= slots.at(s).second)
+        for (int s = 0; s < wslots.size(); ++s)
+            if (wheelValues.at(i) >= wslots.at(s).first && wheelValues.at(i) <= wslots.at(s).second)
                 slotsSeen << s;
         if (i > 0 && wheelValues.at(i) != wheelValues.at(i - 1))
             ++changes;
     }
-    QVERIFY2(slotsSeen.size() >= 4, qPrintable(QString("the wheel only visited %1 slots").arg(slotsSeen.size())));
+    QVERIFY2(slotsSeen.size() >= 4, qPrintable(QString("the wheel only visited %1 wslots").arg(slotsSeen.size())));
     QVERIFY2(changes >= 4, qPrintable(QString("the wheel only changed %1 times").arg(changes)));
     // A step, not a fade: far fewer changes than samples, and no two in a row all the way round.
     QVERIFY2(changes < wheelValues.size() / 2, qPrintable(QString("the wheel changed on %1 of %2 samples").arg(changes).arg(wheelValues.size())));
