@@ -1217,6 +1217,7 @@ void MonitorProperties::reset()
     m_groups.clear();
     m_images.clear();
     m_zones.clear();
+    m_cameraViews.clear();
 }
 
 /********************************************************************
@@ -3292,6 +3293,46 @@ void MonitorProperties::removeImage(quint32 id)
     m_images.remove(id);
 }
 
+int MonitorProperties::cameraViewIndex(const QString &name) const
+{
+    for (int i = 0; i < m_cameraViews.size(); ++i)
+        if (m_cameraViews.at(i).name.compare(name, Qt::CaseInsensitive) == 0)
+            return i;
+    return -1;
+}
+
+void MonitorProperties::setCameraView(const CameraView &v)
+{
+    if (v.name.trimmed().isEmpty())
+        return;
+    const int i = cameraViewIndex(v.name);
+    if (i >= 0)
+        m_cameraViews[i] = v;
+    else
+        m_cameraViews.append(v);
+}
+
+bool MonitorProperties::renameCameraView(const QString &from, const QString &to)
+{
+    const int i = cameraViewIndex(from);
+    if (i < 0 || to.trimmed().isEmpty())
+        return false;
+    const int clash = cameraViewIndex(to);
+    if (clash >= 0 && clash != i)
+        return false;
+    m_cameraViews[i].name = to.trimmed();
+    return true;
+}
+
+bool MonitorProperties::removeCameraView(const QString &name)
+{
+    const int i = cameraViewIndex(name);
+    if (i < 0)
+        return false;
+    m_cameraViews.removeAt(i);
+    return true;
+}
+
 quint32 MonitorProperties::nextNoLightZoneId() const
 {
     quint32 id = 0;
@@ -4048,6 +4089,25 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                     g.name = QStringLiteral("Group %1").arg(gid);
                 m_groups.insert(gid, g);
             }
+            root.skipCurrentElement();
+        }
+        else if (root.name() == QStringLiteral("CameraView"))
+        {
+            const QXmlStreamAttributes a = root.attributes();
+            CameraView v;
+            v.name = a.value(QStringLiteral("Name")).toString();
+            v.plane = a.value(QStringLiteral("Plane")).toInt();
+            v.rotation = a.value(QStringLiteral("Rot")).toInt();
+            v.azimuth = a.value(QStringLiteral("Az")).toDouble();
+            v.elevation = a.value(QStringLiteral("El")).toDouble();
+            v.zoomed = a.value(QStringLiteral("Zoomed")).toInt() != 0;
+            v.scale = a.value(QStringLiteral("Scale")).toDouble();
+            v.originX = a.value(QStringLiteral("OX")).toDouble();
+            v.originY = a.value(QStringLiteral("OY")).toDouble();
+            v.width = a.value(QStringLiteral("W")).toInt();
+            v.height = a.value(QStringLiteral("H")).toInt();
+            if (!v.name.isEmpty() && cameraViewIndex(v.name) < 0)
+                m_cameraViews.append(v);
             root.skipCurrentElement();
         }
         else if (root.name() == QStringLiteral("NoLightZone"))
@@ -5091,6 +5151,24 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
     // No-light zones
     foreach (const NoLightZone &z, m_zones)
         z.saveXML(doc);
+
+    // Named cameras of the Rig Overview
+    foreach (const CameraView &v, m_cameraViews)
+    {
+        doc->writeStartElement(QStringLiteral("CameraView"));
+        doc->writeAttribute(QStringLiteral("Name"), v.name);
+        doc->writeAttribute(QStringLiteral("Plane"), QString::number(v.plane));
+        doc->writeAttribute(QStringLiteral("Rot"), QString::number(v.rotation));
+        doc->writeAttribute(QStringLiteral("Az"), QString::number(v.azimuth, 'g', 10));
+        doc->writeAttribute(QStringLiteral("El"), QString::number(v.elevation, 'g', 10));
+        doc->writeAttribute(QStringLiteral("Zoomed"), v.zoomed ? QStringLiteral("1") : QStringLiteral("0"));
+        doc->writeAttribute(QStringLiteral("Scale"), QString::number(v.scale, 'g', 10));
+        doc->writeAttribute(QStringLiteral("OX"), QString::number(v.originX, 'g', 10));
+        doc->writeAttribute(QStringLiteral("OY"), QString::number(v.originY, 'g', 10));
+        doc->writeAttribute(QStringLiteral("W"), QString::number(v.width));
+        doc->writeAttribute(QStringLiteral("H"), QString::number(v.height));
+        doc->writeEndElement();
+    }
 
     // Trusses
     foreach (const Truss *t, m_trusses)

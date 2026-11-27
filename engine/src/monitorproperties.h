@@ -1253,7 +1253,31 @@ public:
     void removeNoLightZone(quint32 id);
     quint32 nextNoLightZoneId() const;
 
+    /** A named camera of the Rig Overview ("From FOH", "Director's seat"):
+     *  everything StructureStudioView::Camera holds, saved with the show. */
+    struct CameraView
+    {
+        QString name;
+        int plane = 3;
+        int rotation = 0;
+        double azimuth = 20.0;
+        double elevation = 30.0;
+        bool zoomed = false;
+        double scale = 60.0;
+        double originX = 0.0;
+        double originY = 0.0;
+        int width = 0;
+        int height = 0;
+    };
+    QList<CameraView> cameraViews() const { return m_cameraViews; }
+    /** Adds, or replaces the view of the same name (case-insensitive). */
+    void setCameraView(const CameraView &v);
+    bool renameCameraView(const QString &from, const QString &to);
+    bool removeCameraView(const QString &name);
+    int cameraViewIndex(const QString &name) const;
+
 private:
+    QList<CameraView> m_cameraViews;
     QMap<quint32, MonitorImage> m_images;
     QMap<quint32, NoLightZone> m_zones;
 

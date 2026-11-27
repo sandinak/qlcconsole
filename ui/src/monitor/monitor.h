@@ -454,6 +454,9 @@ public:
     /** ⇧⌘R: open it -- or, when it is the window in front, close it. Open
      *  behind others, it is brought forward rather than shut unseen. */
     void toggleStageOverview();
+    /** Rig Overview saved views (named cameras, saved with the show). */
+    void saveCurrentView(class StructureStudioView *view, const QString &name);
+    bool applySavedView(class StructureStudioView *view, const QString &name);
     /** The Rig Overview's view (Q212: a note's snapshot of the view); with
      *  @a open, the window is opened first when it isn't. Null: not open. */
     class StructureStudioView *stageOverviewView(bool open = false);

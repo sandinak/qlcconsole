@@ -3502,6 +3502,60 @@ void Monitor::stageMarksChanged()
         m_overviewView->update();
 }
 
+void Monitor::saveCurrentView(StructureStudioView *view, const QString &name)
+{
+    if (view == nullptr || name.trimmed().isEmpty())
+        return;
+    const StructureStudioView::Camera c = view->camera();
+    MonitorProperties::CameraView v;
+    v.name = name.trimmed();
+    v.plane = c.plane;
+    v.rotation = c.rotation;
+    v.azimuth = c.azimuth;
+    v.elevation = c.elevation;
+    v.zoomed = c.zoomed;
+    v.scale = c.scale;
+    v.originX = c.origin.x();
+    v.originY = c.origin.y();
+    v.width = c.width;
+    v.height = c.height;
+    m_doc->monitorProperties()->setCameraView(v);
+    m_doc->setModified();
+}
+
+bool Monitor::applySavedView(StructureStudioView *view, const QString &name)
+{
+    if (view == nullptr)
+        return false;
+    const MonitorProperties *props = m_doc->monitorProperties();
+    const int i = props->cameraViewIndex(name);
+    if (i < 0)
+        return false;
+    const MonitorProperties::CameraView v = props->cameraViews().at(i);
+    StructureStudioView::Camera c;
+    c.plane = v.plane;
+    c.rotation = v.rotation;
+    c.azimuth = v.azimuth;
+    c.elevation = v.elevation;
+    c.zoomed = v.zoomed;
+    c.scale = v.scale;
+    c.origin = QPointF(v.originX, v.originY);
+    c.width = v.width;
+    c.height = v.height;
+    view->setCamera(c);
+    // The View box says where the eye now is.
+    if (m_overviewPlaneCombo != nullptr && view == m_overviewView)
+    {
+        const int at = m_overviewPlaneCombo->findData(int(view->plane()));
+        if (at >= 0)
+        {
+            QSignalBlocker block(m_overviewPlaneCombo);
+            m_overviewPlaneCombo->setCurrentIndex(at);
+        }
+    }
+    return true;
+}
+
 void Monitor::toggleStageOverview()
 {
     if (m_overviewDlg != NULL && m_overviewDlg->isVisible() && m_overviewDlg->isActiveWindow())
@@ -3858,6 +3912,69 @@ void Monitor::showStageOverview()
     planeCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     planeCombo->setMinimumContentsLength(8);
     bar->addWidget(planeCombo);
+
+    /* Named cameras (Capture's saved views): the View box's own menu. Saved
+       with the show; the Notes' "Snapshot the view" is the same Camera. */
+    {
+        QToolButton *camBtn = new QToolButton(footer);
+        camBtn->setObjectName(QStringLiteral("rigSavedViews"));
+        camBtn->setText(tr("Views"));
+        camBtn->setPopupMode(QToolButton::InstantPopup);
+        camBtn->setToolTip(tr("Saved views: keep this point of view under a name "
+                              "(From FOH, Director's seat) and come back to it"));
+        QMenu *camMenu = new QMenu(camBtn);
+        camBtn->setMenu(camMenu);
+        QPointer<StructureStudioView> cv(view);
+        auto rebuild = [this, camMenu, cv]() {
+            camMenu->clear();
+            MonitorProperties *props = m_doc->monitorProperties();
+            const QList<MonitorProperties::CameraView> views = props->cameraViews();
+            for (const MonitorProperties::CameraView &v : views)
+            {
+                const QString name = v.name;
+                camMenu->addAction(name, camMenu, [this, cv, name]() {
+                    if (cv.isNull())
+                        return;
+                    applySavedView(cv.data(), name);
+                });
+            }
+            if (!views.isEmpty())
+                camMenu->addSeparator();
+            camMenu->addAction(tr("Add View…"), camMenu, [this, cv]() {
+                if (cv.isNull())
+                    return;
+                bool ok = false;
+                const QString name = QInputDialog::getText(
+                    m_overviewView, tr("Add View"), tr("Name this view:"),
+                    QLineEdit::Normal, QString(), &ok).trimmed();
+                if (ok && !name.isEmpty())
+                    saveCurrentView(cv.data(), name);
+            });
+            QMenu *ren = camMenu->addMenu(tr("Rename View"));
+            QMenu *del = camMenu->addMenu(tr("Delete View"));
+            ren->setEnabled(!views.isEmpty());
+            del->setEnabled(!views.isEmpty());
+            for (const MonitorProperties::CameraView &v : views)
+            {
+                const QString name = v.name;
+                ren->addAction(name, camMenu, [this, name]() {
+                    bool ok = false;
+                    const QString to = QInputDialog::getText(
+                        m_overviewView, tr("Rename View"), tr("New name:"),
+                        QLineEdit::Normal, name, &ok).trimmed();
+                    if (ok && !to.isEmpty() && m_doc->monitorProperties()->renameCameraView(name, to))
+                        m_doc->setModified();
+                });
+                del->addAction(name, camMenu, [this, name]() {
+                    if (m_doc->monitorProperties()->removeCameraView(name))
+                        m_doc->setModified();
+                });
+            }
+        };
+        connect(camMenu, &QMenu::aboutToShow, camMenu, rebuild);
+        rebuild();
+        bar->addWidget(camBtn);
+    }
 
     /* Layers, from here: show or hide one without the Studio open. The same
        switch as the Studio's eye (saved with the show), so the two agree --
