@@ -95,6 +95,7 @@ void ControlCollisionBox::refuse(Doc *doc, quint32 universe, quint32 channel,
     m_note->setVisible(movable);
     setStepThrough(false);
     show();
+    fitLabels();
 }
 
 void ControlCollisionBox::refuseRun(Doc *doc, quint32 universe,
@@ -124,7 +125,32 @@ void ControlCollisionBox::setMovesOnOk(bool onOk)
 void ControlCollisionBox::appendText(const QString &line)
 {
     if (!line.isEmpty())
+    {
         m_text->setText(m_text->text() + QStringLiteral("\n") + line);
+        fitLabels();
+    }
+}
+
+void ControlCollisionBox::fitLabels()
+{
+    for (QLabel *l : { m_text, m_note, m_stepNote })
+    {
+        const int w = l->width();
+        if (w > 0 && l->wordWrap())
+            l->setMinimumHeight(l->heightForWidth(w));
+    }
+}
+
+void ControlCollisionBox::resizeEvent(QResizeEvent *event)
+{
+    QFrame::resizeEvent(event);
+    fitLabels();
+}
+
+void ControlCollisionBox::showEvent(QShowEvent *event)
+{
+    QFrame::showEvent(event);
+    fitLabels();
 }
 
 void ControlCollisionBox::clear()

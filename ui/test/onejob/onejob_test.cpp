@@ -154,6 +154,7 @@ void OneJob_Test::aDeskRoleIsNamedAndMovedFromTheSpeedMastersDialog()
     SpeedMastersPanel panel(m_doc);
 
     QString freeLabel, label, boxText, moved, changed;
+    QStringList clipped;
     bool refused = false, moveShown = false;
     QTimer::singleShot(0, this, [&]() {
         QDialog *dlg = qobject_cast<QDialog *>(QApplication::activeModalWidget());
@@ -174,6 +175,19 @@ void OneJob_Test::aDeskRoleIsNamedAndMovedFromTheSpeedMastersDialog()
         refused = tap->collisionBox()->isRefusing();
         boxText = tap->collisionBox()->text();
         moveShown = tap->collisionBox()->moveButton()->isVisibleTo(dlg);
+        // At the narrowest the box grows to fit its wrapped text: no label is clipped.
+        dlg->resize(640, 640);
+        settle();
+        for (const char *n : { "collisionText", "collisionNote" })
+        {
+            QLabel *l = tap->collisionBox()->findChild<QLabel *>(n);
+            if (l != nullptr && l->isVisibleTo(dlg))
+            {
+                const int need = l->heightForWidth(l->width());
+                if (l->height() < need)
+                    clipped << QStringLiteral("%1 is %2 px, its text needs %3").arg(n).arg(l->height()).arg(need);
+            }
+        }
         // The window at three sizes, when the pool asks for shots.
         const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
         if (!shotDir.isEmpty())
@@ -211,6 +225,7 @@ void OneJob_Test::aDeskRoleIsNamedAndMovedFromTheSpeedMastersDialog()
     QVERIFY2(boxText.contains(QStringLiteral("Grand Master")) && boxText.contains(QStringLiteral("One job per control")),
              qPrintable(boxText));
     QVERIFY(moveShown);
+    QVERIFY2(clipped.isEmpty(), qPrintable(clipped.join(QStringLiteral("; "))));
     QVERIFY2(moved.contains(QStringLiteral("taken from Grand Master when you press OK")), qPrintable(moved));
     QVERIFY2(changed.contains(QStringLiteral("Speed 2 Tap")) || changed.contains(QStringLiteral("Tap")), qPrintable(changed));
     // OK: the Tap is on the fader and the desk's Grand Master is cleared.
