@@ -894,6 +894,11 @@ SurfaceControlTable::SurfaceControlTable(SurfaceMapView *view, QWidget *parent)
     v->addWidget(m_table);
 
     connect(m_filter, &QLineEdit::textChanged, this, [this](const QString &t) { setFilter(t); });
+    // A person's sort is kept when the rows are read again.
+    connect(m_table->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this, [this]() {
+        if (!m_syncing)
+            m_sorted = m_table->horizontalHeader()->sortIndicatorSection() >= 0;
+    });
     connect(m_table, &QTableWidget::itemSelectionChanged, this, &SurfaceControlTable::rowSelected);
     connect(m_view, &SurfaceMapView::refreshed, this, &SurfaceControlTable::rebuild);
     connect(m_view, &SurfaceMapView::selectionChanged, this, &SurfaceControlTable::selectionFromMap);
@@ -941,9 +946,6 @@ void SurfaceControlTable::rebuild()
         m_table->sortByColumn(sortCol, order);
     else
         m_table->horizontalHeader()->setSortIndicator(-1, Qt::AscendingOrder);
-    connect(m_table->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this,
-            [this]() { m_sorted = m_table->horizontalHeader()->sortIndicatorSection() >= 0; },
-            Qt::UniqueConnection);
     m_syncing = false;
     applyFilter();
     selectionFromMap(m_view->selected());
