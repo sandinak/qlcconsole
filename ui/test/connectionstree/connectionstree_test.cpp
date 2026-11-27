@@ -4345,8 +4345,10 @@ static QStringList menuTextsOn(ConnectionsTree &tree, QTreeWidgetItem *item)
         {
             seen << a->text();
             if (a->menu() != NULL)
+            {
                 foreach (QAction *sub, a->menu()->actions())
                     seen << QStringLiteral("  > ") + sub->text();
+            }
         }
         m->close();
     });
