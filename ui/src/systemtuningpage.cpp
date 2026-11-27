@@ -105,6 +105,13 @@ SystemTuningPage::SystemTuningPage(Doc *doc, QWidget *parent)
         m_universeThreads->setToolTip(tr("Set for this run by QLC_UNIVERSE_SCHED, which overrides it."));
     }
     engineLayout->addRow(tr("Universe threads"), m_universeThreads);
+#if defined(Q_OS_MACOS)
+    /* A thread that has been real-time can't take a QoS class again */
+    QLabel *restart = new QLabel(tr("From Real-time to Responsive takes effect after a restart."), engine);
+    restart->setObjectName(QStringLiteral("tuningUniverseThreadsRestart"));
+    restart->setWordWrap(true);
+    engineLayout->addRow(QString(), restart);
+#endif
     engine->setVisible(m_universeThreads->count() > 1);
     layout->addWidget(engine);
 

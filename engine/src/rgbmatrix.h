@@ -31,6 +31,7 @@
 #include <QMap>
 #include <QMutex>
 #include <QSharedPointer>
+#include <memory>
 
   #include "rgbscriptv4.h"
 #include "function.h"
@@ -222,6 +223,8 @@ public:
     static bool mapsAhead();
     /** Steps whose map was not ready in time, every matrix, since start */
     static quint64 mapsLate();
+    /** This matrix's map jobs queued on the scripts' thread, not yet run */
+    int mapJobsQueued() const;
 
 private:
     int algorithmStepsCount();
@@ -235,8 +238,23 @@ private:
      *  go of the script, before it is deleted (m_algorithmMutex held) */
     void dropNextMap(bool wait);
 
+    /** The script's map jobs not yet run (dropNextMap(true) waits for them) */
+    void waitForMapJobs();
+    /** The ready map into the step handler, if it is this matrix's as it is now */
+    bool takeReadyMap();
+
+    struct MapKey
+    {
+        QSize size;
+        uint rgb = 0;
+        int step = -1;
+        int generation = -1;
+        bool isFor(const QSize &sz, uint colour, int index, int gen) const;
+    };
     struct NextMap;
     QSharedPointer<NextMap> m_nextMap;
+    MapKey m_shownMapFor;     ///< what the map going out was made for
+    std::shared_ptr<std::atomic<int>> m_mapJobs = std::make_shared<std::atomic<int>>(0);
     /** The step began without its map: it goes out as soon as it is ready */
     bool m_waitingForMap = false;
     /** Bumped by every edit that changes what a map would be */

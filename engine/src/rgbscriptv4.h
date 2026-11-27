@@ -77,6 +77,8 @@ public:
     /** Return once everything asked of the scripts' thread so far has run
      *  (at once when called on that thread, or with none) */
     static void waitForScriptThread();
+    /** Scripts deleted while rgbMap() ran on them (a bug: tests check it) */
+    static int deletedWhileMapping();
 
 private:
     static void initEngine();
@@ -89,6 +91,7 @@ private:
     QString m_fileName;             //! The file name that contains this script
     QString m_contents;             //! The file's contents
     static JSThread *s_jsThread;
+    std::atomic<int> m_mapping { 0 };   ///< rgbMap() running on this script
 
     /************************************************************************
      * RGBAlgorithm API

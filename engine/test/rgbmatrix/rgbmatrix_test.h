@@ -50,6 +50,10 @@ private slots:
     /** A map not ready at its step: the last one stays, counted late, and
      *  the new one goes out the frame it is ready */
     void aLateMapKeepsTheLastOneUntilReady();
+    /** A script slower than its steps: the newest map made still goes out */
+    void aScriptSlowerThanItsStepsStillMoves();
+    /** Deleted while its script makes a map: the delete waits for it */
+    void aMatrixDeletedMidMapWaitsForIt();
     /** Running (coverage campaign: preRun/write/postRun were never run):
      *  a Plain matrix writes its colour to every head and follows a change;
      *  stopped, it lets go; a scripted one steps on its duration */

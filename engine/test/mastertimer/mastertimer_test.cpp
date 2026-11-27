@@ -631,16 +631,38 @@ void MasterTimer_Test::aLateTickDoesNotStretchAFade()
 void MasterTimer_Test::theTimerCatchesUpOnlyWhatItCan()
 {
     const double period = MasterTimer::tick();
+    const qint64 sec = 1000000000LL;
+    MasterTimer::CatchUp state;
     // A late frame, the tick itself quick: catch up
-    QVERIFY(MasterTimer::catchesUp(qint64(period * 3 * 1e6), period / 4));
-    QVERIFY(MasterTimer::catchesUp(0, 0));
-    // The tick overran its own period: the show is more than fits, don't
-    QVERIFY(!MasterTimer::catchesUp(qint64(period * 1e6), period));
-    QVERIFY(!MasterTimer::catchesUp(qint64(period * 1e6), period * 3));
+    QVERIFY(MasterTimer::catchesUp(state, 0, qint64(period * 3 * 1e6), period / 4));
+    QVERIFY(MasterTimer::catchesUp(state, 0, 0, 0));
+    // The tick left under a quarter of its period: catching up would hold
+    // the real-time timer on a core -- it sleeps instead
+    QVERIFY(!MasterTimer::catchesUp(state, 0, qint64(period * 1e6), period * 0.95));
+    QVERIFY(!MasterTimer::catchesUp(state, 0, qint64(period * 1e6), period * 0.8));
+    QVERIFY(!MasterTimer::catchesUp(state, 0, qint64(period * 1e6), period * 3));
     // A computer that slept: start again from now
-    QVERIFY(MasterTimer::catchesUp(MasterTimer::kMaxCatchUpNs, 1));
-    QVERIFY(!MasterTimer::catchesUp(MasterTimer::kMaxCatchUpNs + 1, 1));
-    QVERIFY(!MasterTimer::catchesUp(qint64(3600) * 1000000000, 1));
+    QVERIFY(!MasterTimer::catchesUp(state, 0, MasterTimer::kMaxCatchUpNs + 1, 1));
+    QVERIFY(!MasterTimer::catchesUp(state, 0, qint64(3600) * sec, 1));
+
+    // Ticks at 0.95 of the period, late every time, for a second: never
+    // a frame caught up back to back
+    MasterTimer::CatchUp busy;
+    int caught = 0;
+    for (int f = 0; f < int(MasterTimer::frequency()); ++f)
+        caught += MasterTimer::catchesUp(busy, qint64(f) * qint64(period * 1e6),
+                                         qint64(period * 0.2 * 1e6), period * 0.95) ? 1 : 0;
+    QCOMPARE(caught, 0);
+
+    // Late after every quick tick: at most kMaxCatchUpPerSecond a second,
+    // then the next second's
+    MasterTimer::CatchUp often;
+    caught = 0;
+    for (int f = 0; f < int(MasterTimer::frequency()); ++f)
+        caught += MasterTimer::catchesUp(often, qint64(f) * qint64(period * 1e6),
+                                         qint64(period * 1e6), period / 2) ? 1 : 0;
+    QCOMPARE(caught, MasterTimer::kMaxCatchUpPerSecond);
+    QVERIFY(MasterTimer::catchesUp(often, sec + 1, qint64(period * 1e6), period / 2));
 }
 
 /* stop() during a tick returns only once that tick is over, so whatever the

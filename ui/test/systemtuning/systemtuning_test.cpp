@@ -715,6 +715,12 @@ void SystemTuning_Test::universeThreadsAreSavedPerComputer()
     QVERIFY(combo->count() > 1);
     QCOMPARE(combo->currentData().toInt(), int(Universe::defaultThreadPriority()));
     QVERIFY(combo->currentText().contains(QLatin1String("(default)")));
+#if defined(Q_OS_MACOS)
+    // Real-time to Responsive needs a restart there, and the page says so
+    QLabel *restart = page.findChild<QLabel *>(QStringLiteral("tuningUniverseThreadsRestart"));
+    QVERIFY(restart != nullptr);
+    QVERIFY(restart->text().contains(QLatin1String("restart")));
+#endif
     /* Another one: saved, and in effect, on OK only */
     const Universe::ThreadPriority other = Universe::defaultThreadPriority() == Universe::PriorityStandard
                                            ? Universe::PriorityRealtime : Universe::PriorityStandard;

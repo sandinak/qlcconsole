@@ -274,6 +274,7 @@ void MasterTimerPrivate::run()
 
     HANDLE handles[2] = { m_stopEvent, m_timer };
     qint64 deadline = now();
+    MasterTimer::CatchUp catchUp;
 
     while (m_run.loadAcquire() != 0)
     {
@@ -286,7 +287,7 @@ void MasterTimerPrivate::run()
                thread wasn't scheduled back in time. Same report as the unix
                timer -- "late" vs the previous tick's compute time tells the
                two apart. Tick now. */
-            const long lateUs = long((current - deadline) * 1000000LL / countsPerSec);
+            const qint64 lateUs = (current - deadline) * 1000000LL / countsPerSec;
             qDebug() << Q_FUNC_INFO << "MasterTimer is running late!"
                      << "late_us:" << lateUs
                      << "wall_us:" << long(m_masterTimer->tickComputeMs() * 1000.0)
@@ -296,7 +297,8 @@ void MasterTimerPrivate::run()
             /* Show time is wall-clock time (MasterTimer::catchesUp()): the
                missed frames follow back to back, unless this tick overran
                itself or the gap is too long */
-            if (!MasterTimer::catchesUp(qint64(lateUs) * 1000, m_masterTimer->tickComputeMs()))
+            const qint64 nowNs = qint64(double(current) * 1.0e9 / double(countsPerSec));
+            if (!MasterTimer::catchesUp(catchUp, nowNs, lateUs * 1000, m_masterTimer->tickComputeMs()))
                 deadline = now();
             continue;
         }

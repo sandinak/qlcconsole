@@ -335,10 +335,20 @@ bool MasterTimer::inTimerFrame()
     return t_inTimerFrame;
 }
 
-bool MasterTimer::catchesUp(qint64 lateNs, double tickComputeMs)
+bool MasterTimer::catchesUp(CatchUp &state, qint64 nowNs, qint64 lateNs, double tickComputeMs)
 {
     const double periodMs = 1000.0 / double(s_frequency);
-    return lateNs >= 0 && lateNs <= kMaxCatchUpNs && tickComputeMs < periodMs;
+    if (lateNs < 0 || lateNs > kMaxCatchUpNs || tickComputeMs >= periodMs * kCatchUpHeadroom)
+        return false;
+    if (state.windowStartNs < 0 || nowNs - state.windowStartNs >= 1000000000LL)
+    {
+        state.windowStartNs = nowNs;
+        state.frames = 0;
+    }
+    if (state.frames >= kMaxCatchUpPerSecond)
+        return false;
+    state.frames++;
+    return true;
 }
 
 double MasterTimer::tickComputeMs() const

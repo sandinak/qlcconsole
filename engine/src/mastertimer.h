@@ -79,18 +79,22 @@ public:
 
     /** Show time follows the wall clock: every tick is tick() ms of every
      *  fade, hold and effect, so a frame that comes @a lateNs late is
-     *  followed by the ones it missed, back to back. Not when the tick just
-     *  run took a period or more itself (@a tickComputeMs: the show is more
-     *  than the computer computes in time, and catching up would only fall
-     *  further behind) nor past kMaxCatchUpNs (a computer that slept): then
-     *  the timer starts again from now and that time is lost. */
-    static bool catchesUp(qint64 lateNs, double tickComputeMs);
-
-    /** Whether the calling thread is inside a frame of the running timer
-     *  (timerTick(true)), not a tick by hand: what may be left to finish
-     *  off the tick (RGBMatrix::mapsAhead()) only there */
-    static bool inTimerFrame();
+     *  followed by the ones it missed, back to back -- one more each time
+     *  this says yes. Not when the tick just run left under a quarter of
+     *  the period (@a tickComputeMs: catching up would hold the real-time
+     *  timer on a core and fall further behind), past kMaxCatchUpNs (a
+     *  computer that slept), nor more than kMaxCatchUpPerSecond frames in
+     *  a second (@a state, the timer's own, at @a nowNs): then the timer
+     *  starts again from now and that time is lost. */
+    struct CatchUp
+    {
+        qint64 windowStartNs = -1;
+        int frames = 0;
+    };
+    static bool catchesUp(CatchUp &state, qint64 nowNs, qint64 lateNs, double tickComputeMs);
     static constexpr qint64 kMaxCatchUpNs = 500000000;  // 25 frames at 50 Hz
+    static constexpr int kMaxCatchUpPerSecond = 10;
+    static constexpr double kCatchUpHeadroom = 0.75;   // of the period
 
     /** Compute time of the most recent tick, in milliseconds. This is how
      *  long the engine spent producing DMX for one tick (functions + DMX

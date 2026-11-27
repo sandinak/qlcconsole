@@ -423,11 +423,31 @@ the script at each step. Scripts run on the one script thread, and the
 tick used to wait there for the map: Plasma over the show's 6,156 pixels
 took about 16 ms, five times a second. Since 0.5.3 the next step's map is
 asked for as a step begins and made on the script thread while the frames
-go on (`RGBMatrix::mapsAhead()`; `QLC_MAPS_AHEAD=0` for the old way); a
-map that is not ready at its step leaves the last one out until it is,
-counted as a late map. On time, the output is the same frame for frame
-(`RGBMatrix_Test::mapsAheadSendTheSameFrames`). A run's first map, a tick
-by hand and a matrix without a script are made at the step as before.
+go on (`RGBMatrix::mapsAhead()`; `QLC_MAPS_AHEAD=0` for the old way). A
+map not ready at its step leaves the last one out until it is, counted as
+a late map; a script slower than its steps sends the newest map it has
+made, even one for an older step, so the effect keeps moving at the
+script's own pace (`RGBMatrix_Test::aScriptSlowerThanItsStepsStillMoves`).
+A run's first map is asked for the same way: the matrix's first frame is
+blank, its map out the frame it is ready. On time, the output is the same
+frame for frame (`RGBMatrix_Test::mapsAheadSendTheSameFrames`). A tick by
+hand and a matrix without a script make the map at the step as before. A
+matrix (or its script) is never deleted while a map job for it may run:
+every queued job is counted and waited for
+(`RGBMatrix_Test::aMatrixDeletedMidMapWaitsForIt`).
+
+What still waits on the script thread, with its worst case: the script
+thread runs one job at a time, so a blocking call queues behind whatever
+map jobs are in flight -- one per running scripted matrix, ~16 ms each for
+Plasma over the show's 6,156 pixels (measured above), 0 ms with none
+running. The tick no longer makes such calls in a frame of the running
+timer (a matrix's properties at its start are queued too); the editors
+(setAlgorithm, setProperty, a preview) do, from the UI thread, holding the
+matrix's lock, so a tick that reaches that matrix during the edit waits as
+long. Edits are not made during a show's Operate as a rule. A map asked for
+before an edit (a colour, a property, the algorithm) is dropped when it
+comes back and asked for again; for a script that keeps state between
+maps (Snowball, Fireworks) that edit skips one step of it.
 
 `ui/test/showscale` on newaudio (M4 Pro), on / off / on / off, Release:
 
@@ -455,12 +475,14 @@ The timer used to run one catch-up frame after a late one and start its
 schedule again from there, so the frames a stall missed were lost and a
 fade with a 100 ms stall in it ended ~80 ms late. Now the frames it missed
 follow at once, back to back, so the count of frames keeps to the clock
-(`MasterTimer::catchesUp()`), unless the frame just run took a period or
-more itself (the show is more than the computer computes in time) or the
-gap is over half a second (a computer that slept): then it starts again
-from now, as before. `MasterTimer_Test::aLateTickDoesNotStretchAFade`: a
-600 ms fade with a 100 ms stall a third of the way in ends within a frame
-of its time.
+(`MasterTimer::catchesUp()`), but only while the tick leaves headroom
+(the last tick under 0.75 of the period: a tick at 0.95 never makes the
+real-time timer run frames back to back), at most 10 frames a second, and
+not past half a second late (a computer that slept); otherwise it starts
+again from now and the time is lost, as before
+(`MasterTimer_Test::theTimerCatchesUpOnlyWhatItCan`).
+`MasterTimer_Test::aLateTickDoesNotStretchAFade`: a 600 ms fade with a
+100 ms stall a third of the way in ends within a frame of its time.
 
 ## Tuning your computer
 

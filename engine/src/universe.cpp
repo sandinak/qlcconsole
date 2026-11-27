@@ -536,6 +536,7 @@ Universe::ThreadPriority Universe::defaultThreadPriority()
 #endif
 }
 
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
 /* One warning per run, not one per universe thread */
 static void warnOnce(const char *what, int code)
 {
@@ -543,6 +544,7 @@ static void warnOnce(const char *what, int code)
     if (!warned.exchange(true))
         qWarning() << "Universe threads:" << what << code << "- they run at normal priority";
 }
+#endif
 
 bool Universe::threadPrioritySupported(ThreadPriority priority)
 {
@@ -668,7 +670,7 @@ static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, int
     int prio = sched_get_priority_max(SCHED_FIFO) - 11;
     struct rlimit rl;
     if (getrlimit(RLIMIT_RTPRIO, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY
-        && rlim_t(prio) >= rl.rlim_cur)
+        && rl.rlim_cur > 0 && rlim_t(prio) >= rl.rlim_cur)
         prio = int(rl.rlim_cur) - 1;
     sp.sched_priority = qMax(1, prio);
     const int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);

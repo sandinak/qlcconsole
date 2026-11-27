@@ -90,8 +90,22 @@ RGBScript::RGBScript(const RGBScript& s)
     }
 }
 
+static std::atomic<int> s_deletedWhileMapping { 0 };
+
 RGBScript::~RGBScript()
 {
+    /* Whoever deletes a script must have waited for its maps
+       (RGBMatrix::waitForMapJobs()); counted for the tests, never relied on */
+    if (m_mapping.load(std::memory_order_acquire) > 0)
+    {
+        s_deletedWhileMapping.fetch_add(1, std::memory_order_relaxed);
+        qWarning() << "RGBScript" << m_fileName << "deleted while making a map";
+    }
+}
+
+int RGBScript::deletedWhileMapping()
+{
+    return s_deletedWhileMapping.load(std::memory_order_relaxed);
 }
 
 RGBScript &RGBScript::operator=(const RGBScript &s)
@@ -384,6 +398,13 @@ void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
 
     if (m_rgbMap.isUndefined() == true)
         return;
+
+    struct Busy
+    {
+        explicit Busy(std::atomic<int> &n) : count(n) { count.fetch_add(1, std::memory_order_acq_rel); }
+        ~Busy() { count.fetch_sub(1, std::memory_order_acq_rel); }
+        std::atomic<int> &count;
+    } busy(m_mapping);
 
     // Call the rgbMap function
     QJSValueList args;
