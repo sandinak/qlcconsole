@@ -1965,6 +1965,7 @@ void CueRunner::updateStates()
         const QBrush normal = palette().brush(QPalette::Text);
         const QColor background = m_tree->palette().color(QPalette::Base);
         const QColor alternate = m_tree->palette().color(QPalette::AlternateBase);
+        QTreeWidgetItem *active = nullptr;
         for (QTreeWidgetItemIterator it(m_tree); *it; ++it)
         {
             QTreeWidgetItem *item = *it;
