@@ -1931,6 +1931,27 @@ void ShowTreeWorkbench_Test::aBusyCourseCueAtThreeSizes()
         const QString tag = QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height());
         if (!shots.isEmpty())
             QVERIFY(app->grab().save(QDir(shots).filePath(QStringLiteral("cue-workbench-%1.png").arg(tag))));
+        // Each tab of the cue page; the header and the rows stay in every one.
+        QVERIFY(view->cueTabsShown());
+        for (int t = 0; t < ShowTreeView::CueTabCount; ++t)
+        {
+            view->showCueTab(ShowTreeView::CueTab(t));
+            QTest::qWait(150);
+            QVERIFY(bench->findChild<QWidget *>("workbenchHeader")->isVisible());
+            QVERIFY(bench->rows()->isVisible());
+            if (t == ShowTreeView::CueTrackingTab)
+            {
+                // Nothing clipped: the list is as tall as its wrapped text needs.
+                QLabel *tracked = view->findChild<QLabel *>("stCueTracked");
+                if (tracked != nullptr && tracked->isVisible())
+                    QVERIFY2(tracked->height() >= tracked->heightForWidth(tracked->width()),
+                             qPrintable(tag));
+            }
+            if (!shots.isEmpty())
+                QVERIFY(app->grab().save(QDir(shots).filePath(
+                    QStringLiteral("cue-workbench-tab%1-%2.png").arg(t).arg(tag))));
+        }
+        view->showCueTab(ShowTreeView::CueEditTab);
         QVERIFY(view->closeWorkbench());
     }
     app->doc()->resetModified();
@@ -2040,7 +2061,7 @@ void ShowTreeWorkbench_Test::theTrackedListWrapsAtASmallSize()
     QVERIFY(tracked->width() <= page->width());
     QVERIFY2(tracked->height() >= tracked->heightForWidth(tracked->width()),
              qPrintable(QString("%1 < %2").arg(tracked->height()).arg(tracked->heightForWidth(tracked->width()))));
-    QVERIFY(tracked->text().contains(QStringLiteral("Towers")));
+    QVERIFY2(tracked->text().contains(QStringLiteral("USTs")), qPrintable(tracked->text()));
     view.showCueTab(ShowTreeView::CueEditTab);
 }
 
