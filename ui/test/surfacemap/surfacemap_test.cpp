@@ -684,6 +684,13 @@ void SurfaceMap_Test::pagesHaveKeysTheMapChooses()
     QVERIFY(chips.chip(0)->text().contains(pages->pageName(0)));
     m_doc->setMode(Doc::Design);
     settle();
+    // A page change lights the chip for a moment, and the text is the new page (no lamps, no screen needed).
+    pages->setPage(0, 1);
+    settle();
+    QVERIFY(chips.isFlashing(0));
+    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC40 · %1").arg(pages->pageName(0)));
+    QVERIFY(chips.chip(0)->styleSheet().contains(QStringLiteral("5b4a9e")));
+    QTRY_VERIFY_WITH_TIMEOUT(!chips.isFlashing(0), 2500);
     QMenu *menu = chips.pageMenu(0);
     QVERIFY(menu != nullptr);
     QCOMPARE(menu->actions().size(), count);

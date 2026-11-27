@@ -406,7 +406,10 @@ a click opens its map.
   a page that way, a key has one job (giving it another takes it off the
   first), and they are kept for this computer. The footer's chip and the
   map always say the page (*APC40 · Move*, in Operate too, where the page
-  waits for Design); click the page name on the chip to pick one.
+  waits for Design); click the page name on the chip to pick one. A page change lights the chip for
+  a second, so a board with no lamps and no screen still shows it; the page
+  keys' lamps show it on the board, and a board's own screen is written
+  with it where its device setup supports one (not built yet).
 - **Print Key Labels….** Under the board's name: a sheet of cut-out squares
   at the board's real key sizes with what each key does, a set for each page
   (the desk's and the show's jobs on every page), as an A4 PDF; or one label

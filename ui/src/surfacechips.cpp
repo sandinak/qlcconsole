@@ -107,7 +107,14 @@ SurfaceChips::SurfaceChips(Doc *doc, QWidget *parent)
     connect(m_doc, &Doc::loaded, this, queue);
     // "APC40 · Move": the page on now.
     SurfacePages *pages = m_doc->controlMap()->surfacePages();
-    connect(pages, &SurfacePages::pageChanged, this, queue);
+    connect(pages, &SurfacePages::pageChanged, this, [this, queue](quint32 u) {
+        queue();
+        m_flash.insert(u);
+        QTimer::singleShot(1000, this, [this, u]() {
+            m_flash.remove(u);
+            queue();
+        });
+    });
     connect(pages, &SurfacePages::setsChanged, this, queue);
     rebuild();
 }
@@ -147,7 +154,10 @@ void SurfaceChips::rebuild()
         b->setToolTip(tip);
         b->installEventFilter(this);
         b->setAccessibleName(tr("Map of the %1").arg(layout.name()));
-        b->setStyleSheet(QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px; border: none; }"));
+        b->setStyleSheet(m_flash.contains(u)
+                             ? QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px; border: none; "
+                                              "background: #5b4a9e; color: white; border-radius: 3px; }")
+                             : QStringLiteral("QToolButton { font-weight: bold; padding: 0 6px; border: none; }"));
         if (m_height > 0)
             b->setFixedHeight(m_height);
         connect(b, &QToolButton::clicked, this, [this, u]() { emit mapRequested(u); });
