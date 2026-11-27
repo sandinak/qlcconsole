@@ -410,7 +410,7 @@ a click opens its map.
 - **Print Key Labels….** Under the board's name: a sheet of cut-out squares
   at the board's real key sizes with what each key does, a set for each page
   (the desk's and the show's jobs on every page), as an A4 PDF; or one label
-  a key on TZe tape (12, 18 or 24 mm) for a Brother P-touch CUBE, at its 180
+  a key on TZe tape, 12 mm (½ in), 18 mm (¾ in) or 24 mm (1 in) wide, for a Brother P-touch CUBE, at its 180
   dpi, saved as a PDF or as pictures, or printed through the system's print
   dialog (the Brother is picked when it is installed; there is no Bluetooth
   setup in qlcconsole: pair it with the computer first). The key sizes follow

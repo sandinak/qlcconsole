@@ -24,7 +24,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   No job) with Undo and the show's PIN in Operate; the footer chip always
   says the page, and its page name picks one. **Print Key Labels…** makes a
   PDF sheet at the board's key sizes, or tape labels for a Brother P-touch
-  CUBE (12, 18, 24 mm).
+  CUBE on 12 mm (½ in), 18 mm (¾ in) or 24 mm (1 in) tape.
 
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
