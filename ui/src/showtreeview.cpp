@@ -2249,9 +2249,10 @@ ShowTreeView::ShowTreeView(QWidget *parent, Doc *doc)
             head->addWidget(focus);
             f->addRow(head);
         }
-        /* The Workbench docks this page under the cue's layer rows: its
-           many rows go in tabs there (Edit | Tracking | Timing | Notes).
-           In the tree's own inspector the bar stays hidden and every row shows. */
+        /* The cue page's many rows go in tabs (Edit | Tracking | Timing | Notes),
+           wherever it shows: the tree's own inspector and the Workbench docked
+           in the tree alike (Branson, build 4910: "no tabs at all" on the
+           tree's page). One tab with content: no bar, every row shows. */
         m_cueTabBar = new QTabBar(inner);
         m_cueTabBar->setObjectName("stCueTabs");
         m_cueTabBar->setExpanding(false);
@@ -5333,7 +5334,7 @@ void ShowTreeView::applyCueTabs()
             first = t;
     }
     // One tab or none: no bar, nothing filtered, everything shows.
-    m_cueTabsFilter = m_cueTabsOn && shown > 1;
+    m_cueTabsFilter = shown > 1;
     if (m_cueTabsFilter && !present[s_cueTab])
         s_cueTab = first;
     m_cueTabsSyncing = true;
@@ -5373,12 +5374,6 @@ ShowTreeView::CueTab ShowTreeView::cueTab() const
 bool ShowTreeView::cueTabsShown() const
 {
     return m_cueTabBar != nullptr && m_cueTabsFilter;
-}
-
-void ShowTreeView::setCueTabsOn(bool on)
-{
-    m_cueTabsOn = on;
-    applyCueTabs();
 }
 
 QString ShowTreeView::nextCueText() const
@@ -7594,6 +7589,7 @@ void ShowTreeView::slotNewCue()
     if (id != invalidId())
     {
         selectNode(id);
+        showCueTab(CueEditTab);      // the name is on Edit, whichever tab was last
         m_cueName->setFocus();
     }
 }
@@ -12492,6 +12488,7 @@ quint32 ShowTreeView::newHit(bool global)
     if (id != invalidId())
     {
         selectNode(id);
+        showCueTab(CueEditTab);      // the name is on Edit, whichever tab was last
         m_cueName->setFocus();
         m_hint->setText(tr("A new hit, armed %1").arg(scope == HitScope::Global ? tr("everywhere")
                                                       : tr("while it is %1").arg(m_st->hitPlace(id))));
@@ -12586,6 +12583,7 @@ quint32 ShowTreeView::newLook()
     if (id != invalidId())
     {
         selectNode(id);
+        showCueTab(CueEditTab);      // the name is on Edit, whichever tab was last
         m_cueName->setFocus();
     }
     return id;

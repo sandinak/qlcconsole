@@ -1971,11 +1971,18 @@ void ShowTreeWorkbench_Test::theCuePageIsTabbedInTheWorkbench()
     view.show();
     QVERIFY(QTest::qWaitForWindowExposed(&view));
 
-    // The tree's own page, no Workbench: no tabs, every row there.
+    // The tree's own page, no Workbench: the same tabs (Branson, build 4910:
+    // "fail, no tabs at all" -- he edits a cue on the tree's page too).
     QVERIFY(view.selectNode(s.c2));
-    QVERIFY(!view.cueTabsShown());
-    for (const char *name : { "stCueNumber", "stCueFadeIn", "stCueNote", "stCueMode", "stCueTracked" })
-        QVERIFY2(view.findChild<QWidget *>(name)->isVisibleTo(&view), name);
+    QVERIFY(view.cueTabsShown());
+    QVERIFY(view.findChild<QTabBar *>("stCueTabs")->isVisibleTo(&view));
+    view.showCueTab(ShowTreeView::CueEditTab);
+    QVERIFY(view.findChild<QWidget *>("stCueNumber")->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
+    view.showCueTab(ShowTreeView::CueTimingTab);
+    QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
+    QVERIFY(!view.findChild<QWidget *>("stCueNumber")->isVisibleTo(&view));
+    view.showCueTab(ShowTreeView::CueEditTab);
 
     QVERIFY(view.openInWorkbench(s.c2));
     Workbench *bench = view.dockedWorkbench();
@@ -2033,8 +2040,10 @@ void ShowTreeWorkbench_Test::theCuePageIsTabbedInTheWorkbench()
     // The last tab is remembered, for the session: close, open again.
     view.showCueTab(ShowTreeView::CueTimingTab);
     QVERIFY(view.closeWorkbench());
-    QVERIFY(!view.cueTabsShown());
-    QVERIFY(view.findChild<QWidget *>("stCueNote")->isVisibleTo(&view) || true);
+    // Back on the tree's own page: still tabbed, on the same tab.
+    QVERIFY(view.cueTabsShown());
+    QCOMPARE(view.cueTab(), ShowTreeView::CueTimingTab);
+    QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
     QVERIFY(view.openInWorkbench(s.c2));
     QCOMPARE(view.cueTab(), ShowTreeView::CueTimingTab);
     QVERIFY(view.findChild<QWidget *>("stCueFadeIn")->isVisibleTo(&view));
