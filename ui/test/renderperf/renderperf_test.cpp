@@ -899,6 +899,22 @@ void RenderPerf_Test::theShowsWeRunDrawInBudget()
           StructureStudioView::operateFrameRate(), overviewPaints.p95(), int(plotPaints.ms.size()),
           plotPaints.p95(), cores);
     overview.setLiveValues(false);
+    // With QLC_SHOT_DIR (the pool's --shots), the numbers come back as a file.
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty() && QDir().mkpath(shots))
+    {
+#if defined(QT_NO_DEBUG)
+        QFile out(QDir(shots).filePath(QStringLiteral("renderperf-showscale-release.txt")));
+#else
+        QFile out(QDir(shots).filePath(QStringLiteral("renderperf-showscale-debug.txt")));
+#endif
+        if (out.open(QIODevice::WriteOnly | QIODevice::Text))
+            out.write(QString::asprintf("%s\noverview %.1f fps, paint p95 %.1f ms; plot %d paints, p95 %.1f ms; "
+                                        "overview budgets x%.2f (%d performance cores)\n",
+                                        qPrintable(factorText), fps, overviewPaints.p95(),
+                                        int(plotPaints.ms.size()), plotPaints.p95(), cores,
+                                        SystemProbe::performanceCores()).toUtf8());
+    }
 
     QVERIFY(!overviewPaints.ms.empty() && !plotPaints.ms.empty());
     QVERIFY2(fps <= StructureStudioView::operateFrameRate() + 1.0,

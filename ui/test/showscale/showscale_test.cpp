@@ -736,11 +736,20 @@ void ShowScale_Test::memoryStaysFlatOverAMinute()
     mt->start();
     QVERIFY(m_loadedMB > 0 && !samples.isEmpty());
     const double growth = samples.last() - m_loadedMB;
-    const double secondHalf = samples.last() - samples.at(samples.size() / 2 - 1);
+    /* A trend, not noise: the second half's peak against the first half's.
+       Freed memory comes and goes in steps (dink: 248, 236, 221, 227 MB);
+       a leak makes each peak higher than the last. */
+    double firstPeak = 0, secondPeak = 0;
+    for (int i = 0; i < samples.size(); ++i)
+    {
+        double &peak = i < samples.size() / 2 ? firstPeak : secondPeak;
+        peak = qMax(peak, samples.at(i));
+    }
+    const double secondHalf = secondPeak - firstPeak;
     QStringList at;
     for (double mb : samples)
         at << QString::number(mb, 'f', 1);
-    REPORT("memory: %.1f MB loaded; every 5 s of the show: %s MB; growth %.1f MB, second half %.1f MB "
+    REPORT("memory: %.1f MB loaded; every 5 s of the show: %s MB; growth %.1f MB, second half's peak %+.1f MB "
            "(%d s of show in %.1f s)", m_loadedMB, qPrintable(at.join(' ')), growth, secondHalf, seconds, wallS);
 
     /* newaudio (macOS physical footprint): 124 MB loaded, 205 MB after the
