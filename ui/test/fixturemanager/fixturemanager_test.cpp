@@ -2506,9 +2506,9 @@ void FixtureManager_Test::renameUndoSelectsTheGroupAndKeepsExpansion()
     QVERIFY(QTest::qWaitForWindowExposed(&mgr));
     FixtureTreeWidget *tree = mgr.m_fixtures_tree;
 
-    QTreeWidgetItem *far = tree->fixtureItem(fids.at(55));
-    QVERIFY(far != nullptr);
-    tree->scrollToItem(far, QAbstractItemView::PositionAtBottom);
+    QTreeWidgetItem *lowRow = tree->fixtureItem(fids.at(55));
+    QVERIFY(lowRow != nullptr);
+    tree->scrollToItem(lowRow, QAbstractItemView::PositionAtBottom);
     QCoreApplication::processEvents();
     const QList<bool> open = openRows(mgr);
 
