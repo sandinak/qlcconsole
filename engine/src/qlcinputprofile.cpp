@@ -19,6 +19,7 @@
 
 #include <QXmlStreamReader>
 #include <QRegularExpression>
+#include <QSet>
 #include <QXmlStreamWriter>
 #include <QSaveFile>
 #include <QString>
@@ -39,6 +40,7 @@
 
 #define KXMLQLCInputProfileValue QStringLiteral("Value")
 #define KXMLQLCInputProfileMatch QStringLiteral("Match")
+#define KXMLQLCInputProfileMatchAsk QStringLiteral("MatchAsk")
 #define KXMLQLCInputProfileLabel QStringLiteral("Label")
 #define KXMLQLCInputProfileColorRGB QStringLiteral("RGB")
 
@@ -74,6 +76,7 @@ QLCInputProfile *QLCInputProfile::createCopy()
     copy->setSurfaceLayout(this->surfaceLayout());
     copy->setSurfaceColumns(this->surfaceColumns());
     copy->setDeviceMatches(this->deviceMatches());
+    copy->setDeviceAsks(this->deviceAsks());
 
     /* Copy the other profile's channels */
     QMapIterator <quint32,QLCInputChannel*> it(this->channels());
@@ -118,6 +121,7 @@ QLCInputProfile& QLCInputProfile::operator=(const QLCInputProfile& profile)
         m_surfaceLayout = profile.m_surfaceLayout;
         m_surfaceColumns = profile.m_surfaceColumns;
         m_deviceMatches = profile.m_deviceMatches;
+        m_deviceAsks = profile.m_deviceAsks;
 
         /* Destroy all existing channels */
         destroyChannels();
@@ -638,6 +642,12 @@ bool QLCInputProfile::loadXML(QXmlStreamReader& doc)
                 if (!m.isEmpty())
                     m_deviceMatches << m;
             }
+            else if (doc.name() == KXMLQLCInputProfileMatchAsk)
+            {
+                const QString m = doc.readElementText().trimmed();
+                if (!m.isEmpty())
+                    m_deviceAsks << m;
+            }
             else if (doc.name() == KXMLQLCInputProfileSurface)
             {
                 const QXmlStreamAttributes attrs = doc.attributes();
@@ -691,6 +701,8 @@ bool QLCInputProfile::saveXML(const QString& fileName)
 
     for (const QString &m : std::as_const(m_deviceMatches))
         doc.writeTextElement(KXMLQLCInputProfileMatch, m);
+    for (const QString &m : std::as_const(m_deviceAsks))
+        doc.writeTextElement(KXMLQLCInputProfileMatchAsk, m);
 
     /* A surface type says so; any other profile saves as it always did */
     if (isSurfaceType())
@@ -761,15 +773,146 @@ bool QLCInputProfile::saveXML(const QString& fileName)
 }
 
 
-bool QLCInputProfile::matchesDevice(const QString &deviceName) const
+namespace
 {
-    if (m_deviceMatches.isEmpty())
-        return false;
+/* Words a board's port adds to its name ("APC64 DAW", "APC mini mk2
+   Control", "USB2.0-MIDI Port 1"), and words of no model ("Akai
+   Professional"): none of them tells one board model from another. */
+bool isPortWord(const QString &w)
+{
+    static const QSet<QString> words = {
+        QStringLiteral("daw"), QStringLiteral("notes"), QStringLiteral("note"), QStringLiteral("midi"),
+        QStringLiteral("custom"), QStringLiteral("control"), QStringLiteral("controls"),
+        QStringLiteral("port"), QStringLiteral("in"), QStringLiteral("out"), QStringLiteral("mixer"),
+        QStringLiteral("keys"), QStringLiteral("plugin"), QStringLiteral("session"), QStringLiteral("usb") };
+    if (words.contains(w))
+        return true;
+    bool num = false;
+    w.toInt(&num);
+    return num;
+}
+}
+
+QStringList QLCInputProfile::deviceWords(const QString &deviceName)
+{
     QString name = deviceName.trimmed();
     // Windows numbers a second port of one name "2- APC MINI".
     static const QRegularExpression unit(QStringLiteral("^\\d+- "));
     name.remove(unit);
+    // macOS adds the device after an entity's port: "APC64 DAW (APC64)".
+    static const QRegularExpression suffix(QStringLiteral("\\s*\\([^()]*\\)\\s*$"));
+    name.remove(suffix);
+    static const QRegularExpression sep(QStringLiteral("[\\s|:,_]+"));
+    QStringList out;
+    for (const QString &w : name.toLower().split(sep, Qt::SkipEmptyParts))
+        out << w;
+    return out;
+}
+
+int QLCInputProfile::deviceMatchScore(const QString &deviceName) const
+{
+    if (m_deviceMatches.isEmpty())
+        return 0;
+    QString name = deviceName.trimmed();
+    static const QRegularExpression unit(QStringLiteral("^\\d+- "));
+    name.remove(unit);
+    const QStringList words = deviceWords(deviceName);
+    QSet<QString> maker;
+    for (const QString &w : deviceWords(m_manufacturer))
+        maker << w;
+    maker << QStringLiteral("professional") << QStringLiteral("pro");
+
+    // A board with several ports: its Match names the port it is used on.
+    bool multiPort = false;
     for (const QString &m : m_deviceMatches)
+        for (const QString &w : deviceWords(QString(m).remove(QLatin1Char('*')).remove(QLatin1Char('?'))))
+            multiPort = multiPort || isPortWord(w);
+
+    int best = 0;
+    for (const QString &m : m_deviceMatches)
+    {
+        // The name as the system gives it, a glob: the strongest.
+        const QRegularExpression re(QRegularExpression::wildcardToRegularExpression(m.trimmed()),
+                                    QRegularExpression::CaseInsensitiveOption);
+        const QStringList pw = deviceWords(QString(m).remove(QLatin1Char('*')).remove(QLatin1Char('?')));
+        if (re.match(name).hasMatch())
+        {
+            best = qMax(best, 1000 + int(pw.size()));
+            continue;
+        }
+        /* Else the model's words anywhere in the name, case and the port's
+           suffix aside; any other word must be a port's or the maker's
+           ("Akai APC40 mkII MIDI 1"), never another model's ("APC40" is not
+           in "APC40 mkII"). A port word of a board whose Match names its
+           port means another of its ports ("APC64 Notes"). */
+        if (pw.isEmpty() || pw.size() > words.size())
+            continue;
+        for (int i = 0; i + pw.size() <= words.size(); ++i)
+        {
+            if (words.mid(i, pw.size()) != pw)
+                continue;
+            bool ok = true;
+            for (int j = 0; j < words.size() && ok; ++j)
+            {
+                if (j >= i && j < i + pw.size())
+                    continue;
+                const QString &w = words.at(j);
+                if (maker.contains(w))
+                    continue;
+                ok = isPortWord(w) && !multiPort;
+            }
+            if (ok)
+                best = qMax(best, 100 + int(pw.size()));
+            break;
+        }
+    }
+    return best;
+}
+
+bool QLCInputProfile::matchesDevice(const QString &deviceName) const
+{
+    return deviceMatchScore(deviceName) > 0;
+}
+
+bool QLCInputProfile::isOtherPortOf(const QString &deviceName) const
+{
+    if (m_deviceMatches.isEmpty() || matchesDevice(deviceName))
+        return false;
+    const QStringList words = deviceWords(deviceName);
+    for (const QString &m : m_deviceMatches)
+    {
+        // The model: the Match without its port words ("APC64 DAW" -> "APC64").
+        QStringList model;
+        bool hadPort = false;
+        for (const QString &w : deviceWords(QString(m).remove(QLatin1Char('*')).remove(QLatin1Char('?'))))
+        {
+            if (isPortWord(w))
+                hadPort = true;
+            else
+                model << w;
+        }
+        if (!hadPort || model.isEmpty() || model.size() >= words.size())
+            continue;
+        for (int i = 0; i + model.size() <= words.size(); ++i)
+            if (words.mid(i, model.size()) == model)
+            {
+                bool rest = true;
+                for (int j = 0; j < words.size(); ++j)
+                    if ((j < i || j >= i + model.size()) && !isPortWord(words.at(j)))
+                        rest = false;
+                if (rest)
+                    return true;
+            }
+    }
+    return false;
+}
+
+bool QLCInputProfile::asksForDevice(const QString &deviceName) const
+{
+    QString name = deviceName.trimmed();
+    static const QRegularExpression unit(QStringLiteral("^\\d+- "));
+    name.remove(unit);
+    for (const QString &m : m_deviceAsks)
     {
         const QRegularExpression re(QRegularExpression::wildcardToRegularExpression(m.trimmed()),
                                     QRegularExpression::CaseInsensitiveOption);

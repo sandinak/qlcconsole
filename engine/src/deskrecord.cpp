@@ -38,6 +38,8 @@
 #include "showcontrol.h"
 #include "controlmap.h"
 #include "deskrecord.h"
+#include "surfacesetup.h"
+#include "surfaceboardlog.h"
 #include "inputpatch.h"
 #include "qlcioplugin.h"
 #include "universe.h"
@@ -532,6 +534,11 @@ QString DeskRecord::identityOfUniverse(quint32 universe) const
     InputPatch *ip = iom->inputPatch(universe);
     if (ip == nullptr || ip->plugin() == nullptr)
         return QString();
+    /* A patch whose line is not there now (the device's list shrank under
+       it) names no device: its inputName() is "None", and "midi:None" was
+       seeded as a board on the bench (2026-11-27). */
+    if (ip->input() == QLCIOPlugin::invalidLine() || ip->input() >= quint32(ip->plugin()->inputs().size()))
+        return QString();
     return ControllerJobs::deskIdentityFor(ip->plugin()->name(), ip->inputName(),
                                            ip->plugin()->inputDeviceLocation(ip->input()));
 }
@@ -887,7 +894,10 @@ QString DeskRecord::duplicateWarning() const
 
 QStringList DeskRecord::seededDevices() const
 {
-    return QSettings().value(settingsGroup() + QLatin1Char('/') + kSeeded).toStringList();
+    QStringList out = QSettings().value(settingsGroup() + QLatin1Char('/') + kSeeded).toStringList();
+    // An entry an earlier build seeded for a patch with no device on its line.
+    out.removeAll(QStringLiteral("midi:None"));
+    return out;
 }
 
 QStringList DeskRecord::deferredRoles() const
@@ -1185,7 +1195,11 @@ void DeskRecord::sendGrandMasterToMotor()
     const quint32 channel = m_bindings[GrandMaster].channel;
     if (iom->faderFact(universe, channel) != FaderFact::Motorised)
         return;
-    iom->sendFeedBack(universe, channel, iom->grandMasterValue(), QVariant());
+    const int gm = iom->grandMasterValue();
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+        ss->boardLog()->note(universe, tr("Motor fader sent to the Grand Master, %1 % (%2)")
+                                           .arg(qRound(gm * 100.0 / 255.0)).arg(gm));
+    iom->sendFeedBack(universe, channel, gm, QVariant());
 }
 
 SurfaceLayout DeskRecord::layoutOf(quint32 universe) const
@@ -1242,7 +1256,17 @@ void DeskRecord::grandMaster(uchar value)
         return;
     InputOutputMap *iom = m_doc->inputOutputMap();
     const int current = iom->grandMasterValue();
-    if (m_gmPickup.accept(value, current, now()) && value != current)
+    const bool taken = m_gmPickup.accept(value, current, now());
+    if (!taken && m_universes[GrandMaster] != kInvalid && now() - m_gmRefusedNoteAt > 1000)
+        if (SurfaceSetup *ss = m_doc->surfaceSetup())
+        {
+            // The drive-back's why, on the bench: the move was not the master's.
+            m_gmRefusedNoteAt = now();
+            ss->boardLog()->note(m_universes[GrandMaster],
+                                 tr("Fader at %1 not taken: the Grand Master (%2) waits for it to come "
+                                    "to it (pick-up)").arg(value).arg(current));
+        }
+    if (taken && value != current)
     {
         // The fader's own move: never sent back to it (a motor would fight the hand)
         m_gmFromFader = true;
@@ -1825,9 +1849,14 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             if (m_down.contains(k))
                 return;
             m_down.insert(k);
+            if (SurfaceSetup *ss = m_doc->surfaceSetup())
+                ss->boardLog()->note(universe, tr("STOP refused: Shift (channel %1) is not held")
+                                                   .arg(layoutOf(universe).shiftChannel()));
             emit refused(tr("%1: Shift+Stop stops.").arg(layoutOf(universe).shortName()));
             return;
         }
+        if (SurfaceSetup *ss = m_doc->surfaceSetup())
+            ss->boardLog()->note(universe, tr("STOP: the desk stops"));
         stopPressed(k, value);
         return;
     }

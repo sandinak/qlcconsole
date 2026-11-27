@@ -41,12 +41,18 @@
 #endif
 
 #include "controlmap.h"
+#include "footerbar.h"
 #include "controllearndialog.h"
 #include "placementcheck.h"
 #include "functionliveeditdialog.h"
 #include "inputoutputmanager.h"
 #include "deskchip.h"
 #include "surfacechips.h"
+#include "surfacesetup.h"
+#include "surfaceautopatch.h"
+#include "surfacesetupdialog.h"
+#include "boardlogdialog.h"
+#include "pmjlamplogdialog.h"
 #include "deskrecord.h"
 #include "editlivechip.h"
 #include "surfacemap.h"
@@ -1061,6 +1067,31 @@ void App::init()
                     m_doc->deskRecord()->undoCutOver();
             });
         });
+    /* A known board plugged in is set up by itself (SurfaceAutoPatch):
+       "Akai APC40 mkII ready on universe 5", with Undo. A port many boxes
+       share (the MaizeDMX's "USB2.0-MIDI") is asked about, once. */
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+    {
+        SurfaceAutoPatch *ap = ss->autoPatch();
+        connect(ap, &SurfaceAutoPatch::autoPatched, this,
+                [this, ap](quint32 universe, const QString &profile, const QString &) {
+            showViewNotice(tr("%1 ready on universe %2").arg(profile).arg(universe + 1), tr("Undo"),
+                           [this, ap, universe]() {
+                hideViewNotice();
+                ap->undo(universe);
+            });
+        });
+        connect(ap, &SurfaceAutoPatch::askToUse, this,
+                [this, ap](const QString &plugin, const QString &device, const QString &profile) {
+            showViewNotice(tr("%1: is this a %2?").arg(device, profile), tr("Use It"),
+                           [this, ap, plugin, device, profile]() {
+                hideViewNotice();
+                ap->useAs(m_doc->ioPluginCache()->plugin(plugin), device, profile);
+            });
+        });
+        // After the start-up show has loaded (Doc::loaded scans again then).
+        QTimer::singleShot(1500, ap, [ap]() { ap->setEnabled(true); });
+    }
     connect(m_inputNotices, &InputDeviceNotices::offer, this,
             [this](const QString &text, const QString &button, quint32 universe,
                    const QString &plugin, const QString &device) {
@@ -9351,8 +9382,30 @@ QMenu *App::openVenueMenu()
     return m_venueChip != nullptr ? m_venueChip->openMenu() : nullptr;
 }
 
+void App::openBoardLog(quint32 universe, bool lampTest)
+{
+    // One log a board: an open one comes forward.
+    for (BoardLogDialog *d : findChildren<BoardLogDialog *>())
+        if (d->universe() == universe)
+        {
+            d->raise();
+            d->activateWindow();
+            if (lampTest)
+                d->startLampTest();
+            return;
+        }
+    BoardLogDialog *dlg = new BoardLogDialog(m_doc, universe, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+    if (lampTest)
+        dlg->startLampTest();
+}
+
 void App::initStatusBar()
 {
+    // One message at a time, never drawn under or over a chip (FooterBar).
+    if (qobject_cast<FooterBar *>(statusBar()) == nullptr)
+        setStatusBar(new FooterBar(this));
     QStatusBar* sb = statusBar();
     m_statusFitTimer = new QTimer(this);
     m_statusFitTimer->setSingleShot(true);
@@ -9908,6 +9961,25 @@ void App::initStatusBar()
             if (SurfaceMaps *maps = io->findChild<SurfaceMaps *>())
                 maps->showOnly(universe);   // this board alone, not every board stacked
         }
+    });
+    // The chip's menu (▾, right-click): its Board Log, a lamp test, its setup.
+    connect(m_statusSurfaceChips, &SurfaceChips::boardLogRequested, this, [this](quint32 universe) {
+        openBoardLog(universe, false);
+    });
+    connect(m_statusSurfaceChips, &SurfaceChips::lampTestRequested, this, [this](quint32 universe) {
+        InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+        // The PMJ's own lamp test steps through its levels and blinks.
+        if (ip != nullptr && ip->profileName() == QLatin1String("PMJ Black 1") && m_pmjOverlay != nullptr)
+        {
+            PmjLampLogDialog *dlg = new PmjLampLogDialog(m_pmjOverlay, this);
+            dlg->setAttribute(Qt::WA_DeleteOnClose);
+            dlg->show();
+            return;
+        }
+        openBoardLog(universe, true);
+    });
+    connect(m_statusSurfaceChips, &SurfaceChips::setUpRequested, this, [this](quint32 universe) {
+        SurfaceSetupDialog::open(m_doc, this, universe);
     });
     sb->addPermanentWidget(m_statusSurfaceChips);
 

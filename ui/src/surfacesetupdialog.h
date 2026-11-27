@@ -56,6 +56,10 @@ public:
 
     /** Opened as the hub opens it (modal). */
     static void open(Doc *doc, QWidget *parent);
+    /** Open it on @p universe's board (a footer chip's Set Up…). */
+    static void open(Doc *doc, QWidget *parent, quint32 universe);
+    /** Show @p universe's board (false: it is no known surface). */
+    bool selectUniverse(quint32 universe);
 
     /** The universe shown (UINT_MAX: none). */
     quint32 universe() const;

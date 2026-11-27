@@ -9,6 +9,7 @@
  <Manufacturer>MaizeDMX</Manufacturer>
  <Model>Playback Controller</Model>
  <Type>MIDI</Type>
+ <MatchAsk>USB2.0-MIDI*</MatchAsk>
  <Channel Number="0">
   <Name>Fader 1</Name>
   <Type>Slider</Type>

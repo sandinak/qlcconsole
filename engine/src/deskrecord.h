@@ -483,6 +483,7 @@ private:
     /** The fader moved the master (or tried to) since the motor was last sent. */
     bool m_gmMoved = false;
     int m_gmSettleMs = 150;
+    qint64 m_gmRefusedNoteAt = -100000;   ///< when the board log last said a move was not taken
     QTimer *m_gmSettle = nullptr;
     /** The universes whose board has its Shift key held. */
     QSet<quint32> m_shiftDown;

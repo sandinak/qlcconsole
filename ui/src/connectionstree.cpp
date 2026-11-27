@@ -32,6 +32,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMenu>
+#include <QCursor>
 #include <QHash>
 #include <QSet>
 #include <QBrush>
@@ -53,6 +54,10 @@
 #include <QFontMetrics>
 
 #include "connectionstree.h"
+#include "qlcinputprofile.h"
+#include "controlsurfacespanel.h"
+#include "surfaceautopatch.h"
+#include "surfacesetup.h"
 #include "controllertestdialog.h"
 #include "shrinkablebar.h"
 #include "connectioneditor.h"
@@ -122,6 +127,12 @@
 #define KIND_SURFACE 12
 #define KIND_SURFACE_UNSET 13
 #define KIND_NOTE 14
+/* Under Control surfaces: a device plugged in that no universe has (a
+   click: pick its profile, or "Not a control surface"); another port of a
+   board, not used; a board the show knows that is not connected. */
+#define KIND_SURFACE_DEVICE 15
+#define KIND_SURFACE_PORT 16
+#define KIND_SURFACE_OFFLINE 17
 /* One device of a universe's controller slot (InputOutputMap::setInputSlot()),
    under that universe's input row: its place in the list in ROLE_LINE. */
 #define KIND_SLOTDEVICE 11
@@ -714,7 +725,27 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
                 this, SLOT(slotTargetProblemsChanged()));
         connect(m_doc->inputOutputMap(), SIGNAL(inputSlotChanged(quint32)),
                 this, SLOT(slotTargetProblemsChanged()));
+        /* A line patched here or anywhere (the bench, 2026-11-27: patching
+           the APC64's first port left the list as it was), and a board set
+           up by itself: the list follows at once. */
+        connect(m_doc->inputOutputMap(), SIGNAL(inputPatchChanged(quint32)),
+                this, SLOT(slotTargetProblemsChanged()));
+        connect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
+                this, SLOT(slotTargetProblemsChanged()));
+        if (m_doc->surfaceSetup() != nullptr)
+            connect(m_doc->surfaceSetup()->autoPatch(), &SurfaceAutoPatch::devicesChanged,
+                    this, &ConnectionsTree::slotTargetProblemsChanged);
     }
+    // A plugged-in device under Control surfaces: one click, its menu.
+    connect(m_tree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item, int) {
+        if (item == nullptr || item->data(COL_NAME, ROLE_KIND).toInt() != KIND_SURFACE_DEVICE)
+            return;
+        if (QMenu *m = surfaceDeviceMenu(item))
+        {
+            m->setAttribute(Qt::WA_DeleteOnClose);
+            m->popup(QCursor::pos());
+        }
+    });
     m_activityTimer = new QTimer(this);
     m_activityTimer->setSingleShot(true);
     connect(m_activityTimer, SIGNAL(timeout()), this, SLOT(slotActivityTimeout()));
@@ -2684,6 +2715,15 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     // Show control is set up on the right, not by menu.
     if (kind == KIND_SHOWCONTROL || kind == KIND_SHOWCONTROL_BRANCH)
         return;
+    if (kind == KIND_SURFACE_DEVICE)
+    {
+        if (QMenu *m = surfaceDeviceMenu(item))
+        {
+            m->exec(m_tree->viewport()->mapToGlobal(pos));
+            delete m;
+        }
+        return;
+    }
     const QString plugin = item->data(COL_NAME, ROLE_PLUGIN).toString();
     const quint32 line = item->data(COL_NAME, ROLE_LINE).toUInt();
 
@@ -5466,8 +5506,16 @@ QString ConnectionsTree::showControlTip(const QString &key)
 
 void ConnectionsTree::addSurfaceRows(QTreeWidgetItem *parent)
 {
+    /* Every MIDI or HID input device, the moment it is plugged in, patched
+       or not (bench 2026-11-27: "why do we have Control surfaces if an
+       attached surface doesn't show up under it?"): the boards set up, each
+       with its state, a board's other ports folded under it; the devices
+       no universe has, each a click from its profile; the boards the show
+       knows that are not connected, greyed. */
     InputOutputMap *iom = m_doc->inputOutputMap();
     int shown = 0;
+    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
+    SurfaceSetup *ss = m_doc->surfaceSetup();
     if (iom != NULL)
     {
         for (quint32 u = 0; u < iom->universesCount(); u++)
@@ -5478,14 +5526,37 @@ void ConnectionsTree::addSurfaceRows(QTreeWidgetItem *parent)
             QTreeWidgetItem *row = new QTreeWidgetItem(parent);
             row->setText(COL_NAME, ip->inputName());
             row->setData(COL_NAME, ROLE_UNIVERSE, u);
+            const bool connected = ip->plugin()->inputs().contains(ip->inputName());
             if (ip->profile() != NULL)
             {
                 row->setData(COL_NAME, ROLE_KIND, KIND_SURFACE);
                 row->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
-                row->setText(COL_DETAIL, tr("universe %1 · %2 · feedback %3")
-                                             .arg(u + 1).arg(ip->profileName())
-                                             .arg(iom->feedbackPatch(u) != NULL ? tr("yes") : tr("no")));
+                const SurfaceSetup::Spec *spec = ss != nullptr ? ss->specOf(u) : nullptr;
+                QString detail = tr("universe %1 · %2 · feedback %3")
+                                     .arg(u + 1).arg(ip->profileName())
+                                     .arg(iom->feedbackPatch(u) != NULL && iom->feedbackPatch(u)->isPatched()
+                                              ? tr("yes") : tr("no"));
+                if (spec != nullptr && !spec->init.isEmpty())
+                    detail += QStringLiteral(" · ") + tr("init: %1").arg(spec->initText);
+                if (!connected)
+                    detail += QStringLiteral(" · ") + tr("not connected");
+                row->setText(COL_DETAIL, detail);
                 row->setToolTip(COL_NAME, tr("A control surface: its jobs, lamps and map are on the right."));
+                // Its other ports: part of it, not used.
+                for (const QString &line : ip->plugin()->inputs())
+                    if (line != ip->inputName() && iom->profileOfOtherPort(line) == ip->profileName())
+                    {
+                        QTreeWidgetItem *port = new QTreeWidgetItem(row);
+                        port->setText(COL_NAME, line);
+                        port->setText(COL_DETAIL, tr("part of %1 (not used by qlcconsole)").arg(ip->profileName()));
+                        port->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_PORT);
+                        port->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+                        port->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+                        port->setForeground(COL_NAME, grey);
+                        port->setToolTip(COL_NAME, tr("Another port of the same board: qlcconsole uses %1 only. "
+                                                      "Nothing to set up here.").arg(ip->inputName()));
+                        port->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                    }
             }
             else
             {
@@ -5496,6 +5567,73 @@ void ConnectionsTree::addSurfaceRows(QTreeWidgetItem *parent)
                                              "its controls are. Choose or confirm the profile in the "
                                              "universe's settings on the right."));
             }
+            if (!connected)
+                row->setForeground(COL_NAME, grey);
+            row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            shown++;
+        }
+        // The boards the show knows that went away (kept offline): greyed.
+        for (quint32 u = 0; u < iom->universesCount(); u++)
+        {
+            Universe *uni = iom->universe(u);
+            if (uni == NULL)
+                continue;
+            for (const Universe::OfflinePatch &op : uni->offlinePatches())
+            {
+                if (op.tag != Universe::InputPatchTag || op.uid.isEmpty())
+                    continue;
+                QTreeWidgetItem *row = new QTreeWidgetItem(parent);
+                row->setText(COL_NAME, op.uid);
+                row->setText(COL_DETAIL, op.profile.isEmpty()
+                                             ? tr("universe %1 · not connected").arg(u + 1)
+                                             : tr("universe %1 · %2 · not connected").arg(u + 1).arg(op.profile));
+                row->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_OFFLINE);
+                row->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+                row->setData(COL_NAME, ROLE_UNIVERSE, u);
+                row->setForeground(COL_NAME, grey);
+                row->setForeground(COL_DETAIL, grey);
+                row->setToolTip(COL_NAME, tr("This show's board is not plugged in. It is set up again by "
+                                             "itself when it is."));
+                row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                shown++;
+            }
+        }
+        // Plugged in, no universe has it: a click sets it up.
+        for (const ControlSurfacesPanel::FreeDevice &d : ControlSurfacesPanel::freeDevices(m_doc))
+        {
+            if (d.pad)
+                continue;   // a game pad is set up under Game controllers
+            QTreeWidgetItem *row = new QTreeWidgetItem(parent);
+            row->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_DEVICE);
+            row->setData(COL_NAME, ROLE_PLUGIN, d.plugin->name());
+            row->setData(COL_NAME, ROLE_LINENAME, d.name);
+            row->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+            if (!d.profile.isEmpty())
+            {
+                row->setText(COL_NAME, tr("%1: %2, not set up").arg(d.name, d.profile));
+                row->setText(COL_DETAIL, tr("Set Up…: patch it with its profile"));
+            }
+            else
+            {
+                row->setText(COL_NAME, tr("%1: not set up").arg(d.name));
+                row->setText(COL_DETAIL, d.maybe.isEmpty() ? tr("Set Up…: pick its profile")
+                                                           : tr("Set Up…: is it a %1?").arg(d.maybe));
+            }
+            row->setToolTip(COL_NAME, tr("Plugged in, and no universe has it. Click to pick what it is, or "
+                                         "say it is not a control surface."));
+            // Its other ports, folded under it.
+            for (const QString &line : d.plugin->inputs())
+                if (line != d.name && !d.profile.isEmpty() && iom->profileOfOtherPort(line) == d.profile)
+                {
+                    QTreeWidgetItem *port = new QTreeWidgetItem(row);
+                    port->setText(COL_NAME, line);
+                    port->setText(COL_DETAIL, tr("part of %1 (not used by qlcconsole)").arg(d.profile));
+                    port->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_PORT);
+                    port->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+                    port->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+                    port->setForeground(COL_NAME, grey);
+                    port->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                }
             row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
             shown++;
         }
@@ -5507,11 +5645,69 @@ void ConnectionsTree::addSurfaceRows(QTreeWidgetItem *parent)
         note->setData(COL_NAME, ROLE_KIND, KIND_NOTE);
         note->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
         note->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
-        note->setForeground(COL_NAME, palette().color(QPalette::Disabled, QPalette::Text));
-        note->setToolTip(COL_NAME, tr("Nothing here yet: a board appears when it is patched as an input "
-                                      "with a profile."));
+        note->setForeground(COL_NAME, grey);
+        note->setToolTip(COL_NAME, tr("Nothing here yet: a board appears as soon as it is plugged in."));
         note->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
     }
+}
+
+QMenu *ConnectionsTree::surfaceDeviceMenu(QTreeWidgetItem *item)
+{
+    if (item == nullptr || item->data(COL_NAME, ROLE_KIND).toInt() != KIND_SURFACE_DEVICE)
+        return nullptr;
+    const QString pluginName = item->data(COL_NAME, ROLE_PLUGIN).toString();
+    const QString device = item->data(COL_NAME, ROLE_LINENAME).toString();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceSetup *ss = m_doc->surfaceSetup();
+    if (iom == nullptr || ss == nullptr)
+        return nullptr;
+    QMenu *menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("surfaceDeviceMenu"));
+    const QString known = iom->profileForDevice(device);
+    const QString maybe = iom->profileToAskFor(device);
+    QStringList first;
+    if (!known.isEmpty())
+        first << known;
+    if (!maybe.isEmpty())
+        first << maybe;
+    QPointer<ConnectionsTree> self(this);
+    auto use = [self, pluginName, device](const QString &profile) {
+        if (self == nullptr)
+            return;
+        Doc *doc = self->m_doc;
+        QLCIOPlugin *plugin = doc->ioPluginCache() != nullptr ? doc->ioPluginCache()->plugin(pluginName) : nullptr;
+        if (plugin != nullptr && doc->surfaceSetup() != nullptr)
+            doc->surfaceSetup()->autoPatch()->useAs(plugin, device, profile);
+        self->refresh();
+    };
+    for (const QString &p : std::as_const(first))
+    {
+        QAction *a = menu->addAction(tr("Use as %1").arg(p));
+        a->setObjectName(QStringLiteral("surfaceDeviceUse"));
+        a->setData(p);
+        connect(a, &QAction::triggered, this, [use, p]() { use(p); });
+    }
+    QMenu *other = menu->addMenu(first.isEmpty() ? tr("Use as") : tr("Another Profile"));
+    other->setObjectName(QStringLiteral("surfaceDeviceProfiles"));
+    for (const QString &p : iom->profileNames())
+    {
+        QLCInputProfile *prof = iom->profile(p);
+        if (prof == nullptr || first.contains(p) || prof->type() != QLCInputProfile::MIDI)
+            continue;
+        QAction *a = other->addAction(p);
+        a->setData(p);
+        connect(a, &QAction::triggered, this, [use, p]() { use(p); });
+    }
+    menu->addSeparator();
+    QAction *no = menu->addAction(tr("Not a Control Surface"));
+    no->setObjectName(QStringLiteral("surfaceDeviceNot"));
+    no->setToolTip(tr("Hide it here on this computer (a keyboard, a sound card's MIDI port)."));
+    connect(no, &QAction::triggered, this, [self, device]() {
+        InputOutputMap::setNotSurface(device, true);
+        if (self != nullptr)
+            self->refresh();
+    });
+    return menu;
 }
 
 /*****************************************************************************

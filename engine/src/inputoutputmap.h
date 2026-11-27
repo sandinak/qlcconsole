@@ -1320,6 +1320,19 @@ public:
      *  copy of the same name replaced still counts (its Match is the
      *  type's, the user's copy may predate it). */
     QString profileForDevice(const QString &deviceName) const;
+    /** The profile whose board @p deviceName is another port of ("APC64
+     *  Notes (APC64)": the APC64's, used on its DAW port); empty if none. */
+    QString profileOfOtherPort(const QString &deviceName) const;
+    /** The profile that may be @p deviceName's (its <MatchAsk>: a name many
+     *  boxes share), not yet confirmed or turned down; empty if none. */
+    QString profileToAskFor(const QString &deviceName) const;
+    /** A person's answer for @p deviceName, kept on this computer: the
+     *  profile it is (empty: none said). */
+    static QString confirmedProfile(const QString &deviceName);
+    static void setConfirmedProfile(const QString &deviceName, const QString &profileName);
+    /** "Not a control surface": @p deviceName is not listed as one to set up. */
+    static bool isNotSurface(const QString &deviceName);
+    static void setNotSurface(const QString &deviceName, bool notSurface);
 
     /** A profile file another of the same name replaced: what was loaded
      *  first (a user's copy) wins, unless it is a copy of a surface type

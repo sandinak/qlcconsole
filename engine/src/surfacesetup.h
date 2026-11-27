@@ -117,8 +117,28 @@ public:
 
     /* ---- init ---- */
 
-    /** Send @p universe's surface its init now (false: none, or no way out). */
-    bool sendInit(quint32 universe);
+    /** Send @p universe's surface its init now (false: none, or no way out).
+     *  @p why is said in its board log ("on patch", "asked"). */
+    bool sendInit(quint32 universe, const QString &why = QString());
+    /** How long after a patch its init goes once more (ms; tests shorten it). */
+    void setInitAgainDelay(int ms) { m_initAgainMs = ms; }
+
+    /* ---- lamp test: any board with a feedback line ---- */
+    /** Light each of @p universe's lamps in turn (the layout's lamps, else
+     *  every button of its profile), then all of them, then give the lamps
+     *  back to the show. False, with @p why, when it has no feedback line
+     *  or no lamp. Each step is in the board log. */
+    bool startLampTest(quint32 universe, QString *why = nullptr);
+    void stopLampTest();
+    bool lampTestRunning() const { return m_lampTestUniverse != UINT_MAX; }
+    /** The channels a lamp test lights on @p universe, in order. */
+    QList<quint32> lampChannels(quint32 universe) const;
+    void setLampTestStepMs(int ms) { m_lampStepMs = ms; }
+
+    /** Every board's log of MIDI in and out (SurfaceBoardLog). */
+    class SurfaceBoardLog *boardLog() const { return m_boardLog; }
+    /** Known boards set up when plugged in (SurfaceAutoPatch). */
+    class SurfaceAutoPatch *autoPatch() const { return m_autoPatch; }
     /** Inits sent so far (a test counts them). */
     int initsSent() const { return m_initsSent; }
 
@@ -200,6 +220,8 @@ public:
 signals:
     /** A check, an align, an undo or an init changed what is known. */
     void changed(quint32 universe);
+    /** The lamp test moved on: @p step says what is lit ("" when over). */
+    void lampTestStepped(quint32 universe, const QString &step);
 
 private slots:
     void slotSysEx(quint32 universe, const QByteArray &sysEx);
@@ -208,7 +230,7 @@ private slots:
     void slotInput(quint32 universe, quint32 channel, uchar value);
 
 private:
-    bool sendTo(quint32 universe, const QByteArray &msg);
+    bool sendTo(quint32 universe, const QByteArray &msg, const QString &why = QStringLiteral("setup"));
     QString deviceKey(quint32 universe) const;
     QString backup(quint32 universe, const QString &why, QString *error);
 
@@ -221,6 +243,16 @@ private:
     QHash<quint32, QString> m_identifyBackup;
     QSet<quint32> m_modeWait;
     QSet<quint32> m_holds;
+    class SurfaceBoardLog *m_boardLog = nullptr;
+    class SurfaceAutoPatch *m_autoPatch = nullptr;
+    QSet<quint32> m_initAgain;
+    int m_initAgainMs = 600;
+    void lampTestStep();
+    quint32 m_lampTestUniverse = UINT_MAX;
+    QList<quint32> m_lampTestChannels;
+    int m_lampTestIndex = 0;
+    int m_lampStepMs = 250;
+    class QTimer *m_lampTimer = nullptr;
 };
 
 /** @} */

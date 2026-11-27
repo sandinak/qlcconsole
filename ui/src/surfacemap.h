@@ -89,6 +89,11 @@ public:
     bool isHighlighted(quint32 channel) const;
     /** The last value the board sent (0..255); -1: none yet. */
     int value(quint32 channel) const;
+    /** The words drawn on the control: its job, else its name ("Fader 1"),
+     *  never its value. */
+    QString drawnWords(quint32 channel) const;
+    /** A fader's value, drawn small under its slot ("75 %"); empty: none yet. */
+    QString valueText(quint32 channel) const;
     /** The last value the app sent its light (0..255); -1: none. */
     int lamp(quint32 channel) const;
     /** The control's rectangle on the widget now. */
@@ -157,6 +162,8 @@ protected:
     void paintEvent(QPaintEvent *event) override;
     bool event(QEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    QString wordsOf(int i) const;
+    QString valueTextOf(int i) const;
 
 private:
     struct Cell
@@ -316,6 +323,8 @@ signals:
     void controllerSetupRequested(quint32 universe);
     /** Lamp Test… in a board's options (a board that has one). */
     void lampTestRequested(quint32 universe);
+    /** Open @p universe's Board Log. */
+    void boardLogRequested(quint32 universe);
 
 protected:
     void hideEvent(QHideEvent *event) override;

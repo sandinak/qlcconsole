@@ -30,6 +30,7 @@
 #include "qlcui_export.h"
 
 class QTreeWidgetItem;
+class QMenu;
 class QTreeWidget;
 class QTimer;
 class QCheckBox;
@@ -159,6 +160,12 @@ private:
     static QString showControlTip(const QString &key);
     /** Control surfaces' children: each board, each unset input, or a line saying none. */
     void addSurfaceRows(QTreeWidgetItem *parent);
+public:
+    /** A plugged-in device's menu under Control surfaces (Use as <profile>,
+     *  Another Profile ▸, Not a Control Surface); null for any other row.
+     *  The caller owns it. */
+    QMenu *surfaceDeviceMenu(QTreeWidgetItem *item);
+private:
     /** Say something short beside the toolbar ("Feedback goes back to X"). */
     void postNote(const QString &text);
     /** Pair a universe's feedback to its input's own output (MIDI, HID),

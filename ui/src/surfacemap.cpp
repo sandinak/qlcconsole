@@ -490,6 +490,33 @@ SurfaceMapView::Group SurfaceMapView::group(quint32 channel) const
     return i < 0 ? Free : m_cells.at(i).group;
 }
 
+QString SurfaceMapView::wordsOf(int i) const
+{
+    return i < 0 || i >= m_cells.size() ? QString() : m_cells.at(i).job;
+}
+
+QString SurfaceMapView::valueTextOf(int i) const
+{
+    if (i < 0 || i >= m_cells.size() || m_cells.at(i).value < 0)
+        return QString();
+    return tr("%1 %").arg(qRound(m_cells.at(i).value * 100.0 / 255.0));
+}
+
+QString SurfaceMapView::drawnWords(quint32 channel) const
+{
+    const int i = cellIndex(channel);
+    if (i < 0)
+        return QString();
+    const QString w = wordsOf(i);
+    return w.isEmpty() ? m_layout.controls().at(i).face : w;
+}
+
+QString SurfaceMapView::valueText(quint32 channel) const
+{
+    const int i = cellIndex(channel);
+    return i >= 0 && m_layout.controls().at(i).isFader() ? valueTextOf(i) : QString();
+}
+
 QString SurfaceMapView::jobText(quint32 channel) const
 {
     const int i = cellIndex(channel);
@@ -778,9 +805,23 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     p.setPen(text);
     QFont f = font();
     const bool roleLook = !cell.role.isEmpty() && (cell.group == Desk || cell.group == Board);
-    QString words = cell.job;
-    if (c.isFader() && cell.value >= 0 && lit)
-        words = tr("%1 %").arg(qRound(cell.value * 100.0 / 255.0));
+    // The control's words stay (bench 2026-11-27: a moved fader lost its name
+    // to its percentage); the value is its own small number, under the slot.
+    const QString words = wordsOf(i);
+    const QString valueWords = valueTextOf(i);
+    if (!valueWords.isEmpty() && c.isFader()
+        && !(cell.group == Desk && cell.role == QLatin1String("gm") && m_doc->deskRecord() != nullptr
+             && m_doc->deskRecord()->grandMasterWaiting()))
+    {
+        QFont vf = font();
+        vf.setPixelSize(qMax(9, int(s * 0.2)));
+        p.setFont(vf);
+        const bool vertical = c.kind == SurfaceLayout::Fader;
+        const QRectF at = vertical ? QRectF(r.left(), r.bottom() - s * 0.55, r.width(), s * 0.5)
+                                   : QRectF(r.left() + 2, r.bottom() - s * 0.4, r.width() - 4, s * 0.38);
+        p.drawText(at, Qt::AlignCenter, valueWords);
+        p.setPen(text);
+    }
     if (roleLook)
     {
         f.setBold(true);
@@ -804,17 +845,18 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     f.setPixelSize(px);
     const QString face = c.face;
     // A job that is the control's own name ("Looks" on the PMJ's Looks key) once.
-    if (!c.turns() && words.compare(face, Qt::CaseInsensitive) == 0)
-        words.clear();
+    QString jobWords = words;
+    if (!c.turns() && jobWords.compare(face, Qt::CaseInsensitive) == 0)
+        jobWords.clear();
     if (c.turns())
     {
         // Under a knob: one line, its job if it has one, else its name.
-        QString one = words.isEmpty() ? face : words;
+        QString one = jobWords.isEmpty() ? face : jobWords;
         // A small cap with a long name: its number is enough ("Knob 3" is "3").
-        if (QFontMetricsF(f).horizontalAdvance(one) > textRect.width() && words.isEmpty()
+        if (QFontMetricsF(f).horizontalAdvance(one) > textRect.width() && jobWords.isEmpty()
             && one.section(QLatin1Char(' '), -1).toInt() > 0)
             one = one.section(QLatin1Char(' '), -1);
-        f.setBold(!words.isEmpty());
+        f.setBold(!jobWords.isEmpty());
         f = fitted(f, one, textRect.width());
         p.setFont(f);
         p.drawText(textRect, Qt::AlignCenter,
@@ -823,16 +865,16 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     }
     if (textRect.isEmpty())
         return;     // too small to write on: the tooltip and the table say it
-    if (textRect.height() < px * 2.4 && !words.isEmpty())
+    if (textRect.height() < px * 2.4 && !jobWords.isEmpty())
     {
         // A thin key: one line, the job.
         f.setBold(true);
-        f = fitted(f, words, textRect.width());
+        f = fitted(f, jobWords, textRect.width());
         p.setFont(f);
-        p.drawText(textRect, Qt::AlignCenter, QFontMetricsF(f).elidedText(words, Qt::ElideRight, textRect.width()));
+        p.drawText(textRect, Qt::AlignCenter, QFontMetricsF(f).elidedText(jobWords, Qt::ElideRight, textRect.width()));
         return;
     }
-    if (words.isEmpty())
+    if (jobWords.isEmpty())
     {
         f = fitted(f, face, textRect.width());
         p.setFont(f);
@@ -853,15 +895,15 @@ void SurfaceMapView::paintCell(QPainter &p, int i)
     QRectF top(textRect.left(), textRect.top(), textRect.width(), sm.height());
     p.drawText(top, Qt::AlignLeft | Qt::AlignTop, sm.elidedText(face, Qt::ElideRight, top.width()));
     f.setBold(true);
-    f = fitted(f, words, textRect.width());
+    f = fitted(f, jobWords, textRect.width());
     p.setFont(f);
     const QRectF rest(textRect.left(), top.bottom(), textRect.width(), textRect.bottom() - top.bottom());
     const QFontMetricsF fm(f);
     // Elided to the lines that fit; the tooltip has it whole.
     const int lines = qMax(1, int(rest.height() / fm.height()));
-    QString shown = words;
-    if (fm.boundingRect(rest, Qt::TextWordWrap, words).height() > rest.height() + 0.5)
-        shown = fm.elidedText(words, Qt::ElideRight, rest.width() * lines - fm.averageCharWidth() * 2);
+    QString shown = jobWords;
+    if (fm.boundingRect(rest, Qt::TextWordWrap, jobWords).height() > rest.height() + 0.5)
+        shown = fm.elidedText(jobWords, Qt::ElideRight, rest.width() * lines - fm.averageCharWidth() * 2);
     p.drawText(rest, Qt::AlignLeft | Qt::AlignTop | Qt::TextWordWrap, shown);
 }
 
@@ -1383,14 +1425,18 @@ void SurfaceMaps::addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe
     setUp->setToolTip(tr("This controller's own setup: what it needs set on the device itself."));
     connect(setUp, &QPushButton::clicked, this, [this, universe]() { emit controllerSetupRequested(universe); });
     h->addWidget(setUp);
-    // The PMJ Black 1 is the board with a lamp test (its lamp log).
-    if (layout.profileName() == QLatin1String("PMJ Black 1"))
+    // Every board's lamps can be tested (the PMJ's own test steps its levels).
     {
         QPushButton *test = new QPushButton(tr("Lamp Test…"), block);
         test->setObjectName(QStringLiteral("surfaceMapOptLampTest%1").arg(universe));
-        test->setToolTip(tr("The last lamps sent to this board, and a lamp test for one button."));
+        test->setToolTip(tr("Light this board's lamps one by one, with what was sent in its log."));
         connect(test, &QPushButton::clicked, this, [this, universe]() { emit lampTestRequested(universe); });
         h->addWidget(test);
+        QPushButton *log = new QPushButton(tr("Board Log…"), block);
+        log->setObjectName(QStringLiteral("surfaceMapOptBoardLog%1").arg(universe));
+        log->setToolTip(tr("What this board sent and was sent, to copy into a report."));
+        connect(log, &QPushButton::clicked, this, [this, universe]() { emit boardLogRequested(universe); });
+        h->addWidget(log);
     }
     if (desk != nullptr && desk->hasShift(universe))
     {

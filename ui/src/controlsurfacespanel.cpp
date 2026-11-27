@@ -25,6 +25,7 @@
 #include <QFrame>
 
 #include "controlsurfacespanel.h"
+#include "boardlogdialog.h"
 #include "desksetuppanel.h"
 #include "surfacemap.h"
 #include "deskrecord.h"
@@ -193,7 +194,23 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             learn->click();
     });
     connect(m_maps, &SurfaceMaps::controllerSetupRequested, this, [this]() { emit setUpRequested(QStringLiteral("setup")); });
-    connect(m_maps, &SurfaceMaps::lampTestRequested, this, &ControlSurfacesPanel::openPmjLampLog);
+    connect(m_maps, &SurfaceMaps::lampTestRequested, this, [this](quint32 universe) {
+        InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+        if (ip != nullptr && ip->profileName() == QLatin1String("PMJ Black 1"))
+        {
+            openPmjLampLog();
+            return;
+        }
+        BoardLogDialog *dlg = new BoardLogDialog(m_doc, universe, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->show();
+        dlg->startLampTest();
+    });
+    connect(m_maps, &SurfaceMaps::boardLogRequested, this, [this](quint32 universe) {
+        BoardLogDialog *dlg = new BoardLogDialog(m_doc, universe, this);
+        dlg->setAttribute(Qt::WA_DeleteOnClose);
+        dlg->show();
+    });
     QFrame *rule = new QFrame(this);
     rule->setFrameShape(QFrame::HLine);
     rule->setFrameShadow(QFrame::Sunken);
@@ -698,6 +715,7 @@ bool isVirtualPort(const QString &name)
         QStringLiteral("Midi Through"), QStringLiteral("IAC Driver"),
         QStringLiteral("PipeWire"), QStringLiteral("JACK"),
         QStringLiteral("RtMidi"), QStringLiteral("loopMIDI"),
+        QStringLiteral("RTP Session"), QStringLiteral("Network Session"),
     };
     for (const QString &v : kVirtual)
         if (name.contains(v, Qt::CaseInsensitive))
@@ -725,16 +743,18 @@ bool usedAsOutput(InputOutputMap *iom, QLCIOPlugin *plugin, const QString &name)
 }
 }
 
-QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
+QList<ControlSurfacesPanel::FreeDevice> ControlSurfacesPanel::freeDevices(Doc *doc)
 {
     /* Every hardware input line plugged in now that no universe's input
        has (InputOutputMap::hasFreeInputDevice(): by device, so one of two
-       pads of one name is told apart), once per free device. */
-    QList<QPair<QString, bool>> out;
-    InputOutputMap *iom = m_doc->inputOutputMap();
-    if (m_doc->ioPluginCache() == nullptr)
+       pads of one name is told apart), once per free device. Not another
+       port of a known board ("APC64 Notes (APC64)": not used), nor one a
+       person said is not a control surface. */
+    QList<FreeDevice> out;
+    InputOutputMap *iom = doc->inputOutputMap();
+    if (doc->ioPluginCache() == nullptr)
         return out;
-    for (QLCIOPlugin *plugin : m_doc->ioPluginCache()->plugins())
+    for (QLCIOPlugin *plugin : doc->ioPluginCache()->plugins())
     {
         if (plugin == nullptr || !plugin->linesAreHardware()
             || (plugin->capabilities() & QLCIOPlugin::Input) == 0)
@@ -751,6 +771,8 @@ QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
             const bool pad = isPad(plugin, quint32(l));
             if (!pad && (isDmxInterface(plugin, name) || usedAsOutput(iom, plugin, name)))
                 continue;
+            if (!pad && (InputOutputMap::isNotSurface(name) || !iom->profileOfOtherPort(name).isEmpty()))
+                continue;
             // The n-th line of a name is free when n of that name are.
             int taken = 0;
             for (quint32 u = 0; u < iom->universesCount(); ++u)
@@ -762,9 +784,25 @@ QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
             const int nth = seen.value(name) + 1;
             seen.insert(name, nth);
             if (nth > taken && iom->hasFreeInputDevice(plugin, name))
-                out << qMakePair(name, pad);
+            {
+                FreeDevice d;
+                d.plugin = plugin;
+                d.name = name;
+                d.pad = pad;
+                d.profile = iom->profileForDevice(name);
+                d.maybe = d.profile.isEmpty() ? iom->profileToAskFor(name) : QString();
+                out << d;
+            }
         }
     }
+    return out;
+}
+
+QList<QPair<QString, bool>> ControlSurfacesPanel::unpatchedDevices() const
+{
+    QList<QPair<QString, bool>> out;
+    for (const FreeDevice &d : freeDevices(m_doc))
+        out << qMakePair(d.name, d.pad);
     return out;
 }
 

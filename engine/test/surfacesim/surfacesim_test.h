@@ -142,6 +142,35 @@ private slots:
      *  back on exit; Session mode checked by a pad press. */
     void theApc64IsNamedAndItsModeChecked();
 
+    /* The bench, 2026-11-27: every board patched by hand, nothing logged. */
+    /** The boards' real port names (dink's CoreMIDI) find their profiles:
+     *  case, a "(Device)" suffix, port words and a maker's name aside; of
+     *  a board with several ports only its own one; the MaizeDMX's shared
+     *  name is asked about, never matched. */
+    void realPortNamesFindTheirProfiles();
+    /** A known board plugged in is set up by itself: its input with its
+     *  profile, its feedback to the same device, its init; the APC64's
+     *  other three ports are left alone. Undo lets it go and it is not set
+     *  up by itself again. */
+    void aKnownBoardIsSetUpWhenPluggedIn();
+    /** The MaizeDMX ("USB2.0-MIDI Port 1"): asked about, not patched; a yes
+     *  sets it up and is remembered. */
+    void aSharedPortNameIsAskedAboutThenRemembered();
+    /** The Board Log: a fader's every step in, a lamp out, the init with
+     *  where it went, timestamped and decoded with the control's name;
+     *  the last 500 kept. */
+    void theBoardLogSaysWhatTheBoardSentAndWasSent();
+    /** The init goes once more after the port has settled. */
+    void theInitGoesAgainOnceThePortHasSettled();
+    /** The lamp test lights each lamp, then all, then gives them back;
+     *  with no feedback line it says so. */
+    void theLampTestLightsEveryLampThenGivesThemBack();
+    /** A board named "APC64 DAW (APC64)" keeps this computer's roles
+     *  across a restart (the identity is saved percent-encoded and read
+     *  back raw), and a patch with no device on its line seeds no
+     *  "midi:None". */
+    void aBoardWithParenthesesKeepsItsRoles();
+
 private:
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;

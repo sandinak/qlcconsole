@@ -2792,14 +2792,94 @@ QString InputOutputMap::profileForDevice(const QString &deviceName) const
 {
     if (deviceName.trimmed().isEmpty())
         return QString();
+    // A person said which board this is ("Is this a MaizeDMX? Use it").
+    const QString said = confirmedProfile(deviceName);
+    if (!said.isEmpty() && const_cast<InputOutputMap *>(this)->profile(said) != nullptr)
+        return said;
+    QString best;
+    int bestScore = 0;
     for (const QLCInputProfile *p : m_profiles)
-        if (p->matchesDevice(deviceName))
-            return p->name();
+    {
+        const int score = p->deviceMatchScore(deviceName);
+        if (score > bestScore)
+        {
+            bestScore = score;
+            best = p->name();
+        }
+    }
+    if (!best.isEmpty())
+        return best;
     // A copy that replaced a built-in profile: the type's Match still says which it is.
     for (const QLCInputProfile *p : m_shadowedProfiles)
-        if (p->matchesDevice(deviceName) && const_cast<InputOutputMap *>(this)->profile(p->name()) != nullptr)
+    {
+        const int score = p->deviceMatchScore(deviceName);
+        if (score > bestScore && const_cast<InputOutputMap *>(this)->profile(p->name()) != nullptr)
+        {
+            bestScore = score;
+            best = p->name();
+        }
+    }
+    return best;
+}
+
+QString InputOutputMap::profileOfOtherPort(const QString &deviceName) const
+{
+    if (!profileForDevice(deviceName).isEmpty())
+        return QString();
+    for (const QLCInputProfile *p : m_profiles)
+        if (p->isOtherPortOf(deviceName))
             return p->name();
     return QString();
+}
+
+QString InputOutputMap::profileToAskFor(const QString &deviceName) const
+{
+    if (!profileForDevice(deviceName).isEmpty() || isNotSurface(deviceName))
+        return QString();
+    for (const QLCInputProfile *p : m_profiles)
+        if (p->asksForDevice(deviceName))
+            return p->name();
+    return QString();
+}
+
+namespace
+{
+QString deviceKeyOf(const QString &deviceName)
+{
+    // QSettings keys: no slashes.
+    return QString(deviceName.trimmed()).replace(QLatin1Char('/'), QLatin1Char('_'))
+                                       .replace(QLatin1Char('\\'), QLatin1Char('_'));
+}
+}
+
+QString InputOutputMap::confirmedProfile(const QString &deviceName)
+{
+    return QSettings().value(QStringLiteral("surfaces/confirmed/") + deviceKeyOf(deviceName)).toString();
+}
+
+void InputOutputMap::setConfirmedProfile(const QString &deviceName, const QString &profileName)
+{
+    QSettings s;
+    const QString key = QStringLiteral("surfaces/confirmed/") + deviceKeyOf(deviceName);
+    if (profileName.isEmpty())
+        s.remove(key);
+    else
+        s.setValue(key, profileName);
+}
+
+bool InputOutputMap::isNotSurface(const QString &deviceName)
+{
+    return QSettings().value(QStringLiteral("surfaces/notSurface/") + deviceKeyOf(deviceName), false).toBool();
+}
+
+void InputOutputMap::setNotSurface(const QString &deviceName, bool notSurface)
+{
+    QSettings s;
+    const QString key = QStringLiteral("surfaces/notSurface/") + deviceKeyOf(deviceName);
+    if (notSurface)
+        s.setValue(key, true);
+    else
+        s.remove(key);
 }
 
 QStringList InputOutputMap::profileNames()

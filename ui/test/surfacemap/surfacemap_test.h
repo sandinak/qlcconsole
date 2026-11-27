@@ -98,6 +98,20 @@ private slots:
     void keyLabelsAtTheRealKeySizes();
     /** A map never clips: under its smallest cell it asks for the width. */
     void theMapScrollsRatherThanClips();
+    /** The chip's ▾ (and a right-click): Map, Send Init Again, Profile ▸
+     *  (the one in use ticked; another re-patches and sends the init),
+     *  Feedback ▸ (paired, Pair, None), Lamp Test, Board Log…, Set Up…. */
+    void theChipMenuDoesWhatTheBoardNeeds();
+    /** A fader moved on the map keeps its name ("Fader 1"); its value is
+     *  its own small number. */
+    void aMovedFaderKeepsItsName();
+    /** Connections ▸ Control surfaces lists every plugged-in device before
+     *  any patch: a known board (its other ports folded under it), an
+     *  unknown one a click from its profile or "Not a Control Surface";
+     *  unplugged, a board is greyed "not connected". */
+    void everyPluggedInDeviceIsUnderControlSurfaces();
+    /** The Board Log dialog shows the log and copies it as text. */
+    void theBoardLogDialogCopiesTheLog();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */
     void shots();
 

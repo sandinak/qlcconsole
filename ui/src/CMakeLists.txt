@@ -234,6 +234,8 @@ add_library(${module_name}
     desksetuppanel.cpp desksetuppanel.h
     deskchip.cpp deskchip.h
     surfacechips.cpp surfacechips.h
+    footerbar.cpp footerbar.h
+    boardlogdialog.cpp boardlogdialog.h
     editlivechip.cpp editlivechip.h
     surfacemap.cpp surfacemap.h
     surfacekeylabels.cpp surfacekeylabels.h

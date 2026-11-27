@@ -51,6 +51,16 @@
 #include "showoperate.h"
 #include "inputoutputmap.h"
 #include "surfacelayout.h"
+#include "surfacesetup.h"
+#include "surfaceautopatch.h"
+#include "surfaceboardlog.h"
+#include "boardlogdialog.h"
+#include "connectionstree.h"
+#include "inputpatch.h"
+#include "outputpatch.h"
+#include <QTreeWidget>
+#include <QPlainTextEdit>
+#include <QClipboard>
 #include <QMenu>
 #include <QTableWidget>
 #include <QHeaderView>
@@ -58,6 +68,8 @@
 #include <QCollator>
 #include <QImage>
 #include <QFile>
+#include <memory>
+#include <QContextMenuEvent>
 #include "surfacekeylabels.h"
 #include "measurementunits.h"
 #include "ioplugincache.h"
@@ -1102,6 +1114,225 @@ void SurfaceMap_Test::theMapScrollsRatherThanClips()
     QVERIFY(mv->width() >= min.width());
     QVERIFY(scroll.horizontalScrollBar()->maximum() > 0);
     scroll.takeWidget();
+}
+
+namespace
+{
+QAction *menuAction(QMenu *menu, const QString &name)
+{
+    for (QAction *a : menu->findChildren<QAction *>())
+        if (a->objectName() == name)
+            return a;
+    for (QAction *a : menu->actions())
+        if (a->objectName() == name)
+            return a;
+    return nullptr;
+}
+}
+
+void SurfaceMap_Test::theChipMenuDoesWhatTheBoardNeeds()
+{
+    m_stub->m_hasFeedback = true;
+    m_stub->m_acceptShowControl = true;
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    SurfaceChips chips(m_doc);
+    settle();
+    QToolButton *mark = chips.menuButton(0);
+    QVERIFY(mark != nullptr);
+    QCOMPARE(mark->text(), QStringLiteral("▾"));
+    // The chip's own text is as it was; a click on it still opens the map.
+    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC40 · Move"));
+    QSignalSpy map(&chips, &SurfaceChips::mapRequested);
+    chips.chip(0)->click();
+    QCOMPARE(map.count(), 1);
+
+    std::unique_ptr<QMenu> menu(chips.boardMenu(0));
+    QVERIFY(menu != nullptr);
+    QStringList titles;
+    for (QAction *a : menu->actions())
+        if (!a->isSeparator())
+            titles << a->text();
+    QCOMPARE(titles, QStringList({ "Map", "Send Init Again", "Profile", "Feedback", "Lamp Test",
+                                   QString::fromUtf8("Board Log…"), QString::fromUtf8("Set Up…") }));
+    // Send Init Again: its Ableton mode, out of its port.
+    m_stub->m_showControlSent.clear();
+    menuAction(menu.get(), "chipMenuInit")->trigger();
+    QCOMPARE(m_stub->m_showControlSent.size(), 1);
+    QCOMPARE(QString::fromLatin1(m_stub->m_showControlSent.first().second.toHex(' ')),
+             QString("f0 47 7f 29 60 00 04 41 09 00 05 f7"));
+    // Profile ▸: the one in use ticked.
+    QMenu *prof = menu->findChild<QMenu *>("chipMenuProfile");
+    QVERIFY(prof != nullptr);
+    QAction *ticked = nullptr;
+    for (QAction *a : prof->actions())
+        if (a->isChecked())
+            ticked = a;
+    QVERIFY(ticked != nullptr);
+    QCOMPARE(ticked->text(), kApc);
+    // Feedback ▸: paired to its own port; None lets it go, Pair pairs it again.
+    QMenu *fb = menu->findChild<QMenu *>("chipMenuFeedback");
+    QVERIFY(fb != nullptr);
+    QCOMPARE(fb->actions().first()->text(), QStringLiteral("Paired to APC40 mkII"));
+    menuAction(menu.get(), "chipMenuFeedbackNone")->trigger();
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) == nullptr
+            || !m_doc->inputOutputMap()->feedbackPatch(0)->isPatched());
+    std::unique_ptr<QMenu> again(chips.boardMenu(0));
+    QAction *lamp = menuAction(again.get(), "chipMenuLampTest");
+    QVERIFY(lamp != nullptr && !lamp->isEnabled());         // no feedback line: no lamps to test
+    QVERIFY2(lamp->toolTip().contains("Pair first"), qPrintable(lamp->toolTip()));
+    m_stub->m_showControlSent.clear();
+    menuAction(again.get(), "chipMenuPair")->trigger();
+    QCOMPARE(m_doc->inputOutputMap()->feedbackPatch(0)->outputName(), QStringLiteral("APC40 mkII"));
+    QVERIFY(!m_stub->m_showControlSent.isEmpty());          // its init again, now it has its line
+    // Board Log… and Lamp Test ask for their windows.
+    QSignalSpy log(&chips, &SurfaceChips::boardLogRequested);
+    QSignalSpy test(&chips, &SurfaceChips::lampTestRequested);
+    QSignalSpy setUp(&chips, &SurfaceChips::setUpRequested);
+    std::unique_ptr<QMenu> third(chips.boardMenu(0));
+    menuAction(third.get(), "chipMenuBoardLog")->trigger();
+    menuAction(third.get(), "chipMenuLampTest")->trigger();
+    menuAction(third.get(), "chipMenuSetUp")->trigger();
+    QCOMPARE(log.count(), 1);
+    QCOMPARE(test.count(), 1);
+    QCOMPARE(setUp.count(), 1);
+    // A right-click on the chip opens the same menu.
+    QContextMenuEvent ctx(QContextMenuEvent::Mouse, QPoint(4, 4));
+    QApplication::sendEvent(chips.chip(0), &ctx);
+    QVERIFY(chips.lastMenu() != nullptr);
+    QCOMPARE(chips.lastMenu()->objectName(), QStringLiteral("footerSurfaceMenu0"));
+    chips.lastMenu()->close();
+    m_stub->m_hasFeedback = false;
+    m_stub->m_acceptShowControl = false;
+}
+
+void SurfaceMap_Test::aMovedFaderKeepsItsName()
+{
+    SimMidiDevice mini(m_doc, m_stub, QStringLiteral("APC mini mk2 Control"), 0, QStringLiteral("Akai APC Mini mk2"),
+                       profile("Akai-APCMini-mk2.qxi"));
+    QVERIFY2(mini.plug(), qPrintable(mini.lastError()));
+    ControlSurfacesPanel hub(m_doc);
+    settle();
+    SurfaceMapView *mv = hub.surfaceMaps()->view(0);
+    QVERIFY(mv != nullptr);
+    // A fader with no desk role: its words on the map (its page job, else its name).
+    quint32 fader = 0xFFFFFFFF;
+    for (const SurfaceLayout::Control &c : mv->layout().controls())
+        if (c.isFader() && mv->role(c.channel).isEmpty())
+        {
+            fader = c.channel;
+            break;
+        }
+    QVERIFY(fader != 0xFFFFFFFF);
+    const QString before = mv->drawnWords(fader);
+    QVERIFY(!before.isEmpty());
+    mv->noteInput(0, fader, 128);
+    settle();
+    QCOMPARE(mv->drawnWords(fader), before);         // not "50 %"
+    QCOMPARE(mv->valueText(fader), QStringLiteral("50 %"));
+}
+
+void SurfaceMap_Test::everyPluggedInDeviceIsUnderControlSurfaces()
+{
+    m_doc->inputOutputMap()->loadProfiles(QDir(QStringLiteral(QLC_TEST_RESOURCE_ROOT) + QStringLiteral("inputprofiles/")));
+    InputOutputMap::setNotSurface(QStringLiteral("Mystery Keys"), false);
+    SurfaceAutoPatch::setDeclined(QStringLiteral("APC64 DAW (APC64)"), false);
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_networkDmx = false;
+    m_stub->m_hasFeedback = true;
+    m_stub->m_lineNames = QStringList({ "APC64 DAW (APC64)", "APC64 Notes (APC64)", "APC64 MIDI (APC64)",
+                                        "APC64 Custom (APC64)", "Mystery Keys" });
+    emit m_stub->configurationChanged();
+    ConnectionsTree tree(m_doc);
+    tree.setShowControlRows({ { "surfaces", "Control surfaces", "" } });
+    tree.refresh();
+    QTreeWidget *tw = tree.findChild<QTreeWidget *>();
+    QVERIFY(tw != nullptr);
+    auto surfaces = [tw]() -> QTreeWidgetItem * {
+        QTreeWidgetItemIterator it(tw);
+        for (; *it != nullptr; ++it)
+            if ((*it)->data(0, Qt::UserRole + 2).toString() == QLatin1String("surfaces")
+                && (*it)->data(0, Qt::UserRole + 1).toInt() == 10)
+                return *it;
+        return nullptr;
+    };
+    auto names = [](QTreeWidgetItem *row) {
+        QStringList out;
+        for (int i = 0; i < row->childCount(); ++i)
+            out << row->child(i)->text(0);
+        return out;
+    };
+    // Before any patch: the APC64 once (its other ports under it), the unknown box.
+    QTreeWidgetItem *row = surfaces();
+    QVERIFY(row != nullptr);
+    QCOMPARE(names(row), QStringList({ "APC64 DAW (APC64): Akai APC64, not set up", "Mystery Keys: not set up" }));
+    QTreeWidgetItem *apc = row->child(0);
+    QCOMPARE(names(apc), QStringList({ "APC64 Notes (APC64)", "APC64 MIDI (APC64)", "APC64 Custom (APC64)" }));
+    QCOMPARE(apc->child(0)->text(1), QStringLiteral("part of Akai APC64 (not used by qlcconsole)"));
+    // The hub does not nag about the other ports.
+    ControlSurfacesPanel hub(m_doc);
+    QCOMPARE(hub.status("devices"), QStringLiteral("APC64 DAW (APC64): not set up\nMystery Keys: not set up"));
+
+    // "Not a Control Surface": gone, on this computer.
+    std::unique_ptr<QMenu> mystery(tree.surfaceDeviceMenu(row->child(1)));
+    QVERIFY(mystery != nullptr);
+    menuAction(mystery.get(), "surfaceDeviceNot")->trigger();
+    tree.refresh();
+    row = surfaces();
+    QCOMPARE(names(row), QStringList({ "APC64 DAW (APC64): Akai APC64, not set up" }));
+    QVERIFY(InputOutputMap::isNotSurface(QStringLiteral("Mystery Keys")));
+
+    // One click on the APC64: "Use as Akai APC64" patches it.
+    std::unique_ptr<QMenu> use(tree.surfaceDeviceMenu(row->child(0)));
+    QAction *useApc = menuAction(use.get(), "surfaceDeviceUse");
+    QVERIFY(useApc != nullptr);
+    QCOMPARE(useApc->text(), QStringLiteral("Use as Akai APC64"));
+    useApc->trigger();
+    tree.refresh();
+    row = surfaces();
+    QCOMPARE(row->childCount(), 1);
+    QCOMPARE(row->child(0)->data(0, Qt::UserRole + 1).toInt(), 12);
+    QVERIFY2(row->child(0)->text(1).contains("Akai APC64") && row->child(0)->text(1).contains("feedback yes")
+             && row->child(0)->text(1).contains("init: Its display"), qPrintable(row->child(0)->text(1)));
+    QCOMPARE(row->child(0)->childCount(), 3);
+
+    // Unplugged: greyed, "not connected".
+    m_stub->m_lineNames = QStringList() << QStringLiteral("(no device)");
+    emit m_stub->configurationChanged();
+    settle();
+    tree.refresh();
+    row = surfaces();
+    QTreeWidgetItem *gone = nullptr;
+    for (int i = 0; i < row->childCount(); ++i)
+        if (row->child(i)->text(0).contains("APC64 DAW (APC64)"))
+            gone = row->child(i);
+    QVERIFY2(gone != nullptr, qPrintable(names(row).join(" | ")));
+    QVERIFY2(gone->text(1).contains("not connected"), qPrintable(gone->text(1)));
+    QCOMPARE(gone->foreground(0).color(), tw->palette().color(QPalette::Disabled, QPalette::Text));
+    InputOutputMap::setNotSurface(QStringLiteral("Mystery Keys"), false);
+    m_stub->m_hasFeedback = false;
+}
+
+void SurfaceMap_Test::theBoardLogDialogCopiesTheLog()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    m_doc->surfaceSetup()->boardLog()->note(0, QStringLiteral("hello from the bench"));
+    BoardLogDialog d(m_doc, 0);
+    d.show();
+    settle();
+    QCOMPARE(d.windowTitle(), QStringLiteral("Board Log: Akai APC40 mkII"));
+    QPlainTextEdit *text = d.findChild<QPlainTextEdit *>("boardLogText");
+    QVERIFY(text != nullptr);
+    QVERIFY(text->toPlainText().contains("hello from the bench"));
+    QVERIFY(text->toPlainText().contains("Input: APC40 mkII"));
+    d.findChild<QPushButton *>("boardLogCopy")->click();
+    QCOMPARE(QApplication::clipboard()->text(), d.logText());
+    // No feedback line: the lamp test says why.
+    m_doc->inputOutputMap()->setOutputPatch(0, KOutputNone, QString(), 0, true);
+    d.findChild<QPushButton *>("boardLogLampTest")->click();
+    QVERIFY2(d.findChild<QLabel *>("boardLogStep")->text().contains("no feedback line"),
+             qPrintable(d.findChild<QLabel *>("boardLogStep")->text()));
 }
 
 void SurfaceMap_Test::shots()

@@ -205,6 +205,22 @@ void SurfaceSetupDialog::open(Doc *doc, QWidget *parent)
     dlg.exec();
 }
 
+void SurfaceSetupDialog::open(Doc *doc, QWidget *parent, quint32 universe)
+{
+    SurfaceSetupDialog dlg(doc, parent);
+    dlg.selectUniverse(universe);
+    dlg.exec();
+}
+
+bool SurfaceSetupDialog::selectUniverse(quint32 universe)
+{
+    const int i = m_device->findData(universe);
+    if (i < 0)
+        return false;
+    m_device->setCurrentIndex(i);
+    return true;
+}
+
 quint32 SurfaceSetupDialog::universe() const
 {
     return m_device->count() == 0 ? UINT_MAX : m_device->currentData().toUInt();

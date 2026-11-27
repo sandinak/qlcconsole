@@ -123,6 +123,20 @@ private:
     /** Each hardware input device plugged in that no universe's input
      *  has: its name, and whether it is a game pad. */
     QList<QPair<QString, bool>> unpatchedDevices() const;
+public:
+    /** A hardware input device plugged in that no universe has. */
+    struct FreeDevice
+    {
+        class QLCIOPlugin *plugin = nullptr;
+        QString name;
+        bool pad = false;
+        QString profile;    ///< the known board it is (its name fits); empty: unknown
+        QString maybe;      ///< a board it may be (a shared port name): ask
+    };
+    /** Every such device (not another port of a known board, nor one said
+     *  not to be a control surface). */
+    static QList<FreeDevice> freeDevices(Doc *doc);
+private:
     QString webText() const;
     QString encoderText() const;
     QString stopText() const;

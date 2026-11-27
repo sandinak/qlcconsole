@@ -25,8 +25,14 @@
 #include <QTimer>
 #include <QFile>
 #include <QSet>
+#include <climits>
 
 #include "surfacesetup.h"
+#include "surfaceboardlog.h"
+#include "surfaceautopatch.h"
+#include "surfacelayout.h"
+#include "qlcinputprofile.h"
+#include "qlcinputchannel.h"
 #include "controllerkeepalive.h"
 #include "programmercontroller.h"
 #include "inputoutputmap.h"
@@ -144,6 +150,8 @@ SurfaceSetup::SurfaceSetup(Doc *doc)
     , m_doc(doc)
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
+    m_boardLog = new SurfaceBoardLog(m_doc, this);
+    m_autoPatch = new SurfaceAutoPatch(m_doc, this);
     connect(iom, &InputOutputMap::inputSysExReceived, this, &SurfaceSetup::slotSysEx);
     // Patched, its profile set, or found again after a replug: its init.
     connect(iom, &InputOutputMap::inputPatchChanged, this, &SurfaceSetup::slotPatchChanged);
@@ -316,31 +324,49 @@ QString SurfaceSetup::deviceKey(quint32 universe) const
  * Out
  ****************************************************************************/
 
-bool SurfaceSetup::sendTo(quint32 universe, const QByteArray &msg)
+bool SurfaceSetup::sendTo(quint32 universe, const QByteArray &msg, const QString &why)
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
     // Its feedback line first: the port the app already writes its lamps to.
     OutputPatch *fb = iom->feedbackPatch(universe);
     if (fb != nullptr && fb->plugin() != nullptr && fb->output() != QLCIOPlugin::invalidLine())
-        return fb->plugin()->sendShowControl(fb->output(), msg, QString(), 0);
+    {
+        const bool ok = fb->plugin()->sendShowControl(fb->output(), msg, QString(), 0);
+        m_boardLog->logSysExOut(universe, msg, ok,
+                                ok ? tr("%1, to %2").arg(why, fb->outputName())
+                                   : tr("%1: %2 refused it").arg(why, fb->outputName()));
+        return ok;
+    }
     // Else the output of the same name as its input (a MIDI box's two halves).
     InputPatch *ip = iom->inputPatch(universe);
     if (ip == nullptr || ip->plugin() == nullptr)
+    {
+        m_boardLog->logSysExOut(universe, msg, false, tr("%1: no input patched").arg(why));
         return false;
+    }
     const int line = int(ip->plugin()->outputs().indexOf(ip->inputName()));
     if (line < 0)
+    {
+        m_boardLog->logSysExOut(universe, msg, false,
+                                tr("%1: no feedback line, and no output named %2").arg(why, ip->inputName()));
         return false;
-    return ip->plugin()->sendShowControl(quint32(line), msg, QString(), 0);
+    }
+    const bool ok = ip->plugin()->sendShowControl(quint32(line), msg, QString(), 0);
+    m_boardLog->logSysExOut(universe, msg, ok,
+                            ok ? tr("%1, to %2 (no feedback line: its output of that name)").arg(why, ip->inputName())
+                               : tr("%1: %2 refused it").arg(why, ip->inputName()));
+    return ok;
 }
 
-bool SurfaceSetup::sendInit(quint32 universe)
+bool SurfaceSetup::sendInit(quint32 universe, const QString &why)
 {
     const Spec *s = specOf(universe);
     if (s == nullptr || s->init.isEmpty())
         return false;
+    const QString what = tr("Init (%1), %2").arg(s->initText, why.isEmpty() ? tr("asked") : why);
     bool ok = true;
     for (const QByteArray &m : s->init)
-        ok = sendTo(universe, m) && ok;
+        ok = sendTo(universe, m, what) && ok;
     if (ok)
         ++m_initsSent;
     return ok;
@@ -352,8 +378,150 @@ void SurfaceSetup::slotPatchChanged(quint32 universe)
     if (m_modeWait.remove(universe))
         holdPresses(universe, false);
     m_checks.remove(universe);
-    sendInit(universe);
+    if (sendInit(universe, tr("on patch")))
+    {
+        /* Once more when the port has settled: a board just plugged in may
+           not take a message the moment its port appears (the APC40 mkII
+           stayed in its generic mode on the bench, 2026-11-27). */
+        m_initAgain.insert(universe);
+        QTimer::singleShot(m_initAgainMs, this, [this, universe]() {
+            if (m_initAgain.remove(universe))
+                sendInit(universe, tr("again, after its port opened"));
+        });
+    }
     emit changed(universe);
+}
+
+/****************************************************************************
+ * Lamp test
+ ****************************************************************************/
+
+QList<quint32> SurfaceSetup::lampChannels(quint32 universe) const
+{
+    QList<quint32> out;
+    InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+    if (ip == nullptr || ip->profile() == nullptr)
+        return out;
+    const SurfaceLayout layout = SurfaceLayout::forProfile(ip->profileName());
+    if (layout.isValid())
+    {
+        for (const SurfaceLayout::Control &c : layout.controls())
+            if (c.lamp != SurfaceLayout::NoLamp)
+                out << c.channel;
+        if (!out.isEmpty())
+            return out;
+    }
+    const QMap<quint32, QLCInputChannel *> chans = ip->profile()->channels();
+    for (auto it = chans.constBegin(); it != chans.constEnd(); ++it)
+        if (it.value()->type() == QLCInputChannel::Button)
+            out << it.key();
+    return out;
+}
+
+bool SurfaceSetup::startLampTest(quint32 universe, QString *why)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    OutputPatch *fb = iom->feedbackPatch(universe);
+    if (fb == nullptr || !fb->isPatched())
+    {
+        const QString w = tr("It has no feedback line: its lamps can't be lit. Choose Feedback ▸ Pair first.");
+        m_boardLog->note(universe, tr("Lamp test refused: no feedback line"));
+        if (why != nullptr)
+            *why = w;
+        return false;
+    }
+    const QList<quint32> chans = lampChannels(universe);
+    if (chans.isEmpty())
+    {
+        if (why != nullptr)
+            *why = tr("Its profile has no lamp.");
+        return false;
+    }
+    stopLampTest();
+    m_lampTestUniverse = universe;
+    m_lampTestChannels = chans;
+    m_lampTestIndex = 0;
+    // The test is the one writer of its lamps until it ends (as Identify).
+    iom->setSetupListening(universe);
+    m_boardLog->note(universe, tr("Lamp test: %n lamp(s), out of %1", "", int(chans.size())).arg(fb->outputName()));
+    if (m_lampTimer == nullptr)
+    {
+        m_lampTimer = new QTimer(this);
+        connect(m_lampTimer, &QTimer::timeout, this, &SurfaceSetup::lampTestStep);
+    }
+    m_lampTimer->start(m_lampStepMs);
+    lampTestStep();
+    return true;
+}
+
+void SurfaceSetup::lampTestStep()
+{
+    const quint32 u = m_lampTestUniverse;
+    if (u == UINT_MAX)
+        return;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    OutputPatch *fb = iom->feedbackPatch(u);
+    InputPatch *ip = iom->inputPatch(u);
+    if (fb == nullptr || !fb->isPatched() || ip == nullptr || ip->profile() == nullptr)
+    {
+        stopLampTest();
+        return;
+    }
+    auto send = [this, u, fb, ip](quint32 ch, bool on) {
+        QLCInputChannel *c = ip->profile()->channel(ch);
+        uchar v = on ? (c != nullptr ? c->upperValue() : 255) : (c != nullptr ? c->lowerValue() : 0);
+        // A MIDI profile's levels are velocities: the plugin halves what it is sent.
+        if (c != nullptr && ip->profile()->type() == QLCInputProfile::MIDI)
+            v = v >= 127 ? UCHAR_MAX : uchar(v * 2);
+        const int midiCh = c != nullptr ? c->lowerChannel() : -1;
+        const QVariant params = midiCh >= 0 ? QVariant(midiCh) : QVariant();
+        fb->plugin()->sendFeedBack(u, fb->output(), ch, v, params);
+        const QByteArray b = SurfaceBoardLog::midiBytes(ch, v, midiCh);
+        m_boardLog->logSysExOut(u, b, true, tr("lamp test%1").arg(c != nullptr ? QStringLiteral(": ") + c->name() : QString()));
+    };
+    const int n = int(m_lampTestChannels.size());
+    QString step;
+    if (m_lampTestIndex < n)
+    {
+        if (m_lampTestIndex > 0)
+            send(m_lampTestChannels.at(m_lampTestIndex - 1), false);
+        const quint32 ch = m_lampTestChannels.at(m_lampTestIndex);
+        send(ch, true);
+        QLCInputChannel *c = ip->profile()->channel(ch);
+        step = tr("Lamp %1 of %2: %3").arg(m_lampTestIndex + 1).arg(n).arg(c != nullptr ? c->name() : QString::number(ch));
+    }
+    else if (m_lampTestIndex == n)
+    {
+        send(m_lampTestChannels.last(), false);
+        for (quint32 ch : std::as_const(m_lampTestChannels))
+            send(ch, true);
+        step = tr("All %n lamp(s) on", "", n);
+    }
+    else
+    {
+        for (quint32 ch : std::as_const(m_lampTestChannels))
+            send(ch, false);
+        stopLampTest();
+        return;
+    }
+    ++m_lampTestIndex;
+    emit lampTestStepped(u, step);
+}
+
+void SurfaceSetup::stopLampTest()
+{
+    if (m_lampTimer != nullptr)
+        m_lampTimer->stop();
+    const quint32 u = m_lampTestUniverse;
+    if (u == UINT_MAX)
+        return;
+    m_lampTestUniverse = UINT_MAX;
+    m_lampTestChannels.clear();
+    // The show's lamps again (boardLampsReleased: each owner repaints).
+    if (m_doc->inputOutputMap()->isSetupHeld(u))
+        m_doc->inputOutputMap()->setSetupListening(UINT_MAX);
+    m_boardLog->note(u, tr("Lamp test over: the show's lamps back"));
+    emit lampTestStepped(u, QString());
 }
 
 void SurfaceSetup::slotWoke()
@@ -362,7 +530,7 @@ void SurfaceSetup::slotWoke()
     // power of the port: once they are found again, each gets its init.
     QTimer::singleShot(2000, this, [this]() {
         for (quint32 u : universes())
-            sendInit(u);
+            sendInit(u, tr("after a wake"));
     });
 }
 
