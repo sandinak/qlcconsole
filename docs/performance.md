@@ -429,7 +429,7 @@ counted as a late map. On time, the output is the same frame for frame
 (`RGBMatrix_Test::mapsAheadSendTheSameFrames`). A run's first map, a tick
 by hand and a matrix without a script are made at the step as before.
 
-`ui/test/showscale` on newaudio, on / off / on / off, Release:
+`ui/test/showscale` on newaudio (M4 Pro), on / off / on / off, Release:
 
 | Maps ahead | Tick p50 | p95 | max | p95 CPU | Late frames | Late maps |
 |---|---|---|---|---|---|---|
@@ -437,6 +437,9 @@ by hand and a matrix without a script are made at the step as before.
 | off | 0.01 ms | 17.50 ms | 17.75 ms | 1.86 ms | 0 | -- |
 | on | 0.01 ms | **1.76 ms** | 2.77 ms | 1.76 ms | 0 | 0 |
 | off | 0.01 ms | 17.57 ms | 17.75 ms | 1.95 ms | 0 | -- |
+
+On evoms (M5, 4 performance cores), the same order: p95 1.47 / 15.78 /
+1.49 / 15.32 ms, max 2.40 / 16.51 / 2.45 / 15.52 ms, nothing late.
 
 showscale's budget is now the guardrail's, the p95 under half the period.
 What is left of a matrix step is its own CPU, writing the map to the
