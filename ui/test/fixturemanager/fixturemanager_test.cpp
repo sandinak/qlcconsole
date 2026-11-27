@@ -21,6 +21,8 @@
 #include <QTreeWidgetItemIterator>
 #include <QScrollBar>
 #include <QMenu>
+#include <QSignalSpy>
+#include <QMenu>
 #include <memory>
 #include <QTimer>
 #include <QMessageBox>
@@ -51,6 +53,7 @@
 #define protected public
 #define private public
 #include "fixturemanager.h"
+#include "patchlock.h"
 #include "powerdistribution.h"
 #include "../common/shotdark.h"
 #include "qlcchannel.h"
@@ -2528,4 +2531,57 @@ void FixtureManager_Test::renameUndoSelectsTheGroupAndKeepsExpansion()
     QCOMPARE(grp->name(), QString("Back"));
     QCOMPARE(tree->currentItem()->data(KColumnName, PROP_GROUP).toUInt(), grp->id());
     QVERIFY(inView(mgr, tree->currentItem()));
+}
+
+void FixtureManager_Test::operateLocksTheFixturesTab()
+{
+    addDimmers(m_doc, 3, 1, "Par");
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(900, 600);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    PatchLock *lock = PatchLock::of(&mgr);
+    QVERIFY(lock != nullptr);
+    const QString tip = PatchLock::sentence();
+    QCOMPARE(tip, QString("Operate: the patch is locked. Design to change it"));
+
+    // Design: no bar, nothing greyed by the lock.
+    QVERIFY(!lock->bar()->isVisibleTo(&mgr));
+    QVERIFY(mgr.m_addAction->isEnabled());
+    QVERIFY(mgr.m_addAction->toolTip() != tip);
+
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(lock->bar()->isVisibleTo(&mgr));
+    QVERIFY(lock->bar()->findChild<QLabel *>("patchLockText")->text().contains(tip));
+    for (QAction *a : { mgr.m_addAction, mgr.m_removeAction, mgr.m_propertiesAction })
+    {
+        QVERIFY2(!a->isEnabled(), qPrintable(a->text()));
+        QCOMPARE(a->toolTip(), tip);
+    }
+    QCOMPARE(mgr.m_fixtures_tree->editTriggers(), QAbstractItemView::NoEditTriggers);
+    QVERIFY(mgr.m_fixtures_tree->dragDropMode() == QAbstractItemView::NoDragDrop);
+    // Reading stays: the search box and Locate.
+    QVERIFY(mgr.m_fixturesSearch->isEnabled());
+    // A menu opened on the page: the editing items grey, the reading ones stay.
+    QMenu menu(&mgr);
+    QAction *rename = menu.addAction("Rename Fixture");
+    QAction *collapse = menu.addAction("Collapse All");
+    menu.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&menu));
+    QVERIFY(!rename->isEnabled());
+    QCOMPARE(rename->toolTip(), tip);
+    QVERIFY(collapse->isEnabled());
+    menu.close();
+
+    // The Design button: asks for Design (App does the mode switch, PIN and all).
+    QSignalSpy spy(lock, &PatchLock::designRequested);
+    QTest::mouseClick(lock->designButton(), Qt::LeftButton);
+    QCOMPARE(spy.count(), 1);
+
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!lock->bar()->isVisibleTo(&mgr));
+    QVERIFY(mgr.m_addAction->isEnabled());
+    QVERIFY(mgr.m_addAction->toolTip() != tip);
+    QVERIFY(mgr.m_fixtures_tree->editTriggers() != QAbstractItemView::NoEditTriggers
+            || mgr.m_fixtures_tree->dragDropMode() != QAbstractItemView::NoDragDrop);
 }

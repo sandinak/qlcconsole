@@ -309,6 +309,9 @@ private slots:
     /** File ▸ Show Settings: a PIN keeps the show in Operate (and Live Edit
      *  off) until it's given; "Open in Operate" opens the saved show there. */
     void aPinKeepsTheShowInOperate();
+    /** Operate puts a lock on the Connections and Fixtures tabs; their Design button
+     *  goes through the show's PIN. */
+    void operateLocksThePatchTabsAndTheirDesignButtonAsksForThePin();
     void openInOperateWithoutAPinLoadsInOperateAndLeavesFreely();
     /** Teaching mode (docs/features/teaching.md): the chip and the title in
      *  every view, the scramble only in a teaching show */

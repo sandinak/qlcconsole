@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Operate locks the patch** (board Q358): Fixtures and Connections wear a lock on their tabs, show a bar across the top ("Operate: the patch is locked. Design to change it", with a **Design** button that asks for the show's PIN as the toolbar's does), and grey every editing control, their menus' editing items too, with that sentence as the tooltip. All of it goes in Design.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

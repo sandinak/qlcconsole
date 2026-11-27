@@ -123,6 +123,9 @@ private slots:
      *  undo; the row the step touched is current and in view. */
     void duplicateAndUndoKeepTheViewAndSelectTheRow();
     void renameUndoSelectsTheGroupAndKeepsExpansion();
+    /** Operate: the patch is locked on Fixtures (bar, greyed controls, the
+     *  sentence as their tooltip, the Design button); none of it in Design. */
+    void operateLocksTheFixturesTab();
     void rigHistoryWaitsForDesignAndEndsWithTheShow();
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();

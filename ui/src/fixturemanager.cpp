@@ -92,6 +92,7 @@
 #include "rdmmanager.h"
 #include "universe.h"
 #include "patchundo.h"
+#include "patchlock.h"
 #include "fixture.h"
 #include "apputil.h"
 #include "showsettingsdialog.h"
@@ -301,6 +302,11 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         m_splitter->restoreState(var.toByteArray());
     else
         m_splitter->setSizes(QList <int> () << int(this->width() / 2) << int(this->width() / 2));
+
+    // Operate: the patch is locked (bar, greyed controls); gone in Design.
+    if (m_locateAction != NULL)
+        m_locateAction->setProperty("patchLockKeep", true);   // flashes a light; edits nothing
+    PatchLock::attach(this, m_doc);
 }
 
 FixtureManager::~FixtureManager()
@@ -512,6 +518,9 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         // Locate works on any selection, including in Operate mode.
         m_locateAction->setEnabled(m_fixtures_tree->selectedItems().isEmpty() == false);
     }
+    // After the page's own states: the Operate lock (and its removal in Design).
+    if (PatchLock *lock = PatchLock::of(this))
+        lock->refresh();
 }
 
 void FixtureManager::slotFixtureGroupRemoved(quint32 id)
@@ -662,6 +671,7 @@ void FixtureManager::initDataView()
     fixturesPaneLayout->setContentsMargins(0, 0, 0, 0);
     fixturesPaneLayout->setSpacing(0);
     m_fixturesSearch = new QLineEdit(fixturesPane);
+    m_fixturesSearch->setProperty("patchLockKeep", true);   // filters the list; edits nothing
     m_fixturesSearch->setPlaceholderText(tr("Search fixtures…"));
     m_fixturesSearch->setClearButtonEnabled(true);
     connect(m_fixturesSearch, &QLineEdit::textChanged,

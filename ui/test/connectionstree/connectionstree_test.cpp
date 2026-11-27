@@ -76,6 +76,7 @@
 #include "showstatus.h"
 #include "networkroute.h"
 #include "inputoutputmanager.h"
+#include "patchlock.h"
 #include "connectioneditor.h"
 #include "wledconfigcheck.h"
 #include "inputoutputpatcheditor.h"
@@ -4541,3 +4542,51 @@ void ConnectionsTree_Test::controllerJobsShots()
     }
 }
 
+
+void ConnectionsTree_Test::operateLocksTheConnectionsTab()
+{
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.resize(1000, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    PatchLock *lock = PatchLock::of(&mgr);
+    QVERIFY(lock != nullptr);
+    const QString tip = PatchLock::sentence();
+    QVERIFY(!lock->bar()->isVisibleTo(&mgr));
+    QVERIFY(mgr.m_addUniverseAction->isEnabled());
+
+    m_doc->setMode(Doc::Operate);
+    QVERIFY(lock->bar()->isVisibleTo(&mgr));
+    for (QAction *a : { mgr.m_addUniverseAction, mgr.m_deleteUniverseAction, mgr.m_undoPatchAction })
+    {
+        QVERIFY2(!a->isEnabled(), qPrintable(a->text()));
+        QCOMPARE(a->toolTip(), tip);
+    }
+    QVERIFY(!mgr.m_uniNameEdit->isEnabled());
+    QVERIFY(!mgr.m_uniPassthroughCheck->isEnabled());
+    QCOMPARE(mgr.m_uniPassthroughCheck->toolTip(), tip);
+    // The patch menu's items (the tree's context menus): greyed with the sentence.
+    QMenu menu(&mgr);
+    QAction *patch = menu.addAction("Patch a Universe to This Port…");
+    QAction *del = menu.addAction("Delete Universe…");
+    QAction *plist = menu.addAction("Patch List for U1…");
+    menu.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&menu));
+    QVERIFY(!patch->isEnabled() && !del->isEnabled());
+    QCOMPARE(del->toolTip(), tip);
+    QVERIFY(plist->isEnabled());
+    menu.close();
+    // Reading stays: the view toggles.
+    QCheckBox *byUni = mgr.findChild<QCheckBox *>("connectionsByUniverse");
+    QVERIFY(byUni != nullptr && byUni->isEnabled());
+
+    QSignalSpy spy(lock, &PatchLock::designRequested);
+    QTest::mouseClick(lock->designButton(), Qt::LeftButton);
+    QCOMPARE(spy.count(), 1);
+
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!lock->bar()->isVisibleTo(&mgr));
+    QVERIFY(mgr.m_addUniverseAction->isEnabled());
+    QVERIFY(mgr.m_uniNameEdit->isEnabled());
+    QVERIFY(mgr.m_uniPassthroughCheck->toolTip() != tip);
+}

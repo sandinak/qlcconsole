@@ -103,6 +103,11 @@ any of its targets are unpatched.
   only as far as needed.
   **Esc** lets go of the selection. The keys are the same in every list
   ([Edit keys](shortcuts.md#edit-keys-the-same-in-every-list)).
+- **Operate locks the patch.** In Operate the Fixtures and Connections tabs
+  wear a lock, show a bar ("Operate: the patch is locked. Design to change
+  it") with a **Design** button (it asks for the show's PIN when one is
+  set), and every editing control is greyed with that sentence as its
+  tooltip. Reading still works: search, the tree, Locate.
 - Adding is Design mode only, like Add Fixture.
 
 ### Patching: the Patch dialog
