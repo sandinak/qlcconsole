@@ -1081,7 +1081,7 @@ void SurfaceSim_Test::theApcMiniMk2SeedsItsDefaults()
     DeskRecord *desk = m_doc->deskRecord();
     QCOMPARE(desk->binding(DeskRecord::Go).channel, quint32(240));      // the top scene button
     QCOMPARE(desk->binding(DeskRecord::Back).channel, quint32(241));
-    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(247));    // STOP ALL CLIPS
+    QCOMPARE(desk->binding(DeskRecord::Stop).channel, quint32(250));    // Shift
     QCOMPARE(desk->binding(DeskRecord::GrandMaster).channel, quint32(56));
     runList(m_doc);
     QList<int> commands;
@@ -1092,6 +1092,18 @@ void SurfaceSim_Test::theApcMiniMk2SeedsItsDefaults()
     QVERIFY(mini.tap(QStringLiteral("#240")));
     settle();
     QCOMPARE(int(commands.count(int(ShowControl::Go))), 1);
+
+    // Left and Right page the faders (Design): both lit, a press steps and the page key's lamp says so.
+    const QList<PageSet> sets = PageSet::forProfile(QStringLiteral("Akai APC Mini mk2"));
+    QVERIFY(!sets.isEmpty());
+    QCOMPARE(sets.first().pages().size(), 2);
+    QCOMPARE(sets.first().nextKey(), quint32(235));
+    QCOMPARE(sets.first().previousKey(), quint32(234));
+    QVERIFY2(sets.first().check(SurfaceLayout::forProfile(QStringLiteral("Akai APC Mini mk2")),
+                                m_doc->inputOutputMap()->profile(QStringLiteral("Akai APC Mini mk2"))).isEmpty(),
+             "the page set holds to the layout");
+    QVERIFY(mini.lamp(235) > 0);
+    QVERIFY(mini.lamp(234) > 0);
 }
 
 void SurfaceSim_Test::anOlderCopyOfASurfaceProfileIsNotUsed()

@@ -367,7 +367,7 @@ a click opens its map.
   STOP and the **GM** fader; on the **APC64**, as on the APC40, **PLAY**
   GO, **RECORD** Back, **STOP ALL CLIPS** STOP, and touch strip 8 the Grand
   Master; on the **APC mini mk2** the top scene key **Clip Stop** is GO,
-  **Solo** Back, **Stop All Clips** STOP and **Slider 9** the Grand Master.
+  **Solo** Back, **Shift** STOP and **Slider 9** the Grand Master; **Left** and **Right** page the faders (Colour, Move), lit when there is a page that way.
   A role you have learned already (on any board)
   is never changed, a control the open show already uses keeps its job
   (that role is left for you to learn), and a board is set up once: a role
@@ -1042,8 +1042,8 @@ after any build that changes a surface, and say which build.
    the file is untouched.
 3. Patch the **APC mini mk2** (its *Control* port) with no profile. *Expect:*
    **Akai APC Mini mk2**, a map of 64 pads, the scene keys, the faders and a
-   chip; **Clip Stop** is GO, **Solo** Back, **Stop All Clips** STOP,
-   **Slider 9** the Grand Master (when no other board holds them).
+   chip; **Clip Stop** is GO, **Solo** Back, **Shift** STOP,
+   **Slider 9** the Grand Master; **Left** and **Right** are lit (pages) (when no other board holds them).
 4. Patch the **APC64**'s *DAW* port with no profile, in Session mode.
    *Expect:* **Akai APC64**; its display says *qlc console*; **PLAY** is GO,
    **RECORD** Back, **STOP ALL CLIPS** STOP, touch strip 8 the Grand Master.

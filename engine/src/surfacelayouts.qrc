@@ -12,6 +12,7 @@
 <qresource prefix="/surfacepagesets">
     <file alias="Akai-APC40-mkII.Build.pageset.json">../../resources/inputprofiles/pagesets/Akai-APC40-mkII.Build.pageset.json</file>
     <file alias="Akai-APC64.Build.pageset.json">../../resources/inputprofiles/pagesets/Akai-APC64.Build.pageset.json</file>
+    <file alias="Akai-APCMini-mk2.Build.pageset.json">../../resources/inputprofiles/pagesets/Akai-APCMini-mk2.Build.pageset.json</file>
     <file alias="MaizeDMX-Playback-Controller.Colour.pageset.json">../../resources/inputprofiles/pagesets/MaizeDMX-Playback-Controller.Colour.pageset.json</file>
     <file alias="PMJ-Black-1.Pages.pageset.json">../../resources/inputprofiles/pagesets/PMJ-Black-1.Pages.pageset.json</file>
 </qresource>
