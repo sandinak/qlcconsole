@@ -63,6 +63,13 @@ namespace BeamOptics
     QString slotPicture(const Fixture *fx, quint32 channel, const QLCCapability *cap,
                         const MonitorProperties *props);
 
+    /** @p optics through a frost filter (0 clear ... 1 full): the edge goes
+     *  soft, and a gobo's picture is blurred so its mask loses contrast. */
+    Optics frosted(const Optics &optics, double frost);
+
+    /** Spread of a mask's brightness (max - min), 0..1: a blurred gobo has less. */
+    double maskContrast(const QImage &mask);
+
     /** A generated mask for a gobo slot whose definition has no picture,
      *  drawn from what its name says ("3 Spots", "Split Circle", "Concentric",
      *  "Swirl", "Zebra", "Tetris", "Random Spots") or else a breakup seeded by

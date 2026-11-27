@@ -31,6 +31,16 @@ class StudioWins_Test final : public QObject
 private slots:
     void savedViewsRoundTripWithTheShow();
     void theViewsMenuAddsAppliesRenamesAndDeletes();
+
+    void frostSoftensTheEdgeAndFadesTheGoboMask();
+    void ctoWarmsAndCtbCoolsTheBeam();
+    void frostAndCtoAreReadFromTheChannels();
+    void aClosedShutterDrawsNoBeamInTheRigOverview();
+    void aStrobeBlinksInTheRigOverview();
+
+    void numberingFollowsThePlotOrderAndOneUndoRestores();
+    void numberingCanPatchInThatOrderIntoFreeAddresses();
+    void theNumberItemIsOnTheSelectionMenuOfThePlot();
 };
 
 #endif

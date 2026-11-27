@@ -9987,6 +9987,7 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
         ContextMenus::RigPlace rig;
         rig.parent = this;
         rig.editable = design;
+        rig.offerNumber = true;
         rig.properties = [this](const QList<quint32> &ids) {
             if (ids.size() == 1)
                 emit fixtureDoubleClicked(ids.first());

@@ -175,6 +175,7 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "plotnumbering.h"
 #include "showlevel.h"
 #include "masklenswidget.h"
 #include "planmapwidget.h"
@@ -2037,6 +2038,28 @@ void Monitor::undo()
 bool Monitor::canUndo() const
 {
     return m_graphicsView != nullptr && m_graphicsView->canUndo();
+}
+
+bool Monitor::numberInPlotOrder(const QList<quint32> &fids, QWidget *parent)
+{
+    if (fids.size() < 2)
+        return false;
+    NumberInPlotOrderDialog dlg(m_doc, fids, parent != nullptr ? parent : this);
+    if (dlg.exec() != QDialog::Accepted)
+        return false;
+    const QByteArray before = rigSnapshot();
+    QString why;
+    if (!PlotNumbering::apply(m_doc, dlg.rows(), &why))
+    {
+        QMessageBox::warning(parent != nullptr ? parent : this, tr("Number in Plot Order"),
+                             why.isEmpty() ? tr("The patch would not fit.") : why);
+        return false;
+    }
+    pushRigUndo(before);
+    if (m_graphicsView != nullptr)
+        for (quint32 fid : fids)
+            m_graphicsView->updateFixture(fid);
+    return true;
 }
 
 void Monitor::redo()

@@ -428,6 +428,80 @@ int BeamOptics::prismFacets(const QLCCapability *cap)
     return 0;
 }
 
+double BeamOptics::maskContrast(const QImage &mask)
+{
+    if (mask.isNull())
+        return 0.0;
+    int lo = 255, hi = 0;
+    for (int y = 0; y < mask.height(); ++y)
+    {
+        const uchar *row = mask.constScanLine(y);
+        for (int x = 0; x < mask.width(); ++x)
+        {
+            lo = qMin(lo, int(row[x]));
+            hi = qMax(hi, int(row[x]));
+        }
+    }
+    return (hi - lo) / 255.0;
+}
+
+BeamOptics::Optics BeamOptics::frosted(const Optics &in, double frost)
+{
+    Optics out = in;
+    frost = qBound(0.0, frost, 1.0);
+    if (frost <= 0.0)
+        return out;
+    // The edge: a frosted spot is a soft one.
+    out.softness = qMax(in.softness, frost);
+    if (!in.mask.isNull() && in.mask.format() == QImage::Format_Grayscale8)
+    {
+        // A box blur, wider with the frost (up to 8 of 64 pixels each way), twice.
+        const int r = qMax(1, qRound(frost * 8.0));
+        QImage img = in.mask;
+        const int w = img.width(), h = img.height();
+        for (int pass = 0; pass < 2; ++pass)
+        {
+            QImage tmp = img.copy();
+            for (int y = 0; y < h; ++y)
+            {
+                const uchar *src = img.constScanLine(y);
+                uchar *dst = tmp.scanLine(y);
+                for (int x = 0; x < w; ++x)
+                {
+                    int sum = 0, n = 0;
+                    for (int k = -r; k <= r; ++k)
+                    {
+                        const int xx = x + k;
+                        if (xx >= 0 && xx < w) { sum += src[xx]; ++n; }
+                    }
+                    dst[x] = uchar(sum / qMax(1, n));
+                }
+            }
+            QImage out2 = tmp.copy();
+            for (int y = 0; y < h; ++y)
+            {
+                uchar *dst = out2.scanLine(y);
+                for (int x = 0; x < w; ++x)
+                {
+                    int sum = 0, n = 0;
+                    for (int k = -r; k <= r; ++k)
+                    {
+                        const int yy = y + k;
+                        if (yy >= 0 && yy < h) { sum += tmp.constScanLine(yy)[x]; ++n; }
+                    }
+                    dst[x] = uchar(sum / qMax(1, n));
+                }
+            }
+            img = out2;
+        }
+        out.mask = img;
+        // Edge softness of a pictured beam is the picture's own: stays 0 there,
+        // the blur carries it. (The cone's edge still goes soft below.)
+        out.softness = qMax(in.softness, frost * 0.6);
+    }
+    return out;
+}
+
 double BeamOptics::indexedAngle(const QLCCapability *cap, int value)
 {
     if (cap == nullptr || cap->preset() != QLCCapability::RotationIndexed)

@@ -1227,6 +1227,113 @@ bool fixtureLiveState(Fixture *fx, const QByteArray &v, QColor &colour, uchar &d
     return channelSetLiveState(mode, v, all, colour, dimmer, valuesAreComplete);
 }
 
+/* Channel names that mean frost and colour temperature. Fixture definitions
+   carry no preset for them, so the name is what there is. */
+static bool nameHas(const QString &name, const char *const *words)
+{
+    for (; *words != nullptr; ++words)
+        if (name.contains(QLatin1String(*words), Qt::CaseInsensitive))
+            return true;
+    return false;
+}
+
+BeamExtras beamExtras(const Fixture *fx, const QByteArray &v, bool complete)
+{
+    BeamExtras out;
+    QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;
+    if (mode == nullptr || v.isEmpty())
+        return out;
+    static const char *const frostWords[] = { "frost", "diffus", nullptr };
+    static const char *const ctoWords[] = { "cto", "color temp orange", "colour temp orange", nullptr };
+    static const char *const ctbWords[] = { "ctb", "color temp blue", "colour temp blue", nullptr };
+    static const char *const cctWords[] = { "cct", "color temp", "colour temp", "colortemp", nullptr };
+    const int count = qMin(int(fx->channels()), int(v.size()));
+    for (int c = 0; c < count; ++c)
+    {
+        const QLCChannel *ch = mode->channel(quint32(c));
+        if (ch == nullptr)
+            continue;
+        const int val = uchar(v.at(c));
+        const QString name = ch->name();
+        if (ch->group() == QLCChannel::Shutter)
+        {
+            if (const QLCCapability *cap = ch->searchCapability(uchar(val)))
+            {
+                if (complete && cap->preset() == QLCCapability::ShutterClose)
+                    out.shutterClosed = true;
+                const QLCCapability::Preset pr = cap->preset();
+                const bool strobe = pr == QLCCapability::StrobeSlowToFast
+                                    || pr == QLCCapability::StrobeFastToSlow
+                                    || pr == QLCCapability::StrobeRandom
+                                    || pr == QLCCapability::StrobeRandomSlowToFast
+                                    || pr == QLCCapability::StrobeRandomFastToSlow
+                                    || pr == QLCCapability::StrobeFrequency
+                                    || pr == QLCCapability::StrobeFreqRange
+                                    || cap->name().contains(QLatin1String("strobe"), Qt::CaseInsensitive);
+                if (strobe)
+                {
+                    const double span = qMax(1, int(cap->max()) - int(cap->min()));
+                    double at = (val - int(cap->min())) / span;     // 0 slow ... 1 fast
+                    if (pr == QLCCapability::StrobeFastToSlow || pr == QLCCapability::StrobeRandomFastToSlow)
+                        at = 1.0 - at;
+                    out.strobeHz = qMax(out.strobeHz, 1.0 + 5.0 * qBound(0.0, at, 1.0));
+                }
+            }
+            continue;
+        }
+        if (ch->group() == QLCChannel::Beam || ch->group() == QLCChannel::Effect
+            || ch->group() == QLCChannel::Nothing)
+        {
+            if (nameHas(name, frostWords))
+                out.frost = qMax(out.frost, val / 255.0);
+            continue;
+        }
+        if (ch->group() == QLCChannel::Colour || ch->group() == QLCChannel::Beam)
+        {
+            if (ch->colour() != QLCChannel::NoColour)
+                continue;
+            if (nameHas(name, ctbWords))
+                out.warmth = qMin(out.warmth, -val / 255.0);
+            else if (nameHas(name, ctoWords))
+                out.warmth = qMax(out.warmth, val / 255.0);
+            else if (nameHas(name, cctWords))
+            {
+                // 0 = 2700 K (warm) ... 255 = 6500 K (cool); 5600 K is daylight, no tint.
+                const double kelvin = 2700.0 + 3800.0 * val / 255.0;
+                out.warmth = qBound(-1.0, (5600.0 - kelvin) / 2900.0, 1.0);
+            }
+        }
+    }
+    return out;
+}
+
+bool strobeLit(double hz, double seconds)
+{
+    if (hz <= 0.0)
+        return true;
+    const double phase = seconds * hz;
+    return (phase - qFloor(phase)) < 0.5;
+}
+
+QColor tintByWarmth(const QColor &colour, double warmth)
+{
+    if (!colour.isValid() || qFuzzyIsNull(warmth))
+        return colour;
+    const double k = qBound(0.0, qAbs(warmth), 1.0);
+    // A correction filter multiplies: 3200 K tungsten orange, daylight blue.
+    const QColor filter = warmth > 0 ? QColor(255, 176, 96) : QColor(150, 190, 255);
+    auto mix = [k](int f) { return 255.0 + (f - 255.0) * k; };
+    return QColor(qBound(0, qRound(colour.red() * mix(filter.red()) / 255.0), 255),
+                  qBound(0, qRound(colour.green() * mix(filter.green()) / 255.0), 255),
+                  qBound(0, qRound(colour.blue() * mix(filter.blue()) / 255.0), 255),
+                  colour.alpha());
+}
+
+double frostWiden(double frost)
+{
+    return 1.0 + 0.3 * qBound(0.0, frost, 1.0);
+}
+
 int fixtureColourSlots(Fixture *fx, const QByteArray &v, QColor out[3])
 {
     QLCFixtureMode *mode = fx != nullptr ? fx->fixtureMode() : nullptr;

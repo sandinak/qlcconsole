@@ -182,6 +182,8 @@ namespace ContextMenus
          *  Fixture Group from Selection… inside it) */
         bool offerSelectionMenu = true;
         bool offerPatch = true;
+        /** Number… (Unit # / Channel in plot order): only where the plot is */
+        bool offerNumber = false;
         bool offerCreateGroup = true;
         bool offerMoveToFolder = true;
         bool offerRename = true;

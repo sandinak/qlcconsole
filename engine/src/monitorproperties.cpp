@@ -110,6 +110,9 @@
 
 #define KXMLQLCMonitorFixtureLayerId        QStringLiteral("LayerId")
 #define KXMLQLCMonitorFixtureGroupId        QStringLiteral("GroupId")
+#define KXMLQLCMonitorFixtureUnit           QStringLiteral("Unit")
+#define KXMLQLCMonitorFixtureChannel        QStringLiteral("Chan")
+#define KXMLQLCMonitorFixturePurpose        QStringLiteral("Purpose")
 #define KXMLQLCMonitorFixtureVertStrip      QStringLiteral("VertStrip")
 #define KXMLQLCMonitorFixtureHiddenFlag     QStringLiteral("Hidden")
 #define KXMLQLCMonitorFixtureInvPanFlag     QStringLiteral("InvertedPan")
@@ -284,8 +287,10 @@ bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainD
     const QList<quint32> before = m_rigProps.keys();
     const bool autoLooksWere = autoStageLooks();
     const quint32 liveWas = liveBlocking();     // what the stage plays is not the rig's undo
+    const auto viewsWere = m_cameraViews;       // named cameras are not the rig's undo either
     reset();
     const bool ok = loadXML(r, mainDocument);
+    m_cameraViews = viewsWere;
     if (liveWas == defaultBlocking() || m_blockingSets.contains(liveWas))
         m_liveBlocking.store(liveWas, std::memory_order_release);
     /* reset() clears it quietly and loadXML() only says so when it sets it
@@ -1498,6 +1503,39 @@ QColor MonitorProperties::fixtureGelColor(quint32 fid, quint16 head, quint16 lin
         quint32 subID = fixtureSubID(head, linked);
         return m_fixtureItems[fid].m_subItems[subID].m_color;
     }
+}
+
+void MonitorProperties::setFixtureUnit(quint32 fid, int unit)
+{
+    m_fixtureItems[fid].m_baseItem.m_unit = qMax(0, unit);
+}
+
+int MonitorProperties::fixtureUnit(quint32 fid) const
+{
+    const auto it = m_fixtureItems.constFind(fid);
+    return it == m_fixtureItems.constEnd() ? 0 : it->m_baseItem.m_unit;
+}
+
+void MonitorProperties::setFixtureChannel(quint32 fid, int channel)
+{
+    m_fixtureItems[fid].m_baseItem.m_channel = qMax(0, channel);
+}
+
+int MonitorProperties::fixtureChannel(quint32 fid) const
+{
+    const auto it = m_fixtureItems.constFind(fid);
+    return it == m_fixtureItems.constEnd() ? 0 : it->m_baseItem.m_channel;
+}
+
+void MonitorProperties::setFixturePurpose(quint32 fid, const QString &purpose)
+{
+    m_fixtureItems[fid].m_baseItem.m_purpose = purpose;
+}
+
+QString MonitorProperties::fixturePurpose(quint32 fid) const
+{
+    const auto it = m_fixtureItems.constFind(fid);
+    return it == m_fixtureItems.constEnd() ? QString() : it->m_baseItem.m_purpose;
 }
 
 void MonitorProperties::setFixtureFixedZoom(quint32 fid, quint16 head, quint16 linked, int degrees)
@@ -3959,6 +3997,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (headIndex == 0 && linkedIndex == 0
                     && tAttrs.hasAttribute(KXMLQLCMonitorFixtureGroupId))
                 item.m_groupId = tAttrs.value(KXMLQLCMonitorFixtureGroupId).toString().toUInt();
+            if (headIndex == 0 && linkedIndex == 0)
+            {
+                item.m_unit = tAttrs.value(KXMLQLCMonitorFixtureUnit).toString().toInt();
+                item.m_channel = tAttrs.value(KXMLQLCMonitorFixtureChannel).toString().toInt();
+                item.m_purpose = tAttrs.value(KXMLQLCMonitorFixturePurpose).toString();
+            }
 
             setFixtureItem(fid, headIndex, linkedIndex, item);
             root.skipCurrentElement();
@@ -4980,6 +5024,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
                 doc->writeAttribute(KXMLQLCMonitorFixtureLayerId, QString::number(item.m_layerId));
             if (headIndex == 0 && linkedIndex == 0 && item.m_groupId != 0)
                 doc->writeAttribute(KXMLQLCMonitorFixtureGroupId, QString::number(item.m_groupId));
+            if (headIndex == 0 && linkedIndex == 0 && item.m_unit != 0)
+                doc->writeAttribute(KXMLQLCMonitorFixtureUnit, QString::number(item.m_unit));
+            if (headIndex == 0 && linkedIndex == 0 && item.m_channel != 0)
+                doc->writeAttribute(KXMLQLCMonitorFixtureChannel, QString::number(item.m_channel));
+            if (headIndex == 0 && linkedIndex == 0 && !item.m_purpose.isEmpty())
+                doc->writeAttribute(KXMLQLCMonitorFixturePurpose, item.m_purpose);
 
             doc->writeEndElement();
         }

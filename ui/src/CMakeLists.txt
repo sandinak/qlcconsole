@@ -120,6 +120,7 @@ add_library(${module_name}
     monitor/venuemenu.cpp monitor/venuemenu.h
     monitor/venuerigdialog.cpp monitor/venuerigdialog.h
     monitor/rolefilldialog.cpp monitor/rolefilldialog.h
+    monitor/plotnumbering.cpp monitor/plotnumbering.h
     monitor/venuefromshowdialog.cpp monitor/venuefromshowdialog.h
     monitor/roomoutputpicker.cpp monitor/roomoutputpicker.h
     monitor/monitorbackgroundselection.cpp monitor/monitorbackgroundselection.h monitor/monitorbackgroundselection.ui

@@ -39,6 +39,7 @@
 #include <QtMath>
 #include "headlayout.h"
 #include "monitorfixtureitem.h"
+#include "fixturevisualtraits.h"
 #include "uprighttext.h"
 #include "lengthinputdialog.h"
 #include "measurementunits.h"
@@ -85,7 +86,7 @@ static QCursor smallOpenHandCursor()
 #include "programmercontroller.h"
 
 #define MOVEMENT_THICKNESS    3
-#define STROBE_PERIOD 500 // 0.5s
+#define STROBE_PERIOD kStrobeHalfPeriodMs // 0.5s, shared with the Rig Overview (fixturevisualtraits.h)
 
 // A fixture with more heads than this is drawn as tiled rectangles (pixel
 // array, e.g. RGB tape) rather than round heads, for tight density.
@@ -1911,6 +1912,7 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         ContextMenu cm(&menu);
         ContextMenus::RigPlace rig;
         rig.editable = m_editable;
+        rig.offerNumber = true;
         const quint32 fid = m_fid;
         rig.changed = [this, fid]() { emit mountingChanged(fid); };
         ContextMenus::rig(cm, m_doc, QList<quint32>(), ids, rig);

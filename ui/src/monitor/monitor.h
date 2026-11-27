@@ -253,6 +253,11 @@ public:
      *  duplicate, a new group, a rename on the Fixtures tab. */
     void pushUndoCallback(const std::function<void()> &undo, const std::function<void()> &redo);
 
+    /** Number-in-plot-order dialog for @p fids (the plot's right-click ▸
+     *  Number…): Unit # and / or Channel from N in plot order, optionally
+     *  patching in that order; one undo step. Returns whether it changed. */
+    bool numberInPlotOrder(const QList<quint32> &fids, QWidget *parent = nullptr);
+
     /** "Centre the pan on the stage" (PanTurn::centre) for @p fids: one
      *  undo step, and the notice line says what changed. Fixture
      *  Properties' button for a selection, the plot's menu, Show Review's
