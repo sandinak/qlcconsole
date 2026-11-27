@@ -63,6 +63,12 @@ void GoLog::add(const QString &text)
     emit added(line);
 }
 
+void GoLog::note(const QString &text)
+{
+    if (active() && !text.isEmpty())
+        add(text);
+}
+
 void GoLog::hit(quint32 hitId)
 {
     if (!active() || m_doc->showTree() == nullptr)

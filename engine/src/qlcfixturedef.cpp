@@ -388,6 +388,7 @@ QList <QLCFixtureMode*> QLCFixtureDef::modes()
 void QLCFixtureDef::setPhysical(const QLCPhysical& physical)
 {
     m_physical = physical;
+    Fixture::invalidateGuesses();       // Behaves as reads it
 }
 
 QLCPhysical QLCFixtureDef::physical() const

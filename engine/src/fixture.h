@@ -22,6 +22,7 @@
 #define FIXTURE_H
 
 #include <QObject>
+#include <functional>
 #include <atomic>
 #include <QMutex>
 #include <QAtomicInt>
@@ -69,6 +70,7 @@ class Doc;
 #define KXMLFixtureForcedLTP        QStringLiteral("ForcedLTP")
 #define KXMLFixtureStageLook        QStringLiteral("StageLook")
 #define KXMLFixtureOutputRules      QStringLiteral("OutputRules")
+#define KXMLFixtureBehavesAs        QStringLiteral("BehavesAs")
 #define KXMLFixtureOwner            QStringLiteral("Owner")
 
 #define KXMLFixtureChannelModifier  QStringLiteral("Modifier")
@@ -694,6 +696,96 @@ protected:
     /** hasDimmer(), cached by setFixtureDefinition(). */
     std::atomic<bool> m_hasDimmer { false };
     bool computeHasDimmer() const;
+
+    /*********************************************************************
+     * Behaves as (board Q350, Q351)
+     *********************************************************************/
+public:
+    /** What the fixture is on stage, for when it may move and what a stop
+     *  does to it (FixtureRest::behaviour()):
+     *  - Light: a light. Every preview, edit and stop drives it.
+     *  - Machinery: moves scenery (a curtain, a drape, a turntable, a flown
+     *    piece). Only a run (GO, Back, a jump) moves it; held where it is
+     *    while editing; a stop freezes it where it is until the next GO.
+     *  - OneShot: does something once that cannot be undone (a kabuki drop,
+     *    a dropping scrim). As Machinery, and never fired again by a Back.
+     *  - Switch: a relay, house or work lights. As Machinery: holds its
+     *    state while editing and through a stop.
+     *  - Hazard: never fired by an edit or a preview; a stop sends it to
+     *    off at once and disarms it. A run fires it only when the spotter
+     *    lets it (OutputRuleKeeper's hazard arming, board Q352/Q353), by
+     *    its kind:
+     *    - HazardBurst (flame, CO2 jets, confetti, cannons, sparkulars,
+     *      pyro): the spotter's deadman -- out only while their Hold
+     *      control is held down.
+     *    - HazardRunning (fog, haze, a 3R/3B/4 laser): armed with a press
+     *      of the spotter's Arm control, it stays armed until their Kill. */
+    enum Behaviour
+    {
+        LightBehaviour = 0,
+        MachineryBehaviour,
+        OneShotBehaviour,
+        SwitchBehaviour,
+        HazardBurstBehaviour,
+        HazardRunningBehaviour
+    };
+    Q_ENUM(Behaviour)
+
+    /** The LD's word for it, or -1: guessed from the definition and the
+     *  plot symbol (FixtureRest::guessBehaviour()) -- what an old show
+     *  loads as. Read on any thread. */
+    int behaviourSetting() const { return m_behaviour.load(std::memory_order_relaxed); }
+    /** Set it (-1: guess again); emits changed() when it differs */
+    void setBehaviourSetting(int behaviour);
+    bool behaviourOverridden() const { return behaviourSetting() >= 0; }
+
+    /** Every behaviour, in the order a picker lists them */
+    static QList<Behaviour> behaviours();
+    /** The XML key ("Light", "Machinery", "OneShot", "Switch",
+     *  "HazardBurst", "HazardRunning") */
+    static QString behaviourToString(Behaviour behaviour);
+    /** The behaviour for @p key; -1 for anything else (a newer file). The
+     *  one-kind "Hazard" of 0.5.3's first builds is kHazardOfGuessedKind:
+     *  loadXML() makes it the kind its definition suggests
+     *  (FixtureRest::guessHazardKind()). */
+    static int stringToBehaviour(const QString &key);
+    static constexpr int kHazardOfGuessedKind = -2;
+    /** Either kind of Hazard */
+    static bool isHazardBehaviour(int behaviour)
+    { return behaviour == HazardBurstBehaviour || behaviour == HazardRunningBehaviour; }
+    /** Its name for people ("One-shot"), translated */
+    static QString behaviourName(Behaviour behaviour);
+
+    /** FixtureRest::guessBehaviour()'s answer kept (-1: none kept): a
+     *  guess reads names, definitions and the plot, too much for every
+     *  fixtureChanged of a bulk edit. Dropped on a name, definition or
+     *  output rules change here, and for every fixture by
+     *  invalidateGuesses() (the plot: a scenery, a symbol, a laser class). */
+    int cachedGuess() const
+    {
+        return m_guessEpoch.load(std::memory_order_acquire) == s_guessEpoch.load(std::memory_order_relaxed)
+                   ? m_guess.load(std::memory_order_relaxed) : -1;
+    }
+    void setCachedGuess(int guess) const
+    {
+        m_guess.store(guess, std::memory_order_relaxed);
+        m_guessEpoch.store(s_guessEpoch.load(std::memory_order_relaxed), std::memory_order_release);
+    }
+    /** @p context: what changed -- a show's MonitorProperties (its plot,
+     *  its rig props), or nullptr (a definition, every show's) */
+    static void invalidateGuesses(const void *context = nullptr);
+    /** Told on every invalidateGuesses() (on its thread), with its
+     *  context: the hazards are laid again (OutputRuleKeeper, for its own
+     *  show only). @p owner removes it. */
+    static void addGuessListener(const void *owner, const std::function<void(const void *)> &listener);
+    static void removeGuessListener(const void *owner);
+
+protected:
+    void invalidateGuess() { m_guessEpoch.store(0, std::memory_order_relaxed); }
+    std::atomic<int> m_behaviour { -1 };
+    mutable std::atomic<int> m_guess { -1 };
+    mutable std::atomic<quint32> m_guessEpoch { 0 };
+    static std::atomic<quint32> s_guessEpoch;
 
     /*********************************************************************
      * Owner (board Q137, docs/design/VENUES.md)

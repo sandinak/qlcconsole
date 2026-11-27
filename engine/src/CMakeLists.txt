@@ -65,6 +65,7 @@ add_library(${module_name} SHARED
     inputoutputmap.cpp inputoutputmap.h
     inputslots.cpp
     patchundo.cpp patchundo.h
+    hazardfastpath.h
     inputpatch.cpp inputpatch.h
     iodeferral.cpp iodeferral.h
     ioplugincache.cpp ioplugincache.h

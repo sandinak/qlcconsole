@@ -46,6 +46,7 @@
 #include "cuestackmodel.h"
 #include "groupsconsole.h"
 #include "simpledesk.h"
+#include "outputrulekeeper.h"
 #include "cuestack.h"
 #include "apputil.h"
 #include "showstatus.h"
@@ -1031,6 +1032,9 @@ void SimpleDesk::slotUniverseSliderValueChanged(quint32 fid, quint32 chan, uchar
             }
         }
         m_engine->setValue(chanAbsAddr, value);
+        // A hazard stays off whatever the desk says (Q352/Q353): said.
+        if (value > 0 && m_doc->outputRuleKeeper() != nullptr)
+            m_doc->outputRuleKeeper()->noteHandOnHazard(m_doc->fixtureForAddress(chanAbsAddr));
 
         // Capture this manual adjustment (if Live Edit capture is armed) so it
         // can be reviewed/applied/undone back into the Scene(s) driving this

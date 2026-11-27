@@ -1351,6 +1351,9 @@ private:
      *  in Operate or with none. A click opens their Output Rules. */
     QLabel *m_statusShowOnlyLabel = nullptr;
     void updateShowOnlyFooter();
+    /** Hazards (Q352/Q353): DISARMED / ARMED / HELD, and what a cue skipped */
+    QLabel *m_statusHazardLabel = nullptr;
+    void updateHazardFooter();
     /** The venue chip (board Q150): "Venue: Lincoln HS" or "Set Venue…",
      *  amber with a count when the venue clashes; a click opens the venue
      *  menu. Always there in the qlcconsole and Everything views; in Classic

@@ -810,6 +810,13 @@ public:
      */
     void stop(FunctionParent parent, bool preserveAttributes = false);
 
+protected:
+    /** stop() asked it to stop (the last source gone), on the asking
+     *  thread, before MasterTimer carries it out. */
+    virtual void stopRequested() {}
+
+public:
+
     /**
      * Check, whether the function should be stopped ASAP. Functions can use this
      * to check, whether they should continue running or bail out.

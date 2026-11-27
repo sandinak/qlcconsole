@@ -2518,6 +2518,20 @@ void VCSlider::slotSliderMoved(int value)
 
     setSliderValue(value, false);
 
+    /* A hazard on a Level slider stays off (board Q352/Q353): said, once
+       in a while, never dark without a word. */
+    if (m_sliderMode == Level && value > 0)
+        if (OutputRuleKeeper *k = m_doc->outputRuleKeeper())
+        {
+            QSet<quint32> seen;
+            for (const LevelChannel &lc : std::as_const(m_levelChannels))
+                if (!seen.contains(lc.fixture))
+                {
+                    seen.insert(lc.fixture);
+                    k->noteHandOnHazard(lc.fixture);
+                }
+        }
+
     updateFeedback();
 }
 

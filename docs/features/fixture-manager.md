@@ -1012,6 +1012,237 @@ output, can still reach a laser that way, and nothing checks that chain.
 Don't route a Show-only universe's channels through a passthrough or
 Loopback chain to a USB interface.
 
+## Behaves as
+
+Every fixture says what it is on stage, which decides **when it may move**
+and **what a stop does to it**. The **Behaves as** column in the Fixtures
+list shows it for everything that is not a plain light (it appears once
+the rig has one), and a letter on its icon: **M**, **1**, **S** or **H**
+(a light has none). A guess is in grey italics; one you set is in plain
+type.
+
+| Behaves as | For | Moves when | A stop (Stop all, Fade and stop, the emergency stop) |
+|---|---|---|---|
+| **Light** | every light | anything plays it: a GO, a cue you pick, a preview, Locate | puts it at rest |
+| **Machinery** | a curtain, a drape, a turntable, a winch, a flown piece | only a run: **GO**, **Back** or a jump, in Design or Operate | freezes it where it is until the next GO |
+| **One-shot** | a kabuki drop, a dropping scrim | as Machinery; **Back never fires it again** — dropped stays dropped | holds its state |
+| **Switch** | a relay, house or work lights on when not in use | as Machinery | holds its state |
+| **Hazard — Burst** | flame, CO₂ jets, confetti, cannons, sparkulars, pyro | only a run, and only **while the spotter holds Hazard hold** | off at once, disarmed |
+| **Hazard — Running** | fog, haze, a Class 3R, 3B or 4 laser | only a run, once **the spotter has armed it**, until their **Hazard kill** | off at once, disarmed |
+
+A hazard is never fired by an edit, a preview, Locate, a Virtual Console
+slider or the Simple Desk: they say why in the status bar. See
+[Hazards and arming](#hazards-and-arming).
+
+**Picking a cue in Design holds them.** Click from cue to cue in the Show
+Tree while you build and Machinery, One-shots and Switches stay where they
+are on stage; the plot draws each one where the cue you picked puts it,
+with an amber dashed outline and a **held** badge (a curtain gets its
+**held while editing** mark). A GO from the Run moves them for real,
+over the cue's fade. **Blind** changes only what is drawn.
+
+**The guess.** Absent from the show file, it is worked out from the
+definition (its maker and model too), the fixture's name and the plot
+symbol, so a show from before this loads and plays as it did — apart
+from hazards, which stay off until the spotter lets them fire. Names
+are read as whole words: *Flame Red* (a gel), *Flameless candle*,
+*Smokey Pink* and *Vegas Sign* are lights. A curtain (the Stage
+Curtain definition, the **Curtain** plot symbol, or the fixture driving
+a drape on the plot), a turntable, winch or hoist is Machinery; a kabuki
+or a dropping scrim One-shot — but never a fixture that is a light by
+its definition or its name (*Backdrop curtain wash*). A hazer or smoke
+machine, a MagicFX effect, anything named for fog, haze, flame, CO₂,
+confetti, cannons or sparks, and a laser of class 3R, 3B, 4 or Unknown
+is a Hazard: **Burst** for flame, CO₂, confetti, sparks and pyro,
+**Running** for fog, haze, smoke and lasers. A fixture with the **Switch
+(relay)** or **On when not in use** output rule, or named a relay, is a
+Switch; everything else a Light. Renaming a fixture can change its guess;
+Show Review lists every guessed Hazard and Switch (**FIX-23**), and lists
+one again when it changes.
+
+**Setting it.** Open **Fixture Properties** (double-click the fixture)
+and pick **Behaves as** — **Auto (…)** names the guess and goes back to
+it. With several fixtures picked, it sets them all. Show Review lists
+every fixture set to something other than its guess (**FIX-20**), so the
+next person to run the show knows.
+
+**Lasers.** A laser's class comes from its label: **Laser class** in
+Fixture Properties for the unit, or the definition's **Physical** tab in
+the fixture editor. Class 1, 1M, 2 and 2M behave as a light; 3R, 3B, 4
+and **Unknown** as a hazard (Running). A laser with no class given
+behaves as a light, as it always has — and **none of the bundled laser
+definitions gives a class**, so set the unit's **Laser class** in
+Fixture Properties for every 3R or stronger laser you hang. Setting a 3R or stronger laser to **Light**
+asks you to type its class (`3B`) to confirm, and Show Review lists it
+as a warning (**FIX-21**): accept it with the note naming who approved
+it.
+
+### Park
+
+**Park Here** holds a fixture exactly where it is now, over every cue, a
+cue you pick, the emergency stop and the GO after it, until you
+**Unpark** it. Right-click it — on the plot, in the Fixtures list, in
+Build or the Show Tree — and open **Selection ▸** for **Park Here** or
+**Unpark** (it parks everything picked). A parked fixture
+has a **P** beside it on the plot and on its icon, the Fixtures list says
+**· Parked**, and the **Run** tab lists every parked fixture under
+**Parked** (double-click one, or pick and **Unpark**; none picked unparks
+all). Parks are saved with the show. A hazard parks **off**, whatever it
+is doing — and stays off parked, whatever an older show saved for it.
+
+**Check it.** In a show with a relay, a curtain or a hazer:
+
+1. In Design, click a cue that switches the relay on. It stays off; the
+   plot draws it on, with the held badge.
+2. GO that cue from the Run. It switches on.
+3. Right-click the relay → **Selection ▸ Park Here**. GO the next cue that turns it
+   off: it stays on. The Run tab lists it under **Parked**.
+4. **Unpark** it there. The next GO drives it again.
+5. GO a cue that sends the hazer, with nothing armed. It stays off; the
+   footer says **Hazer skipped — not armed**.
+
+## Hazards and arming
+
+A hazard fires only when **the spotter** — or the laser safety officer —
+lets it, on controls of their own, never the operator's GO. And then
+**only at the level its cue sets**: nothing else ever reaches a hazard's
+channels — not the Simple Desk, Edit Live, a Virtual Console slider, the
+web page, input passthrough, an override hit, Focus or Highlight, the
+programmer, a fixture sharing its address, or a function left running.
+A cue that sets it to 0 puts it at 0. An effect on a hazard — an EFX,
+an RGB matrix, an effect look, a chase inside the cue — never drives it
+(Show Review notes it on the cue, **FIX-24**). Only a **run** fires one,
+**step by step**: a step of the show's own lists that a **Run GO** brought
+— GO, Back, a jump or Sub GO — or that the list went on to by itself after
+one (an auto-follow). Every GO that goes through the show's GO is a Run
+GO: the Run tab and the keys, the web page's **Run** GO, a pad, OSC or
+MIDI GO through the controller map, a timecode or audio-bar GO, and a
+Virtual Console cue list on a Show Tree list. A cue's **sub-cues** fire
+only when that Run GO (its Sub GO, a jump, or the cue's GO for its first
+sub-cue) brought them. Any other step never fires one, even on a list a GO
+started: a Virtual Console button, the programmer's step, the chaser
+editor's **Test**, a web widget, a start alone (the web's function
+switch, the **startup function**, sub-cues started on their own), and
+every step after a stop or a switch between Design and Operate until the
+next GO — the footer says **CO2 jet held — fire it from Run**. A GO during
+**Fade and stop** starts the list again and fires what it plays. Two kinds,
+picked in **Behaves as**:
+
+- **Hazard — Burst** (flame, CO₂ jets, confetti, cannons, sparkulars,
+  pyro): the spotter's **deadman**. When a cue is reached by a run it
+  fires only if **Hazard hold is held down at that moment**, and only while it stays
+  held: let go, it is off that same frame. **Pressing it again within the
+  same cue fires again**: that is how a flame operator gives repeated
+  bursts. A Burst goes out at its cue's level at once (no fade). The Hold
+  counts for **15 seconds** at most: held longer (a stuck button, a weight
+  on it) it counts as let go — the footer says **Hold timed out — release
+  and press again**, and the next burst needs a fresh press. A cue reached
+  while the hold is up **skips** it — the footer
+  says **CO2 jet skipped — not held** — and a hold that comes after
+  fires nothing until a later cue is reached held.
+- **Hazard — Running** (fog, haze, Class 3R/3B/4 lasers): **Hazard arm**
+  arms it with one press, and it stays armed; each cue reached while
+  armed sends its own level (tracking and includes count, so a hazer a
+  cue tracks on stays on), **following the cue's fade**: a haze cue with
+  a 10 s fade fades in over 10 s, and a later cue that sets it lower fades
+  it down. A very long fade down carries on through the cues after it
+  until a step sets the hazard again (which starts from where the fade
+  has got to). **Hazard kill** turns everything off at once and disarms, as a
+  stop or a lost device do. A cue reached unarmed skips it (**Hazer skipped — not
+  armed**); arming then fires nothing until the next cue is reached.
+
+Every step closes what the step before let fire, at once; a GO in
+**Blind** lets nothing fire. A GO onto the cue that is already playing
+(a re-GO) is no new step: the cue keeps what it was first reached with,
+so a hold pressed since fires nothing until the next cue.
+
+**Disarmed, always:** every show opened, the emergency stop, **Stop ALL**
+and **Fade and stop**, the computer going to sleep or waking, and the
+spotter's device lost (unplugged, its patch gone, its role turned off).
+A Hold still held through a disarm counts only once it is let go of and
+pressed again. Letting go of the Hold and the Kill act straight from the
+device's input, even when the app is busy. A **Park** wins (a parked
+hazard stays off), and picking a cue in Design — or a programmer edit
+after a run in Design — takes back what a run let fire.
+
+**Once a hazard, a hazard.** A fixture guessed a Hazard stays one when
+its guess changes (renamed "CO2 jet" to "DS Jet", say): it is set to its
+kind by hand and the hazard log says so. Only setting **Behaves as** to
+something else by hand makes it a light again (logged, and listed in
+Show Review). A laser given a class of 3R or more, a scenery or a symbol
+change re-reads every guess at once.
+
+**Where to see it.** The footer's **Hazards** chip, whenever the show has
+one: **DISARMED**, **ARMED** (the Running ones), **HELD** (the Hold is
+down), with what the last cue skipped; its tooltip lists each hazard and
+the last events, and a click opens the spotter's controls. The **Run**
+tab lists every hazard with its kind and state (**OUT NOW**, **HELD**,
+**ARMED**, **DISARMED**). Opening a show whose cues fire hazards says
+how many stay off until the spotter lets them. Show Review errors when
+cues set a hazard and no Hazard hold (for a Burst) or Hazard arm (for a
+Running one) is set on this computer (**FIX-22**), and lists every
+hazard with its kind (**FIX-23**).
+
+**The log.** Every fire, skip, arm, kill and disarm is kept, with its
+time, in the hazard log: the footer chip's tooltip shows the last ones,
+a Teaching show's GO log has every one, and with `qlcconsole --log -d 1`
+each is a `hazard:` line in `~/qlcconsole.log`.
+
+**The controls** are three of this computer's desk roles — **Hazard
+hold**, **Hazard arm** and **Hazard kill** — in **Connections ▸ Control
+surfaces ▸ This computer's desk** (they show once the show has a hazard).
+Each is learned with **Learn…**: the Hold by **pressing a button, holding
+it about a second and letting go**; the others with a press. Limits:
+
+- never the control of **GO**, **Back**, a **STOP** (the desk's, or the
+  show's own GO, Back or emergency stop) or another hazard role (the Hold
+  on the Kill's button would lose the Kill);
+- never a computer key;
+- the Hold and the Arm only on a device plugged into this computer (USB,
+  a MIDI cable): an input over the network or the air (OSC, Art-Net,
+  sACN, the web, an ENTTEC Wing, a CoreMIDI network session, Bluetooth
+  MIDI) never says it was lost. The Kill may be anything;
+- the Hold must be a **momentary button**: a fader, knob or encoder, a
+  tap too short, or a latching / toggle button (one that does not let go
+  when the hand does) is refused.
+
+They may share a device with the operator's GO, but the setup says so: a
+device of the spotter's own, away from the operator's hands, is better.
+Hazard kill works even while a Learn or Identify is open. Show Review
+warns when cues fire hazards and no Hazard kill is set. One set for the
+show; a hold per group of hazards is not there yet.
+
+**Set it up on a real board** (a FaderPort 2, a PMJ Black 1, an APC40 or
+APC64 — any MIDI button box):
+
+1. Plug the spotter's board in and patch it to a universe's input
+   (**Connections ▸ Inputs/Outputs**), with its profile.
+2. Check **Behaves as** for every hazard (Fixture Properties): the CO₂
+   jets and flame **Hazard — Burst**, the hazer and lasers **Hazard —
+   Running**; give each 3R+ laser its **Laser class**.
+3. Open **Connections ▸ Control surfaces ▸ This computer's desk**. Under
+   **Hazards — the spotter's controls**, press **Learn…** beside **Hazard
+   hold**, then press the button the spotter will hold, keep it down
+   about a second and let go. Learn **Hazard arm** and **Hazard kill**
+   with a press each (three different buttons).
+4. Try learning one on the board's GO: it is refused. If the board is
+   also the operator's, the panel says so; prefer a second board.
+5. Open **Show Review**: **FIX-22** is gone; **FIX-23** lists each hazard
+   and its kind.
+6. In Operate, GO to a CO₂ cue **without** holding: the jet stays off and
+   the footer says **CO2 jet skipped — not held**. Hold now: nothing.
+7. Hold **Hazard hold**, GO the next cue that sets the jet: it fires; let
+   go mid-cue: it stops at once; press again: it fires again. The chip
+   reads **HELD** while held. Push the jet up on the Simple Desk: nothing.
+8. Press **Hazard arm** (chip **ARMED**), GO the hazer's cue: it runs, and
+   stays on through the next cues. Press **Hazard kill**: it is off at
+   once and the chip reads **DISARMED**.
+9. Arm again and GO the hazer on; unplug the board: everything is off
+   and disarmed. Plug it back in: nothing fires until armed again and a
+   cue sets it.
+10. Arm, then hit the emergency stop: disarmed. Open the show again:
+    disarmed.
+
 ## Context menu
 
 ### Right-click menus

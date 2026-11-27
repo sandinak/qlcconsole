@@ -61,6 +61,7 @@ protected:
     class QSpinBox *m_ledsSpin = nullptr;        ///< 0 = one point, else LEDs
     class QComboBox *m_ledLayoutCombo = nullptr; ///< Hanging cluster / Tape
     class QComboBox *m_glassCombo = nullptr;     ///< Diffuse / Clear
+    class QComboBox *m_laserClassCombo = nullptr; ///< QLCPhysical::LaserClass (none: not a laser)
 };
 
 #endif // EDITPHYSICAL_H

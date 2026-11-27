@@ -49,6 +49,10 @@ private slots:
     void theChipNamesWhatGoPlays();
     void theHubShowsTheDeskFirst();
     void deskShots();
+    /** Hazard arming (Q352/Q353): the spotter's three rows show once the
+     *  show has a hazard; GO's control and a computer key are refused,
+     *  said on the panel; sharing GO's device is noted. Shots. */
+    void theSpottersControlsAreSetHere();
 
 private:
     void send(quint32 universe, quint32 channel, uchar value);

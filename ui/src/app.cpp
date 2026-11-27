@@ -5435,8 +5435,8 @@ QList<QWidget *> App::statusChipsByPriority() const
     const QList<QWidget *> order = {
         m_statusStage, m_statusDirtyLabel, m_statusModeChipLabel,
         goHeld ? m_statusStandby : nullptr,
-        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusShowOnlyLabel,
-        m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
+        m_statusPadRoleLabel, m_statusFollowLabel, m_statusModeLabel, m_statusHazardLabel,
+        m_statusShowOnlyLabel, m_statusOverridesChip, m_statusTestChip, m_statusProgrammerLabel,
         m_statusGrandMasterBox, m_statusMastersHeldLabel, m_statusReviewLabel, m_venueChip,
         m_statusSelectionLabel, m_statusPadModeLabel,
         goHeld ? nullptr : m_statusStandby, m_statusTeachingLabel, m_statusLevelLabel, m_statusSpeedMasters, m_statusRigNetLabel, m_statusUpdateLabel,
@@ -9490,6 +9490,38 @@ void App::initStatusBar()
         updateShowOnlyFooter();
     }
 
+    /* Hazards (Q352/Q353): DISARMED, ARMED or HELD whenever the show has
+       one, and a cue that skipped one says so ("CO2 jet skipped — not
+       held"). A click opens the spotter's controls. */
+    m_statusHazardLabel = new QLabel(this);
+    m_statusHazardLabel->setObjectName(QStringLiteral("footerHazard"));
+    m_statusHazardLabel->setCursor(Qt::PointingHandCursor);
+    m_statusHazardLabel->setProperty("helpTopic", QStringLiteral("fixture-manager.md#hazards-and-arming"));
+    m_statusHazardLabel->installEventFilter(this);
+    m_statusHazardLabel->hide();
+    sb->addWidget(m_statusHazardLabel, 0);
+    if (m_doc != NULL && m_doc->outputRuleKeeper() != nullptr)
+    {
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::hazardsChanged, this, &App::updateHazardFooter);
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::hazardLogged, this, &App::updateHazardFooter);
+        // A slider or the Simple Desk on a hazard: why it stays dark.
+        connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::handHeldOnHazard, this, [this](const QString &why) {
+            statusBar()->showMessage(why, 8000);
+        });
+        /* A show opened with hazards its cues fire: said once, so a hazer
+           that stays dark is never a surprise (053p review). */
+        connect(m_doc, &Doc::loaded, this, [this]() {
+            QTimer::singleShot(0, this, [this]() {
+                if (m_doc == NULL || m_doc->outputRuleKeeper() == nullptr)
+                    return;
+                const QString notice = m_doc->outputRuleKeeper()->hazardLoadNotice();
+                if (!notice.isEmpty())
+                    statusBar()->showMessage(notice, 15000);
+            });
+        });
+        updateHazardFooter();
+    }
+
     // Software Update's chip: "Update available: 0.1.1". Never a pop-up --
     // a show may be running -- just this, until it is clicked.
     m_statusUpdateLabel = new QLabel(this);
@@ -10352,6 +10384,16 @@ bool App::eventFilter(QObject *watched, QEvent *event)
     {
         if (static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
             ShowReviewPanel::openShared();
+        return true;
+    }
+
+    if (watched == m_statusHazardLabel && event->type() == QEvent::MouseButtonPress)
+    {
+        if (InputOutputManager *io = InputOutputManager::instance())
+        {
+            switchToTabContaining(io);
+            io->showShowControlSection(QStringLiteral("surfaces"));
+        }
         return true;
     }
 
@@ -11599,6 +11641,54 @@ void App::updateShowOnlyFooter()
     if (m_statusShowOnlyLabel->isHidden())
     {
         m_statusShowOnlyLabel->show();
+        if (m_statusFitTimer != nullptr)
+            m_statusFitTimer->start();
+    }
+}
+
+void App::updateHazardFooter()
+{
+    if (m_statusHazardLabel == nullptr || m_doc == NULL || m_doc->outputRuleKeeper() == nullptr)
+        return;
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    const QString text = k->hazardChipText();
+    if (text.isEmpty())
+    {
+        if (!m_statusHazardLabel->isHidden())
+        {
+            m_statusHazardLabel->hide();
+            if (m_statusFitTimer != nullptr)
+                m_statusFitTimer->start();
+        }
+        return;
+    }
+    setChipText(m_statusHazardLabel, text);
+    // Red while anything may fire; amber while one was skipped; grey at rest.
+    const OutputRuleKeeper::HazardState st = k->hazardState();
+    const QString colour = st == OutputRuleKeeper::HazardsDisarmed
+                               ? (k->hazardsSkipped().isEmpty() ? QStringLiteral("#909090") : QStringLiteral("#d08000"))
+                               : QStringLiteral("#d32f2f");
+    setChipStyle(m_statusHazardLabel, QStringLiteral("QLabel { color: %1; font-weight: bold; }").arg(colour));
+    m_statusHazardLabel->setProperty("hazardState", int(st));
+    QStringList tip;
+    tip << tr("The show's hazards fire only as the spotter lets them: a Burst (flame, CO2, confetti) "
+              "while their Hazard hold is held down, a Running one (fog, haze, a laser) once their Hazard "
+              "arm has armed it, until their Hazard kill. A cue reached otherwise skips it.");
+    QStringList names;
+    foreach (quint32 id, k->hazards())
+        if (const Fixture *fx = m_doc->fixture(id))
+            names << tr("%1 (%2)%3").arg(fx->name(), k->isBurstHazard(id) ? tr("Burst") : tr("Running"),
+                                          k->hazardLive(id) ? tr(": out now") : QString());
+    tip << QString() << names.join(QStringLiteral(", "));
+    const QStringList log = k->hazardLog();
+    if (!log.isEmpty())
+        tip << QString() << tr("Last:") << QStringList(log.mid(qMax(0, int(log.size()) - 5)));
+    tip << QString() << tr("Click to set the spotter's controls (This computer's desk).");
+    m_statusHazardLabel->setToolTip(tip.join(QLatin1Char('\n')));
+    m_statusHazardLabel->setAccessibleName(text);
+    if (m_statusHazardLabel->isHidden())
+    {
+        m_statusHazardLabel->show();
         if (m_statusFitTimer != nullptr)
             m_statusFitTimer->start();
     }

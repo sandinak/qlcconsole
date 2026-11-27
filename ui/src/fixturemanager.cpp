@@ -292,6 +292,12 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
     if (m_doc->programmer() != NULL)
         connect(m_doc->programmer()->venueCorrections(), &VenueCorrections::activeVenueChanged, this,
                 [this]() { updateView(); });
+    // Parked or not: its P and its Behaves as column (board Q351).
+    if (m_doc->programmer() != NULL)
+        connect(m_doc->programmer(), &ProgrammerController::parkChanged, this, [this]() {
+            if (m_fixtures_tree != NULL)
+                m_fixtures_tree->refreshStageLookIcons();
+        });
 
     slotModeChanged(m_doc->mode());
 
@@ -582,7 +588,8 @@ void FixtureManager::initDataView()
     quint32 treeFlags = FixtureTreeWidget::UniverseNumber |
                         FixtureTreeWidget::AddressRange |
                         FixtureTreeWidget::ShowGroups |
-                        FixtureTreeWidget::ShowPower;
+                        FixtureTreeWidget::ShowPower |
+                        FixtureTreeWidget::BehavesAs;
 
     m_fixtures_tree = new FixtureTreeWidget(m_doc, treeFlags, this);
     /* WLEDs found on the network and not in the show: in the Inventory,

@@ -37,6 +37,16 @@ private slots:
     void cleanupTestCase();
 
     void aPickedCueDrawsTheCurtainAndHoldsTheStage();
+    /** Board Q350/Q351 on screen: a relay and a kabuki drop held while a
+     *  cue is picked, marked held on the plot; Behaves as in the Fixture
+     *  Manager's column and in Fixture Properties (a Class 3B laser as a
+     *  Light only with its class typed); Park Here from the fixture's menu
+     *  puts a P on the plot and a row in the Run tab's Parked list, whose
+     *  Unpark lets it go. */
+    void behavesAsAndParkOnScreen();
+    /** Board 053p review: Fixture Remap's clone keeps what a fixture
+     *  behaves as (a hazard set by hand stays one). */
+    void remapKeepsBehavesAs();
     void hisCurtain();
 
 private:

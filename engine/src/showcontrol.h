@@ -551,6 +551,8 @@ private:
     void go(Chaser *chaser, int step);
     /** A GO carried out: the footer's "emergency stop" goes */
     void noteGo();
+    /** The keeper told the show's lists, before a Run action stamps one. */
+    void noteRunList();
     void goSubCue(Chaser *chaser, int step, int subCue);
 
 private:

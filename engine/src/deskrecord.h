@@ -71,6 +71,18 @@ class Doc;
  *  - Grand Master: the fader, with GrandMasterPickup after a load (deaf
  *    while it loads), a replug, a wake and its port (re)patched (Q316).
  *    Learned on a fader; a button is refused.
+ *  - Hazard hold / Hazard arm / Hazard kill (board Q352 A, Q353 A): the
+ *    spotter's or laser safety officer's controls, independent of the
+ *    operator (OutputRuleKeeper's hazard arming). Hold is the deadman a
+ *    Burst hazard fires only under (down: held; released: safe at once);
+ *    Arm arms the Running ones; Kill turns every hazard off and disarms
+ *    (always, a learn or Identify open too, as STOP). Learned on a
+ *    button, never on the control of GO, Back or a STOP (the desk's or
+ *    the show's) nor on the computer keyboard (it can't hear one);
+ *    another device than GO's is better (hazardDeviceNote()). Their
+ *    device lost -- unplugged, its patch gone, the role turned off --
+ *    disarms every hazard. One set for the show (per-hazard groups are a
+ *    follow-up).
  *
  * Each role can be turned off on this computer (setOn(), Q317). Every
  * change asks for the show's PIN when it has one (Q319: isLocked()).
@@ -84,9 +96,9 @@ public:
     explicit DeskRecord(Doc *doc, QObject *parent = nullptr);
     ~DeskRecord() override;
 
-    enum Role { Stop = 0, GrandMaster, Go, Back };
+    enum Role { Stop = 0, GrandMaster, Go, Back, HazardHold, HazardArm, HazardKill };
     Q_ENUM(Role)
-    static constexpr int RoleCount = 4;
+    static constexpr int RoleCount = 7;
 
     /** Where a role stands on this computer in this show. */
     enum State
@@ -116,10 +128,22 @@ public:
     };
 
     static QList<Role> roles();
-    /** "STOP", "Grand Master", "GO", "Back" */
+    /** "STOP", "Grand Master", "GO", "Back", "Hazard hold", "Hazard arm",
+     *  "Hazard kill" */
     static QString roleName(Role role);
-    /** The settings key: "stop", "gm", "go", "back" */
+    /** The settings key: "stop", "gm", "go", "back", "hazardhold",
+     *  "hazardarm", "hazardkill" */
     static QString roleKey(Role role);
+    /** The spotter's: Hazard hold, arm or kill */
+    static bool isHazardRole(Role role) { return role == HazardHold || role == HazardArm || role == HazardKill; }
+    /** Why @p role may not be learned on @p universe / @p channel (it is
+     *  GO's, Back's or a STOP's, the desk's or the show's, or a key of the
+     *  computer keyboard: ControlMap::KeyboardUniverse); empty when it may.
+     *  Only a hazard role is refused anything here. */
+    QString learnRefusal(Role role, quint32 universe, quint32 channel) const;
+    /** "Hazard hold shares APC MINI with GO: …" when a set hazard role is
+     *  on the same device as the desk's GO; empty otherwise. */
+    QString hazardDeviceNote() const;
     /** The Grand Master takes a fader; the others a button. */
     static bool takesFader(Role role) { return role == GrandMaster; }
     /** The QSettings group the record is kept in. */
@@ -317,6 +341,10 @@ private:
     QString controlName(quint32 universe, quint32 channel) const;
     void stopPressed(quint64 k, uchar value);
     void goPressed(bool back);
+    /** A hazard role's control: Hold down / up, Arm, Kill. */
+    void hazardInput(Role role, quint64 k, quint32 universe, quint32 channel, uchar value);
+    /** Hazard roles live at the last rebind(): one lost disarms them. */
+    void checkHazardRolesLost();
     void grandMaster(uchar value);
     void notifyGrandMasterWaiting();
     /** The Grand Master's fader is a motor fader (its surface type says
@@ -347,11 +375,18 @@ private:
     State m_lastState[RoleCount];
     /** Whether each role was on a passthrough universe at the last rebind(). */
     bool m_lastPassthrough[RoleCount];
+    /** Whether each hazard role was live at the last rebind(). */
+    bool m_hazardWasLive[RoleCount] = {};
     bool m_inputConnected = false;
     bool m_unlocked = false;
 
     // Learning
     bool m_learning = false;
+    /** The Hold: held at least this long when learned, and let go of
+     *  within kHoldReleaseMs (second review, 9) */
+    static constexpr qint64 kHoldLearnMs = 800;
+    static constexpr int kHoldReleaseMs = 5000;
+    QTimer *m_holdLearnTimer = nullptr;
     Role m_learnRole = Stop;
     int m_confirmMs = 3000;
     quint64 m_pendingKey = ~quint64(0);

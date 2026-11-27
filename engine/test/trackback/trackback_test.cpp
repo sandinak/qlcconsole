@@ -18,6 +18,7 @@
 */
 
 #include <QXmlStreamReader>
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QRandomGenerator>
 #include <QTemporaryDir>
@@ -30,8 +31,11 @@
 #include "mastertimer.h"
 #include "universe.h"
 #include "genericfader.h"
+#include "outputrulekeeper.h"
 #undef protected
 #undef private
+#include "outputlayer.h"
+#include "programmercontroller.h"
 #include "trackback_test.h"
 #include "showtreecontroller.h"
 #include "inputoutputmap.h"
@@ -55,6 +59,10 @@
 #include "qlcchannel.h"
 #include "chaser.h"
 #include "doc.h"
+#include "qlcfixturemode.h"
+#include "qlcfixturedef.h"
+#include "qlcphysical.h"
+#include "showreview.h"
 
 using namespace ShowTree;
 
@@ -1343,8 +1351,9 @@ void TrackBack_Test::theFooterSaysWhereTheCurtainStopped()
     ShowControl::Request off;
     off.command = ShowControl::AllOff;
     m_doc->showControl()->execute(off);
+    // The house relay (a Switch, board Q351) is held too.
     QCOMPARE(rules->stageMachineryHeldText(),
-             QStringLiteral("Curtain stopped at %1% — GO to carry on").arg(qRound(open * 100.0 / 255.0)));
+             QStringLiteral("Curtain stopped at %1% · 1 more held — GO to carry on").arg(qRound(open * 100.0 / 255.0)));
     QVERIFY(rules->stageMachineryHeldText().startsWith(QStringLiteral("Curtain stopped at 4")));
     // The next GO: gone.
     ShowControl::Request go;
@@ -1354,6 +1363,731 @@ void TrackBack_Test::theFooterSaysWhereTheCurtainStopped()
     tick(2);
     QTest::qWait(int(4 * MasterTimer::tick()) + 100);
     QCOMPARE(rules->stageMachineryHeldText(), QString());
+}
+
+/****************************************************************************
+ * Behaves as (board Q350, Q351)
+ ****************************************************************************/
+
+Chaser *TrackBack_Test::behavesList(int fadeMs)
+{
+    quint32 address = 0;
+    for (Fixture *f : m_doc->fixtures())
+        address = qMax(address, f->address() + f->channels());
+    auto dimmer = [&](const QString &name) {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(name);
+        f->setChannels(1);
+        f->setAddress(address++);
+        if (!m_doc->addFixture(f))
+            qFatal("could not add %s", qPrintable(name));
+        FixtureGroup *g = new FixtureGroup(m_doc);
+        g->setName(name);
+        m_doc->addFixtureGroup(g);
+        g->assignFixture(f->id());
+        return g->id();
+    };
+    auto level = [&](const QString &name, int v) {
+        QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, m_doc);
+        p->setName(name);
+        p->setValue(v);
+        m_doc->addPalette(p);
+        return p->id();
+    };
+    const quint32 wash = dimmer("Stage wash");
+    const quint32 relay = dimmer("House relay");
+    m_doc->fixture(m_doc->fixtureGroup(relay)->fixtureList().first())->setOutputRules(Fixture::Switch);
+    const quint32 drop = dimmer("Kabuki drop");
+    const quint32 jet = dimmer("CO2 jet");
+    const quint32 full = level("Full", 255), half = level("Half", 128), out = level("Out", 0);
+
+    ShowTreeController *st = m_doc->showTree();
+    m_list = st->addCueList(st->addProduction("Behaves"), "Behaves list");
+    m_c1 = st->addCue(m_list, -1, "Preset");
+    set(m_c1, wash, full);
+    set(m_c1, relay, out);
+    set(m_c1, drop, out);
+    set(m_c1, jet, out);
+    m_c2 = st->addCue(m_list, 0, "The drop");
+    set(m_c2, wash, half);
+    set(m_c2, relay, full);
+    set(m_c2, drop, full);
+    set(m_c2, jet, full);
+    m_c3 = st->addCue(m_list, 1, "After");
+    set(m_c3, wash, full);
+    if (fadeMs > 0)
+    {
+        QList<Cue> cues = st->cueList(m_list)->cues;
+        for (Cue &c : cues)
+        {
+            c.fadeIn = uint(fadeMs);
+            st->setCue(c);
+        }
+    }
+    m_doc->outputRuleKeeper()->rebuild();
+    return chaserOf(m_list);
+}
+
+int TrackBack_Test::at(const char *fixture, int ch)
+{
+    const Fixture *f = fixtureNamed(QString::fromLatin1(fixture));
+    if (f == nullptr)
+        return -1;
+    const QByteArray out = settle(0);
+    const int a = int(f->universeAddress()) + ch;
+    return a < out.size() ? int(uchar(out.at(a))) : -1;
+}
+
+void TrackBack_Test::switchesAndDropsHoldWhileEditing()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    QCOMPARE(m_doc->mode(), Doc::Design);
+    ShowTreeController *st = m_doc->showTree();
+    // Picked while editing: the wash previews, the relay and the drop stay
+    // where they are (out), the jet never fires.
+    st->pickCue(m_c2);
+    settle(20);
+    QCOMPARE(at("Stage wash"), 128);
+    QCOMPARE(at("House relay"), 0);
+    QCOMPARE(at("Kabuki drop"), 0);
+    QCOMPARE(at("CO2 jet"), 0);
+    st->pickCue(m_c3);
+    settle(20);
+    QCOMPARE(at("Stage wash"), 255);
+    QCOMPARE(at("House relay"), 0);
+    QCOMPARE(at("Kabuki drop"), 0);
+    st->stopPreview();
+    settle(10);
+    // A run moves them: GO to the drop, from the Run, in Design too.
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(c->currentStepIndex(), 1);
+    QCOMPARE(at("House relay"), 255);
+    QCOMPARE(at("Kabuki drop"), 255);
+    // Picking the preset while it plays: they stay (dropped stays dropped).
+    st->pickCue(m_c1);
+    settle(20);
+    QCOMPARE(at("Stage wash"), 255);
+    QCOMPARE(at("House relay"), 255);
+    QCOMPARE(at("Kabuki drop"), 255);
+    st->stopPreview();
+}
+
+void TrackBack_Test::aBackNeverFiresAOneShotAgain()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < 3; ++i)
+    {
+        act(c, { Go, 0 });
+        settle(10);
+    }
+    QCOMPARE(c->currentStepIndex(), 2);
+    QCOMPARE(at("Kabuki drop"), 255);
+    act(c, { Back, 0 });            // to the drop: it is dropped
+    settle(10);
+    QCOMPARE(c->currentStepIndex(), 1);
+    QCOMPARE(at("Kabuki drop"), 255);
+    act(c, { Back, 0 });            // to before it: dropped stays dropped
+    settle(10);
+    QCOMPARE(c->currentStepIndex(), 0);
+    QCOMPARE(at("Stage wash"), 255);
+    QCOMPARE(at("House relay"), 0);  // a switch plays the cue (a Back is a run)
+    QCOMPARE(at("Kabuki drop"), 255);
+    // The next GO plays on: the drop's cue keeps it down, and it is the
+    // cues' again.
+    act(c, { Go, 0 });
+    QTest::qWait(int(4 * MasterTimer::tick()) + 100);
+    settle(10);
+    QCOMPARE(c->currentStepIndex(), 1);
+    QCOMPARE(at("Kabuki drop"), 255);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::aHazardIsNeverFiredYet()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    // Design: a pick never fires it.
+    m_doc->showTree()->pickCue(m_c2);
+    settle(20);
+    QCOMPARE(at("Stage wash"), 128);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->showTree()->stopPreview();
+    // Operate: nor a GO, until it can be armed.
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("Stage wash"), 128);
+    QCOMPARE(at("Kabuki drop"), 255);
+    QCOMPARE(at("CO2 jet"), 0);
+    // Parked, it parks off.
+    Fixture *jet = fixtureNamed("CO2 jet");
+    m_doc->programmer()->parkFixtures({ jet->id() });
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->programmer()->unparkFixtures({ jet->id() });
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::aStopHoldsSwitchesAndDrops()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("House relay"), 255);
+    QCOMPARE(at("Kabuki drop"), 255);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    m_doc->showControl()->execute(off);
+    QTest::qWait(300);
+    settle(20);
+    QCOMPARE(at("Stage wash"), 0);
+    QCOMPARE(at("CO2 jet"), 0);
+    QCOMPARE(at("House relay"), 255);
+    QCOMPARE(at("Kabuki drop"), 255);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::aGoAfterAStopMidGlideDropsTheGlide()
+{
+    QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("Generic", "Stage Curtain");
+    QVERIFY(def != nullptr && def->mode("Open + Fly") != nullptr);
+    Fixture *curtain = new Fixture(m_doc);
+    curtain->setName("Main drape curtain");
+    curtain->setFixtureDefinition(def, def->mode("Open + Fly"));
+    curtain->setAddress(0);
+    QVERIFY(m_doc->addFixture(curtain));
+    Scene *open = new Scene(m_doc);
+    open->setName("Curtain Open");
+    open->setValue(curtain->id(), 0, 255);
+    QVERIFY(m_doc->addFunction(open));
+    ShowTreeController *st = m_doc->showTree();
+    m_list = st->addCueList(st->addProduction("Show"), "Show list");
+    const quint32 shut = st->addCue(m_list, -1, "Shut");
+    const quint32 opens = st->addCue(m_list, 0, "Opens");
+    Target t;
+    t.function = open->id();
+    QVERIFY(st->addLayer(opens, t) != ShowTree::invalidId());
+    {
+        Cue timed = *st->cue(opens);
+        timed.fadeIn = 20000;               // a long travel: the glide is still on
+        QVERIFY(st->setCue(timed));
+    }
+    Q_UNUSED(shut);
+    m_doc->outputRuleKeeper()->rebuild();
+    Chaser *c = chaserOf(m_list);
+    QVERIFY(c != nullptr);
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    const int ch = 0;
+
+    // Picked while editing: held shut. Then a GO lets go over the cue's fade.
+    st->pickCue(opens);
+    settle(10);
+    QCOMPARE(at("Main drape curtain", ch), 0);
+    QVERIFY(rules->machineryHeldForEdit());
+    ShowControl *sc = m_doc->showControl();
+    sc->setMainCueList(c->id());
+    ShowControl::Request load;
+    load.command = ShowControl::Load;
+    load.chaser = c->id();
+    load.cue = st->cueNumber(*st->cueList(m_list), 1);
+    sc->execute(load);
+    ShowControl::Request go;
+    go.command = ShowControl::Go;
+    go.chaser = c->id();
+    sc->execute(go);
+    QTest::qWait(50);
+    settle(1);
+    QVERIFY(!rules->machineryHeldForEdit());
+    // The edit hold's faders, still travelling (on any universe).
+    auto gliding = [this]() {
+        int n = 0;
+        for (Universe *u : m_doc->inputOutputMap()->universes())
+            for (const QSharedPointer<GenericFader> &f : u->faders())
+                if (!f.isNull() && f->name() == QLatin1String("Curtain held while editing") && !f->deleteRequested())
+                    ++n;
+        return n;
+    };
+    QVERIFY2(gliding() > 0, "the let-go glides");
+    settle(int(3000 / MasterTimer::tick()));      // part way
+    const int moving = at("Main drape curtain", ch);
+    QVERIFY2(moving > 0 && moving < 255, qPrintable(QString::number(moving)));
+
+    // The emergency stop mid-glide: frozen there.
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    sc->execute(off);
+    QTest::qWait(100);
+    settle(5);
+    const int frozen = at("Main drape curtain", ch);
+    QVERIFY2(qAbs(frozen - moving) <= 3, qPrintable(QStringLiteral("%1 -> %2").arg(moving).arg(frozen)));
+    QVERIFY(rules->stageMachineryHeld());
+
+    // GO: the glide is dropped; the cue owns it, from the frozen value.
+    sc->execute(load);
+    sc->execute(go);
+    settle(2);
+    QTest::qWait(int(4 * MasterTimer::tick()) + 150);
+    settle(2);
+    QVERIFY(!rules->stageMachineryHeld());
+    QVERIFY2(gliding() == 0, "the glide's fader is gone");
+    const int first = at("Main drape curtain", ch);
+    QVERIFY2(qAbs(first - frozen) <= 8, qPrintable(QStringLiteral("frozen %1, after the GO %2").arg(frozen).arg(first)));
+    settle(int(21000 / MasterTimer::tick()));
+    QCOMPARE(at("Main drape curtain", ch), 255);
+}
+
+void TrackBack_Test::parkWinsOverHoldsAndCues()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    ProgrammerController *pc = m_doc->programmer();
+    Fixture *relay = fixtureNamed("House relay");
+    Fixture *wash = fixtureNamed("Stage wash");
+    // Parked out: no cue, pick or stop turns it on.
+    pc->parkFixtures({ relay->id(), wash->id() });
+    settle(2);
+    QCOMPARE(at("House relay"), 0);
+    m_doc->showTree()->pickCue(m_c2);
+    settle(20);
+    QCOMPARE(at("House relay"), 0);
+    QCOMPARE(at("Stage wash"), 0);
+    m_doc->showTree()->stopPreview();
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("House relay"), 0);
+    QCOMPARE(at("Kabuki drop"), 255);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    m_doc->showControl()->execute(off);
+    QTest::qWait(200);
+    act(c, { Go, 0 });
+    QTest::qWait(int(4 * MasterTimer::tick()) + 150);
+    settle(20);
+    QCOMPARE(at("House relay"), 0);
+    QVERIFY(pc->isFixtureParked(relay->id()));
+    // Unparked: the cues' again.
+    pc->unparkFixtures({ relay->id(), wash->id() });
+    act(c, { Back, 0 });
+    settle(20);
+    act(c, { Go, 0 });
+    QTest::qWait(int(4 * MasterTimer::tick()) + 150);
+    settle(20);
+    QCOMPARE(c->currentStepIndex(), 1);
+    QCOMPARE(at("House relay"), 255);
+    QCOMPARE(at("Stage wash"), 128);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::behavesAsIsGuessedSetAndSaved()
+{
+    QVERIFY(rig());
+    QVERIFY(behavesList() != nullptr);
+    QLCFixtureDef *curtainDef = m_doc->fixtureDefCache()->fixtureDef("Generic", "Stage Curtain");
+    QVERIFY(curtainDef != nullptr);
+    Fixture *curtain = new Fixture(m_doc);
+    curtain->setName("Main drape curtain");
+    curtain->setFixtureDefinition(curtainDef, curtainDef->mode("Open + Fly"));
+    curtain->setAddress(100);
+    QVERIFY(m_doc->addFixture(curtain));
+    auto named = [&](const char *n) { return fixtureNamed(QString::fromLatin1(n)); };
+    // The guesses, from the name, the rules, the symbol and the definition.
+    QCOMPARE(FixtureRest::behaviour(named("Stage wash")), Fixture::LightBehaviour);
+    QCOMPARE(FixtureRest::behaviour(named("House relay")), Fixture::SwitchBehaviour);
+    QCOMPARE(FixtureRest::behaviour(named("Kabuki drop")), Fixture::OneShotBehaviour);
+    QCOMPARE(FixtureRest::behaviour(named("CO2 jet")), Fixture::HazardBurstBehaviour);
+    QCOMPARE(FixtureRest::behaviour(curtain), Fixture::MachineryBehaviour);
+    for (Fixture *f : m_doc->fixtures())
+        if (f->fixtureDef() != nullptr && f->fixtureDef()->model() == "Sharpy")
+            QCOMPARE(FixtureRest::behaviour(f), Fixture::LightBehaviour);
+    // A silk flame is a light; a real one a hazard.
+    Fixture *silk = new Fixture(m_doc);
+    silk->setName("Silk flame (relay)");
+    silk->setChannels(1);
+    silk->setAddress(200);
+    QVERIFY(m_doc->addFixture(silk));
+    QCOMPARE(FixtureRest::behaviour(silk), Fixture::SwitchBehaviour);
+    silk->setName("Flame projector");
+    QCOMPARE(FixtureRest::behaviour(silk), Fixture::HazardBurstBehaviour);
+    QVERIFY(m_doc->deleteFixture(silk->id()));
+
+    // A laser: its definition's class picks. None or 1-2M a light; 3R and
+    // up a hazard -- and set to Light, Show Review lists it.
+    QLCFixtureDef *laserDef = new QLCFixtureDef();
+    laserDef->setManufacturer("Test");
+    laserDef->setModel("Sky Laser");
+    laserDef->setType(QLCFixtureDef::Laser);
+    QLCChannel *lch = new QLCChannel();
+    lch->setName("Intensity");
+    lch->setGroup(QLCChannel::Intensity);
+    laserDef->addChannel(lch);
+    QLCFixtureMode *lmode = new QLCFixtureMode(laserDef);
+    lmode->setName("1 Channel");
+    lmode->insertChannel(lch, 0);
+    laserDef->addMode(lmode);
+    QVERIFY(m_doc->fixtureDefCache()->addFixtureDef(laserDef));
+    Fixture *laser = new Fixture(m_doc);
+    laser->setName("Sky laser");
+    laser->setFixtureDefinition(laserDef, lmode);
+    laser->setAddress(300);
+    QVERIFY(m_doc->addFixture(laser));
+    QCOMPARE(FixtureRest::behaviour(laser), Fixture::LightBehaviour);       // none said
+    QLCPhysical phys = lmode->physical();
+    phys.setLaserClass(QLCPhysical::LaserClass1);
+    lmode->setPhysical(phys);
+    QCOMPARE(FixtureRest::behaviour(laser), Fixture::LightBehaviour);
+    phys.setLaserClass(QLCPhysical::LaserClass3B);
+    lmode->setPhysical(phys);
+    QCOMPARE(FixtureRest::behaviour(laser), Fixture::HazardRunningBehaviour);
+    QVERIFY(!FixtureRest::isHazardousLaserAsLight(laser));
+    laser->setBehaviourSetting(Fixture::LightBehaviour);
+    QVERIFY(FixtureRest::isHazardousLaserAsLight(laser));
+    // The .qxf: the class round-trips under <Physical>.
+    {
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        phys.saveXML(&w);
+        buf.close();
+        QVERIFY(buf.data().contains("<Laser Class=\"3B\"/>"));
+        QXmlStreamReader r(buf.data());
+        r.readNextStartElement();
+        QLCPhysical back;
+        QVERIFY(back.loadXML(r));
+        QCOMPARE(back.laserClass(), QLCPhysical::LaserClass3B);
+    }
+
+    // Set by hand: saved; guessed: nothing written (old shows load as before).
+    Fixture *drop = named("Kabuki drop");
+    Fixture *wash = named("Stage wash");
+    drop->setBehaviourSetting(Fixture::MachineryBehaviour);
+    QCOMPARE(FixtureRest::behaviour(drop), Fixture::MachineryBehaviour);
+    auto roundTrip = [](Fixture *f, Doc *doc) {
+        QBuffer buf;
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        f->saveXML(&w);
+        buf.close();
+        QXmlStreamReader r(buf.data());
+        r.readNextStartElement();
+        Fixture *back = new Fixture(doc);
+        back->loadXML(r, doc, doc->fixtureDefCache());
+        const int set = back->behaviourSetting();
+        delete back;
+        return qMakePair(buf.data(), set);
+    };
+    const auto dropXml = roundTrip(drop, m_doc);
+    QVERIFY(dropXml.first.contains("<BehavesAs>Machinery</BehavesAs>"));
+    QCOMPARE(dropXml.second, int(Fixture::MachineryBehaviour));
+    const auto washXml = roundTrip(wash, m_doc);
+    QVERIFY(!washXml.first.contains("BehavesAs"));
+    QCOMPARE(washXml.second, -1);
+
+    // Show Review: FIX-20 for the drop, FIX-21 for the laser.
+    ShowReview::Options o;
+    o.checks = QStringList() << QStringLiteral("FIX-20") << QStringLiteral("FIX-21");
+    o.record = false;
+    const ShowReview::Result res = m_doc->showReview()->run(o);
+    QStringList got;
+    for (const ReviewFinding &f : res.findings)
+        got << f.check + QLatin1Char(':') + f.targets.join(QLatin1Char(','));
+    QVERIFY2(got.contains(QStringLiteral("FIX-20:fx:%1").arg(drop->id())), qPrintable(got.join(' ')));
+    QVERIFY2(got.contains(QStringLiteral("FIX-21:fx:%1").arg(laser->id())), qPrintable(got.join(' ')));
+    QCOMPARE(got.size(), 2);
+
+    // The footer: a GO that would fire the hazard says why it did not.
+    drop->setBehaviourSetting(-1);
+    m_doc->deleteFixture(laser->id());
+    m_doc->outputRuleKeeper()->rebuild();
+    Chaser *c = chaserOf(m_list);
+    m_doc->setMode(Doc::Operate);
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    QCOMPARE(rules->hazardSkippedText(), QString());
+    QCOMPARE(rules->hazardChipText(), QStringLiteral("Hazards: DISARMED"));
+    act(c, { Go, 0 });
+    settle(5);
+    act(c, { Go, 0 });
+    settle(5);
+    QTRY_COMPARE_WITH_TIMEOUT(rules->hazardSkippedText(), QStringLiteral("CO2 jet skipped — not held"), 2000);
+    QCOMPARE(rules->hazardsSkipped(), QList<quint32>() << named("CO2 jet")->id());
+    QCOMPARE(rules->hazardChipText(), QStringLiteral("Hazards: DISARMED · CO2 jet skipped — not held"));
+    act(c, { Go, 0 });          // cue 3 tracks the jet on: still skipped
+    settle(5);
+    QTest::qWait(300);
+    QCOMPARE(rules->hazardsSkipped().size(), 1);
+    ShowControl::Request off;
+    off.command = ShowControl::AllOff;
+    m_doc->showControl()->execute(off);
+    QTest::qWait(100);
+    QCOMPARE(rules->hazardSkippedText(), QString());
+    m_doc->setMode(Doc::Design);
+}
+
+/****************************************************************************
+ * The independent review of feat/053-behaves-as
+ ****************************************************************************/
+
+void TrackBack_Test::passthroughNeverFiresAHazard()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    QVERIFY(FixtureRest::isHazard(jet));
+    QTest::qWait(50);                   // the hold laid (rebuild)
+    Universe *uni = m_doc->inputOutputMap()->universe(jet->universe());
+    QVERIFY(uni != nullptr);
+    uni->setPassthrough(true);
+    uni->slotInputValueChanged(uni->id(), jet->address(), 255, QString());
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    // A light beside it takes the input as it always did.
+    Fixture *wash = fixtureNamed("Stage wash");
+    uni->slotInputValueChanged(uni->id(), wash->address(), 200, QString());
+    settle(5);
+    QCOMPARE(at("Stage wash"), 200);
+    uni->setPassthrough(false);
+}
+
+void TrackBack_Test::aParkedHazardStaysOff()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    // A Light first: the cue fires it, and it is parked at what it sends.
+    jet->setBehaviourSetting(Fixture::LightBehaviour);
+    QTest::qWait(50);
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("CO2 jet"), 255);
+    m_doc->programmer()->parkFixtures({ jet->id() });
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 255);
+    // Then a hazard: parked means safe, whatever the Park saved.
+    jet->setBehaviourSetting(-1);
+    QVERIFY(FixtureRest::isHazard(jet));
+    QTest::qWait(50);
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::theHazardHoldWinsOverALaterPark()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    Fixture *wash = fixtureNamed("Stage wash");
+    // Another hazard on the universe: the hold's fader is there already.
+    Fixture *fog = new Fixture(m_doc);
+    fog->setName("Fogger");
+    fog->setChannels(1);
+    fog->setAddress(510);
+    QVERIFY(m_doc->addFixture(fog));
+    m_doc->outputRuleKeeper()->rebuild();
+    QTest::qWait(50);
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("Stage wash"), 128);
+    // The wash parked at 128, after the hold's fader was laid...
+    m_doc->programmer()->parkFixtures({ wash->id() });
+    settle(5);
+    // ...then the jet re-patched onto the wash's address: the hold wins.
+    jet->setAddress(wash->address());
+    QTest::qWait(50);
+    settle(5);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->programmer()->unparkFixtures({ wash->id() });
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::aHazardIsHeldFromTheNextFrame()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    Fixture *jet = fixtureNamed("CO2 jet");
+    jet->setBehaviourSetting(Fixture::LightBehaviour);
+    QTest::qWait(50);
+    m_doc->setMode(Doc::Operate);
+    act(c, { Go, 0 });
+    settle(10);
+    act(c, { Go, 0 });
+    settle(20);
+    QCOMPARE(at("CO2 jet"), 255);
+    // Made a hazard mid-show: no event loop between, one frame.
+    jet->setBehaviourSetting(-1);
+    settle(1);
+    QCOMPARE(at("CO2 jet"), 0);
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::everyBackHoldsTheOneShot()
+{
+    QVERIFY(rig());
+    Chaser *c = behavesList();
+    QVERIFY(c != nullptr);
+    m_doc->setMode(Doc::Operate);
+    for (int i = 0; i < 3; ++i)
+    {
+        act(c, { Go, 0 });
+        settle(10);
+    }
+    QCOMPARE(at("Kabuki drop"), 255);
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    QVERIFY(!rules->oneShotsHeldForBack());
+    // A chaser stepped back as the Simple Desk, a pad or the chaser
+    // editor does: setAction() only, no show control.
+    ChaserAction back;
+    back.m_action = ChaserPreviousStep;
+    back.m_stepIndex = 0;
+    back.m_masterIntensity = 1.0;
+    back.m_stepIntensity = 1.0;
+    back.m_fadeMode = Chaser::FromFunction;
+    c->setAction(back);
+    QVERIFY(rules->oneShotsHeldForBack());
+    settle(10);
+    back.m_action = ChaserPreviousStep;
+    c->setAction(back);
+    settle(10);
+    QCOMPARE(c->currentStepIndex(), 0);
+    QCOMPARE(at("Kabuki drop"), 255);       // dropped stays dropped
+    m_doc->setMode(Doc::Design);
+}
+
+void TrackBack_Test::theGuessReadsWholeWords()
+{
+    auto guess = [this](const QString &name, QLCFixtureDef *def = nullptr, const QString &mode = QString()) {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(name);
+        if (def != nullptr)
+            f->setFixtureDefinition(def, def->mode(mode));
+        else
+            f->setChannels(1);
+        f->setAddress(500);
+        f->setUniverse(1);
+        if (!m_doc->addFixture(f))
+            qFatal("could not add %s", qPrintable(name));
+        const Fixture::Behaviour b = FixtureRest::behaviour(f);
+        m_doc->deleteFixture(f->id());
+        return b;
+    };
+    // Not a hazard: a gel, a candle with no flame, a colour, a sign.
+    QCOMPARE(guess("Flame Red"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Flameless candle"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Smokey Pink"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Vegas Sign"), Fixture::LightBehaviour);
+    // A light by its name: never a One-shot by "drop" or "curtain".
+    QCOMPARE(guess("Backdrop curtain wash"), Fixture::LightBehaviour);
+    QCOMPARE(guess("Kabuki drop"), Fixture::OneShotBehaviour);
+    // A hazard.
+    QVERIFY(Fixture::Behaviour(guess("Flame bar")) != Fixture::LightBehaviour);
+    QVERIFY(Fixture::Behaviour(guess("Fogger DSL")) != Fixture::LightBehaviour);
+    // MagicFX's confetti guns and blowers: their definitions say Effect.
+    for (const char *model : { "StadiumShot III", "StadiumBlaster", "StadiumBlower" })
+    {
+        QLCFixtureDef *def = m_doc->fixtureDefCache()->fixtureDef("MagicFX", model);
+        QVERIFY2(def != nullptr, model);
+        QVERIFY2(!def->modes().isEmpty(), model);
+        QVERIFY2(guess(QStringLiteral("SFX %1").arg(model), def, def->modes().first()->name())
+                     != Fixture::LightBehaviour, model);
+    }
+}
+
+void TrackBack_Test::theGuessIsKept()
+{
+    // A rig of plain lights: what the Fixture Manager's column reads on
+    // every fixtureChanged (updateBehavesColumnShown()).
+    QLCFixtureDef *spot = m_doc->fixtureDefCache()->fixtureDef("Clay Paky", "Sharpy");
+    QVERIFY(spot != nullptr);
+    QList<Fixture *> rigOf;
+    for (int i = 0; i < 400; ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QStringLiteral("Spot %1").arg(i));
+        f->setFixtureDefinition(spot, spot->modes().first());
+        f->setUniverse(quint32(i / 20));
+        f->setAddress(quint32((i % 20) * 20));
+        QVERIFY(m_doc->addFixture(f));
+        rigOf << f;
+    }
+    auto pass = [&]() {
+        QElapsedTimer t;
+        t.start();
+        int lights = 0;
+        for (int n = 0; n < 5; ++n)
+            for (Fixture *f : std::as_const(rigOf))
+                lights += FixtureRest::behaviour(f) == Fixture::LightBehaviour ? 1 : 0;
+        if (lights != 5 * int(rigOf.size()))
+            qFatal("not every spot guessed a light");
+        return t.nsecsElapsed();
+    };
+    pass();                         // guessed once
+    qint64 again = pass();
+    for (int i = 0; i < 2; ++i)
+        again = qMin(again, pass());
+    // One renamed: guessed again, the rest kept.
+    rigOf.first()->setName(QStringLiteral("Kabuki drop"));
+    QCOMPARE(FixtureRest::guessBehaviour(rigOf.first()), Fixture::LightBehaviour);   // a light by definition
+    // Guessing from scratch each time (every fixture renamed) costs many
+    // times reading what is kept.
+    qint64 fresh = 0;
+    {
+        QElapsedTimer t;
+        t.start();
+        for (int n = 0; n < 5; ++n)
+            for (Fixture *f : std::as_const(rigOf))
+            {
+                f->setName(f->name());
+                (void)FixtureRest::behaviour(f);
+            }
+        fresh = t.nsecsElapsed();
+    }
+    QVERIFY2(again * 4 < fresh, qPrintable(QStringLiteral("kept %1 ns, fresh %2 ns").arg(again).arg(fresh)));
+}
+
+void TrackBack_Test::finishedGlidesAreForgotten()
+{
+    QVERIFY(rig());
+    Fixture *f = m_doc->fixtures().first();
+    OutputLayer layer(m_doc, Universe::Park, FadeChannel::Override, QStringLiteral("test"));
+    for (int i = 0; i < 50; ++i)
+    {
+        layer.set({ OutputLayer::Level { f->id(), 0, uchar(100 + i) } });
+        settle(1);
+        layer.glideOut(10);
+        settle(10);             // the glide over, its fader gone
+    }
+    QVERIFY2(layer.m_gliding.size() <= 2, qPrintable(QString::number(layer.m_gliding.size())));
 }
 
 bool TrackBack_Test::loadShow(const QString &path)

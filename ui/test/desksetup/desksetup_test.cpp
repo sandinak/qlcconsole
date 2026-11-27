@@ -46,6 +46,8 @@
 #include "controllearndialog.h"
 #include "qlcfile.h"
 #include "doc.h"
+#include "fixture.h"
+#include "outputrulekeeper.h"
 
 using D = DeskRecord;
 
@@ -83,6 +85,7 @@ void DeskSetup_Test::cleanup()
     {
         m_stub->m_nameOverride.clear();
         m_stub->m_lineNames.clear();
+        m_stub->m_linesAreHardware = false;
     }
     delete m_doc;
     m_doc = nullptr;
@@ -540,6 +543,70 @@ void DeskSetup_Test::assignShowsTheDeskAsThisComputers()
     send(0, 202, 127);
     send(0, 202, 0);
     QCOMPARE(fired.count() + refused.count(), 1);
+}
+
+void DeskSetup_Test::theSpottersControlsAreSetHere()
+{
+    // A device on a cable (the Hold and the Arm refuse the network).
+    m_stub->m_linesAreHardware = true;
+    DeskSetupPanel panel(m_doc);
+    D *desk = m_doc->deskRecord();
+    QVERIFY(!panel.hazardRowsShown());
+    QVERIFY(panel.learnButton(D::HazardHold)->isHidden());
+    // A hazard in the show: the rows show.
+    Fixture *jet = new Fixture(m_doc);
+    jet->setName(QStringLiteral("CO2 jet"));
+    jet->setChannels(1);
+    jet->setAddress(100);
+    QVERIFY(m_doc->addFixture(jet));
+    QCoreApplication::processEvents();
+    QVERIFY(panel.hazardRowsShown());
+    QVERIFY(!panel.learnButton(D::HazardHold)->isHidden());
+    QCOMPARE(panel.statusLabel(D::HazardHold)->text(), QStringLiteral("not set"));
+
+    // GO on the APC; Hazard hold on GO's button: refused, said.
+    learnGo();
+    panel.learnButton(D::HazardHold)->click();
+    QVERIFY(desk->isLearning());
+    send(0, 202, 127);
+    send(0, 202, 0);
+    QVERIFY(!desk->isSet(D::HazardHold));
+    QVERIFY2(panel.learnLine()->text().contains(QStringLiteral("GO")), qPrintable(panel.learnLine()->text()));
+    // A computer key: refused, said.
+    QTest::keyClick(&panel, Qt::Key_H);
+    QVERIFY2(panel.learnLine()->text().contains(QStringLiteral("keyboard")), qPrintable(panel.learnLine()->text()));
+    // A tap: refused (the Hold is learned from a press held); then a
+    // button of its own held about a second: learned. On GO's device, so
+    // the panel says so.
+    send(0, 210, 127);
+    send(0, 210, 0);
+    QVERIFY(!desk->isSet(D::HazardHold));
+    QVERIFY2(panel.learnLine()->text().contains(QStringLiteral("about a second")), qPrintable(panel.learnLine()->text()));
+    send(0, 210, 127);
+    QTest::qWait(1100);
+    send(0, 210, 0);
+    QVERIFY(desk->isSet(D::HazardHold));
+    QVERIFY(panel.hazardNote()->isVisibleTo(&panel));
+    QVERIFY(panel.hazardNote()->text().contains(QStringLiteral("APC MINI")));
+
+    const QByteArray env = qgetenv("QLC_SHOT_DIR");
+    if (!env.isEmpty())
+    {
+        const QDir out(QString::fromLocal8Bit(env));
+        QDir().mkpath(out.absolutePath());
+        InputOutputManager mgr(nullptr, m_doc);
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            mgr.resize(sz);
+            mgr.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+            mgr.showShowControlSection(QStringLiteral("surfaces"));
+            QCoreApplication::processEvents();
+            QVERIFY(mgr.grab().save(out.absoluteFilePath(
+                QString("hazards-desk-%1x%2.png").arg(sz.width()).arg(sz.height()))));
+        }
+        mgr.hide();
+    }
 }
 
 QTEST_MAIN(DeskSetup_Test)

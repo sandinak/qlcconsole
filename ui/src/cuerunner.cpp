@@ -37,11 +37,13 @@
 #include <QPlainTextEdit>
 #include <QAction>
 #include <QLabel>
+#include <QListWidget>
 #include <QStyle>
 #include <QTimer>
 #include <QSet>
 
 #include <functional>
+#include <algorithm>
 
 #include "showfeatures.h"
 #include "app.h"
@@ -58,6 +60,8 @@
 #include "padrun.h"
 #include "controllerjobs.h"
 #include "cuerunner.h"
+#include "fixture.h"
+#include "outputrulekeeper.h"
 #include "editlivechip.h"
 #include "showlevel.h"
 #include "editlive.h"
@@ -626,6 +630,49 @@ void CueRunner::fitStateColumn()
         m_tree->header()->resizeSection(ColState, width);
 }
 
+void CueRunner::refreshHazards()
+{
+    if (m_hazardBox == nullptr)
+        return;
+    const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+    const QList<quint32> ids = k != nullptr ? k->hazards() : QList<quint32>();
+    QStringList lines;
+    for (quint32 id : ids)
+    {
+        const Fixture *fx = m_doc->fixture(id);
+        if (fx == nullptr)
+            continue;
+        const bool burst = k->isBurstHazard(id);
+        QString state;
+        if (k->hazardLive(id))
+            state = tr("OUT NOW");
+        else if (burst)
+            state = k->hazardHeld() ? tr("HELD — fires with its cue") : tr("DISARMED — fires only while held");
+        else
+            state = k->hazardsArmed() ? tr("ARMED — on from its next cue") : tr("DISARMED");
+        lines << tr("%1 · %2 · %3").arg(fx->name(), burst ? tr("Burst") : tr("Running"), state);
+    }
+    m_hazardList->setText(lines.join(QLatin1Char('\n')));
+    m_hazardBox->setVisible(!lines.isEmpty());
+}
+
+void CueRunner::refreshParked()
+{
+    if (m_parkedBox == nullptr)
+        return;
+    const ProgrammerController *pc = m_doc->programmer();
+    QList<quint32> ids = pc != nullptr ? pc->parkedFixtures() : QList<quint32>();
+    std::sort(ids.begin(), ids.end());
+    m_parked->clear();
+    for (quint32 id : ids)
+        if (const Fixture *fx = m_doc->fixture(id))
+        {
+            QListWidgetItem *it = new QListWidgetItem(fx->name(), m_parked);
+            it->setData(Qt::UserRole, id);
+        }
+    m_parkedBox->setVisible(m_parked->count() > 0);
+}
+
 /* The Run tab: big targets, the list, every button. */
 void CueRunner::buildFullLayout()
 {
@@ -900,6 +947,78 @@ void CueRunner::buildFullLayout()
     m_tcNext->setFont(big);
     m_tcNext->hide();
     v->addWidget(m_tcNext);
+
+    /* Parked (board Q351): held where they are over every cue, edit and
+       stop -- named here, so a GO that "does nothing" to one is explained,
+       and let go with Unpark. Hidden while nothing is parked. */
+    {
+        m_parkedBox = new QWidget(this);
+        m_parkedBox->setObjectName(QStringLiteral("crParkedBox"));
+        QHBoxLayout *ph = new QHBoxLayout(m_parkedBox);
+        ph->setContentsMargins(0, 0, 0, 0);
+        QLabel *title = new QLabel(tr("Parked"), m_parkedBox);
+        QFont tf = title->font();
+        tf.setBold(true);
+        title->setFont(tf);
+        title->setToolTip(tr("Held where they are over every cue, edit and stop, until unparked "
+                             "(right-click a fixture: Park Here). Saved with the show."));
+        ph->addWidget(title, 0, Qt::AlignTop);
+        m_parked = new QListWidget(m_parkedBox);
+        m_parked->setObjectName(QStringLiteral("crParked"));
+        m_parked->setSelectionMode(QAbstractItemView::ExtendedSelection);
+        m_parked->setFlow(QListView::LeftToRight);
+        m_parked->setWrapping(true);
+        m_parked->setResizeMode(QListView::Adjust);
+        m_parked->setFixedHeight(m_parked->fontMetrics().lineSpacing() * 2 + 14);
+        m_parked->setToolTip(tr("Double-click one to unpark it"));
+        ph->addWidget(m_parked, 1);
+        m_unpark = new QPushButton(tr("Unpark"), m_parkedBox);
+        m_unpark->setObjectName(QStringLiteral("crUnpark"));
+        m_unpark->setToolTip(tr("Let the cues drive the ones picked again (none picked: all of them)"));
+        ph->addWidget(m_unpark, 0, Qt::AlignTop);
+        v->addWidget(m_parkedBox);
+        auto unpark = [this](const QList<QListWidgetItem *> &items) {
+            QList<quint32> ids;
+            for (QListWidgetItem *it : items)
+                ids << it->data(Qt::UserRole).toUInt();
+            if (ids.isEmpty())
+                m_doc->programmer()->unparkAllFixtures();
+            else
+                m_doc->programmer()->unparkFixtures(ids);
+        };
+        connect(m_unpark, &QPushButton::clicked, this, [this, unpark]() { unpark(m_parked->selectedItems()); });
+        connect(m_parked, &QListWidget::itemDoubleClicked, this, [unpark](QListWidgetItem *it) { unpark({ it }); });
+        connect(m_doc->programmer(), &ProgrammerController::parkChanged, this, &CueRunner::refreshParked);
+        connect(m_doc, &Doc::fixtureChanged, this, &CueRunner::refreshParked);
+        refreshParked();
+    }
+
+    /* Hazards (board Q352/Q353): which are armed, held or out -- the
+       spotter arms them on their own controls, never from here. Hidden
+       while the show has none. */
+    {
+        m_hazardBox = new QWidget(this);
+        m_hazardBox->setObjectName(QStringLiteral("crHazardBox"));
+        QHBoxLayout *hh = new QHBoxLayout(m_hazardBox);
+        hh->setContentsMargins(0, 0, 0, 0);
+        QLabel *title = new QLabel(tr("Hazards"), m_hazardBox);
+        QFont tf = title->font();
+        tf.setBold(true);
+        title->setFont(tf);
+        title->setToolTip(tr("A Burst hazard fires only while the spotter's Hazard hold is held down; a "
+                             "Running one once their Hazard arm has armed it, until their Hazard kill. Set "
+                             "the controls in Connections ▸ Control surfaces ▸ This computer's desk."));
+        hh->addWidget(title, 0, Qt::AlignTop);
+        m_hazardList = new QLabel(m_hazardBox);
+        m_hazardList->setObjectName(QStringLiteral("crHazards"));
+        m_hazardList->setWordWrap(true);
+        hh->addWidget(m_hazardList, 1);
+        v->addWidget(m_hazardBox);
+        if (OutputRuleKeeper *k = m_doc->outputRuleKeeper())
+            connect(k, &OutputRuleKeeper::hazardsChanged, this, &CueRunner::refreshHazards);
+        connect(m_doc, &Doc::fixtureChanged, this, &CueRunner::refreshHazards);
+        refreshHazards();
+    }
 
     /* Teaching show: what each GO, Back and hit just did, in crew words
        (GoLog). Not there at all in any other show. */

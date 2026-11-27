@@ -175,6 +175,18 @@ MonitorGraphicsView::MonitorGraphicsView(Doc *doc, QWidget *parent)
         connect(m_doc->outputRuleKeeper(), &OutputRuleKeeper::stageMachineryChanged, this, [this]() {
             for (auto it = m_sceneryItems.constBegin(); it != m_sceneryItems.constEnd(); ++it)
                 refreshScenery(it.key());
+            /* A relay, a drop, a turntable held while editing: drawn where
+               the cue puts it, with the held mark. */
+            const OutputRuleKeeper *k = m_doc->outputRuleKeeper();
+            for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
+                it.value()->setHeldForEdit(k->heldForEdit(it.key()));
+        });
+    // Parked: the P beside it (board Q351).
+    if (m_doc != nullptr && m_doc->programmer() != nullptr)
+        connect(m_doc->programmer(), &ProgrammerController::parkChanged, this, [this]() {
+            const ProgrammerController *pc = m_doc->programmer();
+            for (auto it = m_fixtures.begin(); it != m_fixtures.end(); ++it)
+                it.value()->setParked(pc->isFixtureParked(it.key()));
         });
 
     /* The stage marks' spikes and numbers are sized for the screen: redrawn
@@ -4556,8 +4568,13 @@ void MonitorGraphicsView::addFixture(quint32 id, QPointF pos)
     item->setVisible(fixtureItemShouldBeVisible(id));
     // Show only: badged "held" from the start when its output is held now.
     if (const OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+    {
         item->setShowOnlyHeld(rules->showOnlyHeldBy() != OutputRuleKeeper::NotHeld
                               && rules->showOnlyFixtures().contains(id));
+        item->setHeldForEdit(rules->heldForEdit(id));
+    }
+    if (const ProgrammerController *pc = m_doc->programmer())
+        item->setParked(pc->isFixtureParked(id));
     // Reflect any existing truss binding (e.g. on workspace load)
     FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(id);
     item->setBoundToTruss(rp.trussId != Truss::invalidId());

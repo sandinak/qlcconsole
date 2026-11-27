@@ -172,6 +172,10 @@ signals:
     void profileNameChanged();
 
 private slots:
+    /** Every value, on the plugin's own thread (a direct connection):
+     *  the spotter's Hold let go and Kill to HazardFastPath. */
+    void slotHazardValue(quint32 universe, quint32 input, quint32 channel, uchar value,
+                         const QString &key = QString());
     void slotValueChanged(quint32 universe, quint32 input,
                           quint32 channel, uchar value, const QString& key = 0);
 
@@ -196,6 +200,8 @@ private:
     /** Device channel -> show channel (setChannelMap()); guarded by
      *  m_inputBufferMutex, which every value takes anyway */
     QVector<quint32> m_channelMap;
+    /** The plugin's values to HazardFastPath, on its own thread */
+    QMetaObject::Connection m_hazardConnection;
 
     /************************************************************************
      * Pages

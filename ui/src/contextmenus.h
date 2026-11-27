@@ -145,6 +145,9 @@ namespace ContextMenus
     QLC_UI_EXPORT QString layOutFromStageText();
     QLC_UI_EXPORT QString usedByText();
     QLC_UI_EXPORT QString duplicateText();
+    /** Park Here / Unpark (board Q351): every fixture's menu */
+    QLC_UI_EXPORT QString parkHereText();
+    QLC_UI_EXPORT QString unparkText();
     QLC_UI_EXPORT QString editPaletteText(bool effect);
     QLC_UI_EXPORT QString openFunctionText();
     QLC_UI_EXPORT QString deletePalettesText(int count);

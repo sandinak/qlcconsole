@@ -99,6 +99,14 @@ public:
      *  the Fixture Manager's Plot Symbol menu's wording. */
     static void fillStageLookCombo(QComboBox *cb, const class Fixture *fx);
 
+    /** Board Q351: setting a laser of class 3R, 3B, 4 or Unknown to behave
+     *  as a Light needs the class typed (@p laserClass, "3B"): true when it
+     *  was. A test answers it instead (setLaserConfirm()). */
+    static bool confirmLaserAsLight(QWidget *parent, const QString &fixtureName, const QString &laserClass);
+    /** For tests: answers confirmLaserAsLight() with what it returns (the
+     *  text typed); empty function: the dialog. */
+    static void setLaserConfirm(const std::function<QString(const QString &laserClass)> &answer);
+
 signals:
     /** A field is about to change the fixtures: @p field names it, so a run of
      *  steps on one spin box can be one undo. */
@@ -148,6 +156,7 @@ private:
 
     QComboBox *m_look;          ///< its stage look (Fixture::StageLook)
     QComboBox *m_owner;         ///< who it belongs to (RigOwner, docs/design/VENUES.md)
+    QComboBox *m_behaves;       ///< what it behaves as (Fixture::Behaviour; -1: guessed)
     QLabel *m_mountOn;
     QComboBox *m_towerPos;
     ColourSwatchButton *m_colour;

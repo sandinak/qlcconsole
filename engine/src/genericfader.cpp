@@ -444,6 +444,9 @@ int GenericFader::channelsCount() const
 
 void GenericFader::write(Universe *universe)
 {
+    // A gated fader (a hazard's fire layer) writes nothing while closed.
+    if (m_gate != nullptr && !m_gate->open())
+        return;
     if (m_zeroAll)
     {
         for (int c = 0; c < 512; ++c)

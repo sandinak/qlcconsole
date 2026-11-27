@@ -72,6 +72,8 @@
 #include "programmerflasher.h"
 #include "highlighteffect.h"
 #include "parkeffect.h"
+#include "fixturerest.h"
+#include "outputrulekeeper.h"
 #include "markeffect.h"
 #include "markplanner.h"
 #include "capturemanager.h"
@@ -1714,6 +1716,7 @@ void ProgrammerController::parkFixtures(const QList<quint32> &fixtureIds)
             continue;
 
         const int uni = (int)fxi->universe();
+        const bool hazard = FixtureRest::isHazard(fxi);
         QHash<quint32, uchar> values;
         const quint32 nCh = fxi->channels();
         for (quint32 c = 0; c < nCh; c++)
@@ -1722,7 +1725,11 @@ void ProgrammerController::parkFixtures(const QList<quint32> &fixtureIds)
             if (absAddr >= UNIVERSE_SIZE)
                 break;
             uchar v = 0;
-            if (uni >= 0 && uni < universes.size() && universes[uni] != NULL)
+            /* A hazard (fog, flame, a 3R+ laser) parks at off, whatever it
+               is doing: parked means safe (board Q351). */
+            if (hazard)
+                v = OutputRuleKeeper::safeValue(fxi, c);
+            else if (uni >= 0 && uni < universes.size() && universes[uni] != NULL)
                 v = universes[uni]->preGMValue(absAddr);
             values.insert(c, v);
         }

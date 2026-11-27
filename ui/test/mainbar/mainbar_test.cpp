@@ -862,6 +862,9 @@ void MainBar_Test::stopAllTurnsTheFogOffAndPutsTheGoboBack()
     fog->setFixtureDefinition(fogDef, fogDef->mode("2 Channel"));
     fog->setUniverse(2);
     fog->setAddress(10);
+    // Fired from its scene for the test (a Hazard waits for arming, Q351):
+    // what is under test is Stop All turning it off.
+    fog->setBehaviourSetting(Fixture::LightBehaviour);
     QVERIFY(doc->addFixture(fog));
     m_addedFixtures << fog->id();
 

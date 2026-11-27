@@ -31,6 +31,8 @@
 #include "function.h"
 #include "chaser.h"
 #include "doc.h"
+#include "outputrulekeeper.h"
+#include <QThread>
 #include "bus.h"
 
 #define KXMLQLCChaserSpeedModeCommon  QStringLiteral("Common")
@@ -711,22 +713,22 @@ ChaserAction subAction(ChaserActionType type, int index = -1, int subIndex = -1)
 }
 }
 
-void Chaser::subGo()
+void Chaser::subGo(bool fromRun)
 {
     ChaserAction action = subAction(ChaserSubNextStep);
-    setAction(action);
+    setAction(action, fromRun);
 }
 
-void Chaser::subBack()
+void Chaser::subBack(bool fromRun)
 {
     ChaserAction action = subAction(ChaserSubPreviousStep);
-    setAction(action);
+    setAction(action, fromRun);
 }
 
-void Chaser::jumpToSubCue(int index, int subIndex)
+void Chaser::jumpToSubCue(int index, int subIndex, bool fromRun)
 {
     ChaserAction action = subAction(ChaserSubSetStep, index, subIndex);
-    setAction(action);
+    setAction(action, fromRun);
 }
 
 void Chaser::setSubCueHeld(bool held)
@@ -746,6 +748,7 @@ bool Chaser::beginRestart()
         return false;
     m_restarting = true;
     m_startupAction.m_action = ChaserNoAction;
+    m_startupAction.m_runStamp = 0;
     return true;
 }
 
@@ -941,8 +944,59 @@ void Chaser::tap()
         m_runner->tap();
 }
 
-void Chaser::setAction(ChaserAction &action)
+quint32 Chaser::nextRouteSerial()
 {
+    quint32 s = m_routeSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+    if (s == 0)                 // 0 is "no stamp"
+        s = m_routeSerial.fetch_add(1, std::memory_order_acq_rel) + 1;
+    return s;
+}
+
+bool Chaser::runStamped() const
+{
+    const quint32 stamp = m_runSerial.load(std::memory_order_acquire);
+    return stamp != 0 && stamp == m_routeSerial.load(std::memory_order_acquire);
+}
+
+bool Chaser::stepRunStamped(int step) const
+{
+    if (step < 0)
+        return false;
+    const quint64 v = m_stepRun.load(std::memory_order_acquire);
+    const quint32 stamp = quint32(v >> 32);
+    return quint32(v) == quint32(step + 1) && stamp != 0
+           && stamp == m_runSerial.load(std::memory_order_acquire) && runStamped();
+}
+
+void Chaser::stopRequested()
+{
+    m_stopSerial.store(m_routeSerial.load(std::memory_order_acquire), std::memory_order_release);
+}
+
+void Chaser::clearRunStamp()
+{
+    m_runSerial.store(0, std::memory_order_release);
+    nextRouteSerial();
+}
+
+void Chaser::setAction(ChaserAction &action, bool fromRun)
+{
+    /* The Run's stamp, before the action is stored: the step it brings is
+       seen (on the MasterTimer's thread) only after this (R1). */
+    {
+        const quint32 s = nextRouteSerial();
+        if (fromRun)
+            m_runSerial.store(s, std::memory_order_release);
+        // On the action itself: the runner takes the stamp with the step.
+        action.m_runStamp = fromRun ? s : 0;
+    }
+    /* A Back, from any route (the Run tab, a VC cue list, the pad, the
+       chaser editor's Test, a web or Simple Desk step): a one-shot is
+       never fired again (board Q350). Its level read now, before the Back
+       is stored -- a frame between could read the Back's own 0. */
+    if (action.m_action == ChaserPreviousStep && isRunning() && doc() != nullptr
+        && doc()->outputRuleKeeper() != nullptr && QThread::currentThread() == doc()->thread())
+        doc()->outputRuleKeeper()->noteBack();
     QMutexLocker runnerLocker(&m_runnerMutex);
     if (m_runner != NULL && !m_restarting)
     {
@@ -961,6 +1015,7 @@ void Chaser::setAction(ChaserAction &action)
         m_startupAction.m_stepIntensity = action.m_stepIntensity;
         m_startupAction.m_fadeMode = action.m_fadeMode;
         m_startupAction.m_subStepIndex = action.m_subStepIndex;
+        m_startupAction.m_runStamp = action.m_runStamp;
     }
 }
 
@@ -1085,8 +1140,11 @@ void Chaser::createRunner(quint32 startTime)
     m_runner->setExternalClock(m_showClocked);
     m_runner->setSubCueHeld(m_subCueHeld);
     m_runner->setSubCueFollow(m_subCueFollow);
+    // A start's first step (no cue asked) carries the start's stamp, if any.
+    m_runner->setStartStamp(m_startupAction.m_runStamp);
     m_runner->setAction(m_startupAction);
     m_startupAction.m_action = ChaserNoAction;
+    m_startupAction.m_runStamp = 0;
 }
 
 void Chaser::preRun(MasterTimer* timer)
@@ -1094,6 +1152,14 @@ void Chaser::preRun(MasterTimer* timer)
     {
         QMutexLocker runnerLocker(&m_runnerMutex);
         createRunner(elapsed());
+        /* Each step with the stamp it was started with, where it starts
+           (first: a direct connection runs before the queued one is even
+           posted) -- the runner's, from the action it took, never the live
+           stamp (fifth review 2). */
+        ChaserRunner *runner = m_runner;
+        connect(runner, &ChaserRunner::currentStepChanged, runner, [this, runner](int step) {
+            m_stepRun.store((quint64(runner->stepStamp()) << 32) | quint32(step + 1), std::memory_order_release);
+        }, Qt::DirectConnection);
         connect(m_runner, SIGNAL(currentStepChanged(int)), this, SIGNAL(currentStepChanged(int)));
     }
 
@@ -1167,6 +1233,24 @@ void Chaser::postRun(MasterTimer* timer, QList<Universe *> universes)
             m_runner->setPause(false, universes);
 
         m_runner->postRun(timer, universes);
+
+        /* A stop that ends the list takes the Run's stamp: what plays next
+           is no GO's until a GO (R2: a start alone). Started again before
+           the stop was carried out, the timer restarts it (from its first
+           cue, as ever; stopped() is false then): the new run's first step
+           is a Run's only if a Run action came after the stop (fifth review
+           3: a GO during Fade and stop). A plain start (the web's, a VC
+           button's) moves no serial: it restarts unstamped (sixth review). */
+        if (!m_restarting)
+        {
+            const quint32 run = m_runSerial.load(std::memory_order_acquire);
+            if (stopped())
+                clearRunStamp();
+            else if (run != 0 && runStamped()
+                     && run != m_stopSerial.load(std::memory_order_acquire)
+                     && m_startupAction.m_runStamp == 0)
+                m_startupAction.m_runStamp = run;
+        }
 
         delete m_runner;
         m_runner = NULL;

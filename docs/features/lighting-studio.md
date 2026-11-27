@@ -833,6 +833,11 @@ over the cue's fade (2 seconds when the cue has none) — the motor is never
 told to jump. Stop the preview and it stays where it is until something
 plays on it. Blind changes only what is drawn.
 
+The same goes for every fixture that behaves as **Machinery**, a
+**One-shot** or a **Switch** — a turntable, a kabuki drop, a relay — and
+a **Hazard** is never fired by a pick at all. See [Behaves
+as](fixture-manager.md#behaves-as).
+
 **Check it on the real curtain.** With the curtain fixture patched to the
 motor controller (or its relay box), in Operate:
 

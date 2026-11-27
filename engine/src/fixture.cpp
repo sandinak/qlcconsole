@@ -23,6 +23,7 @@
 #include <QString>
 #include <QtMath>
 #include <QDebug>
+#include <QMutex>
 #include <QCoreApplication>
 
 #include "qlcfixturedefcache.h"
@@ -38,6 +39,7 @@
 
 #include "wledfixture.h"
 #include "fixture.h"
+#include "fixturerest.h"
 #include "doc.h"
 
 /*****************************************************************************
@@ -102,9 +104,53 @@ quint32 Fixture::invalidId()
  * Name
  *****************************************************************************/
 
+std::atomic<quint32> Fixture::s_guessEpoch { 1 };
+
+namespace
+{
+QMutex &guessListenersMutex()
+{
+    static QMutex m;
+    return m;
+}
+QList<QPair<const void *, std::function<void(const void *)>>> &guessListeners()
+{
+    static QList<QPair<const void *, std::function<void(const void *)>>> l;
+    return l;
+}
+}
+
+void Fixture::invalidateGuesses(const void *context)
+{
+    s_guessEpoch.fetch_add(1, std::memory_order_relaxed);
+    QList<QPair<const void *, std::function<void(const void *)>>> copy;
+    {
+        QMutexLocker locker(&guessListenersMutex());
+        copy = guessListeners();
+    }
+    for (const auto &l : copy)
+        l.second(context);
+}
+
+void Fixture::addGuessListener(const void *owner, const std::function<void(const void *)> &listener)
+{
+    QMutexLocker locker(&guessListenersMutex());
+    guessListeners().append(qMakePair(owner, listener));
+}
+
+void Fixture::removeGuessListener(const void *owner)
+{
+    QMutexLocker locker(&guessListenersMutex());
+    auto &l = guessListeners();
+    for (int i = int(l.size()) - 1; i >= 0; --i)
+        if (l.at(i).first == owner)
+            l.removeAt(i);
+}
+
 void Fixture::setName(const QString& name)
 {
     m_name = name;
+    invalidateGuess();
     emit changed(m_id);
 }
 
@@ -837,6 +883,7 @@ void Fixture::checkAlias(int chIndex, uchar value)
 void Fixture::setFixtureDefinition(QLCFixtureDef* fixtureDef,
                                    QLCFixtureMode* fixtureMode)
 {
+    invalidateGuess();
     // Given a definition: it is no longer standing in for a missing one.
     m_unavailableManufacturer.clear();
     m_unavailableModel.clear();
@@ -1004,7 +1051,65 @@ void Fixture::setStageLook(StageLook look)
         look = AutoLook;
     if (m_stageLook.exchange(int(look), std::memory_order_relaxed) == int(look))
         return;
+    invalidateGuess();      // the Curtain look is Machinery (Behaves as)
     emit changed(m_id);
+}
+
+/*****************************************************************************
+ * Behaves as
+ *****************************************************************************/
+
+void Fixture::setBehaviourSetting(int behaviour)
+{
+    if (behaviour < int(LightBehaviour) || behaviour > int(HazardRunningBehaviour))
+        behaviour = -1;
+    if (m_behaviour.exchange(behaviour, std::memory_order_relaxed) == behaviour)
+        return;
+    emit changed(m_id);
+}
+
+QList<Fixture::Behaviour> Fixture::behaviours()
+{
+    return { LightBehaviour, MachineryBehaviour, OneShotBehaviour, SwitchBehaviour,
+             HazardBurstBehaviour, HazardRunningBehaviour };
+}
+
+QString Fixture::behaviourToString(Behaviour behaviour)
+{
+    switch (behaviour)
+    {
+        case MachineryBehaviour: return QStringLiteral("Machinery");
+        case OneShotBehaviour: return QStringLiteral("OneShot");
+        case SwitchBehaviour: return QStringLiteral("Switch");
+        case HazardBurstBehaviour: return QStringLiteral("HazardBurst");
+        case HazardRunningBehaviour: return QStringLiteral("HazardRunning");
+        case LightBehaviour:
+        default: return QStringLiteral("Light");
+    }
+}
+
+int Fixture::stringToBehaviour(const QString &key)
+{
+    for (Behaviour b : behaviours())
+        if (key == behaviourToString(b))
+            return int(b);
+    if (key == QLatin1String("Hazard"))
+        return kHazardOfGuessedKind;
+    return -1;
+}
+
+QString Fixture::behaviourName(Behaviour behaviour)
+{
+    switch (behaviour)
+    {
+        case MachineryBehaviour: return tr("Machinery");
+        case OneShotBehaviour: return tr("One-shot");
+        case SwitchBehaviour: return tr("Switch");
+        case HazardBurstBehaviour: return tr("Hazard — Burst");
+        case HazardRunningBehaviour: return tr("Hazard — Running");
+        case LightBehaviour:
+        default: return tr("Light");
+    }
 }
 
 void Fixture::setOwner(RigOwner::Owner owner)
@@ -1706,6 +1811,7 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     QList<int> forcedHTP;
     QList<int> forcedLTP;
     OutputRules outputRules;
+    int behaviour = -1;     // absent: guessed, as before there was one
     QList<quint32>modifierIndices;
     QList<ChannelModifier *>modifierPointers;
 
@@ -1818,6 +1924,10 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
         else if (xmlDoc.name() == KXMLFixtureOutputRules)
         {
             outputRules = stringToOutputRules(xmlDoc.readElementText());
+        }
+        else if (xmlDoc.name() == KXMLFixtureBehavesAs)
+        {
+            behaviour = stringToBehaviour(xmlDoc.readElementText().trimmed());
         }
         else if (xmlDoc.name() == KXMLFixtureOwner)
         {
@@ -2015,6 +2125,12 @@ bool Fixture::loadXML(QXmlStreamReader &xmlDoc, Doc *doc,
     setForcedHTPChannels(forcedHTP);
     setForcedLTPChannels(forcedLTP);
     m_outputRules.storeRelaxed(int(outputRules));
+    invalidateGuess();
+    /* 0.5.3's first builds had one kind of Hazard: set by hand, so it
+       stays a hazard -- of the kind its definition and name suggest. */
+    if (behaviour == kHazardOfGuessedKind)
+        behaviour = int(FixtureRest::guessHazardKind(this));
+    m_behaviour.store(behaviour, std::memory_order_relaxed);
     for (int i = 0; i < modifierIndices.count(); i++)
         setChannelModifier(modifierIndices.at(i), modifierPointers.at(i));
     setID(id);
@@ -2165,6 +2281,9 @@ bool Fixture::saveXML(QXmlStreamWriter *doc) const
        reader that does not know the tag skips it (it did before this). */
     if (outputRules() != OutputRules())
         doc->writeTextElement(KXMLFixtureOutputRules, outputRulesToString(outputRules()));
+    /* Only when the LD said: guessed, it stays guessed on the next load */
+    if (behaviourOverridden())
+        doc->writeTextElement(KXMLFixtureBehavesAs, behaviourToString(Behaviour(behaviourSetting())));
 
     /* End the <Fixture> tag */
     doc->writeEndElement();
@@ -2184,6 +2303,7 @@ void Fixture::setOutputRules(OutputRules rules)
 {
     if (rules == outputRules())
         return;
+    invalidateGuess();
     m_outputRules.storeRelaxed(int(rules));
     emit changed(m_id);
 }

@@ -13874,8 +13874,9 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
     laserClassCb->addItem(tr("Class 3R"), 3);
     laserClassCb->addItem(tr("Class 3B"), 4);
     laserClassCb->addItem(tr("Class 4"), 5);
-    laserClassCb->setToolTip(tr("The laser's power class. Show Review treats 1, 2 and 3R reaching the "
-                                "audience as a note, 3B and 4 as a warning."));
+    laserClassCb->setToolTip(tr("The laser's power class, as its label says (Not set: its definition's). "
+                                "Show Review treats 1, 2 and 3R reaching the audience as a note, 3B and 4 "
+                                "as a warning; 3R and up behave as a Hazard unless you say otherwise."));
     fields->insertBeforeDmx(tr("Laser class:"), laserClassCb);    // what it is, not where it points
 
     QDoubleSpinBox *panOffsetSpin = new QDoubleSpinBox;
@@ -14521,7 +14522,13 @@ void Monitor::fixtureEditorOnce(const QList<quint32> &fidList, quint32 &next)
         });
         lensSlot->setVisible(!maskRow->isHidden());       // where the Masking row is
     }
-    connect(laserClassCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int){ liveRigUpdate(); });
+    connect(laserClassCb, QOverload<int>::of(&QComboBox::currentIndexChanged), [&](int){
+        liveRigUpdate();
+        // Its class picks what it behaves as (a 3R+ laser: a Hazard).
+        if (m_doc->outputRuleKeeper() != nullptr)
+            m_doc->outputRuleKeeper()->rebuild();
+        fields->reload();
+    });
     connect(panOffsetSpin,  QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(tiltOffsetSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), [&](double){ liveRigUpdate(); });
     connect(panInvertCb,    &QCheckBox::toggled, [&](bool) { liveRigUpdate(); });

@@ -72,6 +72,54 @@ private slots:
     /** And the footer says so: "Curtain stopped at 40% — GO to carry on";
      *  gone at the GO. */
     void theFooterSaysWhereTheCurtainStopped();
+    /** Board Q350/Q351, "Behaves as": a relay (Switch), house lights and
+     *  a kabuki drop (One-shot) stay where they are when a cue is picked
+     *  in Design -- only a run moves them -- while a light previews. */
+    void switchesAndDropsHoldWhileEditing();
+    /** A Back never fires a one-shot again: dropped stays dropped, Back to
+     *  the cue before the drop too; the next GO plays on. */
+    void aBackNeverFiresAOneShotAgain();
+    /** A hazard (a CO2 jet, a fogger) is never fired -- by a pick, a
+     *  preview or, until arming lands (Q352), a GO -- and the footer says
+     *  why. A parked one parks off. */
+    void aHazardIsNeverFiredYet();
+    /** The emergency stop: a switch and a one-shot hold their state, a
+     *  hazard is off, the lights go out. */
+    void aStopHoldsSwitchesAndDrops();
+    /** Board 053p review, decided: an emergency stop during an edit's
+     *  let-go glide, then a GO: the GO drops what is left of the glide, so
+     *  the cue owns the curtain from where the stop froze it. */
+    void aGoAfterAStopMidGlideDropsTheGlide();
+    /** Park wins over cues, the edit hold and the stop's release. */
+    void parkWinsOverHoldsAndCues();
+    /** The field: guessed (old shows load unchanged), set, saved; the
+     *  definition's laser class; Show Review lists what was set by hand. */
+    void behavesAsIsGuessedSetAndSaved();
+
+    /* The independent review of feat/053-behaves-as (each fails on
+       fa11984b3; base APIs only, so they build there). */
+    /** Input passthrough never reaches a hazard held safe. */
+    void passthroughNeverFiresAHazard();
+    /** A hazard parked at a value (run to 255 as a Light, parked, then made
+     *  a Hazard) is held at 0, not at what the Park saved. */
+    void aParkedHazardStaysOff();
+    /** A light overlapping a hazard's address, parked later, never writes
+     *  over the hazard's hold (the hold sits on top of every Park). */
+    void theHazardHoldWinsOverALaterPark();
+    /** Made a hazard mid-show: held from the very next frame, not after
+     *  the event loop's rebuild. */
+    void aHazardIsHeldFromTheNextFrame();
+    /** A Back from any route (a chaser's own step: the Simple Desk, a pad,
+     *  the chaser editor's Test) holds the one-shot. */
+    void everyBackHoldsTheOneShot();
+    /** Guessed by whole words; a light by name or definition is never
+     *  Machinery or One-shot by name alone; MagicFX's confetti guns. */
+    void theGuessReadsWholeWords();
+    /** Reading what a rig behaves as again (the Fixture Manager's column,
+     *  on every fixtureChanged) costs nothing once guessed. */
+    void theGuessIsKept();
+    /** OutputLayer forgets the glides that are over. */
+    void finishedGlidesAreForgotten();
     void courseShows_data();
     void courseShows();
     void aRealShow();
@@ -129,6 +177,14 @@ private:
      *  does it, the timer played here meanwhile. */
     void stopAllFromControl(int fadeMs);
     Fixture *fixtureNamed(const QString &name) const;
+    /** Board Q351's rig: a stage wash (Light), a house relay (Switch), a
+     *  kabuki drop (One-shot) and a CO2 jet (Hazard), one dimmer each;
+     *  cue 1 the wash full, the rest out; cue 2 the wash half, the relay
+     *  on, the drop and the jet fired; cue 3 the wash full (the rest
+     *  track). @p fadeMs on every cue. */
+    Chaser *behavesList(int fadeMs = 0);
+    int at(const char *fixture, int ch = 0);
+    quint32 m_c1 = 0, m_c2 = 0, m_c3 = 0;
 
     Doc *m_doc = nullptr;
     QMap<int, QByteArray> m_moving;   //!< per cue of the straight run: channels an effect moves

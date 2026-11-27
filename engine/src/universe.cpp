@@ -1512,6 +1512,10 @@ void Universe::reset()
            the buffer postGMValues() hands out */
         memcpy(m_post, m_passthroughValues->constData(),
                size_t(qMin(m_postGMValues->size(), m_passthroughValues->size())));
+        // A hazard held safe never takes the input's (Q352/Q353).
+        for (int i = 0; i < UNIVERSE_SIZE && i < m_postGMValues->size(); i++)
+            if (passthroughHeld(i))
+                m_post[i] = 0;
     }
     else
         memset(m_post, 0, size_t(m_postGMValues->size()));
@@ -1571,6 +1575,8 @@ void Universe::applyPassthroughValues(int address, int range)
     {
         if (uchar(m_channelsMask->at(i)) & ShowOnlyOutput)
             continue;       // Show only: never the input's (R6-4)
+        if (passthroughHeld(i))
+            continue;       // a hazard held safe: never the input's (Q352)
         if (static_cast<uchar>(m_postGMValues->at(i)) < static_cast<uchar>(m_passthroughValues->at(i))) // HTP merge
         {
             m_post[i] = (*m_passthroughValues)[i];
@@ -1738,6 +1744,9 @@ uchar Universe::applyPassthrough(int channel, uchar value)
         // Show only (R6-4): an input merged in never reaches a Show-only
         // channel -- no GO, no stamp, past every fader.
         if (uchar(m_channelsMask->at(channel)) & ShowOnlyOutput)
+            return value;
+        // A hazard held safe: the same (Q352/Q353).
+        if (passthroughHeld(channel))
             return value;
         const uchar passthroughValue = static_cast<uchar>(m_passthroughValues->at(channel));
         if (value < passthroughValue) // HTP merge

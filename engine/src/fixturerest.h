@@ -13,7 +13,10 @@
 #define FIXTUREREST_H
 
 #include <QtGlobal>
+#include <QString>
 #include "qlcengine_export.h"
+#include "qlcphysical.h"
+#include "fixture.h"
 
 class Fixture;
 class QLCChannel;
@@ -50,15 +53,53 @@ namespace FixtureRest
      *  it is, so no head swings to its definition's default. */
     QLC_ENGINE_EXPORT bool holdsPosition(const QLCChannel *ch);
 
-    /** Stage machinery: a fixture that moves scenery, so a stop must not
-     *  move it -- it could be dragging a set piece. Today a curtain fixture
-     *  (Scenery::isCurtainFixture(): the bundled Stage Curtain, or any
-     *  fixture given the Curtain plot symbol) and nothing else; the one
-     *  place a per-fixture behaviour (board Q351: turntables, drops) is
-     *  added. Stop ALL, Fade and stop and the emergency stop freeze every
-     *  channel of it where it is (OutputRuleKeeper::holdStageMachinery())
-     *  and putAllAtRest() leaves it. Read when the rig changes or a stop
-     *  comes, never per frame. */
+    /** What @p fx behaves as (Fixture::Behaviour, board Q350/Q351): the
+     *  LD's word for it (Fixture::behaviourSetting()), else the guess.
+     *  Read when the rig changes, a stop comes or a cue is picked, never
+     *  per frame (the OutputRuleKeeper keeps what it needs). */
+    QLC_ENGINE_EXPORT Fixture::Behaviour behaviour(const Fixture *fx);
+
+    /** What @p fx behaves as when nobody has said, from its definition
+     *  and its plot symbol: a curtain (Scenery::isCurtainFixture()), the
+     *  driver of a drape on the plot, a turntable, winch, hoist or scrim
+     *  is Machinery; a kabuki or a dropping scrim One-shot; a hazer,
+     *  fogger, flame, CO2, confetti or spark effect -- anything gas
+     *  powered -- and a laser of class 3R, 3B, 4 or Unknown a Hazard of
+     *  the kind guessHazardKind() says (a silk flame is a light); a relay (the Switch output rule, or named
+     *  so) and house or work lights on when not in use (the On at open
+     *  rule) a Switch; the rest -- house dimmers by name too --,
+     *  lasers of class 1 to 2M or none said too, a Light. */
+    QLC_ENGINE_EXPORT Fixture::Behaviour guessBehaviour(const Fixture *fx);
+
+    /** @p fx's laser class: the unit's own (Fixture Properties' Laser
+     *  class), else its definition's (its mode's physical, else the
+     *  definition's); none when neither says. */
+    QLC_ENGINE_EXPORT QLCPhysical::LaserClass laserClass(const Fixture *fx);
+
+    /** Which kind of Hazard @p fx is when nobody has said (board Q352,
+     *  Q353): fog, haze, smoke -- a hazer or smoke machine by its
+     *  definition -- and a laser are Running (armed, then on until the
+     *  Kill); flame, CO2, confetti, cannons, sparkulars, pyro and anything
+     *  else Burst (out only while the Hold is held). */
+    QLC_ENGINE_EXPORT Fixture::Behaviour guessHazardKind(const Fixture *fx);
+
+    /** A laser whose class is 3R, 3B, 4 or Unknown that the LD has said is
+     *  a Light: what Show Review lists, and what the properties ask a
+     *  typed yes for. */
+    QLC_ENGINE_EXPORT bool isHazardousLaserAsLight(const Fixture *fx);
+
+    /** Behaves as a Hazard, either kind: never fired by an edit or a
+     *  preview, and by a run only as the spotter lets it (Q352/Q353:
+     *  OutputRuleKeeper's hazard arming); off the moment a stop comes. */
+    QLC_ENGINE_EXPORT bool isHazard(const Fixture *fx);
+
+    /** Stage machinery, a one-shot or a switch (behaviour()): it moves
+     *  only when a run plays it (GO, Back, a jump, in Design or Operate).
+     *  Held where it is while a cue is picked in Design
+     *  (OutputRuleKeeper::holdMachineryForEdit()), and a stop -- Stop ALL,
+     *  Fade and stop, the emergency stop -- freezes every channel of it
+     *  where it is (OutputRuleKeeper::holdStageMachinery()) until the next
+     *  GO; putAllAtRest() leaves it. The one predicate both read. */
     QLC_ENGINE_EXPORT bool freezesOnStop(const Fixture *fx);
 
     /** holdsPosition() for channel @p channel of fixture @p fixtureId:

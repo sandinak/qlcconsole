@@ -35,6 +35,9 @@
 #include <algorithm>
 
 #include "showreviewcontext.h"
+#include "fixturerest.h"
+#include "outputrulekeeper.h"
+#include "deskrecord.h"
 #include "showtreecontroller.h"
 #include "programmercontroller.h"
 #include "venuecorrections.h"
@@ -48,6 +51,8 @@
 #include "placementcheck.h"
 #include "nolightzone.h"
 #include "efx.h"
+#include "efxfixture.h"
+#include "chaser.h"
 #include "monitorproperties.h"
 #include "fixturedefcheck.h"
 #include "qlcfixturemode.h"
@@ -1059,6 +1064,205 @@ static void pwr06(ReviewContext &ctx, QList<ReviewFinding> &out)
     }
 }
 
+/* Board Q351: a fixture whose Behaves as was set by hand differs from what
+   its definition and symbol suggest -- listed, so a show handed on says
+   what was decided. A laser of class 3R or above set to Light is FIX-21. */
+static void fix20(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    for (Fixture *fx : ctx.doc()->fixtures())
+    {
+        if (fx == nullptr || !fx->behaviourOverridden() || FixtureRest::isHazardousLaserAsLight(fx))
+            continue;
+        const Fixture::Behaviour set = Fixture::Behaviour(fx->behaviourSetting());
+        const Fixture::Behaviour guess = FixtureRest::guessBehaviour(fx);
+        if (set == guess)
+            continue;
+        out << ReviewContext::make(QStringLiteral("FIX-20"), ReviewFinding::Note,
+            tr("%1 behaves as %2 (its definition suggests %3).")
+                .arg(fx->name(), Fixture::behaviourName(set), Fixture::behaviourName(guess)),
+            fixtureKeys({ fx->id() }), QByteArray::number(int(set)) + '/' + QByteArray::number(int(guess)),
+            QStringLiteral("fixtures"), variantIds({ fx->id() }));
+    }
+}
+
+static void fix21(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    for (Fixture *fx : ctx.doc()->fixtures())
+    {
+        if (!FixtureRest::isHazardousLaserAsLight(fx))
+            continue;
+        const QString cls = QLCPhysical::laserClassToString(FixtureRest::laserClass(fx));
+        out << ReviewContext::make(QStringLiteral("FIX-21"), ReviewFinding::Warning,
+            tr("%1 is a Class %2 laser treated as a Light: previews, edits and Locate can fire it.")
+                .arg(fx->name(), cls),
+            fixtureKeys({ fx->id() }), cls.toUtf8(), QStringLiteral("fixtures"), variantIds({ fx->id() }));
+    }
+}
+
+/* Board Q352/Q353: the hazards some scene sets above off (a cue's, a VC
+   button's, any): the ones the spotter has to let fire. */
+static QList<quint32> hazardsCued(Doc *doc)
+{
+    const OutputRuleKeeper *k = doc->outputRuleKeeper();
+    return k != nullptr ? k->hazardsCued() : QList<quint32>();
+}
+
+static void fix22(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    const DeskRecord *desk = ctx.doc()->deskRecord();
+    QStringList burst, running;
+    QList<quint32> ids;
+    for (quint32 id : hazardsCued(ctx.doc()))
+    {
+        const Fixture *fx = ctx.doc()->fixture(id);
+        const bool isBurst = FixtureRest::behaviour(fx) == Fixture::HazardBurstBehaviour;
+        const DeskRecord::Role needs = isBurst ? DeskRecord::HazardHold : DeskRecord::HazardArm;
+        if (desk != nullptr && desk->isSet(needs))
+            continue;
+        (isBurst ? burst : running) << fx->name();
+        ids << id;
+    }
+    if (!burst.isEmpty())
+        out << ReviewContext::make(QStringLiteral("FIX-22"), ReviewFinding::Blocker,
+            tr("Cues fire %1 (a Burst hazard), but no Hazard hold is set on this computer: they never "
+               "fire. Set the spotter's Hazard hold in Connections ▸ Control surfaces.")
+                .arg(burst.join(QStringLiteral(", "))),
+            fixtureKeys(ids), QByteArray("hold"), QStringLiteral("fixtures"), variantIds(ids));
+    // A show that fires hazards with no Kill: nothing turns one off at once.
+    const QList<quint32> cued = hazardsCued(ctx.doc());
+    if (!cued.isEmpty() && (desk == nullptr || !desk->isSet(DeskRecord::HazardKill)))
+        out << ReviewContext::make(QStringLiteral("FIX-22"), ReviewFinding::Warning,
+            tr("Cues fire hazards, but no Hazard kill is set on this computer: the spotter has nothing "
+               "that turns them all off at once. Set it in Connections ▸ Control surfaces."),
+            fixtureKeys(cued), QByteArray("kill"), QStringLiteral("fixtures"), variantIds(cued));
+    if (!running.isEmpty())
+        out << ReviewContext::make(QStringLiteral("FIX-22"), ReviewFinding::Blocker,
+            tr("Cues fire %1 (a Running hazard), but no Hazard arm is set on this computer: they never "
+               "fire. Set the spotter's Hazard arm in Connections ▸ Control surfaces.")
+                .arg(running.join(QStringLiteral(", "))),
+            fixtureKeys(ids), QByteArray("arm"), QStringLiteral("fixtures"), variantIds(ids));
+}
+
+/* Third review N7: a hazard takes only its cue's own level -- an effect on
+   it (an EFX, an RGB matrix, an effect look, a chaser inside the cue) never
+   drives it. Said on the cue, so nobody waits for a haze chase that never
+   comes. */
+static void fix24(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    Doc *doc = ctx.doc();
+    ShowTreeController *st = doc->showTree();
+    if (st == nullptr)
+        return;
+    QSet<quint32> hazards;
+    for (Fixture *fx : doc->fixtures())
+        if (fx != nullptr && FixtureRest::isHazard(fx))
+            hazards.insert(fx->id());
+    if (hazards.isEmpty())
+        return;
+    for (const ShowTree::Production &p : st->productions())
+        for (const ShowTree::CueList &l : p.lists)
+            for (const ShowTree::Cue &c : l.cues)
+            {
+                QStringList what;
+                QSet<quint32> on;
+                QList<quint32> fids;
+                if (const Collection *coll = qobject_cast<const Collection *>(doc->function(c.collection)))
+                    fids = coll->functions();
+                for (int i = 0; i < fids.size() && i < 256; ++i)
+                {
+                    Function *f = doc->function(fids.at(i));
+                    if (f == nullptr)
+                        continue;
+                    if (const Collection *sub = qobject_cast<const Collection *>(f))
+                    {
+                        fids << sub->functions();
+                        continue;
+                    }
+                    QSet<quint32> fxs;
+                    if (const EFX *efx = qobject_cast<const EFX *>(f))
+                        for (const EFXFixture *ef : efx->fixtures())
+                            fxs.insert(ef->head().fxi);
+                    else if (const RGBMatrix *m = qobject_cast<const RGBMatrix *>(f))
+                    {
+                        if (const FixtureGroup *g = doc->fixtureGroup(m->fixtureGroup()))
+                            for (quint32 id : g->fixtureList())
+                                fxs.insert(id);
+                    }
+                    else if (qobject_cast<const Chaser *>(f) != nullptr)
+                        fxs = hazards;      // a chase inside a cue: anything it may reach
+                    else if (const Scene *sc = qobject_cast<const Scene *>(f))
+                    {
+                        bool effect = false;
+                        for (quint32 pid : sc->palettes())
+                            if (const QLCPalette *pal = doc->palette(pid))
+                                effect = effect || pal->type() == QLCPalette::Effect;
+                        if (effect)
+                        {
+                            for (quint32 id : sc->fixtures())
+                                fxs.insert(id);
+                            for (quint32 gid : sc->fixtureGroups())
+                                if (const FixtureGroup *g = doc->fixtureGroup(gid))
+                                    for (quint32 id : g->fixtureList())
+                                        fxs.insert(id);
+                        }
+                    }
+                    const QSet<quint32> hit = fxs & hazards;
+                    if (!hit.isEmpty())
+                    {
+                        on += hit;
+                        what << f->name();
+                    }
+                }
+                if (on.isEmpty())
+                    continue;
+                QStringList names;
+                QList<quint32> ids = on.values();
+                std::sort(ids.begin(), ids.end());
+                for (quint32 id : ids)
+                    if (const Fixture *fx = doc->fixture(id))
+                        names << fx->name();
+                const QString cueName = c.number.isEmpty() ? c.name : c.number + QLatin1Char(' ') + c.name;
+                out << ReviewContext::make(QStringLiteral("FIX-24"), ReviewFinding::Note,
+                    tr("Cue %1: %2 does not drive %3 -- a hazard takes only its cue's own level, never an "
+                       "effect's.").arg(cueName, what.join(QStringLiteral(", ")), names.join(QStringLiteral(", "))),
+                    fixtureKeys(ids), QByteArray::number(c.id), QStringLiteral("fixtures"), variantIds(ids));
+            }
+}
+
+/* Every hazard and every switch, guessed or set: what a stop and a run do
+   to it differ from a light, so a show handed on says so. The kind is in
+   the fingerprint: a rename that changes it comes back. */
+static void fix23(ReviewContext &ctx, QList<ReviewFinding> &out)
+{
+    for (Fixture *fx : ctx.doc()->fixtures())
+    {
+        if (fx == nullptr)
+            continue;
+        const Fixture::Behaviour b = FixtureRest::behaviour(fx);
+        if (!Fixture::isHazardBehaviour(int(b)) && b != Fixture::SwitchBehaviour)
+            continue;
+        QString what;
+        switch (b)
+        {
+            case Fixture::HazardBurstBehaviour:
+                what = tr("fires only while the spotter's Hazard hold is held");
+                break;
+            case Fixture::HazardRunningBehaviour:
+                what = tr("fires once the spotter's Hazard arm has armed it, until their Hazard kill");
+                break;
+            default:
+                what = tr("holds its state while editing and through a stop");
+                break;
+        }
+        out << ReviewContext::make(QStringLiteral("FIX-23"), ReviewFinding::Note,
+            tr("%1 behaves as %2 (%3): it %4.")
+                .arg(fx->name(), Fixture::behaviourName(b),
+                     fx->behaviourOverridden() ? tr("set by hand") : tr("guessed"), what),
+            fixtureKeys({ fx->id() }), QByteArray::number(int(b)),
+            QStringLiteral("fixtures"), variantIds({ fx->id() }));
+    }
+}
+
 /****************************************************************************
  * Files (FILE)
  ****************************************************************************/
@@ -1570,6 +1774,28 @@ QList<ShowReview::Check> ShowReviewChecks::showChecks()
           tr("A Gobo look named after glass you loaded in some lights (Gobo Wheels) finds it in "
              "whichever slot each light carries it. A light in the look that has no glass of that "
              "name ignores it. Load the glass in that light too, or take it out of the look."), fix19 },
+        { QStringLiteral("FIX-20"), tr("Behaves as set by hand"), S::Fixtures,
+          tr("What a fixture behaves as (Light, Machinery, One-shot, Switch, Hazard) decides whether "
+             "an edit or a preview may move it and what a stop does to it. One set by hand to "
+             "something other than its definition suggests is listed so whoever runs the show "
+             "knows. Check it is meant, then accept it."), fix20 },
+        { QStringLiteral("FIX-21"), tr("A 3R or stronger laser treated as a light"), S::Fixtures,
+          tr("A laser of class 3R, 3B or 4 (or of unknown class) is a hazard: it is never fired by an "
+             "edit, a preview or Locate. Treated as a Light, any of those can fire it. Accept it "
+             "only with the note naming who approved it (the venue's laser safety officer)."), fix21 },
+        { QStringLiteral("FIX-22"), tr("Hazard cues with no spotter's control"), S::Fixtures,
+          tr("A hazard fires only as the spotter lets it: a Burst (flame, CO2, confetti) while their "
+             "Hazard hold is held down, a Running one (fog, haze, a laser) once their Hazard arm has "
+             "armed it. With neither set on this computer, every cue that sets one skips it. Set them in "
+             "Connections ▸ Control surfaces ▸ This computer's desk."), fix22 },
+        { QStringLiteral("FIX-23"), tr("Hazards and switches"), S::Fixtures,
+          tr("Every hazard (Burst or Running) and every switch, guessed from its definition and name or "
+             "set by hand: a stop and a run treat them differently from a light. Check each is what it "
+             "is, then accept it; one that changes (a rename can) is listed again."), fix23 },
+        { QStringLiteral("FIX-24"), tr("An effect on a hazard"), S::Fixtures,
+          tr("A hazard takes only its cue's own level: an EFX, an RGB matrix, an effect look or a chase "
+             "inside the cue never drives it (a Running hazard follows the cue's fade, a Burst snaps). "
+             "Set its level in the cue itself."), fix24 },
         { QStringLiteral("FIX-18"), tr("No beam angle or pan/tilt range"), S::Fixtures,
           tr("A definition that says 0 for its lens or its pan/tilt range gives the rig view nothing to "
              "draw and the aim solver nothing to turn. They assume a default by fixture type (a moving "

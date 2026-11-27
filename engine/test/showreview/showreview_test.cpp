@@ -58,6 +58,7 @@
 #include "fixture.h"
 #include "qlcfile.h"
 #include "scene.h"
+#include "fixturerest.h"
 #include "doc.h"
 #include "movespeed.h"
 #include "stagetarget.h"
@@ -1121,6 +1122,87 @@ void ShowReview_Test::pwr06()
     QVERIFY(quiet("PWR-06"));               // a work light, said so
     a->setOutputRules(Fixture::ExemptBlackout);
     QVERIFY(fires("PWR-06"));
+}
+
+void ShowReview_Test::fix20fix21()
+{
+    Fixture *wash = par("Par 1", 0);
+    Fixture *relay = dimmer("Stage relay", 10);
+    relay->setOutputRules(Fixture::Switch);
+    QVERIFY(quiet("FIX-20"));               // guessed: nothing to say
+    QVERIFY(quiet("FIX-21"));
+    relay->setBehaviourSetting(Fixture::SwitchBehaviour);
+    QVERIFY(quiet("FIX-20"));               // set to what it is guessed as
+    wash->setBehaviourSetting(Fixture::MachineryBehaviour);
+    QVERIFY(fires("FIX-20"));
+    QCOMPARE(findings("FIX-20").first().severity, ReviewFinding::Note);
+    wash->setBehaviourSetting(-1);
+    QVERIFY(quiet("FIX-20"));
+
+    // A laser of class 3B (its label) set to Light: FIX-21, not FIX-20.
+    Fixture *laser = dimmer("Sky laser", 20);
+    FixtureRigProps rp = m_doc->monitorProperties()->fixtureRigProps(laser->id());
+    rp.laserClass = 4;
+    m_doc->monitorProperties()->setFixtureRigProps(laser->id(), rp);
+    QVERIFY(quiet("FIX-21"));               // a Hazard, as guessed
+    laser->setBehaviourSetting(Fixture::LightBehaviour);
+    QVERIFY(fires("FIX-21"));
+    QCOMPARE(findings("FIX-21").first().severity, ReviewFinding::Warning);
+    QVERIFY(quiet("FIX-20"));
+    rp.laserClass = 2;                      // Class 2: a light anyway
+    m_doc->monitorProperties()->setFixtureRigProps(laser->id(), rp);
+    QVERIFY(quiet("FIX-21"));
+}
+
+void ShowReview_Test::fix22fix23()
+{
+    par("Par 1", 0);
+    QVERIFY(quiet("FIX-23"));               // a light: nothing to say
+    Fixture *jet = dimmer("CO2 jet", 30);
+    QCOMPARE(FixtureRest::behaviour(jet), Fixture::HazardBurstBehaviour);
+    QVERIFY(quiet("FIX-22"));               // nothing fires it
+    QVERIFY(fires("FIX-23"));
+    QCOMPARE(findings("FIX-23").first().severity, ReviewFinding::Note);
+    QVERIFY(findings("FIX-23").first().message.contains(QStringLiteral("Hazard — Burst")));
+    Scene *s = new Scene(m_doc);
+    s->setName(QStringLiteral("Blast"));
+    s->setValue(jet->id(), 0, 255);
+    m_doc->addFunction(s);
+    QVERIFY(fires("FIX-22"));               // a scene fires it, no Hazard hold here
+    QCOMPARE(findings("FIX-22").first().severity, ReviewFinding::Blocker);
+    QVERIFY(findings("FIX-22").first().message.contains(QStringLiteral("Hazard hold")));
+    s->setValue(jet->id(), 0, 0);
+    QVERIFY(quiet("FIX-22"));
+
+    // FIX-24: an effect on a hazard in a cue is said on the cue.
+    QVERIFY(quiet("FIX-24"));
+    FixtureGroup *g = new FixtureGroup(m_doc);
+    g->setName(QStringLiteral("Jets"));
+    m_doc->addFixtureGroup(g);
+    g->assignFixture(jet->id());
+    QLCPalette *full = new QLCPalette(QLCPalette::Dimmer, m_doc);
+    full->setName(QStringLiteral("Full"));
+    full->setValue(255);
+    m_doc->addPalette(full);
+    ShowTreeController *st = m_doc->showTree();
+    const quint32 list = st->addCueList(st->addProduction(QStringLiteral("Show")), QStringLiteral("Main"));
+    const quint32 cueId = st->addCue(list, -1, QStringLiteral("Blast"));
+    ShowTree::Target t;
+    t.groups << g->id();
+    QVERIFY(st->setTargetLook(cueId, t, st->lookForPalette(full->id())));
+    Collection *coll = nullptr;
+    for (const ShowTree::Cue &c : st->cueList(list)->cues)
+        if (c.id == cueId)
+            coll = qobject_cast<Collection *>(m_doc->function(c.collection));
+    QVERIFY(coll != nullptr);
+    QVERIFY(quiet("FIX-24"));               // its own level: nothing to say
+    EFX *efx = new EFX(m_doc);
+    efx->setName(QStringLiteral("Jet sweep"));
+    m_doc->addFunction(efx);
+    efx->addFixture(jet->id(), 0);
+    QVERIFY(coll->addFunction(efx->id()));
+    QVERIFY(fires("FIX-24"));
+    QCOMPARE(findings("FIX-24").first().severity, ReviewFinding::Note);
 }
 
 /****************************************************************************

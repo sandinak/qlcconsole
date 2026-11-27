@@ -121,6 +121,9 @@ Fixture *ShowOnlyReview5_Test::addDimmer(const QString &name, int address, int r
     f->setAddress(quint32(address));
     f->setUniverse(0);
     f->setOutputRules(Fixture::OutputRules(rules));
+    /* The Show-only rules are under test: a "Flame" here fires from the
+       show as a light would (a Hazard waits for arming, board Q351). */
+    f->setBehaviourSetting(Fixture::LightBehaviour);
     if (!m_doc->addFixture(f))
     {
         delete f;
@@ -165,6 +168,7 @@ Fixture *ShowOnlyReview5_Test::addLaser(const QString &name, int address)
     f->setUniverse(0);
     f->setAddress(quint32(address));
     f->setOutputRules(Fixture::ShowOnly);
+    f->setBehaviourSetting(Fixture::LightBehaviour);    // as addDimmer()
     if (!m_doc->addFixture(f))
     {
         delete f;
@@ -1249,6 +1253,7 @@ Fixture *ShowOnlyReview5_Test::addFogger(const QString &name, int address)
     f->setUniverse(0);
     f->setAddress(quint32(address));
     f->setOutputRules(Fixture::ShowOnly);
+    f->setBehaviourSetting(Fixture::LightBehaviour);    // as addDimmer()
     if (!m_doc->addFixture(f))
     {
         delete f;

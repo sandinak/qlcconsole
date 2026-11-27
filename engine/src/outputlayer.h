@@ -35,6 +35,7 @@
 #include "universe.h"
 
 class GenericFader;
+struct FaderGate;
 class Doc;
 
 class OutputLayer
@@ -48,6 +49,15 @@ public:
         quint32 fixtureId;
         quint32 channel;
         uchar value;
+        /** A fade into @a value from @a from over @a fadeMs (a Running
+         *  hazard following its cue's fade); 0: at @a value at once */
+        uchar from = 0;
+        uint fadeMs = 0;
+        bool operator==(const Level &o) const
+        {
+            return fixtureId == o.fixtureId && channel == o.channel && value == o.value
+                   && from == o.from && fadeMs == o.fadeMs;
+        }
     };
 
     /** @p flags are FadeChannel flags added to every channel (Override,
@@ -69,7 +79,7 @@ public:
      *  fixture patched later) is stamped by no session. A level stamped
      *  before this session goes out on a fader that holds Show-only
      *  channels. */
-    void set(const QList<Level> &levels,
+    bool set(const QList<Level> &levels,
              const std::function<bool(const Level &)> &renewed = std::function<bool(const Level &)>());
 
     /** Let go of everything */
@@ -77,12 +87,28 @@ public:
     /** Let go over @p ms: each level travels to what is under it
      *  (GenericFader::glideOut()); 0 is clear(). */
     void glideOut(uint ms);
+    /** Drop what glideOut() left travelling, at once (its faders deleted at
+     *  the next frame): a GO after a stop takes the channels from where the
+     *  stop froze them (board 053p review). */
+    void dropGlides();
+    /** How many faders glideOut() left still travelling (for tests) */
+    int glidingKept() const { QMutexLocker locker(&m_mutex); return int(m_gliding.size()); }
+    /** How many faders glideOut() left still travelling, live (for tests) */
+    int glidingCount() const;
 
     /** Show only (Fixture::ShowOnly): this layer is not the show -- focus,
      *  Refine, Highlight -- and never drives a Show-only fixture
      *  (GenericFader::setHoldsShowOnly()). Park, a held last look and Mark
      *  are the show's or the operator's own hand, and drive it. */
     void setHoldsShowOnly(bool hold);
+
+    /** Each fader kept on top of its priority (Universe::requestTopFader()):
+     *  over a layer of the same priority laid after it (the hazards' hold
+     *  over a Park, board 053p review). Set before the first set(). */
+    void setOnTop(bool onTop) { m_onTop = onTop; }
+    /** Each fader writes only while @p gate is open (GenericFader::setGate());
+     *  @p gate outlives the layer. Set before the first set(). */
+    void setGate(const FaderGate *gate);
     bool holdsShowOnly() const { return m_holdsShowOnly; }
 
     /** The channels the layer writes, per universe index (for tests) */
@@ -116,11 +142,15 @@ private:
     const int m_flags;
     const QString m_name;
     bool m_holdsShowOnly = false;
+    bool m_onTop = false;
+    const FaderGate *m_gate = nullptr;
 
     /** Serialises set()/clear(); guards m_slots */
     mutable QMutex m_mutex;
     /** Universe index -> the fader this layer writes there */
     QHash<int, Slot> m_slots;
+    /** What glideOut() let go of, still travelling (guarded by m_mutex) */
+    QList<QWeakPointer<GenericFader> > m_gliding;
 };
 
 #endif // OUTPUTLAYER_H

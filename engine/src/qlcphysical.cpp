@@ -93,6 +93,7 @@ QLCPhysical& QLCPhysical::operator=(const QLCPhysical& physical)
         m_leds = physical.leds();
         m_ledLayout = physical.ledLayout();
         m_clearGlass = physical.clearGlass();
+        m_laserClass = physical.laserClass();
     }
 
     return *this;
@@ -316,6 +317,38 @@ QString QLCPhysical::dmxConnector() const
  ****************************************************************************/
 
 
+QString QLCPhysical::laserClassToString(LaserClass c)
+{
+    switch (c)
+    {
+        case LaserClass1: return QStringLiteral("1");
+        case LaserClass1M: return QStringLiteral("1M");
+        case LaserClass2: return QStringLiteral("2");
+        case LaserClass2M: return QStringLiteral("2M");
+        case LaserClass3R: return QStringLiteral("3R");
+        case LaserClass3B: return QStringLiteral("3B");
+        case LaserClass4: return QStringLiteral("4");
+        case LaserClassUnknown: return QStringLiteral("Unknown");
+        case NoLaserClass:
+        default: return QString();
+    }
+}
+
+QLCPhysical::LaserClass QLCPhysical::stringToLaserClass(const QString &str)
+{
+    const QString s = str.trimmed();
+    for (LaserClass c : laserClasses())
+        if (c != NoLaserClass && s.compare(laserClassToString(c), Qt::CaseInsensitive) == 0)
+            return c;
+    return NoLaserClass;
+}
+
+QList<QLCPhysical::LaserClass> QLCPhysical::laserClasses()
+{
+    return { NoLaserClass, LaserClass1, LaserClass1M, LaserClass2, LaserClass2M,
+             LaserClass3R, LaserClass3B, LaserClass4, LaserClassUnknown };
+}
+
 QString QLCPhysical::ledLayoutToString(LedLayout layout)
 {
     return layout == TapeLeds ? QStringLiteral("Tape")
@@ -394,6 +427,10 @@ bool QLCPhysical::loadXML(QXmlStreamReader &doc)
             m_leds = qMax(0, attrs.value(KXMLQLCPhysicalBodyLEDs).toInt());
             m_ledLayout = stringToLedLayout(attrs.value(KXMLQLCPhysicalBodyLayout).toString());
             m_clearGlass = attrs.value(KXMLQLCPhysicalBodyGlass).toString() == QLatin1String("Clear");
+        }
+        else if (doc.name() == KXMLQLCPhysicalLaser)
+        {
+            m_laserClass = stringToLaserClass(attrs.value(KXMLQLCPhysicalLaserClass).toString());
         }
         else
         {
@@ -477,6 +514,14 @@ bool QLCPhysical::saveXML(QXmlStreamWriter *doc) const
         }
         if (m_clearGlass)
             doc->writeAttribute(KXMLQLCPhysicalBodyGlass, QStringLiteral("Clear"));
+        doc->writeEndElement();
+    }
+
+    /* Laser class (qlcconsole): only when one is said */
+    if (m_laserClass != NoLaserClass)
+    {
+        doc->writeStartElement(KXMLQLCPhysicalLaser);
+        doc->writeAttribute(KXMLQLCPhysicalLaserClass, laserClassToString(m_laserClass));
         doc->writeEndElement();
     }
 

@@ -70,6 +70,8 @@ public:
 
     /** Stop the MasterTimer */
     void stop();
+    /** The timer thread is running (start() and not stop()) */
+    bool running() const;
 
     /** Get the timer tick frequency in Hertz */
     static uint frequency();

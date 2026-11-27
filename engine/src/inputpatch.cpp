@@ -29,6 +29,8 @@
 #include "qlcinputchannel.h"
 #include "qlcioplugin.h"
 #include "inputpatch.h"
+#include "hazardfastpath.h"
+#include "universe.h"
 #include "iodeferral.h"
 
 #define GRACE_MS 1
@@ -88,6 +90,7 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     {
         disconnect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
                    this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
+        disconnect(m_hazardConnection);
         disconnect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
                    this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         disconnect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
@@ -120,6 +123,14 @@ bool InputPatch::set(QLCIOPlugin* plugin, quint32 input, QLCInputProfile* profil
     {
         connect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
                 this, SLOT(slotValueChanged(quint32,quint32,quint32,uchar,QString)));
+        /* The spotter's Hold let go and their Kill (board Q352/Q353, the
+           second review's 7): on the plugin's own thread, before anything
+           is queued to the main thread -- a busy GUI never keeps a hazard
+           out. Only those two controls do anything (HazardFastPath). */
+        // By name: every plugin DLL has its own QLCIOPlugin (dllsignals_test).
+        m_hazardConnection = connect(m_plugin, SIGNAL(valueChanged(quint32,quint32,quint32,uchar,QString)),
+                                     this, SLOT(slotHazardValue(quint32,quint32,quint32,uchar,QString)),
+                                     Qt::DirectConnection);
         connect(m_plugin, SIGNAL(timeCodeChanged(quint32,quint32,quint32,uchar)),
                 this, SLOT(slotTimeCodeChanged(quint32,quint32,quint32,uchar)));
         connect(m_plugin, SIGNAL(sysExReceived(quint32,quint32,QByteArray)),
@@ -295,6 +306,23 @@ QMap<QString, QVariant> InputPatch::getPluginParameters()
         return m_plugin->getParameters(m_universe, m_pluginLine, QLCIOPlugin::Input);
 
     return QMap<QString, QVariant>();
+}
+
+void InputPatch::slotHazardValue(quint32 universe, quint32 input, quint32 channel,
+                                 uchar value, const QString &key)
+{
+    Q_UNUSED(key)
+    if (input != m_pluginLine || (universe != UINT_MAX && universe != m_universe))
+        return;
+    {
+        QMutexLocker locker(&m_inputBufferMutex);
+        if (channel < quint32(m_channelMap.size()))
+            channel = m_channelMap.at(int(channel));
+    }
+    // This show's own path (its Universe's; another Doc's never).
+    if (Universe *uni = qobject_cast<Universe *>(parent()))
+        if (HazardFastPath *h = uni->hazardFastPath())
+            h->feed(m_universe, channel, value);
 }
 
 void InputPatch::slotValueChanged(quint32 universe, quint32 input, quint32 channel,

@@ -317,6 +317,17 @@ private:
     QLabel *m_next = nullptr;
     QLabel *m_subNext = nullptr;
     QLabel *m_tcNext = nullptr;         //!< the next cue at a timecode (TimecodeCues)
+    /** Board Q351, Full only: what is parked -- held over every cue -- by
+     *  name, with Unpark; hidden while nothing is. No count. */
+    QWidget *m_parkedBox = nullptr;
+    class QListWidget *m_parked = nullptr;
+    QPushButton *m_unpark = nullptr;
+    void refreshParked();
+    /** Board Q352/Q353, Full only: each hazard, its kind and whether it is
+     *  armed, held or out now; hidden while the show has none. */
+    QWidget *m_hazardBox = nullptr;
+    QLabel *m_hazardList = nullptr;
+    void refreshHazards();
     QToolButton *m_go = nullptr;
     QToolButton *m_subGo = nullptr;
     QToolButton *m_subBack = nullptr;

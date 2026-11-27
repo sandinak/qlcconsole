@@ -1470,6 +1470,7 @@ void Function::stop(FunctionParent source, bool preserveAttributes)
     {
         // The preserve choice first, then the stop that publishes it.
         m_preserveAttributes.store(preserveAttributes, std::memory_order_relaxed);
+        stopRequested();
         m_stop.store(true, std::memory_order_release);
     }
 }

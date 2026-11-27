@@ -341,6 +341,13 @@ Doc::~Doc()
     m_controlMap = nullptr;
     delete m_operate;
     m_operate = nullptr;
+    /* The hazards' fire layers point at the keeper's gates, and its lists'
+       signals and the input threads' path reach it (second review N4): the
+       output stopped first, then the keeper quiesced, then deleted. */
+    if (m_masterTimer != NULL && m_masterTimer->running())
+        m_masterTimer->stop();
+    if (m_outputRuleKeeper != nullptr)
+        m_outputRuleKeeper->shutdownHazards();
     delete m_outputRuleKeeper;
     m_outputRuleKeeper = nullptr;
 
@@ -1869,6 +1876,7 @@ bool Doc::replaceFixtures(QList<Fixture*> newFixturesList)
         newFixture->setMacAddress(fixture->macAddress());
         newFixture->setTransport(fixture->transport());
         newFixture->setStageLook(fixture->stageLook());
+        newFixture->setBehaviourSetting(fixture->behaviourSetting());
         newFixture->setOwner(fixture->owner());
         newFixture->setPowerProfile(fixture->powerProfile());
         newFixture->setOutputRules(fixture->outputRules());
