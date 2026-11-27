@@ -141,6 +141,17 @@ void ConnectionEditor::buildForm()
     m_nameEdit->setObjectName(QStringLiteral("connName"));
     top->addRow(tr("Name:"), m_nameEdit);
 
+    /* The same Slot as the Universes toolbar (board Q138): Tour, or House. */
+    m_slotCombo = new QComboBox(this);
+    m_slotCombo->setObjectName(QStringLiteral("connSlot"));
+    m_slotCombo->addItem(RigOwner::displayName(RigOwner::Tour), int(RigOwner::Tour));
+    m_slotCombo->addItem(RigOwner::displayName(RigOwner::House), int(RigOwner::House));
+    m_slotCombo->setToolTip(tr("Which kind of fixture the show means to put in this universe: the tour "
+                               "package, or a venue's house rig. The clash check lists a fixture in the "
+                               "other kind's slot. With a venue applied, an output changed here is "
+                               "that venue's (its file), and the show keeps its own."));
+    top->addRow(tr("Slot:"), m_slotCombo);
+
     m_protocolCombo = new QComboBox(this);
     m_protocolCombo->setObjectName(QStringLiteral("connProtocol"));
     m_protocolCombo->addItem(tr("Not patched"), QString());
@@ -594,6 +605,7 @@ void ConnectionEditor::load()
     if (m_paneTitle != nullptr)
         m_paneTitle->setText(tr("Universe %1: %2").arg(m_universe + 1).arg(u->name()));
     m_nameEdit->setText(u->name());
+    m_slotCombo->setCurrentIndex(qMax(0, m_slotCombo->findData(int(iom->universeSlotOwner(int(m_universe))))));
     m_protocolCombo->setCurrentIndex(qMax(0, m_protocolCombo->findData(m_origPlugin)));
     m_loading = false;
     slotProtocolChanged();
@@ -1363,6 +1375,9 @@ bool ConnectionEditor::apply()
         iom->setUniversePassthrough(int(m_universe), m_passthrough->isChecked());
         iom->saveDefaults();
     }
+    const RigOwner::Owner slot = RigOwner::Owner(m_slotCombo->currentData().toInt());
+    if (iom->universeSlotOwner(int(m_universe)) != slot)
+        iom->setUniverseSlotOwner(int(m_universe), slot);
     const QString name = m_nameEdit->text().trimmed();
     if (name.isEmpty() == false && name != u->name())
         iom->setUniverseName(int(m_universe), name);
@@ -1431,7 +1446,7 @@ ConnectionEditor *ConnectionEditor::createPane(Doc *doc, QWidget *parent)
     auto commit = [ed]() { ed->schedulePaneCommit(); };
     foreach (QComboBox *c, QList<QComboBox *>() << ed->m_transmitMode << ed->m_sacnMode
              << ed->m_midiMode << ed->m_inputCombo << ed->m_profileCombo << ed->m_midiChannel
-             << ed->m_feedbackCombo)
+             << ed->m_feedbackCombo << ed->m_slotCombo)
         connect(c, QOverload<int>::of(&QComboBox::currentIndexChanged), ed, commit);
     foreach (QLineEdit *e, QList<QLineEdit *>() << ed->m_targetIP << ed->m_sacnIP
              << ed->m_feedbackIP << ed->m_feedbackPort << ed->m_nameEdit)
@@ -1490,7 +1505,8 @@ QString ConnectionEditor::formState() const
       << QString::number(m_artnetInUni->value())
       << QString::number(m_feedbackCombo->currentIndex())
       << m_feedbackIP->text().trimmed() << m_feedbackPort->text().trimmed()
-      << QString::number(m_passthrough->isChecked()) << m_nameEdit->text().trimmed();
+      << QString::number(m_passthrough->isChecked()) << m_nameEdit->text().trimmed()
+      << QString::number(m_slotCombo->currentData().toInt());
     return v.join(QChar(0x1f));
 }
 

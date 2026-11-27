@@ -14,6 +14,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **A universe's Slot (Tour or House) is in the Devices universe pane** under
+  Name, as well as on the Universes toolbar; either shows what the other set,
+  and a pane edit is one undo step.
 - **Feedback is patched like input and output.** Patching a MIDI or USB board's
   input pairs its own output as the feedback line (Connections says *Feedback
   goes back to ...*); **Patch a Universe Here (feedback)** on a line,

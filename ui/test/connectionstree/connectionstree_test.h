@@ -54,6 +54,8 @@ private slots:
     void feedbackIsPatchedFromAUniverseAndUndone();
     /** An input on a MIDI-like line pairs its own output; a network one never. */
     void inputPairsItsOwnOutputAsFeedback();
+    /** The universe pane has a Slot row; it is the Universes toolbar's Slot, undoable, saved. */
+    void thePaneSetsTheSlotLikeTheToolbar();
 
     /* Which lines are worth showing */
     void unpatchedLineIsHiddenByDefault();

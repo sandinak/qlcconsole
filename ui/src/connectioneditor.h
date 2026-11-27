@@ -191,6 +191,7 @@ private:
 
     QComboBox *m_universeCombo = nullptr;
     QLineEdit *m_nameEdit = nullptr;
+    QComboBox *m_slotCombo = nullptr;       ///< Slot: Tour or House
     QComboBox *m_protocolCombo = nullptr;
     QComboBox *m_interfaceCombo = nullptr;
     QLabel *m_interfaceAuto = nullptr;

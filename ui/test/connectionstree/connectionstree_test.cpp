@@ -25,6 +25,9 @@
 #include <QSignalSpy>
 #include <QScrollBar>
 #include <QMenu>
+#include <QBuffer>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 #include <QPainter>
 #include <QSettings>
 #include <QSplitter>
@@ -4482,6 +4485,71 @@ void ConnectionsTree_Test::inputPairsItsOwnOutputAsFeedback()
     QVERIFY(iom->setInputPatch(2, stub->name(), QString(), 0));
     QCOMPARE(iom->pairFeedback(2), QString());
     QVERIFY(iom->feedbackPatch(2) == NULL);
+}
+
+void ConnectionsTree_Test::thePaneSetsTheSlotLikeTheToolbar()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.show();
+    mgr.m_devicesTree->m_byUniverse->setChecked(true);
+    mgr.m_devicesTree->refresh();
+    ConnectionEditor *pane = mgr.m_devicesTree->m_connPane;
+    QVERIFY(pane != nullptr && pane->m_slotCombo != nullptr);
+    // Beside Name, in the pane.
+    QVERIFY(pane->m_topForm->labelForField(pane->m_slotCombo) != nullptr);
+    QCOMPARE(pane->m_topForm->labelForField(pane->m_slotCombo)->text(), QString("Slot:"));
+
+    QTreeWidgetItem *row = universeRow(mgr.m_devicesTree->m_tree, 1);
+    QVERIFY(row != NULL);
+    mgr.m_devicesTree->m_tree->setCurrentItem(row);
+    QTRY_COMPARE(pane->universe(), quint32(1));
+    QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
+    QCOMPARE(pane->m_slotCombo->currentData().toInt(), int(RigOwner::Tour));
+
+    pane->m_slotCombo->setCurrentIndex(pane->m_slotCombo->findData(int(RigOwner::House)));
+    QTRY_COMPARE(iom->universeSlotOwner(1), RigOwner::House);
+    QVERIFY(m_doc->isModified());
+
+    // The Universes toolbar shows it for that universe.
+    mgr.m_ioTabs->setCurrentIndex(1);
+    mgr.selectUniverse(1);
+    QCOMPARE(mgr.m_uniSlotCombo->currentData().toInt(), int(RigOwner::House));
+    // And back: set there, shown in the pane.
+    mgr.m_uniSlotCombo->setCurrentIndex(mgr.m_uniSlotCombo->findData(int(RigOwner::Tour)));
+    QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
+    mgr.m_ioTabs->setCurrentIndex(0);
+    pane->reloadIfClean();
+    QCOMPARE(pane->m_slotCombo->currentData().toInt(), int(RigOwner::Tour));
+
+    // Undoable like the other edits in the pane.
+    pane->m_slotCombo->setCurrentIndex(pane->m_slotCombo->findData(int(RigOwner::House)));
+    QTRY_COMPARE(iom->universeSlotOwner(1), RigOwner::House);
+    QVERIFY(iom->patchUndo()->canUndo());
+    iom->patchUndo()->undo();
+    QCOMPARE(iom->universeSlotOwner(1), RigOwner::Tour);
+
+    // Saved and loaded again.
+    pane->m_slotCombo->setCurrentIndex(pane->m_slotCombo->findData(int(RigOwner::House)));
+    QTRY_COMPARE(iom->universeSlotOwner(1), RigOwner::House);
+    QByteArray xml;
+    {
+        QBuffer buf(&xml);
+        buf.open(QIODevice::WriteOnly);
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        QVERIFY(iom->saveXML(&w));
+        w.writeEndDocument();
+    }
+    Doc other(this);
+    other.ioPluginCache()->load(testPluginDir());
+    QXmlStreamReader r(xml);
+    while (r.readNextStartElement() == false && r.atEnd() == false) {}
+    QVERIFY(other.inputOutputMap()->loadXML(r));
+    QCOMPARE(other.inputOutputMap()->universeSlotOwner(1), RigOwner::House);
+    QCOMPARE(other.inputOutputMap()->universeSlotOwner(0), RigOwner::Tour);
 }
 
 /****************************************************************************

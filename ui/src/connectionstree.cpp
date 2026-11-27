@@ -802,6 +802,9 @@ bool ConnectionsTree::arrivalScanEnabled()
 void ConnectionsTree::showEvent(QShowEvent *ev)
 {
     QWidget::showEvent(ev);
+    /* The pane's Slot may have been set on the Universes toolbar meanwhile. */
+    if (m_connPane != nullptr)
+        m_connPane->reloadIfClean();
 
     /* The constructor may have run at startup, minutes before anyone opened
        this tab, so "how long have we been searching" has to be measured from

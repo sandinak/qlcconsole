@@ -29,6 +29,7 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QTabWidget>
+#include <QSignalBlocker>
 #include <QLineEdit>
 #include <QCheckBox>
 #include <QComboBox>
@@ -261,6 +262,16 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     });
 
     m_splitter->widget(0)->layout()->addWidget(m_toolbar);
+
+    /* The Slot is also set in Devices' universe pane: back here, show what it set. */
+    connect(m_ioTabs, &QTabWidget::currentChanged, this, [this](int) {
+        const quint32 uniIdx = currentUniverse();
+        if (uniIdx == InputOutputMap::invalidUniverse() || m_ioMap == NULL)
+            return;
+        const QSignalBlocker block(m_uniSlotCombo);
+        m_uniSlotCombo->setCurrentIndex(
+            qMax(0, m_uniSlotCombo->findData(int(m_ioMap->universeSlotOwner(int(uniIdx))))));
+    });
 
     // Match the main window's icon/text display preference.
     applyToolbarLabelMode();

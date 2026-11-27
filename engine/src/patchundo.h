@@ -109,6 +109,8 @@ public:
         quint32 id;
         QString name;
         bool passthrough;
+        /** The universe's slot (Tour or House): set with the connection pane */
+        RigOwner::Owner slotOwner = RigOwner::Tour;
         Patch input;
         QList<Patch> outputs;
         Patch feedback;
