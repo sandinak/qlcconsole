@@ -835,7 +835,7 @@ void SurfaceSim_Test::theLayoutSelfTestCatchesABrokenOne()
     text = problemsOf(twice);
     QVERIFY2(text.contains(QStringLiteral("channel 221 (Record) is placed 2 times")), qPrintable(text));
     QByteArray overlap = good;
-    overlap.replace("{\"ch\": 221, \"x\": 10.75", "{\"ch\": 221, \"x\": 9.75");
+    overlap.replace("{\"ch\": 221, \"x\": 11.272", "{\"ch\": 221, \"x\": 10.281");
     text = problemsOf(overlap);
     QVERIFY2(text.contains(QStringLiteral("channels 219 and 221 overlap")), qPrintable(text));
     // The Grand Master on a button.

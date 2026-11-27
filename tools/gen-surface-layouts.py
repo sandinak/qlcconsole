@@ -15,9 +15,29 @@ def load(name):
         return json.load(f)
 
 def save(name, d):
+    """One control a line, as the files have always been laid out."""
+    order = ["ch", "also", "x", "y", "w", "h", "kind", "shape", "face", "job", "lamp"]
+    def line(o, keys):
+        parts = ["%s: %s" % (json.dumps(k), json.dumps(o[k], ensure_ascii=False)) for k in keys if k in o]
+        return "{" + ", ".join(parts) + "}"
+    out = ["{"]
+    items = []
+    for k, v in d.items():
+        if k == "controls":
+            body = ",\n".join("    " + line(c, order) for c in v)
+            items.append('  "controls": [\n%s\n  ]' % body)
+        elif k == "sections":
+            body = ",\n".join("    " + line(c, ["label", "x", "y", "w", "h"]) for c in v)
+            items.append('  "sections": [\n%s\n  ]' % body)
+        elif k == "roles":
+            body = ",\n".join("    " + line(c, ["role", "ch", "seed"]) for c in v)
+            items.append('  "roles": [\n%s\n  ]' % body)
+        else:
+            items.append("  %s: %s" % (json.dumps(k), json.dumps(v, ensure_ascii=False)))
+    out.append(",\n".join(items))
+    out.append("}")
     with open(D + name + ".layout.json", "w") as f:
-        json.dump(d, f, indent=1, ensure_ascii=False)
-        f.write("\n")
+        f.write("\n".join(out) + "\n")
 
 class Board:
     def __init__(self, name, U, W, H):

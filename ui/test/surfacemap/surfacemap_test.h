@@ -59,6 +59,21 @@ private slots:
     /** The FaderPort 2 is drawn: its fader, knob and transport keys, its
      *  jobs GO / Back / STOP / GM, and what is pressed lights. */
     void theFaderPort2IsDrawn();
+    /** Each built-in board is drawn like the real one: the PMJ's Master, Go
+     *  and Back left of the strips, its keys 3 across by 4 down, ten
+     *  faders and four round encoders; the FaderPort's one long fader; the
+     *  APC40's 8 x 5 clip grid and its eight device knobs; the APC64's 8 x 8
+     *  pads between its touch strips. */
+    void eachBoardIsDrawnLikeTheRealOne();
+    /** The control table: one row per control, the columns, a sort, the
+     *  filter box, and a row and its control select each other. */
+    void theControlTableAndTheDrawingSelectEachOther();
+    /** A click on a control offers its jobs; GO, Back, STOP, GM and the
+     *  page keys go to the desk and the pages; No job and Undo; the PIN in Operate. */
+    void aClickGivesAControlAJob();
+    /** Page ◀ and ▶ the map lets you choose: they step the pages, are kept
+     *  for this computer, and the chip's page name picks a page. */
+    void pagesHaveKeysTheMapChooses();
     /** A map never clips: under its smallest cell it asks for the width. */
     void theMapScrollsRatherThanClips();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */

@@ -26,6 +26,7 @@
 #include "qlcui_export.h"
 
 class QToolButton;
+class QMenu;
 class QHBoxLayout;
 class Doc;
 
@@ -54,6 +55,12 @@ public:
     QList<quint32> universes() const { return m_chips.keys(); }
     /** Each chip's height (the footer's line). */
     void setChipHeight(int h);
+    /** The menu that picks a page of @p universe's board (the page name on
+     *  the chip, Q356); null when the board has no pages. The caller owns it. */
+    QMenu *pageMenu(quint32 universe);
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 public slots:
     void rebuild();
@@ -66,6 +73,8 @@ private:
     Doc *m_doc;
     QHBoxLayout *m_box;
     QMap<quint32, QToolButton *> m_chips;
+    /** Whether widget point @p x of @p universe's chip is on the page name. */
+    bool onPageName(quint32 universe, int x) const;
     int m_height = -1;
     bool m_queued = false;
 };
