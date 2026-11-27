@@ -82,6 +82,9 @@ private slots:
     /** The footer at 1024 wide and at the window's own minimum: no two
      *  chips overlap, the stage chip and Unsaved stay (wfaudit W1-30). */
     void theFooterChipsNeverOverlap();
+    /** The footer with its icons, at 1024x640 in Design and in Operate: no
+     *  chip or icon clipped by the window or by a neighbour */
+    void theFooterIconsFitAt1024x640InDesignAndOperate();
     void aLongBuildBarReplyWrapsAndLeavesTheLine();
 
     /** The tab strip in Auto mode, in each tool view at 1920 to the window's

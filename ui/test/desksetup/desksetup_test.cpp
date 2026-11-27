@@ -293,20 +293,23 @@ void DeskSetup_Test::theChipIsGreenAmberOrRed()
     QCOMPARE(chip.colour(), DeskChip::Green);
     QCOMPARE(chip.text(), QStringLiteral("Desk"));
     QCOMPARE(chip.property("deskState").toString(), QStringLiteral("green"));
+    // All well: the surface chips name the boards, the desk says nothing.
+    QVERIFY(chip.isHidden());
     // One role off: amber, saying which.
     QVERIFY(desk->setOn(D::Go, false));
     QCOMPARE(chip.colour(), DeskChip::Amber);
     QCOMPARE(chip.text(), QStringLiteral("Desk: GO off"));
     QVERIFY(desk->setOn(D::Go, true));
     QCOMPARE(chip.colour(), DeskChip::Green);
-    // The device not in this show's patch: grey, with Patch It.
+    // The device not in this show's patch: red, with Patch It.
     QVERIFY(m_doc->inputOutputMap()->setInputPatch(0, m_stub->name(), QString(), 1));
     QCOMPARE(chip.colour(), DeskChip::NotPatched);
-    QCOMPARE(chip.text(), QStringLiteral("Desk: APC MINI not patched · Patch It"));
-    // Not patched yet is not set up, not a fault: grey, never red (UX-29).
+    QCOMPARE(chip.text(), QStringLiteral("Desk not patched: Patch It"));
+    QVERIFY(!chip.isHidden());
+    QVERIFY(chip.toolTip().contains(QStringLiteral("APC MINI")));
+    // The one warning the footer keeps for the desk (the Desk chip itself is gone): red.
     QCOMPARE(chip.property("deskState").toString(), QStringLiteral("notpatched"));
-    QVERIFY2(chip.styleSheet().contains("#909090") && !chip.styleSheet().contains("#c62828"),
-             qPrintable(chip.styleSheet()));
+    QVERIFY2(chip.styleSheet().contains("#d32f2f"), qPrintable(chip.styleSheet()));
     // Unplugged altogether: amber (Patch It can't help), at once.
     m_stub->m_lineNames = QStringList() << QStringLiteral("nanoKONTROL2");
     desk->rebind();
