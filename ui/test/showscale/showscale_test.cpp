@@ -71,6 +71,8 @@
 #include "doc.h"
 #include "resource_paths.h"
 
+#include "hostspeed.h"
+#include "../common/painttimer.h"
 #include "showscale_test.h"
 
 static QStringList g_report;
@@ -146,15 +148,7 @@ double residentMB()
 #endif
 }
 
-/** The value at fraction @a q (0.95: p95) of @a v */
-double quantile(std::vector<double> v, double q)
-{
-    if (v.empty())
-        return 0;
-    std::sort(v.begin(), v.end());
-    const size_t i = std::min(v.size() - 1, size_t(q * double(v.size() - 1) + 0.5));
-    return v[i];
-}
+using HostSpeed::quantile;
 
 void settle(int ms)
 {
@@ -197,34 +191,6 @@ private:
     double m_worst = 0;
 };
 
-/** How long each paint of a widget takes on the wall clock: the paint is
- *  delivered from inside this filter, timed, and then not again */
-class PaintTimer final : public QObject
-{
-public:
-    explicit PaintTimer(QWidget *w) : QObject(w) { w->installEventFilter(this); }
-    std::vector<double> ms;
-    double p95() const { return quantile(ms, 0.95); }
-    double worst() const { return ms.empty() ? 0 : *std::max_element(ms.begin(), ms.end()); }
-
-protected:
-    bool eventFilter(QObject *o, QEvent *e) override
-    {
-        if (e->type() != QEvent::Paint || m_inside)
-            return false;
-        m_inside = true;
-        QElapsedTimer t;
-        t.start();
-        QCoreApplication::sendEvent(o, e);
-        ms.push_back(t.nsecsElapsed() / 1e6);
-        m_inside = false;
-        return true;
-    }
-
-private:
-    bool m_inside = false;
-};
-
 /** The MasterTimer's own measure of each frame it computes, collected on
  *  its thread as each tick ends */
 struct TickSamples
@@ -250,70 +216,14 @@ struct TickSamples
     std::vector<double> cpus() const { return std::vector<double>(cpu, cpu + n.load()); }
 };
 
-/* The budgets below were measured on the pool's newaudio (Apple silicon,
-   8 performance cores, Qt 6.12.0, Release, 2026-11-27) and set with
-   headroom over what it measured. The gate runs on whichever pool host is
-   free -- val, an Intel i7 iMac often busy with its owner's work, took four
-   to five times as long for every part -- and CI on shared runners, so each
-   wall-clock budget is scaled by how much slower this machine is than
-   newaudio right now: the median of five runs of a fixed piece of C++
-   (a fade over 26,000 channels) and of JavaScript (what the matrix's script
-   runs on), each against newaudio's time, the larger of the two, at least
-   1 and at most kMaxFactor. A machine slower than that fails its budgets:
-   it is not one a show of this size should run on. */
-const double kRefCppMs = 23.0;  // newaudio, Release, 2026-11-27 (2.3 ms at a tenth of the passes)
-const double kRefJsMs = 32.9;   // newaudio, Release, 2026-11-27
-const double kMaxFactor = 6.0;
+/* Budgets: measured on newaudio, scaled by HostSpeed::factor()
+   (engine/test/common/hostspeed.h) to the machine running them. */
 double g_factor = 1.0;
 QString g_factorText;
 
-double medianMs(const std::function<void()> &op)
-{
-    std::vector<double> ms;
-    for (int i = 0; i < 5; ++i)
-    {
-        QElapsedTimer t;
-        t.start();
-        op();
-        ms.push_back(t.nsecsElapsed() / 1e6);
-    }
-    return quantile(ms, 0.5);
-}
-
 void calibrate()
 {
-    static volatile unsigned sink = 0;
-    const double cppMs = medianMs([]() {
-        std::vector<unsigned char> from(26400), to(26400), out(26400);
-        for (size_t i = 0; i < from.size(); ++i)
-        {
-            from[i] = (unsigned char)(i * 7);
-            to[i] = (unsigned char)(i * 13 + 5);
-        }
-        unsigned sum = 0;
-        for (int pass = 0; pass < 4000; ++pass)
-        {
-            const unsigned k = unsigned(pass % 256);
-            for (size_t i = 0; i < out.size(); ++i)
-                out[i] = (unsigned char)((from[i] * (255 - k) + to[i] * k) / 255);
-            sum += out[size_t(pass) % out.size()];
-            std::swap(from, out);
-        }
-        sink = sink + sum;
-    });
-    QJSEngine js;
-    const double jsMs = medianMs([&js]() {
-        js.evaluate(QStringLiteral("var s = 0; for (var i = 0; i < 300000; i++) "
-                                   "s += Math.floor(Math.sin(i) * 255) & 255; s"));
-    });
-    double f = 1.0;
-    if (kRefCppMs > 0)
-        f = qMax(f, cppMs / kRefCppMs);
-    if (kRefJsMs > 0)
-        f = qMax(f, jsMs / kRefJsMs);
-    g_factor = qMin(f, kMaxFactor);
-    g_factorText = QString::asprintf("host: C++ %.1f ms, JS %.1f ms (newaudio %.1f, %.1f): budgets x%.2f",
-                                     cppMs, jsMs, kRefCppMs, kRefJsMs, g_factor);
+    g_factor = HostSpeed::factor(&g_factorText);
 }
 
 double slowFactor()
@@ -710,19 +620,16 @@ void ShowScale_Test::theStudioAndOverviewKeepUp()
        of one core: its frame of 6,156 pixel heads costs 49 ms p95, so it
        comes every ~140 ms, not every 67); the plot's paints 1.7 ms p95; the
        UI thread's worst stall 56 ms (an overview frame); the tick as above.
-       The overview's frame is the UI thread's largest cost at this size. */
-    /* The overview's frame fans out over the performance cores (newaudio's
-       8): a machine with fewer -- CI's two vCPUs drew it in 193 ms (Windows)
-       and 223 ms (Linux) -- gets the overview's and the UI thread's budgets
-       scaled by how many fewer it has. */
+       The overview's and the plot's frame budgets are RenderPerf_Test::
+       theShowsWeRunDrawInBudget (ui/test/renderperf, the same rig), where
+       every change to the Lighting Studio is measured; here, with the whole
+       app, the UI thread's worst stall. The overview's frame fans out over
+       the performance cores (newaudio's 8): a machine with fewer -- CI's two
+       vCPUs held the UI thread 208-235 ms -- gets the stall's budget scaled
+       by how many fewer it has. */
     const double f = slowFactor();
     const double cores = f * qMax(1.0, 8.0 / qMax(1, SystemProbe::performanceCores()));
-    REPORT("  (overview budgets x%.2f: %d performance cores)", cores, SystemProbe::performanceCores());
-    BUDGET(overviewPaints.p95() < 100 * cores,
-           qPrintable(QString("a Rig Overview frame p95 %1 ms").arg(overviewPaints.p95())));
-    BUDGET(fps >= 2.0 / cores, qPrintable(QString("the overview drew %1 fps").arg(fps)));
-    BUDGET(plotPaints.p95() < 15 * f,
-           qPrintable(QString("a plot frame p95 %1 ms").arg(plotPaints.p95())));
+    REPORT("  (stall budget x%.2f: %d performance cores)", cores, SystemProbe::performanceCores());
     BUDGET(stall.worst() < 120 * cores,
            qPrintable(QString("the UI thread was held %1 ms").arg(stall.worst())));
     BUDGET(quantile(samples.walls(), 0.95) < 1000.0 / MasterTimer::frequency() * f,

@@ -470,8 +470,10 @@ them holding one or two devices for cabling, mostly pixel bars
 matrix (Plasma) over all 6,156 pixels, an EFX on all 32 movers and three
 chasers running in Operate, it holds the MasterTimer's frame at 50 Hz
 (p95 and max under the 20 ms period, nothing late), every universe sent
-every frame (a counting output), the Rig Overview, the Lighting Studio's
-plot and the UI thread's longest stall, memory flat over a minute of the
+every frame (a counting output), the UI thread's longest stall with the
+Rig Overview and the Lighting Studio's plot open (their frame budgets on
+the same rig are `RenderPerf_Test::theShowsWeRunDrawInBudget`, where every
+Studio change is measured), memory flat over a minute of the
 show, and Open/Save to budgets measured on the pool's newaudio (the
 numbers are next to the asserts; Release asserts them, Debug reports them),
 each scaled by how much slower the machine running it is than newaudio (a

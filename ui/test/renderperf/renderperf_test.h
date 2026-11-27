@@ -58,6 +58,8 @@ private slots:
     void pickingDrawsOneRow();
     void aGelFiltersTheLight();
     void hoveringARunningShowKeepsTheRigStill();
+    /** The shows we run (Q360): the Rig Overview and the plot at that size */
+    void theShowsWeRunDrawInBudget();
 
     void cpuPerFrame();
 
