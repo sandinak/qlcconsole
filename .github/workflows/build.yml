@@ -675,7 +675,7 @@ jobs:
       - name: Dependencies
         run: |
           brew update
-          brew install fftw mad libsndfile libftdi
+          brew install fftw mad libsndfile libftdi lame
           # Upstream pinned `brew link --overwrite python@3.13` to work around a
           # runner python/brew link clash. The image no longer ships that keg
           # ("No such keg: /opt/homebrew/Cellar/python@3.13") and the hard
@@ -767,6 +767,8 @@ jobs:
               || { echo "no $l in the app"; exit 1; }
           done
           test -f ~/qlcconsole.app/Contents/PlugIns/Audio/libsndfileplugin.dylib
+          # And it decodes: a generated 1 s WAV and MP3 through the app's own libsndfile.
+          platforms/macos/audio-decode-check.sh ~/qlcconsole.app
 
       - name: Create DMG
         # Use retry loop to work around a race condition on macOS causing

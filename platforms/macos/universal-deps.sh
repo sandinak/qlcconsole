@@ -63,7 +63,10 @@ tar xf "$(fetch https://downloads.sourceforge.net/project/mpg123/mpg123/1.32.10/
 
 step "LAME (MP3 encode, required by libsndfile's MPEG support)"
 tar xf "$(fetch https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz)"
-(cd lame-3.100 && ./configure $AC --disable-frontend --disable-decoder --disable-nasm \
+# lame_init_old is in LAME 3.100's export list but not in its source: the
+# macOS linker rejects the list (Homebrew deletes the line too).
+sed -i '' '/lame_init_old/d' lame-3.100/include/libmp3lame.sym
+(cd lame-3.100 && ./configure $AC --disable-frontend --disable-nasm \
     --disable-gtktest >/dev/null \
     && make -j"$J" >/dev/null && make install >/dev/null)
 
