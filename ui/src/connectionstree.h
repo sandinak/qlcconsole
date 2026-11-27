@@ -72,6 +72,11 @@ public:
     /** Pick the show-control row for @p key ("osc", "msc", "mtc"), or the
      *  branch itself when empty. */
     void selectShowControlRow(const QString &key);
+    /** Select @p universe's input row and say how to patch its feedback by hand. */
+    void showFeedbackNeeded(quint32 universe);
+    /** The universe of the selected row (UINT_MAX: none) and the note beside the toolbar. */
+    quint32 selectedUniverse() const;
+    QString noteText() const { return m_note != nullptr ? m_note->text() : QString(); }
     /** Back to the wiring: nothing picked, the output view on the right. */
     void clearShowControlSelection();
 
@@ -148,11 +153,6 @@ private:
     struct FeedbackMenu { class QAction *remove = nullptr; class QMenu *send = nullptr; };
     FeedbackMenu addFeedbackActions(class QMenu &menu, quint32 universe);
     bool handleFeedbackAction(class QAction *chosen, const FeedbackMenu &fb, quint32 universe);
-    /** Select @p universe's input row and say how to patch its feedback by hand. */
-    void showFeedbackNeeded(quint32 universe);
-    /** The universe of the selected row (UINT_MAX: none) and the note beside the toolbar. */
-    quint32 selectedUniverse() const;
-    QString noteText() const { return m_note != nullptr ? m_note->text() : QString(); }
     /** Say something short beside the toolbar ("Feedback goes back to X"). */
     void postNote(const QString &text);
     /** Pair a universe's feedback to its input's own output (MIDI, HID),
