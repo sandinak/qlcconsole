@@ -22,6 +22,8 @@
 #include <QMessageBox>
 #include <QComboBox>
 #include <QPushButton>
+#include <QCheckBox>
+#include <QSignalBlocker>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QVBoxLayout>
@@ -301,8 +303,24 @@ void SurfaceMapView::refresh()
             cell.role = DeskRecord::roleKey(DeskRecord::Role(deskOwner->index));
             cell.job = roleWord(cell.role);
             lines << tr("This computer's %1: in every show.").arg(DeskRecord::roleName(DeskRecord::Role(deskOwner->index)));
+            // A board that asks for Shift: said on the control itself.
+            if (desk != nullptr && cell.role == QLatin1String("stop") && desk->shiftGuardsStop(m_universe))
+            {
+                cell.job = tr("Shift+%1").arg(cell.job);
+                lines << tr("Held with Shift it stops everything (ALL OFF). Alone it does nothing: the "
+                            "footer says so. Connections ▸ Control surfaces can turn this off.");
+            }
+            else if (desk != nullptr && cell.role == QLatin1String("go") && desk->shiftGuardsRelease(m_universe))
+                lines << tr("After a stop, Shift+%1 releases it: alone it does not.").arg(c.face.toHtmlEscaped());
             if (cell.role == QLatin1String("gm") && desk != nullptr && desk->grandMasterWaiting())
                 lines << desk->grandMasterHint().toHtmlEscaped();
+        }
+        else if (desk != nullptr && c.channel == m_layout.shiftChannel() && desk->hasShift(m_universe))
+        {
+            cell.group = Board;
+            cell.job = tr("Shift");
+            lines << tr("The %1's Shift key: held with STOP it stops everything, held with GO it "
+                        "releases a stop.").arg(m_layout.name().toHtmlEscaped());
         }
         else if (pages != nullptr && pages->owns(m_universe, c.channel))
         {
@@ -704,6 +722,16 @@ SurfaceMaps::SurfaceMaps(Doc *doc, QWidget *parent)
     connect(m_doc->deskRecord(), &DeskRecord::grandMasterWaitingChanged, this, &SurfaceMaps::refresh);
     ControlMap *cm = m_doc->controlMap();
     connect(cm, &ControlMap::bindingsChanged, this, &SurfaceMaps::refresh);
+    // A guard changed (here, or a show loaded): the boxes and the jobs follow.
+    connect(cm, &ControlMap::shiftGuardsChanged, this, [this]() {
+        for (auto it = m_guardBoxes.constBegin(); it != m_guardBoxes.constEnd(); ++it)
+        {
+            const QSignalBlocker b1(it.value().first), b2(it.value().second);
+            it.value().first->setChecked(m_doc->deskRecord()->shiftGuardsStop(it.key()));
+            it.value().second->setChecked(m_doc->deskRecord()->shiftGuardsRelease(it.key()));
+        }
+        refresh();
+    });
     // The pages row: the set, the page on now, the show's offer.
     connect(cm->surfacePages(), &SurfacePages::pageChanged, this, &SurfaceMaps::refreshPages);
     connect(cm->surfacePages(), &SurfacePages::setsChanged, this, &SurfaceMaps::refreshPages);
@@ -853,6 +881,8 @@ QWidget *SurfaceMaps::buildBlock(quint32 universe, const SurfaceLayout &layout)
         v->addLayout(h);
     }
 
+    addOptionsRow(v, block, universe, layout);
+
     // The legend: the four looks.
     QHBoxLayout *legend = new QHBoxLayout();
     legend->setSpacing(12);
@@ -910,6 +940,7 @@ void SurfaceMaps::rebuild()
     m_pageLines.clear();
     m_offers.clear();
     m_setBoxes.clear();
+    m_guardBoxes.clear();
     m_blocks.clear();
     m_fallback.clear();
     while (QLayoutItem *it = m_box->takeAt(0))
@@ -945,6 +976,54 @@ void SurfaceMaps::rebuild()
     }
     setVisible(!m_parts.isEmpty());
     refreshPages();
+}
+
+/* The board's options, in place (a footer chip's click lands here): its
+   controller setup, a lamp test where it has one, and the Shift guards of a
+   board that has a Shift key. The guards are the show's (saved with it). */
+void SurfaceMaps::addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe, const SurfaceLayout &layout)
+{
+    DeskRecord *desk = m_doc->deskRecord();
+    ControlMap *cm = m_doc->controlMap();
+    QHBoxLayout *h = new QHBoxLayout();
+    QPushButton *setUp = new QPushButton(tr("Set Up…"), block);
+    setUp->setObjectName(QStringLiteral("surfaceMapOptSetUp%1").arg(universe));
+    setUp->setToolTip(tr("This controller's own setup: what it needs set on the device itself."));
+    connect(setUp, &QPushButton::clicked, this, [this, universe]() { emit controllerSetupRequested(universe); });
+    h->addWidget(setUp);
+    // The PMJ Black 1 is the board with a lamp test (its lamp log).
+    if (layout.profileName() == QLatin1String("PMJ Black 1"))
+    {
+        QPushButton *test = new QPushButton(tr("Lamp Test…"), block);
+        test->setObjectName(QStringLiteral("surfaceMapOptLampTest%1").arg(universe));
+        test->setToolTip(tr("The last lamps sent to this board, and a lamp test for one button."));
+        connect(test, &QPushButton::clicked, this, [this, universe]() { emit lampTestRequested(universe); });
+        h->addWidget(test);
+    }
+    if (desk != nullptr && desk->hasShift(universe))
+    {
+        QCheckBox *stop = new QCheckBox(tr("Stop needs Shift"), block);
+        stop->setObjectName(QStringLiteral("surfaceMapShiftStop%1").arg(universe));
+        stop->setToolTip(tr("STOP on this board does nothing alone: Shift+STOP stops everything. The "
+                            "keyboard's and the footer's stop stay one press. Saved with this show."));
+        stop->setChecked(desk->shiftGuardsStop(universe));
+        connect(stop, &QCheckBox::toggled, this, [cm](bool on) {
+            cm->setShiftGuardStop(on ? ControlMap::GuardOn : ControlMap::GuardOff);
+        });
+        QCheckBox *rel = new QCheckBox(tr("Releasing a stop needs Shift"), block);
+        rel->setObjectName(QStringLiteral("surfaceMapShiftRelease%1").arg(universe));
+        rel->setToolTip(tr("After a stop, GO on this board needs Shift too, so a stray press does not "
+                           "start the show again. Saved with this show."));
+        rel->setChecked(desk->shiftGuardsRelease(universe));
+        connect(rel, &QCheckBox::toggled, this, [cm](bool on) {
+            cm->setShiftGuardRelease(on ? ControlMap::GuardOn : ControlMap::GuardOff);
+        });
+        h->addWidget(stop);
+        h->addWidget(rel);
+        m_guardBoxes.insert(universe, qMakePair(stop, rel));
+    }
+    h->addStretch(1);
+    v->addLayout(h);
 }
 
 void SurfaceMaps::addPagesRow(QVBoxLayout *v, QWidget *block, quint32 universe)

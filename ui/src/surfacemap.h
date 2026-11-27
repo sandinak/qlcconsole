@@ -193,10 +193,15 @@ public slots:
 signals:
     /** Set Up GO… (a DeskRecord::Role): the desk's own Learn. */
     void deskLearnRequested(int role);
+    /** Set Up… in a board's options: its controller setup. */
+    void controllerSetupRequested(quint32 universe);
+    /** Lamp Test… in a board's options (a board that has one). */
+    void lampTestRequested(quint32 universe);
 
 private:
     QWidget *buildBlock(quint32 universe, const SurfaceLayout &layout);
     void addPagesRow(QVBoxLayout *v, QWidget *block, quint32 universe);
+    void addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe, const SurfaceLayout &layout);
     /** The pages row's words and the offer, as they are now. */
     void refreshPages();
 
@@ -208,6 +213,7 @@ private:
     QMap<quint32, QLabel *> m_pageLines;
     QMap<quint32, QWidget *> m_offers;
     QMap<quint32, class QComboBox *> m_setBoxes;
+    QMap<quint32, QPair<class QCheckBox *, class QCheckBox *>> m_guardBoxes;
     QMap<quint32, QWidget *> m_blocks;
     QList<QWidget *> m_parts;
     QStringList m_fallback;

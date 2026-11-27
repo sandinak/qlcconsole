@@ -178,6 +178,8 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
         if (QPushButton *learn = m_desk->learnButton(DeskRecord::Role(role)))
             learn->click();
     });
+    connect(m_maps, &SurfaceMaps::controllerSetupRequested, this, [this]() { emit setUpRequested(QStringLiteral("setup")); });
+    connect(m_maps, &SurfaceMaps::lampTestRequested, this, &ControlSurfacesPanel::openPmjLampLog);
     QFrame *rule = new QFrame(this);
     rule->setFrameShape(QFrame::HLine);
     rule->setFrameShadow(QFrame::Sunken);

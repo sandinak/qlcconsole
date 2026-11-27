@@ -78,8 +78,18 @@ private slots:
     void aKeyHeldAcrossAReplugGoesOnlyAfterARelease();
     void aPortDumpAsAShowLoadsNeverMovesTheGrandMaster();
     void aPortDumpOnPatchItNeverMovesTheGrandMaster();
+    /** Bench 2026-11-27: the motor fader is sent the master when the hand lets go. */
+    void aMotorFaderStaysWhereTheHandLeftIt();
+    void aMotorFaderWithNoTouchSettles();
+    void aMoveWaitingToPickUpIsNotEchoedAsTaken();
+    /** A board with a Shift key: STOP and the GO that releases a stop need it. */
+    void theFaderPort2StopNeedsShift();
+    void theFaderPort2ReleaseNeedsShift();
+    void theShiftGuardsAreTheShowsAndKeepTheDefault();
 
 private:
+    /** The FaderPort 2's input profile, patched on universe 0 with a feedback line. */
+    void fpPatch();
     /** One input value, through the input map (the dispatch point). */
     void send(quint32 universe, quint32 channel, uchar value);
     void tick(int n = 2);

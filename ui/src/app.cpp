@@ -47,6 +47,7 @@
 #include "inputoutputmanager.h"
 #include "deskchip.h"
 #include "surfacechips.h"
+#include "deskrecord.h"
 #include "editlivechip.h"
 #include "surfacemap.h"
 #include "functionselection.h"
@@ -2052,6 +2053,9 @@ void App::initDoc()
     // A MIDI/OSC press that was held back (CS1) says so on screen.
     connect(m_doc->controlMap(), &ControlMap::blocked, this,
             [this](const QString &why) { statusBar()->showMessage(why, 8000); });
+    // This computer's desk: a press that did nothing says why ("FaderPort: Shift+Stop stops.").
+    connect(m_doc->deskRecord(), &DeskRecord::refused, this,
+            [this](const QString &why) { statusBar()->showMessage(why, 4000); });
 }
 
 void App::watchDefinitionFolder()

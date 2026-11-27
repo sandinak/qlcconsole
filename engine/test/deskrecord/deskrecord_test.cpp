@@ -53,6 +53,10 @@
 #include "qlcfile.h"
 #include "fixture.h"
 #include "scene.h"
+#include "outputrulekeeper.h"
+#include <QBuffer>
+#include <QXmlStreamWriter>
+#include <QXmlStreamReader>
 #include "doc.h"
 
 using D = DeskRecord;
@@ -935,6 +939,236 @@ void DeskRecord_Test::aMotorGrandMasterIsSentWhereTheMasterIs()
     // A pull to 0 is still at once.
     send(0, kGm, 0);
     QCOMPARE(int(iom->grandMasterValue()), 0);
+}
+
+namespace
+{
+const quint32 kFpFader = 513, kFpTouch = 232, kFpShift = 198, kFpStop = 221, kFpPlay = 222;
+
+QLCInputChannel *fpChannel(const QString &name, QLCInputChannel::Type type)
+{
+    QLCInputChannel *c = new QLCInputChannel();
+    c->setName(name);
+    c->setType(type);
+    return c;
+}
+}
+
+/* The FaderPort 2 as the bench had it (build 4831): a motor fader, its
+   touch sensor, Shift, Stop and Play, named as the shipped profile is (its
+   layout is found by that name). */
+void DeskRecord_Test::fpPatch()
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, m_stub->name(), QString(), 0, true));
+    QLCInputProfile *prof = new QLCInputProfile();
+    prof->setManufacturer("PreSonus");
+    prof->setModel("FaderPort 2");
+    QLCInputChannel *f = fpChannel("Fader", QLCInputChannel::Slider);
+    f->setDeclaredFaderFact(FaderFact::Motorised);
+    QVERIFY(prof->insertChannel(kFpFader, f));
+    QVERIFY(prof->insertChannel(kFpTouch, fpChannel("Fader touch", QLCInputChannel::Button)));
+    QVERIFY(prof->insertChannel(kFpShift, fpChannel("Shift", QLCInputChannel::Button)));
+    QVERIFY(prof->insertChannel(kFpStop, fpChannel("Stop", QLCInputChannel::Button)));
+    QVERIFY(prof->insertChannel(kFpPlay, fpChannel("Play", QLCInputChannel::Button)));
+    QVERIFY(iom->addProfile(prof));
+    QVERIFY(iom->setInputProfile(0, prof->name()));
+    m_doc->deskRecord()->rebind();
+}
+
+namespace
+{
+/** What was sent to channel @p ch on universe 0, in order. */
+QList<int> sentOn(const IOPluginStub *stub, quint32 ch)
+{
+    QList<int> out;
+    for (const QPair<quint32, uchar> &p : stub->m_feedback)
+        if (p.first == ch)
+            out << int(p.second);
+    return out;
+}
+}
+
+void DeskRecord_Test::aMotorFaderStaysWhereTheHandLeftIt()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    fpPatch();
+    learn(D::GrandMaster, 0, kFpFader);
+    iom->setGrandMasterValue(100);
+    desk->rearmGrandMaster();
+    now += 1000;
+    send(0, kFpFader, 100);                 // picked up where the motor stands
+    QCOMPARE(int(iom->grandMasterValue()), 100);
+    m_stub->m_feedback.clear();
+
+    send(0, kFpTouch, 127);                 // the hand is on it
+    send(0, kFpFader, 80);
+    send(0, kFpFader, 40);
+    QCOMPARE(int(iom->grandMasterValue()), 40);
+    QVERIFY2(sentOn(m_stub, kFpFader).isEmpty(), "the motor is never fought while the hand is on it");
+    send(0, kFpTouch, 0);                   // let go
+    const QList<int> sent = sentOn(m_stub, kFpFader);
+    QVERIFY2(!sent.isEmpty(), "the motor was not sent the master when the hand let go: it drives back");
+    QCOMPARE(sent.last(), 40);
+    QVERIFY2(!sent.contains(0), "something sent 0 to the fader");
+    QCOMPARE(int(iom->grandMasterValue()), 40);
+}
+
+void DeskRecord_Test::aMotorFaderWithNoTouchSettles()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    desk->setGrandMasterSettleMs(30);
+    fpPatch();
+    learn(D::GrandMaster, 0, kFpFader);
+    iom->setGrandMasterValue(100);
+    desk->rearmGrandMaster();
+    now += 1000;
+    send(0, kFpFader, 100);
+    m_stub->m_feedback.clear();
+    send(0, kFpFader, 70);
+    send(0, kFpFader, 55);
+    QVERIFY2(sentOn(m_stub, kFpFader).isEmpty(), "echoed while still moving");
+    QTRY_VERIFY_WITH_TIMEOUT(!sentOn(m_stub, kFpFader).isEmpty(), 1000);
+    QCOMPARE(sentOn(m_stub, kFpFader).last(), 55);
+}
+
+void DeskRecord_Test::aMoveWaitingToPickUpIsNotEchoedAsTaken()
+{
+    D *desk = m_doc->deskRecord();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    qint64 now = 10000;
+    desk->setClock([&now]() { return now; });
+    fpPatch();
+    learn(D::GrandMaster, 0, kFpFader);
+    iom->setGrandMasterValue(200);
+    desk->rearmGrandMaster();               // a load: waits to pick up at 200
+    m_stub->m_feedback.clear();
+    send(0, kFpTouch, 127);
+    send(0, kFpFader, 20);                  // the hand is far from the master
+    QCOMPARE(int(iom->grandMasterValue()), 200);
+    send(0, kFpTouch, 0);
+    const QList<int> sent = sentOn(m_stub, kFpFader);
+    QVERIFY(!sent.isEmpty());
+    QCOMPARE(sent.last(), 200);             // the master, never the hand's 20
+    QVERIFY(!sent.contains(20));
+}
+
+void DeskRecord_Test::theFaderPort2StopNeedsShift()
+{
+    D *desk = m_doc->deskRecord();
+    fpPatch();
+    learn(D::Stop, 0, kFpStop);
+    QVERIFY(desk->hasShift(0));
+    QVERIFY(desk->shiftGuardsStop(0));
+    QSignalSpy fired(desk, &D::fired);
+    QSignalSpy refused(desk, &D::refused);
+    // Stop alone does nothing, and says why (once per press).
+    send(0, kFpStop, 127);
+    send(0, kFpStop, 127);
+    send(0, kFpStop, 0);
+    QCOMPARE(fired.count(), 0);
+    QCOMPARE(refused.count(), 1);
+    QCOMPARE(refused.first().first().toString(), QString("FaderPort: Shift+Stop stops."));
+    // Shift held: it stops.
+    send(0, kFpShift, 127);
+    QVERIFY(desk->shiftHeld(0));
+    send(0, kFpStop, 127);
+    send(0, kFpStop, 0);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(fired.first().first().toString(), QString("ALL OFF"));
+    send(0, kFpShift, 0);
+    QVERIFY(!desk->shiftHeld(0));
+    // The show's word: Stop needs no Shift here.
+    m_doc->controlMap()->setShiftGuardStop(ControlMap::GuardOff);
+    QVERIFY(!desk->shiftGuardsStop(0));
+    send(0, kFpStop, 127);
+    send(0, kFpStop, 0);
+    QCOMPARE(fired.count(), 2);
+    // A board with no Shift key is never guarded (the APC test profile).
+    QVERIFY(!desk->shiftGuardsStop(1));
+}
+
+void DeskRecord_Test::theFaderPort2ReleaseNeedsShift()
+{
+    D *desk = m_doc->deskRecord();
+    ControlMap *cm = m_doc->controlMap();
+    OutputRuleKeeper *rules = m_doc->outputRuleKeeper();
+    m_doc->showControl()->setGoGuardMs(0);
+    fpPatch();
+    quint32 act2 = 0;
+    cm->setRunTabList(twoLists(&act2));
+    learn(D::Stop, 0, kFpStop);
+    learn(D::Go, 0, kFpPlay);
+    // No stop: GO is GO, no Shift.
+    QSignalSpy fired(desk, &D::fired);
+    QSignalSpy refused(desk, &D::refused);
+    send(0, kFpPlay, 127);
+    send(0, kFpPlay, 0);
+    QCOMPARE(fired.count(), 1);
+    QCOMPARE(refused.count(), 0);
+    // A stop (Shift+Stop).
+    send(0, kFpShift, 127);
+    send(0, kFpStop, 127);
+    send(0, kFpStop, 0);
+    send(0, kFpShift, 0);
+    tick(3);
+    QVERIFY(rules->emergencyStopped());
+    const int firedBefore = fired.count();
+    // GO alone does not release it.
+    send(0, kFpPlay, 127);
+    send(0, kFpPlay, 0);
+    tick(3);
+    QVERIFY2(rules->emergencyStopped(), "a bare GO released the emergency stop");
+    QCOMPARE(fired.count(), firedBefore);
+    QCOMPARE(refused.count(), 1);
+    QVERIFY(refused.first().first().toString().contains("Shift+Play"));
+    // Shift+GO does.
+    send(0, kFpShift, 127);
+    send(0, kFpPlay, 127);
+    send(0, kFpPlay, 0);
+    send(0, kFpShift, 0);
+    tick(3);
+    QVERIFY(!rules->emergencyStopped());
+    QCOMPARE(fired.count(), firedBefore + 1);
+}
+
+void DeskRecord_Test::theShiftGuardsAreTheShowsAndKeepTheDefault()
+{
+    ControlMap *cm = m_doc->controlMap();
+    QCOMPARE(cm->shiftGuardStopSetting(), int(ControlMap::GuardAuto));
+    // Left alone, a show saves as before.
+    QBuffer plain;
+    plain.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&plain);
+        QVERIFY(cm->saveXML(&w));
+    }
+    QVERIFY(!plain.data().contains("ShiftStop"));
+    cm->setShiftGuardStop(ControlMap::GuardOff);
+    cm->setShiftGuardRelease(ControlMap::GuardOn);
+    QBuffer buf;
+    buf.open(QIODevice::WriteOnly);
+    {
+        QXmlStreamWriter w(&buf);
+        w.writeStartDocument();
+        QVERIFY(cm->saveXML(&w));
+        w.writeEndDocument();
+    }
+    cm->clear();
+    QCOMPARE(cm->shiftGuardStopSetting(), int(ControlMap::GuardAuto));
+    buf.close();
+    buf.open(QIODevice::ReadOnly);
+    QXmlStreamReader r(&buf);
+    QVERIFY(r.readNextStartElement());
+    QVERIFY(cm->loadXML(r));
+    QCOMPARE(cm->shiftGuardStopSetting(), int(ControlMap::GuardOff));
+    QCOMPARE(cm->shiftGuardReleaseSetting(), int(ControlMap::GuardOn));
 }
 
 void DeskRecord_Test::reviewLinesSayWhatIsReachable()
