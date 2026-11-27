@@ -148,6 +148,7 @@ private slots:
     /** ⇧⌘N in Build: a folder or a scene selected -- a new scene in that
      *  folder (one undo step), selected and renaming; the Effects section
      *  -- a new effect; the Palettes section -- nothing. */
+    void severalLooksOfAGroupsLayersOpenTogether();
     void newHereMakesASceneInTheFolder();
 
     /** More ▸ Snapshot live output: with something on the rig, each lit
