@@ -781,22 +781,16 @@ void VirtualBench_Test::theFaderPortKnobInBothModes()
     const quint32 u = patched.first().at(0).toUInt();
     settle(1000);
     SurfaceBoardLog *log = m_app->doc()->surfaceSetup()->boardLog();
-    // What the log says of a message, its new lines only.
+    // What the log says of a message: the log cleared, the message, its lines.
     auto said = [this, log, fp, u](const char *bytes) {
-        const int before = int(log->text(u).split(QLatin1Char('\n')).size());
+        log->clear(u);
         fp->send(bytes);
         QElapsedTimer t;
         t.start();
-        QStringList lines;
-        while (t.elapsed() < 2000)
-        {
+        while (t.elapsed() < 2000 && log->entries(u).isEmpty())
             settle(20);
-            lines = log->text(u).split(QLatin1Char('\n')).mid(before);
-            lines.removeAll(QString());
-            if (!lines.isEmpty())
-                break;
-        }
-        return lines.join(QLatin1Char('\n'));
+        settle(50);
+        return log->text(u);
     };
     // Mackie mode: CC 16, the profile's Knob.
     const QString cc16 = said("B0 10 01");
