@@ -65,6 +65,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Changed
 
+- **Workbench: the cue page is in tabs.** Under the header and the layer rows
+  (always in view) a cue's page is **Edit | Tracking | Timing | Notes**;
+  a title carries what needs a look (**Tracking · 3**, **Notes ●**), the last
+  tab is kept, and the tracked-in list now wraps under itself instead of
+  clipping at 1024x640. The tree's own cue page is unchanged.
+
 - **Levels cleanups**: the menu count now holds item by item at every
   level: the Virtual Console's rarely used Add ▸ New Programmer Frame from
   Input Profile… wizard is retired (the one fold the levels design owed).

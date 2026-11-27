@@ -203,7 +203,18 @@ the tree and the Workbench follows it.
   collection) opens in the Workbench itself with **▣ Open** or a
   double-click; **↩** comes back to the cue.
 - **The editor pane**, beside the rows, edits what is selected:
-  - nothing: the cue's own page (number, name, mode, fades, includes…);
+  - nothing: the cue's own page (number, name, mode, fades, includes…),
+    in four tabs under the header and the rows, which stay in view:
+    **Edit** (number, name, text colour, layers, cue looks), **Tracking**
+    (mode, base, mix, includes, blocking, **Tracked in** and **Next cue
+    receives**), **Timing** (fades, hold, advance, timecode, skip, fast) and
+    **Notes** (the note, **Needs work**, venue focus, **Focus This Cue…**).
+    A tab with something to look at says so in its title: **Tracking · 3**
+    is three layers carried in; **Timing ●** has a timecode; **Notes ●** has
+    a note or a mark. The tab you were on is kept while the app is open, and
+    a tab with nothing to show (a hit has no tracking) is left out. The
+    tree's own page, beside the Library, still shows everything in one
+    scroll;
   - a layer: its page as the tree has it — every attribute with **✎** and
     **⋯**, Release, Make reusable, a line aim's strip;
   - a value: its palette in the **Look Editor**, at full height. It says
