@@ -131,6 +131,18 @@ public:
     /** The channel of default role @p role ("go"); invalid when none. */
     quint32 roleChannel(const QString &role) const;
 
+    /** The board's Shift control (profile channel), when it has one: the
+     *  modifier of a "Shift+" job. Invalid when none. */
+    quint32 shiftChannel() const { return m_shift; }
+    /** Touch of the Grand Master's motor fader (profile channel); invalid
+     *  when the board has none. */
+    quint32 gmTouchChannel() const { return m_gmTouch; }
+    /** The board asks for Shift on its STOP (the e-stop is Shift+STOP), and
+     *  on the GO that releases a stop, unless a show says otherwise
+     *  (ControlMap::shiftGuard()). */
+    bool shiftGuardsStop() const { return m_shift != 0xFFFFFFFF && m_guardStop; }
+    bool shiftGuardsRelease() const { return m_shift != 0xFFFFFFFF && m_guardRelease; }
+
     /** The colour an RGB lamp shows for a value sent to it (0..255, as
      *  InputOutputMap::sendFeedBack() takes it). Invalid when the layout
      *  has no colour table. */
@@ -179,6 +191,10 @@ private:
     int m_displayLines = 0;
     int m_displayChars = 0;
     QStringList m_displayShows;
+    quint32 m_shift = 0xFFFFFFFF;
+    quint32 m_gmTouch = 0xFFFFFFFF;
+    bool m_guardStop = false;
+    bool m_guardRelease = false;
     QSizeF m_size;
     QList<Control> m_controls;
     QList<Section> m_sections;

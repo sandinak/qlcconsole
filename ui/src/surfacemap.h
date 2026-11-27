@@ -189,14 +189,31 @@ public slots:
     void refresh();
     /** Scroll to @p universe's map (the footer's chip). */
     void showMap(quint32 universe);
+    /** The footer chip's click: that board's map alone (the others hidden,
+     *  an "All Boards" button to bring them back); the filter ends when the
+     *  page is left. Connections ▸ Control surfaces lists every board. */
+    void showOnly(quint32 universe);
+    /** The universe shown alone; invalidUniverse() while every board is. */
+    quint32 onlyUniverse() const { return m_only; }
+    void showAll();
+    bool isBoardShown(quint32 universe) const;
 
 signals:
     /** Set Up GO… (a DeskRecord::Role): the desk's own Learn. */
     void deskLearnRequested(int role);
+    /** Set Up… in a board's options: its controller setup. */
+    void controllerSetupRequested(quint32 universe);
+    /** Lamp Test… in a board's options (a board that has one). */
+    void lampTestRequested(quint32 universe);
+
+protected:
+    void hideEvent(QHideEvent *event) override;
 
 private:
+    void applyFilter();
     QWidget *buildBlock(quint32 universe, const SurfaceLayout &layout);
     void addPagesRow(QVBoxLayout *v, QWidget *block, quint32 universe);
+    void addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe, const SurfaceLayout &layout);
     /** The pages row's words and the offer, as they are now. */
     void refreshPages();
 
@@ -208,10 +225,13 @@ private:
     QMap<quint32, QLabel *> m_pageLines;
     QMap<quint32, QWidget *> m_offers;
     QMap<quint32, class QComboBox *> m_setBoxes;
+    QMap<quint32, QPair<class QCheckBox *, class QCheckBox *>> m_guardBoxes;
     QMap<quint32, QWidget *> m_blocks;
     QList<QWidget *> m_parts;
     QStringList m_fallback;
     bool m_rebuildQueued = false;
+    quint32 m_only = 0xFFFFFFFF;
+    QMap<quint32, class QPushButton *> m_allButtons;
 };
 
 /** @} */

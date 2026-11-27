@@ -54,6 +54,8 @@
 #define KXMLKey QStringLiteral("Key")
 #define KXMLRunList QStringLiteral("RunList")
 #define KXMLLights QStringLiteral("Lights")
+#define KXMLShiftStop QStringLiteral("ShiftStop")
+#define KXMLShiftRelease QStringLiteral("ShiftRelease")
 #define KXMLScope QStringLiteral("Scope")
 #define KXMLScopeOf QStringLiteral("ScopeOf")
 
@@ -293,6 +295,7 @@ void ControlMap::reset()
         darkenLamp(b);
     m_lampSent.clear();
     m_dimWhenReady = true;
+    m_shiftStop = m_shiftRelease = GuardAuto;
     const bool had = !m_bindings.isEmpty() || m_listening || !m_down.isEmpty();
     m_bindings.clear();
     m_step.clear();
@@ -2543,6 +2546,24 @@ void ControlMap::setDimWhenReady(bool on)
     emit lampsChanged();
 }
 
+void ControlMap::setShiftGuardStop(int setting)
+{
+    if (m_shiftStop == setting)
+        return;
+    m_shiftStop = setting;
+    m_doc->setModified();
+    emit shiftGuardsChanged();
+}
+
+void ControlMap::setShiftGuardRelease(int setting)
+{
+    if (m_shiftRelease == setting)
+        return;
+    m_shiftRelease = setting;
+    m_doc->setModified();
+    emit shiftGuardsChanged();
+}
+
 void ControlMap::sendLampValue(const Binding &b, uchar value, bool force)
 {
     InputOutputMap *iom = m_doc->inputOutputMap();
@@ -2867,7 +2888,8 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
     if (doc == nullptr)
         return false;
     if (m_bindings.isEmpty() && m_encoderBank->device().encoders < 0 && m_runTabList == 0xFFFFFFFF
-        && m_dimWhenReady && !m_surfacePages->hasShowSets())
+        && m_dimWhenReady && !m_surfacePages->hasShowSets()
+        && m_shiftStop == GuardAuto && m_shiftRelease == GuardAuto)
         return true;    // a show with none saves as before
     doc->writeStartElement(KXMLQLCControlMap);
     // The list the Run tab (and so the pad) plays, when it is not the main one.
@@ -2876,6 +2898,11 @@ bool ControlMap::saveXML(QXmlStreamWriter *doc) const
     // Only when the dim light is off: a show with it on saves as before.
     if (!m_dimWhenReady)
         doc->writeAttribute(KXMLLights, QStringLiteral("onoff"));
+    // Only when the show overrides the board's own default.
+    if (m_shiftStop != GuardAuto)
+        doc->writeAttribute(KXMLShiftStop, m_shiftStop == GuardOn ? QStringLiteral("on") : QStringLiteral("off"));
+    if (m_shiftRelease != GuardAuto)
+        doc->writeAttribute(KXMLShiftRelease, m_shiftRelease == GuardOn ? QStringLiteral("on") : QStringLiteral("off"));
     for (const Binding &b : m_bindings)
     {
         doc->writeStartElement(KXMLTrigger);
@@ -2944,6 +2971,12 @@ bool ControlMap::loadXML(QXmlStreamReader &root)
     m_surfacePages->reset();
     // The light a ready control shows; a file that says nothing: dim.
     m_dimWhenReady = root.attributes().value(KXMLLights).toString() != QStringLiteral("onoff");
+    auto guardOf = [&root](const QString &name) {
+        const QString v = root.attributes().value(name).toString();
+        return v == QLatin1String("on") ? int(GuardOn) : v == QLatin1String("off") ? int(GuardOff) : int(GuardAuto);
+    };
+    m_shiftStop = guardOf(KXMLShiftStop);
+    m_shiftRelease = guardOf(KXMLShiftRelease);
     bool okList = false;
     const quint32 runList = root.attributes().value(KXMLRunList).toUInt(&okList);
     const quint32 wasList = m_runTabList;

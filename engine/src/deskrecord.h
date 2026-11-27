@@ -28,6 +28,8 @@
 #include <QSet>
 #include <functional>
 
+#include <QSet>
+#include "surfacelayout.h"
 #include "grandmasterpickup.h"
 #include "qlcengine_export.h"
 
@@ -269,8 +271,27 @@ public:
     QString grandMasterHint() const;
     /** Wait to pick up again: a load, a replug, a wake. */
     void rearmGrandMaster();
+    /** How long after the hand's last move a motor fader is sent the master
+     *  again, on a board that has no touch sensor (ms); tests shorten it. */
+    void setGrandMasterSettleMs(int ms) { m_gmSettleMs = ms; }
     /** A clock in ms for the pick-up's dump window (a test's). */
     void setClock(const std::function<qint64()> &clock) { m_clock = clock; }
+
+    /*********************************************************************
+     * Shift guards: a board with a Shift key (SurfaceLayout::shiftChannel())
+     * asks for it on STOP, and on the GO that releases a stop, so neither
+     * is hit by a stray press. The board's own default, or the show's word
+     * (ControlMap::shiftGuardStopSetting()). The keyboard's, the footer's
+     * and every other stop stay one press.
+     *********************************************************************/
+public:
+    /** Whether STOP on @p universe's board needs Shift held. */
+    bool shiftGuardsStop(quint32 universe) const;
+    /** Whether the GO that releases an emergency stop needs Shift. */
+    bool shiftGuardsRelease(quint32 universe) const;
+    /** Whether @p universe's board has a Shift key at all. */
+    bool hasShift(quint32 universe) const;
+    bool shiftHeld(quint32 universe) const { return m_shiftDown.contains(universe); }
 
     /*********************************************************************
      * Show Review's "This computer" section
@@ -352,6 +373,11 @@ private:
      *  drives there (FaderPickup's rule for a Motorised master). Nothing for
      *  any other fader, or while the fader itself is moving the master. */
     void sendGrandMasterToMotor();
+    /** The hand let go of a motor fader (touch off, or its last move
+     *  settled): the motor is sent where the master is, so it stays there
+     *  instead of driving back to the last position it was sent. */
+    void handReleased();
+    SurfaceLayout layoutOf(quint32 universe) const;
     /** A port opened, closed or moved (@p universe, or any): rebind(), and
      *  the Grand Master waits out its dump if it was its port (Q316). */
     void portChanged(quint32 universe);
@@ -420,6 +446,14 @@ private:
     bool m_gmWasWaiting = false;
     /** grandMaster() is setting the master from the fader: not sent back */
     bool m_gmFromFader = false;
+    /** A hand is on the motor fader (its touch sensor): nothing is sent to it. */
+    bool m_gmTouched = false;
+    /** The fader moved the master (or tried to) since the motor was last sent. */
+    bool m_gmMoved = false;
+    int m_gmSettleMs = 150;
+    QTimer *m_gmSettle = nullptr;
+    /** The universes whose board has its Shift key held. */
+    QSet<quint32> m_shiftDown;
     /** The live Grand Master's identity|universe|channel, last rebind(). */
     QString m_gmLiveKey;
     QElapsedTimer m_elapsed;

@@ -59,12 +59,27 @@ private slots:
     /** The FaderPort 2 is drawn: its fader, knob and transport keys, its
      *  jobs GO / Back / STOP / GM, and what is pressed lights. */
     void theFaderPort2IsDrawn();
+    /** Bench 2026-11-27: with the FaderPort patched and a show running, its
+     *  footer chip is there at 1024x640 and 1440x900, and a click opens the map. */
+    void theFaderPortChipIsInTheFooterAtSmallSizes();
+    /** A bare Stop says "Shift+Stop stops" in the footer; Shift+Stop stops. */
+    void aBareStopSaysShiftStopInTheFooter();
+    /** The map says each job, the Shift combos too; its header has the
+     *  board's options: Set Up…, the Shift guards (the show's). */
+    void theFaderPortMapSaysTheShiftCombosAndHasItsOptions();
+    /** Bench 2026-11-27: a footer click never takes a Design show to Operate. */
+    void aFooterClickNeverGoesLive();
+    /** A surface chip has a controller glyph and says it opens the map. */
+    void aSurfaceChipReadsAsABoard();
+    /** A chip's click shows that board's map alone; Connections lists all. */
+    void aChipOpensOnlyItsBoard();
     /** A map never clips: under its smallest cell it asks for the width. */
     void theMapScrollsRatherThanClips();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */
     void shots();
 
 private:
+    void dropDoc();
     Doc *m_doc = nullptr;
     IOPluginStub *m_stub = nullptr;
     QTemporaryDir m_settings;

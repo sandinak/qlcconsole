@@ -758,6 +758,9 @@ void DeskRecord::forgetHeld(quint32 universe)
     for (const quint64 k : m_down.values())
         if (quint32(k >> 32) == universe)
             m_down.remove(k);
+    m_shiftDown.remove(universe);
+    if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
+        m_gmTouched = false;
 }
 
 void DeskRecord::endSwallow(quint64 k)
@@ -1019,8 +1022,12 @@ void DeskRecord::rearmGrandMaster()
 
 void DeskRecord::sendGrandMasterToMotor()
 {
-    if (m_gmFromFader || m_doc == nullptr || !isLive(GrandMaster))
+    if (m_gmFromFader || m_gmTouched || m_doc == nullptr || !isLive(GrandMaster))
         return;
+    /* A hand about to let go settles first: handReleased() sends it. */
+    if (m_gmSettle != nullptr && m_gmSettle->isActive())
+        return;
+    m_gmMoved = false;
     InputOutputMap *iom = m_doc->inputOutputMap();
     if (iom == nullptr)
         return;
@@ -1029,6 +1036,52 @@ void DeskRecord::sendGrandMasterToMotor()
     if (iom->faderFact(universe, channel) != FaderFact::Motorised)
         return;
     iom->sendFeedBack(universe, channel, iom->grandMasterValue(), QVariant());
+}
+
+SurfaceLayout DeskRecord::layoutOf(quint32 universe) const
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    return ip != nullptr ? SurfaceLayout::forProfile(ip->profileName()) : SurfaceLayout();
+}
+
+bool DeskRecord::hasShift(quint32 universe) const
+{
+    return layoutOf(universe).shiftChannel() != kInvalid;
+}
+
+bool DeskRecord::shiftGuardsStop(quint32 universe) const
+{
+    const SurfaceLayout l = layoutOf(universe);
+    if (l.shiftChannel() == kInvalid)
+        return false;
+    const ControlMap *cm = m_doc->controlMap();
+    const int set = cm != nullptr ? cm->shiftGuardStopSetting() : int(ControlMap::GuardAuto);
+    return set == ControlMap::GuardAuto ? l.shiftGuardsStop() : set == ControlMap::GuardOn;
+}
+
+bool DeskRecord::shiftGuardsRelease(quint32 universe) const
+{
+    const SurfaceLayout l = layoutOf(universe);
+    if (l.shiftChannel() == kInvalid)
+        return false;
+    const ControlMap *cm = m_doc->controlMap();
+    const int set = cm != nullptr ? cm->shiftGuardReleaseSetting() : int(ControlMap::GuardAuto);
+    return set == ControlMap::GuardAuto ? l.shiftGuardsRelease() : set == ControlMap::GuardOn;
+}
+
+void DeskRecord::handReleased()
+{
+    if (m_gmSettle != nullptr)
+        m_gmSettle->stop();
+    m_gmTouched = false;
+    if (!m_gmMoved)
+        return;
+    /* The motor fader holds the last position the host sent it and drives
+       back there when let go: send it where the master is now, so it stays
+       (a hand that moved it is the master's value; a move still waiting to
+       pick up is NOT echoed as taken: the master has not moved to it). */
+    sendGrandMasterToMotor();
 }
 
 void DeskRecord::grandMaster(uchar value)
@@ -1045,6 +1098,20 @@ void DeskRecord::grandMaster(uchar value)
         m_gmFromFader = true;
         iom->setGrandMasterValue(value);
         m_gmFromFader = false;
+    }
+    /* A hand moved the fader: when it lets go (touch off), or has not moved
+       for a moment on a board with no touch sensor, the motor is sent the
+       master, so it does not drive back to where the host last sent it. */
+    m_gmMoved = true;
+    if (!m_gmTouched)
+    {
+        if (m_gmSettle == nullptr)
+        {
+            m_gmSettle = new QTimer(this);
+            m_gmSettle->setSingleShot(true);
+            connect(m_gmSettle, &QTimer::timeout, this, &DeskRecord::handReleased);
+        }
+        m_gmSettle->start(m_gmSettleMs);
     }
     notifyGrandMasterWaiting();
 }
@@ -1540,6 +1607,35 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
     Role role = Stop;
     const bool desk = isDeskControl(universe, channel, &role);
 
+    /* The board's Shift key and its fader's touch sensor: not roles, but
+       the guards and the motor read them. */
+    if (anySet())
+    {
+        const SurfaceLayout lay = layoutOf(universe);
+        if (lay.isValid() && channel == lay.shiftChannel())
+        {
+            if (value > 0)
+                m_shiftDown.insert(universe);
+            else
+                m_shiftDown.remove(universe);
+        }
+        if (lay.isValid() && lay.gmTouchChannel() != kInvalid && channel == lay.gmTouchChannel()
+            && isLive(GrandMaster) && m_universes[GrandMaster] == universe)
+        {
+            if (value > 0)
+            {
+                m_gmTouched = true;
+                if (m_gmSettle != nullptr)
+                    m_gmSettle->stop();
+            }
+            else
+            {
+                m_gmMoved = true;   // the master may have moved meanwhile (a fade)
+                handReleased();
+            }
+        }
+    }
+
     /* The press that taught a role is not a press of it, until its release.
        A release that was lost (a cable pulled, a toggle-mode button) must
        not swallow the first real press for long: the first value after it
@@ -1572,6 +1668,16 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
     // The desk's STOP comes before anything, a learn included.
     if (desk && role == Stop && value > 0)
     {
+        /* A board that asks for Shift: a bare STOP does nothing, and says so.
+           Held, it says it once. */
+        if (shiftGuardsStop(universe) && !shiftHeld(universe))
+        {
+            if (m_down.contains(k))
+                return;
+            m_down.insert(k);
+            emit refused(tr("%1: Shift+Stop stops.").arg(layoutOf(universe).shortName()));
+            return;
+        }
         stopPressed(k, value);
         return;
     }
@@ -1582,6 +1688,8 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
         if (role == HazardKill)
             return;
     }
+    if (desk && role == Stop && value == 0)
+        m_down.remove(k);
 
     if (m_learning)
     {
@@ -1637,6 +1745,16 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
                Grand Master still follows its fader. */
             if (m_doc->inputOutputMap() != nullptr && m_doc->inputOutputMap()->assignListening())
                 break;
+            /* After an emergency stop, the GO that would release it needs
+               Shift on a board that asks for it: Shift+GO. Back, and GO with
+               no stop to release, are as ever. */
+            if (role == Go && shiftGuardsRelease(universe) && !shiftHeld(universe)
+                && m_doc->outputRuleKeeper() != nullptr && m_doc->outputRuleKeeper()->emergencyStopped())
+            {
+                m_down.insert(k);
+                emit refused(tr("%1: stopped. Shift+Play releases the stop.").arg(layoutOf(universe).shortName()));
+                break;
+            }
             m_down.insert(k);
             goPressed(role == Back);
             break;

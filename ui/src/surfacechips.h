@@ -21,6 +21,8 @@
 #define SURFACECHIPS_H
 
 #include <QWidget>
+#include <QColor>
+#include <QIcon>
 #include <QMap>
 
 #include "qlcui_export.h"
@@ -49,6 +51,8 @@ class QLC_UI_EXPORT SurfaceChips final : public QWidget
 public:
     explicit SurfaceChips(Doc *doc, QWidget *parent = nullptr);
 
+    /** The generic controller glyph on each chip. */
+    static QIcon boardIcon(const QColor &colour, int size = 14);
     /** The chip of @p universe; null when it has none. */
     QToolButton *chip(quint32 universe) const { return m_chips.value(universe); }
     QList<quint32> universes() const { return m_chips.keys(); }
