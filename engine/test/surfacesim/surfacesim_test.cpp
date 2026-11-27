@@ -1140,13 +1140,13 @@ void SurfaceSim_Test::anOlderCopyOfASurfaceProfileIsNotUsed()
     QLCInputProfile *used = iom->profile(kApc);
     QVERIFY(used != nullptr);
     QVERIFY2(used->channel(4117) != nullptr, "the user's older copy shadows the built-in profile");
-    QVERIFY(used->path() != oldPath);
+    QVERIFY(QDir::cleanPath(used->path()) != QDir::cleanPath(oldPath));
     QCOMPARE(iom->shadowedProfiles().size(), 1);
     QVERIFY(iom->shadowedProfiles().first().builtInUsed);
-    QCOMPARE(iom->shadowedProfiles().first().path, oldPath);
+    QCOMPARE(QDir::cleanPath(iom->shadowedProfiles().first().path), QDir::cleanPath(oldPath));
     const QStringList notes = iom->shadowedProfileNotes();
     QCOMPARE(notes.size(), 1);
-    QVERIFY2(notes.first().contains(oldPath) && notes.first().contains(QStringLiteral("older")),
+    QVERIFY2(notes.first().contains(QDir::cleanPath(oldPath)) && notes.first().contains(QStringLiteral("older")),
              qPrintable(notes.first()));
     QVERIFY2(QFileInfo::exists(oldPath), "the user's file is left alone");
     // The board's Match is still the type's: a patch by name finds it.
@@ -1160,7 +1160,7 @@ void SurfaceSim_Test::anOlderCopyOfASurfaceProfileIsNotUsed()
     Doc other(this);
     other.inputOutputMap()->loadProfiles(dirOf(fresh.path()));
     other.inputOutputMap()->loadProfiles(dirOf(profileDir()));
-    QCOMPARE(other.inputOutputMap()->profile(kApc)->path(), goodPath);
+    QCOMPARE(QDir::cleanPath(other.inputOutputMap()->profile(kApc)->path()), QDir::cleanPath(goodPath));
     QVERIFY(other.inputOutputMap()->shadowedProfileNotes().isEmpty());
 }
 
