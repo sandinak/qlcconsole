@@ -142,7 +142,13 @@ private:
     static void markUnreachable(QTreeWidgetItem *item, const QStringList &reasons);
 
     /** Patch an existing or new universe to this plugin line. */
-    void patchUniverseTo(const QString &pluginName, quint32 line, bool output);
+    void patchUniverseTo(const QString &pluginName, quint32 line, bool output,
+                         bool feedback = false);
+    /** Say something short beside the toolbar ("Feedback goes back to X"). */
+    void postNote(const QString &text);
+    /** Pair a universe's feedback to its input's own output (MIDI, HID),
+     *  noting it. Returns the device paired, or empty. */
+    QString autoPairFeedback(quint32 universe);
     /** Resolve which of a plugin's lines an action should apply to: the only
      *  one if there is only one, otherwise a picker. False if the plugin has
      *  no line in that direction at all, or the user cancelled the picker.
@@ -383,6 +389,7 @@ private:
     class QPushButton *m_rescan;
     class QPushButton *m_undo;
     class QLabel *m_status;
+    class QLabel *m_note = nullptr;
     /* Which branches are open, by full path, so the periodic rebuild does not
        fight the operator. Tracked as EXPANDED rather than collapsed because
        the default is now "protocol and interface open, devices closed": with a

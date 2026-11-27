@@ -48,6 +48,8 @@ private slots:
     void anInitOnlySurfaceOffersSendAgain();
     /** The hub's Controller setup row, its Set Up… and Rescan. */
     void theHubRowAndRescan();
+    /** No feedback line: the hub row and the dialog offer Patch Feedback, one click pairs the board's own output. */
+    void patchFeedbackIsOneClick();
     /** With QLC_SHOT_DIR: the dialog and the hub at three sizes. */
     void shots();
 

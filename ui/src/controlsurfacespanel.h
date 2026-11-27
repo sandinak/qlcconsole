@@ -68,6 +68,8 @@ public:
     QPushButton *setUpButton(const QString &key) const { return m_buttons.value(key); }
     /** The PMJ row's Lamp Log… button. */
     QPushButton *pmjLampLogButton() const { return m_pmjLampLog; }
+    /** Patch Feedback on the PMJ row: there while the board has no feedback line. */
+    QPushButton *pmjFeedbackButton() const { return m_pmjFeedback; }
     /** Open the PMJ's lamp log (PmjLampLogDialog). */
     void openPmjLampLog();
     QPushButton *rescanButton() const { return m_rescan; }
@@ -102,6 +104,9 @@ private:
     QString triggersText() const;
     QString padsText() const;
     QString pmjText() const;
+    /** The universe whose PMJ Black 1 input has no feedback line (UINT_MAX: none). */
+    quint32 pmjNoFeedbackUniverse() const;
+    void patchPmjFeedback();
     QString setupText() const;
     /** What the PMJ's lit lamps mean (the help's "What the lamps mean"). */
     static QString pmjLampsText();
@@ -136,6 +141,7 @@ private:
     QMap<QString, QLabel *> m_what;
     QMap<QString, QPushButton *> m_buttons;
     QPushButton *m_pmjLampLog = nullptr;
+    QPushButton *m_pmjFeedback = nullptr;
     QString m_lastSummary;
     QPushButton *m_rescan = nullptr;
     /** What the last Rescan found (cleared when a device connects). */

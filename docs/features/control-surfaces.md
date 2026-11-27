@@ -1021,6 +1021,18 @@ after any build that changes a surface, and say which build.
 7. Turn the knob a click each way. *Expect:* its dial on the map turns the
    way the knob does.
 
+**Feedback patch (any board with lamps or motors)**
+
+1. Patch the board's input on a universe, then in Connections remove its
+   feedback (the universe's right-click, **Remove Feedback**). *Expect:* the
+   lamps go dark and Control surfaces says *no feedback line* with a **Patch
+   Feedback** button.
+2. Unpatch the input and patch it again. *Expect:* the status beside the
+   Connections toolbar says *Feedback goes back to* the board, the lamps
+   light and the fader follows the Grand Master, without touching feedback.
+3. Remove feedback again and press **Patch Feedback** in Control surfaces
+   (or in Controller Setup). *Expect:* the lamps light at once.
+
 **PMJ Black 1**
 
 1. Patch the PMJ as an input on any MIDI channel with the feedback line and

@@ -699,6 +699,29 @@ So far the WLED output has been checked against a stand-in that answers
 like a WLED device, not yet against real WLED hardware on a show network —
 try it on your own devices before relying on it for a show.
 
+### Feedback to a control surface
+
+Feedback is what the app sends back to a board so its lamps and motor
+faders follow the show: a lit GO button, a fader that moves with the Grand
+Master. It is an output line of the same device, patched on the universe
+that has the board's input.
+
+- **Patching the input pairs it for you.** Patch a MIDI or USB board as a
+  universe's input and, when the same device has an output with the same
+  name and that universe has no feedback yet, the app sets it and says so
+  beside the toolbar: *Feedback goes back to* the device. Art-Net, sACN and
+  OSC are never paired this way: they need an address.
+- **By hand.** Right-click the board's interface line and choose **Patch a
+  Universe Here (feedback)**, then the universe. Or right-click the universe
+  and choose **Send Feedback To…** and the line. **Remove Feedback** takes it
+  off again. Each is one step of **Undo Patch Change**.
+- **From Control surfaces.** A board with no feedback line says so, and
+  **Patch Feedback** beside it pairs the board's own output in one click.
+
+The menu items appear only where they can act: the feedback item on a line
+of a protocol that can send it, and **Send Feedback To…** on a universe that
+has an input and no feedback yet.
+
 ## Window menu
 
 Every tab is in **Window**. The tabs the [workspace view](getting-started.md#views)

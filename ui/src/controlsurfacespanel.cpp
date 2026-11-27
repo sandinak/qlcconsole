@@ -19,6 +19,7 @@
 #include <QGridLayout>
 #include <QVBoxLayout>
 #include <QPushButton>
+#include <climits>
 #include <QLabel>
 #include <QShowEvent>
 #include <QFrame>
@@ -242,6 +243,13 @@ ControlSurfacesPanel::ControlSurfacesPanel(Doc *doc, QWidget *parent)
             connect(log, &QPushButton::clicked, this, &ControlSurfacesPanel::openPmjLampLog);
             v->addWidget(log);
             m_pmjLampLog = log;
+            m_pmjFeedback = new QPushButton(tr("Patch Feedback"), box);
+            m_pmjFeedback->setObjectName(QStringLiteral("surfacePmjFeedback"));
+            m_pmjFeedback->setToolTip(tr("Send the PMJ's lamps back to its own output. With no single "
+                                         "match, opens Connections to pick one."));
+            m_pmjFeedback->hide();
+            connect(m_pmjFeedback, &QPushButton::clicked, this, &ControlSurfacesPanel::patchPmjFeedback);
+            v->addWidget(m_pmjFeedback);
             grid->addWidget(box, r, 2, Qt::AlignTop);
         }
         else if (key == QLatin1String("setup"))
@@ -519,6 +527,31 @@ QString ControlSurfacesPanel::grandMasterText() const
     return gm ? tr("Grand Master: input set") : tr("Grand Master: no input");
 }
 
+quint32 ControlSurfacesPanel::pmjNoFeedbackUniverse() const
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    for (quint32 u = 0; u < iom->universesCount(); ++u)
+    {
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip != nullptr && ip->profileName().compare(PMJOverlay::deviceId, Qt::CaseInsensitive) == 0
+            && iom->feedbackPatch(u) == nullptr)
+            return u;
+    }
+    return UINT_MAX;
+}
+
+void ControlSurfacesPanel::patchPmjFeedback()
+{
+    const quint32 u = pmjNoFeedbackUniverse();
+    if (u == UINT_MAX)
+        return;
+    if (m_doc->inputOutputMap()->pairFeedback(u).isEmpty())
+        emit setUpRequested(QStringLiteral("pmj"));     // no single match: Connections, to pick
+    else
+        m_doc->setModified();
+    refresh();
+}
+
 QString ControlSurfacesPanel::pmjText() const
 {
     /* The overlay hears only a universe whose input has exactly the PMJ
@@ -744,6 +777,8 @@ void ControlSurfacesPanel::refresh()
     m_status["masters"]->setText(mastersText());
     m_status["gm"]->setText(grandMasterText());
     m_status["pmj"]->setText(pmjText());
+    if (m_pmjFeedback != nullptr)
+        m_pmjFeedback->setVisible(pmjNoFeedbackUniverse() != UINT_MAX);
     m_status["setup"]->setText(setupText());
     m_status["web"]->setText(webText());
     m_status["pads"]->setText(padsText());

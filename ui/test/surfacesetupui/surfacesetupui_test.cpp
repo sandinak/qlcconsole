@@ -96,6 +96,7 @@ void SurfaceSetupUi_Test::cleanup()
     m_stub->m_lineNames.clear();
     m_stub->m_linesAreHardware = false;
     m_stub->m_networkDmx = true;
+    m_stub->m_hasFeedback = false;
     m_stub->m_onShowControl = nullptr;
     m_stub->m_onRescan = nullptr;
     m_stub->m_showControlSent.clear();
@@ -248,6 +249,45 @@ void SurfaceSetupUi_Test::theHubRowAndRescan()
     QVERIFY2(hub.status("setup").contains("PMJ Black 1 (universe 1): Not checked yet."), qPrintable(hub.status("setup")));
     m_doc->surfaceSetup()->check(0);
     QVERIFY2(hub.status("setup").contains("54 of 54 lamps aren't under their buttons"), qPrintable(hub.status("setup")));
+}
+
+void SurfaceSetupUi_Test::patchFeedbackIsOneClick()
+{
+    m_stub->m_hasFeedback = true;
+    m_stub->m_linesAreHardware = true;      // a USB/MIDI line, not a network one
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj, profile("PMJ-Black-1.qxi"));
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) == nullptr);
+
+    ControlSurfacesPanel hub(m_doc);
+    hub.show();
+    QVERIFY(hub.pmjFeedbackButton() != nullptr);
+    QVERIFY(hub.pmjFeedbackButton()->isVisibleTo(&hub));
+    QVERIFY2(hub.status("pmj").contains("no feedback line"), qPrintable(hub.status("pmj")));
+
+    SurfaceSetupDialog d(m_doc);
+    d.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&d));
+    settle();
+    QPushButton *dlgBtn = button(&d, "surfaceSetupPatchFeedback");
+    QVERIFY(dlgBtn != nullptr && dlgBtn->isVisibleTo(&d));
+
+    // The dialog's button first: one click, and it is gone.
+    dlgBtn->click();
+    settle();
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) != nullptr);
+    QVERIFY(dlgBtn->isHidden());
+    // Unpatched again: the hub's button pairs it the same way.
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, QString(), QString(), 0, true, 0));
+    settle();
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) == nullptr);
+    QVERIFY(hub.pmjFeedbackButton()->isVisibleTo(&hub));
+    hub.pmjFeedbackButton()->click();
+    settle();
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) != nullptr);
+    QVERIFY(hub.pmjFeedbackButton()->isHidden());
+    QVERIFY2(hub.status("pmj").contains("with its feedback line"), qPrintable(hub.status("pmj")));
 }
 
 void SurfaceSetupUi_Test::shots()

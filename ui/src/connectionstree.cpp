@@ -466,6 +466,10 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_status = new QLabel(tr("Searching for devices…"), this);
     m_status->setStyleSheet("QLabel { color: #a06000; }");
     bar->insertWidget(bar->indexOf(hint) + 1, m_status);   // on the same row
+    m_note = new QLabel(this);
+    m_note->setObjectName("connectionsNote");
+    m_note->hide();
+    bar->insertWidget(bar->indexOf(hint) + 2, m_note);
 
     m_tree = new RowTree(this);
     m_tree->setObjectName("connectionsTree");
@@ -3057,6 +3061,11 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             ? menu.addAction(tr("Patch a Universe Here (output)…")) : NULL;
         QAction *pIn = (canIn && targets == false)
             ? menu.addAction(tr("Patch a Universe Here (input)…")) : NULL;
+        /* Feedback is the lamps and motor faders on a board: only a line of
+           a plugin that can send it back, with an output on this line. */
+        QAction *pFb = (canOut && targets == false
+                        && (p->capabilities() & QLCIOPlugin::Feedback))
+            ? menu.addAction(tr("Patch a Universe Here (feedback)…")) : NULL;
 
         /* "This got bound to lo0 by mistake, move every universe on it to
            the real NIC" used to mean re-patching each affected universe by
@@ -3108,6 +3117,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             patchUniverseTo(plugin, line, true);
         else if (pIn != NULL && chosen == pIn)
             patchUniverseTo(plugin, line, false);
+        else if (pFb != NULL && chosen == pFb)
+            patchUniverseTo(plugin, line, false, true);
         return;
     }
 
@@ -3251,6 +3262,32 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            removing it from THIS one must not read as deleting the universe.
            Conflating the two would quietly destroy a fan-out. */
         QAction *unp = menu.addAction(tr("Unpatch from This Interface"));
+
+        /* Feedback: only where it can act. A universe with an input and no
+           feedback offers the lines that can carry it; one that has it
+           offers to drop it. */
+        InputOutputMap *fbMap = m_doc->inputOutputMap();
+        QAction *rmFb = NULL;
+        QMenu *fbMenu = NULL;
+        QList<InputOutputMap::FeedbackLine> fbLines;
+        if (fbMap != NULL && fbMap->inputPatch(uni) != NULL)
+        {
+            if (fbMap->feedbackPatch(uni) != NULL)
+                rmFb = menu.addAction(tr("Remove Feedback"));
+            else
+            {
+                fbLines = fbMap->feedbackLines();
+                if (fbLines.isEmpty() == false)
+                {
+                    fbMenu = menu.addMenu(tr("Send Feedback To…"));
+                    foreach (const InputOutputMap::FeedbackLine &fl, fbLines)
+                    {
+                        QAction *a = fbMenu->addAction(tr("%1: %2").arg(fl.plugin, fl.name));
+                        a->setData(QVariantList() << fl.plugin << fl.line);
+                    }
+                }
+            }
+        }
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
@@ -3259,6 +3296,18 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             return;
         if (chosen == NULL)
             return;
+        if (rmFb != NULL && chosen == rmFb)
+        {
+            setFeedback(uni, QString(), 0);
+            return;
+        }
+        if (fbMenu != NULL && chosen->data().canConvert<QVariantList>()
+            && chosen->data().toList().count() == 2)
+        {
+            const QVariantList d = chosen->data().toList();
+            setFeedback(uni, d.at(0).toString(), d.at(1).toUInt());
+            return;
+        }
         if (chosen == ren)
             renameUniverse(uni);
         else if (chosen == plist)
@@ -3374,7 +3423,7 @@ void ConnectionsTree::addTargetOnNewInterface(QLCIOPlugin *p)
 }
 
 void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
-                                      bool output)
+                                      bool output, bool feedback)
 {
     InputOutputMap *iomap = m_doc->inputOutputMap();
     if (iomap == NULL)
@@ -3384,11 +3433,23 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
     QList<quint32> ids;
     foreach (Universe *uni, iomap->universes())
     {
+        /* Feedback goes back to the board an input came from: only a
+           universe with an input has anywhere to send it from. */
+        if (feedback && uni->inputPatch() == NULL)
+            continue;
         names << uni->name();
         ids << uni->id();
     }
+    if (feedback && ids.isEmpty())
+    {
+        QMessageBox::information(this, tr("Patch feedback"),
+                                 tr("No universe has an input yet. Patch the board's "
+                                    "input to a universe first."));
+        return;
+    }
     const QString newLabel = tr("<new universe>");
-    names << newLabel;
+    if (feedback == false)
+        names << newLabel;
 
     bool ok = false;
     const QString pick = QInputDialog::getItem(
@@ -3418,6 +3479,12 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
         if (idx < 0 || idx >= ids.count())
             return;
         uniId = ids.at(idx);
+    }
+
+    if (feedback)
+    {
+        setFeedback(uniId, pluginName, line);
+        return;
     }
 
     bool done = false;
@@ -3492,6 +3559,8 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
             return;
         }
         done = iomap->setInputPatch(uniId, pluginName, QString(), line);
+        if (done)
+            autoPairFeedback(uniId);
     }
 
     if (done == false)
@@ -3857,9 +3926,50 @@ void ConnectionsTree::setFeedback(quint32 universe, const QString &pluginName,
 
     /* Feedback is an output patch flagged as feedback; an empty plugin name
        clears it. */
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    pluginName.isEmpty()
+                                    ? tr("remove feedback on universe %1").arg(universe + 1)
+                                    : tr("patch feedback on universe %1").arg(universe + 1));
     iomap->setOutputPatch(universe, pluginName, QString(), line, true, 0);
     m_doc->setModified();
     refresh();
+    if (pluginName.isEmpty() == false)
+    {
+        const QStringList outs = iomap->pluginOutputs(pluginName);
+        postNote(tr("Feedback goes back to %1")
+                     .arg(int(line) < outs.count() ? outs.at(int(line)) : pluginName));
+    }
+}
+
+void ConnectionsTree::postNote(const QString &text)
+{
+    if (m_note == NULL)
+        return;
+    m_note->setText(text);
+    m_note->setVisible(text.isEmpty() == false);
+    QPointer<QLabel> note(m_note);
+    QTimer::singleShot(8000, this, [note, text]() {
+        if (note != NULL && note->text() == text)
+            note->hide();
+    });
+}
+
+QString ConnectionsTree::autoPairFeedback(quint32 universe)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return QString();
+    /* Nothing to pair: say nothing, and capture nothing. */
+    if (iomap->feedbackPatch(universe) != NULL || iomap->feedbackLineFor(universe).plugin.isEmpty())
+        return QString();
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    tr("pair feedback on universe %1").arg(universe + 1));
+    const QString dev = iomap->pairFeedback(universe);
+    if (dev.isEmpty() == false)
+        postNote(tr("Feedback goes back to %1").arg(dev));
+    return dev;
 }
 
 void ConnectionsTree::setProfile(quint32 universe, const QString &profileName)

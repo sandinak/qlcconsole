@@ -14,6 +14,12 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Feedback is patched like input and output.** Patching a MIDI or USB board's
+  input pairs its own output as the feedback line (Connections says *Feedback
+  goes back to ...*); **Patch a Universe Here (feedback)** on a line,
+  **Send Feedback To...** and **Remove Feedback** on a universe do it by
+  hand, with undo; Control surfaces and Controller Setup get a **Patch
+  Feedback** button where a board's lamps were dark for want of it.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is

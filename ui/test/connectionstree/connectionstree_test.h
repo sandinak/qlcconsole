@@ -48,6 +48,12 @@ private slots:
 
     /* Rescan reaches every plugin, not just the ones with a dialog */
     void rescanReachesEveryPlugin();
+    /** Patch a Universe Here (feedback) is on a feedback-capable line only. */
+    void feedbackMenuItemOnlyOnAFeedbackLine();
+    /** Send Feedback To / Remove Feedback on a universe row; undo restores. */
+    void feedbackIsPatchedFromAUniverseAndUndone();
+    /** An input on a MIDI-like line pairs its own output; a network one never. */
+    void inputPairsItsOwnOutputAsFeedback();
 
     /* Which lines are worth showing */
     void unpatchedLineIsHiddenByDefault();

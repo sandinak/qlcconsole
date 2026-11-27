@@ -4328,6 +4328,142 @@ void ConnectionsTree_Test::byUniverseCellsEditThePatch()
     QCOMPARE(iom->universe(4)->outputPatchesCount(), 0);
 }
 
+
+/****************************************************************************
+ * Feedback patched like input and output
+ ****************************************************************************/
+
+/** The texts of the context menu on @p item (the menu is closed again). */
+static QStringList menuTextsOn(ConnectionsTree &tree, QTreeWidgetItem *item)
+{
+    QStringList seen;
+    QTimer::singleShot(0, [&seen]() {
+        QMenu *m = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+        if (m == NULL)
+            return;
+        foreach (QAction *a, m->actions())
+        {
+            seen << a->text();
+            if (a->menu() != NULL)
+                foreach (QAction *sub, a->menu()->actions())
+                    seen << QStringLiteral("  > ") + sub->text();
+        }
+        m->close();
+    });
+    tree.slotContextMenu(tree.m_tree->visualItemRect(item).center());
+    QApplication::processEvents();
+    return seen;
+}
+
+void ConnectionsTree_Test::feedbackMenuItemOnlyOnAFeedbackLine()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_lineNames = QStringList() << "Pad";
+    const QString item = QStringLiteral("Patch a Universe Here (feedback)");
+
+    for (int pass = 0; pass < 2; pass++)
+    {
+        stub->m_hasFeedback = (pass == 1);
+        ConnectionsTree tree(m_doc);
+        tree.show();
+        tree.m_tree->expandAll();
+        QList<QTreeWidgetItem *> lines = itemsOfKind(tree.m_tree, KIND_LINE);
+        QVERIFY(lines.isEmpty() == false);
+        tree.m_tree->scrollToItem(lines.first());
+        const QStringList seen = menuTextsOn(tree, lines.first());
+        QVERIFY2(seen.isEmpty() == false, "no menu opened");
+        bool has = false;
+        foreach (const QString &t, seen)
+            has = has || t.startsWith(item);
+        QCOMPARE(has, pass == 1);
+        // The other two patches are there both times.
+        QVERIFY2(seen.join("|").contains("Patch a Universe Here (input)"), qPrintable(seen.join("|")));
+    }
+}
+
+void ConnectionsTree_Test::feedbackIsPatchedFromAUniverseAndUndone()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_hasFeedback = true;
+    stub->m_lineNames = QStringList() << "Pad" << "Other";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 2)
+        iom->addUniverse();
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+
+    ConnectionsTree tree(m_doc);
+    tree.m_byUniverse->setChecked(true);
+    tree.show();
+    tree.refresh();
+    QTreeWidgetItem *row = universeRow(tree.m_tree, 0);
+    QVERIFY(row != NULL);
+    QStringList seen = menuTextsOn(tree, row);
+    QVERIFY2(seen.join("|").contains("Send Feedback To"), qPrintable(seen.join("|")));
+    QVERIFY(seen.join("|").contains("Pad") && seen.join("|").contains("Other"));
+    QVERIFY(seen.join("|").contains("Remove Feedback") == false);
+    // A universe with no input has nowhere to send it from.
+    seen = menuTextsOn(tree, universeRow(tree.m_tree, 1));
+    QVERIFY(seen.join("|").contains("Feedback") == false);
+
+    tree.setFeedback(0, stub->name(), 1);
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(1));
+    QCOMPARE(tree.m_note->text(), QString("Feedback goes back to Other"));
+    seen = menuTextsOn(tree, universeRow(tree.m_tree, 0));
+    QVERIFY(seen.join("|").contains("Remove Feedback"));
+    QVERIFY(seen.join("|").contains("Send Feedback To") == false);
+
+    // Undo puts the universe back as it was.
+    QVERIFY(iom->patchUndo()->canUndo());
+    iom->patchUndo()->undo();
+    QVERIFY(iom->feedbackPatch(0) == NULL);
+
+    tree.setFeedback(0, stub->name(), 0);
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+    tree.setFeedback(0, QString(), 0);
+    QVERIFY(iom->feedbackPatch(0) == NULL);
+    iom->patchUndo()->undo();
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+}
+
+void ConnectionsTree_Test::inputPairsItsOwnOutputAsFeedback()
+{
+    IOPluginStub *stub = stubOf(m_doc);
+    stub->m_linesAreHardware = true;
+    stub->m_hasFeedback = true;
+    stub->m_lineNames = QStringList() << "Pad" << "Other";
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    while (iom->universesCount() < 3)
+        iom->addUniverse();
+    ConnectionsTree tree(m_doc);
+
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 1));
+    QCOMPARE(tree.autoPairFeedback(0), QString("Other"));
+    QVERIFY(iom->feedbackPatch(0) != NULL);
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(1));
+    QCOMPARE(tree.m_note->text(), QString("Feedback goes back to Other"));
+    // Already has one: left alone.
+    QVERIFY(iom->setInputPatch(0, stub->name(), QString(), 0));
+    QCOMPARE(tree.autoPairFeedback(0), QString());
+    QCOMPARE(iom->feedbackPatch(0)->output(), quint32(1));
+
+    // Two outputs of the same name: no unique match, no guess.
+    stub->m_lineNames = QStringList() << "Twin" << "Twin";
+    QVERIFY(iom->setInputPatch(1, stub->name(), QString(), 0));
+    QCOMPARE(iom->pairFeedback(1), QString());
+    QVERIFY(iom->feedbackPatch(1) == NULL);
+
+    // A network protocol needs an address: never paired by name.
+    stub->m_lineNames = QStringList() << "Pad";
+    stub->m_linesAreHardware = false;
+    stub->m_supportsTargets = true;
+    QVERIFY(iom->setInputPatch(2, stub->name(), QString(), 0));
+    QCOMPARE(iom->pairFeedback(2), QString());
+    QVERIFY(iom->feedbackPatch(2) == NULL);
+}
+
 /****************************************************************************
  * Pictures: By universe (QLC_SHOT_DIR)
  ****************************************************************************/

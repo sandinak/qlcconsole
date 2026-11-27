@@ -85,6 +85,12 @@ SurfaceSetupDialog::SurfaceSetupDialog(Doc *doc, QWidget *parent)
     m_error->setObjectName(QStringLiteral("surfaceSetupError"));
     m_error->setWordWrap(true);
     lay->addWidget(m_error);
+    m_patchFeedback = new QPushButton(tr("Patch Feedback"), this);
+    m_patchFeedback->setObjectName(QStringLiteral("surfaceSetupPatchFeedback"));
+    m_patchFeedback->setToolTip(tr("Send this board's lamps and faders back to its own output."));
+    m_patchFeedback->hide();
+    lay->addWidget(m_patchFeedback, 0, Qt::AlignLeft);
+    connect(m_patchFeedback, &QPushButton::clicked, this, &SurfaceSetupDialog::patchFeedback);
 
     m_buttons = new QWidget(this);
     QHBoxLayout *row = new QHBoxLayout(m_buttons);
@@ -221,6 +227,11 @@ void SurfaceSetupDialog::updateState()
 {
     const quint32 u = universe();
     const SurfaceSetup::Spec *spec = u == UINT_MAX ? nullptr : m_setup->specOf(u);
+    {
+        InputOutputMap *fbm = m_doc->inputOutputMap();
+        m_patchFeedback->setVisible(u != UINT_MAX && fbm->inputPatch(u) != nullptr
+                                    && fbm->feedbackPatch(u) == nullptr);
+    }
     m_device->setVisible(m_device->count() > 1);
     m_deviceLabel->setVisible(m_device->count() <= 1);
     m_deviceLabel->setText(m_device->count() == 1 ? m_device->itemText(0) : QString());
@@ -269,6 +280,23 @@ bool SurfaceSetupDialog::confirmWrite(bool *confirmed)
     return *confirmed;
 }
 
+void SurfaceSetupDialog::patchFeedback()
+{
+    const quint32 u = universe();
+    if (u == UINT_MAX)
+        return;
+    const QString dev = m_doc->inputOutputMap()->pairFeedback(u);
+    if (dev.isEmpty())
+        showError(tr("No single output matches this board. In Connections, right-click its "
+                     "output line and choose Patch a Universe Here (feedback)."));
+    else
+    {
+        showError(QString());
+        m_doc->setModified();
+    }
+    updateState();
+}
+
 void SurfaceSetupDialog::checkNow()
 {
     const quint32 u = universe();
@@ -313,6 +341,7 @@ void SurfaceSetupDialog::sendAgain()
 {
     const bool ok = m_setup->sendInit(universe());
     showError(ok ? QString() : tr("It could not be sent: patch its output as the feedback line."));
+    updateState();
     if (ok)
         m_status->setText(tr("Sent. %1").arg(m_setup->lastCheck(universe()).text));
 }
