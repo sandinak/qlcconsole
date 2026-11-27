@@ -227,6 +227,10 @@ private:
     int algorithmStepsCount();
     /** The next step's map, asked of the scripts' thread (m_algorithmMutex held) */
     void askNextMap(const QSize &size);
+    /** The map of step @a step in @a rgb, asked of the scripts' thread */
+    bool askMap(const QSize &size, uint rgb, int step);
+    /** Maps ahead here: on, in a frame of the running timer, a script */
+    bool aheadHere() const;
     /** Forget the map asked for; @a wait: until the scripts' thread has let
      *  go of the script, before it is deleted (m_algorithmMutex held) */
     void dropNextMap(bool wait);

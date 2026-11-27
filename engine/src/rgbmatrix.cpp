@@ -850,30 +850,34 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
                 const int step = m_stepHandler->currentStepIndex();
                 bool haveMap = false;
                 m_waitingForMap = false;
-                if (!m_nextMap.isNull())
+                const bool matching = !m_nextMap.isNull()
+                                      && m_nextMap->isFor(size, rgb, step, m_mapGeneration.load());
+                if (matching && m_nextMap->ready.load(std::memory_order_acquire))
                 {
-                    if (m_nextMap->isFor(size, rgb, step, m_mapGeneration.load()))
+                    m_stepHandler->m_map = std::move(m_nextMap->map);
+                    m_nextMap.reset();
+                    haveMap = true;
+                }
+                else if (aheadHere() && !m_stepHandler->m_map.isEmpty())
+                {
+                    /* Late (or asked for before an edit): the last map stays
+                       out until this step's is ready -- the tick never waits */
+                    s_mapsLate.fetch_add(1, std::memory_order_relaxed);
+                    m_waitingForMap = true;
+                    if (!matching)
                     {
-                        if (m_nextMap->ready.load(std::memory_order_acquire))
-                        {
-                            m_stepHandler->m_map = std::move(m_nextMap->map);
-                            m_nextMap.reset();
-                            haveMap = true;
-                        }
-                        else
-                        {
-                            // Late: the last map stays out until this one is ready
-                            s_mapsLate.fetch_add(1, std::memory_order_relaxed);
-                            m_waitingForMap = true;
-                        }
+                        dropNextMap(false);
+                        if (!askMap(size, rgb, step))
+                            m_waitingForMap = false;
                     }
-                    else
-                    {
-                        dropNextMap(false);     // asked for before an edit, or another step
-                    }
+                }
+                else
+                {
+                    dropNextMap(false);
                 }
                 if (!haveMap && !m_waitingForMap)
                 {
+                    // The first step of a run, a tick by hand, no script
                     m_runAlgorithm->rgbMap(size, rgb, step, m_stepHandler->m_map);
                     haveMap = true;
                 }
@@ -979,6 +983,7 @@ void RGBMatrix::postRun(MasterTimer *timer, QList<Universe *> universes)
         QMutexLocker algorithmLocker(&m_algorithmMutex);
         dropNextMap(false);
         m_waitingForMap = false;
+        m_stepHandler->m_map.clear();   // the next run's first map is computed at its step
         checkEngineCreation();
         if (m_runAlgorithm != NULL)
             m_runAlgorithm->postRun();
@@ -1004,33 +1009,43 @@ void RGBMatrix::roundCheck()
         roundElapsed(duration());
 }
 
+bool RGBMatrix::aheadHere() const
+{
+    return mapsAhead() && MasterTimer::inTimerFrame() && m_runAlgorithm != NULL
+           && m_runAlgorithm->type() == RGBAlgorithm::Script;
+}
+
 void RGBMatrix::askNextMap(const QSize &size)
 {
-    if (!mapsAhead() || !MasterTimer::inTimerFrame() || m_runAlgorithm == NULL || m_runAlgorithm->type() != RGBAlgorithm::Script
-        || m_rgbColors.size() < 2 || !m_nextMap.isNull())
+    if (!aheadHere() || m_rgbColors.size() < 2 || !m_nextMap.isNull())
         return;
     /* Where the steps go next: what roundCheck() will do, on a copy */
     RGBMatrixStep next = *m_stepHandler;
     next.m_map = RGBMap();
     if (!next.checkNextStep(runOrder(), m_rgbColors[0], m_rgbColors[1], m_stepsCount))
         return;     // the last step of a single shot
+    askMap(size, next.stepColor().rgb(), next.currentStepIndex());
+}
 
+bool RGBMatrix::askMap(const QSize &size, uint rgb, int step)
+{
     QSharedPointer<NextMap> ask = QSharedPointer<NextMap>::create();
     ask->size = size;
-    ask->rgb = next.stepColor().rgb();
-    ask->step = next.currentStepIndex();
+    ask->rgb = rgb;
+    ask->step = step;
     ask->generation = m_mapGeneration.load();
-    ask->map.reserve(size.height());
     RGBScript *script = static_cast<RGBScript *>(m_runAlgorithm);
     /* The job holds the request (shared), and the script only while it is
        not cancelled: dropNextMap(true) waits for it before a delete */
-    if (RGBScript::runOnScriptThread([ask, script]() {
+    if (!RGBScript::runOnScriptThread([ask, script]() {
             if (ask->cancelled.load(std::memory_order_acquire))
                 return;
             script->rgbMap(ask->size, ask->rgb, ask->step, ask->map);
             ask->ready.store(true, std::memory_order_release);
         }))
-        m_nextMap = ask;
+        return false;
+    m_nextMap = ask;
+    return true;
 }
 
 void RGBMatrix::dropNextMap(bool wait)
