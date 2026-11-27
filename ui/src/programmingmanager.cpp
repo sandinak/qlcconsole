@@ -1600,13 +1600,15 @@ void ProgrammingManager::slotOutlineSelectionChanged()
             held = layer != nullptr;
         if (!held)
             m_workbench->load(row.scene);
-        // Every selected row of that scene, selected there too.
+        // Every selected row the Workbench holds, selected there too -- of
+        // this scene and of the other layers of a collection it has loaded
+        // (the rows of a scene it does not hold have no row there).
         ProgrammingOutline *rows = m_workbench->rows();
         QSignalBlocker block(rows);
         rows->clearSelection();
         QTreeWidgetItem *first = nullptr;
         for (const ProgrammingOutline::Row &r : m_outline->selectedRows())
-            if (r.scene == row.scene)
+            if (r.scene == row.scene || rows->sceneItem(r.scene) != nullptr)
                 if (QTreeWidgetItem *it = rows->itemFor(r))
                 {
                     it->setSelected(true);
