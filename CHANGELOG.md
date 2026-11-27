@@ -14,6 +14,24 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Added
 
+- **Lighting Studio: saved camera views.** The Rig Overview's Views button
+  keeps a named camera (From FOH, Director's seat): plane, turn, angles, zoom
+  and pan, saved with the show; rename, delete, and Show Notes snapshots read
+  the same camera.
+- **Lighting Studio: frost and CTO / CTB / CCT in the beam.** Frost widens and
+  softens the beam and blurs a gobo; colour temperature channels tint it warm
+  or cool.
+- **Lighting Studio: shutter and strobe in the Rig Overview.** A closed shutter
+  draws no beam; a strobe blinks at a readable rate, one rule with the plot.
+- **Number in plot order.** Right-click a selection on the plot, Number…: Unit #
+  and / or Channel from N in stage-right-to-left, upstage-to-downstage or truss
+  order, with a preview and an option to patch in that order; one undo step.
+- **Patch clashes outlined on the DMX overlay**: overlapping addresses, past
+  channel 512 and unpatched fixtures, from Show Review's patch checks, with a
+  tooltip naming the clash.
+- **Label fields on the plot.** Show ▸ Label Fields: Name, Unit #, Channel,
+  Address, Purpose, Colour / gel, Mode, Owner, round the icon and upright;
+  saved with the show.
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is
