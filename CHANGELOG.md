@@ -227,6 +227,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Unpatching an input while the show runs no longer risks a crash**: the universe's own thread flushed its input patch every frame while the I/O tab deleted it; it is now taken out under the frame lock first.
 - **A stop leaves a curtain where it is**: Stop all, Fade and stop and the emergency stop no longer close a curtain (or let a relay-driven one drop) — one opening, closing or flying stops where it is and stays there until the next GO; the footer says "Curtain stopped at 40% — GO to carry on". The lights still go out, flame and fog relays still off.
 - **Picking cues in Design no longer moves the curtain** (board Q350): clicking between cues in the Show Tree holds the curtain where it is on stage, and the plot and Rig Overview draw it where the picked cue puts it, marked "held while editing" — it used to be drawn closed after a pick, or stopped part way when picked again mid-move. A GO (or going into Operate) moves it for real, from where it was held over the cue's fade, never a jump.
 - **Control surfaces hub and the PMJ's lamps**: moving the Grand Master no

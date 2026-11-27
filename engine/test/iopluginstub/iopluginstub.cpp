@@ -69,6 +69,7 @@ int IOPluginStub::capabilities() const
 
 bool IOPluginStub::openOutput(quint32 output, quint32 universe)
 {
+    const OutputCall call(this);
     Q_UNUSED(universe)
     /* addToMap on EVERY open, not only the first for a given line. Real
        plugins do (ArtNetPlugin::openOutput calls it unconditionally), and it
@@ -91,6 +92,7 @@ bool IOPluginStub::openOutput(quint32 output, quint32 universe)
 
 void IOPluginStub::closeOutput(quint32 output, quint32 universe)
 {
+    const OutputCall call(this);
     m_asyncPending.remove(output);          // m_async: a send thread stopped
     m_openOutputs.removeAll(output);
     /* like the real plugins: forget (universe, line) -- universe FIRST */
@@ -122,6 +124,7 @@ QString IOPluginStub::outputInfo(quint32 output)
 
 void IOPluginStub::writeUniverse(quint32 universe, quint32 output, const QByteArray &data, bool dataChanged)
 {
+    const OutputCall call(this);
     Q_UNUSED(universe)
 
     m_lastDataChanged = dataChanged;
@@ -140,6 +143,7 @@ void IOPluginStub::writeUniverse(quint32 universe, quint32 output, const QByteAr
 
 void IOPluginStub::flushOutput(quint32 output, quint32 universe)
 {
+    const OutputCall call(this);
     Q_UNUSED(universe)
     m_flushes++;
     if (m_asyncPending.contains(output))

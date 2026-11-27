@@ -294,6 +294,7 @@ private slots:
     /** The patch list changes under the frame lock: frames and sends from
      *  another thread while lines are added, moved, held and removed */
     void patchListChangesUnderTheFrameLock();
+    void inputPatchChangesUnderTheFrameLock();
     /** A held AutoRemove channel reaching its target lets go of nothing
      *  (no hold, no "Why is this on?" let-go) */
     void aHeldAutoRemoveChannelLetsGoOfNothing();
