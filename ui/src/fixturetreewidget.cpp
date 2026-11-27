@@ -26,6 +26,8 @@
 #include <QDragMoveEvent>
 #include <QDropEvent>
 #include <QKeyEvent>
+#include <QScrollBar>
+#include <QHash>
 #include <QTreeWidgetItemIterator>
 
 #include <QMap>
@@ -1237,9 +1239,59 @@ void FixtureTreeWidget::restoreSelection(const Selection &sel)
     }
 }
 
+/* A row's identity across a rebuild: its parent's key and what it stands for
+   (group, universe, folder, fixture ... by id; else its text). */
+static QString rowKey(const QTreeWidgetItem *it, const QString &parentKey)
+{
+    QString k = parentKey + QLatin1Char('/');
+    bool any = false;
+    for (int role : { int(PROP_ID), int(PROP_UNIVERSE), int(PROP_GROUP), int(PROP_HEAD), int(PROP_FOLDER),
+                      int(PROP_SOURCE), int(PROP_CIRCUIT), int(PROP_INVENTORY), int(PROP_INVENTORY_NAME),
+                      int(PROP_CLASHES), int(PROP_DUPLICATES), int(PROP_FOUND) })
+    {
+        const QVariant v = it->data(0, role);
+        if (v.isValid())
+        {
+            k += QString::number(role) + QLatin1Char('=') + v.toString() + QLatin1Char(';');
+            any = true;
+        }
+    }
+    if (!any)
+        k += it->text(0);
+    return k;
+}
+
+static void collectExpansion(const QTreeWidgetItem *it, const QString &parentKey, QHash<QString, bool> &out)
+{
+    const QString key = rowKey(it, parentKey);
+    if (it->childCount() > 0)
+        out.insert(key, it->isExpanded());
+    for (int i = 0; i < it->childCount(); i++)
+        collectExpansion(it->child(i), key, out);
+}
+
+static void applyExpansion(QTreeWidgetItem *it, const QString &parentKey, const QHash<QString, bool> &was)
+{
+    const QString key = rowKey(it, parentKey);
+    if (it->childCount() > 0)
+    {
+        const auto f = was.constFind(key);
+        if (f != was.constEnd() && it->isExpanded() != f.value())
+            it->setExpanded(f.value());
+    }
+    for (int i = 0; i < it->childCount(); i++)
+        applyExpansion(it->child(i), key, was);
+}
+
 void FixtureTreeWidget::updateTree()
 {
     const Selection keep = currentSelection();
+    /* The view stays where it was: scroll position and which rows were open
+       (a rebuild would otherwise jump to the top and re-open its defaults). */
+    const int scrollWas = verticalScrollBar()->value();
+    QHash<QString, bool> expansionWas;
+    for (int i = 0; i < topLevelItemCount(); i++)
+        collectExpansion(topLevelItem(i), QString(), expansionWas);
     /* Sorted once, when the tree is built. With sorting on, every row added
        arms Qt's pending sort, and the next child()/childCount() below (the
        universe lookup for each fixture) runs it: a full, recursive sort of
@@ -1647,7 +1699,16 @@ void FixtureTreeWidget::updateTree()
 
     header()->resizeSections(QHeaderView::ResizeToContents);
 
+    if (!expansionWas.isEmpty())
+        for (int i = 0; i < topLevelItemCount(); i++)
+            applyExpansion(topLevelItem(i), QString(), expansionWas);
+
     restoreSelection(keep);
+    if (scrollWas > 0)
+    {
+        executeDelayedItemsLayout();      // the scroll range, before the value
+        verticalScrollBar()->setValue(scrollWas);
+    }
 }
 
 void FixtureTreeWidget::setShowFound(bool on)

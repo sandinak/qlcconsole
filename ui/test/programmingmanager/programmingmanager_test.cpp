@@ -53,6 +53,7 @@
 #include <QTemporaryDir>
 #include <QPushButton>
 #include <QTreeWidget>
+#include <QScrollBar>
 #include "../../../engine/test/common/stdprelude.h"
 #define protected public
 #define private public
@@ -3842,4 +3843,42 @@ void ProgrammingManager_Test::theWorkbenchAddBarStaysReachableInBuildAt1024x640(
             QVERIFY(mgr.grab().save(QString("%1/workbench-addbar-%2x%3.png").arg(shotDir).arg(sz.width()).arg(sz.height())));
         QCOMPARE(bar->horizontalScrollBar()->maximum(), 0);
     }
+}
+
+/* Sixty palettes, scrolled to the middle: ⌘D on one scrolls by a row at most
+   (not to the centre) and the copy is the current row. */
+void ProgrammingManager_Test::duplicatePaletteKeepsTheListWhereItWas()
+{
+    QList<quint32> ids;
+    for (int i = 0; i < 60; i++)
+    {
+        QLCPalette *p = new QLCPalette(QLCPalette::Dimmer, m_doc);
+        p->setName(QString("Dim %1").arg(i, 2, 10, QChar('0')));
+        p->setValue(i);
+        m_doc->addPalette(p);
+        ids << p->id();
+    }
+    ProgrammingManager mgr(nullptr, m_doc);
+    mgr.resize(900, 500);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    mgr.setSection(ProgrammingManager::PalettesSection);
+    mgr.m_paletteTree->updateTree();
+    QTreeWidgetItem *row = mgr.m_paletteTree->paletteItem(m_doc->palette(ids.at(30)));
+    QVERIFY(row != nullptr);
+    mgr.m_paletteTree->setCurrentItem(row);
+    mgr.m_paletteTree->scrollToItem(row, QAbstractItemView::PositionAtCenter);
+    QCoreApplication::processEvents();
+    QScrollBar *bar = mgr.m_paletteTree->verticalScrollBar();
+    const int was = bar->value();
+    QVERIFY(was > 0);
+    const int rowH = mgr.m_paletteTree->visualItemRect(row).height();
+
+    mgr.duplicatePalette(ids.at(30));
+    QCoreApplication::processEvents();
+    QVERIFY(qAbs(bar->value() - was) <= rowH);
+    QTreeWidgetItem *cur = mgr.m_paletteTree->currentItem();
+    QVERIFY(cur != nullptr);
+    const quint32 copy = mgr.m_paletteTree->itemPaletteId(cur);
+    QVERIFY(copy != ids.at(30) && !ids.contains(copy));
 }

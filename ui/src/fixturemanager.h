@@ -149,7 +149,12 @@ public:
      *  ⇧⌘Z does it again): @p fixtures and @p groups were just made -- a
      *  duplicate, a paste, a new group. The undo takes them away, the redo
      *  puts them back as they were, with the same ids. No Studio: none. */
-    static void recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups);
+    static void recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups,
+                           const QList<quint32> &srcFixtures = QList<quint32>(),
+                           const QList<quint32> &srcGroups = QList<quint32>());
+    /** Select these rows (the first current) and scroll it into view only as
+     *  far as needed; folders above them open, nothing else moves. */
+    void revealRows(const QList<quint32> &fixtures, const QList<quint32> &groups);
     /** One step on the same history: group @p gid was just renamed from
      *  @p before. Nothing when its name is still @p before. */
     static void recordGroupRename(Doc *doc, quint32 gid, const QString &before);

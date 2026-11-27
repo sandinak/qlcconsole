@@ -1404,7 +1404,7 @@ QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const Q
         m_fixtures_tree->updateTree();
         m_doc->setModified();
         // All of it one ⌘Z: the copies go, with whatever patched them since.
-        recordMade(m_doc, made, madeGroups);
+        recordMade(m_doc, made, madeGroups, fixtures, groups);
     }
     // The new fixtures selected, to patch or rename next.
     if (!made.isEmpty())
@@ -1418,7 +1418,12 @@ QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const Q
                 item->setSelected(true);
                 m_fixtures_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
             }
+        // Only as far as needed: the view stays where it was.
+        if (QTreeWidgetItem *cur = m_fixtures_tree->currentItem())
+            m_fixtures_tree->scrollToItem(cur, QAbstractItemView::EnsureVisible);
     }
+    else if (!madeGroups.isEmpty())
+        revealRows(QList<quint32>(), madeGroups);
     return made;
 }
 
@@ -1456,6 +1461,8 @@ void FixtureManager::selectGroup(quint32 id)
         QVariant var = item->data(KColumnName, PROP_GROUP);
         if (var.isValid() && var.toUInt() == id)
         {
+            for (QTreeWidgetItem *p = item->parent(); p != NULL; p = p->parent())
+                p->setExpanded(true);
             m_fixtures_tree->setCurrentItem(item);
             m_fixtures_tree->scrollToItem(item);
             slotSelectionChanged();
@@ -4589,7 +4596,31 @@ quint32 FixtureManager::newHere()
     return grp->id();
 }
 
-void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups)
+void FixtureManager::revealRows(const QList<quint32> &fixtures, const QList<quint32> &groups)
+{
+    QList<QTreeWidgetItem *> rows;
+    for (quint32 id : fixtures)
+        if (QTreeWidgetItem *it = m_fixtures_tree->fixtureItem(id))
+            rows << it;
+    for (quint32 id : groups)
+        if (QTreeWidgetItem *it = m_fixtures_tree->groupItem(id))
+            rows << it;
+    if (rows.isEmpty())
+        return;
+    m_fixtures_tree->clearSelection();
+    for (QTreeWidgetItem *it : rows)
+    {
+        for (QTreeWidgetItem *p = it->parent(); p != NULL; p = p->parent())
+            if (!p->isExpanded())
+                p->setExpanded(true);
+        it->setSelected(true);
+    }
+    m_fixtures_tree->setCurrentItem(rows.first(), 0, QItemSelectionModel::NoUpdate);
+    m_fixtures_tree->scrollToItem(rows.first(), QAbstractItemView::EnsureVisible);
+}
+
+void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups,
+                                const QList<quint32> &srcFixtures, const QList<quint32> &srcGroups)
 {
     Monitor *mon = Monitor::instance();
     if (doc == NULL || mon == NULL || (fixtures.isEmpty() && groups.isEmpty()))
@@ -4603,15 +4634,18 @@ void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const 
     };
     QSharedPointer<Taken> taken(new Taken);
     QPointer<Doc> d(doc);
-    auto refresh = []() {
+    /* What the step restored or changed ends up selected and in view: the
+       originals after an undo, the copies after a redo. */
+    auto refresh = [](const QList<quint32> &selFixtures, const QList<quint32> &selGroups) {
         if (FixtureManager *fm = FixtureManager::instance())
         {
             fm->updateGroupMenu();
             fm->updateView();
+            fm->revealRows(selFixtures, selGroups);
         }
     };
     // Fixtures come and go only in Design, as everywhere else on this tab.
-    auto undo = [d, fixtures, groups, taken, refresh]() {
+    auto undo = [d, fixtures, groups, srcFixtures, srcGroups, taken, refresh]() {
         if (d.isNull() || d->mode() != Doc::Design)
             return;
         taken->fixtures.clear();
@@ -4639,9 +4673,9 @@ void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const 
                 d->deleteFixture(fid);
             }
         d->setModified();
-        refresh();
+        refresh(srcFixtures, srcGroups);
     };
-    auto redo = [d, taken, refresh]() {
+    auto redo = [d, fixtures, groups, taken, refresh]() {
         if (d.isNull() || d->mode() != Doc::Design)
             return;
         for (const QByteArray &xml : taken->fixtures)
@@ -4664,7 +4698,7 @@ void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const 
                 delete grp;
         }
         d->setModified();
-        refresh();
+        refresh(fixtures, groups);
     };
     mon->pushUndoCallback(undo, redo);
 }
@@ -4683,6 +4717,8 @@ void FixtureManager::recordGroupRename(Doc *doc, quint32 gid, const QString &bef
             return;
         g->setName(n);
         d->setModified();
+        if (FixtureManager *fm = FixtureManager::instance())
+            fm->revealRows(QList<quint32>(), { gid });
     };
     mon->pushUndoCallback([name, before]() { name(before); }, [name, after]() { name(after); });
 }

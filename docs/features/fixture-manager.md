@@ -98,6 +98,9 @@ any of its targets are unpatched.
   The whole duplicate is one undo step: **⌘Z** takes the copies away again,
   **⇧⌘Z** puts them back. A new group (**⇧⌘N** or **New Group…**) and a
   group's rename (in place or in its editor) are one step each the same way.
+  The list stays where it was, with the same folders open; the copy is
+  selected, and after an undo or redo the row it touched, scrolled into view
+  only as far as needed.
   **Esc** lets go of the selection. The keys are the same in every list
   ([Edit keys](shortcuts.md#edit-keys-the-same-in-every-list)).
 - Adding is Design mode only, like Add Fixture.

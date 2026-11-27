@@ -119,6 +119,10 @@ private slots:
     /** Duplicate, a new group and a group renamed: each one ⌘Z on the
      *  rig's history, and ⇧⌘Z does it again. */
     void duplicateNewGroupAndRenameAreUndoSteps();
+    /** The tree stays where it was across a duplicate, ⌘Z, ⇧⌘Z and a rename
+     *  undo; the row the step touched is current and in view. */
+    void duplicateAndUndoKeepTheViewAndSelectTheRow();
+    void renameUndoSelectsTheGroupAndKeepsExpansion();
     void rigHistoryWaitsForDesignAndEndsWithTheShow();
     void outputRulesForFixturesAndGroups();
     void editDefinitionForFixturesSharingOne();

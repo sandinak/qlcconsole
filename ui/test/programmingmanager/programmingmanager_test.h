@@ -144,6 +144,8 @@ private slots:
     void paletteFoldersHoldAnyTypeInBothViews();
     void libraryAndProgrammingAgreeOnFolders();
     void undoHereReachesTheSharedHistory();
+    /** ⌘D on a Library palette: the list stays put, the copy is current. */
+    void duplicatePaletteKeepsTheListWhereItWas();
     void deletingHereClearsTheShowTreesUses();
     /** ⇧⌘N in Build: a folder or a scene selected -- a new scene in that
      *  folder (one undo step), selected and renaming; the Effects section

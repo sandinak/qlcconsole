@@ -19,6 +19,7 @@
 #include "../common/fixtureeditor.h"
 #include <QDir>
 #include <QTreeWidgetItemIterator>
+#include <QScrollBar>
 #include <QMenu>
 #include <memory>
 #include <QTimer>
@@ -2395,4 +2396,136 @@ void FixtureManager_Test::plotSymbolInOperateChangesOnlyThePicture()
     scene->stop(FunctionParent::master());
     m_doc->masterTimer()->timerTick();
     m_doc->setMode(Doc::Design);
+}
+
+namespace
+{
+/* The tree's top-level rows and whether each is open. */
+QList<bool> openRows(FixtureManager &mgr)
+{
+    QList<bool> out;
+    for (int i = 0; i < mgr.m_fixtures_tree->topLevelItemCount(); i++)
+        out << mgr.m_fixtures_tree->topLevelItem(i)->isExpanded();
+    return out;
+}
+
+bool inView(FixtureManager &mgr, QTreeWidgetItem *it)
+{
+    if (it == nullptr)
+        return false;
+    const QRect r = mgr.m_fixtures_tree->visualItemRect(it);
+    return !r.isEmpty() && mgr.m_fixtures_tree->viewport()->rect().intersects(r)
+           && r.top() >= 0 && r.bottom() <= mgr.m_fixtures_tree->viewport()->height();
+}
+
+quint32 currentFixtureId(FixtureManager &mgr)
+{
+    QTreeWidgetItem *c = mgr.m_fixtures_tree->currentItem();
+    return c != nullptr && c->data(KColumnName, PROP_ID).isValid()
+           ? c->data(KColumnName, PROP_ID).toUInt() : Fixture::invalidId();
+}
+}
+
+/* A tree of 60 fixtures scrolled to the middle: ⌘D, ⌘Z and ⇧⌘Z leave the
+   scroll where it was (a row at most), the copy / the original is current and
+   in view, and a folder closed stays closed. */
+void FixtureManager_Test::duplicateAndUndoKeepTheViewAndSelectTheRow()
+{
+    const QList<quint32> fids = addDimmers(m_doc, 60, 1, "Par");
+    QCOMPARE(fids.size(), 60);
+    // A staged one, so the Inventory and its folders exist before the copy.
+    stagedDimmer(m_doc, "Staged");
+    FixtureGroup *grp = addGroup(m_doc, "Front", "", fids.mid(0, 2));
+    Q_UNUSED(grp);
+
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(700, 420);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    FixtureTreeWidget *tree = mgr.m_fixtures_tree;
+    // Something shut that a rebuild would open by default.
+    QTreeWidgetItem *grpRoot = tree->topLevelItem(0);
+    QVERIFY(grpRoot != nullptr);
+    grpRoot->setExpanded(false);
+
+    const quint32 orig = fids.at(30);
+    QTreeWidgetItem *row = mgr.m_fixtures_tree->fixtureItem(orig);
+    QVERIFY(row != nullptr);
+    tree->clearSelection();
+    tree->setCurrentItem(row);
+    row->setSelected(true);
+    tree->scrollToItem(row, QAbstractItemView::PositionAtCenter);
+    QCoreApplication::processEvents();
+    const int scrolled = tree->verticalScrollBar()->value();
+    QVERIFY(scrolled > 0);
+    const int rowH = tree->visualItemRect(row).height();
+    QVERIFY(rowH > 0);
+    const QList<bool> open = openRows(mgr);
+    auto steady = [&](const char *what) {
+        QVERIFY2(qAbs(tree->verticalScrollBar()->value() - scrolled) <= rowH, what);
+        QCOMPARE(openRows(mgr), open);
+    };
+
+    mgr.duplicateSelection();
+    QCoreApplication::processEvents();
+    const quint32 copy = currentFixtureId(mgr);
+    QVERIFY(copy != orig && copy != Fixture::invalidId());
+    QVERIFY(m_doc->fixture(copy) != nullptr);
+    QVERIFY(inView(mgr, tree->currentItem()));
+    steady("scroll after duplicate");
+
+    mon.undo();
+    QCoreApplication::processEvents();
+    QVERIFY(m_doc->fixture(copy) == nullptr);
+    QCOMPARE(currentFixtureId(mgr), orig);
+    QVERIFY(inView(mgr, tree->currentItem()));
+    steady("scroll after undo");
+
+    mon.redo();
+    QCoreApplication::processEvents();
+    QCOMPARE(currentFixtureId(mgr), copy);      // the re-created one
+    QVERIFY(inView(mgr, tree->currentItem()));
+    steady("scroll after redo");
+}
+
+/* A group renamed, then undone: the group is current and in view, and the
+   rebuild-free path leaves expansion alone. */
+void FixtureManager_Test::renameUndoSelectsTheGroupAndKeepsExpansion()
+{
+    const QList<quint32> fids = addDimmers(m_doc, 60, 1, "Par");
+    stagedDimmer(m_doc, "Staged");
+    FixtureGroup *grp = addGroup(m_doc, "Front", "", fids.mid(0, 2));
+
+    QWidget parent;
+    Monitor mon(&parent, m_doc);
+    FixtureManager mgr(nullptr, m_doc);
+    mgr.resize(700, 420);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    FixtureTreeWidget *tree = mgr.m_fixtures_tree;
+
+    QTreeWidgetItem *far = tree->fixtureItem(fids.at(55));
+    QVERIFY(far != nullptr);
+    tree->scrollToItem(far, QAbstractItemView::PositionAtBottom);
+    QCoreApplication::processEvents();
+    const QList<bool> open = openRows(mgr);
+
+    const QString before = grp->name();
+    grp->setName("Back");
+    FixtureManager::recordGroupRename(m_doc, grp->id(), before);
+    mon.undo();
+    QCoreApplication::processEvents();
+    QCOMPARE(grp->name(), before);
+    QTreeWidgetItem *cur = tree->currentItem();
+    QVERIFY(cur != nullptr);
+    QCOMPARE(cur->data(KColumnName, PROP_GROUP).toUInt(), grp->id());
+    QVERIFY(inView(mgr, cur));
+    QCOMPARE(openRows(mgr), open);
+    mon.redo();
+    QCoreApplication::processEvents();
+    QCOMPARE(grp->name(), QString("Back"));
+    QCOMPARE(tree->currentItem()->data(KColumnName, PROP_GROUP).toUInt(), grp->id());
+    QVERIFY(inView(mgr, tree->currentItem()));
 }
