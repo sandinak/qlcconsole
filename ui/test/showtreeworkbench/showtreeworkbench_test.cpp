@@ -1957,6 +1957,7 @@ void ShowTreeWorkbench_Test::aBusyCourseCueAtThreeSizes()
     }
     app->doc()->resetModified();
     delete app;
+    ShowLevel::instance()->setLevel(ShowLevel::Standard);    // the course show's level was Student
 }
 
 /* Tab the cue page in the docked Workbench (Edit | Tracking | Timing | Notes):
@@ -2100,9 +2101,8 @@ void ShowTreeWorkbench_Test::openingSeveralSelectedLayersEditsThemAll()
     QCOMPARE(view.selectedLayerRefs().size(), 3);
     QVERIFY2(view.currentCueId() == s.c1 && view.currentKind() == ShowTreeView::LayerNode,
              qPrintable(QString("cue %1 kind %2").arg(view.currentCueId()).arg(int(view.currentKind()))));
-    QVERIFY2(ShowLevel::shown(QStringLiteral("showtree.workbench")), "level hides the Workbench");
-    QVERIFY2(view.openInWorkbench(s.c1, view.currentId(), QString(), view.alsoSelectedLayers(s.c1, view.currentId())),
-             "openInWorkbench");
+    QVERIFY(ShowLevel::shown(QStringLiteral("showtree.workbench")));
+    QVERIFY(view.openSelectionInWorkbench());
     Workbench *bench = view.dockedWorkbench();
     QVERIFY(bench != nullptr);
     QCoreApplication::processEvents();
