@@ -1199,7 +1199,7 @@ void SurfaceMap_Test::theChipMenuDoesWhatTheBoardNeeds()
     QCOMPARE(test.count(), 1);
     QCOMPARE(setUp.count(), 1);
     // A right-click on the chip opens the same menu.
-    QContextMenuEvent ctx(QContextMenuEvent::Mouse, QPoint(4, 4));
+    QContextMenuEvent ctx(QContextMenuEvent::Mouse, QPoint(4, 4), chips.chip(0)->mapToGlobal(QPoint(4, 4)));
     QApplication::sendEvent(chips.chip(0), &ctx);
     QVERIFY(chips.lastMenu() != nullptr);
     QCOMPARE(chips.lastMenu()->objectName(), QStringLiteral("footerSurfaceMenu0"));
