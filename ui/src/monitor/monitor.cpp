@@ -3291,9 +3291,13 @@ void Monitor::applyMapView(int view)
     // address order, with its stats on hover.
     m_graphicsView->setNetworkRunsVisible(view == ViewNet);
     if (view != ViewDMX)
+    {
         foreach (Fixture *fx, m_doc->fixtures())
+        {
             if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id()))
                 it->setPatchClash(QColor(), QString());
+        }
+    }
 
     if (view == ViewPower)
     {
