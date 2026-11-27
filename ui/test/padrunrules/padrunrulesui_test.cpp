@@ -1260,7 +1260,9 @@ void PadRunRulesUi_Test::noPadNoChip()
     iom->setInputPatch(0, QString(), QString(), QLCIOPlugin::invalidLine());
     emit iom->pluginConfigurationChanged(m_stub->name(), true);
     settle(50);
-    QVERIFY2(!chip->isVisibleTo(m_app), "the Pad chip stays after the controller is gone");
+    // A notice (the pad was lost) is said for its few seconds, then the chip goes.
+    QTRY_VERIFY2_WITH_TIMEOUT(!chip->isVisibleTo(m_app), "the Pad chip stays after the controller is gone",
+                              PadRun::noticeMs() + 3000);
 }
 
 int main(int argc, char **argv)
