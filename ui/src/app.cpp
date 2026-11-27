@@ -1081,6 +1081,15 @@ void App::init()
                 ap->undo(universe);
             });
         });
+        // A board back with a wrong patch, put right: "PMJ Black 1: feedback
+        // repaired to its own port", with Undo (it is then left as it is).
+        connect(ap, &SurfaceAutoPatch::repaired, this,
+                [this, ap](quint32 universe, const QString &profile, const QString &what) {
+            showViewNotice(tr("%1: %2").arg(profile, what), tr("Undo"), [this, ap, universe]() {
+                hideViewNotice();
+                ap->undoRepair(universe);
+            });
+        });
         connect(ap, &SurfaceAutoPatch::askToUse, this,
                 [this, ap](const QString &plugin, const QString &device, const QString &profile) {
             showViewNotice(tr("%1: is this a %2?").arg(device, profile), tr("Use It"),

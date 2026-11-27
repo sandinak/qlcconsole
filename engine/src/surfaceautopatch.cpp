@@ -18,6 +18,7 @@
 */
 
 #include <QPointer>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QTimer>
 
@@ -29,6 +30,7 @@
 #include "qlcinputprofile.h"
 #include "qlcioplugin.h"
 #include "outputpatch.h"
+#include "patchundo.h"
 #include "inputpatch.h"
 #include "universe.h"
 #include "doc.h"
@@ -42,6 +44,15 @@ QString keyOf(const QString &device)
 }
 const QString kLastUniverse = QStringLiteral("surfaces/lastUniverse/");
 const QString kDeclined = QStringLiteral("surfaces/declined/");
+const QString kKeepPatch = QStringLiteral("surfaces/keepPatch/");
+/* A port a network MIDI session has (macOS "Network Session 1", a custom
+   "Network RTP Session 1", rtpMIDI's): never a board's own feedback. */
+bool isNetworkSession(const QString &name)
+{
+    static const QRegularExpression re(QStringLiteral("\\b(session|rtp)\\b|rtpmidi"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    return re.match(name).hasMatch();
+}
 }
 
 SurfaceAutoPatch::SurfaceAutoPatch(Doc *doc, QObject *parent)
@@ -157,7 +168,18 @@ void SurfaceAutoPatch::consider(QLCIOPlugin *plugin, const QString &device)
     if (!m_enabled || device.trimmed().isEmpty() || !plugin->inputs().contains(device))
         return;
     InputOutputMap *iom = m_doc->inputOutputMap();
-    if (known(plugin, device) || isDeclined(device) || InputOutputMap::isNotSurface(device))
+    if (known(plugin, device))
+    {
+        // Already patched: its patch put right where it is wrong.
+        for (quint32 u = 0; u < iom->universesCount(); ++u)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip != nullptr && ip->plugin() == plugin && ip->inputName() == device)
+                repair(u);
+        }
+        return;
+    }
+    if (isDeclined(device) || InputOutputMap::isNotSurface(device))
         return;
     const QString profile = iom->profileForDevice(device);
     if (profile.isEmpty())
@@ -285,6 +307,98 @@ quint32 SurfaceAutoPatch::useAs(QLCIOPlugin *plugin, const QString &device, cons
         }
     }
     return setUp(plugin, device, profile);
+}
+
+QString SurfaceAutoPatch::repair(quint32 universe)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    InputPatch *ip = iom->inputPatch(universe);
+    QLCIOPlugin *plugin = ip != nullptr ? ip->plugin() : nullptr;
+    if (plugin == nullptr || !plugin->linesAreHardware())
+        return QString();
+    const QString device = ip->inputName();
+    if (device.trimmed().isEmpty() || !plugin->inputs().contains(device) || InputOutputMap::isNotSurface(device))
+        return QString();
+    const QString want = iom->profileForDevice(device);
+    if (want.isEmpty())
+        return QString();          // not a board this app knows
+    if (QSettings().value(kKeepPatch + keyOf(device), false).toBool())
+        return QString();          // its repair was undone: left as it is
+
+    // The profile: none, not installed, or another board's.
+    bool fixProfile = false;
+    const QString cur = ip->profileName();
+    if (cur != want)
+    {
+        QLCInputProfile *cp = cur.isEmpty() ? nullptr : iom->profile(cur);
+        fixProfile = cp == nullptr || (!cp->deviceMatches().isEmpty() && cp->deviceMatchScore(device) == 0);
+    }
+
+    // The feedback: none, another board, a network session, or a port gone.
+    bool fixFeedback = false;
+    QString was;
+    const InputOutputMap::FeedbackLine own = iom->feedbackLineFor(universe);
+    if (!own.plugin.isEmpty())
+    {
+        OutputPatch *fb = iom->feedbackPatch(universe);
+        if (fb == nullptr || !fb->isPatched() || fb->plugin() == nullptr)
+            fixFeedback = true;
+        else if (!(fb->pluginName() == own.plugin && fb->output() == own.line))
+        {
+            was = fb->outputName();
+            const QStringList outs = fb->plugin()->outputs();
+            const bool gone = int(fb->output()) >= outs.size() || outs.at(int(fb->output())) != was;
+            const bool board = !was.isEmpty() && was != device && !iom->profileForDevice(was).isEmpty();
+            fixFeedback = gone || board || isNetworkSession(was);
+        }
+    }
+    if (!fixProfile && !fixFeedback)
+        return QString();
+
+    QStringList what;
+    if (fixFeedback)
+        what << (was.isEmpty() ? tr("feedback set to its own port") : tr("feedback repaired to its own port"));
+    if (fixProfile)
+        what << tr("profile set to %1").arg(want);
+    const QString text = what.join(tr(", "));
+    const QString summary = tr("repair %1 on universe %2").arg(want).arg(universe + 1);
+    if (PatchUndo *pu = iom->patchUndo())
+    {
+        pu->capture(QList<quint32>() << universe, summary);
+        m_repairUndo.insert(universe, summary);
+    }
+    if (fixProfile)
+        iom->setInputProfile(universe, want);
+    if (fixFeedback)
+        iom->setOutputPatch(universe, own.plugin, QString(), own.line, true, 0);
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+    {
+        ss->boardLog()->note(universe, tr("Repaired %1: %2%3").arg(want, text,
+                                 was.isEmpty() ? QString() : tr(" (it was %1)").arg(was)));
+        ss->sendInit(universe, tr("after the repair"));
+    }
+    emit repaired(universe, want, text);
+    emit devicesChanged();
+    return text;
+}
+
+bool SurfaceAutoPatch::undoRepair(quint32 universe)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    PatchUndo *pu = iom->patchUndo();
+    const QString summary = m_repairUndo.take(universe);
+    if (pu == nullptr || summary.isEmpty() || !pu->canUndo() || pu->summary() != summary)
+        return false;
+    if (!pu->undo())
+        return false;
+    InputPatch *ip = iom->inputPatch(universe);
+    const QString device = ip != nullptr ? ip->inputName() : QString();
+    if (!device.isEmpty())
+        QSettings().setValue(kKeepPatch + keyOf(device), true);
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+        ss->boardLog()->note(universe, tr("Repair undone: this patch is left as it is on this computer"));
+    emit devicesChanged();
+    return true;
 }
 
 bool SurfaceAutoPatch::setFeedback(quint32 universe, const QString &output)

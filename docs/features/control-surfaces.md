@@ -1011,6 +1011,17 @@ none is). A notice says so, *Akai APC40 mkII ready on universe 5*, with
 computer until you patch it by hand. A board the show already has, or
 waits for while it is unplugged, is left to the show's own patch.
 
+**A board already patched is put right.** When a board the show has comes
+online (plugged in again, the show opened, the app started), its universe
+is checked: a feedback that is none, points at another board, at a network
+session (*Network RTP Session 1*) or at a port that is gone moves to the
+board's own port; a profile that is none, not installed or another board's
+becomes its own; then its init goes out. A notice says what was done,
+*PMJ Black 1: feedback repaired to its own port*, with **Undo**, and the
+Board Log has a *Repaired* line. Undo puts the patch back as it was and
+leaves it alone on this computer from then on. A feedback you set on
+purpose to another port that is here and is not a board is never touched.
+
 The name the computer gives the board is matched loosely: case, a trailing
 *(APC64)*, port words such as *MIDI 1* or *Port 1*, and the maker's name do
 not matter, but another model's word does (an *APC40 mkII* is never taken
@@ -1220,9 +1231,15 @@ Start with the app open and a show loaded, every board unplugged.
 6. Plug in something that is no board (a keyboard, the Launchkey). *Expect:*
    **Connections ▸ Control surfaces** lists it *…: not set up*; click it,
    **Not a Control Surface**. *Expect:* it is gone from the list.
-7. Unplug a board that is set up. *Expect:* its row in Control surfaces is
+7. **A stale feedback.** In Connections set the PMJ's universe's
+   **Feedback** to *Network RTP Session 1* (or any other board), then unplug
+   the PMJ and plug it back. *Expect:* *PMJ Black 1: feedback repaired to
+   its own port* with **Undo**; the PMJ's lamps light; the Board Log says
+   *Repaired PMJ Black 1 … (it was Network RTP Session 1)*. Reopen the show
+   with the same stale patch: *Expect:* the same notice.
+8. Unplug a board that is set up. *Expect:* its row in Control surfaces is
    grey and says *not connected*; plug it back: it is back, not grey.
-8. Click a footer chip's **Design mode** chip and then press a board's
+9. Click a footer chip's **Design mode** chip and then press a board's
    Stop without Shift, one after the other. *Expect:* one message at a time
    in the footer, never two drawn over each other, and never under another
    chip's words.

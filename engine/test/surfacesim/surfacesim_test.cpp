@@ -1842,6 +1842,120 @@ void SurfaceSim_Test::aSharedPortNameIsAskedAboutThenRemembered()
     m_stub->m_hasFeedback = false;
 }
 
+namespace
+{
+// dink's MIDI ports on 2026-11-27, in CoreMIDI's order.
+const QStringList kDinkPorts = { QStringLiteral("Launchkey MK4 49 MIDI Out"), QStringLiteral("Launchkey MK4 49 DAW Out"),
+                                 QStringLiteral("Network RTP Session 1"), QStringLiteral("OpenDeck | PMJ_BLACK_1") };
+const QString kPmj = QStringLiteral("OpenDeck | PMJ_BLACK_1");
+}
+
+/* Branson, build 4910: "LEDs are not lighting on the PMJ still" -- and "when
+   that board comes online it should be configured correctly". His show's U01
+   had the PMJ as its input and its feedback on "Network RTP Session 1", left
+   by the APC40 patched there before: every lamp went to the session. When
+   the show loads with the PMJ here, and when the PMJ is plugged in again,
+   the feedback is put on the PMJ's own port, said with Undo, and logged;
+   Undo puts his patch back and it is then left alone. */
+void SurfaceSim_Test::aBoardBackWithAStaleFeedbackIsRepaired()
+{
+    loadAllProfiles(m_doc);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmj);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
+    ap->setDelay(0);
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_networkDmx = false;
+    m_stub->m_hasFeedback = true;
+    m_stub->m_acceptShowControl = true;
+    m_stub->m_lineNames = kDinkPorts;
+    emit m_stub->configurationChanged();
+    QCOMPARE(iom->profileForDevice(kPmj), QString("PMJ Black 1"));
+    QCOMPARE(iom->profileForDevice("Network RTP Session 1"), QString());
+    auto hisPatch = [&]() {
+        QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 3, QStringLiteral("PMJ Black 1")));
+        QVERIFY(iom->setOutputPatch(0, m_stub->name(), QString(), 2, true));
+        QCOMPARE(iom->feedbackPatch(0)->outputName(), QString("Network RTP Session 1"));
+    };
+    hisPatch();
+    QSignalSpy repaired(ap, &SurfaceAutoPatch::repaired);
+
+    // The show loaded (or the app started) with the PMJ here: the scan.
+    ap->setEnabled(true, true);
+    QCOMPARE(repaired.count(), 1);
+    QCOMPARE(repaired.first().at(0).toUInt(), 0u);
+    QCOMPARE(repaired.first().at(1).toString(), QString("PMJ Black 1"));
+    QCOMPARE(repaired.first().at(2).toString(), QString("feedback repaired to its own port"));
+    QCOMPARE(iom->feedbackPatch(0)->outputName(), kPmj);
+    QCOMPARE(iom->inputPatch(0)->profileName(), QString("PMJ Black 1"));
+    const QString log = m_doc->surfaceSetup()->boardLog()->text(0);
+    QVERIFY2(log.contains("Repaired PMJ Black 1: feedback repaired to its own port (it was Network RTP Session 1)"),
+             qPrintable(log));
+    // A lamp now reaches the PMJ's port.
+    m_stub->m_feedbackLines.clear();
+    QVERIFY(iom->sendFeedBack(0, 5, 127));
+    QCOMPARE(m_stub->m_feedbackLines, QList<quint32>({ 3u }));
+    // Nothing more to do on the next scan.
+    ap->scanNow();
+    QCOMPARE(repaired.count(), 1);
+
+    // Undo: his patch back, and left as it is from then on.
+    QVERIFY(ap->undoRepair(0));
+    QCOMPARE(iom->feedbackPatch(0)->outputName(), QString("Network RTP Session 1"));
+    ap->scanNow();
+    QCOMPARE(repaired.count(), 1);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmj);
+
+    // Plugged out and in again with the stale patch: repaired on its return.
+    ap->scanNow();
+    QCOMPARE(repaired.count(), 2);
+    hisPatch();
+    m_stub->m_lineNames = kDinkPorts.mid(0, 3);
+    emit m_stub->configurationChanged();
+    settle(20);
+    m_stub->m_lineNames = kDinkPorts;
+    emit m_stub->configurationChanged();
+    QTRY_COMPARE(repaired.count(), 3);
+    QCOMPARE(iom->feedbackPatch(0)->outputName(), kPmj);
+
+    ap->setEnabled(false);
+    m_stub->m_hasFeedback = false;
+    m_stub->m_acceptShowControl = false;
+}
+
+/* A feedback set on purpose to another port that is here and is not a
+   board (a Launchkey's) is a choice: never touched. A missing profile is
+   still put right. */
+void SurfaceSim_Test::aFeedbackChosenOnPurposeIsLeft()
+{
+    loadAllProfiles(m_doc);
+    QSettings().remove(QStringLiteral("surfaces/keepPatch/") + kPmj);
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
+    ap->setDelay(0);
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_networkDmx = false;
+    m_stub->m_hasFeedback = true;
+    m_stub->m_lineNames = kDinkPorts;
+    emit m_stub->configurationChanged();
+    QVERIFY(iom->setInputPatch(0, m_stub->name(), QString(), 3, QStringLiteral("PMJ Black 1")));
+    QVERIFY(iom->setOutputPatch(0, m_stub->name(), QString(), 0, true));
+    QSignalSpy repaired(ap, &SurfaceAutoPatch::repaired);
+    ap->setEnabled(true, true);
+    QCOMPARE(repaired.count(), 0);
+    QCOMPARE(iom->feedbackPatch(0)->outputName(), QString("Launchkey MK4 49 MIDI Out"));
+
+    // No profile: given its own, the feedback still left.
+    QVERIFY(iom->setInputProfile(0, QString()));
+    ap->scanNow();
+    QCOMPARE(repaired.count(), 1);
+    QCOMPARE(repaired.first().at(2).toString(), QString("profile set to PMJ Black 1"));
+    QCOMPARE(iom->inputPatch(0)->profileName(), QString("PMJ Black 1"));
+    QCOMPARE(iom->feedbackPatch(0)->outputName(), QString("Launchkey MK4 49 MIDI Out"));
+    ap->setEnabled(false);
+    m_stub->m_hasFeedback = false;
+}
+
 void SurfaceSim_Test::theBoardLogSaysWhatTheBoardSentAndWasSent()
 {
     const QString fp = QStringLiteral("PreSonus FaderPort 2");

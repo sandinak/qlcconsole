@@ -156,6 +156,8 @@ private slots:
     /** The MaizeDMX ("USB2.0-MIDI Port 1"): asked about, not patched; a yes
      *  sets it up and is remembered. */
     void aSharedPortNameIsAskedAboutThenRemembered();
+    void aBoardBackWithAStaleFeedbackIsRepaired();
+    void aFeedbackChosenOnPurposeIsLeft();
     /** The Board Log: a fader's every step in, a lamp out, the init with
      *  where it went, timestamped and decoded with the control's name;
      *  the last 500 kept. */

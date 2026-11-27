@@ -14,6 +14,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **A board that comes online is configured correctly**: when a known board the show has is plugged in again, the show opens or the app starts, a feedback that is none, another board's, a network session's (*Network RTP Session 1*) or a gone port's moves to the board's own port, a missing or another board's profile becomes its own, and its init goes out; a notice says so with Undo, and the Board Log has it. The PMJ Black 1 is now recognised by its port name (*OpenDeck | PMJ_BLACK_1*): its profile had no Match, so it was never set up by itself.
 - **A board plugged in is set up by itself** (bench 2026-11-27: the APC40 mkII, APC64, APC mini mk2 and MaizeDMX were not found). A known board is patched with its profile and feedback line, its init sent, with a notice and Undo; port names are matched loosely (case, "(APC64)", port words), a multi-port board on its own port only (its other ports are "part of APC64"); the MaizeDMX's shared "USB2.0-MIDI" name is asked about once and remembered.
 - **Connections ▸ Control surfaces lists every plugged-in MIDI device**, patched or not: unknown ones a click from a profile or "Not a Control Surface", unplugged boards greyed "not connected"; the list follows a patch at once.
 - **The footer shows one message at a time**, never drawn over or under another chip's words.

@@ -94,6 +94,26 @@ public:
     /** The universes set up by this object this session (for undo). */
     QList<quint32> patchedUniverses() const { return m_patched.keys(); }
 
+    /**
+     * A recognised board already patched (it came back, the show loaded,
+     * the app started): what is wrong with its universe is put right
+     * (Branson, build 4910: U01 had the PMJ as input and its feedback on
+     * "Network RTP Session 1", left by the APC40 patched there before).
+     *  - its feedback, when it is none, or points at another known board,
+     *    a network session or a port that is gone: the board's own output.
+     *    A feedback set to another port that is here and is not a board is
+     *    a choice and is left;
+     *  - its profile, when it is none, not installed or another board's:
+     *    the board's own;
+     *  - then its init goes out.
+     * Logged in the Board Log; repaired() says it (with Undo: undoRepair()).
+     * @return what was repaired, in words (empty: nothing).
+     */
+    QString repair(quint32 universe);
+    /** Undo the last repair() of @p universe (PatchUndo), and leave that
+     *  universe's patch as it is on this computer from now on. */
+    bool undoRepair(quint32 universe);
+
     /** @p universe's feedback, paired to @p output of its input's plugin
      *  (empty: let go); false when that is no such line. */
     bool setFeedback(quint32 universe, const QString &output);
@@ -105,6 +125,9 @@ signals:
     /** @p device was set up on @p universe with @p profile: "APC40 mkII
      *  ready on universe 5" (with Undo). */
     void autoPatched(quint32 universe, const QString &profile, const QString &device);
+    /** @p universe's board (@p profile) had its patch put right: @p what
+     *  ("feedback repaired to its own port"). */
+    void repaired(quint32 universe, const QString &profile, const QString &what);
     /** @p device may be the board of @p profile (a shared port name): ask. */
     void askToUse(const QString &plugin, const QString &device, const QString &profile);
     /** A device of @p plugin came or went (the Control surfaces list follows). */
@@ -123,6 +146,7 @@ private:
     QHash<QString, QSet<QString>> m_present;     ///< plugin -> its input lines
     QHash<quint32, QString> m_patched;           ///< universe -> device, this session
     QSet<QString> m_asked;                       ///< asked this session
+    QHash<quint32, QString> m_repairUndo;        ///< universe -> its repair's undo summary
 };
 
 /** @} */
