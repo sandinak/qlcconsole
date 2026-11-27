@@ -224,6 +224,10 @@ the same speed (see [Lighting Studio](lighting-studio.md#heads-travel-at-their-r
   with its kind and every switch, guessed or set by hand. Accept each once
   checked; one whose behaviour changes (a rename can change a guess) is
   listed again.
+- **FIX-24** An effect on a hazard (a note per cue): an EFX, an RGB
+  matrix, an effect look or a chase inside the cue reaches a hazard. A
+  hazard takes only its cue's own level, so the effect never drives it:
+  set the level in the cue itself.
 - **FIX-19** Loaded gobo missing from a light: a Gobo look named after
   glass you loaded and named in some lights (Gobo Wheels, "Moon") reaches a
   light that has no glass of that name, so that light ignores it. A warning,

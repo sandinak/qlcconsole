@@ -1109,25 +1109,34 @@ lets it, on controls of their own, never the operator's GO. And then
 channels — not the Simple Desk, Edit Live, a Virtual Console slider, the
 web page, input passthrough, an override hit, Focus or Highlight, the
 programmer, a fixture sharing its address, or a function left running.
-A cue that sets it to 0 puts it at 0. The level goes out at once (a
-hazard does not fade in with its cue). Two kinds, picked in **Behaves
-as**:
+A cue that sets it to 0 puts it at 0. An effect on a hazard — an EFX,
+an RGB matrix, an effect look, a chase inside the cue — never drives it
+(Show Review notes it on the cue, **FIX-24**). Only a **run** fires one:
+the show's own lists played from the Run (GO, Back, a jump, an
+auto-follow, a timecode or audio step, the Run tab, a cue list on the Run
+list, sub-cues); a Virtual Console button, the chaser editor's **Test**
+or a web widget never does — the footer says **CO2 jet held — fire it
+from Run**. Two kinds, picked in **Behaves as**:
 
 - **Hazard — Burst** (flame, CO₂ jets, confetti, cannons, sparkulars,
-  pyro): the spotter's **deadman**. When a cue is reached — by a GO,
-  Back, a jump, an auto-follow, a timecode or audio step, a sub-cue, a
-  Virtual Console cue list, anything that steps the list — it fires only
-  if **Hazard hold is held down at that moment**, and only while it stays
+  pyro): the spotter's **deadman**. When a cue is reached by a run it
+  fires only if **Hazard hold is held down at that moment**, and only while it stays
   held: let go, it is off that same frame. **Pressing it again within the
   same cue fires again**: that is how a flame operator gives repeated
-  bursts. A cue reached while the hold is up **skips** it — the footer
+  bursts. A Burst goes out at its cue's level at once (no fade). The Hold
+  counts for **15 seconds** at most: held longer (a stuck button, a weight
+  on it) it counts as let go — the footer says **Hold timed out — release
+  and press again**, and the next burst needs a fresh press. A cue reached
+  while the hold is up **skips** it — the footer
   says **CO2 jet skipped — not held** — and a hold that comes after
   fires nothing until a later cue is reached held.
 - **Hazard — Running** (fog, haze, Class 3R/3B/4 lasers): **Hazard arm**
   arms it with one press, and it stays armed; each cue reached while
   armed sends its own level (tracking and includes count, so a hazer a
-  cue tracks on stays on). **Hazard kill** turns everything off at once
-  and disarms. A cue reached unarmed skips it (**Hazer skipped — not
+  cue tracks on stays on), **following the cue's fade**: a haze cue with
+  a 10 s fade fades in over 10 s, and a later cue that sets it lower fades
+  it down. **Hazard kill** turns everything off at once and disarms, as a
+  stop or a lost device do. A cue reached unarmed skips it (**Hazer skipped — not
   armed**); arming then fires nothing until the next cue is reached.
 
 Every step closes what the step before let fire, at once; a GO in
@@ -1176,8 +1185,9 @@ it about a second and letting go**; the others with a press. Limits:
   on the Kill's button would lose the Kill);
 - never a computer key;
 - the Hold and the Arm only on a device plugged into this computer (USB,
-  MIDI): an input over the network (OSC, Art-Net, sACN, the web) never
-  says it was lost. The Kill may be anything;
+  a MIDI cable): an input over the network or the air (OSC, Art-Net,
+  sACN, the web, an ENTTEC Wing, a CoreMIDI network session, Bluetooth
+  MIDI) never says it was lost. The Kill may be anything;
 - the Hold must be a **momentary button**: a fader, knob or encoder, a
   tap too short, or a latching / toggle button (one that does not let go
   when the hand does) is refused.
