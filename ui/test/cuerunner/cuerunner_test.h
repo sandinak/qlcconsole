@@ -68,6 +68,7 @@ private slots:
     void resizingRunnerSurvivesStateChanges();
     void theRunTabHasTheGroupMasters();
     void clickLoadsDoubleClickJumps();
+    void theListFollowsTheCueOnStage();
     /** LOAD next / previous follow tonight's running order and pass over
      *  the songs left out. */
     void loadNextAndPreviousFollowTheRunningOrder();
