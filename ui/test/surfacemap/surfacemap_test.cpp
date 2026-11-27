@@ -55,6 +55,8 @@
 #include "surfaceautopatch.h"
 #include "surfaceboardlog.h"
 #include "boardlogdialog.h"
+#include "footerbar.h"
+#include <QMainWindow>
 #include "connectionstree.h"
 #include "inputpatch.h"
 #include "outputpatch.h"
@@ -1419,6 +1421,85 @@ void SurfaceMap_Test::shots()
             maize.release(QStringLiteral("X3"));
         }
     }
+}
+
+void SurfaceMap_Test::boardShots()
+{
+    const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (dir.isEmpty())
+        QSKIP("QLC_SHOT_DIR not set");
+    QDir().mkpath(dir);
+    m_doc->inputOutputMap()->loadProfiles(QDir(QStringLiteral(QLC_TEST_RESOURCE_ROOT) + QStringLiteral("inputprofiles/")));
+    m_stub->m_hasFeedback = true;
+    m_stub->m_acceptShowControl = true;
+    SimMidiDevice fp2(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                      profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp2.plug(), qPrintable(fp2.lastError()));
+    // What a fader move and a Shift+Stop look like in the log.
+    fp2.raw(QByteArray::fromHex("90687f"));
+    for (int v = 0x30; v < 0x48; v += 4)
+        fp2.raw(QByteArray::fromHex(QByteArray("e000") + QByteArray::number(v, 16)));
+    fp2.raw(QByteArray::fromHex("906800"));
+    fp2.raw(QByteArray::fromHex("90467f"));
+    fp2.raw(QByteArray::fromHex("905d7f"));
+    fp2.raw(QByteArray::fromHex("905d00"));
+    fp2.raw(QByteArray::fromHex("904600"));
+    m_doc->inputOutputMap()->sendFeedBack(0, 513, 140, QVariant());
+    // Plugged in, not set up: the APC64's ports and a keyboard.
+    m_stub->m_lineNames << QStringLiteral("APC64 DAW (APC64)") << QStringLiteral("APC64 Notes (APC64)")
+                        << QStringLiteral("APC64 MIDI (APC64)") << QStringLiteral("APC64 Custom (APC64)")
+                        << QStringLiteral("Launchkey MK4 49 MIDI Out") << QStringLiteral("USB2.0-MIDI Port 1");
+    emit m_stub->configurationChanged();
+    settle();
+    for (const QSize &size : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+    {
+        const QString tag = QStringLiteral("%1x%2").arg(size.width()).arg(size.height());
+        {
+            BoardLogDialog d(m_doc, 0);
+            d.resize(qMin(size.width() - 100, 820 + (size.width() - 1024) / 3), qMin(size.height() - 100, 520));
+            d.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&d));
+            settle();
+            QVERIFY(d.grab().save(dir + QStringLiteral("/board-log-%1.png").arg(tag)));
+        }
+        {
+            ConnectionsTree tree(m_doc);
+            tree.setShowControlRows({ { "surfaces", "Control surfaces", "" } });
+            tree.resize(size);
+            tree.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&tree));
+            tree.refresh();
+            if (QTreeWidget *tw = tree.findChild<QTreeWidget *>())
+                tw->expandAll();
+            settle();
+            QVERIFY(tree.grab().save(dir + QStringLiteral("/control-surfaces-devices-%1.png").arg(tag)));
+        }
+        {
+            QMainWindow mw;
+            FooterBar *bar = new FooterBar(&mw);
+            mw.setStatusBar(bar);
+            mw.setCentralWidget(new QWidget(&mw));
+            bar->addWidget(new QLabel(QStringLiteral("Show Status: ready"), bar));
+            SurfaceChips *chips = new SurfaceChips(m_doc, bar);
+            bar->addPermanentWidget(chips);
+            bar->addPermanentWidget(new QLabel(QStringLiteral("DESIGN"), bar));
+            mw.resize(size);
+            mw.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&mw));
+            bar->showMessage(QStringLiteral("Design mode. The footer does not go live: use Control ▸ Operate (⌘F12)."));
+            bar->showMessage(QStringLiteral("FaderPort: Shift+Stop stops."));
+            settle();
+            QVERIFY(bar->grab().save(dir + QStringLiteral("/footer-one-message-%1.png").arg(tag)));
+            std::unique_ptr<QMenu> menu(chips->boardMenu(0));
+            QVERIFY(menu != nullptr);
+            menu->popup(chips->mapToGlobal(QPoint(0, 0)));
+            settle();
+            QVERIFY(menu->grab().save(dir + QStringLiteral("/board-menu-%1.png").arg(tag)));
+            menu->close();
+        }
+    }
+    m_stub->m_hasFeedback = false;
+    m_stub->m_acceptShowControl = false;
 }
 
 QTEST_MAIN(SurfaceMap_Test)

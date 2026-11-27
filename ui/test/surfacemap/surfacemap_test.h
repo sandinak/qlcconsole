@@ -114,6 +114,9 @@ private slots:
     void theBoardLogDialogCopiesTheLog();
     /** With QLC_SHOT_DIR: the hub with each board's map at three sizes. */
     void shots();
+    /** With QLC_SHOT_DIR: the Board Log, the board menu, Control surfaces
+     *  with plugged-in devices and the footer's one message, at three sizes. */
+    void boardShots();
 
 private:
     void dropDoc();
