@@ -22,7 +22,6 @@
 
 #include <QtGlobal>
 #include <atomic>
-#include <thread>
 
 #include "qlcengine_export.h"
 
@@ -59,14 +58,7 @@ public:
     }
     /** Nothing reaches the flags after this returns: a feed in flight on a
      *  plugin's thread is waited for (the quiescence point, N4). */
-    void detach()
-    {
-        m_alive.store(false, std::memory_order_release);
-        while (m_users.load(std::memory_order_acquire) != 0)
-            std::this_thread::yield();
-        holdKey.store(kNone);
-        killKey.store(kNone);
-    }
+    void detach();
 
     /** One input value, any thread: Hold let go -> not held; Kill pressed
      *  -> not held, not armed, every grant closed. */

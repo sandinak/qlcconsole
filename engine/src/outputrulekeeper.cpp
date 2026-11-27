@@ -1449,6 +1449,15 @@ void OutputRuleKeeper::watchChaser(Chaser *chaser)
     connect(chaser, &QObject::destroyed, this, [this, id]() { m_watched.remove(id); });
 }
 
+void HazardFastPath::detach()
+{
+    m_alive.store(false, std::memory_order_release);
+    while (m_users.load(std::memory_order_acquire) != 0)
+        QThread::yieldCurrentThread();
+    holdKey.store(kNone);
+    killKey.store(kNone);
+}
+
 void OutputRuleKeeper::shutdownHazards()
 {
     if (m_shutDown)
