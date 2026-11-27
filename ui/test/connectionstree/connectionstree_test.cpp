@@ -4500,7 +4500,9 @@ void ConnectionsTree_Test::thePaneSetsTheSlotLikeTheToolbar()
     QVERIFY(pane != nullptr && pane->m_slotCombo != nullptr);
     // Beside Name, in the pane.
     QVERIFY(pane->m_topForm->labelForField(pane->m_slotCombo) != nullptr);
-    QCOMPARE(pane->m_topForm->labelForField(pane->m_slotCombo)->text(), QString("Slot:"));
+    QLabel *slotLabel = qobject_cast<QLabel *>(pane->m_topForm->labelForField(pane->m_slotCombo));
+    QVERIFY(slotLabel != nullptr);
+    QCOMPARE(slotLabel->text(), QString("Slot:"));
 
     QTreeWidgetItem *row = universeRow(mgr.m_devicesTree->m_tree, 1);
     QVERIFY(row != NULL);
