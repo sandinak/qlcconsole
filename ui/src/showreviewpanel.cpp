@@ -28,6 +28,12 @@
 #include <QLineEdit>
 #include <QLabel>
 #include <QMenu>
+#include <QSet>
+#include <algorithm>
+#include "inputoutputmap.h"
+#include <QApplication>
+#include <QClipboard>
+#include <QTimer>
 
 #include "showreviewpanel.h"
 #include "deskrecord.h"
@@ -38,6 +44,8 @@
 #include "showtreeview.h"
 #include "contextmenus.h"
 #include "showstatus.h"
+#include "monitor/monitor.h"
+#include "fixture.h"
 #include "doc.h"
 
 namespace
@@ -102,12 +110,14 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
 
     m_tree = new QTreeWidget(this);
     m_tree->setObjectName(QStringLiteral("showReviewTree"));
-    m_tree->setColumnCount(2);
-    m_tree->setHeaderLabels(QStringList() << tr("Check") << tr("Finding"));
+    m_tree->setColumnCount(3);
+    m_tree->setHeaderLabels(QStringList() << tr("Check") << tr("Finding") << tr("Fix"));
     m_tree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tree->setWordWrap(true);
-    m_tree->header()->setStretchLastSection(true);
+    m_tree->header()->setStretchLastSection(false);
+    m_tree->header()->setSectionResizeMode(1, QHeaderView::Stretch);
     m_tree->setColumnWidth(0, 110);
+    m_tree->setColumnWidth(2, 96);
     lay->addWidget(m_tree, 1);
     connect(m_tree, &QTreeWidget::itemSelectionChanged, this, &ShowReviewPanel::updateButtons);
     connect(m_tree, &QTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem *, int) { fixOrSay(); });
@@ -133,6 +143,11 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     m_cut->setToolTip(tr("Tape the bottom of the beam or scan window by the degrees suggested: it "
                          "goes in the fixture's Masking, and the finding is checked again"));
     connect(m_cut, &QPushButton::clicked, this, [this]() { applySuggestedCut(); });
+    m_fixAll = new QPushButton(tr("Fix All Safe"), this);
+    m_fixAll->setObjectName(QStringLiteral("showReviewFixAll"));
+    m_fixAll->setToolTip(tr("Does every one-click Fix in view, as one undo step. Anything that changes how "
+                            "the show behaves, and every safety finding, is left for you."));
+    connect(m_fixAll, &QPushButton::clicked, this, [this]() { fixAllSafe(); });
     m_why = new QPushButton(tr("Why?"), this);
     m_why->setObjectName(QStringLiteral("showReviewWhy"));
     connect(m_why, &QPushButton::clicked, this, &ShowReviewPanel::slotWhy);
@@ -143,6 +158,7 @@ ShowReviewPanel::ShowReviewPanel(Doc *doc, QWidget *parent)
     actions->addWidget(m_fix);
     actions->addWidget(m_accept);
     actions->addWidget(m_cut);
+    actions->addWidget(m_fixAll);
     actions->addWidget(m_reopen);
     actions->addWidget(m_why);
     actions->addWidget(m_off);
@@ -268,6 +284,8 @@ void ShowReviewPanel::rebuild()
     m_tree->clear();
     QTreeWidgetItem *groups[3] = { nullptr, nullptr, nullptr };
     QTreeWidgetItem *accepted = nullptr, *meantGroup = nullptr;
+    QList<QPair<QTreeWidgetItem *, QString>> footerButtons;
+    QList<QPair<QTreeWidgetItem *, int>> rowItems;      // rows that get a Fix / Go There button
     int counts[3] = { 0, 0, 0 }, acceptedCount = 0, meantCount = 0;
     auto groupFor = [&](ReviewFinding::Severity s) {
         if (groups[s] == nullptr)
@@ -344,8 +362,12 @@ void ShowReviewPanel::rebuild()
         }
         else if (f.state != ReviewFinding::Open)
             text += QStringLiteral("\n— “%1” · %2 · %3").arg(f.acceptedNote, f.acceptedBy, f.acceptedWhen.left(10));
+        if (!f.howToFix.isEmpty())
+            text += QStringLiteral("\n") + tr("How to fix: %1").arg(f.howToFix);
         item->setText(1, text);
         item->setData(0, IndexRole, i);
+        if (f.fixKind != ReviewFinding::Manual)
+            rowItems << qMakePair(item, i);
         const ShowReview::Check *c = ShowReview::check(f.check);
         // The check's id is the compact badge: its detail, as on every mark.
         item->setToolTip(0, ShowReviewMarker::tooltip(m_doc, { f }));
@@ -365,6 +387,8 @@ void ShowReviewPanel::rebuild()
             counts[row.severity]++;
             item->setText(0, row.id);
             item->setText(1, row.text);
+            if (!ShowStatus::instance()->actionLabel(row.key).isEmpty())
+                footerButtons << qMakePair(item, row.key);
             item->setToolTip(1, row.detail);
             item->setData(0, IndexRole, -1);
             item->setData(0, FooterKeyRole, row.key);
@@ -425,6 +449,36 @@ void ShowReviewPanel::rebuild()
         computer->setFirstColumnSpanned(true);
         computer->setExpanded(true);
     }
+
+    // The fix on the row itself: a button labelled by its kind. A click
+    // selects the row and fixes it (deferred: the fix redraws this tree).
+    m_rowButtons.clear();
+    auto rowButton = [this](QTreeWidgetItem *item, const QString &label, const QString &tip) {
+        QPushButton *b = new QPushButton(label);
+        b->setObjectName(QStringLiteral("showReviewRowFix"));
+        b->setToolTip(tip);
+        b->setFocusPolicy(Qt::NoFocus);
+        connect(b, &QPushButton::clicked, this, [this, item]() {
+            QTimer::singleShot(0, this, [this, item]() {
+                m_tree->clearSelection();
+                item->setSelected(true);
+                m_tree->setCurrentItem(item);
+                fixOrSay();
+            });
+        });
+        m_tree->setItemWidget(item, 2, b);
+        return b;
+    };
+    for (const QPair<QTreeWidgetItem *, int> &ri : rowItems)
+    {
+        const ReviewFinding &f = m_findings.at(ri.second);
+        const bool one = f.fixKind == ReviewFinding::OneClick;
+        m_rowButtons.insert(f.key(), rowButton(ri.first, one ? tr("Fix") : tr("Go There"),
+            one ? tr("Fix it now: one undo step, and this line says what it did")
+                : tr("Open the place to fix it, with the item selected")));
+    }
+    for (const QPair<QTreeWidgetItem *, QString> &fb : footerButtons)
+        rowButton(fb.first, tr("Fix"), ShowStatus::instance()->actionLabel(fb.second));
 
     QTreeWidgetItemIterator it(m_tree);
     while (*it)
@@ -542,6 +596,15 @@ void ShowReviewPanel::updateButtons()
     m_reopen->setText(unmeantRows ? tr("Not Meant") : tr("Reopen"));
     m_reopen->setEnabled(anyAccepted || (sel.count() == 1 && sel.first().checkOff));
     m_cut->setVisible(sel.count() == 1 && !sel.first().fixMask.isEmpty());
+    const int safe = safeCount();
+    m_fixAll->setVisible(safe > 0);
+    m_fixAll->setText(tr("Fix All Safe (%1)").arg(safe));
+    if (sel.count() == 1 && rows == 1 && sel.first().fixKind == ReviewFinding::OneClick
+        && !backwash && !panSeam)
+    {
+        m_fix->setText(tr("Fix"));
+        m_fix->setToolTip(tr("Fix it now: %1").arg(sel.first().howToFix));
+    }
     m_why->setEnabled(sel.count() == 1);
     m_off->setEnabled(sel.count() == 1);
 }
@@ -856,6 +919,29 @@ void ShowReviewPanel::fixOrSay()
 {
     // Never a click that does nothing: the finding's place may be gone.
     m_gone.clear();
+    {
+        // One-click rows are fixed here, together, as one undo step; any
+        // other selected row is left for a visit of its own.
+        QList<ReviewFinding> ones;
+        int others = 0;
+        for (QTreeWidgetItem *item : m_tree->selectedItems())
+        {
+            const int idx = item->data(0, IndexRole).toInt();
+            if (idx >= 0 && idx < m_findings.count() && m_findings.at(idx).fixKind == ReviewFinding::OneClick
+                && m_findings.at(idx).isOpen())
+                ones << m_findings.at(idx);
+            else
+                ++others;
+        }
+        if (!ones.isEmpty())
+        {
+            applyOneClick(ones);
+            if (others > 0)
+                m_summary->setText(m_said + QLatin1Char(' ')
+                                   + tr("%1 more need you at their place: select one and Go There.").arg(others));
+            return;
+        }
+    }
     const int n = int(m_tree->selectedItems().count());
     if (n > 1)
     {
@@ -982,6 +1068,7 @@ void ShowReviewPanel::slotContextMenu(const QPoint &pos)
     QMenu menu(this);
     menu.setObjectName(QStringLiteral("showReviewRowMenu"));
     menu.setToolTipsVisible(true);
+    fillRowMenu(&menu, sel);
     // Several rows: their fixes in place, in one go (as the Fix button).
     const int direct = m_tree->selectedItems().count() > 1 ? directFixCount() : 0;
     if (direct > 0)
@@ -998,6 +1085,108 @@ void ShowReviewPanel::slotContextMenu(const QPoint &pos)
     }
     if (!menu.isEmpty())
         menu.exec(m_tree->viewport()->mapToGlobal(pos));
+}
+
+QMenu *ShowReviewPanel::buildRowMenu(QWidget *parent)
+{
+    QMenu *menu = new QMenu(parent);
+    menu->setObjectName(QStringLiteral("showReviewRowMenu"));
+    menu->setToolTipsVisible(true);
+    fillRowMenu(menu, selectedFindings());
+    return menu;
+}
+
+/* The fix first (what the row's button does), then How to Fix and Copy;
+   Accept / Un-accept come after from ShowReviewMarker::fillMenu. */
+void ShowReviewPanel::fillRowMenu(QMenu *menu, const QList<ReviewFinding> &sel)
+{
+    if (sel.isEmpty())
+        return;
+    int ones = 0;
+    for (const ReviewFinding &f : sel)
+        ones += (f.fixKind == ReviewFinding::OneClick && f.isOpen()) ? 1 : 0;
+    const ReviewFinding first = sel.first();
+    if (sel.count() == 1 && first.fixKind != ReviewFinding::Manual)
+    {
+        QAction *a = menu->addAction(first.fixKind == ReviewFinding::OneClick ? tr("Fix") : tr("Go There"));
+        a->setObjectName(QStringLiteral("reviewRowFix"));
+        a->setToolTip(first.howToFix);
+        connect(a, &QAction::triggered, this, [this]() { fixOrSay(); });
+    }
+    else if (sel.count() > 1 && ones > 0)
+    {
+        QAction *a = menu->addAction(tr("Fix %1 One-Click Findings").arg(ones));
+        a->setObjectName(QStringLiteral("reviewRowFix"));
+        connect(a, &QAction::triggered, this, [this]() { fixOrSay(); });
+    }
+    if (sel.count() == 1)
+    {
+        QAction *how = menu->addAction(tr("How to Fix…"));
+        how->setObjectName(QStringLiteral("reviewRowHow"));
+        connect(how, &QAction::triggered, this, [this, first]() { showHowToFix(first); });
+    }
+    QAction *copy = menu->addAction(tr("Copy"));
+    copy->setObjectName(QStringLiteral("reviewRowCopy"));
+    connect(copy, &QAction::triggered, this, [sel]() {
+        QStringList lines;
+        for (const ReviewFinding &f : sel)
+            lines << QStringLiteral("%1  %2\n%3").arg(f.check, f.message,
+                                                     tr("How to fix: %1").arg(f.howToFix));
+        QApplication::clipboard()->setText(lines.join(QStringLiteral("\n\n")));
+    });
+    menu->addSeparator();
+}
+
+void ShowReviewPanel::showHowToFix(const ReviewFinding &f)
+{
+    QString kind;
+    switch (f.fixKind)
+    {
+        case ReviewFinding::OneClick: kind = tr("One click: Fix does this and says what it did; one undo step."); break;
+        case ReviewFinding::GoThere: kind = tr("Go There opens the place with the item selected; the change is yours."); break;
+        default: kind = tr("By hand: it needs a decision or work that can't be done for you."); break;
+    }
+    QMessageBox::information(this, tr("How to Fix %1").arg(f.check),
+                             QStringLiteral("%1\n\n%2\n\n%3").arg(f.message, f.howToFix, kind));
+}
+
+QPushButton *ShowReviewPanel::rowButton(const QString &key) const
+{
+    return m_rowButtons.value(key).data();
+}
+
+int ShowReviewPanel::safeCount() const
+{
+    // In view: the rows the filter and search leave listed.
+    int n = 0;
+    QTreeWidgetItemIterator it(m_tree);
+    while (*it)
+    {
+        const int idx = (*it)->data(0, IndexRole).toInt();
+        if (idx >= 0 && idx < m_findings.count() && m_findings.at(idx).fixKind == ReviewFinding::OneClick
+            && m_findings.at(idx).isOpen())
+            ++n;
+        ++it;
+    }
+    return n;
+}
+
+int ShowReviewPanel::fixAllSafe()
+{
+    QList<ReviewFinding> ones;
+    QTreeWidgetItemIterator it(m_tree);
+    while (*it)
+    {
+        const int idx = (*it)->data(0, IndexRole).toInt();
+        if (idx >= 0 && idx < m_findings.count() && m_findings.at(idx).fixKind == ReviewFinding::OneClick
+            && m_findings.at(idx).isOpen())
+            ones << m_findings.at(idx);
+        ++it;
+    }
+    if (ones.isEmpty())
+        return 0;
+    const int n = applyOneClick(ones);
+    return n;
 }
 
 void ShowReviewPanel::slotWhy()
@@ -1024,4 +1213,161 @@ void ShowReviewPanel::slotTurnOff()
         QLineEdit::Normal, QString(), &ok);
     if (ok && !note.trimmed().isEmpty())
         m_doc->showReview()->turnOff(sel.first().check, note, ShowReview::defaultName());
+}
+
+
+/****************************************************************************
+ * One-click fixes
+ ****************************************************************************/
+
+namespace {
+
+struct OneFix
+{
+    bool ok = false;
+    QString said;
+    std::function<void()> undo;
+};
+
+/* The first address in @a fx's universe (then the others) where it fits
+   without touching another fixture or the venue's kept channels. */
+bool freeHome(Doc *doc, Fixture *fx, quint32 *universe, quint32 *address)
+{
+    const quint32 unis = doc->inputOutputMap()->universesCount();
+    QList<quint32> order;
+    order << fx->universe();
+    for (quint32 u = 0; u < unis; ++u)
+        if (u != fx->universe())
+            order << u;
+    for (quint32 u : order)
+        for (quint32 a = 0; a + fx->channels() <= 512; ++a)
+        {
+            if (u == fx->universe() && a == fx->address() && fx->isPatched())
+                continue;
+            if (doc->canPatchFixtures({ { fx->id(), u, a } }))
+            {
+                *universe = u;
+                *address = a;
+                return true;
+            }
+        }
+    return false;
+}
+
+OneFix movedToFree(Doc *doc, const ReviewFinding &f, QSet<quint32> *moved)
+{
+    OneFix r;
+    QList<Fixture *> fxs;
+    for (const QString &t : f.targets)
+        if (t.startsWith(QLatin1String("fx:")))
+            if (Fixture *fx = doc->fixture(t.mid(3).toUInt()))
+                fxs << fx;
+    if (fxs.isEmpty())
+        return r;
+    // The one that moves: a fixture the file put on another's channels, else
+    // the later of the two (the first stays where it was).
+    Fixture *mv = fxs.first();
+    for (Fixture *fx : fxs)
+    {
+        if (fx->addressClash() && !mv->addressClash())
+            mv = fx;
+        else if (fx->addressClash() == mv->addressClash()
+                 && (fx->universe() << 9 | fx->address()) > (mv->universe() << 9 | mv->address()))
+            mv = fx;
+    }
+    if (moved->contains(mv->id()))
+        return r;           // an earlier finding in this batch already moved it
+    quint32 u = 0, a = 0;
+    if (!freeHome(doc, mv, &u, &a))
+    {
+        r.said = ShowReviewPanel::tr("No free address fits %1: patch it by hand.").arg(mv->name());
+        return r;
+    }
+    const quint32 fid = mv->id(), ou = mv->universe(), oa = mv->address();
+    const bool wasClash = mv->addressClash(), wasPatched = mv->isPatched();
+    const QString was = QStringLiteral("%1/%2").arg(ou + 1).arg(oa + 1);
+    if (!doc->patchFixtures({ { fid, u, a } }))
+        return r;
+    moved->insert(fid);
+    r.ok = true;
+    r.said = ShowReviewPanel::tr("Moved %1 from %2 to %3/%4 (first free fit).")
+                 .arg(mv->name(), was).arg(u + 1).arg(a + 1);
+    QPointer<Doc> d(doc);
+    r.undo = [d, fid, ou, oa, wasClash, wasPatched]() {
+        if (d.isNull())
+            return;
+        if (wasPatched && d->canPatchFixtures({ { fid, ou, oa } }))
+            d->patchFixtures({ { fid, ou, oa } });
+        else if (Fixture *fx = d->fixture(fid))
+        {
+            d->unpatchFixture(fid);
+            fx->setUniverse(ou);
+            fx->setAddress(oa);
+            fx->setAddressClash(wasClash);
+        }
+    };
+    return r;
+}
+
+} // namespace
+
+bool ShowReviewPanel::undoLast()
+{
+    if (!m_undoLast)
+        return false;
+    const std::function<void()> undo = m_undoLast;
+    m_undoLast = nullptr;
+    undo();
+    recheck();
+    return true;
+}
+
+int ShowReviewPanel::applyOneClick(const QList<ReviewFinding> &findings)
+{
+    if (m_doc == nullptr)
+        return 0;
+    /* Q358: a fix that edits the patch follows the Operate lock -- the
+       Design button (the PIN, if the show has one), never done from here. */
+    if (m_doc->mode() == Doc::Operate)
+    {
+        m_said = tr("The show is in Operate and its patch is locked: press Design (the PIN, if the "
+                    "show has one), then Fix.");
+        m_summary->setText(m_said);
+        return 0;
+    }
+    QStringList said;
+    QList<std::function<void()>> undos;
+    int fixed = 0;
+    QSet<quint32> movedIds;
+    for (const ReviewFinding &f : findings)
+    {
+        OneFix r;
+        if (f.check == QLatin1String("PAT-01") || f.check == QLatin1String("PAT-02"))
+            r = movedToFree(m_doc, f, &movedIds);
+        if (!r.said.isEmpty())
+            said << r.said;
+        if (!r.ok)
+            continue;
+        ++fixed;
+        if (r.undo)
+            undos << r.undo;
+    }
+    if (fixed > 0)
+    {
+        m_doc->setModified();
+        QPointer<Doc> d(m_doc);
+        const QList<std::function<void()>> list = undos;
+        m_undoLast = [list]() {
+            for (int i = list.count() - 1; i >= 0; --i)
+                list.at(i)();
+        };
+        if (Monitor *mon = Monitor::instance())
+            mon->pushUndoCallback(m_undoLast);
+        if (fixed > 1)
+            said.prepend(tr("Fixed %1 findings (one undo step).").arg(fixed));
+    }
+    m_said = said.isEmpty() ? tr("Nothing to fix here.") : said.join(QLatin1Char(' '));
+    recheck();
+    m_summary->setText(m_said);
+    return fixed;
 }

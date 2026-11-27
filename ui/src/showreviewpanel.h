@@ -33,6 +33,7 @@ class QPushButton;
 class QComboBox;
 class QLineEdit;
 class QLabel;
+class QMenu;
 class Doc;
 
 /**
@@ -116,6 +117,23 @@ public:
      *  the summary line says so -- by name when the cue, list, scene or
      *  palette is gone */
     void fixOrSay();
+    /** The one-click fixes (ReviewFinding::OneClick): safe and unambiguous
+     *  ones only. Apply @a findings' as ONE undo step, saying what was done
+     *  (said()); refused in Operate (the Design button, PIN if set). The
+     *  number fixed. A re-check follows. */
+    int applyOneClick(const QList<ReviewFinding> &findings);
+    /** "Fix All Safe": every one-click finding in view, one undo step. */
+    int fixAllSafe();
+    int safeCount() const;
+    QPushButton *fixAllButton() const { return m_fixAll; }
+    /** What the last fix did, or why it didn't (also the summary line). */
+    QString said() const { return m_said; }
+    /** Undo the last one-click fix (also pushed on the Fixtures tab's undo). */
+    bool undoLast();
+    /** The row's How to Fix text and Go There / Fix button, by finding key. */
+    QPushButton *rowButton(const QString &key) const;
+    /** The right-click menu of the selected rows (also what a test reads). */
+    QMenu *buildRowMenu(QWidget *parent);
     /** What is gone of the place @a jump / @a data points at ("That cue is
      *  gone: ..."); empty when it is still there or can't be told. */
     static QString gonePlace(Doc *doc, const QString &jump, const QVariantList &data);
@@ -143,6 +161,10 @@ private:
     QPushButton *m_accept;
     QPushButton *m_reopen;
     QPushButton *m_cut;
+    QPushButton *m_fixAll;
+    QString m_said;
+    std::function<void()> m_undoLast;
+    QHash<QString, QPointer<QPushButton>> m_rowButtons;
     QPushButton *m_why;
     QPushButton *m_off;
     QList<ReviewFinding> m_findings;
@@ -164,6 +186,9 @@ private:
     void applyCut(const QVariantList &fix);
     /** Every selected cut, each head's worst one taped off once. */
     void applyCuts(const QList<QVariantList> &cuts);
+
+    void fillRowMenu(QMenu *menu, const QList<ReviewFinding> &sel);
+    void showHowToFix(const ReviewFinding &f);
 
     static Jumper s_jumper;
     static QPointer<ShowReviewPanel> s_shared;

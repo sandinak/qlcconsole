@@ -317,6 +317,49 @@ bool ShowReview_Test::loadShow(Doc *doc, const QString &xml) const
  * Patch
  ****************************************************************************/
 
+/* Every check says how to fix it (showreviewfixes.cpp): a new check without
+   a row fails here. Hazards and safety checks are never one-click. */
+void ShowReview_Test::howToFixCoversEveryCheck()
+{
+    QVERIFY(ShowReview::catalog().count() > 60);
+    for (const ShowReview::Check &c : ShowReview::catalog())
+    {
+        QVERIFY2(ShowReview::hasHowToFix(c.id), qPrintable(c.id + " has no How to fix"));
+        ReviewFinding f;
+        f.check = c.id;
+        f.jump = QStringLiteral("fixtures");
+        f.targets = QStringList() << QStringLiteral("fx:1");
+        const QString text = ShowReview::howToFix(f, m_doc);
+        QVERIFY2(text.trimmed().length() > 20, qPrintable(c.id));
+        QVERIFY2(!text.contains(QLatin1String("%f")), qPrintable(c.id));
+        f.jump.clear();
+        QVERIFY2(ShowReview::fixKind(f) != ReviewFinding::GoThere || ShowReview::hasHowToFix(c.id), qPrintable(c.id));
+    }
+    for (const char *safety : { "FIX-21", "FIX-22", "FIX-23", "FIX-24", "CTL-01", "PWR-09", "PWR-10", "PWR-13" })
+    {
+        ReviewFinding f;
+        f.check = QString::fromLatin1(safety);
+        f.jump = QStringLiteral("fixtures");
+        f.targets = QStringList() << QStringLiteral("fx:1");
+        QVERIFY2(ShowReview::fixKind(f) != ReviewFinding::OneClick, safety);
+    }
+    // The text names the fixture.
+    Fixture *a = par("Spot 3", 0);
+    ReviewFinding f;
+    f.check = QStringLiteral("PAT-03");
+    f.jump = QStringLiteral("status:fixtures.unpatched");
+    f.targets = QStringList() << QStringLiteral("fx:%1").arg(a->id());
+    QVERIFY(ShowReview::howToFix(f, m_doc).contains("'Spot 3'"));
+    // Findings carry it after a run.
+    a->setAddress(10);
+    Fixture *b = par("Par 2", 12);
+    QVERIFY(b != nullptr);
+    const QList<ReviewFinding> got = findings("PAT-01");
+    QVERIFY(!got.isEmpty());
+    QVERIFY(!got.first().howToFix.isEmpty());
+    QCOMPARE(got.first().fixKind, ReviewFinding::OneClick);
+}
+
 void ShowReview_Test::pat01()
 {
     Fixture *a = par("Par 1", 0);
