@@ -190,7 +190,7 @@ public slots:
     /** Scroll to @p universe's map (the footer's chip). */
     void showMap(quint32 universe);
     /** The footer chip's click: that board's map alone (the others hidden,
-     *  an "All boards" button to bring them back); the filter ends when the
+     *  an "All Boards" button to bring them back); the filter ends when the
      *  page is left. Connections ▸ Control surfaces lists every board. */
     void showOnly(quint32 universe);
     /** The universe shown alone; invalidUniverse() while every board is. */
