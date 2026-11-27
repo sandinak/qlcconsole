@@ -1417,6 +1417,7 @@ void SurfaceMaps::rebuild()
    board that has a Shift key. The guards are the show's (saved with it). */
 void SurfaceMaps::addOptionsRow(QVBoxLayout *v, QWidget *block, quint32 universe, const SurfaceLayout &layout)
 {
+    Q_UNUSED(layout)    // every board has the lamp test and the log now
     DeskRecord *desk = m_doc->deskRecord();
     ControlMap *cm = m_doc->controlMap();
     QHBoxLayout *h = new QHBoxLayout();
