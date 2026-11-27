@@ -60,8 +60,9 @@ private slots:
     void timecodeIsNeverHeld();
     /** Rule 2: the words, and how long heldNotice() keeps them. */
     void theHoldIsSaidInOneText();
-    /** Rule 2 on the pad: a long buzz and the words aloud, whoever's GO
-     *  was held -- in the Run role only; the pad's own GO is said once. */
+    /** Rule 2 on the pad: the words aloud whoever's GO was held, a long
+     *  buzz only for the pad's own press (build 4910) -- in the Run role
+     *  only; the pad's own GO is said once. */
     void thePadBuzzesLongForEveryHold();
     /** Rule 5: OSC, MSC and the pad's own path are held in run(), before
      *  the run handler sees them. */
