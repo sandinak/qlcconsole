@@ -1827,7 +1827,13 @@ bool Universe::setInputPatch(QLCIOPlugin *plugin,
         if (plugin == NULL || input == QLCIOPlugin::invalidLine())
             return true;
 
-        m_inputPatch = new InputPatch(m_id, this);
+        /* Published under the frame lock: this universe's thread reads
+           m_inputPatch every frame (processFaders() -> flushInput()). */
+        InputPatch *patch = new InputPatch(m_id, this);
+        {
+            QMutexLocker frameLocker(&m_frameMutex);
+            m_inputPatch = patch;
+        }
         connectInputPatch();
     }
     else
@@ -1835,8 +1841,16 @@ bool Universe::setInputPatch(QLCIOPlugin *plugin,
         if (input == QLCIOPlugin::invalidLine())
         {
             disconnectInputPatch();
-            delete m_inputPatch;
-            m_inputPatch = NULL;
+            /* Taken out under the frame lock, deleted after it: never while
+               a frame flushes it (a use-after-free on the universe's
+               thread). Its close is queued (IODeferral) either way. */
+            InputPatch *gone = NULL;
+            {
+                QMutexLocker frameLocker(&m_frameMutex);
+                gone = m_inputPatch;
+                m_inputPatch = NULL;
+            }
+            delete gone;
             emit inputPatchChanged();
             return true;
         }
@@ -2167,6 +2181,8 @@ void Universe::zeroNotOurs(QByteArray &frame) const
 
 void Universe::flushInput()
 {
+    /* On the universe's thread, under the frame lock (processFaders()):
+       setInputPatch() changes m_inputPatch only under it. */
     if (m_inputPatch == NULL)
         return;
 

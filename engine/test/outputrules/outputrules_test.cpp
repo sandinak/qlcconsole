@@ -3743,8 +3743,16 @@ void OutputRules_Test::patchListChangesUnderTheFrameLock()
             frames.fetch_add(1);
         }
     });
+    /* The GUI's side: each change opens or closes a line, and a line
+       closed sends its closing frame -- device calls made after the frame
+       lock (IODeferral), so on this thread while the frames above go out
+       on line 0. A plugin is called from both threads at once there (the
+       stub serialises its calls, as a real plugin does: unserialised, it
+       corrupted the heap -- Linux CI, 2026-11-27). Enough rounds that the
+       two meet many times over. */
+    m_stub->m_outputOverlaps.storeRelaxed(0);
     t->start();
-    for (int i = 0; i < 300; i++)
+    for (int i = 0; i < 1500; i++)
     {
         QVERIFY(uni->setOutputPatch(m_stub, 2, 1));                         // added
         QVERIFY(uni->setOutputPatch(m_stub, 3, 1));                         // moved
@@ -3757,11 +3765,45 @@ void OutputRules_Test::patchListChangesUnderTheFrameLock()
     t->wait();
     delete t;
     QVERIFY(frames.load() > 0);
+    QCOMPARE(m_stub->m_outputOverlaps.loadRelaxed(), 0);
     QCOMPARE(uni->outputPatchesCount(), 1);
     // Every line closed at safe; line 0 carries the show.
     QCOMPARE(int(uchar(m_stub->m_universe.at(1024 + Flame))), 0);
     QCOMPARE(int(uchar(m_stub->m_universe.at(1536 + Flame))), 0);
     m_stub->m_universe.fill(char(0));
+}
+
+void OutputRules_Test::inputPatchChangesUnderTheFrameLock()
+{
+    /* Each frame flushes the universe's input patch (processFaders() ->
+       flushInput(), on the universe's thread); unpatching it deleted it on
+       the GUI's with no lock between the two -- a frame could flush a
+       deleted patch. Now taken out under the frame lock, deleted after. */
+    Universe *uni = m_uni;
+    std::atomic<bool> stop { false };
+    std::atomic<int> frames { 0 };
+    QThread *t = QThread::create([uni, &stop, &frames]() {
+        while (stop.load() == false)
+        {
+            uni->processFaders();
+            frames.fetch_add(1);
+        }
+    });
+    t->start();
+    for (int i = 0; i < 1500; i++)
+    {
+        QVERIFY(uni->setInputPatch(m_stub, 0, nullptr));
+        // Something to flush: off the GUI's thread, it is queued to the patch.
+        m_stub->emitValueChanged(uni->id(), 0, quint32(i % 8), uchar(i));
+        QVERIFY(uni->setInputPatch(nullptr, QLCIOPlugin::invalidLine(), nullptr));
+    }
+    stop.store(true);
+    t->wait();
+    delete t;
+    QVERIFY(frames.load() > 0);
+    QVERIFY(uni->inputPatch() == nullptr);
+    // What was queued to a deleted patch is dropped with it.
+    QCoreApplication::processEvents();
 }
 
 void OutputRules_Test::aHeldAutoRemoveChannelLetsGoOfNothing()

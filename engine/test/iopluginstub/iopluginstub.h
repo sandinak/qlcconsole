@@ -26,6 +26,9 @@
 #include <QPair>
 #include <QMap>
 #include <QByteArray>
+#include <QAtomicInt>
+#include <QRecursiveMutex>
+#include <QThread>
 
 #include <functional>
 #include <climits>
@@ -255,6 +258,7 @@ public:
      *  (an out-of-line non-virtual member is not exported: MinGW link). */
     void pumpAsync()
     {
+        const OutputCall call(this);
         const QMap<quint32, QPair<quint32, QByteArray> > pending = m_asyncPending;
         m_asyncPending.clear();
         for (auto it = pending.constBegin(); it != pending.constEnd(); ++it)
@@ -263,13 +267,72 @@ public:
 
     /** @reimp recorded in m_forgotten (line, universe), then forgotten */
     void forgetOutput(quint32 output, quint32 universe) override
-    { m_forgotten << qMakePair(output, universe); QLCIOPlugin::forgetOutput(output, universe); }
+    {
+        const OutputCall call(this);
+        m_forgotten << qMakePair(output, universe);
+        QLCIOPlugin::forgetOutput(output, universe);
+    }
+    /** @reimp under the output lock (OutputCall): a universe's thread sets
+     *  one (PLUGIN_UNIVERSECHANNELS) while the GUI's opens a line */
+    void setParameter(quint32 universe, quint32 line, Capability type,
+                      QString name, QVariant value) override
+    {
+        const OutputCall call(this);
+        QLCIOPlugin::setParameter(universe, line, type, name, value);
+    }
+    /** @reimp under the output lock, as setParameter() */
+    void unSetParameter(quint32 universe, quint32 line, Capability type, QString name) override
+    {
+        const OutputCall call(this);
+        QLCIOPlugin::unSetParameter(universe, line, type, name);
+    }
     QList<QPair<quint32, quint32> > m_forgotten;
     /** Whether @p universe is still mapped on @p output (a plugin entry) */
     bool mapped(quint32 universe, quint32 output) const
     { return m_universesMap.contains(universe) && m_universesMap.value(universe).outputLine == output; }
 
 public:
+    /** One output call at a time, as a real plugin's own lock does
+     *  (ArtNetController::m_dataMutex, E131Controller's). The engine calls
+     *  a plugin from more than one thread at once: each universe's thread
+     *  sends its frames (writeUniverse(), setParameter()) while the GUI's
+     *  opens and closes lines and sends their closing frames -- after the
+     *  frame lock (IODeferral), so concurrently with the same universe's
+     *  frames on its other lines. Unlocked, two of them changed m_universe,
+     *  m_lastByTarget and the parameter map at once: a heap corrupted
+     *  (outputrules, Linux CI, 2026-11-27). m_outputOverlaps counts a call
+     *  that found another one inside -- always 0 with the lock. */
+    class OutputCall
+    {
+    public:
+        explicit OutputCall(IOPluginStub *stub) : m_stub(stub)
+        {
+            m_stub->m_outputMutex.lock();
+            const Qt::HANDLE me = QThread::currentThreadId();
+            if (m_stub->m_outputCallers.fetchAndAddOrdered(1) != 0
+                && m_stub->m_outputOwner.loadAcquire() != me)
+                m_stub->m_outputOverlaps.fetchAndAddRelaxed(1);
+            m_stub->m_outputOwner.storeRelease(me);
+        }
+        ~OutputCall()
+        {
+            if (m_stub->m_outputCallers.fetchAndSubOrdered(1) == 1)
+                m_stub->m_outputOwner.storeRelease(nullptr);
+            m_stub->m_outputMutex.unlock();
+        }
+        OutputCall(const OutputCall &) = delete;
+        OutputCall &operator=(const OutputCall &) = delete;
+    private:
+        IOPluginStub *m_stub;
+    };
+    QRecursiveMutex m_outputMutex;
+    /** Output calls inside now (a nested one of the same thread too: the
+     *  lock is recursive), and the thread they are on */
+    QAtomicInt m_outputCallers { 0 };
+    QAtomicPointer<void> m_outputOwner { nullptr };
+    /** Calls that came in while another thread's was inside */
+    QAtomicInt m_outputOverlaps { 0 };
+
     /** Review 10: a plugin that sends from its own thread (a USB widget,
      *  WLED). writeUniverse() only keeps the frame (m_asyncPending); it is
      *  "sent" -- reaches m_universe -- by the send thread's pass
