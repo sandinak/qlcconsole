@@ -5366,6 +5366,11 @@ void ShowTreeView::showCueTab(CueTab tab)
     applyCueTabs();
 }
 
+void ShowTreeView::forgetCueTab()
+{
+    s_cueTab = CueEditTab;
+}
+
 ShowTreeView::CueTab ShowTreeView::cueTab() const
 {
     return CueTab(s_cueTab);

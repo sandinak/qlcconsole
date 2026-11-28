@@ -995,6 +995,9 @@ public:
     enum CueTab { CueEditTab = 0, CueTrackingTab, CueTimingTab, CueNotesTab, CueTabCount };
     void showCueTab(CueTab tab);            //!< switch to it (an action that needs it)
     CueTab cueTab() const;
+    /** Forget the tab kept for the session: the next cue page opens on Edit
+     *  (a new show; a test starting clean). */
+    static void forgetCueTab();
     bool cueTabsShown() const;              //!< the bar is up (more than one tab has content)
     /** The tab that holds the cue page's row of @a w (a field, or a widget
      *  inside one); -1: none (the header, or not the cue page's). */

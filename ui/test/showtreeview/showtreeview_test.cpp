@@ -159,6 +159,7 @@ using namespace ShowTree;
 
 void ShowTreeView_Test::init()
 {
+    ShowTreeView::forgetCueTab();     // each test starts on Edit, whatever the last left
     m_doc = new Doc(this);
     m_fixtures.clear();
     for (int i = 0; i < 6; ++i)
@@ -6475,6 +6476,7 @@ void ShowTreeView_Test::subCuesInTheTree()
     // The page: Advance (not mode / base / hold); Auto-follow is one step.
     QVERIFY(view.selectNode(s2));
     QComboBox *adv = view.findChild<QComboBox *>("stSubCueAdvance");
+    QVERIFY(clickCueTabOf(&view, adv));
     QVERIFY(adv->isVisibleTo(&view));
     QVERIFY(!view.findChild<QComboBox *>("stCueMode")->isVisibleTo(&view));
     QDoubleSpinBox *wait = view.findChild<QDoubleSpinBox *>("stSubCueWait");

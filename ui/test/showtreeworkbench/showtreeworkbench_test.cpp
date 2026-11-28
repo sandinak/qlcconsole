@@ -198,6 +198,7 @@ QSplitter *pageSplitter(ShowTreeView *view)
 
 void ShowTreeWorkbench_Test::init()
 {
+    ShowTreeView::forgetCueTab();     // each test starts on Edit, whatever the last left
     m_doc = new Doc(this);
     m_fixtures.clear();
     for (int i = 0; i < 6; ++i)
