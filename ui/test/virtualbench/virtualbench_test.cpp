@@ -149,6 +149,9 @@ void VirtualBench_Test::initTestCase()
     for (const QString &n : already)
         if (!m_realPorts.contains(n))
             m_realPorts << n;
+    // Declined before the app starts: its start-up scan must not set one up either.
+    for (const QString &n : std::as_const(m_realPorts))
+        SurfaceAutoPatch::setDeclined(n, true);
 
     m_bench = new VirtualMidiBench();
     QVERIFY2(m_bench->isValid(), qPrintable(QStringLiteral("CoreMIDI refused a client: %1").arg(m_bench->status())));
