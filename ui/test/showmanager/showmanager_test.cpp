@@ -39,6 +39,11 @@
 #include "audio.h"
 #include "efx.h"
 #include <QBuffer>
+#include <QMimeData>
+#include <QDropEvent>
+#include <QScrollBar>
+#include <QSignalSpy>
+#include "trackitem.h"
 #include <QXmlStreamWriter>
 #include <QXmlStreamReader>
 
@@ -98,6 +103,44 @@ void ShowManager_Test::undoTakesBackADrop()
     QCOMPARE(sf->duration(), quint32(2000));
     QVERIFY(!m_manager->m_undoAction->isEnabled());      // nothing more to undo
     QVERIFY(m_doc->isModified());
+}
+
+void ShowManager_Test::aDropOnAScrolledTimelineLandsUnderThePointer()
+{
+    for (int i = 0; i < 7; ++i)
+    {
+        Track *t = new Track();
+        t->setName(QString("T%1").arg(i));
+        m_show->addTrack(t);
+    }
+    m_manager->updateMultiTrackView();
+    m_manager->resize(900, 360);
+    m_manager->show();
+    QVERIFY(QTest::qWaitForWindowExposed(m_manager));
+    MultiTrackView *v = m_manager->m_showview;
+    QCOMPARE(v->m_tracks.count(), 8);
+    v->verticalScrollBar()->setValue(v->verticalScrollBar()->maximum());
+    v->horizontalScrollBar()->setValue(400);
+    QVERIFY(v->verticalScrollBar()->value() > TRACK_HEIGHT);
+    QVERIFY(v->horizontalScrollBar()->value() > 0);
+
+    TrackItem *last = v->m_tracks.last();
+    const qreal sceneY = last->y() + TRACK_HEIGHT / 2;
+    const qreal sceneX = v->getPositionFromTime(30000);
+    const QPoint at = v->mapFromScene(QPointF(sceneX, sceneY));
+    QVERIFY(v->viewport()->rect().contains(at));
+
+    QSignalSpy dropped(v, &MultiTrackView::functionDropped);
+    QMimeData mime;
+    QByteArray data;
+    QDataStream out(&data, QIODevice::WriteOnly);
+    out << m_sceneB;
+    mime.setData("application/x-qlcplus-functions", data);
+    QDropEvent ev(QPointF(at), Qt::CopyAction, &mime, Qt::LeftButton, Qt::NoModifier);
+    v->dropEvent(&ev);
+    QCOMPARE(dropped.count(), 1);
+    QCOMPARE(dropped.at(0).at(2).value<Track *>(), last->getTrack());
+    QVERIFY(qAbs(qint64(dropped.at(0).at(1).toUInt()) - 30000) < 200);
 }
 
 void ShowManager_Test::undoPutsAMarkerBack()

@@ -36,6 +36,7 @@ private slots:
     /** A function dropped on a track is one Undo away from gone; the item
      *  that was there before stays where it was. */
     void undoTakesBackADrop();
+    void aDropOnAScrolledTimelineLandsUnderThePointer();
     /** Undo of a marker edit puts the label back, and a marker linked to a
      *  cue list keeps its link. */
     void undoPutsAMarkerBack();
