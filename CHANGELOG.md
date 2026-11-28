@@ -409,6 +409,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Fixtures: ⌘D and ⌘Z no longer jump the tree.** The list keeps its scroll position and which folders were open; the copy is selected after a duplicate, the original after undoing one, the re-created row after a redo, the group after a rename undo, each scrolled into view only as far as needed. Library palettes: ⌘D no longer centres the list.
 - **A stop leaves a curtain where it is**: Stop all, Fade and stop and the emergency stop no longer close a curtain (or let a relay-driven one drop) — one opening, closing or flying stops where it is and stays there until the next GO; the footer says "Curtain stopped at 40% — GO to carry on". The lights still go out, flame and fog relays still off.
 - **Picking cues in Design no longer moves the curtain** (board Q350): clicking between cues in the Show Tree holds the curtain where it is on stage, and the plot and Rig Overview draw it where the picked cue puts it, marked "held while editing" — it used to be drawn closed after a pick, or stopped part way when picked again mid-move. A GO (or going into Operate) moves it for real, from where it was held over the cue's fade, never a jump.
+- **Test runs no longer swell macOS's WindowServer**: the test programs
+  draw the rig on the CPU unless the run sets `QLC_TEST_GPU=1`. On macOS 27
+  every new peak of test programs drawing with Metal at once left
+  WindowServer bigger for good, gate after gate on the build Macs.
+
 - **Control surfaces hub and the PMJ's lamps**: moving the Grand Master no
   longer sends a PMJ key the show learned (a GO, a hit, the stop on
   Favorites or a Down key) dark: the Control Map is its one lamp writer. In

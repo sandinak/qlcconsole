@@ -73,6 +73,15 @@ bool RhiRaster::available()
     if (env != "1" && (platform == QLatin1String("offscreen")
                        || platform == QLatin1String("minimal")))
         return false;                   // tests draw on the CPU unless asked
+    /* A test program (engine/test/common/testguard.cpp marks it) that asks
+       for the GPU gets it only when its run asks too. On macOS 27 each new
+       peak of processes drawing with Metal at once raises WindowServer's
+       memory for good: 20 runs of monitor_test's three GPU functions took
+       it from 3274 to 3513 MB on newaudio, six at once 29 MB more, and it
+       kept nearly all of it -- gate after gate on the pool Macs
+       (2026-11-28). QLC_TEST_GPU=1 runs them (CI's GPU step does). */
+    if (qgetenv("QLC_TEST_OFFSCREEN_GUARD") == "1" && qgetenv("QLC_TEST_GPU") != "1")
+        return false;
     // The hardware, once.
     static int probed = -1;
     if (probed < 0)

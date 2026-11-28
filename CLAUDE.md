@@ -102,7 +102,11 @@ CMakeLists) force `QT_QPA_PLATFORM=offscreen`, and on macOS a crashing test
 exits with no "quit unexpectedly" dialog; `platforms/linux/check-test-guard.sh`
 fails the gate on a test without the guard. `platforms/linux/check-private-public.sh` fails it on a test whose `#define private public` sits in front of a standard/Qt header or a project header that first pulls in a standard one (libstdc++ rejects that; it broke Windows CI): include `engine/test/common/stdprelude.h` above the define, or use a `friend`. Opt out only on purpose:
 `QLC_TEST_REAL_SCREEN=1` (+ `QT_QPA_PLATFORM=cocoa`); `QLC_TEST_CRASH_REPORTS=1`
-keeps crash reports.
+keeps crash reports. Tests never draw on the GPU either (`RhiRaster::available()`
+is false in a test program): on macOS 27 each new peak of concurrent Metal
+test processes grew WindowServer for good, gate after gate (2026-11-28).
+`QLC_TEST_GPU=1` (+ the test's own `QLC_RIG_GPU=1`) runs the GPU checks on
+purpose, as CI's GPU step does.
 
 **The gate pool** runs the full gate of a *committed* SHA on whichever Mac is
 idle: `./check-all.sh --remote auto [--rev SHA]` (= `make pool`;

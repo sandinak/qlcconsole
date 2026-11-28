@@ -598,6 +598,11 @@ private slots:
     void keptLandingsFollowTheDecks();
     void aPoolOnADeckIsDrawn();
     void theGpuDrawsWhatTheCpuDraws();
+    /** A test program never draws on the GPU unless its run asks with
+     *  QLC_TEST_GPU=1, even when the test itself sets QLC_RIG_GPU=1: on
+     *  macOS 27 each new peak of Metal test processes grew WindowServer
+     *  for good (2026-11-28). */
+    void aTestRunDrawsOnTheCpuUnlessItAsksForTheGpu();
     /** Coloured light on a grey surface reads as its colour ("blue on the
      *  cyc looks pale"): white light is plain Screen, a saturated surface
      *  keeps its own colour. */
