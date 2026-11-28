@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QThread>
 #include <QDebug>
 #include <cmath>
 #include <QDir>
@@ -34,6 +35,39 @@
 #include "rgbmatrix.h"
 #include "rgbimage.h"
 #include "doc.h"
+
+/* The next step's map, computed on the scripts' thread (RGBMatrix::askNextMap()) */
+struct RGBMatrix::NextMap
+{
+    MapKey key;
+    RGBMap map;
+    std::atomic<bool> ready { false };
+    std::atomic<bool> cancelled { false };
+};
+
+bool RGBMatrix::MapKey::isFor(const QSize &sz, uint colour, int index, int gen) const
+{
+    return size == sz && rgb == colour && step == index && generation == gen;
+}
+
+/* QLC_MAPS_AHEAD=0: every map at its step, as before (for an A/B) */
+static std::atomic<bool> s_mapsAhead { qgetenv("QLC_MAPS_AHEAD") != "0" };
+static std::atomic<quint64> s_mapsLate { 0 };
+
+void RGBMatrix::setMapsAhead(bool on)
+{
+    s_mapsAhead.store(on, std::memory_order_relaxed);
+}
+
+bool RGBMatrix::mapsAhead()
+{
+    return s_mapsAhead.load(std::memory_order_relaxed);
+}
+
+quint64 RGBMatrix::mapsLate()
+{
+    return s_mapsLate.load(std::memory_order_relaxed);
+}
 
 #define KXMLQLCRGBMatrixStartColor      QStringLiteral("MonoColor")
 #define KXMLQLCRGBMatrixEndColor        QStringLiteral("EndColor")
@@ -97,6 +131,10 @@ RGBMatrix::~RGBMatrix()
 {
     //if (m_runAlgorithm != NULL)
     //    delete m_runAlgorithm;
+    {
+        QMutexLocker algorithmLocker(&m_algorithmMutex);
+        dropNextMap(true);
+    }
     delete m_algorithm;
     delete m_stepHandler;
 }
@@ -246,6 +284,14 @@ void RGBMatrix::setAlgorithm(RGBAlgorithm *algo)
 {
     {
         QMutexLocker algorithmLocker(&m_algorithmMutex);
+        dropNextMap(true);
+        m_mapGeneration++;
+        // A running matrix must not go on with the one deleted here
+        if (m_runAlgorithm == m_algorithm)
+        {
+            m_runAlgorithm = NULL;
+            m_requestEngineCreation = true;
+        }
         delete m_algorithm;
         m_algorithm = algo;
         m_unknownAlgorithmXML.clear();
@@ -340,19 +386,21 @@ void RGBMatrix::setColor(int i, QColor c)
     if (i < 0)
         return;
 
-    if (i >= m_rgbColors.count())
-        m_rgbColors.resize(i + 1);
-
-    m_rgbColors.replace(i, c);
     {
         QMutexLocker algorithmLocker(&m_algorithmMutex);
+        // Under the lock: the timer reads the first two as it steps
+        if (i >= m_rgbColors.count())
+            m_rgbColors.resize(i + 1);
+        m_rgbColors.replace(i, c);
         if (m_algorithm != NULL)
         {
             m_algorithm->setColors(m_rgbColors);
             updateColorDelta();
         }
+        setMapColors(m_algorithm);
+        // After the script has the colours: a map asked for from here has them
+        m_mapGeneration++;
     }
-    setMapColors(m_algorithm);
     emit changed(id());
 }
 
@@ -418,6 +466,7 @@ void RGBMatrix::setProperty(QString propName, QString value)
     {
         RGBScript *script = static_cast<RGBScript*> (m_algorithm);
         script->setProperty(propName, value);
+        m_mapGeneration++;      // after: a map asked for from here has it
 
         QVector<uint> colors = script->rgbMapGetColors();
         for (int i = 0; i < colors.count(); i++)
@@ -743,11 +792,31 @@ void RGBMatrix::preRun(MasterTimer *timer)
             if (m_runAlgorithm->type() == RGBAlgorithm::Script)
             {
                 RGBScript *script = static_cast<RGBScript*> (m_runAlgorithm);
-                QMapIterator<QString, QString> it(m_properties);
-                while (it.hasNext())
+                /* From the running timer: queued to the scripts' thread, not
+                   waited for -- the first map, asked for after, is made with
+                   them (one thread, in order) */
+                std::shared_ptr<std::atomic<int>> jobs = m_mapJobs;
+                const QMap<QString, QString> props = m_properties;
+                bool queued = false;
+                if (aheadHere() && !props.isEmpty())
                 {
-                    it.next();
-                    script->setProperty(it.key(), it.value());
+                    jobs->fetch_add(1, std::memory_order_acq_rel);
+                    queued = RGBScript::runOnScriptThread([script, props, jobs]() {
+                        for (auto it = props.cbegin(); it != props.cend(); ++it)
+                            script->setProperty(it.key(), it.value());
+                        jobs->fetch_sub(1, std::memory_order_acq_rel);
+                    });
+                    if (!queued)
+                        jobs->fetch_sub(1, std::memory_order_acq_rel);
+                }
+                if (!queued)
+                {
+                    QMapIterator<QString, QString> it(m_properties);
+                    while (it.hasNext())
+                    {
+                        it.next();
+                        script->setProperty(it.key(), it.value());
+                    }
                 }
             }
             else if (m_runAlgorithm->type() == RGBAlgorithm::Image)
@@ -794,6 +863,7 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
 
         if (isPaused() == false)
         {
+            const QSize size = m_group->size();
             // Get a new map every time elapsed is reset to zero
             if (elapsed() < MasterTimer::tick())
             {
@@ -801,9 +871,64 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
                     m_stepBeatDuration = beatsToTime(duration(), timer->beatTimeDuration());
 
                 //qDebug() << "RGBMatrix step" << m_stepHandler->currentStepIndex() << ", color:" << QString::number(m_stepHandler->stepColor().rgb(), 16);
-                m_runAlgorithm->rgbMap(m_group->size(), m_stepHandler->stepColor().rgb(),
-                                       m_stepHandler->currentStepIndex(), m_stepHandler->m_map);
+                const uint rgb = m_stepHandler->stepColor().rgb();
+                const int step = m_stepHandler->currentStepIndex();
+                bool haveMap = false;
+                const bool first = m_stepHandler->m_map.isEmpty();
+                m_waitingForMap = false;
+                if (takeReadyMap())
+                {
+                    haveMap = true;
+                    // A map for an older step (a script slower than its
+                    // steps) still goes out: the newest one there is
+                    if (!m_shownMapFor.isFor(size, rgb, step, m_mapGeneration.load()))
+                        s_mapsLate.fetch_add(1, std::memory_order_relaxed);
+                }
+                else if (aheadHere())
+                {
+                    /* Not ready (late, or a run's first step): the last map
+                       stays out -- the first: nothing yet -- until one is;
+                       the tick never waits for the script */
+                    if (m_nextMap.isNull() && !askMap(size, rgb, step))
+                    {
+                        // no scripts' thread: made here, as ever
+                    }
+                    else if (first && firstMapInTime() && takeReadyMap())
+                    {
+                        // A run's first map, made in the little it is waited for
+                        haveMap = true;
+                    }
+                    else
+                    {
+                        if (!first)
+                            s_mapsLate.fetch_add(1, std::memory_order_relaxed);
+                        m_waitingForMap = true;
+                    }
+                }
+                if (!haveMap && !m_waitingForMap)
+                {
+                    // A tick by hand, no script, no scripts' thread
+                    dropNextMap(false);
+                    m_runAlgorithm->rgbMap(size, rgb, step, m_stepHandler->m_map);
+                    m_shownMapFor = MapKey { size, rgb, step, m_mapGeneration.load() };
+                    haveMap = true;
+                }
+                if (haveMap)
+                {
+                    updateMapChannels(m_stepHandler->m_map, m_group, universes);
+                    askNextMap(size);
+                }
+            }
+            else if (m_waitingForMap && takeReadyMap())
+            {
+                m_waitingForMap = false;
                 updateMapChannels(m_stepHandler->m_map, m_group, universes);
+                askNextMap(size);
+            }
+            else if (m_waitingForMap && m_nextMap.isNull() && aheadHere())
+            {
+                // What was asked for was from before an edit: ask again
+                askMap(size, m_stepHandler->stepColor().rgb(), m_stepHandler->currentStepIndex());
             }
         }
     }
@@ -890,6 +1015,9 @@ void RGBMatrix::postRun(MasterTimer *timer, QList<Universe *> universes)
 
     {
         QMutexLocker algorithmLocker(&m_algorithmMutex);
+        dropNextMap(false);
+        m_waitingForMap = false;
+        m_stepHandler->m_map.clear();   // the next run's first map is computed at its step
         checkEngineCreation();
         if (m_runAlgorithm != NULL)
             m_runAlgorithm->postRun();
@@ -913,6 +1041,126 @@ void RGBMatrix::roundCheck()
         roundElapsed(m_stepBeatDuration);
     else
         roundElapsed(duration());
+}
+
+bool RGBMatrix::aheadHere() const
+{
+    return mapsAhead() && MasterTimer::inTimerFrame() && m_runAlgorithm != NULL
+           && m_runAlgorithm->type() == RGBAlgorithm::Script;
+}
+
+namespace
+{
+/* All the matrices of a frame together wait at most this for their runs'
+   first maps (a matrix starting on a chase step with no fade would go out
+   dark for a frame without); a map slower than that comes a frame late */
+std::atomic<qint64> s_firstMapWaitNs { 3000000 };
+}
+
+void RGBMatrix::setFirstMapWaitUs(qint64 us)
+{
+    s_firstMapWaitNs.store(us * 1000, std::memory_order_relaxed);
+}
+
+bool RGBMatrix::firstMapInTime()
+{
+    if (m_nextMap.isNull())
+        return false;
+    /* The timer's thread only (aheadHere()): its budget, renewed each tick */
+    static thread_local QElapsedTimer window;
+    static thread_local qint64 spentNs = 0;
+    const qint64 tickNs = qint64(MasterTimer::tick()) * 1000000;
+    if (!window.isValid() || window.nsecsElapsed() >= tickNs)
+    {
+        window.start();
+        spentNs = 0;
+    }
+    const qint64 budgetNs = s_firstMapWaitNs.load(std::memory_order_relaxed);
+    QElapsedTimer waited;
+    waited.start();
+    while (!m_nextMap->ready.load(std::memory_order_acquire)
+           && spentNs + waited.nsecsElapsed() < budgetNs)
+        QThread::usleep(50);
+    spentNs += waited.nsecsElapsed();
+    return m_nextMap->ready.load(std::memory_order_acquire);
+}
+
+bool RGBMatrix::takeReadyMap()
+{
+    if (m_nextMap.isNull() || !m_nextMap->ready.load(std::memory_order_acquire))
+        return false;
+    QSharedPointer<NextMap> done = m_nextMap;
+    m_nextMap.reset();
+    /* Made before an edit, or for another size: not what this matrix is now */
+    if (done->key.generation != m_mapGeneration.load() || done->key.size != m_group->size())
+        return false;
+    m_stepHandler->m_map = std::move(done->map);
+    m_shownMapFor = done->key;
+    return true;
+}
+
+void RGBMatrix::askNextMap(const QSize &size)
+{
+    if (!aheadHere() || m_rgbColors.size() < 2 || !m_nextMap.isNull())
+        return;
+    /* Where the steps go next: what roundCheck() will do, on a copy */
+    RGBMatrixStep next = *m_stepHandler;
+    next.m_map = RGBMap();
+    if (!next.checkNextStep(runOrder(), m_rgbColors[0], m_rgbColors[1], m_stepsCount))
+        return;     // the last step of a single shot
+    askMap(size, next.stepColor().rgb(), next.currentStepIndex());
+}
+
+bool RGBMatrix::askMap(const QSize &size, uint rgb, int step)
+{
+    QSharedPointer<NextMap> ask = QSharedPointer<NextMap>::create();
+    ask->key = MapKey { size, rgb, step, m_mapGeneration.load() };
+    RGBScript *script = static_cast<RGBScript *>(m_runAlgorithm);
+    /* Every job queued is counted until it has run (m_mapJobs, shared with
+       the job): the script is never deleted while one may still use it --
+       waitForMapJobs() before every delete */
+    std::shared_ptr<std::atomic<int>> jobs = m_mapJobs;
+    jobs->fetch_add(1, std::memory_order_acq_rel);
+    if (!RGBScript::runOnScriptThread([ask, script, jobs]() {
+            if (!ask->cancelled.load(std::memory_order_acquire))
+            {
+                script->rgbMap(ask->key.size, ask->key.rgb, ask->key.step, ask->map);
+                ask->ready.store(true, std::memory_order_release);
+            }
+            jobs->fetch_sub(1, std::memory_order_acq_rel);
+        }))
+    {
+        jobs->fetch_sub(1, std::memory_order_acq_rel);
+        return false;
+    }
+    m_nextMap = ask;
+    return true;
+}
+
+void RGBMatrix::dropNextMap(bool wait)
+{
+    if (!m_nextMap.isNull())
+    {
+        m_nextMap->cancelled.store(true, std::memory_order_release);
+        m_nextMap.reset();
+    }
+    if (wait)
+        waitForMapJobs();
+}
+
+void RGBMatrix::waitForMapJobs()
+{
+    /* A script also has colour updates queued (setColor() does not wait
+       for them, nor count them): before it is deleted, everything asked
+       of the scripts' thread has run -- at once when that thread is idle */
+    if (m_mapJobs->load(std::memory_order_acquire) > 0
+        || (m_algorithm != NULL && m_algorithm->type() == RGBAlgorithm::Script))
+        RGBScript::waitForScriptThread();
+}
+
+int RGBMatrix::mapJobsQueued() const
+{
+    return m_mapJobs->load(std::memory_order_acquire);
 }
 
 GenericFader::ChannelRef RGBMatrix::getFader(Universe *universe, quint32 fixtureID, quint32 channel)

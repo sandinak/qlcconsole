@@ -271,6 +271,7 @@ void MasterTimerPrivate::run()
     struct timespec* remainingTime = static_cast<struct timespec*> (malloc(sizeof(struct timespec)));
 
     sleepTime->tv_sec = 0;
+    MasterTimer::CatchUp catchUp;
 
     /* This is the start time for the timer */
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
@@ -313,21 +314,29 @@ void MasterTimerPrivate::run()
          * this is scheduling jitter, not engine load. */
         if (compareTime(finish, current) <= 0)
         {
-            const long lateUs = long((current->tv_sec - finish->tv_sec) * 1000000L
-                                     + (current->tv_nsec - finish->tv_nsec) / 1000L);
+            const qint64 lateUs = qint64(current->tv_sec - finish->tv_sec) * 1000000LL
+                                  + qint64(current->tv_nsec - finish->tv_nsec) / 1000LL;
             qDebug() << Q_FUNC_INFO << "MasterTimer is running late!"
                      << "late_us:" << lateUs
-                     << "wall_us:" << long(mt->tickComputeMs() * 1000.0)
+                     << "wall_us:" << qint64(mt->tickComputeMs() * 1000.0)
                      << "cpu_us:" << long(mt->tickCpuMs() * 1000.0)
                      << "budget_us:" << (nsTickTime / 1000);
             /* No need to sleep. Immediately process the next tick */
             mt->timerTick(true);
-            /* Now the finish time needs to be recalibrated */
+            /* Show time is wall-clock time: the deadlines stay where they
+               were, so the frames a late one missed follow it back to back
+               and a fade ends when it should -- unless this tick overran
+               itself or the gap is too long (MasterTimer::catchesUp()):
+               then the clock starts again from now, the missed time lost. */
+            const qint64 nowNs = qint64(current->tv_sec) * 1000000000LL + qint64(current->tv_nsec);
+            if (!MasterTimer::catchesUp(catchUp, nowNs, qint64(lateUs) * 1000, mt->tickComputeMs()))
+            {
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
-            clock_get_time(cclock, finish);
+                clock_get_time(cclock, finish);
 #else
-            clock_gettime(CLOCK_MONOTONIC, finish);
+                clock_gettime(CLOCK_MONOTONIC, finish);
 #endif
+            }
             continue;
         }
 

@@ -90,8 +90,22 @@ RGBScript::RGBScript(const RGBScript& s)
     }
 }
 
+static std::atomic<int> s_deletedWhileMapping { 0 };
+
 RGBScript::~RGBScript()
 {
+    /* Whoever deletes a script must have waited for its maps
+       (RGBMatrix::waitForMapJobs()); counted for the tests, never relied on */
+    if (m_mapping.load(std::memory_order_acquire) > 0)
+    {
+        s_deletedWhileMapping.fetch_add(1, std::memory_order_relaxed);
+        qWarning() << "RGBScript" << m_fileName << "deleted while making a map";
+    }
+}
+
+int RGBScript::deletedWhileMapping()
+{
+    return s_deletedWhileMapping.load(std::memory_order_relaxed);
 }
 
 RGBScript &RGBScript::operator=(const RGBScript &s)
@@ -101,6 +115,7 @@ RGBScript &RGBScript::operator=(const RGBScript &s)
         m_fileName = s.m_fileName;
         m_contents = s.m_contents;
         m_apiVersion = s.m_apiVersion.load();
+        m_acceptColors = s.m_acceptColors.load();
         evaluate();
         foreach (RGBScriptProperty cap, s.m_properties)
         {
@@ -249,6 +264,7 @@ bool RGBScript::evaluate()
                 return false;
             }
         }
+        noteAcceptColors();
         if (m_apiVersion >= 2)
             return loadProperties();
         return true;
@@ -333,6 +349,7 @@ void RGBScript::rgbMapSetColors(const QVector<uint> &colors)
     QJSValue value = m_rgbMapSetColors.call(args);
     if (value.isError())
         displayError(value, m_fileName);
+    noteAcceptColors();
 }
 
 QVector<uint> RGBScript::rgbMapGetColors()
@@ -360,6 +377,20 @@ QVector<uint> RGBScript::rgbMapGetColors()
     return colArray;
 }
 
+bool RGBScript::runOnScriptThread(std::function<void()> job)
+{
+    if (s_jsThread == NULL || s_jsThread->engine == nullptr)
+        return false;
+    return QMetaObject::invokeMethod(s_jsThread->engine, std::move(job), Qt::QueuedConnection);
+}
+
+void RGBScript::waitForScriptThread()
+{
+    if (s_jsThread == NULL || s_jsThread->engine == nullptr || QThread::currentThread() == s_jsThread)
+        return;
+    QMetaObject::invokeMethod(s_jsThread->engine, []{}, Qt::BlockingQueuedConnection);
+}
+
 void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
 {
     if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
@@ -370,6 +401,13 @@ void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
 
     if (m_rgbMap.isUndefined() == true)
         return;
+
+    struct Busy
+    {
+        explicit Busy(std::atomic<int> &n) : count(n) { count.fetch_add(1, std::memory_order_acq_rel); }
+        ~Busy() { count.fetch_sub(1, std::memory_order_acq_rel); }
+        std::atomic<int> &count;
+    } busy(m_mapping);
 
     // Call the rgbMap function
     QJSValueList args;
@@ -400,6 +438,7 @@ void RGBScript::rgbMap(const QSize& size, uint rgb, int step, RGBMap &map)
     {
         qWarning() << "Returned value is not an array within an array!";
     }
+    noteAcceptColors();
 }
 
 QString RGBScript::name() const
@@ -444,9 +483,11 @@ int RGBScript::acceptColors() const
 {
     if (s_jsThread != NULL && QThread::currentThread() != s_jsThread)
     {
-        int retVal;
-        QMetaObject::invokeMethod(s_jsThread->engine, [this]{ return acceptColors();}, Qt::BlockingQueuedConnection, &retVal);
-        return retVal;
+        /* Off the scripts' thread: what the script said the last time it
+           ran (evaluate, a property, a map, colours), never a wait -- a
+           matrix starting on the timer asks this, and the scripts' thread
+           may be busy with other maps for a while */
+        return m_acceptColors.load(std::memory_order_acquire);
     }
 
     QJSValue accColors = m_script.property(QStringLiteral("acceptColors"));
@@ -455,6 +496,13 @@ int RGBScript::acceptColors() const
     // if no property is provided, let's assume the script
     // will accept both start and end colors
     return 2;
+}
+
+void RGBScript::noteAcceptColors()
+{
+    if (m_script.isUndefined() || m_script.isError())
+        return;
+    m_acceptColors.store(acceptColors(), std::memory_order_release);
 }
 
 bool RGBScript::loadXML(QXmlStreamReader &root)
@@ -542,10 +590,12 @@ bool RGBScript::setProperty(QString propertyName, QString value)
             if (written.isError())
             {
                 displayError(written, m_fileName);
+                noteAcceptColors();
                 return false;
             } 
             else 
             {
+                noteAcceptColors();     // a property can change it (Plasma's presets)
                 return true;
             }
         }

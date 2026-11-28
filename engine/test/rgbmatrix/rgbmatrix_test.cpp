@@ -21,6 +21,7 @@
 #include <QtTest>
 #include <QXmlStreamReader>
 #include <QXmlStreamWriter>
+#include <QTemporaryDir>
 
 #include "../common/stdprelude.h"
 #define protected public
@@ -685,3 +686,278 @@ void RGBMatrix_Test::aMatrixDoesNotStartTheAudioCapture()
 }
 
 QTEST_MAIN(RGBMatrix_Test)
+
+namespace
+{
+/* One frame of the running timer (not a tick by hand, which never maps
+   ahead): the functions, then the universe's faders; the frame's bytes */
+QByteArray timerFrame(Doc *doc)
+{
+    doc->masterTimer()->timerTick(true);
+    QList<Universe *> ua = doc->inputOutputMap()->claimUniverses();
+    ua.first()->processFaders();
+    const QByteArray bytes = ua.first()->preGMValues().left(25 * 5);
+    doc->inputOutputMap()->releaseUniverses(false);
+    return bytes;
+}
+}
+
+void RGBMatrix_Test::mapsAheadSendTheSameFrames()
+{
+    auto restore = qScopeGuard([] {
+        RGBMatrix::setMapsAhead(true);
+        RGBMatrix::setFirstMapWaitUs(3000);
+    });
+    // The first map waited for as long as it takes (3 ms in a show): even
+    // a loaded test host compares every frame
+    RGBMatrix::setFirstMapWaitUs(10 * 1000 * 1000);
+    for (const char *script : { "Plasma", "Stripes" })
+    {
+        QList<QByteArray> runs[2];
+        for (int ahead = 0; ahead < 2; ++ahead)
+        {
+            RGBMatrix::setMapsAhead(ahead == 1);
+            RGBMatrix *mtx = new RGBMatrix(m_doc);
+            mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+            mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, script));
+            QVERIFY(mtx->algorithm() != NULL);
+            mtx->setColor(0, QColor(255, 40, 0));
+            mtx->setColor(1, QColor(0, 60, 255));
+            mtx->setDuration(MasterTimer::tick() * 3);
+            m_doc->addFunction(mtx);
+            const quint64 late = RGBMatrix::mapsLate();
+            mtx->start(m_doc->masterTimer(), FunctionParent::master());
+            for (int f = 0; f < 60; ++f)
+            {
+                runs[ahead] << timerFrame(m_doc);
+                // On time: the scripts' thread done before the next frame
+                RGBScript::waitForScriptThread();
+                if (ahead == 1 && f == 10)
+                    QVERIFY2(!mtx->m_nextMap.isNull(), "no map asked for ahead");
+            }
+            QCOMPARE(RGBMatrix::mapsLate(), late);
+            mtx->stop(FunctionParent::master());
+            tick(m_doc, 3);
+            m_doc->deleteFunction(mtx->id());
+        }
+        QCOMPARE(runs[1].size(), runs[0].size());
+        // Ahead, a run's first map is made off the tick too, and waited
+        // for: its first frame is not dark (a chase step with no fade
+        // would flash); frame for frame the same
+        QVERIFY2(runs[1].first() != QByteArray(runs[1].first().size(), char(0)),
+                 "the first frame went out dark");
+        for (int f = 0; f < runs[0].size(); ++f)
+            QVERIFY2(runs[1].at(f) == runs[0].at(f),
+                     qPrintable(QString("%1: frame %2 differs").arg(script).arg(f)));
+        QVERIFY2(runs[0].first() != runs[0].last() || runs[0].at(4) != runs[0].at(8),
+                 "the matrix never changed: nothing compared");
+    }
+}
+
+void RGBMatrix_Test::aLateMapKeepsTheLastOneUntilReady()
+{
+    RGBMatrix::setMapsAhead(true);
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Stripes"));
+    mtx->setColor(0, QColor(255, 0, 0));
+    mtx->setDuration(MasterTimer::tick() * 2);
+    m_doc->addFunction(mtx);
+    QSemaphore hold, holding;
+    auto tidy = qScopeGuard([&]() {
+        hold.release(10);
+        RGBScript::waitForScriptThread();
+        mtx->stop(FunctionParent::master());
+        tick(m_doc, 3);
+        m_doc->deleteFunction(mtx->id());
+    });
+    mtx->start(m_doc->masterTimer(), FunctionParent::master());
+    timerFrame(m_doc);                      // step 0 begins: its map asked for
+    RGBScript::waitForScriptThread();
+    const QByteArray step0 = timerFrame(m_doc);     // ...out; step 1's asked for
+    RGBScript::waitForScriptThread();
+    // The scripts' thread busy from here: step 2's map, asked for at step 1,
+    // waits behind it
+    QVERIFY(RGBScript::runOnScriptThread([&]() { holding.release(); hold.acquire(); }));
+    QVERIFY(holding.tryAcquire(1, 5000));
+    const QByteArray step1 = timerFrame(m_doc);     // on time
+    QVERIFY(step1 != step0);
+    const quint64 late = RGBMatrix::mapsLate();
+    QByteArray f = timerFrame(m_doc);
+    QCOMPARE(f, step1);                     // still step 1's frame...
+    f = timerFrame(m_doc);                  // step 2 begins, its map not ready
+    QCOMPARE(RGBMatrix::mapsLate(), late + 1);
+    QCOMPARE(f, step1);                     // ...the last map stays out
+    hold.release();
+    RGBScript::waitForScriptThread();
+    f = timerFrame(m_doc);                  // ready: out on this frame
+    QVERIFY(f != step1);
+}
+
+namespace
+{
+/* A script that takes @a ms to make each map (a moving dot, 8 steps) */
+RGBScript *slowScript(Doc *doc, int ms, QTemporaryDir &dir)
+{
+    const QString path = dir.filePath(QStringLiteral("slow%1.js").arg(ms));
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text))
+        return nullptr;
+    f.write(QStringLiteral(
+        "(function() {\n"
+        "  var algo = new Object;\n"
+        "  algo.apiVersion = 2;\n"
+        "  algo.name = \"Slow %1\";\n"
+        "  algo.author = \"test\";\n"
+        "  algo.properties = new Array();\n"
+        "  algo.rgbMapStepCount = function(width, height) { return 8; };\n"
+        "  algo.rgbMap = function(width, height, rgb, step) {\n"
+        "    var until = Date.now() + %1;\n"
+        "    while (Date.now() < until) {}\n"
+        "    var map = new Array(height);\n"
+        "    for (var y = 0; y < height; y++) {\n"
+        "      map[y] = new Array(width);\n"
+        "      for (var x = 0; x < width; x++)\n"
+        "        map[y][x] = ((y * width + x) % 8 == step) ? rgb : 0;\n"
+        "    }\n"
+        "    return map;\n"
+        "  };\n"
+        "  return algo;\n"
+        "})()\n").arg(ms).toUtf8());
+    f.close();
+    RGBScript *script = new RGBScript(doc);
+    if (!script->load(path))
+    {
+        delete script;
+        return nullptr;
+    }
+    return script;
+}
+}
+
+void RGBMatrix_Test::aScriptSlowerThanItsStepsStillMoves()
+{
+    RGBMatrix::setMapsAhead(true);
+    QTemporaryDir dir;
+    RGBScript *script = slowScript(m_doc, int(MasterTimer::tick()) * 6, dir);   // 3 steps' time
+    QVERIFY(script != nullptr);
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(script);
+    mtx->setColor(0, QColor(255, 0, 0));
+    mtx->setDuration(MasterTimer::tick() * 2);
+    m_doc->addFunction(mtx);
+    auto tidy = qScopeGuard([&]() {
+        mtx->stop(FunctionParent::master());
+        tick(m_doc, 3);
+        m_doc->deleteFunction(mtx->id());
+    });
+    mtx->start(m_doc->masterTimer(), FunctionParent::master());
+    // Frames at their pace, for 40 steps' time: each map comes three
+    // steps late, and the newest one made goes out
+    QSet<QByteArray> seen;
+    const quint64 late = RGBMatrix::mapsLate();
+    for (int f = 0; f < 80; ++f)
+    {
+        seen.insert(timerFrame(m_doc));
+        QThread::msleep(MasterTimer::tick());
+    }
+    QVERIFY2(seen.size() >= 4, qPrintable(QString("only %1 different frames").arg(seen.size())));
+    QVERIFY(RGBMatrix::mapsLate() > late);
+}
+
+void RGBMatrix_Test::aStartingMatrixNeverWaitsForTheScripts()
+{
+    RGBMatrix::setMapsAhead(true);
+    RGBMatrix::setFirstMapWaitUs(3000);
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Plasma"));
+    QVERIFY(mtx->algorithm() != NULL);
+    // Two colours: the start works out the fade between them
+    mtx->setColor(0, QColor(255, 0, 0));
+    mtx->setColor(1, QColor(0, 0, 255));
+    mtx->setDuration(MasterTimer::tick() * 2);
+    m_doc->addFunction(mtx);
+    // The scripts' thread busy (other matrices' maps) for 2 s
+    QSemaphore hold, holding;
+    QVERIFY(RGBScript::runOnScriptThread([&]() { holding.release(); hold.acquire(); }));
+    QVERIFY(holding.tryAcquire(1, 5000));
+    QThread *releaser = QThread::create([&]() { QThread::msleep(2000); hold.release(); });
+    releaser->start();
+    auto tidy = qScopeGuard([&]() {
+        releaser->wait();
+        delete releaser;
+        RGBScript::waitForScriptThread();
+        mtx->stop(FunctionParent::master());
+        tick(m_doc, 3);
+        m_doc->deleteFunction(mtx->id());
+    });
+    QElapsedTimer took;
+    took.start();
+    mtx->start(m_doc->masterTimer(), FunctionParent::master());
+    const QByteArray first = timerFrame(m_doc);    // preRun + the first write
+    timerFrame(m_doc);
+    const qint64 ms = took.elapsed();
+    QVERIFY2(ms < 1000, qPrintable(QString("the start waited %1 ms for the scripts").arg(ms)));
+    QVERIFY(mtx->isRunning());
+    // Its map not made in time: the frame goes out without it, and the
+    // map follows when it is
+    QCOMPARE(first, QByteArray(first.size(), char(0)));
+    releaser->wait();
+    RGBScript::waitForScriptThread();
+    const QByteArray later = timerFrame(m_doc);
+    QVERIFY(later != first);
+}
+
+void RGBMatrix_Test::aColourChangeRunsBeforeItsScriptGoes()
+{
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(RGBAlgorithm::algorithm(m_doc, "Plasma"));   // API 3: takes colours
+    QVERIFY(mtx->algorithm() != NULL);
+    m_doc->addFunction(mtx);
+    QSemaphore hold, holding;
+    QVERIFY(RGBScript::runOnScriptThread([&]() { holding.release(); hold.acquire(); }));
+    QVERIFY(holding.tryAcquire(1, 5000));
+    // Queued behind the busy thread, not waited for...
+    mtx->setColor(1, QColor(0, 0, 255));
+    std::atomic<bool> after { false };
+    QVERIFY(RGBScript::runOnScriptThread([&]() { after.store(true); }));
+    QThread *releaser = QThread::create([&]() { QThread::msleep(200); hold.release(); });
+    releaser->start();
+    // ...and the matrix (and its script) deleted: not before it has run
+    QVERIFY(m_doc->deleteFunction(mtx->id()));
+    const bool ranFirst = after.load();
+    releaser->wait();
+    delete releaser;
+    RGBScript::waitForScriptThread();
+    QVERIFY2(ranFirst, "the script was deleted with its colour update still queued");
+}
+
+void RGBMatrix_Test::aMatrixDeletedMidMapWaitsForIt()
+{
+    RGBMatrix::setMapsAhead(true);
+    QTemporaryDir dir;
+    RGBScript *script = slowScript(m_doc, 300, dir);
+    QVERIFY(script != nullptr);
+    RGBMatrix *mtx = new RGBMatrix(m_doc);
+    mtx->setFixtureGroup(m_doc->fixtureGroups().first()->id());
+    mtx->setAlgorithm(script);
+    mtx->setColor(0, QColor(255, 0, 0));
+    mtx->setDuration(MasterTimer::tick() * 2);
+    m_doc->addFunction(mtx);
+    const int before = RGBScript::deletedWhileMapping();
+    mtx->start(m_doc->masterTimer(), FunctionParent::master());
+    timerFrame(m_doc);                      // a map asked for: 300 ms
+    timerFrame(m_doc);
+    // ...and being made on the scripts' thread
+    QTRY_VERIFY_WITH_TIMEOUT(script->mapping(), 2000);
+    // Deleted while it runs (Doc::deleteFunction: removed, postRun, deleted)
+    mtx->stop(FunctionParent::master());
+    timerFrame(m_doc);
+    QVERIFY(m_doc->deleteFunction(mtx->id()));
+    RGBScript::waitForScriptThread();
+    QCOMPARE(RGBScript::deletedWhileMapping(), before);
+}
+

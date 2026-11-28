@@ -569,9 +569,26 @@ public:
     static constexpr int kSendLatencyBuckets = 161;
     static constexpr int kSendLatencyBucketUs = 250;
     QVector<quint32> sendLatencyHistogram() const;
-    /** What the universe threads got from the system (QLC_UNIVERSE_SCHED) */
+    /** What the universe threads got from the system */
     enum ThreadScheduling { ThreadsNormal, ThreadsElevated, ThreadsRealtime, ThreadsRefused };
     static ThreadScheduling threadScheduling();
+
+    /** What the universe threads ask the system for (Settings ▸ Performance
+     *  ▸ Universe threads, per computer). Standard: ordinary threads.
+     *  Responsive: macOS user-interactive QoS. Real-time: macOS
+     *  time-constraint policy, Linux SCHED_FIFO one level under the timer's
+     *  (when granted). Running threads change at their next frame. */
+    enum ThreadPriority { PriorityStandard, PriorityResponsive, PriorityRealtime };
+    static void setThreadPriority(ThreadPriority priority);
+    /** The one in effect: QLC_UNIVERSE_SCHED (standard|qos|rt) when it is
+     *  set, else the one set, else defaultThreadPriority() */
+    static ThreadPriority threadPriority();
+    /** This platform's default (docs/performance.md#universe-threads) */
+    static ThreadPriority defaultThreadPriority();
+    /** Whether QLC_UNIVERSE_SCHED overrides the setting */
+    static bool threadPriorityOverridden();
+    /** Whether @a priority does anything on this platform */
+    static bool threadPrioritySupported(ThreadPriority priority);
     void resetSendLatency();
 
 public slots:
@@ -585,6 +602,8 @@ protected:
 
     /** DMX writer thread worker method */
     void run() override;
+    /** On the universe thread: setThreadPriority()'s, once per change */
+    void applyThreadPriority();
 
     /*********************************************************************
      * Power limits
@@ -963,6 +982,9 @@ protected:
     QSemaphore m_semaphore;
     std::atomic<qint64> m_tickedNs { 0 };
     std::unique_ptr<std::atomic<quint32>[]> m_sendLatency;
+    /** The thread's own: the setThreadPriority() generation it applied */
+    int m_priorityApplied = -1;
+    int m_priorityAsked = PriorityStandard;   ///< ...and what it asked for
 
     /** Indicated if the DMX writer worker thread is running. Atomic: set
      *  by the thread, cleared by the destructor on another one. */

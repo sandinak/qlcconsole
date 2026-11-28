@@ -16,6 +16,15 @@ what to change.
 | **Keep the display awake** | The screen doesn't sleep or lock when idle either, while in Operate. Needs **Run at full speed**. | On |
 | **Say in Show Status…** | The footer warns during Operate when an item marked ● below is off. | On |
 
+**DMX output ▸ Universe threads** says how the system runs the threads
+that compute and send each universe: **Standard** (ordinary threads),
+**Responsive** (macOS: a higher quality of service) or **Real-time**
+(macOS: a time-constraint thread; Linux: real-time priority, when the user
+may have it). It is saved on this computer, not in the show, and applies
+when you press OK. Real-time is the default on macOS and Linux; Windows has
+no choice yet. Starting the app with `QLC_UNIVERSE_SCHED=standard`, `qos`
+or `rt` overrides it for that run, and the box says so.
+
 **This computer** lists what helps the timer, one line each:
 
 - **OK**: set up for steady output.
@@ -44,7 +53,7 @@ lowest priority the system has, so the show always comes first.
 | Item | What it looks at | What to do |
 |---|---|---|
 | **Measured with this show** ● | How many frames actually left late, or never left. In the footer it covers the last 15 seconds. 1% late or more is marked important. | Work down the list. If it stays late, the show is more than this computer can compute in time. |
-| **Universe threads** | Whether the threads that compute and send each universe are real-time too. Measured on a Raspberry Pi 5: at 160 universes, real-time universe threads halved the worst frame times for about 10% more CPU. | On Linux with 64 or more universes it shows how to try it. Not measured on other systems yet. |
+| **Universe threads** | Which of **Universe threads** above is in use (Standard, Responsive or Real-time) and whether the system granted it. Real-time is the default on macOS and Linux: on an M4 Pro at 80 universes it took the slowest sends (p99.9) from about 4 ms to 1 ms for no more CPU; on a Raspberry Pi 5 at 160 universes it halved the worst frame times for about 10% more CPU. | Leave it on Real-time. On Linux it needs a real-time limit for the user (see Real-time DMX timer); without one it runs at normal priority and says so. |
 | **This computer** ● | The processor, its cores, and whether this build matches it. | Apple silicon, Intel Macs, and small ARM boards each get their own advice. A Mac running the app under Rosetta, or a build for the wrong processor: use the right one. |
 | **Mains power** ● | On battery or plugged in. Only the computer's own battery counts: a wireless controller's is not this line. | Plug it in. |
 | **Temperature** ● | Whether the system says it is slowing down from heat. Windows doesn't say. | Clear the vents and close what else is running. |

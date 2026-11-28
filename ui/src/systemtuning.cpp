@@ -39,6 +39,8 @@
    the old default, which says nothing about what anyone wanted */
 #define KEY_DISPLAY      QStringLiteral("tuning/displayAwakeInOperate")
 #define KEY_WARN         QStringLiteral("tuning/warnInOperate")
+/* standard | responsive | realtime; absent: this platform's default */
+#define KEY_UNIVERSE_THREADS QStringLiteral("tuning/universeThreads")
 
 namespace
 {
@@ -89,6 +91,8 @@ SystemTuning::Probe SystemTuning::probeDoc(const Doc *doc)
     p.keepDisplayAwake = keepDisplayAwakeInOperate();
 
     p.universeScheduling = Universe::threadScheduling();
+    p.universePriority = Universe::threadPriority();
+    p.universePriorityOverridden = Universe::threadPriorityOverridden();
     if (doc != nullptr && doc->inputOutputMap() != nullptr)
     {
         InputOutputMap *ioMap = doc->inputOutputMap();
@@ -479,6 +483,41 @@ void SystemTuning::setWarnInOperate(bool on)
     QSettings().setValue(KEY_WARN, on);
 }
 
+Universe::ThreadPriority SystemTuning::universeThreads()
+{
+    const QString v = QSettings().value(KEY_UNIVERSE_THREADS).toString();
+    Universe::ThreadPriority p = Universe::defaultThreadPriority();
+    if (v == QLatin1String("standard"))
+        p = Universe::PriorityStandard;
+    else if (v == QLatin1String("responsive"))
+        p = Universe::PriorityResponsive;
+    else if (v == QLatin1String("realtime"))
+        p = Universe::PriorityRealtime;
+    return Universe::threadPrioritySupported(p) ? p : Universe::PriorityStandard;
+}
+
+void SystemTuning::setUniverseThreads(Universe::ThreadPriority priority)
+{
+    QSettings s;
+    if (priority == Universe::defaultThreadPriority())
+        s.remove(KEY_UNIVERSE_THREADS);     // follows the default, should it move
+    else
+        s.setValue(KEY_UNIVERSE_THREADS, priority == Universe::PriorityRealtime ? QStringLiteral("realtime")
+                                         : priority == Universe::PriorityResponsive ? QStringLiteral("responsive")
+                                         : QStringLiteral("standard"));
+    Universe::setThreadPriority(priority);
+}
+
+QString SystemTuning::universeThreadsText(Universe::ThreadPriority priority)
+{
+    switch (priority)
+    {
+        case Universe::PriorityResponsive: return tr("Responsive");
+        case Universe::PriorityRealtime: return tr("Real-time");
+        default: return tr("Standard");
+    }
+}
+
 /****************************************************************************
  * Runtime
  ****************************************************************************/
@@ -510,6 +549,8 @@ SystemTuning::SystemTuning(Doc *doc, QObject *parent)
     connect(m_doc, &Doc::modeChanged, this, &SystemTuning::slotModeChanged);
     if (s_instance == nullptr)
         s_instance = this;
+    /* Before any universe thread starts (App makes this before a show opens) */
+    Universe::setThreadPriority(universeThreads());
     apply();
 }
 

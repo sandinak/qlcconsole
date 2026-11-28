@@ -30,6 +30,8 @@
 #include <QPair>
 #include <QMap>
 #include <QMutex>
+#include <QSharedPointer>
+#include <memory>
 
   #include "rgbscriptv4.h"
 #include "function.h"
@@ -212,8 +214,56 @@ public:
     /** Get the preview of the current algorithm at the given step */
     void previewMap(int step, RGBMatrixStep *handler);
 
+    /** A script's next map is computed ahead of its step, on the scripts'
+     *  thread, so the tick never waits for the script (Plasma's 96 x 82
+     *  map took ~16 ms there, every fifth of a second). A map not ready at
+     *  its step: the last one stays until it is (counted, mapsLate()).
+     *  Off: every map computed at its step, the tick waiting (tests). */
+    static void setMapsAhead(bool on);
+    static bool mapsAhead();
+    /** Steps whose map was not ready in time, every matrix, since start */
+    static quint64 mapsLate();
+    /** This matrix's map jobs queued on the scripts' thread, not yet run */
+    int mapJobsQueued() const;
+    /** How long a frame waits for its matrices' first maps, all together
+     *  (3 ms; tests set it long, to compare frames, or 0) */
+    static void setFirstMapWaitUs(qint64 us);
+
 private:
     int algorithmStepsCount();
+    /** The next step's map, asked of the scripts' thread (m_algorithmMutex held) */
+    void askNextMap(const QSize &size);
+    /** The map of step @a step in @a rgb, asked of the scripts' thread */
+    bool askMap(const QSize &size, uint rgb, int step);
+    /** Maps ahead here: on, in a frame of the running timer, a script */
+    bool aheadHere() const;
+    /** Forget the map asked for; @a wait: until the scripts' thread has let
+     *  go of the script, before it is deleted (m_algorithmMutex held) */
+    void dropNextMap(bool wait);
+
+    /** The script's map jobs not yet run (dropNextMap(true) waits for them) */
+    void waitForMapJobs();
+    /** The ready map into the step handler, if it is this matrix's as it is now */
+    bool takeReadyMap();
+    /** A run's first map: waited for, within the frame's budget; ready? */
+    bool firstMapInTime();
+
+    struct MapKey
+    {
+        QSize size;
+        uint rgb = 0;
+        int step = -1;
+        int generation = -1;
+        bool isFor(const QSize &sz, uint colour, int index, int gen) const;
+    };
+    struct NextMap;
+    QSharedPointer<NextMap> m_nextMap;
+    MapKey m_shownMapFor;     ///< what the map going out was made for
+    std::shared_ptr<std::atomic<int>> m_mapJobs = std::make_shared<std::atomic<int>>(0);
+    /** The step began without its map: it goes out as soon as it is ready */
+    bool m_waitingForMap = false;
+    /** Bumped by every edit that changes what a map would be */
+    std::atomic<int> m_mapGeneration { 0 };
 
 private:
     bool m_requestEngineCreation;

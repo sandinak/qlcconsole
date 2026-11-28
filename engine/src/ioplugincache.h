@@ -61,6 +61,7 @@ private slots:
 
 private:
     QList <QLCIOPlugin*> m_plugins;
+    friend class UniverseSched_Test;    // an output of its own, not a file
 };
 
 /** @} */

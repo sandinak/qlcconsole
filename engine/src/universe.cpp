@@ -35,6 +35,7 @@
 #elif defined(Q_OS_LINUX)
 #include <pthread.h>
 #include <sched.h>
+#include <sys/resource.h>
 #endif
 
 #include "channelmodifier.h"
@@ -507,63 +508,179 @@ void Universe::resetSendLatency()
         m_sendLatency[i].store(0, std::memory_order_relaxed);
 }
 
-/* The A/B of how universe threads are scheduled, for measuring only: they do
-   the sending, but start at ordinary priority while the timer that wakes them
-   is real-time. QLC_UNIVERSE_SCHED: empty (as ever), "qos" (macOS: user
-   interactive) or "rt" (macOS: time constraint; Linux: SCHED_FIFO one level
-   under the timer's, when granted). */
+/* How the universe threads are scheduled. They do the sending, and woken by
+   a real-time timer they used to start at ordinary priority: on a busy
+   computer the timer then waits on them (docs/performance.md#universe-threads
+   has the A/B). The setting is per computer (Settings ▸ Performance);
+   QLC_UNIVERSE_SCHED (standard|qos|rt) overrides it, for measuring. Each
+   thread applies it as it starts and again at the frame after a change
+   (s_priorityGeneration). */
 static std::atomic<int> s_universeThreadScheduling { Universe::ThreadsNormal };
+static std::atomic<int> s_threadPrioritySet { -1 };    // -1: the default
+static std::atomic<int> s_priorityGeneration { 0 };
 
 Universe::ThreadScheduling Universe::threadScheduling()
 {
     return ThreadScheduling(s_universeThreadScheduling.load(std::memory_order_relaxed));
 }
 
-static void applyUniverseThreadScheduling()
+/* Real-time on macOS and Linux: measured on the show's rig (an M4 Pro at 80
+   and 160 universes: the send's p99.9 a third, no more CPU; a Pi 5 at 160:
+   the tick's p99 halved for ~10% more CPU). Windows: not measured. */
+Universe::ThreadPriority Universe::defaultThreadPriority()
 {
-    const QByteArray mode = qgetenv("QLC_UNIVERSE_SCHED");
-    if (mode.isEmpty())
-        return;
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    return PriorityRealtime;
+#else
+    return PriorityStandard;
+#endif
+}
+
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+/* One warning per run, not one per universe thread */
+static void warnOnce(const char *what, int code)
+{
+    static std::atomic<bool> warned { false };
+    if (!warned.exchange(true))
+        qWarning() << "Universe threads:" << what << code << "- they run at normal priority";
+}
+#endif
+
+bool Universe::threadPrioritySupported(ThreadPriority priority)
+{
+    switch (priority)
+    {
+        case PriorityStandard:
+            return true;
+        case PriorityResponsive:
 #if defined(Q_OS_MACOS)
-    if (mode == "qos")
+            return true;
+#else
+            return false;
+#endif
+        case PriorityRealtime:
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+            return true;
+#else
+            return false;
+#endif
+    }
+    return false;
+}
+
+static int envThreadPriority()
+{
+    const QByteArray mode = qgetenv("QLC_UNIVERSE_SCHED").trimmed().toLower();
+    if (mode.isEmpty())
+        return -1;
+    if (mode == "rt" || mode == "realtime")
+        return Universe::PriorityRealtime;
+    if (mode == "qos" || mode == "responsive")
+        return Universe::PriorityResponsive;
+    return Universe::PriorityStandard;   // "standard", "normal", anything else
+}
+
+bool Universe::threadPriorityOverridden()
+{
+    return envThreadPriority() >= 0;
+}
+
+void Universe::setThreadPriority(ThreadPriority priority)
+{
+    if (s_threadPrioritySet.exchange(int(priority), std::memory_order_relaxed) != int(priority))
+        s_priorityGeneration.fetch_add(1, std::memory_order_release);
+}
+
+Universe::ThreadPriority Universe::threadPriority()
+{
+    const int env = envThreadPriority();
+    if (env >= 0)
+        return ThreadPriority(env);
+    const int set = s_threadPrioritySet.load(std::memory_order_relaxed);
+    ThreadPriority p = set >= 0 ? ThreadPriority(set) : defaultThreadPriority();
+    return threadPrioritySupported(p) ? p : PriorityStandard;
+}
+
+static void applyUniverseThreadScheduling(Universe::ThreadPriority priority, int previous)
+{
+    const bool first = previous < 0;
+    /* A new thread left Standard is the thread as ever: nothing asked */
+    if (first && priority == Universe::PriorityStandard)
+    {
+        s_universeThreadScheduling.store(Universe::ThreadsNormal, std::memory_order_relaxed);
+        return;
+    }
+#if defined(Q_OS_MACOS)
+    const thread_act_t self = pthread_mach_thread_np(pthread_self());
+    /* Undo only what was asked before: a thread given an explicit Mach
+       policy (even the standard one) can no longer take a QoS class */
+    if (previous == Universe::PriorityRealtime)
+    {
+        thread_standard_policy_data_t standard;
+        thread_policy_set(self, THREAD_STANDARD_POLICY, reinterpret_cast<thread_policy_t>(&standard),
+                          THREAD_STANDARD_POLICY_COUNT);
+    }
+    if (previous == Universe::PriorityResponsive && priority != Universe::PriorityResponsive)
+        pthread_set_qos_class_self_np(QOS_CLASS_DEFAULT, 0);
+    if (priority == Universe::PriorityStandard)
+    {
+        s_universeThreadScheduling.store(Universe::ThreadsNormal, std::memory_order_relaxed);
+    }
+    else if (priority == Universe::PriorityResponsive)
     {
         const int rc = pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
         s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsElevated : Universe::ThreadsRefused,
                                          std::memory_order_relaxed);
         if (rc != 0)
-            qWarning() << "Universe: user-interactive QoS refused:" << rc;
+            warnOnce("user-interactive QoS refused:", rc);
     }
-    else if (mode == "rt")
+    else
     {
         mach_timebase_info_data_t tb;
         if (mach_timebase_info(&tb) != KERN_SUCCESS || tb.numer == 0)
+        {
+            s_universeThreadScheduling.store(Universe::ThreadsRefused, std::memory_order_relaxed);
             return;
+        }
         const double toAbs = double(tb.denom) / double(tb.numer);
         thread_time_constraint_policy_data_t policy;
         policy.period = uint32_t(1.0e9 / MasterTimer::frequency() * toAbs);
         policy.computation = uint32_t(500000.0 * toAbs);   /* 0.5 ms */
         policy.constraint = uint32_t(5000000.0 * toAbs);   /* 5 ms */
         policy.preemptible = 1;
-        const kern_return_t kr = thread_policy_set(pthread_mach_thread_np(pthread_self()),
-                                                   THREAD_TIME_CONSTRAINT_POLICY,
+        const kern_return_t kr = thread_policy_set(self, THREAD_TIME_CONSTRAINT_POLICY,
                                                    reinterpret_cast<thread_policy_t>(&policy),
                                                    THREAD_TIME_CONSTRAINT_POLICY_COUNT);
         s_universeThreadScheduling.store(kr == KERN_SUCCESS ? Universe::ThreadsRealtime : Universe::ThreadsRefused,
                                          std::memory_order_relaxed);
         if (kr != KERN_SUCCESS)
-            qWarning() << "Universe: time-constraint policy refused:" << kr;
+            warnOnce("time-constraint policy refused:", int(kr));
     }
 #elif defined(Q_OS_LINUX)
-    if (mode == "rt")
+    struct sched_param sp;
+    memset(&sp, 0, sizeof(sp));
+    if (priority != Universe::PriorityRealtime)
     {
-        struct sched_param sp;
-        sp.sched_priority = qMax(1, sched_get_priority_max(SCHED_FIFO) - 11);
-        const int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
-        s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsRealtime : Universe::ThreadsRefused,
-                                         std::memory_order_relaxed);
-        if (rc != 0)
-            qWarning() << "Universe: SCHED_FIFO refused:" << rc;
+        pthread_setschedparam(pthread_self(), SCHED_OTHER, &sp);
+        s_universeThreadScheduling.store(Universe::ThreadsNormal, std::memory_order_relaxed);
+        return;
     }
+    /* One level under the timer's (mastertimer-unix.cpp: the maximum - 10,
+       or the user's rtprio limit when that is lower) */
+    int prio = sched_get_priority_max(SCHED_FIFO) - 11;
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_RTPRIO, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY
+        && rl.rlim_cur > 0 && rlim_t(prio) >= rl.rlim_cur)
+        prio = int(rl.rlim_cur) - 1;
+    sp.sched_priority = qMax(1, prio);
+    const int rc = pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
+    s_universeThreadScheduling.store(rc == 0 ? Universe::ThreadsRealtime : Universe::ThreadsRefused,
+                                     std::memory_order_relaxed);
+    if (rc != 0)
+        warnOnce("SCHED_FIFO refused (no rtprio limit for this user):", rc);
+#else
+    Q_UNUSED(priority)
+    Q_UNUSED(first)
 #endif
 }
 
@@ -1469,9 +1586,21 @@ void Universe::applyAutoOpen()
     }
 }
 
+void Universe::applyThreadPriority()
+{
+    const int generation = s_priorityGeneration.load(std::memory_order_acquire);
+    if (generation == m_priorityApplied)
+        return;
+    const int previous = m_priorityApplied < 0 ? -1 : m_priorityAsked;
+    m_priorityApplied = generation;
+    m_priorityAsked = threadPriority();
+    applyUniverseThreadScheduling(ThreadPriority(m_priorityAsked), previous);
+}
+
 void Universe::run()
 {
-    applyUniverseThreadScheduling();
+    m_priorityApplied = -1;
+    applyThreadPriority();
     m_running = true;
     int timeout = int(MasterTimer::tick()) * 2;
 
@@ -1482,8 +1611,10 @@ void Universe::run()
         if (m_semaphore.tryAcquire(1, timeout) == false)
         {
             //qWarning() << "Semaphore not acquired on universe" << id();
+            applyThreadPriority();
             continue;
         }
+        applyThreadPriority();
 #if 0
         if (m_faders.count())
             qDebug() << "<<<<<<<< UNIVERSE TICK - id" << id() << "faders:" << m_faders.count();

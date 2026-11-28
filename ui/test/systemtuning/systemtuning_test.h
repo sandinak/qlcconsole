@@ -63,6 +63,7 @@ private slots:
     void frameTimingCountsLateAndDropped();
     void measuredItemFollowsTheLateFrames();
     void universeThreadsAdviceFollowsTheNumbers();
+    void universeThreadsAreSavedPerComputer();
     void theMachineItemKnowsTheArchitecture();
     void batteryAndHeatAndThePi();
     void wifiMattersMostWhenItCarriesDmx();

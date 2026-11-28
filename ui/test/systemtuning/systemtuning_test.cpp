@@ -20,6 +20,7 @@
 #endif
 #include <cerrno>
 #include <QtTest>
+#include <QComboBox>
 #include <QClipboard>
 #include <QCheckBox>
 #include <QTreeWidget>
@@ -658,15 +659,18 @@ void SystemTuning_Test::measuredItemFollowsTheLateFrames()
 
 void SystemTuning_Test::universeThreadsAdviceFollowsTheNumbers()
 {
-    /* Measured on Linux only: only there does it say to change something */
+    /* Standard threads behind a real-time timer, at a size where it shows:
+       set them to Real-time (macOS and Linux) */
     SystemTuning::Probe p = linuxProbe();
     p.scheduling = MasterTimer::SchedulingRealtime;
     p.patchedUniverses = 128;
-    p.binary = QStringLiteral("/opt/qlcconsole");
-    const QList<SystemTuning::Item> items = SystemTuning::check(p);
+    p.universePriority = Universe::PriorityStandard;
+    QList<SystemTuning::Item> items = SystemTuning::check(p);
     const SystemTuning::Item *u = find(items, QStringLiteral("universes"));
     QCOMPARE(u->status, SystemTuning::CanImprove);
-    QVERIFY(u->command.startsWith(QLatin1String("QLC_UNIVERSE_SCHED=rt '/opt/qlcconsole'")));
+    QVERIFY(u->howTo.contains(QLatin1String("Real-time")));
+    QVERIFY(u->state.contains(QLatin1String("Standard")));
+    QVERIFY(u->command.isEmpty());
     QVERIFY(u->important == false);
 
     p.patchedUniverses = 8;
@@ -674,12 +678,75 @@ void SystemTuning_Test::universeThreadsAdviceFollowsTheNumbers()
 
     SystemTuning::Probe mac = macProbe();
     mac.patchedUniverses = 128;
-    QCOMPARE(find(SystemTuning::check(mac), QStringLiteral("universes"))->status, SystemTuning::Advice);
+    QCOMPARE(find(SystemTuning::check(mac), QStringLiteral("universes"))->status, SystemTuning::CanImprove);
+    /* Windows has nothing to set */
+    SystemTuning::Probe win = mac;
+    win.os = SystemTuning::OsWindows;
+    QCOMPARE(find(SystemTuning::check(win), QStringLiteral("universes"))->status, SystemTuning::Advice);
 
+    /* It says which is in use, and who chose it */
+    p.patchedUniverses = 128;
+    p.universePriority = Universe::PriorityRealtime;
     p.universeScheduling = Universe::ThreadsRealtime;
-    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("universes"))->status, SystemTuning::Good);
+    items = SystemTuning::check(p);
+    QCOMPARE(find(items, QStringLiteral("universes"))->status, SystemTuning::Good);
+    QCOMPARE(find(items, QStringLiteral("universes"))->state, QStringLiteral("real-time (Real-time)"));
+    p.universePriorityOverridden = true;
+    QCOMPARE(find(SystemTuning::check(p), QStringLiteral("universes"))->state,
+             QStringLiteral("real-time (Real-time, from QLC_UNIVERSE_SCHED)"));
     p.universeScheduling = Universe::ThreadsRefused;
     QCOMPARE(find(SystemTuning::check(p), QStringLiteral("universes"))->status, SystemTuning::CanImprove);
+}
+
+void SystemTuning_Test::universeThreadsAreSavedPerComputer()
+{
+    qunsetenv("QLC_UNIVERSE_SCHED");
+    auto restore = qScopeGuard([] { Universe::setThreadPriority(Universe::defaultThreadPriority()); });
+    /* Nothing saved: this platform's default, also in effect */
+    QCOMPARE(SystemTuning::universeThreads(), Universe::defaultThreadPriority());
+    SystemTuning tuning(m_doc);
+    tuning.setProbe([]() { SystemTuning::Probe p; return p; });
+    QCOMPARE(Universe::threadPriority(), Universe::defaultThreadPriority());
+
+    SystemTuningPage page(m_doc);
+    QComboBox *combo = page.universeThreadsCombo();
+    QVERIFY(combo != nullptr);
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+    QVERIFY(combo->count() > 1);
+    QCOMPARE(combo->currentData().toInt(), int(Universe::defaultThreadPriority()));
+    QVERIFY(combo->currentText().contains(QLatin1String("(default)")));
+#if defined(Q_OS_MACOS)
+    // Real-time to Responsive needs a restart there, and the page says so
+    QLabel *restart = page.findChild<QLabel *>(QStringLiteral("tuningUniverseThreadsRestart"));
+    QVERIFY(restart != nullptr);
+    QVERIFY(restart->text().contains(QLatin1String("restart")));
+#endif
+    /* Another one: saved, and in effect, on OK only */
+    const Universe::ThreadPriority other = Universe::defaultThreadPriority() == Universe::PriorityStandard
+                                           ? Universe::PriorityRealtime : Universe::PriorityStandard;
+    combo->setCurrentIndex(combo->findData(int(other)));
+    QCOMPARE(Universe::threadPriority(), Universe::defaultThreadPriority());
+    page.apply();
+    QCOMPARE(SystemTuning::universeThreads(), other);
+    QCOMPARE(Universe::threadPriority(), other);
+    QVERIFY(QSettings().contains(QStringLiteral("tuning/universeThreads")));
+    /* The next start takes it from the settings */
+    Universe::setThreadPriority(Universe::defaultThreadPriority());
+    SystemTuning again(m_doc);
+    QCOMPARE(Universe::threadPriority(), other);
+    /* Back to the default: nothing kept, so it follows the default */
+    SystemTuning::setUniverseThreads(Universe::defaultThreadPriority());
+    QVERIFY(!QSettings().contains(QStringLiteral("tuning/universeThreads")));
+
+    /* The environment overrides it: the box says so and changes nothing */
+    qputenv("QLC_UNIVERSE_SCHED", "standard");
+    SystemTuningPage overridden(m_doc);
+    QVERIFY(!overridden.universeThreadsCombo()->isEnabled());
+    QVERIFY(overridden.universeThreadsCombo()->toolTip().contains(QLatin1String("QLC_UNIVERSE_SCHED")));
+    qunsetenv("QLC_UNIVERSE_SCHED");
+#else
+    QVERIFY(combo->count() <= 1);
+#endif
 }
 
 void SystemTuning_Test::theMachineItemKnowsTheArchitecture()

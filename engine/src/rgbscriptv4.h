@@ -23,6 +23,7 @@
 #include <QHash>
 #include <QJSValue>
 #include <atomic>
+#include <functional>
 
 #include "rgbalgorithm.h"
 #include "rgbscriptproperty.h"
@@ -69,6 +70,18 @@ public:
     /** Evaluate the script's contents and see if it checks out */
     bool evaluate();
 
+    /** Run @a job on the scripts' thread, not waiting for it (a matrix
+     *  computing its next map ahead of the step). False, and nothing run,
+     *  where there is no scripts' thread yet. */
+    static bool runOnScriptThread(std::function<void()> job);
+    /** Return once everything asked of the scripts' thread so far has run
+     *  (at once when called on that thread, or with none) */
+    static void waitForScriptThread();
+    /** Scripts deleted while rgbMap() ran on them (a bug: tests check it) */
+    static int deletedWhileMapping();
+    /** rgbMap() is running on this script now (tests) */
+    bool mapping() const { return m_mapping.load(std::memory_order_acquire) > 0; }
+
 private:
     static void initEngine();
     static void cleanupEngine();
@@ -80,6 +93,7 @@ private:
     QString m_fileName;             //! The file name that contains this script
     QString m_contents;             //! The file's contents
     static JSThread *s_jsThread;
+    std::atomic<int> m_mapping { 0 };   ///< rgbMap() running on this script
 
     /************************************************************************
      * RGBAlgorithm API
@@ -119,6 +133,11 @@ public:
     bool saveXML(QXmlStreamWriter *doc) const override;
 
 private:
+    /** acceptColors() as the script last said, for callers off the scripts'
+     *  thread (written there, by noteAcceptColors()) */
+    std::atomic<int> m_acceptColors { 2 };
+    /** Keep m_acceptColors current (on the scripts' thread) */
+    void noteAcceptColors();
     std::atomic<int> m_apiVersion; //! API version (read lock-free from the run thread; written on the JS thread during evaluate())
     QJSValue m_script;          //! The script itself
     QJSValue m_rgbMap;          //! rgbMap() function

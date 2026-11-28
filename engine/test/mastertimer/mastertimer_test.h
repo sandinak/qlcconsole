@@ -58,6 +58,10 @@ private slots:
      *  function behind. */
     void stopAllTakesTheQueuedFunctionsToo();
     void anOverrunningTickRunsAlone();
+    /** Show time is wall-clock time: a tick that comes late is followed by
+     *  the ones it missed, so a fade still ends on time */
+    void aLateTickDoesNotStretchAFade();
+    void theTimerCatchesUpOnlyWhatItCan();
     void stopWaitsForATickInProgress();
     void stopRightAfterStartReturns();
     void aStopReachesTheUniversesWithTheGuiThreadBusy();

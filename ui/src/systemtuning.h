@@ -114,6 +114,10 @@ public:
         /* The engine, with this show */
         int patchedUniverses = 0;
         Universe::ThreadScheduling universeScheduling = Universe::ThreadsNormal;
+        /** What the universe threads were asked for, and whether
+         *  QLC_UNIVERSE_SCHED (not the setting) asked */
+        Universe::ThreadPriority universePriority = Universe::PriorityStandard;
+        bool universePriorityOverridden = false;
         MasterTimer::FrameTiming frames;
         double sendP99Ms = -1;      ///< tick to send, all universes; -1 none
 
@@ -190,6 +194,12 @@ public:
      *  (default on) */
     static bool warnInOperate();
     static void setWarnInOperate(bool on);
+    /** How the universe threads are scheduled (default
+     *  Universe::defaultThreadPriority()); set, it applies at once */
+    static Universe::ThreadPriority universeThreads();
+    static void setUniverseThreads(Universe::ThreadPriority priority);
+    /** Its name in the Settings page's list */
+    static QString universeThreadsText(Universe::ThreadPriority priority);
 
     /*********************************************************************
      * Runtime: one, made by App

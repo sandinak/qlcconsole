@@ -74,6 +74,7 @@
 #include "hostspeed.h"
 #include "../common/painttimer.h"
 #include "showscale_test.h"
+#include "rgbmatrix.h"
 
 static QStringList g_report;
 #define REPORT(...) do { const QString l = QString::asprintf(__VA_ARGS__); qInfo("%s", qPrintable(l)); g_report << l; } while (0)
@@ -515,6 +516,8 @@ void ShowScale_Test::theEngineKeepsItsFrame()
            "%llu frames, %llu late, %llu dropped",
            MasterTimer::frequency(), periodMs, quantile(walls, 0.5), quantile(walls, 0.95),
            quantile(walls, 1.0), quantile(cpus, 0.95), frames, late, dropped);
+    REPORT("matrix maps ahead: %s; late maps so far %llu",
+           RGBMatrix::mapsAhead() ? "on" : "off (QLC_MAPS_AHEAD=0)", (unsigned long long)RGBMatrix::mapsLate());
     REPORT("universe frame tick-to-output p50 %.2f p95 %.2f p99 %.2f ms; sent per universe %d-%d (fewest: U%d)",
            histQuantile(0.5), histQuantile(0.95), histQuantile(0.99), fewest, most, fewestAt + 1);
 
@@ -528,22 +531,18 @@ void ShowScale_Test::theEngineKeepsItsFrame()
     QVERIFY2(fewest >= int(frames) - slack && most <= int(frames) + slack,
              qPrintable(QString("universes sent %1-%2 frames of %3").arg(fewest).arg(most).arg(frames)));
 
-    /* newaudio, Release: tick p50 0.01 ms, p95 17.4 ms, max 17.8 ms wall,
-       p95 1.8 ms of CPU; no frame late; tick to output p95 0.5 ms.
-       The wall p95 is NOT the half-period margin the guardrail wanted: the
-       RGB matrix's script (Plasma, Perlin noise per cell over the 96 x 82
-       grid of every pixel) computes each new map -- five a second -- on the
-       script engine's thread while the tick waits for it (RGBScript::rgbMap,
-       a BlockingQueuedConnection), about 16 ms each. One frame in ten is
-       that wait; the rest cost under a millisecond. So the budget is the
-       frame itself, measured: p95 and max under the period, nothing late;
-       the CPU the tick spends under half of it (1.8-2.1 ms on newaudio and
-       ender, 6.3 ms on Linux CI). A second matrix like
-       this one, or a slower machine, takes frames late: the fix is a map
-       made ahead of its step, off the tick (reported, not made here). */
+    /* newaudio, Release, before maps ahead: tick p50 0.01 ms, p95 17.4 ms,
+       max 17.8 ms wall, p95 1.8 ms of CPU -- the RGB matrix's script
+       (Plasma over the 96 x 82 grid of every pixel) made each new map, five
+       a second, on the script thread while the tick waited (~16 ms each).
+       With the next map made ahead of its step (RGBMatrix::mapsAhead(),
+       QLC_MAPS_AHEAD=0 for the old way), on/off/on/off on newaudio: p95
+       1.71 / 17.50 / 1.76 / 17.57 ms, max 2.72 / 17.75 / 2.77 / 17.75 ms,
+       no late map. The budget is now the guardrail's: the p95 under half
+       the period. */
     const double f = slowFactor();
     const double p95 = quantile(walls, 0.95), worst = quantile(walls, 1.0);
-    BUDGET(p95 < periodMs * f,
+    BUDGET(p95 < periodMs * 0.5 * f,
            qPrintable(QString("a frame's p95 took %1 ms of its %2").arg(p95).arg(periodMs)));
     BUDGET(worst < periodMs * 1.25 * f,
            qPrintable(QString("the slowest frame took %1 ms of its %2").arg(worst).arg(periodMs)));
