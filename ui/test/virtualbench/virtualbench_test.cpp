@@ -931,7 +931,8 @@ void VirtualBench_Test::theLpd8Mk2PadsReachTheirJobs()
     QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 1, 2000);
     QCOMPARE(fired.first().first().toString(), QStringLiteral("ALL OFF"));
     QTRY_VERIFY_WITH_TIMEOUT(m_app->doc()->outputRuleKeeper()->emergencyStopped(), 2000);
-    // K1 (CC 70, channel 1): the Grand Master, picked up and then followed.
+    // K1 (CC 70, channel 1): the Grand Master, picked up at the master and then followed.
+    iom->setGrandMasterValue(255);
     for (int v : { 120, 124, 127, 110, 90, 64 })
     {
         const char msg[3] = { char(0xB0), char(70), char(v) };

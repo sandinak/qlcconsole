@@ -1156,10 +1156,12 @@ void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop()
 
     runList(m_doc);
     QList<int> commands;
-    m_doc->showControl()->setGoGuardMs(0);
-    m_doc->showControl()->setRunHandler([&commands](const ShowControl::Request &r, ShowControl::Route) {
+    ShowControl *sc = m_doc->showControl();
+    sc->setGoGuardMs(0);
+    // GO and Back counted; the stop carried out, so the release guard has a stop to guard.
+    sc->setRunHandler([&commands, sc](const ShowControl::Request &r, ShowControl::Route) {
         commands << int(r.command);
-        return true;
+        return r.command == ShowControl::AllOff ? sc->execute(r) : true;
     });
     const QString padGo = QStringLiteral("#%1").arg(pad1 + 3);
     const QString padBack = QStringLiteral("#%1").arg(pad1 + 2);
@@ -1196,8 +1198,9 @@ void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop()
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
     QCOMPARE(refused.last().first().toString(),
              QStringLiteral("%1: stopped. Pad 1 + Pad 4 releases the stop.").arg(layout.shortName()));
-    // K1: the Grand Master (picked up, then followed).
+    // K1: the Grand Master (picked up at the master, then followed).
     InputOutputMap *iom = m_doc->inputOutputMap();
+    iom->setGrandMasterValue(255);
     for (int v : { 120, 124, 127, 110, 90, 64 })
         QVERIFY(lpd.set(QStringLiteral("#%1").arg(k1), v));
     settle();
