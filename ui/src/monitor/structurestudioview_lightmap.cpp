@@ -214,7 +214,7 @@ void StructureStudioView::startLightMap()
         key = mix(key, bitsOf(s.dir.x()) ^ (bitsOf(s.dir.y()) << 21) ^ (bitsOf(s.dir.z()) << 42));
         key = mix(key, bitsOf(s.halfRad) ^ (bitsOf(s.candela * 0.01f) << 24));
     }
-    if (key == m_lightKey && m_lightGrid.isValid())
+    if (key == m_lightKey && m_lightKey != 0)
         return;
 
     // The deck under each point is read here, on the GUI thread; the rest is pure.
@@ -292,8 +292,7 @@ bool StructureStudioView::waitForLightMap(int ms)
     while (t.elapsed() < ms)
     {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
-        if (!m_lightBusy && !m_lightPending && (m_lightThrottle == nullptr || !m_lightThrottle->isActive())
-            && m_lightGrid.isValid())
+        if (!m_lightBusy && !m_lightPending && (m_lightThrottle == nullptr || !m_lightThrottle->isActive()))
         {
             // Up to date with what it reads now?
             startLightMap();
