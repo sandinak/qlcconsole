@@ -65,6 +65,12 @@ Right-click a track's header:
   item: Duplicate, Rename, Move to Track, Snap to Grid, Show in
   Functions, Delete. ⌘D duplicates, F2 renames, Esc clears the selection
   while the timeline has the focus.
+- **Right-click the Functions list** (left of the timeline) — a function:
+  **Add to Timeline at Playhead** (on the track you picked last; its name
+  is in the entry), **Add on a New Track**, **Open in Editor**. A category
+  (Scene, Chaser…): **New Scene**, **New Chaser**… of that kind; empty
+  space: all of them. A new one is selected in the list, ready to drag or
+  add.
 - **New sequence on a track** — ⌘E; **audio** — ⌘A; **video** — ⌘D.
 - **Edit an item** — double-click it (a scene clip opens its scene).
 - **Time an item exactly** — ⌘T: its start and length. A sequence or

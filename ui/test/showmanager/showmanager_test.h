@@ -79,6 +79,8 @@ private slots:
      *  sidebar menu at three sizes. */
     void shootsTheTimelineDrop();
     void addTrackFromTheMenuIsOneUndo();
+    void rightClickOnTheTimelineOpensItsMenus();
+    void rightClickInTheFunctionsSidebarAdds();
     void renameInPlaceAndMoveUpDown();
 
 private:
