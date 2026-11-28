@@ -78,6 +78,7 @@
 #include "doc.h"
 
 #include "showtreeworkbench_test.h"
+#include "../common/cuetabs.h"
 
 class ImportSheet;
 using namespace ShowTree;
@@ -2085,6 +2086,7 @@ void ShowTreeWorkbench_Test::theTrackedListWrapsAtASmallSize()
     view.showCueTab(ShowTreeView::CueTrackingTab);
     QTest::qWait(100);
     QLabel *tracked = view.findChild<QLabel *>("stCueTracked");
+    QVERIFY(clickCueTabOf(&view, tracked));
     QVERIFY(tracked != nullptr && tracked->isVisibleTo(&view));
     QVERIFY(tracked->wordWrap());
     // Wide as the pane lets it, never wider, and tall enough for every line.
