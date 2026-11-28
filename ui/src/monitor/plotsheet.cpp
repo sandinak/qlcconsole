@@ -24,7 +24,6 @@
 #include <QScrollBar>
 #include <QPdfWriter>
 #include <QPainter>
-#include <QPicture>
 #include <QLocale>
 #include <QFile>
 #include <QHash>
@@ -459,26 +458,29 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
     else if (v != nullptr && v->scene() != nullptr && !l.source.isEmpty())
     {
         ViewGuard guard(v, m_options.view);
-        /* Recorded at about screen scale (two units a point), then replayed
-           on the page. What keeps its size on screen whatever the zoom -- a
-           structure's count badge, a network node's tag -- is drawn in
-           device units: straight onto a 600 dpi PDF it shrank to a speck.
-           A QPicture keeps the drawing vector. */
-        const double rec = 2.0;
-        const QRectF target(QPointF(0, 0), l.plot.size() * rec);
-        QPicture picture;
+        /* What keeps its size on screen whatever the zoom -- a structure's
+           count badge, a network node's tag -- is drawn in DEVICE units:
+           straight onto a 600 dpi PDF it shrank to a speck. For the length
+           of the render each is scaled to half a point a unit (its size in
+           the preview, about as on screen), then given its own back. */
+        const double devPerPoint = qAbs(p->deviceTransform().m11()) + qAbs(p->deviceTransform().m12());
+        const double grow = devPerPoint > 0 ? devPerPoint / 2.0 : 1.0;
+        QList<QPair<QGraphicsItem *, QTransform> > fixedSize;
+        if (qAbs(grow - 1.0) > 0.01)
         {
-            QPainter pp(&picture);
-            pp.setRenderHints(p->renderHints());
-            pp.setClipRect(target);
-            v->scene()->render(&pp, target, l.source, Qt::KeepAspectRatio);
+            for (QGraphicsItem *it : v->scene()->items())
+                if (it->flags() & QGraphicsItem::ItemIgnoresTransformations)
+                {
+                    fixedSize << qMakePair(it, it->transform());
+                    it->setTransform(it->transform() * QTransform::fromScale(grow, grow));
+                }
         }
         p->save();
         p->setClipRect(inner);
-        p->translate(l.plot.topLeft());
-        p->scale(1.0 / rec, 1.0 / rec);
-        p->drawPicture(QPointF(0, 0), picture);
+        v->scene()->render(p, l.plot, l.source, Qt::KeepAspectRatio);
         p->restore();
+        for (const QPair<QGraphicsItem *, QTransform> &f : std::as_const(fixedSize))
+            f.first->setTransform(f.second);
     }
     else
     {

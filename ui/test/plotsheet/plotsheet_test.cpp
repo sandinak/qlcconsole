@@ -32,6 +32,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGraphicsItem>
+#include <QGraphicsScene>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -277,6 +279,15 @@ void PlotSheet_Test::thePlanPdfHasTitleKeyCountsAndScaleBar()
     QVERIFY2(kFeet.match(bar).hasMatch(), qPrintable(bar));   // feet by default
     QVERIFY(sheet.scaleBarMm() > 0);
 
+    /* The count badges and node tags keep their size on screen whatever the
+       zoom: printing scales them to the page for the render and gives each
+       its own transform back. */
+    QHash<QGraphicsItem *, QTransform> fixed;
+    for (QGraphicsItem *it : mon->m_graphicsView->scene()->items())
+        if (it->flags() & QGraphicsItem::ItemIgnoresTransformations)
+            fixed.insert(it, it->transform());
+    QVERIFY2(!fixed.isEmpty(), "the demo's plot has no count badge");
+
     // The PDF: one page, written offscreen.
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
@@ -289,6 +300,8 @@ void PlotSheet_Test::thePlanPdfHasTitleKeyCountsAndScaleBar()
     QVERIFY(pdf.startsWith("%PDF"));
     QVERIFY2(pdf.size() > 20000, qPrintable(QString::number(pdf.size())));   // a drawing, not a blank page
     QVERIFY(pdf.contains("/Count 1"));
+    for (auto it = fixed.constBegin(); it != fixed.constEnd(); ++it)
+        QCOMPARE(it.key()->transform(), it.value());
 
     // What it says: the title block, the key's counts, the scale bar.
     const QStringList texts = sheetTexts(sheet);
