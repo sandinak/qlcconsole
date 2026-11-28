@@ -343,6 +343,41 @@ PlotSheet::Layout PlotSheet::layout() const
     return l;
 }
 
+QRectF PlotSheet::drawingRect() const
+{
+    return layout().drawing;
+}
+
+void PlotSheet::toPaper(QImage &image)
+{
+    if (image.format() != QImage::Format_ARGB32_Premultiplied && image.format() != QImage::Format_RGB32
+        && image.format() != QImage::Format_ARGB32)
+        image = image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+    for (int y = 0; y < image.height(); ++y)
+    {
+        QRgb *line = reinterpret_cast<QRgb *>(image.scanLine(y));
+        for (int x = 0; x < image.width(); ++x)
+        {
+            const QRgb c = line[x];
+            int r = qRed(c), g = qGreen(c), b = qBlue(c);
+            const int mx = qMax(r, qMax(g, b)), mn = qMin(r, qMin(g, b));
+            // HSL lightness turned over, hue and saturation kept: every
+            // channel moves by the same amount.
+            const int d = 255 - mx - mn;
+            r += d; g += d; b += d;
+            if (mx - mn < 24)
+            {
+                // A grey: darker on paper, so a faint screen grid line
+                // (light once turned over) is a visible line again.
+                r = 255 - qMin(255, (255 - r) * 5 / 2);
+                g = 255 - qMin(255, (255 - g) * 5 / 2);
+                b = 255 - qMin(255, (255 - b) * 5 / 2);
+            }
+            line[x] = qRgba(qBound(0, r, 255), qBound(0, g, 255), qBound(0, b, 255), qAlpha(c));
+        }
+    }
+}
+
 double PlotSheet::scaleBarMm() const
 {
     return layout().barMm;
@@ -445,14 +480,19 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
     p->setBrush(Qt::NoBrush);
     p->drawRect(l.drawing);
 
-    // The plot on the Studio's own background, so it reads as it does there.
+    /* On paper: white, the plot turned over for it (toPaper()). As on
+       screen: the Studio's own background, so it reads as it does there. */
+    const bool paper = m_options.paper;
     const QRectF inner = l.drawing.adjusted(1, 1, -1, -1);
-    p->fillRect(inner, v != nullptr ? v->backgroundBrush() : QBrush(QColor(11, 11, 11)));
+    const QColor screenBg = v != nullptr ? v->backgroundBrush().color() : QColor(11, 11, 11);
+    p->fillRect(inner, paper ? QColor(Qt::white) : screenBg);
 
     if (m_options.view == OverviewView)
     {
         const double k = 3.0;   // points to pixels: about 216 dpi on the page
-        const QImage img = overviewImage(QSize(int(l.plot.width() * k), int(l.plot.height() * k)));
+        QImage img = overviewImage(QSize(int(l.plot.width() * k), int(l.plot.height() * k)));
+        if (paper)
+            toPaper(img);
         p->drawImage(l.plot, img);
     }
     else if (v != nullptr && v->scene() != nullptr && !l.source.isEmpty())
@@ -472,7 +512,9 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
             rec = 4000.0 / longSide;
         QImage img(QSize(qMax(1, qRound(l.plot.width() * rec)), qMax(1, qRound(l.plot.height() * rec))),
                    QImage::Format_ARGB32_Premultiplied);
-        img.fill(v->backgroundBrush().color());
+        // Black under paper: it turns over to pure white whatever the
+        // Studio's own background colour is.
+        img.fill(paper ? QColor(Qt::black) : screenBg);
 
         // Fixed-size items at half a point a unit (about as on screen); the
         // outermost of each, a child of one is scaled with it.
@@ -502,6 +544,8 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
         }
         for (const QPair<QGraphicsItem *, QTransform> &f : std::as_const(fixedSize))
             f.first->setTransform(f.second);
+        if (paper)
+            toPaper(img);
         p->save();
         p->setClipRect(inner);
         p->drawImage(l.plot, img);
@@ -509,7 +553,7 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
     }
     else
     {
-        p->setPen(QColor(200, 200, 200));
+        p->setPen(paper ? kSoft : QColor(200, 200, 200));
         p->setFont(sheetFont(12));
         p->drawText(inner, Qt::AlignCenter, tr("Nothing on the plot to draw."));
     }
@@ -534,7 +578,7 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
     }
     if (!top.isEmpty())
     {
-        p->setPen(QColor(150, 180, 230));
+        p->setPen(paper ? QColor(40, 70, 140) : QColor(150, 180, 230));
         p->setFont(sheetFont(8));
         const QRectF a = inner.adjusted(4, 2, -4, -2);
         p->drawText(a, Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("▲ ") + top);
@@ -550,24 +594,27 @@ void PlotSheet::paintScaleBar(QPainter *p, const Layout &l) const
 {
     p->save();
     p->setFont(sheetFont(8));
+    // Ink on paper, light on the screen's dark.
+    const QColor ink = m_options.paper ? kInk : QColor(Qt::white);
+    const QColor gap = m_options.paper ? QColor(Qt::white) : QColor(11, 11, 11);
     const QRectF strip(l.drawing.left() + 12, l.drawing.bottom() - 26, l.drawing.width() - 24, 20);
     if (l.barMm <= 0 || l.pointsPerMm <= 0)
     {
-        p->setPen(QColor(200, 200, 200));
+        p->setPen(m_options.paper ? kSoft : QColor(200, 200, 200));
         p->drawText(strip, Qt::AlignLeft | Qt::AlignVCenter, tr("Angled view: not to scale"));
         p->restore();
         return;
     }
     const double len = l.barMm * l.pointsPerMm;
     const QRectF bar(strip.left(), strip.top() + 2, len, 5);
-    p->setPen(QPen(Qt::white, 0.6));
+    p->setPen(QPen(ink, 0.6));
     for (int i = 0; i < 4; ++i)
     {
         const QRectF seg(bar.left() + i * len / 4, bar.top(), len / 4, bar.height());
-        p->setBrush((i % 2) == 0 ? QBrush(Qt::white) : QBrush(QColor(11, 11, 11)));
+        p->setBrush((i % 2) == 0 ? QBrush(ink) : QBrush(gap));
         p->drawRect(seg);
     }
-    p->setPen(Qt::white);
+    p->setPen(ink);
     const double ty = bar.bottom() + 1;
     p->drawText(QRectF(bar.left() - 20, ty, 40, 10), Qt::AlignHCenter | Qt::AlignTop, QStringLiteral("0"));
     p->drawText(QRectF(bar.center().x() - 40, ty, 80, 10), Qt::AlignHCenter | Qt::AlignTop,
@@ -582,22 +629,38 @@ void PlotSheet::paintSymbol(QPainter *p, const QRectF &cell, quint32 fid) const
     MonitorGraphicsView *v = m_context.view;
     // Through QGraphicsItem: the item's own overrides are protected.
     QGraphicsItem *item = v != nullptr ? v->fixtureItemForId(fid) : nullptr;
-    p->save();
-    p->fillRect(cell, QColor(11, 11, 11));
+    /* Drawn into a small picture on the screen's dark, as the plot is, and
+       turned over for paper the same way, so the key's symbol is the one
+       on the drawing. */
+    const int px = 96;
+    QImage img(px, px, QImage::Format_ARGB32_Premultiplied);
+    img.fill(m_options.paper ? QColor(Qt::black) : QColor(11, 11, 11));
     if (item != nullptr)
     {
         const QRectF br = item->boundingRect();
         if (br.width() > 0 && br.height() > 0)
         {
-            const QRectF box = cell.adjusted(2, 2, -2, -2);
+            QPainter ip(&img);
+            ip.setRenderHint(QPainter::Antialiasing);
+            const QRectF box(8, 8, px - 16, px - 16);
             const double k = qMin(box.width() / br.width(), box.height() / br.height());
-            p->translate(box.center());
-            p->scale(k, k);
-            p->translate(-br.center());
+            ip.translate(box.center());
+            ip.scale(k, k);
+            ip.translate(-br.center());
             QStyleOptionGraphicsItem opt;
             opt.exposedRect = br;
-            item->paint(p, &opt, nullptr);
+            item->paint(&ip, &opt, nullptr);
         }
+    }
+    if (m_options.paper)
+        toPaper(img);
+    p->save();
+    p->drawImage(cell, img);
+    if (m_options.paper)
+    {
+        p->setPen(QPen(kRule, 0.5));
+        p->setBrush(Qt::NoBrush);
+        p->drawRect(cell);
     }
     p->restore();
 }

@@ -49,6 +49,7 @@ const char *const kDrawnByKey = "plotpdf/drawnBy";
 const char *const kPageKey = "plotpdf/page";
 const char *const kViewKey = "plotpdf/view";
 const char *const kKeysKey = "plotpdf/keys";
+const char *const kPaperKey = "plotpdf/paperBackground";
 
 /* The show's file name, as the patch list finds it. */
 QString showFileName()
@@ -117,6 +118,14 @@ PlotPrintDialog::PlotPrintDialog(Doc *doc, const PlotSheet::Context &context, QW
     m_page->setCurrentIndex(qMax(0, m_page->findData(settings.value(kPageKey, defPage).toInt())));
     form->addRow(tr("Paper"), m_page);
 
+    m_background = new QComboBox(this);
+    m_background->setObjectName(QStringLiteral("plotBackground"));
+    m_background->addItem(tr("White (for print)"), true);
+    m_background->addItem(tr("As on screen"), false);
+    m_background->setToolTip(tr("White saves ink and leaves room for notes; the plot's colours keep their meaning"));
+    m_background->setCurrentIndex(settings.value(kPaperKey, true).toBool() ? 0 : 1);
+    form->addRow(tr("Background"), m_background);
+
     const int keys = settings.value(kKeysKey, 3).toInt();
     m_symbolKey = new QCheckBox(tr("Symbol key with counts"), this);
     m_symbolKey->setObjectName(QStringLiteral("plotSymbolKey"));
@@ -170,6 +179,7 @@ PlotPrintDialog::PlotPrintDialog(Doc *doc, const PlotSheet::Context &context, QW
         connect(e, &QLineEdit::textChanged, m_refresh, QOverload<>::of(&QTimer::start));
     connect(m_view, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PlotPrintDialog::slotRefresh);
     connect(m_page, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PlotPrintDialog::slotRefresh);
+    connect(m_background, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PlotPrintDialog::slotRefresh);
     connect(m_symbolKey, &QCheckBox::toggled, this, &PlotPrintDialog::slotRefresh);
     connect(m_layerKey, &QCheckBox::toggled, this, &PlotPrintDialog::slotRefresh);
 
@@ -187,6 +197,7 @@ PlotSheet::Options PlotPrintDialog::options() const
     o.page = QPageSize::PageSizeId(m_page->currentData().toInt());
     o.symbolKey = m_symbolKey->isChecked();
     o.layerKey = m_layerKey->isChecked();
+    o.paper = m_background->currentData().toBool();
     return o;
 }
 
@@ -254,6 +265,7 @@ void PlotPrintDialog::remember() const
     settings.setValue(kDrawnByKey, m_drawnBy->text().trimmed());
     settings.setValue(kPageKey, m_page->currentData().toInt());
     settings.setValue(kViewKey, m_view->currentData().toInt());
+    settings.setValue(kPaperKey, m_background->currentData().toBool());
     settings.setValue(kKeysKey, (m_symbolKey->isChecked() ? 1 : 0) | (m_layerKey->isChecked() ? 2 : 0));
 }
 

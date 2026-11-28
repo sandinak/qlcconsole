@@ -13,8 +13,10 @@ Plot / Save PDF…**. The same submenu has the **Patch List…** and the
 One landscape page:
 
 - **The drawing**: the plot as the Studio draws it (the same symbols,
-  labels and colours, on the plot's own background), framed with the stage
-  directions round the edge. Anything placed just off the stage grid, a FOH
+  labels and colours), on white paper, framed with the stage directions
+  round the edge. On white the outlines, labels and grid are dark, and the
+  colours that mean something (layer tints, owner colours, the blue count
+  badges) keep their hue. Anything placed just off the stage grid, a FOH
   truss or a boom in the wings, is in the frame too. The drawing goes on
   the page as a 300 dpi picture; the keys and the title block are text.
 - **A scale bar** under the drawing, a round length in the unit chosen in
@@ -47,6 +49,9 @@ in **Plot layers** to print it.
   it to the angle you want); it is not to scale, so it has no scale bar.
 - **Paper**: Letter, Legal, Tabloid, A4 or A3. Letter is the first choice
   when Settings ▸ Units is in feet or inches, A4 when it is metric.
+- **Background**: **White (for print)**, the first choice, saves ink and
+  leaves room for notes in pencil; **As on screen** keeps the Studio's dark
+  background (for a screen or a projector). Remembered for the next sheet.
 - **Show**: tick off the symbol key, or the layer and owner key, for a
   bigger drawing area.
 

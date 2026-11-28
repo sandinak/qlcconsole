@@ -80,6 +80,7 @@ private:
     QLineEdit *m_revision;
     QComboBox *m_view;
     QComboBox *m_page;
+    QComboBox *m_background;
     QCheckBox *m_symbolKey;
     QCheckBox *m_layerKey;
     QLabel *m_summary;

@@ -19,7 +19,9 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
   elevation or the Rig Overview's angled look, on Letter, Legal, Tabloid, A4
   or A3: a title block (show, venue, drawn by, date, revision, view), a
   symbol key with each kind of fixture's symbol and count, a layer and owner
-  key, and a scale bar in Settings ▸ Units. Save it as a PDF or print it;
+  key, and a scale bar in Settings ▸ Units. The drawing is on white for
+  paper (dark lines and labels, colours kept), or as on screen. Save it as
+  a PDF or print it;
   Patch List… and Network Report… moved into the same submenu. See
   [Printing the plot](docs/features/plot-drawing.md).
 

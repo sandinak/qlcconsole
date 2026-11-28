@@ -86,6 +86,9 @@ public:
         QPageSize::PageSizeId page = QPageSize::Letter;
         bool symbolKey = true;
         bool layerKey = true;
+        /** The drawing on white for paper (the default), or on the Studio's
+         *  own dark background as on screen. */
+        bool paper = true;
     };
 
     struct KeyRow
@@ -146,6 +149,14 @@ public:
     bool writePdf(const QString &path, QString *error = nullptr) const;
     /** The sheet as a picture @p width pixels wide (the dialog's preview). */
     QImage preview(int width) const;
+    /** The frame the plot is drawn in, in points (as paint() lays it out). */
+    QRectF drawingRect() const;
+    /** Turn a drawing made for the dark screen into one for white paper:
+     *  each pixel's lightness is turned over and its hue kept, so the dark
+     *  background goes white, white lines and labels go black, and colours
+     *  (layer tints, owners, badges) keep their meaning; greys are pushed
+     *  darker so the grid still reads on white. In place; opaque images. */
+    static void toPaper(QImage &image);
 
 private:
     struct Layout

@@ -33,6 +33,8 @@ private slots:
     void cleanupTestCase();
 
     void thePlanPdfHasTitleKeyCountsAndScaleBar();
+    void theDrawingIsOnWhiteByDefault();
+    void paperKeepsColoursAndTurnsGreysOver();
     void theKeyCountsWhatIsDrawn();
     void aHiddenLayerIsLeftOffAndSaidSo();
     void frontAndOverviewPrintAndTheStudioIsUnchanged();

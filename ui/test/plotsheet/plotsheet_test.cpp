@@ -340,6 +340,83 @@ void PlotSheet_Test::thePlanPdfHasTitleKeyCountsAndScaleBar()
     }
 }
 
+/* The mean lightness (0..255) of a patch of the preview at a point of the
+   page, in points from the top-left of the printable area. */
+static int lightnessAt(const QImage &img, const PlotSheet &sheet, const QPointF &pt, int half = 10)
+{
+    const double pad = 12.0 / 25.4 * 72.0;
+    const double k = img.width() / (sheet.pageSizePoints().width() + 2 * pad);
+    const QPoint c(qRound((pt.x() + pad) * k), qRound((pt.y() + pad) * k));
+    qint64 sum = 0;
+    int n = 0;
+    for (int y = c.y() - half; y <= c.y() + half; ++y)
+        for (int x = c.x() - half; x <= c.x() + half; ++x)
+            if (img.valid(x, y))
+            {
+                sum += QColor(img.pixel(x, y)).lightness();
+                ++n;
+            }
+    return n > 0 ? int(sum / n) : -1;
+}
+
+void PlotSheet_Test::theDrawingIsOnWhiteByDefault()
+{
+    Monitor *mon = studio(m_app);
+    // White for paper unless asked otherwise (ink; the crew pencils notes on it).
+    PlotSheet::Options o = optionsFor(PlotSheet::TopView);
+    QVERIFY(o.paper);
+    const PlotSheet paper(m_app->doc(), contextOf(mon), o);
+    const QRectF d = paper.drawingRect();
+    QVERIFY(!d.isEmpty());
+    const QImage img = paper.preview(1400);
+    // The frame's corner, and the open stage at the top of the drawing.
+    const QPointF corner = d.topLeft() + QPointF(8, 8);
+    const QPointF stage(d.center().x(), d.top() + d.height() * 0.2);
+    QVERIFY2(lightnessAt(img, paper, corner) > 230, qPrintable(QString::number(lightnessAt(img, paper, corner))));
+    QVERIFY2(lightnessAt(img, paper, stage) > 180, qPrintable(QString::number(lightnessAt(img, paper, stage))));
+
+    // As on screen: the Studio's dark.
+    o.paper = false;
+    const PlotSheet screen(m_app->doc(), contextOf(mon), o);
+    const QImage dark = screen.preview(1400);
+    QVERIFY2(lightnessAt(dark, screen, corner) < 60, qPrintable(QString::number(lightnessAt(dark, screen, corner))));
+    QVERIFY2(lightnessAt(dark, screen, stage) < 80, qPrintable(QString::number(lightnessAt(dark, screen, stage))));
+
+    // The dialog starts on white.
+    PlotPrintDialog dlg(m_app->doc(), contextOf(mon));
+    QComboBox *bg = dlg.findChild<QComboBox *>(QStringLiteral("plotBackground"));
+    QVERIFY(bg != nullptr);
+    QCOMPARE(bg->currentText(), QStringLiteral("White (for print)"));
+    QVERIFY(dlg.options().paper);
+
+    const QString shots = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (!shots.isEmpty())
+        dark.save(QDir(shots).filePath(QStringLiteral("plotsheet-plan-onscreen-letter.png")));
+}
+
+void PlotSheet_Test::paperKeepsColoursAndTurnsGreysOver()
+{
+    QImage img(6, 1, QImage::Format_ARGB32_Premultiplied);
+    img.setPixel(0, 0, qRgb(0, 0, 0));          // the screen's background
+    img.setPixel(1, 0, qRgb(255, 255, 255));    // a white label
+    img.setPixel(2, 0, qRgb(40, 40, 40));       // a grid line
+    img.setPixel(3, 0, qRgb(40, 110, 220));     // a count badge
+    img.setPixel(4, 0, qRgb(235, 170, 50));     // the house owner's amber
+    img.setPixel(5, 0, qRgb(80, 0, 0));         // a dark red layer tint
+    PlotSheet::toPaper(img);
+    QCOMPARE(QColor(img.pixel(0, 0)), QColor(255, 255, 255));
+    QCOMPARE(QColor(img.pixel(1, 0)), QColor(0, 0, 0));
+    QVERIFY2(QColor(img.pixel(2, 0)).lightness() < 170, "a grid line must still read on white");
+    QVERIFY(QColor(img.pixel(2, 0)).lightness() > 60);
+    // Colours keep their hue (and so their meaning).
+    for (int x : { 3, 4, 5 })
+    {
+        const QColor before = x == 3 ? QColor(40, 110, 220) : x == 4 ? QColor(235, 170, 50) : QColor(80, 0, 0);
+        QVERIFY2(qAbs(QColor(img.pixel(x, 0)).hslHue() - before.hslHue()) <= 2, qPrintable(QString::number(x)));
+    }
+    QVERIFY(QColor(img.pixel(5, 0)).lightness() > 150);   // a dark tint goes pale on paper
+}
+
 void PlotSheet_Test::theKeyCountsWhatIsDrawn()
 {
     Monitor *mon = studio(m_app);
