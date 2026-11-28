@@ -586,7 +586,7 @@ jobs:
           DLLDIRS=$(find "$PWD/build" -name '*.dll' -not -path '*/CMakeFiles/*' -exec dirname {} \; | sort -u | tr '\n' ':')
           T=$(find build -name 'monitor_test.exe' -not -path '*/CMakeFiles/*' | head -n1)
           cd "$(dirname "$T")"
-          run() { PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 \
+          run() { PATH="${DLLDIRS}${PATH}" QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 QLC_TEST_GPU=1 \
                     /usr/bin/timeout 600 ./monitor_test.exe "$@" 2>&1 \
                   | grep -E "RhiRaster|quality|rig view|^PASS|^FAIL|^SKIP|^QFATAL|Totals|   Loc" || true; }
           QLC_RIG_GPU=1 QLC_GPU_SHOTS=$SHOTS run theGpuDrawsWhatTheCpuDraws

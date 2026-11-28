@@ -18492,6 +18492,31 @@ void Monitor_Test::colouredLightTakesOverAGreySurface()
     QCOMPARE(frame.pixel(0, 0), cyc);
 }
 
+void Monitor_Test::aTestRunDrawsOnTheCpuUnlessItAsksForTheGpu()
+{
+    const QByteArray rig = qgetenv("QLC_RIG_GPU");
+    const QByteArray asked = qgetenv("QLC_TEST_GPU");
+    auto restore = qScopeGuard([&]() {
+        if (rig.isNull()) qunsetenv("QLC_RIG_GPU"); else qputenv("QLC_RIG_GPU", rig);
+        if (asked.isNull()) qunsetenv("QLC_TEST_GPU"); else qputenv("QLC_TEST_GPU", asked);
+    });
+    // The test guard marked this program before main().
+    QCOMPARE(qgetenv("QLC_TEST_OFFSCREEN_GUARD"), QByteArray("1"));
+
+    // What the GPU tests do: ask for it. The run didn't: no GPU, no Metal.
+    qputenv("QLC_RIG_GPU", "1");
+    qunsetenv("QLC_TEST_GPU");
+    QVERIFY(!RhiRaster::available());
+    QVERIFY(RhiRaster::availableBackend().isEmpty());
+    qputenv("QLC_TEST_GPU", "0");
+    QVERIFY(!RhiRaster::available());
+
+    // Off is off, whatever the run says.
+    qputenv("QLC_TEST_GPU", "1");
+    qputenv("QLC_RIG_GPU", "0");
+    QVERIFY(!RhiRaster::available());
+}
+
 void Monitor_Test::theGpuDrawsWhatTheCpuDraws()
 {
     Doc doc(this);

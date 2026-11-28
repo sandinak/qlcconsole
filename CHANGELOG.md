@@ -111,6 +111,11 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ### Fixed
 
+- **Test runs no longer swell macOS's WindowServer**: the test programs
+  draw the rig on the CPU unless the run sets `QLC_TEST_GPU=1`. On macOS 27
+  every new peak of test programs drawing with Metal at once left
+  WindowServer bigger for good, gate after gate on the build Macs.
+
 - **Control surfaces hub and the PMJ's lamps**: moving the Grand Master no
   longer sends a PMJ key the show learned (a GO, a hit, the stop on
   Favorites or a Down key) dark: the Control Map is its one lamp writer. In
