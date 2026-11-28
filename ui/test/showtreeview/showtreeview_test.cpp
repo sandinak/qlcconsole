@@ -1192,6 +1192,7 @@ void ShowTreeView_Test::cueFieldsEditTheCue()
     QVERIFY(QTest::qWaitForWindowActive(&view));
     NoteEdit *note = view.findChild<NoteEdit *>("stCueNote");
     QVERIFY(note != nullptr);
+    QVERIFY(clickCueTabOf(&view, note));     // the note is on Notes
     const int closed = note->height();
     note->setFocus(Qt::MouseFocusReason);
     QVERIFY(note->isExpanded());
