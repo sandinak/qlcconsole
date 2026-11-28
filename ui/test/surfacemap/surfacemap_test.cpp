@@ -1479,6 +1479,21 @@ void SurfaceMap_Test::aShiftHeldAcrossAReplugIsNoShift()
     QVERIFY2(!m_doc->inputOutputMap()->blackout(), "one press made a blackout after a replug");
 }
 
+void SurfaceMap_Test::aGuardedJobOnTheShiftKeyNeverFires()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    ControlMap *cm = m_doc->controlMap();
+    // As a show file or a Learn could give it: Blackout on the Shift key.
+    cm->setBinding({ 0, 226, ControlMap::job(ControlMap::BlackoutTarget), ControlMap::Toggle });
+    m_doc->setMode(Doc::Operate);
+    settle();
+    QVERIFY(apc.tap(QStringLiteral("#226")));
+    settle();
+    QVERIFY2(!m_doc->inputOutputMap()->blackout(), "the Shift key alone made a blackout");
+    QCOMPARE(cm->lamp(cm->bindingsOn(0, 226).first()), ControlMap::LampOff);
+}
+
 void SurfaceMap_Test::theBoardJobsRoundTripThroughTheShowFile()
 {
     SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));

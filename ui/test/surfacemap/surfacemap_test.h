@@ -111,6 +111,8 @@ private slots:
     void theEmergencyStopEndsAFlash();
     /** ... a Shift held as the board went away is not held when it is back. */
     void aShiftHeldAcrossAReplugIsNoShift();
+    /** ... a guarded job on the Shift key itself never fires on its press. */
+    void aGuardedJobOnTheShiftKeyNeverFires();
     /** With QLC_SHOT_DIR: the job picker (a key's, its submenu, a fader's)
      *  and the map with board jobs, at three sizes. */
     void jobPickerShots();

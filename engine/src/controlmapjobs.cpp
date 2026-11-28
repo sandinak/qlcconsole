@@ -244,16 +244,24 @@ bool ControlMap::pressJob(const Binding &b)
        Shift held, as Shift+STOP. Alone it does nothing, and says so. */
     if (isGuardedJob(type))
     {
-        const bool shift = isKey(b) ? (b.channel & quint32(Qt::ShiftModifier)) != 0 : isShiftHeld(b.universe);
+        /* On the Shift key itself (a show file's, a Learn's: the map never
+           offers it) its own press would be both controls: never. */
+        const bool onShift = !isKey(b) && b.channel == shiftChannelOf(b.universe);
+        const bool shift = isKey(b) ? (b.channel & quint32(Qt::ShiftModifier)) != 0
+                                    : isShiftHeld(b.universe) && !onShift;
         if (!shift)
         {
             const bool hasShift = isKey(b) || shiftChannelOf(b.universe) != kNone;
             if (log != nullptr)
                 log->note(b.universe, tr("%1 refused: Shift is not held").arg(what));
-            say(k, hasShift ? tr("%1 takes two controls: hold Shift and press %2. Alone it does nothing.")
-                                  .arg(what, controlName(b.universe, b.channel))
-                            : tr("%1 takes two controls, and this board has no Shift key: give it to a "
-                                 "board that has one (Connections ▸ Control surfaces).").arg(what));
+            if (onShift)
+                say(k, tr("%1 is on the Shift key itself, so it never fires: give it another key "
+                          "(Connections ▸ Control surfaces).").arg(what));
+            else
+                say(k, hasShift ? tr("%1 takes two controls: hold Shift and press %2. Alone it does nothing.")
+                                      .arg(what, controlName(b.universe, b.channel))
+                                : tr("%1 takes two controls, and this board has no Shift key: give it to a "
+                                     "board that has one (Connections ▸ Control surfaces).").arg(what));
             return false;
         }
     }
@@ -441,7 +449,8 @@ void ControlMap::faderJob(const Binding &b, uchar value)
 ControlMap::Lamp ControlMap::jobLamp(const Binding &b) const
 {
     // A job that takes Shift on a board with none never fires: dark.
-    if (isGuardedJob(b.target.type) && !isKey(b) && shiftChannelOf(b.universe) == kNone)
+    if (isGuardedJob(b.target.type) && !isKey(b)
+        && (shiftChannelOf(b.universe) == kNone || shiftChannelOf(b.universe) == b.channel))
         return LampOff;
     switch (b.target.type)
     {
