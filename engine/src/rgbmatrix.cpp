@@ -22,6 +22,7 @@
 #include <QXmlStreamWriter>
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QThread>
 #include <QDebug>
 #include <cmath>
 #include <QDir>
@@ -285,6 +286,12 @@ void RGBMatrix::setAlgorithm(RGBAlgorithm *algo)
         QMutexLocker algorithmLocker(&m_algorithmMutex);
         dropNextMap(true);
         m_mapGeneration++;
+        // A running matrix must not go on with the one deleted here
+        if (m_runAlgorithm == m_algorithm)
+        {
+            m_runAlgorithm = NULL;
+            m_requestEngineCreation = true;
+        }
         delete m_algorithm;
         m_algorithm = algo;
         m_unknownAlgorithmXML.clear();
@@ -379,12 +386,12 @@ void RGBMatrix::setColor(int i, QColor c)
     if (i < 0)
         return;
 
-    if (i >= m_rgbColors.count())
-        m_rgbColors.resize(i + 1);
-
-    m_rgbColors.replace(i, c);
     {
         QMutexLocker algorithmLocker(&m_algorithmMutex);
+        // Under the lock: the timer reads the first two as it steps
+        if (i >= m_rgbColors.count())
+            m_rgbColors.resize(i + 1);
+        m_rgbColors.replace(i, c);
         if (m_algorithm != NULL)
         {
             m_algorithm->setColors(m_rgbColors);
@@ -886,6 +893,11 @@ void RGBMatrix::write(MasterTimer *timer, QList<Universe *> universes)
                     {
                         // no scripts' thread: made here, as ever
                     }
+                    else if (first && firstMapInTime() && takeReadyMap())
+                    {
+                        // A run's first map, made in the little it is waited for
+                        haveMap = true;
+                    }
                     else
                     {
                         if (!first)
@@ -1037,6 +1049,42 @@ bool RGBMatrix::aheadHere() const
            && m_runAlgorithm->type() == RGBAlgorithm::Script;
 }
 
+namespace
+{
+/* All the matrices of a frame together wait at most this for their runs'
+   first maps (a matrix starting on a chase step with no fade would go out
+   dark for a frame without); a map slower than that comes a frame late */
+std::atomic<qint64> s_firstMapWaitNs { 3000000 };
+}
+
+void RGBMatrix::setFirstMapWaitUs(qint64 us)
+{
+    s_firstMapWaitNs.store(us * 1000, std::memory_order_relaxed);
+}
+
+bool RGBMatrix::firstMapInTime()
+{
+    if (m_nextMap.isNull())
+        return false;
+    /* The timer's thread only (aheadHere()): its budget, renewed each tick */
+    static thread_local QElapsedTimer window;
+    static thread_local qint64 spentNs = 0;
+    const qint64 tickNs = qint64(MasterTimer::tick()) * 1000000;
+    if (!window.isValid() || window.nsecsElapsed() >= tickNs)
+    {
+        window.start();
+        spentNs = 0;
+    }
+    const qint64 budgetNs = s_firstMapWaitNs.load(std::memory_order_relaxed);
+    QElapsedTimer waited;
+    waited.start();
+    while (!m_nextMap->ready.load(std::memory_order_acquire)
+           && spentNs + waited.nsecsElapsed() < budgetNs)
+        QThread::usleep(50);
+    spentNs += waited.nsecsElapsed();
+    return m_nextMap->ready.load(std::memory_order_acquire);
+}
+
 bool RGBMatrix::takeReadyMap()
 {
     if (m_nextMap.isNull() || !m_nextMap->ready.load(std::memory_order_acquire))
@@ -1102,7 +1150,11 @@ void RGBMatrix::dropNextMap(bool wait)
 
 void RGBMatrix::waitForMapJobs()
 {
-    if (m_mapJobs->load(std::memory_order_acquire) > 0)
+    /* A script also has colour updates queued (setColor() does not wait
+       for them, nor count them): before it is deleted, everything asked
+       of the scripts' thread has run -- at once when that thread is idle */
+    if (m_mapJobs->load(std::memory_order_acquire) > 0
+        || (m_algorithm != NULL && m_algorithm->type() == RGBAlgorithm::Script))
         RGBScript::waitForScriptThread();
 }
 

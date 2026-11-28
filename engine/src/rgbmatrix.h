@@ -225,6 +225,9 @@ public:
     static quint64 mapsLate();
     /** This matrix's map jobs queued on the scripts' thread, not yet run */
     int mapJobsQueued() const;
+    /** How long a frame waits for its matrices' first maps, all together
+     *  (3 ms; tests set it long, to compare frames, or 0) */
+    static void setFirstMapWaitUs(qint64 us);
 
 private:
     int algorithmStepsCount();
@@ -242,6 +245,8 @@ private:
     void waitForMapJobs();
     /** The ready map into the step handler, if it is this matrix's as it is now */
     bool takeReadyMap();
+    /** A run's first map: waited for, within the frame's budget; ready? */
+    bool firstMapInTime();
 
     struct MapKey
     {

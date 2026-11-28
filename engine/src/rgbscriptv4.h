@@ -133,6 +133,11 @@ public:
     bool saveXML(QXmlStreamWriter *doc) const override;
 
 private:
+    /** acceptColors() as the script last said, for callers off the scripts'
+     *  thread (written there, by noteAcceptColors()) */
+    std::atomic<int> m_acceptColors { 2 };
+    /** Keep m_acceptColors current (on the scripts' thread) */
+    void noteAcceptColors();
     std::atomic<int> m_apiVersion; //! API version (read lock-free from the run thread; written on the JS thread during evaluate())
     QJSValue m_script;          //! The script itself
     QJSValue m_rgbMap;          //! rgbMap() function

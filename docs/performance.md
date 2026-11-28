@@ -428,13 +428,21 @@ map not ready at its step leaves the last one out until it is, counted as
 a late map; a script slower than its steps sends the newest map it has
 made, even one for an older step, so the effect keeps moving at the
 script's own pace (`RGBMatrix_Test::aScriptSlowerThanItsStepsStillMoves`).
-A run's first map is asked for the same way: the matrix's first frame is
-blank, its map out the frame it is ready. On time, the output is the same
-frame for frame (`RGBMatrix_Test::mapsAheadSendTheSameFrames`). A tick by
+A run's first map is asked for the same way and waited for a little: all
+the matrices starting in a frame wait at most 3 ms together, so a matrix
+taking over a chase step with no fade does not go out dark for a frame; a
+first map slower than that (a busy script thread) goes out the frame it is
+ready. On time, the output is the same frame for frame
+(`RGBMatrix_Test::mapsAheadSendTheSameFrames`). Starting a matrix never
+waits for the script thread: what the timer asks of a script (how many
+colours it takes) is what the script last said, kept on the script
+(`RGBMatrix_Test::aStartingMatrixNeverWaitsForTheScripts`). A tick by
 hand and a matrix without a script make the map at the step as before. A
-matrix (or its script) is never deleted while a map job for it may run:
-every queued job is counted and waited for
-(`RGBMatrix_Test::aMatrixDeletedMidMapWaitsForIt`).
+matrix (or its script) is never deleted while a job for it may run: every
+queued map job is counted and waited for, and a script's queued colour
+updates run before it goes
+(`RGBMatrix_Test::aMatrixDeletedMidMapWaitsForIt`,
+`::aColourChangeRunsBeforeItsScriptGoes`).
 
 What still waits on the script thread, with its worst case: the script
 thread runs one job at a time, so a blocking call queues behind whatever
