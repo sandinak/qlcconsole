@@ -1390,6 +1390,41 @@ void SurfaceMap_Test::everyBoardJobFiresFromTheBoard()
     QVERIFY2(saidContains(blocked, QStringLiteral("50%")), "the pick-up was not said");
 }
 
+void SurfaceMap_Test::aFlashLeavesMachineryAlone()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    // In the group beside the dimmer: a kabuki drop, the house lights' relay,
+    // a curtain and a flame (each a one-channel dimmer, as often patched).
+    const QList<Fixture::Behaviour> kinds = { Fixture::OneShotBehaviour, Fixture::SwitchBehaviour,
+                                              Fixture::MachineryBehaviour, Fixture::HazardBurstBehaviour };
+    for (int i = 0; i < kinds.size(); ++i)
+    {
+        Fixture *f = new Fixture(m_doc);
+        f->setName(QStringLiteral("Thing %1").arg(i));
+        f->setAddress(quint32(i + 1));
+        f->setUniverse(0);
+        f->setChannels(1);
+        m_doc->addFixture(f);
+        f->setBehaviourSetting(kinds.at(i));
+        show.front->assignFixture(f->id());
+    }
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kClip11, ControlMap::job(ControlMap::FlashGroupTarget, show.front->id()),
+                     ControlMap::Momentary });
+    m_doc->setMode(Doc::Operate);
+    settle();
+    QVERIFY(apc.press(QStringLiteral("#%1").arg(kClip11)));
+    settle();
+    QVERIFY(cm->isFlashing(show.front->id()));
+    QCOMPARE(outAt(m_doc, 0), 255);         // the light flashes
+    for (int i = 0; i < kinds.size(); ++i)
+        QVERIFY2(outAt(m_doc, i + 1) == 0, qPrintable(QStringLiteral("a Flash drove behaviour %1").arg(int(kinds.at(i)))));
+    QVERIFY(apc.release(QStringLiteral("#%1").arg(kClip11)));
+    settle();
+}
+
 void SurfaceMap_Test::theBoardJobsRoundTripThroughTheShowFile()
 {
     SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));

@@ -188,6 +188,11 @@ void ControlMap::flashGroup(quint32 groupId, bool on)
             const Fixture *fxi = m_doc->fixture(fid);
             if (fxi == nullptr || fxi->fixtureMode() == nullptr)
                 continue;
+            /* A press is not a run: stage machinery, a one-shot (a kabuki
+               drop), a switch (a relay, the house lights) and a hazard move
+               only when a run plays them (FixtureRest::freezesOnStop()). */
+            if (FixtureRest::freezesOnStop(fxi) || FixtureRest::isHazard(fxi))
+                continue;
             for (quint32 c = 0; c < fxi->channels(); ++c)
             {
                 const QLCChannel *ch = fxi->channel(c);
