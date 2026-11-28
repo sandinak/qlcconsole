@@ -15,7 +15,7 @@
     {"label": "Knobs", "x": 21.2, "y": 0.6, "w": 8.8, "h": 6.9}
   ],
   "controls": [
-    {"ch": 37028, "x": 4.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 1 (Shift)", "lamp": "led"},
+    {"ch": 37028, "x": 4.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 1", "lamp": "led"},
     {"ch": 37029, "x": 8.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 2", "lamp": "led"},
     {"ch": 37030, "x": 12.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 3", "lamp": "led"},
     {"ch": 37031, "x": 16.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 4", "lamp": "led"},
