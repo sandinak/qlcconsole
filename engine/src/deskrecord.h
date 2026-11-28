@@ -405,6 +405,11 @@ private:
      *  instead of driving back to the last position it was sent. */
     void handReleased();
     SurfaceLayout layoutOf(quint32 universe) const;
+    /** The guarded chord in the board's own words ("Pad 1 + Pad 8"), for a
+     *  layout that names it (guardWords): its words while @p channel is the
+     *  control it seeds for @p role ("stop" or "go"), else Shift's and
+     *  @p channel's names; empty for a board without guardWords. */
+    QString guardedWords(quint32 universe, quint32 channel, const QString &role) const;
     /** A port opened, closed or moved (@p universe, or any): rebind(), and
      *  the Grand Master waits out its dump if it was its port (Q316). */
     void portChanged(quint32 universe, bool anyComesOnline = false);

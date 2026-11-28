@@ -1198,6 +1198,12 @@ void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop()
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
     QCOMPARE(refused.last().first().toString(),
              QStringLiteral("%1: stopped. Pad 1 + Pad 4 releases the stop.").arg(layout.shortName()));
+    // STOP moved to Pad 7: the refusal names Pad 7, not the drawing's Pad 8.
+    QString why;
+    QVERIFY2(desk->assignRole(DeskRecord::Stop, 0, pad1 + 6, &why), qPrintable(why));
+    QVERIFY(lpd.tap(QStringLiteral("#%1").arg(pad1 + 6)));
+    settle();
+    QCOMPARE(refused.last().first().toString(), QStringLiteral("%1: Pad 1 + Pad 7 stops.").arg(layout.shortName()));
     // K1 moving the master is the virtual bench's (theLpd8Mk2PadsReachTheirJobs): past the plug's dump window.
 }
 
