@@ -323,8 +323,11 @@ if [ \$rc -eq 0 ]; then
     QLC_TEST_PHASE=serial ./unittest.sh ui "\$PWD/build" >> \$L/tests.log 2>&1 || { res="FAIL(check)"; rc=1; }
     ta=\$(nt \$t0)
     ran=\$(grep -E "^Test programs run:" \$L/tests.log | awk '{ n += \$4 + \$6 + \$10 } END { print n + 0 }')
-    exp=\$({ ls engine/test/*/test.sh ui/test/*/test.sh ai/test/*/test.sh
-        ls plugins/{enttecwing,midi,artnet,E1.31,wled,hid}/test/test.sh plugins/velleman/test/test.sh; } 2>/dev/null | wc -l)
+    # Every program unittest.sh runs on Linux: each plugin's too (osc and
+    # dmxusb were missing, so "tests 317/313" read as too many), and the
+    # web pages' scripts (webaccess/test/pagescript, no test.sh of its own).
+    exp=\$({ ls engine/test/*/test.sh ui/test/*/test.sh ai/test/*/test.sh plugins/*/test/test.sh
+        ls webaccess/test/test.sh; ls -d webaccess/test/pagescript; } 2>/dev/null | wc -l)
     if [ "\$ran" -lt "\$exp" ]; then
         res="FAIL(count)"; rc=1
         echo "ran \$ran test programs of the \$exp in the tree. This is not a pass." >> \$L/tests.log

@@ -160,6 +160,7 @@ private slots:
     void aFeedbackChosenOnPurposeIsLeft();
     void aPadIsSetUpWhenItAppears();
     void aHandPatchedPadIsRepaired();
+    void aPadSetUpByItselfYieldsToTheShowsSlot();
     void theRepairIsTheSameAsAHandRepatch();
     /** The Board Log: a fader's every step in, a lamp out, the init with
      *  where it went, timestamped and decoded with the control's name;
