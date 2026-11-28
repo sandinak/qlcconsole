@@ -3785,13 +3785,17 @@ void Monitor::showStageOverview()
     }
     /* One connect() per signal: a braced list of another DLL's signals
        connects none of them on Windows (dllsignals_test). */
-    auto soon = [this]() { m_featuresSoon->start(); };
+    /* The timer, not `this`: the window is the main window's and outlives
+       the Monitor at quit, when clearing the show still says functionRemoved
+       (a crash at quit with the Rig Overview open, ui/test/showscale). */
+    QPointer<QTimer> featuresSoon(m_featuresSoon);
+    auto soon = [featuresSoon]() { if (featuresSoon) featuresSoon->start(); };
     connect(m_doc, &Doc::functionAdded, planeCombo, soon);
     connect(m_doc, &Doc::functionRemoved, planeCombo, soon);
     connect(m_doc, &Doc::functionChanged, planeCombo, soon);
     connect(m_doc, &Doc::paletteAdded, planeCombo, soon);
     connect(m_doc, &Doc::paletteRemoved, planeCombo, soon);
-    connect(m_doc, &Doc::loaded, planeCombo, [this]() { m_featuresSoon->start(); });
+    connect(m_doc, &Doc::loaded, planeCombo, soon);
     applyShowFeatures();
 
     /* How much light is in the ROOM. Without it the rendered colours are as

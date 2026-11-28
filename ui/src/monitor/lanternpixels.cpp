@@ -127,6 +127,26 @@ void LanternPixels::watch(QLCIOPlugin *plugin, quint32 universe)
            builds its own QLCIOPlugin, so on Windows that address is not the
            one the plugin's moc compares with, and nothing would connect. */
         connect(plugin, SIGNAL(targetPixelsChanged(quint32)), this, SIGNAL(changed()));
+        /* A plugin goes before the view at quit (the show's plugin cache is
+           deleted, then the Rig Overview is hidden): forget it then, or
+           unwatchAll() calls into a deleted plugin (ui/test/showscale). */
+        QObject *gone = plugin;
+        connect(plugin, &QObject::destroyed, this, [this, gone]() {
+            for (auto it = m_connected.begin(); it != m_connected.end(); )
+            {
+                if (static_cast<QObject *>(*it) == gone)
+                    it = m_connected.erase(it);
+                else
+                    ++it;
+            }
+            for (auto it = m_watched.begin(); it != m_watched.end(); )
+            {
+                if (static_cast<QObject *>(it->first) == gone)
+                    it = m_watched.erase(it);
+                else
+                    ++it;
+            }
+        });
     }
 }
 

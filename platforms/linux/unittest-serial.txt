@@ -72,3 +72,10 @@ engine/test/spreadeffects
 # dark answer list under a quarter of a burning one's); the full measurement
 # runs by hand (FIRE_PERF=1 or FIRE_PERF_SHOW).
 ui/test/firespreadperf
+
+# The gate's size check (board Q360): the whole app on a show the size of
+# the ones we run (engine/test/common/scalerig.h: 260 fixtures, 26,598
+# channels, 80 universes), holding the MasterTimer's frame, the Rig
+# Overview's and the plot's frames, the UI thread's longest stall and
+# load/save to wall-clock budgets.
+ui/test/showscale

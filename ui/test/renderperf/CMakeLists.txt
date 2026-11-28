@@ -6,6 +6,8 @@ add_executable(${module_name} WIN32 MACOSX_BUNDLE
     ${module_name}.cpp ${module_name}.h
     # The mixed rig the stress harness and engine/test/hotpath run
     ../../../stresstest/engine/showbuilder.cpp ../../../stresstest/engine/showbuilder.h
+    # The shows we run (board Q360; ui/test/showscale's rig)
+    ../../../engine/test/common/scalerig.cpp ../../../engine/test/common/scalerig.h
 )
 target_include_directories(${module_name} PRIVATE
     ../../../engine/src
