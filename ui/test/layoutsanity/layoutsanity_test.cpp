@@ -2266,8 +2266,18 @@ void LayoutSanity_Test::theUxNitsAtThreeSizes()
         {
             QCOMPARE(m_app->venueFooterText(), QString::fromUtf8("Set Venue\u2026"));
             const QWidget *chip = m_app->m_venueChip;
+            // What the footer holds, said when it fails: which chip took the room.
+            QString held;
+            for (QWidget *w : m_app->statusBar()->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+                if (w->isVisible())
+                    held += QString(" %1:%2@%3").arg(w->objectName().isEmpty() ? QString::fromLatin1(w->metaObject()->className())
+                                                                         : w->objectName())
+                                .arg(w->width()).arg(w->x());
             QVERIFY2(chip->width() >= chip->fontMetrics().horizontalAdvance(m_app->venueFooterText()),
-                     qPrintable(where + ": the venue chip is cut"));
+                     qPrintable(where + QString(": the venue chip is cut (%1 of %2 px; squeezed %3; window %4, bar %5;%6)")
+                                .arg(chip->width()).arg(chip->fontMetrics().horizontalAdvance(m_app->venueFooterText()))
+                                .arg(chip->property("statusSqueezed").toBool()).arg(m_app->width())
+                                .arg(m_app->statusBar()->width()).arg(held)));
         }
 
         // 3. The Show Tree's hint line after the sub-cue words.
