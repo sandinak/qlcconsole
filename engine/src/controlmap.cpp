@@ -396,6 +396,18 @@ void ControlMap::rebuild()
     }
     if (m_guardedJobs == 0)
         m_shiftDown.clear();
+    /* The Effect size fader's job taken off (Q355 review): nothing would be
+       left to bring the effects back, and nothing on the screen says they
+       are smaller. They go back as made. */
+    bool sizeBound = false;
+    for (const Binding &b : std::as_const(m_bindings))
+        sizeBound = sizeBound || b.target.type == EffectSizeTarget;
+    if (!sizeBound && m_effectSize != 255)
+    {
+        m_effectSize = 255;
+        if (m_doc->effectScriptRunner() != nullptr)
+            m_doc->effectScriptRunner()->setSizeMaster(1.0f);
+    }
 }
 
 void ControlMap::updateConnections()

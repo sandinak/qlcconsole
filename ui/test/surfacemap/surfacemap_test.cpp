@@ -1535,6 +1535,31 @@ void SurfaceMap_Test::aGroupLevelFaderPicksUpFirst()
     QVERIFY2(qAbs(int(show.front->masterLevel()) - 128) <= 2, "a replug's dump moved the group");
 }
 
+void SurfaceMap_Test::effectSizeComesBackWhenItsFaderGoes()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    ControlMap *cm = m_doc->controlMap();
+    m_doc->setMode(Doc::Operate);
+    settle();
+    const quint32 kSize = 12295;
+    const ControlMap::Binding b{ 0, kSize, ControlMap::job(ControlMap::EffectSizeTarget), ControlMap::StartOnly };
+    cm->setBinding(b);
+    settle();
+    const QString fader = QStringLiteral("#%1").arg(kSize);
+    QVERIFY(apc.set(fader, 127));
+    settle();
+    QVERIFY(apc.set(fader, 32));
+    settle();
+    EffectScriptRunner *runner = m_doc->effectScriptRunner();
+    QVERIFY(runner != nullptr);
+    QVERIFY(runner->sizeMaster() < 0.5f);
+    // The fader given no job: nothing left to bring the effects back.
+    QVERIFY(cm->removeBinding(b.target));
+    settle();
+    QVERIFY2(qFuzzyCompare(runner->sizeMaster(), 1.0f), qPrintable(QString::number(runner->sizeMaster())));
+}
+
 void SurfaceMap_Test::theBoardJobsRoundTripThroughTheShowFile()
 {
     SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));

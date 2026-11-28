@@ -116,6 +116,8 @@ private slots:
     /** ... a group's level fader picks up first (no jump on a brush or a
      *  replug's dump); giving the job keeps the group where it is. */
     void aGroupLevelFaderPicksUpFirst();
+    /** ... the Effect size fader's job taken off: the effects as made. */
+    void effectSizeComesBackWhenItsFaderGoes();
     /** With QLC_SHOT_DIR: the job picker (a key's, its submenu, a fader's)
      *  and the map with board jobs, at three sizes. */
     void jobPickerShots();
