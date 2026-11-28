@@ -52,7 +52,7 @@
 namespace
 {
 /* What the view's map is, for a failure. */
-QString state(const StructureStudioView &v)
+QString mapState(const StructureStudioView &v)
 {
     const QRectF a = LightMap::stageArea(v.m_doc->monitorProperties());
     return QStringLiteral("busy %1 pending %2 grid %3x%4 area %5,%6 %7x%8 sources %9 caption '%10'")
@@ -200,7 +200,7 @@ void LightMapView_Test::offWorksNothingOut()
 
     // On and off again: let go of what it had.
     v.setLightMap(true);
-    QVERIFY2(v.waitForLightMap(), qPrintable(state(v)));
+    QVERIFY2(v.waitForLightMap(), qPrintable(mapState(v)));
     QVERIFY(v.lightMapGrid().isValid());
     v.setLightMap(false);
     QVERIFY(!v.lightMapGrid().isValid());
@@ -222,7 +222,7 @@ void LightMapView_Test::theMapShowsWhatTheOutputLights()
     v.resize(900, 640);
     v.reload();
     v.setLightMap(true);
-    QVERIFY2(v.waitForLightMap(), qPrintable(state(v)));
+    QVERIFY2(v.waitForLightMap(), qPrintable(mapState(v)));
 
     // The light it reads: the par, pointing down, at its lumens.
     const QVector<LightMap::Source> sources = v.lightSources();
@@ -267,7 +267,7 @@ void LightMapView_Test::theMapShowsWhatTheOutputLights()
     // The light goes out: the whole stage dark, and the map follows the output.
     par->setOwnChannelValues(QByteArray(1, char(0)));
     v.liveTick();
-    QVERIFY2(v.waitForLightMap(), qPrintable(state(v)));
+    QVERIFY2(v.waitForLightMap(), qPrintable(mapState(v)));
     QVERIFY(v.lightMapGrid().dark(under.x(), under.y()));
     QCOMPARE(v.lightMapDarkSpots(), 1);
     int darkCells = 0;
@@ -295,7 +295,7 @@ void LightMapView_Test::theSettingsAreReadAgain()
     v.resize(800, 600);
     v.reload();
     v.setLightMap(true);
-    QVERIFY2(v.waitForLightMap(), qPrintable(state(v)));
+    QVERIFY2(v.waitForLightMap(), qPrintable(mapState(v)));
     const QVector3D apex = v.lightSources().first().apex;
     const QPoint under = cellAt(v.lightMapGrid(), apex);
     const float before = v.lightMapGrid().lux.at(v.lightMapGrid().index(under.x(), under.y()));
@@ -304,14 +304,14 @@ void LightMapView_Test::theSettingsAreReadAgain()
     // A seated subject (3' 6"): further from the light, less light.
     mp->setLightMapHeight(float(42 * 0.0254));
     v.lightMapSettingsChanged();
-    QVERIFY2(v.waitForLightMap(), qPrintable(state(v)));
+    QVERIFY2(v.waitForLightMap(), qPrintable(mapState(v)));
     QVERIFY(qAbs(v.lightMapGrid().height - 42 * 0.0254) < 1e-4);
     const float seated = v.lightMapGrid().lux.at(v.lightMapGrid().index(under.x(), under.y()));
     QVERIFY2(seated < before, qPrintable(QString("%1 seated, %2 standing").arg(seated).arg(before)));
     // Dark under more than it gets: dark there too.
     mp->setLightMapDarkLux(seated * 2.0f);
     v.lightMapSettingsChanged();
-    QVERIFY2(v.waitForLightMap(), qPrintable(state(v)));
+    QVERIFY2(v.waitForLightMap(), qPrintable(mapState(v)));
     QVERIFY(v.lightMapGrid().dark(under.x(), under.y()));
 }
 
@@ -386,7 +386,7 @@ void LightMapView_Test::aRealRigAndWhatItCosts()
     };
     const double offMs = frameMs();
     v.setLightMap(true);
-    QVERIFY2(v.waitForLightMap(20000), qPrintable(state(v)));
+    QVERIFY2(v.waitForLightMap(20000), qPrintable(mapState(v)));
     const QVector<LightMap::Source> sources = v.lightSources();
     QVERIFY2(sources.size() > 20, qPrintable(QString("%1 lights lit").arg(sources.size())));
     const LightMap::Grid &g = v.lightMapGrid();
@@ -445,7 +445,7 @@ void LightMapView_Test::aRealRigAndWhatItCosts()
             if (plane == StructureStudioView::Angled)
                 ov->setStandOnCentreStage(true);
             settle(30);
-            QVERIFY2(ov->waitForLightMap(20000), qPrintable(state(*ov)));
+            QVERIFY2(ov->waitForLightMap(20000), qPrintable(mapState(*ov)));
             ov->m_qualityFrame = true;
             dock->grab().save(QDir(dir).filePath(QStringLiteral("%1-lightmap-%2-%3x%4.png")
                 .arg(state, plane == StructureStudioView::Top ? QStringLiteral("top") : QStringLiteral("angled"))
