@@ -9826,6 +9826,7 @@ void App::initStatusBar()
     m_statusPadRoleLabel->setAlignment(Qt::AlignCenter);
     m_statusPadRoleLabel->setProperty("helpTopic", QStringLiteral("show-control.md"));
     m_statusPadRoleLabel->hide();
+    m_statusPadRoleLabel->installEventFilter(this);     // a click patches a pad not patched yet
     sb->addPermanentWidget(m_statusPadRoleLabel);
 
     // The follow spot at work, wherever you are (Show Tree, Run, Operate):
@@ -10054,6 +10055,21 @@ void App::initStatusBar()
             connect(run, &PadRun::hitChanged, this, &App::updatePadRoleChip);
             connect(m_doc->programmer(), &ProgrammerController::focusControllerChanged,
                     this, &App::updatePadRoleChip);
+            /* A pad patched by hand, or plugged in (a HID rescan) or
+               unplugged: the chip follows at once, once for a burst (a
+               show loading patches every universe). Build 4910: a
+               DualShock 4 patched by hand still showed no chip. */
+            m_padChipTimer = new QTimer(this);
+            m_padChipTimer->setSingleShot(true);
+            m_padChipTimer->setInterval(0);
+            connect(m_padChipTimer, &QTimer::timeout, this, &App::updatePadRoleChip);
+            InputOutputMap *iom = m_doc->inputOutputMap();
+            auto later = [this]() { m_padChipTimer->start(); };
+            connect(iom, &InputOutputMap::inputPatchChanged, this, later);
+            connect(iom, &InputOutputMap::inputDeviceConnected, this, later);
+            connect(iom, &InputOutputMap::inputDeviceDisconnected, this, later);
+            connect(iom, &InputOutputMap::pluginConfigurationChanged, this, later);
+            connect(iom, &InputOutputMap::offlinePatchesChanged, this, later);
         }
         updateFollowChip();
         updatePadRoleChip();
@@ -10107,8 +10123,37 @@ QMenu *App::tabContextMenu(int index)
     return menu;
 }
 
+bool App::patchPadFromChip()
+{
+    if (!m_padChipUnpatched || m_doc == nullptr || m_doc->programmer() == nullptr)
+        return false;
+    ProgrammerController *pc = m_doc->programmer();
+    const QList<ProgrammerController::UnpatchedPad> pads = pc->unpatchedPads();
+    quint32 universe = UINT_MAX;
+    if (pads.isEmpty() || !pc->patchPad(pads.first(), &universe))
+    {
+        updatePadRoleChip();
+        return false;
+    }
+    Universe *uni = m_doc->inputOutputMap()->universe(universe);
+    statusBar()->showMessage(tr("%1 patched to universe %2%3")
+                                 .arg(ProgrammerController::shortPadName(pads.first().name, pads.first().kind))
+                                 .arg(universe + 1)
+                                 .arg(uni != nullptr && !uni->name().isEmpty()
+                                      ? QStringLiteral(" (%1)").arg(uni->name()) : QString()),
+                             5000);
+    updatePadRoleChip();
+    return true;
+}
+
 bool App::eventFilter(QObject *watched, QEvent *event)
 {
+    if (watched == m_statusPadRoleLabel && m_padChipUnpatched && event->type() == QEvent::MouseButtonRelease
+        && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton)
+    {
+        patchPadFromChip();
+        return true;
+    }
     if (m_tab != NULL && watched == m_tab && event->type() == QEvent::Resize && m_tabLabelMode == TabAuto)
         fitTabLabels();
     if (m_statusFitTimer != nullptr && watched == statusBar()
@@ -11336,8 +11381,28 @@ void App::updatePadRoleChip()
        Review's "Controllers connected" line says what the show maps. An
        arm or a stop still standing, or a notice (the pad was lost), is
        said whether or not the pad is there. */
+    m_padChipUnpatched = false;
     if (!pc->focusController().present && !run->stateColour().isValid() && run->chipNotice().isEmpty())
     {
+        /* Connected, not patched: said, and one click patches it (the
+           operator never has to find Inputs/Outputs to use a pad). */
+        const QList<ProgrammerController::UnpatchedPad> pads = pc->unpatchedPads();
+        if (!pads.isEmpty())
+        {
+            const ProgrammerController::UnpatchedPad &pad = pads.first();
+            m_padChipUnpatched = true;
+            m_statusPadRoleLabel->setText(tr("Pad: %1 · not patched, click to use it")
+                                              .arg(ProgrammerController::shortPadName(pad.name, pad.kind)));
+            m_statusPadRoleLabel->setStyleSheet(QStringLiteral("QLabel { font-weight: bold; padding: 0 4px; }"));
+            m_statusPadRoleLabel->setToolTip(tr("%1 is connected, but no universe takes its input, so it runs "
+                                                "nothing. Click to patch it to a free universe (Edit ▸ Undo "
+                                                "takes it back).").arg(pad.name.trimmed()));
+            m_statusPadRoleLabel->setCursor(Qt::PointingHandCursor);
+            m_statusPadRoleLabel->show();
+            if (m_statusFitTimer != nullptr)
+                m_statusFitTimer->start();
+            return;
+        }
         m_statusPadRoleLabel->hide();
         if (m_statusFitTimer != nullptr)
             m_statusFitTimer->start();
@@ -11386,6 +11451,7 @@ void App::updatePadRoleChip()
               .arg(run->stateInk().name(), state.name())
         : QStringLiteral("QLabel { font-weight: bold; padding: 0 4px; }"));
     m_statusPadRoleLabel->setToolTip(run->helpHtml());
+    m_statusPadRoleLabel->unsetCursor();
     m_statusPadRoleLabel->show();
     if (m_statusFitTimer != nullptr)
         m_statusFitTimer->start();

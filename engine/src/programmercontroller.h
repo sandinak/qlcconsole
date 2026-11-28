@@ -318,6 +318,25 @@ public:
      *  Focus job, then the most controls); @p only: describe that
      *  universe's pad alone. */
     FocusController focusController(quint32 only = UINT_MAX) const;
+    /** A game controller connected to this computer that no universe
+     *  takes input from (build 4910: a DualShock 4 plugged in showed no
+     *  Pad chip, since only a patched pad counted). */
+    struct UnpatchedPad
+    {
+        QString plugin;
+        quint32 line = UINT_MAX;
+        QString name;               ///< the plugin's name for the line
+        QString kind;               ///< QLCIOPlugin::inputDeviceKind()
+    };
+    QList<UnpatchedPad> unpatchedPads() const;
+    /** Patch @p pad's input to the first universe with no input (one is
+     *  added when every universe has one), undoable. The universe used in
+     *  @p universe. False: the pad is gone or already patched. */
+    bool patchPad(const UnpatchedPad &pad, quint32 *universe = nullptr);
+    /** "DUALSHOCK 4 Wireless Controller (DE:4C:...)" as a person calls it:
+     *  "DUALSHOCK 4"; a wired PlayStation pad that names only its maker by
+     *  its @p kind. */
+    static QString shortPadName(const QString &name, const QString &kind);
     /** The family of the pad whose action it is (feedbackPad(); else the
      *  pad the tools use; Xbox with none): what every line that names a
      *  control calls it (PadNames). */

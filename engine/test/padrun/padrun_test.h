@@ -91,6 +91,9 @@ private slots:
      *  disarmed, red after the emergency stop; two short buzzes armed, one
      *  long disarmed, a short one on a GO, a long one for nothing to play. */
     void theLightBarAndRumble();
+    /** Build 4910: Back on the PMJ (a board, no pad) held by the double-GO
+     *  guard buzzed the DualShock. A hold buzzes the pad only for its own press. */
+    void aBoardsHeldBackBuzzesNoPad();
     /** The controller lost while armed: disarmed, and the screen says why. */
     void aLostPadDisarms();
 

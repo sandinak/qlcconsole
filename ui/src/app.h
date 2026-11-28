@@ -1422,6 +1422,12 @@ private:
     /** The Pad chip leaves out what RT fires (the Run tab still says it):
      *  with it, a narrow footer squeezed the Grand Master out. */
     bool m_padChipShort = false;
+    /** The Pad chip names a game controller connected but not patched:
+     *  a click patches it (build 4910: a DualShock 4 showed no chip). */
+    bool m_padChipUnpatched = false;
+    class QTimer *m_padChipTimer = nullptr;     ///< a patch or a device changed: the chip, once
+    /** Patch the controller the Pad chip names; false: none to patch. */
+    bool patchPadFromChip();
     QLabel* m_statusTimecodeLabel;
     class QToolButton* m_statusStandby = nullptr;   ///< "Next: 12.5 — ..."
     QLabel* m_statusLoadLabel;

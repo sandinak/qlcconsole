@@ -78,6 +78,8 @@
 #include "markplanner.h"
 #include "capturemanager.h"
 #include "inputoutputmap.h"
+#include "ioplugincache.h"
+#include "patchundo.h"
 #include "inputpatch.h"
 #include "qlcioplugin.h"
 #include "genericfader.h"
@@ -1966,6 +1968,11 @@ void ProgrammerController::padRumble(int pulses, int lengthMs, quint32 universe)
 {
     if (pulses <= 0)
         return;
+    /* A press on a board, not a pad (a MIDI or OSC input), buzzes no pad:
+       feedback goes to the device that has the control, never another
+       (build 4910: Back on the PMJ buzzed the DualShock). */
+    if (universe == UINT_MAX && m_actingUniverse != UINT_MAX && !isPadUniverse(m_actingUniverse))
+        return;
     ++m_padRumbles;
     QVariantMap p;
     p.insert(QStringLiteral("gamepad"), QStringLiteral("rumble"));
@@ -3187,9 +3194,14 @@ QString ProgrammerController::followSpotStickName() const
     InputPatch *ip = iom != nullptr ? iom->inputPatch(m_panBound ? m_panUniverse : m_tiltUniverse) : nullptr;
     if (ip == nullptr || ip->plugin() == nullptr || !ip->isPatched())
         return QString();
+    return shortPadName(ip->inputName(), ip->plugin()->inputDeviceKind(ip->input()));
+}
+
+QString ProgrammerController::shortPadName(const QString &fullName, const QString &kind)
+{
     /* "DUALSHOCK 4 Wireless Controller (DE:4C:09:77:77:93)" is a
        DUALSHOCK 4: no address, no "Wireless Controller". */
-    QString name = ip->inputName().trimmed();
+    QString name = fullName.trimmed();
     const int paren = name.lastIndexOf(QLatin1String(" ("));
     if (paren > 0 && name.endsWith(QLatin1Char(')')))
         name.truncate(paren);
@@ -3202,7 +3214,6 @@ QString ProgrammerController::followSpotStickName() const
         }
     }
     // A wired PlayStation pad names its maker, not itself.
-    const QString kind = ip->plugin()->inputDeviceKind(ip->input());
     if (name.startsWith(QLatin1String("Sony"), Qt::CaseInsensitive) || name.isEmpty())
     {
         if (kind == QLatin1String("dualsense"))
@@ -3211,6 +3222,90 @@ QString ProgrammerController::followSpotStickName() const
             return QStringLiteral("DualShock 4");
     }
     return name.trimmed();
+}
+
+QList<ProgrammerController::UnpatchedPad> ProgrammerController::unpatchedPads() const
+{
+    QList<UnpatchedPad> out;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr || m_doc->ioPluginCache() == nullptr)
+        return out;
+    for (QLCIOPlugin *plugin : m_doc->ioPluginCache()->plugins())
+    {
+        if (plugin == nullptr || !(plugin->capabilities() & QLCIOPlugin::Input))
+            continue;
+        const QStringList lines = plugin->inputs();
+        for (int l = 0; l < lines.size(); ++l)
+        {
+            // A pad the plugin knows (an Xbox, a DualShock 4, a DualSense, a Deck).
+            const QString kind = plugin->inputDeviceKind(quint32(l));
+            if (kind.isEmpty())
+                continue;
+            bool taken = !iom->universesWithInputOn(plugin->name(), quint32(l)).isEmpty();
+            /* A universe waiting for this very device (kept offline, a
+               controller slot) takes it back by itself: not offered. */
+            for (quint32 u = 0; u < iom->universesCount() && !taken; ++u)
+            {
+                const Universe *uni = iom->universe(u);
+                if (uni == nullptr)
+                    continue;
+                for (const Universe::OfflinePatch &op : uni->offlinePatches())
+                    if (op.tag == Universe::InputPatchTag && op.plugin == plugin->name()
+                        && op.uid.trimmed() == lines.at(l).trimmed())
+                        taken = true;
+            }
+            if (taken)
+                continue;
+            UnpatchedPad pad;
+            pad.plugin = plugin->name();
+            pad.line = quint32(l);
+            pad.name = lines.at(l);
+            pad.kind = kind;
+            out << pad;
+        }
+    }
+    return out;
+}
+
+bool ProgrammerController::patchPad(const UnpatchedPad &pad, quint32 *universe)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == nullptr)
+        return false;
+    // Still here, still free.
+    bool found = false;
+    for (const UnpatchedPad &p : unpatchedPads())
+        found = found || (p.plugin == pad.plugin && p.line == pad.line && p.name == pad.name);
+    if (!found)
+        return false;
+    quint32 target = UINT_MAX;
+    for (quint32 u = 0; u < iom->universesCount() && target == UINT_MAX; ++u)
+    {
+        const Universe *uni = iom->universe(u);
+        InputPatch *ip = iom->inputPatch(u);
+        if (uni == nullptr || (ip != nullptr && ip->plugin() != nullptr) || uni->hasInputSlot())
+            continue;
+        bool waiting = false;
+        for (const Universe::OfflinePatch &op : uni->offlinePatches())
+            waiting = waiting || op.tag == Universe::InputPatchTag;
+        if (!waiting)
+            target = u;
+    }
+    if (target == UINT_MAX)
+    {
+        if (!iom->addUniverse())
+            return false;
+        target = iom->universesCount() - 1;
+    }
+    if (iom->patchUndo() != nullptr)
+        iom->patchUndo()->capture(QList<quint32>() << target,
+                                  tr("patch %1 to universe %2").arg(shortPadName(pad.name, pad.kind)).arg(target + 1));
+    if (!iom->setInputPatch(target, pad.plugin, pad.name, pad.line) && iom->inputPatch(target) == nullptr)
+        return false;
+    m_doc->setModified();
+    if (universe != nullptr)
+        *universe = target;
+    return true;
 }
 
 void ProgrammerController::refreshControllerKeepAlive()
