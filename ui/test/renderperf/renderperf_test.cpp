@@ -44,6 +44,7 @@
 #undef private
 
 #include "monitorproperties.h"
+#include "qlcphysical.h"
 #include "systemprobe.h"
 #include "rhiraster.h"
 #include "zraster.h"
@@ -927,6 +928,258 @@ void RenderPerf_Test::theShowsWeRunDrawInBudget()
              qPrintable(QString("a Rig Overview frame p95 %1 ms").arg(overviewPaints.p95())));
     QVERIFY2(fps >= 2.0 / cores, qPrintable(QString("the overview drew %1 fps").arg(fps)));
     QVERIFY2(plotPaints.p95() < 40 * f, qPrintable(QString("a plot frame p95 %1 ms").arg(plotPaints.p95())));
+#endif
+}
+
+
+namespace
+{
+/** A moving head with what the Lighting Studio small wins read: 0 Pan, 1 Tilt,
+ *  2 Dimmer, 3-5 RGB, 6 Gobo wheel, 7 Shutter (0-9 closed, 10-19 open, 20-255
+ *  strobe slow to fast), 8 Frost, 9 CTO. Built from old API only: the same
+ *  file measures the commit before them. */
+QLCFixtureDef *featureDef()
+{
+    QLCFixtureDef *def = new QLCFixtureDef();
+    def->setManufacturer("Perf");
+    def->setModel("Feature head");
+    def->setType(QLCFixtureDef::MovingHead);
+    QLCFixtureMode *mode = new QLCFixtureMode(def);
+    mode->setName("10ch");
+    auto add = [&](int at, const char *name, QLCChannel::Group g, QLCChannel::PrimaryColour col = QLCChannel::NoColour) {
+        QLCChannel *ch = new QLCChannel();
+        ch->setName(QString::fromLatin1(name));
+        ch->setGroup(g);
+        ch->setColour(col);
+        def->addChannel(ch);
+        mode->insertChannel(ch, quint32(at));
+        return ch;
+    };
+    QLCChannel *pan = add(0, "Pan", QLCChannel::Pan); pan->setControlByte(QLCChannel::MSB);
+    QLCChannel *tilt = add(1, "Tilt", QLCChannel::Tilt); tilt->setControlByte(QLCChannel::MSB);
+    add(2, "Dimmer", QLCChannel::Intensity);
+    add(3, "Red", QLCChannel::Intensity, QLCChannel::Red);
+    add(4, "Green", QLCChannel::Intensity, QLCChannel::Green);
+    add(5, "Blue", QLCChannel::Intensity, QLCChannel::Blue);
+    QLCChannel *gobo = add(6, "Gobo", QLCChannel::Gobo);
+    const char *slotNames[] = { "Open", "3 Spots", "Concentric", "Swirl", "Zebra" };
+    for (int i = 0; i < 5; ++i)
+    {
+        QLCCapability *c = new QLCCapability(uchar(i * 10), uchar(i * 10 + 9), QString::fromLatin1(slotNames[i]));
+        c->setPreset(QLCCapability::GoboMacro);
+        gobo->addCapability(c);
+    }
+    QLCChannel *sh = add(7, "Shutter", QLCChannel::Shutter);
+    QLCCapability *c0 = new QLCCapability(0, 9, "Closed"); c0->setPreset(QLCCapability::ShutterClose); sh->addCapability(c0);
+    QLCCapability *c1 = new QLCCapability(10, 19, "Open"); c1->setPreset(QLCCapability::ShutterOpen); sh->addCapability(c1);
+    QLCCapability *c2 = new QLCCapability(20, 255, "Strobe"); c2->setPreset(QLCCapability::StrobeSlowToFast); sh->addCapability(c2);
+    add(8, "Frost", QLCChannel::Beam);
+    add(9, "CTO", QLCChannel::Colour);
+    QLCPhysical ph;
+    ph.setWidth(300); ph.setHeight(400); ph.setDepth(300);
+    ph.setFocusPanMax(540); ph.setFocusTiltMax(270);
+    ph.setLensDegreesMin(10); ph.setLensDegreesMax(30);
+    mode->setPhysical(ph);
+    QLCFixtureHead head;
+    for (quint32 c = 0; c < 10; ++c)
+        head.addChannel(c);
+    mode->insertHead(-1, head);
+    def->addMode(mode);
+    return def;
+}
+
+/** @p n heads in a grid over the stage, each given @p values */
+QList<Fixture *> featureRig(Doc *doc, int n, const QByteArray &values)
+{
+    QLCFixtureDef *def = featureDef();
+    QList<Fixture *> out;
+    const int cols = 20;
+    for (int i = 0; i < n; ++i)
+    {
+        Fixture *f = new Fixture(doc);
+        f->setName(QStringLiteral("Head %1").arg(i + 1));
+        f->setFixtureDefinition(def, def->modes().first());
+        f->setUniverse(quint32(i / 40));
+        f->setAddress(quint32((i % 40) * 12));
+        if (!doc->addFixture(f))
+            continue;
+        doc->monitorProperties()->setFixturePosition(
+            f->id(), 0, 0, QVector3D(float(1000 + (i % cols) * 600), float(1000 + (i / cols) * 700), 5000.0f));
+        f->setOwnChannelValues(values);
+        out << f;
+    }
+    return out;
+}
+
+QByteArray featureValues(int gobo, int shutter, int frost, int cto, int dim = 255)
+{
+    QByteArray v(10, 0);
+    v[0] = char(128); v[1] = char(200); v[2] = char(dim);
+    v[3] = char(255); v[4] = char(255); v[5] = char(255);
+    v[6] = char(gobo); v[7] = char(shutter); v[8] = char(frost); v[9] = char(cto);
+    return v;
+}
+
+struct FrameStats { double medianMs = 0, p95Ms = 0, cpuMs = 0; };
+
+/** @p frames repaints of @p w, @p between run before each (to dirty the frame) */
+FrameStats timeFrames(QWidget *w, int frames, const std::function<void(int)> &between)
+{
+    QElapsedTimer wall;
+    wall.start();
+    QList<double> ms;
+    const qint64 cpu0 = cpuNs(wall);
+    for (int i = 0; i < frames; ++i)
+    {
+        between(i);
+        QElapsedTimer one;
+        one.start();
+        w->repaint();
+        ms << one.nsecsElapsed() / 1e6;
+    }
+    FrameStats s;
+    s.cpuMs = double(cpuNs(wall) - cpu0) / 1e6 / frames;
+    std::sort(ms.begin(), ms.end());
+    s.medianMs = ms.at(ms.size() / 2);
+    s.p95Ms = ms.at(qMin(int(ms.size()) - 1, int(ms.size() * 0.95)));
+    return s;
+}
+}
+
+/* The Studio small wins' frame costs (frost, CTO, strobe, label fields), the
+   same cases on this branch and on the commit before it. A steady frost, a
+   steady strobe rate and the label fields are worked out once, not per
+   frame. Nothing is asserted but that they draw; tools/perf reads the report. */
+void RenderPerf_Test::studioFeatureFrames()
+{
+    // Many frames to measure (the perf guard, or a pool run with --shots, which
+    // brings the table back as studio-feature-frames.txt); the gate draws a few.
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    const int frames = (reporting() || !shotDir.isEmpty()) ? 40 : 3;
+    QList<QPair<QString, double>> results;
+    auto record = [&results](const QString &name, const FrameStats &s) {
+        results << qMakePair(name + QStringLiteral("_median_ms"), s.medianMs)
+                << qMakePair(name + QStringLiteral("_p95_ms"), s.p95Ms)
+                << qMakePair(name + QStringLiteral("_cpu_ms"), s.cpuMs);
+    };
+
+    // 30 movers with a gobo, frost and CTO at mid values (the old code ignores
+    // the last two: that is the comparison). The first value is wobbled so
+    // every frame has something to draw.
+    {
+        Doc doc(nullptr, 2);
+        doc.monitorProperties()->setGridSize(QVector3D(14, 8, 14));
+        const QList<Fixture *> rig = featureRig(&doc, 30, featureValues(15, 15, 128, 128));
+        StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+        v.resize(1100, 700);
+        v.reload();
+        v.setPlane(StructureStudioView::Angled);
+        v.setBeams(true);
+        v.setLiveValues(true);
+        v.m_liveTimer->stop();
+        v.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&v));
+        auto wobble = [&](int i) {
+            for (Fixture *f : rig)
+                f->setOwnChannelValues(featureValues(15, 15, 128, 128, 250 + (i & 1) * 5));
+        };
+        v.repaint();
+        record(QStringLiteral("studio_30_movers_gobo_frost_cto"), timeFrames(&v, frames, wobble));
+
+        // 10 of them strobing at a mid rate.
+        auto strobing = [&](int i) {
+            int n = 0;
+            for (Fixture *f : rig)
+                f->setOwnChannelValues(featureValues(15, n++ < 10 ? 140 : 15, 128, 128, 250 + (i & 1) * 5));
+        };
+        v.m_opticsTime = -1.0;
+        record(QStringLiteral("studio_10_of_30_strobing"), timeFrames(&v, frames, strobing));
+        v.setLiveValues(false);
+    }
+
+    // 260 fixtures, the plot with every label field on.
+    {
+        Doc doc(nullptr, 8);
+        doc.setMode(Doc::Design);
+        doc.monitorProperties()->setGridSize(QVector3D(14, 8, 14));
+        const QList<Fixture *> rig = featureRig(&doc, 260, featureValues(15, 15, 0, 0));
+        QWidget parent;
+        Monitor mon(&parent, &doc);
+        parent.resize(1200, 800);
+        parent.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&parent));
+        MonitorGraphicsView *gv = mon.m_graphicsView;
+        for (Fixture *f : rig)
+            gv->addFixture(f->id(), QPointF(doc.monitorProperties()->fixturePosition(f->id(), 0, 0).x(),
+                                            doc.monitorProperties()->fixturePosition(f->id(), 0, 0).y()));
+        gv->showFixturesLabels(true);
+        QCoreApplication::processEvents();
+        auto dirty = [&](int i) {
+            for (Fixture *f : rig)
+                f->setOwnChannelValues(featureValues(15, 15, 0, 0, 250 + (i & 1) * 5));
+            QCoreApplication::processEvents();
+        };
+        record(QStringLiteral("plot_260_labels_name"), timeFrames(gv->viewport(), frames, dirty));
+#ifdef STUDIO_LABEL_FIELDS
+        for (int i = 0; i < int(rig.size()); ++i)
+        {
+            doc.monitorProperties()->setFixtureUnit(rig.at(i)->id(), i + 1);
+            doc.monitorProperties()->setFixtureChannel(rig.at(i)->id(), 100 + i);
+        }
+        doc.monitorProperties()->setLabelFields(255);
+        gv->refreshFixtureLabels();
+        QCoreApplication::processEvents();
+        record(QStringLiteral("plot_260_labels_all_fields"), timeFrames(gv->viewport(), frames, dirty));
+#endif
+    }
+
+    QStringList table;
+    for (const auto &r : results)
+        table << QString("%1 %2").arg(r.first, -44).arg(r.second, 10, 'f', 2);
+    qInfo().noquote() << "Studio feature frames (ms, process CPU per frame):\n  " + table.join("\n  ");
+    if (!shotDir.isEmpty())
+    {
+        QDir().mkpath(shotDir);
+        QFile t(QDir(shotDir).filePath(QStringLiteral("studio-feature-frames.txt")));
+        if (t.open(QIODevice::WriteOnly | QIODevice::Text))
+            t.write(table.join("\n").toUtf8() + "\n");
+    }
+    const QString report = qEnvironmentVariable("QLC_PERF_REPORT");
+    if (!report.isEmpty())
+    {
+        QFile f(report);
+        QVERIFY2(f.open(QIODevice::Append | QIODevice::Text), qPrintable(report));
+        QTextStream out(&f);
+        for (const auto &r : results)
+            out << r.first << "," << QString::number(r.second, 'f', 3) << "\n";
+    }
+}
+
+/* Frost and CTO at steady values, the shutter open and no strobe: a still rig
+   draws nothing on the live tick -- the strobe's repaint is for strobing
+   fixtures only. And one strobing fixture does ask for frames. */
+void RenderPerf_Test::anIdleRigWithFrostAndNoStrobeDrawsNothing()
+{
+    Doc doc(nullptr, 2);
+    doc.monitorProperties()->setGridSize(QVector3D(14, 8, 14));
+    const QList<Fixture *> rig = featureRig(&doc, 12, featureValues(15, 15, 128, 128));
+    StructureStudioView v(&doc, StructureStudioView::StageKind, 0);
+    v.resize(900, 600);
+    v.reload();
+    v.setPlane(StructureStudioView::Angled);
+    v.setBeams(true);
+    v.setLiveValues(true);
+    v.m_liveTimer->stop();
+    v.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&v));
+    v.repaint();
+    v.repaint();
+    QVERIFY2(!v.liveTick(), "a still rig with frost and CTO asked for a frame");
+    QVERIFY(!v.m_opticsAnimating);
+#ifdef STUDIO_LABEL_FIELDS
+    rig.first()->setOwnChannelValues(featureValues(15, 140, 128, 128));     // strobing
+    v.repaint();
+    QVERIFY(v.m_opticsAnimating);
 #endif
 }
 

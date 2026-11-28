@@ -175,6 +175,8 @@
 #include "outputpatch.h"
 #include "qlccapability.h"
 #include "monitor.h"
+#include "plotnumbering.h"
+#include "showreview.h"
 #include "showlevel.h"
 #include "masklenswidget.h"
 #include "planmapwidget.h"
@@ -1212,6 +1214,38 @@ void Monitor::initGraphicsFooter(QWidget *gcontainer, QWidget *viewArea)
     labelsBtn->setChecked(m_props->labelsVisible());
     connect(labelsBtn, &QAction::toggled, this, [this](bool on) { slotShowLabels(on); });
 
+    /* What the labels say: any of the fields, per show. A submenu of Show, so
+       the menu count is the same. */
+    {
+        QMenu *fieldsMenu = showMenu->addMenu(tr("Label Fields"));
+        fieldsMenu->setObjectName(QStringLiteral("labelFieldsMenu"));
+        fieldsMenu->setToolTip(tr("What each fixture's label says on the plot. Saved with the show."));
+        const struct { int bit; const char *name; const char *obj; } fields[] = {
+            { MonitorProperties::LabelName, "Name", "labelFieldName" },
+            { MonitorProperties::LabelUnit, "Unit #", "labelFieldUnit" },
+            { MonitorProperties::LabelChannel, "Channel / ID", "labelFieldChannel" },
+            { MonitorProperties::LabelAddress, "Address (U.ch)", "labelFieldAddress" },
+            { MonitorProperties::LabelGel, "Colour / gel", "labelFieldGel" },
+            { MonitorProperties::LabelMode, "Mode", "labelFieldMode" },
+            { MonitorProperties::LabelOwner, "Owner", "labelFieldOwner" } };
+        for (const auto &f : fields)
+        {
+            QAction *a = fieldsMenu->addAction(tr(f.name));
+            a->setObjectName(QString::fromLatin1(f.obj));
+            a->setCheckable(true);
+            a->setChecked((m_props->labelFields() & f.bit) != 0);
+            const int bit = f.bit;
+            connect(a, &QAction::toggled, this, [this, bit](bool on) {
+                RigEditSession edit(this);
+                int mask = m_props->labelFields();
+                mask = on ? (mask | bit) : (mask & ~bit);
+                m_props->setLabelFields(mask);
+                if (m_graphicsView != nullptr)
+                    m_graphicsView->refreshFixtureLabels();
+            });
+        }
+    }
+
     /* Fixtures left on Auto drawn as their closest stage look (an LED PAR,
        a moving head spot...) instead of by their definition's type. Per
        show, saved with it; one Ctrl+Z, like any change to the plot. */
@@ -2037,6 +2071,31 @@ void Monitor::undo()
 bool Monitor::canUndo() const
 {
     return m_graphicsView != nullptr && m_graphicsView->canUndo();
+}
+
+bool Monitor::numberInPlotOrder(const QList<quint32> &fids, QWidget *parent)
+{
+    if (fids.size() < 2)
+        return false;
+    NumberInPlotOrderDialog dlg(m_doc, fids, parent != nullptr ? parent : this);
+    if (dlg.exec() != QDialog::Accepted)
+        return false;
+    const QByteArray before = rigSnapshot();
+    QString why;
+    if (!PlotNumbering::apply(m_doc, dlg.rows(), &why))
+    {
+        QMessageBox::warning(parent != nullptr ? parent : this, tr("Number in Plot Order"),
+                             why.isEmpty() ? tr("The patch would not fit.") : why);
+        return false;
+    }
+    pushRigUndo(before);
+    if (m_graphicsView != nullptr)
+    {
+        for (quint32 fid : fids)
+            m_graphicsView->updateFixture(fid);
+        m_graphicsView->refreshFixtureLabels();     // Unit # and Channel may be on them
+    }
+    return true;
 }
 
 void Monitor::redo()
@@ -3189,6 +3248,36 @@ void Monitor::slotMapViewChanged(int)
     updateModeIndicator();
 }
 
+QHash<quint32, QPair<QColor, QString> > Monitor::patchProblems() const
+{
+    QHash<quint32, QPair<QColor, QString> > out;
+    if (m_doc->showReview() == nullptr)
+        return out;
+    ShowReview::Options opt;
+    opt.checks = { QStringLiteral("PAT-01"), QStringLiteral("PAT-02"), QStringLiteral("PAT-03") };
+    opt.record = false;
+    const ShowReview::Result res = m_doc->showReview()->run(opt);
+    for (const ReviewFinding &f : res.findings)
+    {
+        if (f.state == ReviewFinding::Accepted)
+            continue;
+        const QColor colour = f.severity == ReviewFinding::Blocker ? QColor(235, 40, 40)
+                                                                   : QColor(240, 170, 30);
+        for (const QString &t : f.targets)
+        {
+            if (!t.startsWith(QLatin1String("fx:")))
+                continue;
+            const quint32 fid = t.mid(3).toUInt();
+            const auto have = out.constFind(fid);
+            if (have != out.constEnd())
+                out[fid].second += QStringLiteral("\n") + f.message;
+            else
+                out.insert(fid, qMakePair(colour, f.message));
+        }
+    }
+    return out;
+}
+
 void Monitor::applyMapView(int view)
 {
     if (m_graphicsView == NULL)
@@ -3201,6 +3290,14 @@ void Monitor::applyMapView(int view)
     // The Network overlay also draws each port's cable run, node -> fixtures in
     // address order, with its stats on hover.
     m_graphicsView->setNetworkRunsVisible(view == ViewNet);
+    if (view != ViewDMX)
+    {
+        foreach (Fixture *fx, m_doc->fixtures())
+        {
+            if (MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id()))
+                it->setPatchClash(QColor(), QString());
+        }
+    }
 
     if (view == ViewPower)
     {
@@ -3290,15 +3387,24 @@ void Monitor::applyMapView(int view)
             }
         }
 
+        /* The problems, from Show Review's own patch checks (PAT-01 overlap,
+           PAT-02 past channel 512, PAT-03 unpatched), so the plot and the
+           review never disagree; a finding someone accepted stays quiet. */
+        const QHash<quint32, QPair<QColor, QString> > problems = patchProblems();
+
         foreach (Fixture *fx, fixtures)
         {
             if (fx == NULL) continue;
             MonitorFixtureItem *it = m_graphicsView->fixtureItemForId(fx->id());
             if (it == NULL) continue;
+            const auto prob = problems.constFind(fx->id());
+            it->setPatchClash(prob != problems.constEnd() ? prob->first : QColor(),
+                              prob != problems.constEnd() ? prob->second : QString());
             if (!fx->isPatched())
             {
                 it->setViewTint(QColor(70, 70, 70));
-                it->setToolTip(tr("Unpatched (inventory)"));
+                it->setToolTip(prob != problems.constEnd() ? tr("Unpatched: %1").arg(prob->second)
+                                                           : tr("Unpatched (inventory)"));
                 continue;
             }
             const quint32 uni = fx->universe() + 1;        // 1-based for display
@@ -3321,6 +3427,8 @@ void Monitor::applyMapView(int view)
                 it->setToolTip(tr("Universe %1%2 · A %3–%4 (%5 ch)")
                                .arg(uni).arg(via).arg(a0).arg(a1).arg(fx->channels()));
             }
+            if (prob != problems.constEnd())
+                it->setToolTip(it->toolTip() + QStringLiteral("\n⚠ ") + prob->second);
         }
         m_graphicsView->setPowerSourceColors(QHash<QString, QColor>());
     }
@@ -3500,6 +3608,60 @@ void Monitor::stageMarksChanged()
         v->update();
     if (m_overviewView != NULL)         // its own window: not one of ours
         m_overviewView->update();
+}
+
+void Monitor::saveCurrentView(StructureStudioView *view, const QString &name)
+{
+    if (view == nullptr || name.trimmed().isEmpty())
+        return;
+    const StructureStudioView::Camera c = view->camera();
+    MonitorProperties::CameraView v;
+    v.name = name.trimmed();
+    v.plane = c.plane;
+    v.rotation = c.rotation;
+    v.azimuth = c.azimuth;
+    v.elevation = c.elevation;
+    v.zoomed = c.zoomed;
+    v.scale = c.scale;
+    v.originX = c.origin.x();
+    v.originY = c.origin.y();
+    v.width = c.width;
+    v.height = c.height;
+    m_doc->monitorProperties()->setCameraView(v);
+    m_doc->setModified();
+}
+
+bool Monitor::applySavedView(StructureStudioView *view, const QString &name)
+{
+    if (view == nullptr)
+        return false;
+    const MonitorProperties *props = m_doc->monitorProperties();
+    const int i = props->cameraViewIndex(name);
+    if (i < 0)
+        return false;
+    const MonitorProperties::CameraView v = props->cameraViews().at(i);
+    StructureStudioView::Camera c;
+    c.plane = v.plane;
+    c.rotation = v.rotation;
+    c.azimuth = v.azimuth;
+    c.elevation = v.elevation;
+    c.zoomed = v.zoomed;
+    c.scale = v.scale;
+    c.origin = QPointF(v.originX, v.originY);
+    c.width = v.width;
+    c.height = v.height;
+    view->setCamera(c);
+    // The View box says where the eye now is.
+    if (m_overviewPlaneCombo != nullptr && view == m_overviewView)
+    {
+        const int at = m_overviewPlaneCombo->findData(int(view->plane()));
+        if (at >= 0)
+        {
+            QSignalBlocker block(m_overviewPlaneCombo);
+            m_overviewPlaneCombo->setCurrentIndex(at);
+        }
+    }
+    return true;
 }
 
 void Monitor::toggleStageOverview()
@@ -3862,6 +4024,69 @@ void Monitor::showStageOverview()
     planeCombo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     planeCombo->setMinimumContentsLength(8);
     bar->addWidget(planeCombo);
+
+    /* Named cameras (Capture's saved views): the View box's own menu. Saved
+       with the show; the Notes' "Snapshot the view" is the same Camera. */
+    {
+        QToolButton *camBtn = new QToolButton(footer);
+        camBtn->setObjectName(QStringLiteral("rigSavedViews"));
+        camBtn->setText(tr("Views"));
+        camBtn->setPopupMode(QToolButton::InstantPopup);
+        camBtn->setToolTip(tr("Saved views: keep this point of view under a name "
+                              "(From FOH, Director's seat) and come back to it"));
+        QMenu *camMenu = new QMenu(camBtn);
+        camBtn->setMenu(camMenu);
+        QPointer<StructureStudioView> cv(view);
+        auto rebuild = [this, camMenu, cv]() {
+            camMenu->clear();
+            MonitorProperties *props = m_doc->monitorProperties();
+            const QList<MonitorProperties::CameraView> views = props->cameraViews();
+            for (const MonitorProperties::CameraView &v : views)
+            {
+                const QString name = v.name;
+                camMenu->addAction(name, camMenu, [this, cv, name]() {
+                    if (cv.isNull())
+                        return;
+                    applySavedView(cv.data(), name);
+                });
+            }
+            if (!views.isEmpty())
+                camMenu->addSeparator();
+            camMenu->addAction(tr("Add View…"), camMenu, [this, cv]() {
+                if (cv.isNull())
+                    return;
+                bool ok = false;
+                const QString name = QInputDialog::getText(
+                    m_overviewView, tr("Add View"), tr("Name this view:"),
+                    QLineEdit::Normal, QString(), &ok).trimmed();
+                if (ok && !name.isEmpty())
+                    saveCurrentView(cv.data(), name);
+            });
+            QMenu *ren = camMenu->addMenu(tr("Rename View"));
+            QMenu *del = camMenu->addMenu(tr("Delete View"));
+            ren->setEnabled(!views.isEmpty());
+            del->setEnabled(!views.isEmpty());
+            for (const MonitorProperties::CameraView &v : views)
+            {
+                const QString name = v.name;
+                ren->addAction(name, camMenu, [this, name]() {
+                    bool ok = false;
+                    const QString to = QInputDialog::getText(
+                        m_overviewView, tr("Rename View"), tr("New name:"),
+                        QLineEdit::Normal, name, &ok).trimmed();
+                    if (ok && !to.isEmpty() && m_doc->monitorProperties()->renameCameraView(name, to))
+                        m_doc->setModified();
+                });
+                del->addAction(name, camMenu, [this, name]() {
+                    if (m_doc->monitorProperties()->removeCameraView(name))
+                        m_doc->setModified();
+                });
+            }
+        };
+        connect(camMenu, &QMenu::aboutToShow, camMenu, rebuild);
+        rebuild();
+        bar->addWidget(camBtn);
+    }
 
     /* Layers, from here: show or hide one without the Studio open. The same
        switch as the Studio's eye (saved with the show), so the two agree --

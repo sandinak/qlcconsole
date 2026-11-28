@@ -72,6 +72,9 @@ struct PreviewItem
     quint32 m_flags = 0;        ///< Item flags as specified in the ItemsFlags enum
     quint32 m_layerId = 0;      ///< 2D-map organizational layer (0 = Default)
     quint32 m_groupId = 0;      ///< 2D-map group (0 = ungrouped)
+    int m_unit = 0;             ///< Fixture: plot Unit # (0 = none)
+    int m_channel = 0;          ///< Fixture: control Channel / ID (0 = none)
+    QString m_purpose;          ///< Fixture: what it is for ("Front wash")
 };
 
 struct FixturePreviewItem
@@ -535,6 +538,17 @@ public:
     inline void setLabelsVisible(bool visible) { m_showLabels = visible; }
     inline bool labelsVisible() const { return m_showLabels; }
 
+    /** What a fixture's plot label says (Show ▸ Label Fields): a mask of
+     *  LabelField values, saved with the show. Name only is the default and
+     *  how every older show reads. */
+    enum LabelField
+    {
+        LabelName = 1, LabelUnit = 2, LabelChannel = 4, LabelAddress = 8,
+        LabelPurpose = 16, LabelGel = 32, LabelMode = 64, LabelOwner = 128
+    };
+    inline int labelFields() const { return m_labelFields; }
+    inline void setLabelFields(int mask) { m_labelFields = mask; }
+
     /** Draw fixtures left on Auto as their closest stage look
      *  (Fixture::autoStageLook()) in the plot and the studio, rather than by
      *  their definition's type as always. Per show, saved with it (only when
@@ -592,6 +606,15 @@ public:
     void setFixtureGroup(quint32 fid, quint32 groupId);
     quint32 fixtureGroup(quint32 fid) const;
 
+    /** The plot's own numbering of a whole Fixture (base item; 0 = none): its
+     *  Unit # and its control Channel / ID, and what it is for. */
+    void setFixtureUnit(quint32 fid, int unit);
+    int fixtureUnit(quint32 fid) const;
+    void setFixtureChannel(quint32 fid, int channel);
+    int fixtureChannel(quint32 fid) const;
+    void setFixturePurpose(quint32 fid, const QString &purpose);
+    QString fixturePurpose(quint32 fid) const;
+
     /** Get/Set all the Fixture item properties of a Fixture with ID $fid */
     inline FixturePreviewItem fixtureProperties(quint32 fid) const { return m_fixtureItems[fid]; }
     inline void setFixtureProperties(quint32 fid, FixturePreviewItem props) { m_fixtureItems[fid] = props; }
@@ -608,6 +631,7 @@ public:
 
 private:
     bool m_showLabels;
+    int m_labelFields = 1;
     std::atomic<bool> m_autoStageLooks { false };
     QMap <quint32, FixturePreviewItem> m_fixtureItems;
 
@@ -1253,7 +1277,31 @@ public:
     void removeNoLightZone(quint32 id);
     quint32 nextNoLightZoneId() const;
 
+    /** A named camera of the Rig Overview ("From FOH", "Director's seat"):
+     *  everything StructureStudioView::Camera holds, saved with the show. */
+    struct CameraView
+    {
+        QString name;
+        int plane = 3;
+        int rotation = 0;
+        double azimuth = 20.0;
+        double elevation = 30.0;
+        bool zoomed = false;
+        double scale = 60.0;
+        double originX = 0.0;
+        double originY = 0.0;
+        int width = 0;
+        int height = 0;
+    };
+    QList<CameraView> cameraViews() const { return m_cameraViews; }
+    /** Adds, or replaces the view of the same name (case-insensitive). */
+    void setCameraView(const CameraView &v);
+    bool renameCameraView(const QString &from, const QString &to);
+    bool removeCameraView(const QString &name);
+    int cameraViewIndex(const QString &name) const;
+
 private:
+    QList<CameraView> m_cameraViews;
     QMap<quint32, MonitorImage> m_images;
     QMap<quint32, NoLightZone> m_zones;
 

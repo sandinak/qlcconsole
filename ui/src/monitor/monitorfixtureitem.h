@@ -21,6 +21,7 @@
 #define MONITORFIXTUREITEM_H
 
 #include <QGraphicsItem>
+#include <QStaticText>
 #include <QAbstractGraphicsShapeItem>
 #include <QFont>
 #include <QElapsedTimer>
@@ -163,6 +164,14 @@ public:
      *  circuit, universe, group, etc.; an invalid colour restores normal fill. */
     void setViewTint(const QColor &color);
 
+    /** Outline this fixture as a patch problem (the DMX overlay: overlapping
+     *  addresses, past channel 512, unpatched), @p reason as the tooltip; an
+     *  invalid colour clears it. */
+    void setPatchClash(const QColor &colour, const QString &reason);
+    bool hasPatchClash() const { return m_clashColour.isValid(); }
+    QString patchClashReason() const { return m_clashReason; }
+    QColor patchClashColour() const { return m_clashColour; }
+
     /** Return the fixture ID associated to this item */
     quint32 fixtureID() const { return m_fid; }
 
@@ -245,6 +254,20 @@ public:
     void setViewHint(qreal scale, qreal turnDeg);
     /** The name label as painted, upright on screen, in item coordinates. */
     QPolygonF labelPolygon() const;
+    QPolygonF labelPolygonAbove() const;
+
+    /** What the label says for @p fid under the field mask @p fields
+     *  (MonitorProperties::LabelField): the short ids (Unit #, Channel,
+     *  Address) go in @p above the icon, the words (Name, Purpose, Gel, Mode,
+     *  Owner) in @p below it, one line each. */
+    static void labelTexts(Doc *doc, quint32 fid, int fields, QString *above, QString *below);
+    /** Read the label's fields again (they are a show-wide setting, and the
+     *  numbers behind them change from the dialogs). */
+    void refreshLabel();
+    QString labelAbove() const { return m_labelTextAbove; }
+    QString labelBelow() const { return m_labelTextBelow; }
+    /** The label's boxes in scene coordinates, for the overlap test. */
+    QList<QRectF> labelSceneRects() const;
 
     /** "Isolated" = drilled into its group to select this ONE fixture (double-
      *  click). Draws a distinct bright dashed border so it's obvious the sub-
@@ -472,12 +495,17 @@ private:
     QFont m_font;
 
     QRect m_labelRect;
+    QRect m_labelRectAbove;
+    QString m_labelTextAbove, m_labelTextBelow;
+    QStaticText m_labelStaticAbove, m_labelStaticBelow;   ///< laid out once, drawn each frame
 
     /** setViewHint(): the view's scale and turn. */
     qreal m_viewScale = 1.0;
     qreal m_viewTurn = 0.0;
 
     bool m_boundToTruss  = false;
+    QColor m_clashColour;       ///< a patch problem's outline (invalid = none)
+    QString m_clashReason;
     bool m_trussGroupSelected = false;
     bool m_escapeMode    = false;
     bool m_attachMode    = false;

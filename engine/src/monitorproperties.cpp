@@ -73,6 +73,7 @@
 #define KXMLQLCMonitorOriginY       QStringLiteral("OriginY")
 #define KXMLQLCMonitorItemID        QStringLiteral("ID")
 #define KXMLQLCMonitorShowLabels    QStringLiteral("ShowLabels")
+#define KXMLQLCMonitorLabelFields   QStringLiteral("LabelFields")
 #define KXMLQLCMonitorAutoStageLooks QStringLiteral("AutoStageLooks")
 #define KXMLQLCMonitorStageMarks    QStringLiteral("StageMarks")
 #define KXMLQLCMonitorCurtainLineY  QStringLiteral("CurtainLineY")
@@ -111,6 +112,9 @@
 
 #define KXMLQLCMonitorFixtureLayerId        QStringLiteral("LayerId")
 #define KXMLQLCMonitorFixtureGroupId        QStringLiteral("GroupId")
+#define KXMLQLCMonitorFixtureUnit           QStringLiteral("Unit")
+#define KXMLQLCMonitorFixtureChannel        QStringLiteral("Chan")
+#define KXMLQLCMonitorFixturePurpose        QStringLiteral("Purpose")
 #define KXMLQLCMonitorFixtureVertStrip      QStringLiteral("VertStrip")
 #define KXMLQLCMonitorFixtureHiddenFlag     QStringLiteral("Hidden")
 #define KXMLQLCMonitorFixtureInvPanFlag     QStringLiteral("InvertedPan")
@@ -285,8 +289,10 @@ bool MonitorProperties::restoreSnapshot(const QByteArray &snap, const Doc *mainD
     const QList<quint32> before = m_rigProps.keys();
     const bool autoLooksWere = autoStageLooks();
     const quint32 liveWas = liveBlocking();     // what the stage plays is not the rig's undo
+    const auto viewsWere = m_cameraViews;       // named cameras are not the rig's undo either
     reset();
     const bool ok = loadXML(r, mainDocument);
+    m_cameraViews = viewsWere;
     if (liveWas == defaultBlocking() || m_blockingSets.contains(liveWas))
         m_liveBlocking.store(liveWas, std::memory_order_release);
     /* reset() clears it quietly and loadXML() only says so when it sets it
@@ -1169,6 +1175,7 @@ void MonitorProperties::reset()
     m_numberLineY = 0.0f;
     m_targetPositionsVisible = true;
     m_showLabels = true;
+    m_labelFields = 1;
     /* Quietly: a load or an undo snapshot sets it again straight after, and
        its setter says so then if it differs. */
     m_autoStageLooks.store(false, std::memory_order_relaxed);
@@ -1219,6 +1226,7 @@ void MonitorProperties::reset()
     m_groups.clear();
     m_images.clear();
     m_zones.clear();
+    m_cameraViews.clear();
 }
 
 /********************************************************************
@@ -1499,6 +1507,39 @@ QColor MonitorProperties::fixtureGelColor(quint32 fid, quint16 head, quint16 lin
         quint32 subID = fixtureSubID(head, linked);
         return m_fixtureItems[fid].m_subItems[subID].m_color;
     }
+}
+
+void MonitorProperties::setFixtureUnit(quint32 fid, int unit)
+{
+    m_fixtureItems[fid].m_baseItem.m_unit = qMax(0, unit);
+}
+
+int MonitorProperties::fixtureUnit(quint32 fid) const
+{
+    const auto it = m_fixtureItems.constFind(fid);
+    return it == m_fixtureItems.constEnd() ? 0 : it->m_baseItem.m_unit;
+}
+
+void MonitorProperties::setFixtureChannel(quint32 fid, int channel)
+{
+    m_fixtureItems[fid].m_baseItem.m_channel = qMax(0, channel);
+}
+
+int MonitorProperties::fixtureChannel(quint32 fid) const
+{
+    const auto it = m_fixtureItems.constFind(fid);
+    return it == m_fixtureItems.constEnd() ? 0 : it->m_baseItem.m_channel;
+}
+
+void MonitorProperties::setFixturePurpose(quint32 fid, const QString &purpose)
+{
+    m_fixtureItems[fid].m_baseItem.m_purpose = purpose;
+}
+
+QString MonitorProperties::fixturePurpose(quint32 fid) const
+{
+    const auto it = m_fixtureItems.constFind(fid);
+    return it == m_fixtureItems.constEnd() ? QString() : it->m_baseItem.m_purpose;
 }
 
 void MonitorProperties::setFixtureFixedZoom(quint32 fid, quint16 head, quint16 linked, int degrees)
@@ -3296,6 +3337,46 @@ void MonitorProperties::removeImage(quint32 id)
     m_images.remove(id);
 }
 
+int MonitorProperties::cameraViewIndex(const QString &name) const
+{
+    for (int i = 0; i < m_cameraViews.size(); ++i)
+        if (m_cameraViews.at(i).name.compare(name, Qt::CaseInsensitive) == 0)
+            return i;
+    return -1;
+}
+
+void MonitorProperties::setCameraView(const CameraView &v)
+{
+    if (v.name.trimmed().isEmpty())
+        return;
+    const int i = cameraViewIndex(v.name);
+    if (i >= 0)
+        m_cameraViews[i] = v;
+    else
+        m_cameraViews.append(v);
+}
+
+bool MonitorProperties::renameCameraView(const QString &from, const QString &to)
+{
+    const int i = cameraViewIndex(from);
+    if (i < 0 || to.trimmed().isEmpty())
+        return false;
+    const int clash = cameraViewIndex(to);
+    if (clash >= 0 && clash != i)
+        return false;
+    m_cameraViews[i].name = to.trimmed();
+    return true;
+}
+
+bool MonitorProperties::removeCameraView(const QString &name)
+{
+    const int i = cameraViewIndex(name);
+    if (i < 0)
+        return false;
+    m_cameraViews.removeAt(i);
+    return true;
+}
+
 quint32 MonitorProperties::nextNoLightZoneId() const
 {
     quint32 id = 0;
@@ -3718,6 +3799,8 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
         else
             setLabelsVisible(false);
     }
+    if (attrs.hasAttribute(KXMLQLCMonitorLabelFields))
+        setLabelFields(qBound(0, attrs.value(KXMLQLCMonitorLabelFields).toString().toInt(), 255));
 
     if (attrs.hasAttribute(KXMLQLCMonitorAutoStageLooks))
         setAutoStageLooks(attrs.value(KXMLQLCMonitorAutoStageLooks).toString() == "1");
@@ -3923,6 +4006,12 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
             if (headIndex == 0 && linkedIndex == 0
                     && tAttrs.hasAttribute(KXMLQLCMonitorFixtureGroupId))
                 item.m_groupId = tAttrs.value(KXMLQLCMonitorFixtureGroupId).toString().toUInt();
+            if (headIndex == 0 && linkedIndex == 0)
+            {
+                item.m_unit = tAttrs.value(KXMLQLCMonitorFixtureUnit).toString().toInt();
+                item.m_channel = tAttrs.value(KXMLQLCMonitorFixtureChannel).toString().toInt();
+                item.m_purpose = tAttrs.value(KXMLQLCMonitorFixturePurpose).toString();
+            }
 
             setFixtureItem(fid, headIndex, linkedIndex, item);
             root.skipCurrentElement();
@@ -4053,6 +4142,25 @@ bool MonitorProperties::loadXML(QXmlStreamReader &root, const Doc *mainDocument)
                     g.name = QStringLiteral("Group %1").arg(gid);
                 m_groups.insert(gid, g);
             }
+            root.skipCurrentElement();
+        }
+        else if (root.name() == QStringLiteral("CameraView"))
+        {
+            const QXmlStreamAttributes a = root.attributes();
+            CameraView v;
+            v.name = a.value(QStringLiteral("Name")).toString();
+            v.plane = a.value(QStringLiteral("Plane")).toInt();
+            v.rotation = a.value(QStringLiteral("Rot")).toInt();
+            v.azimuth = a.value(QStringLiteral("Az")).toDouble();
+            v.elevation = a.value(QStringLiteral("El")).toDouble();
+            v.zoomed = a.value(QStringLiteral("Zoomed")).toInt() != 0;
+            v.scale = a.value(QStringLiteral("Scale")).toDouble();
+            v.originX = a.value(QStringLiteral("OX")).toDouble();
+            v.originY = a.value(QStringLiteral("OY")).toDouble();
+            v.width = a.value(QStringLiteral("W")).toInt();
+            v.height = a.value(QStringLiteral("H")).toInt();
+            if (!v.name.isEmpty() && cameraViewIndex(v.name) < 0)
+                m_cameraViews.append(v);
             root.skipCurrentElement();
         }
         else if (root.name() == QStringLiteral("NoLightZone"))
@@ -4771,6 +4879,8 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
     doc->writeStartElement(KXMLQLCMonitorProperties);
     doc->writeAttribute(KXMLQLCMonitorDisplay, QString::number(displayMode()));
     doc->writeAttribute(KXMLQLCMonitorShowLabels, QString::number(labelsVisible()));
+    if (labelFields() != LabelName)
+        doc->writeAttribute(KXMLQLCMonitorLabelFields, QString::number(labelFields()));
     // Only when on: a show that never turned it on saves as it always has.
     if (autoStageLooks())
         doc->writeAttribute(KXMLQLCMonitorAutoStageLooks, QString::number(1));
@@ -4927,6 +5037,12 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
                 doc->writeAttribute(KXMLQLCMonitorFixtureLayerId, QString::number(item.m_layerId));
             if (headIndex == 0 && linkedIndex == 0 && item.m_groupId != 0)
                 doc->writeAttribute(KXMLQLCMonitorFixtureGroupId, QString::number(item.m_groupId));
+            if (headIndex == 0 && linkedIndex == 0 && item.m_unit != 0)
+                doc->writeAttribute(KXMLQLCMonitorFixtureUnit, QString::number(item.m_unit));
+            if (headIndex == 0 && linkedIndex == 0 && item.m_channel != 0)
+                doc->writeAttribute(KXMLQLCMonitorFixtureChannel, QString::number(item.m_channel));
+            if (headIndex == 0 && linkedIndex == 0 && !item.m_purpose.isEmpty())
+                doc->writeAttribute(KXMLQLCMonitorFixturePurpose, item.m_purpose);
 
             doc->writeEndElement();
         }
@@ -5098,6 +5214,24 @@ bool MonitorProperties::saveXML(QXmlStreamWriter *doc, const Doc *mainDocument, 
     // No-light zones
     foreach (const NoLightZone &z, m_zones)
         z.saveXML(doc);
+
+    // Named cameras of the Rig Overview
+    foreach (const CameraView &v, m_cameraViews)
+    {
+        doc->writeStartElement(QStringLiteral("CameraView"));
+        doc->writeAttribute(QStringLiteral("Name"), v.name);
+        doc->writeAttribute(QStringLiteral("Plane"), QString::number(v.plane));
+        doc->writeAttribute(QStringLiteral("Rot"), QString::number(v.rotation));
+        doc->writeAttribute(QStringLiteral("Az"), QString::number(v.azimuth, 'g', 10));
+        doc->writeAttribute(QStringLiteral("El"), QString::number(v.elevation, 'g', 10));
+        doc->writeAttribute(QStringLiteral("Zoomed"), v.zoomed ? QStringLiteral("1") : QStringLiteral("0"));
+        doc->writeAttribute(QStringLiteral("Scale"), QString::number(v.scale, 'g', 10));
+        doc->writeAttribute(QStringLiteral("OX"), QString::number(v.originX, 'g', 10));
+        doc->writeAttribute(QStringLiteral("OY"), QString::number(v.originY, 'g', 10));
+        doc->writeAttribute(QStringLiteral("W"), QString::number(v.width));
+        doc->writeAttribute(QStringLiteral("H"), QString::number(v.height));
+        doc->writeEndElement();
+    }
 
     // Trusses
     foreach (const Truss *t, m_trusses)

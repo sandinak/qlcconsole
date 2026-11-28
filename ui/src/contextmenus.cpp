@@ -544,6 +544,18 @@ void ContextMenus::rig(ContextMenu &menu, Doc *doc, const QList<quint32> &groupI
         pa->setToolTip(ContextMenu::tr("Give a universe and address, or move to another -- as a block "
                                        "keeping their spacing, or packed -- reviewed before it is applied"));
     }
+    /* A selection: unit and channel numbers in plot order, and the patch. */
+    if (onlyFixtures && editable && place.offerNumber && fixtures.size() > 1 && Monitor::instance() != nullptr)
+    {
+        QAction *na = menu.add(ContextMenu::Kind, ContextMenu::tr("Number…"), [fixtures, parent, changed]() {
+            if (Monitor *mon = Monitor::instance())
+                if (mon->numberInPlotOrder(fixtures, parent) && changed)
+                    changed();
+        }, QStringLiteral("ctxNumber"));
+        na->setToolTip(ContextMenu::tr("Give them Unit # and Channel numbers in plot order -- stage right "
+                                       "to left, upstage to down, or along a truss -- and patch them in "
+                                       "that order if you like"));
+    }
     /* One fixture: where each of its heads is. */
     if (onlyFixtures && fixtures.size() == 1)
     {

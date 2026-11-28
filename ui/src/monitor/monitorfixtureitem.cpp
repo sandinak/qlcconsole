@@ -40,6 +40,7 @@
 #include "headlayout.h"
 #include "monitorfixtureitem.h"
 #include "outputrulekeeper.h"
+#include "fixturevisualtraits.h"
 #include "uprighttext.h"
 #include "lengthinputdialog.h"
 #include "measurementunits.h"
@@ -73,6 +74,8 @@ static QCursor smallOpenHandCursor()
     return QCursor(pm, 5, 0); // hotspot = tip of middle finger
 }
 #include "monitorproperties.h"
+#include "rigowner.h"
+#include "qlcfixturemode.h"
 #include "aimsolver.h"
 #include "qlcfixturehead.h"
 #include "qlcfixturemode.h"
@@ -86,7 +89,7 @@ static QCursor smallOpenHandCursor()
 #include "programmercontroller.h"
 
 #define MOVEMENT_THICKNESS    3
-#define STROBE_PERIOD 500 // 0.5s
+#define STROBE_PERIOD kStrobeHalfPeriodMs // 0.5s, shared with the Rig Overview (fixturevisualtraits.h)
 
 // A fixture with more heads than this is drawn as tiled rectangles (pixel
 // array, e.g. RGB tape) rather than round heads, for tight density.
@@ -702,9 +705,7 @@ void MonitorFixtureItem::setSize(QSize size)
 
     updateLensHint();
 
-    QFontMetrics fm(m_font);
-    m_labelRect = fm.boundingRect(QRect(-10, m_height + 2, m_width + 20, 30),
-                                  Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
+    refreshLabel();
 
     setTransformOriginPoint(m_width / 2, m_height / 2);
     update();
@@ -716,14 +717,129 @@ void MonitorFixtureItem::refreshName()
        (the edit dialog, Layers, the Fixture Manager) the plot kept the old
        label and tooltip. */
     Fixture *fxi = m_doc->fixture(m_fid);
-    if (fxi == NULL || fxi->name() == m_name)
+    if (fxi == NULL)
+        return;
+    if (fxi->name() != m_name)
+    {
+        prepareGeometryChange();
+        m_name = fxi->name();
+        setToolTip(baseToolTip());
+    }
+    refreshLabel();
+}
+
+void MonitorFixtureItem::labelTexts(Doc *doc, quint32 fid, int fields, QString *above, QString *below)
+{
+    QStringList ids, words;
+    Fixture *fx = doc != nullptr ? doc->fixture(fid) : nullptr;
+    MonitorProperties *props = doc != nullptr ? doc->monitorProperties() : nullptr;
+    if (fx != nullptr && props != nullptr)
+    {
+        if ((fields & MonitorProperties::LabelUnit) && props->fixtureUnit(fid) > 0)
+            ids << QObject::tr("U%1").arg(props->fixtureUnit(fid));
+        if ((fields & MonitorProperties::LabelChannel) && props->fixtureChannel(fid) > 0)
+            ids << QObject::tr("Ch %1").arg(props->fixtureChannel(fid));
+        if (fields & MonitorProperties::LabelAddress)
+            ids << (fx->isPatched() ? QStringLiteral("%1.%2").arg(fx->universe() + 1).arg(fx->address() + 1)
+                                    : QObject::tr("unpatched"));
+        if (fields & MonitorProperties::LabelName)
+            words << fx->name();
+        if ((fields & MonitorProperties::LabelPurpose) && !props->fixturePurpose(fid).isEmpty())
+            words << props->fixturePurpose(fid);
+        if (fields & MonitorProperties::LabelGel)
+        {
+            const QColor gel = props->fixtureGelColor(fid, 0, 0);
+            if (gel.isValid())
+                words << QObject::tr("Gel %1").arg(gel.name().toUpper());
+        }
+        if ((fields & MonitorProperties::LabelMode) && fx->fixtureMode() != nullptr)
+            words << fx->fixtureMode()->name();
+        if (fields & MonitorProperties::LabelOwner)
+            words << RigOwner::displayName(RigOwner::effective(doc, fid));
+    }
+    if (above != nullptr)
+        *above = ids.join(QStringLiteral(" · "));
+    if (below != nullptr)
+        *below = words.join(QLatin1Char('\n'));
+}
+
+void MonitorFixtureItem::refreshLabel()
+{
+    const int fields = m_doc->monitorProperties()->labelFields();
+    QString above, below;
+    labelTexts(m_doc, m_fid, fields, &above, &below);
+    // The icon-less rule from before: a fixture the doc lost keeps its name.
+    if (below.isEmpty() && above.isEmpty() && (fields & MonitorProperties::LabelName))
+        below = m_name;
+    QFontMetrics fm(m_font);
+    const QRect belowRect = below.isEmpty() ? QRect()
+        : fm.boundingRect(QRect(-10, m_height + 2, m_width + 20, 30),
+                          Qt::AlignHCenter | Qt::TextWrapAnywhere, below);
+    // Above: the box's bottom edge sits just over the icon.
+    QRect aboveRect;
+    if (!above.isEmpty())
+    {
+        // One line, never broken in the middle of "Ch 101": centred on the icon.
+        aboveRect = fm.boundingRect(QRect(-200, 0, int(m_width) + 400, 30), Qt::AlignHCenter, above);
+        aboveRect.moveCenter(QPoint(int(m_width) / 2, aboveRect.center().y()));
+        aboveRect.moveBottom(-3);
+    }
+    if (belowRect == m_labelRect && aboveRect == m_labelRectAbove && below == m_labelTextBelow
+        && above == m_labelTextAbove)
         return;
     prepareGeometryChange();
-    m_name = fxi->name();
-    setToolTip(baseToolTip());
-    QFontMetrics fm(m_font);
-    m_labelRect = fm.boundingRect(QRect(-10, m_height + 2, m_width + 20, 30),
-                                  Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
+    m_labelTextBelow = below;
+    m_labelTextAbove = above;
+    m_labelRect = belowRect;
+    m_labelRectAbove = aboveRect;
+    // Laid out here, once: a frame only draws them.
+    auto prep = [this](QStaticText &st, const QRect &box, const QString &text, QTextOption::WrapMode wrap) {
+        st.setText(text);
+        st.setTextFormat(Qt::PlainText);
+        st.setPerformanceHint(QStaticText::AggressiveCaching);
+        QTextOption opt(Qt::AlignHCenter);
+        opt.setWrapMode(wrap);
+        st.setTextOption(opt);
+        st.setTextWidth(box.width());
+        st.prepare(QTransform(), m_font);
+    };
+    prep(m_labelStaticBelow, belowRect, below, QTextOption::WrapAnywhere);
+    prep(m_labelStaticAbove, aboveRect, above, QTextOption::NoWrap);
+    update();
+}
+
+QPolygonF MonitorFixtureItem::labelPolygonAbove() const
+{
+    if (m_labelRectAbove.isEmpty())
+        return QPolygonF();
+    const QRectF r(m_labelRectAbove);
+    const qreal turn = std::fmod(m_viewTurn + rotation(), 360.0);
+    if (qAbs(turn) < 0.5 || qAbs(qAbs(turn) - 360.0) < 0.5)
+        return QPolygonF(r);
+    QTransform t;
+    t.translate(r.center().x(), r.center().y());
+    t.rotate(-turn);
+    t.translate(-r.center().x(), -r.center().y());
+    return t.map(QPolygonF(r));
+}
+
+QList<QRectF> MonitorFixtureItem::labelSceneRects() const
+{
+    QList<QRectF> out;
+    if (!m_labelVisibility)
+        return out;
+    for (const QPolygonF &poly : { labelPolygon(), labelPolygonAbove() })
+        if (!poly.isEmpty())
+            out << mapToScene(poly).boundingRect();
+    return out;
+}
+
+void MonitorFixtureItem::setPatchClash(const QColor &colour, const QString &reason)
+{
+    if (m_clashColour == colour && m_clashReason == reason)
+        return;
+    m_clashColour = colour;
+    m_clashReason = colour.isValid() ? reason : QString();
     update();
 }
 
@@ -1102,6 +1218,8 @@ QPolygonF MonitorFixtureItem::labelPolygon() const
        the view's and the item's own -- about its centre, so it reads
        upright. At a quarter turn that is a tall rectangle in item terms,
        not the wide one m_labelRect is. */
+    if (m_labelRect.isEmpty())
+        return QPolygonF();
     const QRectF r(m_labelRect);
     const qreal turn = std::fmod(m_viewTurn + rotation(), 360.0);
     if (qAbs(turn) < 0.5 || qAbs(qAbs(turn) - 360.0) < 0.5)
@@ -1128,8 +1246,13 @@ QRectF MonitorFixtureItem::boundingRect() const
         rect |= QRectF(m_width, -8.0, 16.0, 16.0);                 // the "P" badge
     if (m_labelVisibility)
     {
-        rect |= QRectF(-10, m_height, m_width + 20, m_labelRect.height() + 2);
-        rect |= labelPolygon().boundingRect().adjusted(-1, -1, 1, 1);
+        if (!m_labelRect.isEmpty())
+        {
+            rect |= QRectF(-10, m_height, m_width + 20, m_labelRect.height() + 2);
+            rect |= labelPolygon().boundingRect().adjusted(-1, -1, 1, 1);
+        }
+        if (!m_labelRectAbove.isEmpty())
+            rect |= labelPolygonAbove().boundingRect().adjusted(-1, -1, 1, 1);
     }
 
     // Its pixels along a path, a wand's staff, a flame's outline.
@@ -1166,7 +1289,10 @@ QPainterPath MonitorFixtureItem::shape() const
     path.setFillRule(Qt::WindingFill);     // a turned label may overlap the body
     path.addRect(QRectF(-m, -m, m_width + 2 * m, m_height + 2 * m));
     if (m_labelVisibility)
+    {
         path.addPolygon(labelPolygon());      // as painted: upright at any turn
+        path.addPolygon(labelPolygonAbove());
+    }
     /* Selected and unlocked, the arrow's HEAD is a handle that turns it --
        the head only, outside the body, so it never takes a fixture it
        overlaps from anyone not reaching for it. */
@@ -1562,6 +1688,16 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
         drawBody(painter, QRectF(1.5, 1.5, m_width - 3, m_height - 3));
     }
 
+    // A patch problem on the DMX overlay: a thick outline, a step outside the body.
+    if (m_clashColour.isValid())
+    {
+        QPen clashPen(m_clashColour, 3.0);
+        clashPen.setCosmetic(true);
+        painter->setPen(clashPen);
+        painter->setBrush(Qt::NoBrush);
+        drawBody(painter, QRectF(-2.0, -2.0, m_width + 4.0, m_height + 4.0));
+    }
+
     // Marked (move-in-black): a thin dashed violet outline so a pre-positioned-
     // but-dark fixture reads distinctly from a live one. Outline only — the
     // fixture's fill still shows whatever (dark) output it has.
@@ -1712,20 +1848,26 @@ void MonitorFixtureItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
            the text is pinned. */
         const double viewTurn = qRadiansToDegrees(qAtan2(painter->transform().m12(),
                                                          painter->transform().m11()));
-        painter->save();
-        if (qAbs(viewTurn) > 0.5)
-        {
-            painter->translate(m_labelRect.center());
-            painter->rotate(-viewTurn);
-            painter->translate(-m_labelRect.center());
-        }
-        painter->setFont(m_font);
-        painter->setPen(QPen(Qt::NoPen));
-        painter->setBrush(QBrush(QColor(33, 33, 33)));
-        painter->drawRoundedRect(m_labelRect, 2, 2);
-        painter->setPen(QPen(Qt::white, 1));
-        painter->drawText(m_labelRect, Qt::AlignHCenter | Qt::TextWrapAnywhere, m_name);
-        painter->restore();
+        auto drawLabel = [&](const QRect &box, const QString &text, const QStaticText &st) {
+            if (box.isEmpty() || text.isEmpty())
+                return;
+            painter->save();
+            if (qAbs(viewTurn) > 0.5)
+            {
+                painter->translate(box.center());
+                painter->rotate(-viewTurn);
+                painter->translate(-box.center());
+            }
+            painter->setFont(m_font);
+            painter->setPen(QPen(Qt::NoPen));
+            painter->setBrush(QBrush(QColor(33, 33, 33)));
+            painter->drawRoundedRect(box, 2, 2);
+            painter->setPen(QPen(Qt::white, 1));
+            painter->drawStaticText(box.topLeft(), st);
+            painter->restore();
+        };
+        drawLabel(m_labelRect, m_labelTextBelow, m_labelStaticBelow);
+        drawLabel(m_labelRectAbove, m_labelTextAbove, m_labelStaticAbove);
     }
 }
 
@@ -1944,6 +2086,7 @@ void MonitorFixtureItem::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
         ContextMenu cm(&menu);
         ContextMenus::RigPlace rig;
         rig.editable = m_editable;
+        rig.offerNumber = true;
         const quint32 fid = m_fid;
         rig.changed = [this, fid]() { emit mountingChanged(fid); };
         ContextMenus::rig(cm, m_doc, QList<quint32>(), ids, rig);

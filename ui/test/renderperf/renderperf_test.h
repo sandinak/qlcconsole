@@ -61,6 +61,8 @@ private slots:
     /** The shows we run (Q360): the Rig Overview and the plot at that size */
     void theShowsWeRunDrawInBudget();
 
+    void studioFeatureFrames();
+    void anIdleRigWithFrostAndNoStrobeDrawsNothing();
     void cpuPerFrame();
 
 private:

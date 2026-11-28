@@ -282,6 +282,33 @@ double starTurnRate(const Fixture *fx, const QByteArray &vals);
  *          callers can fall back to their static appearance. */
 bool fixtureLiveState(Fixture *fx, QColor &colour, uchar &dimmer);
 
+/** The beam's finishing touches read from a fixture's live channels: frost,
+ *  colour temperature (CTO / CTB / CCT), a closed shutter and a strobe. Shared
+ *  by the Rig Overview and, for the strobe, the plot's 2D items. */
+struct BeamExtras
+{
+    double frost = 0.0;         ///< 0 clear ... 1 full frost (widens and softens, blurs a gobo)
+    double warmth = 0.0;        ///< -1 full CTB (cool) ... +1 full CTO (warm); 0 none
+    bool shutterClosed = false; ///< an explicit ShutterClose capability
+    double strobeHz = 0.0;      ///< 0 steady; else flashes a second, 1..6 (readable)
+};
+
+/** Half a strobe flash, in milliseconds, at the slowest rate: what the plot's
+ *  2D fixture items blink at. */
+static const int kStrobeHalfPeriodMs = 500;
+
+BeamExtras beamExtras(const Fixture *fx, const QByteArray &values, bool valuesAreComplete = true);
+
+/** Is a strobing fixture lit at @p seconds? Always when @p hz is 0. */
+bool strobeLit(double hz, double seconds);
+
+/** @p colour through a warm (+) or cool (-) correction filter; @p warmth is
+ *  BeamExtras::warmth. Invalid stays invalid. */
+QColor tintByWarmth(const QColor &colour, double warmth);
+
+/** How much wider a frosted beam reads: 1 clear ... 1.3 full frost. */
+double frostWiden(double frost);
+
 /** The colour slots a fixture is sent: out[0] is the primary (a WLED Effect Mode's
  *  Color 1, or the plain colour channels), out[1] its "Secondary" and out[2]
  *  its "Tertiary" colour; invalid for a slot with no channels or no light.

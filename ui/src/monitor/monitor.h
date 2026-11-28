@@ -253,6 +253,11 @@ public:
      *  duplicate, a new group, a rename on the Fixtures tab. */
     void pushUndoCallback(const std::function<void()> &undo, const std::function<void()> &redo);
 
+    /** Number-in-plot-order dialog for @p fids (the plot's right-click ▸
+     *  Number…): Unit # and / or Channel from N in plot order, optionally
+     *  patching in that order; one undo step. Returns whether it changed. */
+    bool numberInPlotOrder(const QList<quint32> &fids, QWidget *parent = nullptr);
+
     /** "Centre the pan on the stage" (PanTurn::centre) for @p fids: one
      *  undo step, and the notice line says what changed. Fixture
      *  Properties' button for a selection, the plot's menu, Show Review's
@@ -454,6 +459,11 @@ public:
     /** ⇧⌘R: open it -- or, when it is the window in front, close it. Open
      *  behind others, it is brought forward rather than shut unseen. */
     void toggleStageOverview();
+    /** Rig Overview saved views (named cameras, saved with the show). */
+    /** The patch problems the DMX overlay outlines: fixture -> (colour, what). */
+    QHash<quint32, QPair<QColor, QString> > patchProblems() const;
+    void saveCurrentView(class StructureStudioView *view, const QString &name);
+    bool applySavedView(class StructureStudioView *view, const QString &name);
     /** The Rig Overview's view (Q212: a note's snapshot of the view); with
      *  @a open, the window is opened first when it isn't. Null: not open. */
     class StructureStudioView *stageOverviewView(bool open = false);

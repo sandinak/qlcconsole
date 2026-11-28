@@ -6827,6 +6827,17 @@ ProjectorParts StructureStudioView::drawProjectorSolid(QPainter &p, quint32 fid,
     return parts;
 }
 
+/* Shutter, strobe and colour temperature for a beam: false when nothing leaves
+   the lens now (a closed shutter, or the dark half of a strobe flash); else
+   @p live is through the CTO / CTB / CCT filter. */
+static bool beamExtrasPass(const BeamExtras &ex, double seconds, QColor &live)
+{
+    if (ex.shutterClosed || !strobeLit(ex.strobeHz, seconds))
+        return false;
+    live = tintByWarmth(live, ex.warmth);
+    return true;
+}
+
 void StructureStudioView::drawMoverSolid(QPainter &p, quint32 fid,
                                          const FixtureVisualTraits &traits,
                                          const QColor &col,
@@ -8482,7 +8493,13 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
     {
         QColor live = col;
         uchar dim = 0;
-        if (fixtureLiveState(fx, vals, live, dim, valsComplete))
+        /* The dark half of a strobe flash, and a shut shutter: the lens goes
+           dark with the beam; CTO / CTB tint the lens as they do the light. */
+        const BeamExtras lensEx = beamExtras(fx, vals, valsComplete);
+        if (lensEx.strobeHz > 0.0)
+            markOpticsAnimating();
+        if (fixtureLiveState(fx, vals, live, dim, valsComplete)
+            && beamExtrasPass(lensEx, opticsTime(), live))
         {
             col = shadeLive(live, dim, unlit, visibility);
             emitting = true;
@@ -8632,14 +8649,20 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                is the opposite question. A head pointed away from you is
                precisely when its beam is most worth drawing. */
             double beamLevel = 0.0;
+            double beamFrost = 0.0;
+            BeamExtras ex;
             // Read with beams off too: the LEDs on a wash's face still light.
             if (showingOutput)
             {
+                ex = beamExtras(fx, vals, valsComplete);
                 /* The gobo and prism it throws through are the fixture's,
                    the same for every head: worked out once, not once a
                    head (a 64-pixel bar walked its channels 64 times). */
                 BeamOptics::Optics fixtureOptics;
                 bool haveOptics = false;
+                beamFrost = ex.frost;
+                if (ex.strobeHz > 0.0)
+                    markOpticsAnimating();
                 for (int u = 0; u < units; ++u)
                 {
                     QColor live = unlit;
@@ -8654,6 +8677,8 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                            lamp does -- white through blue is blue. */
                         const QColor gel = m_doc->monitorProperties()->fixtureGelColor(fid, 0, 0);
                         live = gelled(live, gel);
+                        if (!beamExtrasPass(ex, opticsTime(), live))
+                            dim = 0;
                         looks[u].beamLevel = dim / 255.0;
                         looks[u].beamColour = live;
                         beamLevel = qMax(beamLevel, looks[u].beamLevel);
@@ -8666,6 +8691,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                         looks[u].optics = fixtureOptics;
                         // A gobo's picture is sharp, whatever the lens.
                         looks[u].optics.softness = looks[u].optics.mask.isNull() ? traits.edgeSoftness : 0.0;
+                        looks[u].optics = BeamOptics::frosted(looks[u].optics, ex.frost);
                         if (looks[u].optics.animated)
                             markOpticsAnimating();
                     }
@@ -8687,7 +8713,7 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                     markOpticsAnimating();
             }
             drawMoverSolid(p, fid, traits, col, looks, !showingOutput,
-                           beamNow);
+                           beamNow * frostWiden(beamFrost));
 
             /* Say where it is aimed -- but ONLY when the beam is not already
                saying it.
@@ -8858,8 +8884,12 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
             QColor live = col;
             uchar dim = 0;
             QVector3D dir;
+            const BeamExtras ex = beamExtras(fx, vals, valsComplete);
+            if (ex.strobeHz > 0.0)
+                markOpticsAnimating();
             if (fixtureLiveState(fx, vals, live, dim, valsComplete)
                 && dim > 2
+                && beamExtrasPass(ex, opticsTime(), live)
                 && emitDirection(fx, rp, traits, dir))
             {
                 /* A declared lens wins. Without one, a fixture that cannot
@@ -8875,9 +8905,10 @@ void StructureStudioView::drawOneFixture(QPainter &p, quint32 fid,
                 const QVector3D apex = (haveProjector && !projector.apertures.isEmpty())
                     ? projector.apertures.at(projector.apertures.size() / 2)
                     : fixtureCentre(fid);
-                const double half = qDegreesToRadians(deg / 2.0);
+                const double half = qDegreesToRadians(deg / 2.0) * frostWiden(ex.frost);
                 BeamOptics::Optics optics = BeamOptics::opticsFor(fx, vals, opticsTime(), m_doc->monitorProperties());
                 optics.softness = optics.mask.isNull() ? traits.edgeSoftness : 0.0;
+                optics = BeamOptics::frosted(optics, ex.frost);
                 if (optics.animated)
                     markOpticsAnimating();
                 /* A bar of pixels is not a lamp in its middle ("the source

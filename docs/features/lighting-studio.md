@@ -356,6 +356,15 @@ than part of one core, draws no more than 15 frames a second (setting
 the rest of the app. A covered or hidden Rig Overview draws nothing in
 either mode.
 
+### Saved views
+
+The Rig Overview's footer has a **Views** button beside the View box. **Add View…**
+keeps where you are looking from -- the plane, the turn, the angle and height of
+the eye, the zoom and the pan -- under a name ("From FOH", "Director's seat").
+Pick a name to go back to it; **Rename View** and **Delete View** are in the same
+menu. Naming a view that already exists replaces it. The views are saved with
+the show, and are the same camera a Show Notes "Snapshot the view" keeps.
+
 ## Stage structures
 
 Six structure types, each its own object with its own geometry, plus
@@ -1608,6 +1617,16 @@ The symbol is saved in the show only when it is not Auto, so a show without
 symbols saves exactly as before, and QLC+ opens a show with symbols (it skips
 them).
 
+### Label fields
+
+**Show ▸ Label Fields** chooses what each fixture's label says on the plot, any of
+**Name**, **Unit #**, **Channel / ID**, **Address (U.ch)**, **Colour / gel**,
+**Mode** and **Owner**. The short ids (Unit #, Channel, Address) sit above
+the icon on one line; the words (Name, Gel, Mode, Owner) sit below it,
+one a line. They stay upright when the plot is turned. The choice is saved with
+the show; a show that never chose has the name only, as before. Unit # and
+Channel are set by Number… (right-click on the plot).
+
 ## Locks
 
 Two locks hold things still: the **object's own**, and its **layer's**.
@@ -1861,6 +1880,17 @@ It is selected and its name is open in Plot layers. The **Edit** menu reads
 *New Target Position (⇧⌘N)*, and is off while the plot is locked. One
 undo step takes the target and its palette away together.
 
+### Number in plot order
+
+Select two or more fixtures, right-click, **Number…**. It gives them **Unit #**
+and / or **Channel** numbers from the number you choose, in the order they stand
+on the plot: stage right to stage left, upstage to downstage, or along their
+truss. The list in the dialog is a preview of what each would get. Tick **Patch
+them in that order** to also give them the next free addresses, starting at the
+lowest address the selection holds now; a fixture that would not fit is marked
+"no room" and left alone. It is one undo step. Show the numbers on the plot with
+Show ▸ Label Fields.
+
 ## Plot layers
 
 ![Plot layers: Selected only, a fixture picked on the plot, a bar under its truss and a hanger under its tower, a layer's lock](../images/lighting-studio-plot-layers.png)
@@ -1973,6 +2003,17 @@ the Rig Overview show what it's actually doing, not just where it sits:
 
 Both overlays are visualization aids only — they aren't saved with the
 workspace.
+
+### Frost, colour temperature, shutter and strobe
+
+The Rig Overview draws what the fixture's own channels say. **Frost** widens the
+beam a little and softens its edge, and blurs a gobo's picture, more as the
+channel goes up. **CTO** warms the beam colour and **CTB** cools it; a **CCT**
+channel runs from warm (about 2700 K) to cool (about 6500 K), with daylight
+(5600 K) untinted. A **closed shutter** draws no beam at all, and a **strobe**
+blinks, slowly at the slow end of its range and about six times a second at the
+fast end -- a rate you can read. The channel is found by its name (Frost, CTO,
+CTB, CCT, Color Temperature) and by the shutter capabilities of the definition.
 
 ### Line of sight
 
@@ -2797,6 +2838,16 @@ Two small but load-bearing visual cues:
   back at Dim and above, and Show Review lists the clashes at any level.) Each body is measured as it is
   rigged: bars stood on end side by side, or strips stacked up a step's
   face each touching the next, are not in the same space.
+
+
+### Patch clashes on the DMX overlay
+
+With the plot's overlay on **DMX**, a fixture with a patch problem is outlined
+-- red for two fixtures on the same channels or one running past channel 512,
+amber for one that is not patched -- and its tooltip says which. The outlines
+come from Show Review's own patch checks (PAT-01, PAT-02, PAT-03), so the two
+never disagree, and a finding you have accepted there is left quiet. Fix the
+patch and the outline goes.
 
 ## Terminology
 

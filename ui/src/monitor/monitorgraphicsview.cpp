@@ -3684,7 +3684,10 @@ void MonitorGraphicsView::refreshFixtureLabels()
     // Rendering is driven purely by each item's LAYER labels flag.
     MonitorProperties *props = m_doc->monitorProperties();
     for (auto it = m_fixtures.constBegin(); it != m_fixtures.constEnd(); ++it)
+    {
+        it.value()->refreshLabel();
         it.value()->showLabel(props->layer(props->fixtureLayer(it.key())).labels);
+    }
 
     foreach (PlatformItem *pi, m_platformItems)
         if (StagePlatform *p = pi->platform())
@@ -10004,6 +10007,7 @@ void MonitorGraphicsView::buildItemMenu(QMenu *menu, const QString &kind, quint3
         ContextMenus::RigPlace rig;
         rig.parent = this;
         rig.editable = design;
+        rig.offerNumber = true;
         rig.properties = [this](const QList<quint32> &ids) {
             if (ids.size() == 1)
                 emit fixtureDoubleClicked(ids.first());
