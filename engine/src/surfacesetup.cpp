@@ -109,6 +109,19 @@ QList<SurfaceSetup::Spec> buildSpecs()
         list << s;
     }
     {
+        /* The LPD8 mk2: its RGB pads ignore a note from the host. One SysEx
+           paints all 8 (F0 47 7F 4C 06 00 30 ...; not in Akai's documents,
+           read on real units: docs/features/control-surfaces.md). Pads 1-8
+           are notes 36-43 on MIDI channel 10 in its factory program. On
+           connect they are painted as the app has them (dark at first). */
+        SurfaceSetup::Spec s;
+        s.profile = QStringLiteral("Akai LPD8 mk2");
+        s.initText = QObject::tr("One message with its pads' colours");
+        for (quint32 n = 36; n <= 43; ++n)
+            s.sysExPads << ((9u << 12) | (128u + n));
+        list << s;
+    }
+    {
         // Novation-LaunchPadMiniMK3.qxm's first message: the pads as notes 11-88.
         SurfaceSetup::Spec s;
         s.profile = QStringLiteral("Novation Launchpad Mini MK3");
@@ -161,9 +174,13 @@ SurfaceSetup::SurfaceSetup(Doc *doc)
             [this](quint32 universe, const QString &, const QString &) { slotPatchChanged(universe); });
     connect(iom, &InputOutputMap::universeRemoved, this, [this](quint32 universe) {
         m_checks.remove(universe);
+        m_padColours.remove(universe);
     });
     connect(iom, &InputOutputMap::inputValueChanged, this,
             [this](quint32 u, quint32 ch, uchar v, const QString &) { slotInput(u, ch, v); });
+    // A board whose pads are lit by SysEx (the LPD8 mk2): every lamp sent to it.
+    connect(iom, &InputOutputMap::feedbackSent, this,
+            [this](quint32 u, quint32 ch, uchar v, const QVariant &) { slotFeedbackSent(u, ch, v); });
     if (ProgrammerController *pc = m_doc->programmer())
         if (ControllerKeepAlive *ka = pc->controllerKeepAlive())
             connect(ka, &ControllerKeepAlive::woke, this, &SurfaceSetup::slotWoke);
@@ -182,6 +199,84 @@ SurfaceSetup::~SurfaceSetup()
         if (m_doc->inputOutputMap()->isSetupHeld(u))
             m_doc->inputOutputMap()->setSetupListening(UINT_MAX, false);
     qDeleteAll(m_links);
+}
+
+QByteArray SurfaceSetup::lpd8Mk2Colours(const QList<QColor> &pads)
+{
+    QByteArray m = hex("F0 47 7F 4C 06 00 30");
+    for (int i = 0; i < 8; ++i)
+    {
+        const QColor c = i < pads.size() && pads.at(i).isValid() ? pads.at(i) : QColor(Qt::black);
+        for (const int v : { c.red(), c.green(), c.blue() })
+        {
+            m.append(char((v >> 7) & 0x7F));
+            m.append(char(v & 0x7F));
+        }
+    }
+    m.append(char(0xF7));
+    return m;
+}
+
+QColor SurfaceSetup::padColour(quint32 universe, quint32 channel, uchar value) const
+{
+    if (value == 0)
+        return QColor(Qt::black);
+    QColor hue(0, 90, 255);                 // a pad with no desk job: blue
+    InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+    const SurfaceLayout layout = SurfaceLayout::forProfile(ip != nullptr ? ip->profileName() : QString());
+    if (layout.isValid())
+    {
+        const QString role = layout.roleOn(channel);
+        if (channel == layout.shiftChannel())
+            hue = QColor(255, 255, 255);
+        else if (role == QLatin1String("go"))
+            hue = QColor(0, 255, 0);
+        else if (role == QLatin1String("back"))
+            hue = QColor(255, 150, 0);
+        else if (role == QLatin1String("stop"))
+            hue = QColor(255, 0, 0);
+    }
+    // As bright as the value; a dim "ready" stays visible.
+    const int scale = qMax(int(value), 24);
+    return QColor(hue.red() * scale / 255, hue.green() * scale / 255, hue.blue() * scale / 255);
+}
+
+void SurfaceSetup::slotFeedbackSent(quint32 universe, quint32 channel, uchar value)
+{
+    paintPad(universe, channel, value);
+}
+
+void SurfaceSetup::paintPad(quint32 universe, quint32 channel, uchar value)
+{
+    const Spec *s = specOf(universe);
+    if (s == nullptr || s->sysExPads.isEmpty())
+        return;
+    const int i = int(s->sysExPads.indexOf(channel));
+    if (i < 0)
+        return;
+    QList<QColor> &pads = m_padColours[universe];
+    while (pads.size() < s->sysExPads.size())
+        pads << QColor(Qt::black);
+    const QColor c = padColour(universe, channel, value);
+    if (pads.at(i) == c && !m_padsDirty.contains(universe))
+        return;
+    pads[i] = c;
+    m_padsDirty.insert(universe);
+    if (m_padFlushQueued)
+        return;
+    // A lamp test or a cue change sends many lamps at once: one message for them.
+    m_padFlushQueued = true;
+    QTimer::singleShot(0, this, &SurfaceSetup::flushPads);
+}
+
+void SurfaceSetup::flushPads()
+{
+    m_padFlushQueued = false;
+    const QSet<quint32> dirty = m_padsDirty;
+    m_padsDirty.clear();
+    for (quint32 u : dirty)
+        if (specOf(u) != nullptr)
+            sendTo(u, lpd8Mk2Colours(m_padColours.value(u)), tr("pad colours"));
 }
 
 QByteArray SurfaceSetup::apc64Text(int line, const QString &text)
@@ -361,12 +456,15 @@ bool SurfaceSetup::sendTo(quint32 universe, const QByteArray &msg, const QString
 bool SurfaceSetup::sendInit(quint32 universe, const QString &why)
 {
     const Spec *s = specOf(universe);
-    if (s == nullptr || s->init.isEmpty())
+    if (s == nullptr || (s->init.isEmpty() && s->sysExPads.isEmpty()))
         return false;
     const QString what = tr("Init (%1), %2").arg(s->initText, why.isEmpty() ? tr("asked") : why);
     bool ok = true;
     for (const QByteArray &m : s->init)
         ok = sendTo(universe, m, what) && ok;
+    // Its pads as the app has them (a replug or a wake shows the board's own colours).
+    if (!s->sysExPads.isEmpty())
+        ok = sendTo(universe, lpd8Mk2Colours(m_padColours.value(universe)), what) && ok;
     if (ok)
         ++m_initsSent;
     return ok;
@@ -485,6 +583,7 @@ void SurfaceSetup::lampTestStep()
         const int midiCh = c != nullptr ? c->lowerChannel() : -1;
         const QVariant params = midiCh >= 0 ? QVariant(midiCh) : QVariant();
         fb->plugin()->sendFeedBack(u, fb->output(), ch, v, params);
+        paintPad(u, ch, v);         // a board whose pads are lit by SysEx
         const QByteArray b = SurfaceBoardLog::midiBytes(ch, v, midiCh);
         m_boardLog->logSysExOut(u, b, true, tr("lamp test%1").arg(c != nullptr ? QStringLiteral(": ") + c->name() : QString()));
     };

@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "profile": "Akai LPD8",
+  "name": "Akai LPD8",
+  "short": "LPD8",
+  "width": 30.6,
+  "height": 8.1,
+  "shift": 164,
+  "guards": ["stop", "release"],
+  "guardWords": {"stop": "Pad 1 + Pad 8", "release": "Pad 1 + Pad 4"},
+  "pages": [],
+  "sections": [
+    {"label": "PROGRAM / PAD / PROG CHNG / CC", "x": 0.5, "y": 0.6, "w": 3.2, "h": 6.9},
+    {"label": "Pads", "x": 4.2, "y": 0.6, "w": 16.2, "h": 7.0},
+    {"label": "Knobs", "x": 21.2, "y": 0.6, "w": 8.8, "h": 6.9}
+  ],
+  "controls": [
+    {"ch": 164, "x": 4.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 1", "lamp": "led"},
+    {"ch": 165, "x": 8.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 2", "lamp": "led"},
+    {"ch": 166, "x": 12.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 3", "lamp": "led"},
+    {"ch": 167, "x": 16.5, "y": 4.3, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 4", "lamp": "led"},
+    {"ch": 168, "x": 4.5, "y": 0.9, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 5", "lamp": "led"},
+    {"ch": 169, "x": 8.5, "y": 0.9, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 6", "lamp": "led"},
+    {"ch": 170, "x": 12.5, "y": 0.9, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 7", "lamp": "led"},
+    {"ch": 171, "x": 16.5, "y": 0.9, "w": 3.6, "h": 3.0, "kind": "pad", "face": "PAD 8", "lamp": "led"},
+    {"ch": 0, "x": 21.6, "y": 1.6, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K1"},
+    {"ch": 1, "x": 23.7, "y": 1.6, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K2"},
+    {"ch": 2, "x": 25.8, "y": 1.6, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K3"},
+    {"ch": 3, "x": 27.9, "y": 1.6, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K4"},
+    {"ch": 4, "x": 21.6, "y": 5.0, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K5"},
+    {"ch": 5, "x": 23.7, "y": 5.0, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K6"},
+    {"ch": 6, "x": 25.8, "y": 5.0, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K7"},
+    {"ch": 7, "x": 27.9, "y": 5.0, "w": 1.6, "h": 1.6, "kind": "knob", "shape": "round", "face": "K8"}
+  ],
+  "roles": [
+    {"role": "go", "ch": 167, "seed": true},
+    {"role": "back", "ch": 166, "seed": true},
+    {"role": "gm", "ch": 0, "seed": true},
+    {"role": "stop", "ch": 171, "seed": true}
+  ]
+}

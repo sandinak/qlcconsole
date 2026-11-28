@@ -30,6 +30,7 @@
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTimer>
+#include <QColor>
 #include <QtTest>
 
 #include <fcntl.h>
@@ -73,6 +74,8 @@ const QString kMaize = QStringLiteral("USB2.0-MIDI Port 1");
 const QString kMaize2 = QStringLiteral("USB2.0-MIDI Port 2");
 const QString kPmj = QStringLiteral("OpenDeck | PMJ_BLACK_1");
 const QString kRtp = QStringLiteral("Network RTP Session 1");
+const QString kLpd8Mk2 = QStringLiteral("LPD8 mk2");
+const QString kLpd8 = QStringLiteral("LPD8");
 
 QByteArray hex(const char *s)
 {
@@ -105,6 +108,14 @@ QByteArray pitch(int v)
 
 const QByteArray kAbleton = hex("F0 47 7F 29 60 00 04 41 09 00 05 F7");
 const QByteArray kApc64Display = hex("F0 47 00 53 1C 00 01 01 F7");
+const QByteArray kLpd8Paint = hex("F0 47 7F 4C 06 00 30");
+
+/** A pad's colour in an LPD8 mk2 paint: its six bytes put back together. */
+QColor lpd8Pad(const QByteArray &m, int pad)
+{
+    auto v = [&m, pad](int c) { return (uchar(m.at(7 + pad * 6 + c * 2)) << 7) | uchar(m.at(8 + pad * 6 + c * 2)); };
+    return QColor(v(0), v(1), v(2));
+}
 }
 
 /****************************************************************************
@@ -132,6 +143,15 @@ void VirtualBench_Test::initTestCase()
         for (const VirtualMidiBench::PortSpec &p : VirtualMidiBench::board(b))
             if (already.contains(p.name))
                 QSKIP(qPrintable(QStringLiteral("a real \"%1\" is connected to this computer").arg(p.name)));
+
+    /* Every port already here is a real device (his LPD8 mk2 on dink): the
+       app under test never sets one up, so nothing is sent to it. */
+    for (const QString &n : already)
+        if (!m_realPorts.contains(n))
+            m_realPorts << n;
+    // Declined before the app starts: its start-up scan must not set one up either.
+    for (const QString &n : std::as_const(m_realPorts))
+        SurfaceAutoPatch::setDeclined(n, true);
 
     m_bench = new VirtualMidiBench();
     QVERIFY2(m_bench->isValid(), qPrintable(QStringLiteral("CoreMIDI refused a client: %1").arg(m_bench->status())));
@@ -183,6 +203,8 @@ void VirtualBench_Test::cleanupTestCase()
     m_bench = nullptr;
     delete m_pluginDir;
     m_pluginDir = nullptr;
+    for (const QString &n : std::as_const(m_realPorts))
+        SurfaceAutoPatch::setDeclined(n, false);
     if (m_lockFd >= 0)
     {
         ::flock(m_lockFd, LOCK_UN);
@@ -198,6 +220,9 @@ void VirtualBench_Test::init()
     s.remove(QStringLiteral("surfaces"));
     s.remove(DeskRecord::settingsGroup());
     s.sync();
+    // A real board on this computer is never set up by the bench (declined, as an Undo does).
+    for (const QString &n : std::as_const(m_realPorts))
+        SurfaceAutoPatch::setDeclined(n, true);
     m_app->doc()->deskRecord()->load();
     InputOutputMap::setConfirmedProfile(kMaize, QString());
     SurfaceSetup *ss = m_app->doc()->surfaceSetup();
@@ -214,7 +239,7 @@ void VirtualBench_Test::cleanup()
     auto benchLines = [this]() {
         const QStringList lines = midi()->inputs();
         return QSet<QString>(lines.begin(), lines.end())
-            .intersect(QSet<QString>({ kApc40, kApc64Daw, kFp2, kMaize, kPmj, kRtp }));
+            .intersect(QSet<QString>({ kApc40, kApc64Daw, kFp2, kMaize, kPmj, kRtp, kLpd8Mk2, kLpd8 }));
     };
     QTRY_VERIFY_WITH_TIMEOUT(benchLines().isEmpty(), 5000);
     settle(100);
@@ -800,6 +825,207 @@ void VirtualBench_Test::theFaderPortKnobInBothModes()
     QVERIFY2(!cc60.isEmpty(), "CC 60 from the FaderPort never reached its Board Log");
     qInfo().noquote() << "[VirtualBench] FaderPort knob as CC 16:" << cc16;
     qInfo().noquote() << "[VirtualBench] FaderPort knob as CC 60:" << cc60;
+}
+
+/****************************************************************************
+ * The Akai LPD8s
+ ****************************************************************************/
+
+void VirtualBench_Test::theLpd8Mk2IsSetUpAndPaintedWhenPluggedIn()
+{
+    if (realBoard(kLpd8Mk2))
+        QSKIP("a real LPD8 mk2 is connected to this computer: the bench leaves it alone");
+    SurfaceAutoPatch *ap = m_app->doc()->surfaceSetup()->autoPatch();
+    QSignalSpy patched(ap, &SurfaceAutoPatch::autoPatched);
+    VirtualMidiPort *lpd = m_bench->plug(kLpd8Mk2);
+    QVERIFY(lpd != nullptr);
+    QTRY_COMPARE_WITH_TIMEOUT(patched.count(), 1, 5000);
+    const quint32 u = patched.first().at(0).toUInt();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    QCOMPARE(iom->inputPatch(u)->inputName(), kLpd8Mk2);
+    QCOMPARE(iom->inputPatch(u)->profileName(), QStringLiteral("Akai LPD8 mk2"));
+    QVERIFY(iom->feedbackPatch(u) != nullptr && iom->feedbackPatch(u)->isPatched());
+    QCOMPARE(iom->feedbackPatch(u)->outputName(), kLpd8Mk2);
+    // Its pads painted at its own port, by their one documented message.
+    auto paints = [lpd]() {
+        QList<QByteArray> out;
+        for (const QByteArray &m : lpd->receivedOfType(0xF0))
+            if (m.startsWith(kLpd8Paint))
+                out << m;
+        return out;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(!paints().isEmpty(), 3000);
+    settle(800);
+    for (const QByteArray &m : lpd->receivedOfType(0xF0))
+        QVERIFY2(m.startsWith(kLpd8Paint) && m.size() == 56,
+                 qPrintable("a SysEx that is not the pad colours: " + QString::fromLatin1(m.toHex(' '))));
+    qInfo().noquote() << "[VirtualBench] LPD8 mk2:" << paints().size() << "paints on plug-in, last"
+                      << QString::fromLatin1(paints().last().toHex(' '));
+    // The notice, and its chip.
+    QVERIFY2(m_app->m_viewNoticeText->text().contains(QStringLiteral("ready on universe %1").arg(u + 1)),
+             qPrintable(m_app->m_viewNoticeText->text()));
+    SurfaceChips *chips = m_app->surfaceChips();
+    QVERIFY(chips != nullptr);
+    QTRY_VERIFY_WITH_TIMEOUT(chips->chip(u) != nullptr && chips->chip(u)->isVisible(), 2000);
+    // The lamp test lights each pad through that message.
+    lpd->clear();
+    SurfaceSetup *ss = m_app->doc()->surfaceSetup();
+    ss->setLampTestStepMs(5);
+    QString why;
+    QVERIFY2(ss->startLampTest(u, &why), qPrintable(why));
+    QTRY_VERIFY_WITH_TIMEOUT(!ss->lampTestRunning(), 5000);
+    settle(100);
+    QSet<int> lit;
+    for (const QByteArray &m : paints())
+        for (int p = 0; p < 8; ++p)
+            if (lpd8Pad(m, p) != QColor(0, 0, 0))
+                lit.insert(p);
+    QVERIFY2(lit.size() == 8, qPrintable(QStringLiteral("the lamp test lit %1 of the 8 pads").arg(lit.size())));
+}
+
+void VirtualBench_Test::theLpd8Mk2PadsReachTheirJobs()
+{
+    if (realBoard(kLpd8Mk2))
+        QSKIP("a real LPD8 mk2 is connected to this computer: the bench leaves it alone");
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    DeskRecord *desk = m_app->doc()->deskRecord();
+    SurfaceAutoPatch *ap = m_app->doc()->surfaceSetup()->autoPatch();
+    QSignalSpy patched(ap, &SurfaceAutoPatch::autoPatched);
+    VirtualMidiPort *lpd = m_bench->plug(kLpd8Mk2);
+    QTRY_COMPARE_WITH_TIMEOUT(patched.count(), 1, 5000);
+    const quint32 u = patched.first().at(0).toUInt();
+    QTRY_VERIFY_WITH_TIMEOUT(desk->isLive(DeskRecord::Go) && desk->isLive(DeskRecord::Stop)
+                                 && desk->isLive(DeskRecord::GrandMaster), 2000);
+    for (DeskRecord::Role r : { DeskRecord::Go, DeskRecord::Back, DeskRecord::Stop, DeskRecord::GrandMaster })
+        QCOMPARE(desk->universeOf(r), u);
+    settle(1000);       // past the plug's dump window
+    QSignalSpy fired(desk, &DeskRecord::fired);
+    QSignalSpy refused(desk, &DeskRecord::refused);
+    auto pad = [this, lpd](int n, bool down) {
+        // Pads 1-8 are notes 36-43 on MIDI channel 10, as the board sends them.
+        const char msg[3] = { char(down ? 0x99 : 0x89), char(35 + n), char(down ? 0x64 : 0x00) };
+        QVERIFY(lpd->send(QByteArray(msg, 3)));
+        settle(30);
+    };
+    // Pad 4: GO (the Run tab has no list here, and says so).
+    pad(4, true);
+    pad(4, false);
+    QTRY_VERIFY_WITH_TIMEOUT(refused.count() >= 1, 2000);
+    QVERIFY2(refused.last().first().toString().startsWith(QStringLiteral("GO")), qPrintable(refused.last().first().toString()));
+    // Pad 3: Back.
+    pad(3, true);
+    pad(3, false);
+    QTRY_VERIFY_WITH_TIMEOUT(refused.count() >= 2, 2000);
+    QVERIFY2(refused.last().first().toString().startsWith(QStringLiteral("Back")), qPrintable(refused.last().first().toString()));
+    // Pad 8 alone: refused, and said in the footer.
+    pad(8, true);
+    pad(8, false);
+    QTRY_VERIFY_WITH_TIMEOUT(refused.count() >= 3, 2000);
+    QCOMPARE(refused.last().first().toString(), QStringLiteral("LPD8 mk2: Pad 1 + Pad 8 stops."));
+    QCOMPARE(fired.count(), 0);
+    QVERIFY(!m_app->doc()->outputRuleKeeper()->emergencyStopped());
+    QVERIFY2(m_footerMessages.join(QLatin1Char('\n')).contains(QStringLiteral("Pad 1 + Pad 8 stops")),
+             qPrintable(m_footerMessages.join(" | ")));
+    // Pad 1 held, Pad 8: ALL OFF.
+    pad(1, true);
+    pad(8, true);
+    pad(8, false);
+    pad(1, false);
+    QTRY_COMPARE_WITH_TIMEOUT(fired.count(), 1, 2000);
+    QCOMPARE(fired.first().first().toString(), QStringLiteral("ALL OFF"));
+    QTRY_VERIFY_WITH_TIMEOUT(m_app->doc()->outputRuleKeeper()->emergencyStopped(), 2000);
+    // K1 (CC 70, channel 1): the Grand Master, picked up at the master and then followed.
+    iom->setGrandMasterValue(255);
+    for (int v : { 120, 124, 127, 110, 90, 64 })
+    {
+        const char msg[3] = { char(0xB0), char(70), char(v) };
+        QVERIFY(lpd->send(QByteArray(msg, 3)));
+        settle(20);
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(int(iom->grandMasterValue()), 128, 2000);
+}
+
+void VirtualBench_Test::theLpd8Mk2SurvivesSaveAndReopen()
+{
+    if (realBoard(kLpd8Mk2))
+        QSKIP("a real LPD8 mk2 is connected to this computer: the bench leaves it alone");
+    SurfaceAutoPatch *ap = m_app->doc()->surfaceSetup()->autoPatch();
+    QSignalSpy patched(ap, &SurfaceAutoPatch::autoPatched);
+    VirtualMidiPort *lpd = m_bench->plug(kLpd8Mk2);
+    QTRY_COMPARE_WITH_TIMEOUT(patched.count(), 1, 5000);
+    const quint32 u = patched.first().at(0).toUInt();
+    settle(1000);
+    // A lamp lit (a live state of the board, never the show's).
+    m_app->doc()->inputOutputMap()->sendFeedBack(u, (9u << 12) | (128u + 41), 255, QVariant());
+    settle(50);
+
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("lpd8.qxw"));
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QString xml = QString::fromUtf8(f.readAll());
+    f.close();
+    // The show keeps the patch it was given: the port and its profile.
+    QVERIFY2(xml.contains(QStringLiteral("LPD8 mk2")), "the saved show has no LPD8 mk2 patch");
+    QVERIFY2(xml.contains(QStringLiteral("Akai LPD8 mk2")), "the saved show lost the profile");
+    // Not the board's live state: no pad colours, no message to it.
+    QVERIFY2(!xml.contains(QStringLiteral("F0477F4C"), Qt::CaseInsensitive)
+                 && !xml.contains(QStringLiteral("f0 47 7f 4c"), Qt::CaseInsensitive),
+             "the pads' colours were saved into the show");
+
+    QCOMPARE(m_app->loadXML(path), QFile::NoError);
+    settle(1500);
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    QTRY_COMPARE_WITH_TIMEOUT(universeOf(kLpd8Mk2), u, 3000);
+    QCOMPARE(iom->inputPatch(u)->profileName(), QStringLiteral("Akai LPD8 mk2"));
+    QCOMPARE(iom->feedbackPatch(u)->outputName(), kLpd8Mk2);
+    int universesWithIt = 0;
+    for (quint32 i = 0; i < iom->universesCount(); ++i)
+        if (iom->inputPatch(i) != nullptr && iom->inputPatch(i)->inputName() == kLpd8Mk2)
+            ++universesWithIt;
+    QCOMPARE(universesWithIt, 1);
+    // Its pads are painted again, and Pad 4 is still GO on this computer.
+    QTRY_VERIFY_WITH_TIMEOUT(!lpd->receivedOfType(0xF0).isEmpty(), 3000);
+    DeskRecord *desk = m_app->doc()->deskRecord();
+    QSignalSpy refused(desk, &DeskRecord::refused);
+    QSignalSpy fired(desk, &DeskRecord::fired);
+    QVERIFY(lpd->send("99 27 64"));
+    settle(30);
+    QVERIFY(lpd->send("89 27 00"));
+    QTRY_VERIFY_WITH_TIMEOUT(refused.count() + fired.count() >= 1, 2000);
+    const QString said = !refused.isEmpty() ? refused.last().first().toString() : fired.last().first().toString();
+    QVERIFY2(said.startsWith(QStringLiteral("GO")), qPrintable(said));
+    m_app->doc()->resetModified();
+}
+
+void VirtualBench_Test::theOriginalLpd8LightsByNote()
+{
+    if (realBoard(kLpd8))
+        QSKIP("a real LPD8 is connected to this computer: the bench leaves it alone");
+    SurfaceAutoPatch *ap = m_app->doc()->surfaceSetup()->autoPatch();
+    QSignalSpy patched(ap, &SurfaceAutoPatch::autoPatched);
+    VirtualMidiPort *lpd = m_bench->plug(kLpd8);
+    QTRY_COMPARE_WITH_TIMEOUT(patched.count(), 1, 5000);
+    const quint32 u = patched.first().at(0).toUInt();
+    InputOutputMap *iom = m_app->doc()->inputOutputMap();
+    QCOMPARE(iom->inputPatch(u)->profileName(), QStringLiteral("Akai LPD8"));
+    QCOMPARE(iom->feedbackPatch(u)->outputName(), kLpd8);
+    settle(800);
+    lpd->clear();
+    SurfaceSetup *ss = m_app->doc()->surfaceSetup();
+    ss->setLampTestStepMs(5);
+    QString why;
+    QVERIFY2(ss->startLampTest(u, &why), qPrintable(why));
+    QTRY_VERIFY_WITH_TIMEOUT(!ss->lampTestRunning(), 5000);
+    settle(100);
+    QSet<int> notes;
+    for (const QByteArray &m : lpd->receivedOfType(0x90))
+        if ((uchar(m.at(0)) & 0x0F) == 0 && m.size() > 2 && m.at(2) != 0)
+            notes.insert(uchar(m.at(1)));
+    QCOMPARE(notes, QSet<int>({ 36, 37, 38, 39, 40, 41, 42, 43 }));
+    QVERIFY2(lpd->receivedOfType(0xF0).isEmpty(), "the original LPD8 was sent a SysEx");
 }
 
 /****************************************************************************

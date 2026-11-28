@@ -1217,6 +1217,18 @@ SurfaceLayout DeskRecord::layoutOf(quint32 universe) const
     return ip != nullptr ? SurfaceLayout::forProfile(ip->profileName()) : SurfaceLayout();
 }
 
+QString DeskRecord::guardedWords(quint32 universe, quint32 channel, const QString &role) const
+{
+    const SurfaceLayout l = layoutOf(universe);
+    const QString words = role == QLatin1String("stop") ? l.guardedStopWords() : l.guardedReleaseWords();
+    if (words.isEmpty())
+        return QString();
+    // The layout's words name its seeded pads; a relearned STOP or GO is named itself.
+    if (l.roleChannel(role) == channel)
+        return words;
+    return tr("%1 + %2").arg(controlName(universe, l.shiftChannel()), controlName(universe, channel));
+}
+
 bool DeskRecord::hasShift(quint32 universe) const
 {
     return layoutOf(universe).shiftChannel() != kInvalid;
@@ -1900,7 +1912,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             if (SurfaceSetup *ss = m_doc->surfaceSetup())
                 ss->boardLog()->note(universe, tr("STOP refused: Shift (channel %1) is not held")
                                                    .arg(layoutOf(universe).shiftChannel()));
-            emit refused(tr("%1: Shift+Stop stops.").arg(layoutOf(universe).shortName()));
+            const SurfaceLayout lay = layoutOf(universe);
+            const QString words = guardedWords(universe, channel, QStringLiteral("stop"));
+            emit refused(words.isEmpty() ? tr("%1: Shift+Stop stops.").arg(lay.shortName())
+                                         : tr("%1: %2 stops.").arg(lay.shortName(), words));
             return;
         }
         if (SurfaceSetup *ss = m_doc->surfaceSetup())
@@ -1982,7 +1997,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
                 && m_doc->outputRuleKeeper() != nullptr && m_doc->outputRuleKeeper()->emergencyStopped())
             {
                 m_down.insert(k);
-                emit refused(tr("%1: stopped. Shift+Play releases the stop.").arg(layoutOf(universe).shortName()));
+                const SurfaceLayout lay = layoutOf(universe);
+                const QString words = guardedWords(universe, channel, QStringLiteral("go"));
+                emit refused(words.isEmpty() ? tr("%1: stopped. Shift+Play releases the stop.").arg(lay.shortName())
+                                             : tr("%1: stopped. %2 releases the stop.").arg(lay.shortName(), words));
                 break;
             }
             m_down.insert(k);

@@ -760,6 +760,41 @@ void SurfaceMap_Test::eachBoardIsDrawnLikeTheRealOne()
     // A few printed groups on each, outlined by the app.
     for (const SurfaceLayout &l : { pmj, fp, apc, a64 })
         QVERIFY(l.sections().size() >= 2);
+
+    /* The LPD8s: Pads 1-4 along the bottom, 5-8 above them, left to right;
+       K1-K4 on top and K5-K8 below, round, right of every pad. */
+    for (const QString &name : { QStringLiteral("Akai LPD8"), QStringLiteral("Akai LPD8 mk2") })
+    {
+        const SurfaceLayout lpd = SurfaceLayout::forProfile(name);
+        QVERIFY2(lpd.isValid(), qPrintable(name));
+        const quint32 pad1 = name.endsWith(QLatin1String("mk2")) ? ((9u << 12) | 164u) : 164u;
+        const quint32 k1 = name.endsWith(QLatin1String("mk2")) ? 70u : 0u;
+        qreal padRight = 0;
+        for (quint32 i = 0; i < 8; ++i)
+        {
+            const QRectF p = ctl(lpd, pad1 + i).rect;
+            QCOMPARE(ctl(lpd, pad1 + i).kind, SurfaceLayout::Pad);
+            padRight = qMax(padRight, p.right());
+            if (i % 4 != 0)
+                QVERIFY(ctl(lpd, pad1 + i - 1).rect.right() <= p.left());
+            if (i < 4)
+                QVERIFY(ctl(lpd, pad1 + i + 4).rect.bottom() <= p.top());     // Pad 5 above Pad 1
+        }
+        for (quint32 i = 0; i < 8; ++i)
+        {
+            const SurfaceLayout::Control k = ctl(lpd, k1 + i);
+            QCOMPARE(k.kind, SurfaceLayout::Knob);
+            QCOMPARE(k.shape, SurfaceLayout::Round);
+            QVERIFY(k.rect.left() >= padRight);
+            if (i < 4)
+                QVERIFY(k.rect.bottom() <= ctl(lpd, k1 + i + 4).rect.top());   // K1 above K5
+        }
+        // Shift is Pad 1, guarding the stop on Pad 8, said in pad words.
+        QCOMPARE(lpd.shiftChannel(), pad1);
+        QCOMPARE(lpd.roleChannel(QStringLiteral("stop")), pad1 + 7);
+        QCOMPARE(lpd.guardedStopWords(), QStringLiteral("Pad 1 + Pad 8"));
+        QVERIFY(lpd.sections().size() >= 2);
+    }
 }
 
 void SurfaceMap_Test::theControlTableAndTheDrawingSelectEachOther()
@@ -1356,6 +1391,9 @@ void SurfaceMap_Test::shots()
     SimMidiDevice fp2(m_doc, m_stub, QStringLiteral("PreSonus FP2"), 4, QStringLiteral("PreSonus FaderPort 2"),
                       profile("PreSonus-FaderPort-2.qxi"));
     QVERIFY2(fp2.plug(), qPrintable(fp2.lastError()));
+    SimMidiDevice lpd8(m_doc, m_stub, QStringLiteral("LPD8 mk2"), 6, QStringLiteral("Akai LPD8 mk2"),
+                       profile("Akai-LPD8-mk2.qxi"));
+    QVERIFY2(lpd8.plug(), qPrintable(lpd8.lastError()));
     settle();
     // A show with a few triggers, one only in a cue; a lit pad; a fader moved.
     ControlMap *cm = m_doc->controlMap();
@@ -1376,7 +1414,8 @@ void SurfaceMap_Test::shots()
     QVERIFY2(mini.plug(), qPrintable(mini.lastError()));
     settle();
     const QList<QPair<quint32, QString>> boards = { { 5, QStringLiteral("apcmini-mk2") }, { 0, QStringLiteral("apc40") }, { 1, QStringLiteral("pmj") },
-                                                    { 2, QStringLiteral("maizedmx") }, { 3, QStringLiteral("apc64") }, { 4, QStringLiteral("faderport2") } };
+                                                    { 2, QStringLiteral("maizedmx") }, { 3, QStringLiteral("apc64") }, { 4, QStringLiteral("faderport2") },
+                                                    { 6, QStringLiteral("lpd8-mk2") } };
     for (const QSize &size : sizes)
     {
         QScrollArea scroll;
@@ -1403,6 +1442,8 @@ void SurfaceMap_Test::shots()
                 apc64.set(QStringLiteral("Touch strip 2"), 70);
             if (b.first == 4)
                 fp2.set(QStringLiteral("Fader"), 80);
+            if (b.first == 6)
+                lpd8.set(QStringLiteral("Knob K1"), 100);
             settle();
             const QString file = QStringLiteral("%1/%2-surfacemap-%3-%4x%5.png")
                                      .arg(dir, prefix, b.second).arg(size.width()).arg(size.height());

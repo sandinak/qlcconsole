@@ -99,6 +99,15 @@ private slots:
     void aProfileIsChosenByTheDevice();
     /** The APC mini mk2 is a drawn surface with the APC40's default roles. */
     void theApcMiniMk2SeedsItsDefaults();
+    /** The Akai LPD8 and LPD8 mk2, patched by their port names alone:
+     *  Pad 4 GO, Pad 3 Back, K1 the Grand Master; STOP is Pad 8 with Pad 1
+     *  (Shift) held, and Pad 8 alone is refused and said. */
+    void theLpd8sSeedTheirDefaultsAndGuardTheStop_data();
+    void theLpd8sSeedTheirDefaultsAndGuardTheStop();
+    /** The LPD8 mk2's RGB pads ignore a note: its lamps go as one SysEx of
+     *  all 8 pads, each in its job's colour, coalesced; its init paints
+     *  them as the app has them. The original LPD8 is sent notes only. */
+    void theLpd8Mk2PadsArePaintedBySysEx();
     /** A user's copy of a surface profile older than the built-in one (a
      *  legacy link) is not used, and the panel says so; a good copy is. */
     void anOlderCopyOfASurfaceProfileIsNotUsed();

@@ -185,6 +185,7 @@ These come as surface types:
 | **PMJ Black 1** | Master = Grand Master; Go, Back, Left, Right, page arrows; O = Blackout, Set = Blind; the five mode keys = pages; strip keys Select / Load / Up (reset); encoders | plain |
 | **Akai APC mini** and **APC mini mk2** | Slider 9 = Grand Master; scene keys: **Clip Stop** = GO, **Solo** = Back, **Stop All Clips** = stop | plain |
 | **PreSonus FaderPort 2** | Fader = Grand Master; **Play** = GO, **Rewind** = Back, **Shift+Stop** = stop (Shift+Play releases it) | motor |
+| **Akai LPD8** and **LPD8 mk2** | Knob **K1** = Grand Master; **Pad 4** = GO, **Pad 3** = Back, **Pad 1 + Pad 8** = stop (Pad 1 + Pad 4 releases it) | knobs, plain |
 | **PMJ 9 Faders**, **KORG nanoKONTROL2**, **Behringer BCF2000** | the last fader = Grand Master | plain (BCF2000: motor) |
 
 Today the roles are what the board's own overlay does (the PMJ's) and what
@@ -386,7 +387,10 @@ a click opens its map.
   STOP and the **GM** fader; on the **APC64**, as on the APC40, **PLAY**
   GO, **RECORD** Back, **STOP ALL CLIPS** STOP, and touch strip 8 the Grand
   Master; on the **APC mini mk2** the top scene key **Clip Stop** is GO,
-  **Solo** Back, **Shift** STOP and **Slider 9** the Grand Master; **Left** and **Right** page the faders (Colour, Move), lit when there is a page that way.
+  **Solo** Back, **Shift** STOP and **Slider 9** the Grand Master; **Left** and **Right** page the faders (Colour, Move), lit when there is a page that way;
+  on the **LPD8** and **LPD8 mk2** **Pad 4** is GO, **Pad 3** Back, **Pad 8**
+  STOP with **Pad 1** held as Shift, and knob **K1** the Grand Master
+  ([the LPD8s](#the-akai-lpd8-and-lpd8-mk2)).
   A role you have learned already (on any board)
   is never changed, a control the open show already uses keeps its job
   (that role is left for you to learn), and a board is set up once: a role
@@ -395,7 +399,8 @@ a click opens its map.
 - **The profile comes with the device.** A board patched with no profile
   gets the one made for it, by the name the system gives its port: **APC40**,
   **APC40 mkII**, the **APC64's DAW port**, **APC mini** and **mini mk2**
-  (its *Control* port), the **FaderPort 2** (*PreSonus FP2*). A profile you
+  (its *Control* port), the **FaderPort 2** (*PreSonus FP2*), the **LPD8**
+  and the **LPD8 mk2** (*LPD8 mk2*). A profile you
   pick yourself is kept. The MaizeDMX's port is *USB2.0-MIDI*, a name many
   boxes share, so it is never chosen by name: pick its profile. The
   profile's init follows at once (the APC40 mkII's Ableton mode, the APC64's
@@ -522,7 +527,8 @@ native mode; patch it on that channel with the profile **PreSonus FaderPort
   **Stop needs Shift** and **Releasing a stop needs Shift**, saved with the
   show; untick them for a show that wants the single press. A board's
   layout file says which key is its Shift and what it guards by default
-  (`"shift"`, `"guards"`); only the FaderPort 2 asks for it.
+  (`"shift"`, `"guards"`, and `"guardWords"` for a board whose keys are
+  not labelled Shift and Stop); the FaderPort 2 and the LPD8s ask for it.
 - **What PreSonus's MIDI protocol says** (the FaderPort owner's manual,
   appendix *FaderPort Multichannel Controller MIDI Protocol*, for its native
   Studio One mode): the fader is pitch bend on MIDI channel 1, both ways
@@ -540,6 +546,73 @@ native mode; patch it on that channel with the profile **PreSonus FaderPort
   Marker, Nudge, Click, Loop, Rewind, Fast Forward, Stop, Play, Record).
   **Prev** (note 46) and key **25** are not confirmed by a PreSonus document;
   rename them in the profile once the manual says.
+
+## The Akai LPD8 and LPD8 mk2
+
+The LPD8 is a small pad board: 8 pads in two rows and 8 knobs. There are
+two models with different MIDI, and each has its own profile, **Akai
+LPD8** (the original, 2009) and **Akai LPD8 mk2** (2020, RGB pads). Both
+are set up when plugged in: the mk2's port is **LPD8 mk2**, the original's
+**LPD8**. Use the board's factory **Program 1** with the pads in **PAD**
+(original) or **NOTE** (mk2) mode; the other programs and modes send other
+messages and the pads would do nothing.
+
+The pads are numbered as Akai prints them: **Pad 1** to **4** along the
+bottom row, **5** to **8** along the top. The knobs are **K1** to **K4** on
+the top row, **K5** to **K8** below.
+
+- **Default jobs** (this computer's desk, set the first time the board is
+  patched here, as for the APC boards): **Pad 4** (bottom right) is GO,
+  **Pad 3** Back, knob **K1** the Grand Master.
+- **The stop takes two pads.** All eight pads look alike, so no single
+  pad stops the show. **Pad 1** (bottom left) is the board's Shift: hold
+  it and press **Pad 8** (top right) to stop. **Pad 8** alone does nothing
+  and the footer says *LPD8 mk2: Pad 1 + Pad 8 stops.* After a stop, the
+  GO that releases it is **Pad 1 + Pad 4** (a bare Pad 4 says *LPD8 mk2:
+  stopped. Pad 1 + Pad 4 releases the stop.*). These are the map's **Stop needs
+  Shift** and **Releasing a stop needs Shift** options, as on the
+  FaderPort 2. The keyboard's and the footer's stop stay one press.
+- **The other pads** (2, 5, 6, 7) and knobs **K2** to **K8** are free: give
+  them a scene to flash, a hit or a fader with **Learn** like any other
+  control. No pad ever picks the cue list; the Run tab does.
+- **K1 is a knob, not a motor fader.** After a load or a replug the Grand
+  Master waits for it to pick up: turn it past where the master is. The
+  mk2 does not send a knob's last resting value (it can stop 1-3 steps
+  short of the end), so turn it firmly to the stop for full or out.
+- **Lights.** The original LPD8's pads are red LEDs that light when the
+  board is sent the pad's note: a lit pad has a job that is ready or
+  running. Pressing a pad changes its own LED; the app sends it again on
+  the next change. The mk2's pads are RGB and ignore a note, so the app
+  paints all eight with one SysEx message (below) whenever a lamp changes,
+  each pad in its job's colour: **GO green**, **Back amber**, **STOP red**,
+  **Shift white**, any other job **blue**; dim when ready, bright when
+  running, dark with no job. On connect, a replug and a wake the pads are
+  painted as the app has them. The mk2's **PROGRAM**, **NOTE**, **CC** and
+  **PROG CHNG** buttons repaint the pads in the program's own colours and
+  send nothing the app can see: the app's colours return on the next lamp
+  change, a replug, or **▾ ▸ Send Init Again**.
+
+**What is known, and from where.** Facts that a later reader should be able
+to check:
+
+| Fact | Original LPD8 | LPD8 mk2 | Source |
+|---|---|---|---|
+| Pads, Program 1 | notes 36-43, MIDI channel 1 | notes 36-43, MIDI channel **10** | original: Akai *LPD8 Editor User Guide* (the editor picture); mk2: two independent readings of real units, not Akai |
+| Knobs, Program 1 | CC 0-7, channel 1 | CC 70-77, channel 1 | original: the same Akai picture, **not confirmed on a factory unit**; mk2: real units |
+| Pads in CC mode | CC 0-7 (the knobs' numbers) | CC 12-19, channel 10 | not used by the profiles |
+| Pad lights | a note on lights the pad | ignored; `F0 47 7F 4C 06 00 30`, then for pads 1-8 R G B each as two 7-bit bytes (`v >> 7`, `v & 7F`), `F7` | original: third-party; mk2: real units, not Akai (Akai says the host cannot set them) |
+| USB vendor:product | 09e8:0075 (a Linux report, unconfirmed) | 09e8:004c (his unit, firmware 0x0249) | |
+| macOS port | *LPD8* (its USB product name, unconfirmed) | *LPD8 mk2*, both ways (his unit) | |
+
+Akai's own documents for both boards give the controls, the four programs
+and the modes, but no factory MIDI numbers and no MIDI implementation for
+the mk2. If a pad or knob does the wrong thing, open **▾ ▸ Board Log…** and
+press it: the **IN** line shows what it sent (*Note 39 on, ch 10*).
+Without the app, `swift tools/midi-probe.swift "LPD8 mk2" 60` (macOS)
+prints what the board sends and sends it nothing; `--lpd8-paint` adds the
+one pad-colour message, pads 1-8 red to white, to check the mk2's lights. A
+profile's name match is its `<Match>` line (`LPD8 mk2*` for the mk2), so a
+port named differently is one line to change.
 
 ## Pages
 
@@ -1013,7 +1086,7 @@ The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
 ## A board is set up when you plug it in
 
 Plug in a board the app knows (APC40 mkII, APC64, APC mini mk2, FaderPort
-2, PMJ Black 1, and any other with a built-in profile) and it is set up by
+2, LPD8 mk2, PMJ Black 1, and any other with a built-in profile) and it is set up by
 itself: its input is patched with its profile, its feedback goes to the same
 device's output, and its init goes out (the APC40 mkII's Ableton mode, the
 APC64's display). It goes on the universe it had on this computer last time
@@ -1344,6 +1417,37 @@ Start with the app open and a show loaded, every board unplugged.
    stop needs Shift** (both ticked) in its header; **STOP** reads
    *Shift+STOP*, **Shift** is drawn as the board's own key. Untick **Stop
    needs Shift**: **Stop** alone now stops.
+
+**Akai LPD8 mk2 (053, his board on dink)**
+
+1. Plug in the LPD8 mk2 with nothing else patched on it. *Expect:* *Akai
+   LPD8 mk2 ready on universe N* and an **LPD8 mk2** chip in the footer;
+   all eight pads go dark (the app has painted them), then **Pad 4** dim
+   green, **Pad 3** dim amber, **Pad 8** dim red.
+2. On the board press **PROGRAM** + **Pad 1** (Program 1) and **NOTE**.
+   Click the chip's **▾ ▸ Board Log…**, then **Clear**.
+3. Press each pad once, 1 to 8, then turn each knob a little, K1 to K8.
+   *Expect:* **IN** *Note 36 on, ch 10 … (Pad 1)* up to *Note 43 … (Pad
+   8)*, then *Control change 70, ch 1 … (Knob K1)* up to *77 … (Knob K8)*.
+   Any other number: **Copy** the log and send it (the profile is one
+   line off).
+4. With a cue list on the Run tab, press **Pad 4**. *Expect:* GO; the pad
+   bright green while the cue runs. Press **Pad 3**. *Expect:* Back.
+5. Press **Pad 8** alone. *Expect:* nothing stops; the footer says *LPD8
+   mk2: Pad 1 + Pad 8 stops.* Hold **Pad 1**, press **Pad 8**. *Expect:* the
+   show stops (ALL OFF), **Pad 8** bright red. Press **Pad 4** alone.
+   *Expect:* the stop stays and the footer says *LPD8 mk2: stopped. Pad 1 +
+   Pad 4 releases the stop.* Hold **Pad 1** and press **Pad 4**. *Expect:* released, GO.
+6. Turn **K1** fully up, then to the middle. *Expect:* the Grand Master
+   follows once the knob has passed it (the footer says *GM waiting* until
+   then); fully down puts it at or near 0 %.
+7. **▾ ▸ Lamp Test**. *Expect:* each pad lights in turn, all eight, then
+   the show's colours come back.
+8. Press **CC** on the board, then **NOTE**. *Expect:* the pads show the
+   program's own colours (the app cannot see the button). **▾ ▸ Send Init
+   Again**. *Expect:* the app's colours are back.
+9. Save the show, close it and open it again with the board plugged in.
+   *Expect:* the same universe, no second *ready* notice, Pad 4 still GO.
 
 **Feedback patch (any board with lamps or motors: FaderPort 2, APC, PMJ, MaizeDMX)**
 

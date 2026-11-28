@@ -81,7 +81,8 @@ private slots:
      *  and Back left of the strips, its keys 3 across by 4 down, ten
      *  faders and four round encoders; the FaderPort's one long fader; the
      *  APC40's 8 x 5 clip grid and its eight device knobs; the APC64's 8 x 8
-     *  pads between its touch strips. */
+     *  pads between its touch strips; the LPD8s' two rows of pads (1-4 at
+     *  the bottom) left of their two rows of round knobs. */
     void eachBoardIsDrawnLikeTheRealOne();
     /** The control table: one row per control, the columns, a sort, the
      *  filter box, and a row and its control select each other. */

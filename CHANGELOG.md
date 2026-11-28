@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Akai LPD8 and LPD8 mk2 boards**: set up when plugged in (ports *LPD8* and *LPD8 mk2*), drawn on the map, with default jobs for this computer's desk: **Pad 4** GO, **Pad 3** Back, knob **K1** the Grand Master, and the stop on two pads (**Pad 1 + Pad 8**; Pad 1 + Pad 4 releases it). The mk2's RGB pads show each job's colour, painted by the board's colour message.
+
 ### Fixed
 
 - **Timeline drop when scrolled sideways**: a file or function dropped on

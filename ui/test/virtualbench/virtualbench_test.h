@@ -89,6 +89,21 @@ private slots:
      *  the app and its Board Log names it. */
     void theFaderPortKnobInBothModes();
 
+    /** The Akai LPD8 mk2 (its port "LPD8 mk2"): set up by itself, its
+     *  pads painted by their one SysEx (and nothing else of SysEx), the
+     *  lamp test lighting them through it, a footer chip. */
+    void theLpd8Mk2IsSetUpAndPaintedWhenPluggedIn();
+    /** Its pads and knob reach their jobs: Pad 4 GO, Pad 3 Back, Pad 8
+     *  alone refused and said, Pad 1 + Pad 8 ALL OFF, K1 the master. */
+    void theLpd8Mk2PadsReachTheirJobs();
+    /** Saved and opened again: the same universe, profile and feedback,
+     *  Pad 4 still GO; the show holds the patch, not the pads' colours,
+     *  and nothing is set up twice. */
+    void theLpd8Mk2SurvivesSaveAndReopen();
+    /** The original LPD8 (port "LPD8"): set up as itself, never as the
+     *  mk2; its lamps are notes on channel 1, never the mk2's SysEx. */
+    void theOriginalLpd8LightsByNote();
+
     /** Unplugged: "not connected", greyed; plugged back: on its universe
      *  again, its init sent again. */
     void anUnpluggedBoardIsGreyAndComesBackWithItsInit();
@@ -102,6 +117,9 @@ private:
     /** Empty when the footer shows at most one message, drawn over no chip. */
     QString footerProblem() const;
     void settle(int ms = 0);
+    /** Skips the test when a real board of @p port's name is connected
+     *  (the bench never talks to real hardware). */
+    bool realBoard(const QString &port) const { return m_realPorts.contains(port); }
 
     QTemporaryDir *m_pluginDir = nullptr;
     VirtualMidiBench *m_bench = nullptr;
@@ -110,6 +128,9 @@ private:
     int m_lockFd = -1;
     QStringList m_footerMessages;
     QStringList m_footerProblems;
+    /** Ports on this computer before the bench plugged any: real devices,
+     *  never set up by the app under test (declined in init()). */
+    QStringList m_realPorts;
 };
 
 #endif

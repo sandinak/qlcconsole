@@ -4,6 +4,8 @@
     <file alias="Akai-APC64.layout.json">../../resources/inputprofiles/layouts/Akai-APC64.layout.json</file>
     <file alias="Akai-APC40-mkII.layout.json">../../resources/inputprofiles/layouts/Akai-APC40-mkII.layout.json</file>
     <file alias="Akai-APCMini-mk2.layout.json">../../resources/inputprofiles/layouts/Akai-APCMini-mk2.layout.json</file>
+    <file alias="Akai-LPD8.layout.json">../../resources/inputprofiles/layouts/Akai-LPD8.layout.json</file>
+    <file alias="Akai-LPD8-mk2.layout.json">../../resources/inputprofiles/layouts/Akai-LPD8-mk2.layout.json</file>
     <file alias="MaizeDMX-Playback-Controller.layout.json">../../resources/inputprofiles/layouts/MaizeDMX-Playback-Controller.layout.json</file>
     <file alias="PreSonus-FaderPort-2.layout.json">../../resources/inputprofiles/layouts/PreSonus-FaderPort-2.layout.json</file>
     <file alias="PMJ-Black-1.layout.json">../../resources/inputprofiles/layouts/PMJ-Black-1.layout.json</file>
