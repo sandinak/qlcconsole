@@ -15,7 +15,8 @@ One landscape page:
 - **The drawing**: the plot as the Studio draws it (the same symbols,
   labels and colours, on the plot's own background), framed with the stage
   directions round the edge. Anything placed just off the stage grid, a FOH
-  truss or a boom in the wings, is in the frame too.
+  truss or a boom in the wings, is in the frame too. The drawing goes on
+  the page as a 300 dpi picture; the keys and the title block are text.
 - **A scale bar** under the drawing, a round length in the unit chosen in
   **Settings ▸ Units**: whole feet (feet and inches is the default), or
   metres in 1-2-5 steps. The plot is drawn to fit the page, so measure with

@@ -458,23 +458,34 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
     else if (v != nullptr && v->scene() != nullptr && !l.source.isEmpty())
     {
         ViewGuard guard(v, m_options.view);
-        /* What keeps its size on screen whatever the zoom -- a structure's
-           count badge, a network node's tag -- is drawn in DEVICE units:
-           straight onto a 600 dpi PDF it shrank to a speck. For the length
-           of the render each is scaled to half a point a unit (its size in
-           the preview, about as on screen), then given its own back. */
+        /* The plot is drawn into a picture at up to 300 dpi and that goes on
+           the page, as the preview has it. Drawn straight onto a 600 dpi PDF,
+           what the plot sizes for the screen came out wrong: text set in
+           points grew by the PDF's resolution on top of the page's scale, and
+           what keeps its size whatever the zoom (a structure's count badge, a
+           node's tag) shrank to a speck. The keys and the title block stay
+           text. */
         const double devPerPoint = qAbs(p->deviceTransform().m11()) + qAbs(p->deviceTransform().m12());
-        const double grow = devPerPoint > 0 ? devPerPoint / 2.0 : 1.0;
+        double rec = qBound(2.0, devPerPoint, 300.0 / 72.0);
+        const double longSide = qMax(l.plot.width(), l.plot.height());
+        if (longSide * rec > 4000.0)
+            rec = 4000.0 / longSide;
+        QImage img(QSize(qMax(1, qRound(l.plot.width() * rec)), qMax(1, qRound(l.plot.height() * rec))),
+                   QImage::Format_ARGB32_Premultiplied);
+        img.fill(v->backgroundBrush().color());
+
+        // Fixed-size items at half a point a unit (about as on screen); the
+        // outermost of each, a child of one is scaled with it.
+        const double grow = rec / 2.0;
+        auto underFixed = [](QGraphicsItem *it) {
+            for (QGraphicsItem *up = it->parentItem(); up != nullptr; up = up->parentItem())
+                if (up->flags() & QGraphicsItem::ItemIgnoresTransformations)
+                    return true;
+            return false;
+        };
         QList<QPair<QGraphicsItem *, QTransform> > fixedSize;
         if (qAbs(grow - 1.0) > 0.01)
         {
-            auto underFixed = [](QGraphicsItem *it) {
-                for (QGraphicsItem *up = it->parentItem(); up != nullptr; up = up->parentItem())
-                    if (up->flags() & QGraphicsItem::ItemIgnoresTransformations)
-                        return true;
-                return false;
-            };
-            // The outermost of each: a child of one is scaled with it.
             for (QGraphicsItem *it : v->scene()->items())
                 if ((it->flags() & QGraphicsItem::ItemIgnoresTransformations) && !underFixed(it))
                 {
@@ -482,12 +493,19 @@ void PlotSheet::paintDrawing(QPainter *p, const Layout &l) const
                     it->setTransform(it->transform() * QTransform::fromScale(grow, grow));
                 }
         }
-        p->save();
-        p->setClipRect(inner);
-        v->scene()->render(p, l.plot, l.source, Qt::KeepAspectRatio);
-        p->restore();
+        {
+            QPainter ip(&img);
+            ip.setRenderHint(QPainter::Antialiasing);
+            ip.setRenderHint(QPainter::TextAntialiasing);
+            ip.setRenderHint(QPainter::SmoothPixmapTransform);
+            v->scene()->render(&ip, QRectF(QPointF(0, 0), QSizeF(img.size())), l.source, Qt::KeepAspectRatio);
+        }
         for (const QPair<QGraphicsItem *, QTransform> &f : std::as_const(fixedSize))
             f.first->setTransform(f.second);
+        p->save();
+        p->setClipRect(inner);
+        p->drawImage(l.plot, img);
+        p->restore();
     }
     else
     {
