@@ -1275,6 +1275,9 @@ public:
 
 private:
     /** Initialize the status bar */
+    /** @p universe's Board Log (BoardLogDialog), its lamp test started
+     *  with @p lampTest. */
+    void openBoardLog(quint32 universe, bool lampTest);
     void initStatusBar();
     /** The footer's chips, when the window is too narrow for all of them:
      *  the least important ones give up their room (a chip squeezed to no

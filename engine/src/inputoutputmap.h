@@ -1013,6 +1013,38 @@ public:
     bool pluginSupportsFeedback(const QString& pluginName);
 
     /**
+     * A device line that can carry feedback back to a control surface:
+     * an output line of a plugin with QLCIOPlugin::Feedback.
+     */
+    struct FeedbackLine
+    {
+        QString plugin;
+        quint32 line = 0;
+        QString name;
+        /** An address-less line a board's own output can be paired to
+         *  (not a network protocol: those need an address) */
+        bool pairable = false;
+    };
+
+    /** Every feedback-capable output line of every plugin. */
+    QList<FeedbackLine> feedbackLines();
+
+    /**
+     * The feedback line that is the same device as the input patched on
+     * @p universe: a hardware (MIDI, HID) line of the input's plugin with
+     * the input's name, and only one of them. Network protocols never
+     * pair. Empty plugin if none.
+     */
+    FeedbackLine feedbackLineFor(quint32 universe);
+
+    /**
+     * Set @p universe's feedback to feedbackLineFor() when it has an input
+     * and no feedback yet.
+     * @return the device name paired, or an empty string (nothing done)
+     */
+    QString pairFeedback(quint32 universe);
+
+    /**
      * Open a configuration dialog for the given plugin
      *
      * @param pluginName Name of the plugin to configure
@@ -1085,6 +1117,15 @@ private:
      * has one), never by the line number alone.
      */
     void followInputDevices(QLCIOPlugin *plugin);
+    /**
+     * The same for feedback patches on @p plugin's devices (a board's lamp
+     * port): one whose port moved to another line is reopened there, one
+     * whose port went is KEPT offline by that port's name and comes back
+     * with it -- never left on the line number another port moved onto
+     * (the virtual bench, 2026-11-27: the PMJ's lamps went to an RTP
+     * session, and the show was saved that way).
+     */
+    void followFeedbackDevices(QLCIOPlugin *plugin);
 
     /** A hand patch of @p universe (setInputPatch()) with a slot on it:
      *  kept when the device is one of the slot's, else the slot goes. */
@@ -1232,6 +1273,9 @@ private:
 signals:
     /** Signal emitted when a profile is changed */
     void profileChanged(quint32 universe, const QString& profileName);
+    /** A patch with no profile was given @p profileName for its device
+     *  (profileForDevice()); said once, for a notice. */
+    void profileAutoSelected(quint32 universe, const QString &profileName, const QString &deviceName);
 
     /** Notifies (InputOutputManager) of plugin configuration changes */
     void pluginConfigurationChanged(const QString& pluginName, bool success);
@@ -1256,6 +1300,11 @@ signals:
      *  hand or by its controller slot. */
     void inputPatchChanged(quint32 universe);
 
+    /** @p universe's feedback line was patched or unpatched
+     *  (setOutputPatch() with isFeedback): what is sent to a board's lamps
+     *  and motor goes out there from now on. */
+    void feedbackPatchChanged(quint32 universe);
+
     /** Every input value, the desk's controls included: for what reads
      *  raw input (Learn, the activity lights, the desk itself). A show
      *  listener connects to showInputValueChanged() instead. */
@@ -1278,6 +1327,45 @@ signals:
 public:
     /** Load all input profiles from the given directory using QDir filters */
     void loadProfiles(const QDir& dir);
+
+    /** The profile a hardware input line named @p deviceName is for: the
+     *  first profile (a user's copy first, else a built-in one) whose
+     *  <Match> fits it; empty when none does. A built-in profile a user's
+     *  copy of the same name replaced still counts (its Match is the
+     *  type's, the user's copy may predate it). */
+    QString profileForDevice(const QString &deviceName) const;
+    /** The profile whose board @p deviceName is another port of ("APC64
+     *  Notes (APC64)": the APC64's, used on its DAW port); empty if none. */
+    QString profileOfOtherPort(const QString &deviceName) const;
+    /** The profile that may be @p deviceName's (its <MatchAsk>: a name many
+     *  boxes share), not yet confirmed or turned down; empty if none. */
+    QString profileToAskFor(const QString &deviceName) const;
+    /** A person's answer for @p deviceName, kept on this computer: the
+     *  profile it is (empty: none said). */
+    static QString confirmedProfile(const QString &deviceName);
+    static void setConfirmedProfile(const QString &deviceName, const QString &profileName);
+    /** "Not a control surface": @p deviceName is not listed as one to set up. */
+    static bool isNotSurface(const QString &deviceName);
+    static void setNotSurface(const QString &deviceName, bool notSurface);
+
+    /** A profile file another of the same name replaced: what was loaded
+     *  first (a user's copy) wins, unless it is a copy of a surface type
+     *  that no longer holds to its built-in layout (a legacy link to an old
+     *  QLC+ profile: it lacks controls the surface map draws), when the
+     *  built-in one is used instead. Nothing is ever deleted. */
+    struct ShadowedProfile
+    {
+        QString name;           ///< the profile's name
+        QString path;           ///< the file that is not used
+        QString usedPath;       ///< the file that is
+        bool builtInUsed = false;   ///< the built-in one was used over the user's copy
+        QStringList problems;   ///< why the user's copy fails its layout (builtInUsed only)
+    };
+    QList<ShadowedProfile> shadowedProfiles() const { return m_shadowed; }
+    /** One line each for the Control surfaces panel: "Your copy of the
+     *  Akai APC40 mkII profile (…/InputProfiles/…) is older than the
+     *  built-in one: the built-in one is used." Empty: none. */
+    QStringList shadowedProfileNotes() const;
 
     /** Get a list of available profile names */
     /**
@@ -1352,7 +1440,8 @@ public:
     /**
      * A board's lamps follow its input: universe @a universe's feedback is
      * moved to the output of the device its input now comes from, when that
-     * device has one (partnerOutput()) and the feedback is unpatched or on
+     * device has one (feedbackLineFor(), as pairFeedback() and the board
+     * repair) and the feedback is unpatched or on
      * another line of the same plugin -- left behind by the board patched
      * there before (Branson, build 4910: the PMJ patched where an APC was,
      * its lamps still sent to the APC's old line). Feedback on another
@@ -1380,6 +1469,11 @@ public:
     void removeManualPort(const QString &address, quint32 portAddress);
 
     QStringList profileNames();
+
+private:
+    /** @p prof has the name @p have has: one is used, the other is kept as shadowed. */
+    void keepOneOf(QLCInputProfile *have, QLCInputProfile *prof);
+public:
 
     /** Get a profile by its name */
     QLCInputProfile* profile(const QString& name);
@@ -1423,6 +1517,10 @@ public:
 private:
     /** List that contains all available profiles */
     QList <QLCInputProfile*> m_profiles;
+    /** Profiles whose name another already had (profileForDevice() reads
+     *  their Match), and the record of which file won (loadProfiles()). */
+    QList <QLCInputProfile*> m_shadowedProfiles;
+    QList <ShadowedProfile> m_shadowed;
 
     /** Operator-supplied names for output targets, keyed by address. */
     QMap<QString, QString> m_targetAliases;

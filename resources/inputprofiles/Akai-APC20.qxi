@@ -9,6 +9,7 @@
  <Manufacturer>Akai</Manufacturer>
  <Model>APC20</Model>
  <Type>MIDI</Type>
+ <Match>APC20</Match>
  <Channel Number="7">
   <Name>Slider 1</Name>
   <Type>Slider</Type>

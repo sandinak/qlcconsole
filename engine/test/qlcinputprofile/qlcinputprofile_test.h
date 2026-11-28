@@ -27,6 +27,7 @@ class QLCInputProfile_Test final : public QObject
     Q_OBJECT
 
 private slots:
+    void deviceMatch();
     void manufacturer();
     void model();
     void name();

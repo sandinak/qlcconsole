@@ -19,6 +19,7 @@
 
 #include <QPluginLoader>
 #include <QMediaDevices>
+#include <QFileInfo>
 #include <QDebug>
 
 #include "audioplugincache.h"
@@ -39,6 +40,9 @@ AudioPluginCache::~AudioPluginCache()
 void AudioPluginCache::load(const QDir &dir)
 {
     qDebug() << Q_FUNC_INFO << dir.path();
+
+    m_loadAttempted = true;
+    m_loadErrors.clear();
 
     m_audioDevicesList = AudioRendererQt6::getDevicesInfo();
     m_outputDevicesList = QMediaDevices::audioOutputs();
@@ -67,8 +71,52 @@ void AudioPluginCache::load(const QDir &dir)
             loader.unload();
         }
         else
-            qDebug() << "Failed to load plugin: " << loader.errorString();
+        {
+            m_loadErrors << QStringLiteral("%1: %2").arg(fileName, loader.errorString());
+            qWarning() << "Failed to load audio plugin" << path << ":" << loader.errorString();
+        }
     }
+}
+
+int AudioPluginCache::decoderCount() const
+{
+    return m_pluginsMap.count();
+}
+
+QStringList AudioPluginCache::loadErrors() const
+{
+    return m_loadErrors;
+}
+
+bool AudioPluginCache::loadAttempted() const
+{
+    return m_loadAttempted;
+}
+
+QString AudioPluginCache::cantPlayMessage(const QString& fileName, int decoderCount,
+                                          const QStringList& supportedFormats)
+{
+    const QString name = QFileInfo(fileName).fileName();
+    if (decoderCount <= 0)
+        return tr("Can't play %1: no audio decoder is loaded (the app's audio library failed to load)")
+                .arg(name);
+
+    QStringList formats;
+    for (QString f : supportedFormats)
+    {
+        f.remove(QLatin1Char('*')).remove(QLatin1Char('.'));
+        if (f.isEmpty() == false && formats.contains(f.toUpper()) == false)
+            formats << f.toUpper();
+    }
+    formats.sort();
+    const QString suffix = QFileInfo(fileName).suffix().toUpper();
+    return tr("Can't play %1: %2 isn't supported (supported: %3)")
+            .arg(name, suffix.isEmpty() ? tr("this format") : suffix, formats.join(QStringLiteral(", ")));
+}
+
+QString AudioPluginCache::cantPlayMessage(const QString& fileName)
+{
+    return cantPlayMessage(fileName, decoderCount(), getSupportedFormats());
 }
 
 QStringList AudioPluginCache::getSupportedFormats()

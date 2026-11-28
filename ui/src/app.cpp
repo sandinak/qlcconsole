@@ -41,6 +41,7 @@
 #endif
 
 #include "controlmap.h"
+#include "footerbar.h"
 #include "controllearndialog.h"
 #include "placementcheck.h"
 #include "functionliveeditdialog.h"
@@ -48,6 +49,11 @@
 #include "deskchip.h"
 #include "surfacechips.h"
 #include "footericons.h"
+#include "surfacesetup.h"
+#include "surfaceautopatch.h"
+#include "surfacesetupdialog.h"
+#include "boardlogdialog.h"
+#include "pmjlamplogdialog.h"
 #include "deskrecord.h"
 #include "editlivechip.h"
 #include "surfacemap.h"
@@ -125,6 +131,7 @@
 #include <QProgressDialog>
 #include <QDialogButtonBox>
 #include <QListWidget>
+#include "deskrecord.h"
 #include "doc.h"
 #include "testchannels.h"
 #include "fixturerest.h"
@@ -1061,6 +1068,59 @@ void App::init()
             m_inputNotices->centreSticks(p.data(), input);
         });
     });
+    /* A new board came online where the one that held this computer's GO,
+       Back, STOP and Grand Master is gone: they moved to it, said once in
+       the notice line, with Undo (nothing is blocked, nothing to unmap). */
+    if (DeskRecord *desk = m_doc->deskRecord())
+        connect(desk, &DeskRecord::cutOver, this, [this](const QString &text) {
+            showViewNotice(text, tr("Undo"), [this]() {
+                hideViewNotice();
+                if (m_doc->deskRecord() != nullptr)
+                    m_doc->deskRecord()->undoCutOver();
+            });
+        });
+    /* A known board plugged in is set up by itself (SurfaceAutoPatch):
+       "Akai APC40 mkII ready on universe 5", with Undo. A port many boxes
+       share (the MaizeDMX's "USB2.0-MIDI") is asked about, once. */
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+    {
+        SurfaceAutoPatch *ap = ss->autoPatch();
+        connect(ap, &SurfaceAutoPatch::autoPatched, this,
+                [this, ap](quint32 universe, const QString &profile, const QString &) {
+            showViewNotice(tr("%1 ready on universe %2").arg(profile).arg(universe + 1), tr("Undo"),
+                           [this, ap, universe]() {
+                hideViewNotice();
+                ap->undo(universe);
+            });
+        });
+        // A board back with a wrong patch, put right: "PMJ Black 1: feedback
+        // repaired to its own port", with Undo (it is then left as it is).
+        connect(ap, &SurfaceAutoPatch::repaired, this,
+                [this, ap](quint32 universe, const QString &profile, const QString &what) {
+            showViewNotice(tr("%1: %2").arg(profile, what), tr("Undo"), [this, ap, universe]() {
+                hideViewNotice();
+                ap->undoRepair(universe);
+            });
+        });
+        // A game pad plugged in: the pad, no click. "DUALSHOCK 4 ready as the pad".
+        connect(ap, &SurfaceAutoPatch::padPatched, this,
+                [this, ap](quint32 universe, const QString &name, const QString &) {
+            showViewNotice(tr("%1 ready as the pad").arg(name), tr("Undo"), [this, ap, universe]() {
+                hideViewNotice();
+                ap->undo(universe);
+            });
+        });
+        connect(ap, &SurfaceAutoPatch::askToUse, this,
+                [this, ap](const QString &plugin, const QString &device, const QString &profile) {
+            showViewNotice(tr("%1: is this a %2?").arg(device, profile), tr("Use It"),
+                           [this, ap, plugin, device, profile]() {
+                hideViewNotice();
+                ap->useAs(m_doc->ioPluginCache()->plugin(plugin), device, profile);
+            });
+        });
+        // After the start-up show has loaded (Doc::loaded scans again then).
+        QTimer::singleShot(1500, ap, [ap]() { ap->setEnabled(true); });
+    }
     connect(m_inputNotices, &InputDeviceNotices::offer, this,
             [this](const QString &text, const QString &button, quint32 universe,
                    const QString &plugin, const QString &device) {
@@ -5454,7 +5514,12 @@ void App::fitStatusBar()
         return;
     const QList<QWidget *> chips = statusChipsByPriority();
     const int gap = 6;                  // QStatusBar's spacing between items
-    int room = sb->width() - 2 * gap;
+    /* The window's width, not the bar's: a bar held wider than the window by
+       its chips' minimums (a window made narrower, a tab detached) is never
+       resized down to it, so measured by itself every chip still "fit" and
+       nothing was squeezed -- the footer stuck at 1073 px in a 900 px
+       window (viewlayout, CI 2026-11-27). */
+    int room = qMin(sb->width(), width()) - 2 * gap;
     // What is not on the list (the Run controls, the spacers, the size grip)
     // keeps its place.
     for (QWidget *w : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
@@ -9520,8 +9585,37 @@ QMenu *App::openVenueMenu()
     return m_venueChip != nullptr ? m_venueChip->openMenu() : nullptr;
 }
 
+void App::openBoardLog(quint32 universe, bool lampTest)
+{
+    // One log a board: an open one comes forward.
+    for (BoardLogDialog *d : findChildren<BoardLogDialog *>())
+        if (d->universe() == universe)
+        {
+            d->raise();
+            d->activateWindow();
+            if (lampTest)
+                d->startLampTest();
+            return;
+        }
+    BoardLogDialog *dlg = new BoardLogDialog(m_doc, universe, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+    if (lampTest)
+        dlg->startLampTest();
+}
+
 void App::initStatusBar()
 {
+    // One message at a time, never drawn under or over a chip (FooterBar).
+    if (QStatusBar *old = statusBar(); qobject_cast<FooterBar *>(old) == nullptr)
+    {
+        setStatusBar(new FooterBar(this));
+        /* Gone now, not later: QMainWindow only hides it and deletes it on
+           a later turn, and until then the layout checks found the hidden
+           old bar first and saw the central area stop short of nothing (a
+           false "stuck mid-drag" self-heal at start-up, viewlayout). */
+        delete old;
+    }
     QStatusBar* sb = statusBar();
     m_statusFitTimer = new QTimer(this);
     m_statusFitTimer->setSingleShot(true);
@@ -10077,6 +10171,25 @@ void App::initStatusBar()
             if (SurfaceMaps *maps = io->findChild<SurfaceMaps *>())
                 maps->showOnly(universe);   // this board alone, not every board stacked
         }
+    });
+    // The chip's menu (▾, right-click): its Board Log, a lamp test, its setup.
+    connect(m_statusSurfaceChips, &SurfaceChips::boardLogRequested, this, [this](quint32 universe) {
+        openBoardLog(universe, false);
+    });
+    connect(m_statusSurfaceChips, &SurfaceChips::lampTestRequested, this, [this](quint32 universe) {
+        InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
+        // The PMJ's own lamp test steps through its levels and blinks.
+        if (ip != nullptr && ip->profileName() == QLatin1String("PMJ Black 1") && m_pmjOverlay != nullptr)
+        {
+            PmjLampLogDialog *dlg = new PmjLampLogDialog(m_pmjOverlay, this);
+            dlg->setAttribute(Qt::WA_DeleteOnClose);
+            dlg->show();
+            return;
+        }
+        openBoardLog(universe, true);
+    });
+    connect(m_statusSurfaceChips, &SurfaceChips::setUpRequested, this, [this](quint32 universe) {
+        SurfaceSetupDialog::open(m_doc, this, universe);
     });
     addFooterChip(sb, m_statusSurfaceChips, QStringLiteral("surfaces"), true, false);
 

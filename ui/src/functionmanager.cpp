@@ -739,7 +739,7 @@ void FunctionManager::slotAddAudio()
         Audio *audio = qobject_cast<Audio*> (f);
         if (audio->setSourceFileName(fn) == false)
         {
-            QMessageBox::warning(this, tr("Unsupported audio file"), tr("This audio file cannot be played with QLC+. Sorry."));
+            QMessageBox::warning(this, tr("Unsupported audio file"), m_doc->audioPluginCache()->cantPlayMessage(fn));
             return;
         }
 

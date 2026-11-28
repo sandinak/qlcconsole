@@ -81,6 +81,7 @@ const QHash<QString, Row> &rows()
     { "FILE-01", { F::GoThere, tr("Copy the media into the show's folder and re-link it, or save the show as .qlcc so it carries them.") } },
     { "FILE-02", { F::GoThere, tr("Find the missing file and re-link it (the media list shows where the show looked), or remove the cue that plays it.") } },
     { "FILE-03", { F::GoThere, tr("Save the show as .qlcc so it carries its fixture definitions to the next computer.") } },
+    { "FILE-07", { F::Manual, tr("Nothing in the show to change: reinstall the app so its audio library loads, then open the show again. If audio still can't play, report it.") } },
     { "NAME-01", { F::GoThere, tr("Rename it to the folder's SS-PP.II-Description pattern, as its siblings are.") } },
     { "NAME-02", { F::GoThere, tr("Rename the default or copy name to say what it is, in the folder's pattern.") } },
     { "PAL-01", { F::GoThere, tr("Two layers set the same attribute: remove one, or move them to different cues so only one decides.") } },

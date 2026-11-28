@@ -3,6 +3,7 @@
 <qresource prefix="/surfacelayouts">
     <file alias="Akai-APC64.layout.json">../../resources/inputprofiles/layouts/Akai-APC64.layout.json</file>
     <file alias="Akai-APC40-mkII.layout.json">../../resources/inputprofiles/layouts/Akai-APC40-mkII.layout.json</file>
+    <file alias="Akai-APCMini-mk2.layout.json">../../resources/inputprofiles/layouts/Akai-APCMini-mk2.layout.json</file>
     <file alias="MaizeDMX-Playback-Controller.layout.json">../../resources/inputprofiles/layouts/MaizeDMX-Playback-Controller.layout.json</file>
     <file alias="PreSonus-FaderPort-2.layout.json">../../resources/inputprofiles/layouts/PreSonus-FaderPort-2.layout.json</file>
     <file alias="PMJ-Black-1.layout.json">../../resources/inputprofiles/layouts/PMJ-Black-1.layout.json</file>
@@ -11,6 +12,7 @@
 <qresource prefix="/surfacepagesets">
     <file alias="Akai-APC40-mkII.Build.pageset.json">../../resources/inputprofiles/pagesets/Akai-APC40-mkII.Build.pageset.json</file>
     <file alias="Akai-APC64.Build.pageset.json">../../resources/inputprofiles/pagesets/Akai-APC64.Build.pageset.json</file>
+    <file alias="Akai-APCMini-mk2.Build.pageset.json">../../resources/inputprofiles/pagesets/Akai-APCMini-mk2.Build.pageset.json</file>
     <file alias="MaizeDMX-Playback-Controller.Colour.pageset.json">../../resources/inputprofiles/pagesets/MaizeDMX-Playback-Controller.Colour.pageset.json</file>
     <file alias="PMJ-Black-1.Pages.pageset.json">../../resources/inputprofiles/pagesets/PMJ-Black-1.Pages.pageset.json</file>
 </qresource>

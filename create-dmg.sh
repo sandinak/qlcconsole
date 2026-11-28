@@ -55,15 +55,6 @@ cd ..
 # Extract VERSION from engine/src/qlcconfig.h
 VERSION=$(grep -E '^#define APPVERSION' engine/src/qlcconfig.h | sed -E 's/^#define APPVERSION[[:space:]]+"([^"]+)".*/\1/' | tr ' ' '-')
 
-echo "Fix non-Qt dependencies..."
-platforms/macos/fix_dylib_deps.sh $APP_DIR/Contents/Frameworks/libsndfile.1.dylib
-if [ -f "$BIN_DIR/qlcconsole" ]; then
-    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcconsole
-    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcconsole-fixtureeditor
-else
-    platforms/macos/fix_dylib_deps.sh $BIN_DIR/qlcconsole-qml
-fi
-
 echo "Run macdeployqt..."
 if [ "$1" == "qmlui" ]; then
     $QTDIR/bin/macdeployqt $APP_DIR -qmldir=qmlui/qml
@@ -78,6 +69,11 @@ if [ "$1" == "qmlui" ]; then
 else
     $QTDIR/bin/macdeployqt $APP_DIR
 fi
+
+echo "Bundle every non-Qt dependency (recursively) and check the bundle..."
+chmod -R u+w $APP_DIR
+python3 platforms/macos/bundlefix.py $APP_DIR || exit 1
+python3 platforms/macos/bundle-check.py $APP_DIR || exit 1
 
 if [ -n "$SIGNATURE" ]; then
     # sign package with codesign (macdeployqt fails in that too)

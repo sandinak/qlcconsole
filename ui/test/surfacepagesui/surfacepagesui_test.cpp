@@ -356,11 +356,11 @@ void SurfacePagesUi_Test::theMapAndTheChipNameThePage()
     QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC40 · Beam"));
     QVERIFY(maps.pageLine(0).contains(QStringLiteral("Beam")));
 
-    // Operate: the controls are the show's; the chip says the board only.
+    // Operate: the controls are the show's; the chip still says the page (Q356).
     m_doc->setMode(Doc::Operate);
     settle();
     QVERIFY(mv->group(kKnob1) != SurfaceMapView::Page);
-    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC40"));
+    QCOMPARE(chips.chip(0)->text(), QStringLiteral("APC40 · Beam"));
     QVERIFY(maps.pageLine(0).contains(QStringLiteral("Operate")));
     m_doc->setMode(Doc::Design);
 }

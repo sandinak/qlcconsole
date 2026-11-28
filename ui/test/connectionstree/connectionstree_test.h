@@ -48,6 +48,18 @@ private slots:
 
     /* Rescan reaches every plugin, not just the ones with a dialog */
     void rescanReachesEveryPlugin();
+    /** Patch a Universe Here (feedback) is on a feedback-capable line only. */
+    void feedbackMenuItemOnlyOnAFeedbackLine();
+    /** Send Feedback To / Remove Feedback on a universe row; undo restores. */
+    void feedbackIsPatchedFromAUniverseAndUndone();
+    /** An input on a MIDI-like line pairs its own output; a network one never. */
+    void inputPairsItsOwnOutputAsFeedback();
+    /** The universe pane has a Slot row; it is the Universes toolbar's Slot, undoable, saved. */
+    void thePaneSetsTheSlotLikeTheToolbar();
+    /** Everything the Universes tab offers for a universe is also in Connections ▸ Devices (UX-83). */
+    void theUniversesTabHasADevicesCounterpart();
+    /** Every branch says what it is, and an empty one says why (UX-82, UX-84); sample and empty show. */
+    void everyConnectionsBranchIsExplained();
 
     /* Which lines are worth showing */
     void unpatchedLineIsHiddenByDefault();

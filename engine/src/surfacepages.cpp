@@ -108,6 +108,7 @@ void SurfacePages::rescan()
         b.set = setFor(b);
         if (!b.set.isValid())
             continue;
+        applyKeyChoices(b);
         // The same board with the same set: on the page it was on.
         const auto old = was.constFind(u);
         if (old != was.constEnd() && old->profile == b.profile && old->set.name() == b.set.name())
@@ -347,6 +348,12 @@ void SurfacePages::sendLamps(quint32 universe)
         for (const PageSet::Page &p : b->set.pages())
             if (p.key != kNone)
                 iom->sendFeedBack(universe, p.key, 0, QVariant());
+        for (quint32 k : { b->set.nextKey(), b->set.previousKey() })
+            if (k != kNone)
+                iom->sendFeedBack(universe, k, 0, QVariant());
+        for (quint32 k : { b->set.previousKey(), b->set.nextKey() })
+            if (k != kNone)
+                iom->sendFeedBack(universe, k, 0, QVariant());
         if (ControlMap *cm = m_doc->controlMap())
             cm->resendFeedback();
         return;
@@ -356,6 +363,16 @@ void SurfacePages::sendLamps(quint32 universe)
     for (const PageSet::Page &p : b->set.pages())
         if (p.key != kNone)
             iom->sendFeedBack(universe, p.key, p.key == on ? 255 : 0, QVariant());
+    // Page ◀ ▶ (the APC mini's Left and Right): lit while there is a page to go to.
+    const bool several = b->set.pages().size() > 1;
+    for (quint32 k : { b->set.nextKey(), b->set.previousKey() })
+        if (k != kNone)
+            iom->sendFeedBack(universe, k, several ? 255 : 0, QVariant());
+    // Page ◀ and ▶ are lit while there is a page that way (the pages go round).
+    const uchar step = b->set.pages().size() > 1 ? 255 : 0;
+    for (quint32 k : { b->set.previousKey(), b->set.nextKey() })
+        if (k != kNone)
+            iom->sendFeedBack(universe, k, step, QVariant());
 }
 
 /*****************************************************************************
@@ -522,6 +539,202 @@ PageSet SurfacePages::setFor(const Board &b) const
     return PageSet::defaultFor(b.profile);
 }
 
+/*****************************************************************************
+ * The keys, per computer (Q356)
+ *****************************************************************************/
+
+QString SurfacePages::keysGroup(const Board &b) const
+{
+    return QStringLiteral("SurfacePageKeys/")
+           + QString::fromLatin1(QUrl::toPercentEncoding(
+                 (b.identity.isEmpty() ? QStringLiteral("type:") + b.profile : b.identity)
+                 + QLatin1Char('|') + b.profile + QLatin1Char('|') + b.set.name()));
+}
+
+void SurfacePages::applyKeyChoices(Board &b) const
+{
+    QSettings s;
+    s.beginGroup(keysGroup(b));
+    auto get = [&s](const QString &k, quint32 *out) {
+        if (s.contains(k))
+            *out = quint32(s.value(k).toUInt());
+    };
+    quint32 k = kNone;
+    if (s.contains(QStringLiteral("next")))
+    {
+        get(QStringLiteral("next"), &k);
+        b.set.setNextKey(k);
+    }
+    if (s.contains(QStringLiteral("previous")))
+    {
+        get(QStringLiteral("previous"), &k);
+        b.set.setPreviousKey(k);
+    }
+    for (int i = 0; i < b.set.pages().size(); ++i)
+        if (s.contains(QStringLiteral("page%1").arg(i)))
+        {
+            get(QStringLiteral("page%1").arg(i), &k);
+            b.set.setPageKey(i, k);
+        }
+}
+
+quint32 SurfacePages::stepKey(quint32 universe, int direction) const
+{
+    const Board *b = board(universe);
+    if (b == nullptr)
+        return kNone;
+    return direction > 0 ? b->set.nextKey() : b->set.previousKey();
+}
+
+quint32 SurfacePages::pageKey(quint32 universe, int page) const
+{
+    const Board *b = board(universe);
+    return b == nullptr || page < 0 || page >= b->set.pages().size() ? kNone : b->set.pages().at(page).key;
+}
+
+QString SurfacePages::keyJob(quint32 universe, quint32 channel) const
+{
+    const Board *b = board(universe);
+    if (b == nullptr)
+        return QString();
+    if (channel == b->set.nextKey())
+        return tr("Next page");
+    if (channel == b->set.previousKey())
+        return tr("Previous page");
+    for (const PageSet::Page &p : b->set.pages())
+        if (p.key == channel)
+            return p.name;
+    return QString();
+}
+
+SurfacePages::KeyState SurfacePages::keyState(quint32 universe) const
+{
+    KeyState k;
+    const Board *b = board(universe);
+    if (b == nullptr)
+        return k;
+    k.previous = b->set.previousKey();
+    k.next = b->set.nextKey();
+    for (const PageSet::Page &p : b->set.pages())
+        k.pages << p.key;
+    return k;
+}
+
+void SurfacePages::setKeyState(quint32 universe, const KeyState &state)
+{
+    Board *b = board(universe);
+    if (b == nullptr)
+        return;
+    QSettings s;
+    s.beginGroup(keysGroup(*b));
+    b->set.setPreviousKey(state.previous);
+    b->set.setNextKey(state.next);
+    s.setValue(QStringLiteral("previous"), uint(state.previous));
+    s.setValue(QStringLiteral("next"), uint(state.next));
+    for (int i = 0; i < state.pages.size() && i < b->set.pages().size(); ++i)
+    {
+        b->set.setPageKey(i, state.pages.at(i));
+        s.setValue(QStringLiteral("page%1").arg(i), uint(state.pages.at(i)));
+    }
+    s.endGroup();
+    applyStatic();
+    sendLamps(universe);
+    emit pageChanged(universe, pageName(universe));
+    emit setsChanged();
+}
+
+bool SurfacePages::clearKey(quint32 universe, quint32 channel)
+{
+    Board *b = board(universe);
+    if (b == nullptr || keyJob(universe, channel).isEmpty())
+        return false;
+    QSettings s;
+    s.beginGroup(keysGroup(*b));
+    if (b->set.nextKey() == channel)
+    {
+        b->set.setNextKey(kNone);
+        s.setValue(QStringLiteral("next"), uint(kNone));
+    }
+    if (b->set.previousKey() == channel)
+    {
+        b->set.setPreviousKey(kNone);
+        s.setValue(QStringLiteral("previous"), uint(kNone));
+    }
+    for (int i = 0; i < b->set.pages().size(); ++i)
+        if (b->set.pages().at(i).key == channel)
+        {
+            b->set.setPageKey(i, kNone);
+            s.setValue(QStringLiteral("page%1").arg(i), uint(kNone));
+        }
+    s.endGroup();
+    // The key's light was the page's: dark now (the Control Map has it again).
+    if (b->lampsOurs)
+        if (InputOutputMap *iom = m_doc->inputOutputMap())
+            iom->sendFeedBack(universe, channel, 0, QVariant());
+    applyStatic();
+    sendLamps(universe);
+    emit pageChanged(universe, pageName(universe));
+    emit setsChanged();
+    return true;
+}
+
+bool SurfacePages::assignKey(quint32 universe, quint32 channel, int slot)
+{
+    Board *b = board(universe);
+    if (b == nullptr || channel == kNone)
+        return false;
+    const int i = b->layout.indexOf(channel);
+    if (i < 0)
+        return false;
+    const SurfaceLayout::Control &c = b->layout.controls().at(i);
+    if (c.kind != SurfaceLayout::Button && c.kind != SurfaceLayout::Pad)
+        return false;
+    // Never the desk's GO, Back, STOP or GM.
+    if (!b->layout.roleOn(channel).isEmpty())
+        return false;
+    const quint32 own = c.channel;
+    // One job a key: it leaves another page job first.
+    const bool had = !keyJob(universe, own).isEmpty();
+    if (had)
+        clearKey(universe, own);
+    QSettings s;
+    s.beginGroup(keysGroup(*b));
+    if (slot == kSlotNext)
+    {
+        b->set.setNextKey(own);
+        s.setValue(QStringLiteral("next"), uint(own));
+    }
+    else if (slot == kSlotPrevious)
+    {
+        b->set.setPreviousKey(own);
+        s.setValue(QStringLiteral("previous"), uint(own));
+    }
+    else
+    {
+        b->set.setPageKey(slot, own);
+        s.setValue(QStringLiteral("page%1").arg(slot), uint(own));
+    }
+    s.endGroup();
+    applyStatic();
+    sendLamps(universe);
+    emit pageChanged(universe, pageName(universe));
+    emit setsChanged();
+    return true;
+}
+
+bool SurfacePages::setStepKey(quint32 universe, int direction, quint32 channel)
+{
+    return assignKey(universe, channel, direction > 0 ? kSlotNext : kSlotPrevious);
+}
+
+bool SurfacePages::setPageKey(quint32 universe, int page, quint32 channel)
+{
+    const Board *b = board(universe);
+    if (b == nullptr || page < 0 || page >= b->set.pages().size())
+        return false;
+    return assignKey(universe, channel, page);
+}
+
 QString SurfacePages::chosenSet(quint32 universe) const
 {
     const Board *b = board(universe);
@@ -538,6 +751,7 @@ bool SurfacePages::chooseSet(quint32 universe, const QString &name)
         return false;
     QSettings().setValue(settingsKey(*b), name);
     b->set = s;
+    applyKeyChoices(*b);
     b->page = 0;
     applyStatic();
     sendLamps(universe);

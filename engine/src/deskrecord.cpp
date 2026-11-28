@@ -38,6 +38,8 @@
 #include "showcontrol.h"
 #include "controlmap.h"
 #include "deskrecord.h"
+#include "surfacesetup.h"
+#include "surfaceboardlog.h"
 #include "inputpatch.h"
 #include "qlcioplugin.h"
 #include "universe.h"
@@ -69,6 +71,8 @@ const QLatin1String kFileRoot("ThisComputersDesk");
 /* The boards seedDefaults() has seeded, by identity (beside the roles in
    the group, kept by save()). */
 const QLatin1String kSeeded("seeded");
+/* Roles a board waited on because another board held them ("identity|role"). */
+const QLatin1String kDeferred("deferred");
 }
 
 DeskRecord::DeskRecord(Doc *doc, QObject *parent)
@@ -103,8 +107,8 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
         connect(iom, &InputOutputMap::inputSlotChanged, this, [this](quint32 u) { portChanged(u); });
         // A board given its profile: its type's default roles (seedDefaults()).
         connect(iom, &InputOutputMap::profileChanged, this, [this](quint32 u) { portChanged(u); });
-        connect(iom, &InputOutputMap::offlinePatchesChanged, this, [this]() { portChanged(kInvalid); });
-        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, [this]() { portChanged(kInvalid); });
+        connect(iom, &InputOutputMap::offlinePatchesChanged, this, [this]() { portChanged(kInvalid, true); });
+        connect(iom, &InputOutputMap::pluginConfigurationChanged, this, [this]() { portChanged(kInvalid, true); });
         connect(iom, &InputOutputMap::inputDeviceDisconnected, this, [this](quint32 universe) {
             /* The spotter's device gone: every hazard safe and disarmed at
                once, before anything else (Q352/Q353). */
@@ -130,9 +134,18 @@ DeskRecord::DeskRecord(Doc *doc, QObject *parent)
            box on another universe (that would freeze a fade mid-show). */
         connect(iom, &InputOutputMap::inputDeviceConnected, this, [this](quint32 universe) {
             forgetHeld(universe);
+            seedFor(universe, false);       // a board found: its roles, or the ones its predecessor held
             rebind();
             if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
                 rearmGrandMaster();
+        });
+        /* The Grand Master's board given its feedback line (an auto-patch
+           pairs it just after the input, when the motor was sent nowhere):
+           its motor fader is sent the master now (the virtual bench,
+           2026-11-27: the FaderPort plugged in was never sent it). */
+        connect(iom, &InputOutputMap::feedbackPatchChanged, this, [this](quint32 universe) {
+            if (isLive(GrandMaster) && m_universes[GrandMaster] == universe)
+                sendGrandMasterToMotor();
         });
         /* A motor fader as the Grand Master follows the master when
            something else moves it (the footer, a VC slider, a fade). */
@@ -267,10 +280,13 @@ void DeskRecord::save() const
 {
     QSettings s;
     const QVariant seeded = s.value(settingsGroup() + QLatin1Char('/') + kSeeded);
+    const QVariant deferred = s.value(settingsGroup() + QLatin1Char('/') + kDeferred);
     s.remove(settingsGroup());
     s.beginGroup(settingsGroup());
     if (seeded.isValid())
         s.setValue(kSeeded, seeded);
+    if (deferred.isValid())
+        s.setValue(kDeferred, deferred);
     for (Role r : roles())
     {
         const Binding &b = m_bindings[r];
@@ -444,6 +460,62 @@ bool DeskRecord::setBinding(Role role, const Binding &binding)
     return true;
 }
 
+bool DeskRecord::assignRole(Role role, quint32 universe, quint32 channel, QString *why)
+{
+    InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
+    InputPatch *ip = iom != nullptr ? iom->inputPatch(universe) : nullptr;
+    const QString id = identityOfUniverse(universe);
+    auto refuse = [why](const QString &text) {
+        if (why != nullptr)
+            *why = text;
+        return false;
+    };
+    if (ip == nullptr || id.isEmpty())
+        return refuse(tr("That board is not patched here."));
+    if (isLocked())
+    {
+        emit refused(lockedText());
+        return refuse(lockedText());
+    }
+    bool known = false;
+    const bool fader = isFaderOnProfile(universe, channel, &known);
+    if (known && fader != takesFader(role))
+        return refuse(takesFader(role) ? tr("The Grand Master takes a fader.") : tr("%1 takes a button.").arg(roleName(role)));
+    if (role != Stop && isShowStop(universe, channel))
+        return refuse(tr("That control is the show's emergency stop."));
+    Binding b;
+    b.identity = id;
+    b.plugin = ip->plugin() != nullptr ? ip->plugin()->name() : QString();
+    b.device = ControllerJobs::midiModelName(ip->inputName());
+    b.channel = channel;
+    b.control = controlName(universe, channel);
+    b.on = true;
+    // Another role on this control gives it up.
+    for (Role r : roles())
+        if (r != role && m_bindings[r].isSet() && m_bindings[r].identity == id && m_bindings[r].channel == channel)
+        {
+            m_bindings[r] = Binding();
+            m_lastUniverses[r] = kInvalid;
+        }
+    m_unlocked = false;
+    if (m_bindings[role] == b)
+    {
+        save();
+        rebind();
+        emit changed();
+        return true;
+    }
+    if (m_bindings[role].identity != b.identity)
+        m_lastUniverses[role] = kInvalid;
+    m_bindings[role] = b;
+    save();
+    rebind();
+    if (role == GrandMaster)
+        rearmGrandMaster();     // it picks up before it moves the master
+    emit changed();
+    return true;
+}
+
 bool DeskRecord::clear(Role role)
 {
     return setBinding(role, Binding());
@@ -469,6 +541,11 @@ QString DeskRecord::identityOfUniverse(quint32 universe) const
         return QString();
     InputPatch *ip = iom->inputPatch(universe);
     if (ip == nullptr || ip->plugin() == nullptr)
+        return QString();
+    /* A patch whose line is not there now (the device's list shrank under
+       it) names no device: its inputName() is "None", and "midi:None" was
+       seeded as a board on the bench (2026-11-27). */
+    if (ip->input() == QLCIOPlugin::invalidLine() || ip->input() >= quint32(ip->plugin()->inputs().size()))
         return QString();
     return ControllerJobs::deskIdentityFor(ip->plugin()->name(), ip->inputName(),
                                            ip->plugin()->inputDeviceLocation(ip->input()));
@@ -710,10 +787,10 @@ void DeskRecord::hazardInput(Role role, quint64 k, quint32 universe, quint32 cha
     }
 }
 
-void DeskRecord::portChanged(quint32 universe)
+void DeskRecord::portChanged(quint32 universe, bool anyComesOnline)
 {
     const QString was = m_gmLiveKey;
-    seedDefaults();
+    seedFor(universe, anyComesOnline);
     rebind();
     /* The Grand Master's port (re)opened, or it moved to another: the
        device may dump its fader where it sits (a parked 0 would black the
@@ -825,15 +902,29 @@ QString DeskRecord::duplicateWarning() const
 
 QStringList DeskRecord::seededDevices() const
 {
-    return QSettings().value(settingsGroup() + QLatin1Char('/') + kSeeded).toStringList();
+    QStringList out = QSettings().value(settingsGroup() + QLatin1Char('/') + kSeeded).toStringList();
+    // An entry an earlier build seeded for a patch with no device on its line.
+    out.removeAll(QStringLiteral("midi:None"));
+    return out;
+}
+
+QStringList DeskRecord::deferredRoles() const
+{
+    return QSettings().value(settingsGroup() + QLatin1Char('/') + kDeferred).toStringList();
 }
 
 bool DeskRecord::seedDefaults()
+{
+    return seedFor(kInvalid, true);
+}
+
+bool DeskRecord::seedFor(quint32 cutOverOn, bool cutOverAll)
 {
     InputOutputMap *iom = m_doc != nullptr ? m_doc->inputOutputMap() : nullptr;
     if (iom == nullptr || isLocked())
         return false;
     QStringList seeded = seededDevices();
+    QStringList deferred = deferredRoles();
     bool marked = false;
     bool learnedAny = false;
     for (quint32 u = 0; u < iom->universesCount(); ++u)
@@ -845,10 +936,16 @@ bool DeskRecord::seedDefaults()
         if (!layout.isValid())
             continue;
         const QString id = identityOfUniverse(u);
-        if (id.isEmpty() || seeded.contains(id))
+        if (id.isEmpty())
             continue;
-        seeded << id;
-        marked = true;
+        const bool seen = seeded.contains(id);
+        if (!seen)
+        {
+            seeded << id;
+            marked = true;
+        }
+        const bool mayCut = cutOverAll || u == cutOverOn;
+        CutOver cut;
         for (const SurfaceLayout::Role &lr : layout.roles())
         {
             if (!lr.seed)
@@ -861,8 +958,29 @@ bool DeskRecord::seedDefaults()
                     role = r;
                     known = true;
                 }
-            // Never over a role learned (here or on another device).
-            if (!known || m_bindings[role].isSet())
+            if (!known)
+                continue;
+            const QString dk = id + QLatin1Char('|') + roleKey(role);
+            const bool held = m_bindings[role].isSet();
+            bool cutting = false;
+            if (held)
+            {
+                if (m_bindings[role].identity == id)
+                    continue;
+                /* Another board's: it keeps it while it is here. Gone, and
+                   this one just came online: it hands the role over. */
+                if (state(role) != NotConnected || !mayCut
+                    || m_cutRefused.contains(id + QLatin1Char('|') + m_bindings[role].identity))
+                {
+                    if (!deferred.contains(dk))
+                        deferred << dk;
+                    marked = true;
+                    continue;
+                }
+                cutting = true;
+            }
+            // A cleared default stays cleared, unless it waited for the board that held it.
+            else if (seen && !deferred.contains(dk))
                 continue;
             bool taken = false;
             for (Role r : roles())
@@ -881,21 +999,71 @@ bool DeskRecord::seedDefaults()
             b.channel = lr.channel;
             b.control = controlName(u, lr.channel);
             b.on = true;
+            if (cutting)
+            {
+                cut.roles << role;
+                cut.was << m_bindings[role];
+            }
             m_bindings[role] = b;
             m_lastUniverses[role] = kInvalid;
+            if (deferred.removeAll(dk) > 0)
+                marked = true;
             learnedAny = true;
+        }
+        if (!cut.roles.isEmpty())
+        {
+            QStringList names;
+            for (Role r : std::as_const(cut.roles))
+                names << roleName(r);
+            QString list = names.value(0);
+            if (names.size() > 1)
+                list = names.mid(0, names.size() - 1).join(QStringLiteral(", ")) + tr(" and ") + names.last();
+            const QString from = cut.was.first().device;
+            cut.newIdentity = id;
+            cut.text = tr("%1 moved to %2 from %3.").arg(list, layout.shortName(), from);
+            m_cut = cut;
         }
     }
     if (learnedAny)
         save();
     if (marked)
+    {
         QSettings().setValue(settingsGroup() + QLatin1Char('/') + kSeeded, seeded);
+        QSettings().setValue(settingsGroup() + QLatin1Char('/') + kDeferred, deferred);
+    }
     if (learnedAny)
     {
         rebind();
         emit changed();
+        if (!m_cut.text.isEmpty() && m_cut.roles.size() > 0 && m_cutAnnounced != m_cut.text + m_cut.newIdentity)
+        {
+            m_cutAnnounced = m_cut.text + m_cut.newIdentity;
+            emit cutOver(m_cut.text);
+        }
     }
     return learnedAny;
+}
+
+bool DeskRecord::undoCutOver()
+{
+    if (m_cut.roles.isEmpty() || isLocked())
+        return false;
+    for (int i = 0; i < m_cut.roles.size(); ++i)
+    {
+        const Role r = m_cut.roles.at(i);
+        if (m_bindings[r].identity == m_cut.newIdentity)
+        {
+            m_cutRefused.insert(m_cut.newIdentity + QLatin1Char('|') + m_cut.was.at(i).identity);
+            m_bindings[r] = m_cut.was.at(i);
+            m_lastUniverses[r] = kInvalid;
+        }
+    }
+    m_cut = CutOver();
+    m_cutAnnounced.clear();
+    save();
+    rebind();
+    emit changed();
+    return true;
 }
 
 QStringList DeskRecord::missingDevices() const
@@ -1035,7 +1203,11 @@ void DeskRecord::sendGrandMasterToMotor()
     const quint32 channel = m_bindings[GrandMaster].channel;
     if (iom->faderFact(universe, channel) != FaderFact::Motorised)
         return;
-    iom->sendFeedBack(universe, channel, iom->grandMasterValue(), QVariant());
+    const int gm = iom->grandMasterValue();
+    if (SurfaceSetup *ss = m_doc->surfaceSetup())
+        ss->boardLog()->note(universe, tr("Motor fader sent to the Grand Master, %1 % (%2)")
+                                           .arg(qRound(gm * 100.0 / 255.0)).arg(gm));
+    iom->sendFeedBack(universe, channel, gm, QVariant());
 }
 
 SurfaceLayout DeskRecord::layoutOf(quint32 universe) const
@@ -1092,7 +1264,17 @@ void DeskRecord::grandMaster(uchar value)
         return;
     InputOutputMap *iom = m_doc->inputOutputMap();
     const int current = iom->grandMasterValue();
-    if (m_gmPickup.accept(value, current, now()) && value != current)
+    const bool taken = m_gmPickup.accept(value, current, now());
+    if (!taken && m_universes[GrandMaster] != kInvalid && now() - m_gmRefusedNoteAt > 1000)
+        if (SurfaceSetup *ss = m_doc->surfaceSetup())
+        {
+            // The drive-back's why, on the bench: the move was not the master's.
+            m_gmRefusedNoteAt = now();
+            ss->boardLog()->note(m_universes[GrandMaster],
+                                 tr("Fader at %1 not taken: the Grand Master (%2) waits for it to come "
+                                    "to it (pick-up)").arg(value).arg(current));
+        }
+    if (taken && value != current)
     {
         // The fader's own move: never sent back to it (a motor would fight the hand)
         m_gmFromFader = true;
@@ -1114,6 +1296,46 @@ void DeskRecord::grandMaster(uchar value)
         m_gmSettle->start(m_gmSettleMs);
     }
     notifyGrandMasterWaiting();
+}
+
+bool DeskRecord::sayRoleElsewhere(quint32 universe, quint32 channel, uchar value, quint64 k)
+{
+    /* The virtual bench (2026-11-27): STOP and the Grand Master learned on
+       the APC64, the FaderPort plugged in beside it -- its Shift+Stop and
+       its fader did nothing, and nothing said why. One STOP and one Grand
+       Master per computer stays the rule (the old board is here, so
+       nothing moves); the board says where they are. */
+    if (value == 0)
+    {
+        m_down.remove(k);
+        return false;
+    }
+    if (m_down.contains(k))
+        return false;
+    const SurfaceLayout lay = layoutOf(universe);
+    if (!lay.isValid())
+        return false;
+    for (const SurfaceLayout::Role &r : lay.roles())
+    {
+        const Role role = r.role == roleKey(Stop) ? Stop
+                        : r.role == roleKey(GrandMaster) ? GrandMaster : Go;
+        if (role == Go || r.channel != channel || !isSet(role) || universeOf(role) == universe)
+            continue;
+        if (role == Stop)
+            m_down.insert(k);       // once a press
+        else if (now() - m_elsewhereSaidAt < 2000)
+            return false;           // a fader: once in a while, not on every value
+        m_elsewhereSaidAt = now();
+        const QString where = m_bindings[role].device.isEmpty() ? m_bindings[role].identity
+                                                                : m_bindings[role].device;
+        if (SurfaceSetup *ss = m_doc->surfaceSetup())
+            ss->boardLog()->note(universe, tr("%1 here does nothing: this computer's %1 is on %2")
+                                               .arg(roleName(role), where));
+        emit refused(tr("%1: this computer's %2 is on %3. Click it on this board's map to move it here.")
+                         .arg(lay.shortName(), roleName(role), where));
+        return true;
+    }
+    return false;
 }
 
 void DeskRecord::goPressed(bool back)
@@ -1675,9 +1897,14 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             if (m_down.contains(k))
                 return;
             m_down.insert(k);
+            if (SurfaceSetup *ss = m_doc->surfaceSetup())
+                ss->boardLog()->note(universe, tr("STOP refused: Shift (channel %1) is not held")
+                                                   .arg(layoutOf(universe).shiftChannel()));
             emit refused(tr("%1: Shift+Stop stops.").arg(layoutOf(universe).shortName()));
             return;
         }
+        if (SurfaceSetup *ss = m_doc->surfaceSetup())
+            ss->boardLog()->note(universe, tr("STOP: the desk stops"));
         stopPressed(k, value);
         return;
     }
@@ -1710,7 +1937,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
     }
 
     if (!desk)
+    {
+        sayRoleElsewhere(universe, channel, value, k);
         return;
+    }
     /* A controller's setup is listening to this board (Identify Lamps):
        its presses pair lamps, they do no job. The STOP went above. */
     if (value > 0 && m_doc != nullptr && m_doc->inputOutputMap()->isSetupHeld(universe))

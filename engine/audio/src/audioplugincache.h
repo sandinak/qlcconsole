@@ -53,6 +53,26 @@ public:
      *  If $filename can't be decoded, this method returns NULL */
     AudioDecoder *getDecoderForFile(const QString& filename);
 
+    /** How many decoder plugins loaded; 0 when none did (the app's audio
+     *  library failed to load, or no plugin is installed). */
+    int decoderCount() const;
+
+    /** Why each plugin file in the folder failed to load (one line each),
+     *  logged when load() ran. Empty when they all did. */
+    QStringList loadErrors() const;
+
+    /** Whether load() has run (a Doc that never loads plugins -- a headless
+     *  tool -- has no verdict on whether audio can play). */
+    bool loadAttempted() const;
+
+    /** What to tell a person whose file @a fileName can't be played, given
+     *  how many decoders loaded and the formats they list ("*.wav", ...):
+     *  no decoder at all is the app's fault, a format miss is the file's. */
+    static QString cantPlayMessage(const QString& fileName, int decoderCount,
+                                   const QStringList& supportedFormats);
+    /** The same, from this cache's own state. */
+    QString cantPlayMessage(const QString& fileName);
+
     /** Get the list of cached audio devices detected on creation */
     QList<AudioDeviceInfo> audioDevicesList() const;
 
@@ -62,6 +82,9 @@ public:
 private:
     /** a map of the vailable plugins ordered by priority */
     QMap<int, QString> m_pluginsMap;
+
+    QStringList m_loadErrors;
+    bool m_loadAttempted = false;
 
     /** a list of all input/output audio devices arranged in
      *  AudioDeviceInfo structure */

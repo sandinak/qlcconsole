@@ -189,6 +189,14 @@ public:
     /** Q317: one static role off (or on again) on this computer. */
     bool setOn(Role role, bool on);
 
+    /** The map's click-to-assign (Q355): make @p universe's control
+     *  @p channel this computer's @p role, as a learn would, without the
+     *  press. Refused (false, @p why says it) while locked, for a fader on a
+     *  button role or a button on the Grand Master, and for the show's
+     *  emergency stop on GO, Back and the Grand Master; the role's old
+     *  control is let go, and another role on this control gives it up. */
+    bool assignRole(Role role, quint32 universe, quint32 channel, QString *why = nullptr);
+
     /** Why the last change was refused ("Enter the show's PIN…"). */
     QString lockedText() const;
 
@@ -236,6 +244,22 @@ public:
     bool seedDefaults();
     /** The identities seedDefaults() has seeded on this computer. */
     QStringList seededDevices() const;
+
+    /** Cut-over: a board that holds this computer's core roles (GO, Back,
+     *  STOP, the Grand Master) and is gone -- unplugged, not here -- when a
+     *  new surface with defaults for them comes online, hands them over:
+     *  they move to the new board by themselves and cutOver() says so (the
+     *  notice, with Undo). While the old board is still here nothing moves:
+     *  the new one gets its defaults only for roles nobody holds, and is
+     *  given a role when the board holding it lets go of it (cleared). */
+    bool canUndoCutOver() const { return !m_cut.roles.isEmpty(); }
+    /** The last cut-over's sentence ("GO, Back, STOP and Grand Master moved
+     *  to APC64 from FaderPort 2"); empty when none can be undone. */
+    QString cutOverText() const { return m_cut.text; }
+    /** Put the roles of the last cut-over back on the board they came from,
+     *  and never move them to that new board again. False: nothing to undo,
+     *  or the desk is locked. */
+    bool undoCutOver();
 
     /** The devices set roles need that this show's patch lacks, but are
      *  plugged in (Patch It can patch them). */
@@ -343,6 +367,9 @@ signals:
     void grandMasterWaitingChanged(bool waiting);
     /** The Run tab's list changed: what GO plays now. */
     void goTargetChanged(const QString &text);
+    /** Roles moved to a new board because the one holding them is gone
+     *  (cutOverText()); canUndoCutOver() is true. */
+    void cutOver(const QString &text);
 
 private:
     void load();
@@ -380,7 +407,12 @@ private:
     SurfaceLayout layoutOf(quint32 universe) const;
     /** A port opened, closed or moved (@p universe, or any): rebind(), and
      *  the Grand Master waits out its dump if it was its port (Q316). */
-    void portChanged(quint32 universe);
+    void portChanged(quint32 universe, bool anyComesOnline = false);
+    /** seedDefaults() with cut-over for the board on @p cutOverOn (or every
+     *  board when @p cutOverAll): a board comes online at a patch, a
+     *  reconnect, a load or the app's start, never at any other change. */
+    bool seedFor(quint32 cutOverOn, bool cutOverAll);
+    QStringList deferredRoles() const;
     /** A learn listens (or no longer): the show's listeners hear no press meanwhile. */
     void setLearning(bool on);
     void endSwallow(quint64 k);
@@ -451,6 +483,12 @@ private:
     /** The fader moved the master (or tried to) since the motor was last sent. */
     bool m_gmMoved = false;
     int m_gmSettleMs = 150;
+    qint64 m_gmRefusedNoteAt = -100000;   ///< when the board log last said a move was not taken
+    qint64 m_elsewhereSaidAt = -100000;   ///< when a board's own STOP/GM last said it is another's
+    /** A board's own STOP key or Grand Master fader (its layout's default)
+     *  touched while that role is another device's on this computer: said,
+     *  never silent. True when it was said. */
+    bool sayRoleElsewhere(quint32 universe, quint32 channel, uchar value, quint64 k);
     QTimer *m_gmSettle = nullptr;
     /** The universes whose board has its Shift key held. */
     QSet<quint32> m_shiftDown;
@@ -458,6 +496,19 @@ private:
     QString m_gmLiveKey;
     QElapsedTimer m_elapsed;
     std::function<qint64()> m_clock;
+
+    // Cut-over (seedFor())
+    struct CutOver
+    {
+        QString text;
+        QString newIdentity;
+        QList<Role> roles;
+        QList<Binding> was;
+    };
+    CutOver m_cut;
+    /** "new identity|old identity": a cut-over undone, not done again this session. */
+    QSet<QString> m_cutRefused;
+    QString m_cutAnnounced;
 
     // Patch It
     quint32 m_patchedUniverse = 0xFFFFFFFF;

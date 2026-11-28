@@ -35,6 +35,8 @@ add_library(${module_name} SHARED
     surfacelayout.cpp surfacelayout.h
     opendecklink.cpp opendecklink.h
     surfacesetup.cpp surfacesetup.h
+    surfaceboardlog.cpp surfaceboardlog.h
+    surfaceautopatch.cpp surfaceautopatch.h
     pageset.cpp pageset.h
     surfacepages.cpp surfacepages.h
     editlive.cpp editlive.h

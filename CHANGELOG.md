@@ -23,6 +23,22 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Footer icons and View ▸ Footer**: every footer chip has a small icon that says what it reports (bolt for power, clock for timecode, map pin for the venue, a cue glyph for the next cue, fader for the Grand Master, checklist for Review, controller board for surfaces, game controller for Pad, pencil for Edit Live, lamp for the selected fixtures, disk for Saved), with its name in the tooltip; a squeezed chip shrinks to its icon before it goes. **View ▸ Footer** ticks each chip on or off for this computer, **Reset Footer** puts them back; safety chips are always shown. The Design / Operate chip, the ADVANCED mark and the Desk chip while all is well are gone; STUDENT and a red *Desk not patched: Patch It* stay.
 
 - **Show Review: how to fix** every finding, with a **Fix** (one click, one undo step: PAT-01/02 move to a free address) or **Go There** button on the row and in the right-click menu, **How to Fix…**, **Copy** and **Fix All Safe**; safety findings are Go There only.
+- **A game pad sets itself up when it appears**: a DualShock 4, DualSense or Xbox pad plugged in or paired is patched as the pad with no click (its last universe, else the first free one), says *DUALSHOCK 4 ready as the pad* with Undo, and the Pad chip shows; a pad the show has is put right when it comes online (a board's profile taken off, a board's or a network session's feedback let go).
+- **A board that comes online is configured correctly**: when a known board the show has is plugged in again, the show opens or the app starts, a feedback that is none, another board's, a network session's (*Network RTP Session 1*) or a gone port's moves to the board's own port, a missing or another board's profile becomes its own, and its init goes out; a notice says so with Undo, and the Board Log has it. The PMJ Black 1 is now recognised by its port name (*OpenDeck | PMJ_BLACK_1*): its profile had no Match, so it was never set up by itself.
+- **A board's lamps stay on its own port** when another MIDI port goes or the board itself is power-cycled (the PMJ's lamps went to an RTP network session and the show was saved that way); a FaderPort plugged in is sent the Grand Master at once; Ableton mode goes out twice on a plug, not four times; a board's own STOP or fader whose job is another board's says so in the footer instead of nothing. Found by the new virtual bench: his boards as real CoreMIDI ports through the real MIDI plugin.
+- **A board plugged in is set up by itself** (bench 2026-11-27: the APC40 mkII, APC64, APC mini mk2 and MaizeDMX were not found). A known board is patched with its profile and feedback line, its init sent, with a notice and Undo; port names are matched loosely (case, "(APC64)", port words), a multi-port board on its own port only (its other ports are "part of APC64"); the MaizeDMX's shared "USB2.0-MIDI" name is asked about once and remembered.
+- **Connections ▸ Control surfaces lists every plugged-in MIDI device**, patched or not: unknown ones a click from a profile or "Not a Control Surface", unplugged boards greyed "not connected"; the list follows a patch at once.
+- **The footer shows one message at a time**, never drawn over or under another chip's words.
+- **A moved fader keeps its name on the map**; its value is a small number under it.
+- **The APC40 mkII's init goes out again once its port has settled**, and every init send says in the Board Log where it went or why it could not.
+- **No "midi:None" desk entry** for a patch whose device line is gone.
+- **MP3 and every other sound failed on the CI macOS build.** The app's audio libraries (libsndfile's codecs: Ogg, Vorbis, FLAC, Opus, mpg123, LAME) were never copied into the app, so no sound could play. CI now bundles every dependency like the release build, a check fails the build on any library not in the app, the release DMG decodes MP3, and a sound that can't be added says why (Show Review FILE-07 warns when the audio library didn't load).
+
+### Added
+
+- **Board menu on each footer chip** (▾ or right-click): Map, Send Init Again, Profile, Feedback, Lamp Test, Board Log, Set Up.
+- **Board Log**: the last 500 MIDI messages in and out of each board, decoded with the control's name, with the app's own steps (init, motor fader, a refused pick-up or STOP); Copy for a report.
+- **Lamp Test for every board** with a feedback line (the MaizeDMX's too).
 - **Behaves as** (board Q350, Q351): every fixture is a Light, Machinery,
   One-shot, Switch or Hazard -- guessed from its definition and plot
   symbol (old shows load unchanged), set in Fixture Properties, shown in
@@ -102,6 +118,48 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 - **Label fields on the plot.** Show ▸ Label Fields: Name, Unit #, Channel,
   Address, Colour / gel, Mode, Owner, round the icon and upright;
   saved with the show.
+- **Control surfaces on the bench: the right profile by itself.** A board
+  patched with no profile gets the one made for its device (APC40, APC40 mkII,
+  APC64's DAW port, APC mini and mini mk2, FaderPort 2: a profile's `Match`),
+  so its init, map and desk roles work without choosing anything; the APC mini
+  mk2 is now a drawn surface (GO, Back, STOP ALL CLIPS, the master fader); an
+  older copy of a board's profile in your user folder (a legacy link to the
+  old QLC+ one) no longer shadows the built-in one, and Control surfaces says
+  so; when the board holding GO, Back, STOP and the Grand Master is gone and a
+  new surface comes online, they move to it with a notice and Undo (never
+  while the old board is still here); a lamp for a control the drawn board
+  does not have is not sent (an APC pad blinking at 8,2); the MaizeDMX's LEDs
+  are drawn as lights, not knobs, and it has a Colour and a Move page on X7
+  and X9.
+
+- **Connections ▸ Devices holds everything the Universes tab does** (Slot,
+  Input Profile Edit…, Add/Delete, Undo, Rescan are all on Devices, and a test
+  fails if the Universes tab gains a setting Devices lacks). **Control surfaces**
+  lists each board with its universe, profile and feedback, each unprofiled
+  input as *not set up*, or says none; its pane opens with what a control
+  surface is. Every branch has a tooltip and an empty one says why; three new
+  UX rules (UX-82 to UX-84) check it.
+- **A universe's Slot (Tour or House) is in the Devices universe pane** under
+  Name, as well as on the Universes toolbar; either shows what the other set,
+  and a pane edit is one undo step.
+- **Feedback is patched like input and output.** Patching a MIDI or USB board's
+  input pairs its own output as the feedback line (Connections says *Feedback
+  goes back to ...*); **Patch a Universe Here (feedback)** on a line,
+  **Send Feedback To...** and **Remove Feedback** on a universe do it by
+  hand, with undo; Control surfaces and Controller Setup get a **Patch
+  Feedback** button where a board's lamps were dark for want of it.
+- **The surface maps are drawn like the boards.** The PMJ Black 1 (Master,
+  Go and Back left of the strips, a 3 x 4 grid of keys, four round
+  encoders), the FaderPort 2, the APC40 mk2 and the APC64 have their real
+  proportions and parts, with the printed groups outlined. Above each map is
+  a sortable, filterable table (Control, Page, Job, Lamp, Picks up) that
+  selects the control on the drawing and back. Click a control to give it a
+  job (GO, Back, STOP, Grand Master, Page ◀, Page ▶, a key per page, Other,
+  No job) with Undo and the show's PIN in Operate; the footer chip always
+  says the page, and its page name picks one. **Print Key Labels…** makes a
+  PDF sheet at the board's key sizes, or tape labels for a Brother P-touch
+  CUBE on 12 mm (½ in), 18 mm (¾ in) or 24 mm (1 in) tape.
+
 - **PreSonus FaderPort 2** (2017, "PreSonus FP2"): a built-in profile and
   surface type with its map. The motor fader is the Grand Master (picked up
   as a motor fader), Play is GO, Rewind is Back, Stop is STOP, the knob is
@@ -335,6 +393,7 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 - **rainbow-movers.qlcc is on the plot**: its three fixtures hang on one front pipe at 16', 6' apart, aimed at three targets downstage centre, so the Lighting Studio's Top and Rig Overview show them (they were all under **Not on the plot**); both bench shows' tests fail if any fixture is off the plot.
 - **Edit Live chip at Student takes a click again**: the footer chip reading **Edit Live · Standard** greys itself but stays clickable, so a click shows the line with **Switch to Standard** (build 4910: greyed by disabling it, it took no click).
+
 - **The footer says why**: the **Pad** chip no longer shows with no game
   controller connected (it appears on connect, goes on unplug); a control
   greyed by the workspace level names the level on its face (**Edit Live ·

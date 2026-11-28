@@ -56,6 +56,10 @@ public:
 
     /** Opened as the hub opens it (modal). */
     static void open(Doc *doc, QWidget *parent);
+    /** Open it on @p universe's board (a footer chip's Set Up…). */
+    static void open(Doc *doc, QWidget *parent, quint32 universe);
+    /** Show @p universe's board (false: it is no known surface). */
+    bool selectUniverse(quint32 universe);
 
     /** The universe shown (UINT_MAX: none). */
     quint32 universe() const;
@@ -75,6 +79,8 @@ public slots:
     void startIdentify();
     void skipLamp();
     void finishIdentify();
+    /** Pair the board's own output as its feedback line, or say where to. */
+    void patchFeedback();
 
 private:
     /** Whether a write may go ahead (in Operate: asked). */
@@ -98,6 +104,7 @@ private:
     QPushButton *m_identify = nullptr;
     QPushButton *m_send = nullptr;
     QPushButton *m_mode = nullptr;
+    QPushButton *m_patchFeedback = nullptr;
     QWidget *m_identifyBox = nullptr;
     QLabel *m_identifyText = nullptr;
     QPushButton *m_skip = nullptr;

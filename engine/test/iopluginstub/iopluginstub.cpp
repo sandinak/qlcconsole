@@ -37,6 +37,7 @@ void IOPluginStub::init()
     m_lineDescriptions.clear();
     m_linesAreHardware = false;
     m_supportsTargets = false;
+    m_hasFeedback = false;
     m_rescanCalled = 0;
     m_probed.clear();
     m_lineCount = 4;
@@ -60,7 +61,7 @@ QString IOPluginStub::name() const
 
 int IOPluginStub::capabilities() const
 {
-    return QLCIOPlugin::Output | QLCIOPlugin::Input;
+    return QLCIOPlugin::Output | QLCIOPlugin::Input | (m_hasFeedback ? QLCIOPlugin::Feedback : 0);
 }
 
 /*****************************************************************************

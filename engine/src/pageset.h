@@ -107,6 +107,12 @@ public:
     quint32 previousKey() const { return m_previous; }
     /** A turning control that steps the pages (the APC64's encoder). */
     quint32 stepper() const { return m_stepper; }
+    /** This computer's own choice of keys (SurfacePages' overrides, Q356):
+     *  the keys that step the pages and the key of page @p page (kNone
+     *  clears it). In memory only; the file is untouched. */
+    void setNextKey(quint32 key) { m_next = key; }
+    void setPreviousKey(quint32 key) { m_previous = key; }
+    void setPageKey(int page, quint32 key) { if (page >= 0 && page < m_pages.size()) m_pages[page].key = key; }
     /** The board's encoders turn the other way (the PMJ's). */
     bool invertTurns() const { return m_invert; }
 

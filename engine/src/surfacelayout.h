@@ -64,6 +64,9 @@ public:
     /** Indicator: a light only (the MaizeDMX's LEDs): it hears nothing. */
     enum Kind { Button, Pad, Fader, CrossFader, Knob, Encoder, Indicator };
     enum Lamp { NoLamp, Led, Rgb };
+    /** How a control is cut: a key is a rounded rectangle, a transport
+     *  button or an encoder cap is round ("shape": "round"). */
+    enum Shape { Rectangle, Round };
 
     struct Control
     {
@@ -78,6 +81,7 @@ public:
          *  has one (the PMJ's); empty otherwise. */
         QString job;
         Lamp lamp = NoLamp;
+        Shape shape = Rectangle;
 
         bool isFader() const { return kind == Fader || kind == CrossFader; }
         bool turns() const { return kind == Knob || kind == Encoder; }
@@ -117,6 +121,10 @@ public:
     /** For a footer chip: "APC40" */
     QString shortName() const { return m_short.isEmpty() ? m_name : m_short; }
     QSizeF size() const { return m_size; }
+    /** Millimetres of the real board in one grid unit (its key sizes for
+     *  the key label sheets); 0: not known. Measured off the board's
+     *  published size, to be checked with a rule. */
+    double unitMm() const { return m_unitMm; }
 
     const QList<Control> &controls() const { return m_controls; }
     const QList<Section> &sections() const { return m_sections; }
@@ -196,6 +204,7 @@ private:
     bool m_guardStop = false;
     bool m_guardRelease = false;
     QSizeF m_size;
+    double m_unitMm = 0;
     QList<Control> m_controls;
     QList<Section> m_sections;
     QList<Role> m_roles;

@@ -9,6 +9,8 @@
  <Manufacturer>Akai</Manufacturer>
  <Model>APC Mini mk2</Model>
  <Type>MIDI</Type>
+ <Match>APC mini mk2</Match>
+ <Match>APC mini mk2 Control</Match>
  <Surface Version="1"/>
  <Channel Number="48">
   <Name>Slider 1</Name>

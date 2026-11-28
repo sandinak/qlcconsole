@@ -40,6 +40,7 @@ add_library(${module_name}
     windowplacement.cpp windowplacement.h
     assignhotkey.cpp assignhotkey.h assignhotkey.ui
     audiobar.cpp audiobar.h
+    audiosettingspanel.cpp audiosettingspanel.h
     audioeditor.cpp audioeditor.h audioeditor.ui
     audiotriggerwidget.cpp audiotriggerwidget.h
     channelmodifiereditor.cpp channelmodifiereditor.h channelmodifiereditor.ui
@@ -236,8 +237,11 @@ add_library(${module_name}
     deskchip.cpp deskchip.h
     surfacechips.cpp surfacechips.h
     footericons.cpp footericons.h
+    footerbar.cpp footerbar.h
+    boardlogdialog.cpp boardlogdialog.h
     editlivechip.cpp editlivechip.h
     surfacemap.cpp surfacemap.h
+    surfacekeylabels.cpp surfacekeylabels.h
     qrencoder.cpp qrencoder.h
     controlcollisionbox.cpp controlcollisionbox.h
     controllearndialog.cpp controllearndialog.h

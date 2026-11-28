@@ -130,6 +130,45 @@ qlcplus-midi-profiler), with `under` from its `opendeck identify` pairing.
 (a Mac's output with no saved setting is channel 1); the bytes follow the
 plugin's own rule, `QLCMIDIProtocol::feedbackMidiChannel()`.
 
+## Through the real MIDI plugin: the virtual bench (macOS)
+
+The simulator above feeds the plugin's decoders, not the operating system,
+and its stub plugin lists whatever names the test gives it. Real boards
+failed where it passed (2026-11-27). [ui/test/virtualbench](../../ui/test/virtualbench/)
+makes his boards as **CoreMIDI virtual ports with the names they report**
+("APC40 mkII", "APC64 DAW (APC64)" and its three other ports, "APC mini mk2
+Control"/"Notes", "PreSonus FP2", "USB2.0-MIDI Port 1"/"Port 2",
+"OpenDeck | PMJ_BLACK_1", "Network RTP Session 1"), loads the **real MIDI
+plugin** into the whole app (offscreen) and reads every byte the app sends
+each port:
+
+```cpp
+VirtualMidiBench bench;
+VirtualMidiPort *apc = bench.plug("APC40 mkII");   // the plug: a source + a destination
+apc->send("90 00 7F 80 00 00");                    // the board talking
+QTRY_VERIFY(apc->count(QByteArray::fromHex("f0477f2960000441090005f7")) >= 2);
+bench.unplug("APC40 mkII");                        // the unplug
+```
+
+- **They are hardware to the app.** The plugin finds virtual ports through
+  the same `MIDIGetSource()`/`MIDIGetDestination()` list as a USB board,
+  with the same names. Two differences, neither used by the app: a virtual
+  port has no device or entity (its source and destination have two unique
+  ids where a USB port's share its entity's), and it is listed in the
+  order it was made.
+- **Hot-plug needs a run loop.** CoreMIDI says "a device came" on the
+  CoreFoundation run loop of the thread that made the first MIDI client.
+  The real app's Cocoa event dispatcher runs it; the offscreen platform's
+  (`QPAEventDispatcherGlib` on the pool's Homebrew Qt) does not, so a test
+  that waits for a plug sees nothing. The bench pumps the main run loop
+  every 5 ms, as Cocoa does (`VirtualMidiBench::pumpRunLoop()`);
+  `aPlugReachesThePluginByItself` prints which it was.
+- **One bench a computer.** The MIDI list is the system's: the gate's three
+  legs would see each other's "APC40 mkII". The test takes
+  `/tmp/qlcconsole-virtualbench.lock` first, and skips when a real board
+  of one of these names is plugged in.
+- It runs over ssh with no one logged in at the screen (the pool's hosts).
+
 ## A known bug
 
 Pin it with the branch that fixes it, so the test flips when it lands:

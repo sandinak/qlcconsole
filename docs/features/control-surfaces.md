@@ -385,22 +385,105 @@ a click opens its map.
   on the **MaizeDMX Playback Controller** its **GO** and **BACK** keys, **X10**
   STOP and the **GM** fader; on the **APC64**, as on the APC40, **PLAY**
   GO, **RECORD** Back, **STOP ALL CLIPS** STOP, and touch strip 8 the Grand
-  Master. A role you have learned already (on any board)
+  Master; on the **APC mini mk2** the top scene key **Clip Stop** is GO,
+  **Solo** Back, **Shift** STOP and **Slider 9** the Grand Master; **Left** and **Right** page the faders (Colour, Move), lit when there is a page that way.
+  A role you have learned already (on any board)
   is never changed, a control the open show already uses keeps its job
   (that role is left for you to learn), and a board is set up once: a role
   you clear stays cleared. The PMJ Black 1's **Go**, **Back** and **Master** are its own
   (the board's overlay does them) and are drawn as GO, Back and GM.
+- **The profile comes with the device.** A board patched with no profile
+  gets the one made for it, by the name the system gives its port: **APC40**,
+  **APC40 mkII**, the **APC64's DAW port**, **APC mini** and **mini mk2**
+  (its *Control* port), the **FaderPort 2** (*PreSonus FP2*). A profile you
+  pick yourself is kept. The MaizeDMX's port is *USB2.0-MIDI*, a name many
+  boxes share, so it is never chosen by name: pick its profile. The
+  profile's init follows at once (the APC40 mkII's Ableton mode, the APC64's
+  display), so a board that was patched with no profile starts working when
+  it is patched or the show is opened.
+- **An older copy of a profile in your folder.** A profile of the same name
+  in your user folder is used before the built-in one, unless it no longer
+  holds to the board's drawing (the old QLC+ APC40 mkII profile, without the
+  knobs on the track channels): then the built-in one is used, your file is
+  left as it is, and the **Controller setup** line under Control surfaces
+  says which file and why. Rename your copy to keep both.
+- **Another board takes over.** When the board that holds this computer's
+  GO, Back, STOP and Grand Master is gone (unplugged, not here) and a new
+  surface with defaults for them is patched or found, the roles move to it
+  by themselves; the notice line says so (*GO, Back, STOP and Grand Master
+  moved to APC64 from FaderPort 2.*) with **Undo**, which puts them back and
+  keeps them there. While the old board is still plugged in nothing moves:
+  the new one gets only the roles nobody holds, and the rest when the old
+  board lets go of them (cleared, or its Learn replaced). Its own STOP key
+  or fader then says where that job is (*FaderPort: this computer's STOP is
+  on APC64 DAW (APC64). Click it on this board's map to move it here.*)
+  rather than doing nothing silently.
+- **A board's lamps stay on its own port.** Its feedback line follows the
+  port by name: when another MIDI port goes, or the board itself is
+  switched off and on, the lamps never land on whatever port took its place
+  in the list (a network session, another board); they come back with it.
 - **A board with no drawing** (an APC mini, a fader box) is named in one line
   under the maps; what its controls do stays in the rows below.
-- The map reads; it changes nothing. Assign a free control from the thing
-  (right-click a cue list, cue or hit ▸ **Assign to Control…**; a scene or
-  effect in the Classic QLC+ view).
+- **Drawn like the board.** Each map keeps the real board's proportions and
+  its parts: round knobs and encoders, wide clip pads, square pads, long
+  fader slots, round transport keys, and the groups the panel prints
+  (**DEVICE CONTROL**, **SCENE LAUNCH**, **BANK SELECT**) outlined with their
+  names. The **PMJ Black 1** has its Master fader and its red and white
+  **Go** and **Back** keys on the left under the 3 x 4 grid of keys, four
+  big encoders over ten strips (a row of keys, the Load keys, the faders, and
+  two rows of keys under them). The map is drawn by the app, not copied from
+  a photo.
+- **A table of the controls.** Above each map is a table in the look of the
+  Connections lists: one row per control, with **Control**, **Page**,
+  **Job**, **Lamp** and **Picks up** (a fader that waits to reach the value
+  before it moves it). Click a heading to sort (numbers sort as numbers:
+  *Clip 1-2* before *Clip 1-10*); type in **Filter the controls** to narrow
+  it to a name, a job or a page. A row you select is the control outlined on
+  the drawing, and a control you click on the drawing is the selected row.
+- **Click a control to give it a job.** A click on a key offers **GO**,
+  **Back**, **STOP (all off)**, **Page ◀**, **Page ▶** and a key for each
+  page; on a fader, **Grand Master**; on a knob or encoder the page decides.
+  Every list ends with **Other… (Assign to Control)** (it tells you how to
+  assign a scene, cue or hit to the control) and **No job**. The job ticked is
+  the one it has. GO, Back, STOP and the Grand Master are this computer's
+  desk (the same as **Learn…**, without the press); the page keys are this
+  computer's too. The last change has an **Undo** at the foot of the list. In
+  Operate, a show with a PIN asks for it first, as **Assign to Control…** does.
+  Jobs such as Sub GO, Blackout, Blind and Flash a group, and a Shift guard
+  on STOP, are not in the list yet.
+- **Page ◀ and Page ▶.** A board with pages (the APC40 mk2, the APC64, the
+  PMJ, the MaizeDMX) has its page keys chosen here: give any key **Page ◀**
+  or **Page ▶**, and a key of its own to a page. They are lit while there is
+  a page that way, a key has one job (giving it another takes it off the
+  first), and they are kept for this computer. The footer's chip and the
+  map always say the page (*APC40 · Move*, in Operate too, where the page
+  waits for Design); click the page name on the chip to pick one. A page change lights the chip for
+  a second, so a board with no lamps and no screen still shows it; the page
+  keys' lamps show it on the board, and a board's own screen is written
+  with it where its device setup supports one (not built yet).
+- **Print Key Labels….** Under the board's name: a sheet of cut-out squares
+  at the board's real key sizes with what each key does, a set for each page
+  (the desk's and the show's jobs on every page), as an A4 PDF; or one label
+  a key on TZe tape, 12 mm (½ in), 18 mm (¾ in) or 24 mm (1 in) wide, for a Brother P-touch CUBE, at its 180
+  dpi, saved as a PDF or as pictures, or printed through the system's print
+  dialog (the Brother is picked when it is installed; there is no Bluetooth
+  setup in qlcconsole: pair it with the computer first). The key sizes follow
+  **Settings ▸ Units**. They are measured off each board's published size:
+  check one against a rule before you cut a sheet.
+- The map is a picture of the board's jobs: assign a scene, cue or hit
+  from the thing (right-click a cue list, cue or hit ▸ **Assign to
+  Control…**; a scene or effect in the Classic QLC+ view) or from the
+  control's click.
 
 The **MaizeDMX Playback Controller** shows up as **USB2.0-MIDI** (a name many
 USB MIDI boxes share): patch it with the profile **MaizeDMX Playback
 Controller**. The map and its default roles come from the profile, never the
 port's name. Its **BO** key is printed Blackout; it has no job yet in
-qlcconsole (the map says *Blackout (coming)*).
+qlcconsole (the map says *Blackout (coming)*). The small circles above the
+faders (*LED 1* to *LED 11*) are lights on the board, not knobs: the map
+draws them as lamps. **X7** is its **Colour** page and **X9** its **Move**
+page (see [Pages](#pages)), each lit while it is on; its lamps need its
+feedback line patched.
 
 ## The PreSonus FaderPort 2
 
@@ -440,6 +523,18 @@ native mode; patch it on that channel with the profile **PreSonus FaderPort
   show; untick them for a show that wants the single press. A board's
   layout file says which key is its Shift and what it guards by default
   (`"shift"`, `"guards"`); only the FaderPort 2 asks for it.
+- **What PreSonus's MIDI protocol says** (the FaderPort owner's manual,
+  appendix *FaderPort Multichannel Controller MIDI Protocol*, for its native
+  Studio One mode): the fader is pitch bend on MIDI channel 1, both ways
+  (the board sends it when moved; the same message moves the motor); the
+  touch sensor is note 104 (0x68), 127 touched, 0 let go; **Shift** is note
+  70 (0x46), **Stop** 93 (0x5D), **Play** 94 (0x5E), **Record** 95,
+  **Rewind** 91, **Fast Forward** 92, **Loop** 86. The profile matches all
+  of these. There is no init message: the mode is chosen on the board, by
+  holding **Next** while it powers on and pressing **Solo** (Studio One). A
+  lamp is note on: 127 on, 0 off, 1 flashing. The manual gives the knob as
+  CC 60 (0x3C); the profile has CC 16, which is what the board sends in its
+  Mackie modes. If the knob does nothing, its Board Log says which it is.
 - Names are the board's own labels where PreSonus's documents confirm them
   (the Mackie set: Arm, Solo, Mute, Shift, Read, Write, Trim, Touch,
   Marker, Nudge, Click, Loop, Rewind, Fast Forward, Stop, Play, Record).
@@ -479,7 +574,7 @@ names the page: **APC40 · Move**.
 | **APC40 mk2** (*Build*) | **Move**: device knobs 1, 2 pan and pan fine; 3, 4 focus and zoom; 5, 6 tilt and tilt fine; 7, 8 gobo and gobo rotation. **Beam**: zoom, focus, iris, frost, strobe, shutter, prism, prism rotation. On every page: faders 1-6 red, green, blue, white, amber, UV, fader 8 intensity; track knobs 1, 2 hue and saturation. | **Pan** (Move) and **Sends** (Beam), lit when on; **Device ◀ ▶** step |
 | **APC64** (*Build*) | **Colour**: touch strips 1-7 red, green, blue, white, amber, UV, intensity. **Move**: pan, tilt, zoom, focus, iris, gobo, intensity. The pads stay free; strip 8 is the GM. | Turn the **encoder** |
 | **PMJ Black 1** (*Pages*) | **Looks** (on at start): the faders edit the open look (a colour look: 1-6 R G B W A UV; a dimmer look: 1), else the intensity of selected fixture N; encoders pan, tilt, hue, saturation. **Fix Cont**: faders 1-6 colour, 10 intensity, encoders pan, tilt, zoom, focus; press it again for gobo, gobo rotation, prism, iris. **Groups**: fader N is the level of the open scene's group N. **Effects** and **Macros**: nothing yet (their keys dim; the map and the Workbench say *Effects: coming*). Every fader picks up first; **1-Up…10-Up** zero the open look's channel on any page. | The mode keys, the lit one is the page |
-| **MaizeDMX** (*Colour*) | Faders 1-6 red, green, blue, white, amber, UV; 7, 8 hue and saturation; 10 intensity. | One page |
+| **MaizeDMX** (*Colour*) | **Colour**: faders 1-6 red, green, blue, white, amber, UV; 7, 8 hue and saturation; 10 intensity. **Move**: faders 1-8 pan, tilt, zoom, focus, iris, gobo, gobo rotation, frost; 10 intensity. | **X7** (Colour) and **X9** (Move), lit when on |
 
 **Which set, and sharing one.** The **Pages** row over each map picks the
 set this board uses **on this computer** (by the device, like this
@@ -796,6 +891,7 @@ pad read -- so no two surfaces can disagree.
 | **dark** | Pressing it does nothing here, now: a hit whose place is not live, a cue list or cue that is not armed in Design (rules 2 and 3 above), a *Stop only* control with nothing to stop, a cue list with every cue cut, or the thing it fired is gone. The footer says which when you press it. |
 | **dim** | Ready: a press would fire it. |
 | **bright** | What it fires is running. |
+| **no light** | A trigger learned on another board (the PMJ's channel 9 note 1) on a universe whose drawn board has no such control: it sends no lamp, so an APC pad never blinks for a control it does not have. |
 | **two blinks** | The double-GO guard held a command on that cue list ([Two GOs at once](show-control.md#two-gos-at-once)). The light then goes back to what it was saying. |
 | **the emergency stop's button** | Dim at every other moment -- it always works, so it is always findable on a dark stage -- and **lit** from an ALL OFF until the next GO. Every other light is dark while it is lit: after an ALL OFF nothing is ready until the show runs again. |
 
@@ -913,6 +1009,84 @@ one step every second and a half: say what each step looks like (a colour
 means that LED is an RGB one).
 
 The **PMJ Black 1** row of **Connections ▸ Control surfaces** says the same.
+
+## A board is set up when you plug it in
+
+Plug in a board the app knows (APC40 mkII, APC64, APC mini mk2, FaderPort
+2, PMJ Black 1, and any other with a built-in profile) and it is set up by
+itself: its input is patched with its profile, its feedback goes to the same
+device's output, and its init goes out (the APC40 mkII's Ableton mode, the
+APC64's display). It goes on the universe it had on this computer last time
+when that one is free, else on the first free universe (a new one when
+none is). A notice says so, *Akai APC40 mkII ready on universe 5*, with
+**Undo**: Undo lets it go, and it is not set up by itself again on this
+computer until you patch it by hand. A board the show already has, or
+waits for while it is unplugged, is left to the show's own patch.
+
+**A board already patched is put right.** When a board the show has comes
+online (plugged in again, the show opened, the app started), its universe
+is checked: a feedback that is none, points at another board, at a network
+session (*Network RTP Session 1*) or at a port that is gone moves to the
+board's own port; a profile that is none, not installed or another board's
+becomes its own; then its init goes out. A notice says what was done,
+*PMJ Black 1: feedback repaired to its own port*, with **Undo**, and the
+Board Log has a *Repaired* line. Undo puts the patch back as it was and
+leaves it alone on this computer from then on. A feedback you set on
+purpose to another port that is here and is not a board is never touched.
+
+The name the computer gives the board is matched loosely: case, a trailing
+*(APC64)*, port words such as *MIDI 1* or *Port 1*, and the maker's name do
+not matter, but another model's word does (an *APC40 mkII* is never taken
+for an *APC40*). A board with several ports is set up on the one its
+profile uses: the APC64 on **APC64 DAW**, the APC mini mk2 on its
+**Control** port. Its other ports show under it in **Connections ▸ Control
+surfaces** as *part of APC64 (not used by qlcconsole)*; nothing to patch
+there.
+
+The **MaizeDMX** shows up as **USB2.0-MIDI Port 1**, a name many cheap
+USB MIDI cables share (its chip, USB 1a86:752d, is a generic one), so it
+is never set up by itself. The notice asks *USB2.0-MIDI Port 1: is this a
+MaizeDMX Playback Controller?* with **Use It**; one click sets it up and
+this computer remembers the answer.
+
+**Connections ▸ Control surfaces** lists every MIDI input device plugged
+in, patched or not: the boards set up, each with its universe, profile,
+feedback line and init; a known board not set up yet (*APC64 DAW (APC64):
+Akai APC64, not set up*); an unknown device (*Launchkey MK4 49 MIDI Out:
+not set up*). Click one of the last two for its menu: **Use as** its
+profile, **Another Profile**, or **Not a Control Surface** (it is hidden on
+this computer). A board the show knows that is unplugged stays in the list,
+greyed, *not connected*.
+
+## A board's menu and its Board Log
+
+Each board has a chip in the footer (**APC40**, **FaderPort**). A click on
+it opens the board's map. The **▾** beside it, or a right-click on the chip,
+opens the board's menu:
+
+- **Map**: the board's map.
+- **Send Init Again**: its init now (Ableton mode, the APC64's display).
+- **Profile**: the profiles that fit this device, the one in use ticked.
+  Choosing another patches the board again with it and sends its init.
+- **Feedback**: *Paired to* its output, **Pair**, or **None**.
+- **Lamp Test**: lights each of the board's lamps in turn, then all of
+  them, then gives them back to the show. It needs a feedback line; without
+  one the menu says *Feedback ▸ Pair first*.
+- **Board Log…**: what the board sent and was sent.
+- **Set Up…**: the board's [controller setup](#setting-up-a-controller).
+
+The **Board Log** keeps the last 500 MIDI messages in and out of each
+board, newest last: the time to the millisecond, **IN** or **OUT**, the
+bytes, and what they are (*Note 93 on, ch 1, velocity 127 (Stop)*, *Pitch
+bend, ch 1 = 8192 of 16383 (Fader)*, *SysEx (12 bytes)*). The app's own
+steps are in it too, marked **--**: the board recognised and patched, its
+profile chosen, each init with the port it went out of (or why it could
+not go), the motor fader sent to the Grand Master, a fader move not taken
+because the Grand Master waits for it to pick up, a STOP refused because
+Shift was not held. **Copy** puts the whole log, with the board's input,
+profile and feedback line at the top, on the clipboard for a report.
+**Clear** empties it. The map's options row has **Lamp Test…** and **Board
+Log…** too.
 
 ## Setting up a controller
 
@@ -1036,6 +1210,101 @@ and never surprises you when it comes back.
 These steps need the hardware. Do them once on the desk you will use,
 after any build that changes a surface, and say which build.
 
+**Plugged in, set up by itself (053 boards)**
+
+Start with the app open and a show loaded, every board unplugged.
+
+1. Plug in the **APC40 mkII**. *Expect:* within a second a notice *Akai
+   APC40 mkII ready on universe N* with **Undo**; an **APC40** chip and a
+   **▾** in the footer; the pads go dark and light only from the app
+   (Ableton mode). Click **▾ ▸ Board Log…**. *Expect:* lines *Recognised
+   APC40 mkII as Akai APC40 mkII*, then two **OUT** lines *F0 47 7F 29 60 00
+   04 41 09 00 05 F7 … Init (Ableton mode), on patch, to APC40 mkII* and
+   *… again, after its port opened*. If the pads are still not in Ableton
+   mode: **▾ ▸ Send Init Again**, then **Copy** the log and send it.
+2. Click **Undo** on the notice. *Expect:* the chip goes. Unplug and replug
+   it. *Expect:* no notice (it is not set up by itself again). Patch it by
+   hand in Connections. *Expect:* from then on it is set up by itself again.
+3. Plug in the **APC64**. *Expect:* *Akai APC64 ready on universe N*; its
+   display says *qlc console*; in **Connections ▸ Control surfaces** one
+   row *APC64 DAW (APC64)* with *Notes*, *MIDI* and *Custom* folded under
+   it as *part of Akai APC64 (not used by qlcconsole)*, and no *not set
+   up* line for them.
+4. Plug in the **APC mini mk2**. *Expect:* *Akai APC Mini mk2 ready* on its
+   *Control* port; its *Notes* port folded under it. Open its map and move
+   fader 1. *Expect:* the fader keeps its name, and its value (*50 %*) is a
+   small number under it.
+5. Plug in the **MaizeDMX**. *Expect:* a notice *USB2.0-MIDI Port 1: is
+   this a MaizeDMX Playback Controller?* with **Use It**. Click it.
+   *Expect:* set up with its feedback line; **X7** lit (Colour page). **▾
+   ▸ Lamp Test**. *Expect:* each LED and key lamp lights in turn, then all,
+   then the show's lamps come back; the Board Log has an **OUT** line per
+   lamp. Unplug and replug: *Expect:* set up by itself, no question.
+6. Plug in something that is no board (a keyboard, the Launchkey). *Expect:*
+   **Connections ▸ Control surfaces** lists it *…: not set up*; click it,
+   **Not a Control Surface**. *Expect:* it is gone from the list.
+7. **A stale feedback.** In Connections set the PMJ's universe's
+   **Feedback** to *Network RTP Session 1* (or any other board), then unplug
+   the PMJ and plug it back. *Expect:* *PMJ Black 1: feedback repaired to
+   its own port* with **Undo**; the PMJ's lamps light; the Board Log says
+   *Repaired PMJ Black 1 … (it was Network RTP Session 1)*. Reopen the show
+   with the same stale patch: *Expect:* the same notice.
+8. Unplug a board that is set up. *Expect:* its row in Control surfaces is
+   grey and says *not connected*; plug it back: it is back, not grey.
+9. Click a footer chip's **Design mode** chip and then press a board's
+   Stop without Shift, one after the other. *Expect:* one message at a time
+   in the footer, never two drawn over each other, and never under another
+   chip's words.
+
+**FaderPort 2: what it really sends (053 boards)**
+
+1. Plug in the FaderPort 2. *Expect:* *PreSonus FaderPort 2 ready on
+   universe N*, a **FaderPort** chip.
+2. **▾ ▸ Board Log…**, then **Clear**.
+3. Touch the fader, move it from the bottom to about the middle, let go,
+   and wait two seconds. *Expect:* **IN** *Note 104 on … (Fader touch)*, a
+   run of **IN** *Pitch bend … (Fader)* lines, *Note 104 off*, then one
+   **--** *Motor fader sent to the Grand Master* and an **OUT** *Pitch
+   bend* at the place you left it. The fader stays there. If it drives
+   back, the log says why (a *not taken … pick-up* line, or the **OUT**
+   value).
+4. Hold **Shift**, press **Stop**, let go of both. *Expect:* **IN** *Note
+   70 on (Shift)*, *Note 93 on (Stop)* and **--** *STOP: the desk stops*;
+   the show stops. Press **Stop** alone. *Expect:* **--** *STOP refused:
+   Shift … is not held* and the footer says *FaderPort: Shift+Stop stops.*
+5. Turn the knob a few clicks each way.
+6. **Copy**, and send the log to Claude with the build number.
+
+**APC boards and the MaizeDMX (053 bench)**
+
+1. Patch the **APC40 mkII**'s port with no profile (leave the profile on
+   *None*). *Expect:* it is given **Akai APC40 mkII**, the pads go to
+   Ableton mode (they light only from the app), an **APC40** chip is in the
+   footer. Unplug and replug it: *Expect:* Ableton mode again.
+2. Open Control surfaces with the old QLC+ copy of the APC40 mkII profile
+   still in your user folder. *Expect:* the Controller setup line names that
+   file as older, the knobs on the track channels move their map dials, and
+   the file is untouched.
+3. Patch the **APC mini mk2** (its *Control* port) with no profile. *Expect:*
+   **Akai APC Mini mk2**, a map of 64 pads, the scene keys, the faders and a
+   chip; **Clip Stop** is GO, **Solo** Back, **Shift** STOP,
+   **Slider 9** the Grand Master; **Left** and **Right** are lit (pages) (when no other board holds them).
+4. Patch the **APC64**'s *DAW* port with no profile, in Session mode.
+   *Expect:* **Akai APC64**; its display says *qlc console*; **PLAY** is GO,
+   **RECORD** Back, **STOP ALL CLIPS** STOP, touch strip 8 the Grand Master.
+5. Open a show with a trigger learned on the PMJ, with an APC patched.
+   *Expect:* no pad blinks at row 8, column 2 (or anywhere else the APC
+   has no control for the trigger).
+6. Patch the **MaizeDMX** with its profile and feedback line. *Expect:* the
+   LEDs above the faders look like lamps, not knobs; **X7** is lit (Colour),
+   press **X9**: it lights, X7 goes dark, faders 1-8 are pan to frost (the
+   map says so); press **X7** to go back.
+7. With the PMJ or FaderPort holding the roles and an APC64 plugged in too,
+   nothing moves. Unplug the FaderPort and patch (or replug) the APC64.
+   *Expect:* a notice *GO, Back, STOP and Grand Master moved to APC64 from
+   PreSonus FP2* with **Undo**; PLAY is GO at once; **Undo** puts the roles
+   back on the FaderPort's controls.
+
 **PreSonus FaderPort 2**
 
 1. Put the FaderPort 2 in native mode (MIDI channel 1) and patch it with the
@@ -1075,6 +1344,22 @@ after any build that changes a surface, and say which build.
    stop needs Shift** (both ticked) in its header; **STOP** reads
    *Shift+STOP*, **Shift** is drawn as the board's own key. Untick **Stop
    needs Shift**: **Stop** alone now stops.
+
+**Feedback patch (any board with lamps or motors: FaderPort 2, APC, PMJ, MaizeDMX)**
+
+1. Patch the board's input on a universe, then in Connections remove its
+   feedback (the universe's right-click, **Remove Feedback**). *Expect:* the
+   lamps go dark and Control surfaces says *no feedback line* with a **Patch
+   Feedback** button.
+2. Unpatch the input and patch it again. *Expect:* the status beside the
+   Connections toolbar says *Feedback goes back to* the board, the lamps
+   light and the fader follows the Grand Master, without touching feedback.
+3. Remove feedback again and press **Patch Feedback** in Control surfaces
+   (or in Controller Setup). *Expect:* the lamps light at once.
+4. With two outputs of the board's name (or none that matches), press **Patch
+   Feedback** under **Boards without feedback**. *Expect:* Connections opens
+   with the board's input selected and says *Right-click the board's output,
+   Patch a Universe Here (feedback)*; nothing is patched by guess.
 
 **PMJ Black 1**
 

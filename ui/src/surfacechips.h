@@ -24,10 +24,14 @@
 #include <QColor>
 #include <QIcon>
 #include <QMap>
+#include <QSet>
+#include <QPointer>
+#include <QMenu>
 
 #include "qlcui_export.h"
 
 class QToolButton;
+class QMenu;
 class QHBoxLayout;
 class Doc;
 
@@ -58,6 +62,23 @@ public:
     QList<quint32> universes() const { return m_chips.keys(); }
     /** Each chip's height (the footer's line). */
     void setChipHeight(int h);
+    /** The menu that picks a page of @p universe's board (the page name on
+     *  the chip, Q356); null when the board has no pages. The caller owns it. */
+    QMenu *pageMenu(quint32 universe);
+    /** The chip of @p universe is lit (about a second) after a page change, so a
+     *  board with no lamps and no screen still shows it. */
+    bool isFlashing(quint32 universe) const { return m_flash.contains(universe); }
+    /** @p universe's board menu (the chip's ▾ or a right-click): Map, Send
+     *  Init Again, Profile ▸, Feedback ▸, Lamp Test, Board Log…, Set Up….
+     *  Null when it is no board. The caller owns it. */
+    QMenu *boardMenu(quint32 universe);
+    /** The ▾ beside @p universe's chip (its board menu). */
+    QToolButton *menuButton(quint32 universe) const { return m_menuButtons.value(universe); }
+    /** The board menu opened last (tests); null once closed. */
+    QMenu *lastMenu() const { return m_lastMenu; }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 public slots:
     void rebuild();
@@ -65,11 +86,22 @@ public slots:
 signals:
     /** Open @p universe's map. */
     void mapRequested(quint32 universe);
+    /** Open @p universe's Board Log (and, for lampTestRequested, start its lamp test). */
+    void boardLogRequested(quint32 universe);
+    void lampTestRequested(quint32 universe);
+    /** Open @p universe's controller setup. */
+    void setUpRequested(quint32 universe);
 
 private:
+    void popupBoardMenu(quint32 universe);
     Doc *m_doc;
     QHBoxLayout *m_box;
     QMap<quint32, QToolButton *> m_chips;
+    QMap<quint32, QToolButton *> m_menuButtons;
+    QPointer<QMenu> m_lastMenu;
+    /** Whether widget point @p x of @p universe's chip is on the page name. */
+    bool onPageName(quint32 universe, int x) const;
+    QSet<quint32> m_flash;
     int m_height = -1;
     bool m_queued = false;
 };

@@ -32,6 +32,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QMenu>
+#include <QCursor>
 #include <QHash>
 #include <QSet>
 #include <QBrush>
@@ -53,6 +54,10 @@
 #include <QFontMetrics>
 
 #include "connectionstree.h"
+#include "qlcinputprofile.h"
+#include "controlsurfacespanel.h"
+#include "surfaceautopatch.h"
+#include "surfacesetup.h"
 #include "controllertestdialog.h"
 #include "shrinkablebar.h"
 #include "connectioneditor.h"
@@ -116,6 +121,18 @@
    its settings on the right (ShowControlSyncPage). */
 #define KIND_SHOWCONTROL_BRANCH 9
 #define KIND_SHOWCONTROL 10
+/* Under Control surfaces: a board recognised as a surface (12), a MIDI/HID
+   input patched with no profile (13), and a grey line saying why a branch is
+   empty (14). */
+#define KIND_SURFACE 12
+#define KIND_SURFACE_UNSET 13
+#define KIND_NOTE 14
+/* Under Control surfaces: a device plugged in that no universe has (a
+   click: pick its profile, or "Not a control surface"); another port of a
+   board, not used; a board the show knows that is not connected. */
+#define KIND_SURFACE_DEVICE 15
+#define KIND_SURFACE_PORT 16
+#define KIND_SURFACE_OFFLINE 17
 /* One device of a universe's controller slot (InputOutputMap::setInputSlot()),
    under that universe's input row: its place in the list in ROLE_LINE. */
 #define KIND_SLOTDEVICE 11
@@ -363,6 +380,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        wondering whether the cable is in. One click sends one poll per
        interface and redraws immediately. */
     m_rescan = new QPushButton(tr("Rescan"), this);
+    m_rescan->setObjectName(QStringLiteral("connRescan"));
     m_rescan->setToolTip(tr("Ask every interface for devices now. Discovery is "
                             "continuous anyway; this just skips the wait."));
     connect(m_rescan, SIGNAL(clicked()), this, SLOT(slotRescan()));
@@ -373,6 +391,7 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
        after deleting a fixture, get silence, and stop trusting it. This one
        covers patch changes and says so. */
     m_undo = new QPushButton(tr("Undo Patch Change"), this);
+    m_undo->setObjectName(QStringLiteral("connUndo"));
     m_undo->setEnabled(false);
     connect(m_undo, SIGNAL(clicked()), this, SLOT(slotUndoPatch()));
 
@@ -466,6 +485,10 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
     m_status = new QLabel(tr("Searching for devices…"), this);
     m_status->setStyleSheet("QLabel { color: #a06000; }");
     bar->insertWidget(bar->indexOf(hint) + 1, m_status);   // on the same row
+    m_note = new QLabel(this);
+    m_note->setObjectName("connectionsNote");
+    m_note->hide();
+    bar->insertWidget(bar->indexOf(hint) + 2, m_note);
 
     m_tree = new RowTree(this);
     m_tree->setObjectName("connectionsTree");
@@ -641,11 +664,14 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
             return;
         const int kind = it->data(COL_NAME, ROLE_KIND).toInt();
         if (m_showControlPanel != nullptr
-                && (kind == KIND_SHOWCONTROL || kind == KIND_SHOWCONTROL_BRANCH))
+                && (kind == KIND_SHOWCONTROL || kind == KIND_SHOWCONTROL_BRANCH || kind == KIND_SURFACE
+                    || (kind == KIND_NOTE && it->data(COL_NAME, ROLE_PLUGIN).toString() == QLatin1String("surfaces"))))
         {
             m_side->setCurrentWidget(m_showControlPanel);
             emit showControlRowSelected(kind == KIND_SHOWCONTROL
-                                        ? it->data(COL_NAME, ROLE_PLUGIN).toString() : QString());
+                                        ? it->data(COL_NAME, ROLE_PLUGIN).toString()
+                                        : kind == KIND_SHOWCONTROL_BRANCH ? QString()
+                                        : QStringLiteral("surfaces"));
             return;
         }
         m_side->setCurrentWidget(m_outputPage);
@@ -699,7 +725,27 @@ ConnectionsTree::ConnectionsTree(Doc *doc, QWidget *parent)
                 this, SLOT(slotTargetProblemsChanged()));
         connect(m_doc->inputOutputMap(), SIGNAL(inputSlotChanged(quint32)),
                 this, SLOT(slotTargetProblemsChanged()));
+        /* A line patched here or anywhere (the bench, 2026-11-27: patching
+           the APC64's first port left the list as it was), and a board set
+           up by itself: the list follows at once. */
+        connect(m_doc->inputOutputMap(), SIGNAL(inputPatchChanged(quint32)),
+                this, SLOT(slotTargetProblemsChanged()));
+        connect(m_doc->inputOutputMap(), SIGNAL(profileChanged(quint32,QString)),
+                this, SLOT(slotTargetProblemsChanged()));
+        if (m_doc->surfaceSetup() != nullptr)
+            connect(m_doc->surfaceSetup()->autoPatch(), &SurfaceAutoPatch::devicesChanged,
+                    this, &ConnectionsTree::slotTargetProblemsChanged);
     }
+    // A plugged-in device under Control surfaces: one click, its menu.
+    connect(m_tree, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item, int) {
+        if (item == nullptr || item->data(COL_NAME, ROLE_KIND).toInt() != KIND_SURFACE_DEVICE)
+            return;
+        if (QMenu *m = surfaceDeviceMenu(item))
+        {
+            m->setAttribute(Qt::WA_DeleteOnClose);
+            m->popup(QCursor::pos());
+        }
+    });
     m_activityTimer = new QTimer(this);
     m_activityTimer->setSingleShot(true);
     connect(m_activityTimer, SIGNAL(timeout()), this, SLOT(slotActivityTimeout()));
@@ -798,6 +844,9 @@ bool ConnectionsTree::arrivalScanEnabled()
 void ConnectionsTree::showEvent(QShowEvent *ev)
 {
     QWidget::showEvent(ev);
+    /* The pane's Slot may have been set on the Universes toolbar meanwhile. */
+    if (m_connPane != nullptr)
+        m_connPane->reloadIfClean();
 
     /* The constructor may have run at startup, minutes before anyone opened
        this tab, so "how long have we been searching" has to be measured from
@@ -837,7 +886,7 @@ bool ConnectionsTree::setTestMode(bool on)
         // Said in the banner, not a window: why Test is not allowed now.
         m_testBanner->setText(why);
         m_testBanner->show();
-        QTimer::singleShot(8000, this, [this]() {
+        QTimer::singleShot(15000, this, [this]() {
             if (!m_doc->testChannels()->isOn())
                 m_testBanner->hide();
         });
@@ -2471,6 +2520,7 @@ void ConnectionsTree::refresh()
             depths << depth + 1;
         }
     }
+    explainBranches();
     m_knownLines = curLines;
     m_linesBaselined = true;
     m_populatedOnce = true;
@@ -2665,6 +2715,15 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
     // Show control is set up on the right, not by menu.
     if (kind == KIND_SHOWCONTROL || kind == KIND_SHOWCONTROL_BRANCH)
         return;
+    if (kind == KIND_SURFACE_DEVICE)
+    {
+        if (QMenu *m = surfaceDeviceMenu(item))
+        {
+            m->exec(m_tree->viewport()->mapToGlobal(pos));
+            delete m;
+        }
+        return;
+    }
     const QString plugin = item->data(COL_NAME, ROLE_PLUGIN).toString();
     const quint32 line = item->data(COL_NAME, ROLE_LINE).toUInt();
 
@@ -2957,6 +3016,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             QAction *unp = menu.addAction(tr("Unpatch from This Interface"));
             menu.addSeparator();
             QAction *del = menu.addAction(tr("Delete Universe…"));
+        del->setObjectName(QStringLiteral("connDeleteUniverse"));
             appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
             QAction *c = menu.exec(m_tree->viewport()->mapToGlobal(pos));
             if (handleUniversalMenuAction(c, item, collapseAll, expandAll, addUniv, delUniv))
@@ -3057,6 +3117,11 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             ? menu.addAction(tr("Patch a Universe Here (output)…")) : NULL;
         QAction *pIn = (canIn && targets == false)
             ? menu.addAction(tr("Patch a Universe Here (input)…")) : NULL;
+        /* Feedback is the lamps and motor faders on a board: only a line of
+           a plugin that can send it back, with an output on this line. */
+        QAction *pFb = (canOut && targets == false
+                        && (p->capabilities() & QLCIOPlugin::Feedback))
+            ? menu.addAction(tr("Patch a Universe Here (feedback)…")) : NULL;
 
         /* "This got bound to lo0 by mistake, move every universe on it to
            the real NIC" used to mean re-patching each affected universe by
@@ -3108,6 +3173,8 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
             patchUniverseTo(plugin, line, true);
         else if (pIn != NULL && chosen == pIn)
             patchUniverseTo(plugin, line, false);
+        else if (pFb != NULL && chosen == pFb)
+            patchUniverseTo(plugin, line, false, true);
         return;
     }
 
@@ -3125,11 +3192,15 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            row shows it there): no window for it here. */
         QAction *ren = menu.addAction(tr("Rename Universe…"));
         QAction *plist = menu.addAction(tr("Patch List for U%1…").arg(uni + 1));
+        FeedbackMenu fb = addFeedbackActions(menu, uni);
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
+        del->setObjectName(QStringLiteral("connDeleteUniverse"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
+            return;
+        if (handleFeedbackAction(chosen, fb, uni))
             return;
         if (chosen == ren)
             renameUniverse(uni);
@@ -3219,6 +3290,7 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
         QAction *forget = menu.addAction(tr("Unpatch…"));
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
+        del->setObjectName(QStringLiteral("connDeleteUniverse"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
@@ -3251,13 +3323,18 @@ void ConnectionsTree::slotContextMenu(const QPoint &pos)
            removing it from THIS one must not read as deleting the universe.
            Conflating the two would quietly destroy a fan-out. */
         QAction *unp = menu.addAction(tr("Unpatch from This Interface"));
+
+        FeedbackMenu fb = addFeedbackActions(menu, uni);
         menu.addSeparator();
         QAction *del = menu.addAction(tr("Delete Universe…"));
+        del->setObjectName(QStringLiteral("connDeleteUniverse"));
         appendUniversalMenuActions(menu, item, collapseAll, expandAll, addUniv, delUniv);
         QAction *chosen = menu.exec(m_tree->viewport()->mapToGlobal(pos));
         if (handleUniversalMenuAction(chosen, item, collapseAll, expandAll, addUniv, delUniv))
             return;
         if (chosen == NULL)
+            return;
+        if (handleFeedbackAction(chosen, fb, uni))
             return;
         if (chosen == ren)
             renameUniverse(uni);
@@ -3374,7 +3451,7 @@ void ConnectionsTree::addTargetOnNewInterface(QLCIOPlugin *p)
 }
 
 void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
-                                      bool output)
+                                      bool output, bool feedback)
 {
     InputOutputMap *iomap = m_doc->inputOutputMap();
     if (iomap == NULL)
@@ -3384,11 +3461,23 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
     QList<quint32> ids;
     foreach (Universe *uni, iomap->universes())
     {
+        /* Feedback goes back to the board an input came from: only a
+           universe with an input has anywhere to send it from. */
+        if (feedback && uni->inputPatch() == NULL)
+            continue;
         names << uni->name();
         ids << uni->id();
     }
+    if (feedback && ids.isEmpty())
+    {
+        QMessageBox::information(this, tr("Patch feedback"),
+                                 tr("No universe has an input yet. Patch the board's "
+                                    "input to a universe first."));
+        return;
+    }
     const QString newLabel = tr("<new universe>");
-    names << newLabel;
+    if (feedback == false)
+        names << newLabel;
 
     bool ok = false;
     const QString pick = QInputDialog::getItem(
@@ -3418,6 +3507,12 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
         if (idx < 0 || idx >= ids.count())
             return;
         uniId = ids.at(idx);
+    }
+
+    if (feedback)
+    {
+        setFeedback(uniId, pluginName, line);
+        return;
     }
 
     bool done = false;
@@ -3492,8 +3587,10 @@ void ConnectionsTree::patchUniverseTo(const QString &pluginName, quint32 line,
             return;
         }
         done = iomap->setInputPatch(uniId, pluginName, QString(), line);
-        // A board's lamps go back to it, not to the line the last one used.
-        if (done)
+        /* A board's lamps go back to it: paired (with a note and an undo
+           step) when it has no feedback, else moved off the line the board
+           patched here before left it on. Both go to feedbackLineFor(). */
+        if (done && autoPairFeedback(uniId).isEmpty())
             iomap->feedbackFollowsInput(uniId);
     }
 
@@ -3694,6 +3791,7 @@ void ConnectionsTree::appendUniversalMenuActions(QMenu &menu, QTreeWidgetItem *i
        UNPATCHED/PENDING offer "Delete Universe…", last), or empty space,
        which offers Add and Delete together. @p delUniv stays NULL here. */
     addUniv = new QAction(QIcon(":/edit_add.png"), tr("Add Universe"), &menu);
+    addUniv->setObjectName(QStringLiteral("connAddUniverse"));
     top << addUniv;
 
     QAction *before = menu.actions().isEmpty() ? nullptr : menu.actions().first();
@@ -3860,9 +3958,138 @@ void ConnectionsTree::setFeedback(quint32 universe, const QString &pluginName,
 
     /* Feedback is an output patch flagged as feedback; an empty plugin name
        clears it. */
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    pluginName.isEmpty()
+                                    ? tr("remove feedback on universe %1").arg(universe + 1)
+                                    : tr("patch feedback on universe %1").arg(universe + 1));
     iomap->setOutputPatch(universe, pluginName, QString(), line, true, 0);
     m_doc->setModified();
     refresh();
+    if (pluginName.isEmpty() == false)
+    {
+        const QStringList outs = iomap->pluginOutputs(pluginName);
+        postNote(tr("Feedback goes back to %1")
+                     .arg(int(line) < outs.count() ? outs.at(int(line)) : pluginName));
+    }
+}
+
+ConnectionsTree::FeedbackMenu ConnectionsTree::addFeedbackActions(QMenu &menu, quint32 uni)
+{
+    /* Feedback: only where it can act. A universe with an input and no
+       feedback offers the lines that can carry it; one that has it offers
+       to drop it. */
+    FeedbackMenu fb;
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    if (iom == NULL || iom->inputPatch(uni) == NULL || iom->inputPatch(uni)->plugin() == NULL)
+        return fb;
+    if (iom->feedbackPatch(uni) != NULL)
+    {
+        fb.remove = menu.addAction(tr("Remove Feedback"));
+        return fb;
+    }
+    const QList<InputOutputMap::FeedbackLine> lines = iom->feedbackLines();
+    if (lines.isEmpty())
+        return fb;
+    fb.send = menu.addMenu(tr("Send Feedback To…"));
+    foreach (const InputOutputMap::FeedbackLine &fl, lines)
+    {
+        QAction *a = fb.send->addAction(tr("%1: %2").arg(fl.plugin, fl.name));
+        a->setData(QVariantList() << fl.plugin << fl.line);
+    }
+    return fb;
+}
+
+bool ConnectionsTree::handleFeedbackAction(QAction *chosen, const FeedbackMenu &fb, quint32 uni)
+{
+    if (chosen == NULL)
+        return false;
+    if (fb.remove != NULL && chosen == fb.remove)
+    {
+        setFeedback(uni, QString(), 0);
+        return true;
+    }
+    if (fb.send != NULL && chosen->data().canConvert<QVariantList>()
+        && chosen->data().toList().count() == 2)
+    {
+        const QVariantList d = chosen->data().toList();
+        setFeedback(uni, d.at(0).toString(), d.at(1).toUInt());
+        return true;
+    }
+    return false;
+}
+
+void ConnectionsTree::showFeedbackNeeded(quint32 universe)
+{
+    refresh();
+    QTreeWidgetItem *best = NULL;
+    QTreeWidgetItemIterator it(m_tree);
+    for (; *it != NULL; ++it)
+    {
+        QTreeWidgetItem *i = *it;
+        const int k = i->data(COL_NAME, ROLE_KIND).toInt();
+        if ((k != KIND_UNIVERSE && k != KIND_UNPATCHED_UNIVERSE)
+            || i->data(COL_NAME, ROLE_UNIVERSE).toUInt() != universe)
+            continue;
+        if (best == NULL || (i->data(COL_NAME, ROLE_OUTPUT).toBool() == false
+                             && best->data(COL_NAME, ROLE_OUTPUT).toBool()))
+            best = i;
+    }
+    if (best != NULL)
+    {
+        for (QTreeWidgetItem *p = best->parent(); p != NULL; p = p->parent())
+            p->setExpanded(true);
+        m_tree->setCurrentItem(best);
+        m_tree->scrollToItem(best);
+    }
+    postNote(tr("No single output matches this board. Right-click the board's output %1 "
+                "Patch a Universe Here (feedback)…").arg(QString::fromUtf8("\u25b8")));
+}
+
+QString ConnectionsTree::noteText() const
+{
+    return m_note != NULL ? m_note->text() : QString();
+}
+
+quint32 ConnectionsTree::selectedUniverse() const
+{
+    QTreeWidgetItem *cur = m_tree->currentItem();
+    if (cur == NULL)
+        return UINT_MAX;
+    const int k = cur->data(COL_NAME, ROLE_KIND).toInt();
+    if (k != KIND_UNIVERSE && k != KIND_UNPATCHED_UNIVERSE && k != KIND_PENDING_UNIVERSE)
+        return UINT_MAX;
+    return cur->data(COL_NAME, ROLE_UNIVERSE).toUInt();
+}
+
+void ConnectionsTree::postNote(const QString &text)
+{
+    if (m_note == NULL)
+        return;
+    m_note->setText(text);
+    m_note->setVisible(text.isEmpty() == false);
+    QPointer<QLabel> note(m_note);
+    QTimer::singleShot(15000, this, [note, text]() {
+        if (note != NULL && note->text() == text)
+            note->hide();
+    });
+}
+
+QString ConnectionsTree::autoPairFeedback(quint32 universe)
+{
+    InputOutputMap *iomap = m_doc->inputOutputMap();
+    if (iomap == NULL)
+        return QString();
+    /* Nothing to pair: say nothing, and capture nothing. */
+    if (iomap->feedbackPatch(universe) != NULL || iomap->feedbackLineFor(universe).plugin.isEmpty())
+        return QString();
+    if (iomap->patchUndo() != NULL)
+        iomap->patchUndo()->capture(QList<quint32>() << universe,
+                                    tr("pair feedback on universe %1").arg(universe + 1));
+    const QString dev = iomap->pairFeedback(universe);
+    if (dev.isEmpty() == false)
+        postNote(tr("Feedback goes back to %1").arg(dev));
+    return dev;
 }
 
 void ConnectionsTree::setProfile(quint32 universe, const QString &profileName)
@@ -5097,6 +5324,7 @@ void ConnectionsTree::buildUniverseList()
         }
     }
     markOutputProblems();
+    explainBranches();
     m_rebuilding = false;
     m_populatedOnce = true;
     fitOutputColumn();
@@ -5196,7 +5424,293 @@ void ConnectionsTree::addShowControlRows()
         row->setData(COL_NAME, ROLE_PLUGIN, r.at(0));
         row->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
         row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        row->setToolTip(COL_NAME, showControlTip(r.at(0)));
+        if (r.at(0) == QLatin1String("surfaces"))
+            addSurfaceRows(row);
     }
+    branch->setToolTip(COL_NAME, tr("Where the show is run from outside: boards, cue commands, "
+                                    "timecode and web access. Pick a row to set it up."));
+}
+
+void ConnectionsTree::explainBranches()
+{
+    /* Anything that can be empty says why and what to do, and every branch
+       says what it is (the UX rules empty-explains and says-what-it-is). */
+    auto isBranchKind = [](int k) {
+        return k == KIND_HOST || k == KIND_PLUGIN || k == KIND_LINE || k == KIND_SHOWCONTROL_BRANCH
+               || k == 0;     // 0: a folder with no kind
+    };
+    auto explain = [&](QTreeWidgetItem *it) {
+        const int k = it->data(COL_NAME, ROLE_KIND).toInt();
+        if (it->toolTip(COL_NAME).isEmpty() && isBranchKind(k))
+        {
+            QString tip;
+            switch (k)
+            {
+                case KIND_HOST: tip = tr("A computer on the network and the interfaces it offers."); break;
+                case KIND_PLUGIN: tip = tr("A protocol (Art-Net, sACN, MIDI, DMX USB…): its interfaces, "
+                                           "and the universes patched through them."); break;
+                case KIND_LINE: tip = tr("One interface of this protocol: a network card, a USB device "
+                                         "or a MIDI port. Universes patched to it are below."); break;
+                default: tip = it->text(COL_DETAIL).isEmpty()
+                                   ? tr("A group of connections: %1.").arg(it->text(COL_NAME))
+                                   : it->text(COL_DETAIL);
+            }
+            it->setToolTip(COL_NAME, tip);
+        }
+        if (isBranchKind(k) && it->childCount() == 0)
+        {
+            QString why;
+            switch (k)
+            {
+                case KIND_HOST: why = tr("Nothing found on this computer."); break;
+                case KIND_PLUGIN: why = tr("Nothing here: no interface found for this protocol. Check its "
+                                           "cable or network, then Rescan."); break;
+                case KIND_LINE: why = tr("Nothing patched on this line: right-click it, then Patch a "
+                                         "Universe Here."); break;
+                default: why = tr("Nothing here yet.");
+            }
+            QTreeWidgetItem *note = new QTreeWidgetItem(it);
+            note->setText(COL_NAME, why);
+            note->setData(COL_NAME, ROLE_KIND, KIND_NOTE);
+            note->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+            note->setForeground(COL_NAME, palette().color(QPalette::Disabled, QPalette::Text));
+            note->setToolTip(COL_NAME, why);
+            note->setFlags(Qt::ItemIsEnabled);
+        }
+    };
+    for (int i = 0; i < m_tree->topLevelItemCount(); i++)
+    {
+        QTreeWidgetItem *top = m_tree->topLevelItem(i);
+        explain(top);
+        for (int c = 0; c < top->childCount(); c++)
+            if (top->child(c)->data(COL_NAME, ROLE_KIND).toInt() != KIND_NOTE)
+                explain(top->child(c));
+    }
+}
+
+QString ConnectionsTree::showControlTip(const QString &key)
+{
+    if (key == QLatin1String("surfaces"))
+        return tr("Control surfaces are the boards you run the show from: their jobs (GO, Back, GM…), "
+                  "lamps and map. Each board patched with a profile is listed here.");
+    if (key == QLatin1String("osc"))
+        return tr("Cue commands arriving over the network as OSC (QLab, a sound desk).");
+    if (key == QLatin1String("msc"))
+        return tr("MIDI Show Control: cue commands from a lighting or sound desk over MIDI.");
+    if (key == QLatin1String("mtc"))
+        return tr("MIDI timecode: the clock a show is locked to, and whether it is arriving.");
+    if (key == QLatin1String("web"))
+        return tr("The web page and remote the show serves to a tablet or phone.");
+    if (key == QLatin1String("map"))
+        return tr("The Control Map: which control fires which scene, cue or hit.");
+    return QString();
+}
+
+void ConnectionsTree::addSurfaceRows(QTreeWidgetItem *parent)
+{
+    /* Every MIDI or HID input device, the moment it is plugged in, patched
+       or not (bench 2026-11-27: "why do we have Control surfaces if an
+       attached surface doesn't show up under it?"): the boards set up, each
+       with its state, a board's other ports folded under it; the devices
+       no universe has, each a click from its profile; the boards the show
+       knows that are not connected, greyed. */
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    int shown = 0;
+    const QColor grey = palette().color(QPalette::Disabled, QPalette::Text);
+    SurfaceSetup *ss = m_doc->surfaceSetup();
+    if (iom != NULL)
+    {
+        for (quint32 u = 0; u < iom->universesCount(); u++)
+        {
+            InputPatch *ip = iom->inputPatch(u);
+            if (ip == NULL || ip->plugin() == NULL || ip->plugin()->linesAreHardware() == false)
+                continue;
+            QTreeWidgetItem *row = new QTreeWidgetItem(parent);
+            row->setText(COL_NAME, ip->inputName());
+            row->setData(COL_NAME, ROLE_UNIVERSE, u);
+            const bool connected = ip->plugin()->inputs().contains(ip->inputName());
+            if (ip->profile() != NULL)
+            {
+                row->setData(COL_NAME, ROLE_KIND, KIND_SURFACE);
+                row->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+                const SurfaceSetup::Spec *spec = ss != nullptr ? ss->specOf(u) : nullptr;
+                QString detail = tr("universe %1 · %2 · feedback %3")
+                                     .arg(u + 1).arg(ip->profileName())
+                                     .arg(iom->feedbackPatch(u) != NULL && iom->feedbackPatch(u)->isPatched()
+                                              ? tr("yes") : tr("no"));
+                if (spec != nullptr && !spec->init.isEmpty())
+                    detail += QStringLiteral(" · ") + tr("init: %1").arg(spec->initText);
+                if (!connected)
+                    detail += QStringLiteral(" · ") + tr("not connected");
+                row->setText(COL_DETAIL, detail);
+                row->setToolTip(COL_NAME, tr("A control surface: its jobs, lamps and map are on the right."));
+                // Its other ports: part of it, not used.
+                for (const QString &line : ip->plugin()->inputs())
+                    if (line != ip->inputName() && iom->profileOfOtherPort(line) == ip->profileName())
+                    {
+                        QTreeWidgetItem *port = new QTreeWidgetItem(row);
+                        port->setText(COL_NAME, line);
+                        port->setText(COL_DETAIL, tr("part of %1 (not used by qlcconsole)").arg(ip->profileName()));
+                        port->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_PORT);
+                        port->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+                        port->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+                        port->setForeground(COL_NAME, grey);
+                        port->setToolTip(COL_NAME, tr("Another port of the same board: qlcconsole uses %1 only. "
+                                                      "Nothing to set up here.").arg(ip->inputName()));
+                        port->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                    }
+            }
+            else
+            {
+                row->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_UNSET);
+                row->setText(COL_NAME, tr("%1: not set up").arg(ip->inputName()));
+                row->setText(COL_DETAIL, tr("Set Up… universe %1: pick its profile on the right").arg(u + 1));
+                row->setToolTip(COL_NAME, tr("This input has no profile, so the app does not know what "
+                                             "its controls are. Choose or confirm the profile in the "
+                                             "universe's settings on the right."));
+            }
+            if (!connected)
+                row->setForeground(COL_NAME, grey);
+            row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            shown++;
+        }
+        // The boards the show knows that went away (kept offline): greyed.
+        for (quint32 u = 0; u < iom->universesCount(); u++)
+        {
+            Universe *uni = iom->universe(u);
+            if (uni == NULL)
+                continue;
+            for (const Universe::OfflinePatch &op : uni->offlinePatches())
+            {
+                if (op.tag != Universe::InputPatchTag || op.uid.isEmpty())
+                    continue;
+                QTreeWidgetItem *row = new QTreeWidgetItem(parent);
+                row->setText(COL_NAME, op.uid);
+                row->setText(COL_DETAIL, op.profile.isEmpty()
+                                             ? tr("universe %1 · not connected").arg(u + 1)
+                                             : tr("universe %1 · %2 · not connected").arg(u + 1).arg(op.profile));
+                row->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_OFFLINE);
+                row->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+                row->setData(COL_NAME, ROLE_UNIVERSE, u);
+                row->setForeground(COL_NAME, grey);
+                row->setForeground(COL_DETAIL, grey);
+                row->setToolTip(COL_NAME, tr("This show's board is not plugged in. It is set up again by "
+                                             "itself when it is."));
+                row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                shown++;
+            }
+        }
+        // Plugged in, no universe has it: a click sets it up.
+        for (const ControlSurfacesPanel::FreeDevice &d : ControlSurfacesPanel::freeDevices(m_doc))
+        {
+            if (d.pad)
+                continue;   // a game pad is set up under Game controllers
+            QTreeWidgetItem *row = new QTreeWidgetItem(parent);
+            row->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_DEVICE);
+            row->setData(COL_NAME, ROLE_PLUGIN, d.plugin->name());
+            row->setData(COL_NAME, ROLE_LINENAME, d.name);
+            row->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+            if (!d.profile.isEmpty())
+            {
+                row->setText(COL_NAME, tr("%1: %2, not set up").arg(d.name, d.profile));
+                row->setText(COL_DETAIL, tr("Set Up…: patch it with its profile"));
+            }
+            else
+            {
+                row->setText(COL_NAME, tr("%1: not set up").arg(d.name));
+                row->setText(COL_DETAIL, d.maybe.isEmpty() ? tr("Set Up…: pick its profile")
+                                                           : tr("Set Up…: is it a %1?").arg(d.maybe));
+            }
+            row->setToolTip(COL_NAME, tr("Plugged in, and no universe has it. Click to pick what it is, or "
+                                         "say it is not a control surface."));
+            // Its other ports, folded under it.
+            for (const QString &line : d.plugin->inputs())
+                if (line != d.name && !d.profile.isEmpty() && iom->profileOfOtherPort(line) == d.profile)
+                {
+                    QTreeWidgetItem *port = new QTreeWidgetItem(row);
+                    port->setText(COL_NAME, line);
+                    port->setText(COL_DETAIL, tr("part of %1 (not used by qlcconsole)").arg(d.profile));
+                    port->setData(COL_NAME, ROLE_KIND, KIND_SURFACE_PORT);
+                    port->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+                    port->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+                    port->setForeground(COL_NAME, grey);
+                    port->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+                }
+            row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+            shown++;
+        }
+    }
+    if (shown == 0)
+    {
+        QTreeWidgetItem *note = new QTreeWidgetItem(parent);
+        note->setText(COL_NAME, tr("No control surface: plug in a board, or patch a MIDI input with a profile."));
+        note->setData(COL_NAME, ROLE_KIND, KIND_NOTE);
+        note->setData(COL_NAME, ROLE_PLUGIN, QStringLiteral("surfaces"));
+        note->setData(COL_NAME, ROLE_UNIVERSE, Universe::invalid());
+        note->setForeground(COL_NAME, grey);
+        note->setToolTip(COL_NAME, tr("Nothing here yet: a board appears as soon as it is plugged in."));
+        note->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+    }
+}
+
+QMenu *ConnectionsTree::surfaceDeviceMenu(QTreeWidgetItem *item)
+{
+    if (item == nullptr || item->data(COL_NAME, ROLE_KIND).toInt() != KIND_SURFACE_DEVICE)
+        return nullptr;
+    const QString pluginName = item->data(COL_NAME, ROLE_PLUGIN).toString();
+    const QString device = item->data(COL_NAME, ROLE_LINENAME).toString();
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceSetup *ss = m_doc->surfaceSetup();
+    if (iom == nullptr || ss == nullptr)
+        return nullptr;
+    QMenu *menu = new QMenu(this);
+    menu->setObjectName(QStringLiteral("surfaceDeviceMenu"));
+    const QString known = iom->profileForDevice(device);
+    const QString maybe = iom->profileToAskFor(device);
+    QStringList first;
+    if (!known.isEmpty())
+        first << known;
+    if (!maybe.isEmpty())
+        first << maybe;
+    QPointer<ConnectionsTree> self(this);
+    auto use = [self, pluginName, device](const QString &profile) {
+        if (self == nullptr)
+            return;
+        Doc *doc = self->m_doc;
+        QLCIOPlugin *plugin = doc->ioPluginCache() != nullptr ? doc->ioPluginCache()->plugin(pluginName) : nullptr;
+        if (plugin != nullptr && doc->surfaceSetup() != nullptr)
+            doc->surfaceSetup()->autoPatch()->useAs(plugin, device, profile);
+        self->refresh();
+    };
+    for (const QString &p : std::as_const(first))
+    {
+        QAction *a = menu->addAction(tr("Use as %1").arg(p));
+        a->setObjectName(QStringLiteral("surfaceDeviceUse"));
+        a->setData(p);
+        connect(a, &QAction::triggered, this, [use, p]() { use(p); });
+    }
+    QMenu *other = menu->addMenu(first.isEmpty() ? tr("Use as") : tr("Another Profile"));
+    other->setObjectName(QStringLiteral("surfaceDeviceProfiles"));
+    for (const QString &p : iom->profileNames())
+    {
+        QLCInputProfile *prof = iom->profile(p);
+        if (prof == nullptr || first.contains(p) || prof->type() != QLCInputProfile::MIDI)
+            continue;
+        QAction *a = other->addAction(p);
+        a->setData(p);
+        connect(a, &QAction::triggered, this, [use, p]() { use(p); });
+    }
+    menu->addSeparator();
+    QAction *no = menu->addAction(tr("Not a Control Surface"));
+    no->setObjectName(QStringLiteral("surfaceDeviceNot"));
+    no->setToolTip(tr("Hide it here on this computer (a keyboard, a sound card's MIDI port)."));
+    connect(no, &QAction::triggered, this, [self, device]() {
+        InputOutputMap::setNotSurface(device, true);
+        if (self != nullptr)
+            self->refresh();
+    });
+    return menu;
 }
 
 /*****************************************************************************

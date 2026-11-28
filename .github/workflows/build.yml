@@ -675,7 +675,7 @@ jobs:
       - name: Dependencies
         run: |
           brew update
-          brew install fftw mad libsndfile libftdi
+          brew install fftw mad libsndfile libftdi lame
           # Upstream pinned `brew link --overwrite python@3.13` to work around a
           # runner python/brew link clash. The image no longer ships that keg
           # ("No such keg: /opt/homebrew/Cellar/python@3.13") and the hard
@@ -738,14 +738,46 @@ jobs:
           APPVERSION=$(awk -F\" '/^#define APPVERSION/ {gsub(/ /,"-",$2); print $2}' engine/src/qlcconfig.h)
           echo "APPVERSION=$APPVERSION" >> $GITHUB_ENV
 
-      - name: Fix v4 dylib dependencies
+      # Bundle every non-system dependency of every Mach-O in the app,
+      # recursively (libsndfile's codecs, Qt's own, the plugins'), the way the
+      # release build does (platforms/macos/bundlefix.py), then fail when any
+      # reference still leaves the bundle (platforms/macos/bundle-check.py).
+      # The old fix_dylib_deps.sh copied libsndfile's codecs into ~/QLC+.app,
+      # not this app: no sound could play, WAV included.
+      - name: Bundle dependencies
         shell: bash
         if: ${{ matrix.task == 'build-v4' }}
         run: |-
-          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/Frameworks/libsndfile.1.dylib
-          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/MacOS/qlcconsole
-          platforms/macos/fix_dylib_deps.sh ~/qlcconsole.app/Contents/MacOS/qlcconsole-fixtureeditor
-          ${{ env.QTDIR }}/bin/macdeployqt ~/qlcconsole.app
+          export QTDIR="${{ env.QTDIR }}"
+          ${{ env.QTDIR }}/bin/macdeployqt ~/qlcconsole.app \
+            -executable=$HOME/qlcconsole.app/Contents/MacOS/qlcconsole \
+            -executable=$HOME/qlcconsole.app/Contents/MacOS/qlcconsole-fixtureeditor
+          chmod -R u+w ~/qlcconsole.app
+          python3 platforms/macos/bundlefix.py ~/qlcconsole.app
+          # install_name_tool leaves the libraries' signatures invalid, and an
+          # arm64 Mac kills a binary that loads one (exit 137): sign it all
+          # again, ad hoc, as package-local.sh does.
+          APP=$HOME/qlcconsole.app
+          find "$APP/Contents/Frameworks" "$APP/Contents/PlugIns" "$APP/Contents/MacOS" -type f | while IFS= read -r f; do
+            file "$f" | grep -q 'Mach-O' && codesign --force --sign - "$f"
+          done
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+
+      - name: Check the bundle is self-contained
+        shell: bash
+        if: ${{ matrix.task == 'build-v4' }}
+        run: |-
+          python3 platforms/macos/bundle-check.py --signed ~/qlcconsole.app
+          # The audio libraries by name: every dependency of libsndfile's
+          # plugin must be inside the app, MP3 included (mpg123 + LAME).
+          for l in libsndfile libmpg123 libmp3lame; do
+            ls ~/qlcconsole.app/Contents/Frameworks/$l.*dylib >/dev/null \
+              || { echo "no $l in the app"; exit 1; }
+          done
+          test -f ~/qlcconsole.app/Contents/PlugIns/Audio/libsndfileplugin.dylib
+          # And it decodes: a generated 1 s WAV and MP3 through the app's own libsndfile.
+          platforms/macos/audio-decode-check.sh ~/qlcconsole.app
 
       - name: Create DMG
         # Use retry loop to work around a race condition on macOS causing

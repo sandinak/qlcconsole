@@ -45,6 +45,7 @@
 #include "networkroute.h"
 #include "rignetwork.h"
 #include "qlcfile.h"
+#include "surfacelayout.h"
 #include "doc.h"
 
 #if !defined(Q_OS_WIN)
@@ -144,6 +145,7 @@ InputOutputMap::~InputOutputMap()
     delete m_grandMaster;
     delete m_beatTime;
     qDeleteAll(m_profiles);
+    qDeleteAll(m_shadowedProfiles);
 }
 
 /*****************************************************************************
@@ -715,8 +717,25 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
         }
     }
 
+    /* A hardware line patched with no profile gets the one made for its
+       device (a profile's <Match>): the surface's init, map and roles work
+       without a person choosing it. A choice made afterwards (None) holds. */
+    QString useProfile = profileName;
+    bool autoSelected = false;
+    if ((useProfile.isEmpty() || useProfile == KInputNone) && plugin != NULL && plugin->linesAreHardware()
+        && (plugin->capabilities() & QLCIOPlugin::Input) && input != QLCIOPlugin::invalidLine())
+    {
+        const QString deviceName = plugin->inputs().value(int(input));
+        const QString found = profileForDevice(deviceName);
+        if (!found.isEmpty())
+        {
+            useProfile = found;
+            autoSelected = true;
+        }
+    }
+
     if (m_universeArray.at(universe)->setInputPatch(
-                plugin, input, profile(profileName)) == true)
+                plugin, input, profile(useProfile)) == true)
     {
         ip = m_universeArray.at(universe)->inputPatch();
         if (ip != NULL)
@@ -749,6 +768,8 @@ bool InputOutputMap::setInputPatch(quint32 universe, const QString &pluginName,
     const bool opened = io.finish();
     if (ip != NULL && currProfile != ip->profile())
         emit profileChanged(universe, ip->profileName());
+    if (autoSelected && ip != NULL && ip->profile() != NULL)
+        emit profileAutoSelected(universe, ip->profileName(), ip->inputName());
     emit inputPatchChanged(universe);
 
     return opened;
@@ -793,7 +814,10 @@ bool InputOutputMap::setOutputPatch(quint32 universe, const QString &pluginName,
        have run. (A frame write that hangs is not covered: iodeferral.h.) */
     IODeferral io;
     const bool done = patchOutput(universe, pluginName, outputUID, output, isFeedback, index, params);
-    return io.finish() && done;
+    const bool opened = io.finish();
+    if (isFeedback && done)
+        emit feedbackPatchChanged(universe);
+    return opened && done;
 }
 
 bool InputOutputMap::patchOutput(quint32 universe, const QString &pluginName,
@@ -2078,6 +2102,70 @@ bool InputOutputMap::pluginSupportsFeedback(const QString& pluginName)
         return false;
 }
 
+QList<InputOutputMap::FeedbackLine> InputOutputMap::feedbackLines()
+{
+    QList<FeedbackLine> out;
+    if (m_doc->ioPluginCache() == NULL)
+        return out;
+    foreach (QLCIOPlugin *p, m_doc->ioPluginCache()->plugins())
+    {
+        if (p == NULL || (p->capabilities() & QLCIOPlugin::Feedback) == 0
+            || (p->capabilities() & QLCIOPlugin::Output) == 0)
+            continue;
+        const QStringList outs = p->outputs();
+        /* Network protocols (Art-Net, sACN, OSC) need an address, which a
+           name cannot give. */
+        const bool network = p->supportsOutputTargets() || p->isNetworkDmxOutput()
+                || p->name().contains(QLatin1String("OSC"), Qt::CaseInsensitive);
+        for (int i = 0; i < outs.count(); i++)
+        {
+            FeedbackLine fl;
+            fl.plugin = p->name();
+            fl.line = quint32(i);
+            fl.name = outs.at(i);
+            fl.pairable = !network;
+            out << fl;
+        }
+    }
+    return out;
+}
+
+InputOutputMap::FeedbackLine InputOutputMap::feedbackLineFor(quint32 universe)
+{
+    FeedbackLine none;
+    InputPatch *ip = inputPatch(universe);
+    if (ip == NULL || ip->plugin() == NULL)
+        return none;
+    const QStringList ins = ip->plugin()->inputs();
+    if (int(ip->input()) >= ins.count())
+        return none;
+    const QString want = ins.at(int(ip->input()));
+    int hits = 0;
+    FeedbackLine found;
+    foreach (const FeedbackLine &fl, feedbackLines())
+    {
+        if (fl.plugin == ip->pluginName() && fl.pairable && fl.name == want)
+        {
+            found = fl;
+            hits++;
+        }
+    }
+    return hits == 1 ? found : none;
+}
+
+QString InputOutputMap::pairFeedback(quint32 universe)
+{
+    if (universe >= universesCount() || inputPatch(universe) == NULL || inputPatch(universe)->plugin() == NULL
+        || feedbackPatch(universe) != NULL)
+        return QString();
+    const FeedbackLine fl = feedbackLineFor(universe);
+    if (fl.plugin.isEmpty())
+        return QString();
+    if (setOutputPatch(universe, fl.plugin, QString(), fl.line, true, 0) == false)
+        return QString();
+    return fl.name;
+}
+
 void InputOutputMap::configurePlugin(const QString& pluginName)
 {
     QLCIOPlugin* outputPlugin = m_doc->ioPluginCache()->plugin(pluginName);
@@ -2253,6 +2341,45 @@ void InputOutputMap::followInputDevices(QLCIOPlugin *plugin)
     }
     io.finish();
 
+    if (kept)
+        emit offlinePatchesChanged();
+}
+
+void InputOutputMap::followFeedbackDevices(QLCIOPlugin *plugin)
+{
+    const QStringList lines = plugin->outputs();
+    bool kept = false;
+    for (quint32 i = 0; i < universesCount(); i++)
+    {
+        Universe *uni = m_universeArray.at(i);
+        OutputPatch *fp = uni->feedbackPatch();
+        if (fp == NULL || fp->plugin() != plugin || fp->output() == QLCIOPlugin::invalidLine())
+            continue;
+        const QString port = fp->openedLineName();
+        if (port.isEmpty() || lines.value(int(fp->output())) == port)
+            continue;   // where it was: reconnect() is enough
+        const int line = int(lines.indexOf(port));
+        if (line >= 0)
+        {
+            qDebug() << "[IOMAP] universe" << i + 1 << "feedback" << port
+                     << "moved from line" << fp->output() << "to" << line;
+            setOutputPatch(i, plugin->name(), port, quint32(line), true);
+            continue;
+        }
+        /* Gone: kept as the show describes it, back by itself when the
+           port is (retryOfflinePatches()), never on whatever now has its
+           old line. */
+        qDebug() << "[IOMAP] universe" << i + 1 << "feedback" << port << "disconnected: kept offline";
+        Universe::OfflinePatch rec;
+        rec.tag = Universe::FeedbackPatchTag;
+        rec.plugin = plugin->name();
+        rec.uid = port;
+        rec.line = fp->output();
+        rec.params = fp->getPluginParameters();
+        setOutputPatch(i, KOutputNone, QString(), 0, true);
+        uni->addOfflinePatch(rec);
+        kept = true;
+    }
     if (kept)
         emit offlinePatchesChanged();
 }
@@ -2551,6 +2678,7 @@ void InputOutputMap::slotPluginConfigurationChanged(QLCIOPlugin* plugin)
     if (plugin->linesAreHardware())
     {
         followInputDevices(plugin);
+        followFeedbackDevices(plugin);
         applyInputSlots();
     }
 
@@ -2644,16 +2772,157 @@ void InputOutputMap::loadProfiles(const QDir& dir)
         if (prof != NULL)
         {
             /* Check for duplicates */
-            if (profile(prof->name()) == NULL)
+            QLCInputProfile *have = profile(prof->name());
+            if (have == NULL)
                 addProfile(prof);
             else
-                delete prof;
+                keepOneOf(have, prof);
         }
         else
         {
             qWarning() << Q_FUNC_INFO << "Unable to find an input profile from" << path;
         }
     }
+}
+
+void InputOutputMap::keepOneOf(QLCInputProfile *have, QLCInputProfile *prof)
+{
+    ShadowedProfile rec;
+    rec.name = prof->name();
+    /* The layout of a surface type draws every control its profile has:
+       a user's copy that predates them (a link to the old QLC+ folder's
+       APC40 mkII) leaves the board's knobs and roles dead, so the type
+       the app ships is used, and the panel says so. */
+    const SurfaceLayout layout = SurfaceLayout::forProfile(have->name());
+    if (layout.isValid() && have->path() != prof->path())
+    {
+        const QStringList problems = layout.selfTest(have);
+        const QStringList builtIn = layout.selfTest(prof);
+        if (!problems.isEmpty() && builtIn.isEmpty())
+        {
+            const int i = m_profiles.indexOf(have);
+            rec.path = have->path();
+            rec.usedPath = prof->path();
+            rec.builtInUsed = true;
+            rec.problems = problems;
+            m_profiles[i] = prof;
+            m_shadowedProfiles << have;
+            m_shadowed << rec;
+            return;
+        }
+    }
+    rec.path = prof->path();
+    rec.usedPath = have->path();
+    m_shadowedProfiles << prof;
+    m_shadowed << rec;
+}
+
+QStringList InputOutputMap::shadowedProfileNotes() const
+{
+    QStringList out;
+    for (const ShadowedProfile &s : m_shadowed)
+    {
+        if (!s.builtInUsed)
+            continue;
+        out << tr("Your copy of the %1 profile (%2) is older than the one built in: it lacks "
+                  "controls the board's map draws (%3). The built-in one is used; your file is "
+                  "left as it is.").arg(s.name, s.path, s.problems.value(0));
+    }
+    return out;
+}
+
+QString InputOutputMap::profileForDevice(const QString &deviceName) const
+{
+    if (deviceName.trimmed().isEmpty())
+        return QString();
+    // A person said which board this is ("Is this a MaizeDMX? Use it").
+    const QString said = confirmedProfile(deviceName);
+    if (!said.isEmpty() && const_cast<InputOutputMap *>(this)->profile(said) != nullptr)
+        return said;
+    QString best;
+    int bestScore = 0;
+    for (const QLCInputProfile *p : m_profiles)
+    {
+        const int score = p->deviceMatchScore(deviceName);
+        if (score > bestScore)
+        {
+            bestScore = score;
+            best = p->name();
+        }
+    }
+    if (!best.isEmpty())
+        return best;
+    // A copy that replaced a built-in profile: the type's Match still says which it is.
+    for (const QLCInputProfile *p : m_shadowedProfiles)
+    {
+        const int score = p->deviceMatchScore(deviceName);
+        if (score > bestScore && const_cast<InputOutputMap *>(this)->profile(p->name()) != nullptr)
+        {
+            bestScore = score;
+            best = p->name();
+        }
+    }
+    return best;
+}
+
+QString InputOutputMap::profileOfOtherPort(const QString &deviceName) const
+{
+    if (!profileForDevice(deviceName).isEmpty())
+        return QString();
+    for (const QLCInputProfile *p : m_profiles)
+        if (p->isOtherPortOf(deviceName))
+            return p->name();
+    return QString();
+}
+
+QString InputOutputMap::profileToAskFor(const QString &deviceName) const
+{
+    if (!profileForDevice(deviceName).isEmpty() || isNotSurface(deviceName))
+        return QString();
+    for (const QLCInputProfile *p : m_profiles)
+        if (p->asksForDevice(deviceName))
+            return p->name();
+    return QString();
+}
+
+namespace
+{
+QString deviceKeyOf(const QString &deviceName)
+{
+    // QSettings keys: no slashes.
+    return QString(deviceName.trimmed()).replace(QLatin1Char('/'), QLatin1Char('_'))
+                                       .replace(QLatin1Char('\\'), QLatin1Char('_'));
+}
+}
+
+QString InputOutputMap::confirmedProfile(const QString &deviceName)
+{
+    return QSettings().value(QStringLiteral("surfaces/confirmed/") + deviceKeyOf(deviceName)).toString();
+}
+
+void InputOutputMap::setConfirmedProfile(const QString &deviceName, const QString &profileName)
+{
+    QSettings s;
+    const QString key = QStringLiteral("surfaces/confirmed/") + deviceKeyOf(deviceName);
+    if (profileName.isEmpty())
+        s.remove(key);
+    else
+        s.setValue(key, profileName);
+}
+
+bool InputOutputMap::isNotSurface(const QString &deviceName)
+{
+    return QSettings().value(QStringLiteral("surfaces/notSurface/") + deviceKeyOf(deviceName), false).toBool();
+}
+
+void InputOutputMap::setNotSurface(const QString &deviceName, bool notSurface)
+{
+    QSettings s;
+    const QString key = QStringLiteral("surfaces/notSurface/") + deviceKeyOf(deviceName);
+    if (notSurface)
+        s.setValue(key, true);
+    else
+        s.remove(key);
 }
 
 QStringList InputOutputMap::profileNames()
@@ -3423,24 +3692,24 @@ bool InputOutputMap::feedbackFollowsInput(quint32 universe)
 {
     if (universe >= universesCount())
         return false;
+    /* The board's own port is feedbackLineFor()'s, the one pairFeedback()
+       and the board repair (SurfaceAutoPatch::repair()) use too: one
+       answer to "where do this board's lamps go", so none of them moves
+       the feedback somewhere another then moves it back from. */
+    const FeedbackLine own = feedbackLineFor(universe);
+    if (own.plugin.isEmpty())
+        return false;
     Universe *uni = m_universeArray.at(int(universe));
-    InputPatch *ip = uni->inputPatch();
-    if (ip == NULL || ip->plugin() == NULL || ip->input() == QLCIOPlugin::invalidLine())
-        return false;
-    const QString plugin = ip->pluginName();
-    const int partner = partnerOutput(plugin, ip->input());
-    if (partner < 0)
-        return false;
     OutputPatch *fb = uni->feedbackPatch();
     if (fb != NULL && fb->isPatched())
     {
-        if (fb->pluginName() != plugin)
+        if (fb->pluginName() != own.plugin)
             return false;           // another route, on purpose
-        if (fb->output() == quint32(partner))
+        if (fb->output() == own.line)
             return false;           // already the board's own
     }
-    qDebug() << "[IOMAP] universe" << universe + 1 << "feedback follows its input to" << plugin << partner;
-    return setOutputPatch(universe, plugin, QString(), quint32(partner), true, 0);
+    qDebug() << "[IOMAP] universe" << universe + 1 << "feedback follows its input to" << own.plugin << own.line;
+    return setOutputPatch(universe, own.plugin, QString(), own.line, true, 0);
 }
 
 PatchUndo *InputOutputMap::patchUndo() const

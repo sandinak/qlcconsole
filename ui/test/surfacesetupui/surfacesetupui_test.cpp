@@ -24,6 +24,15 @@
 #include <QScrollArea>
 #include <QDir>
 #include <QtTest>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
+#include <QDialog>
+#include <QFormLayout>
+#include <QComboBox>
+#include <QLineEdit>
+#include <QCheckBox>
+#include <QSplitter>
+#include <QStackedWidget>
 
 #include "surfacesetupui_test.h"
 #include "simmididevice.h"
@@ -32,8 +41,15 @@
 #include "controlsurfacespanel.h"
 #include "showcontrolsyncpage.h"
 #include "inputoutputmanager.h"
-#include "connectionstree.h"
 #include "surfacesetup.h"
+#include "inputpatch.h"
+#include "outputpatch.h"
+
+#include "../../../engine/test/common/stdprelude.h"
+#define private public
+#include "connectionstree.h"
+#include "connectioneditor.h"
+#include "inputoutputmanager.h"
 #include "ioplugincache.h"
 #include "qlcioplugin.h"
 #include "qlcfile.h"
@@ -96,6 +112,7 @@ void SurfaceSetupUi_Test::cleanup()
     m_stub->m_lineNames.clear();
     m_stub->m_linesAreHardware = false;
     m_stub->m_networkDmx = true;
+    m_stub->m_hasFeedback = false;
     m_stub->m_onShowControl = nullptr;
     m_stub->m_onRescan = nullptr;
     m_stub->m_showControlSent.clear();
@@ -248,6 +265,174 @@ void SurfaceSetupUi_Test::theHubRowAndRescan()
     QVERIFY2(hub.status("setup").contains("PMJ Black 1 (universe 1): Not checked yet."), qPrintable(hub.status("setup")));
     m_doc->surfaceSetup()->check(0);
     QVERIFY2(hub.status("setup").contains("54 of 54 lamps aren't under their buttons"), qPrintable(hub.status("setup")));
+}
+
+void SurfaceSetupUi_Test::patchFeedbackIsOneClick()
+{
+    m_stub->m_hasFeedback = true;
+    m_stub->m_linesAreHardware = true;      // a USB/MIDI line, not a network one
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj, profile("PMJ-Black-1.qxi"));
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    SimOpenDeck deck(m_stub, &pmj);
+    // plug() patches the feedback line as a person does: take it off.
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, QString(), QString(), 0, true, 0));
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) == nullptr);
+
+    ControlSurfacesPanel hub(m_doc);
+    hub.show();
+    QVERIFY(hub.pmjFeedbackButton() != nullptr);
+    QVERIFY(hub.pmjFeedbackButton()->isVisibleTo(&hub));
+    QVERIFY2(hub.status("pmj").contains("no feedback line"), qPrintable(hub.status("pmj")));
+
+    SurfaceSetupDialog d(m_doc);
+    d.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&d));
+    settle();
+    QPushButton *dlgBtn = button(&d, "surfaceSetupPatchFeedback");
+    QVERIFY(dlgBtn != nullptr && dlgBtn->isVisibleTo(&d));
+
+    const QString shotDir = qEnvironmentVariable("QLC_SHOT_DIR");
+    if (shotDir.isEmpty() == false)
+    {
+        QDir().mkpath(shotDir);
+        const QList<QSize> sizes { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) };
+        for (const QSize &z : sizes)
+        {
+            hub.resize(z);
+            d.resize(z.width() / 2, qMax(320, z.height() / 2));
+            settle();
+            hub.grab().save(QStringLiteral("%1/feedback-hub-%2x%3.png").arg(shotDir).arg(z.width()).arg(z.height()));
+            d.grab().save(QStringLiteral("%1/feedback-setup-%2x%3.png").arg(shotDir).arg(z.width()).arg(z.height()));
+        }
+    }
+    // The dialog's button first: one click, and it is gone.
+    dlgBtn->click();
+    settle();
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) != nullptr);
+    QVERIFY(dlgBtn->isHidden());
+    // Unpatched again: the hub's button pairs it the same way.
+    QVERIFY(m_doc->inputOutputMap()->setOutputPatch(0, QString(), QString(), 0, true, 0));
+    settle();
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) == nullptr);
+    QVERIFY(hub.pmjFeedbackButton()->isVisibleTo(&hub));
+    hub.pmjFeedbackButton()->click();
+    settle();
+    QVERIFY(m_doc->inputOutputMap()->feedbackPatch(0) != nullptr);
+    QVERIFY(hub.pmjFeedbackButton()->isHidden());
+    QVERIFY2(hub.status("pmj").contains("with its feedback line"), qPrintable(hub.status("pmj")));
+}
+
+void SurfaceSetupUi_Test::everyBoardOffersPatchFeedback()
+{
+    m_stub->m_hasFeedback = true;
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40"), 1, QStringLiteral("Akai APC40"),
+                      profile("Akai-APC40.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, QString(), QString(), 0, true, 0));
+    QVERIFY(iom->setOutputPatch(1, QString(), QString(), 0, true, 0));
+
+    ControlSurfacesPanel hub(m_doc);
+    hub.show();
+    settle();
+    QPushButton *b = hub.setUpButton("feedback");
+    QVERIFY(b != nullptr && b->isVisibleTo(&hub));
+    QVERIFY2(hub.status("feedback").contains("Universe 1:") && hub.status("feedback").contains("Universe 2:"),
+             qPrintable(hub.status("feedback")));
+    QSignalSpy spy(&hub, &ControlSurfacesPanel::patchFeedbackRequested);
+    b->click();
+    settle();
+    QVERIFY(iom->feedbackPatch(0) != nullptr && iom->feedbackPatch(1) != nullptr);
+    QCOMPARE(spy.count(), 0);
+    QVERIFY(b->isHidden());
+}
+
+void SurfaceSetupUi_Test::noUniqueMatchLandsOnConnections()
+{
+    m_stub->m_hasFeedback = true;
+    SimMidiDevice fp(m_doc, m_stub, QStringLiteral("FaderPort 2"), 0, QStringLiteral("PreSonus FaderPort 2"),
+                     profile("PreSonus-FaderPort-2.qxi"));
+    QVERIFY2(fp.plug(), qPrintable(fp.lastError()));
+    // A second output of the same name: no single match to pick.
+    m_stub->m_lineNames << QStringLiteral("FaderPort 2");
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    QVERIFY(iom->setOutputPatch(0, QString(), QString(), 0, true, 0));
+    QVERIFY(iom->feedbackPatch(0) == nullptr);
+
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.show();
+    settle();
+    ControlSurfacesPanel *panel = mgr.findChild<ControlSurfacesPanel *>();
+    ConnectionsTree *tree = mgr.findChild<ConnectionsTree *>();
+    QVERIFY(panel != nullptr && tree != nullptr);
+    QPushButton *b = panel->setUpButton("feedback");
+    QVERIFY(b != nullptr);
+    b->click();
+    settle();
+    QVERIFY(iom->feedbackPatch(0) == nullptr);              // nothing guessed
+    QCOMPARE(tree->selectedUniverse(), quint32(0));          // the board's input is selected
+    QCOMPARE(tree->noteText(), QString::fromUtf8("No single output matches this board. Right-click "
+                 "the board's output \u25b8 Patch a Universe Here (feedback)\u2026"));
+}
+
+void SurfaceSetupUi_Test::theSurfacesRowExplainsItselfAndListsBoards()
+{
+    m_stub->m_hasFeedback = true;
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.show();
+    settle();
+    ConnectionsTree *tree = mgr.findChild<ConnectionsTree *>();
+    ControlSurfacesPanel *panel = mgr.findChild<ControlSurfacesPanel *>();
+    QVERIFY(tree != nullptr && panel != nullptr);
+    // The pane begins with one plain sentence.
+    QLabel *purpose = panel->findChild<QLabel *>("surfacesPurpose");
+    QVERIFY(purpose != nullptr);
+    QCOMPARE(purpose->text(), QString("Control surfaces are the boards you run the show from: their "
+                                      "jobs (GO, Back, GM…), lamps and map."));
+
+    auto surfaceRow = [tree]() -> QTreeWidgetItem * {
+        QTreeWidgetItemIterator it(tree->m_tree);
+        for (; *it != nullptr; ++it)
+            if ((*it)->data(0, Qt::UserRole + 2).toString() == QLatin1String("surfaces")
+                && (*it)->data(0, Qt::UserRole + 1).toInt() == 10)
+                return *it;
+        return nullptr;
+    };
+    // Nothing at all: one grey line saying what to do.
+    tree->refresh();
+    QTreeWidgetItem *row = surfaceRow();
+    QVERIFY(row != nullptr);
+    QCOMPARE(row->childCount(), 1);
+    QCOMPARE(row->child(0)->text(0), QString("No control surface: plug in a board, or patch a MIDI input "
+                                              "with a profile."));
+    QVERIFY(row->toolTip(0).isEmpty() == false);
+
+    // A board with its profile: named, with its universe, profile and feedback.
+    SimMidiDevice pmj(m_doc, m_stub, kPmj, 0, kPmj, profile("PMJ-Black-1.qxi"));
+    QVERIFY2(pmj.plug(), qPrintable(pmj.lastError()));
+    tree->refresh();
+    row = surfaceRow();
+    QVERIFY(row != nullptr && row->childCount() == 1);
+    QCOMPARE(row->child(0)->data(0, Qt::UserRole + 1).toInt(), 12);
+    QVERIFY2(row->child(0)->text(1).contains("universe 1") && row->child(0)->text(1).contains("PMJ Black 1")
+             && row->child(0)->text(1).contains("feedback yes"), qPrintable(row->child(0)->text(1)));
+
+    // An input patched with no profile: "not set up", one click to the pane that sets it.
+    SimMidiDevice bare(m_doc, m_stub, QStringLiteral("Mystery Pad"), 1);
+    QVERIFY2(bare.plug(), qPrintable(bare.lastError()));
+    tree->refresh();
+    row = surfaceRow();
+    QVERIFY(row != nullptr && row->childCount() == 2);
+    QTreeWidgetItem *unset = row->child(1);
+    QCOMPARE(unset->data(0, Qt::UserRole + 1).toInt(), 13);
+    QVERIFY2(unset->text(0).contains("Mystery Pad: not set up"), qPrintable(unset->text(0)));
+    tree->m_tree->setCurrentItem(unset);
+    unset->setSelected(true);
+    settle();
+    QCOMPARE(tree->m_connPane->universe(), quint32(1));
 }
 
 void SurfaceSetupUi_Test::shots()

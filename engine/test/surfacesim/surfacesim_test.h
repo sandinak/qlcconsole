@@ -93,6 +93,26 @@ private slots:
      *  STOP ALL CLIPS STOP, touch strip 8 the GM; pads on MIDI channel 7
      *  apart from the buttons on 1. */
     void theApc64SeedsItsDefaults();
+    /** 053 surfaces on the bench: a board patched with no profile gets the
+     *  one made for its device (a profile's Match) -- the init, the map and
+     *  the roles follow; a chosen profile and an unknown name are left. */
+    void aProfileIsChosenByTheDevice();
+    /** The APC mini mk2 is a drawn surface with the APC40's default roles. */
+    void theApcMiniMk2SeedsItsDefaults();
+    /** A user's copy of a surface profile older than the built-in one (a
+     *  legacy link) is not used, and the panel says so; a good copy is. */
+    void anOlderCopyOfASurfaceProfileIsNotUsed();
+    /** The board holding the core roles is gone when a new one comes
+     *  online: the roles move, with a notice and an Undo. */
+    void aGoneBoardHandsItsRolesToTheNewOne();
+    /** The old board is still here: nothing moves; the new one is given a
+     *  role only when the old lets go of it. */
+    void aBoardThatIsHereKeepsItsRoles();
+    /** A trigger learned on another board does not light a lamp on a drawn
+     *  surface that has no such control (an APC pad blinking at 8,2). */
+    void aLampForAControlTheBoardLacksIsNotSent();
+    /** The MaizeDMX has two pages, each on its own X key. */
+    void theMaizeDmxHasAPager();
 
     /* Setting up a controller (SurfaceSetup, the OpenDeck model in
        simopendeck.h): the device's own config, read and written over SysEx. */
@@ -121,6 +141,40 @@ private slots:
     /** The APC64: its display taken and named on patch and replug, given
      *  back on exit; Session mode checked by a pad press. */
     void theApc64IsNamedAndItsModeChecked();
+
+    /* The bench, 2026-11-27: every board patched by hand, nothing logged. */
+    /** The boards' real port names (dink's CoreMIDI) find their profiles:
+     *  case, a "(Device)" suffix, port words and a maker's name aside; of
+     *  a board with several ports only its own one; the MaizeDMX's shared
+     *  name is asked about, never matched. */
+    void realPortNamesFindTheirProfiles();
+    /** A known board plugged in is set up by itself: its input with its
+     *  profile, its feedback to the same device, its init; the APC64's
+     *  other three ports are left alone. Undo lets it go and it is not set
+     *  up by itself again. */
+    void aKnownBoardIsSetUpWhenPluggedIn();
+    /** The MaizeDMX ("USB2.0-MIDI Port 1"): asked about, not patched; a yes
+     *  sets it up and is remembered. */
+    void aSharedPortNameIsAskedAboutThenRemembered();
+    void aBoardBackWithAStaleFeedbackIsRepaired();
+    void aFeedbackChosenOnPurposeIsLeft();
+    void aPadIsSetUpWhenItAppears();
+    void aHandPatchedPadIsRepaired();
+    void theRepairIsTheSameAsAHandRepatch();
+    /** The Board Log: a fader's every step in, a lamp out, the init with
+     *  where it went, timestamped and decoded with the control's name;
+     *  the last 500 kept. */
+    void theBoardLogSaysWhatTheBoardSentAndWasSent();
+    /** The init goes once more after the port has settled. */
+    void theInitGoesAgainOnceThePortHasSettled();
+    /** The lamp test lights each lamp, then all, then gives them back;
+     *  with no feedback line it says so. */
+    void theLampTestLightsEveryLampThenGivesThemBack();
+    /** A board named "APC64 DAW (APC64)" keeps this computer's roles
+     *  across a restart (the identity is saved percent-encoded and read
+     *  back raw), and a patch with no device on its line seeds no
+     *  "midi:None". */
+    void aBoardWithParenthesesKeepsItsRoles();
 
 private:
     Doc *m_doc = nullptr;

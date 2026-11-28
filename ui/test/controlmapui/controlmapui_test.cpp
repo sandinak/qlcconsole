@@ -2053,7 +2053,7 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     ControlSurfacesPanel *hub = page->surfaces();
     QVERIFY(hub != nullptr);
     QCOMPARE(ControlSurfacesPanel::keys(),
-             QStringList({ "map", "estop", "encoder", "vc", "masters", "gm", "pmj", "setup", "web", "pads", "devices",
+             QStringList({ "map", "estop", "encoder", "vc", "masters", "gm", "pmj", "feedback", "setup", "web", "pads", "devices",
                           "collisions", "places" }));
     QVERIFY(hub->setUpButton("places") == nullptr);         // read only
     QVERIFY(hub->findChild<QLabel *>("surfacePlacesStatus")->isHidden());       // no trigger at a place
@@ -2062,7 +2062,7 @@ void ControlMapUi_Test::theSurfacesHubListsEveryPlace()
     QVERIFY(hub->findChild<QLabel *>("surfaceCollisionsStatus")->isHidden());   // nothing to say
     for (const QString &key : ControlSurfacesPanel::keys())
     {
-        if (key == QLatin1String("collisions") || key == QLatin1String("places"))
+        if (key == QLatin1String("collisions") || key == QLatin1String("places") || key == QLatin1String("feedback"))
             continue;
         QVERIFY2(hub->setUpButton(key) != nullptr, qPrintable(key));
         QCOMPARE(hub->setUpButton(key)->text(), QString("Set Up…"));

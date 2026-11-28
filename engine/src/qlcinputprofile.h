@@ -144,6 +144,45 @@ protected:
     int m_surfaceColumns;
 
     /********************************************************************
+     * The device it is for (auto-selected when that device is patched)
+     ********************************************************************/
+public:
+    /** Device names this profile is for, one <Match>APC40 mkII*</Match>
+     *  each: a glob (* and ?), case-insensitive, against the input's name
+     *  as the system gives it (a Windows "2- " unit prefix is ignored).
+     *  A line whose name matches gets this profile when it is patched with
+     *  none (InputOutputMap::profileForDevice()). Empty: never chosen by
+     *  name (a board whose port is a name many boxes share). */
+    QStringList deviceMatches() const { return m_deviceMatches; }
+    void setDeviceMatches(const QStringList &matches) { m_deviceMatches = matches; }
+    bool matchesDevice(const QString &deviceName) const;
+    /** How well @p deviceName fits (0: not at all). The name as the system
+     *  gives it, a glob, beats the model's words found in it: case, a
+     *  trailing "(Device)" and port words ("MIDI 1") aside, never with
+     *  another model's word ("APC40" does not fit "APC40 mkII"). A board
+     *  whose Match names a port ("APC64 DAW") fits that port only. The
+     *  best score wins (InputOutputMap::profileForDevice()). */
+    int deviceMatchScore(const QString &deviceName) const;
+    /** @p deviceName is another port of this board ("APC64 Notes (APC64)"
+     *  for a profile used on "APC64 DAW"): not used, never a board to set up. */
+    bool isOtherPortOf(const QString &deviceName) const;
+    /** A name's words as matching reads them: lower case, no Windows unit
+     *  prefix, no trailing "(Device)". */
+    static QStringList deviceWords(const QString &deviceName);
+
+    /** Device names that may be this board, one <MatchAsk>USB2.0-MIDI*</MatchAsk>
+     *  each: a port name many boxes share (the MaizeDMX's), so it is never
+     *  chosen by itself. A person is asked once ("Is this a MaizeDMX?") and
+     *  the answer is kept on this computer. */
+    QStringList deviceAsks() const { return m_deviceAsks; }
+    void setDeviceAsks(const QStringList &asks) { m_deviceAsks = asks; }
+    bool asksForDevice(const QString &deviceName) const;
+
+protected:
+    QStringList m_deviceMatches;
+    QStringList m_deviceAsks;
+
+    /********************************************************************
      * Plugin-specific global settings
      ********************************************************************/
 public:

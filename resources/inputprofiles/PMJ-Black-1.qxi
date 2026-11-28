@@ -9,6 +9,8 @@
  <Manufacturer>PMJ</Manufacturer>
  <Model>Black 1</Model>
  <Type>MIDI</Type>
+ <Match>*PMJ_BLACK_1*</Match>
+ <Match>PMJ Black 1*</Match>
  <Surface Version="1"/>
  <Channel Number="32768">
   <Name>Master</Name>

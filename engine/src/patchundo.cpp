@@ -50,6 +50,7 @@ PatchUndo::State PatchUndo::captureOne(quint32 universe) const
     {
         st.name = uni->name();
         st.passthrough = uni->passthrough();
+        st.slotOwner = uni->slotOwner();
         foreach (const Universe::OfflinePatch &kept, uni->offlinePatches())
             if (kept.tag == Universe::OutputPatchTag)
                 st.offlineOutputs << kept;
@@ -339,6 +340,7 @@ bool PatchUndo::undo()
             uni->setPassthrough(st.passthrough);
         }
 
+        uni->setSlotOwner(st.slotOwner);
         restoreOne(st);
     }
 
