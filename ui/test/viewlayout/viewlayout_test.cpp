@@ -181,8 +181,18 @@ static QString mainLayoutProblem(const QMainWindow *mw)
     const bool hasBar = sb != nullptr && sb->isVisible();
     const int floor = hasBar ? sb->geometry().top() - 1 : mw->height() - 1;
     if (hasBar && (sb->geometry().bottom() != mw->height() - 1 || sb->width() != mw->width()))
-        return QStringLiteral("the status bar is %1x%2 at y=%3 in a %4x%5 window")
-               .arg(sb->width()).arg(sb->height()).arg(sb->y()).arg(mw->width()).arg(mw->height());
+    {
+        // Which of its widgets holds it wide: each shown one's minimum.
+        QStringList wide;
+        for (QWidget *w : sb->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly))
+            if (w->isVisibleTo(sb))
+                wide << QStringLiteral("%1 %2 min %3 hint %4")
+                            .arg(QString::fromLatin1(w->metaObject()->className()), w->objectName())
+                            .arg(qMax(w->minimumWidth(), w->minimumSizeHint().width())).arg(w->sizeHint().width());
+        return QStringLiteral("the status bar is %1x%2 at y=%3 in a %4x%5 window (bar min %6: %7)")
+               .arg(sb->width()).arg(sb->height()).arg(sb->y()).arg(mw->width()).arg(mw->height())
+               .arg(sb->minimumSizeHint().width()).arg(wide.join(QStringLiteral(", ")));
+    }
     if (c.isValid() && (c.right() != mw->width() - 1 || c.bottom() != floor))
         return QStringLiteral("the central area is %1x%2 at %3,%4 in a %5x%6 window")
                .arg(c.width()).arg(c.height()).arg(c.x()).arg(c.y()).arg(mw->width()).arg(mw->height());
