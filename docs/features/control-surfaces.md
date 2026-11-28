@@ -602,7 +602,10 @@ to check:
 Akai's own documents for both boards give the controls, the four programs
 and the modes, but no factory MIDI numbers and no MIDI implementation for
 the mk2. If a pad or knob does the wrong thing, open **▾ ▸ Board Log…** and
-press it: the **IN** line shows what it sent (*Note 39 on, ch 10*). A
+press it: the **IN** line shows what it sent (*Note 39 on, ch 10*).
+Without the app, `swift tools/midi-probe.swift "LPD8 mk2" 60` (macOS)
+prints what the board sends and sends it nothing; `--lpd8-paint` adds the
+one pad-colour message, pads 1-8 red to white, to check the mk2's lights. A
 profile's name match is its `<Match>` line (`LPD8 mk2*` for the mk2), so a
 port named differently is one line to change.
 
