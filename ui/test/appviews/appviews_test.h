@@ -312,6 +312,9 @@ private slots:
     /** Operate puts a lock on the Connections and Fixtures tabs; their Design button
      *  goes through the show's PIN. */
     void operateLocksThePatchTabsAndTheirDesignButtonAsksForThePin();
+    /** Control ▸ Live Edit: on in Operate unless the PIN locks Design, and
+     *  it follows the lock (a locked show loaded from the web in Operate). */
+    void liveEditFollowsTheLockInOperate();
     void openInOperateWithoutAPinLoadsInOperateAndLeavesFreely();
     /** Teaching mode (docs/features/teaching.md): the chip and the title in
      *  every view, the scramble only in a teaching show */

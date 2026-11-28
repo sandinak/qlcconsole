@@ -727,6 +727,9 @@ public:
     /** The Teaching chip, tool-tip and the title: what the show's Teaching
      *  settings say (docs/features/teaching.md). */
     void updateTeachingStatus();
+    /** Control ▸ Live Edit's actions: on in Operate unless the show's PIN
+     *  locks Design. Follows the mode and the lock. */
+    void updateLiveEditActions();
     /** The Review chip (docs/features/show-review.md): "Review · 2 ⛔ 5 ⚠"
      *  from Show Review's last run, grey "Reviewed" when nothing is open. */
     void updateReviewStatus();
@@ -872,6 +875,8 @@ public slots:
     void slotCaptureUndo();
     void slotCapturePendingChanged();
     void slotCaptureUndoStackChanged();
+    void slotCaptureUndoPerformed(const QString &summary);
+    void slotCaptureAutoStored(const QString &summary);
     /** Bring a view to the front by its tab label, wherever it lives: switch
      *  to its tab if it is docked, or raise its own window if it has been
      *  detached. */

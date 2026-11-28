@@ -6316,6 +6316,66 @@ void AppViews_Test::aPinKeepsTheShowInOperate()
     QCOMPARE(doc->mode(), Doc::Design);
 }
 
+/* Control ▸ Live Edit is on in Operate unless the show's PIN locks Design
+   (getting-started.md, Show settings), and it follows the lock while the
+   show stays in Operate: a locked show loaded from web access in Operate
+   used to leave Live Edit on (its state was set on a mode change only). */
+void AppViews_Test::liveEditFollowsTheLockInOperate()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    auto cleanup = qScopeGuard([this]() {
+        m_app->doc()->operateSettings()->setPin(QString());
+        if (m_app->doc()->mode() == Doc::Operate)
+            m_app->slotModeDesign();
+        m_app->doc()->setLoadedFromWeb(false);
+        m_app->clearDocument();
+    });
+    QAction *liveEdit = m_app->m_liveEditAction;
+    QAction *vcLiveEdit = m_app->m_liveEditVirtualConsoleAction;
+    QAction *capture = m_app->m_captureLiveEditsAction;
+    QVERIFY(liveEdit != nullptr && vcLiveEdit != nullptr && capture != nullptr);
+
+    // Design: off. Operate, no PIN: on.
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!liveEdit->isEnabled());
+    m_app->slotModeOperate();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(liveEdit->isEnabled());
+    QVERIFY(vcLiveEdit->isEnabled());
+    QVERIFY(capture->isEnabled());
+
+    // The lock comes on while the show stays in Operate: off, and a capture
+    // running stops. It goes: on again.
+    capture->setChecked(true);
+    doc->operateSettings()->setPin("2468");
+    QVERIFY(doc->operateSettings()->locksDesign());
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(!liveEdit->isEnabled());
+    QVERIFY(!vcLiveEdit->isEnabled());
+    QVERIFY(!capture->isEnabled());
+    QVERIFY(!capture->isChecked());
+    doc->operateSettings()->setLockDesign(false);
+    QVERIFY(liveEdit->isEnabled());
+    doc->operateSettings()->setLockDesign(true);
+    QVERIFY(!liveEdit->isEnabled());
+
+    // The real path: a locked show sent from web access while an unlocked
+    // one runs in Operate.
+    QTemporaryDir dir;
+    const QString path = dir.filePath("locked.qlcc");
+    QCOMPARE(m_app->saveXML(path), QFile::NoError);
+    doc->operateSettings()->setPin(QString());
+    QVERIFY(liveEdit->isEnabled());
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QString xml = QString::fromUtf8(file.readAll());
+    m_app->slotLoadDocFromMemory(xml);
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(doc->operateSettings()->locksDesign());
+    QVERIFY(!liveEdit->isEnabled());
+}
+
 /* Changelog: Open in Operate (File ▸ Show Settings) with no PIN: the saved
    show loads in Operate and Design is one click away, no prompt; a show
    without it loads in Design and stays there. */

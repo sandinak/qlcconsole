@@ -1227,6 +1227,7 @@ branches bring their tests. Rows are written from those branches.
 | M900 | Help answers forum's common questions | Docs | (docs) | n/a | n/a | low | none |
 | M901 | File ▸ New from Template | Show-choir stage (classroom) template, untitled, nothing patched | AppViews_Test::newFromTemplateOpensTheClassroomStageUntitled | covered | covered | low | none |
 | M902 | Show Settings: open in Operate + Operate PIN | Open in Operate as -p; PIN 4-8 digits: back to Design asks, Live Edit off; salted hash saved | ShowOperate_Test::aPinIsHashedAndChecked, setAndRemoveThePin, savedWithTheShowOnlyWhenSet; AppViews_Test::aPinKeepsTheShowInOperate; **AppViews_Test::openInOperateWithoutAPinLoadsInOperateAndLeavesFreely** (new) | partial | covered | high | — |
+| Mnew | Live Edit follows the PIN lock | Control ▸ Live Edit on in Operate unless the PIN locks Design; follows the lock in Operate (a locked show loaded from web access); turning Capture Live Edits on does not assert | **AppViews_Test::liveEditFollowsTheLockInOperate** (new) | none | covered | med | — |
 | M903 | Menu keys | Save As ⇧⌘S, Quit ⌘Q everywhere; Undo/Redo show keys; Settings… name on every platform; VC slider ⇧⌘U | AppViews_Test::theMenusShowTheirKeys, editUndoSaysWhereItWorks, editUndoOnConnectionsIsUndoPatchChange, noTwoApplicationShortcutsShareAKey | partial | partial | low | VC "new slider ⇧⌘U" and Windows-only Ctrl+Y/Ctrl+Shift+Z not asserted |
 
 ## 0.4.0: Changed and Fixed
