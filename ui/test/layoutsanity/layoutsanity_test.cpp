@@ -131,6 +131,7 @@
 #include "livecapturedialog.h"
 #include "lookeditor.h"
 #include "networkreportdialog.h"
+#include "plotprintdialog.h"
 #include "palettemanager.h"
 #include "patchinventorydialog.h"
 #include "patchlistdialog.h"
@@ -1068,6 +1069,9 @@ QList<Screen> screens()
             })
          << screen(QStringLiteral("Network report"), [](App *app) -> QWidget * {
                 return new NetworkReportDialog(docOf(app));
+            })
+         << screen(QStringLiteral("Print plot"), [](App *app) -> QWidget * {
+                return new PlotPrintDialog(docOf(app), PlotSheet::Context());
             })
          << screen(QStringLiteral("DMX monitor"), [](App *app) -> QWidget * {
                 return new DmxMonitorWindow(docOf(app));

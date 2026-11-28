@@ -133,6 +133,8 @@ add_library(${module_name}
     monitor/monitorimageitem.cpp monitor/monitorimageitem.h
     monitor/monitorinventorypanel.cpp monitor/monitorinventorypanel.h
     monitor/monitorlayout.cpp monitor/monitorlayout.h
+    monitor/plotprintdialog.cpp monitor/plotprintdialog.h
+    monitor/plotsheet.cpp monitor/plotsheet.h
     monitor/trussitem.cpp monitor/trussitem.h
     monitor/platformitem.cpp monitor/platformitem.h
     monitor/pipeitem.cpp monitor/pipeitem.h

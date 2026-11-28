@@ -337,6 +337,13 @@ QList<Row> windows()
                 [](App *a) { studio(a)->slotManageTrusses(); })
          << row("NetworkReportDialog", QStringLiteral("Network Report"),
                 [](App *a) { studio(a)->slotNetworkReport(); })
+         << row("PlotPrintDialog", QStringLiteral("Print Plot"),
+                [](App *a) {
+                    // More > Print & Reports > Print Plot / Save PDF…
+                    Monitor *m = studio(a);
+                    QVERIFY(m->m_moreBtn != nullptr && m->m_moreBtn->menu() != nullptr);
+                    QVERIFY(trigger(m->m_moreBtn->menu(), QStringLiteral("Print Plot / Save PDF…")));
+                })
          << row("NetworkTopologyDialog", QStringLiteral("Network Topology"),
                 [](App *a) { studio(a)->slotEditNetworkNode(0); })
          << row("PatchListDialog", QStringLiteral("Patch List"),

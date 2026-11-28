@@ -608,6 +608,9 @@ protected slots:
     void slotEditNetworkNode(quint32 nodeIndex);
     /** Show the network summary for the data package (N5). */
     void slotNetworkReport();
+    /** Print or save the plot as a drawing (PlotPrintDialog): title block,
+     *  symbol key with counts, layer and owner key, scale bar. */
+    void slotPlotPdf();
     void slotNetworkNodeRemoveRequested(quint32 nodeIndex);
 
     /** Show the Add context menu at the given scene position. */

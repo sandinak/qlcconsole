@@ -12,6 +12,17 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Print the plot**: the Lighting Studio's **More ▸ Print & Reports ▸ Print
+  Plot / Save PDF…** makes a drawing of the plan, the front or side
+  elevation or the Rig Overview's angled look, on Letter, Legal, Tabloid, A4
+  or A3: a title block (show, venue, drawn by, date, revision, view), a
+  symbol key with each kind of fixture's symbol and count, a layer and owner
+  key, and a scale bar in Settings ▸ Units. Save it as a PDF or print it;
+  Patch List… and Network Report… moved into the same submenu. See
+  [Printing the plot](docs/features/plot-drawing.md).
+
 ### Changed
 
 - **A replug never presses the desk**: this computer's STOP, GO and Back and
