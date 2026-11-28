@@ -134,6 +134,10 @@ SurfaceLayout SurfaceLayout::fromJson(const QByteArray &json, QString *error)
     // "shift": the modifier's channel; "guards": what it guards by default.
     l.m_shift = quint32(root.value(QStringLiteral("shift")).toInt(-1));
     l.m_gmTouch = quint32(root.value(QStringLiteral("gmTouch")).toInt(-1));
+    // "guardWords": {"stop": "Pad 1 + Pad 8", "release": "Pad 1 + Pad 4"} (the LPD8's).
+    const QJsonObject words = root.value(QStringLiteral("guardWords")).toObject();
+    l.m_guardedStop = words.value(QStringLiteral("stop")).toString();
+    l.m_guardedRelease = words.value(QStringLiteral("release")).toString();
     for (const QJsonValue &g : root.value(QStringLiteral("guards")).toArray())
     {
         l.m_guardStop = l.m_guardStop || g.toString() == QLatin1String("stop");

@@ -138,7 +138,8 @@ failed where it passed (2026-11-27). [ui/test/virtualbench](../../ui/test/virtua
 makes his boards as **CoreMIDI virtual ports with the names they report**
 ("APC40 mkII", "APC64 DAW (APC64)" and its three other ports, "APC mini mk2
 Control"/"Notes", "PreSonus FP2", "USB2.0-MIDI Port 1"/"Port 2",
-"OpenDeck | PMJ_BLACK_1", "Network RTP Session 1"), loads the **real MIDI
+"OpenDeck | PMJ_BLACK_1", "Network RTP Session 1", and "LPD8 mk2" / "LPD8"
+for the Akai pad boards' own tests), loads the **real MIDI
 plugin** into the whole app (offscreen) and reads every byte the app sends
 each port:
 
@@ -166,7 +167,10 @@ bench.unplug("APC40 mkII");                        // the unplug
 - **One bench a computer.** The MIDI list is the system's: the gate's three
   legs would see each other's "APC40 mkII". The test takes
   `/tmp/qlcconsole-virtualbench.lock` first, and skips when a real board
-  of one of these names is plugged in.
+  of one of these names is plugged in. A port that was there before the
+  bench plugged anything is a real device: it is declined for the app
+  under test (never set up, never sent a byte), and a test whose board is
+  one of them skips (his LPD8 mk2 stays plugged into dink).
 - It runs over ssh with no one logged in at the screen (the pool's hosts).
 
 ## A known bug

@@ -1179,7 +1179,8 @@ void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop()
     settle();
     QCOMPARE(fired.count(), 0);
     QCOMPARE(refused.count(), 1);
-    QCOMPARE(refused.first().first().toString(), QStringLiteral("%1: Shift+Stop stops.").arg(layout.shortName()));
+    // In the board's own words: its pads have no Shift or Stop printed on them.
+    QCOMPARE(refused.first().first().toString(), QStringLiteral("%1: Pad 1 + Pad 8 stops.").arg(layout.shortName()));
     QVERIFY(!m_doc->outputRuleKeeper()->emergencyStopped());
     // Pad 1 held: Pad 8 stops.
     QVERIFY(lpd.chord({ padShift, padStop }));
@@ -1193,6 +1194,8 @@ void SurfaceSim_Test::theLpd8sSeedTheirDefaultsAndGuardTheStop()
     settle();
     QCOMPARE(int(commands.count(int(ShowControl::Go))), gos);
     QVERIFY(m_doc->outputRuleKeeper()->emergencyStopped());
+    QCOMPARE(refused.last().first().toString(),
+             QStringLiteral("%1: stopped. Pad 1 + Pad 4 releases the stop.").arg(layout.shortName()));
     // K1: the Grand Master (picked up, then followed).
     InputOutputMap *iom = m_doc->inputOutputMap();
     for (int v : { 120, 124, 127, 110, 90, 64 })

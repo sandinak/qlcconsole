@@ -112,6 +112,10 @@ has its own switch, and its own PIN.
   patch the desk, the footer's **Desk** chip turns grey and says *Patch It*: click it to patch
   it. The show keeps its own stop too, so a computer with no desk learned
   can still stop the show.
+- **A pad board with no Shift key.** On an Akai LPD8 every pad looks the
+  same, so one pad stands in for Shift: **Pad 4** is GO, and the stop is
+  **Pad 1 held + Pad 8**, two hands apart. One knocked pad never stops the
+  show.
 - **A desk that needs its own setting.** Some desks must be set on the
   device itself first: a PMJ Black 1 straight from the factory lights the
   wrong keys, an APC40 mkII must be in Ableton mode. **Connections ▸ Control

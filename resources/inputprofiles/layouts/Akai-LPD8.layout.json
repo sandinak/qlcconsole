@@ -7,6 +7,7 @@
   "height": 8.1,
   "shift": 164,
   "guards": ["stop", "release"],
+  "guardWords": {"stop": "Pad 1 + Pad 8", "release": "Pad 1 + Pad 4"},
   "pages": [],
   "sections": [
     {"label": "PROGRAM / PAD / PROG CHNG / CC", "x": 0.5, "y": 0.6, "w": 3.2, "h": 6.9},

@@ -918,10 +918,10 @@ void VirtualBench_Test::theLpd8Mk2PadsReachTheirJobs()
     pad(8, true);
     pad(8, false);
     QTRY_VERIFY_WITH_TIMEOUT(refused.count() >= 3, 2000);
-    QCOMPARE(refused.last().first().toString(), QStringLiteral("LPD8 mk2: Shift+Stop stops."));
+    QCOMPARE(refused.last().first().toString(), QStringLiteral("LPD8 mk2: Pad 1 + Pad 8 stops."));
     QCOMPARE(fired.count(), 0);
     QVERIFY(!m_app->doc()->outputRuleKeeper()->emergencyStopped());
-    QVERIFY2(m_footerMessages.join(QLatin1Char('\n')).contains(QStringLiteral("Shift+Stop")),
+    QVERIFY2(m_footerMessages.join(QLatin1Char('\n')).contains(QStringLiteral("Pad 1 + Pad 8 stops")),
              qPrintable(m_footerMessages.join(" | ")));
     // Pad 1 held, Pad 8: ALL OFF.
     pad(1, true);

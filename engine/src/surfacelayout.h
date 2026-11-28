@@ -150,6 +150,11 @@ public:
      *  (ControlMap::shiftGuard()). */
     bool shiftGuardsStop() const { return m_shift != 0xFFFFFFFF && m_guardStop; }
     bool shiftGuardsRelease() const { return m_shift != 0xFFFFFFFF && m_guardRelease; }
+    /** How the board's own faces name the guarded stop and release, for a
+     *  board whose keys are not labelled Shift, Stop and Play (the LPD8's
+     *  pads: "Pad 1 + Pad 8"); empty: "Shift+Stop" and "Shift+Play". */
+    QString guardedStopWords() const { return m_guardedStop; }
+    QString guardedReleaseWords() const { return m_guardedRelease; }
 
     /** The colour an RGB lamp shows for a value sent to it (0..255, as
      *  InputOutputMap::sendFeedBack() takes it). Invalid when the layout
@@ -203,6 +208,8 @@ private:
     quint32 m_gmTouch = 0xFFFFFFFF;
     bool m_guardStop = false;
     bool m_guardRelease = false;
+    QString m_guardedStop;
+    QString m_guardedRelease;
     QSizeF m_size;
     double m_unitMm = 0;
     QList<Control> m_controls;

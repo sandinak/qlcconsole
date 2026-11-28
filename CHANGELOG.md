@@ -12,6 +12,10 @@ in-app build string (see [RELEASE.md](docs/dev/RELEASE.md) for how the two relat
 
 ## [Unreleased]
 
+### Added
+
+- **Akai LPD8 and LPD8 mk2 boards**: set up when plugged in (ports *LPD8* and *LPD8 mk2*), drawn on the map, with default jobs for this computer's desk: **Pad 4** GO, **Pad 3** Back, knob **K1** the Grand Master, and the stop on two pads (**Pad 1 + Pad 8**; Pad 1 + Pad 4 releases it). The mk2's RGB pads show each job's colour, painted by the board's colour message.
+
 ### Fixed
 
 - **A game pad sets itself up when it appears**: a DualShock 4, DualSense or Xbox pad plugged in or paired is patched as the pad with no click (its last universe, else the first free one), says *DUALSHOCK 4 ready as the pad* with Undo, and the Pad chip shows; a pad the show has is put right when it comes online (a board's profile taken off, a board's or a network session's feedback let go).

@@ -1900,7 +1900,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
             if (SurfaceSetup *ss = m_doc->surfaceSetup())
                 ss->boardLog()->note(universe, tr("STOP refused: Shift (channel %1) is not held")
                                                    .arg(layoutOf(universe).shiftChannel()));
-            emit refused(tr("%1: Shift+Stop stops.").arg(layoutOf(universe).shortName()));
+            const SurfaceLayout lay = layoutOf(universe);
+            emit refused(lay.guardedStopWords().isEmpty()
+                             ? tr("%1: Shift+Stop stops.").arg(lay.shortName())
+                             : tr("%1: %2 stops.").arg(lay.shortName(), lay.guardedStopWords()));
             return;
         }
         if (SurfaceSetup *ss = m_doc->surfaceSetup())
@@ -1982,7 +1985,10 @@ void DeskRecord::handleInput(quint32 universe, quint32 channel, uchar value)
                 && m_doc->outputRuleKeeper() != nullptr && m_doc->outputRuleKeeper()->emergencyStopped())
             {
                 m_down.insert(k);
-                emit refused(tr("%1: stopped. Shift+Play releases the stop.").arg(layoutOf(universe).shortName()));
+                const SurfaceLayout lay = layoutOf(universe);
+                emit refused(lay.guardedReleaseWords().isEmpty()
+                                 ? tr("%1: stopped. Shift+Play releases the stop.").arg(lay.shortName())
+                                 : tr("%1: stopped. %2 releases the stop.").arg(lay.shortName(), lay.guardedReleaseWords()));
                 break;
             }
             m_down.insert(k);
