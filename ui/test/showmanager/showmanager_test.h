@@ -70,6 +70,10 @@ private slots:
     void droppedAudioLandsOnTheTrack();
     void droppedAudioBelowTheTracksMakesATrack();
     void droppedVideoLandsOnTheTrack();
+    /** Scrolled sideways and down: a drop on the pinned track-header column
+     *  is refused, one beside it lands at the time shown, on the row under
+     *  the pointer. */
+    void aDropOnAScrolledTimelineLandsWhereItIsShown();
     void anUnsupportedDropSaysWhy();
     /** The sidebar's right-click menus offer what can act on the row. */
     void sidebarMenusOfferWhatCanAct();

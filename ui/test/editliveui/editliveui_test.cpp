@@ -28,6 +28,8 @@
 #include <QDir>
 #include <QtTest>
 #include <QSignalSpy>
+#include <QScopeGuard>
+#include <QWindow>
 
 #include "../../../engine/test/common/stdprelude.h"
 #define private public
@@ -284,7 +286,17 @@ void EditLiveUi_Test::aStudentShowNeverReachesIt()
     level->apply();
     settle();
     QToolButton *b = run.editLiveButton();
-    QVERIFY(!b->isEnabled());
+    // The switch greys itself, as the chip, but takes a click: the click
+    // offers the Switch and never turns it on.
+    QVERIFY(b->isEnabled());
+    QCOMPARE(b->text(), QStringLiteral("Edit Live \u00B7 Standard"));
+    {
+        QSignalSpy offered(level, &ShowLevel::switchOffered);
+        b->click();
+        QCOMPARE(offered.count(), 1);
+        QVERIFY(!el->isOn());
+        QVERIFY(!b->isChecked());
+    }
     // The chip greys itself but takes a click (build 4910): the click
     // offers the Switch and never turns it on.
     QVERIFY(chip.chip()->text().contains(QStringLiteral("Standard")));
@@ -306,6 +318,7 @@ void EditLiveUi_Test::aStudentShowNeverReachesIt()
     level->apply();
     settle();
     QVERIFY(b->isEnabled());
+    QCOMPARE(b->text(), QStringLiteral("Edit Live"));
     QVERIFY(chip.chip()->isEnabled());
     QVERIFY(!b->toolTip().contains(QStringLiteral("Standard level")));
     QVERIFY(EditLiveChip::turnOn(m_doc, nullptr));
@@ -390,6 +403,58 @@ void EditLiveUi_Test::afterGoTheChipOffersStoreToCue()
     chip.storeLeftButton()->click();
     QVERIFY(chip.storeLeftButton()->isHidden());
     QVERIFY(!el->hasLeftBehind());
+}
+
+/* The Run tab's switch at Student, clicked as the mouse does (through the
+   window): it was greyed with ShowLevel's setEnabled(false), so a click
+   landed nowhere -- no line, no Switch -- where the docs say a click
+   explains, with Switch to Standard (the footer chip's build-4910 bug,
+   left on the switch). Operate only: hidden in Design. */
+void EditLiveUi_Test::theRunTabSwitchAtStudentTakesARealClick()
+{
+    ShowLevel *level = ShowLevel::instance();
+    auto back = qScopeGuard([level]() {
+        level->setLevel(ShowLevel::Standard);
+        level->apply();
+    });
+    EditLive *el = m_doc->controlMap()->editLive();
+    CueRunner run(m_doc, CueRunner::Full);
+    run.resize(1100, 700);
+    run.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&run));
+    QToolButton *b = run.editLiveButton();
+    QVERIFY(b->isHidden());                         // Design
+    m_doc->setMode(Doc::Operate);
+    level->setLevel(ShowLevel::Student);
+    level->apply();
+    settle();
+    QVERIFY(b->isVisible());
+    QVERIFY(b->isEnabled());
+    QVERIFY2(b->text().contains(QStringLiteral("Standard")), qPrintable(b->text()));
+    QVERIFY2(b->toolTip().contains(QStringLiteral("Standard")), qPrintable(b->toolTip()));
+
+    QSignalSpy offered(level, &ShowLevel::switchOffered);
+    QWindow *win = run.windowHandle();
+    QVERIFY(win != nullptr);
+    QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier, b->mapTo(&run, b->rect().center()));
+    settle();
+    QCOMPARE(offered.count(), 1);
+    QVERIFY(!el->isOn());
+    QVERIFY(!b->isChecked());
+
+    // Standard: a real click turns it on; Design hides it and turns it off.
+    level->setLevel(ShowLevel::Standard);
+    level->apply();
+    settle();
+    QCOMPARE(b->text(), QStringLiteral("Edit Live"));
+    QTest::mouseClick(win, Qt::LeftButton, Qt::NoModifier, b->mapTo(&run, b->rect().center()));
+    settle();
+    QVERIFY(el->isOn());
+    QVERIFY(b->isChecked());
+    m_doc->setMode(Doc::Design);
+    settle();
+    QVERIFY(!el->isOn());
+    QVERIFY(b->isHidden());
 }
 
 void EditLiveUi_Test::shots()
