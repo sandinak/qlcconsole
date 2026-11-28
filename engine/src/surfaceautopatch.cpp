@@ -68,7 +68,13 @@ SurfaceAutoPatch::SurfaceAutoPatch(Doc *doc, QObject *parent)
         InputPatch *ip = m_doc->inputOutputMap()->inputPatch(universe);
         if (ip != nullptr && ip->plugin() != nullptr && !m_patched.contains(universe))
             setDeclined(ip->inputName(), false);
+        // Patched by anyone but the pad set-up: no longer its stand-in.
+        if (!m_settingUpPad)
+            m_padStandIns.remove(universe);
     });
+    // The show given a controller slot of its own: a pad set up by itself
+    // meanwhile is let go, and the slot takes it.
+    connect(iom, &InputOutputMap::inputSlotChanged, this, &SurfaceAutoPatch::slotInputSlotChanged);
     connect(m_doc, &Doc::loaded, this, [this]() {
         snapshot();
         if (m_enabled)
@@ -191,9 +197,13 @@ void SurfaceAutoPatch::consider(QLCIOPlugin *plugin, const QString &device)
            beside it is the footer's to offer (one click), never a second
            pad running the show by itself. */
         bool hasPad = false;
-        if (ProgrammerController *pc = m_doc->programmer())
-            for (quint32 u = 0; u < iom->universesCount() && !hasPad; ++u)
-                hasPad = pc->isPadUniverse(u);
+        ProgrammerController *pc = m_doc->programmer();
+        for (quint32 u = 0; u < iom->universesCount() && !hasPad; ++u)
+        {
+            // A controller slot is the show's pad, a pad live in it or not.
+            Universe *uni = iom->universe(u);
+            hasPad = (uni != nullptr && uni->hasInputSlot()) || (pc != nullptr && pc->isPadUniverse(u));
+        }
         if (!hasPad)
             setUpPad(plugin, device, quint32(padLine));
         return;
@@ -417,11 +427,15 @@ quint32 SurfaceAutoPatch::setUpPad(QLCIOPlugin *plugin, const QString &device, q
     if (PatchUndo *pu = iom->patchUndo())
         pu->capture(QList<quint32>() << u, tr("set up %1 as the pad on universe %2").arg(name).arg(u + 1));
     m_patched.insert(u, device);
-    if (!iom->setInputPatch(u, plugin->name(), device, line))
+    m_settingUpPad = true;
+    const bool patched = iom->setInputPatch(u, plugin->name(), device, line);
+    m_settingUpPad = false;
+    if (!patched)
     {
         m_patched.remove(u);
         return UINT_MAX;
     }
+    m_padStandIns.insert(u, device);
     QSettings().setValue(kLastUniverse + keyOf(device), u);
     if (SurfaceSetup *ss = m_doc->surfaceSetup())
         ss->boardLog()->note(u, tr("Recognised %1 as a game pad (%2): patched on universe %3; its light bar "
@@ -430,6 +444,46 @@ quint32 SurfaceAutoPatch::setUpPad(QLCIOPlugin *plugin, const QString &device, q
     emit padPatched(u, name, device);
     emit devicesChanged();
     return u;
+}
+
+void SurfaceAutoPatch::slotInputSlotChanged(quint32 universe)
+{
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    Universe *slotUni = iom->universe(universe);
+    if (slotUni == nullptr || !slotUni->hasInputSlot() || m_padStandIns.isEmpty())
+        return;
+    /* A pad set up by itself stands in only while the show has no pad
+       (consider()). The show has one now: its slot ("any game controller",
+       or the pads it names) is what the show file keeps, never the pad
+       that happened to be here, so the stand-in is let go -- not declined:
+       the slot takes it, and it is set up again in a show with no pad. */
+    bool released = false;
+    const QHash<quint32, QString> standIns = m_padStandIns;
+    for (auto it = standIns.constBegin(); it != standIns.constEnd(); ++it)
+    {
+        const quint32 u = it.key();
+        if (u == universe)
+            continue;
+        m_padStandIns.remove(u);
+        InputPatch *ip = iom->inputPatch(u);
+        if (ip == nullptr || ip->plugin() == nullptr || ip->inputName() != it.value())
+            continue;       // repatched meanwhile: not the stand-in any more
+        Universe *uni = iom->universe(u);
+        if (uni != nullptr && uni->hasInputSlot())
+            continue;       // a slot of its own: the show's
+        m_patched.remove(u);
+        m_settingUpPad = true;
+        iom->setInputPatch(u, KInputNone, QString(), QLCIOPlugin::invalidLine());
+        m_settingUpPad = false;
+        if (SurfaceSetup *ss = m_doc->surfaceSetup())
+            ss->boardLog()->note(u, tr("%1 let go of universe %2: the show's controller slot on universe %3 "
+                                       "takes the pad").arg(it.value().trimmed()).arg(u + 1).arg(universe + 1));
+        released = true;
+    }
+    if (!released)
+        return;
+    iom->applyInputSlots();
+    emit devicesChanged();
 }
 
 QString SurfaceAutoPatch::repairPad(quint32 universe)

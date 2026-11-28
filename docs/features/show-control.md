@@ -170,7 +170,10 @@ patch it by hand; then the footer offers it: *Pad: DUALSHOCK 4 · not
 patched, click to use it*, and a click patches it. A pad the show already
 has is put right when it comes online: a board's input profile on it is
 taken off, and a feedback left on another board or a network session is
-let go (*DUALSHOCK 4: feedback back on its own line*, with **Undo**).
+let go (*DUALSHOCK 4: feedback back on its own line*, with **Undo**). A pad is set up by itself only while the show has no
+pad of its own: give a universe an *Any game controller* slot and a pad
+set up by itself on another universe is let go, the slot takes it, and the
+show file keeps *Any game controller*, not the name of the pad that was here.
 
 **One state, shown the same everywhere.** The Run tab's **Pad:** button,
 the frame round the Run tab, the footer's **Pad** chip (from every tab; it shows only while a game

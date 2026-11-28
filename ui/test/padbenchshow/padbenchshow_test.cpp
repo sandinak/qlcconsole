@@ -622,16 +622,16 @@ void PadBenchShow_Test::build(const QString &path)
     QCOMPARE(st->currentProduction(), prod);
 
     // ---- the pad's universe: whichever game controller is connected.
-    // Set on the universe as the show file holds it: these virtual pads
-    // must not be written into the show as its input.
+    // Set as Connections sets it: a virtual pad may be live in it, and one
+    // may have been set up by itself while the show was built (the app's
+    // auto-setup, 1.5 s after start: under load that lands in build()).
+    // Either way these virtual pads must not be written into the show as
+    // its input: the show keeps "any game controller".
     Universe::InputSlotDevice any;
     any.plugin = QStringLiteral("HID");
     any.anyGamepad = true;
-    Universe *padUni = iom->universe(1);
-    QVERIFY(padUni != nullptr);
-    padUni->setInputSlot({ any });
-    padUni->setInputSlotLive(-1);
-    padUni->setInputSlotRoles(InputOutputMap::standardChannelRoles());
+    QVERIFY(iom->universe(1) != nullptr);
+    iom->setInputSlot(1, { any }, InputOutputMap::standardChannelRoles());
 
     QCOMPARE(m_app->saveXML(path), QFile::NoError);
 

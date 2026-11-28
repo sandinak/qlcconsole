@@ -3004,6 +3004,12 @@ bool Universe::saveXML(QXmlStreamWriter *doc) const
         savePatchXML(doc, KXMLQLCUniverseInputPatch, d.plugin, d.uid, d.line, d.profile,
                      d.params, d.hidProfile, QString());
     }
+    else if (slotFirst < 0 && m_inputSlotLive >= 0)
+    {
+        /* "Any game controller" only, a pad live in it: the show keeps
+           the slot, never the pad that happens to be here (an <Input> of
+           its name would be opened as that pad on every machine). */
+    }
     else if (inputPatch() != NULL)
     {
         savePatchXML(doc, KXMLQLCUniverseInputPatch, inputPatch()->pluginName(), inputPatch()->inputName(),

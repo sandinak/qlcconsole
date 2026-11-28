@@ -21,6 +21,8 @@
 #include <QSignalSpy>
 #include <QSettings>
 #include <QDir>
+#include <QBuffer>
+#include <QXmlStreamWriter>
 
 #include "surfacesim_test.h"
 #include "simmididevice.h"
@@ -2067,6 +2069,66 @@ void SurfaceSim_Test::aHandPatchedPadIsRepaired()
     QCOMPARE(iom->inputPatch(3)->input(), 0u);
     ap->setEnabled(false);
     m_stub->m_hasFeedback = false;
+    m_stub->m_lineDeviceKind.clear();
+}
+
+/* The Linux gate, 2026-11-28 (padbenchshow under load): a pad set up by
+   itself while a show was being built stayed patched as that pad when the
+   show was then given an "any game controller" slot on another universe,
+   and the show file named the pad. The stand-in is let go, the slot takes
+   the pad, the file keeps the slot alone, and no pad is set up beside it. */
+void SurfaceSim_Test::aPadSetUpByItselfYieldsToTheShowsSlot()
+{
+    loadAllProfiles(m_doc);
+    SurfaceAutoPatch::setDeclined(kDs4, false);
+    QSettings().remove(QStringLiteral("surfaces/lastUniverse/") + kDs4.trimmed());
+    InputOutputMap *iom = m_doc->inputOutputMap();
+    SurfaceAutoPatch *ap = m_doc->surfaceSetup()->autoPatch();
+    ap->setDelay(0);
+    ap->setEnabled(true, false);
+    m_stub->m_linesAreHardware = true;
+    m_stub->m_networkDmx = false;
+    m_stub->m_lineNames = QStringList() << kDs4;
+    m_stub->m_lineDeviceKind[0] = QStringLiteral("dualshock4");
+    QSignalSpy pad(ap, &SurfaceAutoPatch::padPatched);
+    emit m_stub->configurationChanged();
+    QTRY_COMPARE(pad.count(), 1);
+    const quint32 standIn = pad.first().at(0).toUInt();
+    QVERIFY(iom->inputPatch(standIn) != nullptr && iom->inputPatch(standIn)->plugin() == m_stub);
+
+    // The show's pad: any game controller, on another universe.
+    const quint32 slotUni = standIn + 1;
+    while (iom->universesCount() <= slotUni)
+        QVERIFY(iom->addUniverse());
+    Universe::InputSlotDevice any;
+    any.plugin = m_stub->name();
+    any.anyGamepad = true;
+    iom->setInputSlot(slotUni, { any }, InputOutputMap::standardChannelRoles());
+
+    QVERIFY2(iom->inputPatch(standIn) == nullptr || iom->inputPatch(standIn)->plugin() == nullptr,
+             "the pad set up by itself is still patched beside the show's slot");
+    QCOMPARE(iom->inputSlotLive(slotUni), 0);
+    QVERIFY(iom->inputPatch(slotUni) != nullptr);
+    QCOMPARE(iom->inputPatch(slotUni)->inputName(), kDs4);
+    QVERIFY(!SurfaceAutoPatch::isDeclined(kDs4));          // let go, not declined
+
+    QBuffer buf;
+    QVERIFY(buf.open(QIODevice::WriteOnly));
+    QXmlStreamWriter xml(&buf);
+    QVERIFY(iom->saveXML(&xml));
+    const QString saved = QString::fromUtf8(buf.data());
+    QVERIFY2(!saved.contains(QStringLiteral("DUALSHOCK 4")), qPrintable(saved));
+    QVERIFY2(saved.contains(QStringLiteral("Any=\"True\"")), qPrintable(saved));
+
+    // The slot is the show's pad: a second pad is not set up beside it.
+    m_stub->m_lineNames << QStringLiteral(" DualSense Wireless Controller (DE:4C:09:77:77:94)");
+    m_stub->m_lineDeviceKind[1] = QStringLiteral("dualsense");
+    emit m_stub->configurationChanged();
+    QTest::qWait(50);
+    QCOMPARE(pad.count(), 1);
+
+    iom->setInputSlot(slotUni, QList<Universe::InputSlotDevice>());
+    ap->setEnabled(false);
     m_stub->m_lineDeviceKind.clear();
 }
 

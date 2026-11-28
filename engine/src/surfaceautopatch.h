@@ -150,6 +150,9 @@ signals:
 
 private:
     void slotPluginChanged(const QString &pluginName);
+    /** @p universe's controller slot set: a pad set up by itself on
+     *  another universe meanwhile is let go and the slot takes it. */
+    void slotInputSlotChanged(quint32 universe);
     void consider(QLCIOPlugin *plugin, const QString &device);
     bool known(QLCIOPlugin *plugin, const QString &device) const;
     quint32 freeUniverse(const QString &device);
@@ -160,6 +163,8 @@ private:
     int m_delayMs = 400;
     QHash<QString, QSet<QString>> m_present;     ///< plugin -> its input lines
     QHash<quint32, QString> m_patched;           ///< universe -> device, this session
+    QHash<quint32, QString> m_padStandIns;       ///< universe -> pad set up by itself (setUpPad())
+    bool m_settingUpPad = false;                 ///< our own setInputPatch() in progress
     QSet<QString> m_asked;                       ///< asked this session
     QHash<quint32, QString> m_repairUndo;        ///< universe -> its repair's undo summary
 };
