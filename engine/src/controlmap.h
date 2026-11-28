@@ -847,6 +847,8 @@ private:
     const Binding *faderJobOn(quint64 k) const;
     /** Flash group @a groupId at full (on) or let go. */
     void flashGroup(quint32 groupId, bool on);
+    /** Every Flash let go of (the emergency stop) */
+    void dropFlashes();
     /** Notes the board's Shift going down or up. */
     void noteShift(quint32 universe, quint32 channel, uchar value);
     /** blocked(), said once per hold of control @a k */

@@ -107,6 +107,8 @@ private slots:
     /** Review of Q355: a Flash never drives stage machinery, a one-shot, a
      *  switch or a hazard (a press is not a run). */
     void aFlashLeavesMachineryAlone();
+    /** ... the emergency stop lets go of a Flash held through it. */
+    void theEmergencyStopEndsAFlash();
     /** With QLC_SHOT_DIR: the job picker (a key's, its submenu, a fader's)
      *  and the map with board jobs, at three sizes. */
     void jobPickerShots();

@@ -1425,6 +1425,37 @@ void SurfaceMap_Test::aFlashLeavesMachineryAlone()
     settle();
 }
 
+void SurfaceMap_Test::theEmergencyStopEndsAFlash()
+{
+    SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));
+    QVERIFY2(apc.plug(), qPrintable(apc.lastError()));
+    const JobShow show = jobShow(m_doc);
+    ControlMap *cm = m_doc->controlMap();
+    cm->setBinding({ 0, kClip11, ControlMap::job(ControlMap::FlashGroupTarget, show.front->id()),
+                     ControlMap::Momentary });
+    m_doc->setMode(Doc::Operate);
+    settle();
+    const QString flash = QStringLiteral("#%1").arg(kClip11);
+    QVERIFY(apc.press(flash));
+    settle();
+    QCOMPARE(outAt(m_doc, 0), 255);
+    // ALL OFF while the key is still held: everything is off, the Flash too.
+    QVERIFY(m_doc->showControl()->allOff(ShowControl::RouteOther));
+    settle();
+    QCoreApplication::processEvents();
+    QVERIFY2(!cm->isFlashing(show.front->id()), "the Flash outlived the emergency stop");
+    QCOMPARE(outAt(m_doc, 0), 0);
+    // Its release lets go of nothing; a new press flashes again.
+    QVERIFY(apc.release(flash));
+    settle();
+    QCOMPARE(outAt(m_doc, 0), 0);
+    QVERIFY(apc.press(flash));
+    settle();
+    QCOMPARE(outAt(m_doc, 0), 255);
+    QVERIFY(apc.release(flash));
+    settle();
+}
+
 void SurfaceMap_Test::theBoardJobsRoundTripThroughTheShowFile()
 {
     SimMidiDevice apc(m_doc, m_stub, QStringLiteral("APC40 mkII"), 0, kApc, profile("Akai-APC40-mkII.qxi"));

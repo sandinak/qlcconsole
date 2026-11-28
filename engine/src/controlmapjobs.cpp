@@ -173,6 +173,13 @@ void ControlMap::flashGroup(quint32 groupId, bool on)
         m_flashLayer = new OutputLayer(m_doc, Universe::Flashing, 0, QStringLiteral("Flash"));
         m_flashLayer->setHoldsShowOnly(true);
     }
+    /* The emergency stop lets go of a Flash held through it (E7, as the
+       Simple Desk and the VC sliders): its key still down is no new press.
+       The keeper is made after this map, so connected here. */
+    if (on)
+        if (OutputRuleKeeper *rules = m_doc->outputRuleKeeper())
+            connect(rules, &OutputRuleKeeper::emergencyStopStruck, this, &ControlMap::dropFlashes,
+                    Qt::UniqueConnection);
     /* Every held group's intensity at full: the dimmer and the red, green,
        blue and white of a head with none. Cyan, magenta and yellow are left
        (full is dark for them). */
@@ -213,6 +220,16 @@ void ControlMap::flashGroup(quint32 groupId, bool on)
         m_flashLayer->clear();
     else
         m_flashLayer->set(levels);
+    slotLampsMayHaveChanged();
+}
+
+void ControlMap::dropFlashes()
+{
+    if (m_flashHeld.isEmpty())
+        return;
+    m_flashHeld.clear();
+    if (m_flashLayer != nullptr)
+        m_flashLayer->clear();
     slotLampsMayHaveChanged();
 }
 
