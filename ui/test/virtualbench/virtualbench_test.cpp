@@ -17,6 +17,7 @@
   limitations under the License.
 */
 
+#include <QScopeGuard>
 #include <QAbstractEventDispatcher>
 #include <QApplication>
 #include <QElapsedTimer>
