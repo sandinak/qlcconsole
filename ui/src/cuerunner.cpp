@@ -744,7 +744,9 @@ void CueRunner::buildFullLayout()
     m_editLiveBtn->setProperty("helpTopic", QStringLiteral("edit-live.md"));
     connect(m_editLiveBtn, &QToolButton::toggled, this, [this](bool on) {
         EditLive *el = m_doc->controlMap()->editLive();
-        if (on)
+        if (on && !ShowLevel::shown(EditLiveChip::levelKey()))
+            ShowLevel::instance()->offer(EditLiveChip::levelKey());   // the line, with the Switch
+        else if (on)
             EditLiveChip::turnOn(m_doc, window());
         else
             el->setOn(false);
@@ -757,9 +759,11 @@ void CueRunner::buildFullLayout()
     connect(m_doc, &Doc::modeChanged, this, &CueRunner::refreshEditLive);
     head->addWidget(m_editLiveBtn);
     /* Standard and up (it edits the show live): greyed at Student, saying
-       the level, as the footer's chip. */
+       the level on its face, as the footer's chip. Not bound to ShowLevel's
+       greying, which disables the button so a click never lands (the
+       chip's build-4910 bug): it greys itself, stays clickable, and a
+       click offers the Switch (refreshEditLive(), the toggle above). */
     refreshEditLive();
-    ShowLevel::instance()->bind(m_editLiveBtn, QStringLiteral("operate.editlive"));
     connect(ShowLevel::instance(), &ShowLevel::changed, this, &CueRunner::refreshEditLive);
     m_mode = new QLabel(this);
     m_mode->setObjectName(QStringLiteral("crMode"));
@@ -1597,13 +1601,28 @@ void CueRunner::refreshEditLive()
     SurfacePages *pages = m_doc->controlMap()->surfacePages();
     m_editLiveBtn->setVisible(on || (m_doc->mode() == Doc::Operate && pages != nullptr
                                      && !pages->universes().isEmpty()));
-    m_editLiveBtn->setStyleSheet(on ? QStringLiteral("QToolButton { color: #ffffff; background: #c62828; "
-                                                     "font-weight: bold; }")
-                                    : QString());
-    // Greyed by the level (ShowLevel): its tooltip says the level.
-    if (ShowLevel::shown(QStringLiteral("operate.editlive")))
+    const QString key = EditLiveChip::levelKey();
+    const bool levelOk = ShowLevel::shown(key);
+    m_editLiveBtn->setEnabled(true);
+    if (on)
+        m_editLiveBtn->setStyleSheet(QStringLiteral("QToolButton { color: #ffffff; background: #c62828; "
+                                                    "font-weight: bold; }"));
+    else if (!levelOk)
+        m_editLiveBtn->setStyleSheet(QStringLiteral("QToolButton { color: palette(mid); }"));
+    else
+        m_editLiveBtn->setStyleSheet(QString());
+    // Below its level: greyed, the face and the tooltip naming the level.
+    if (!on && !levelOk)
+    {
+        m_editLiveBtn->setText(tr("Edit Live · %1").arg(ShowLevel::name(ShowLevel::levelOf(key))));
+        m_editLiveBtn->setToolTip(ShowLevel::whyHidden(key));
+    }
+    else
+    {
+        m_editLiveBtn->setText(tr("Edit Live"));
         m_editLiveBtn->setToolTip(tr("Edit Live: the board's page controls trim the running cue; the footer's "
                                      "red chip stores or drops the trims. GO never waits for them."));
+    }
 }
 
 void CueRunner::refreshPadRun()
