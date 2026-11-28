@@ -2011,7 +2011,7 @@ void SurfaceSim_Test::aPadIsSetUpWhenItAppears()
     InputPatch *ip = iom->inputPatch(u);
     QVERIFY(ip != nullptr && ip->plugin() == m_stub);
     QCOMPARE(ip->input(), 1u);
-    QCOMPARE(ip->profileName(), QString());
+    QVERIFY(ip->profile() == nullptr);
     QVERIFY(m_doc->programmer()->isPadUniverse(u));
     QVERIFY2(m_doc->surfaceSetup()->boardLog()->text(u).contains("as a game pad (dualshock4)"),
              qPrintable(m_doc->surfaceSetup()->boardLog()->text(u)));
@@ -2062,7 +2062,7 @@ void SurfaceSim_Test::aHandPatchedPadIsRepaired()
     QCOMPARE(repaired.first().at(1).toString(), QString("DUALSHOCK 4"));
     QCOMPARE(repaired.first().at(2).toString(),
              QString("feedback back on its own line, board profile Akai APC40 mkII taken off"));
-    QCOMPARE(iom->inputPatch(3)->profileName(), QString());
+    QVERIFY(iom->inputPatch(3)->profile() == nullptr);
     QVERIFY(iom->feedbackPatch(3) == nullptr || !iom->feedbackPatch(3)->isPatched());
     QCOMPARE(iom->inputPatch(3)->input(), 0u);
     ap->setEnabled(false);

@@ -187,7 +187,15 @@ void SurfaceAutoPatch::consider(QLCIOPlugin *plugin, const QString &device)
     const int padLine = int(plugin->inputs().indexOf(device));
     if (padLine >= 0 && !plugin->inputDeviceKind(quint32(padLine)).isEmpty())
     {
-        setUpPad(plugin, device, quint32(padLine));
+        /* The pad: only while the show has none. A second one plugged in
+           beside it is the footer's to offer (one click), never a second
+           pad running the show by itself. */
+        bool hasPad = false;
+        if (ProgrammerController *pc = m_doc->programmer())
+            for (quint32 u = 0; u < iom->universesCount() && !hasPad; ++u)
+                hasPad = pc->isPadUniverse(u);
+        if (!hasPad)
+            setUpPad(plugin, device, quint32(padLine));
         return;
     }
     const QString profile = iom->profileForDevice(device);
@@ -432,12 +440,8 @@ QString SurfaceAutoPatch::repairPad(quint32 universe)
         return QString();
     const QString name = ProgrammerController::shortPadName(device, ip->plugin()->inputDeviceKind(ip->input()));
     // A board's input profile on a pad (a pad needs none: its HID profile has its roles).
-    bool fixProfile = false;
-    if (!ip->profileName().isEmpty())
-    {
-        QLCInputProfile *cp = iom->profile(ip->profileName());
-        fixProfile = cp == nullptr || !cp->deviceMatches().isEmpty();
-    }
+    QLCInputProfile *cp = ip->profile();
+    const bool fixProfile = cp != nullptr && !cp->deviceMatches().isEmpty();
     // A feedback patch left by a board: a pad's feedback goes on its own line.
     bool fixFeedback = false;
     QString was;
