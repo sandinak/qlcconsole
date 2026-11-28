@@ -74,6 +74,7 @@ add_library(${module_name}
     fixturecreator.cpp fixturecreator.h
     fixturegroupeditor.cpp fixturegroupeditor.h fixturegroupeditor.ui
     fixturemanager.cpp fixturemanager.h
+    patchlock.cpp patchlock.h
     fixtureremap.cpp fixtureremap.h fixtureremap.ui
     fixtureselection.cpp fixtureselection.h fixtureselection.ui
     fixturetreewidget.cpp fixturetreewidget.h

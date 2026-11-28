@@ -92,6 +92,7 @@
 #include "rdmmanager.h"
 #include "universe.h"
 #include "patchundo.h"
+#include "patchlock.h"
 #include "fixture.h"
 #include "apputil.h"
 #include "showsettingsdialog.h"
@@ -307,6 +308,11 @@ FixtureManager::FixtureManager(QWidget* parent, Doc* doc)
         m_splitter->restoreState(var.toByteArray());
     else
         m_splitter->setSizes(QList <int> () << int(this->width() / 2) << int(this->width() / 2));
+
+    // Operate: the patch is locked (bar, greyed controls); gone in Design.
+    if (m_locateAction != NULL)
+        m_locateAction->setProperty("patchLockKeep", true);   // flashes a light; edits nothing
+    PatchLock::attach(this, m_doc);
 }
 
 FixtureManager::~FixtureManager()
@@ -518,6 +524,9 @@ void FixtureManager::slotModeChanged(Doc::Mode mode)
         // Locate works on any selection, including in Operate mode.
         m_locateAction->setEnabled(m_fixtures_tree->selectedItems().isEmpty() == false);
     }
+    // After the page's own states: the Operate lock (and its removal in Design).
+    if (PatchLock *lock = PatchLock::of(this))
+        lock->refresh();
 }
 
 void FixtureManager::slotFixtureGroupRemoved(quint32 id)
@@ -669,6 +678,7 @@ void FixtureManager::initDataView()
     fixturesPaneLayout->setContentsMargins(0, 0, 0, 0);
     fixturesPaneLayout->setSpacing(0);
     m_fixturesSearch = new QLineEdit(fixturesPane);
+    m_fixturesSearch->setProperty("patchLockKeep", true);   // filters the list; edits nothing
     m_fixturesSearch->setPlaceholderText(tr("Search fixtures…"));
     m_fixturesSearch->setClearButtonEnabled(true);
     connect(m_fixturesSearch, &QLineEdit::textChanged,
@@ -750,15 +760,6 @@ void FixtureManager::showEvent(QShowEvent *event)
 
 void FixtureManager::updateView()
 {
-    // Record which top level items are open
-    QList <QVariant> openGroups;
-    for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
-    {
-        QTreeWidgetItem* item = m_fixtures_tree->topLevelItem(i);
-        if (item->isExpanded() == true)
-            openGroups << item->data(KColumnName, PROP_GROUP);
-    }
-
     if (m_doc->fixtures().count() > 0)
     {
         m_exportAction->setEnabled(true);
@@ -778,18 +779,7 @@ void FixtureManager::updateView()
 
     m_fixtures_tree->updateTree();
 
-    // Reopen groups that were open before update
-    for (int i = 0; i < m_fixtures_tree->topLevelItemCount(); i++)
-    {
-        QTreeWidgetItem* item = m_fixtures_tree->topLevelItem(i);
-        QVariant var = item->data(KColumnName, PROP_GROUP);
-        if (openGroups.contains(var) == true)
-        {
-            item->setExpanded(true);
-            openGroups.removeAll(var);
-        }
-    }
-
+    // updateTree() keeps what was open (and the scroll position).
     updateGroupMenu();
     slotModeChanged(m_doc->mode());
 
@@ -1411,7 +1401,7 @@ QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const Q
         m_fixtures_tree->updateTree();
         m_doc->setModified();
         // All of it one ⌘Z: the copies go, with whatever patched them since.
-        recordMade(m_doc, made, madeGroups);
+        recordMade(m_doc, made, madeGroups, fixtures, groups);
     }
     // The new fixtures selected, to patch or rename next.
     if (!made.isEmpty())
@@ -1425,7 +1415,11 @@ QList<quint32> FixtureManager::duplicate(const QList<quint32> &fixtures, const Q
                 item->setSelected(true);
                 m_fixtures_tree->setCurrentItem(item, 0, QItemSelectionModel::NoUpdate);
             }
+        // Only as far as needed: the view stays where it was.
+        m_fixtures_tree->scrollToRow(m_fixtures_tree->currentItem());
     }
+    else if (!madeGroups.isEmpty())
+        revealRows(QList<quint32>(), madeGroups);
     return made;
 }
 
@@ -1463,6 +1457,8 @@ void FixtureManager::selectGroup(quint32 id)
         QVariant var = item->data(KColumnName, PROP_GROUP);
         if (var.isValid() && var.toUInt() == id)
         {
+            for (QTreeWidgetItem *p = item->parent(); p != NULL; p = p->parent())
+                p->setExpanded(true);
             m_fixtures_tree->setCurrentItem(item);
             m_fixtures_tree->scrollToItem(item);
             slotSelectionChanged();
@@ -4596,7 +4592,31 @@ quint32 FixtureManager::newHere()
     return grp->id();
 }
 
-void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups)
+void FixtureManager::revealRows(const QList<quint32> &fixtures, const QList<quint32> &groups)
+{
+    QList<QTreeWidgetItem *> rows;
+    for (quint32 id : fixtures)
+        if (QTreeWidgetItem *it = m_fixtures_tree->fixtureItem(id))
+            rows << it;
+    for (quint32 id : groups)
+        if (QTreeWidgetItem *it = m_fixtures_tree->groupItem(id))
+            rows << it;
+    if (rows.isEmpty())
+        return;
+    m_fixtures_tree->clearSelection();
+    for (QTreeWidgetItem *it : rows)
+    {
+        for (QTreeWidgetItem *p = it->parent(); p != NULL; p = p->parent())
+            if (!p->isExpanded())
+                p->setExpanded(true);
+        it->setSelected(true);
+    }
+    m_fixtures_tree->setCurrentItem(rows.first(), 0, QItemSelectionModel::NoUpdate);
+    m_fixtures_tree->scrollToRow(rows.first());
+}
+
+void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const QList<quint32> &groups,
+                                const QList<quint32> &srcFixtures, const QList<quint32> &srcGroups)
 {
     Monitor *mon = Monitor::instance();
     if (doc == NULL || mon == NULL || (fixtures.isEmpty() && groups.isEmpty()))
@@ -4610,15 +4630,18 @@ void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const 
     };
     QSharedPointer<Taken> taken(new Taken);
     QPointer<Doc> d(doc);
-    auto refresh = []() {
+    /* What the step restored or changed ends up selected and in view: the
+       originals after an undo, the copies after a redo. */
+    auto refresh = [](const QList<quint32> &selFixtures, const QList<quint32> &selGroups) {
         if (FixtureManager *fm = FixtureManager::instance())
         {
             fm->updateGroupMenu();
             fm->updateView();
+            fm->revealRows(selFixtures, selGroups);
         }
     };
     // Fixtures come and go only in Design, as everywhere else on this tab.
-    auto undo = [d, fixtures, groups, taken, refresh]() {
+    auto undo = [d, fixtures, groups, srcFixtures, srcGroups, taken, refresh]() {
         if (d.isNull() || d->mode() != Doc::Design)
             return;
         taken->fixtures.clear();
@@ -4646,9 +4669,9 @@ void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const 
                 d->deleteFixture(fid);
             }
         d->setModified();
-        refresh();
+        refresh(srcFixtures, srcGroups);
     };
-    auto redo = [d, taken, refresh]() {
+    auto redo = [d, fixtures, groups, taken, refresh]() {
         if (d.isNull() || d->mode() != Doc::Design)
             return;
         for (const QByteArray &xml : taken->fixtures)
@@ -4671,7 +4694,7 @@ void FixtureManager::recordMade(Doc *doc, const QList<quint32> &fixtures, const 
                 delete grp;
         }
         d->setModified();
-        refresh();
+        refresh(fixtures, groups);
     };
     mon->pushUndoCallback(undo, redo);
 }
@@ -4690,6 +4713,8 @@ void FixtureManager::recordGroupRename(Doc *doc, quint32 gid, const QString &bef
             return;
         g->setName(n);
         d->setModified();
+        if (FixtureManager *fm = FixtureManager::instance())
+            fm->revealRows(QList<quint32>(), { gid });
     };
     mon->pushUndoCallback([name, before]() { name(before); }, [name, after]() { name(after); });
 }

@@ -102,6 +102,7 @@
 #include "functionstreewidget.h"
 #define protected public
 #include "app.h"
+#include "patchlock.h"
 #include "dmxmonitorwindow.h"
 #include "appsettings.h"
 #include "shutterautoopen.h"
@@ -2361,6 +2362,10 @@ void AppViews_Test::editUndoFollowsTheTabInFront()
 void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
 {
     Doc *doc = m_app->m_doc;
+    // Renaming is the patch's: Design only (Operate locks Fixtures).
+    if (doc->mode() == Doc::Operate)
+        m_app->slotModeDesign();
+    QCOMPARE(doc->mode(), Doc::Design);
     Fixture *fx = new Fixture(doc);
     fx->setName("Old name");
     fx->setChannels(1);
@@ -2375,15 +2380,27 @@ void AppViews_Test::renamingAFixtureInTheTreeIsARigStep()
     QVERIFY(fm != nullptr);
     FixtureTreeWidget *tree = fm->m_fixtures_tree;
     QVERIFY(tree != nullptr);
-    tree->updateTree();
     QTreeWidgetItem *row = nullptr;
-    for (QTreeWidgetItemIterator it(tree); *it; ++it)
-        if ((*it)->data(0, PROP_ID).isValid() && (*it)->data(0, PROP_ID).toUInt() == fid
-            && !(*it)->data(0, PROP_HEAD).isValid() && !(*it)->data(0, PROP_CHANNEL).isValid())
-            row = *it;
-    QVERIFY(row != nullptr);
+    auto findRow = [&]() {
+        row = nullptr;
+        for (QTreeWidgetItemIterator it(tree); *it; ++it)
+            if ((*it)->data(0, PROP_ID).isValid() && (*it)->data(0, PROP_ID).toUInt() == fid
+                && !(*it)->data(0, PROP_HEAD).isValid() && !(*it)->data(0, PROP_CHANNEL).isValid())
+                row = *it;
+        return row != nullptr;
+    };
+    tree->updateTree();
+    QVERIFY(findRow());
     tree->setCurrentItem(row);
-
+    // Selecting a row can queue a rebuild of the tree (a group editor going
+    // away): let it run first, or it takes the rename's editor with it (the
+    // delegate commits a turn after Return). Folders stay as they were.
+    QTest::qWait(50);
+    QVERIFY(findRow());
+    for (QTreeWidgetItem *p = row->parent(); p != nullptr; p = p->parent())
+        p->setExpanded(true);
+    tree->setCurrentItem(row);
+    tree->scrollToItem(row);
     // Return opens the name's editor; type, Return.
     QTest::keyClick(tree, Qt::Key_Return);
     QLineEdit *editor = nullptr;
@@ -6142,6 +6159,61 @@ void AppViews_Test::newFromTemplateOpensTheClassroomStageUntitled()
     QVERIFY(doc->isModified());
     QCOMPARE(doc->fixtures().count(), 68);
     m_app->clearDocument();
+}
+
+void AppViews_Test::operateLocksThePatchTabsAndTheirDesignButtonAsksForThePin()
+{
+    m_app->clearDocument();
+    Doc *doc = m_app->doc();
+    ShowSettingsDialog::setTestMode(true);
+    auto cleanup = qScopeGuard([this]() {
+        ShowSettingsDialog::setTestMode(false);
+        ShowSettingsDialog::testAnswers().clear();
+        if (m_app->doc()->mode() == Doc::Operate)
+        {
+            m_app->doc()->operateSettings()->setPin(QString());
+            m_app->slotModeDesign();
+        }
+        m_app->clearDocument();
+    });
+    QTabWidget *tabs = m_app->m_tab;
+    auto tabIndex = [tabs](const QString &name) {
+        for (int i = 0; i < tabs->count(); i++)
+            if (tabs->tabBar()->tabData(i).toString() == name)
+                return i;
+        return -1;
+    };
+    const int conn = tabIndex(QObject::tr("Connections"));
+    const int fix = tabIndex(QObject::tr("Fixtures"));
+    const int other = tabIndex(QObject::tr("Shows"));
+    QVERIFY(conn >= 0 && fix >= 0);
+    const QString lockGlyph = QString::fromUtf8("\xF0\x9F\x94\x92");
+
+    // Design: no lock, no bar.
+    QVERIFY(!tabs->tabText(conn).contains(lockGlyph) && !tabs->tabText(fix).contains(lockGlyph));
+    PatchLock *cl = PatchLock::of(tabs->widget(conn));
+    PatchLock *fl = PatchLock::of(tabs->widget(fix));
+    QVERIFY(cl != nullptr && fl != nullptr);
+    QVERIFY(!cl->bar()->isVisibleTo(tabs->widget(conn)) && !fl->bar()->isVisibleTo(tabs->widget(fix)));
+
+    doc->operateSettings()->setPin("2468");
+    m_app->slotModeOperate();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    QVERIFY(tabs->tabText(conn).contains(lockGlyph));
+    QVERIFY(tabs->tabText(fix).contains(lockGlyph));
+    if (other >= 0)
+        QVERIFY(!tabs->tabText(other).contains(lockGlyph));
+    QVERIFY(cl->bar()->isVisibleTo(tabs->widget(conn)) && fl->bar()->isVisibleTo(tabs->widget(fix)));
+
+    // The Design button: the PIN is asked; a wrong one stays, the right one goes.
+    ShowSettingsDialog::testAnswers() = { "1111" };
+    fl->designButton()->click();
+    QCOMPARE(doc->mode(), Doc::Operate);
+    ShowSettingsDialog::testAnswers() = { "2468" };
+    cl->designButton()->click();
+    QCOMPARE(doc->mode(), Doc::Design);
+    QVERIFY(!tabs->tabText(conn).contains(lockGlyph) && !tabs->tabText(fix).contains(lockGlyph));
+    QVERIFY(!cl->bar()->isVisibleTo(tabs->widget(conn)) && !fl->bar()->isVisibleTo(tabs->widget(fix)));
 }
 
 void AppViews_Test::aPinKeepsTheShowInOperate()

@@ -103,6 +103,7 @@
 #include "speedmastersfooter.h"
 #include "updatemanager.h"
 #include "app.h"
+#include "patchlock.h"
 #include "previewkeep.h"
 #include "keytriggers.h"
 #include "selectionshape.h"
@@ -786,8 +787,12 @@ void App::init()
         m_startupWindow->beginStep(tr("Building workspace"));
     QWidget* w = new InputOutputManager(m_tab, m_doc);
     addTab(w, QIcon(":/input_output.png"), tr("Connections"));
+    if (PatchLock *lock = PatchLock::of(w))
+        connect(lock, &PatchLock::designRequested, this, &App::slotModeDesign);
     w = new FixtureManager(m_tab, m_doc);
     addTab(w, QIcon(":/fixture.png"), tr("Fixtures"));
+    if (PatchLock *lock = PatchLock::of(w))
+        connect(lock, &PatchLock::designRequested, this, &App::slotModeDesign);
     // Lighting Studio (Monitor) used to be a lazily-created standalone
     // window (Qt::Window flag), created on first use via createAndShow()
     // and destroyed on close (WA_DeleteOnClose) — inconsistent with every
@@ -2690,6 +2695,7 @@ void App::slotModeChanged(Doc::Mode mode)
     // rig actually output?" matters, and it's the last moment before someone
     // starts running cues.
     updateOutputReadiness();
+    applyTabLabelMode();       // the lock on the Connections and Fixtures tabs
 
     if (mode == Doc::Operate && m_doc->teachingSettings()->enabled() && !m_teachingNoticeShown)
     {
@@ -8434,8 +8440,14 @@ void App::applyTabLabelMode()
                 o = k;
         if (o < 0)
             continue;
-        const QString origText = tabDisplayLabel(m_tabOriginals.at(o).first);
-        const QIcon   &origIcon = m_tabOriginals.at(o).second;
+        /* Operate locks the patch: those two tabs wear a lock (PatchLock). */
+        const bool patchTab = m_doc != NULL && m_doc->mode() == Doc::Operate
+                              && (m_tabOriginals.at(o).first == tr("Connections")
+                                  || m_tabOriginals.at(o).first == tr("Fixtures"));
+        const QString origText = (patchTab ? QString::fromUtf8("\xF0\x9F\x94\x92 ") : QString())
+                                 + tabDisplayLabel(m_tabOriginals.at(o).first);
+        const QIcon origIcon = patchTab ? PatchLock::lockedIcon(m_tabOriginals.at(o).second)
+                                        : m_tabOriginals.at(o).second;
         /* Whatever it shows, the tooltip names the tab in full -- and says
            what is in it where the name alone doesn't (Q266). */
         m_tab->setTabToolTip(i, tabToolTipText(m_tabOriginals.at(o).first));

@@ -33,6 +33,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QToolBar>
+#include "patchlock.h"
 #include <QAction>
 #include <QTimer>
 #include <QDebug>
@@ -366,6 +367,9 @@ InputOutputManager::InputOutputManager(QWidget* parent, Doc* doc)
     QVariant var = settings.value(SETTINGS_SPLITTER);
     if (var.isValid() == true)
         m_splitter->restoreState(var.toByteArray());
+
+    // Operate: the patch is locked (bar, greyed controls); gone in Design.
+    PatchLock::attach(this, m_doc);
 }
 
 InputOutputManager::~InputOutputManager()

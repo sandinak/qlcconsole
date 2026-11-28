@@ -98,8 +98,16 @@ any of its targets are unpatched.
   The whole duplicate is one undo step: **⌘Z** takes the copies away again,
   **⇧⌘Z** puts them back. A new group (**⇧⌘N** or **New Group…**) and a
   group's rename (in place or in its editor) are one step each the same way.
+  The list stays where it was, with the same folders open; the copy is
+  selected, and after an undo or redo the row it touched, scrolled into view
+  only as far as needed.
   **Esc** lets go of the selection. The keys are the same in every list
   ([Edit keys](shortcuts.md#edit-keys-the-same-in-every-list)).
+- **Operate locks the patch.** In Operate the Fixtures and Connections tabs
+  wear a lock, show a bar ("Operate: the patch is locked. Design to change
+  it") with a **Design** button (it asks for the show's PIN when one is
+  set), and every editing control is greyed with that sentence as its
+  tooltip. Reading still works: search, the tree, Locate.
 - Adding is Design mode only, like Add Fixture.
 
 ### Patching: the Patch dialog

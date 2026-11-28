@@ -25,6 +25,7 @@
 #include <QSignalSpy>
 #include <QScrollBar>
 #include <QMenu>
+#include <QDir>
 #include <QPainter>
 #include <QSettings>
 #include <QSplitter>
@@ -76,6 +77,7 @@
 #include "showstatus.h"
 #include "networkroute.h"
 #include "inputoutputmanager.h"
+#include "patchlock.h"
 #include "connectioneditor.h"
 #include "wledconfigcheck.h"
 #include "inputoutputpatcheditor.h"
@@ -4541,3 +4543,68 @@ void ConnectionsTree_Test::controllerJobsShots()
     }
 }
 
+
+void ConnectionsTree_Test::operateLocksTheConnectionsTab()
+{
+    InputOutputManager mgr(nullptr, m_doc);
+    mgr.resize(1000, 700);
+    mgr.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&mgr));
+    PatchLock *lock = PatchLock::of(&mgr);
+    QVERIFY(lock != nullptr);
+    const QString tip = PatchLock::sentence();
+    QVERIFY(!lock->bar()->isVisibleTo(&mgr));
+    QVERIFY(mgr.m_addUniverseAction->isEnabled());
+
+    auto shots = [](QWidget *w, const QString &prefix) {
+        const QString dir = qEnvironmentVariable("QLC_SHOT_DIR");
+        if (dir.isEmpty())
+            return;
+        QDir().mkpath(dir);
+        const QSize was = w->size();
+        for (const QSize &sz : { QSize(1024, 640), QSize(1440, 900), QSize(1920, 1080) })
+        {
+            w->resize(sz);
+            QTest::qWait(50);
+            w->grab().save(QString("%1/%2-%3x%4.png").arg(dir, prefix).arg(sz.width()).arg(sz.height()));
+        }
+        w->resize(was);
+        QTest::qWait(20);
+    };
+    shots(&mgr, "connections-design");
+    m_doc->setMode(Doc::Operate);
+    shots(&mgr, "connections-operate-locked");
+    QVERIFY(lock->bar()->isVisibleTo(&mgr));
+    for (QAction *a : { mgr.m_addUniverseAction, mgr.m_deleteUniverseAction, mgr.m_undoPatchAction })
+    {
+        QVERIFY2(!a->isEnabled(), qPrintable(a->text()));
+        QCOMPARE(a->toolTip(), tip);
+    }
+    QVERIFY(!mgr.m_uniNameEdit->isEnabled());
+    QVERIFY(!mgr.m_uniPassthroughCheck->isEnabled());
+    QCOMPARE(mgr.m_uniPassthroughCheck->toolTip(), tip);
+    // The patch menu's items (the tree's context menus): greyed with the sentence.
+    QMenu menu(&mgr);
+    QAction *patch = menu.addAction("Patch a Universe to This Port…");
+    QAction *del = menu.addAction("Delete Universe…");
+    QAction *plist = menu.addAction("Patch List for U1…");
+    menu.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&menu));
+    QVERIFY(!patch->isEnabled() && !del->isEnabled());
+    QCOMPARE(del->toolTip(), tip);
+    QVERIFY(plist->isEnabled());
+    menu.close();
+    // Reading stays: the view toggles.
+    QCheckBox *byUni = mgr.findChild<QCheckBox *>("connectionsByUniverse");
+    QVERIFY(byUni != nullptr && byUni->isEnabled());
+
+    QSignalSpy spy(lock, &PatchLock::designRequested);
+    QTest::mouseClick(lock->designButton(), Qt::LeftButton);
+    QCOMPARE(spy.count(), 1);
+
+    m_doc->setMode(Doc::Design);
+    QVERIFY(!lock->bar()->isVisibleTo(&mgr));
+    QVERIFY(mgr.m_addUniverseAction->isEnabled());
+    QVERIFY(mgr.m_uniNameEdit->isEnabled());
+    QVERIFY(mgr.m_uniPassthroughCheck->toolTip() != tip);
+}

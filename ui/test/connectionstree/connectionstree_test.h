@@ -155,6 +155,8 @@ private slots:
 
     /** Connections' Ctrl+N adds a universe, Ctrl+D deletes the last one,
      *  and Undo Patch Change (Ctrl+Z there) puts either back */
+    /** Operate: the patch is locked on Connections too. */
+    void operateLocksTheConnectionsTab();
     void ctrlNAddsAndCtrlDDeletesAUniverseAndUndoPutsItBack();
 
     /* One connection window (ConnectionEditor): a double-click on a

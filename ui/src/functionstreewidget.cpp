@@ -30,6 +30,7 @@
 #include <QTimer>
 
 #include "treekeepview.h"
+#include <QScrollBar>
 #include "functionstreewidget.h"
 #include "itemicons.h"
 #include "showtreecontroller.h"
@@ -257,6 +258,8 @@ bool FunctionsTreeWidget::isListed(const Function *function) const
 void FunctionsTreeWidget::updateTree()
 {
     blockSignals(true);
+    // The view stays where it was across the rebuild.
+    const int scrollWas = verticalScrollBar()->value();
 
     // Snapshot which folder paths are currently expanded so we can restore
     // them after the tree is rebuilt (clearTree wipes m_foldersMap).
@@ -296,6 +299,11 @@ void FunctionsTreeWidget::updateTree()
         if (it.value() && expandedPaths.contains(it.key()))
             it.value()->setExpanded(true);
 
+    if (scrollWas > 0)
+    {
+        executeDelayedItemsLayout();
+        verticalScrollBar()->setValue(scrollWas);
+    }
     blockSignals(false);
 }
 

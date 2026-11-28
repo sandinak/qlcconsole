@@ -1953,7 +1953,7 @@ void ProgrammingManager::revealPalette(quint32 paletteId)
     for (QTreeWidgetItem *a = item->parent(); a != NULL; a = a->parent())
         a->setExpanded(true);
     m_paletteTree->setCurrentItem(item);
-    m_paletteTree->scrollToItem(item, QAbstractItemView::PositionAtCenter);
+    m_paletteTree->scrollToItem(item, QAbstractItemView::EnsureVisible);
 }
 
 void ProgrammingManager::slotPaletteDoubleClicked(QTreeWidgetItem *item)
